@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><style>
+.watch-scroll{scrollbar-width:none;-ms-overflow-style:none}
+.watch-scroll::-webkit-scrollbar{display:none;width:0;height:0}
+</style></helmet>
+<div style="position:relative;width:414px;height:506px;display:flex;align-items:center;justify-content:center">
+
+<div style="position:absolute;right:24px;top:150px;display:flex;flex-direction:column;align-items:center;gap:16px;z-index:3">
+<div onPointerDown="{{ onCrownDown }}" title="Drag up or down to adjust weight" style="width:17px;height:56px;border-radius:6px;background:linear-gradient(90deg,#5d5b55,#adaba4 40%,#3f3d39);box-shadow:0 2px 6px rgba(0,0,0,.35);cursor:ns-resize;border:1px solid rgba(0,0,0,.35);transform:scale({{ crownScale }})"></div>
+<div style="width:11px;height:38px;border-radius:5px;background:linear-gradient(90deg,#4a4844,#8c8a84 45%,#3a3835);border:1px solid rgba(0,0,0,.3)"></div>
+</div>
+
+<div style="position:relative;width:334px;height:406px;border-radius:80px;background:linear-gradient(155deg,#3a3833,#1c1b18 45%,#2e2c28);padding:13px;box-sizing:border-box;box-shadow:0 32px 64px rgba(22,21,15,.3),0 0 0 1px rgba(0,0,0,.25)">
+<div style="width:100%;height:100%;border-radius:68px;background:#000;overflow:hidden;position:relative;animation:{{ buzzAnim }}">
+
+<sc-if value="{{ isIdle }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Watch — before workout" style="position:absolute;inset:0;padding:20px 20px 16px;box-sizing:border-box;display:flex;flex-direction:column;color:#fff">
+<div style="font:700 17px/1 Archivo;letter-spacing:.09em;color:#FF5B22">{{ weekLabel }}</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:11px">
+<div style="font:700 30px/1.08 Archivo;font-variation-settings:'wdth' 96;letter-spacing:-.025em;max-width:230px">{{ dayName }}</div>
+<div style="font:600 17px/1.35 Archivo;color:rgba(255,255,255,.55);max-width:230px">{{ planLine }}</div>
+</div>
+<sc-if value="{{ hasPlan }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ onStart }}" style="width:100%;border:none;background:#FF5B22;color:#fff;font:600 21px/1 Archivo;padding:19px;border-radius:999px;cursor:pointer;font-family:Archivo">Start</button>
+</sc-if>
+<sc-if value="{{ noPlan }}" hint-placeholder-val="{{ false }}">
+<div style="border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:18px;text-align:center;font:600 18px/1 Archivo;color:rgba(255,255,255,.45)">{{ nextSessionLine }}</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isReady }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Watch — set ready" style="position:absolute;inset:0;padding:18px 20px 16px;box-sizing:border-box;display:flex;flex-direction:column;color:#fff">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+<span style="font:700 17px/1 Archivo;letter-spacing:.08em;color:#FF5B22">{{ setLabel }}</span>
+<span style="font:600 17px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5)">{{ elapsed }}</span>
+</div>
+<button onClick="{{ openList }}" style="border:none;background:none;padding:9px 0 0;margin:0;text-align:left;display:flex;align-items:center;gap:8px;cursor:pointer;font-family:Archivo;width:100%">
+<span style="font:600 20px/1.12 Archivo;color:rgba(255,255,255,.9);max-width:196px">{{ exName }}</span>
+<span style="font:600 19px/1 Archivo;color:rgba(255,255,255,.35)">›</span>
+</button>
+
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:2px">
+<div style="display:flex;align-items:baseline;gap:6px">
+<span style="font:700 64px/.86 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.035em;font-variant-numeric:tabular-nums">{{ w }}</span>
+<span style="font:700 18px/1 Archivo;color:rgba(255,255,255,.45)">LB</span>
+<div style="flex:1"></div>
+<div style="display:flex;gap:4px;padding-bottom:6px">
+<sc-for list="{{ setDots }}" as="d" hint-placeholder-count="5">
+<div style="width:9px;height:9px;border-radius:5px;background:{{ d.bg }}"></div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;align-items:baseline;gap:6px">
+<span style="font:700 40px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.8)">× {{ r }}</span>
+<span style="font:600 17px/1 Archivo;color:rgba(255,255,255,.35);padding-bottom:3px">REPS</span>
+<div style="flex:1"></div>
+<span style="font:600 17px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.4);padding-bottom:3px">{{ targetLine }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:7px;margin-top:12px">
+<div style="width:8px;height:8px;border-radius:4px;background:#FF5B22"></div>
+<span style="font:700 19px/1 Archivo;font-variant-numeric:tabular-nums">{{ hr }}</span>
+<span style="font:600 17px/1 Archivo;letter-spacing:.06em;color:rgba(255,255,255,.4)">BPM</span>
+<div style="flex:1"></div>
+<button onClick="{{ onRDown }}" style="width:44px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;font:600 20px/1 Archivo;cursor:pointer">−</button>
+<button onClick="{{ onRUp }}" style="width:44px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;font:600 20px/1 Archivo;cursor:pointer">+</button>
+</div>
+</div>
+
+<button onClick="{{ onLog }}" style="width:100%;border:none;background:#FF5B22;color:#fff;font:600 21px/1 Archivo;letter-spacing:-.01em;padding:19px;border-radius:999px;cursor:pointer;font-family:Archivo">Done set</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRest }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Watch — rest timer" style="position:absolute;inset:0;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;color:#fff">
+<div style="font:700 17px/1 Archivo;letter-spacing:.1em;color:#FF5B22;margin-bottom:2px">{{ restTitle }}</div>
+<div style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;width:100%">
+<svg viewBox="0 0 200 200" style="position:absolute;width:196px;height:196px;transform:rotate(-90deg)">
+<circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="9"></circle>
+<circle cx="100" cy="100" r="88" fill="none" stroke="#FF5B22" stroke-width="9" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="{{ restOffset }}"></circle>
+</svg>
+<div style="display:flex;flex-direction:column;align-items:center;gap:3px;z-index:2">
+<span style="font:700 52px/1 Archivo;font-variation-settings:'wdth' 92;font-variant-numeric:tabular-nums;letter-spacing:-.035em">{{ rest }}</span>
+<div style="display:flex;align-items:center;gap:5px">
+<div style="width:7px;height:7px;border-radius:4px;background:#FF5B22"></div>
+<span style="font:700 18px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.75)">{{ hr }}</span>
+</div>
+<span style="font:600 17px/1.2 Archivo;color:rgba(255,255,255,.52);margin-top:6px;text-align:center;max-width:168px">{{ nextLine }}</span>
+</div>
+</div>
+<div style="display:flex;gap:8px;width:100%">
+<button onClick="{{ onAddRest }}" style="flex:1;border:1px solid rgba(255,255,255,.22);background:none;color:#fff;font:700 18px/1 Archivo;padding:15px 0;border-radius:999px;cursor:pointer;font-family:Archivo">+30s</button>
+<button onClick="{{ onSkipRest }}" style="flex:1;border:none;background:#FF5B22;color:#fff;font:700 18px/1 Archivo;padding:15px 0;border-radius:999px;cursor:pointer;font-family:Archivo">Skip</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Watch — session list" style="position:absolute;inset:0;display:flex;flex-direction:column;color:#fff">
+<div style="display:flex;align-items:center;gap:10px;padding:16px 20px 10px">
+<button onClick="{{ closeList }}" style="border:none;background:none;color:#FF5B22;font:700 18px/1 Archivo;cursor:pointer;padding:0;font-family:Archivo">‹</button>
+<span style="flex:1;font:700 17px/1 Archivo;letter-spacing:.08em;color:rgba(255,255,255,.55)">{{ listLabel }}</span>
+</div>
+<div class="watch-scroll" style="flex:1;overflow:auto;padding:0 16px 8px;scrollbar-width:none">
+<sc-for list="{{ exRows }}" as="e" hint-placeholder-count="5">
+<button onClick="{{ e.go }}" style="width:100%;text-align:left;border:1px solid {{ e.bd }};background:{{ e.bg }};border-radius:16px;padding:12px 13px;margin-bottom:7px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Archivo;min-height:52px;box-sizing:border-box">
+<span style="font:700 17px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ e.nFg }};width:14px">{{ e.n }}</span>
+<div style="flex:1;min-width:0">
+<div style="font:600 18px/1.15 Archivo;color:{{ e.fg }}">{{ e.name }}</div>
+<div style="font:600 17px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.4);margin-top:5px">{{ e.scheme }}</div>
+</div>
+<span style="font:700 18px/1 Archivo;color:{{ e.markFg }}">{{ e.mark }}</span>
+</button>
+</sc-for>
+</div>
+<div style="padding:8px 16px 16px">
+<button onClick="{{ openEnd }}" style="width:100%;border:1px solid rgba(255,255,255,.22);background:none;color:#fff;font:700 18px/1 Archivo;padding:16px;border-radius:999px;cursor:pointer;font-family:Archivo">End workout</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEnd }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Watch — end workout" style="position:absolute;inset:0;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;color:#fff">
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px">
+<div style="font:700 26px/1.1 Archivo;font-variation-settings:'wdth' 96;letter-spacing:-.02em">End workout?</div>
+<div style="font:600 17px/1.35 Archivo;color:rgba(255,255,255,.55);max-width:220px">{{ endLine }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<button onClick="{{ confirmEnd }}" style="width:100%;border:none;background:#FF5B22;color:#fff;font:700 19px/1 Archivo;padding:17px;border-radius:999px;cursor:pointer;font-family:Archivo">Save workout</button>
+<button onClick="{{ confirmDiscard }}" style="width:100%;border:1px solid rgba(255,255,255,.22);background:none;color:rgba(255,255,255,.75);font:700 18px/1 Archivo;padding:16px;border-radius:999px;cursor:pointer;font-family:Archivo">Discard</button>
+<button onClick="{{ closeEnd }}" style="width:100%;border:none;background:none;color:rgba(255,255,255,.45);font:600 18px/1 Archivo;padding:12px;cursor:pointer;font-family:Archivo">Keep lifting</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSummary }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Watch — summary" style="position:absolute;inset:0;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;color:#fff">
+<div style="font:700 17px/1 Archivo;letter-spacing:.1em;color:#FF5B22;margin-bottom:12px">WORKOUT DONE</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+<div><div style="font:700 52px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.035em;font-variant-numeric:tabular-nums">{{ elapsed }}</div><div style="font:600 17px/1 Archivo;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-top:6px">ELAPSED</div></div>
+<div style="display:flex;gap:20px">
+<div style="flex:1"><div style="font:700 30px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.03em;font-variant-numeric:tabular-nums">{{ setsLine }}</div><div style="font:600 17px/1 Archivo;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-top:6px">SETS</div></div>
+<div style="flex:1"><div style="font:700 30px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.03em;font-variant-numeric:tabular-nums">{{ volume }}</div><div style="font:600 17px/1 Archivo;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-top:6px">LB MOVED</div></div>
+</div>
+<div style="display:flex;gap:20px">
+<div style="flex:1;display:flex;align-items:baseline;gap:6px"><div style="width:9px;height:9px;border-radius:5px;background:#FF5B22"></div><div><div style="font:700 30px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.03em;font-variant-numeric:tabular-nums">{{ avgHr }}</div><div style="font:600 17px/1 Archivo;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-top:6px">AVG BPM</div></div></div>
+<div style="flex:1"><div style="font:700 30px/1 Archivo;font-variation-settings:'wdth' 92;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:{{ prFg }}">{{ prs }}</div><div style="font:600 17px/1 Archivo;letter-spacing:.07em;color:rgba(255,255,255,.4);margin-top:6px">NEW PR</div></div>
+</div>
+</div>
+<button onClick="{{ onReset }}" style="width:100%;border:1px solid rgba(255,255,255,.22);background:none;color:#fff;font:700 18px/1 Archivo;padding:16px;border-radius:999px;cursor:pointer;margin-top:16px;font-family:Archivo">Done</button>
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:414,&quot;height&quot;:506},&quot;state&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;}}">
+class Component extends DCLogic {
+  state = { view: null };
+
+  componentDidUpdate(prev) {
+    const was = (prev.state || {}).mode, now = (this.props.state || {}).mode;
+    if (was !== now && this.state.view === 'list') this.setState({ view: null });
+  }
+
+  renderVals() {
+    const s = this.props.state || {};
+    const mode = s.mode || 'idle';
+    const live = mode === 'ready' || mode === 'rest';
+    const inEnd = this.state.view === 'end' && live;
+    const inList = this.state.view === 'list' && live && !inEnd;
+    const base = !inList && !inEnd;
+    const rows = s.exList || [];
+    const doneEx = rows.filter(e => e.done).length;
+
+    return {
+      ...s,
+      isIdle: mode === 'idle' && base,
+      isReady: mode === 'ready' && base,
+      isRest: mode === 'rest' && base,
+      isSummary: mode === 'summary' && base,
+      isList: inList, isEnd: inEnd,
+
+      hasPlan: !!s.hasPlan, noPlan: mode === 'idle' && !s.hasPlan,
+      restOffset: 553 - 553 * (s.restFrac || 0),
+      buzzAnim: s.buzz ? 'buzz .38s ease 3' : 'none',
+      crownScale: s.crownDrag ? 1.12 : 1,
+      restTitle: s.buzz ? 'GO' : 'REST',
+      setsLine: (s.doneCount || 0) + '/' + (s.totalSets || 0),
+      avgHr: s.hr || 0,
+      prs: s.prs || 0,
+      prFg: (s.prs || 0) > 0 ? '#FF5B22' : 'rgba(255,255,255,.55)',
+
+      openList: () => this.setState({ view: 'list' }),
+      closeList: () => this.setState({ view: null }),
+      openEnd: () => this.setState({ view: 'end' }),
+      closeEnd: () => this.setState({ view: 'list' }),
+      confirmEnd: () => { this.setState({ view: null }); if (s.onFinish) s.onFinish(); },
+      confirmDiscard: () => { this.setState({ view: null }); if (s.onDiscard) s.onDiscard(); },
+
+      listLabel: doneEx + ' OF ' + rows.length + ' DONE',
+      endLine: (s.doneCount || 0) + ' of ' + (s.totalSets || 0) + ' sets logged · '
+        + (s.volume || 0) + ' lb moved',
+      exRows: rows.map(e => ({
+        n: e.n, name: e.name, scheme: e.scheme,
+        bg: e.cur ? 'rgba(255,91,34,.16)' : 'transparent',
+        bd: e.cur ? '#FF5B22' : 'rgba(255,255,255,.14)',
+        fg: e.done ? 'rgba(255,255,255,.5)' : '#fff',
+        nFg: e.cur ? '#FF5B22' : 'rgba(255,255,255,.35)',
+        mark: e.done ? '✓' : '', markFg: '#FF5B22',
+        go: () => { this.setState({ view: null }); if (e.go) e.go(); },
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

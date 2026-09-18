@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EFEDE6;font-family:Archivo,system-ui,sans-serif;color:#16150F}
+.phone-scroll{scrollbar-width:none;-ms-overflow-style:none}
+.phone-scroll::-webkit-scrollbar{display:none;width:0;height:0}
+a{color:#FF5B22;text-decoration:none}a:hover{color:#16150F}
+@keyframes buzz{0%,100%{transform:translateX(0)}20%{transform:translateX(-3px)}40%{transform:translateX(3px)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}}
+@keyframes pulse{0%{opacity:.4;transform:scale(.85)}70%{opacity:0;transform:scale(1.45)}100%{opacity:0}}
+</style></helmet>
+
+<section style="padding:56px 60px 44px;max-width:1560px">
+<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px">
+<span style="font:800 10px/1 Archivo;letter-spacing:.18em;color:#FF5B22">WORKING PROTOTYPE — V1</span>
+<span style="font:500 10px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.4)">PHONE + WATCH SHARE ONE LIVE WORKOUT</span>
+</div>
+<h1 style="font:800 76px/.92 Archivo;font-variation-settings:'wdth' 112;letter-spacing:-.03em;margin:0 0 16px">Ledger</h1>
+<p style="font:400 17px/1.5 Archivo;max-width:540px;margin:0 0 34px;color:rgba(22,21,15,.68);text-wrap:pretty">A lifting log built around one question: what am I lifting next, and what did I lift last time. Everything else gets out of the way.</p>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,250px));gap:36px;padding:24px 0 28px;border-top:1px solid rgba(22,21,15,.14);border-bottom:1px solid rgba(22,21,15,.14)">
+<div><div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:10px">ASSUMED</div><p style="font:400 13px/1.55 Archivo;margin:0;color:rgba(22,21,15,.7)">Barbell strength plus hypertrophy accessories, four days a week, pounds. Programs get built at home; the gym is for logging only.</p></div>
+<div><div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:10px">THE SYSTEM</div><p style="font:400 13px/1.55 Archivo;margin:0;color:rgba(22,21,15,.7)">Paper ground, ink type, one accent. Numbers are the loudest thing on every screen: expanded Archivo, tabular figures, nothing below 15px.</p></div>
+<div><div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:10px">NEW THIS PASS</div><p style="font:400 13px/1.55 Archivo;margin:0;color:rgba(22,21,15,.7)">Exercises can be chained into supersets from the expanded panel, and any exercise can carry a drop set. The live workout shows a superset as one block, logged round by round, and only rests once the last exercise in the round is done.</p></div>
+</div>
+</section>
+
+<section style="padding:0 60px 90px;display:flex;gap:76px;align-items:flex-start;flex-wrap:wrap">
+
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:402px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.45);margin-right:2px">JUMP TO</span>
+<sc-for list="{{ jumps }}" as="j" hint-placeholder-count="5">
+<button onClick="{{ j.go }}" style="border:1px solid {{ j.bd }};background:{{ j.bg }};color:{{ j.fg }};font:600 11px/1 Archivo;letter-spacing:.02em;padding:7px 11px;border-radius:999px;cursor:pointer">{{ j.label }}</button>
+</sc-for>
+</div>
+
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Home" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column;padding:78px 26px 40px;box-sizing:border-box">
+<div style="display:flex;align-items:center;gap:9px;margin-bottom:30px">
+<div style="width:24px;height:24px;border-radius:7px;background:#16150F;display:flex;align-items:center;justify-content:center;font:800 11px/1 Archivo;color:#EFEDE6">L</div>
+<span style="font:700 9px/1 Archivo;letter-spacing:.2em;color:rgba(22,21,15,.45)">LEDGER</span>
+</div>
+<h2 style="font:800 42px/1.02 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.03em;margin:0 0 14px">Write the program. Log the work.</h2>
+<p style="font:400 15px/1.5 Archivo;color:rgba(22,21,15,.6);margin:0;max-width:290px;text-wrap:pretty">For lifters who already know what they want to train. Build your own routine, day by day, and keep every number.</p>
+<div style="flex:1;min-height:26px"></div>
+
+<div style="display:flex;gap:4px;background:rgba(22,21,15,.07);border-radius:14px;padding:4px;margin-bottom:16px">
+<sc-for list="{{ authTabs }}" as="t" hint-placeholder-count="2">
+<button onClick="{{ t.pick }}" style="flex:1;border:none;background:{{ t.bg }};color:{{ t.fg }};font:600 13px/1 Archivo;padding:13px 0;border-radius:11px;cursor:pointer;font-family:Archivo">{{ t.label }}</button>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px">
+<sc-if value="{{ isCreate }}" hint-placeholder-val="{{ false }}">
+<input placeholder="Name" style="width:100%;box-sizing:border-box;border:1.5px solid rgba(22,21,15,.14);background:#fff;border-radius:14px;padding:17px 16px;font:500 15px/1 Archivo;color:#16150F;outline:none" style-focus="border-color:#FF5B22">
+</sc-if>
+<input type="email" placeholder="Email" style="width:100%;box-sizing:border-box;border:1.5px solid rgba(22,21,15,.14);background:#fff;border-radius:14px;padding:17px 16px;font:500 15px/1 Archivo;color:#16150F;outline:none" style-focus="border-color:#FF5B22">
+<input type="password" placeholder="Password" style="width:100%;box-sizing:border-box;border:1.5px solid rgba(22,21,15,.14);background:#fff;border-radius:14px;padding:17px 16px;font:500 15px/1 Archivo;color:#16150F;outline:none" style-focus="border-color:#FF5B22">
+</div>
+
+<button onClick="{{ authGo }}" style="width:100%;border:none;background:#FF5B22;color:#fff;font:700 16px/1 Archivo;letter-spacing:.01em;padding:19px;border-radius:16px;cursor:pointer;font-family:Archivo">{{ authCta }}</button>
+
+<div style="display:flex;align-items:center;gap:12px;padding:18px 0">
+<div style="flex:1;height:1px;background:rgba(22,21,15,.12)"></div>
+<span style="font:600 10px/1 Archivo;letter-spacing:.12em;color:rgba(22,21,15,.35)">OR</span>
+<div style="flex:1;height:1px;background:rgba(22,21,15,.12)"></div>
+</div>
+
+<button onClick="{{ authGo }}" style="width:100%;border:1.5px solid rgba(22,21,15,.16);background:none;color:#16150F;font:600 15px/1 Archivo;padding:17px;border-radius:16px;cursor:pointer;font-family:Archivo">Continue with Apple</button>
+
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ authGo }}" style="border:none;background:none;color:rgba(22,21,15,.45);font:500 13px/1 Archivo;padding:18px 0 0;cursor:pointer;font-family:Archivo">Forgot password?</button>
+</sc-if>
+<sc-if value="{{ isCreate }}" hint-placeholder-val="{{ false }}">
+<p style="font:400 11.5px/1.45 Archivo;color:rgba(22,21,15,.4);margin:16px 0 0;text-align:center">By creating an account you agree to the terms and privacy policy.</p>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isProgram }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Program builder" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:70px 22px 24px;scrollbar-width:none">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px">
+<div>
+<div style="font:700 9px/1 Archivo;letter-spacing:.18em;color:rgba(22,21,15,.42);margin-bottom:9px">MY PROGRAM</div>
+<h2 style="font:800 34px/1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;margin:0">Upper / Lower</h2>
+</div>
+<button onClick="{{ goSettings }}" style="width:44px;height:44px;flex:none;border:1.5px solid rgba(22,21,15,.14);background:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">
+<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:rgba(22,21,15,.6);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.87 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7.1 19.3l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 3 13.6H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.7 7.1l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 10.4 3V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.87 1.2l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0 1.2 2.87H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.04z"></path></svg>
+</button>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42)">BLOCK · {{ weeks }} WEEKS</span>
+<div style="display:flex;gap:7px">
+<button onClick="{{ weeksDown }}" style="width:34px;height:34px;border-radius:10px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 16px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">−</button>
+<button onClick="{{ weeksUp }}" style="width:34px;height:34px;border-radius:10px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 16px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">+</button>
+</div>
+</div>
+<div class="phone-scroll" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:22px;scrollbar-width:none">
+<sc-for list="{{ weekChips }}" as="w" hint-placeholder-count="8">
+<button onClick="{{ w.pick }}" style="flex:none;width:54px;height:58px;border:1.5px solid {{ w.bd }};background:{{ w.bg }};border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-family:Archivo">
+<span style="font:700 14px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ w.fg }}">{{ w.label }}</span>
+<span style="font:600 8.5px/1 Archivo;letter-spacing:.08em;color:{{ w.subFg }}">{{ w.sub }}</span>
+</button>
+</sc-for>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42)">{{ weekTitle }}</span>
+<span style="font:500 11px/1 Archivo;color:rgba(22,21,15,.38)">Tap to assign</span>
+</div>
+<div style="display:flex;gap:5px;margin-bottom:10px">
+<sc-for list="{{ sched }}" as="d" hint-placeholder-count="7">
+<button onClick="{{ d.cycle }}" style="flex:1;border:1.5px solid {{ d.bd }};background:{{ d.bg }};border-radius:11px;padding:10px 0;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-family:Archivo">
+<span style="font:600 10px/1 Archivo;color:{{ d.dowFg }}">{{ d.dow }}</span>
+<span style="font:700 12px/1 Archivo;letter-spacing:.03em;color:{{ d.fg }}">{{ d.label }}</span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;gap:7px;margin-bottom:26px">
+<button onClick="{{ copyPrev }}" style="flex:1;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 11.5px/1.2 Archivo;color:rgba(22,21,15,.6);padding:13px 6px;border-radius:12px;cursor:pointer;font-family:Archivo">{{ copyPrevLabel }}</button>
+<button onClick="{{ copyRest }}" style="flex:1;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 11.5px/1.2 Archivo;color:rgba(22,21,15,.6);padding:13px 6px;border-radius:12px;cursor:pointer;font-family:Archivo">Apply to later weeks</button>
+<button onClick="{{ toggleDeload }}" style="flex:none;border:1.5px solid {{ deloadBd }};background:{{ deloadBg }};font:600 11.5px/1.2 Archivo;color:{{ deloadFg }};padding:13px 14px;border-radius:12px;cursor:pointer;font-family:Archivo">Deload</button>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42)">TRAINING DAYS</span>
+<span style="font:500 11px/1 Archivo;color:rgba(22,21,15,.38)">{{ daySummary }}</span>
+</div>
+<p style="font:400 11.5px/1.4 Archivo;color:rgba(22,21,15,.4);margin:0 0 12px">Shared by every week. The schedule above decides which day you train, and when.</p>
+<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+<sc-for list="{{ days }}" as="d" hint-placeholder-count="4">
+<button onClick="{{ d.open }}" style="text-align:left;border:none;background:#fff;border-radius:18px;padding:17px;cursor:pointer;display:flex;align-items:flex-start;gap:13px;font-family:Archivo">
+<div style="width:38px;height:38px;border-radius:11px;background:#EFEDE6;flex:none;display:flex;align-items:center;justify-content:center;font:700 11px/1 Archivo;letter-spacing:.04em;color:rgba(22,21,15,.55)">{{ d.tag }}</div>
+<div style="flex:1;min-width:0">
+<div style="font:600 15px/1.2 Archivo">{{ d.name }}</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:4px">{{ d.meta }}</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:11px">
+<sc-for list="{{ d.chips }}" as="c" hint-placeholder-count="4">
+<span style="font:600 10px/1 Archivo;letter-spacing:.05em;background:#EFEDE6;color:rgba(22,21,15,.58);padding:6px 8px;border-radius:7px">{{ c }}</span>
+</sc-for>
+</div>
+</div>
+<span style="font:400 16px/1 Archivo;color:rgba(22,21,15,.28);padding-top:9px">›</span>
+</button>
+</sc-for>
+</div>
+<button onClick="{{ addDay }}" style="width:100%;border:1.5px dashed rgba(22,21,15,.22);background:none;border-radius:18px;padding:18px;font:600 14px/1 Archivo;color:rgba(22,21,15,.55);cursor:pointer;font-family:Archivo">+ Add training day</button>
+</div>
+<dc-import name="LedgerTabs" tab="{{ tab }}" on-tab="{{ setTab }}" hint-size="100%,84px"></dc-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Settings" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:64px 22px 28px;scrollbar-width:none">
+<button onClick="{{ goProgram }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);padding:0 0 16px;cursor:pointer;font-family:Archivo">‹ Program</button>
+<h2 style="font:800 34px/1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;margin:0 0 22px">Settings</h2>
+
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42);margin-bottom:10px">TRAINING</div>
+<div style="background:#fff;border-radius:20px;padding:4px 18px;margin-bottom:22px">
+<div style="display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid rgba(22,21,15,.08)">
+<div style="flex:1">
+<div style="font:600 15px/1.2 Archivo">Units</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:4px">Applies to every log and chart</div>
+</div>
+<div style="display:flex;gap:4px;background:rgba(22,21,15,.07);border-radius:12px;padding:3px">
+<sc-for list="{{ unitOpts }}" as="u" hint-placeholder-count="2">
+<button onClick="{{ u.pick }}" style="border:none;background:{{ u.bg }};color:{{ u.fg }};font:700 12px/1 Archivo;letter-spacing:.06em;width:50px;height:38px;border-radius:10px;cursor:pointer;font-family:Archivo">{{ u.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid rgba(22,21,15,.08)">
+<div style="flex:1">
+<div style="font:600 15px/1.2 Archivo">Default rest</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:4px">Used for new exercises</div>
+</div>
+<div style="font:700 17px/1 Archivo;font-variant-numeric:tabular-nums;margin-right:2px">{{ restDefaultLabel }}</div>
+<button onClick="{{ restDown }}" style="width:40px;height:40px;border-radius:11px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 17px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">−</button>
+<button onClick="{{ restUp }}" style="width:40px;height:40px;border-radius:11px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 17px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">+</button>
+</div>
+<sc-for list="{{ toggles }}" as="t" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid {{ t.line }}">
+<div style="flex:1">
+<div style="font:600 15px/1.2 Archivo">{{ t.label }}</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:4px">{{ t.sub }}</div>
+</div>
+<button onClick="{{ t.toggle }}" style="width:52px;height:32px;flex:none;border:none;border-radius:16px;background:{{ t.trackBg }};cursor:pointer;padding:3px;display:flex;justify-content:{{ t.justify }}">
+<div style="width:26px;height:26px;border-radius:13px;background:#fff"></div>
+</button>
+</div>
+</sc-for>
+</div>
+
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42);margin-bottom:10px">ACCOUNT</div>
+<div style="background:#fff;border-radius:20px;padding:4px 18px;margin-bottom:22px">
+<sc-for list="{{ acctRows }}" as="r" hint-placeholder-count="3">
+<button onClick="{{ r.go }}" style="width:100%;text-align:left;border:none;background:none;padding:16px 0;border-bottom:1px solid {{ r.line }};display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Archivo">
+<span style="flex:1;font:600 15px/1.2 Archivo;color:{{ r.fg }}">{{ r.label }}</span>
+<span style="font:400 13px/1 Archivo;color:rgba(22,21,15,.42)">{{ r.value }}</span>
+<span style="font:400 15px/1 Archivo;color:rgba(22,21,15,.28)">›</span>
+</button>
+</sc-for>
+</div>
+<div style="font:400 11.5px/1.4 Archivo;color:rgba(22,21,15,.35)">Ledger 1.0 · build 214</div>
+</div>
+<dc-import name="LedgerTabs" tab="{{ tab }}" on-tab="{{ setTab }}" hint-size="100%,84px"></dc-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDay }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Day editor" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column;position:relative;overflow:hidden">
+<div style="padding:64px 22px 12px;border-bottom:1px solid rgba(22,21,15,.1)">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+<button onClick="{{ goProgram }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);padding:0;cursor:pointer;font-family:Archivo">‹ Program</button>
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.4)">{{ dayTag }}</span>
+<button onClick="{{ goProgram }}" style="border:none;background:#16150F;color:#EFEDE6;font:700 12px/1 Archivo;padding:10px 15px;border-radius:999px;cursor:pointer;font-family:Archivo">Done</button>
+</div>
+<sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+<input value="{{ dayName }}" onChange="{{ renameDay }}" style="width:100%;box-sizing:border-box;border:none;background:none;outline:none;font:800 29px/1.05 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;color:#16150F;padding:14px 0 5px;margin:0">
+</sc-if>
+<div style="font:400 12.5px/1.3 Archivo;color:rgba(22,21,15,.5);padding-bottom:6px">{{ dayMeta }}</div>
+</div>
+
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:16px 22px 28px;scrollbar-width:none">
+<sc-for list="{{ dayEx }}" as="e" hint-placeholder-count="5">
+<div style="background:#fff;border-radius:{{ e.radius }};margin-bottom:{{ e.mb }};overflow:hidden">
+<sc-if value="{{ e.supHeader }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:baseline;gap:9px;padding:14px 16px 0;flex-wrap:wrap">
+<span style="font:700 9px/1 Archivo;letter-spacing:.15em;color:#FF5B22">SUPERSET</span>
+<span style="font:500 12px/1 Archivo;color:rgba(22,21,15,.62)">{{ e.supNote }}</span>
+</div>
+</sc-if>
+<div onClick="{{ e.toggle }}" style="display:flex;align-items:center;gap:12px;padding:16px;cursor:pointer">
+<span style="font:700 11px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.3);width:19px">{{ e.n }}</span>
+<div style="flex:1;min-width:0">
+<div style="font:600 15px/1.2 Archivo">{{ e.name }}</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:4px">{{ e.sub }}</div>
+</div>
+<div style="flex:none;text-align:right">
+<div style="font:700 14px/1 Archivo;font-variation-settings:'wdth' 110;font-variant-numeric:tabular-nums;color:{{ e.schemeFg }}">{{ e.scheme }}</div>
+<div style="font:600 11px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.48);margin-top:5px">{{ e.loadLabel }}</div>
+</div>
+<span style="font:400 12px/1 Archivo;color:rgba(22,21,15,.3)">{{ e.caret }}</span>
+</div>
+<sc-if value="{{ e.open }}">
+<div style="padding:0 16px 16px;border-top:1px solid rgba(22,21,15,.08)">
+<div style="display:flex;align-items:baseline;gap:10px;padding:14px 0 2px;flex-wrap:wrap">
+<span style="font:700 9px/1 Archivo;letter-spacing:.14em;color:#FF5B22">{{ e.weekLabel }}</span>
+<span style="font:700 15px/1 Archivo;font-variant-numeric:tabular-nums;color:#16150F">{{ e.weekScheme }}</span>
+</div>
+<sc-for list="{{ e.fields }}" as="f" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(22,21,15,.06)">
+<div style="flex:1">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42)">{{ f.label }}</div>
+<div style="font:700 19px/1 Archivo;font-variation-settings:'wdth' 110;font-variant-numeric:tabular-nums;margin-top:7px">{{ f.value }}</div>
+</div>
+<button onClick="{{ f.down }}" style="width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">−</button>
+<button onClick="{{ f.up }}" style="width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.6);cursor:pointer">+</button>
+</div>
+</sc-for>
+<div style="padding:15px 0 4px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:9px">PROGRESSION</div>
+<div style="display:flex;gap:6px">
+<sc-for list="{{ e.progOpts }}" as="p" hint-placeholder-count="3">
+<button onClick="{{ p.pick }}" style="flex:1;min-height:44px;border:1.5px solid {{ p.bd }};background:{{ p.bg }};color:{{ p.fg }};font:600 12.5px/1 Archivo;border-radius:11px;cursor:pointer;font-family:Archivo">{{ p.label }}</button>
+</sc-for>
+</div>
+<p style="font:400 11.5px/1.45 Archivo;color:rgba(22,21,15,.52);margin:10px 0 0;text-wrap:pretty">{{ e.progNote }}</p>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 0 4px;border-top:1px solid rgba(22,21,15,.06);margin-top:14px">
+<div style="flex:1">
+<div style="font:600 14px/1.2 Archivo">Drop set</div>
+<div style="font:400 11.5px/1.4 Archivo;color:rgba(22,21,15,.5);margin-top:4px">{{ e.dropNote }}</div>
+</div>
+<button onClick="{{ e.dropToggle }}" style="width:52px;height:32px;flex:none;border:none;border-radius:16px;background:{{ e.dropTrackBg }};cursor:pointer;padding:3px;display:flex;justify-content:{{ e.dropJustify }}">
+<div style="width:26px;height:26px;border-radius:13px;background:#fff"></div>
+</button>
+</div>
+<sc-if value="{{ e.hasSupActions }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:8px;padding-top:12px">
+<sc-for list="{{ e.supActions }}" as="a" hint-placeholder-count="1">
+<button onClick="{{ a.go }}" style="flex:1;min-height:44px;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 12px/1.2 Archivo;color:rgba(22,21,15,.6);border-radius:12px;cursor:pointer;font-family:Archivo">{{ a.label }}</button>
+</sc-for>
+</div>
+</sc-if>
+<div style="display:flex;gap:8px;padding-top:14px">
+<button onClick="{{ e.moveUp }}" style="flex:1;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 12px/1 Archivo;color:rgba(22,21,15,.6);padding:14px 0;border-radius:12px;cursor:pointer;font-family:Archivo">Move up</button>
+<button onClick="{{ e.moveDown }}" style="flex:1;border:1.5px solid rgba(22,21,15,.14);background:none;font:600 12px/1 Archivo;color:rgba(22,21,15,.6);padding:14px 0;border-radius:12px;cursor:pointer;font-family:Archivo">Move down</button>
+<button onClick="{{ e.remove }}" style="flex:1;border:1.5px solid rgba(255,91,34,.35);background:none;font:600 12px/1 Archivo;color:#FF5B22;padding:14px 0;border-radius:12px;cursor:pointer;font-family:Archivo">Remove</button>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<button onClick="{{ openPicker }}" style="width:100%;border:1.5px dashed rgba(22,21,15,.22);background:none;border-radius:18px;padding:18px;font:600 14px/1 Archivo;color:rgba(22,21,15,.55);cursor:pointer;font-family:Archivo">+ Add exercise from library</button>
+</div>
+
+<sc-if value="{{ pickerOpen }}">
+<div style="position:absolute;inset:0;background:rgba(22,21,15,.42);display:flex;align-items:flex-end">
+<div style="width:100%;height:90%;background:#EFEDE6;border-radius:26px 26px 0 0;display:flex;flex-direction:column;overflow:hidden">
+<div style="padding:20px 20px 12px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+<h4 style="font:800 22px/1.1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.02em;margin:0">Exercise library</h4>
+<button onClick="{{ closePicker }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);cursor:pointer;padding:0;font-family:Archivo">Cancel</button>
+</div>
+<sc-if value="{{ ready }}" hint-placeholder-val="{{ false }}">
+<input value="{{ query }}" onChange="{{ setQuery }}" placeholder="Search exercises" style="width:100%;box-sizing:border-box;border:1.5px solid rgba(22,21,15,.12);background:#fff;border-radius:14px;padding:15px 16px;font:500 15px/1 Archivo;color:#16150F;outline:none;margin-bottom:12px" style-focus="border-color:#FF5B22">
+</sc-if>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px">
+<sc-for list="{{ musChips }}" as="c" hint-placeholder-count="6">
+<button onClick="{{ c.pick }}" style="border:1.5px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font:600 12px/1 Archivo;padding:9px 12px;border-radius:999px;cursor:pointer;font-family:Archivo">{{ c.label }}</button>
+</sc-for>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ eqpChips }}" as="c" hint-placeholder-count="6">
+<button onClick="{{ c.pick }}" style="border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font:500 11.5px/1 Archivo;padding:8px 11px;border-radius:999px;cursor:pointer;font-family:Archivo">{{ c.label }}</button>
+</sc-for>
+</div>
+</div>
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:6px 20px 12px;scrollbar-width:none">
+<sc-for list="{{ picks }}" as="p" hint-placeholder-count="8">
+<button onClick="{{ p.toggle }}" style="width:100%;text-align:left;border:1.5px solid {{ p.bd }};background:{{ p.bg }};border-radius:14px;padding:13px 15px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Archivo">
+<div style="width:36px;height:36px;border-radius:10px;background:#EFEDE6;flex:none;display:flex;align-items:center;justify-content:center;font:700 10px/1 Archivo;letter-spacing:.04em;color:rgba(22,21,15,.5)">{{ p.abbr }}</div>
+<div style="flex:1;min-width:0">
+<div style="font:600 15px/1.2 Archivo">{{ p.name }}</div>
+<div style="font:400 12px/1.3 Archivo;color:{{ p.metaFg }};margin-top:3px">{{ p.meta }}</div>
+</div>
+<div style="width:26px;height:26px;border-radius:13px;border:1.5px solid {{ p.dotBd }};background:{{ p.dotBg }};flex:none;display:flex;align-items:center;justify-content:center;font:700 13px/1 Archivo;color:#fff">{{ p.tick }}</div>
+</button>
+</sc-for>
+<sc-if value="{{ noPicks }}">
+<div style="padding:26px 4px;text-align:center">
+<p style="font:400 14px/1.5 Archivo;color:rgba(22,21,15,.5);margin:0 0 14px">Nothing matches that filter.</p>
+<button onClick="{{ clearFilters }}" style="border:1.5px solid rgba(22,21,15,.16);background:none;font:600 13px/1 Archivo;color:#16150F;padding:14px 18px;border-radius:13px;cursor:pointer;font-family:Archivo">Clear filters</button>
+</div>
+</sc-if>
+</div>
+<div style="padding:12px 20px 32px;border-top:1px solid rgba(22,21,15,.1)">
+<button onClick="{{ addPicked }}" style="width:100%;border:none;background:{{ addBg }};color:{{ addFg }};font:700 16px/1 Archivo;padding:18px;border-radius:16px;cursor:pointer;font-family:Archivo">{{ addLabel }}</button>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Today" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:70px 22px 24px;scrollbar-width:none">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px">
+<div>
+<div style="font:700 9px/1 Archivo;letter-spacing:.18em;color:rgba(22,21,15,.42);margin-bottom:8px">{{ todayDate }}</div>
+<h2 style="font:800 34px/1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;margin:0">{{ todayTitle }}</h2>
+</div>
+<div style="width:44px;height:44px;border-radius:22px;background:#16150F;color:#EFEDE6;display:flex;align-items:center;justify-content:center;font:700 14px/1 Archivo">JD</div>
+</div>
+
+<div style="display:flex;gap:5px;margin-bottom:26px">
+<sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px">
+<span style="font:600 10px/1 Archivo;color:rgba(22,21,15,.4)">{{ d.dow }}</span>
+<div style="width:100%;height:38px;border-radius:9px;background:{{ d.bg }};border:1.5px solid {{ d.bd }};display:flex;align-items:center;justify-content:center;font:700 13px/1 Archivo;color:{{ d.fg }}">{{ d.num }}</div>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{ noToday }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:22px;padding:24px;margin-bottom:14px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42);margin-bottom:14px">SCHEDULED REST</div>
+<div style="font:800 24px/1.15 Archivo;font-variation-settings:'wdth' 106;letter-spacing:-.02em;margin-bottom:10px">No session today</div>
+<p style="font:400 14px/1.5 Archivo;color:rgba(22,21,15,.55);margin:0 0 18px;text-wrap:pretty">{{ restDayNote }}</p>
+<button onClick="{{ goProgram }}" style="width:100%;border:1.5px solid rgba(22,21,15,.16);background:none;color:#16150F;font:600 14px/1 Archivo;padding:16px;border-radius:14px;cursor:pointer;font-family:Archivo">Edit this week</button>
+</div>
+</sc-if>
+<sc-if value="{{ isLogged }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:22px;padding:24px;margin-bottom:14px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22">LOGGED · {{ loggedWeek }}</span>
+<span style="font:500 11px/1 Archivo;color:rgba(22,21,15,.45)">{{ loggedMins }}</span>
+</div>
+<div style="font:800 27px/1.1 Archivo;font-variation-settings:'wdth' 106;letter-spacing:-.02em;margin-bottom:12px">{{ loggedDay }}</div>
+<div style="font:500 13px/1.4 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.6);margin-bottom:20px">{{ loggedStats }}</div>
+<button onClick="{{ openReceipt }}" style="width:100%;border:1.5px solid rgba(22,21,15,.16);background:none;color:#16150F;font:600 15px/1 Archivo;padding:17px;border-radius:14px;cursor:pointer;font-family:Archivo">View session</button>
+<div style="font:500 12px/1 Archivo;color:rgba(22,21,15,.45);padding-top:16px;text-align:center">{{ loggedNext }}</div>
+</div>
+</sc-if>
+<sc-if value="{{ hasToday }}" hint-placeholder-val="{{ true }}">
+<div style="background:#16150F;border-radius:22px;padding:24px;color:#EFEDE6;margin-bottom:14px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22">{{ blockLabel }}</span>
+<span style="font:500 11px/1 Archivo;color:rgba(239,237,230,.5)">{{ todayMins }}</span>
+</div>
+<div style="font:800 27px/1.1 Archivo;font-variation-settings:'wdth' 106;letter-spacing:-.02em;margin-bottom:16px">{{ todayName }}</div>
+<div style="display:flex;flex-direction:column;gap:9px;margin-bottom:22px">
+<sc-for list="{{ preview }}" as="p" hint-placeholder-count="5">
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding-bottom:9px;border-bottom:1px solid rgba(239,237,230,.12)">
+<span style="font:500 13px/1.2 Archivo;color:rgba(239,237,230,.82)">{{ p.name }}</span>
+<span style="font:600 13px/1.2 Archivo;font-variant-numeric:tabular-nums;color:#EFEDE6">{{ p.scheme }}</span>
+</div>
+</sc-for>
+</div>
+<button onClick="{{ startWorkout }}" style="width:100%;border:none;background:#FF5B22;color:#fff;font:700 16px/1 Archivo;padding:18px;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px">
+<span>{{ startLabel }}</span>
+<span style="font-size:17px">→</span>
+</button>
+</div>
+</sc-if>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+<div style="background:#fff;border-radius:18px;padding:18px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:12px">THIS WEEK</div>
+<div style="font:800 30px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">{{ sessionsDone }}<span style="font-size:16px;color:rgba(22,21,15,.4)">/{{ sessionsPlanned }}</span></div>
+<div style="font:400 12px/1.2 Archivo;color:rgba(22,21,15,.5);margin-top:5px">sessions done</div>
+</div>
+<div style="background:#fff;border-radius:18px;padding:18px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:12px">VOLUME</div>
+<div style="font:800 30px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">{{ volLabel }}<span style="font-size:15px;color:rgba(22,21,15,.4)">k</span></div>
+<div style="font:400 12px/1.2 Archivo;color:rgba(22,21,15,.5);margin-top:5px">lb moved · +8%</div>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:18px;padding:18px 18px 6px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:4px">RECENT</div>
+<sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+<button onClick="{{ r.go }}" style="width:100%;text-align:left;border:none;background:none;padding:14px 0;border-bottom:1px solid rgba(22,21,15,.08);display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Archivo">
+<div style="width:34px;height:34px;border-radius:10px;background:#EFEDE6;display:flex;align-items:center;justify-content:center;font:700 11px/1 Archivo;color:rgba(22,21,15,.55)">{{ r.tag }}</div>
+<div style="flex:1"><div style="font:600 14px/1.2 Archivo">{{ r.name }}</div><div style="font:400 12px/1.2 Archivo;color:rgba(22,21,15,.5);margin-top:3px">{{ r.meta }}</div></div>
+<span style="font:400 16px/1 Archivo;color:rgba(22,21,15,.28)">›</span>
+</button>
+</sc-for>
+</div>
+</div>
+<dc-import name="LedgerTabs" tab="{{ tab }}" on-tab="{{ setTab }}" hint-size="100%,84px"></dc-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Session receipt" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:66px 22px 30px;scrollbar-width:none">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:20px">
+<div>
+<div style="font:700 9px/1 Archivo;letter-spacing:.18em;color:rgba(22,21,15,.42);margin-bottom:9px">{{ recDate }}</div>
+<h2 style="font:800 31px/1.04 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;margin:0;max-width:240px">{{ recDay }}</h2>
+</div>
+<button onClick="{{ goToday }}" style="flex:none;border:none;background:#16150F;color:#EFEDE6;font:700 12px/1 Archivo;padding:11px 16px;border-radius:999px;cursor:pointer;font-family:Archivo">Done</button>
+</div>
+
+<sc-if value="{{ hasReceipt }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:18px">
+<div style="background:#16150F;border-radius:16px;padding:15px 14px;color:#EFEDE6">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:#FF5B22;margin-bottom:10px">TIME</div>
+<div style="font:800 23px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">{{ recElapsed }}</div>
+</div>
+<div style="background:#fff;border-radius:16px;padding:15px 14px">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:10px">SETS</div>
+<div style="font:800 23px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">{{ recSets }}</div>
+</div>
+<div style="background:#fff;border-radius:16px;padding:15px 14px">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:10px">LB MOVED</div>
+<div style="font:800 23px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">{{ recVolume }}</div>
+</div>
+</div>
+
+<sc-if value="{{ hasPrs }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 12px/1 Archivo;letter-spacing:.02em;color:#C63F0F;padding:0 2px 16px">{{ prLine }}</div>
+</sc-if>
+
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42)">LOGGED</span>
+<span style="font:500 11px/1 Archivo;color:rgba(22,21,15,.38)">Prescribed on the right</span>
+</div>
+<div style="background:#fff;border-radius:20px;padding:4px 18px">
+<sc-for list="{{ recRows }}" as="r" hint-placeholder-count="5">
+<div style="padding:15px 0;border-bottom:1px solid {{ r.line }}">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px">
+<span style="font:600 15px/1.2 Archivo">{{ r.name }}</span>
+<span style="flex:none;font:600 12px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.45)">{{ r.target }}</span>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ r.actual }}" as="c" hint-placeholder-count="3">
+<span style="font:600 12px/1 Archivo;font-variant-numeric:tabular-nums;background:#EFEDE6;color:#16150F;padding:7px 9px;border-radius:7px">{{ c }}</span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ noReceipt }}" hint-placeholder-val="{{ false }}">
+<p style="font:400 14px/1.5 Archivo;color:rgba(22,21,15,.5);margin:8px 0 0;max-width:280px;text-wrap:pretty">Nothing logged yet. Finish a session and the receipt lands here.</p>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWorkout }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Active workout" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column;position:relative;overflow:hidden">
+<div style="padding:66px 20px 14px;background:#EFEDE6;border-bottom:1px solid rgba(22,21,15,.1)">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<button onClick="{{ goToday }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);padding:0;cursor:pointer">‹ Minimize</button>
+<div style="display:flex;align-items:center;gap:7px">
+<div style="width:6px;height:6px;border-radius:3px;background:#FF5B22"></div>
+<span style="font:700 15px/1 Archivo;font-variant-numeric:tabular-nums;letter-spacing:.02em">{{ elapsed }}</span>
+</div>
+<button onClick="{{ finishWorkout }}" style="border:none;background:#16150F;color:#EFEDE6;font:700 12px/1 Archivo;padding:9px 14px;border-radius:999px;cursor:pointer">Finish</button>
+</div>
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42);margin:15px 0 9px">{{ workoutDay }}</div>
+<div style="display:flex;gap:4px">
+<sc-for list="{{ progressBars }}" as="b" hint-placeholder-count="5"><div style="flex:{{ b.flex }};height:4px;border-radius:2px;background:{{ b.bg }}"></div></sc-for>
+</div>
+</div>
+
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:20px 20px 28px;scrollbar-width:none">
+<div style="background:#fff;border-radius:22px;padding:22px 20px;margin-bottom:16px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
+<div style="flex:1">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:9px">{{ exCounter }}</div>
+<h3 style="font:800 27px/1.06 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.022em;margin:0">{{ exName }}</h3>
+</div>
+<sc-if value="{{ isSolo }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ openSwap }}" style="border:1.5px solid rgba(22,21,15,.14);background:none;border-radius:12px;width:40px;height:40px;flex:none;cursor:pointer;font:500 15px/1 Archivo;color:rgba(22,21,15,.6)">⇄</button>
+</sc-if>
+</div>
+<sc-if value="{{ isSolo }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:9px;margin:16px 0 7px;padding:12px 13px;background:#16150F;border-radius:12px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.13em;color:#FF5B22">TARGET</span>
+<span style="font:600 13px/1 Archivo;font-variant-numeric:tabular-nums;color:#EFEDE6;flex:1">{{ exTarget }}</span>
+</div>
+<sc-if value="{{ hasPlates }}" hint-placeholder-val="{{ false }}">
+<div style="font:500 12px/1.3 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.62);padding:0 2px 9px">{{ exPlates }}</div>
+</sc-if>
+<div style="display:flex;align-items:center;gap:8px;margin:0 0 18px;padding:11px 13px;background:#EFEDE6;border-radius:12px">
+<span style="font:700 9px/1 Archivo;letter-spacing:.13em;color:rgba(22,21,15,.42)">LAST</span>
+<span style="font:600 13px/1 Archivo;font-variant-numeric:tabular-nums;color:#16150F;flex:1">{{ exLast }}</span>
+<button onClick="{{ repeatLast }}" style="border:none;background:#16150F;color:#EFEDE6;font:600 10px/1 Archivo;letter-spacing:.06em;padding:7px 10px;border-radius:8px;cursor:pointer">REPEAT</button>
+</div>
+</sc-if>
+<sc-if value="{{ isGroup }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:7px;margin:15px 0 16px">
+<sc-for list="{{ blockLegend }}" as="b" hint-placeholder-count="2">
+<button onClick="{{ b.go }}" style="width:100%;text-align:left;border:none;background:{{ b.bg }};border-radius:12px;padding:12px 13px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Archivo">
+<span style="width:15px;flex:none;font:700 13px/1 Archivo;color:{{ b.letterFg }}">{{ b.letter }}</span>
+<span style="flex:1;min-width:0;font:600 13.5px/1.2 Archivo;color:{{ b.fg }}">{{ b.name }}</span>
+<span style="flex:none;font:600 12px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ b.metaFg }}">{{ b.target }}</span>
+</button>
+</sc-for>
+<div style="font:500 12px/1 Archivo;color:rgba(22,21,15,.62);padding:3px 2px 0">{{ groupRestLabel }}</div>
+</div>
+</sc-if>
+
+<div style="display:grid;grid-template-columns:30px 1fr 1fr 46px;gap:8px;padding:0 2px 9px;border-bottom:1px solid rgba(22,21,15,.1)">
+<span style="font:700 9px/1 Archivo;letter-spacing:.12em;color:rgba(22,21,15,.38)">#</span>
+<span style="font:700 9px/1 Archivo;letter-spacing:.12em;color:rgba(22,21,15,.38)">LB</span>
+<span style="font:700 9px/1 Archivo;letter-spacing:.12em;color:rgba(22,21,15,.38)">REPS</span>
+<span></span>
+</div>
+
+<sc-for list="{{ rows }}" as="s" hint-placeholder-count="5">
+<div style="border-bottom:1px solid rgba(22,21,15,.07)">
+<div onClick="{{ s.select }}" style="display:grid;grid-template-columns:30px 1fr 1fr 46px;gap:8px;align-items:center;padding:13px 2px;cursor:pointer">
+<span style="font:700 13px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ s.numFg }}">{{ s.n }}</span>
+<span style="font:700 21px/1 Archivo;font-variation-settings:'wdth' 110;font-variant-numeric:tabular-nums;color:{{ s.fg }}">{{ s.w }}</span>
+<span style="font:700 21px/1 Archivo;font-variation-settings:'wdth' 110;font-variant-numeric:tabular-nums;color:{{ s.fg }}">{{ s.r }}</span>
+<button onClick="{{ s.check }}" style="width:34px;height:34px;border-radius:10px;border:1.5px solid {{ s.chkBd }};background:{{ s.chkBg }};color:{{ s.chkFg }};font:700 15px/1 Archivo;cursor:pointer;justify-self:end">{{ s.chk }}</button>
+</div>
+<sc-if value="{{ s.active }}">
+<div style="display:flex;gap:8px;padding:0 2px 14px">
+<div style="flex:1;display:flex;align-items:center;background:#EFEDE6;border-radius:11px;overflow:hidden">
+<button onClick="{{ s.wDown }}" style="border:none;background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.55);padding:12px 0;flex:1;cursor:pointer">−</button>
+<span style="font:600 10px/1 Archivo;letter-spacing:.1em;color:rgba(22,21,15,.4)">{{ wStepLabel }}</span>
+<button onClick="{{ s.wUp }}" style="border:none;background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.55);padding:12px 0;flex:1;cursor:pointer">+</button>
+</div>
+<div style="flex:1;display:flex;align-items:center;background:#EFEDE6;border-radius:11px;overflow:hidden">
+<button onClick="{{ s.rDown }}" style="border:none;background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.55);padding:12px 0;flex:1;cursor:pointer">−</button>
+<span style="font:600 10px/1 Archivo;letter-spacing:.1em;color:rgba(22,21,15,.4)">1 REP</span>
+<button onClick="{{ s.rUp }}" style="border:none;background:none;font:600 19px/1 Archivo;color:rgba(22,21,15,.55);padding:12px 0;flex:1;cursor:pointer">+</button>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+
+<button onClick="{{ addSet }}" style="width:100%;border:none;background:none;font:600 13px/1 Archivo;color:rgba(22,21,15,.45);padding:15px 0 4px;cursor:pointer">+ Add set</button>
+</div>
+
+<sc-if value="{{ hasUpNext }}" hint-placeholder-val="{{ true }}">
+<div style="background:#fff;border-radius:18px;padding:6px 18px 6px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);padding:14px 0 2px">REMAINING</div>
+<sc-for list="{{ upNext }}" as="u" hint-placeholder-count="4">
+<button onClick="{{ u.go }}" style="width:100%;text-align:left;border:none;background:none;padding:13px 0;border-bottom:1px solid rgba(22,21,15,.08);display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Archivo">
+<span style="font:700 11px/1 Archivo;color:rgba(22,21,15,.32);width:14px">{{ u.n }}</span>
+<span style="flex:1;font:600 14px/1.2 Archivo;color:{{ u.fg }}">{{ u.name }}</span>
+<span style="font:600 13px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.5)">{{ u.scheme }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ resting }}">
+<div style="position:absolute;left:0;right:0;bottom:0;background:#16150F;border-radius:26px 26px 0 0;padding:22px 22px 44px;color:#EFEDE6;box-shadow:0 -20px 50px rgba(22,21,15,.28)">
+<div style="display:flex;align-items:center;gap:18px">
+<div style="position:relative;width:74px;height:74px;flex:none">
+<svg viewBox="0 0 74 74" style="width:74px;height:74px;transform:rotate(-90deg)">
+<circle cx="37" cy="37" r="32" fill="none" stroke="rgba(239,237,230,.16)" stroke-width="5"></circle>
+<circle cx="37" cy="37" r="32" fill="none" stroke="#FF5B22" stroke-width="5" stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="{{ restOffset }}"></circle>
+</svg>
+<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 18px/1 Archivo;font-variant-numeric:tabular-nums">{{ restLabel }}</div>
+</div>
+<div style="flex:1">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:7px">RESTING</div>
+<div style="font:600 15px/1.25 Archivo;color:rgba(239,237,230,.9)">{{ restNext }}</div>
+<div style="font:400 12px/1.3 Archivo;color:rgba(239,237,230,.5);margin-top:4px">Watch will buzz at zero</div>
+</div>
+</div>
+<div style="display:flex;gap:9px;margin-top:18px">
+<button onClick="{{ addRest }}" style="flex:1;border:1.5px solid rgba(239,237,230,.22);background:none;color:#EFEDE6;font:700 14px/1 Archivo;padding:15px;border-radius:13px;cursor:pointer">+30s</button>
+<button onClick="{{ skipRest }}" style="flex:1;border:none;background:#FF5B22;color:#fff;font:700 14px/1 Archivo;padding:15px;border-radius:13px;cursor:pointer">Skip rest</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ swapOpen }}">
+<div style="position:absolute;inset:0;background:rgba(22,21,15,.42);display:flex;align-items:flex-end">
+<div style="width:100%;background:#EFEDE6;border-radius:26px 26px 0 0;padding:22px 20px 40px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+<h4 style="font:800 22px/1.1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.02em;margin:0">Swap exercise</h4>
+<button onClick="{{ closeSwap }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);cursor:pointer;padding:0">Cancel</button>
+</div>
+<p style="font:400 13px/1.4 Archivo;color:rgba(22,21,15,.55);margin:0 0 16px">Same movement pattern, equipment you have.</p>
+<sc-for list="{{ swaps }}" as="a" hint-placeholder-count="3">
+<button onClick="{{ a.pick }}" style="width:100%;text-align:left;border:1.5px solid rgba(22,21,15,.12);background:#fff;border-radius:14px;padding:15px 16px;margin-bottom:9px;cursor:pointer;display:flex;align-items:center;gap:12px;font-family:Archivo">
+<div style="flex:1"><div style="font:600 15px/1.2 Archivo">{{ a.name }}</div><div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:3px">{{ a.sub }}</div></div>
+<span style="font:600 11px/1 Archivo;color:#FF5B22;letter-spacing:.06em">USE</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isLibrary }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Library" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:70px 22px 24px;scrollbar-width:none">
+<h2 style="font:800 34px/1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.025em;margin:0 0 18px">Library</h2>
+<div style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:16px">
+<span style="font:400 15px/1 Archivo;color:rgba(22,21,15,.35)">⌕</span>
+<span style="font:400 15px/1 Archivo;color:rgba(22,21,15,.38)">Search 214 exercises</span>
+</div>
+<div style="display:flex;gap:7px;margin-bottom:22px;flex-wrap:wrap">
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+<button onClick="{{ f.pick }}" style="border:1.5px solid {{ f.bd }};background:{{ f.bg }};color:{{ f.fg }};font:600 12px/1 Archivo;padding:9px 13px;border-radius:999px;cursor:pointer">{{ f.label }}</button>
+</sc-for>
+</div>
+<sc-for list="{{ libSections }}" as="sec" hint-placeholder-count="2">
+<div style="margin-bottom:22px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.42);margin-bottom:10px">{{ sec.title }}</div>
+<div style="background:#fff;border-radius:18px;padding:4px 18px">
+<sc-for list="{{ sec.items }}" as="e" hint-placeholder-count="4">
+<button onClick="{{ e.go }}" style="width:100%;text-align:left;border:none;background:none;padding:15px 0;border-bottom:1px solid rgba(22,21,15,.08);display:flex;align-items:center;gap:13px;cursor:pointer;font-family:Archivo">
+<div style="width:38px;height:38px;border-radius:11px;background:#EFEDE6;flex:none;display:flex;align-items:center;justify-content:center;font:700 10px/1 Archivo;letter-spacing:.04em;color:rgba(22,21,15,.5)">{{ e.abbr }}</div>
+<div style="flex:1"><div style="font:600 15px/1.2 Archivo">{{ e.name }}</div><div style="font:400 12px/1.3 Archivo;color:rgba(22,21,15,.5);margin-top:3px">{{ e.meta }}</div></div>
+<span style="font:700 14px/1 Archivo;font-variant-numeric:tabular-nums;color:rgba(22,21,15,.75)">{{ e.pr }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+<dc-import name="LedgerTabs" tab="{{ tab }}" on-tab="{{ setTab }}" hint-size="100%,84px"></dc-import>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Exercise history" style="height:100%;background:#EFEDE6;display:flex;flex-direction:column">
+<div class="phone-scroll" style="flex:1;overflow:auto;padding:66px 22px 24px;scrollbar-width:none">
+<button onClick="{{ goLibrary }}" style="border:none;background:none;font:500 13px/1 Archivo;color:rgba(22,21,15,.5);padding:0 0 16px;cursor:pointer">‹ Library</button>
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:9px">BARBELL · CHEST</div>
+<h2 style="font:800 36px/1 Archivo;font-variation-settings:'wdth' 108;letter-spacing:-.028em;margin:0 0 20px">Bench Press</h2>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:16px">
+<div style="background:#16150F;border-radius:16px;padding:15px 14px;color:#EFEDE6">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:#FF5B22;margin-bottom:10px">1RM EST</div>
+<div style="font:800 25px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">218</div>
+</div>
+<div style="background:#fff;border-radius:16px;padding:15px 14px">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:10px">BEST SET</div>
+<div style="font:800 25px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">195<span style="font-size:12px;color:rgba(22,21,15,.42)">×5</span></div>
+</div>
+<div style="background:#fff;border-radius:16px;padding:15px 14px">
+<div style="font:700 8px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);margin-bottom:10px">SESSIONS</div>
+<div style="font:800 25px/1 Archivo;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums">34</div>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:20px;padding:20px 18px 14px;margin-bottom:16px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42)">ESTIMATED 1RM · 8 WEEKS</div>
+<span style="font:700 11px/1 Archivo;color:#FF5B22">+22 lb</span>
+</div>
+<div data-om-raster="true" style="display:flex;align-items:flex-end;gap:6px;height:132px">
+<sc-for list="{{ chart }}" as="c" hint-placeholder-count="8">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end">
+<span style="font:700 10px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ c.fg }}">{{ c.v }}</span>
+<div style="width:100%;border-radius:5px 5px 2px 2px;height:{{ c.h }};background:{{ c.bg }}"></div>
+<span style="font:500 9px/1 Archivo;color:rgba(22,21,15,.4)">{{ c.wk }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="background:#fff;border-radius:20px;padding:6px 18px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.14em;color:rgba(22,21,15,.42);padding:16px 0 4px">SESSION LOG</div>
+<sc-for list="{{ sessions }}" as="h" hint-placeholder-count="4">
+<div style="padding:15px 0;border-bottom:1px solid rgba(22,21,15,.08)">
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">
+<span style="font:600 13px/1 Archivo;color:rgba(22,21,15,.55)">{{ h.date }}</span>
+<span style="font:700 12px/1 Archivo;font-variant-numeric:tabular-nums;color:{{ h.tagFg }}">{{ h.tag }}</span>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ h.sets }}" as="q" hint-placeholder-count="5">
+<span style="font:600 12px/1 Archivo;font-variant-numeric:tabular-nums;background:#EFEDE6;color:#16150F;padding:7px 9px;border-radius:7px">{{ q }}</span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<dc-import name="LedgerTabs" tab="{{ tab }}" on-tab="{{ setTab }}" hint-size="100%,84px"></dc-import>
+</div>
+</sc-if>
+
+</x-import>
+<div style="font:400 12px/1.5 Archivo;color:rgba(22,21,15,.45);max-width:380px">Phone — setup, programming and review. Change the week or the schedule on Program, then open Today: the session that starts is the one you just wrote. Tap a set row for steppers; tick a set to start the shared rest timer.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:rgba(22,21,15,.45);height:31px;display:flex;align-items:center">APPLE WATCH · 46MM</div>
+<dc-import name="LedgerWatch" state="{{ watch }}" hint-size="420px,520px"></dc-import>
+<div style="font:400 12px/1.5 Archivo;color:rgba(22,21,15,.45);max-width:330px">Watch — six states: before the workout (start from the wrist), set ready, rest, the session list (tap the exercise name), end-workout confirm, and the summary. Weight and reps arrive preset from the phone. Drag the crown to adjust, tap the face to log. Drawn at 1.5× a 46mm display (208 × 248 pt) — divide by 1.5 for real point sizes. Smallest label is 17px = 11pt; the ± buttons are 44px = 29pt, tuned for the crown to do the fine work.</div>
+</div>
+
+<div style="width:300px;padding-top:47px">
+<div style="font:700 9px/1 Archivo;letter-spacing:.16em;color:#FF5B22;margin-bottom:14px">NEXT STEPS</div>
+<ol style="margin:0;padding-left:18px;font:400 13px/1.6 Archivo;color:rgba(22,21,15,.68)">
+<li style="margin-bottom:11px">Per-set schemes, for days that are not straight sets (5/3/1, pyramids, back-off sets).</li>
+<li style="margin-bottom:11px">Reordering exercises across a superset boundary — Move up / Move down currently ignores grouping.</li>
+<li style="margin-bottom:11px">Custom exercise creation from the library sheet.</li>
+<li style="margin-bottom:11px">History is still sample data — the finished session should feed Recent, the e1RM chart and each exercise's LAST line.</li>
+<li>A block-level view of the prescription: every week's load for every lift, on one screen.</li>
+</ol>
+</div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560,&quot;height&quot;:1200}}">
+const ORANGE = '#FF5B22', INK = '#16150F', PAPER = '#EFEDE6';
+
+const EXERCISES = [
+  { name: 'Barbell Bench Press', scheme: '5 × 5', target: 185, reps: 5,
+    last: 'Aug 12 · 5×5 @ 180 lb', rest: 150,
+    alts: [
+      { name: 'Dumbbell Bench Press', sub: 'Similar pattern · 2 × 70 lb' },
+      { name: 'Smith Machine Press', sub: 'Machine · bench occupied?' },
+      { name: 'Weighted Dip', sub: 'Bodyweight + 45 lb' },
+    ] },
+  { name: 'Incline DB Press', scheme: '3 × 10', target: 55, reps: 10,
+    last: 'Aug 12 · 3×10 @ 50 lb', rest: 90,
+    alts: [
+      { name: 'Incline Barbell Press', sub: 'Barbell · 135 lb' },
+      { name: 'Machine Incline Press', sub: 'Machine · 120 lb' },
+      { name: 'Low-to-High Cable Fly', sub: 'Cable · 25 lb' },
+    ] },
+  { name: 'Chest-Supported Row', scheme: '4 × 8', target: 70, reps: 8,
+    last: 'Aug 12 · 4×8 @ 65 lb', rest: 90,
+    alts: [
+      { name: 'Seated Cable Row', sub: 'Cable · 130 lb' },
+      { name: 'Single-Arm DB Row', sub: 'Dumbbell · 80 lb' },
+      { name: 'Barbell Row', sub: 'Barbell · 155 lb' },
+    ] },
+  { name: 'Lat Pulldown', scheme: '3 × 12', target: 100, reps: 12,
+    last: 'Aug 12 · 3×12 @ 100 lb', rest: 75,
+    alts: [
+      { name: 'Assisted Pull-Up', sub: 'Machine · −40 lb' },
+      { name: 'Neutral-Grip Pulldown', sub: 'Cable · 95 lb' },
+      { name: 'Straight-Arm Pulldown', sub: 'Cable · 45 lb' },
+    ] },
+  { name: 'Cable Lateral Raise', scheme: '3 × 15', target: 15, reps: 15,
+    last: 'Aug 12 · 3×15 @ 12.5 lb', rest: 60,
+    alts: [
+      { name: 'DB Lateral Raise', sub: 'Dumbbell · 2 × 15 lb' },
+      { name: 'Machine Lateral Raise', sub: 'Machine · 50 lb' },
+      { name: 'Upright Row', sub: 'Cable · 60 lb' },
+    ] },
+];
+
+const CATALOG = [
+  { name: 'Barbell Bench Press', eq: 'Barbell', mus: 'Chest', abbr: 'BB', sh: 'BENCH' },
+  { name: 'Incline DB Press', eq: 'Dumbbell', mus: 'Chest', abbr: 'DB', sh: 'INCLINE' },
+  { name: 'Low-to-High Cable Fly', eq: 'Cable', mus: 'Chest', abbr: 'CB', sh: 'FLY' },
+  { name: 'Weighted Dip', eq: 'Bodyweight', mus: 'Chest', abbr: 'BW', sh: 'DIP' },
+  { name: 'Barbell Row', eq: 'Barbell', mus: 'Back', abbr: 'BB', sh: 'ROW' },
+  { name: 'Chest-Supported Row', eq: 'Machine', mus: 'Back', abbr: 'MC', sh: 'CS ROW' },
+  { name: 'Lat Pulldown', eq: 'Cable', mus: 'Back', abbr: 'CB', sh: 'PULLDOWN' },
+  { name: 'Weighted Pull-Up', eq: 'Bodyweight', mus: 'Back', abbr: 'BW', sh: 'PULL-UP' },
+  { name: 'Overhead Press', eq: 'Barbell', mus: 'Shoulders', abbr: 'BB', sh: 'OHP' },
+  { name: 'Cable Lateral Raise', eq: 'Cable', mus: 'Shoulders', abbr: 'CB', sh: 'LATERAL' },
+  { name: 'Rear Delt Fly', eq: 'Machine', mus: 'Shoulders', abbr: 'MC', sh: 'REAR DELT' },
+  { name: 'Back Squat', eq: 'Barbell', mus: 'Legs', abbr: 'BB', sh: 'SQUAT' },
+  { name: 'Front Squat', eq: 'Barbell', mus: 'Legs', abbr: 'BB', sh: 'FRONT SQ' },
+  { name: 'Romanian Deadlift', eq: 'Barbell', mus: 'Legs', abbr: 'BB', sh: 'RDL' },
+  { name: 'Deadlift', eq: 'Barbell', mus: 'Legs', abbr: 'BB', sh: 'DEADLIFT' },
+  { name: 'Leg Press', eq: 'Machine', mus: 'Legs', abbr: 'MC', sh: 'LEG PRESS' },
+  { name: 'Seated Leg Curl', eq: 'Machine', mus: 'Legs', abbr: 'MC', sh: 'LEG CURL' },
+  { name: 'Standing Calf Raise', eq: 'Machine', mus: 'Legs', abbr: 'MC', sh: 'CALF' },
+  { name: 'Barbell Curl', eq: 'Barbell', mus: 'Arms', abbr: 'BB', sh: 'CURL' },
+  { name: 'Incline DB Curl', eq: 'Dumbbell', mus: 'Arms', abbr: 'DB', sh: 'DB CURL' },
+  { name: 'Cable Triceps Pushdown', eq: 'Cable', mus: 'Arms', abbr: 'CB', sh: 'PUSHDOWN' },
+  { name: 'Overhead Cable Extension', eq: 'Cable', mus: 'Arms', abbr: 'CB', sh: 'OH EXT' },
+];
+const CI = {};
+CATALOG.forEach((e, i) => { CI[e.name] = i; });
+const mk = (name, sets, reps, rpe, rest) => ({
+  c: CI[name], sets, reps, rpe, rest,
+  prog: 'linear', repsHi: reps + 2, load: W0[name],
+  step: CATALOG[CI[name]].eq === 'Barbell' ? 5 : 2.5, misses: [],
+});
+const PROG_LABEL = { linear: 'Linear', double: 'Double', fixed: 'Fixed' };
+const LET = ['A', 'B', 'C', 'D', 'E'];
+const groupsOf = list => {
+  const g = [];
+  list.forEach((x, i) => { if (i > 0 && x.sup) g[g.length - 1].push(i); else g.push([i]); });
+  return g;
+};
+
+const W0 = {
+  'Barbell Bench Press': 180, 'Incline DB Press': 50, 'Low-to-High Cable Fly': 25, 'Weighted Dip': 45,
+  'Barbell Row': 155, 'Chest-Supported Row': 65, 'Lat Pulldown': 100, 'Weighted Pull-Up': 35,
+  'Overhead Press': 115, 'Cable Lateral Raise': 12.5, 'Rear Delt Fly': 50,
+  'Back Squat': 250, 'Front Squat': 185, 'Romanian Deadlift': 205, 'Deadlift': 315,
+  'Leg Press': 320, 'Seated Leg Curl': 90, 'Standing Calf Raise': 160,
+  'Barbell Curl': 75, 'Incline DB Curl': 30, 'Cable Triceps Pushdown': 60, 'Overhead Cable Extension': 45,
+};
+const BASE = CATALOG.map(e => W0[e.name]);
+const META = {};
+EXERCISES.forEach(e => { META[e.name] = e; });
+
+const plateLine = load => {
+  let per = (load - 45) / 2;
+  if (per < 2.5) return '';
+  const out = [];
+  [45, 25, 10, 5, 2.5].forEach(p => {
+    const n = Math.floor(per / p + 1e-6);
+    if (n) { out.push(n > 1 ? n + '×' + p : String(p)); per -= n * p; }
+  });
+  return out.join(' + ') + ' / side';
+};
+
+const DAYS = [
+  { name: 'Upper A — Push focus', tag: 'UA', ex: [
+    mk('Barbell Bench Press', 5, 5, 8, 150), mk('Incline DB Press', 3, 10, 8, 90),
+    mk('Chest-Supported Row', 4, 8, 8, 90), mk('Lat Pulldown', 3, 12, 9, 75),
+    mk('Cable Lateral Raise', 3, 15, 9, 60) ] },
+  { name: 'Lower A — Squat focus', tag: 'LA', ex: [
+    mk('Back Squat', 5, 5, 8, 180), mk('Romanian Deadlift', 3, 8, 8, 120),
+    mk('Leg Press', 3, 12, 9, 90), mk('Standing Calf Raise', 4, 12, 9, 60) ] },
+  { name: 'Upper B — Pull focus', tag: 'UB', ex: [
+    mk('Weighted Pull-Up', 4, 6, 8, 150), mk('Overhead Press', 4, 6, 8, 120),
+    mk('Barbell Row', 3, 10, 8, 90), mk('Barbell Curl', 3, 12, 9, 60) ] },
+  { name: 'Lower B — Hinge focus', tag: 'LB', ex: [
+    mk('Deadlift', 4, 4, 8, 210), mk('Front Squat', 3, 8, 8, 120),
+    mk('Seated Leg Curl', 3, 12, 9, 75) ] },
+];
+const DOUBLE = ['Incline DB Press', 'Lat Pulldown', 'Cable Lateral Raise', 'Leg Press', 'Seated Leg Curl', 'Barbell Curl'];
+DAYS.forEach(d => d.ex.forEach(x => {
+  const n = CATALOG[x.c].name;
+  if (DOUBLE.indexOf(n) >= 0) x.prog = 'double';
+  if (n === 'Standing Calf Raise') x.prog = 'fixed';
+}));
+DAYS[0].ex[4].sup = true;
+DAYS[1].ex[3].sup = true;
+DAYS[2].ex[3].drop = 1;
+
+const MUSCLES = ['All', 'Chest', 'Back', 'Shoulders', 'Legs', 'Arms'];
+const EQUIP = ['All', 'Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight'];
+const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+class Component extends DCLogic {
+  state = {
+    screen: 'program', tab: 'program', auth: 'login',
+    units: 'lb', restDefault: 90, plateMath: true, autoRest: true, watchBuzz: true,
+    days: DAYS.map(d => ({ ...d, ex: d.ex.map(x => ({ ...x })) })),
+    dayIdx: 0, openEx: 0, pickerOpen: false, sel: [], query: '', mus: 'All', eqp: 'All',
+    weeksData: Array.from({ length: 8 }, (_, i) => ({
+      sched: i === 7 ? [0, null, 1, null, 2, null, null] : [0, null, 1, null, 2, 3, null],
+      deload: i === 7,
+    })),
+    curWeek: 0,
+    exIdx: 0, activeSet: 0, started: false, elapsed: 0,
+    rest: 0, restTotal: 150, buzz: false, swapOpen: false, filter: 'All',
+    session: null, todayDow: 2, doneDow: [0], priorVolume: 24180, finishedSummary: null,
+    crownDrag: false, hr: 118, finished: false,
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      this.setState(s => {
+        const n = { hr: Math.max(96, Math.min(158, s.hr + Math.round((Math.random() - .5) * 7))) };
+        if (s.started && !s.finished) n.elapsed = s.elapsed + 1;
+        if (s.rest > 0) { n.rest = s.rest - 1; if (s.rest === 1) n.buzz = true; }
+        return n;
+      });
+    }, 1000);
+    this.onMove = e => {
+      if (!this.state.crownDrag) return;
+      const dy = this.lastY - e.clientY; if (Math.abs(dy) < 9) return;
+      this.lastY = e.clientY;
+      this.bumpW(dy > 0 ? 1 : -1);
+    };
+    this.onUp = () => this.setState({ crownDrag: false });
+    window.addEventListener('pointermove', this.onMove);
+    window.addEventListener('pointerup', this.onUp);
+  }
+  componentWillUnmount() {
+    clearInterval(this.timer);
+    window.removeEventListener('pointermove', this.onMove);
+    window.removeEventListener('pointerup', this.onUp);
+  }
+
+  mmss(t) { return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
+
+  clone(s) { return s.session.ex.map(e => ({ ...e, sets: e.sets.map(x => ({ ...x })) })); }
+
+  bumpW(dir) {
+    this.setState(s => {
+      if (!s.session) return {};
+      const ex = this.clone(s);
+      const e = ex[Math.min(s.exIdx, ex.length - 1)];
+      const row = e && e.sets[s.activeSet]; if (!row) return {};
+      row.w = Math.max(0, row.w + dir * e.step);
+      return { session: { ...s.session, ex } };
+    });
+  }
+  bumpR(d) {
+    this.setState(s => {
+      if (!s.session) return {};
+      const ex = this.clone(s);
+      const e = ex[Math.min(s.exIdx, ex.length - 1)];
+      const row = e && e.sets[s.activeSet]; if (!row) return {};
+      row.r = Math.max(1, row.r + d);
+      return { session: { ...s.session, ex } };
+    });
+  }
+
+  presc(weekIdx, x) {
+    const w = this.state.weeksData[weekIdx] || { deload: false };
+    const step = x.step || (CATALOG[x.c].eq === 'Barbell' ? 5 : 2.5);
+    const start = x.load != null ? x.load : BASE[x.c];
+    const misses = x.misses || [];
+    const prog = x.prog || 'linear';
+    let adv = 0;
+    for (let i = 0; i < weekIdx; i++) if (misses.indexOf(i) < 0) adv++;
+    let load = start, reps = x.reps, sets = x.sets, rpe = x.rpe;
+    if (prog === 'linear') load = start + step * adv;
+    else if (prog === 'double') {
+      const span = Math.max(1, (x.repsHi || x.reps) - x.reps + 1);
+      load = start + step * Math.floor(adv / span);
+      reps = x.reps + (adv % span);
+    }
+    const held = misses.indexOf(weekIdx - 1) >= 0;
+    if (w.deload) { load = Math.round(load * 0.85 / 5) * 5; sets = Math.max(1, sets - 1); rpe = Math.max(5, rpe - 2); }
+    return { load, sets, reps, rpe, rest: x.rest, step, prog, held, deload: !!w.deload };
+  }
+
+  buildSession(weekIdx, dayIdx) {
+    const day = this.state.days[dayIdx];
+    if (!day) return null;
+    return {
+      week: weekIdx, day: dayIdx, name: day.name, tag: day.tag, deload: !!(this.state.weeksData[weekIdx] || {}).deload,
+      ex: day.ex.map(x => {
+        const p = this.presc(weekIdx, x), c = CATALOG[x.c], m = META[c.name];
+        return {
+          c: x.c, name: c.name, rest: p.rest, step: p.step, rpe: p.rpe, eq: c.eq, sup: !!x.sup,
+          targetSets: p.sets, targetReps: p.reps,
+          target: p.sets + ' × ' + p.reps + ' @ ' + p.load + ' lb · RPE ' + p.rpe,
+          last: m ? m.last : 'Aug 12 · ' + p.sets + '×' + p.reps + ' @ ' + (p.load - p.step) + ' lb',
+          sets: Array.from({ length: p.sets }, () => ({ w: p.load, r: p.reps, done: false }))
+            .concat(x.drop ? [{ w: Math.round(p.load * 0.85 / 5) * 5, r: p.reps, done: false, drop: true }] : []),
+        };
+      }),
+    };
+  }
+
+  logSet = (ei, si, opts) => {
+    const o = opts || {};
+    this.setState(s => {
+      if (!s.session) return {};
+      const e0 = Math.min(ei == null ? s.exIdx : ei, s.session.ex.length - 1);
+      const ix = si == null ? s.activeSet : si;
+      const ex = this.clone(s);
+      const row = ex[e0].sets[ix]; if (!row) return {};
+      const nowDone = !row.done;
+      row.done = nowDone;
+      const next = { session: { ...s.session, ex }, buzz: false, started: true };
+      if (nowDone) {
+        const secs = o.restSecs == null ? ex[e0].rest : o.restSecs;
+        if (s.autoRest && o.rest !== false && secs > 0) { next.rest = secs; next.restTotal = secs; }
+        if (o.next) { next.exIdx = o.next.ei; next.activeSet = o.next.si; }
+        else {
+          const nextUndone = ex[e0].sets.findIndex(x => !x.done);
+          if (nextUndone >= 0) next.activeSet = nextUndone;
+          else if (e0 < ex.length - 1) { next.exIdx = e0 + 1; next.activeSet = 0; }
+        }
+      }
+      return next;
+    });
+  };
+
+  renderVals() {
+    const s = this.state;
+    const dim = 'rgba(22,21,15,.34)';
+    const sess = s.session;
+    const sxi = sess ? Math.min(s.exIdx, sess.ex.length - 1) : 0;
+    const sx = sess && sess.ex.length ? sess.ex[sxi] : null;
+    const sets = sx ? sx.sets : [];
+    const row = sets[Math.min(s.activeSet, sets.length - 1)];
+    const blocks = sess ? groupsOf(sess.ex) : [];
+    const letterOf = {};
+    blocks.forEach(b => { if (b.length > 1) b.forEach((ei, k) => { letterOf[ei] = LET[k]; }); });
+    const bNo = blocks.findIndex(b => b.indexOf(sxi) >= 0);
+    const curIds = bNo >= 0 ? blocks[bNo] : (sess ? [sxi] : []);
+    const isGroup = curIds.length > 1;
+    const groupRest = curIds.reduce((a, i) => Math.max(a, sess.ex[i].rest), 0);
+    const blockLen = curIds.reduce((a, i) => Math.max(a, sess.ex[i].sets.length), 0);
+    const rowDefs = [];
+    if (sess && isGroup) {
+      for (let r = 0; r < blockLen; r++) {
+        const present = curIds.filter(i => sess.ex[i].sets[r]);
+        present.forEach((ei, k) => {
+          const st = sess.ex[ei].sets[r];
+          rowDefs.push({ ei, si: r, round: r, drop: !!st.drop, last: k === present.length - 1,
+            label: LET[curIds.indexOf(ei)] + (st.drop ? 'D' : r + 1) });
+        });
+      }
+    } else if (sess) {
+      sets.forEach((x, i) => rowDefs.push({ ei: sxi, si: i, round: i, drop: !!x.drop, last: true,
+        label: x.drop ? 'D' : String(i + 1) }));
+    }
+    const firstOpen = rowDefs.findIndex(d => !sess.ex[d.ei].sets[d.si].done);
+    const nextOf = idx => {
+      for (let j = idx + 1; j < rowDefs.length; j++) {
+        const d = rowDefs[j]; if (!sess.ex[d.ei].sets[d.si].done) return { ei: d.ei, si: d.si };
+      }
+      for (let j = 0; j < idx; j++) {
+        const d = rowDefs[j]; if (!sess.ex[d.ei].sets[d.si].done) return { ei: d.ei, si: d.si };
+      }
+      const nb = blocks[bNo + 1];
+      return nb ? { ei: nb[0], si: 0 } : null;
+    };
+
+    const altsFor = ci => {
+      const c = CATALOG[ci], m = META[c.name];
+      if (m) return m.alts;
+      return CATALOG.filter((e, i) => e.mus === c.mus && i !== ci).slice(0, 3)
+        .map(e => ({ name: e.name, sub: e.eq + ' · ' + BASE[CI[e.name]] + ' lb' }));
+    };
+
+    const jumpDefs = [['Home', 'home'], ['Program', 'program'], ['Day editor', 'day'], ['Settings', 'settings'], ['Today', 'today'], ['Workout', 'workout'], ['Receipt', 'done'], ['Library', 'library'], ['History', 'history']];
+    const cur = s.screen;
+    const tabFor = k => k === 'program' || k === 'day' || k === 'settings' ? 'program' : k === 'library' ? 'library' : k === 'history' ? 'history' : 'today';
+
+    const cw = s.weeksData[Math.min(s.curWeek, s.weeksData.length - 1)];
+    const updWeeks = fn => this.setState(st => {
+      const ws = st.weeksData.map(w => ({ ...w, sched: [...w.sched] }));
+      fn(ws);
+      return { weeksData: ws };
+    });
+
+    const di = Math.min(s.dayIdx, s.days.length - 1);
+    const dayObj = s.days[di] || { name: '', tag: '', ex: [] };
+    const setsOf = d => d.ex.reduce((a, x) => a + x.sets + (x.drop ? 1 : 0), 0);
+    const minsOf = d => Math.round(d.ex.reduce((a, x) =>
+      a + (x.sets + (x.drop ? 1 : 0)) * ((x.sup ? 12 : x.rest) + 42) / 60, 0));
+    const restLbl = r => r < 60 ? r + 's' : (r % 60 ? Math.floor(r / 60) + ':' + String(r % 60).padStart(2, '0') : (r / 60) + ' min');
+    const upd = fn => this.setState(st => {
+      const days = st.days.map(d => ({ ...d, ex: d.ex.map(x => ({ ...x }) ) }));
+      fn(days, days[Math.min(st.dayIdx, days.length - 1)]);
+      return { days };
+    });
+    const bump = (i, key, d, lo, hi) => () => upd((ds, day) => {
+      const x = day.ex[i];
+      x[key] = Math.max(lo, Math.min(hi, x[key] + d));
+      if (key === 'reps' && (x.repsHi || 0) <= x.reps) x.repsHi = x.reps + 1;
+      if (key === 'repsHi' && x.repsHi <= x.reps) x.repsHi = x.reps + 1;
+    });
+    const bumpLoad = (i, dir) => () => upd((ds, day) => {
+      const x = day.ex[i];
+      x.load = Math.max(0, (x.load == null ? BASE[x.c] : x.load) + dir * (x.step || 5));
+    });
+    const setProg = (i, p) => () => upd((ds, day) => {
+      const x = day.ex[i];
+      x.prog = p;
+      if (p === 'double' && (x.repsHi || 0) <= x.reps) x.repsHi = x.reps + 2;
+    });
+    const gIdx = groupsOf(dayObj.ex);
+    const gOf = {};
+    gIdx.forEach((ids, gi) => ids.forEach((id, k) => { gOf[id] = { gi, k, len: ids.length }; }));
+    const toggleSup = (i, on) => () => { upd((ds, day) => { if (day.ex[i]) day.ex[i].sup = on; }); this.setState({ openEx: null }); };
+    const toggleDrop = i => () => upd((ds, day) => { const x = day.ex[i]; x.drop = x.drop ? 0 : 1; });
+
+    const tdIdx = cw.sched[s.todayDow] != null && cw.sched[s.todayDow] < s.days.length ? cw.sched[s.todayDow] : null;
+    const tdDay = tdIdx == null ? null : s.days[tdIdx];
+    const liveMatchesToday = !!sess && sess.week === s.curWeek && sess.day === tdIdx;
+    const loggedToday = s.doneDow.indexOf(s.todayDow) >= 0;
+    const FULLDOW = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const nextUp = (() => {
+      for (let i = s.todayDow + 1; i < 7; i++) {
+        const v = cw.sched[i];
+        if (v != null && v < s.days.length) return 'Next: ' + FULLDOW[i] + ' · ' + s.days[v].tag;
+      }
+      return 'Next: week ' + (s.curWeek + 2);
+    })();
+    const openSession = (wk, dy) => this.setState(st => ({
+      screen: 'workout', tab: 'today', started: true, finished: false,
+      exIdx: 0, activeSet: 0, rest: 0,
+      elapsed: st.session && st.session.week === wk && st.session.day === dy ? st.elapsed : 0,
+      session: st.session && st.session.week === wk && st.session.day === dy ? st.session : this.buildSession(wk, dy),
+    }));
+
+    const q = s.query.trim().toLowerCase();
+    const inDay = new Set(dayObj.ex.map(x => x.c));
+    const matches = CATALOG.map((e, i) => ({ e, i })).filter(({ e }) =>
+      (s.mus === 'All' || e.mus === s.mus) && (s.eqp === 'All' || e.eq === s.eqp) &&
+      (!q || e.name.toLowerCase().indexOf(q) >= 0));
+
+    const allSets = sess ? sess.ex.reduce((a, e) => a.concat(e.sets), []) : [];
+    const doneCount = allSets.filter(x => x.done).length;
+    const totalSets = allSets.length;
+    const volume = allSets.filter(x => x.done).reduce((a, x) => a + x.w * x.r, 0);
+
+    const finish = () => this.setState(st => {
+      const prs = sess ? sess.ex.filter(e => e.sets.some(x => x.done && x.w > BASE[e.c])).length : 0;
+      const rows = (sess ? sess.ex : []).map(e => {
+        const runs = [];
+        e.sets.filter(x => x.done).forEach(x => {
+          const t = x.w + '×' + x.r, last = runs[runs.length - 1];
+          if (last && last.t === t) last.n++; else runs.push({ t, n: 1 });
+        });
+        return {
+          name: e.name, target: e.target.split(' · ')[0],
+          actual: runs.length ? runs.map(r => (r.n > 1 ? r.n + ' × ' + r.t : r.t)) : ['—'],
+        };
+      });
+      const days = st.days.map(d => ({ ...d, ex: d.ex.map(x => ({ ...x, misses: [...(x.misses || [])] })) }));
+      if (sess && days[sess.day]) {
+        sess.ex.forEach((e, i) => {
+          const xx = days[sess.day].ex[i]; if (!xx) return;
+          const logged = e.sets.filter(y => y.done);
+          const missed = logged.length < e.targetSets || logged.some(y => y.r < e.targetReps);
+          const at = xx.misses.indexOf(sess.week);
+          if (missed && at < 0) xx.misses.push(sess.week);
+          else if (!missed && at >= 0) xx.misses.splice(at, 1);
+        });
+      }
+      return {
+        days,
+        screen: 'done', tab: 'today', finished: true, rest: 0, started: false,
+        finishedSummary: { elapsed: this.mmss(st.elapsed), done: doneCount, total: totalSets, volume, hr: st.hr, prs,
+          day: sess ? sess.name : '', tag: sess ? sess.tag : '', date: 'WEDNESDAY, AUG 19', rows },
+        doneDow: st.doneDow.indexOf(st.todayDow) >= 0 ? st.doneDow : [...st.doneDow, st.todayDow],
+        priorVolume: st.priorVolume + volume,
+        session: null, elapsed: 0,
+      };
+    });
+    const discard = () => this.setState({
+      screen: 'today', tab: 'today', session: null, started: false, finished: false,
+      finishedSummary: null, elapsed: 0, rest: 0, exIdx: 0, activeSet: 0,
+    });
+    const fin = s.finishedSummary;
+
+    const chartVals = [196, 199, 203, 201, 208, 211, 214, 218];
+
+    const upNext = (sess ? sess.ex : []).map((e, i) => ({ n: i + 1, name: e.name,
+      scheme: e.sets.length + ' × ' + e.sets[0].r,
+      fg: i === sxi ? ORANGE : i < sxi ? dim : INK,
+      go: () => this.setState({ exIdx: i, activeSet: Math.max(0, e.sets.findIndex(x => !x.done)) }) }))
+      .filter(u => u.n > sxi + 1);
+
+    return {
+      tab: s.tab,
+      setTab: t => this.setState({ tab: t, screen: t === 'program' ? 'program' : t === 'library' ? 'library' : t === 'history' ? 'history' : 'today' }),
+      isHome: s.screen === 'home', isProgram: s.screen === 'program', isDay: s.screen === 'day',
+      isToday: s.screen === 'today', isWorkout: s.screen === 'workout', isDone: s.screen === 'done',
+      hasReceipt: !!fin, noReceipt: !fin,
+      recDate: fin ? fin.date : 'NO SESSION YET',
+      recDay: fin ? fin.day : 'Session receipt',
+      recElapsed: fin ? fin.elapsed : '0:00',
+      recSets: fin ? fin.done + '/' + fin.total : '0',
+      recVolume: fin ? fin.volume.toLocaleString() : '0',
+      hasPrs: !!fin && fin.prs > 0,
+      prLine: fin ? fin.prs + (fin.prs === 1 ? ' new PR this session' : ' new PRs this session') : '',
+      recRows: (fin ? fin.rows : []).map((r, i) => ({ ...r,
+        line: i === fin.rows.length - 1 ? 'transparent' : 'rgba(22,21,15,.08)' })),
+      isLogged: tdDay != null && loggedToday,
+      loggedWeek: 'WEEK ' + (s.curWeek + 1),
+      loggedDay: tdDay ? tdDay.name : '',
+      loggedMins: fin ? fin.elapsed : '',
+      loggedStats: fin ? fin.done + ' of ' + fin.total + ' sets · ' + fin.volume.toLocaleString() + ' lb moved' : 'Logged earlier today',
+      loggedNext: nextUp,
+      openReceipt: () => this.setState({ screen: 'done', tab: 'today' }),
+      isLibrary: s.screen === 'library', isHistory: s.screen === 'history',
+      ready: true,
+
+      jumps: jumpDefs.map(([label, k]) => ({
+        label,
+        go: () => k === 'workout' ? openSession(s.curWeek, tdIdx == null ? 0 : tdIdx)
+          : this.setState({ screen: k, tab: tabFor(k) }),
+        bg: cur === k ? INK : 'transparent', fg: cur === k ? PAPER : 'rgba(22,21,15,.62)',
+        bd: cur === k ? INK : 'rgba(22,21,15,.16)',
+      })),
+
+      isLogin: s.auth === 'login', isCreate: s.auth === 'create',
+      authTabs: [['login', 'Log in'], ['create', 'Create account']].map(([k, label]) => ({
+        label, pick: () => this.setState({ auth: k }),
+        bg: s.auth === k ? '#fff' : 'transparent', fg: s.auth === k ? INK : 'rgba(22,21,15,.5)',
+      })),
+      authCta: s.auth === 'login' ? 'Log in' : 'Create account',
+      authGo: () => this.setState({ screen: 'program', tab: 'program' }),
+
+      isSettings: s.screen === 'settings',
+      goSettings: () => this.setState({ screen: 'settings' }),
+      weeks: s.weeksData.length,
+      weeksUp: () => this.setState(st => ({
+        weeksData: [...st.weeksData, { sched: [...st.weeksData[st.weeksData.length - 1].sched], deload: false }],
+        curWeek: st.weeksData.length,
+      })),
+      weeksDown: () => this.setState(st => st.weeksData.length <= 2 ? {} : ({
+        weeksData: st.weeksData.slice(0, -1),
+        curWeek: Math.min(st.curWeek, st.weeksData.length - 2),
+      })),
+      unitOpts: ['lb', 'kg'].map(u => ({
+        label: u.toUpperCase(), pick: () => this.setState({ units: u }),
+        bg: s.units === u ? '#16150F' : 'transparent', fg: s.units === u ? PAPER : 'rgba(22,21,15,.5)',
+      })),
+      restDefaultLabel: restLbl(s.restDefault),
+      restUp: () => this.setState(st => ({ restDefault: Math.min(300, st.restDefault + 15) })),
+      restDown: () => this.setState(st => ({ restDefault: Math.max(30, st.restDefault - 15) })),
+      toggles: [
+        { key: 'plateMath', label: 'Plate math', sub: 'Show the plates per side on each set', line: 'rgba(22,21,15,.08)' },
+        { key: 'autoRest', label: 'Auto rest timer', sub: 'Start the clock when a set is logged', line: 'rgba(22,21,15,.08)' },
+        { key: 'watchBuzz', label: 'Watch haptic at zero', sub: 'Buzz the wrist when rest ends', line: 'transparent' },
+      ].map(t => ({
+        label: t.label, sub: t.sub, line: t.line,
+        trackBg: s[t.key] ? ORANGE : 'rgba(22,21,15,.16)',
+        justify: s[t.key] ? 'flex-end' : 'flex-start',
+        toggle: () => this.setState(st => ({ [t.key]: !st[t.key] })),
+      })),
+      acctRows: [
+        { label: 'Email', value: 'jd@example.com', line: 'rgba(22,21,15,.08)', fg: INK },
+        { label: 'Apple Health', value: 'Connected', line: 'rgba(22,21,15,.08)', fg: INK },
+        { label: 'Export data', value: 'CSV', line: 'rgba(22,21,15,.08)', fg: INK },
+        { label: 'Log out', value: '', line: 'transparent', fg: ORANGE },
+      ].map(r => ({ ...r, go: () => r.label === 'Log out' ? this.setState({ screen: 'home' }) : null })),
+
+      weekChips: s.weeksData.map((w, i) => {
+        const on = i === s.curWeek;
+        const count = w.sched.filter(v => v != null && v < s.days.length).length;
+        return {
+          label: 'W' + (i + 1), sub: w.deload ? 'DELOAD' : count + ' DAYS',
+          pick: () => this.setState({ curWeek: i }),
+          bg: on ? INK : 'transparent', bd: on ? INK : 'rgba(22,21,15,.14)',
+          fg: on ? PAPER : 'rgba(22,21,15,.55)',
+          subFg: on ? (w.deload ? ORANGE : 'rgba(239,237,230,.5)') : (w.deload ? ORANGE : 'rgba(22,21,15,.35)'),
+        };
+      }),
+      weekTitle: 'WEEK ' + (s.curWeek + 1) + (cw.deload ? ' · DELOAD' : ''),
+      copyPrevLabel: s.curWeek === 0 ? 'First week' : 'Copy week ' + s.curWeek,
+      copyPrev: () => { if (s.curWeek > 0) updWeeks(ws => { ws[s.curWeek] = { ...ws[s.curWeek], sched: [...ws[s.curWeek - 1].sched] }; }); },
+      copyRest: () => updWeeks(ws => {
+        for (let i = s.curWeek + 1; i < ws.length; i++) ws[i] = { ...ws[i], sched: [...ws[s.curWeek].sched] };
+      }),
+      deloadBg: cw.deload ? 'rgba(255,91,34,.12)' : 'transparent',
+      deloadBd: cw.deload ? 'rgba(255,91,34,.5)' : 'rgba(22,21,15,.14)',
+      deloadFg: cw.deload ? '#C63F0F' : 'rgba(22,21,15,.6)',
+      toggleDeload: () => updWeeks(ws => { ws[s.curWeek] = { ...ws[s.curWeek], deload: !ws[s.curWeek].deload }; }),
+      sched: DOW.map((dow, i) => {
+        const v = cw.sched[i] != null && cw.sched[i] < s.days.length ? cw.sched[i] : null;
+        return {
+          dow, label: v == null ? 'REST' : s.days[v].tag,
+          bg: v == null ? 'transparent' : '#16150F',
+          bd: v == null ? 'rgba(22,21,15,.14)' : '#16150F',
+          fg: v == null ? 'rgba(22,21,15,.35)' : PAPER,
+          dowFg: v == null ? 'rgba(22,21,15,.4)' : 'rgba(239,237,230,.55)',
+          cycle: () => updWeeks(ws => {
+            const w = ws[Math.min(s.curWeek, ws.length - 1)];
+            const nx = w.sched[i] == null ? 0 : w.sched[i] + 1;
+            w.sched[i] = nx >= s.days.length ? null : nx;
+          }),
+        };
+      }),
+      daySummary: s.days.length + ' days · ' + s.days.reduce((a, d) => a + setsOf(d), 0) + ' sets a week',
+      days: s.days.map((d, i) => {
+        const chips = d.ex.slice(0, 4).map(x => CATALOG[x.c].sh);
+        if (d.ex.length > 4) chips.push('+' + (d.ex.length - 4));
+        return { tag: d.tag, name: d.name, chips,
+          meta: d.ex.length + ' exercises · ' + setsOf(d) + ' sets · ~' + minsOf(d) + ' min',
+          open: () => this.setState({ screen: 'day', tab: 'program', dayIdx: i, openEx: null }) };
+      }),
+      addDay: () => this.setState(st => ({
+        days: [...st.days, { name: 'New day', tag: 'D' + (st.days.length + 1), ex: [] }],
+        screen: 'day', dayIdx: st.days.length, openEx: null,
+      })),
+
+      dayTag: 'DAY ' + (di + 1) + ' OF ' + s.days.length,
+      dayName: dayObj.name,
+      renameDay: e => { const v = e.target.value; upd((ds, day) => { day.name = v; }); },
+      dayMeta: 'Week ' + (s.curWeek + 1) + ' · ' + dayObj.ex.length + ' exercises · ' + setsOf(dayObj) + ' sets · ~' + minsOf(dayObj) + ' min',
+      goProgram: () => this.setState({ screen: 'program', tab: 'program', openEx: null }),
+      dayEx: dayObj.ex.map((x, i) => {
+        const c = CATALOG[x.c];
+        const open = s.openEx === i;
+        const p = this.presc(s.curWeek, x);
+        const prog = x.prog || 'linear';
+        const start = x.load == null ? BASE[x.c] : x.load;
+        const progShort = prog === 'linear' ? '+' + p.step + '/wk'
+          : prog === 'double' ? 'Reps ' + x.reps + '–' + x.repsHi : 'Fixed';
+        const fields = [
+          { label: 'SETS', value: x.sets, up: bump(i, 'sets', 1, 1, 12), down: bump(i, 'sets', -1, 1, 12) },
+          { label: prog === 'double' ? 'REP FLOOR' : 'REPS', value: x.reps, up: bump(i, 'reps', 1, 1, 30), down: bump(i, 'reps', -1, 1, 30) },
+        ];
+        if (prog === 'double') fields.push({ label: 'TOP OF RANGE', value: x.repsHi, up: bump(i, 'repsHi', 1, 2, 40), down: bump(i, 'repsHi', -1, 2, 40) });
+        fields.push(
+          { label: 'START LOAD', value: start + ' lb', up: bumpLoad(i, 1), down: bumpLoad(i, -1) },
+          { label: 'TARGET RPE', value: x.rpe, up: bump(i, 'rpe', 0.5, 5, 10), down: bump(i, 'rpe', -0.5, 5, 10) },
+          { label: 'REST', value: restLbl(x.rest), up: bump(i, 'rest', 15, 30, 300), down: bump(i, 'rest', -15, 30, 300) },
+        );
+        const g = gOf[i] || { gi: i, k: 0, len: 1 };
+        const isSuper = g.len > 1;
+        const lastOfGroup = g.k === g.len - 1;
+        const supActions = [];
+        if (g.k > 0) supActions.push({ label: 'Break out', go: toggleSup(i, false) });
+        if (lastOfGroup && i < dayObj.ex.length - 1) supActions.push({ label: 'Superset with next', go: toggleSup(i + 1, true) });
+        return {
+          n: isSuper ? (g.gi + 1) + LET[g.k] : String(g.gi + 1),
+          radius: isSuper ? (g.k === 0 ? '18px 18px 0 0' : lastOfGroup ? '0 0 18px 18px' : '0px') : '18px',
+          mb: isSuper && !lastOfGroup ? '1px' : '10px',
+          supHeader: isSuper && g.k === 0,
+          supNote: g.len + ' exercises back to back · rest after ' + LET[g.len - 1],
+          hasSupActions: supActions.length > 0, supActions,
+          dropOn: !!x.drop,
+          dropTrackBg: x.drop ? ORANGE : 'rgba(22,21,15,.16)',
+          dropJustify: x.drop ? 'flex-end' : 'flex-start',
+          dropNote: x.drop ? 'One extra set at −15%, straight after the last working set.' : 'One extra set at −15% after the last working set.',
+          dropToggle: toggleDrop(i),
+          name: c.name, open, caret: open ? '▴' : '▾',
+          sub: c.eq + ' · ' + progShort + (x.drop ? ' · drop' : '') + ' · RPE ' + p.rpe + ' · ' + (isSuper && !lastOfGroup ? 'no rest' : restLbl(x.rest) + ' rest'),
+          scheme: p.sets + '×' + p.reps, schemeFg: open ? ORANGE : INK,
+          loadLabel: p.load + ' lb',
+          weekLabel: 'WEEK ' + (s.curWeek + 1) + (p.deload ? ' · DELOAD' : p.held ? ' · HELD' : ''),
+          weekScheme: p.sets + ' × ' + p.reps + ' @ ' + p.load + ' lb · RPE ' + p.rpe,
+          progOpts: ['linear', 'double', 'fixed'].map(k => ({
+            label: PROG_LABEL[k], pick: setProg(i, k),
+            bg: prog === k ? INK : 'transparent', bd: prog === k ? INK : 'rgba(22,21,15,.14)',
+            fg: prog === k ? PAPER : 'rgba(22,21,15,.55)',
+          })),
+          progNote: prog === 'linear'
+            ? 'Adds ' + p.step + ' lb a week from ' + start + ' lb. A week with a missed set holds the load.'
+            : prog === 'double'
+              ? 'Adds a rep each week up to ' + x.repsHi + ', then +' + p.step + ' lb back at ' + x.reps + '.'
+              : 'Stays at ' + start + ' lb for the whole block.',
+          toggle: () => this.setState(st => ({ openEx: st.openEx === i ? null : i })),
+          fields,
+          moveUp: () => { if (i > 0) { upd((ds, day) => { const t = day.ex[i - 1]; day.ex[i - 1] = day.ex[i]; day.ex[i] = t; }); this.setState({ openEx: i - 1 }); } },
+          moveDown: () => { if (i < dayObj.ex.length - 1) { upd((ds, day) => { const t = day.ex[i + 1]; day.ex[i + 1] = day.ex[i]; day.ex[i] = t; }); this.setState({ openEx: i + 1 }); } },
+          remove: () => { upd((ds, day) => { day.ex.splice(i, 1); }); this.setState({ openEx: null }); },
+        };
+      }),
+
+      pickerOpen: s.pickerOpen,
+      openPicker: () => this.setState({ pickerOpen: true, sel: [] }),
+      closePicker: () => this.setState({ pickerOpen: false, sel: [], query: '' }),
+      query: s.query,
+      setQuery: e => this.setState({ query: e.target.value }),
+      musChips: MUSCLES.map(m => ({ label: m, pick: () => this.setState({ mus: m }),
+        bg: s.mus === m ? INK : 'transparent', fg: s.mus === m ? PAPER : 'rgba(22,21,15,.6)',
+        bd: s.mus === m ? INK : 'rgba(22,21,15,.14)' })),
+      eqpChips: EQUIP.map(m => ({ label: m, pick: () => this.setState({ eqp: m }),
+        bg: s.eqp === m ? 'rgba(255,91,34,.12)' : 'transparent', fg: s.eqp === m ? '#C63F0F' : 'rgba(22,21,15,.5)',
+        bd: s.eqp === m ? 'rgba(255,91,34,.5)' : 'rgba(22,21,15,.12)' })),
+      picks: matches.map(({ e, i }) => {
+        const on = s.sel.indexOf(i) >= 0;
+        return {
+          abbr: e.abbr, name: e.name,
+          meta: inDay.has(i) ? e.eq + ' · ' + e.mus + ' · already in this day' : e.eq + ' · ' + e.mus,
+          metaFg: inDay.has(i) ? ORANGE : 'rgba(22,21,15,.5)',
+          bg: on ? '#fff' : 'transparent', bd: on ? ORANGE : 'rgba(22,21,15,.12)',
+          dotBd: on ? ORANGE : 'rgba(22,21,15,.2)', dotBg: on ? ORANGE : 'transparent', tick: on ? '✓' : '',
+          toggle: () => this.setState(st => ({ sel: st.sel.indexOf(i) >= 0 ? st.sel.filter(v => v !== i) : [...st.sel, i] })),
+        };
+      }),
+      noPicks: matches.length === 0,
+      clearFilters: () => this.setState({ mus: 'All', eqp: 'All', query: '' }),
+      addLabel: s.sel.length === 0 ? 'Select exercises to add' : 'Add ' + s.sel.length + (s.sel.length === 1 ? ' exercise' : ' exercises'),
+      addBg: s.sel.length === 0 ? 'rgba(22,21,15,.1)' : ORANGE,
+      addFg: s.sel.length === 0 ? 'rgba(22,21,15,.38)' : '#fff',
+      addPicked: () => {
+        if (s.sel.length === 0) return;
+        const picked = [...s.sel];
+        upd((ds, day) => { picked.forEach(c => day.ex.push({
+          c, sets: 3, reps: 8, rpe: 8, rest: s.restDefault,
+          prog: 'linear', repsHi: 10, load: BASE[c], step: CATALOG[c].eq === 'Barbell' ? 5 : 2.5, misses: [],
+        })); });
+        this.setState({ pickerOpen: false, sel: [], query: '' });
+      },
+
+      week: DOW.map((dow, i) => {
+        const st = s.doneDow.indexOf(i) >= 0 ? 'done' : i === s.todayDow ? 'today'
+          : cw.sched[i] != null && cw.sched[i] < s.days.length ? 'plan' : '';
+        return { dow, num: 17 + i,
+          bg: st === 'today' ? ORANGE : st === 'done' ? INK : 'transparent',
+          bd: st === 'plan' ? 'rgba(22,21,15,.2)' : st === 'today' ? ORANGE : st === 'done' ? INK : 'rgba(22,21,15,.1)',
+          fg: st === 'today' || st === 'done' ? PAPER : 'rgba(22,21,15,.5)' };
+      }),
+
+      todayDate: 'WEDNESDAY, AUG 19',
+      todayTitle: tdDay ? tdDay.name.split(' — ')[0] : 'Rest day',
+      hasToday: tdDay != null && !loggedToday, noToday: tdDay == null,
+      blockLabel: 'UP NEXT · WEEK ' + (s.curWeek + 1) + ' OF ' + s.weeksData.length + (cw.deload ? ' · DELOAD' : ''),
+      todayName: tdDay ? tdDay.name : '',
+      todayMins: tdDay ? '~' + Math.round(tdDay.ex.reduce((a, x) => {
+        const p = this.presc(s.curWeek, x);
+        return a + p.sets * (p.rest + 42) / 60;
+      }, 0)) + ' min' : '',
+      restDayNote: 'Nothing scheduled for Wednesday in week ' + (s.curWeek + 1)
+        + '. Next up is ' + (() => {
+          for (let i = s.todayDow + 1; i < 7; i++) {
+            if (cw.sched[i] != null && cw.sched[i] < s.days.length) return DOW[i] === 'T' && i === 3 ? 'Thursday' : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i];
+          }
+          return 'next Monday';
+        })() + '.',
+      sessionsDone: s.doneDow.length,
+      sessionsPlanned: cw.sched.filter(v => v != null && v < s.days.length).length,
+      volLabel: ((s.priorVolume + volume) / 1000).toFixed(1),
+      preview: tdDay ? tdDay.ex.map(x => {
+        const p = this.presc(s.curWeek, x);
+        return { name: CATALOG[x.c].name, scheme: p.sets + ' × ' + p.reps + ' @ ' + p.load };
+      }) : [],
+      startLabel: liveMatchesToday && s.started ? 'Resume · ' + this.mmss(s.elapsed) : 'Start workout',
+      startWorkout: () => { if (tdIdx != null) openSession(s.curWeek, tdIdx); },
+
+      recent: (fin ? [{ tag: fin.tag, name: fin.day,
+        meta: 'Today · ' + fin.elapsed + ' · ' + fin.volume.toLocaleString() + ' lb',
+        go: () => this.setState({ screen: 'done', tab: 'today' }) }] : []).concat([
+        { tag: 'LA', name: 'Lower A — Squat focus', meta: 'Mon · 58 min · 24,180 lb', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+        { tag: 'UB', name: 'Upper B — Pull focus', meta: 'Sun · 49 min · 17,020 lb', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+        { tag: 'LB', name: 'Lower B — Hinge focus', meta: 'Fri · 61 min · 26,400 lb', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+      ].filter(r => !fin || r.name !== fin.day)),
+
+      elapsed: this.mmss(s.elapsed),
+      workoutDay: sess ? sess.name : '',
+      exCounter: isGroup
+        ? 'SUPERSET · BLOCK ' + (bNo + 1) + ' OF ' + blocks.length
+        : 'EXERCISE ' + (sxi + 1) + ' OF ' + (sess ? sess.ex.length : 0),
+      exName: isGroup
+        ? 'Round ' + (firstOpen >= 0 ? rowDefs[firstOpen].round + 1 : blockLen) + ' of ' + blockLen
+        : (sx ? sx.name : ''),
+      isSolo: !!sess && !isGroup, isGroup,
+      blockLegend: curIds.map((ei, k) => {
+        const e = sess.ex[ei], cur = ei === sxi;
+        return {
+          letter: LET[k], name: e.name, target: e.target.split(' · ')[0],
+          bg: cur ? '#16150F' : '#EFEDE6',
+          fg: cur ? '#EFEDE6' : 'rgba(22,21,15,.75)',
+          letterFg: cur ? ORANGE : 'rgba(22,21,15,.4)',
+          metaFg: cur ? 'rgba(239,237,230,.62)' : 'rgba(22,21,15,.5)',
+          go: () => this.setState({ exIdx: ei, activeSet: Math.max(0, e.sets.findIndex(x => !x.done)) }),
+        };
+      }),
+      groupRestLabel: 'Rest ' + restLbl(groupRest) + ' after ' + LET[curIds.length - 1],
+      exLast: sx ? sx.last : '',
+      exTarget: sx ? sx.target : '',
+      exPlates: sx && s.plateMath && sx.eq === 'Barbell' && row ? plateLine(row.w) : '',
+      hasPlates: !!(sx && s.plateMath && sx.eq === 'Barbell' && row && plateLine(row.w)),
+      wStepLabel: sx ? sx.step + ' LB' : '5 LB',
+      repeatLast: () => this.setState(st => {
+        if (!st.session) return {};
+        const ex = this.clone(st);
+        const e = ex[Math.min(st.exIdx, ex.length - 1)];
+        const m = e.last.match(/(\d+)×(\d+) @ ([\d.]+)/);
+        if (m) e.sets = e.sets.map(x => ({ ...x, w: +m[3], r: +m[2] }));
+        return { session: { ...st.session, ex } };
+      }),
+      progressBars: (sess ? sess.ex : []).map((e, i) => ({ flex: e.sets.length,
+        bg: i < sxi ? INK : i === sxi ? ORANGE : 'rgba(22,21,15,.14)' })),
+      goToday: () => this.setState({ screen: 'today', tab: 'today' }),
+      finishWorkout: finish,
+
+      rows: rowDefs.map((d, idx) => {
+        const x = sess.ex[d.ei].sets[d.si];
+        const active = d.ei === sxi && d.si === s.activeSet && !x.done;
+        const pick = () => this.setState({ exIdx: d.ei, activeSet: d.si });
+        return {
+          n: d.label, w: x.w, r: x.r, active,
+          fg: x.done ? dim : INK,
+          numFg: x.done ? dim : active ? ORANGE : d.drop ? 'rgba(255,91,34,.7)' : 'rgba(22,21,15,.45)',
+          chk: x.done ? '✓' : '', chkBg: x.done ? ORANGE : 'transparent',
+          chkBd: x.done ? ORANGE : active ? INK : 'rgba(22,21,15,.16)', chkFg: '#fff',
+          select: pick,
+          check: e => {
+            if (e && e.stopPropagation) e.stopPropagation();
+            this.logSet(d.ei, d.si, {
+              next: nextOf(idx), rest: d.last,
+              restSecs: d.last ? (isGroup ? groupRest : sess.ex[d.ei].rest) : 0,
+            });
+          },
+          wUp: () => { pick(); this.bumpW(1); },
+          wDown: () => { pick(); this.bumpW(-1); },
+          rUp: () => { pick(); this.bumpR(1); },
+          rDown: () => { pick(); this.bumpR(-1); },
+        };
+      }),
+      addSet: () => this.setState(st => {
+        if (!st.session) return {};
+        const ex = this.clone(st);
+        const e = ex[Math.min(st.exIdx, ex.length - 1)];
+        const last = e.sets[e.sets.length - 1] || { w: 0, r: 8 };
+        e.sets.push({ w: last.w, r: last.r, done: false });
+        return { session: { ...st.session, ex } };
+      }),
+      upNext: upNext,
+      hasUpNext: upNext.length > 0,
+
+      resting: s.rest > 0,
+      restLabel: this.mmss(s.rest),
+      restOffset: 201 - 201 * (s.rest / Math.max(1, s.restTotal)),
+      restNext: 'Set ' + (s.activeSet + 1) + ' · ' + (sets[s.activeSet] ? sets[s.activeSet].w + ' lb × ' + sets[s.activeSet].r : 'next exercise'),
+      addRest: () => this.setState(st => ({ rest: st.rest + 30, restTotal: st.restTotal + 30 })),
+      skipRest: () => this.setState({ rest: 0, buzz: false }),
+
+      swapOpen: s.swapOpen,
+      openSwap: () => this.setState({ swapOpen: true }),
+      closeSwap: () => this.setState({ swapOpen: false }),
+      swaps: (sx ? altsFor(sx.c) : []).map(a => ({ ...a, pick: () => this.setState(st => {
+        if (!st.session) return { swapOpen: false };
+        const ex = this.clone(st);
+        ex[Math.min(st.exIdx, ex.length - 1)].name = a.name;
+        return { session: { ...st.session, ex }, swapOpen: false };
+      }) })),
+
+      filters: ['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms'].map(f => ({
+        label: f, pick: () => this.setState({ filter: f }),
+        bg: s.filter === f ? INK : 'transparent', fg: s.filter === f ? PAPER : 'rgba(22,21,15,.6)',
+        bd: s.filter === f ? INK : 'rgba(22,21,15,.14)',
+      })),
+      libSections: [
+        { title: 'RECENTLY LOGGED', items: [
+          { abbr: 'BB', name: 'Bench Press', meta: 'Barbell · chest · 34 sessions', pr: '195', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'BB', name: 'Back Squat', meta: 'Barbell · quads · 41 sessions', pr: '285', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'DB', name: 'Incline DB Press', meta: 'Dumbbell · chest · 22 sessions', pr: '60', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+        ] },
+        { title: 'ALL EXERCISES', items: [
+          { abbr: 'BB', name: 'Barbell Row', meta: 'Barbell · back', pr: '165', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'CB', name: 'Cable Lateral Raise', meta: 'Cable · shoulders', pr: '17.5', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'MC', name: 'Chest-Supported Row', meta: 'Machine · back', pr: '80', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'BB', name: 'Deadlift', meta: 'Barbell · hamstrings', pr: '365', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'CB', name: 'Lat Pulldown', meta: 'Cable · back', pr: '110', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+          { abbr: 'BB', name: 'Overhead Press', meta: 'Barbell · shoulders', pr: '125', go: () => this.setState({ screen: 'history', tab: 'history' }) },
+        ] },
+      ],
+      goLibrary: () => this.setState({ screen: 'library', tab: 'library' }),
+
+      chart: chartVals.map((v, i) => ({ v, wk: 'W' + (i + 1),
+        h: Math.round(28 + (v - 194) * 2.6) + 'px',
+        bg: i === 7 ? ORANGE : 'rgba(22,21,15,.16)',
+        fg: i === 7 ? ORANGE : 'rgba(22,21,15,.45)' })),
+      sessions: [
+        { date: 'Aug 12', tag: 'PR', tagFg: ORANGE, sets: ['180×5', '180×5', '180×5', '180×5', '180×5'] },
+        { date: 'Aug 5', tag: '+5 lb', tagFg: 'rgba(22,21,15,.5)', sets: ['175×5', '175×5', '175×5', '175×5', '175×4'] },
+        { date: 'Jul 29', tag: '—', tagFg: 'rgba(22,21,15,.35)', sets: ['175×5', '175×5', '175×5', '175×5'] },
+        { date: 'Jul 22', tag: '+5 lb', tagFg: 'rgba(22,21,15,.5)', sets: ['170×5', '170×5', '170×5', '170×5', '170×5'] },
+      ],
+
+      watch: {
+        mode: fin && s.finished ? 'summary' : !sess ? 'idle' : s.rest > 0 ? 'rest' : 'ready',
+        weekLabel: 'WEEK ' + (s.curWeek + 1) + ' OF ' + s.weeksData.length + (cw.deload ? ' · DELOAD' : ''),
+        dayName: tdDay ? tdDay.name : 'Rest day',
+        hasPlan: tdIdx != null && !loggedToday,
+        planLine: tdIdx == null ? 'Nothing scheduled today.'
+          : loggedToday ? (fin ? 'Logged · ' + fin.done + ' sets · ' + fin.volume.toLocaleString() + ' lb' : 'Logged earlier today')
+          : tdDay.ex.length + ' exercises · ' + setsOf(tdDay) + ' sets · ' + (tdDay.ex[0] ? CATALOG[tdDay.ex[0].c].name + ' first' : 'empty day'),
+        nextSessionLine: nextUp,
+        onStart: () => { if (tdIdx != null) openSession(s.curWeek, tdIdx); },
+        exName: sx ? sx.name : '',
+        setLabel: (letterOf[sxi] ? letterOf[sxi] + ' · ' : '') + 'SET ' + (s.activeSet + 1) + ' OF ' + sets.length,
+        targetLine: sx ? 'RPE ' + sx.rpe : '',
+        setDots: sets.map(x => ({ bg: x.done ? ORANGE : 'rgba(255,255,255,.22)' })),
+        exList: (sess ? sess.ex : []).map((e, i) => ({
+          n: i + 1, name: (letterOf[i] ? letterOf[i] + ' · ' : '') + e.name,
+          scheme: e.sets.length + ' × ' + e.sets[0].r + ' @ ' + e.sets[0].w,
+          done: e.sets.every(x => x.done), cur: i === sxi,
+          go: () => this.setState({ exIdx: i, activeSet: Math.max(0, e.sets.findIndex(x => !x.done)) }),
+        })),
+        nextLine: row ? 'Next: ' + row.w + ' lb × ' + row.r : 'Next exercise',
+        onFinish: finish, onDiscard: discard,
+        w: row ? row.w : 0,
+        r: row ? row.r : 0,
+        rest: this.mmss(s.rest), restFrac: s.rest / Math.max(1, s.restTotal),
+        hr: fin ? fin.hr : s.hr, buzz: s.buzz,
+        elapsed: fin ? fin.elapsed : this.mmss(s.elapsed),
+        doneCount: fin ? fin.done : doneCount,
+        totalSets: fin ? fin.total : totalSets,
+        volume: (fin ? fin.volume : volume).toLocaleString(),
+        prs: fin ? fin.prs : 0,
+        crownDrag: s.crownDrag,
+        onCrownDown: e => { this.lastY = e.clientY; this.setState({ crownDrag: true }); },
+        onLog: () => this.logSet(null, null),
+        onAddRest: () => this.setState(st => ({ rest: st.rest + 30, restTotal: st.restTotal + 30 })),
+        onSkipRest: () => this.setState({ rest: 0, buzz: false }),
+        onWUp: () => this.bumpW(1), onWDown: () => this.bumpW(-1),
+        onRUp: () => this.bumpR(1), onRDown: () => this.bumpR(-1),
+        onReset: () => this.setState({ finished: false }),
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

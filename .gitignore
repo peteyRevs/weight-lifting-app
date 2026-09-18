@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Xcode (project IS committed; only user state is ignored)
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+.derivedData/
+build/
+*.xcresult
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved.lock
+
+# Tooling
+.claude/worktrees/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+.bundle/
+vendor/bundle/
+node_modules/
+
+# Secrets — never commit
+*.p8
+*.p12
+*.mobileprovision
+.env
+.env.*
