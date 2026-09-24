@@ -1,0 +1,19 @@
+--swiftversion 6.3
+--languagemode 6
+
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--self remove
+--semicolons never
+--commas inline
+--header strip
+
+--exclude .build,DerivedData,.derivedData,**/__Snapshots__
+
+# Keeps `@Test("Sentence") func subject_condition_expectation()` as written
+# (docs/testing-strategy.md §6). The rule would rewrite the function name into a
+# backticked raw identifier, which SwiftLint's identifier_name then rejects.
+--disable swiftTestingTestCaseNames

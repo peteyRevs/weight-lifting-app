@@ -18,13 +18,13 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
   - [x] MCP servers verified 2026-09-19: sosumi, context7, XcodeBuildMCP. `xcode` pending the Intelligence toggle.
   - [x] Bundle ID prefix decided: `com.petearevalo` (2026-09-19).
   - [ ] Xcode ▸ Settings ▸ Intelligence ▸ "Allow external agents to use Xcode tools" on, then `/mcp` reconnect `xcode`.
-  - [ ] Xcode ▸ Settings ▸ Accounts: sign in with the Apple Account (personal team is enough for F00 on simulators).
-  - [ ] Enroll in the Apple Developer Program as an individual (Apple Developer app on iPhone; legal name on the Apple Account; 2FA on; 99 USD/yr).
-  - [ ] After approval: record the Team ID for `Config/Base.xcconfig`.
+  - [x] Xcode ▸ Settings ▸ Accounts: signed in (`Apple Development: Peter Arevalo` certificate issued 2026-09-22).
+  - [x] Enrolled in the Apple Developer Program as an individual (2026-09-22).
+  - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig` — read from the signing certificate's OU; **Pete to confirm** it is the Individual team, not a Personal Team.
   - [ ] Register explicit App IDs: `com.petearevalo.Ledger` (HealthKit) and `com.petearevalo.Ledger.watchkitapp` (HealthKit). Xcode Cloud needs the watch ID registered by hand (R3 §4).
   - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
 - [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
-- [ ] Approve starting M0.
+- [x] Approve starting M0. (Pete, 2026-09-24)
 
 ## M0 — Foundation (target: 1.5 weeks; mostly serial)
 
@@ -39,7 +39,22 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [ ] F00 · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [~] F00 · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+
+### F00 delivery (branch `feat/F00-project-skeleton`)
+
+- [x] Scrap the half-built 2026-09-21 `Ledger.xcodeproj` and the duplicate root `Ledger/` folder.
+- [x] Tooling: `.xcode-version`, `mise.toml`, `.swiftformat`, `.swiftlint.yml`, `lefthook.yml`.
+- [x] Scripts: `bootstrap.sh`, `check.sh`, `check-commit-msg.sh`, `check-package-graph.sh`.
+- [x] `Config/{Base,Debug,Release,Ledger,LedgerWatch,Tests}.xcconfig`.
+- [x] `LedgerKit`: 19 source targets + 17 test targets, graph recorded, `swift test` green (18 tests).
+- [x] `Resources/Fonts/Archivo[wdth,wght].ttf` (+ OFL) — `fvar` verified: wght 100–900, wdth 62–125.
+- [x] `Apps/` shells and smoke/UI tests for both apps; `TestPlans/*.xctestplan` ×6.
+- [x] Criteria 5 and 7 demonstrated (lint rejects planted violations; hook rejects `added stuff`).
+- [ ] **Pete:** the Xcode sitting — `tasks/features/F00-project-skeleton/xcode-setup.md`.
+- [ ] Criteria 1–4, 6, 8, 10 verified against the real project; `scripts/check.sh` green end to end.
+- [ ] PR opened with the criterion 5/6/7 output pasted.
+
 - [ ] M0 exit: both apps build and launch to an empty Today screen; `check.sh` and CI green; domain coverage ≥ 95 %; Archivo width axis verified on watch simulator.
 
 ## M1 — iPhone core loop (target: 3 weeks; up to 3 lanes in parallel)

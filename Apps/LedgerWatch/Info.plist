@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WKApplication</key>
+	<true/>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>com.petearevalo.Ledger</string>
+	<key>WKRunsIndependentlyOfCompanionApp</key>
+	<true/>
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>workout-processing</string>
+	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>$(PRODUCT_DISPLAY_NAME) reads your heart rate during a workout so each set is logged with what your body was doing.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>$(PRODUCT_DISPLAY_NAME) saves each finished workout to Health so it counts towards your rings and appears in Fitness.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fonts/Archivo[wdth,wght].ttf</string>
+	</array>
+</dict>
+</plist>

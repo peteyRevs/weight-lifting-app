@@ -1,0 +1,39 @@
+// Base.xcconfig — every build setting the project has lives in Config/*.xcconfig.
+// The pbxproj holds no build settings (ADR-003): Debug/Release are set at the
+// PROJECT level, the per-target files at the TARGET level, and target settings
+// win over project settings.
+//
+// Included by Debug.xcconfig and Release.xcconfig only.
+
+// ---- Language -------------------------------------------------------------
+SWIFT_VERSION = 6.0
+SWIFT_STRICT_CONCURRENCY = complete
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
+
+// ---- Deployment -----------------------------------------------------------
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+WATCHOS_DEPLOYMENT_TARGET = 26.0
+
+// ---- Versioning (release-please owns MARKETING_VERSION) -------------------
+MARKETING_VERSION = 0.1.0 // x-release-please-version
+CURRENT_PROJECT_VERSION = 1
+
+// ---- Naming ---------------------------------------------------------------
+// "Ledger" is the internal codename. The shipping name is decided in F31 and
+// changing it is this one line (docs/product-decisions.md › Naming).
+PRODUCT_DISPLAY_NAME = Ledger
+
+// ---- Signing --------------------------------------------------------------
+DEVELOPMENT_TEAM = 95JAK545DF
+CODE_SIGN_STYLE = Automatic
+
+// ---- Build hygiene --------------------------------------------------------
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+GENERATE_INFOPLIST_FILE = YES
+ENABLE_MODULE_VERIFIER = YES
+DEAD_CODE_STRIPPING = YES
+CLANG_ENABLE_OBJC_WEAK = YES
+ALWAYS_SEARCH_USER_PATHS = NO

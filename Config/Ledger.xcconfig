@@ -1,0 +1,20 @@
+// Target-level configuration for the iOS app target `Ledger`.
+// Applied to BOTH Debug and Release; project-level values come from
+// Debug.xcconfig / Release.xcconfig.
+
+PRODUCT_NAME = $(TARGET_NAME)
+PRODUCT_BUNDLE_IDENTIFIER = com.petearevalo.Ledger
+INFOPLIST_FILE = Apps/Ledger/Info.plist
+CODE_SIGN_ENTITLEMENTS = Apps/Ledger/Ledger.entitlements
+INFOPLIST_KEY_CFBundleDisplayName = $(PRODUCT_DISPLAY_NAME)
+
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 1
+
+INFOPLIST_KEY_UILaunchScreen_Generation = YES
+INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES
+INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+SWIFT_EMIT_LOC_STRINGS = YES

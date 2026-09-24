@@ -101,7 +101,8 @@ workout-app/
 │   (GRDB)     │ │ (HealthKit)│ │ (HK+WC)  │ │ (SwiftUI)  │ │Kit (ActivityK)│
 └───────▲──────┘ └─────▲──────┘ └──▲───────┘ └─▲──────────┘ └─▲─────────────┘
         │              │           │           │              │
-        │   Feature* targets depend ONLY on LedgerDomain + LedgerDesign (+ActivityKit for the LA)
+        │   Feature* → LedgerDomain, LedgerDesign, LedgerDependencies, LedgerTestSupport,
+        │              swift-dependencies (+ LedgerActivityKit for FeatureWorkout's Live Activity)
         │              │           │           │              │
 ┌───────┴──────────────┴───────────┴───────────┴──────────────┴─────────────┐
 │  App targets (Ledger, LedgerWatch, widgets): the composition root.        │
@@ -114,6 +115,19 @@ LedgerDependencies → depends on LedgerDomain (+ swift-dependencies); Features 
 `Package.swift` encodes exactly these edges. A feature that needs data calls a
 protocol declared in `LedgerDomain` (e.g. `WorkoutRepository`), which the app
 binds to `GRDBWorkoutRepository` via `swift-dependencies`.
+
+`LedgerKit/package-graph.expected.txt` is the machine-readable copy of that
+edge list; `scripts/check-package-graph.sh` fails the gate when `Package.swift`
+and the table disagree, so an edge cannot be added quietly (F00).
+
+**Open question (raised in F00, decide in F06/F07):** feature targets link
+`LedgerTestSupport` so that `#Preview` bodies can use its fixtures. Because
+`LedgerTestSupport` itself depends on Persistence, Health, Sync and Design,
+this gives every feature a transitive link to the whole stack, which is exactly
+what the rule above is meant to prevent. The alternative is a small
+`LedgerPreviewFixtures` target that depends on `LedgerDomain` only. The edge is
+kept for now because F00's target table specifies it, and the cost is invisible
+while every module is a placeholder.
 
 Isolation defaults per target (Swift 6.2+ `defaultIsolation`):
 

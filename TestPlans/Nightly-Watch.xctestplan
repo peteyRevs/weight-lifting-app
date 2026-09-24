@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "configurations": [
+    {
+      "id": "8D6D0F3C-0000-4000-8000-000000000004",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": {
+      "targets": [
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerDomain",
+          "name": "LedgerDomain"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerDependencies",
+          "name": "LedgerDependencies"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerPersistence",
+          "name": "LedgerPersistence"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerHealth",
+          "name": "LedgerHealth"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerSync",
+          "name": "LedgerSync"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerActivityKit",
+          "name": "LedgerActivityKit"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "LedgerDesign",
+          "name": "LedgerDesign"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureOnboarding",
+          "name": "FeatureOnboarding"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureToday",
+          "name": "FeatureToday"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureProgram",
+          "name": "FeatureProgram"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureLibrary",
+          "name": "FeatureLibrary"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureHistory",
+          "name": "FeatureHistory"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureSettings",
+          "name": "FeatureSettings"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "FeatureWorkout",
+          "name": "FeatureWorkout"
+        },
+        {
+          "containerPath": "container:LedgerKit",
+          "identifier": "WatchFeatureWorkout",
+          "name": "WatchFeatureWorkout"
+        }
+      ]
+    },
+    "environmentVariableEntries": [
+      {
+        "key": "TZ",
+        "value": "UTC"
+      },
+      {
+        "key": "LEDGER_TEST_LANE",
+        "value": "nightly"
+      },
+      {
+        "key": "LEDGER_PROPERTY_SEED_COUNT",
+        "value": "2000"
+      },
+      {
+        "key": "SNAPSHOT_ARTIFACTS",
+        "value": "$(PROJECT_DIR)/.derivedData/SnapshotArtifacts"
+      }
+    ],
+    "language": "en",
+    "region": "US",
+    "testExecutionOrdering": "random",
+    "testTimeoutsEnabled": true,
+    "maximumTestExecutionTimeAllowance": 600
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerDomainTests",
+        "name": "LedgerDomainTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerPersistenceTests",
+        "name": "LedgerPersistenceTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerSyncTests",
+        "name": "LedgerSyncTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerDesignTests",
+        "name": "LedgerDesignTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "WatchFeatureWorkoutTests",
+        "name": "WatchFeatureWorkoutTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerWatchAppKitTests",
+        "name": "LedgerWatchAppKitTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Ledger.xcodeproj",
+        "identifier": "LedgerWatchTests",
+        "name": "LedgerWatchTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Ledger.xcodeproj",
+        "identifier": "LedgerWatchUITests",
+        "name": "LedgerWatchUITests"
+      }
+    }
+  ]
+}

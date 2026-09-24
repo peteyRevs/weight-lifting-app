@@ -1,0 +1,13 @@
+// Target-level configuration shared by every app-hosted test target
+// (LedgerTests, LedgerUITests, LedgerWatchTests, LedgerWatchUITests).
+//
+// EXCEPTION to "no target-level build settings": TEST_HOST, BUNDLE_LOADER and
+// TEST_TARGET_NAME stay where Xcode writes them, because they differ per test
+// target and xcconfig has no per-target conditionals. Nothing else may be set
+// at target level.
+
+PRODUCT_NAME = $(TARGET_NAME)
+PRODUCT_BUNDLE_IDENTIFIER = com.petearevalo.$(PRODUCT_NAME:rfc1034identifier)
+GENERATE_INFOPLIST_FILE = YES
+SWIFT_EMIT_LOC_STRINGS = NO
+CODE_SIGN_STYLE = Automatic

@@ -1,0 +1,10 @@
+# Pinned developer tooling. `scripts/bootstrap.sh` installs these; `scripts/check.sh`
+# fails if any is missing or at a different version. CI and Xcode Cloud use the same file.
+[tools]
+swiftlint = "0.65.1"
+swiftformat = "0.63.0"
+lefthook = "2.1.14"
+xcbeautify = "3.2.1"
+
+[settings]
+idiomatic_version_file_enable_tools = []
