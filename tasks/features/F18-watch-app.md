@@ -44,7 +44,7 @@ No new persisted types. Presentation derivations (pure, unit-tested, in `WatchPr
 - "GO" (spec §4.5 resolved): at zero the rest screen title becomes "GO" for 1.2 s with the buzz shake (`buzz .38s ×3`) then transitions to `ready`; "+30s" after zero restarts a 30 s rest titled "REST". Reduce Motion: no shake, title + haptic only.
 - Always-On (R1 §5.5): `@Environment(\.isLuminanceReduced)` → HR line `.privacySensitive()` + hidden, orange → 60 % alpha, set dots outlined, `TimelineView(.periodic(from:by: 60))` for elapsed; `Text(timerInterval:)` keeps the rest countdown ticking for free.
 - Frontmost: the running `HKWorkoutSession` (F16) keeps the app on screen; no `WKExtendedRuntimeSession` (R1 §5.4).
-- Undesigned states (spec §9): no program cached → idle shows "No program on watch" + "Open Ledger on iPhone" (outlined pill); HealthKit `.denied` → set-ready HR line shows "— BPM" and a one-time "Allow Health in iPhone Settings" line; `.anotherWorkoutSessionStarted` → banner "Apple Workout took over · logging continues".
+- Undesigned states (spec §9): no program cached → idle shows "No program on watch" + "Open %@ on iPhone" (outlined pill; `%@` = `CFBundleDisplayName`, never a literal — see `docs/product-decisions.md` › Naming); HealthKit `.denied` → set-ready HR line shows "— BPM" and a one-time "Allow Health in iPhone Settings" line; `.anotherWorkoutSessionStarted` → banner "Apple Workout took over · logging continues".
 
 ## Acceptance criteria
 1. Given a cached program with today scheduled, when idle renders, then it shows week label ("WEEK 1 OF 8" / "WEEK 8 OF 8 · DELOAD"), day name, plan line "{n} exercises · {sets} sets · {first} first" and an orange "Start" pill; given a rest day, then "Rest day", "Nothing scheduled today." and the outlined "Next: Friday · UB" line, non-interactive.
@@ -62,7 +62,7 @@ No new persisted types. Presentation derivations (pure, unit-tested, in `WatchPr
 13. Given the watch app is launched by `handle(_ workoutConfiguration:)` or `handleActiveWorkoutRecovery()`, when the delegate runs, then the store receives the corresponding `HealthSessionEvent` and shows set-ready without a tap (**device**).
 14. Given VoiceOver, when on set-ready, then the weight is an adjustable element ("185 pounds, adjustable"), buttons have labels ("Decrease reps", "Increase reps", "Done set"), and the ring reads "Rest, 42 seconds remaining".
 15. Given Reduce Motion, when rest hits zero, then no shake animation plays and the haptic still does.
-16. Given no cached program, when idle renders, then "No program on watch" with the outlined "Open Ledger on iPhone" pill (spec §9 state).
+16. Given no cached program, when idle renders, then "No program on watch" with the outlined "Open %@ on iPhone" pill, `%@` resolved from `CFBundleDisplayName` (spec §9 state).
 
 ## Test plan
 - Unit (WatchFeatureWorkoutTests): `test_mode_idleReadyRestGoSummary`, `test_mode_goWindowIs1200ms`, `test_listClosesOnModeChange_endDoesNot`, `test_setLabel_supersetLetter`, `test_elapsed_frozenOnSummary`, `test_planLine_variants`, `test_nextSessionLine_withinWeek_elseNextWeek`, `test_crown_commitsOnceOnIdle`, `test_crown_followsRemoteWhenIdle`, `test_reps_minimumOne`, `test_addRest_atZeroStartsThirtySeconds`, `test_buzz_gatedByWatchBuzz`, `test_buzzTaskCancelledOnSkipExtendFinish`, `test_haptics_minimumSpacing100ms`, `test_volume_formattedThousands`, `test_units_kgLabelsAndStep`

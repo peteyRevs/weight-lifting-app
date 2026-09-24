@@ -401,7 +401,7 @@ useful `previewValue`. Stores never construct their dependencies.
 
 ## 14. Observability
 
-- `os.Logger` subsystem `app.ledger`, category per module; signposts around
+- `os.Logger` subsystem `com.petearevalo.Ledger`, category per module; signposts around
   DB aggregates and sync round-trips.
 - MetricKit for launch/hang/crash diagnostics at launch; no third-party crash
   SDK initially (keeps the privacy manifest trivial).

@@ -59,7 +59,7 @@ With thin app targets and all logic in local Swift packages, the `.pbxproj` is s
 
 ### watchOS tests in CI
 - Apple: add a "watchOS Unit Testing Bundle" / "watchOS UI Testing Bundle" target to the watch app; tests run in the watch simulator via the generated scheme (https://developer.apple.com/documentation/watchos-apps/setting-up-tests-for-your-watchos-app).
-- `xcodebuild test -scheme LedgerWatch -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5'`. GitHub's macos-26 image preinstalls watchOS 26.2/26.4/26.5 runtimes (see §4), so no download step is needed there. Locally you have only watchOS 26.5; install iOS with `xcodebuild -downloadPlatform iOS` (optionally `-buildVersion 26.5`) (https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components); runtimes are ~5–8 GB each (https://developer.apple.com/forums/thread/765478).
+- `xcodebuild test -scheme LedgerWatch -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5'`. GitHub's macos-26 image preinstalls watchOS 26.2/26.4/26.5 runtimes (see §4), so no download step is needed there. Locally you have only watchOS 26.5; install iOS with `xcodebuild -downloadPlatform iOS` (`-buildVersion` takes a build number such as `23F77`; `26.5` is rejected as "not available" — verified 2026-09-19) (https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components); runtimes are ~5–8 GB each (https://developer.apple.com/forums/thread/765478).
 - Put pure logic in platform-agnostic packages so most tests run via `swift test` on macOS (fast, no simulator); keep simulator-bound tests (SwiftUI snapshots, HealthKit-facing code, UI tests) small.
 
 ---

@@ -13,8 +13,17 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 
 - [ ] Read `docs/architecture.md` and the six ADRs; object or approve.
 - [ ] Confirm or override the 20 defaults in `docs/product-decisions.md` (the big ones: no accounts, lb+kg, 4 tabs, watch works standalone).
-- [ ] Apple Developer account ready (Team ID), App IDs for iOS + watch, HealthKit capability, iCloud container name reserved.
-- [ ] Create the GitHub repository (private) and push `main`.
+- [~] Apple setup (identifiers per `docs/product-decisions.md` › Identifiers):
+  - [x] Simulator runtimes: iOS 26.5 (23F77) + watchOS 26.5 (23T570) installed 2026-09-19.
+  - [x] MCP servers verified 2026-09-19: sosumi, context7, XcodeBuildMCP. `xcode` pending the Intelligence toggle.
+  - [x] Bundle ID prefix decided: `com.petearevalo` (2026-09-19).
+  - [ ] Xcode ▸ Settings ▸ Intelligence ▸ "Allow external agents to use Xcode tools" on, then `/mcp` reconnect `xcode`.
+  - [ ] Xcode ▸ Settings ▸ Accounts: sign in with the Apple Account (personal team is enough for F00 on simulators).
+  - [ ] Enroll in the Apple Developer Program as an individual (Apple Developer app on iPhone; legal name on the Apple Account; 2FA on; 99 USD/yr).
+  - [ ] After approval: record the Team ID for `Config/Base.xcconfig`.
+  - [ ] Register explicit App IDs: `com.petearevalo.Ledger` (HealthKit) and `com.petearevalo.Ledger.watchkitapp` (HealthKit). Xcode Cloud needs the watch ID registered by hand (R3 §4).
+  - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
+- [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
 - [ ] Approve starting M0.
 
 ## M0 — Foundation (target: 1.5 weeks; mostly serial)

@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "sosumi": {
+      "type": "http",
+      "url": "https://sosumi.ai/mcp"
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@4.1.1"]
+    },
+    "XcodeBuildMCP": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "xcodebuildmcp@2.7.0", "mcp"],
+      "env": {
+        "XCODEBUILDMCP_SENTRY_DISABLED": "true"
+      }
+    },
+    "xcode": {
+      "type": "stdio",
+      "command": "xcrun",
+      "args": ["mcpbridge"]
+    }
+  }
+}

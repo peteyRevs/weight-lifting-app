@@ -163,7 +163,7 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
   (`try?` needs a comment saying why the failure is acceptable).
 - Stores map errors to user-facing presentation state; they never surface raw
   error descriptions.
-- Logging via `os.Logger` with subsystem `app.ledger` and a category per
+- Logging via `os.Logger` with subsystem `com.petearevalo.Ledger` and a category per
   module. No `print`. No logging of health data values.
 
 ---

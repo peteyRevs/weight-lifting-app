@@ -30,6 +30,12 @@ any of them and the affected feature briefs will be updated.
 
 ## Additional scoping calls
 
+- **Identifiers (Pete, 2026-09-19):** personal namespace `com.petearevalo` — app `com.petearevalo.Ledger`, watch `com.petearevalo.Ledger.watchkitapp`, iCloud container `iCloud.com.petearevalo.Ledger`; the `os.Logger` subsystem and HealthKit metadata keys use the same prefix. Replaces `app.ledger` (domain not owned; bundle IDs are permanent after the first upload). The App Store display name is chosen separately in F31 — see Naming below.
+- **Naming (Pete, 2026-09-21):** **"Ledger" is the internal codename, not a commitment to the shipping name.** Pete found similarly named apps; the shipping name stays open until F31.
+  - *Codename surface (stays "Ledger" regardless of what ships):* Xcode targets and schemes, Swift module names, `Apps/` and `LedgerKit/` folders, test plans, scripts, docs. Renaming these later is a scripted `sed` plus one synchronized-folder path per app in the pbxproj (ADR-003 keeps per-file references out), not a rebuild — but there is no reason to pay it.
+  - *Shipped copy never contains the product name.* The display name comes from `PRODUCT_DISPLAY_NAME` in `Config/Base.xcconfig` → `INFOPLIST_KEY_CFBundleDisplayName` (F00); the Settings About row reads `CFBundleDisplayName` / `CFBundleShortVersionString` / `CFBundleVersion` from the bundle (F14); onboarding body copy was reworded to drop the name (F08). Changing the product name is therefore **one xcconfig line plus the App Store Connect listing**.
+  - *Bundle ID leaf stays `Ledger`.* It is not user-visible and does not have to match the app name. It is free to change until the first upload (F30) and permanent after — that upload is the deadline, and it is blocked on the Developer Program membership anyway.
+  - *Why F31 and not sooner:* an App Store name cannot be reserved without a paid membership, and Apple rejects names confusingly similar to existing apps — so the research is only actionable at listing time. Note "Ledger" is a crypto-wallet trademark independently of the lifting apps Pete found.
 - **Launch platforms:** iPhone + Apple Watch. iPad runs the iPhone app (no dedicated layout at launch). No Mac.
 - **Sync scope:** M2 = phone⇄watch live workout. M4 = iCloud across the user's devices. No sharing between users.
 - **Live Activity** for elapsed + rest on the iPhone Lock Screen / Dynamic Island: M3.
