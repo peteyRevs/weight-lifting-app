@@ -107,11 +107,13 @@ done_step "iOS"
 # ---- 4. watchOS build + PR-Watch plan ---------------------------------------
 step "4 · watchOS build + PR-Watch test plan"
 rm -rf "$RESULTS/PR-watchOS.xcresult"
+# One worker = one watch clone. A second clone intermittently fails to launch
+# the host app or UI runner ("Unknown application display identifier").
 xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
     -destination "$WATCH_DEST" \
     -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
     -resultBundlePath "$RESULTS/PR-watchOS.xcresult" \
-    -parallel-testing-enabled YES -test-timeouts-enabled YES \
+    -parallel-testing-enabled YES -parallel-testing-worker-count 1 -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 60 -quiet | beautify
 done_step "watchOS"
 
