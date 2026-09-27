@@ -17,10 +17,10 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
   - [x] Simulator runtimes: iOS 26.5 (23F77) + watchOS 26.5 (23T570) installed 2026-09-19.
   - [x] MCP servers verified 2026-09-19: sosumi, context7, XcodeBuildMCP. `xcode` pending the Intelligence toggle.
   - [x] Bundle ID prefix decided: `com.petearevalo` (2026-09-19).
-  - [ ] Xcode ▸ Settings ▸ Intelligence ▸ "Allow external agents to use Xcode tools" on, then `/mcp` reconnect `xcode`.
+  - [x] Xcode ▸ Settings ▸ Intelligence ▸ "Allow external agents to use Xcode tools" on (verified 2026-09-26: `xcode` MCP answers).
   - [x] Xcode ▸ Settings ▸ Accounts: signed in (`Apple Development: Peter Arevalo` certificate issued 2026-09-22).
   - [x] Enrolled in the Apple Developer Program as an individual (2026-09-22).
-  - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig` — read from the signing certificate's OU; **Pete to confirm** it is the Individual team, not a Personal Team.
+  - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig`; confirmed paid Individual team (Xcode defaults, 2026-09-26).
   - [ ] Register explicit App IDs: `com.petearevalo.Ledger` (HealthKit) and `com.petearevalo.Ledger.watchkitapp` (HealthKit). Xcode Cloud needs the watch ID registered by hand (R3 §4).
   - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
 - [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
@@ -51,9 +51,24 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 - [x] `Resources/Fonts/Archivo[wdth,wght].ttf` (+ OFL) — `fvar` verified: wght 100–900, wdth 62–125.
 - [x] `Apps/` shells and smoke/UI tests for both apps; `TestPlans/*.xctestplan` ×6.
 - [x] Criteria 5 and 7 demonstrated (lint rejects planted violations; hook rejects `added stuff`).
-- [ ] **Pete:** the Xcode sitting — `tasks/features/F00-project-skeleton/xcode-setup.md`.
+- [~] **Pete:** the Xcode sitting — `tasks/features/F00-project-skeleton/xcode-setup.md`. Done 2026-09-24: steps 1–2, package added, `Ledger` → `LedgerAppKit`. Left: watch folders, xcconfigs + clearing pbxproj settings, test hosts, `LedgerWatchAppKit`, fonts, schemes/test plans.
+- [x] `Info.plist` / `.entitlements` moved beside the synchronized folders (fixes `Multiple commands produce Info.plist`; implementation-notes #11).
 - [ ] Criteria 1–4, 6, 8, 10 verified against the real project; `scripts/check.sh` green end to end.
 - [ ] PR opened with the criterion 5/6/7 output pasted.
+
+### F02 delivery (branch `feat/F02-domain-core`, worktree `.claude/worktrees/F02-domain-core`)
+
+Started 2026-09-26 in parallel with the F00 Xcode sitting (Pete approved). Based on
+`00a504b` (F00 scaffolding); rebased onto `main` once F00 merges. Until the Xcode
+project is committed the working gate is `scripts/check.sh --fast` plus a
+`LedgerDomain` coverage measurement; the full `scripts/check.sh` runs after the rebase.
+
+- [x] G0 brief: `tasks/features/F02-domain-core.md` (14 criteria, test plan) — approved with M0.
+- [x] G1 implementer: code + brief's tests, `check.sh --fast` green, coverage ≥ 95 %, implementation notes. (2026-09-26: 148 domain tests, 98.91 % lines; re-run green by orchestrator; committed `f30d94e`. Brief's rest-label example fixed to rule 39 in `76ebbdb`.)
+- [x] 500-line PR budget (standards §10): product code is ~2,200 lines. **Pete granted a one-time waiver (2026-09-26)** — F02 ships as one PR; say so in the PR body. Future briefs must be scoped to fit.
+- [ ] G2 adversarial tester: independent tests; `test-findings.md` empty or resolved.
+- [ ] G3 reviewer: `review.md`, zero blocking.
+- [ ] Rebase onto `main` after F00 merges; full `scripts/check.sh` green; PR opened.
 
 - [ ] M0 exit: both apps build and launch to an empty Today screen; `check.sh` and CI green; domain coverage ≥ 95 %; Archivo width axis verified on watch simulator.
 

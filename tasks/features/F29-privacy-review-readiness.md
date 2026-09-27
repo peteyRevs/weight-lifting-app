@@ -18,7 +18,7 @@ Everything App Review checks before it looks at the app: privacy manifests on ev
 
 ## Touches
 - `Apps/Ledger/PrivacyInfo.xcprivacy`, `Apps/LedgerWatch/PrivacyInfo.xcprivacy`, `Apps/LedgerWidgets/PrivacyInfo.xcprivacy`, `Apps/LedgerWatchWidgets/PrivacyInfo.xcprivacy`
-- `Apps/Ledger/Info.plist`, `Apps/LedgerWatch/Info.plist` (usage strings via `Config/*.xcconfig` `INFOPLIST_KEY_*`)
+- `Apps/Ledger-Info.plist`, `Apps/LedgerWatch-Info.plist` (usage strings via `Config/*.xcconfig` `INFOPLIST_KEY_*`)
 - `LedgerKit/Sources/FeatureWorkout/HealthExplainerView.swift` (shown once before authorization)
 - `docs/app-review/{privacy-answers.md,review-notes.md,demo-script.md}`, `docs/legal/{privacy-policy.md,terms.md}`
 

@@ -64,19 +64,32 @@ synchronized folders exactly as in step 2.
 
 ## 4. Point every configuration at the xcconfigs
 
+The Configurations menus only list xcconfig files that are in the project, so
+first add the `Config` folder: Add Files to "Ledger"… ▸ `Config` ▸ Reference
+files in place, **Create folders**, and **no target ticked** (nothing in it is
+compiled).
+
 Project ▸ Info ▸ Configurations:
 
 | Level | Debug | Release |
 |---|---|---|
-| **Project** (`Ledger`) | `Config/Debug.xcconfig` | `Config/Release.xcconfig` |
-| Target `Ledger` | `Config/Ledger.xcconfig` | `Config/Ledger.xcconfig` |
-| Target `LedgerWatch` | `Config/LedgerWatch.xcconfig` | `Config/LedgerWatch.xcconfig` |
-| Targets `LedgerTests`, `LedgerUITests`, `LedgerWatchTests`, `LedgerWatchUITests` | `Config/Tests.xcconfig` | `Config/Tests.xcconfig` |
+| **Project** (`Ledger`) | `Debug` | `Release` |
+| Target `Ledger` | `Ledger` | `Ledger` |
+| Target `LedgerWatch` | `LedgerWatch` | `LedgerWatch` |
+| Targets `LedgerTests`, `LedgerUITests` | `Tests` | `Tests` |
+| Targets `LedgerWatchTests`, `LedgerWatchUITests` | `WatchTests` | `WatchTests` |
 
-Then, per target, Build Settings ▸ **Levels** and delete every setting still
-shown in the target column (select the row, press Delete) so the value comes
-from the xcconfig. The three exceptions that stay target-level, because they
-differ per test target: `TEST_HOST`, `BUNDLE_LOADER`, `TEST_TARGET_NAME`.
+Never pick `Base`; `Debug` and `Release` include it.
+
+Then clear every build setting the templates wrote, on the project **and** all
+six targets: Build Settings ▸ **All** + **Levels**, click a row, ⌘A, Delete.
+The column named after the project/target must end up empty. This also deletes
+the three settings that legitimately stay at target level (`TEST_HOST`,
+`BUNDLE_LOADER`, `TEST_TARGET_NAME` — they differ per test target and xcconfig
+has no per-target conditionals), so put them back by choosing General ▸
+Testing ▸ **Host Application** (`LedgerTests` → `Ledger`, `LedgerWatchTests` →
+`LedgerWatch`) and **Target Application** (`LedgerUITests` → `Ledger`,
+`LedgerWatchUITests` → `LedgerWatch`).
 
 ## 5. Add the local package
 
@@ -87,22 +100,25 @@ Then per target ▸ General ▸ Frameworks, Libraries and Embedded Content:
 - `Ledger` → `LedgerAppKit` **only**
 - `LedgerWatch` → `LedgerWatchAppKit` **only**
 
-## 6. Capabilities
+## 6. Capabilities — check only, nothing to add
 
-- `Ledger` ▸ Signing & Capabilities ▸ + **HealthKit**
-- `LedgerWatch` ▸ + **HealthKit**, + **Background Modes** ▸ ✅ Workout processing
-
-If Xcode writes new `.entitlements` files, delete them: the xcconfigs already
-point `CODE_SIGN_ENTITLEMENTS` at `Apps/Ledger/Ledger.entitlements` and
-`Apps/LedgerWatch/LedgerWatch.entitlements`, which are committed. Same for
-`Info.plist` — `INFOPLIST_FILE` already points at the committed ones and
-`GENERATE_INFOPLIST_FILE` stays YES so Xcode merges its keys in.
+The committed files already carry them: HealthKit in `Apps/Ledger.entitlements`
+and `Apps/LedgerWatch.entitlements` (via `CODE_SIGN_ENTITLEMENTS`), and
+`WKBackgroundModes = workout-processing` in `Apps/LedgerWatch-Info.plist` (via
+`INFOPLIST_FILE`; `GENERATE_INFOPLIST_FILE` stays YES so Xcode merges its keys
+in). Once step 4 is done, Signing & Capabilities on both targets should list
+HealthKit. If Xcode writes a new `.entitlements` or `Info.plist` anywhere, trash
+it. These files sit **beside** the synchronized folders, not inside them, because
+a synchronized folder copies everything it holds into the bundle
+(implementation-notes #11).
 
 ## 7. Bundle the font
 
-Drag `Resources/Fonts` into the navigator with **"Create folder references"**
-(blue folder) and tick **both** `Ledger` and `LedgerWatch`. The bundle must end
-up with `Fonts/Archivo[wdth,wght].ttf`, which is what `UIAppFonts` names in both
+Add Files ▸ `Resources/Fonts` ▸ Reference files in place, **Create folders**,
+targets **`Ledger` and `LedgerWatch`** only. A synchronized folder copies its
+files *flat* into the bundle, so each app ends up with
+`Archivo[wdth,wght].ttf` (and `OFL.txt`, which the licence wants shipped with
+the font) at the bundle root — which is what `UIAppFonts` names in both
 Info.plists.
 
 ## 8. Schemes and test plans
@@ -110,16 +126,25 @@ Info.plists.
 Product ▸ Scheme ▸ Manage Schemes: keep exactly `Ledger` and `LedgerWatch`,
 delete any others, tick **Shared** on both.
 
-Edit Scheme ▸ Test ▸ ▾ ▸ **Convert to use Test Plans…** ▸ *choose an existing
-plan*, then add the rest with +:
+Add the `TestPlans` folder like `Config` (Create folders, no target).
+
+Attaching the plans is **not** done in the scheme editor: Xcode 26.6 creates
+schemes with `shouldAutocreateTestPlan = "YES"`, which has no "Convert to use
+Test Plans…" button. With Xcode quit, the orchestrator replaces each scheme's
+`<Testables>` with `<TestPlans>` in `Ledger.xcodeproj/xcshareddata/xcschemes/`
+(scheme XML is not the pbxproj, so ADR-003 allows it):
 
 | Scheme | Plans (default first) |
 |---|---|
 | `Ledger` | `TestPlans/PR.xctestplan`, `Nightly`, `Device` |
 | `LedgerWatch` | `TestPlans/PR-Watch.xctestplan`, `Nightly-Watch`, `Device-Watch` |
 
-The plans already carry coverage targets, the lane env vars and the
-`Smoke`-only UI selection — don't re-edit them in the UI.
+`xcodebuild -showTestPlans -scheme Ledger` must list all three. The plans refer
+to the four app test targets by their pbxproj target IDs (a plan written before
+the project existed can only guess, so they were filled in once the project
+existed) and set `targetForVariableExpansion` to the host app so
+`$(PROJECT_DIR)` in `SNAPSHOT_ARTIFACTS` expands. Otherwise they already carry
+coverage targets, the lane env vars and the `Smoke`-only UI selection.
 
 ## 9. Verify, then commit
 
@@ -130,11 +155,12 @@ grep -c "PBXFileReference.*sourcecode.swift" Ledger.xcodeproj/project.pbxproj # 
 git status --short                     # nothing under Ledger/ or LedgerWatch/ at the root
 ```
 
-Also confirm the setting name that the brief flagged as unverified:
-Build Settings ▸ search "Default Actor Isolation" on the `Ledger` target — it
-must read **MainActor** and come from `Config/Base.xcconfig`. If the row does
-not exist, the key `SWIFT_DEFAULT_ACTOR_ISOLATION` is wrong for 26.6; say so and
-it moves to a per-target `OTHER_SWIFT_FLAGS = -default-isolation MainActor`.
+`SWIFT_DEFAULT_ACTOR_ISOLATION` is confirmed as a real 26.6 key (the 26.6
+templates write it; values `nonisolated` | `MainActor`). Build Settings ▸
+Levels ▸ "Default Actor Isolation" must read **MainActor** on `Ledger` and
+`LedgerWatch` (from their own xcconfigs) and **nonisolated** on the four test
+targets. Same check for "Swift Language Version": `6.0` from
+`Config/Base.xcconfig`, with every target column empty.
 
 Commit the project on its own:
 

@@ -34,7 +34,7 @@ After this ships, the watch runs a real `HKWorkoutSession` for every Ledger work
 - `LedgerKit/Sources/LedgerTestSupport/Fakes/FakeHealthStore.swift`
 - `LedgerKit/Tests/LedgerHealthTests/HealthStoreContractTests.swift`, `LiveHealthStoreStateMachineTests.swift`
 - `LedgerKit/Tests/LedgerDomainTests/HealthTypesTests.swift`
-- `Apps/Ledger/Info.plist`, `Apps/LedgerWatch/Info.plist` (usage strings; watch background modes `workout-processing` **and** `audio` — R1 D6 / §3.1: haptics in the background need Audio); entitlements `com.apple.developer.healthkit` on both (human edits in Xcode, ADR-003)
+- `Apps/Ledger-Info.plist`, `Apps/LedgerWatch-Info.plist` (usage strings; watch background modes `workout-processing` **and** `audio` — R1 D6 / §3.1: haptics in the background need Audio); entitlements `com.apple.developer.healthkit` on both (human edits in Xcode, ADR-003)
 - `Apps/Ledger/LedgerApp.swift` (handler assignment at top of launch), `Apps/Ledger/SceneDelegate.swift` (`shouldHandleActiveWorkoutRecovery`)
 - `Apps/LedgerWatch/WatchAppDelegate.swift` (`WKApplicationDelegate`: `handle(_:)`, `handleActiveWorkoutRecovery()`)
 

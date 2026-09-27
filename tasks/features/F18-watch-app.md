@@ -30,7 +30,7 @@ After this ships, a lifter can run a whole workout from the wrist: see today's p
 - `LedgerKit/Sources/WatchFeatureWorkout/Components/CrownWeight.swift`, `SetDots.swift`, `HeartRateLine.swift`
 - `LedgerKit/Sources/LedgerDesign/Watch/WatchTokens.swift`, `RestRing.swift` (watch variant), `WatchPill.swift`
 - `LedgerKit/Sources/LedgerDomain/Haptics.swift` (`Haptics` protocol if F07 has only the key), `LedgerKit/Sources/LedgerTestSupport/Fakes/FakeHaptics.swift`
-- `Apps/LedgerWatch/LedgerWatchApp.swift`, `Apps/LedgerWatch/WatchAppDelegate.swift`, `Apps/LedgerWatch/Info.plist` (`WKSupportsAlwaysOnDisplay = true`)
+- `Apps/LedgerWatch/LedgerWatchApp.swift`, `Apps/LedgerWatch/WatchAppDelegate.swift`, `Apps/LedgerWatch-Info.plist` (`WKSupportsAlwaysOnDisplay = true`)
 - `LedgerKit/Tests/WatchFeatureWorkoutTests/…`, `LedgerKit/Tests/LedgerDesignTests/WatchComponentsSnapshotTests.swift`
 - `Localizable.xcstrings` (all watch strings)
 

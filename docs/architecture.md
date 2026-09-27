@@ -135,6 +135,11 @@ Isolation defaults per target (Swift 6.2+ `defaultIsolation`):
 |---|---|---|
 | Feature*, WatchFeature*, App shells, LedgerDesign | `MainActor` | UI code; matches Apple DTS guidance (R2 §6) |
 | LedgerDomain, LedgerPersistence, LedgerHealth, LedgerSync, LedgerActivityKit, LedgerDependencies | `nonisolated` | value types + actors; no implicit main-thread hops |
+| App-hosted test targets (`LedgerTests`, `LedgerUITests`, `LedgerWatchTests`, `LedgerWatchUITests`) | `nonisolated` | `XCTestCase`'s overrides are nonisolated, so a MainActor default does not compile; tests mark `@MainActor` where they touch UI (Apple's 26.6 template pattern). Package test targets inherit their source target's setting. |
+
+In the Xcode project this lives in `Config/Ledger.xcconfig` and
+`Config/LedgerWatch.xcconfig`, not `Base.xcconfig`, so it reaches the app
+targets only.
 
 ---
 

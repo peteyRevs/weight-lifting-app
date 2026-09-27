@@ -53,6 +53,62 @@ scratchpad; nothing in it was hand-written. The duplicate root `Ledger/` folder
    `unused_import` need `swiftlint analyze --compiler-log-path`, i.e. a build log.
    Declared in `.swiftlint.yml`, wired up in F01 where the CI build log exists.
 10. **`scripts/coverage-gate.sh`** is F01's; step 5 prints `coverage gate: F01`.
+11. **`Info.plist` and `.entitlements` live beside the synchronized folders, not
+    in them:** `Apps/Ledger-Info.plist`, `Apps/Ledger.entitlements`,
+    `Apps/LedgerWatch-Info.plist`, `Apps/LedgerWatch.entitlements`. A
+    synchronized folder puts every file it holds into Copy Bundle Resources, so
+    `Apps/Ledger/Info.plist` was both copied and processed — the first
+    `xcodebuild` (2026-09-24) failed with `Multiple commands produce
+    …/Ledger.app/Info.plist`. The alternative, a membership exception, is
+    per-file state in the pbxproj, which ADR-003 avoids.
+12. **The xcconfigs had to absorb what the templates set at project level.**
+    Clearing the pbxproj (2026-09-26) exposed settings the templates had been
+    supplying. A diff of every target's resolved settings, old project vs new,
+    found: the four test targets resolved to **macOS** (no `SDKROOT`); the
+    embedded watch app lost `SKIP_INSTALL = YES` (its archive would become a
+    Generic Xcode Archive); both apps lost `LD_RUNPATH_SEARCH_PATHS` and
+    `ENABLE_PREVIEWS`; `COPY_PHASE_STRIP` flipped to YES. Fixed in `Config/`:
+    iOS is the project default in `Base.xcconfig`, a new `WatchTests.xcconfig`
+    (includes `Tests.xcconfig`) switches the two watch test targets to watchOS,
+    and the app files carry the rest. After the fix the only differences from
+    the template are intended: 26.0 targets, iPhone only, Swift 6 + strict
+    concurrency + warnings as errors, and clean test bundle IDs. Not adopted
+    from the 26.6 templates: `SWIFT_APPROACHABLE_CONCURRENCY` and
+    `SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY` — the LedgerKit targets
+    don't enable them, and app and package code should compile under the same
+    rules; revisit together in `Package.swift` if wanted.
+13. **Test plans and schemes wired after the project existed (2026-09-26).**
+    The plans named the four app test targets by name, but a test plan
+    identifies an `.xcodeproj` target by its pbxproj ID, so they now carry
+    `8AA8D3B9…` (LedgerTests), `8AA8D3C3…` (LedgerUITests), `8AAE5FE4…`
+    (LedgerWatchTests), `8AAE5FEE…` (LedgerWatchUITests), plus
+    `targetForVariableExpansion` = the host app. The 26.6 schemes had no
+    "Convert to use Test Plans…" path (`shouldAutocreateTestPlan`), so the
+    `<TestPlans>` blocks were written into the two `.xcscheme` files directly.
+14. **`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` moved from `Base.xcconfig`
+    to `Ledger.xcconfig` / `LedgerWatch.xcconfig`.** The brief put it at project
+    level, which also made the four test targets MainActor by default; the first
+    full `check.sh` then failed to compile `LedgerUITests/Smoke` (`main
+    actor-isolated … setUpWithError() has different actor isolation from
+    nonisolated overridden declaration`). Architecture §3 only asks for it on the
+    app shells, and Apple's 26.6 templates leave test targets nonisolated. The
+    smoke tests now say `@MainActor` where they touch UI or `LedgerAppKit`
+    symbols. Architecture §3's table gained a row for app test targets.
+15. **The font is bundled flat, so `UIAppFonts` names `Archivo[wdth,wght].ttf`.**
+    `Resources/Fonts` is a synchronized folder like every other source folder;
+    those copy their files to the bundle root (checked in the built
+    `Ledger.app`), not into a `Fonts/` subdirectory as the brief's blue folder
+    reference would have. The first full run failed `archivo_isRegistered`
+    because both plists still said `Fonts/…`. `OFL.txt` ships beside the font.
+16. **One-off pbxproj text edit (Pete-approved, 2026-09-26, Xcode closed).**
+    Removed an orphan self-reference to `Ledger.xcodeproj` (a
+    `PBXFileReference`, its empty `Products` group and the `projectReferences`
+    array — invisible in the navigator, so not removable in Xcode) and four
+    empty `PROVISIONING_PROFILE = ""` lines Xcode wrote when the UI-test
+    Target Application was re-picked. Validated with `plutil -lint` and
+    `xcodebuild -list`; Pete reviewed and approved the diff (18 lines
+    removed, none added) before the project was committed. ADR-003's rule stands for
+    everything else.
 
 ## Concern to settle (not blocking F00)
 
@@ -84,13 +140,16 @@ feature code exists.
 - Acceptance criterion 7 reproduced: `git commit -m "added stuff"` is rejected by
   the lefthook `commit-msg` hook.
 - Team ID `95JAK545DF`, read from the OU of the `Apple Development: Peter Arevalo`
-  certificate issued 2026-09-22, is in `Config/Base.xcconfig`. **Pete to confirm**
-  it is the paid Individual team and not a Personal Team.
+  certificate issued 2026-09-22, is in `Config/Base.xcconfig`. Confirmed
+  2026-09-26 from Xcode's provisioning-team defaults: `teamType = Individual`,
+  `isFreeProvisioningTeam = 0` — the paid team, not a Personal Team.
+- `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` is a real Xcode 26.6 build setting:
+  the 26.6 app and watch-app templates write exactly that key (seen in the
+  generated pbxproj, 2026-09-26). No `OTHER_SWIFT_FLAGS` fallback needed.
+- The `xcode` MCP server is connected (`XcodeListWindows` answered 2026-09-26),
+  so the Intelligence toggle is on.
 
 ## Still open after the Xcode sitting
 
 - Criteria 1–4, 6, 8, 10 need the project: they are the checklist at the end of
   `xcode-setup.md`.
-- `SWIFT_DEFAULT_ACTOR_ISOLATION` is still unverified as a real Xcode 26.6 build
-  setting (the brief's own risk list); the sitting checks it in the Build Settings
-  editor.

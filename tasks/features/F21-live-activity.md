@@ -20,7 +20,7 @@ While a workout is live, the iPhone Lock Screen and Dynamic Island show the elap
 - `LedgerKit/Sources/LedgerActivityKit/{WorkoutActivityAttributes,ActivityContentMapper}.swift`
 - `Apps/LedgerWidgets/{LedgerWidgetsBundle,WorkoutLiveActivity,RestIntents}.swift`, `Apps/LedgerWidgets/Info.plist`
 - `LedgerKit/Sources/LedgerDependencies/Keys/LiveActivities.swift` (`liveValue` → `ActivityKitClient`)
-- `Apps/Ledger/Info.plist` (`NSSupportsLiveActivities`), `Ledger.xcodeproj` (widget extension target — human, ADR-003)
+- `Apps/Ledger-Info.plist` (`NSSupportsLiveActivities`), `Ledger.xcodeproj` (widget extension target — human, ADR-003)
 
 ## Domain changes
 ```swift
