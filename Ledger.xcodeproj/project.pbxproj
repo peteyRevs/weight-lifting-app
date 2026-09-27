@@ -1,0 +1,750 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8AAE5FD4306594D40005BA68 /* LedgerAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8AAE5FD3306594D40005BA68 /* LedgerAppKit */; };
+		8AAE5FF9306596E00005BA68 /* LedgerWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 8AAE5FD9306596DE0005BA68 /* LedgerWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8AAE60193068BEE90005BA68 /* LedgerWatchAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8AAE60183068BEE90005BA68 /* LedgerWatchAppKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8AA8D3BB3065929400EC0E0F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AA8D3A53065929200EC0E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AA8D3AC3065929200EC0E0F;
+			remoteInfo = Ledger;
+		};
+		8AA8D3C53065929400EC0E0F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AA8D3A53065929200EC0E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AA8D3AC3065929200EC0E0F;
+			remoteInfo = Ledger;
+		};
+		8AAE5FE6306596E00005BA68 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AA8D3A53065929200EC0E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AAE5FD8306596DE0005BA68;
+			remoteInfo = "LedgerWatch Watch App";
+		};
+		8AAE5FF0306596E00005BA68 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AA8D3A53065929200EC0E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AAE5FD8306596DE0005BA68;
+			remoteInfo = "LedgerWatch Watch App";
+		};
+		8AAE5FF7306596E00005BA68 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AA8D3A53065929200EC0E0F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AAE5FD8306596DE0005BA68;
+			remoteInfo = "LedgerWatch Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8AAE5FFD306596E00005BA68 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				8AAE5FF9306596E00005BA68 /* LedgerWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		8AA8D3AD3065929200EC0E0F /* Ledger.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ledger.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AA8D3BA3065929400EC0E0F /* LedgerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AA8D3C43065929400EC0E0F /* LedgerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AAE5FD9306596DE0005BA68 /* LedgerWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LedgerWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AAE5FE5306596E00005BA68 /* LedgerWatchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerWatchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AAE5FEF306596E00005BA68 /* LedgerWatchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LedgerWatchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		8AA8D3AF3065929200EC0E0F /* Apps/Ledger */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Apps/Ledger;
+			sourceTree = "<group>";
+		};
+		8AA8D3BD3065929400EC0E0F /* Apps/LedgerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Apps/LedgerTests;
+			sourceTree = "<group>";
+		};
+		8AA8D3C73065929400EC0E0F /* Apps/LedgerUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Apps/LedgerUITests;
+			sourceTree = "<group>";
+		};
+		8AAE60063068B2570005BA68 /* LedgerWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = LedgerWatch;
+			path = Apps/LedgerWatch;
+			sourceTree = "<group>";
+		};
+		8AAE600A3068B2980005BA68 /* LedgerWatchTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = LedgerWatchTests;
+			path = Apps/LedgerWatchTests;
+			sourceTree = "<group>";
+		};
+		8AAE600D3068B2AE0005BA68 /* LedgerWatchUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = LedgerWatchUITests;
+			path = Apps/LedgerWatchUITests;
+			sourceTree = "<group>";
+		};
+		8AAE60153068B3080005BA68 /* Config */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Config;
+			sourceTree = "<group>";
+		};
+		8AAE601C3068BF1A0005BA68 /* Fonts */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = Fonts;
+			path = Resources/Fonts;
+			sourceTree = "<group>";
+		};
+		8AAE60273068BF550005BA68 /* TestPlans */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TestPlans;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8AA8D3AA3065929200EC0E0F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8AAE5FD4306594D40005BA68 /* LedgerAppKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3B73065929400EC0E0F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3C13065929400EC0E0F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FD6306596DE0005BA68 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8AAE60193068BEE90005BA68 /* LedgerWatchAppKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FE2306596E00005BA68 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FEC306596E00005BA68 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		8AA8D3A43065929200EC0E0F = {
+			isa = PBXGroup;
+			children = (
+				8AAE60273068BF550005BA68 /* TestPlans */,
+				8AAE601C3068BF1A0005BA68 /* Fonts */,
+				8AAE60153068B3080005BA68 /* Config */,
+				8AAE600D3068B2AE0005BA68 /* LedgerWatchUITests */,
+				8AAE600A3068B2980005BA68 /* LedgerWatchTests */,
+				8AAE60063068B2570005BA68 /* LedgerWatch */,
+				8AA8D3AF3065929200EC0E0F /* Apps/Ledger */,
+				8AA8D3BD3065929400EC0E0F /* Apps/LedgerTests */,
+				8AA8D3C73065929400EC0E0F /* Apps/LedgerUITests */,
+				8AAE60173068BEE90005BA68 /* Frameworks */,
+				8AA8D3AE3065929200EC0E0F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8AA8D3AE3065929200EC0E0F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8AA8D3AD3065929200EC0E0F /* Ledger.app */,
+				8AA8D3BA3065929400EC0E0F /* LedgerTests.xctest */,
+				8AA8D3C43065929400EC0E0F /* LedgerUITests.xctest */,
+				8AAE5FD9306596DE0005BA68 /* LedgerWatch.app */,
+				8AAE5FE5306596E00005BA68 /* LedgerWatchTests.xctest */,
+				8AAE5FEF306596E00005BA68 /* LedgerWatchUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8AAE60173068BEE90005BA68 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8AA8D3AC3065929200EC0E0F /* Ledger */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AA8D3CE3065929400EC0E0F /* Build configuration list for PBXNativeTarget "Ledger" */;
+			buildPhases = (
+				8AA8D3A93065929200EC0E0F /* Sources */,
+				8AA8D3AA3065929200EC0E0F /* Frameworks */,
+				8AA8D3AB3065929200EC0E0F /* Resources */,
+				8AAE5FFD306596E00005BA68 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AAE5FF8306596E00005BA68 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AA8D3AF3065929200EC0E0F /* Apps/Ledger */,
+				8AAE601C3068BF1A0005BA68 /* Fonts */,
+			);
+			name = Ledger;
+			packageProductDependencies = (
+				8AAE5FD3306594D40005BA68 /* LedgerAppKit */,
+			);
+			productName = Ledger;
+			productReference = 8AA8D3AD3065929200EC0E0F /* Ledger.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8AA8D3B93065929400EC0E0F /* LedgerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AA8D3D13065929400EC0E0F /* Build configuration list for PBXNativeTarget "LedgerTests" */;
+			buildPhases = (
+				8AA8D3B63065929400EC0E0F /* Sources */,
+				8AA8D3B73065929400EC0E0F /* Frameworks */,
+				8AA8D3B83065929400EC0E0F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AA8D3BC3065929400EC0E0F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AA8D3BD3065929400EC0E0F /* Apps/LedgerTests */,
+			);
+			name = LedgerTests;
+			packageProductDependencies = (
+			);
+			productName = LedgerTests;
+			productReference = 8AA8D3BA3065929400EC0E0F /* LedgerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8AA8D3C33065929400EC0E0F /* LedgerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AA8D3D43065929400EC0E0F /* Build configuration list for PBXNativeTarget "LedgerUITests" */;
+			buildPhases = (
+				8AA8D3C03065929400EC0E0F /* Sources */,
+				8AA8D3C13065929400EC0E0F /* Frameworks */,
+				8AA8D3C23065929400EC0E0F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AA8D3C63065929400EC0E0F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AA8D3C73065929400EC0E0F /* Apps/LedgerUITests */,
+			);
+			name = LedgerUITests;
+			packageProductDependencies = (
+			);
+			productName = LedgerUITests;
+			productReference = 8AA8D3C43065929400EC0E0F /* LedgerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		8AAE5FD8306596DE0005BA68 /* LedgerWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AAE5FFA306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatch" */;
+			buildPhases = (
+				8AAE5FD5306596DE0005BA68 /* Sources */,
+				8AAE5FD6306596DE0005BA68 /* Frameworks */,
+				8AAE5FD7306596DE0005BA68 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8AAE60063068B2570005BA68 /* LedgerWatch */,
+				8AAE601C3068BF1A0005BA68 /* Fonts */,
+			);
+			name = LedgerWatch;
+			packageProductDependencies = (
+				8AAE60183068BEE90005BA68 /* LedgerWatchAppKit */,
+			);
+			productName = "LedgerWatch Watch App";
+			productReference = 8AAE5FD9306596DE0005BA68 /* LedgerWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8AAE5FE4306596E00005BA68 /* LedgerWatchTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AAE5FFE306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatchTests" */;
+			buildPhases = (
+				8AAE5FE1306596E00005BA68 /* Sources */,
+				8AAE5FE2306596E00005BA68 /* Frameworks */,
+				8AAE5FE3306596E00005BA68 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AAE5FE7306596E00005BA68 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AAE600A3068B2980005BA68 /* LedgerWatchTests */,
+			);
+			name = LedgerWatchTests;
+			packageProductDependencies = (
+			);
+			productName = "LedgerWatch Watch AppTests";
+			productReference = 8AAE5FE5306596E00005BA68 /* LedgerWatchTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8AAE5FEE306596E00005BA68 /* LedgerWatchUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AAE6001306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatchUITests" */;
+			buildPhases = (
+				8AAE5FEB306596E00005BA68 /* Sources */,
+				8AAE5FEC306596E00005BA68 /* Frameworks */,
+				8AAE5FED306596E00005BA68 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AAE5FF1306596E00005BA68 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AAE600D3068B2AE0005BA68 /* LedgerWatchUITests */,
+			);
+			name = LedgerWatchUITests;
+			packageProductDependencies = (
+			);
+			productName = "LedgerWatch Watch AppUITests";
+			productReference = 8AAE5FEF306596E00005BA68 /* LedgerWatchUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8AA8D3A53065929200EC0E0F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					8AA8D3AC3065929200EC0E0F = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					8AA8D3B93065929400EC0E0F = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 8AA8D3AC3065929200EC0E0F;
+					};
+					8AA8D3C33065929400EC0E0F = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 8AA8D3AC3065929200EC0E0F;
+					};
+					8AAE5FD8306596DE0005BA68 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					8AAE5FE4306596E00005BA68 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 8AAE5FD8306596DE0005BA68;
+					};
+					8AAE5FEE306596E00005BA68 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 8AAE5FD8306596DE0005BA68;
+					};
+				};
+			};
+			buildConfigurationList = 8AA8D3A83065929200EC0E0F /* Build configuration list for PBXProject "Ledger" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8AA8D3A43065929200EC0E0F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8AAE5FD2306594D40005BA68 /* XCLocalSwiftPackageReference "LedgerKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8AA8D3AE3065929200EC0E0F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8AA8D3AC3065929200EC0E0F /* Ledger */,
+				8AA8D3B93065929400EC0E0F /* LedgerTests */,
+				8AA8D3C33065929400EC0E0F /* LedgerUITests */,
+				8AAE5FD8306596DE0005BA68 /* LedgerWatch */,
+				8AAE5FE4306596E00005BA68 /* LedgerWatchTests */,
+				8AAE5FEE306596E00005BA68 /* LedgerWatchUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8AA8D3AB3065929200EC0E0F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3B83065929400EC0E0F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3C23065929400EC0E0F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FD7306596DE0005BA68 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FE3306596E00005BA68 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FED306596E00005BA68 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8AA8D3A93065929200EC0E0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3B63065929400EC0E0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AA8D3C03065929400EC0E0F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FD5306596DE0005BA68 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FE1306596E00005BA68 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AAE5FEB306596E00005BA68 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8AA8D3BC3065929400EC0E0F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AA8D3AC3065929200EC0E0F /* Ledger */;
+			targetProxy = 8AA8D3BB3065929400EC0E0F /* PBXContainerItemProxy */;
+		};
+		8AA8D3C63065929400EC0E0F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AA8D3AC3065929200EC0E0F /* Ledger */;
+			targetProxy = 8AA8D3C53065929400EC0E0F /* PBXContainerItemProxy */;
+		};
+		8AAE5FE7306596E00005BA68 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AAE5FD8306596DE0005BA68 /* LedgerWatch */;
+			targetProxy = 8AAE5FE6306596E00005BA68 /* PBXContainerItemProxy */;
+		};
+		8AAE5FF1306596E00005BA68 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AAE5FD8306596DE0005BA68 /* LedgerWatch */;
+			targetProxy = 8AAE5FF0306596E00005BA68 /* PBXContainerItemProxy */;
+		};
+		8AAE5FF8306596E00005BA68 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AAE5FD8306596DE0005BA68 /* LedgerWatch */;
+			targetProxy = 8AAE5FF7306596E00005BA68 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		8AA8D3CC3065929400EC0E0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Debug.xcconfig;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		8AA8D3CD3065929400EC0E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Release.xcconfig;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		8AA8D3CF3065929400EC0E0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Ledger.xcconfig;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		8AA8D3D03065929400EC0E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Ledger.xcconfig;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		8AA8D3D23065929400EC0E0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Tests.xcconfig;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ledger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Ledger";
+			};
+			name = Debug;
+		};
+		8AA8D3D33065929400EC0E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Tests.xcconfig;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ledger.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Ledger";
+			};
+			name = Release;
+		};
+		8AA8D3D53065929400EC0E0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Tests.xcconfig;
+			buildSettings = {
+				TEST_TARGET_NAME = Ledger;
+			};
+			name = Debug;
+		};
+		8AA8D3D63065929400EC0E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = Tests.xcconfig;
+			buildSettings = {
+				TEST_TARGET_NAME = Ledger;
+			};
+			name = Release;
+		};
+		8AAE5FFB306596E00005BA68 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = LedgerWatch.xcconfig;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		8AAE5FFC306596E00005BA68 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = LedgerWatch.xcconfig;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		8AAE5FFF306596E00005BA68 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = WatchTests.xcconfig;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LedgerWatch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LedgerWatch";
+			};
+			name = Debug;
+		};
+		8AAE6000306596E00005BA68 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = WatchTests.xcconfig;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LedgerWatch.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LedgerWatch";
+			};
+			name = Release;
+		};
+		8AAE6002306596E00005BA68 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = WatchTests.xcconfig;
+			buildSettings = {
+				TEST_TARGET_NAME = LedgerWatch;
+			};
+			name = Debug;
+		};
+		8AAE6003306596E00005BA68 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 8AAE60153068B3080005BA68 /* Config */;
+			baseConfigurationReferenceRelativePath = WatchTests.xcconfig;
+			buildSettings = {
+				TEST_TARGET_NAME = LedgerWatch;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8AA8D3A83065929200EC0E0F /* Build configuration list for PBXProject "Ledger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AA8D3CC3065929400EC0E0F /* Debug */,
+				8AA8D3CD3065929400EC0E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AA8D3CE3065929400EC0E0F /* Build configuration list for PBXNativeTarget "Ledger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AA8D3CF3065929400EC0E0F /* Debug */,
+				8AA8D3D03065929400EC0E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AA8D3D13065929400EC0E0F /* Build configuration list for PBXNativeTarget "LedgerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AA8D3D23065929400EC0E0F /* Debug */,
+				8AA8D3D33065929400EC0E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AA8D3D43065929400EC0E0F /* Build configuration list for PBXNativeTarget "LedgerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AA8D3D53065929400EC0E0F /* Debug */,
+				8AA8D3D63065929400EC0E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AAE5FFA306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AAE5FFB306596E00005BA68 /* Debug */,
+				8AAE5FFC306596E00005BA68 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AAE5FFE306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatchTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AAE5FFF306596E00005BA68 /* Debug */,
+				8AAE6000306596E00005BA68 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AAE6001306596E00005BA68 /* Build configuration list for PBXNativeTarget "LedgerWatchUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AAE6002306596E00005BA68 /* Debug */,
+				8AAE6003306596E00005BA68 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8AAE5FD2306594D40005BA68 /* XCLocalSwiftPackageReference "LedgerKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LedgerKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8AAE5FD3306594D40005BA68 /* LedgerAppKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LedgerAppKit;
+		};
+		8AAE60183068BEE90005BA68 /* LedgerWatchAppKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8AAE5FD2306594D40005BA68 /* XCLocalSwiftPackageReference "LedgerKit" */;
+			productName = LedgerWatchAppKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 8AA8D3A53065929200EC0E0F /* Project object */;
+}
