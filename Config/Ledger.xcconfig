@@ -4,9 +4,13 @@
 
 PRODUCT_NAME = $(TARGET_NAME)
 PRODUCT_BUNDLE_IDENTIFIER = com.petearevalo.Ledger
-INFOPLIST_FILE = Apps/Ledger/Info.plist
-CODE_SIGN_ENTITLEMENTS = Apps/Ledger/Ledger.entitlements
+INFOPLIST_FILE = Apps/Ledger-Info.plist
+CODE_SIGN_ENTITLEMENTS = Apps/Ledger.entitlements
 INFOPLIST_KEY_CFBundleDisplayName = $(PRODUCT_DISPLAY_NAME)
+
+// App shells are MainActor by default (architecture §3); test targets keep
+// Xcode's nonisolated default because XCTestCase's overrides are nonisolated.
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
 
 SDKROOT = iphoneos
 SUPPORTED_PLATFORMS = iphoneos iphonesimulator
@@ -18,3 +22,6 @@ INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
 SWIFT_EMIT_LOC_STRINGS = YES
+STRING_CATALOG_GENERATE_SYMBOLS = YES
+ENABLE_PREVIEWS = YES
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks

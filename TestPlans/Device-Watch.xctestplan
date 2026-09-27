@@ -109,7 +109,12 @@
     "region": "US",
     "testExecutionOrdering": "random",
     "testTimeoutsEnabled": true,
-    "maximumTestExecutionTimeAllowance": 600
+    "maximumTestExecutionTimeAllowance": 600,
+    "targetForVariableExpansion": {
+      "containerPath": "container:Ledger.xcodeproj",
+      "identifier": "8AAE5FD8306596DE0005BA68",
+      "name": "LedgerWatch"
+    }
   },
   "testTargets": [
     {

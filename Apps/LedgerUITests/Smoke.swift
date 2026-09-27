@@ -7,6 +7,7 @@ final class Smoke: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func test_launchShowsPlaceholder() {
         let app = XCUIApplication()
         app.launch()

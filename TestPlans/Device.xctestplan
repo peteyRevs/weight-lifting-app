@@ -109,7 +109,12 @@
     "region": "US",
     "testExecutionOrdering": "random",
     "testTimeoutsEnabled": true,
-    "maximumTestExecutionTimeAllowance": 600
+    "maximumTestExecutionTimeAllowance": 600,
+    "targetForVariableExpansion": {
+      "containerPath": "container:Ledger.xcodeproj",
+      "identifier": "8AA8D3AC3065929200EC0E0F",
+      "name": "Ledger"
+    }
   },
   "testTargets": [
     {

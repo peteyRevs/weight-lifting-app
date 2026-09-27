@@ -1,0 +1,8 @@
+// Target-level configuration for the watchOS app-hosted test targets
+// (LedgerWatchTests, LedgerWatchUITests): everything in Tests.xcconfig, on
+// watchOS instead of the project's iOS default.
+#include "Tests.xcconfig"
+
+SDKROOT = watchos
+SUPPORTED_PLATFORMS = watchos watchsimulator
+TARGETED_DEVICE_FAMILY = 4

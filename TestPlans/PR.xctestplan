@@ -109,7 +109,12 @@
     "region": "US",
     "testExecutionOrdering": "random",
     "testTimeoutsEnabled": true,
-    "maximumTestExecutionTimeAllowance": 60
+    "maximumTestExecutionTimeAllowance": 60,
+    "targetForVariableExpansion": {
+      "containerPath": "container:Ledger.xcodeproj",
+      "identifier": "8AA8D3AC3065929200EC0E0F",
+      "name": "Ledger"
+    }
   },
   "testTargets": [
     {
@@ -220,14 +225,14 @@
     {
       "target": {
         "containerPath": "container:Ledger.xcodeproj",
-        "identifier": "LedgerTests",
+        "identifier": "8AA8D3B93065929400EC0E0F",
         "name": "LedgerTests"
       }
     },
     {
       "target": {
         "containerPath": "container:Ledger.xcodeproj",
-        "identifier": "LedgerUITests",
+        "identifier": "8AA8D3C33065929400EC0E0F",
         "name": "LedgerUITests"
       },
       "selectedTests": [

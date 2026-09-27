@@ -8,7 +8,6 @@
 // ---- Language -------------------------------------------------------------
 SWIFT_VERSION = 6.0
 SWIFT_STRICT_CONCURRENCY = complete
-SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 GCC_TREAT_WARNINGS_AS_ERRORS = YES
 SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
@@ -16,6 +15,14 @@ SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
 // ---- Deployment -----------------------------------------------------------
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 WATCHOS_DEPLOYMENT_TARGET = 26.0
+
+// ---- Platform default -----------------------------------------------------
+// iOS unless a target file says otherwise (LedgerWatch.xcconfig,
+// WatchTests.xcconfig). Without a project default, a target that names no
+// platform resolves to macOS.
+SDKROOT = iphoneos
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+TARGETED_DEVICE_FAMILY = 1
 
 // ---- Versioning (release-please owns MARKETING_VERSION) -------------------
 MARKETING_VERSION = 0.1.0 // x-release-please-version
@@ -35,5 +42,8 @@ ENABLE_USER_SCRIPT_SANDBOXING = YES
 GENERATE_INFOPLIST_FILE = YES
 ENABLE_MODULE_VERIFIER = YES
 DEAD_CODE_STRIPPING = YES
+COPY_PHASE_STRIP = NO
 CLANG_ENABLE_OBJC_WEAK = YES
 ALWAYS_SEARCH_USER_PATHS = NO
+LOCALIZATION_PREFERS_STRING_CATALOGS = YES
+ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES

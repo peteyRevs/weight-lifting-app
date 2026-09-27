@@ -109,7 +109,12 @@
     "region": "US",
     "testExecutionOrdering": "random",
     "testTimeoutsEnabled": true,
-    "maximumTestExecutionTimeAllowance": 600
+    "maximumTestExecutionTimeAllowance": 600,
+    "targetForVariableExpansion": {
+      "containerPath": "container:Ledger.xcodeproj",
+      "identifier": "8AAE5FD8306596DE0005BA68",
+      "name": "LedgerWatch"
+    }
   },
   "testTargets": [
     {
@@ -157,14 +162,14 @@
     {
       "target": {
         "containerPath": "container:Ledger.xcodeproj",
-        "identifier": "LedgerWatchTests",
+        "identifier": "8AAE5FE4306596E00005BA68",
         "name": "LedgerWatchTests"
       }
     },
     {
       "target": {
         "containerPath": "container:Ledger.xcodeproj",
-        "identifier": "LedgerWatchUITests",
+        "identifier": "8AAE5FEE306596E00005BA68",
         "name": "LedgerWatchUITests"
       }
     }
