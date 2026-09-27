@@ -184,12 +184,13 @@ Typed identifiers everywhere: `ExerciseID`, `ProgramID`, `WeekID`,
 Units:
 
 ```swift
-public struct Weight: Hashable, Codable, Sendable, Comparable {   // stored in grams, never Double
-    public let grams: Int
+public struct Weight: Hashable, Codable, Sendable, Comparable {   // exact grams, never Double (ADR-007)
+    public let grams: Decimal                                   // .pounds(185) = 83,914.58845 g, not rounded
     public static func pounds(_ lb: Decimal) -> Weight
     public static func kilograms(_ kg: Decimal) -> Weight
-    public func rounded(toStep step: Weight) -> Weight
+    public func rounded(toStep step: Weight) -> Weight          // the only rounding, where a rule asks for it
 }
+public struct CivilDate: Hashable, Comparable, Codable, Sendable { public let year, month, day: Int }  // "YYYY-MM-DD"
 public struct Reps: Hashable, Codable, Sendable { public let value: Int /* ≥ 1 */ }
 public enum Units: String, Codable, Sendable { case lb, kg }
 ```
@@ -199,7 +200,7 @@ Entities (all `struct`, `Equatable`, `Sendable`, `Codable`):
 | Type | Key fields |
 |---|---|
 | `Exercise` | id, name, shortName, equipment (`barbell/dumbbell/cable/machine/bodyweight`), primaryMuscle, secondaryMuscles, movementPattern, defaultStartLoad, isCustom, curatedAlternatives: [ExerciseID] |
-| `Program` | id, name, startDate, weeks: [Week], days: [DayTemplate], goal, daysPerWeek, isActive |
+| `Program` | id, name, startDate (`CivilDate`, ADR-007), weeks: [Week], days: [DayTemplate], goal, daysPerWeek, isActive |
 | `Week` | id, index, isDeload, schedule: [Weekday: DayTemplateID?] |
 | `DayTemplate` | id, name, tag, slots: [Slot] |
 | `Slot` | id, exercise, sets (1–12), reps (1–30), repsHi (2–40), rpe (5–10 by 0.5), rest (30–300 s by 15), progression (`linear/double/fixed`), startLoad, step?, isSupersetWithPrevious, dropSets (0/1), misses: Set<Int> |
@@ -221,7 +222,7 @@ Pure services in `LedgerDomain` (all unit-tested to ~100 %):
 - `PersonalRecords.detect(finished:history:)`.
 - `PlateMath.perSide(load:bar:plates:)`.
 - `TimeEstimate.minutes(day:)` — one formula (decision #14).
-- `WeekCalendar` — startDate → current week index, week boundaries, off-schedule days.
+- `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days.
 - `MissTracking.update(slot:workout:)` — decision #5.
 
 The seed exercise catalog ships as `Resources/exercises.json` inside
