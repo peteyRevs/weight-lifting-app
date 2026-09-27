@@ -21,20 +21,6 @@
                ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "8AA8D3AC3065929200EC0E0F"
-               BuildableName = "Ledger.app"
-               BlueprintName = "Ledger"
-               ReferencedContainer = "container:Ledger.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
