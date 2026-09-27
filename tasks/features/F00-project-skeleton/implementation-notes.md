@@ -176,6 +176,31 @@ scratchpad; nothing in it was hand-written. The duplicate root `Ledger/` folder
       would still hide every package test, and every doc and workflow would
       have to switch to the workspace. One entry point wins (ADR-003).
 
+18. **Acceptance run in a fresh clone (2026-09-27) found two defects, both
+    fixed.**
+    - *Criterion 1.* `scripts/bootstrap.sh` exited 141 once in a concurrent
+      loop: `xcodebuild -version | head -1 | awk` under `pipefail` let `head`
+      close the pipe and SIGPIPE `xcodebuild`. Now
+      `xcodebuild -version | awk 'NR == 1 { print $2 }'`.
+      `check-commit-msg.sh` had the same shape (`… | sed | head -1`); it now
+      reads the subject with one `awk`, no pipe. Hook re-tested: `added stuff`
+      and `docs(F02): …` rejected, `feat(domain): add Weight` accepted.
+    - *Criterion 2.* The `LedgerWatch` scheme also built the `Ledger` iOS
+      target (Xcode's companion-app template), so actool thinned the iPhone
+      asset catalog for the watch device: `Apps/Ledger/Assets.xcassets:
+      warning: Could not get trait set for device Watch7,18`. The watch app
+      runs independently of the phone (decision #16), so the iOS app entry was
+      removed from `LedgerWatch.xcscheme`'s build action. Both
+      `xcodebuild build` result bundles now report 0 warnings, 0 errors.
+    - *Passed as-is:* criterion 5 (step 2 fails with force_unwrapping,
+      implicitly_unwrapped_optional, feature_raw_padding, feature_raw_font,
+      exit 2, no build), 6 (new files in `Apps/Ledger/` and
+      `LedgerKit/Sources/LedgerDomain/` compile, pbxproj untouched), 8 (font at
+      the root of both bundles, `UIAppFonts` names it), 10 (`Codename` in
+      `CFBundleDisplayName` of all three bundles with only
+      `Config/Base.xcconfig` changed — verified in the built plists; no Home
+      Screen screenshot, the icon sat on page 2).
+
 ## Concern to settle (not blocking F00)
 
 Feature targets link `LedgerTestSupport` (per the brief's target table) so
