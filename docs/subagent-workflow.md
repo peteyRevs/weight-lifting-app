@@ -92,7 +92,7 @@ merge. No single agent both writes and approves its own code.
 | G2 Adversarial | Tester | Tester's tests green after fixes; findings file empty or all resolved. |
 | G3 Review | Reviewer | Zero blocking findings. |
 | G4 CI | GitHub Actions | Lint, build (iOS + watchOS), all tests, coverage threshold, snapshot diff = 0. |
-| G5 Merge | Human | User reviews PR summary and merges. Squash merge, conventional title. |
+| G5 Merge | Orchestrator (delegated by Pete, 2026-09-27) | G1–G4 green and zero Blocking findings → the orchestrator squash-merges with a conventional title and reports afterwards. It stops for Pete's review first when a PR carries a product/architecture decision or ADR, a waiver of a standard, anything touching signing, the App Store or releases, a pbxproj edit, or a finding it is unsure about. |
 | G6 Release | Human | TestFlight build validated on device (phone + watch) via the release checklist before tagging. |
 
 A gate cannot be skipped. If a gate fails three times on the same feature, the

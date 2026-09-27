@@ -39,9 +39,9 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [~] F00 (PR #1) · [ ] F01 · [~] F02 (PR #2) · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [x] F00 (#1, #3) · [ ] F01 · [x] F02 (#2 → #3) · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
 
-### F00 delivery (branch `feat/F00-project-skeleton`)
+### F00 delivery — merged 2026-09-27 (#1; the gate's result check landed via #3)
 
 - [x] Scrap the half-built 2026-09-21 `Ledger.xcodeproj` and the duplicate root `Ledger/` folder.
 - [x] Tooling: `.xcode-version`, `mise.toml`, `.swiftformat`, `.swiftlint.yml`, `lefthook.yml`.
@@ -57,7 +57,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 - [x] Criteria 1–10 verified against the real project (2026-09-27, fresh clone; two defects fixed — bootstrap SIGPIPE, watch-scheme asset warning; notes #18).
 - [x] PR opened: https://github.com/peteyRevs/weight-lifting-app/pull/1 (2026-09-27; criteria table + check.sh output in the body). Awaiting Pete's merge (G5). No CI yet — F01 adds it.
 
-### F02 delivery (branch `feat/F02-domain-core`, worktree `.claude/worktrees/F02-domain-core`)
+### F02 delivery — merged 2026-09-27 (#2 merged into the F00 branch as its stacked base; landed on `main` via #3 at `10ff661`)
 
 Started 2026-09-26 in parallel with the F00 Xcode sitting (Pete approved). Based on
 `00a504b` (F00 scaffolding); rebased onto `main` once F00 merges. Until the Xcode
