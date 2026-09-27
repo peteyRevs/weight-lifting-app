@@ -17,7 +17,7 @@ Settings owns the few global preferences the whole app reads: units (lb/kg with 
 - As a lifter, I can export my whole log as CSV and share it.
 
 ## Scope
-**In:** `FeatureSettings` screen + store, `Settings` persistence via `SettingsRepository`, plate inventory editor, CSV export via share sheet, Delete all data (confirm), About/version, Health row (status + open system Settings), Diagnostics entry (Debug).
+**In:** `FeatureSettings` screen + store, `Settings` persistence via `SettingsRepository`, plate inventory editor, CSV export via share sheet, Delete all data (confirm), About/version (read `CFBundleDisplayName` / `CFBundleShortVersionString` / `CFBundleVersion` from the bundle — never a hard-coded product name or version), Health row (status + open system Settings), Diagnostics entry (Debug).
 **Out:** HealthKit authorization itself (F16 — the row shows "Not connected" until then), iCloud status (F28), notification preferences (F23).
 
 ## Touches

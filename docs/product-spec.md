@@ -213,7 +213,7 @@ Seed values: Upper A "5 exercises · 18 sets · ~40 min", Lower A "4 exercises �
    - Toggle "Watch haptic at zero" / "Buzz the wrist when rest ends" (`watchBuzz`, default on — **stored but not consulted by any logic in the prototype**).
    Toggle visual: 52×32 track, radius 16, orange when on / 16% ink when off; 26px white knob, `justify-content: flex-end` when on.
 3. Section "ACCOUNT" — white card rows with label · value · "›": "Email" → "jd@example.com"; "Apple Health" → "Connected"; "Export data" → "CSV"; "Log out" (orange text, no value). Only "Log out" has behaviour (→ Home). 
-4. Footer "Ledger 1.0 · build 214" (400 11.5px, 35% ink).
+4. Footer "{app name} {version} · build {build}" (400 11.5px, 35% ink) — the prototype hard-codes "Ledger 1.0 · build 214"; the app reads `CFBundleDisplayName`, `CFBundleShortVersionString` and `CFBundleVersion` from the bundle instead (F14).
 5. Tab bar (Program active).
 
 ### 3.4 Day editor (v1 only) — `data-screen-label="Day editor"`
@@ -673,7 +673,7 @@ v1: `priorVolume = 24180` → "24.2k" (+ live volume), `sessionsDone = 1` of `4`
 
 | step | title | body | cta | options (label — sub) |
 |---|---|---|---|---|
-| 1 | What are you training for? | This sets how Ledger progresses your loads week to week. | Continue | Get stronger — Low reps, linear load increases · Build muscle — Moderate reps, volume tracking · Both, honestly — Barbell strength + accessory volume · Stay consistent — Habit first, numbers second |
+| 1 | What are you training for? | This sets how your loads progress week to week. | Continue | Get stronger — Low reps, linear load increases · Build muscle — Moderate reps, volume tracking · Both, honestly — Barbell strength + accessory volume · Stay consistent — Habit first, numbers second |
 | 2 | How many days a week? | Pick the number you will actually hit, not the one you want to hit. | Continue | 3 days — Full body each session · 4 days — Upper / lower split · 5 days — Push, pull, legs + accessories · 6 days — Body-part split |
 | 3 | Your program | Upper / Lower, 8 weeks, pounds. Editable any time. | Start training | Upper A · Push focus — Bench, incline, row, pulldown, laterals · Lower A · Squat focus — Squat, RDL, leg press, calves · Upper B · Pull focus — Weighted pull-up, OHP, row, curls · Lower B · Hinge focus — Deadlift, front squat, hamstring, abs |
 

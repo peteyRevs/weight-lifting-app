@@ -101,7 +101,8 @@ workout-app/
 │   (GRDB)     │ │ (HealthKit)│ │ (HK+WC)  │ │ (SwiftUI)  │ │Kit (ActivityK)│
 └───────▲──────┘ └─────▲──────┘ └──▲───────┘ └─▲──────────┘ └─▲─────────────┘
         │              │           │           │              │
-        │   Feature* targets depend ONLY on LedgerDomain + LedgerDesign (+ActivityKit for the LA)
+        │   Feature* → LedgerDomain, LedgerDesign, LedgerDependencies, LedgerTestSupport,
+        │              swift-dependencies (+ LedgerActivityKit for FeatureWorkout's Live Activity)
         │              │           │           │              │
 ┌───────┴──────────────┴───────────┴───────────┴──────────────┴─────────────┐
 │  App targets (Ledger, LedgerWatch, widgets): the composition root.        │
@@ -115,12 +116,30 @@ LedgerDependencies → depends on LedgerDomain (+ swift-dependencies); Features 
 protocol declared in `LedgerDomain` (e.g. `WorkoutRepository`), which the app
 binds to `GRDBWorkoutRepository` via `swift-dependencies`.
 
+`LedgerKit/package-graph.expected.txt` is the machine-readable copy of that
+edge list; `scripts/check-package-graph.sh` fails the gate when `Package.swift`
+and the table disagree, so an edge cannot be added quietly (F00).
+
+**Open question (raised in F00, decide in F06/F07):** feature targets link
+`LedgerTestSupport` so that `#Preview` bodies can use its fixtures. Because
+`LedgerTestSupport` itself depends on Persistence, Health, Sync and Design,
+this gives every feature a transitive link to the whole stack, which is exactly
+what the rule above is meant to prevent. The alternative is a small
+`LedgerPreviewFixtures` target that depends on `LedgerDomain` only. The edge is
+kept for now because F00's target table specifies it, and the cost is invisible
+while every module is a placeholder.
+
 Isolation defaults per target (Swift 6.2+ `defaultIsolation`):
 
 | Targets | Default isolation | Why |
 |---|---|---|
 | Feature*, WatchFeature*, App shells, LedgerDesign | `MainActor` | UI code; matches Apple DTS guidance (R2 §6) |
 | LedgerDomain, LedgerPersistence, LedgerHealth, LedgerSync, LedgerActivityKit, LedgerDependencies | `nonisolated` | value types + actors; no implicit main-thread hops |
+| App-hosted test targets (`LedgerTests`, `LedgerUITests`, `LedgerWatchTests`, `LedgerWatchUITests`) | `nonisolated` | `XCTestCase`'s overrides are nonisolated, so a MainActor default does not compile; tests mark `@MainActor` where they touch UI (Apple's 26.6 template pattern). Package test targets inherit their source target's setting. |
+
+In the Xcode project this lives in `Config/Ledger.xcconfig` and
+`Config/LedgerWatch.xcconfig`, not `Base.xcconfig`, so it reaches the app
+targets only.
 
 ---
 
@@ -401,7 +420,7 @@ useful `previewValue`. Stores never construct their dependencies.
 
 ## 14. Observability
 
-- `os.Logger` subsystem `app.ledger`, category per module; signposts around
+- `os.Logger` subsystem `com.petearevalo.Ledger`, category per module; signposts around
   DB aggregates and sync round-trips.
 - MetricKit for launch/hang/crash diagnostics at launch; no third-party crash
   SDK initially (keeps the privacy manifest trivial).

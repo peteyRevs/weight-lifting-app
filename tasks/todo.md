@@ -13,9 +13,18 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 
 - [ ] Read `docs/architecture.md` and the six ADRs; object or approve.
 - [ ] Confirm or override the 20 defaults in `docs/product-decisions.md` (the big ones: no accounts, lb+kg, 4 tabs, watch works standalone).
-- [ ] Apple Developer account ready (Team ID), App IDs for iOS + watch, HealthKit capability, iCloud container name reserved.
-- [ ] Create the GitHub repository (private) and push `main`.
-- [ ] Approve starting M0.
+- [~] Apple setup (identifiers per `docs/product-decisions.md` › Identifiers):
+  - [x] Simulator runtimes: iOS 26.5 (23F77) + watchOS 26.5 (23T570) installed 2026-09-19.
+  - [x] MCP servers verified 2026-09-19: sosumi, context7, XcodeBuildMCP. `xcode` pending the Intelligence toggle.
+  - [x] Bundle ID prefix decided: `com.petearevalo` (2026-09-19).
+  - [x] Xcode ▸ Settings ▸ Intelligence ▸ "Allow external agents to use Xcode tools" on (verified 2026-09-26: `xcode` MCP answers).
+  - [x] Xcode ▸ Settings ▸ Accounts: signed in (`Apple Development: Peter Arevalo` certificate issued 2026-09-22).
+  - [x] Enrolled in the Apple Developer Program as an individual (2026-09-22).
+  - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig`; confirmed paid Individual team (Xcode defaults, 2026-09-26).
+  - [ ] Register explicit App IDs: `com.petearevalo.Ledger` (HealthKit) and `com.petearevalo.Ledger.watchkitapp` (HealthKit). Xcode Cloud needs the watch ID registered by hand (R3 §4).
+  - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
+- [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
+- [x] Approve starting M0. (Pete, 2026-09-24)
 
 ## M0 — Foundation (target: 1.5 weeks; mostly serial)
 
@@ -30,7 +39,40 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [ ] F00 · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [~] F00 (PR #1) · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+
+### F00 delivery (branch `feat/F00-project-skeleton`)
+
+- [x] Scrap the half-built 2026-09-21 `Ledger.xcodeproj` and the duplicate root `Ledger/` folder.
+- [x] Tooling: `.xcode-version`, `mise.toml`, `.swiftformat`, `.swiftlint.yml`, `lefthook.yml`.
+- [x] Scripts: `bootstrap.sh`, `check.sh`, `check-commit-msg.sh`, `check-package-graph.sh`.
+- [x] `Config/{Base,Debug,Release,Ledger,LedgerWatch,Tests}.xcconfig`.
+- [x] `LedgerKit`: 19 source targets + 17 test targets, graph recorded, `swift test` green (18 tests).
+- [x] `Resources/Fonts/Archivo[wdth,wght].ttf` (+ OFL) — `fvar` verified: wght 100–900, wdth 62–125.
+- [x] `Apps/` shells and smoke/UI tests for both apps; `TestPlans/*.xctestplan` ×6.
+- [x] Criteria 5 and 7 demonstrated (lint rejects planted violations; hook rejects `added stuff`).
+- [x] **Pete:** the Xcode sitting — finished 2026-09-26 (watch folders, xcconfigs, cleared settings, hosts, `LedgerWatchAppKit`, fonts); test plans wired into the schemes by the orchestrator; orphan self-reference removed in a reviewed edit. Committed `1f2991d` / `ff02613` / `7847bb0`.
+- [x] `Info.plist` / `.entitlements` moved beside the synchronized folders (fixes `Multiple commands produce Info.plist`; implementation-notes #11).
+- [x] `scripts/check.sh` green end to end with the package tests running (2026-09-27): PR-iOS 19 tests, PR-watchOS 10 (was 3 each — LedgerKit had been added as a dependency, so its test targets never existed; now a local package in the project, notes #17). Nightly/Device plans resolve 17/8/1/1 targets. Coverage is plan-wide (Xcode bug); F01's gate filters by path.
+- [x] Criteria 1–10 verified against the real project (2026-09-27, fresh clone; two defects fixed — bootstrap SIGPIPE, watch-scheme asset warning; notes #18).
+- [x] PR opened: https://github.com/peteyRevs/weight-lifting-app/pull/1 (2026-09-27; criteria table + check.sh output in the body). Awaiting Pete's merge (G5). No CI yet — F01 adds it.
+
+### F02 delivery (branch `feat/F02-domain-core`, worktree `.claude/worktrees/F02-domain-core`)
+
+Started 2026-09-26 in parallel with the F00 Xcode sitting (Pete approved). Based on
+`00a504b` (F00 scaffolding); rebased onto `main` once F00 merges. Until the Xcode
+project is committed the working gate is `scripts/check.sh --fast` plus a
+`LedgerDomain` coverage measurement; the full `scripts/check.sh` runs after the rebase.
+
+- [x] G0 brief: `tasks/features/F02-domain-core.md` (14 criteria, test plan) — approved with M0.
+- [x] G1 implementer: code + brief's tests, `check.sh --fast` green, coverage ≥ 95 %, implementation notes. (2026-09-26: 148 domain tests, 98.91 % lines; re-run green by orchestrator; committed `f30d94e`. Brief's rest-label example fixed to rule 39 in `76ebbdb`.)
+- [x] 500-line PR budget (standards §10): product code is ~2,200 lines. **Pete granted a one-time waiver (2026-09-26)** — F02 ships as one PR; say so in the PR body. Future briefs must be scoped to fit.
+- [x] G2 adversarial tester (round 1): 209 tests, 8 failing from 3 bugs (A 11 kg step, B DST-at-midnight weeks, C 1.25 lb ties) + 7 spec questions. **Pete decided 2026-09-27: exact weights (Decimal grams; amends decision #9 → ADR-007) and a calendar-date program start.** Revision committed `f891e12` (ADR/docs) + `f8e1687` (code + adversarial suite): 367 domain tests green, 98.87 %. Round 2: tester auditing its changed tests + attacking the new Weight/CivilDate surface.
+- [x] G2 closed (round 2, 2026-09-27): tester accepted the implementer's test edits, +44 tests, no new bugs; 413 tests green at 2,000 seeds.
+- [x] G3 reviewer: approved, 0 Blocking / 4 Should fix / 9 Nits (`review.md`). Should-fix round in progress (CivilDate range, brzycki doc, SessionBuilder day source, lb/kg lint allowlist).
+- [x] Rebased onto F00 tip `70b36b5` (clean).
+- [ ] Rebase onto `main` after F00 merges; full `scripts/check.sh` green; PR opened.
+
 - [ ] M0 exit: both apps build and launch to an empty Today screen; `check.sh` and CI green; domain coverage ≥ 95 %; Archivo width axis verified on watch simulator.
 
 ## M1 — iPhone core loop (target: 3 weeks; up to 3 lanes in parallel)

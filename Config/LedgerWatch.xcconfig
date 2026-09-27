@@ -1,0 +1,26 @@
+// Target-level configuration for the watchOS app target `LedgerWatch`.
+
+PRODUCT_NAME = $(TARGET_NAME)
+PRODUCT_BUNDLE_IDENTIFIER = com.petearevalo.Ledger.watchkitapp
+INFOPLIST_FILE = Apps/LedgerWatch-Info.plist
+CODE_SIGN_ENTITLEMENTS = Apps/LedgerWatch.entitlements
+INFOPLIST_KEY_CFBundleDisplayName = $(PRODUCT_DISPLAY_NAME)
+
+// App shells are MainActor by default (architecture §3); test targets keep
+// Xcode's nonisolated default because XCTestCase's overrides are nonisolated.
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+
+SDKROOT = watchos
+SUPPORTED_PLATFORMS = watchos watchsimulator
+TARGETED_DEVICE_FAMILY = 4
+
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+SWIFT_EMIT_LOC_STRINGS = YES
+STRING_CATALOG_GENERATE_SYMBOLS = YES
+ENABLE_PREVIEWS = YES
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks
+
+// Embedded in Ledger.app; installing it on its own turns an archive into a
+// "Generic Xcode Archive" that App Store Connect and Xcode Cloud reject.
+SKIP_INSTALL = YES

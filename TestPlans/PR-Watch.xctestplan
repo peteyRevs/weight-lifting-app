@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "configurations": [
+    {
+      "id": "8D6D0F3C-0000-4000-8000-000000000002",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": true,
+    "environmentVariableEntries": [
+      {
+        "key": "TZ",
+        "value": "UTC"
+      },
+      {
+        "key": "LEDGER_TEST_LANE",
+        "value": "pr"
+      },
+      {
+        "key": "LEDGER_PROPERTY_SEED_COUNT",
+        "value": "200"
+      },
+      {
+        "key": "SNAPSHOT_ARTIFACTS",
+        "value": "$(PROJECT_DIR)/.derivedData/SnapshotArtifacts"
+      }
+    ],
+    "language": "en",
+    "region": "US",
+    "testExecutionOrdering": "random",
+    "testTimeoutsEnabled": true,
+    "maximumTestExecutionTimeAllowance": 60,
+    "targetForVariableExpansion": {
+      "containerPath": "container:Ledger.xcodeproj",
+      "identifier": "8AAE5FD8306596DE0005BA68",
+      "name": "LedgerWatch"
+    }
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerDomainTests",
+        "name": "LedgerDomainTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerPersistenceTests",
+        "name": "LedgerPersistenceTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerSyncTests",
+        "name": "LedgerSyncTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerDesignTests",
+        "name": "LedgerDesignTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "WatchFeatureWorkoutTests",
+        "name": "WatchFeatureWorkoutTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerWatchAppKitTests",
+        "name": "LedgerWatchAppKitTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Ledger.xcodeproj",
+        "identifier": "8AAE5FE4306596E00005BA68",
+        "name": "LedgerWatchTests"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Ledger.xcodeproj",
+        "identifier": "8AAE5FEE306596E00005BA68",
+        "name": "LedgerWatchUITests"
+      },
+      "selectedTests": [
+        "Smoke"
+      ]
+    }
+  ]
+}

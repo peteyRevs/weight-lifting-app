@@ -1,0 +1,159 @@
+# SwiftLint 0.65.x — see docs/engineering-standards.md §1. `--strict` everywhere:
+# a warning fails the local gate and CI. Custom rules encode the design-system
+# boundary (feature modules may not spell colours, fonts, spacing or radii) and
+# the concurrency rules from engineering-standards §3.
+strict: true
+
+included:
+  - LedgerKit
+  - Apps
+
+excluded:
+  - "**/.build"
+  - "**/__Snapshots__"
+  - DerivedData
+  - .derivedData
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+opt_in_rules:
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - explicit_init
+  - first_where
+  - empty_count
+  - sorted_imports
+  - unhandled_throwing_task
+  - unowned_variable_capture
+  - closure_body_length
+  - fatal_error_message
+  - discouraged_optional_boolean
+  - contains_over_filter_is_empty
+  - redundant_type_annotation
+  - private_outlet
+  - variable_shadowing
+
+force_cast: error
+force_try: error
+force_unwrapping: error
+
+file_length:
+  warning: 300
+  error: 400
+type_body_length:
+  warning: 150
+  error: 200
+function_body_length:
+  warning: 40
+  error: 60
+line_length:
+  warning: 120
+  error: 140
+  ignores_urls: true
+
+custom_rules:
+  # ---- design-system boundary: feature modules use LedgerDesign tokens only ----
+  feature_raw_color:
+    name: "Raw colour in a feature module"
+    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: 'Color\((red|white|hue|\.sRGB|\.displayP3|uiColor)|Color\.(red|blue|green|orange|black|white|gray|yellow|pink|purple|indigo|mint|teal|cyan|brown|primary|secondary|accentColor)\b|\.(foregroundStyle|foregroundColor|background|tint|fill)\(\.(red|blue|green|orange|black|white|gray|yellow)\b|UIColor\(|#colorLiteral'
+    message: "Use a LedgerDesign colour token, not a raw Color (docs/architecture.md §11)."
+    severity: error
+  feature_raw_font:
+    name: "Raw font in a feature module"
+    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '\.font\(\.(system|largeTitle|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|Font\.(system|custom)\(|\.fontWeight\('
+    message: "Use a LedgerDesign type token, not a system font (docs/architecture.md §11)."
+    severity: error
+  feature_raw_padding:
+    name: "Raw padding in a feature module"
+    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '\.padding\((\.[a-zA-Z]+,\s*)?-?\d|(VStack|HStack|LazyVStack|LazyHStack|Grid)\((alignment:[^,)]+,\s*)?spacing:\s*\d'
+    message: "Use a LedgerDesign spacing token, not a numeric literal."
+    severity: error
+  feature_raw_radius:
+    name: "Raw corner radius in a feature module"
+    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: 'cornerRadius:\s*\d|\.cornerRadius\(\d'
+    message: "Use a LedgerDesign radius token, not a numeric literal."
+    severity: error
+
+  # ---- repo-wide concurrency / hygiene rules (Sources only) ----
+  no_dispatch_queue:
+    name: "DispatchQueue"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '\bDispatchQueue\b'
+    message: "Use structured concurrency (actors, Task), not DispatchQueue."
+    severity: error
+  no_task_detached:
+    name: "Task.detached"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: 'Task\.detached'
+    message: "Task.detached drops isolation and priority; use a child Task or an actor."
+    severity: error
+  no_nslock:
+    name: "Manual locking"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '\bNSLock\b|DispatchSemaphore'
+    message: "Use an actor instead of a lock or semaphore."
+    severity: error
+  no_shared_singleton:
+    name: "Shared singleton"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: 'static\s+(let|var)\s+shared\b'
+    message: "Inject the dependency via swift-dependencies instead of a shared singleton."
+    severity: error
+  no_print:
+    name: "print()"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '(^|[^\w.])print\('
+    message: "Use os.Logger (docs/architecture.md §14), not print()."
+    severity: error
+  no_user_defaults_outside_settings:
+    name: "UserDefaults outside the settings store"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+      - '.*LedgerPersistence/Settings.*'
+    regex: 'UserDefaults'
+    message: "Go through the settings store in LedgerPersistence."
+    severity: error
+  unchecked_sendable_needs_reason:
+    name: "@unchecked Sendable without a reason"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded:
+      - '.*Tests/.*'
+      - '.*LedgerTestSupport.*'
+    regex: '@unchecked Sendable(?!.*//\s*(ADR|issue))'
+    message: "Justify @unchecked Sendable with a trailing // ADR-### or // issue comment."
+    severity: error

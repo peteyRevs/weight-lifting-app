@@ -120,6 +120,23 @@ STOP and re-plan").
 - Prompts state the branch, the worktree path, and the command that defines
   success (`scripts/check.sh`).
 
+## Documentation lookups (MCP)
+
+`.mcp.json` at the repo root gives every session and worktree agent the same
+servers. Training data lags the SDKs, so agents look an API up before writing
+code against it instead of relying on memory:
+
+| Need | Server | Notes |
+|---|---|---|
+| Apple APIs, HIG, WWDC sessions | `sosumi` | Hosted; works without Xcode. First stop for SwiftUI, HealthKit, WatchConnectivity, ActivityKit, CloudKit. |
+| GRDB, swift-dependencies, SQLiteData, snapshot-testing | `context7` | Query the version pinned in `Package.swift`. Optional `CONTEXT7_API_KEY` in the shell env raises rate limits; never commit it. |
+| Build, run, screenshot on simulators (iOS + watch) | `XcodeBuildMCP` | For iteration and the orchestrator's design-fidelity check. **Not a gate**: `scripts/check.sh` is. |
+| SwiftUI preview renders, live diagnostics | `xcode` | Needs Xcode running with the project open and Settings ▸ Intelligence ▸ Model Context Protocol ▸ "Allow external agents to use Xcode tools" on; Xcode asks to approve each new connection. Acts on the open project only, so main session only; worktree agents use XcodeBuildMCP. |
+
+If a looked-up doc contradicts a brief or ADR, the agent records it in
+implementation-notes.md and follows the brief; the orchestrator decides
+whether the brief changes.
+
 ## Optional: deterministic orchestration
 
 The implement → test → review pipeline maps directly onto the `Workflow` tool
@@ -146,7 +163,9 @@ Read first, fully, in this order:
   5. <abs>/design/prototype/<file>          (screen labels: <list>)
 
 Deliver: product code + every test in the brief's test plan, under the modules
-named in "Touches". Run <abs>/scripts/check.sh until green. Do not modify
+named in "Touches". Look up Apple and third-party APIs via the sosumi / context7 MCP servers
+before using them (docs/subagent-workflow.md, Documentation lookups).
+Run <abs>/scripts/check.sh until green. Do not modify
 files outside "Touches" without recording why in implementation-notes.md.
 Write <abs>/tasks/features/F##-<slug>/implementation-notes.md.
 Do NOT commit or open a PR. Return a ≤200-word summary: what you built, what

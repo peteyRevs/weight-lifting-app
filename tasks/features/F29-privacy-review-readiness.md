@@ -18,7 +18,7 @@ Everything App Review checks before it looks at the app: privacy manifests on ev
 
 ## Touches
 - `Apps/Ledger/PrivacyInfo.xcprivacy`, `Apps/LedgerWatch/PrivacyInfo.xcprivacy`, `Apps/LedgerWidgets/PrivacyInfo.xcprivacy`, `Apps/LedgerWatchWidgets/PrivacyInfo.xcprivacy`
-- `Apps/Ledger/Info.plist`, `Apps/LedgerWatch/Info.plist` (usage strings via `Config/*.xcconfig` `INFOPLIST_KEY_*`)
+- `Apps/Ledger-Info.plist`, `Apps/LedgerWatch-Info.plist` (usage strings via `Config/*.xcconfig` `INFOPLIST_KEY_*`)
 - `LedgerKit/Sources/FeatureWorkout/HealthExplainerView.swift` (shown once before authorization)
 - `docs/app-review/{privacy-answers.md,review-notes.md,demo-script.md}`, `docs/legal/{privacy-policy.md,terms.md}`
 
@@ -27,7 +27,7 @@ None.
 
 ## Acceptance criteria
 1. Given the archived build, when `xcrun` privacy report is generated (Xcode ▸ Product ▸ Generate Privacy Report), then every target's manifest is present and the report lists Health & Fitness with "not linked, not tracking" and the required-reason APIs actually used (a script diffs declared vs. `nm`/`strings` findings — best effort, recorded).
-2. Given a fresh install, when the user first taps Start workout, then the explainer appears ("Ledger reads your heart rate during workouts and saves them to Apple Health…"), then the system HealthKit prompt; declining leaves the app fully usable without HR.
+2. Given a fresh install, when the user first taps Start workout, then the explainer appears ("%@ reads your heart rate during workouts and saves them to Apple Health…", `%@` = `CFBundleDisplayName`), then the system HealthKit prompt; declining leaves the app fully usable without HR.
 3. Given the usage strings, then each states the specific data and purpose in one sentence and matches the explainer copy.
 4. Given `docs/app-review/privacy-answers.md`, then every App Privacy question has an answer with the code path that justifies it.
 5. Given `review-notes.md`, then it explains: watch required for HR, how to test without a watch, that no account exists, where export/delete live, and that no health data is stored in iCloud.

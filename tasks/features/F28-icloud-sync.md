@@ -19,7 +19,7 @@ A user's programs, workouts, custom exercises and settings follow them across iP
 ## Touches
 - `LedgerKit/Sources/LedgerCloud/**` (new target: depends on LedgerPersistence + the chosen library), `LedgerKit/Package.swift`
 - `LedgerKit/Sources/LedgerDependencies/Keys/CloudSync.swift`, `LedgerKit/Sources/FeatureSettings/CloudStatusRow.swift`
-- `Apps/Ledger/Ledger.entitlements` (iCloud container `iCloud.app.ledger`), `Ledger.xcodeproj` capability (human)
+- `Apps/Ledger.entitlements` (iCloud container `iCloud.com.petearevalo.Ledger`), `Ledger.xcodeproj` capability (human)
 - Tests: `LedgerCloudTests` (fake CloudKit), device checklist in F20 addendum
 
 ## Domain changes
