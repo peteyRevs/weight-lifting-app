@@ -35,6 +35,14 @@ opt_in_rules:
   - private_outlet
   - variable_shadowing
 
+# `id` is SwiftLint's own default; `lb` and `kg` are the unit symbols the domain names
+# (`Units.lb`, `Units.kg`, F02), too short for min_length but clearer than any longer name.
+identifier_name:
+  excluded:
+    - "^id$"
+    - "^lb$"
+    - "^kg$"
+
 force_cast: error
 force_try: error
 force_unwrapping: error
