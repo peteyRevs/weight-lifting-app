@@ -39,7 +39,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [~] F00 · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [~] F00 (PR #1) · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
 
 ### F00 delivery (branch `feat/F00-project-skeleton`)
 
@@ -55,7 +55,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 - [x] `Info.plist` / `.entitlements` moved beside the synchronized folders (fixes `Multiple commands produce Info.plist`; implementation-notes #11).
 - [x] `scripts/check.sh` green end to end with the package tests running (2026-09-27): PR-iOS 19 tests, PR-watchOS 10 (was 3 each — LedgerKit had been added as a dependency, so its test targets never existed; now a local package in the project, notes #17). Nightly/Device plans resolve 17/8/1/1 targets. Coverage is plan-wide (Xcode bug); F01's gate filters by path.
 - [x] Criteria 1–10 verified against the real project (2026-09-27, fresh clone; two defects fixed — bootstrap SIGPIPE, watch-scheme asset warning; notes #18).
-- [ ] PR opened with the criterion 5/6/7 output pasted.
+- [x] PR opened: https://github.com/peteyRevs/weight-lifting-app/pull/1 (2026-09-27; criteria table + check.sh output in the body). Awaiting Pete's merge (G5). No CI yet — F01 adds it.
 
 ### F02 delivery (branch `feat/F02-domain-core`, worktree `.claude/worktrees/F02-domain-core`)
 
