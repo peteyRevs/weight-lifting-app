@@ -53,7 +53,7 @@ public struct Weight: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
 }
 public struct Reps: Hashable, Codable, Sendable, Comparable { public let value: Int; public init?(_ value: Int) /* ≥ 1 */; public static let one: Reps }
 public struct RPE: Hashable, Codable, Sendable, Comparable { public let value: Decimal; public init?(_ value: Decimal) /* 5…10 in 0.5 steps */ }
-public struct RestDuration: Hashable, Codable, Sendable { public let seconds: Int; public init?(seconds: Int) /* 30…300 in 15 s steps */; public var label: String /* "90s", "2 min", "2:30" per rule 39 */ }
+public struct RestDuration: Hashable, Codable, Sendable { public let seconds: Int; public init?(seconds: Int) /* 30…300 in 15 s steps */; public var label: String /* "45s", "2 min", "1:30" per rule 39 */ }
 /// Σ weight × reps, in gram·reps.
 public struct Volume: Hashable, Codable, Sendable, AdditiveArithmetic { public let gramReps: Int; public func formatted(in: Units) -> String /* "24,180" */; public func compact(in: Units) -> String /* "41.2k" */ }
 public enum Equipment: String, Codable, Sendable, CaseIterable { case barbell, dumbbell, cable, machine, bodyweight, kettlebell, band
