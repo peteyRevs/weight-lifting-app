@@ -1,0 +1,76 @@
+import Foundation
+
+// Locale-independent number handling shared by every domain string.
+//
+// Domain strings follow the spec's own formats (§7.7: "185", "52.5", "24,180", "41.2k",
+// "5 × 5 @ 185 lb · RPE 8"): '.' decimal point, ',' thousands separator, no `Locale`,
+// no `NumberFormatter`. Output is byte-identical on every host regardless of its region.
+
+extension Decimal {
+    /// Rounds to `scale` fractional digits using a Swift rounding rule (via `NSDecimalRound`).
+    func rounded(scale: Int, _ rule: FloatingPointRoundingRule) -> Decimal {
+        var source = self
+        var result = Decimal()
+        NSDecimalRound(&result, &source, scale, Self.decimalMode(for: rule, isNegative: self < 0))
+        return result
+    }
+
+    /// Rounds to a whole number and returns it as an `Int`.
+    func roundedToInt(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> Int {
+        NSDecimalNumber(decimal: rounded(scale: 0, rule)).intValue
+    }
+
+    /// `NSDecimalNumber.RoundingMode` only has plain / bankers / up (toward +∞) / down (toward −∞);
+    /// the sign decides which of those implements `towardZero` and `awayFromZero`.
+    private static func decimalMode(
+        for rule: FloatingPointRoundingRule,
+        isNegative: Bool
+    ) -> NSDecimalNumber.RoundingMode {
+        switch rule {
+        case .toNearestOrAwayFromZero: .plain
+        case .toNearestOrEven: .bankers
+        case .up: .up
+        case .down: .down
+        case .towardZero: isNegative ? .up : .down
+        case .awayFromZero: isNegative ? .down : .up
+        @unknown default: .plain
+        }
+    }
+}
+
+enum NumberText {
+    /// Renders `scaled / 10^fractionDigits` with a '.' decimal point. Trailing fractional zeros
+    /// (and a bare '.') are dropped when `trimZeros` is true: `fixed(18500, fractionDigits: 2)`
+    /// → "185", `fixed(5250, fractionDigits: 2)` → "52.5", `fixed(242, fractionDigits: 1,
+    /// trimZeros: false)` → "24.2".
+    static func fixed(_ scaled: Int, fractionDigits: Int, trimZeros: Bool = true, grouped: Bool = false) -> String {
+        let divisor = (0 ..< fractionDigits).reduce(UInt(1)) { product, _ in product * 10 }
+        let whole = Int(scaled.magnitude / divisor)
+        var text = grouped ? thousands(whole) : String(whole)
+        let digits = String(scaled.magnitude % divisor)
+        var fraction = String(repeating: "0", count: max(0, fractionDigits - digits.count)) + digits
+        if trimZeros || fractionDigits == 0 {
+            while fraction.hasSuffix("0") {
+                fraction.removeLast()
+            }
+        }
+        if !fraction.isEmpty {
+            text += "." + fraction
+        }
+        return scaled < 0 ? "-" + text : text
+    }
+
+    /// "24180" → "24,180". Negative values keep their sign in front.
+    static func thousands(_ value: Int) -> String {
+        let digits = String(value.magnitude)
+        var groups: [Substring] = []
+        var end = digits.endIndex
+        while end > digits.startIndex {
+            let start = digits.index(end, offsetBy: -3, limitedBy: digits.startIndex) ?? digits.startIndex
+            groups.insert(digits[start ..< end], at: 0)
+            end = start
+        }
+        let text = groups.joined(separator: ",")
+        return value < 0 ? "-" + text : text
+    }
+}
