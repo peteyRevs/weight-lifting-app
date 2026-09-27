@@ -108,7 +108,7 @@ extension VolumeAdversarialTests {
 
     @Test("Volume formats whole units with thousands separators (rule 34).")
     func volume_formatted_thousandsSeparators() throws {
-        // 24,180 lb = 10,967,864 g (to the gram) → 24,180.001 lb → "24,180".
+        // 24,180 lb = 10,967,863.5066 g exactly (ADR-007) → "24,180".
         #expect(try Volume(weight: pounds("24180"), reps: Fixtures.reps(1)).formatted(in: .lb) == "24,180")
         #expect(Volume.zero.formatted(in: .lb) == "0")
         #expect(Volume(gramReps: 999_000).formatted(in: .kg) == "999")
@@ -130,7 +130,7 @@ extension VolumeAdversarialTests {
         #expect(Volume(gramReps: 24_000_000).compact(in: .kg) == "24.0k")
         #expect(Volume(gramReps: 500_000).compact(in: .kg) == "0.5k")
         #expect(Volume.zero.compact(in: .lb) == "0.0k")
-        // 41,200 lb = 18,687,965.6 g → 41.2k lb.
+        // 18,687,966 g = 41,200.0008 lb → 41.2k lb.
         #expect(Volume(gramReps: 18_687_966).compact(in: .lb) == "41.2k")
     }
 

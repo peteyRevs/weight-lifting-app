@@ -89,7 +89,7 @@ extension WeightAdversarialTests {
             ("242.5", "109996.149725"), ("-185", "-83914.58845"), ("0.001", "0.45359237"), ("-0.001", "-0.45359237")
         ]
     )
-    func pounds_nearestGram_table(text: String, grams: String) {
+    func pounds_exactGrams_table(text: String, grams: String) {
         // 1 lb = 453.59237 g exactly; e.g. 242.5 × 453.59237 = 109,996.149725 g, kept exactly.
         #expect(pounds(text).grams == dec(grams))
     }
@@ -101,7 +101,7 @@ extension WeightAdversarialTests {
             ("0.0005", "0.5")
         ]
     )
-    func kilograms_nearestGram_tiesAwayFromZero(text: String, grams: String) {
+    func kilograms_exactGrams_table(text: String, grams: String) {
         #expect(kilos(text).grams == dec(grams))
     }
 
@@ -143,7 +143,7 @@ extension WeightAdversarialTests {
     }
 
     @Test("scaled(by:) is the exact Decimal product (ADR-007: only rounded(toStep:) rounds).")
-    func scaled_exactDecimal_nearestGram() {
+    func scaled_isExactProduct() {
         // 123,456,789 g × 0.85 = 104,938,270.65 g exactly.
         #expect(Weight(grams: 123_456_789).scaled(by: dec("0.85")).grams == dec("104938270.65"))
         #expect(pounds("185").scaled(by: 1) == pounds("185"))

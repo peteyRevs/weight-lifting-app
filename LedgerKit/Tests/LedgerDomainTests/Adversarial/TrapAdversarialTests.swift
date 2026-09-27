@@ -38,6 +38,16 @@ import Testing
             }
         }
 
+        @Test("CivilDate rejects absurd year, month and day values with nil instead of trapping (ADR-007).")
+        func civilDate_absurdComponents_doNotTrap() async {
+            await #expect(processExitsWith: .success) {
+                let absurd = [(Int.max, 1, 1), (Int.min, 1, 1), (2026, Int.max, 1), (2026, 1, Int.min)]
+                if absurd.contains(where: { CivilDate(year: $0.0, month: $0.1, day: $0.2) != nil }) {
+                    exit(1)
+                }
+            }
+        }
+
         @Test("MissTracking.update for a week before the block does not trap.")
         func missTracking_negativeWeek_doesNotTrap() async {
             await #expect(processExitsWith: .success) {

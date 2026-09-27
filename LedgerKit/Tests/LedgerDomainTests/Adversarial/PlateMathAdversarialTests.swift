@@ -136,6 +136,9 @@ extension PlateMathPropertyAdversarialTests {
         let total = breakdown.perSide
             .reduce(Decimal(0)) { $0 + decimalRounded($1.plate.pounds, scale: 2) * Decimal($1.count) }
         #expect(total == (load - 45) / 2, "\(load) lb")
+        // ADR-007: the plates add up to exactly half of (load − bar), to the fraction of a gram.
+        let perSide = breakdown.perSide.reduce(Weight.zero) { $0 + $1.plate.scaled(by: Decimal($1.count)) }
+        #expect(perSide == Weight.pounds((load - 45) / 2), "\(load) lb")
         #expect(breakdown.remainder == .zero)
         #expect(breakdown.perSide.allSatisfy { $0.count >= 1 })
         #expect(breakdown.perSide.map(\.plate) == breakdown.perSide.map(\.plate).sorted(by: >))

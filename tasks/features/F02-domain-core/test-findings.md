@@ -137,3 +137,115 @@ Zones that spring forward at 00:00 → 01:00 include Africa/Cairo (last Friday o
 - **Codable:** every identifier (bare UUID; malformed input rejected); every enum case; exercise, week and day templates; a finished workout with a rest timer, sub-second dates and history, plus a bare one; fractional `Duration` in RestTimer and WorkoutSummary; PR kinds; settings; inventories; week keys; `Volume(Int.max)`.
 - **Protocols:** conformances written from the brief's signatures for every repository, query and shape protocol compile and run.
 - **Trap-freedom** (macOS exit tests): `prescribe`, `skippedWeeks` and `MissTracking.update` with week indices before the block. `WeekCalendar` produces these indices, and none of the three traps.
+
+## Round 2: after ADR-007 (`f8e1687`)
+
+The same independence rules applied: I read ADR-007, the brief, the spec, the public declarations
+and doc comments, and the "Adversarial tests changed" part of `implementation-notes.md`. I did not
+read implementation bodies or the implementer's own tests.
+
+- **Tests:** 253 adversarial tests (37 suites): the 209 from round 1 plus 44 new ones (43 in 5 new files, plus 1 exit test in `TrapAdversarialTests`).
+- **Result:** all pass.
+- **Gate:** `scripts/check.sh --fast` passes: format, strict lint, package graph and 413 tests.
+- **Nightly lane:** `LEDGER_PROPERTY_SEED_COUNT=2000` over all of `LedgerDomainTests` passes too.
+- **Round-1 bugs A–C:** the 8 failing tests pass unedited. A, B and C are fixed.
+
+### Audit of the implementer's edits to the adversarial tests
+
+**Verdict: accepted.** Every change is either a compile-only adaptation or follows from ADR-007.
+None weakens the original intent. I checked the assertions in all 25 round-1 files against what I
+wrote and found no changes that the implementation notes don't list.
+
+| Test | Implementer's change | Verdict |
+|---|---|---|
+| Compile-only adaptations (`Adversarial.startDay`; `CivilDate(start, in: calendar)` in the WeekCalendar, Trap, Stats and property helpers; `Decimal(_:)` wraps in 13 tests) | Types only | Faithful. Each `CivilDate` is taken in the test's own zone, so every DST and round-1 bug-B assertion keeps its meaning. |
+| `pounds185_convertsAndFormats_matchesCriterion1` | 83,915 → 83,914.58845 g | Follows ADR (criterion 1 amended). Stronger, because the value is now exact. |
+| `pounds_nearestGram_table`, `kilograms_nearestGram_tiesAwayFromZero` | Nearest-gram values → exact gram strings | Follows ADR and is stronger. I renamed them `pounds_exactGrams_table` / `kilograms_exactGrams_table` because the old names now describe the wrong behaviour. |
+| `scaled_exactDecimal_nearestGram` | Exact products; adds `== pounds("242.25")` | Follows ADR and is stronger. I renamed it `scaled_isExactProduct`. |
+| `arithmetic_andOrdering_inGrams` | Exact 185 lb | Follows ADR. |
+| `rounded_respectsBounds` | Slack 6 g → 0 | Stronger. Accepted. |
+| `brzycki_200x5_is225`, `detect_criterion12_bothKinds` | `== pounds("225")` → `== Weight(grams: 102_058)`, with `wholeValue == 225` kept | Follows ADR ("the e1RM stays rounded to the nearest gram"). I removed a stale comment. |
+| `brzycki_oneRepAndZero` | 1 rep of 185 lb → 83,915 g, plus `wholeValue == 185` | Follows the brief and ADR rounding. The display name still said "estimates exactly the weight lifted", so I reworded it (see D). |
+| `volume_ofSet_isGramsTimesReps` | `83914.58845 × 5` | Follows ADR. |
+
+**What I strengthened** now that weights are exact:
+- `poundsRoundTrip_hundredths_isIdentity` also asserts `Weight.pounds(x).pounds == x` exactly.
+- `perSide_standardPounds_isExactAndDescending` asserts the plates per side add up to exactly `.pounds((load − 45) / 2)` in grams.
+- I fixed stale gram figures in comments in `brzycki_criterion7` and the Volume tests.
+
+### What was attacked
+
+**Exact weights** (`ExactWeightAdversarialTests`):
+- Stepper drift is gone:
+  - 185 lb + 6 × 2.5 lb with `+` is exactly `.pounds(200)`.
+  - 100 × 2.5 lb, 1,000 × 0.01 lb, 64 × 1.25 kg and 80 × −2.5 lb all land exactly.
+- That stepper-built 200 lb **no longer fakes a PR** against a stored 200 lb best (round-1 question 2).
+- Mixed-unit arithmetic is exact and reversible (0.45359237 kg == 1 lb).
+- lb → g → lb and kg → g → kg are the identity for 8 values, down to 0.0001 and up to 123,456.789.
+- **Equality, hash and order agree** across eight construction paths for 2.5 lb:
+  - `.pounds`, a float literal, grams, kilograms, trailing zeros, a difference, a product.
+  - 1 == 1.0 == 1.00 g, and every route to zero (including `.zero.scaled(by: -1)`) gives one value and one hash.
+  - Inside `PRKind` as well.
+- **Formatting:** a negative near-zero difference (185 lb − 83.915 kg = −0.41 g) never prints "-0".
+- **Extremes:** 10⁻⁷ g and 20-digit pound values keep every digit.
+- **Ties:**
+  - The exact 1.25 lb tie at ±180.625 lb follows all six rounding rules.
+  - A cross-unit exact tie (1.133980925 kg = ½ × 5 lb) rounds as a tie.
+  - The 11 kg and 64.75 kg steps (round-1 bug A) stay exact.
+- **Volume:** 1,000 reps × 185 lb formats as "185,000", and 50,000 reps is exactly 9,250,000 lb (round-1 question 3).
+
+**Codable** (`ExactCodableAdversarialTests`):
+- `{"grams": "83914.58845"}` shape.
+- Digit-for-digit round-trips, including 38-digit, 10⁻²⁰, 10³⁰ and ⅓ lb values.
+- 14 malformed payloads are rejected for both `Weight` and `Volume`:
+  - a JSON number;
+  - partial numbers `"12abc"`, `"1.2.3"`, `"1,5"`, `"1 2"`, `"0x10"`;
+  - `"NaN"`, `null`, a missing key, bare values.
+- A tampered `Slot` start load given as a number is rejected.
+- `Program.startDate` encodes as `"2026-08-17"`, and impossible or badly shaped dates are rejected.
+
+**CivilDate** (`CivilDateAdversarialTests`):
+- 15 impossible dates (Feb 30, Feb 29 in 2023, 1900 and 2100, month 0 or 13, day 0 or 32, years 0, 10000 and −1) are nil.
+- The leap and range-end dates are accepted.
+- Day numbers and weekdays match proleptic Gregorian, from 0001-01-01 to 9999-12-31, including 1582-10-04/15.
+- Arithmetic across leap days and year ends is correct, and so is ordering.
+- 22 malformed "YYYY-MM-DD" texts are rejected: unpadded, full-width digits, en dash, trailing newline, `T00:00Z`, signs, 5-digit years…
+- Zero-padded years such as "0005-01-02" work.
+- An instant's civil day uses only the zone: it is the same under Islamic, Buddhist, Hebrew and Japanese calendars.
+- `startOfDay` is 01:00 on Cairo's missing-midnight day.
+- Exit test: `Int.max` / `Int.min` components give nil rather than trapping.
+
+**Travel and DST** (`WeekCalendarTravelAdversarialTests`):
+- **The same local date gives the same program week in 11 zones** (UTC−11 to UTC+14, Lord Howe, Cairo, Santiago, Havana), and gives the same bounds, civil date and `firstDayOfWeek` (round-1 question 5).
+- The same scheduled day and block end also hold in every zone.
+- One instant falls in different weeks in Los Angeles and Tokyo, as it should.
+- **DST-at-midnight cases:**
+  - Havana, block starting on its 01:00 day: week 0 starts at 01:00 and week −1 ends there.
+  - Beirut: the week holding the missing midnight still ends at Monday 00:00.
+  - Cairo, Friday week start: week 0 starts on the transition Friday at 01:00.
+
+**Properties** (`ExactPropertyAdversarialTests` and `TravelPropertyAdversarialTests`):
+- `+` sums equal the pound literal of the decimal sum.
+- Hashes are numeric.
+- `Weight` and `Volume` Codable round-trips are exact.
+- Half-step ties round away from zero, or to even under `.toNearestOrEven`, on 7 steps.
+- Up to 2,000 sets of volume equal the exact pound total.
+- CivilDate matches Foundation for 1600–2399, and text, JSON and `startOfDay` round-trips hold in 13 zones (Tehran and Asunción included).
+- Two random zones agree on week, weekday and week start for the same local date-time.
+- Week bounds are starts of their own civil days.
+
+### Findings
+
+**No new bugs.** Two low-severity items:
+
+- **D. Stale doc: `OneRepMax.brzycki` says "One rep returns `weight`" — doc (low).**
+  - The implementation (following the brief and ADR-007: "the e1RM stays rounded to the nearest gram") returns 83,915 g for 1 × 185 lb, while `weight` is 83,914.58845 g.
+  - The behaviour is consistent: every e1RM is whole grams, so e1RM PR comparisons are unaffected.
+  - The doc sentence should say "One rep returns `weight` rounded to the nearest gram". No failing test, because the behaviour matches the ADR.
+- **Q8. `CivilDate.adding(days:)` can leave the valid range — spec question.**
+  - `CivilDate(9999-12-31).adding(days: 1)` returns `10000-01-01`, which encodes as `"10000-01-01"` but fails to decode, and `CivilDate(iso8601:)` rejects it too. The same happens with `0001-01-01 − 1` → `0000-12-31`.
+  - So the type can produce a value that breaks its own Codable round-trip.
+  - This is unreachable for real training dates. Options are to clamp, return optional, trap, or widen the year range. It isn't asserted.
+- **Observation, not a finding:** `Weight`/`Volume` decoding is strict. `".5"`, `"+12"` and `"1e3"` are rejected. The encoder never emits these forms, so that is consistent with "decoding accepts only that shape".
+
+Round-1 questions 2, 3 and 5 are answered by ADR-007 and now covered by passing tests. Questions 1, 4, 6 and 7 are unchanged.

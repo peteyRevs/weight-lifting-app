@@ -42,7 +42,8 @@ extension WeightPropertyAdversarialTests {
     func poundsRoundTrip_hundredths_isIdentity(seed: PropertySeed) {
         var generator = seed.generator
         let value = randomMultiple(of: dec("0.01"), in: -100_000 ... 500_000, using: &generator)
-        // 1 g = 0.0022 lb < 0.005 lb, so nearest-gram storage must read back to the same hundredth.
+        // ADR-007: weights are exact, so lb → g → lb is the identity, not just to the hundredth.
+        #expect(Weight.pounds(value).pounds == value)
         #expect(decimalRounded(Weight.pounds(value).pounds, scale: 2) == value)
         let halves = randomMultiple(of: dec("0.5"), in: 0 ... 2000, using: &generator)
         #expect(decimalRounded(Weight.pounds(halves).pounds * 2) / 2 == halves)
