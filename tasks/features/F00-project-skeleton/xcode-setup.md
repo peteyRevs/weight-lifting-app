@@ -93,7 +93,11 @@ Testing ▸ **Host Application** (`LedgerTests` → `Ledger`, `LedgerWatchTests`
 
 ## 5. Add the local package
 
-File ▸ Add Package Dependencies… ▸ **Add Local…** ▸ `LedgerKit`.
+Drag the `LedgerKit` folder from Finder onto the project in the navigator
+(Reference files in place, no targets). **Not** File ▸ Add Package
+Dependencies… ▸ Add Local…: that makes LedgerKit a *dependency*, whose test
+targets Xcode never builds, so every LedgerKit test silently drops out of the
+test plans (implementation-notes #17).
 
 Then per target ▸ General ▸ Frameworks, Libraries and Embedded Content:
 

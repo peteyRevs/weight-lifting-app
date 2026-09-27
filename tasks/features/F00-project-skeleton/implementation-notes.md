@@ -109,6 +109,72 @@ scratchpad; nothing in it was hand-written. The duplicate root `Ledger/` folder
     `xcodebuild -list`; Pete reviewed and approved the diff (18 lines
     removed, none added) before the project was committed. ADR-003's rule stands for
     everything else.
+17. **No LedgerKit test ever ran in a plan; LedgerKit is now a local package
+    *in* the project (2026-09-27).** `check.sh` was green, but
+    `PR-iOS.xcresult` and `PR-watchOS.xcresult` held 3 tests each (the app
+    smoke tests). None of the 15 / 6 `container:LedgerKit` test targets ran, and
+    nothing warned. The Device plans were empty: their `.xctestrun` listed zero
+    test targets.
+    - *Root cause.* Step 5 added LedgerKit with *Add Package Dependencies… ▸
+      Add Local…*, which writes an `XCLocalSwiftPackageReference`. Xcode loads
+      that as a **dependency**, not a root package, so only the targets that
+      products reach exist. LedgerKit's PIF (`.derivedData/…/PIFCache`) had 41
+      entries: source and product targets only. There was no `*Tests` target and
+      no `LedgerSnapshotTesting`. The project's `Package.resolved` has no
+      swift-snapshot-testing or swift-custom-dump pins because test-only
+      dependencies were pruned. The plan entries could not resolve, and
+      `xcodebuild` dropped them without a message. The entries themselves are
+      correct (`container:LedgerKit` + target name is the form Xcode writes), so
+      they are unchanged.
+    - *Evidence.* `build-for-testing -project … -testPlan PR` gave a target
+      graph of 61 targets with no LedgerKit test target, and an `.xctestrun`
+      with LedgerTests and LedgerUITests only. The same command through a
+      workspace that also lists the `LedgerKit` folder gave 79 targets,
+      including all 15 test targets, and an `.xctestrun` with 17. Tried and
+      rejected: a `FileRef` added to the embedded
+      `project.xcworkspace` is ignored under `-project` (still 61).
+    - *Second silent gap: coverage.* The plans' selective
+      `codeCoverage.targets` (LedgerDomain … WatchFeatureWorkout) matched
+      nothing, before and after the workspace fix. Package library targets are
+      object files linked into each test bundle, so none of them is a coverage
+      buildable of its own. Every `CodeCoverageBuildableInfos` entry in the
+      `.xctestrun` had `IncludeInReport = false`, and `xccov` reported 0
+      targets. This is a long-standing Xcode issue (Apple forums thread 133517,
+      FB7724987). All six plans now say `"codeCoverage": true`. LedgerKit
+      sources then appear in the report (e.g.
+      `Sources/LedgerAppKit/AppRootView.swift` under `LedgerAppKitTests`), and
+      remote packages are not instrumented. F01's `coverage-gate.sh` must
+      therefore select `LedgerKit/Sources/<target>/` by path (testing-strategy
+      §4) rather than rely on the plan.
+    - *Watch clones.* With the package tests added, the watch run spread over
+      two parallel clones. The first app launch on the second clone failed
+      3 times in 6 runs ("Failed to install or launch the test runner … Unknown
+      application display identifier"). It hit `LedgerWatchTests` or the UI
+      runner, whichever was placed there. Step 4 now passes
+      `-parallel-testing-worker-count 1`: one clone, with Swift Testing still
+      parallel in-process. The result was 5/5 green and faster (28–33 s of
+      testing, against 43–54 s). iOS stays unlimited because its second clone
+      never failed.
+    - *Counts.* PR-iOS went from 3 to 19: 16 package tests from 15 targets,
+      plus 3 app tests. PR-watchOS went from 3 to 10: 7 package tests from 6
+      targets, plus 3 app tests. On the host, `swift test` runs 18. The iOS
+      plans leave out `WatchFeatureWorkoutTests` and `LedgerWatchAppKitTests`
+      (item 4), which accounts for the 2 missing tests. No test was dropped
+      for platform reasons: every listed package target builds and passes on
+      its simulator.
+    - *Fix (Pete, in Xcode).* Removed the *Add Local…* reference under Package
+      Dependencies, dragged the `LedgerKit` folder into the navigator (a
+      `PBXFileReference`, `lastKnownFileType = wrapper` — Apple's "local
+      package in your project" form, which Xcode loads as a root package) and
+      re-linked `LedgerWatchAppKit` (`LedgerAppKit`'s link survived; both are
+      now product-name-only dependencies). The project's `Package.resolved`
+      gained the two test-only pins. `check.sh` keeps `-project`; the plans'
+      target entries are unchanged.
+    - *Rejected: a `Ledger.xcworkspace` holding the project + `LedgerKit`
+      folder.* It fixed the gate without a pbxproj edit, but opening
+      `Ledger.xcodeproj` directly — in Xcode, XcodeBuildMCP, CI or Xcode Cloud —
+      would still hide every package test, and every doc and workflow would
+      have to switch to the workspace. One entry point wins (ADR-003).
 
 ## Concern to settle (not blocking F00)
 

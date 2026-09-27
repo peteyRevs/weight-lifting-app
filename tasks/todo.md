@@ -51,9 +51,10 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 - [x] `Resources/Fonts/Archivo[wdth,wght].ttf` (+ OFL) — `fvar` verified: wght 100–900, wdth 62–125.
 - [x] `Apps/` shells and smoke/UI tests for both apps; `TestPlans/*.xctestplan` ×6.
 - [x] Criteria 5 and 7 demonstrated (lint rejects planted violations; hook rejects `added stuff`).
-- [~] **Pete:** the Xcode sitting — `tasks/features/F00-project-skeleton/xcode-setup.md`. Done 2026-09-24: steps 1–2, package added, `Ledger` → `LedgerAppKit`. Left: watch folders, xcconfigs + clearing pbxproj settings, test hosts, `LedgerWatchAppKit`, fonts, schemes/test plans.
+- [x] **Pete:** the Xcode sitting — finished 2026-09-26 (watch folders, xcconfigs, cleared settings, hosts, `LedgerWatchAppKit`, fonts); test plans wired into the schemes by the orchestrator; orphan self-reference removed in a reviewed edit. Committed `1f2991d` / `ff02613` / `7847bb0`.
 - [x] `Info.plist` / `.entitlements` moved beside the synchronized folders (fixes `Multiple commands produce Info.plist`; implementation-notes #11).
-- [ ] Criteria 1–4, 6, 8, 10 verified against the real project; `scripts/check.sh` green end to end.
+- [x] `scripts/check.sh` green end to end with the package tests running (2026-09-27): PR-iOS 19 tests, PR-watchOS 10 (was 3 each — LedgerKit had been added as a dependency, so its test targets never existed; now a local package in the project, notes #17). Nightly/Device plans resolve 17/8/1/1 targets. Coverage is plan-wide (Xcode bug); F01's gate filters by path.
+- [ ] Criteria 1–4, 6, 8, 10 verified against the real project.
 - [ ] PR opened with the criterion 5/6/7 output pasted.
 
 ### F02 delivery (branch `feat/F02-domain-core`, worktree `.claude/worktrees/F02-domain-core`)
@@ -66,7 +67,7 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 - [x] G0 brief: `tasks/features/F02-domain-core.md` (14 criteria, test plan) — approved with M0.
 - [x] G1 implementer: code + brief's tests, `check.sh --fast` green, coverage ≥ 95 %, implementation notes. (2026-09-26: 148 domain tests, 98.91 % lines; re-run green by orchestrator; committed `f30d94e`. Brief's rest-label example fixed to rule 39 in `76ebbdb`.)
 - [x] 500-line PR budget (standards §10): product code is ~2,200 lines. **Pete granted a one-time waiver (2026-09-26)** — F02 ships as one PR; say so in the PR body. Future briefs must be scoped to fit.
-- [ ] G2 adversarial tester: independent tests; `test-findings.md` empty or resolved.
+- [~] G2 adversarial tester: 209 tests, 8 failing from 3 bugs (A 11 kg step, B DST-at-midnight weeks, C 1.25 lb ties) + 7 spec questions. **Pete decided 2026-09-27: exact weights (Decimal grams; amends decision #9 → ADR-007) and a calendar-date program start.** Revision committed `f891e12` (ADR/docs) + `f8e1687` (code + adversarial suite): 367 domain tests green, 98.87 %. Round 2: tester auditing its changed tests + attacking the new Weight/CivilDate surface.
 - [ ] G3 reviewer: `review.md`, zero blocking.
 - [ ] Rebase onto `main` after F00 merges; full `scripts/check.sh` green; PR opened.
 
