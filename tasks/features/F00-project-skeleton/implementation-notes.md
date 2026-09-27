@@ -201,6 +201,16 @@ scratchpad; nothing in it was hand-written. The duplicate root `Ledger/` folder
       `Config/Base.xcconfig` changed — verified in the built plists; no Home
       Screen screenshot, the icon sat on page 2).
 
+19. **`check.sh` now proves the plan ran, not just that `xcodebuild` exited 0
+    (2026-09-27).** `xcodebuild test` passed twice while the gate was blind:
+    once with every LedgerKit target silently dropped (#17), and once in F02
+    when a full disk left an empty watchOS result bundle behind a green step.
+    `scripts/check-test-results.sh <xcresult> <plan>` runs after steps 3 and 4:
+    every enabled `testTargets` entry of the plan must appear as a test bundle
+    in the result, and every bundle must be `Passed`; an unreadable or empty
+    result fails. Verified against good results (17 / 8 targets) and against
+    mismatched and missing bundles.
+
 ## Concern to settle (not blocking F00)
 
 Feature targets link `LedgerTestSupport` (per the brief's target table) so

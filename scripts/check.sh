@@ -102,6 +102,7 @@ xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
     -resultBundlePath "$RESULTS/PR-iOS.xcresult" \
     -parallel-testing-enabled YES -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 60 -quiet | beautify
+scripts/check-test-results.sh "$RESULTS/PR-iOS.xcresult" TestPlans/PR.xctestplan
 done_step "iOS"
 
 # ---- 4. watchOS build + PR-Watch plan ---------------------------------------
@@ -115,6 +116,7 @@ xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch
     -resultBundlePath "$RESULTS/PR-watchOS.xcresult" \
     -parallel-testing-enabled YES -parallel-testing-worker-count 1 -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 60 -quiet | beautify
+scripts/check-test-results.sh "$RESULTS/PR-watchOS.xcresult" TestPlans/PR-Watch.xctestplan
 done_step "watchOS"
 
 # ---- 5. coverage gate -------------------------------------------------------

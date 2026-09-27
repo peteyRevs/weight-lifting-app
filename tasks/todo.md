@@ -39,7 +39,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [~] F00 (PR #1) · [ ] F01 · [ ] F02 · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [~] F00 (PR #1) · [ ] F01 · [~] F02 (PR #2) · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
 
 ### F00 delivery (branch `feat/F00-project-skeleton`)
 
@@ -71,7 +71,8 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 - [x] G2 closed (round 2, 2026-09-27): tester accepted the implementer's test edits, +44 tests, no new bugs; 413 tests green at 2,000 seeds.
 - [x] G3 reviewer: approved, 0 Blocking / 4 Should fix / 9 Nits (`review.md`). Should-fix round in progress (CivilDate range, brzycki doc, SessionBuilder day source, lb/kg lint allowlist).
 - [x] Rebased onto F00 tip `70b36b5` (clean).
-- [ ] Rebase onto `main` after F00 merges; full `scripts/check.sh` green; PR opened.
+- [x] Should-fix round done (`eb2a30d`); rebased on F00 tip; full `check.sh` green (PR-iOS 431/431, PR-watchOS 422/422, all planned targets ran); host 419 tests; coverage 98.78 %.
+- [x] PR opened: https://github.com/peteyRevs/weight-lifting-app/pull/2 (stacked on #1). After #1's squash merge: rebase onto `main`, retarget #2, re-run the gate.
 
 - [ ] M0 exit: both apps build and launch to an empty Today screen; `check.sh` and CI green; domain coverage ≥ 95 %; Archivo width axis verified on watch simulator.
 

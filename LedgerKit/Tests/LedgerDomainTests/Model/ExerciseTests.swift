@@ -1,0 +1,38 @@
+import Foundation
+@testable import LedgerDomain
+import Testing
+
+@Suite("Exercise", .tags(.domain))
+struct ExerciseTests {
+    @Test("Default steps: lb barbell 5, others 2.5; kg barbell 2.5, others 1.25 (rule 1, decision #9)")
+    func equipment_defaultStep() {
+        #expect(Equipment.barbell.defaultStep(in: .lb) == .pounds(5))
+        #expect(Equipment.barbell.defaultStep(in: .kg) == .kilograms(2.5))
+        for equipment in Equipment.allCases where equipment != .barbell {
+            #expect(equipment.defaultStep(in: .lb) == .pounds(2.5))
+            #expect(equipment.defaultStep(in: .kg) == .kilograms(1.25))
+        }
+    }
+
+    @Test("The start load is the unit's W0, else the other unit's rounded to this unit's step, else zero")
+    func startLoad_fallsBack() {
+        var exercise = Fixtures.inclineDB
+        #expect(exercise.startLoad(in: .lb) == .pounds(50))
+        #expect(exercise.startLoad(in: .kg) == .kilograms(22.5))
+        exercise.defaultStartLoad = [.lb: .pounds(50)]
+        #expect(exercise.startLoad(in: .kg) == .kilograms(22.5))
+        exercise.defaultStartLoad = [.kg: .kilograms(20)]
+        #expect(exercise.startLoad(in: .lb) == .pounds(45))
+        exercise.defaultStartLoad = [:]
+        #expect(exercise.startLoad(in: .lb) == .zero)
+    }
+
+    @Test("An exercise round-trips through JSON")
+    func codable_roundTrip_preservesValue() throws {
+        var exercise = Fixtures.bench
+        exercise.secondaryMuscles = [.triceps, .shoulders]
+        exercise.curatedAlternatives = [Fixtures.inclineDB.id]
+        exercise.isCustom = true
+        #expect(try JSONDecoder().decode(Exercise.self, from: JSONEncoder().encode(exercise)) == exercise)
+    }
+}

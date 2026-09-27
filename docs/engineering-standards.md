@@ -113,7 +113,7 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 
 - All identifiers are typed: `struct ExerciseID: Hashable, Codable, Sendable { let rawValue: UUID }`.
   Never pass a bare `UUID` or `String` as an identity.
-- Units are explicit: `Weight` (stores grams as `Int`, presents lb/kg),
+- Units are explicit: `Weight` (stores exact grams as `Decimal`, rounds only where a rule says so, presents lb/kg; ADR-007),
   `Reps` (`Int`, ≥ 1), `Duration` (`Swift.Duration`). No `Double` weights.
 - Models are `struct`, `Equatable`, `Sendable`, `Codable` when persisted or
   transmitted. Events are `enum` with associated values.

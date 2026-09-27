@@ -7,7 +7,7 @@
 | Depends on | F00 |
 | Branch | `feat/F02-domain-core` |
 | Design refs | none (pure logic) |
-| Spec refs | `docs/product-spec.md` §6.1, §7.1–§7.7; `docs/product-decisions.md` #3–#5, #7, #9, #14, #15, #18; `docs/architecture.md` §5 |
+| Spec refs | `docs/product-spec.md` §6.1, §7.1–§7.7; `docs/product-decisions.md` #3–#5, #7, #9, #14, #15, #18; `docs/architecture.md` §5; `docs/adr/ADR-007-exact-weights-and-civil-program-start.md` |
 
 ## Goal
 `LedgerDomain` becomes the single source of truth for every type and rule in the app: typed identifiers, exact weight arithmetic, program/prescription/progression, session building, superset rounds, 1RM, PRs, plate math, time estimates, week calendar, miss tracking, and the protocols every other module implements. It imports Foundation only and is tested to ≥ 95 %. F04 (engine), F05 (persistence) and every feature build on these names exactly.
@@ -38,24 +38,24 @@ public struct ExerciseID: Hashable, Codable, Sendable { public let rawValue: UUI
 
 public enum Units: String, Codable, Sendable, CaseIterable { case lb, kg }
 
-/// Exact mass in grams. 1 lb = 453.59237 g. Never a Double.
+/// Exact mass in grams. 1 lb = 453.59237 g. Never a Double. Amended by ADR-007: exact Decimal, no rounding on construction.
 public struct Weight: Hashable, Codable, Sendable, Comparable, AdditiveArithmetic {
-    public let grams: Int
-    public init(grams: Int)
-    public static func pounds(_ lb: Decimal) -> Weight          // rounds to nearest gram
+    public let grams: Decimal                                   // numeric ==/hash (1 == 1.00); Codable {"grams": "83914.58845"}
+    public init(grams: Decimal)
+    public static func pounds(_ lb: Decimal) -> Weight          // exactly lb × 453.59237 g (ADR-007)
     public static func kilograms(_ kg: Decimal) -> Weight
     public var pounds: Decimal; public var kilograms: Decimal
     public func value(in units: Units) -> Decimal
-    public func rounded(toStep step: Weight, _ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> Weight
-    public func scaled(by factor: Decimal) -> Weight            // exact Decimal math, then nearest gram
+    public func rounded(toStep step: Weight, _ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> Weight  // (grams / step.grams).rounded(rule) × step.grams
+    public func scaled(by factor: Decimal) -> Weight            // exact Decimal product (ADR-007)
     public func formatted(in units: Units) -> String            // "185", "52.5", "0"; no unit suffix
     public static let zero: Weight
 }
 public struct Reps: Hashable, Codable, Sendable, Comparable { public let value: Int; public init?(_ value: Int) /* ≥ 1 */; public static let one: Reps }
 public struct RPE: Hashable, Codable, Sendable, Comparable { public let value: Decimal; public init?(_ value: Decimal) /* 5…10 in 0.5 steps */ }
-public struct RestDuration: Hashable, Codable, Sendable { public let seconds: Int; public init?(seconds: Int) /* 30…300 in 15 s steps */; public var label: String /* "90s", "2 min", "2:30" per rule 39 */ }
-/// Σ weight × reps, in gram·reps.
-public struct Volume: Hashable, Codable, Sendable, AdditiveArithmetic { public let gramReps: Int; public func formatted(in: Units) -> String /* "24,180" */; public func compact(in: Units) -> String /* "41.2k" */ }
+public struct RestDuration: Hashable, Codable, Sendable { public let seconds: Int; public init?(seconds: Int) /* 30…300 in 15 s steps */; public var label: String /* "45s", "2 min", "1:30" per rule 39 */ }
+/// Σ weight × reps, in exact gram·reps (ADR-007).
+public struct Volume: Hashable, Codable, Sendable, AdditiveArithmetic { public let gramReps: Decimal; public func formatted(in: Units) -> String /* "24,180" */; public func compact(in: Units) -> String /* "41.2k" */ }
 public enum Equipment: String, Codable, Sendable, CaseIterable { case barbell, dumbbell, cable, machine, bodyweight, kettlebell, band
     public func defaultStep(in units: Units) -> Weight }        // lb: barbell 5, others 2.5 · kg: barbell 2.5, others 1.25
 public enum MuscleGroup: String, Codable, Sendable, CaseIterable { case chest, back, shoulders, quads, hamstrings, glutes, calves, biceps, triceps, forearms, core }
@@ -74,7 +74,7 @@ public struct Exercise: Identifiable, Hashable, Codable, Sendable {
     public var curatedAlternatives: [ExerciseID]
 }
 public struct Program: Identifiable, Hashable, Codable, Sendable {
-    public let id: ProgramID; public var name: String; public var startDate: Date /* first day of week 0 */
+    public let id: ProgramID; public var name: String; public var startDate: CivilDate /* first day of week 0; ADR-007 */
     public var weeks: [Week] /* ≥ 2, indices contiguous */; public var days: [DayTemplate]
     public var goal: TrainingGoal?; public var daysPerWeek: Int?; public var isActive: Bool
     public init(...) throws   // ProgramValidationError.tooFewWeeks, .nonContiguousWeeks, .danglingSchedule
@@ -165,8 +165,10 @@ public enum TimeEstimate {
     /// Decision #14: Σ over slots of (sets + dropSets) × 42 s + rest, where a superset block counts one rest per round (max of members). Rounded to whole minutes.
     public static func minutes(day: DayTemplate, prescriptions: [SlotID: Prescription]) -> Int
 }
+/// ADR-007: a calendar day, no time or zone; Codable "YYYY-MM-DD".
+public struct CivilDate: Hashable, Comparable, Codable, Sendable { public let year: Int; public let month: Int; public let day: Int }
 public struct WeekCalendar: Sendable {
-    public init(startDate: Date, weekStart: Weekday, calendar: Calendar)
+    public init(startDate: CivilDate, weekStart: Weekday, calendar: Calendar)   // every boundary = startOfDay of its civil day (ADR-007)
     public func weekIndex(for date: Date) -> Int                   // may exceed program.weeks.count − 1 → block ended
     public func bounds(ofWeek index: Int) -> Range<Date>
     public func weekday(of date: Date) -> Weekday
@@ -215,7 +217,7 @@ public protocol CompanionTransport: Sendable { /* shape only; full contract in F
 ```
 
 ## Acceptance criteria
-1. Given `Weight.pounds(185)`, when converted, then `grams == 83915` and `formatted(in: .lb) == "185"`, `.kg` → `"83.9"`.
+1. Given `Weight.pounds(185)`, when converted, then `grams == 83914.58845` exactly (ADR-007; was `83915` before exact weights) and `formatted(in: .lb) == "185"`, `.kg` → `"83.9"`.
 2. Given `Weight.pounds(242.25).rounded(toStep: .pounds(5))`, then result is 240 lb; `.pounds(242.5)` → 245 lb (away from zero on ties).
 3. Given the Incline DB slot (reps 10, repsHi 12, step 2.5 lb, start 50 lb, double), when prescribed for weeks 0…3 with no misses, then loads/reps are 50×10, 50×11, 50×12, 52.5×10.
 4. Given Back Squat (start 250 lb, step 5, linear) at week index 7 with no misses and `isDeload == true`, then load = 240 lb, sets = 4 (from 5), rpe = 6 (from 8).
@@ -226,7 +228,7 @@ public protocol CompanionTransport: Sendable { /* shape only; full contract in F
 9. Given a day of 5 straight slots (5×5 rest 150; 3×10 rest 90; 4×8 rest 90; 3×12 rest 75; 3×15 rest 60), then `TimeEstimate.minutes` is the spec value computed by the formula (state it in the test) and a superset of two 3-set slots with rest 90/60 counts 3 rests of 90 s.
 10. Given a `WeekCalendar(startDate: 2026-08-17 (Mon), weekStart: .monday)`, then 2026-08-19 → week 0, Wednesday; 2026-09-14 → week 4; `previousCompleteWeek(before: 2026-09-16)` is Sep 7–14.
 11. Given a workout where set 2 of a 5-set working slot was logged with 4 reps (target 5), then `MissTracking.update` inserts the week; given the same with `isDeload`, the slot is unchanged; a missed drop set alone does not insert.
-12. Given a finished workout with a 200 lb × 5 bench when best e1RM was 219 lb, then `PersonalRecords.detect` returns `.estimatedOneRepMax` (200×5 → 225 lb) and `.weightAtReps` if 200 lb at ≥ 5 reps is a new best.
+12. Given a finished workout with a 200 lb × 5 bench when best e1RM was 219 lb, then `PersonalRecords.detect` returns `.estimatedOneRepMax` (200×5 → 102,058 g, the estimate rounded to the gram, presented as 225 lb) and `.weightAtReps` if 200 lb at ≥ 5 reps is a new best.
 13. Given any invalid range (sets 13, reps 0, repsHi ≤ reps, rpe 4.75, rest 100), when constructing a `Slot`, then the matching `SlotValidationError` case is thrown.
 14. Given the module, when `swift build` runs, then `LedgerDomain` has no imports other than Foundation (asserted by `scripts/check-package-graph.sh` plus a grep test).
 
@@ -236,7 +238,7 @@ public protocol CompanionTransport: Sendable { /* shape only; full contract in F
 - Snapshot / UI: none.
 
 ## Non-functional
-- Every type `Sendable`; no classes. `Decimal` for unit math, `Int` grams storage.
+- Every type `Sendable`; no classes. `Decimal` for unit math and exact `Decimal` grams storage (ADR-007; was `Int` grams).
 - No `Date()` / `UUID()` calls inside rules; all inputs explicit.
 
 ## Risks / unknowns
