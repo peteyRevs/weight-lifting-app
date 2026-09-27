@@ -28,7 +28,7 @@ struct ExerciseTests {
     }
 
     @Test("An exercise round-trips through JSON")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         var exercise = Fixtures.bench
         exercise.secondaryMuscles = [.triceps, .shoulders]
         exercise.curatedAlternatives = [Fixtures.inclineDB.id]

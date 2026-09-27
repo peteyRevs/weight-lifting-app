@@ -27,7 +27,7 @@ A CloudKit-shaped SQLite schema on both platforms, GRDB implementations of every
 
 ## Domain changes
 No Domain type changes. Schema (v001, all `TEXT` ids are UUID strings; `_at` columns are ISO-8601 UTC `TEXT`; `deleted_at` nullable):
-> **ADR-007:** weights are exact (`Weight.grams: Decimal`) and `Program.startDate` is a `CivilDate`. Store weight and volume columns as integer counts of 10⁻⁷ g (exact for every hundredth of a pound), store `start_date` as `"YYYY-MM-DD"`, and choose an overflow-safe volume aggregate. See `docs/adr/ADR-007-exact-weights-and-civil-program-start.md`; column naming below is F05's to revise.
+> **ADR-007:** weights are exact (`Weight.grams: Decimal`) and `Program.startDate` is a `CivilDate`. Store weight and volume columns as integer counts of 10⁻⁷ g (exact for every hundredth of a pound), store `start_date` as `"YYYY-MM-DD"`, and choose an overflow-safe volume aggregate. See `docs/adr/ADR-007-exact-weights-and-civil-program-start.md`; column naming below is F05's to revise. Re-validate `Slot` / `Program` through their `init`s before writing, so a direct `var` mutation that broke a range fails at save time rather than on the next load (F02 review N2).
 
 ```sql
 CREATE TABLE exercise (id TEXT PRIMARY KEY, name TEXT NOT NULL, short_name TEXT NOT NULL, equipment TEXT NOT NULL,

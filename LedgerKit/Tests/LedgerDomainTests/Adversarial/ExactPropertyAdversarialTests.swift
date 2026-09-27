@@ -14,10 +14,10 @@ struct ExactPropertyAdversarialTests {
     }
 
     static func randomCivil(using generator: inout SeededGenerator) throws -> CivilDate {
-        try #require(CivilDate(year: 1600, month: 1, day: 1)).adding(days: Int.random(
+        try #require(CivilDate(year: 1600, month: 1, day: 1)?.adding(days: Int.random(
             in: 0 ... 292_000,
             using: &generator
-        ))
+        )))
     }
 }
 
@@ -126,7 +126,7 @@ extension ExactPropertyAdversarialTests {
         )
         #expect(CivilDate(midnight, in: Self.utcGregorian) == date)
         let step = Int.random(in: -5000 ... 5000, using: &generator)
-        let moved = date.adding(days: step)
+        let moved = try #require(date.adding(days: step))
         let foundation = try #require(Self.utcGregorian.date(byAdding: .day, value: step, to: midnight))
         #expect(moved == CivilDate(foundation, in: Self.utcGregorian), "\(date) + \(step)")
         #expect(moved.days(since: date) == step)

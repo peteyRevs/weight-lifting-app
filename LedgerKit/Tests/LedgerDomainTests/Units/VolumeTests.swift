@@ -48,7 +48,7 @@ struct VolumeTests {
     }
 
     @Test("Volume encodes as gram·reps and decodes back")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         let volume = Volume(gramReps: 419_575)
         let data = try JSONEncoder().encode(volume)
         #expect(try Fixtures.json(volume) == #"{"gramReps":"419575"}"#)

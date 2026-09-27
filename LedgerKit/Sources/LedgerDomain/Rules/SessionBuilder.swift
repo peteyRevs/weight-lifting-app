@@ -2,7 +2,8 @@ import Foundation
 
 /// Builds the live workout for a program day (spec §7.3, rules 14–17).
 public enum SessionBuilder {
-    /// Spec §7.3: one `WorkoutExercise` per slot, in slot order. Each gets `p.sets` rows
+    /// Spec §7.3: one `WorkoutExercise` per slot of `program`'s copy of `day` (found by `day.id`; a
+    /// day the program does not hold throws `.dayNotInProgram`), in slot order. Each gets `p.sets` rows
     /// `{w: p.load, r: p.reps, kind: .working}` from `ProgressionRules.prescribe` (rule 14); a slot
     /// with a drop set appends `{w: (p.load × 0.85).rounded(toStep: p.step), r: p.reps, kind: .drop}`
     /// (rule 15). Rest, step, RPE, equipment, superset flag and targets are copied so later
@@ -26,11 +27,13 @@ public enum SessionBuilder {
         guard let week = program.week(at: weekIndex) else {
             throw .weekOutOfRange(weekIndex)
         }
-        guard program.days.contains(where: { $0.id == day.id }) else {
+        // Build from the program's own copy of the day, never a caller's possibly stale copy, so the
+        // session's slots match what MissTracking and materialize(slotUpdates:) write back to.
+        guard let programDay = program.days.first(where: { $0.id == day.id }) else {
             throw .dayNotInProgram(day.id)
         }
         var built: [WorkoutExercise] = []
-        for (index, slot) in day.slots.enumerated() {
+        for (index, slot) in programDay.slots.enumerated() {
             guard let exercise = exercises[slot.exerciseID] else {
                 throw .unknownExercise(slot.exerciseID)
             }
@@ -51,9 +54,9 @@ public enum SessionBuilder {
         }
         return WorkoutState(
             id: id,
-            source: WorkoutSource(programID: program.id, weekIndex: weekIndex, dayTemplateID: day.id),
-            name: day.name,
-            tag: day.tag,
+            source: WorkoutSource(programID: program.id, weekIndex: weekIndex, dayTemplateID: programDay.id),
+            name: programDay.name,
+            tag: programDay.tag,
             isDeload: week.isDeload,
             exercises: built,
             cursor: built.isEmpty ? nil : Cursor(exerciseIndex: 0, setIndex: 0),

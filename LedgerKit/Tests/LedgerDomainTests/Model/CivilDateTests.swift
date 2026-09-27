@@ -61,6 +61,28 @@ struct CivilDateTests {
         #expect(CivilDate(iso8601: "+026-08-17") == nil)
     }
 
+    @Test("Day arithmetic and instants never leave 0001-01-01 … 9999-12-31 (review S1)")
+    func edges_returnNilOutsideRange() throws {
+        let first = try #require(CivilDate(year: 1, month: 1, day: 1))
+        let last = try #require(CivilDate(year: 9999, month: 12, day: 31))
+        #expect(last.adding(days: 1) == nil)
+        #expect(first.adding(days: -1) == nil)
+        #expect(first.adding(days: -400) == nil)
+        #expect(last.adding(days: Int.max) == nil)
+        #expect(first.adding(days: Int.min) == nil)
+        #expect(last.adding(days: -1) == CivilDate(year: 9999, month: 12, day: 30))
+        #expect(first.adding(days: 0) == first)
+        #expect(first.adding(days: last.days(since: first)) == last)
+        var losAngeles = Calendar(identifier: .gregorian)
+        losAngeles.timeZone = try Fixtures.zone("America/Los_Angeles")
+        #expect(CivilDate(Date(timeIntervalSince1970: 1e12), in: Fixtures.calendar) == nil)
+        #expect(CivilDate(Date.distantPast, in: losAngeles) == nil)
+        #expect(CivilDate(Date.distantFuture, in: Fixtures.calendar) == CivilDate(year: 4001, month: 1, day: 1))
+        for edge in [first, last] {
+            #expect(try JSONDecoder().decode(CivilDate.self, from: JSONEncoder().encode(edge)) == edge)
+        }
+    }
+
     @Test("An instant maps to the day of the calendar's time zone")
     func init_fromInstant_usesZone() throws {
         let instant = Fixtures.date(2026, 8, 17, hour: 5)
@@ -97,7 +119,7 @@ struct CivilDateTests {
         var generator = seed.generator
         let offset = Int
             .random(in: -141_000 ... 2_900_000, using: &generator) // 1584 … 9909; Foundation is Julian before 1582
-        let date = Fixtures.civil(1970, 1, 1).adding(days: offset)
+        let date = try #require(Fixtures.civil(1970, 1, 1).adding(days: offset))
         let instant = Date(timeIntervalSince1970: Double(offset) * 86400 + 43200)
         #expect(date == CivilDate(instant, in: Fixtures.calendar), "\(offset)")
         #expect(date.daysSinceEpoch == offset)

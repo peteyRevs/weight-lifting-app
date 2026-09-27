@@ -17,7 +17,7 @@ struct SettingsTests {
     }
 
     @Test("Settings round-trip through JSON with unit-keyed inventories")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         var settings = Settings.default
         settings.units = .kg
         settings.weekStart = .sunday

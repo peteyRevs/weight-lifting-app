@@ -27,7 +27,7 @@ struct RepsRPERestTests {
     }
 
     @Test("Reps must be at least 1; clamping lifts lower values to 1 (rule 2)")
-    func reps_bounds() {
+    func reps_belowOne_isRejectedOrClampedToOne() {
         #expect(Reps(0) == nil)
         #expect(Reps(-3) == nil)
         #expect(Reps(1)?.value == 1)

@@ -56,6 +56,6 @@ public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(DecimalText.encode(gramReps), forKey: .gramReps)
+        try DecimalText.encode(gramReps, into: &container, forKey: .gramReps)
     }
 }

@@ -9,7 +9,8 @@ import Foundation
 /// Brzycki estimate (decision #4). Equality, hashing and ordering are numeric (1 g == 1.00 g).
 ///
 /// Encodes as `{"grams": "83914.58845"}`: the exact decimal text, so no JSON consumer can
-/// degrade it through `Double`. Persistence stores whole 10⁻⁷ g (ADR-007).
+/// degrade it through `Double` (a NaN weight throws on encode). Persistence stores whole
+/// 10⁻⁷ g (ADR-007).
 public struct Weight: Hashable, Codable, Sendable, Comparable, AdditiveArithmetic {
     public let grams: Decimal
 
@@ -95,13 +96,16 @@ public extension Weight {
     /// A value that is a whole number of quarter units (every plate and step value: 1.25, 2.5,
     /// 52.5 …) prints exactly with trailing zeros dropped; anything else (usually a converted
     /// value such as 185 lb in kg = 83.91458845) prints to one decimal. '.' is always the decimal point.
+    ///
+    /// Rendered from the `Decimal` digits (never through `Int`), so any magnitude prints correctly.
     func formatted(in units: Units) -> String {
         let value = value(in: units)
-        let hundredths = (value * 100).roundedToInt()
-        if hundredths % 25 == 0 {
-            return NumberText.fixed(hundredths, fractionDigits: 2)
+        let hundredths = value.rounded(scale: 2, .toNearestOrAwayFromZero)
+        let quarters = hundredths * 4
+        if quarters.rounded(scale: 0, .toNearestOrAwayFromZero) == quarters {
+            return DecimalText.encode(hundredths)
         }
-        return NumberText.fixed((value * 10).roundedToInt(), fractionDigits: 1)
+        return DecimalText.encode(value.rounded(scale: 1, .toNearestOrAwayFromZero))
     }
 
     /// Decision #4 presentation of an estimated 1RM: the value rounded to a whole unit
@@ -125,6 +129,6 @@ public extension Weight {
 
     func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(DecimalText.encode(grams), forKey: .grams)
+        try DecimalText.encode(grams, into: &container, forKey: .grams)
     }
 }

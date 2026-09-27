@@ -53,7 +53,11 @@ enum Fixtures {
 
     /// The civil date `year-month-day` (a Program start, ADR-007).
     static func civil(_ year: Int, _ month: Int, _ day: Int) -> CivilDate {
-        CivilDate(date(year, month, day, hour: 12), in: calendar)
+        guard let civil = CivilDate(year: year, month: month, day: day) else {
+            Issue.record("\(year)-\(month)-\(day) is not a valid fixture date")
+            return .unixEpoch
+        }
+        return civil
     }
 
     /// `value` encoded as JSON text.

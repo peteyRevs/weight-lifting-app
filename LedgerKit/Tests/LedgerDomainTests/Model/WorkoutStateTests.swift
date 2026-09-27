@@ -41,7 +41,7 @@ struct WorkoutStateTests {
     }
 
     @Test("A workout state round-trips through JSON, including its rest timer")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         var state = try sample()
         state.rest = RestTimer(endsAt: Fixtures.now, total: .seconds(90))
         state.source = WorkoutSource(

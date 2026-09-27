@@ -158,7 +158,11 @@ extension WeekCalendarPropertyAdversarialTests {
         )) * 86400)
         let date = start.addingTimeInterval(Double(Int.random(in: -86400 * 60 ... 86400 * 400, using: &generator)))
         let weekStart = Weekday.allCases.randomElement(using: &generator) ?? .monday
-        let weeks = WeekCalendar(startDate: CivilDate(start, in: calendar), weekStart: weekStart, calendar: calendar)
+        let weeks = try WeekCalendar(
+            startDate: #require(CivilDate(start, in: calendar)),
+            weekStart: weekStart,
+            calendar: calendar
+        )
         let days = try Self.dayNumber(date, calendar) - Self.dayNumber(start, calendar)
         let index = Int((Double(days) / 7).rounded(.down))
         let context = "\(zone.identifier) start \(start) date \(date)"
@@ -190,8 +194,8 @@ extension WeekCalendarPropertyAdversarialTests {
             in: 0 ... 86400 * 365 * 40,
             using: &generator
         )))
-        let weeks = WeekCalendar(
-            startDate: CivilDate(date, in: Base.calendar(zone)),
+        let weeks = try WeekCalendar(
+            startDate: #require(CivilDate(date, in: Base.calendar(zone))),
             weekStart: .monday,
             calendar: Base.calendar(zone)
         )

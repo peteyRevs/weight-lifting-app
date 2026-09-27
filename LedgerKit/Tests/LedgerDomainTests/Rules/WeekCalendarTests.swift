@@ -145,6 +145,22 @@ extension WeekCalendarTests {
         #expect(block.bounds(ofWeek: 0).lowerBound == Fixtures.date(2026, 8, 17, in: losAngeles))
     }
 
+    @Test("Absurd week indices and instants clamp at 0001…9999 instead of trapping (review S1)")
+    func edges_neverTrapOrInvert() {
+        for index in [Int.max, Int.min, Int.max / 7, Int.min / 7, 1_000_000, -1_000_000] {
+            let range = block.bounds(ofWeek: index)
+            #expect(range.lowerBound <= range.upperBound, "\(index)")
+        }
+        #expect(block.bounds(ofWeek: Int.max).isEmpty)
+        #expect(block.bounds(ofWeek: Int.min).isEmpty)
+        let farFuture = Date(timeIntervalSince1970: 1e12)
+        #expect(block.firstDayOfWeek(containing: farFuture) == nil)
+        #expect(block.civilDate(of: farFuture) == nil)
+        #expect(block.week(containing: farFuture).isEmpty)
+        #expect(block.weekIndex(for: farFuture) > 1_000_000)
+        #expect(block.firstDayOfWeek(containing: Fixtures.date(2026, 8, 19)) == Fixtures.civil(2026, 8, 17))
+    }
+
     @Test("With a Monday start the week key is the ISO 8601 week")
     func isoWeekKey_mondayIsISO8601() {
         #expect(block.isoWeekKey(for: Fixtures.date(2026, 1, 1)) == WeekKey(year: 2026, week: 1))

@@ -76,7 +76,8 @@ struct SessionBuilderTests {
         upperA.slots[4].sets = 5
         #expect(state.exercises[4].rest.seconds == 60)
         #expect(state.exercises[4].sets.count == 3)
-        #expect(try build(program, week: 0, day: upperA).exercises[4].sets.count == 5)
+        let editedProgram = try Fixtures.program(days: [upperA])
+        #expect(try build(editedProgram, week: 0, day: upperA).exercises[4].sets.count == 5)
     }
 
     @Test("Last performance comes from history and is nil on a first session")
@@ -122,7 +123,7 @@ struct SessionBuilderTests {
     }
 
     @Test("Kilogram settings prescribe in kilograms")
-    func build_kilograms() throws {
+    func build_kilogramSettings_prescribesKilogramLoads() throws {
         let upperA = try Fixtures.upperA()
         var settings = Settings.default
         settings.units = .kg
@@ -153,5 +154,32 @@ struct SessionBuilderTests {
         #expect(throws: SessionBuilderError.unknownExercise(ExerciseID(Fixtures.uuid(999)))) {
             try build(withStranger, week: 0, day: stranger)
         }
+    }
+}
+
+// MARK: - Program day resolution (review S3)
+
+extension SessionBuilderTests {
+    @Test("The session is built from the program's copy of the day, not a stale caller copy (review S3)")
+    func build_staleDayCopy_usesProgramsDay() throws {
+        let upperA = try Fixtures.upperA()
+        let program = try Fixtures.program(days: [upperA])
+        var stale = upperA
+        stale.slots[4].sets = 5
+        stale.slots.removeFirst()
+        let state = try build(program, week: 0, day: stale)
+        #expect(state.exercises.map(\.slotID) == upperA.slots.map(\.id))
+        #expect(state.exercises[4].sets.count == 3)
+        #expect(state.name == upperA.name)
+    }
+
+    @Test("A day the program does not hold throws dayNotInProgram (review S3)")
+    func build_dayNotInProgram_throws() throws {
+        let upperA = try Fixtures.upperA()
+        var program = try Fixtures.program(days: [upperA])
+        let foreign = DayTemplate(id: DayTemplateID(Fixtures.uuid(501)), name: "Elsewhere", tag: "EL")
+        #expect(throws: SessionBuilderError.dayNotInProgram(foreign.id)) { try build(program, week: 0, day: foreign) }
+        program.days = []
+        #expect(throws: SessionBuilderError.dayNotInProgram(upperA.id)) { try build(program, week: 0, day: upperA) }
     }
 }

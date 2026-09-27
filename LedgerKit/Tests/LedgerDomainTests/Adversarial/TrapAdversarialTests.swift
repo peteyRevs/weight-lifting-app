@@ -29,7 +29,9 @@ import Testing
             await #expect(processExitsWith: .success) {
                 var calendar = Calendar(identifier: .gregorian)
                 calendar.timeZone = Fixtures.utc
-                let start = CivilDate(Fixtures.date(2026, 8, 17), in: calendar)
+                guard let start = CivilDate(Fixtures.date(2026, 8, 17), in: calendar) else {
+                    exit(1)
+                }
                 let weeks = WeekCalendar(startDate: start, weekStart: .monday, calendar: calendar)
                 let skipped = weeks.skippedWeeks(before: Fixtures.date(2026, 8, 1), trainedWeeks: [], weekCount: 8)
                 if !skipped.isEmpty {

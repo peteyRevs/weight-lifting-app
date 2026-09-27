@@ -118,11 +118,11 @@ extension TravelPropertyAdversarialTests {
         let zones = WeekCalendarTravelAdversarialTests.zones
         let first = zones.randomElement(using: &generator) ?? "UTC"
         let second = zones.randomElement(using: &generator) ?? "UTC"
-        let start = try #require(CivilDate(year: 2000, month: 1, day: 1)).adding(days: Int.random(
+        let start = try #require(CivilDate(year: 2000, month: 1, day: 1)?.adding(days: Int.random(
             in: 0 ... 14000,
             using: &generator
-        ))
-        let local = start.adding(days: Int.random(in: -60 ... 400, using: &generator))
+        )))
+        let local = try #require(start.adding(days: Int.random(in: -60 ... 400, using: &generator)))
         let hour = Int.random(in: 0 ... 23, using: &generator)
         let minute = Int.random(in: 0 ... 59, using: &generator)
         let weekStart = Weekday.allCases.randomElement(using: &generator) ?? .monday
@@ -140,8 +140,9 @@ extension TravelPropertyAdversarialTests {
             let index = weeks.weekIndex(for: instant)
             #expect(index == Int((Double(local.days(since: start)) / 7).rounded(.down)), "\(identifier)")
             #expect(weeks.bounds(ofWeek: index).contains(instant), "\(identifier) \(local) \(hour):\(minute)")
-            #expect(weeks.firstDayOfWeek(containing: instant).weekday == weekStart)
-            results.append("\(index) \(weeks.weekday(of: instant)) \(weeks.firstDayOfWeek(containing: instant))")
+            #expect(weeks.firstDayOfWeek(containing: instant)?.weekday == weekStart)
+            let firstDay = String(describing: weeks.firstDayOfWeek(containing: instant))
+            results.append("\(index) \(weeks.weekday(of: instant)) \(firstDay)")
         }
         #expect(results[0] == results[1], "\(first) vs \(second) at \(local) \(hour):\(minute)")
     }
@@ -152,18 +153,18 @@ extension TravelPropertyAdversarialTests {
         let zones = WeekCalendarTravelAdversarialTests.zones + ["Asia/Beirut", "America/Asuncion", "Asia/Tehran"]
         let zone = try Fixtures.zone(zones.randomElement(using: &generator) ?? "UTC")
         let calendar = WeekCalendarAdversarialTests.calendar(zone)
-        let start = try #require(CivilDate(year: 2005, month: 1, day: 1)).adding(days: Int.random(
+        let start = try #require(CivilDate(year: 2005, month: 1, day: 1)?.adding(days: Int.random(
             in: 0 ... 9000,
             using: &generator
-        ))
+        )))
         let weeks = WeekCalendar(startDate: start, weekStart: .monday, calendar: calendar)
         let index = Int.random(in: -10 ... 60, using: &generator)
         let bounds = weeks.bounds(ofWeek: index)
         #expect(
-            bounds.lowerBound == start.adding(days: 7 * index).startOfDay(in: calendar),
+            try bounds.lowerBound == #require(start.adding(days: 7 * index)).startOfDay(in: calendar),
             "\(zone.identifier) \(start)"
         )
-        #expect(bounds.upperBound == start.adding(days: 7 * index + 7).startOfDay(in: calendar))
+        #expect(try bounds.upperBound == #require(start.adding(days: 7 * index + 7)).startOfDay(in: calendar))
         #expect(CivilDate(bounds.lowerBound, in: calendar) == start.adding(days: 7 * index))
         #expect(CivilDate(bounds.upperBound.addingTimeInterval(-1), in: calendar) == start.adding(days: 7 * index + 6))
     }

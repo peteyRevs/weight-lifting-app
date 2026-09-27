@@ -63,7 +63,7 @@ struct ProgramTests {
     }
 
     @Test("The seed program is valid and round-trips through JSON")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         let program = try Fixtures.program(days: [Fixtures.upperA(), Fixtures.upperB()])
         let data = try JSONEncoder().encode(program)
         #expect(try JSONDecoder().decode(Program.self, from: data) == program)

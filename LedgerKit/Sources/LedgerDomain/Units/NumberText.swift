@@ -83,6 +83,21 @@ enum DecimalText {
         value.description
     }
 
+    /// Encodes `value` as exact text; a NaN has no exact text and throws `EncodingError.invalidValue`.
+    static func encode<Key: CodingKey>(
+        _ value: Decimal,
+        into container: inout KeyedEncodingContainer<Key>,
+        forKey key: Key
+    ) throws {
+        guard value.isFinite else {
+            throw EncodingError.invalidValue(value, EncodingError.Context(
+                codingPath: container.codingPath + [key],
+                debugDescription: "A non-finite decimal has no exact text"
+            ))
+        }
+        try container.encode(encode(value), forKey: key)
+    }
+
     static func decode<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>, forKey key: Key) throws -> Decimal {
         let text = try container.decode(String.self, forKey: key)
         guard let value = parse(text) else {
@@ -95,14 +110,35 @@ enum DecimalText {
         return value
     }
 
-    /// `text` as a `Decimal` when it is an optional '-', digits, and an optional '.' plus digits.
+    /// `text` as a `Decimal` when it is an optional '-', digits, and an optional '.' plus digits,
+    /// and `Decimal` holds it exactly (at most 38 significant digits): anything that would not
+    /// read back digit for digit is rejected rather than silently truncated.
     static func parse(_ text: String) -> Decimal? {
         let unsigned = text.hasPrefix("-") ? text.dropFirst() : Substring(text)
         let parts = unsigned.split(separator: ".", omittingEmptySubsequences: false)
         let isDigits = { (part: Substring) in !part.isEmpty && part.allSatisfy { ("0" ... "9").contains($0) } }
-        guard (1 ... 2).contains(parts.count), parts.allSatisfy(isDigits) else {
+        guard (1 ... 2).contains(parts.count), parts.allSatisfy(isDigits),
+              let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")),
+              canonical(text) == canonical(value.description)
+        else {
             return nil
         }
-        return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+        return value
+    }
+
+    /// `text` without leading integer zeros or trailing fraction zeros ("-007.50" → "-7.5", "-0" → "0").
+    private static func canonical(_ text: String) -> String {
+        let isNegative = text.hasPrefix("-")
+        let parts = (isNegative ? text.dropFirst() : Substring(text)).split(
+            separator: ".",
+            omittingEmptySubsequences: false
+        )
+        let whole = parts.first?.drop { $0 == "0" } ?? ""
+        var fraction = parts.count > 1 ? parts[1] : ""
+        while fraction.hasSuffix("0") {
+            fraction.removeLast()
+        }
+        let digits = (whole.isEmpty ? "0" : String(whole)) + (fraction.isEmpty ? "" : "." + fraction)
+        return isNegative && digits != "0" ? "-" + digits : digits
     }
 }

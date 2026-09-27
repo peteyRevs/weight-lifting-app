@@ -5,8 +5,7 @@ import Foundation
 /// `CodingKeyRepresentable` makes `[Units: Weight]` encode as a JSON object (`{"lb": …}`)
 /// rather than a flat key/value array.
 public enum Units: String, Codable, Sendable, CaseIterable, CodingKeyRepresentable {
-    // swiftlint:disable:next identifier_name - unit symbols named by the F02 brief; renaming breaks `.lb` call sites
-    case lb, kg
+    case lb, kg // allowed by `identifier_name.excluded` in .swiftlint.yml (unit symbols)
 }
 
 extension Units {

@@ -15,7 +15,7 @@ struct WeekKeyTests {
     }
 
     @Test("A week key round-trips through JSON")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         let key = WeekKey(year: 2026, week: 38)
         #expect(try JSONDecoder().decode(WeekKey.self, from: JSONEncoder().encode(key)) == key)
     }

@@ -156,6 +156,24 @@ extension WeightTests {
         }
     }
 
+    @Test("Text that Decimal cannot hold exactly is rejected, and a NaN weight cannot encode (review N3, N4)")
+    func codable_rejectsInexactTextAndNaN() throws {
+        let tooLong = #"{"grams":"1234567890123456789012345678901234567890.5"}"#
+        #expect(throws: DecodingError.self) { try JSONDecoder().decode(Weight.self, from: Data(tooLong.utf8)) }
+        let padded = try JSONDecoder().decode(Weight.self, from: Data(#"{"grams":"-007.500"}"#.utf8))
+        #expect(padded == Weight(grams: dec("-7.5")))
+        #expect(throws: EncodingError.self) { try JSONEncoder().encode(Weight(grams: .nan)) }
+        #expect(throws: EncodingError.self) { try JSONEncoder().encode(Volume(gramReps: .nan)) }
+    }
+
+    @Test("Formatting renders Decimal digits, so huge weights print correctly (review N4)")
+    func formatted_hugeValues_printDigits() {
+        #expect(Weight.pounds(dec("1000000000000000000")).formatted(in: .lb) == "1000000000000000000")
+        #expect(Weight.pounds(dec("-12345678901234567890.25")).formatted(in: .lb) == "-12345678901234567890.25")
+        #expect(Weight.kilograms(dec("0.04")).formatted(in: .kg) == "0")
+        #expect(Weight.kilograms(dec("-0.04")).formatted(in: .kg) == "0")
+    }
+
     @Test("Bugs A and C: exact multiples and exact ties no longer depend on unit inference or gram noise")
     func roundedToStep_exactTiesAndMultiples() {
         // 33 = 3 × 11 kg is already a multiple (bug A); 212.5 × 0.85 = 180.625 lb = 144.5 × 1.25 lb (bug C).
@@ -252,7 +270,13 @@ extension WeightTests {
                 .kilograms(62.5),
                 "61.25 kg tie → 62.5 kg"
             ),
-            RoundingRow(.kilograms(61.2), .kilograms(2.5), .toNearestOrAwayFromZero, .kilograms(60), "61.2 kg → 60 kg"),
+            RoundingRow(
+                .kilograms(dec("61.2")),
+                .kilograms(2.5),
+                .toNearestOrAwayFromZero,
+                .kilograms(60),
+                "61.2 kg → 60 kg"
+            ),
             RoundingRow(
                 .pounds(185),
                 .kilograms(1.25),

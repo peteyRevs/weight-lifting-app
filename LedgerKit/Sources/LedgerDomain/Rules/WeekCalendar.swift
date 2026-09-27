@@ -21,8 +21,8 @@ public struct WeekKey: Hashable, Comparable, Codable, Sendable {
 /// Program weeks count whole calendar days from the civil `startDate` (week 0 = its first 7 days).
 /// Stats weeks (`week(containing:)`, `previousCompleteWeek`, `isoWeekKey`) start on `weekStart`.
 /// Every date is first mapped to the civil day it falls on in the calendar's time zone; day
-/// arithmetic is then pure `CivilDate` arithmetic, and every boundary is the start of its own
-/// civil day (`CivilDate.startOfDay(in:)`), never an earlier instant plus n days. So DST weeks are
+/// arithmetic is then pure integer day-number arithmetic, and every boundary is the start of its
+/// own civil day (`CivilDate.startOfDay`), never an earlier instant plus n days. So DST weeks are
 /// 7 days of 167 or 169 hours, and a day whose midnight is skipped starts its week at 01:00
 /// without moving any other boundary. The calendar is always Gregorian; the passed calendar
 /// contributes its time zone only (its `firstWeekday` is replaced by `weekStart`, decision #15's
@@ -43,44 +43,50 @@ public struct WeekCalendar: Sendable {
         self.startDate = startDate
     }
 
-    /// The civil day `date` falls on in this calendar's time zone.
-    public func civilDate(of date: Date) -> CivilDate {
+    /// The civil day `date` falls on in this calendar's time zone, or `nil` outside 0001…9999.
+    public func civilDate(of date: Date) -> CivilDate? {
         CivilDate(date, in: calendar)
     }
 
     /// Decision #18: whole weeks from `startDate` to the day of `date` (floored, so dates before
     /// the block are negative). A result ≥ `program.weeks.count` means the block has ended.
     public func weekIndex(for date: Date) -> Int {
-        let days = civilDate(of: date).days(since: startDate)
+        let days = dayNumber(of: date) - startDate.daysSinceEpoch
         return days >= 0 ? days / 7 : -((6 - days) / 7)
     }
 
     /// Decision #18: program week `index` as `[start of its first day, start of the next week's first day)`.
+    /// Days before 0001-01-01 or after 9999-12-31 (and indices that overflow `Int`) are clamped to
+    /// those edges, so an absurd index yields an empty range there instead of trapping.
     public func bounds(ofWeek index: Int) -> Range<Date> {
-        range(from: startDate.adding(days: 7 * index))
+        let (offset, multiplyOverflow) = index.multipliedReportingOverflow(by: 7)
+        let (first, addOverflow) = startDate.daysSinceEpoch.addingReportingOverflow(offset)
+        guard !multiplyOverflow, !addOverflow else {
+            return range(fromDay: index < 0 ? Int.min : Int.max)
+        }
+        return range(fromDay: first)
     }
 
     /// Spec §6.1 `sched[7]`: the ISO weekday of `date` in the calendar's time zone.
     public func weekday(of date: Date) -> Weekday {
-        civilDate(of: date).weekday
+        CivilDate.weekday(ofDayNumber: dayNumber(of: date))
     }
 
-    /// Decision #15: the first day (on `weekStart`) of the stats week containing `date`. F08 uses
-    /// this as a new program's `startDate` (decision #18).
-    public func firstDayOfWeek(containing date: Date) -> CivilDate {
-        let day = civilDate(of: date)
-        return day.adding(days: -((day.weekday.rawValue - weekStart.rawValue + 7) % 7))
+    /// Decision #15: the first day (on `weekStart`) of the stats week containing `date`, or `nil`
+    /// when that day is outside 0001…9999. F08 uses this as a new program's `startDate` (decision #18).
+    public func firstDayOfWeek(containing date: Date) -> CivilDate? {
+        CivilDate(daysSinceEpoch: firstDayNumber(ofWeekContaining: date))
     }
 
     /// Decision #15: the stats week containing `date`, starting on `weekStart`.
     public func week(containing date: Date) -> Range<Date> {
-        range(from: firstDayOfWeek(containing: date))
+        range(fromDay: firstDayNumber(ofWeekContaining: date))
     }
 
     /// Decision #15: the last full stats week before the one containing `date`
     /// ("lb moved" delta baseline). 2026-09-16 with a Monday start → Sep 7 ..< Sep 14.
     public func previousCompleteWeek(before date: Date) -> Range<Date> {
-        range(from: firstDayOfWeek(containing: date).adding(days: -7))
+        range(fromDay: firstDayNumber(ofWeekContaining: date) - 7)
     }
 
     /// Decision #4 chart key: week-based year and week number, weeks starting on `weekStart`
@@ -90,9 +96,26 @@ public struct WeekCalendar: Sendable {
         return WeekKey(year: parts.yearForWeekOfYear ?? 0, week: parts.weekOfYear ?? 0)
     }
 
-    /// The seven civil days from `first`, as start-of-day instants.
-    private func range(from first: CivilDate) -> Range<Date> {
-        first.startOfDay(in: calendar) ..< first.adding(days: 7).startOfDay(in: calendar)
+    // Day numbers (days since 1970-01-01) are plain `Int`s here, unbounded by `CivilDate`'s
+    // 0001…9999 range, so the non-optional range API stays total.
+
+    private func dayNumber(of date: Date) -> Int {
+        CivilDate.dayNumber(of: date, in: calendar)
+    }
+
+    private func firstDayNumber(ofWeekContaining date: Date) -> Int {
+        let day = dayNumber(of: date)
+        return day - (CivilDate.weekday(ofDayNumber: day).rawValue - weekStart.rawValue + 7) % 7
+    }
+
+    /// The seven civil days from day number `first`, as start-of-day instants (saturating at the
+    /// clamped edges; `CivilDate.startOfDay(dayNumber:in:)` is monotonic, so the range never inverts).
+    private func range(fromDay first: Int) -> Range<Date> {
+        let last = first > Int.max - 7 ? Int.max : first + 7
+        return CivilDate.startOfDay(dayNumber: first, in: calendar) ..< CivilDate.startOfDay(
+            dayNumber: last,
+            in: calendar
+        )
     }
 }
 

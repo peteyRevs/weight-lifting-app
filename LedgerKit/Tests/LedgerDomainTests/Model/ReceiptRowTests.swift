@@ -51,7 +51,7 @@ struct ReceiptRowTests {
     }
 
     @Test("Chips use the display unit's number format")
-    func actual_kilograms() throws {
+    func actual_kilograms_printsKilogramNumbers() throws {
         let sets = try [LoggedSet(
             id: SetID(Fixtures.uuid(1)),
             weight: .kilograms(62.5),

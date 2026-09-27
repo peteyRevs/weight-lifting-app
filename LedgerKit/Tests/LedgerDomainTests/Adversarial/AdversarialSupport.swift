@@ -43,7 +43,17 @@ func randomMultiple(
 enum Adversarial {
     static let start = Fixtures.date(2026, 8, 17)
     /// `start` as the civil date a `Program` starts on (ADR-007).
-    static let startDay = CivilDate(start, in: Fixtures.calendar)
+    static let startDay = civilDay(start, in: Fixtures.calendar)
+
+    /// The civil day of `date` in `calendar` (S1: `CivilDate(_:in:)` is optional at the 0001…9999
+    /// edges; every fixture instant is well inside them).
+    static func civilDay(_ date: Date, in calendar: Calendar) -> CivilDate {
+        guard let day = CivilDate(date, in: calendar) else {
+            Issue.record("\(date) has no civil day in 0001…9999")
+            return .unixEpoch
+        }
+        return day
+    }
 
     /// A done/undone set row with an explicit kind.
     static func row(

@@ -16,7 +16,8 @@ public enum ProgressionRules {
     ///
     /// `start = slot.startLoad ?? exercise.startLoad(in: units)` and
     /// `step = slot.step ?? exercise.equipment.defaultStep(in: units)` (rule 1, decision #9).
-    /// `weekIndex` drives advancement; `week` supplies only `isDeload`.
+    /// `weekIndex` drives advancement and HELD; `week` supplies only `isDeload`. Pass the block's
+    /// week at `weekIndex` (`week.index == weekIndex`); the pair is not cross-checked.
     public static func prescribe(
         week: Week,
         weekIndex: Int,

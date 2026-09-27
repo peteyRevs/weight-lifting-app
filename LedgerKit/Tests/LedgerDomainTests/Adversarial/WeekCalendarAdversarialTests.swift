@@ -18,7 +18,11 @@ struct WeekCalendarAdversarialTests {
         firstWeekday: Int = 1
     ) -> WeekCalendar {
         let calendar = calendar(zone, firstWeekday: firstWeekday)
-        return WeekCalendar(startDate: CivilDate(start, in: calendar), weekStart: weekStart, calendar: calendar)
+        return WeekCalendar(
+            startDate: Adversarial.civilDay(start, in: calendar),
+            weekStart: weekStart,
+            calendar: calendar
+        )
     }
 
     static func day(

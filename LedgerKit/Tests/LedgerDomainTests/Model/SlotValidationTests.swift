@@ -97,7 +97,7 @@ struct SlotValidationTests {
     }
 
     @Test("A slot round-trips through JSON")
-    func codable_roundTrips() throws {
+    func codable_roundTrip_preservesValue() throws {
         let slot = try Fixtures.slot(
             Fixtures.inclineDB, id: 7, sets: 3, reps: 10, repsHi: 12, rpe: 8.5, rest: 75,
             progression: .double, startLoad: .pounds(50), step: .pounds(2.5), superset: true, misses: [1, 4]

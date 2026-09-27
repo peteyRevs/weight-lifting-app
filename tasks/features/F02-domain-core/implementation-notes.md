@@ -4,6 +4,8 @@ Branch `feat/F02-domain-core` (based on `00a504b`).
 - **Implementer pass:** 2026-09-26 (commit `f30d94e`).
 - **Revision 1:** 2026-09-27. It applies ADR-007 (exact weights and a calendar-date program
   start, decided by Pete) and resolves the adversarial findings; see "Revision 1" below.
+- **Revision 2:** 2026-09-27, on the rebased branch (F00 tip `70b36b5`). It fixes the review's four
+  Should-fix items and the cheap nits; see "Review follow-up" below.
 
 ## What was built
 
@@ -25,15 +27,25 @@ Branch `feat/F02-domain-core` (based on `00a504b`).
 The placeholder `LedgerDomainModule` and its test are deleted. `Resources/exercises.json` was
 not touched.
 
-## Verification (after revision 1)
+## Verification (after revision 2, rebased on F00 `70b36b5`)
 
 | Check | Result |
 |---|---|
-| `scripts/check.sh --fast` (format, strict lint, package graph, `swift test` for Domain + Persistence) | **OK**: 369 tests in 61 suites (367 domain tests in 59 suites, plus F00's 2 persistence tests) |
-| `LEDGER_PROPERTY_SEED_COUNT=2000 swift test --package-path LedgerKit --filter LedgerDomainTests` | **OK**: 367 tests, 59 suites |
-| LedgerDomain line coverage | **98.87 %** (1326 lines, 15 missed) |
+| Full `scripts/check.sh` (format, lint, graph, iOS `PR` plan, watchOS `PR-Watch` plan) | **OK** (233 s) |
+| `xcrun xcresulttool get test-results summary --path .derivedData/Results/PR-iOS.xcresult` | **Passed: 431 tests, 0 failed, 0 skipped**; 9,299 runs on iPhone 17 (26.5), 95 of them parameterized |
+| `… --path .derivedData/Results/PR-watchOS.xcresult` | **Passed: 422 tests, 0 failed, 0 skipped**; 9,290 runs on Apple Watch Series 11 46 mm (26.5) |
+| `scripts/check.sh --fast` | **OK**: 419 tests in 67 suites (417 domain tests in 65 suites, plus 2 persistence tests) |
+| LedgerDomain host line coverage | **98.78 %** (1,398 lines, 17 missed) |
 
-The 367 domain tests are my 158 plus the adversarial tester's 209. Nothing is skipped or disabled.
+**Disk-space incident.**
+- **What happened:** the first full run in this round also exited 0, but xcodebuild logged
+  `No space left on device` while writing the watchOS result bundle. Only about 1.4 GiB was free
+  on the data volume, and `PR-watchOS.xcresult` came out empty (result "unknown", 0 tests).
+- **Recovery:** I deleted my own regenerable `LedgerKit/.build` and reran; the numbers above come
+  from the complete second run.
+- **Gate gap:** `check.sh` passes even when a result bundle is not written. F01's coverage gate
+  (which reads the bundles) should fail on an empty bundle.
+- **Still low:** the disk has about 1.7 GiB free.
 
 Coverage commands, run from the worktree root:
 
@@ -42,10 +54,10 @@ swift test --package-path LedgerKit --filter LedgerDomainTests --enable-code-cov
 BIN=$(swift build --package-path LedgerKit --show-bin-path)
 xcrun llvm-cov report "$BIN/LedgerKitPackageTests.xctest/Contents/MacOS/LedgerKitPackageTests" \
   -instr-profile="$BIN/codecov/default.profdata" LedgerKit/Sources/LedgerDomain
-# TOTAL … Lines 1326, Missed 15, Cover 98.87%
+# TOTAL … Lines 1398, Missed 17, Cover 98.78%
 ```
 
-All 15 missed lines are autoclosures of `??` fallbacks that cannot fire, for example
+All 17 missed lines are autoclosures of `??` fallbacks that cannot fire, for example
 `Weekday(calendarWeekday:) ?? .monday`, `parts.year ?? 1970` on components Foundation always
 returns, or `.max() ?? 0` on a non-empty group. `llvm-cov report -show-functions` lists every one
 as an `…Xefu_` autoclosure.
@@ -173,10 +185,15 @@ None of the test names carry a `test` prefix.
    encoded).
 6. **`WorkoutState.autoRest` was added**, snapshotted from settings. F04's rule 3 reads it.
 7. **`WorkoutEventStore` lives in `Protocols/WorkoutEventStore.swift`**, the file F04 replaces.
-8. **Two inline SwiftLint suppressions**, despite the DoD's "no new lint suppressions". Both are
-   justified inline; the alternative is a `.swiftlint.yml` change outside my Touches.
-   - `identifier_name` on `case lb, kg`: the brief names the cases.
-   - `function_parameter_count` on the brief's 9-parameter `SessionBuilder.build`.
+8. **Lint exceptions (review S4).**
+   - `lb` and `kg` are allowlisted in `.swiftlint.yml` (`identifier_name.excluded`: `^id$`, which
+     is SwiftLint's default, plus `^lb$` and `^kg$`). The orchestrator authorised the edit. The
+     inline suppression is gone.
+   - **DoD waiver:** one inline `function_parameter_count` suppression remains, on the brief's
+     9-parameter `SessionBuilder.build`, with its justification on the line. This conflicts with
+     the DoD's "No new lint suppressions". It is kept because raising the global threshold would
+     loosen every module, and a parameter struct would change the signature F04 and F07 build on
+     (reviewer agreed). Record the waiver in the PR description.
 9. **Tags, fixtures and the seeded RNG live in `LedgerDomainTests/Support/`**, not
    `LedgerTestSupport` (F00 notes #6).
 10. **`Settings.default.weekStart` is `.monday`.** The app seeds it from `Weekday.first(of:)`
@@ -242,6 +259,11 @@ None of the test names carry a `test` prefix.
   F05's storage boundary should reject rather than round them (ADR-007).
 - `CivilDate(_:in:)` uses Foundation's Gregorian calendar, which is Julian before 1582-10-15, so
   instants before that map to Julian days. `CivilDate`'s own arithmetic is proleptic Gregorian.
+- `CivilDate` values are always in 0001-01-01 … 9999-12-31 (review S1).
+  - `adding(days:)`, `init(_:in:)`, `WeekCalendar.civilDate(of:)` and
+    `firstDayOfWeek(containing:)` return `nil` past those edges.
+  - `WeekCalendar`'s non-optional ranges clamp its internal day numbers to those edges instead,
+    so an absurd index gives an empty range at the edge rather than trapping.
 - Model properties are `var` by design (orchestrator decision on spec question 7). `Slot`'s doc
   comment says validation happens only at `init` and decode, so editors must rebuild through
   `init`.
@@ -339,6 +361,68 @@ fixed in code, so their 8 failing tests needed no edits and now pass.
 | `OneRepMaxAdversarialTests.brzycki_oneRepAndZero` | 1 rep of 185 lb `== pounds("185")` → `== Weight(grams: 83915)`, plus `wholeValue == 185` | Same rounding rule applied to a 1-rep estimate |
 | `PersonalRecordsAdversarialTests.detect_criterion12_bothKinds` | `e1RM("200", 5) == pounds("225")` → `== Weight(grams: 102_058)`, plus `wholeValue == 225` | Same as above; the exact-set comparison of both records is unchanged and passes |
 | `VolumeAdversarialTests.volume_ofSet_isGramsTimesReps` | `gramReps == 83915 * 5` → `== 83914.58845 * 5` | `Volume` is exact |
+
+## Review follow-up (revision 2, 2026-09-27)
+
+The review (`review.md`) approved with 0 Blocking. All four Should-fix items are fixed.
+
+- **S1. `CivilDate` stays inside 0001…9999.**
+  - **API:** `adding(days:) -> CivilDate?` returns `nil` past either edge, including `Int`
+    overflow. `init?(_:in:)` returns `nil` for an instant whose day is outside the range. That
+    includes 1 BC, now read correctly through Foundation's era component.
+  - **`WeekCalendar`:** it now works on plain `Int` day numbers internally, so
+    `weekIndex`/`bounds`/`week(containing:)`/`previousCompleteWeek` stay non-optional.
+    - `bounds(ofWeek:)` uses `multipliedReportingOverflow` / `addingReportingOverflow`.
+    - Day numbers are clamped to 0001-01-01 … 9999-12-31 + 7 before becoming instants. That is
+      monotonic, so a range can never invert; an absurd index gives an empty range at the edge.
+  - **Optional returns:** `civilDate(of:)` and `firstDayOfWeek(containing:)` return optionals.
+  - **Tests:** `CivilDateTests.edges_returnNilOutsideRange` (both edges, ±`Int` extremes, 1e12 s,
+    `distantPast` in Los Angeles, edge values round-tripping JSON) and
+    `WeekCalendarTests.edges_neverTrapOrInvert`.
+- **S2.** The `OneRepMax.brzycki` doc now says the result is rounded to the nearest gram, and that
+  one rep returns the weight rounded to the gram (185 lb → 83,915 g). Behaviour is unchanged.
+- **S3.** `SessionBuilder.build` resolves the day from `program.days` by `day.id` and builds from
+  the program's copy. A day the program does not hold throws `.dayNotInProgram`. Tests:
+  - `build_snapshotsSlotFieldsSoTemplateEditsDoNotLeak` now rebuilds the program with the edited
+    day.
+  - New `build_staleDayCopy_usesProgramsDay` and `build_dayNotInProgram_throws`.
+- **S4.** `lb` and `kg` are allowlisted in `.swiftlint.yml` and the inline suppression is removed.
+  `function_parameter_count` stays inline with a DoD waiver (deviation 8).
+
+**Nits fixed**
+
+| Nit | Fix |
+|---|---|
+| N1 | The `prescribe` doc states that `week.index == weekIndex` is the caller's responsibility |
+| N2 | One line in the F05 brief (next to the ADR-007 pointer): re-validate `Slot`/`Program` through `init` before writing |
+| N3 | `DecimalText.parse` rejects any text `Decimal` would not read back digit for digit (> 38 significant digits); padded forms such as `"-007.500"` still decode. Test: `WeightTests.codable_rejectsInexactTextAndNaN` |
+| N4 | Encoding a NaN `Weight`/`Volume` throws `EncodingError.invalidValue`. `Weight.formatted` renders from `Decimal` digits, not `Int`, so 10¹⁸ lb prints correctly. Test: `formatted_hugeValues_printDigits` |
+| N7 (part) | `CivilDate.daysSinceEpoch` is internal (`days(since:)` covers callers) |
+| N8 (part) | `.kilograms(61.2)` → `.kilograms(dec("61.2"))`; the unspecific test names were renamed (`reps_belowOne_isRejectedOrClampedToOne`, `build_kilogramSettings_prescribesKilogramLoads`, `actual_kilograms_printsKilogramNumbers`, `codable_roundTrip_preservesValue`) |
+
+**Nits left**
+
+| Nit | Why it is left |
+|---|---|
+| N5 | `LastPerformance.line` would gain a `nil` path through the now-optional `CivilDate(_:in:)` for a non-optional string. It already does a single Gregorian component read in the calendar's zone. |
+| N6 | `PlateMath`'s re-filter guards `public var plates` (the brief's shape). `isLastOfRound` is O(rows²) on handfuls of rows; the reviewer asked for no action now. |
+| N7 (rest) | `Weight.advanced(bySteps:of:)` stays public as the stepper helper F10 wants. `WeekCalendar.civilDate(of:)` stays as the zone-bound convenience F09 will call. |
+| N8 (rest) | A SwiftLint custom rule for float literals in `.pounds(`/`.kilograms(` is a lint-policy change beyond this round's authorisation; proposed to the orchestrator. The exit tests stay in the tester's `TrapAdversarialTests.swift`, correctly gated `#if os(macOS)`. |
+| N9 | Notes for downstream briefs, not F02 changes: F05/F19 sort `misses` when hashing; F05/F07 seed `weekStart` from `Weekday.first(of:)`; encode `Duration` as seconds for non-Swift readers (M4); define lb-start-under-kg in the unit-switch feature. |
+
+**Adversarial tests changed (round 3).** These are compile-only adaptations to S1's optional
+returns; no assertion changed:
+- `AdversarialSupport`: `startDay` now comes from a new `civilDay(_:in:)` helper, which records an
+  `Issue` on an impossible `nil`.
+- `WeekCalendarAdversarialTests.weeks(...)`: the helper uses `civilDay`.
+- `TrapAdversarialTests.skippedWeeks_beforeStart_doesNotTrap`: `guard let … else { exit(1) }`.
+- `WeekCalendarPropertyAdversarialTests.weeks_agreeWithCalendarDays` and
+  `.isoWeekKey_matchesISOCalendar`: `#require`.
+- `ExactPropertyAdversarialTests.randomCivil` and `.civilDate_matchesFoundation`: `#require` /
+  `?.adding`.
+- `TravelPropertyAdversarialTests.twoZones_agreeOnLocalDateTime`: `#require`, `?.weekday`, and
+  `String(describing:)`, because the Xcode build treats optional-interpolation warnings as errors.
+- `TravelPropertyAdversarialTests.bounds_areStartsOfCivilDays`: `#require`.
 
 ## Documentation lookups
 
