@@ -10,7 +10,9 @@ say() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 # ---- 1. Xcode ---------------------------------------------------------------
 say "Xcode"
 PINNED_XCODE="$(tr -d '[:space:]' < .xcode-version)"
-ACTUAL_XCODE="$(xcodebuild -version | head -1 | awk '{print $2}')"
+# awk reads all of xcodebuild's output; `head -1` could exit first and, under
+# pipefail, SIGPIPE xcodebuild and abort the script (seen 1 run in 40).
+ACTUAL_XCODE="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
 if [[ "$ACTUAL_XCODE" != "$PINNED_XCODE" ]]; then
     cat >&2 <<MSG
 error: this repo is pinned to Xcode $PINNED_XCODE (.xcode-version) but

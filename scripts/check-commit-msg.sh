@@ -4,7 +4,7 @@
 set -euo pipefail
 
 MESSAGE_FILE="${1:?usage: check-commit-msg.sh <path-to-commit-message>}"
-SUBJECT="$(grep -v '^#' "$MESSAGE_FILE" | sed '/^[[:space:]]*$/d' | head -1)"
+SUBJECT="$(awk '!/^#/ && NF { print; exit }' "$MESSAGE_FILE")"
 
 # Merge, revert and fixup commits are written by git itself.
 if [[ "$SUBJECT" =~ ^(Merge|Revert|fixup!|squash!) ]]; then
