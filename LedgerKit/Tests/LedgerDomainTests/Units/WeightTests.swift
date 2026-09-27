@@ -4,14 +4,14 @@ import Testing
 
 @Suite("Weight", .tags(.domain))
 struct WeightTests {
-    @Test("Pounds and kilograms convert to the nearest gram exactly (criterion 1)")
+    @Test("Pounds and kilograms convert to exact grams with no rounding (criterion 1, ADR-007)")
     func pounds_toGrams_exact() {
-        #expect(Weight.pounds(185).grams == 83915)
-        #expect(Weight.pounds(1).grams == 454)
-        #expect(Weight.pounds(2.5).grams == 1134)
-        #expect(Weight.pounds(dec("453.59237")).grams == 205_746)
+        #expect(Weight.pounds(185).grams == dec("83914.58845"))
+        #expect(Weight.pounds(1).grams == dec("453.59237"))
+        #expect(Weight.pounds(2.5).grams == dec("1133.980925"))
+        #expect(Weight.pounds(dec("453.59237")).grams == dec("205746.0381222169"))
         #expect(Weight.kilograms(dec("83.915")).grams == 83915)
-        #expect(Weight.kilograms(1.25).grams == 1250)
+        #expect(Weight.kilograms(dec("0.0025")).grams == dec("2.5"))
         #expect(Weight.pounds(185).formatted(in: .lb) == "185")
         #expect(Weight.pounds(185).formatted(in: .kg) == "83.9")
     }
@@ -20,24 +20,31 @@ struct WeightTests {
     func value_inUnits_isExact() {
         #expect(Weight(grams: 1000).kilograms == 1)
         #expect(Weight(grams: 453_592).value(in: .kg) == dec("453.592"))
-        #expect(Weight.pounds(5).pounds.rounded(scale: 4, .toNearestOrAwayFromZero) == dec("5.0001"))
+        #expect(Weight.pounds(5).pounds == 5)
+        #expect(Weight.pounds(dec("180.625")).pounds == dec("180.625"))
         #expect(Weight(grams: 45_359_237).pounds == 100_000)
     }
 
-    @Test("Rounding to a step follows the table, in the step's own unit", arguments: RoundingRow.all)
+    @Test("Rounding to a step follows the table, exactly (rules 12, 15; decision #3)", arguments: RoundingRow.all)
     func roundedToStep_table(row: RoundingRow) {
         #expect(row.weight.rounded(toStep: row.step, row.rule) == row.expected)
     }
 
     @Test("Pound and kilogram display is stable when a value round-trips through the other unit")
     func lbKgRoundTrip_displayStable() {
-        for grams in [0, 1134, 23814, 83915, 108_862, 20412, 20000, 61250, 999_999] {
-            let weight = Weight(grams: grams)
-            #expect(Weight.pounds(weight.pounds) == weight)
-            #expect(Weight.kilograms(weight.kilograms) == weight)
-            #expect(Weight.pounds(weight.pounds).formatted(in: .kg) == weight.formatted(in: .kg))
-            #expect(Weight.kilograms(weight.kilograms).formatted(in: .lb) == weight.formatted(in: .lb))
+        let grams: [Weight] = [Weight(grams: 1134), Weight(grams: 23814), Weight(grams: 999_999)]
+        let samples: [Weight] = [.zero, .pounds(2.5), .pounds(185), .pounds(dec("46.25")), .kilograms(20)] + grams
+        for weight in samples {
+            let viaPounds = Weight.pounds(weight.pounds)
+            let viaKilograms = Weight.kilograms(weight.kilograms)
+            #expect(viaKilograms == weight)
+            #expect(abs(viaPounds.grams - weight.grams) < dec("0.000000000000000000000001"))
+            for units in Units.allCases {
+                #expect(viaPounds.formatted(in: units) == weight.formatted(in: units))
+                #expect(viaKilograms.formatted(in: units) == weight.formatted(in: units))
+            }
         }
+        #expect(Weight.pounds(Weight.pounds(185).pounds) == .pounds(185))
     }
 
     @Test("Weights order by grams")
@@ -47,7 +54,22 @@ struct WeightTests {
         #expect(Weight.kilograms(20) < .pounds(45))
     }
 
-    @Test("Addition, subtraction and zero work on grams")
+    @Test("Equality and hashing are numeric: 1 g == 1.00 g, and sums equal their literal")
+    func equality_isNumeric_hashesAgree() {
+        let pairs: [(Weight, Weight)] = [
+            (Weight(grams: 1), Weight(grams: dec("1.00"))),
+            (.pounds(2.5) + .pounds(2.5), .pounds(5)),
+            (.kilograms(dec("0.1")) + .kilograms(dec("0.2")), .kilograms(dec("0.3"))),
+            (.pounds(dec("212.5")).scaled(by: dec("0.85")), .pounds(dec("180.625")))
+        ]
+        for (left, right) in pairs {
+            #expect(left == right)
+            #expect(left.hashValue == right.hashValue)
+        }
+        #expect(Set(pairs.flatMap { [$0.0, $0.1] }).count == pairs.count)
+    }
+
+    @Test("Addition, subtraction and zero are exact")
     func arithmetic_isOnGrams() {
         #expect(Weight(grams: 1500) + Weight(grams: 250) == Weight(grams: 1750))
         #expect(Weight(grams: 1500) - Weight(grams: 2000) == Weight(grams: -500))
@@ -55,22 +77,22 @@ struct WeightTests {
         #expect([Weight(grams: 5), Weight(grams: 7)].reduce(.zero, +) == Weight(grams: 12))
     }
 
-    @Test("Advancing by steps stays on the pound lattice, so loads never drift a gram")
-    func advancedBySteps_staysCanonical() {
+    @Test("Stepping and adding never drift: 185 lb + 6 × 2.5 lb is exactly 200 lb (ADR-007)")
+    func arithmetic_noDrift() {
         #expect(Weight.pounds(250).advanced(bySteps: 7, of: .pounds(5)) == .pounds(285))
         #expect(Weight.pounds(50).advanced(bySteps: 20, of: .pounds(2.5)) == .pounds(100))
-        #expect(Weight.pounds(50).grams + 20 * Weight.pounds(2.5).grams != Weight.pounds(100).grams)
+        #expect((0 ..< 6).reduce(Weight.pounds(185)) { total, _ in total + .pounds(2.5) } == .pounds(200))
         #expect(Weight.kilograms(20).advanced(bySteps: 3, of: .kilograms(1.25)) == .kilograms(23.75))
         #expect(Weight.pounds(45).advanced(bySteps: -2, of: .pounds(2.5)) == .pounds(40))
         #expect(Weight(grams: 20000).advanced(bySteps: 0, of: .pounds(2.5)) == Weight(grams: 20000))
         #expect(Weight(grams: 20000).advanced(bySteps: 4, of: .zero) == Weight(grams: 20000))
     }
 
-    @Test("Scaling multiplies exactly, then rounds to the nearest gram")
-    func scaled_roundsToNearestGram() {
-        #expect(Weight.pounds(285).scaled(by: dec("0.85")) == Weight(grams: 109_883))
-        #expect(Weight(grams: 3).scaled(by: dec("0.5")) == Weight(grams: 2))
-        #expect(Weight(grams: -3).scaled(by: dec("0.5")) == Weight(grams: -2))
+    @Test("Scaling is the exact product; only rounded(toStep:) rounds (rules 12, 15)")
+    func scaled_isExact() {
+        #expect(Weight.pounds(285).scaled(by: dec("0.85")) == .pounds(dec("242.25")))
+        #expect(Weight(grams: 3).scaled(by: dec("0.5")) == Weight(grams: dec("1.5")))
+        #expect(Weight(grams: -3).scaled(by: dec("0.5")) == Weight(grams: dec("-1.5")))
     }
 }
 
@@ -111,36 +133,50 @@ extension WeightTests {
         #expect(Weight.kilograms(dec("99.4")).wholeValue(in: .kg) == 99)
     }
 
-    @Test("Weight encodes as its grams and decodes back")
-    func codable_roundTrips() throws {
-        let data = try JSONEncoder().encode(Weight.pounds(185))
-        #expect(try Fixtures.json(Weight.pounds(185)) == #"{"grams":83915}"#)
-        #expect(try JSONDecoder().decode(Weight.self, from: data) == .pounds(185))
+    @Test("Weight encodes as the exact decimal text of its grams and rejects anything else")
+    func codable_exactDecimalText() throws {
+        #expect(try Fixtures.json(Weight.pounds(185)) == #"{"grams":"83914.58845"}"#)
+        #expect(try Fixtures.json(Weight(grams: dec("-0.5"))) == #"{"grams":"-0.5"}"#)
+        for weight in [Weight.pounds(185), .kilograms(dec("-12.345")), .zero, Weight(grams: dec("1e-20"))] {
+            #expect(try JSONDecoder().decode(Weight.self, from: JSONEncoder().encode(weight)) == weight)
+        }
+        for bad in [
+            #"{"grams":83915}"#,
+            #"{"grams":"1e3"}"#,
+            #"{"grams":"NaN"}"#,
+            #"{"grams":"12abc"}"#,
+            #"{"grams":"1,5"}"#,
+            #"{"grams":"."}"#,
+            #"{"grams":"-"}"#,
+            #"{"grams":""}"#
+        ] {
+            #expect(throws: DecodingError.self, "\(bad)") {
+                try JSONDecoder().decode(Weight.self, from: Data(bad.utf8))
+            }
+        }
     }
 
-    @Test("Standard pound and kilogram steps, bars and plates are read in their own unit")
-    func denominating_standardLattices() {
-        for quarters in 1 ... 400 {
-            #expect(Units.denominating(.pounds(Decimal(quarters) / 4)) == .lb, "\(quarters) quarter pounds")
-        }
-        for quarters in 1 ... 240 where quarters != 44 {
-            #expect(Units.denominating(.kilograms(Decimal(quarters) / 4)) == .kg, "\(quarters) quarter kilograms")
-        }
-        #expect(Units.denominating(.kilograms(11)) == .lb, "11 kg is 24.25 lb to the gram (documented)")
+    @Test("Bugs A and C: exact multiples and exact ties no longer depend on unit inference or gram noise")
+    func roundedToStep_exactTiesAndMultiples() {
+        // 33 = 3 × 11 kg is already a multiple (bug A); 212.5 × 0.85 = 180.625 lb = 144.5 × 1.25 lb (bug C).
+        #expect(Weight.kilograms(33).rounded(toStep: .kilograms(11)) == .kilograms(33))
+        let deload = Weight.pounds(dec("212.5")).scaled(by: dec("0.85"))
+        #expect(deload.rounded(toStep: .pounds(1.25)) == .pounds(dec("181.25")))
+        #expect(deload.rounded(toStep: .pounds(1.25), .toNearestOrEven) == .pounds(180))
     }
 
-    @Test("Pounds round-trip through grams at 0.5 lb resolution", .tags(.property), arguments: PropertySeed.all)
+    @Test("Pounds round-trip through grams exactly at 0.5 lb resolution", .tags(.property), arguments: PropertySeed.all)
     func poundsRoundTrip_isIdentityAtHalfPound(seed: PropertySeed) {
         var generator = seed.generator
         let halves = Int.random(in: -200 ... 2000, using: &generator)
         let pounds = Decimal(halves) / 2
         let weight = Weight.pounds(pounds)
-        #expect(weight.pounds.rounded(scale: 1, .toNearestOrAwayFromZero) == pounds)
+        #expect(weight.pounds == pounds)
         #expect(weight.formatted(in: .lb) == NumberText.fixed(halves * 5, fractionDigits: 1))
     }
 
     @Test(
-        "Rounding to a step is idempotent and lands exactly on a step multiple",
+        "Rounding to a step is idempotent, lands exactly on a step multiple and moves at most half a step",
         .tags(.property),
         arguments: PropertySeed.all
     )
@@ -152,17 +188,15 @@ extension WeightTests {
             .pounds(1.25),
             .kilograms(2.5),
             .kilograms(1.25),
-            .kilograms(5)
+            .kilograms(11)
         ]
         let step = try #require(steps.randomElement(using: &generator))
-        let weight = Weight(grams: Int.random(in: -50000 ... 300_000, using: &generator))
+        let weight = Weight.pounds(Decimal(Int.random(in: -50000 ... 70000, using: &generator)) / 100)
         let rounded = weight.rounded(toStep: step)
-        let units = Units.denominating(step)
-        let multiple = Decimal(rounded.quanta(in: units)) / Decimal(step.quanta(in: units))
+        let multiple = rounded.grams / step.grams
         #expect(rounded.rounded(toStep: step) == rounded)
         #expect(multiple.rounded(scale: 0, .toNearestOrAwayFromZero) == multiple)
-        // Half a step, plus the ≤ 2.3 g snap to 0.01 lb and the final gram rounding.
-        #expect(abs(rounded.grams - weight.grams) <= step.grams / 2 + 3)
+        #expect(abs(rounded.grams - weight.grams) * 2 <= step.grams)
     }
 }
 
@@ -174,104 +208,64 @@ extension WeightTests {
         let expected: Weight
         let description: String
 
+        init(
+            _ weight: Weight,
+            _ step: Weight,
+            _ rule: FloatingPointRoundingRule,
+            _ expected: Weight,
+            _ description: String
+        ) {
+            self.weight = weight
+            self.step = step
+            self.rule = rule
+            self.expected = expected
+            self.description = description
+        }
+
         static let all: [RoundingRow] = [
             RoundingRow(
-                weight: .pounds(242.25),
-                step: .pounds(5),
-                rule: .toNearestOrAwayFromZero,
-                expected: .pounds(240),
-                description: "242.25 lb → 240 lb (criterion 2)"
+                .pounds(242.25),
+                .pounds(5),
+                .toNearestOrAwayFromZero,
+                .pounds(240),
+                "242.25 lb → 240 lb (criterion 2)"
             ),
             RoundingRow(
-                weight: .pounds(242.5),
-                step: .pounds(5),
-                rule: .toNearestOrAwayFromZero,
-                expected: .pounds(245),
-                description: "242.5 lb tie → 245 lb (criterion 2)"
+                .pounds(242.5),
+                .pounds(5),
+                .toNearestOrAwayFromZero,
+                .pounds(245),
+                "242.5 lb tie → 245 lb (criterion 2)"
+            ),
+            RoundingRow(.pounds(242.5), .pounds(5), .toNearestOrEven, .pounds(240), "242.5 lb, to even → 240 lb"),
+            RoundingRow(.pounds(242.5), .pounds(5), .down, .pounds(240), "242.5 lb, down → 240 lb"),
+            RoundingRow(.pounds(241), .pounds(5), .up, .pounds(245), "241 lb, up → 245 lb"),
+            RoundingRow(.pounds(-2.5), .pounds(5), .toNearestOrAwayFromZero, .pounds(-5), "−2.5 lb tie → −5 lb"),
+            RoundingRow(.pounds(-2.5), .pounds(5), .towardZero, .zero, "−2.5 lb toward zero → 0"),
+            RoundingRow(.pounds(-2.5), .pounds(5), .awayFromZero, .pounds(-5), "−2.5 lb away from zero → −5 lb"),
+            RoundingRow(.pounds(2.5), .pounds(5), .towardZero, .zero, "2.5 lb toward zero → 0"),
+            RoundingRow(.pounds(2.5), .pounds(5), .awayFromZero, .pounds(5), "2.5 lb away from zero → 5 lb"),
+            RoundingRow(
+                .kilograms(61.25),
+                .kilograms(2.5),
+                .toNearestOrAwayFromZero,
+                .kilograms(62.5),
+                "61.25 kg tie → 62.5 kg"
+            ),
+            RoundingRow(.kilograms(61.2), .kilograms(2.5), .toNearestOrAwayFromZero, .kilograms(60), "61.2 kg → 60 kg"),
+            RoundingRow(
+                .pounds(185),
+                .kilograms(1.25),
+                .toNearestOrAwayFromZero,
+                .kilograms(83.75),
+                "185 lb on a 1.25 kg step → 83.75 kg"
             ),
             RoundingRow(
-                weight: .pounds(242.5),
-                step: .pounds(5),
-                rule: .toNearestOrEven,
-                expected: .pounds(240),
-                description: "242.5 lb, to even → 240 lb"
-            ),
-            RoundingRow(
-                weight: .pounds(242.5),
-                step: .pounds(5),
-                rule: .down,
-                expected: .pounds(240),
-                description: "242.5 lb, down → 240 lb"
-            ),
-            RoundingRow(
-                weight: .pounds(241),
-                step: .pounds(5),
-                rule: .up,
-                expected: .pounds(245),
-                description: "241 lb, up → 245 lb"
-            ),
-            RoundingRow(
-                weight: .pounds(-2.5),
-                step: .pounds(5),
-                rule: .toNearestOrAwayFromZero,
-                expected: .pounds(-5),
-                description: "−2.5 lb tie → −5 lb"
-            ),
-            RoundingRow(
-                weight: .pounds(-2.5),
-                step: .pounds(5),
-                rule: .towardZero,
-                expected: .zero,
-                description: "−2.5 lb toward zero → 0"
-            ),
-            RoundingRow(
-                weight: .pounds(-2.5),
-                step: .pounds(5),
-                rule: .awayFromZero,
-                expected: .pounds(-5),
-                description: "−2.5 lb away from zero → −5 lb"
-            ),
-            RoundingRow(
-                weight: .pounds(2.5),
-                step: .pounds(5),
-                rule: .towardZero,
-                expected: .zero,
-                description: "2.5 lb toward zero → 0"
-            ),
-            RoundingRow(
-                weight: .pounds(2.5),
-                step: .pounds(5),
-                rule: .awayFromZero,
-                expected: .pounds(5),
-                description: "2.5 lb away from zero → 5 lb"
-            ),
-            RoundingRow(
-                weight: .kilograms(61.25),
-                step: .kilograms(2.5),
-                rule: .toNearestOrAwayFromZero,
-                expected: .kilograms(62.5),
-                description: "61.25 kg tie → 62.5 kg"
-            ),
-            RoundingRow(
-                weight: .kilograms(61.2),
-                step: .kilograms(2.5),
-                rule: .toNearestOrAwayFromZero,
-                expected: .kilograms(60),
-                description: "61.2 kg → 60 kg"
-            ),
-            RoundingRow(
-                weight: .pounds(185),
-                step: .kilograms(1.25),
-                rule: .toNearestOrAwayFromZero,
-                expected: .kilograms(83.75),
-                description: "185 lb on a 1.25 kg step → 83.75 kg"
-            ),
-            RoundingRow(
-                weight: .pounds(187),
-                step: .zero,
-                rule: .toNearestOrAwayFromZero,
-                expected: .pounds(187),
-                description: "a zero step leaves the weight unchanged"
+                .pounds(187),
+                .zero,
+                .toNearestOrAwayFromZero,
+                .pounds(187),
+                "a zero step leaves the weight unchanged"
             )
         ]
     }

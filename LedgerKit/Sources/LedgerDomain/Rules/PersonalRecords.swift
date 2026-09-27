@@ -9,8 +9,9 @@ public enum PersonalRecords {
     /// - `.weightAtReps` when a set's weight is strictly greater than the best weight in history at
     ///   ≥ the same reps; the heaviest such set is reported (ties → more reps).
     ///
-    /// Both may fire. Ties are not PRs. A record needs a previous value to beat: an exercise or
-    /// rep count with no history at or above it produces no PR (a first session is a baseline).
+    /// Both may fire. Ties are not PRs. No PR without a comparable prior record: an exercise with
+    /// no best e1RM, or a set whose rep count has no history at or above it, produces no PR (a
+    /// first session is a baseline; F02 spec question 1, orchestrator decision).
     /// Deload workouts never produce PRs. `achievedAt` is `now`.
     public static func detect(
         workout: WorkoutState,

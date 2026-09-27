@@ -21,7 +21,8 @@ struct PlateInventoryTests {
             plates: [.pounds(5), .pounds(45), .zero, .pounds(5), .pounds(-10)]
         )
         #expect(inventory.plates == [.pounds(45), .pounds(5)])
-        let json = #"{"bar":{"grams":15876},"plates":[{"grams":2268},{"grams":20412},{"grams":2268}]}"#
+        let json = #"{"bar":{"grams":"15875.73295"},"plates":"#
+            + #"[{"grams":"2267.96185"},{"grams":"20411.65665"},{"grams":"2267.96185"}]}"#
         let decoded = try JSONDecoder().decode(PlateInventory.self, from: Data(json.utf8))
         #expect(decoded.plates == [.pounds(45), .pounds(5)])
         #expect(try JSONDecoder().decode(PlateInventory.self, from: JSONEncoder().encode(inventory)) == inventory)

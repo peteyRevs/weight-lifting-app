@@ -82,16 +82,16 @@ struct PlateMathTests {
             of: units == .lb ? .pounds(0.5) : .kilograms(0.25)
         )
         let smallest = try #require(inventory.plates.last)
-        let perSide = Decimal(load.quanta(in: units) - inventory.bar.quanta(in: units)) / 2
+        let perSide = (load - inventory.bar).scaled(by: dec("0.5"))
         guard let breakdown = PlateMath.perSide(load: load, inventory: inventory) else {
-            #expect(perSide < Decimal(smallest.quanta(in: units)))
+            #expect(perSide < smallest)
             return
         }
         #expect(breakdown.perSide.allSatisfy { inventory.plates.contains($0.plate) && $0.count >= 1 })
         #expect(breakdown.perSide.map(\.plate) == breakdown.perSide.map(\.plate).sorted(by: >))
-        let loaded = breakdown.perSide.reduce(Decimal(0)) { $0 + Decimal($1.count * $1.plate.quanta(in: units)) }
+        let loaded = breakdown.perSide.reduce(Weight.zero) { $0 + $1.plate.scaled(by: Decimal($1.count)) }
         #expect(loaded <= perSide)
-        #expect(perSide - loaded < Decimal(smallest.quanta(in: units)))
+        #expect(loaded + breakdown.remainder == perSide)
         #expect(breakdown.remainder < smallest)
     }
 }

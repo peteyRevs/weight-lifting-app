@@ -29,7 +29,9 @@ struct PersonalRecordsTests {
     func detect_newBestE1RM() throws {
         let records = try detect(workout([Fixtures.set(0, pounds: 200, reps: 5)]), e1RM: .pounds(219), atReps: [5: 195])
         let five = try Fixtures.reps(5)
-        #expect(records.map(\.kind) == [.estimatedOneRepMax(.pounds(225)), .weightAtReps(.pounds(200), five)])
+        // 200 lb × 36 / 32 = 102,058.28325 g → 102,058 g (the estimate rounds to the gram), shown as 225 lb.
+        #expect(records.map(\.kind) == [.estimatedOneRepMax(Weight(grams: 102_058)), .weightAtReps(.pounds(200), five)])
+        #expect(Weight(grams: 102_058).wholeValue(in: .lb) == 225)
         #expect(records.map(\.previous) == [.estimatedOneRepMax(.pounds(219)), .weightAtReps(.pounds(195), five)])
         #expect(records.allSatisfy { $0.exerciseID == Fixtures.bench.id && $0.workoutID == Fixtures.workoutID })
         #expect(records.allSatisfy { $0.achievedAt == Fixtures.now })

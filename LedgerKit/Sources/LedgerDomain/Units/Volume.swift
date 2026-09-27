@@ -1,16 +1,19 @@
 import Foundation
 
-/// Σ weight × reps, in gram·reps (rule 34: "lb moved" = Σ over done sets of w × r).
+/// Σ weight × reps, in exact gram·reps (rule 34: "lb moved" = Σ over done sets of w × r; ADR-007).
+///
+/// Exact like `Weight`, so 1,000 reps of 185 lb is exactly "185,000" lb moved at any horizon.
+/// Encodes as `{"gramReps": "419572.94225"}` (exact decimal text).
 public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmetic {
-    public let gramReps: Int
+    public let gramReps: Decimal
 
-    public init(gramReps: Int) {
+    public init(gramReps: Decimal) {
         self.gramReps = gramReps
     }
 
-    /// The volume of one set: `weight × reps`.
+    /// The volume of one set: `weight × reps`, exactly.
     public init(weight: Weight, reps: Reps) {
-        gramReps = weight.grams * reps.value
+        gramReps = weight.grams * Decimal(reps.value)
     }
 
     public static let zero = Volume(gramReps: 0)
@@ -27,7 +30,7 @@ public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
     }
 
     private func value(in units: Units) -> Decimal {
-        Decimal(gramReps) / units.gramsPerUnit
+        gramReps / units.gramsPerUnit
     }
 
     public static func < (lhs: Volume, rhs: Volume) -> Bool {
@@ -40,5 +43,19 @@ public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
 
     public static func - (lhs: Volume, rhs: Volume) -> Volume {
         Volume(gramReps: lhs.gramReps - rhs.gramReps)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case gramReps
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(gramReps: DecimalText.decode(container, forKey: .gramReps))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(DecimalText.encode(gramReps), forKey: .gramReps)
     }
 }

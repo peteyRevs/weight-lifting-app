@@ -51,6 +51,11 @@ enum Fixtures {
         return gregorian.date(from: parts) ?? .distantPast
     }
 
+    /// The civil date `year-month-day` (a Program start, ADR-007).
+    static func civil(_ year: Int, _ month: Int, _ day: Int) -> CivilDate {
+        CivilDate(date(year, month, day, hour: 12), in: calendar)
+    }
+
     /// `value` encoded as JSON text.
     static func json(_ value: some Encodable) throws -> String {
         try #require(String(bytes: JSONEncoder().encode(value), encoding: .utf8))

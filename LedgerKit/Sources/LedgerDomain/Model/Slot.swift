@@ -7,8 +7,10 @@ public enum Progression: String, Codable, Sendable, CaseIterable {
 
 /// One exercise in a day template (spec §6.1 "Exercise slot").
 ///
-/// Ranges are validated at construction and on decoding (engineering-standards §5); the
-/// `var` properties are for editors that rebuild through `init` when they change a ranged value.
+/// Validation happens only in `init` and when decoding (engineering-standards §5). The ranged
+/// properties are `var` by design (F02 brief), and assigning one directly skips validation, so an
+/// editor that changes `sets`, `reps`, `repsHi`, `dropSets`, `startLoad` or `step` rebuilds the slot
+/// through `init` (a directly mutated out-of-range slot still encodes, but will not decode).
 public struct Slot: Identifiable, Hashable, Codable, Sendable {
     public let id: SlotID
     public var exerciseID: ExerciseID

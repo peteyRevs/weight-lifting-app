@@ -74,3 +74,35 @@ enum NumberText {
         return value < 0 ? "-" + text : text
     }
 }
+
+/// Exact decimal text for `Codable` (ADR-007): "-12.5", "83914.58845". Always '.', never an
+/// exponent, never localised. Decoding accepts exactly that shape and rejects anything else
+/// (NaN, "1e3", "1,5", "12abc"), so a stored value reads back bit-for-bit.
+enum DecimalText {
+    static func encode(_ value: Decimal) -> String {
+        value.description
+    }
+
+    static func decode<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>, forKey key: Key) throws -> Decimal {
+        let text = try container.decode(String.self, forKey: key)
+        guard let value = parse(text) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: container,
+                debugDescription: "Expected an exact decimal like \"-12.5\", got \"\(text)\""
+            )
+        }
+        return value
+    }
+
+    /// `text` as a `Decimal` when it is an optional '-', digits, and an optional '.' plus digits.
+    static func parse(_ text: String) -> Decimal? {
+        let unsigned = text.hasPrefix("-") ? text.dropFirst() : Substring(text)
+        let parts = unsigned.split(separator: ".", omittingEmptySubsequences: false)
+        let isDigits = { (part: Substring) in !part.isEmpty && part.allSatisfy { ("0" ... "9").contains($0) } }
+        guard (1 ... 2).contains(parts.count), parts.allSatisfy(isDigits) else {
+            return nil
+        }
+        return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
+    }
+}

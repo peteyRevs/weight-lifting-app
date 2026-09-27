@@ -7,7 +7,7 @@ struct VolumeTests {
     @Test("A set's volume is weight × reps in gram·reps (rule 34)")
     func init_weightTimesReps() throws {
         let volume = try Volume(weight: .pounds(185), reps: Fixtures.reps(5))
-        #expect(volume.gramReps == 83915 * 5)
+        #expect(volume.gramReps == dec("83914.58845") * 5)
         #expect(volume.formatted(in: .lb) == "925")
     }
 
@@ -29,6 +29,14 @@ struct VolumeTests {
         #expect(Volume(gramReps: 1_234_500_000).compact(in: .kg) == "1,234.5k")
     }
 
+    @Test("Volume is exact at any horizon: 1,000 reps of 185 lb is 185,000 lb moved (ADR-007)")
+    func sum_isExact_noDrift() throws {
+        let set = try Volume(weight: .pounds(185), reps: Fixtures.reps(1))
+        let lifetime = (0 ..< 1000).reduce(Volume.zero) { total, _ in total + set }
+        #expect(lifetime.formatted(in: .lb) == "185,000")
+        #expect(lifetime == Volume(weight: .pounds(185_000), reps: .one))
+    }
+
     @Test("Volumes add, subtract and order by gram·reps")
     func arithmetic_andOrder() {
         let small = Volume(gramReps: 100)
@@ -43,7 +51,10 @@ struct VolumeTests {
     func codable_roundTrips() throws {
         let volume = Volume(gramReps: 419_575)
         let data = try JSONEncoder().encode(volume)
-        #expect(try Fixtures.json(volume) == #"{"gramReps":419575}"#)
+        #expect(try Fixtures.json(volume) == #"{"gramReps":"419575"}"#)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(Volume.self, from: Data(#"{"gramReps":419575}"#.utf8))
+        }
         #expect(try JSONDecoder().decode(Volume.self, from: data) == volume)
     }
 }

@@ -12,8 +12,9 @@ public enum TrainingGoal: String, Codable, Sendable, CaseIterable {
 public struct Program: Identifiable, Hashable, Codable, Sendable {
     public let id: ProgramID
     public var name: String
-    /// Decision #18: the first day of week 0 (normally the first day of the week the lifter started).
-    public var startDate: Date
+    /// Decision #18 / ADR-007: the calendar day week 0 starts on (normally the first day of the week
+    /// the lifter started). A civil date, so the block's weeks do not move when the lifter travels.
+    public var startDate: CivilDate
     public var weeks: [Week]
     public var days: [DayTemplate]
     public var goal: TrainingGoal?
@@ -23,7 +24,7 @@ public struct Program: Identifiable, Hashable, Codable, Sendable {
     public init(
         id: ProgramID,
         name: String,
-        startDate: Date,
+        startDate: CivilDate,
         weeks: [Week],
         days: [DayTemplate],
         goal: TrainingGoal? = nil,
@@ -77,7 +78,7 @@ extension Program {
         try self.init(
             id: container.decode(ProgramID.self, forKey: .id),
             name: container.decode(String.self, forKey: .name),
-            startDate: container.decode(Date.self, forKey: .startDate),
+            startDate: container.decode(CivilDate.self, forKey: .startDate),
             weeks: container.decode([Week].self, forKey: .weeks),
             days: container.decode([DayTemplate].self, forKey: .days),
             goal: container.decodeIfPresent(TrainingGoal.self, forKey: .goal),

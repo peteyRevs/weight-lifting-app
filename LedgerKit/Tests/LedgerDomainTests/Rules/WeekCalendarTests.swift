@@ -13,13 +13,13 @@ struct WeekCalendarTests {
     }
 
     private var block: WeekCalendar {
-        WeekCalendar(startDate: Fixtures.date(2026, 8, 17), weekStart: .monday, calendar: Fixtures.calendar)
+        WeekCalendar(startDate: Fixtures.civil(2026, 8, 17), weekStart: .monday, calendar: Fixtures.calendar)
     }
 
     @Test("Week index counts calendar weeks from the start date, DST included (decision #18)", arguments: IndexRow.all)
     func weekIndex_fromStartDate(row: IndexRow) throws {
         let zone = try Fixtures.zone(row.zone)
-        let start = Fixtures.date(row.start[0], row.start[1], row.start[2], in: zone)
+        let start = try #require(CivilDate(year: row.start[0], month: row.start[1], day: row.start[2]))
         let date = Fixtures.date(
             row.date[0],
             row.date[1],
@@ -34,27 +34,18 @@ struct WeekCalendarTests {
 
     @Test("Criterion 10: Aug 19 is week 0 and a Wednesday; the last complete week before Sep 16 is Sep 7–14")
     func criterion10_weekdayAndPreviousCompleteWeek() {
+        let septemberSeventh = Fixtures.date(2026, 9, 7) ..< Fixtures.date(2026, 9, 14)
         #expect(block.weekday(of: Fixtures.date(2026, 8, 19, hour: 12)) == .wednesday)
-        #expect(block.previousCompleteWeek(before: Fixtures.date(2026, 9, 16)) == Fixtures.date(2026, 9, 7) ..< Fixtures
-            .date(
-                2026,
-                9,
-                14
-            ))
-        #expect(block.previousCompleteWeek(before: Fixtures.date(2026, 9, 14)) == Fixtures.date(2026, 9, 7) ..< Fixtures
-            .date(
-                2026,
-                9,
-                14
-            ))
-        #expect(block.startDate == Fixtures.date(2026, 8, 17))
+        #expect(block.previousCompleteWeek(before: Fixtures.date(2026, 9, 16)) == septemberSeventh)
+        #expect(block.previousCompleteWeek(before: Fixtures.date(2026, 9, 14)) == septemberSeventh)
+        #expect(block.startDate == Fixtures.civil(2026, 8, 17))
     }
 
     @Test("Week bounds are local midnights, so a DST week lasts 167 hours")
     func bounds_dstWeekIs167Hours() throws {
         let berlin = try Fixtures.zone("Europe/Berlin")
         let weeks = WeekCalendar(
-            startDate: Fixtures.date(2026, 3, 23, hour: 15, in: berlin),
+            startDate: Fixtures.civil(2026, 3, 23),
             weekStart: .monday,
             calendar: calendar(berlin)
         )
@@ -76,7 +67,7 @@ struct WeekCalendarTests {
         }
         let american = Fixtures.calendar
         let weeks = WeekCalendar(
-            startDate: Fixtures.date(2026, 8, 16),
+            startDate: Fixtures.civil(2026, 8, 16),
             weekStart: Weekday.first(of: american),
             calendar: american
         )
@@ -102,7 +93,11 @@ struct WeekCalendarTests {
 
     @Test("A Sunday week start moves stats weeks and week keys to Sunday")
     func weekStart_sunday() {
-        let weeks = WeekCalendar(startDate: Fixtures.date(2026, 8, 16), weekStart: .sunday, calendar: Fixtures.calendar)
+        let weeks = WeekCalendar(
+            startDate: Fixtures.civil(2026, 8, 16),
+            weekStart: .sunday,
+            calendar: Fixtures.calendar
+        )
         #expect(weeks.previousCompleteWeek(before: Fixtures.date(2026, 9, 16)) == Fixtures.date(2026, 9, 6) ..< Fixtures
             .date(
                 2026,
@@ -119,6 +114,37 @@ struct WeekCalendarTests {
 // MARK: - Week keys and schedule (decisions #4, #18)
 
 extension WeekCalendarTests {
+    @Test("A day whose midnight DST skips starts at 01:00 without moving any other boundary (ADR-007)")
+    func missingMidnight_onlyThatDayStartsLate() throws {
+        // Havana springs forward 00:00 → 01:00 on Sun 2026-03-08; Cairo on Fri 2026-04-24.
+        let havana = try Fixtures.zone("America/Havana")
+        let block = WeekCalendar(startDate: Fixtures.civil(2026, 3, 8), weekStart: .sunday, calendar: calendar(havana))
+        #expect(block.bounds(ofWeek: 0).lowerBound == Fixtures.date(2026, 3, 8, hour: 1, in: havana))
+        let secondWeek = Fixtures.date(2026, 3, 15, in: havana) ..< Fixtures.date(2026, 3, 22, in: havana)
+        #expect(block.bounds(ofWeek: 1) == secondWeek)
+        #expect(block.weekIndex(for: Fixtures.date(2026, 3, 15, minute: 30, in: havana)) == 1)
+        let cairo = try Fixtures.zone("Africa/Cairo")
+        let stats = WeekCalendar(startDate: Fixtures.civil(2026, 4, 6), weekStart: .monday, calendar: calendar(cairo))
+        let week = Fixtures.date(2026, 4, 20, in: cairo) ..< Fixtures.date(2026, 4, 27, in: cairo)
+        #expect(stats.week(containing: Fixtures.date(2026, 4, 24, hour: 12, in: cairo)) == week)
+        let friday = Fixtures.date(2026, 4, 24, hour: 12, in: cairo)
+        #expect(stats.firstDayOfWeek(containing: friday) == Fixtures.civil(2026, 4, 20))
+    }
+
+    @Test("Dates map to the civil day of the calendar's zone, so travel cannot move the block")
+    func civilDate_isZoneDayOfTheInstant() throws {
+        let losAngeles = try Fixtures.zone("America/Los_Angeles")
+        let block = WeekCalendar(
+            startDate: Fixtures.civil(2026, 8, 17),
+            weekStart: .monday,
+            calendar: calendar(losAngeles)
+        )
+        // 2026-08-17 05:00 UTC is Sunday Aug 16 22:00 in Los Angeles: still the day before week 0.
+        #expect(block.civilDate(of: Fixtures.date(2026, 8, 17, hour: 5)) == Fixtures.civil(2026, 8, 16))
+        #expect(block.weekIndex(for: Fixtures.date(2026, 8, 17, hour: 5)) == -1)
+        #expect(block.bounds(ofWeek: 0).lowerBound == Fixtures.date(2026, 8, 17, in: losAngeles))
+    }
+
     @Test("With a Monday start the week key is the ISO 8601 week")
     func isoWeekKey_mondayIsISO8601() {
         #expect(block.isoWeekKey(for: Fixtures.date(2026, 1, 1)) == WeekKey(year: 2026, week: 1))
@@ -178,119 +204,43 @@ extension WeekCalendarTests {
         let expected: Int
         let description: String
 
+        init(_ zone: String, _ start: [Int], _ date: [Int], _ expected: Int, _ description: String) {
+            self.zone = zone
+            self.start = start
+            self.date = date
+            self.expected = expected
+            self.description = description
+        }
+
         static let all: [IndexRow] = [
+            IndexRow("UTC", [2026, 8, 17], [2026, 8, 19, 12, 0], 0, "Wed of week 0 (criterion 10)"),
+            IndexRow("UTC", [2026, 8, 17], [2026, 9, 14, 0, 0], 4, "Sep 14 is week 4 (criterion 10)"),
+            IndexRow("UTC", [2026, 8, 17], [2026, 8, 23, 23, 59], 0, "last minute of week 0"),
+            IndexRow("UTC", [2026, 8, 17], [2026, 8, 24, 0, 0], 1, "first minute of week 1"),
+            IndexRow("UTC", [2026, 8, 17], [2026, 8, 16, 12, 0], -1, "the day before the block"),
+            IndexRow("UTC", [2026, 8, 17], [2026, 8, 9, 23, 0], -2, "eight days before"),
+            IndexRow("UTC", [2026, 12, 28], [2027, 1, 3, 23, 0], 0, "across year end, week 0"),
+            IndexRow("UTC", [2026, 12, 28], [2027, 1, 4, 0, 0], 1, "across year end, week 1"),
             IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 8, 19, 12, 0],
-                expected: 0,
-                description: "Wed of week 0 (criterion 10)"
+                "Europe/Berlin",
+                [2026, 3, 23],
+                [2026, 3, 29, 23, 30],
+                0,
+                "Berlin spring-forward week, Sunday night"
             ),
+            IndexRow("Europe/Berlin", [2026, 3, 23], [2026, 3, 30, 0, 30], 1, "Berlin, 167 h after the start"),
+            IndexRow("Europe/Berlin", [2026, 10, 19], [2026, 10, 25, 23, 59], 0, "Berlin fall-back week, Sunday night"),
+            IndexRow("Europe/Berlin", [2026, 10, 19], [2026, 10, 26, 0, 0], 1, "Berlin after fall-back"),
+            IndexRow("America/New_York", [2026, 3, 2], [2026, 3, 8, 23, 0], 0, "New York spring-forward Sunday"),
+            IndexRow("America/New_York", [2026, 3, 2], [2026, 3, 9, 0, 0], 1, "New York, Monday after spring-forward"),
             IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 9, 14, 0, 0],
-                expected: 4,
-                description: "Sep 14 is week 4 (criterion 10)"
+                "America/New_York",
+                [2026, 10, 26],
+                [2026, 11, 1, 23, 59],
+                0,
+                "New York, 168 h 59 min after the start"
             ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 8, 23, 23, 59],
-                expected: 0,
-                description: "last minute of week 0"
-            ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 8, 24, 0, 0],
-                expected: 1,
-                description: "first minute of week 1"
-            ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 8, 16, 12, 0],
-                expected: -1,
-                description: "the day before the block"
-            ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 8, 17],
-                date: [2026, 8, 9, 23, 0],
-                expected: -2,
-                description: "eight days before"
-            ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 12, 28],
-                date: [2027, 1, 3, 23, 0],
-                expected: 0,
-                description: "across year end, week 0"
-            ),
-            IndexRow(
-                zone: "UTC",
-                start: [2026, 12, 28],
-                date: [2027, 1, 4, 0, 0],
-                expected: 1,
-                description: "across year end, week 1"
-            ),
-            IndexRow(
-                zone: "Europe/Berlin",
-                start: [2026, 3, 23],
-                date: [2026, 3, 29, 23, 30],
-                expected: 0,
-                description: "Berlin spring-forward week, Sunday night"
-            ),
-            IndexRow(
-                zone: "Europe/Berlin",
-                start: [2026, 3, 23],
-                date: [2026, 3, 30, 0, 30],
-                expected: 1,
-                description: "Berlin, 167 h after the start"
-            ),
-            IndexRow(
-                zone: "Europe/Berlin",
-                start: [2026, 10, 19],
-                date: [2026, 10, 25, 23, 59],
-                expected: 0,
-                description: "Berlin fall-back week, Sunday night"
-            ),
-            IndexRow(
-                zone: "Europe/Berlin",
-                start: [2026, 10, 19],
-                date: [2026, 10, 26, 0, 0],
-                expected: 1,
-                description: "Berlin after fall-back"
-            ),
-            IndexRow(
-                zone: "America/New_York",
-                start: [2026, 3, 2],
-                date: [2026, 3, 8, 23, 0],
-                expected: 0,
-                description: "New York spring-forward Sunday"
-            ),
-            IndexRow(
-                zone: "America/New_York",
-                start: [2026, 3, 2],
-                date: [2026, 3, 9, 0, 0],
-                expected: 1,
-                description: "New York, Monday after spring-forward"
-            ),
-            IndexRow(
-                zone: "America/New_York",
-                start: [2026, 10, 26],
-                date: [2026, 11, 1, 23, 59],
-                expected: 0,
-                description: "New York, 168 h 59 min after the start"
-            ),
-            IndexRow(
-                zone: "America/New_York",
-                start: [2026, 10, 26],
-                date: [2026, 11, 16, 9, 0],
-                expected: 3,
-                description: "New York, three weeks on"
-            )
+            IndexRow("America/New_York", [2026, 10, 26], [2026, 11, 16, 9, 0], 3, "New York, three weeks on")
         ]
     }
 }

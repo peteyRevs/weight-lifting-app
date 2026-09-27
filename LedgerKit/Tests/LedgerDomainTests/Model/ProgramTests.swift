@@ -11,7 +11,7 @@ struct ProgramTests {
             try Program(
                 id: Fixtures.programID,
                 name: "P",
-                startDate: Fixtures.now,
+                startDate: Fixtures.civil(2026, 9, 14),
                 weeks: [Fixtures.week(0)],
                 days: [day]
             )
@@ -22,14 +22,26 @@ struct ProgramTests {
     func init_gapInWeekIndices_throwsNonContiguous() {
         let weeks = [Fixtures.week(0), Fixtures.week(2)]
         #expect(throws: ProgramValidationError.nonContiguousWeeks(indices: [0, 2])) {
-            try Program(id: Fixtures.programID, name: "P", startDate: Fixtures.now, weeks: weeks, days: [])
+            try Program(
+                id: Fixtures.programID,
+                name: "P",
+                startDate: Fixtures.civil(2026, 9, 14),
+                weeks: weeks,
+                days: []
+            )
         }
     }
 
     @Test("Weeks given out of order are stored sorted by index")
     func init_unsortedWeeks_areSorted() throws {
         let weeks = [Fixtures.week(1), Fixtures.week(0), Fixtures.week(2)]
-        let program = try Program(id: Fixtures.programID, name: "P", startDate: Fixtures.now, weeks: weeks, days: [])
+        let program = try Program(
+            id: Fixtures.programID,
+            name: "P",
+            startDate: Fixtures.civil(2026, 9, 14),
+            weeks: weeks,
+            days: []
+        )
         #expect(program.weeks.map(\.index) == [0, 1, 2])
         #expect(program.week(at: 2) == Fixtures.week(2))
         #expect(program.week(at: 3) == nil)
@@ -40,7 +52,13 @@ struct ProgramTests {
         let missing = DayTemplateID(Fixtures.uuid(777))
         let weeks = [Fixtures.week(0), Fixtures.week(1, schedule: [.friday: missing])]
         #expect(throws: ProgramValidationError.danglingSchedule(weekIndex: 1, dayTemplateID: missing)) {
-            try Program(id: Fixtures.programID, name: "P", startDate: Fixtures.now, weeks: weeks, days: [])
+            try Program(
+                id: Fixtures.programID,
+                name: "P",
+                startDate: Fixtures.civil(2026, 9, 14),
+                weeks: weeks,
+                days: []
+            )
         }
     }
 

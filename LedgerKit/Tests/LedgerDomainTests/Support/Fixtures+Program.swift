@@ -73,7 +73,7 @@ extension Fixtures {
     static func program(
         days: [DayTemplate],
         weekCount: Int = 8,
-        startDate: Date = date(2026, 8, 17)
+        startDate: CivilDate = civil(2026, 8, 17)
     ) throws -> Program {
         let weekdays: [Weekday] = [.monday, .wednesday, .friday]
         let schedule = Dictionary(uniqueKeysWithValues: zip(weekdays, days.map(\.id)))
