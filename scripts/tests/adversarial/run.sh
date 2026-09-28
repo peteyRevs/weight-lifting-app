@@ -9,7 +9,7 @@
 # Exit 0 only when every case in every suite passed.
 set -uo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 failed=()
 for suite in ./*.adv.sh; do
     [[ -z "${1:-}" || "$suite" == *"$1"* ]] || continue

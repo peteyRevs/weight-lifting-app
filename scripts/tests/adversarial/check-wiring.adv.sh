@@ -10,7 +10,6 @@ SB="$ADV_TMP/sandbox"
 mkdir -p "$SB/scripts/tests" "$SB/bin"
 cp "${ADV_CHECK_SH:-$ROOT/scripts/check.sh}" "$SB/scripts/check.sh" # override: mutation-test this suite
 export LOG="$ADV_TMP/calls.log"
-is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 stub() { # <path> <body>: a /bin/sh stub with the log/fail helpers in front of <body>
     printf '#!/bin/sh\nlog() { printf "%%s\\n" "$*" >>"$LOG"; }\nfail_if() { [ "${FAIL_AT:-}" = "$1" ] && exit "${FAIL_CODE:-1}"; return 0; }\n%s\n' "$2" >"$1"

@@ -10,7 +10,7 @@ WF="$ROOT/.github/workflows"
 T="$ADV_TMP"
 
 if ! command -v ruby >/dev/null || ! ruby -ryaml -rjson -e '' 2>/dev/null; then
-    skip "workflows suite" "no ruby with yaml/json"
+    fail "workflows suite" "no ruby with yaml/json (macOS and the runner both ship one)"
     finish; exit
 fi
 
@@ -22,16 +22,16 @@ json "$WF/pr.yml" >"$T/pr.json"
 json "$WF/nightly.yml" >"$T/nightly.json"
 json "$WF/release-please.yml" >"$T/rp.json"
 q() { jq -r "$2" "$T/$1.json"; } # q <pr|nightly|rp> <jq filter>
-is() { [[ "$1" == "$2" ]] || { printf '        got: %s\n' "$1"; return 1; }; }
 
 # ---- actionlint -------------------------------------------------------------------
-al="$(mise where aqua:rhysd/actionlint@1.7.12 2>/dev/null || true)"
-sc="$(mise where aqua:koalaman/shellcheck@0.11.0 2>/dev/null || true)"
-if [[ -n "$al" && -x "$al/actionlint" ]]; then
-    out="$(cd "$ROOT" && PATH="${sc:+$sc:}$PATH" "$al/actionlint" -no-color .github/workflows/*.yml 2>&1)"
+# mise.toml pins both, and check.sh step 0 installs them: a missing one fails (S2).
+al="$(cd "$ROOT" && mise which actionlint 2>/dev/null || true)"
+sc="$(cd "$ROOT" && mise which shellcheck 2>/dev/null || true)"
+if [[ -x "$al" && -x "$sc" ]]; then
+    out="$(cd "$ROOT" && PATH="$(dirname "$sc"):$PATH" "$al" -no-color .github/workflows/*.yml 2>&1)"
     expect_exit "WF01 actionlint (with shellcheck) finds nothing" 0 $? "$out"
 else
-    skip "WF01 actionlint" "not installed in mise; run: mise install aqua:rhysd/actionlint@1.7.12"
+    fail "WF01 actionlint (with shellcheck) finds nothing" "actionlint or shellcheck missing; run: mise install"
 fi
 
 # ---- pr.yml shape ---------------------------------------------------------------------
@@ -97,6 +97,12 @@ if [[ -z "$unsafe" ]]; then pass "WF16 every piped run step fails when an upstre
 
 # ---- the docs-only decision (pr.yml, Scope, step "scope") ----------------------------
 q pr '.jobs.scope.steps[] | select(.id == "scope") | .run' >"$T/scope.sh"
+# B1: check.sh's script tests read history (RP11), so a job that runs it checks out everything.
+full="$(for w in pr nightly rp; do q $w '.jobs | to_entries[] | select([.value.steps[].run // "" | test("scripts/check\\.sh")] | any)
+    | "\(.key): fetch-depth \([.value.steps[] | select(.uses // "" | test("actions/checkout")) | .with["fetch-depth"] // 1] | first)"'; done)"
+shallow="$(grep -v 'fetch-depth 0$' <<<"$full" || true)"
+check "WF47 [B1] every job that runs check.sh checks out full history (fetch-depth: 0)" \
+    is "$([[ -n "$full" ]] && echo found) ${shallow:-none}" "found none"
 check "WF17 Scope checks out 2 commits (the merge and its base) for the scope step" \
     is "$(q pr '.jobs.scope.steps[0].with["fetch-depth"]')" 2
 

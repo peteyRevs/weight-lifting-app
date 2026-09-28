@@ -1,7 +1,9 @@
+# shellcheck shell=bash
 # Shared helpers for the F01 adversarial suites. Sourced, never executed.
 # Each case prints "ok", "FAIL" or "skip"; a suite exits 1 when any case failed.
 # Bash 3.2 compatible (the macOS /bin/bash), no network.
 
+# shellcheck disable=SC2034 # ROOT is read by the suites that source this file
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ADV_PASS=0
 ADV_FAIL=0
@@ -35,6 +37,9 @@ expect_exit() {
 $detail}"
     fi
 }
+
+# is <actual> <expected>: for `check`; prints both on a mismatch.
+is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 finish() {
     printf '%s: %d passed, %d failed, %d skipped\n' "$(basename "$0")" "$ADV_PASS" "$ADV_FAIL" "$ADV_SKIP"

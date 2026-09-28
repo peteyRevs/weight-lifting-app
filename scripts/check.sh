@@ -5,7 +5,7 @@
 #   scripts/check.sh                    full gate: format, lint, iOS, watchOS, coverage
 #   scripts/check.sh --fast             host-side package tests only; no simulators
 #   scripts/check.sh --lint-only        steps 0–2 only
-#   scripts/check.sh --skip-lint        steps 3–5 only (CI runs lint in its own job)
+#   scripts/check.sh --skip-lint        steps 3–5 only (no format, lint or script tests)
 #   scripts/check.sh --record-snapshots re-record snapshot references, then fail
 #
 # Destinations are overridable:

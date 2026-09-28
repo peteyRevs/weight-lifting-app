@@ -1,8 +1,8 @@
 # F01 implementation notes
 
 Base: `main` 8404d02. Commits so far: 0c74369 (first pass), 19d4050 (F1–F8 and Pete's
-decisions) and cd2aae2 (tester round 2). The round-2 fixes below (R3–R5 and R-D1–R-D5) are
-uncommitted. No GitHub or App Store Connect setting was changed.
+decisions), cd2aae2 (tester round 2) and 97fbab8 (R3–R5, R-D1–R-D5). The review fixes
+(B1, S1–S3 and the cheap nits) are uncommitted. No GitHub or App Store Connect setting was changed.
 
 ## Decisions
 
@@ -141,6 +141,64 @@ the property under test.
     bundles disagree on. Proposed for when it first happens; it would not fit the line budget
     now.
 
+## Review fixes (`review.md`: B1, S1–S3, nits)
+
+- **B1.** The Check job was checked out at depth 1, but RP11 needs history, so `check.sh`
+  step 2 would fail every PR.
+  - `pr.yml` Check now checks out with `fetch-depth: 0`. The repository is small, so this
+    costs seconds.
+  - **WF47** fails when any job that runs `check.sh` checks out shallow. Removing the line
+    fails WF47.
+  - In a shallow repo, RP11 now names its cause: "shallow checkout: check.sh needs full
+    history".
+  - *Proof, in a scratch clone* (`git clone --depth 1 file://…` of 97fbab8, plus this
+    round's changes, with `CI=true GITHUB_ACTIONS=true`; the clone is deleted):
+    - At depth 1, `check.sh --lint-only` exits 1. The only failure is RP11, with that message.
+    - After `git fetch --unshallow`, which is what `fetch-depth: 0` gives, it exits 0.
+      All suites pass, including WF01's actionlint, and 0 bytes reach the step summary.
+  - With `CI=true`, mise trusts `mise.toml` without asking, so the pinned tools resolve on
+    the runner. Without CI, a fresh clone needs `mise trust`, as before.
+  - The Scope job keeps depth 2 because it reads only the merge and its base. The nightly
+    runs no history-dependent check.
+- **S1.** The ci-cd.md header states the R5 allowlist: files under `docs/`, `tasks/` or
+  `design/`, or `*.md` at the repository root.
+- **S2.**
+  - WF01 now **fails** when actionlint or shellcheck is missing, instead of skipping. It
+    finds them with `mise which` from `mise.toml`, so a pin bump needs no test edit.
+  - A missing Ruby fails the workflows suite too.
+  - A mutant that hides the tools fails WF01.
+- **S3.** The nightly runs `swift package resolve` before `update --dry-run`. Measured:
+  - on a fresh workspace, the dry-run alone lists all 9 pins as changes;
+  - resolved first, it reports "0 dependencies would change".
+
+**Nits fixed:**
+- **N1:** `check.sh`'s header describes `--skip-lint` correctly.
+- **N2:** these notes.
+- **N3:**
+  - §8's token row now names the nightly report's `issues: write`.
+  - The header now carries the free-tier cost (about 13–18 minutes per code PR; §9 is superseded).
+- **N5:** the `check.sh` step has `timeout-minutes: 27`, so a hang fails the step and the
+  bundles still upload before the 30-minute job timeout.
+- **N7 (part):** one `is()` in `lib.sh` instead of five copies.
+- **N8:** `run.sh` does `cd … || exit 1`. `lib.sh` has a shellcheck `shell` directive, a
+  justified SC2034, and mode 100644.
+- **N9:** ci-cd.md §4 now says to seed the cache only if the first runs show slow resolution.
+- **Review §d:** the checklist says to squash only, and why.
+
+**Nits deferred, with reasons:**
+- **N4** touches files outside F01's Touches: engineering-standards §10/§12 and
+  testing-strategy §4. They should state Pete's no-protection decision and the gate's real
+  rules. This is for the orchestrator.
+- **N6** (the suite adds about 0.5 billed minutes per run) is accepted. If minutes get
+  tight, move the host-only suites into the Linux Scope job.
+- **N7 (rest):** folding `coverage-gate.test.sh` into `coverage-gate.adv.sh` changes no
+  behaviour. It is left for a test-only cleanup.
+- **N10** is adopted as the plan for criterion 10 (see Pending).
+- **N11** is R-D5, deferred as explained above.
+- **N12** is informational: SwiftFormat's reporter emits `::warning`, and the step still
+  exits 1.
+- **N13** is for the orchestrator at merge.
+
 ## Verification
 
 - **Runner image** (`macos-26` = arm64, 20260907): Xcode 26.6 (17F113) is the default at
@@ -184,11 +242,14 @@ the property under test.
   - test: a failing `#expect` in LedgerDomainTests;
   - coverage: the LedgerDomain threshold set to 99;
   - snapshot: after F06 lands.
-- **Criterion 10:** `gh workflow run nightly.yml --ref <branch with a failing test>`, once
-  F01 is on `main`.
+- **Criterion 10**, the cheap way (N10): dispatch `nightly.yml` on a throwaway branch whose
+  `.xcode-version` names a missing Xcode. Every macOS job fails within a minute, and `report`
+  still opens the `nightly` issue.
 - **Criteria 7 and 9 are manual** (Pete), in `docs/xcode-cloud/README.md` §6.
-- **Squash-merge F01 with a `ci:` subject.** A `feat` subject would make release-please open
-  a 0.2.0 release PR.
+- **Merge F01 with `gh pr merge --squash --subject "ci: …"`.** A `feat` subject would open a
+  0.2.0 release PR, and a merge commit would put the `fix(ci):` commits on `main` (0.1.1).
+  release-please reads the whole message; the default squash body is safe.
+- **G5 stops for Pete.** The PR edits ADR-006 and touches releases and Xcode Cloud delivery.
 - **Follow-ups not done:**
   - SwiftLint analyzer (F00 #9);
   - Dependabot for the SHA pins;

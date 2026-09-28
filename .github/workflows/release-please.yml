@@ -1,6 +1,6 @@
-# Versions and changelog from Conventional Commits (docs/ci-cd.md §6): each push to main
-# opens or updates the release PR (MARKETING_VERSION in Config/Base.xcconfig); merging
-# it tags vX.Y.Z for Xcode Cloud "Release". CI never runs on it: check.sh it locally.
+# Versions and changelog from Conventional Commits (docs/ci-cd.md §6): each push to main updates the
+# release PR (MARKETING_VERSION in Config/Base.xcconfig; CI never runs on it, so check.sh it locally).
+# Merging it tags vX.Y.Z for Xcode Cloud "Release".
 name: Release Please
 
 on:

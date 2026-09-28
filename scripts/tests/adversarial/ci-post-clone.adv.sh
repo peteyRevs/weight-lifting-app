@@ -7,7 +7,6 @@ source "$(dirname "$0")/lib.sh"
 
 SCRIPT="$ROOT/ci_scripts/ci_post_clone.sh"
 T="$ADV_TMP"
-is() { [[ "$1" == "$2" ]] || { printf 'got: %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 # clone: a fresh copy of what the script and xcodebuild read, as Xcode Cloud clones it.
 clone() {

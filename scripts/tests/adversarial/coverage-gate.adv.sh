@@ -52,7 +52,6 @@ gate() {
     out="$("$GATE" "$@" 2>&1)"
     code=$?
 }
-is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 # ---- thresholds: boundaries ------------------------------------------------
 report "$T/exact.json" "D.xctest|LedgerDomain/A.swift|95/100"

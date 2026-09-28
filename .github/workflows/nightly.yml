@@ -1,6 +1,5 @@
-# Nightly (docs/ci-cd.md §3): the full Nightly / Nightly-Watch plans and a dependency
-# report; a failure opens an issue labelled "nightly" or comments on the open one.
-# Manual only: a schedule would spend the free macOS minutes (Pete, 2026-09-27).
+# Nightly (docs/ci-cd.md §3), manual only to save the free macOS minutes (Pete, 2026-09-27): the full
+# Nightly plans and a dependency report; a failure opens (or comments on) an issue labelled "nightly".
 name: Nightly
 
 on:
@@ -68,7 +67,7 @@ jobs:
         run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
       - name: Available package updates (report only; bumps are deliberate PRs)
         run: |
-          swift package --package-path LedgerKit update --dry-run | tee updates.txt
+          swift package --package-path LedgerKit resolve && swift package --package-path LedgerKit update --dry-run | tee updates.txt
           { echo '```'; sed -n '/Dry-run/,$p' updates.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   report:

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# The coverage gate (docs/testing-strategy.md §4): line coverage per module of
-# LedgerKit/Sources/<Module>/ (coverage is plan-wide, F00 notes #17) against
-# scripts/coverage-thresholds.json. A file measured twice (two bundles, iOS and
-# watchOS) keeps the measurement with the most lines, then the most covered.
-# "required" lists every module with code: one missing from the report fails (its
-# test target was dropped), and a measured one fails until it is listed.
+# The coverage gate (docs/testing-strategy.md §4): line coverage per LedgerKit/Sources/<Module>/
+# (coverage is plan-wide, F00 notes #17) against scripts/coverage-thresholds.json. A file measured
+# twice (two bundles, iOS and watchOS) keeps the measurement with the most lines, then most covered.
+# "required" lists every module with code: one missing from the report fails (its test target was
+# dropped), and a measured one fails until it is listed.
 #
 #   scripts/coverage-gate.sh <result.xcresult | xccov-report.json>...
 #
-# Prints a Markdown table (also to $GITHUB_STEP_SUMMARY). Exit 0: all thresholds met;
-# 1: a threshold missed or missing; 2: bad input.
+# Prints a Markdown table (also to $GITHUB_STEP_SUMMARY). Exit 0: all thresholds met; 1: a
+# threshold missed or missing; 2: bad input.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

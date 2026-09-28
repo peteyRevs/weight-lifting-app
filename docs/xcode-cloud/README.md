@@ -17,7 +17,8 @@ therefore waived; the merge gate is the orchestrator's policy.
 - [ ] **Actions ▸ General ▸ Workflow permissions:** keep *Read repository contents*. Tick
   **Allow GitHub Actions to create and approve pull requests**, which release-please needs.
 - [ ] **General ▸ Pull Requests:** untick *Allow merge commits* and *Allow rebase merging* (squash
-  only). Tick **Automatically delete head branches**. *Verified:* all three merge types are on today.
+  only; a merge commit would put branch commits on `main` for release-please). Tick **Automatically
+  delete head branches**. *Verified:* all three merge types are on today.
 
 ## 2. Apple prerequisites
 
@@ -67,8 +68,7 @@ waits for Beta App Review (about 1–2 days).
   `CURRENT_PROJECT_VERSION = N`, where N is the Xcode Cloud build number. TestFlight should show
   **0.1.0 (N)** with the same N. Install it on the iPhone; the watch app comes with it.
   Screenshot: `testflight-beta.png`.
-- [ ] **9:** run `scripts/check.sh` on release-please's release PR (CI does not run on it),
-  then merge it (criterion 8). The run on that merge tags `v0.2.0`.
-  "Release" should start through the Xcode Cloud GitHub App; the `GITHUB_TOKEN` tag still sends
-  the webhook. If it doesn't start, use Manual Start and tell the orchestrator.
-  Screenshot: `xcode-cloud-release-run.png`.
+- [ ] **9:** run `scripts/check.sh` on release-please's release PR (CI does not run on it), then merge
+  it (criterion 8). The run on that merge tags `v0.2.0`, and "Release" should start through the Xcode
+  Cloud GitHub App (a `GITHUB_TOKEN` tag still sends the webhook). If it doesn't, use Manual Start
+  and tell the orchestrator. Screenshot: `xcode-cloud-release-run.png`.

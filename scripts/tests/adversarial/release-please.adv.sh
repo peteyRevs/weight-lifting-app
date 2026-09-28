@@ -9,7 +9,6 @@ source "$(dirname "$0")/lib.sh"
 CONFIG="$ROOT/release-please-config.json"
 MANIFEST="$ROOT/.release-please-manifest.json"
 BASE="$ROOT/Config/Base.xcconfig"
-is() { [[ "$1" == "$2" ]] || { printf 'got: %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 check "RP01 config and manifest are valid JSON" jq -e . "$CONFIG" "$MANIFEST"
 
@@ -43,7 +42,11 @@ check "RP10 the changelog shows feat, fix, perf and hides everything else" \
     is "$(jq -r '[."changelog-sections"[] | select(.hidden != true) | .type] | sort | join(",")' "$CONFIG")" "feat,fix,perf"
 
 sha="$(jq -r '."bootstrap-sha"' "$CONFIG")"
-check "RP11 bootstrap-sha is an ancestor of HEAD" git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD
+if [[ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" == true ]]; then
+    fail "RP11 bootstrap-sha is an ancestor of HEAD" "shallow checkout: check.sh needs full history (actions/checkout fetch-depth: 0)"
+else
+    check "RP11 bootstrap-sha is an ancestor of HEAD" git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD
+fi
 
 overrides="$(cd "$ROOT" && grep -lE '^\s*MARKETING_VERSION\s*=' Config/*.xcconfig | grep -v '^Config/Base.xcconfig$' || true)
 $(grep -c 'MARKETING_VERSION' "$ROOT/Ledger.xcodeproj/project.pbxproj" | grep -v '^0$' || true)"
