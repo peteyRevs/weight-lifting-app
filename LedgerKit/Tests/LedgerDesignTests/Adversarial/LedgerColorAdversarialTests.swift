@@ -15,7 +15,8 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
     static let paper: UInt32 = 0xEFEDE6, card: UInt32 = 0xFFFFFF, inkHex: UInt32 = 0x16150F
     static let groundHex: UInt32 = 0x0B0B0D, sheet: UInt32 = 0x131316, text: UInt32 = 0xF4F2ED
     /// F06 fix round (Pete, WCAG AA): accentDeep #C63F0F → #C03D0F, inkMuted .45 → .48 dark / .60 light.
-    static let orange: UInt32 = 0xFF5B22, orangeDeep: UInt32 = 0xC03D0F
+    /// F06 fix round 2 (same decision, finding 14): accentDeep → #B2390E, for 4.5:1 on accentSoft.
+    static let orange: UInt32 = 0xFF5B22, orangeDeep: UInt32 = 0xB2390E
 
     var color: Color {
         switch self {

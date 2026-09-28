@@ -88,13 +88,13 @@ public nonisolated extension LedgerFont.Role {
         case .caption: .text(12, 400, .caption)
         case .button: .text(16, 700, tracking: -0.005, .callout) // bold: white on accent is 3.1:1
         case .eyebrow: .text(10, 500, tracking: 0.18, uppercase: true, .caption2)
-        case .numeralXL: .numeral(34, width: 88, tracking: -0.03, .largeTitle)
-        case .numeralL: .numeral(30, width: 88, tracking: -0.03, .title)
-        case .numeralM: .numeral(24, width: 90, tracking: -0.025, .title2)
-        case .numeralS: .numeral(15, width: 90, tracking: 0, .subheadline)
-        case .watchNumeral: .watch(.numeral(64, width: 92, line: 0.86, tracking: -0.035, .largeTitle))
-        case .watchCountdown: .watch(.numeral(52, width: 92, tracking: -0.035, .largeTitle))
-        case .watchStat: .watch(.numeral(30, width: 92, tracking: -0.03, .title3))
+        case .numeralXL: .text(34, 700, width: 88, tracking: -0.03, tabular: true, .largeTitle)
+        case .numeralL: .text(30, 700, width: 88, tracking: -0.03, tabular: true, .title)
+        case .numeralM: .text(24, 700, width: 90, tracking: -0.025, tabular: true, .title2)
+        case .numeralS: .text(15, 700, width: 90, tracking: 0, tabular: true, .subheadline)
+        case .watchNumeral: .watch(.text(64, 700, width: 92, line: 0.86, tracking: -0.035, tabular: true, .largeTitle))
+        case .watchCountdown: .watch(.text(52, 700, width: 92, tracking: -0.035, tabular: true, .largeTitle))
+        case .watchStat: .watch(.text(30, 700, width: 92, tracking: -0.03, tabular: true, .title3))
         case .watchTitle: .watch(.text(20, 600, line: 1.12, .headline))
         case .watchButton: .watch(.text(21, 700, tracking: -0.01, .body))
         case .watchLabel: .watch(.text(17, 700, tracking: 0.1, uppercase: true, .footnote))
@@ -111,24 +111,12 @@ private nonisolated extension LedgerTypeSpec {
         line: CGFloat = 1,
         tracking: CGFloat = 0,
         uppercase: Bool = false,
+        tabular: Bool = false,
         _ textStyle: Font.TextStyle
     ) -> LedgerTypeSpec {
         LedgerTypeSpec(
             size: size, weight: weight, width: width, lineHeight: line, tracking: tracking,
-            isTabular: false, isUppercase: uppercase, textStyle: textStyle, minimumSize: 0
-        )
-    }
-
-    static func numeral(
-        _ size: CGFloat,
-        width: CGFloat,
-        line: CGFloat = 1,
-        tracking: CGFloat,
-        _ textStyle: Font.TextStyle
-    ) -> LedgerTypeSpec {
-        LedgerTypeSpec(
-            size: size, weight: 700, width: width, lineHeight: line, tracking: tracking,
-            isTabular: true, isUppercase: false, textStyle: textStyle, minimumSize: 0
+            isTabular: tabular, isUppercase: uppercase, textStyle: textStyle, minimumSize: 0
         )
     }
 
@@ -147,7 +135,8 @@ private nonisolated extension LedgerTypeSpec {
 
 public extension View {
     /// Sets text in a type role: Archivo at the role's axes, its size scaled with Dynamic Type and
-    /// its weight stepped up by Bold Text, plus the role's tracking, case and line height.
+    /// its weight stepped up by Bold Text, plus the role's tracking, case and line height, with each
+    /// line placed in its line box where CSS places it.
     func ledgerFont(_ role: LedgerFont.Role) -> some View {
         modifier(LedgerTextStyle(role: role))
     }
@@ -161,10 +150,15 @@ struct LedgerTextStyle: ViewModifier {
     func body(content: Content) -> some View {
         let spec = role.spec
         let size = LedgerFont.scaledSize(role, dynamicTypeSize: dynamicTypeSize)
+        // SwiftUI puts a baseline 1 em below the top of its line box at any line height; CSS centres
+        // the font in the box. Lifting the text by the difference keeps the frame and the line pitch.
+        let lift = (1 - spec.lineHeight / 2 - ArchivoFont.baselineBelowMiddle) * size
         content
             .font(LedgerFont.font(role, size: size, legibilityWeight: legibilityWeight))
             .tracking(spec.tracking * size)
             .textCase(spec.isUppercase ? .uppercase : nil)
             .lineHeight(.multiple(factor: spec.lineHeight))
+            .padding(.top, -lift)
+            .padding(.bottom, lift)
     }
 }

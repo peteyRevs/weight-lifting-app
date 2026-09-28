@@ -40,8 +40,8 @@ public nonisolated enum LedgerColor {
 
     /// `#FF5B22`.
     public static let accent = Color(light: .accent, dark: .accent)
-    /// Orange text: `#C03D0F` on paper (the spec's `accentDeep` `#C63F0F`, 3 % darker to reach AA),
-    /// `#FF5B22` on the dark ground.
+    /// Orange text: `#B2390E` on paper (the spec's `accentDeep` `#C63F0F` × 0.9, for AA on paper and
+    /// on `accentSoft`), `#FF5B22` on the dark ground.
     public static let accentText = Color(light: .accentDeep, dark: .accent)
     /// Tinted fill behind a selected item: 12 % on paper (`accentTint`), 16 % on dark (§8.3).
     public static let accentSoft = Color(light: .accent.opacity(0.12), dark: .accent.opacity(0.16))
@@ -97,7 +97,7 @@ nonisolated struct LedgerRGBA: Equatable {
     static let sheet = LedgerRGBA(0x131316)
     static let text = LedgerRGBA(0xF4F2ED)
     static let accent = LedgerRGBA(0xFF5B22)
-    static let accentDeep = LedgerRGBA(0xC03D0F)
+    static let accentDeep = LedgerRGBA(0xB2390E)
     static let white = LedgerRGBA(0xFFFFFF)
 }
 

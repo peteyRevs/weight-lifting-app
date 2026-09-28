@@ -28,27 +28,38 @@ extension Diffing where Value == Data {
 }
 
 enum PixelComparison {
-    /// Why `actual` does not match `reference`, and where (the reference dimmed, mismatches in
-    /// magenta); nil when it matches.
+    /// Why `actual` does not match `reference`, and where; nil when it matches. The difference
+    /// image lays both on one canvas the size of the larger: the reference dimmed, mismatches in
+    /// magenta, including every pixel only one of the two images has (a size change).
     static func failure(reference: CGImage, actual: CGImage) -> (message: String, difference: CGImage?)? {
-        guard reference.width == actual.width, reference.height == actual.height else {
-            let sizes = "\(actual.width)×\(actual.height) against \(reference.width)×\(reference.height)"
-            return ("The image size differs from the reference: \(sizes)", nil)
-        }
         guard let old = PixelBuffer(reference), let new = PixelBuffer(actual) else {
             return ("Could not decode the images to compare them", nil)
         }
-        // Float arithmetic, like the thresholds: 995 of 1000 pixels is exactly `precision` 0.995.
         let threshold = Double(100 - 100 * SnapshotConfig.perceptualPrecision)
-        let mismatches = zip(old.pixels, new.pixels).map { $0 != $1 && deltaE($0, $1) > threshold }
+        let (width, height) = (max(old.width, new.width), max(old.height, new.height))
+        let mismatches = (0 ..< width * height).map { index in
+            guard let lhs = old[index % width, index / width], let rhs = new[index % width, index / width] else {
+                return true
+            }
+            return lhs != rhs && deltaE(lhs, rhs) > threshold
+        }
         let mismatched = mismatches.count { $0 }
-        let matching = Float(mismatches.count - mismatched) / Float(mismatches.count)
-        guard matching < SnapshotConfig.precision else { return nil }
-        let difference = PixelBuffer(width: old.width, height: old.height, pixels: zip(old.pixels, mismatches).map {
-            $1 ? Pixel(hex: 0xFF00FF) : Pixel(red: $0.red / 3, green: $0.green / 3, blue: $0.blue / 3, alpha: 0xFF)
+        let sameSize = old.width == new.width && old.height == new.height
+        // Whole pixels against the precision in parts per million, so no rounding moves the
+        // boundary: 0.995 lets exactly floor(0.5 %) of the pixels differ.
+        let allowedPerMillion = Int(((1 - Double(SnapshotConfig.precision)) * 1_000_000).rounded())
+        if sameSize, mismatched * 1_000_000 <= mismatches.count * allowedPerMillion {
+            return nil
+        }
+        let difference = PixelBuffer(width: width, height: height, pixels: mismatches.indices.map { index in
+            guard !mismatches[index], let pixel = old[index % width, index / width] else { return Pixel(hex: 0xFF00FF) }
+            return Pixel(red: pixel.red / 3, green: pixel.green / 3, blue: pixel.blue / 3, alpha: 0xFF)
         })
-        let message = "\(mismatched) pixels differ by more than ΔE \(threshold): \(matching) match, "
+        let matching = Double(mismatches.count - mismatched) / Double(mismatches.count)
+        let message = sameSize
+            ? "\(mismatched) pixels differ by more than ΔE \(threshold): \(matching) match, "
             + "\(SnapshotConfig.precision) required"
+            : "The image size differs from the reference: \(new.width)×\(new.height) against \(old.width)×\(old.height)"
         return (message, difference.cgImage)
     }
 
@@ -60,6 +71,13 @@ enum PixelComparison {
         let greenRed = old.greenRed - new.greenRed
         let blueYellow = old.blueYellow - new.blueYellow
         return max(alphaDelta, (lightness * lightness + greenRed * greenRed + blueYellow * blueYellow).squareRoot())
+    }
+}
+
+private extension PixelBuffer {
+    /// The pixel at `column`, `row`, or nil outside the image.
+    subscript(column: Int, row: Int) -> Pixel? {
+        column < width && row < height ? pixel(column: column, row: row) : nil
     }
 }
 

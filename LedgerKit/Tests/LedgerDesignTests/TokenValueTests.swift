@@ -52,7 +52,7 @@ struct TokenValueTests {
         Case("hairline", LedgerColor.hairline, 0x16150F, 0.08),
         Case("hairlineStrong", LedgerColor.hairlineStrong, 0x16150F, 0.14),
         Case("accent", LedgerColor.accent, 0xFF5B22),
-        Case("accentText", LedgerColor.accentText, 0xC03D0F),
+        Case("accentText", LedgerColor.accentText, 0xB2390E),
         Case("accentSoft", LedgerColor.accentSoft, 0xFF5B22, 0.12),
         Case("accentLine", LedgerColor.accentLine, 0xFF5B22, 0.4),
         Case("onAccent", LedgerColor.onAccent, 0xFFFFFF)

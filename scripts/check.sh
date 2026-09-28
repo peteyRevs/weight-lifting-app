@@ -67,6 +67,7 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml
     scripts/tests/lint-rules.test.sh
     scripts/tests/lint-rules-adversarial.test.sh
+    scripts/tests/lint-rules-adversarial-round2.test.sh
     scripts/check-package-graph.sh
     done_step "lint"
 fi

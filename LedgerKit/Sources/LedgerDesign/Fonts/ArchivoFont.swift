@@ -17,6 +17,12 @@ nonisolated enum ArchivoFont {
     /// The ranges in the font's `fvar` table; requests outside them are clamped.
     static let weightRange: ClosedRange<CGFloat> = 100 ... 900
     static let widthRange: ClosedRange<CGFloat> = 62 ... 125
+    /// Half of ascent minus descent in em (.878 and .210 at every axis position): how far below the
+    /// middle of a CSS line box a lone line's baseline sits.
+    static let baselineBelowMiddle: CGFloat = {
+        let font = make(size: 1, weight: 400, width: 100)
+        return (CTFontGetAscent(font) - CTFontGetDescent(font)) / 2
+    }()
 
     static func make(size: CGFloat, weight: CGFloat, width: CGFloat, tabularDigits: Bool = false) -> CTFont {
         FontRegistration.registerIfNeeded()

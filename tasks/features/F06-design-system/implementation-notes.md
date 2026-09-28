@@ -78,6 +78,8 @@ static-instance fallback was needed or built.**
    `font(_:size:legibilityWeight:)` (explicit, already scaled size, floored);
    the brief's environment-free `font(_:)` is gone, so no caller can get an
    unscaled font. See "Dynamic Type" below for why the size must be passed.
+   Since fix round 2 the modifier also places each line in its line box where
+   CSS does (see "Fix round 2", finding 11).
 4. **21 type roles**, values copied from the v2 and watch prototypes'
    `font:` declarations (table in `TypeScaleTests`). Added to the brief's 13:
    `subheading` (sheet title 21 pt), `caption` (400 12 pt metadata), `button`
@@ -101,7 +103,7 @@ static-instance fallback was needed or built.**
    appearance and no dynamic `UIColor`, so it takes the dark value; macOS
    exists only for the host build. Added to the brief's list, each from the
    spec: `accentText` (spec §8.1 "orange text on paper uses #C63F0F for
-   contrast", now `#C03D0F`, see decision 7), `accentLine` (accent 40 %, the active-set rule),
+   contrast", now `#B2390E`, see decision 7 and fix round 2), `accentLine` (accent 40 %, the active-set rule),
    `inkDim` (28 %, the v2 `DIM` done rows), and the watch ink family
    (`watchInk`, `…Secondary` 55 %, `…Muted` 46 % (was 40 %, decision 7), `watchOutline` 22 %,
    `watchHairline` 14 %, `watchTrack` 13 %). `accentSoft` is 12 % on paper
@@ -115,7 +117,7 @@ static-instance fallback was needed or built.**
    | `inkMuted`, dark | text .45 | 4.15 / 4.17 | text **.48** | 4.58 / 4.58 |
    | `inkMuted`, light | ink .45 | 2.88 / 2.97 | ink **.60** | 4.53 / 4.78 |
    | `watchInkMuted` | white .40 | 3.66 | white **.46** | 4.58 |
-   | `accentText`, light | `#C63F0F` | 4.35 / 5.10 | **`#C03D0F`** (3 % darker) | 4.58 / 5.36 |
+   | `accentText`, light | `#C63F0F` | 4.35 / 5.10 | **`#B2390E`** (× 0.90; fix round 1 had `#C03D0F`, × 0.97) | 5.14 / 6.03 |
    | `onAccent` on `accent` | white | 3.10 | white (unchanged) | 3.10 |
 
    White stays on the accent. Its only text is the button label, and the HIG
@@ -189,7 +191,8 @@ static-instance fallback was needed or built.**
    corner-radius label (`topLeadingRadius:` …) and `cornerSize:`. A literal `0`
    is allowed for spacing and radii (`VStack(spacing: 0)`), `\bColor(` no longer
    matches `highlightColor(red:)`, and `excluded_match_kinds` ignores comments and
-   string literals.
+   string literals. **Fix round 2 (findings 12, 13, 17):** see "Fix round 2";
+   `lint-rules-adversarial-round2.test.sh` (39/39) now also runs in step 2.
 11. **Snapshot infrastructure (`LedgerSnapshotTesting`, test-only).**
     swift-snapshot-testing 1.19.6 has no image strategy on watchOS (its SwiftUI
     and `UIImage` strategies are `#if os(iOS) || os(tvOS)`), and its newest
@@ -205,7 +208,9 @@ static-instance fallback was needed or built.**
     like `precision` itself, so exactly 995 of 1000 pixels passes; the ΔE
     threshold prints as 2.0. A failing `.png` comparison now attaches
     `difference.png` (the reference at a third of its brightness, mismatches in
-    magenta) next to `actual.png` and `reference.png`.
+    magenta) next to `actual.png` and `reference.png`. **Fix round 2 (findings
+    15, 16):** mismatches are counted in whole pixels against the precision in
+    parts per million, and a size change attaches a difference image too.
 12. **`check.sh --record-snapshots` now works.** It exported
     `SNAPSHOT_TESTING_RECORD`, which `xcodebuild` does not forward to the
     simulator's test runner, and `set -e` stopped at the iOS step, so watch
@@ -247,15 +252,139 @@ bound is the 11 pt watch floor, applied on every path. The adversarial tests
 that called `font(role)` now pass the text size (`LedgerFontRenderingAdversarialTests`
 ×3, `LedgerFontMetricsAdversarialTests.trackingGain`).
 
+## Fix round 2 (adversarial round 2, findings 11–17)
+
+**11. Where a lone line sits in its line box (bug, fixed).** The tester's CSS
+model is the right one: the prototypes are CSS, and spec §8.5's line heights
+are CSS `line-height`, which centres the font's ascent + descent in an `L` em
+box. Probe on the host (confirmed by the tests on both simulators): with
+`.lineHeight(.multiple(factor:))` or `.exact(points:)`, SwiftUI puts a single
+line's baseline exactly **1 em** below the frame top whatever `L` is (0.5, 0.86,
+1, 1.2, 1.6, 2 at 20 and 40 pt), and the frame is `L` em. CSS puts it at
+`L/2 + (ascent − descent)/2` em; Archivo's ascent is .878 em and descent .210 em
+at every axis position (`CTFontGetAscent`/`Descent` on the file). So
+`.ledgerFont` lifts the text by `(1 − L/2 − 0.334) × size` with
+`.padding(.top, −lift).padding(.bottom, lift)`. `ArchivoFont.baselineBelowMiddle`
+reads the 0.334 from the font rather than hard-coding it.
+- Padding, not `offset`: the frame keeps its exact height (measured identical to
+  the unlifted text at 1×, 2× and 3× for 11–42.67 pt × `L` 0.86–1.6), and the
+  text-baseline alignment guides move with the glyphs, so
+  `HStack(alignment: .firstTextBaseline)` / `.lastTextBaseline` still line up
+  mixed roles (probe: numeralXL/bodyLight, watchNumeral/caption,
+  display/eyebrow align to the pixel). An `offset` would leave the guides behind.
+- Multi-line pitch is unchanged (the whole block moves), so round 1's
+  baseline-to-baseline tests still hold; each line lands where CSS stacks it.
+- `watchNumeral` (0.86) now has its baseline at 0.764 em inside its 0.86 em
+  frame instead of 0.996 em (0.14 em below it).
+- Limitation: the lift is applied to whatever view `.ledgerFont` modifies. On
+  a container of text in one role that is still right (every line moves
+  together); a non-text child in that container moves with it.
+- Line budget: the lift cost 12 lines (the metric in `ArchivoFont`, the
+  modifier's comment, `lift` and two paddings, one doc line); folding the
+  `numeral` spec builder into `text(…, tabular: true)` saved 12, so
+  LedgerDesign stays at 497.
+
+**12. `ledger_raw_font` flagged `LedgerFont.font(.title/.body/.caption, …)` (bug, fixed).**
+The `.font(` branch now has a negative lookbehind, `(?<!LedgerFont)\.font\(`.
+
+**13. Eleven raw spellings passed (bug, fixed).** B01–B04: the colour
+leading-dot branch also fires after an assignment `=` (not `==`, `!=`, `<=`,
+`>=`), a ternary `? ` and `??`, and `.init(red:|white:|hue:|uiColor:|…)` is a
+colour construction. B05: any system style anywhere inside a `.font(…)`
+argument (so ternaries), not only right after the paren. B06/B07: `.init(top:…)`
+is `EdgeInsets`. B08: `.contentMargins(` (with `.listRowSpacing(` /
+`.listSectionSpacing(`) joins the padding branch. B09: `minLength:` joins the
+spacing labels. B10/B11: RectangleCornerRadii's `topLeading:` … labels join the
+radius labels.
+
+**14. `accentText` on `accentSoft` over paper was 4.04:1 (design question) — an
+application of Pete's decision of 2026-09-27, "meet WCAG AA, keep the look".**
+The tint cannot fix it alone: even at 3 % alpha (a near-invisible chip) the
+text is 4.44:1. So the text moves, along the same line as fix round 1 (the
+spec's `accentDeep` scaled down): round 1 used × 0.97 (`#C03D0F`); × 0.905
+(`#B3390E`) is 4.51 exact but 4.49 once the tint is quantised to 8 bits, so
+× 0.90, **`#B2390E`**, is the smallest step on that line that holds. It is one
+token value, light only; the tint, the dark value and Increase Contrast are
+unchanged. Colour distance: ΔE2000 3.1 from `#C03D0F`, 4.5 from the spec's
+`#C63F0F` (the smallest possible change for this pair, any hue, is ΔE2000 2.8
+and lands exactly on 4.50).
+
+| `accentText` light over… | `#C63F0F` (spec) | `#C03D0F` (before) | **`#B2390E` (after)** |
+|---|---|---|---|
+| `accentSoft` on paper (`ground`) | 3.83 | **4.04** | **4.54** (4.52 with an 8-bit tint) |
+| `accentSoft` on card (`surface`) | 4.43 | 4.67 | 5.25 |
+| paper (`ground`) | 4.35 | 4.58 | 5.14 |
+| card (`surface`) | 5.10 | 5.36 | 6.03 |
+
+Increase Contrast leaves the accent family alone, so the ratios are the same
+with it on. Dark mode already passed and is unchanged: `#FF5B22` on the 16 %
+tint is 5.32 over ground, 4.92 over sheet. Tests updated to the decided value
+(each commented `F06 fix round 2`): `TokenValueTests` (accentText light) and
+`Adversarial/LedgerColorAdversarialTests.orangeDeep`.
+
+**15. One pixel too many passed at some sizes (bug, fixed).** The comparator
+no longer divides: it passes when `mismatched × 1 000 000 ≤ pixels ×
+allowedPerMillion`, where `allowedPerMillion` is `(1 − precision) × 10⁶`
+rounded (5 000), so exactly floor(0.5 %) of the pixels may differ at every size.
+
+**16. A size change attached no difference image (bug, fixed).** The
+comparison now lays both images on a canvas the size of the larger: the
+overlap is compared pixel by pixel, every pixel only one image has is a
+mismatch, and `difference.png` is that canvas (reference dimmed, mismatches
+magenta). A size change still always fails and its message still names both
+sizes.
+
+**17. Lint escape hatches (design questions).** Decided one by one; the rule is
+"close what a feature author would write without meaning to bypass tokens".
+
+| Case | Decision | Why |
+|---|---|---|
+| D01 `LedgerFont.font(.numeralL, dynamicTypeSize: .large)` | Closed: a constant `dynamicTypeSize:` is flagged | It looks like the sanctioned call but drops Dynamic Type; the real call passes `@Environment(\.dynamicTypeSize)` |
+| D02 `LedgerFont.font(.label, size: 13)` | Closed: a literal `size:` is flagged | The parameter's contract is an already scaled size; a literal never is |
+| D04 `.dynamicTypeSize(.large)` | Closed, with `.environment(\.dynamicTypeSize, .large)`: a single pinned size is flagged | It turns Dynamic Type off for a subtree (standards §7). Cost: a preview can't pin a size in code; previews use the canvas's Dynamic Type variants and the snapshot matrix covers the sizes |
+| — `.dynamicTypeSize(...DynamicTypeSize.accessibility2)` | Left open | Apple's documented way to bound growth where a layout truly can't grow; deliberate, rare and visible in review, and it still supports accessibility sizes |
+| D05 `LedgerColor.ink.opacity(0.6)` | Closed: `.opacity(` on a `LedgerColor` token is flagged | A hand-made alpha leaves the AA ladder and Increase Contrast; view `.opacity` (fades) is unaffected |
+| D06 `LedgerSpacing.m + 1` | Closed, for spacing and radius tokens | "Nudge by one" is the classic accident; token-to-token arithmetic (concentric radii) stays legal |
+| D07, D08 `.tracking(2)`, `.lineSpacing(4)` | Closed, with `.kerning(` and `.lineHeight(` | Letter-spacing and leading belong to the roles |
+| D09 `.font(.init(CTFont…))` | Closed: `.init` inside `.font(…)` | Costs one alternative |
+| P04 `cornerSize: CGSize(width: LedgerRadius.row, …)` | Fixed: flagged only with a literal | False positive on tokens |
+| N12 `LedgerFont.archivo(size: 30, …)` | Left open | The brief makes it public and round 1's N12 requires it to lint; see "Open points" |
+
+Residual breadth, accepted: the colour leading-dot branch now also fires after
+`=`, `?` and `??`, so a feature enum case named like a colour (`primary`,
+`secondary`, …) written with a leading dot there is flagged; the workaround is
+to qualify it (`Rank.primary`). `LedgerDomain` has no such case and the whole
+repo lints clean. A probe of 14 legitimate spellings (token arithmetic
+between tokens, `Spacer(minLength: 0)`, range caps, `LedgerFont.font` with a
+role ternary or a scaled size, view `.opacity`, `.task(priority: .background)`,
+`dynamicTypeSize >= .accessibility1`, …) raised nothing, with a raw control in
+the same tree flagged.
+
+No test is disputed. Test edits this round: the two `accentText` values above,
+nothing else. The round-2 lint script's header still says it is not wired into
+`check.sh`; it is the tester's file, so the comment was left as is.
+
 ## Deviations from the brief
 
 - Criterion 1 names `UIFontDescriptor`; `CTFontDescriptor` is used (decision 2).
-- The brief's `LedgerFont.font(_ role:) -> Font` became
-  `font(_:dynamicTypeSize:legibilityWeight:)`; see "Dynamic Type" (decision 3).
+- **`LedgerFont`'s `Font` entry points.** The brief's public surface still reads
+  `public static func font(_ role: Role) -> Font // Dynamic Type–scaled`. That
+  function does not exist: the entry points are
+  `font(_:dynamicTypeSize:legibilityWeight:)` and
+  `font(_:size:legibilityWeight:)`, plus `scaledSize(_:dynamicTypeSize:)` and
+  `boldTextWeightStep`, because a `Font` built from a Core Text instance cannot
+  follow the environment by itself (decision 3, "Dynamic Type"). Architecture
+  §11 already says so; the brief's code block is the orchestrator's to update.
+- `.ledgerFont` lifts each line inside its line box to match CSS half-leading
+  (fix round 2, finding 11); the brief says nothing about vertical placement.
+- `accentText` light is `#B2390E`, not spec §8.1's `#C63F0F` (decision 7, fix
+  round 2, finding 14).
 - Role list and colour list extended (decisions 4, 6); `LedgerMotion.buzz` replaced (decision 8).
 - Criterion 3 uses `.xLarge` as the brief says; testing-strategy §2.5 said
   `.xxxLarge` and now follows the brief.
-- Lint rules renamed and re-scoped rather than only allowlisted (decision 9).
+- Lint rules renamed and re-scoped rather than only allowlisted (decision 10);
+  since fix round 2 they also cover tracking/leading modifiers, a constant text
+  size and raw alphas on tokens, which the brief's three examples don't name.
 - `Resources/Fonts/` removed (decision 1): **the pbxproj still has the `Fonts`
   synchronized group pointing at it.** Builds report 0 warnings with the folder
   gone (checked in the build result bundle), but the dangling group should be
@@ -272,6 +401,14 @@ that called `font(role)` now pass the text size (`LedgerFontRenderingAdversarial
 - Contrast and Bold Text: decided by Pete 2026-09-27 and implemented (decisions 7, 9).
 - F00's open question (feature targets linking `LedgerTestSupport` for preview
   fixtures) is not touched here; it matters once slice 2 adds previews.
+- **For Pete (finding 14):** `accentText` light moved again under his AA
+  decision, `#C03D0F` → `#B2390E`, so orange chip text on its tint reaches
+  4.5:1 (table in "Fix round 2").
+- **Brief question (finding 17):** `LedgerFont.archivo(size:weight:width:)` is
+  public per the brief and still lints with literals in a feature (round 1's
+  N12 requires it). Its only intended callers are `LedgerDesign` components
+  and `DesignGallery`, both inside the module, so the brief could make it
+  internal in slice 3; that would close the last font escape hatch.
 
 ## Verification (2026-09-27)
 
