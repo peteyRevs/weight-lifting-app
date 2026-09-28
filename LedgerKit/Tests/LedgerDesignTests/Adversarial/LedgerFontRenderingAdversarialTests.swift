@@ -55,12 +55,12 @@ struct LedgerFontRenderingAdversarialTests {
     }
 
     @Test(
-        "The bare LedgerFont.font(role) is tabular for numeral roles too (brief public surface).",
+        "The bare LedgerFont.font(role, dynamicTypeSize:) is tabular for numeral roles too (brief public surface).",
         arguments: RoleSets.numerals
     )
     func numeralRole_bareFont_isTabular(role: LedgerFont.Role) throws {
-        let ones = try #require(Self.size(Text("1111111111").font(LedgerFont.font(role))))
-        let zeros = try #require(Self.size(Text("0000000000").font(LedgerFont.font(role))))
+        let ones = try #require(Self.size(Text("1111111111").font(LedgerFont.font(role, dynamicTypeSize: .large))))
+        let zeros = try #require(Self.size(Text("0000000000").font(LedgerFont.font(role, dynamicTypeSize: .large))))
         #expect(ones.width == zeros.width, "\(role): 1s \(ones.width) px, 0s \(zeros.width) px")
     }
 
@@ -83,7 +83,10 @@ struct LedgerFontRenderingAdversarialTests {
             ArchivoFile.swiftUIFont(size: size, weight: weight, width: expected.width, tabular: expected.tabular),
             "Archivo not found next to the test bundle"
         )
-        let actual = try #require(Self.size(Text(Self.sample).font(LedgerFont.font(expected.role)), scale: 2))
+        // F06 fix round: the bare font now takes the text size; the design size is exact at the
+        // platform's reference size (.large on iOS, .xLarge on watchOS).
+        let font = LedgerFont.font(expected.role, dynamicTypeSize: SnapshotConfig.referenceDynamicTypeSize)
+        let actual = try #require(Self.size(Text(Self.sample).font(font), scale: 2))
         let wanted = try #require(Self.size(Text(Self.sample).font(reference), scale: 2))
         #expect(abs(actual.width - wanted.width) <= 1, "\(expected.role) width \(actual.width), spec \(wanted.width)")
         #expect(
@@ -108,12 +111,18 @@ struct LedgerFontRenderingAdversarialTests {
     }
 
     @Test(
-        "LedgerFont.font(role) is Dynamic Type–scaled, as the brief's public surface promises.",
+        "LedgerFont.font(role, dynamicTypeSize:) is Dynamic Type–scaled, as the brief's public surface promises.",
         arguments: [LedgerFont.Role.body, .numeralL]
     )
     func bareFont_accessibilitySize_scalesUp(role: LedgerFont.Role) throws {
-        let large = try #require(Self.capHeight(Text("H").font(LedgerFont.font(role)), type: .large))
-        let accessibility = try #require(Self.capHeight(Text("H").font(LedgerFont.font(role)), type: .accessibility3))
+        // F06 fix round: a Font built from a Core Text instance cannot read the environment, so the
+        // text size is passed explicitly (implementation notes, "Dynamic Type").
+        let large = try #require(Self.capHeight(
+            Text("H").font(LedgerFont.font(role, dynamicTypeSize: .large)), type: .large
+        ))
+        let accessibility = try #require(Self.capHeight(
+            Text("H").font(LedgerFont.font(role, dynamicTypeSize: .accessibility3)), type: .accessibility3
+        ))
         #expect(accessibility > large + 1, "\(role): large \(large) px, AX3 \(accessibility) px")
     }
 

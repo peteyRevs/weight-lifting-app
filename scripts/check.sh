@@ -66,6 +66,7 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     step "2 · lint (swiftlint --strict) + package graph"
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml
     scripts/tests/lint-rules.test.sh
+    scripts/tests/lint-rules-adversarial.test.sh
     scripts/check-package-graph.sh
     done_step "lint"
 fi
@@ -135,7 +136,7 @@ run_plan "$RESULTS/PR-watchOS.xcresult" TestPlans/PR-Watch.xctestplan \
 done_step "watchOS"
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
-    git status --short -- '**/__Snapshots__'
+    git status --short -- ':(glob)**/__Snapshots__/**'
     echo "snapshot references recorded; re-run check.sh (without the flag) to verify them" >&2
     exit 1
 fi

@@ -74,12 +74,12 @@ struct ArchivoFontTests {
 
     @Test("Numeral roles use tabular figures; other roles keep proportional ones")
     func numeralRoles_digits_haveEqualAdvances() throws {
-        let ones = try #require(RenderedImage.render(Text("1111").font(LedgerFont.font(.numeralM))))
-        let eights = try #require(RenderedImage.render(Text("8888").font(LedgerFont.font(.numeralM))))
+        let ones = try #require(RenderedImage.render(Text("1111").font(LedgerFont.font(.numeralM, size: 24))))
+        let eights = try #require(RenderedImage.render(Text("8888").font(LedgerFont.font(.numeralM, size: 24))))
         #expect(ones.width == eights.width)
 
-        let proportionalOnes = try #require(RenderedImage.render(Text("1111").font(LedgerFont.font(.body))))
-        let proportionalEights = try #require(RenderedImage.render(Text("8888").font(LedgerFont.font(.body))))
+        let proportionalOnes = try #require(RenderedImage.render(Text("1111").font(LedgerFont.font(.body, size: 15))))
+        let proportionalEights = try #require(RenderedImage.render(Text("8888").font(LedgerFont.font(.body, size: 15))))
         #expect(proportionalOnes.width < proportionalEights.width)
     }
 

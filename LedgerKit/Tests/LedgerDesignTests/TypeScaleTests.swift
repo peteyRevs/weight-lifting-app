@@ -36,7 +36,7 @@ struct TypeScaleTests {
         Row(.bodyLight, 13.5, 300, 100, 0, false, false), // body copy
         Row(.label, 12.5, 300, 100, 0, false, false), // row meta, stat caption
         Row(.caption, 12, 400, 100, 0, false, false), // date line, "Week 3 of 8"
-        Row(.button, 16, 600, 100, -0.005, false, false), // "Start workout"
+        Row(.button, 16, 700, 100, -0.005, false, false), // "Start workout", bold for 3:1 on the accent
         Row(.eyebrow, 10, 500, 100, 0.18, false, true), // "UP NEXT"
         Row(.numeralXL, 34, 700, 88, -0.03, true, false), // Today stats
         Row(.numeralL, 30, 700, 88, -0.03, true, false), // stat tiles
@@ -46,7 +46,7 @@ struct TypeScaleTests {
         Row(.watchCountdown, 52 / 1.5, 700, 92, -0.035, true, false), // rest countdown
         Row(.watchStat, 30 / 1.5, 700, 92, -0.03, true, false), // summary stats
         Row(.watchTitle, 20 / 1.5, 600, 100, 0, false, false), // exercise name
-        Row(.watchButton, 21 / 1.5, 600, 100, -0.01, false, false), // "Done set"
+        Row(.watchButton, 21 / 1.5, 700, 100, -0.01, false, false), // "Done set", bold as above
         Row(.watchLabel, 17 / 1.5, 700, 100, 0.1, false, true), // "RESTING"
         Row(.watchCaption, 17 / 1.5, 600, 100, 0.07, false, true) // "ELAPSED"
     ]
@@ -90,9 +90,22 @@ struct TypeScaleTests {
     @Test("At the reference text size a role renders at exactly its design size")
     func ledgerFont_referenceSize_matchesDesignSize() throws {
         let scaled = try #require(RenderedImage.render(Text("185 × 5").ledgerFont(.numeralM)))
-        let fixed = try #require(RenderedImage.render(Text("185 × 5").font(LedgerFont.font(.numeralM)).tracking(-0.6)))
+        let fixed = try #require(RenderedImage.render(Text("185 × 5").font(LedgerFont.font(
+            .numeralM,
+            dynamicTypeSize: SnapshotConfig.referenceDynamicTypeSize
+        )).tracking(-0.6)))
         #expect(scaled.width == fixed.width)
         #expect(scaled.height == 24) // line height 1 × 24 pt at 1×
+    }
+
+    @Test("scaledSize is the design size at the platform's reference text size and grows with it")
+    func scaledSize_referenceTextSize_isDesignSize() {
+        for role in LedgerFont.Role.allCases {
+            let reference = LedgerFont.scaledSize(role, dynamicTypeSize: SnapshotConfig.referenceDynamicTypeSize)
+            let sizes = DynamicTypeSize.allCases.map { LedgerFont.scaledSize(role, dynamicTypeSize: $0) }
+            #expect(abs(reference - max(role.spec.size, role.spec.minimumSize)) < 0.01, "\(role): \(reference)")
+            #expect(zip(sizes, sizes.dropFirst()).allSatisfy { $0 <= $1 }, "\(role): \(sizes)")
+        }
     }
 
     @Test("Watch roles never scale below 11 pt, even at the smallest text size")
@@ -103,6 +116,10 @@ struct TypeScaleTests {
         ))
         #expect(label.height == 11) // line height 1 × the 11 pt floor at 1×
         #expect(LedgerFont.Role.allCases.filter { $0.spec.minimumSize == 11 }.count == 7)
+        let explicit = try #require(RenderedImage.render(
+            Text("RESTING").font(LedgerFont.font(.watchLabel, size: 8)).lineHeight(.multiple(factor: 1))
+        ))
+        #expect(explicit.height == label.height, "an explicit 8 pt is floored to 11 pt too")
     }
 
     @Test("Uppercase roles render lower-case copy in capitals")
@@ -115,7 +132,10 @@ struct TypeScaleTests {
     @Test("Letter spacing is applied in em of the scaled size")
     func eyebrow_tracking_widensText() throws {
         let tracked = try #require(RenderedImage.render(Text("UP NEXT").ledgerFont(.eyebrow)))
-        let plain = try #require(RenderedImage.render(Text("UP NEXT").font(LedgerFont.font(.eyebrow))))
+        let plain = try #require(RenderedImage.render(Text("UP NEXT").font(LedgerFont.font(
+            .eyebrow,
+            dynamicTypeSize: SnapshotConfig.referenceDynamicTypeSize
+        ))))
         // .18 em × 10 pt × 7 glyphs ≈ 12.6 pt wider at 1×.
         #expect(tracked.width - plain.width >= 11, "\(plain.width) → \(tracked.width)")
     }

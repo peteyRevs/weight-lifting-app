@@ -23,8 +23,8 @@ nonisolated enum ArchivoFont {
         var attributes: [CFString: Any] = [
             kCTFontNameAttribute: postScriptName,
             kCTFontVariationAttribute: [
-                weightAxis: weight.clamped(to: weightRange),
-                widthAxis: width.clamped(to: widthRange)
+                weightAxis: min(max(weight, weightRange.lowerBound), weightRange.upperBound),
+                widthAxis: min(max(width, widthRange.lowerBound), widthRange.upperBound)
             ]
         ]
         if tabularDigits {
@@ -42,11 +42,5 @@ nonisolated enum ArchivoFont {
     static var isResolvable: Bool {
         let font = CTFontCreateWithName(postScriptName as CFString, 12, nil)
         return CTFontCopyPostScriptName(font) as String == postScriptName
-    }
-}
-
-nonisolated extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
     }
 }

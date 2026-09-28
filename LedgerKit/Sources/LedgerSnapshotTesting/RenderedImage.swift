@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import SwiftUI
 
 /// Renders SwiftUI with `ImageRenderer`. swift-snapshot-testing 1.19 has no image strategy on
@@ -73,6 +74,23 @@ public struct PixelBuffer: Equatable, Sendable {
         pixels = stride(from: 0, to: bytes.count, by: 4).map { offset in
             Pixel(red: bytes[offset], green: bytes[offset + 1], blue: bytes[offset + 2], alpha: bytes[offset + 3])
         }
+    }
+
+    init(width: Int, height: Int, pixels: [Pixel]) {
+        (self.width, self.height, self.pixels) = (width, height, pixels)
+    }
+
+    /// The buffer as an sRGB image (premultiplied RGBA).
+    public var cgImage: CGImage? {
+        let bytes = pixels.flatMap { [$0.red, $0.green, $0.blue, $0.alpha] }
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: Data(bytes) as CFData)
+        else { return nil }
+        return CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+            space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        )
     }
 
     public func pixel(column: Int, row: Int) -> Pixel {

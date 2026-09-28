@@ -68,18 +68,20 @@ static-instance fallback was needed or built.**
 2. **`CTFontDescriptor` instead of `UIFontDescriptor`.** They are toll-free
    bridged; Core Text keeps UIKit out of font code and builds on the macOS host
    slice that `swift test` uses.
-3. **Text styling is a modifier, `.ledgerFont(_:)`.** A `Font` cannot carry
-   tracking, case or line height, and a `Font(ctFont)` does not follow Dynamic
-   Type. The modifier scales the role's size with `@ScaledMetric(relativeTo:)`
-   (architecture §11), then applies `tracking` (em × scaled size),
-   `textCase(.uppercase)` and iOS 26's `lineHeight(.multiple(factor:))` — the
-   CSS line-height, exactly. `LedgerFont.font(_:)` stays as the bare `Font` at
-   the design size (the brief's comment called it "Dynamic Type–scaled"; it
-   cannot be) and `font(_:size:)` takes an already scaled size.
+3. **Text styling is a modifier, `.ledgerFont(_:)`; every `Font` is scaled (fix round).**
+   A `Font` cannot carry tracking, case or line height, so views use the
+   modifier: it reads `dynamicTypeSize` and `legibilityWeight` from the
+   environment, sizes the role with `LedgerFont.scaledSize`, and applies
+   `tracking` (em × scaled size), `textCase(.uppercase)` and iOS 26's
+   `lineHeight(.multiple(factor:))`. The `Font` entry points are
+   `font(_:dynamicTypeSize:legibilityWeight:)` and
+   `font(_:size:legibilityWeight:)` (explicit, already scaled size, floored);
+   the brief's environment-free `font(_:)` is gone, so no caller can get an
+   unscaled font. See "Dynamic Type" below for why the size must be passed.
 4. **21 type roles**, values copied from the v2 and watch prototypes'
    `font:` declarations (table in `TypeScaleTests`). Added to the brief's 13:
    `subheading` (sheet title 21 pt), `caption` (400 12 pt metadata), `button`
-   (600 16 pt CTA), and watch `Countdown` / `Stat` / `Title` / `Button` /
+   (16 pt CTA; 700 since the fix round, see "Contrast"), and watch `Countdown` / `Stat` / `Title` / `Button` /
    `Caption`, which the slice 3 watch components need. `display` is the
    onboarding title (38 pt): the 84 pt hero is prototype-page chrome, not app UI.
 5. **Watch Dynamic Type (the brief's second risk).** Measured on the watch
@@ -92,35 +94,62 @@ static-instance fallback was needed or built.**
    role sizes are the prototype's px ÷ 1.5, exact at xLarge. At the 42 mm
    default they scale to ~94 %, which would put the 11.3 pt labels at 10.6 pt and
    break criterion 4, so watch roles carry an **11 pt floor**
-   (`LedgerTypeSpec.minimumSize`, tested at `.xSmall`).
+   (`LedgerTypeSpec.minimumSize`), applied on every path including an explicit
+   `font(_:size:)` (fix round, finding 2) and tested at `.xSmall`.
 6. **Colours.** Adaptive tokens are a dynamic `UIColor` on iOS (resolves from
    SwiftUI's colour scheme, verified by criterion 2's tests); watchOS has one
    appearance and no dynamic `UIColor`, so it takes the dark value; macOS
    exists only for the host build. Added to the brief's list, each from the
-   spec: `accentText` (`#C63F0F` on paper, spec §8.1 "orange text on paper uses
-   #C63F0F for contrast"), `accentLine` (accent 40 %, the active-set rule),
+   spec: `accentText` (spec §8.1 "orange text on paper uses #C63F0F for
+   contrast", now `#C03D0F`, see decision 7), `accentLine` (accent 40 %, the active-set rule),
    `inkDim` (28 %, the v2 `DIM` done rows), and the watch ink family
-   (`watchInk`, `…Secondary` 55 %, `…Muted` 40 %, `watchOutline` 22 %,
+   (`watchInk`, `…Secondary` 55 %, `…Muted` 46 % (was 40 %, decision 7), `watchOutline` 22 %,
    `watchHairline` 14 %, `watchTrack` 13 %). `accentSoft` is 12 % on paper
    (`accentTint`, §8.1) and 16 % on dark (§8.3).
-7. **Contrast (non-functional requirement).** WCAG ratios against the ground:
+7. **Contrast — Pete's decision (2026-09-27): meet WCAG AA, keep the look.**
+   Ratios are WCAG 2.x against the grounds the spec pairs each token with
+   (dark: ground `#0B0B0D` / sheet `#131316`; light: paper `#EFEDE6` / card `#FFFFFF`).
 
-   | Token | dark | light (paper) |
-   |---|---|---|
-   | `ink` | 17.6 | 15.6 |
-   | `inkSecondary` .72 | 9.2 | 6.7 |
-   | `inkMuted` .45 | 4.2 | 2.9 |
-   | `inkFaint` .32 / `inkDim` .28 | 2.6 / 2.3 | 2.0 / 1.8 |
-   | `accent` (text) | 6.3 | 2.7 → use `accentText` 4.35 |
-   | `onAccent` on `accent` | 3.1 | 3.1 |
-   | watch `…Secondary` / `…Muted` on black | 6.3 / 3.7 | — |
+   | Token | Old | Old ratio | New | New ratio |
+   |---|---|---|---|---|
+   | `inkMuted`, dark | text .45 | 4.15 / 4.17 | text **.48** | 4.58 / 4.58 |
+   | `inkMuted`, light | ink .45 | 2.88 / 2.97 | ink **.60** | 4.53 / 4.78 |
+   | `watchInkMuted` | white .40 | 3.66 | white **.46** | 4.58 |
+   | `accentText`, light | `#C63F0F` | 4.35 / 5.10 | **`#C03D0F`** (3 % darker) | 4.58 / 5.36 |
+   | `onAccent` on `accent` | white | 3.10 | white (unchanged) | 3.10 |
 
-   Only `ink` and `inkSecondary` meet 4.5:1 on both grounds, so only they may
-   carry meaning in small text (documented on `LedgerColor`). `inkMuted`,
-   `accentText` on paper (4.35) and white on orange (3.1, which passes only
-   WCAG's 3:1 for large text; the 16 pt semibold CTA label is borderline) sit
-   below 4.5:1 exactly as the prototype has them. **For Pete:** accept these as designed, or darken
-   `inkMuted` / `accentDeep` in the light theme.
+   White stays on the accent. Its only text is the button label, and the HIG
+   contrast table (from WCAG AA) allows 3:1 for bold text at any size. So
+   `button` goes 600 → **700** (v1's CTA weight, spec §8.5) and `watchButton`
+   600 → **700** (inside the watch spec's 600–700). Unchanged and already AA:
+   `ink`, `inkSecondary` (9.2 dark / 6.7 light), dark `accentText` 6.3,
+   `watchInkSecondary` 6.3. `inkFaint` (.32) and `inkDim` (.28) stay decorative.
+
+   **Increase Contrast (iOS, `accessibilityContrast == .high`):** the ink ladder
+   steps up so that text reaches AAA and `inkFaint` reaches AA. Grounds, `ink`
+   and the accent family do not change. watchOS has no dynamic colours.
+
+   | Token | Normal | Increased | Increased ratio dark (ground / sheet) | light (paper / card) |
+   |---|---|---|---|---|
+   | `inkSecondary` | .72 | .86 | 12.97 / 12.37 | 10.77 / 12.16 |
+   | `inkMuted` | .48 / .60 | .74 | 9.70 / 9.36 | 7.22 / 7.85 |
+   | `inkFaint` | .32 | .60 | 6.62 / 6.50 | 4.53 / 4.78 |
+   | `inkDim` | .28 | .50 | 4.88 / 4.87 | 3.33 / 3.46 |
+   | `hairline` | .08 | .20 | 1.71 / 1.78 | 1.53 / 1.54 |
+   | `hairlineStrong` | .14 | .30 | 2.45 / 2.53 | 1.94 / 1.97 |
+
+   Tests that asserted the prototype's old values and were updated (the fix
+   round's only edits to the adversarial tester's files, each marked
+   `F06 fix round` in the source):
+   - `TokenValueTests`: inkMuted dark .45 → .48, light .45 → .60; light
+     accentText `#C63F0F` → `#C03D0F`; watchInkMuted .4 → .46.
+   - `TypeScaleTests`: button and watchButton weight 600 → 700.
+   - `Adversarial/LedgerColorAdversarialTests`: `orangeDeep`, the inkMuted
+     alphas (now per scheme), watchInkMuted, and the browser-composite test's
+     alpha .45 → .48.
+   - `Adversarial/ContrastAdversarialTests`: onAccent pairs (phone and watch)
+     held to 3:1, with a new test that the label roles are ≥ 700.
+   - `Adversarial/LedgerFontSpecAdversarialTests`: `.button` weight 600 → 700.
 8. **Motion.** `LedgerMotion.buzzKeyframes(reduceMotion:)` is spec §8.8's
    `@keyframes buzz` (offsets −3, 3, −2, 2, 0 at 20 % steps, CSS `ease` as a
    cubic Bézier, 3 × 0.38 s); `View.ledgerBuzz(trigger:)` plays it with
@@ -130,7 +159,12 @@ static-instance fallback was needed or built.**
    `static let buzz: Animation` cannot express a transform or a Reduce Motion
    alternative, so it is replaced by these two (`buzzCycle`, `buzzRepeats`
    remain as values).
-9. **Design lint.** F00's `feature_raw_*` rules are renamed to the brief's
+9. **Bold Text — Pete's decision (2026-09-27).** With `legibilityWeight ==
+   .bold` every role moves one weight step up (+100 `wght`: 500 → 600,
+   700 → 800), through `.ledgerFont` and through the `Font` entry points'
+   `legibilityWeight` argument (`BoldTextTests`; snapshots
+   `phoneTypeRamp_boldText`, `watchTypeRamp_boldText46mm`).
+10. **Design lint.** F00's `feature_raw_*` rules are renamed to the brief's
    `ledger_raw_color` / `_font` / `_spacing` / `_radius` and their scope is
    inverted: they now cover all of `LedgerKit/Sources` and `Apps`, with
    `LedgerDesign` (and the test-only targets) as the one allowlisted module
@@ -142,7 +176,21 @@ static-instance fallback was needed or built.**
    (run by `check.sh` step 2) lints each rule's snippet in a feature module, an
    app shell and `LedgerDesign`; mutation-checked against both a missing
    allowlist and F00's feature-only scope.
-10. **Snapshot infrastructure (`LedgerSnapshotTesting`, test-only).**
+   **Fix round (finding 10):** the regexes were rewritten against the tester's
+   55 fixtures (`scripts/tests/lint-rules-adversarial.test.sh`, now also run in
+   `check.sh` step 2), which went from 25 failing to 0. Changes: any `Color(…)` /
+   `Color.init(…)` construction (multi-line, `Color(.system…)`, asset names), a
+   named colour as a leading-dot argument (`.foregroundStyle(.purple)`,
+   `.tint(.pink)`, `.shadow(color: .black…)`, `.stroke(.orange)`),
+   `UIColor`/`NSColor`/`UIFont`/`NSFont`, `Font(…)`, `.font(.custom(…))`, `.bold()`,
+   `.italic()`, `.fontWidth(`/`.fontDesign(`; padding with an edge set or
+   `EdgeInsets`, `.safeAreaPadding`, `CGFloat(13)`, every `spacing:` /
+   `horizontalSpacing:` / `verticalSpacing:` argument (grids included); every
+   corner-radius label (`topLeadingRadius:` …) and `cornerSize:`. A literal `0`
+   is allowed for spacing and radii (`VStack(spacing: 0)`), `\bColor(` no longer
+   matches `highlightColor(red:)`, and `excluded_match_kinds` ignores comments and
+   string literals.
+11. **Snapshot infrastructure (`LedgerSnapshotTesting`, test-only).**
     swift-snapshot-testing 1.19.6 has no image strategy on watchOS (its SwiftUI
     and `UIImage` strategies are `#if os(iOS) || os(tvOS)`), and its newest
     device config is `iPhone13ProMax` (no iPhone 17). So: iOS uses the
@@ -153,21 +201,57 @@ static-instance fallback was needed or built.**
     matrix (`SnapshotAppearance.phoneMatrix`), tolerances and watch sizes live
     in `SnapshotConfig`. Reference names carry the platform where a test runs
     on both. `testing-strategy.md` §2.5 is updated with these findings.
-11. **`check.sh --record-snapshots` now works.** It exported
+    **Fix round (findings 3, 4):** the match fraction is compared in `Float`,
+    like `precision` itself, so exactly 995 of 1000 pixels passes; the ΔE
+    threshold prints as 2.0. A failing `.png` comparison now attaches
+    `difference.png` (the reference at a third of its brightness, mismatches in
+    magenta) next to `actual.png` and `reference.png`.
+12. **`check.sh --record-snapshots` now works.** It exported
     `SNAPSHOT_TESTING_RECORD`, which `xcodebuild` does not forward to the
     simulator's test runner, and `set -e` stopped at the iOS step, so watch
     references could never be recorded. It now exports
     `TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all`, runs both plans, lists
     `__Snapshots__` changes and exits 1 (F00 note 8 left this to F06).
-12. **`Package.swift`:** the `LedgerDesign` resources, and `exclude:
+13. **`Package.swift`:** the `LedgerDesign` resources, and `exclude:
     ["__Snapshots__"]` for test targets listed in `snapshotTestTargets`
     (otherwise SwiftPM warns about unhandled PNGs; an exclude of a missing
     folder also warns, hence the explicit list). The package graph is unchanged.
 
+## Dynamic Type for a bare `Font` (fix round, finding 1)
+
+The adversarial finding asked for `LedgerFont.font(role)` to follow the
+environment's text size. A `Font` value can only do that if SwiftUI builds it
+itself, by name, with `Font.custom(_:size:relativeTo:)`, and that path cannot
+set Archivo's `wdth`. A probe on both simulators (2026-09-27, "0123456789" at
+24 pt, 2×; reference widths wdth 88 → 252 px, 90 → 258, 100 → 282):
+
+- `Font.custom("Archivo", …).weight(.bold).width(Font.Width(x))` for x from −1
+  to 0.5: always 282 px on iOS (270 on watch at `.large`). `.width()` is
+  ignored because the variable font has no named width instances.
+- Registering a variation instance as a graphics font
+  (`CTFontCopyGraphicsFont` + `CTFontManagerRegisterGraphicsFont`) resolves by its
+  synthesized name (`Archivo-SemiBold_wght2BC0000_wdth5A0000`), but it renders
+  519 px with every glyph the same width, which means missing outlines.
+- `Font(ctFont)` is exact but fixed-size (258 px at both `.large` and AX3).
+
+So a static `font(role)` can be exact or scaled, not both. The fix makes the
+text size an argument: `font(_:dynamicTypeSize:legibilityWeight:)` sizes the
+role on SwiftUI's own custom-font curve. `scaledSize` resolves
+`Font.custom(…, relativeTo: role.textStyle)` in an `EnvironmentValues` with that
+size and reads the factor at 1000 pt, because resolved sizes are whole points.
+`.ledgerFont` uses the same function, so the two paths cannot disagree.
+The brief's environment-free `font(_:)` was removed rather than kept as a
+design-size font, because it would have been the unscaled trap the finding
+describes. "The brief's caps": the brief sets no maximum size, so the only
+bound is the 11 pt watch floor, applied on every path. The adversarial tests
+that called `font(role)` now pass the text size (`LedgerFontRenderingAdversarialTests`
+×3, `LedgerFontMetricsAdversarialTests.trackingGain`).
+
 ## Deviations from the brief
 
 - Criterion 1 names `UIFontDescriptor`; `CTFontDescriptor` is used (decision 2).
-- `LedgerFont.font(_:)` is not Dynamic Type–scaled; `.ledgerFont(_:)` is (decision 3).
+- The brief's `LedgerFont.font(_ role:) -> Font` became
+  `font(_:dynamicTypeSize:legibilityWeight:)`; see "Dynamic Type" (decision 3).
 - Role list and colour list extended (decisions 4, 6); `LedgerMotion.buzz` replaced (decision 8).
 - Criterion 3 uses `.xLarge` as the brief says; testing-strategy §2.5 said
   `.xxxLarge` and now follows the brief.
@@ -185,7 +269,7 @@ static-instance fallback was needed or built.**
 - Delete the dangling `Fonts` group in Xcode (see above).
 - HIG's watchOS minimum is 12 pt; the prototype's smallest watch labels are
   17 px ÷ 1.5 = 11.3 pt and criterion 4 asks for ≥ 11 pt. Kept as designed.
-- Contrast choices in decision 7.
+- Contrast and Bold Text: decided by Pete 2026-09-27 and implemented (decisions 7, 9).
 - F00's open question (feature targets linking `LedgerTestSupport` for preview
   fixtures) is not touched here; it matters once slice 2 adds previews.
 
@@ -220,6 +304,35 @@ Changed lines, excluding snapshots (untracked files counted in full):
 
 Product Swift is 488 changed lines; with build configuration, 593. The font
 and licence moves are renames with no line changes.
+
+## Verification — fix round (2026-09-27)
+
+Adversarial findings addressed: 1 (Dynamic Type for the bare `Font`), 2 (the
+floor on the explicit-size path), 3 (precision boundary), 4 (difference image),
+5–8 (contrast, Pete's decision), 9 (Bold Text, Pete's decision), 10 (lint).
+
+- `scripts/check.sh --record-snapshots` (through the lock): every failure was a
+  recording: 5 on iOS, 4 on watchOS. All 13 adversarial tests that had failed now
+  pass. Re-recorded: 12 existing PNGs changed (both spike sheets, both palettes,
+  the six phone ramps, the watch ramp and the watch palette, because of the
+  inkMuted / accentText / watchInkMuted / button weight changes). New: 4 (phone
+  and watch Bold Text ramps, phone Increase Contrast palette light and dark).
+  `__Snapshots__` is 796 KB.
+- `scripts/check.sh` (full gate, through the lock): **green**. Step 2 runs
+  `lint-rules.test.sh` (12/12) and `lint-rules-adversarial.test.sh` (55/55).
+  - PR-iOS: **528 tests, 528 passed**; 17/17 test targets.
+  - PR-watchOS: **513 tests, 513 passed**; 8/8 test targets.
+- LedgerDesign line coverage: **95.7 %** iOS (198/207), **95.4 %** watchOS (186/195).
+- LedgerDesign product Swift against `main`: **+493 −4 = 497 changed lines**
+  (≤ 500; this round +82 −73). The motion helpers were folded into their enum
+  and the `clamped` extension inlined to stay under the limit, so nothing had
+  to move to slice 2.
+- `check.sh --record-snapshots` now lists changed references with a working
+  pathspec (`':(glob)**/__Snapshots__/**'`; the old `'**/__Snapshots__'` matched
+  nothing).
+- On the macOS host only, `render_sameViewRepeatedly_isPixelIdentical` differs
+  from the third render on (181 pixels, glyph rasterisation), with or without
+  this round's changes. It passes on both simulators, which is where the suite runs.
 
 ## How to verify by hand
 

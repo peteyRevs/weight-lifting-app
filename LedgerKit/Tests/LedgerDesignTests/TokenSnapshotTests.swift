@@ -37,6 +37,38 @@ struct TokenSnapshotTests {
                 named: appearance.description
             )
         }
+
+        @Test("The phone type ramp with Bold Text matches its reference (dark, large)")
+        func phoneTypeRamp_boldText_matchesReference() {
+            let appearance = SnapshotAppearance(.dark, .large)
+            assertSnapshot(
+                of: TypeRampSpecimen(roles: Specimen.phoneRoles, width: SnapshotConfig.phoneWidth)
+                    .environment(\.legibilityWeight, .bold),
+                as: .image(
+                    precision: SnapshotConfig.precision,
+                    perceptualPrecision: SnapshotConfig.perceptualPrecision,
+                    layout: .sizeThatFits,
+                    traits: appearance.traits
+                ),
+                named: "bold-\(appearance)"
+            )
+        }
+
+        @Test("The phone palette with Increase Contrast matches its references", arguments: [ColorScheme.light, .dark])
+        func phonePalette_increasedContrast_matchesReference(_ scheme: ColorScheme) {
+            let appearance = SnapshotAppearance(scheme, .large)
+            let traits = appearance.traits.modifyingTraits { $0.accessibilityContrast = .high }
+            assertSnapshot(
+                of: PaletteSpecimen(swatches: PaletteSpecimen.phone, width: SnapshotConfig.phoneWidth),
+                as: .image(
+                    precision: SnapshotConfig.precision,
+                    perceptualPrecision: SnapshotConfig.perceptualPrecision,
+                    layout: .sizeThatFits,
+                    traits: traits
+                ),
+                named: "increasedContrast-\(appearance)"
+            )
+        }
     #endif
 
     #if os(watchOS)
@@ -48,6 +80,16 @@ struct TokenSnapshotTests {
             )
             let image = try #require(RenderedImage.render(sheet, dynamicTypeSize: WatchSize.mm46.dynamicTypeSize))
             assertSnapshot(of: image, as: .png, named: WatchSize.mm46.rawValue)
+        }
+
+        @Test("The watch type ramp with Bold Text matches its reference at 46 mm")
+        func watchTypeRamp_boldText46mm_matchesReference() throws {
+            let sheet = TypeRampSpecimen(
+                roles: Specimen.watchRoles, width: WatchSize.mm46.size.width,
+                ground: LedgerColor.watchGround, ink: LedgerColor.watchInk, nameInk: LedgerColor.watchInkMuted
+            ).environment(\.legibilityWeight, .bold)
+            let image = try #require(RenderedImage.render(sheet, dynamicTypeSize: WatchSize.mm46.dynamicTypeSize))
+            assertSnapshot(of: image, as: .png, named: "bold-\(WatchSize.mm46.rawValue)")
         }
 
         @Test("The watch palette matches its reference")

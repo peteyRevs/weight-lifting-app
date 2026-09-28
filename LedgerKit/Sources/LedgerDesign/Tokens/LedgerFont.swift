@@ -1,11 +1,12 @@
 import SwiftUI
 
 /// Type tokens: Archivo roles from the v2 type system (docs/product-spec.md §8.5). Numbers are
-/// 700 at a narrow width with tabular figures; everything else is 300–600 at normal width.
+/// 700 at a narrow width with tabular figures; everything else is 300–700 at normal width.
 ///
-/// Views style text with `.ledgerFont(_:)`, which also applies the role's
-/// tracking, case and line height and scales the size with Dynamic Type. ``font(_:)`` is the
-/// bare `Font` at the design size, for places that need a `Font` value.
+/// Views style text with `.ledgerFont(_:)`, which reads Dynamic Type and Bold Text from the
+/// environment and adds the role's tracking, case and line height. A `Font` built from a Core Text
+/// instance cannot follow the environment by itself (F06 notes, "Dynamic Type"), so the `Font`
+/// entry points below take the text size explicitly; none of them returns an unscaled font.
 public nonisolated enum LedgerFont {
     public enum Role: String, CaseIterable, Sendable {
         // Phone
@@ -17,15 +18,38 @@ public nonisolated enum LedgerFont {
         case watchTitle, watchButton, watchLabel, watchCaption
     }
 
-    /// The role's font at its design size, before Dynamic Type.
-    public static func font(_ role: Role) -> Font {
-        font(role, size: role.spec.size)
+    /// Bold Text moves every role one weight step up, as it does system text.
+    public static let boldTextWeightStep: CGFloat = 100
+
+    /// The role's font at a Dynamic Type size (and Bold Text setting).
+    public static func font(
+        _ role: Role,
+        dynamicTypeSize: DynamicTypeSize,
+        legibilityWeight: LegibilityWeight? = nil
+    ) -> Font {
+        font(role, size: scaledSize(role, dynamicTypeSize: dynamicTypeSize), legibilityWeight: legibilityWeight)
     }
 
-    /// The role's font at an explicit, already scaled point size.
-    public static func font(_ role: Role, size: CGFloat) -> Font {
+    /// The role's font at an explicit, already scaled point size, never below the role's floor.
+    public static func font(_ role: Role, size: CGFloat, legibilityWeight: LegibilityWeight? = nil) -> Font {
         let spec = role.spec
-        return Font(ArchivoFont.make(size: size, weight: spec.weight, width: spec.width, tabularDigits: spec.isTabular))
+        let weight = spec.weight + (legibilityWeight == .bold ? boldTextWeightStep : 0)
+        let pointSize = max(size, spec.minimumSize)
+        return Font(ArchivoFont.make(size: pointSize, weight: weight, width: spec.width, tabularDigits: spec.isTabular))
+    }
+
+    /// The role's point size at a Dynamic Type size, on SwiftUI's own curve for custom fonts
+    /// relative to the role's text style (exact at `.large` on iOS and at `.xLarge` on watchOS),
+    /// never below the role's floor. Resolved sizes are whole points, so the factor is read at
+    /// 1000 pt and applied to the design size.
+    public static func scaledSize(_ role: Role, dynamicTypeSize: DynamicTypeSize) -> CGFloat {
+        FontRegistration.registerIfNeeded() // an unknown name sends Core Text on a slow fallback search
+        let spec = role.spec
+        var environment = EnvironmentValues()
+        environment.dynamicTypeSize = dynamicTypeSize
+        let probe = Font.custom(ArchivoFont.postScriptName, size: 1000, relativeTo: spec.textStyle)
+        let factor = probe.resolve(in: environment.fontResolutionContext).pointSize / 1000
+        return max(spec.size * factor, spec.minimumSize)
     }
 
     /// Archivo at any point on its axes. `weight` is `wght` (the design uses 300…700), `width` is
@@ -62,7 +86,7 @@ public nonisolated extension LedgerFont.Role {
         case .bodyLight: .text(13.5, 300, line: 1.6, .footnote)
         case .label: .text(12.5, 300, line: 1.2, .footnote)
         case .caption: .text(12, 400, .caption)
-        case .button: .text(16, 600, tracking: -0.005, .callout)
+        case .button: .text(16, 700, tracking: -0.005, .callout) // bold: white on accent is 3.1:1
         case .eyebrow: .text(10, 500, tracking: 0.18, uppercase: true, .caption2)
         case .numeralXL: .numeral(34, width: 88, tracking: -0.03, .largeTitle)
         case .numeralL: .numeral(30, width: 88, tracking: -0.03, .title)
@@ -72,7 +96,7 @@ public nonisolated extension LedgerFont.Role {
         case .watchCountdown: .watch(.numeral(52, width: 92, tracking: -0.035, .largeTitle))
         case .watchStat: .watch(.numeral(30, width: 92, tracking: -0.03, .title3))
         case .watchTitle: .watch(.text(20, 600, line: 1.12, .headline))
-        case .watchButton: .watch(.text(21, 600, tracking: -0.01, .body))
+        case .watchButton: .watch(.text(21, 700, tracking: -0.01, .body))
         case .watchLabel: .watch(.text(17, 700, tracking: 0.1, uppercase: true, .footnote))
         case .watchCaption: .watch(.text(17, 600, tracking: 0.07, uppercase: true, .footnote))
         }
@@ -122,8 +146,8 @@ private nonisolated extension LedgerTypeSpec {
 }
 
 public extension View {
-    /// Sets text in a type role: Archivo at the role's axes, its size scaled with Dynamic Type,
-    /// plus the role's tracking, case and line height.
+    /// Sets text in a type role: Archivo at the role's axes, its size scaled with Dynamic Type and
+    /// its weight stepped up by Bold Text, plus the role's tracking, case and line height.
     func ledgerFont(_ role: LedgerFont.Role) -> some View {
         modifier(LedgerTextStyle(role: role))
     }
@@ -131,19 +155,15 @@ public extension View {
 
 struct LedgerTextStyle: ViewModifier {
     let role: LedgerFont.Role
-    @ScaledMetric private var size: CGFloat
-
-    init(role: LedgerFont.Role) {
-        self.role = role
-        _size = ScaledMetric(wrappedValue: role.spec.size, relativeTo: role.spec.textStyle)
-    }
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.legibilityWeight) private var legibilityWeight
 
     func body(content: Content) -> some View {
         let spec = role.spec
-        let pointSize = max(size, spec.minimumSize)
+        let size = LedgerFont.scaledSize(role, dynamicTypeSize: dynamicTypeSize)
         content
-            .font(LedgerFont.font(role, size: pointSize))
-            .tracking(spec.tracking * pointSize)
+            .font(LedgerFont.font(role, size: size, legibilityWeight: legibilityWeight))
+            .tracking(spec.tracking * size)
             .textCase(spec.isUppercase ? .uppercase : nil)
             .lineHeight(.multiple(factor: spec.lineHeight))
     }

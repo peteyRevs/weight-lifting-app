@@ -14,7 +14,8 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
 
     static let paper: UInt32 = 0xEFEDE6, card: UInt32 = 0xFFFFFF, inkHex: UInt32 = 0x16150F
     static let groundHex: UInt32 = 0x0B0B0D, sheet: UInt32 = 0x131316, text: UInt32 = 0xF4F2ED
-    static let orange: UInt32 = 0xFF5B22, orangeDeep: UInt32 = 0xC63F0F
+    /// F06 fix round (Pete, WCAG AA): accentDeep #C63F0F → #C03D0F, inkMuted .45 → .48 dark / .60 light.
+    static let orange: UInt32 = 0xFF5B22, orangeDeep: UInt32 = 0xC03D0F
 
     var color: Color {
         switch self {
@@ -36,11 +37,11 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
     }
 
     /// Ink at a fixed alpha, or nil for tokens that are not ink.
-    private var inkAlpha: Double? {
+    private func inkAlpha(light: Bool) -> Double? {
         switch self {
         case .ink: 1
         case .inkSecondary: 0.72
-        case .inkMuted: 0.45
+        case .inkMuted: light ? 0.60 : 0.48
         case .inkFaint: 0.32
         case .inkDim: 0.28 // v2 `DIM`
         case .hairline: 0.08 // v2 `LINE`, v1 list rows
@@ -51,7 +52,7 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
 
     /// Light value; nil where the light prototype has no counterpart.
     var light: SRGB? {
-        if let alpha = inkAlpha {
+        if let alpha = inkAlpha(light: true) {
             return SRGB(Self.inkHex, alpha: alpha)
         }
         return switch self {
@@ -66,7 +67,7 @@ nonisolated enum PhoneToken: String, CaseIterable, Sendable {
     }
 
     var dark: SRGB {
-        if let alpha = inkAlpha {
+        if let alpha = inkAlpha(light: false) {
             return SRGB(Self.text, alpha: alpha)
         }
         return switch self {
@@ -101,7 +102,7 @@ nonisolated enum WatchToken: String, CaseIterable, Sendable {
         case .watchGround: SRGB(0x000000)
         case .watchInk: SRGB(0xFFFFFF)
         case .watchInkSecondary: SRGB(0xFFFFFF, alpha: 0.55)
-        case .watchInkMuted: SRGB(0xFFFFFF, alpha: 0.4)
+        case .watchInkMuted: SRGB(0xFFFFFF, alpha: 0.46) // F06 fix round (WCAG AA): .4 → .46
         case .watchOutline: SRGB(0xFFFFFF, alpha: 0.22)
         case .watchHairline: SRGB(0xFFFFFF, alpha: 0.14)
         case .watchTrack: SRGB(0xFFFFFF, alpha: 0.13)
@@ -194,8 +195,9 @@ struct LedgerColorAdversarialTests {
 
     @Test("Muted dark ink composites over the ground exactly as the prototype's rgba text does.")
     func inkMuted_renderedOverGround_matchesBrowserComposite() throws {
-        // v2 `rgba(244,242,237,.45)` on `#0B0B0D`, blended in gamma sRGB as a browser does.
-        let expected = SRGB(PhoneToken.text, alpha: 0.45).composited(over: SRGB(PhoneToken.groundHex))
+        // v2 `rgba(244,242,237,.45)` on `#0B0B0D`, blended in gamma sRGB as a browser does
+        // (F06 fix round: .48 for WCAG AA).
+        let expected = SRGB(PhoneToken.text, alpha: 0.48).composited(over: SRGB(PhoneToken.groundHex))
         let swatch = LedgerColor.inkMuted.frame(width: 4, height: 4).background(LedgerColor.ground)
         let image = try #require(RenderedImage.render(swatch, colorScheme: .dark))
         let pixel = try #require(PixelBuffer(image)).pixel(column: 2, row: 2)

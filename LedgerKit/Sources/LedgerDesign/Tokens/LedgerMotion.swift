@@ -30,9 +30,7 @@ public nonisolated enum LedgerMotion {
             }
         }
     }
-}
 
-nonisolated extension LedgerMotion {
     static func shakeOffsets(reduceMotion: Bool) -> [CGFloat] {
         let cycles = Array(repeating: buzzOffsets, count: buzzRepeats).flatMap(\.self)
         return reduceMotion ? cycles.map { _ in 0 } : cycles

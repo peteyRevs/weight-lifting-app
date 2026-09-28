@@ -16,31 +16,40 @@ public extension Snapshotting where Value == CGImage, Format == Data {
 extension Diffing where Value == Data {
     static var pixels: Diffing {
         .diff(toData: { $0 }, fromData: { $0 }, diffV2: { reference, actual in
-            let message: String? = if let old = PNG.decode(reference), let new = PNG.decode(actual) {
-                PixelComparison.failure(reference: old, actual: new)
-            } else {
-                "Could not decode the reference or the new image as PNG"
+            let inputs: [DiffAttachment] = [.data(actual, name: "actual.png"), .data(reference, name: "reference.png")]
+            guard let old = PNG.decode(reference), let new = PNG.decode(actual) else {
+                return ("Could not decode the reference or the new image as PNG", inputs)
             }
-            return message.map { ($0, [.data(actual, name: "actual.png"), .data(reference, name: "reference.png")]) }
+            guard let failure = PixelComparison.failure(reference: old, actual: new) else { return nil }
+            let difference = failure.difference.map { DiffAttachment.data(PNG.encode($0), name: "difference.png") }
+            return (failure.message, inputs + [difference].compactMap(\.self))
         })
     }
 }
 
 enum PixelComparison {
-    static func failure(reference: CGImage, actual: CGImage) -> String? {
+    /// Why `actual` does not match `reference`, and where (the reference dimmed, mismatches in
+    /// magenta); nil when it matches.
+    static func failure(reference: CGImage, actual: CGImage) -> (message: String, difference: CGImage?)? {
         guard reference.width == actual.width, reference.height == actual.height else {
             let sizes = "\(actual.width)×\(actual.height) against \(reference.width)×\(reference.height)"
-            return "The image size differs from the reference: \(sizes)"
+            return ("The image size differs from the reference: \(sizes)", nil)
         }
         guard let old = PixelBuffer(reference), let new = PixelBuffer(actual) else {
-            return "Could not decode the images to compare them"
+            return ("Could not decode the images to compare them", nil)
         }
-        let threshold = Double(1 - SnapshotConfig.perceptualPrecision) * 100
-        let mismatched = zip(old.pixels, new.pixels).count { $0 != $1 && deltaE($0, $1) > threshold }
-        let matching = 1 - Double(mismatched) / Double(old.pixels.count)
-        guard matching < Double(SnapshotConfig.precision) else { return nil }
-        return "\(mismatched) pixels differ by more than ΔE \(threshold): \(matching) match, "
+        // Float arithmetic, like the thresholds: 995 of 1000 pixels is exactly `precision` 0.995.
+        let threshold = Double(100 - 100 * SnapshotConfig.perceptualPrecision)
+        let mismatches = zip(old.pixels, new.pixels).map { $0 != $1 && deltaE($0, $1) > threshold }
+        let mismatched = mismatches.count { $0 }
+        let matching = Float(mismatches.count - mismatched) / Float(mismatches.count)
+        guard matching < SnapshotConfig.precision else { return nil }
+        let difference = PixelBuffer(width: old.width, height: old.height, pixels: zip(old.pixels, mismatches).map {
+            $1 ? Pixel(hex: 0xFF00FF) : Pixel(red: $0.red / 3, green: $0.green / 3, blue: $0.blue / 3, alpha: 0xFF)
+        })
+        let message = "\(mismatched) pixels differ by more than ΔE \(threshold): \(matching) match, "
             + "\(SnapshotConfig.precision) required"
+        return (message, difference.cgImage)
     }
 
     /// CIE76 distance between two pixels; an alpha difference counts as a full-scale difference.

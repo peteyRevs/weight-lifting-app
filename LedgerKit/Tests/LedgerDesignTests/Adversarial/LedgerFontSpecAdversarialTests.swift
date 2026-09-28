@@ -88,7 +88,8 @@ nonisolated struct RoleExpectation: Sendable, CustomTestStringConvertible {
         // Meta `300 12.5px/1.2–1.35`
         .init(.label, size: exactly(12.5), weight: exactly(300), line: 1.2 ... 1.35),
         // Primary CTA `600 16px/1 -.005em`
-        .init(.button, size: exactly(16), weight: exactly(600), tracking: exactly(-0.005)),
+        // F06 fix round: 700 (v1's CTA weight) so white on the accent meets the bold-text 3:1 rule.
+        .init(.button, size: exactly(16), weight: exactly(700), tracking: exactly(-0.005)),
         // Labels `500 10px/1 .18em` uppercase (UP NEXT, RECENT, …)
         .init(.eyebrow, size: exactly(10), weight: exactly(500), tracking: exactly(0.18), uppercase: true)
     ]

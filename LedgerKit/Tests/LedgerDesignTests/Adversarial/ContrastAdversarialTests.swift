@@ -16,11 +16,15 @@ nonisolated struct ContrastPair: Sendable, CustomTestStringConvertible {
         "\(name) (\(scheme == .dark ? "dark" : "light"))"
     }
 
-    static func both(_ name: String, _ foreground: Color, on background: Color) -> [Self] {
+    static func both(_ name: String, _ foreground: Color, on background: Color, minimum: Double = 4.5) -> [Self] {
         [ColorScheme.light, .dark].map {
-            Self(name: name, foreground: foreground, background: background, scheme: $0, minimum: 4.5)
+            Self(name: name, foreground: foreground, background: background, scheme: $0, minimum: minimum)
         }
     }
+
+    /// F06 fix round (Pete, 2026-09-27): white stays on the accent. Its only text is the bold
+    /// (700) button label, which the HIG / WCAG large-text rule holds to 3:1 (asserted below).
+    static let boldLabelMinimum = 3.0
 
     /// Phone pairs. v2 examples: `ink` = row titles, `inkSecondary` = preview names (.72),
     /// `inkMuted` = "Week 3 of 8 · ~52 min", "1RM est", "sessions this week" (.38–.45),
@@ -34,7 +38,7 @@ nonisolated struct ContrastPair: Sendable, CustomTestStringConvertible {
             + both("inkMuted on surface", LedgerColor.inkMuted, on: LedgerColor.surface)
             + both("accentText on ground", LedgerColor.accentText, on: LedgerColor.ground)
             + both("accentText on surface", LedgerColor.accentText, on: LedgerColor.surface)
-            + both("onAccent on accent", LedgerColor.onAccent, on: LedgerColor.accent)
+            + both("onAccent on accent", LedgerColor.onAccent, on: LedgerColor.accent, minimum: boldLabelMinimum)
 
     /// Watch pairs (§8.3): values 17 px+ (11 pt), captions "ELAPSED"/"SETS"/"LB MOVED" at .4.
     static let watch: [Self] = [
@@ -42,11 +46,11 @@ nonisolated struct ContrastPair: Sendable, CustomTestStringConvertible {
         watchPair("watchInkSecondary on watchGround", LedgerColor.watchInkSecondary, on: LedgerColor.watchGround),
         watchPair("watchInkMuted on watchGround", LedgerColor.watchInkMuted, on: LedgerColor.watchGround),
         watchPair("accent on watchGround", LedgerColor.accent, on: LedgerColor.watchGround),
-        watchPair("onAccent on accent (watch CTA)", LedgerColor.onAccent, on: LedgerColor.accent)
+        watchPair("onAccent on accent (watch CTA)", LedgerColor.onAccent, on: LedgerColor.accent, minimum: 3)
     ]
 
-    static func watchPair(_ name: String, _ foreground: Color, on background: Color) -> Self {
-        Self(name: name, foreground: foreground, background: background, scheme: .dark, minimum: 4.5)
+    static func watchPair(_ name: String, _ foreground: Color, on background: Color, minimum: Double = 4.5) -> Self {
+        Self(name: name, foreground: foreground, background: background, scheme: .dark, minimum: minimum)
     }
 }
 
@@ -72,6 +76,12 @@ struct ContrastAdversarialTests {
     func watchPair_meetsAA(pair: ContrastPair) {
         let ratio = Self.ratio(pair)
         #expect(ratio >= pair.minimum, "\(pair.testDescription): \(String(format: "%.2f", ratio)):1")
+    }
+
+    @Test("Text on the accent is bold, so the 3:1 large-text minimum applies to it (HIG, WCAG).")
+    func accentLabelRoles_areBold() {
+        #expect(LedgerFont.Role.button.spec.weight >= 700)
+        #expect(LedgerFont.Role.watchButton.spec.weight >= 700)
     }
 
     @Test("Hairlines stay visible: at least 1.1:1 against their ground, but quieter than muted text.")

@@ -7,10 +7,10 @@ import SwiftUI
 /// theme; light is the v1 "paper / ink" palette (decision #1). The `watch…` tokens are the watch
 /// palette, which has a single appearance.
 ///
-/// Text and rules are one ink colour at fixed alphas. Only `ink` and `inkSecondary` reach
-/// 4.5:1 on both grounds, so only they may carry meaning in small text; `inkMuted` (4.2:1 dark,
-/// 2.9:1 light) is for supplementary text, and `inkFaint`, `inkDim` and the hairlines are
-/// decorative (F06 implementation notes, "Contrast").
+/// Text and rules are one ink colour at fixed alphas. Every text token reaches WCAG AA (4.5:1)
+/// on `ground` and `surface` except `inkFaint` and `inkDim`, which are decorative. With iOS
+/// Increase Contrast the ink ladder steps up: text to 7:1, `inkFaint` to 4.5:1 (Pete, 2026-09-27;
+/// ratios in the F06 implementation notes).
 public nonisolated enum LedgerColor {
     // MARK: Grounds
 
@@ -23,24 +23,25 @@ public nonisolated enum LedgerColor {
 
     /// Primary text: ink `#16150F` / text `#F4F2ED`.
     public static let ink = Color(light: .ink, dark: .text)
-    /// Secondary text, 72 %.
-    public static let inkSecondary = ink(0.72)
-    /// Metadata and captions, 45 %.
-    public static let inkMuted = ink(0.45)
+    /// Secondary text, 72 % (Increase Contrast 86 %).
+    public static let inkSecondary = ink(0.72, increased: 0.86)
+    /// Metadata and captions: 60 % on paper, 48 % on dark (the spec's 45 % is below AA).
+    public static let inkMuted = ink(0.48, light: 0.60, increased: 0.74)
     /// Column headers and decorative labels, 32 %.
-    public static let inkFaint = ink(0.32)
+    public static let inkFaint = ink(0.32, increased: 0.60)
     /// Completed rows (`DIM` in the v2 prototype), 28 %.
-    public static let inkDim = ink(0.28)
+    public static let inkDim = ink(0.28, increased: 0.50)
     /// Default one-point rule (`LINE`), 8 %.
-    public static let hairline = ink(0.08)
+    public static let hairline = ink(0.08, increased: 0.20)
     /// Outlined controls and avatar rings, 14 %.
-    public static let hairlineStrong = ink(0.14)
+    public static let hairlineStrong = ink(0.14, increased: 0.30)
 
     // MARK: Accent: once per screen, on the thing you are about to touch (§8.4)
 
     /// `#FF5B22`.
     public static let accent = Color(light: .accent, dark: .accent)
-    /// Orange text: `#C63F0F` on paper for contrast (`accentDeep`), `#FF5B22` on the dark ground.
+    /// Orange text: `#C03D0F` on paper (the spec's `accentDeep` `#C63F0F`, 3 % darker to reach AA),
+    /// `#FF5B22` on the dark ground.
     public static let accentText = Color(light: .accentDeep, dark: .accent)
     /// Tinted fill behind a selected item: 12 % on paper (`accentTint`), 16 % on dark (§8.3).
     public static let accentSoft = Color(light: .accent.opacity(0.12), dark: .accent.opacity(0.16))
@@ -55,8 +56,8 @@ public nonisolated enum LedgerColor {
     public static let watchInk = Color(LedgerRGBA.white)
     /// Body copy and secondary values, 55 %.
     public static let watchInkSecondary = Color(LedgerRGBA.white.opacity(0.55))
-    /// Captions under numbers, 40 %.
-    public static let watchInkMuted = Color(LedgerRGBA.white.opacity(0.4))
+    /// Captions under numbers: 46 % (the spec's 40 % is below AA).
+    public static let watchInkMuted = Color(LedgerRGBA.white.opacity(0.46))
     /// Outlined buttons and inactive set dots, 22 %.
     public static let watchOutline = Color(LedgerRGBA.white.opacity(0.22))
     /// List-row borders, 14 %.
@@ -64,35 +65,29 @@ public nonisolated enum LedgerColor {
     /// Rest-ring track, 13 %.
     public static let watchTrack = Color(LedgerRGBA.white.opacity(0.13))
 
-    private static func ink(_ alpha: Double) -> Color {
-        Color(light: .ink.opacity(alpha), dark: .text.opacity(alpha))
+    private static func ink(_ alpha: Double, light: Double? = nil, increased: Double) -> Color {
+        Color(
+            light: .ink.opacity(light ?? alpha), dark: .text.opacity(alpha),
+            increased: (.ink.opacity(increased), .text.opacity(increased))
+        )
     }
 }
 
 /// An sRGB colour written the way the spec writes it: a hex triplet and an alpha.
 nonisolated struct LedgerRGBA: Equatable {
-    let hex: UInt32
-    let alpha: Double
+    var red, green, blue: Double
+    var alpha = 1.0
 
-    init(_ hex: UInt32, alpha: Double = 1) {
-        self.hex = hex
-        self.alpha = alpha
-    }
-
-    var red: Double {
-        Double((hex >> 16) & 0xFF) / 255
-    }
-
-    var green: Double {
-        Double((hex >> 8) & 0xFF) / 255
-    }
-
-    var blue: Double {
-        Double(hex & 0xFF) / 255
+    init(_ hex: UInt32) {
+        red = Double((hex >> 16) & 0xFF) / 255
+        green = Double((hex >> 8) & 0xFF) / 255
+        blue = Double(hex & 0xFF) / 255
     }
 
     func opacity(_ alpha: Double) -> LedgerRGBA {
-        LedgerRGBA(hex, alpha: alpha)
+        var copy = self
+        copy.alpha = alpha
+        return copy
     }
 
     static let paper = LedgerRGBA(0xEFEDE6)
@@ -102,7 +97,7 @@ nonisolated struct LedgerRGBA: Equatable {
     static let sheet = LedgerRGBA(0x131316)
     static let text = LedgerRGBA(0xF4F2ED)
     static let accent = LedgerRGBA(0xFF5B22)
-    static let accentDeep = LedgerRGBA(0xC63F0F)
+    static let accentDeep = LedgerRGBA(0xC03D0F)
     static let white = LedgerRGBA(0xFFFFFF)
 }
 
@@ -111,12 +106,14 @@ nonisolated extension Color {
         self.init(.sRGB, red: rgba.red, green: rgba.green, blue: rgba.blue, opacity: rgba.alpha)
     }
 
-    /// A colour that follows the environment's colour scheme. watchOS has one (dark) appearance
-    /// and no dynamic `UIColor`; the macOS slice exists only for host-side `swift test`.
-    init(light: LedgerRGBA, dark: LedgerRGBA) {
+    /// A colour that follows the colour scheme and, on iOS, Increase Contrast. watchOS has one
+    /// (dark) appearance and no dynamic `UIColor`; the macOS slice exists only for `swift test`.
+    init(light: LedgerRGBA, dark: LedgerRGBA, increased: (light: LedgerRGBA, dark: LedgerRGBA)? = nil) {
         #if os(iOS)
             self.init(uiColor: UIColor { traits in
-                let rgba = traits.userInterfaceStyle == .dark ? dark : light
+                let normal = (light: light, dark: dark)
+                let pair = traits.accessibilityContrast == .high ? increased ?? normal : normal
+                let rgba = traits.userInterfaceStyle == .dark ? pair.dark : pair.light
                 return UIColor(red: rgba.red, green: rgba.green, blue: rgba.blue, alpha: rgba.alpha)
             })
         #else

@@ -15,7 +15,7 @@ struct LedgerFontMetricsAdversarialTests {
     static func trackingGain(_ text: String, role: LedgerFont.Role, type: DynamicTypeSize) throws -> CGFloat {
         let tracked = try #require(Probe.image(Text(text).ledgerFont(role), scale: scale, dynamicTypeSize: type))
         let bare = try #require(Probe.image(
-            Text(text).font(LedgerFont.font(role)),
+            Text(text).font(LedgerFont.font(role, dynamicTypeSize: type)), // F06 fix round: explicit text size
             scale: scale,
             dynamicTypeSize: type
         ))
