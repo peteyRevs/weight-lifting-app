@@ -52,6 +52,7 @@ gate() {
     out="$("$GATE" "$@" 2>&1)"
     code=$?
 }
+is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 # ---- thresholds: boundaries ------------------------------------------------
 report "$T/exact.json" "D.xctest|LedgerDomain/A.swift|95/100"
@@ -74,9 +75,14 @@ expect_exit "C04a decimal threshold 95.5 met exactly passes" 0 "$code" "$out"
 LEDGER_COVERAGE_THRESHOLDS="$T/decimal.json" gate "$T/d954.json"
 expect_exit "C04b decimal threshold 95.5 missed by 0.1 fails" 1 "$code" "$out"
 
+# Each exit-1 case below asserts its reason too: with "required", a stray module fails
+# the gate on its own, which would otherwise mask the property under test (round 2).
+sed 's/"required": \["LedgerDomain"\]/"required": ["LedgerDesign", "FeatureToday"]/' "$T/thresholds.json" >"$T/overall-thresholds.json"
 report "$T/overall.json" "D.xctest|LedgerDesign/A.swift|60/100" "D.xctest|FeatureToday/A.swift|70/100"
-gate "$T/overall.json"
+LEDGER_COVERAGE_THRESHOLDS="$T/overall-thresholds.json" gate "$T/overall.json"
 expect_exit "C05 every module passes but overall (65 %) misses 80 -> fails" 1 "$code" "$out"
+check "C05b ... and overall is the only reason" \
+    is "$(grep '^error: coverage gate:' <<<"$out")" "error: coverage gate: Overall is at 65.00 %, below its 80 % threshold"
 
 # ---- attribution -------------------------------------------------------------
 report "$T/prefix.json" "D.xctest|LedgerDomain/A.swift|100/100" "D.xctest|LedgerDomainExtras/B.swift|0/100"
@@ -106,10 +112,12 @@ expect_exit "C08 excluded files and modules never count" 0 "$code" "$out"
 
 report "$T/f69.json" "F.xctest|FeatureToday/A.swift|69/100" "D.xctest|LedgerDomain/A.swift|1000/1000"
 report "$T/f70.json" "F.xctest|FeatureToday/A.swift|70/100" "D.xctest|LedgerDomain/A.swift|1000/1000"
-gate "$T/f69.json"
-expect_exit "C09a Feature* wildcard applies: FeatureToday 69 % fails" 1 "$code" "$out"
 # (FeatureToday has code here, so it must be "required" too; F3 fix)
 sed 's/"required": \["LedgerDomain"\]/"required": ["LedgerDomain", "FeatureToday"]/' "$T/thresholds.json" >"$T/feature.json"
+LEDGER_COVERAGE_THRESHOLDS="$T/feature.json" gate "$T/f69.json"
+expect_exit "C09a Feature* wildcard applies: FeatureToday 69 % fails" 1 "$code" "$out"
+check "C09c ... because of its 70 % wildcard threshold, nothing else" \
+    is "$(grep '^error: coverage gate:' <<<"$out")" "error: coverage gate: FeatureToday is at 69.00 %, below its 70 % threshold"
 LEDGER_COVERAGE_THRESHOLDS="$T/feature.json" gate "$T/f70.json"
 expect_exit "C09b Feature* wildcard applies: FeatureToday 70 % passes" 0 "$code" "$out"
 
@@ -221,11 +229,87 @@ bad_thresholds "C29 thresholds without \"overall\" -> fails" \
 bad_thresholds "C30 threshold given as a string -> fails" \
     '{"overall": 80, "modules": {"LedgerDomain": "95"}, "excludedModules": [], "excludedFiles": []}' nonzero
 bad_thresholds "C31 threshold null -> treated as missing, fails" \
-    '{"overall": 80, "modules": {"LedgerDomain": null}, "excludedModules": [], "excludedFiles": []}' 1
+    '{"overall": 80, "modules": {"LedgerDomain": null}, "required": ["LedgerDomain"], "excludedModules": [], "excludedFiles": []}' 1
+check "C31b ... because it has no threshold" grep -q 'LedgerDomain has no threshold' <<<"$out"
 LEDGER_COVERAGE_THRESHOLDS="$T/missing-thresholds.json" gate "$T/exact.json"
 expect_exit "C32 thresholds file missing -> fails" nonzero "$code" "$out"
 bad_thresholds "C33 [F5] unparseable thresholds is bad input: exit 2 per the script's contract" \
     '{"overall": 80,' 2
+
+# ---- round 2: the "required" list fails closed both ways (F3 fix) ------------------
+# req_thresholds <required-json> [excluded-json]: the shared thresholds with these lists.
+req_thresholds() {
+    python3 - "$T/thresholds.json" "$1" "${2:-[\"LedgerTestSupport\"]}" >"$T/req.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1]))
+c["required"], c["excludedModules"] = json.loads(sys.argv[2]), json.loads(sys.argv[3])
+if c["required"] == "__absent__": del c["required"]
+json.dump(c, sys.stdout)
+PY
+}
+req_gate() { LEDGER_COVERAGE_THRESHOLDS="$T/req.json" gate "$@"; }
+errors() { grep '^error' <<<"$out" | sed "s|$T/||g"; }
+report "$T/dom-design.json" "D.xctest|LedgerDomain/A.swift|100/100" "D.xctest|LedgerDesign/B.swift|100/100"
+
+req_thresholds '["LedgerDomain"]'; req_gate "$T/dom-design.json"
+expect_exit "C36 a measured module missing from \"required\" fails (both at 100 %)" 1 "$code" "$out"
+check "C36b ... and the error says to add LedgerDesign" \
+    is "$(errors)" 'error: coverage gate: LedgerDesign has coverage now; add it to "required" in req.json'
+
+req_thresholds '["LedgerDomian"]'; req_gate "$T/exact.json"
+expect_exit "C37 a typo in \"required\" (LedgerDomian) fails" 1 "$code" "$out"
+check "C37b ... naming the typo and the real, now unrequired, LedgerDomain" \
+    bash -c 'grep -q "LedgerDomian has no threshold" <<<"$1" && grep -q "LedgerDomain has coverage now" <<<"$1"' _ "$out"
+req_thresholds '["LedgerDomain", "FeatureTodya"]'; req_gate "$T/exact.json"
+expect_exit "C38 a typo that still matches Feature* is unmeasured and fails" 1 "$code" "$out"
+
+report "$T/previews-only.json" "D.xctest|LedgerDomain/A+Previews.swift|0/100"
+req_thresholds '["LedgerDomain"]'; req_gate "$T/previews-only.json"
+expect_exit "C39 a required module measured only through excluded files fails" 1 "$code" "$out"
+report "$T/zero-only.json" "D.xctest|LedgerDomain/A.swift|0/0"
+req_gate "$T/zero-only.json"
+expect_exit "C40 a required module whose files have no executable lines fails" 1 "$code" "$out"
+
+req_thresholds '["LedgerDomain"]' '["LedgerDomain"]'; req_gate "$T/exact.json"
+expect_exit "C41 a module both required and excluded is bad input (exit 2)" 2 "$code" "$out"
+req_thresholds '[]' '["LedgerDesign"]'; req_gate "$T/exact.json"
+expect_exit "C42 a module with its own threshold and an exclusion is bad input (exit 2)" 2 "$code" "$out"
+report "$T/feature-hidden.json" "D.xctest|LedgerDomain/A.swift|100/100" "F.xctest|FeatureToday/A.swift|0/500"
+req_thresholds '["LedgerDomain"]' '["FeatureToday"]'; req_gate "$T/feature-hidden.json"
+expect_exit "C43 [R3] a module gated by the Feature* wildcard and also excluded is bad input (exit 2)" 2 "$code" "$out"
+
+req_thresholds '"__absent__"'; req_gate "$T/exact.json"
+expect_exit "C44 without a \"required\" key every measured module fails (fails closed)" 1 "$code" "$out"
+req_thresholds 'null'; req_gate "$T/exact.json"
+expect_exit "C45 \"required\": null is bad input (exit 2)" 2 "$code" "$out"
+req_thresholds '"LedgerDomain"'; req_gate "$T/exact.json"
+expect_exit "C46 [R4] \"required\" given as a string is bad input (exit 2)" 2 "$code" "$out"
+req_thresholds '["LedgerDomain", 7]'; req_gate "$T/exact.json"
+expect_exit "C47 [R4] a non-name in \"required\" is bad input (exit 2)" 2 "$code" "$out"
+
+# The committed list: every required module has sources, a threshold, and no exclusion.
+python3 - "$ROOT/scripts/coverage-thresholds.json" "$SRC" >"$T/required.txt" 2>&1 <<'PY'
+import fnmatch, glob, json, sys
+c, src = json.load(open(sys.argv[1])), sys.argv[2]
+bad = []
+for m in c.get("required", []):
+    if not glob.glob(f"{src}/{m}/**/*.swift", recursive=True): bad.append(f"{m}: no sources")
+    if not any(fnmatch.fnmatchcase(m, p) for p in c["modules"]): bad.append(f"{m}: no threshold")
+    if m in c["excludedModules"]: bad.append(f"{m}: excluded")
+if "LedgerDomain" not in c.get("required", []): bad.append("LedgerDomain is not required")
+print("\n".join(bad)); sys.exit(1 if bad else 0)
+PY
+expect_exit "C48 committed \"required\" modules exist, have thresholds, are not excluded" 0 $? "$(cat "$T/required.txt")"
+
+# ---- round 2: the F2 fix keeps the larger denominator --------------------------------
+report "$T/ios-more.json" "D.xctest|LedgerDomain/A.swift|10/100"
+report "$T/watch-full.json" "D.xctest|LedgerDomain/A.swift|10/10"
+gate "$T/watch-full.json" "$T/ios-more.json"
+expect_exit "C49 input order does not matter: the 100-line measurement still wins" 1 "$code" "$out"
+report "$T/tie-a.json" "D.xctest|LedgerDomain/A.swift|90/100"
+report "$T/tie-b.json" "D.xctest|LedgerDomain/A.swift|96/100"
+gate "$T/tie-a.json" "$T/tie-b.json"
+expect_exit "C50 equal line counts: the better-covered measurement wins (96 % passes)" 0 "$code" "$out"
 
 # ---- the committed thresholds match docs/testing-strategy.md §4 -------------------
 python3 - "$ROOT/scripts/coverage-thresholds.json" >"$T/committed.txt" 2>&1 <<'PY'

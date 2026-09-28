@@ -24,8 +24,11 @@ check "RP05 manifest version equals MARKETING_VERSION" \
     is "$(jq -r '."."' "$MANIFEST")" "$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"$line")"
 
 extra="$(jq -r '.packages["."]["extra-files"][] | if type == "string" then . else .path end' "$CONFIG" | sort)"
-marked="$(cd "$ROOT" && git ls-files | grep -vE '\.md$|^release-please-config\.json$' \
-    | xargs grep -l 'x-release-please-' 2>/dev/null | sort)"
+# Tests quote the marker (this file does), so scripts/tests/ is not searched. Untracked
+# files are searched too, so a marker added but not yet committed is caught as well.
+marked="$(cd "$ROOT" && git ls-files --cached --others --exclude-standard \
+    | grep -vE '\.md$|^release-please-config\.json$|^scripts/tests/' \
+    | xargs grep -l 'x-release-please-' 2>/dev/null | sort -u)"
 check "RP06 every file carrying a marker is an extra-file, and every extra-file has one" is "$marked" "$extra"
 check "RP07 the extra-file uses the generic updater" \
     is "$(jq -r '.packages["."]["extra-files"][0].type' "$CONFIG")" generic

@@ -153,6 +153,51 @@ git clone -q --depth 1 "file://$T/repo" "$T/shallow1" 2>/dev/null
 check "WF26 without the base commit the step fails rather than skipping Check" \
     is "$(scope "$T/shallow1" | head -1)" step-failed
 
+# ---- round 2: the Scope job under hostile histories ---------------------------------
+# Folders Xcode syncs into a target (PBXFileSystemSynchronizedRootGroup members): every
+# file in them, *.md included, becomes part of the built product.
+synced="$(python3 - "$ROOT/Ledger.xcodeproj/project.pbxproj" <<'PY'
+import re, sys
+p = open(sys.argv[1]).read()
+ids = set(re.findall(r"^\s+([0-9A-F]{24}) /\*", "\n".join(re.findall(r"fileSystemSynchronizedGroups = \((.*?)\);", p, re.S)), re.M))
+for gid, body in re.findall(r"([0-9A-F]{24}) /\* [^*]* \*/ = \{\s*isa = PBXFileSystemSynchronizedRootGroup;(.*?)\};", p, re.S):
+    m = re.search(r"path = ([^;]+);", body)
+    if gid in ids and m: print(m.group(1).strip('"'))
+PY
+)"
+check "WF37 the synced-folder list was read from the pbxproj" grep -q '^Resources/Fonts$' <<<"$synced"
+for dir in $(grep -v '^Apps/' <<<"$synced"); do
+    decide "WF38 [R5] a Markdown file in $dir/ (synced into an app target) -> Check runs" code=true \
+        "mkdir -p '$dir' && echo x >'$dir/NOTES.md'"
+done
+decide "WF39 a rename inside docs/ -> Check skipped" code=false 'git mv docs/ci-cd.md docs/ci.md'
+decide "WF40 deleting a Markdown file under LedgerKit/ -> Check runs" code=true \
+    'echo x >LedgerKit/Sources/LedgerDomain/Notes.md && git add -A && git commit -qm add && git switch -q main && git merge -q pr && git switch -q pr' \
+    'git rm -q LedgerKit/Sources/LedgerDomain/Notes.md' 'echo more >>docs/ci-cd.md'
+decide "WF41 docs plus one Swift line -> Check runs" code=true \
+    'echo more >>docs/ci-cd.md' 'echo more >>tasks/todo.md' 'echo "// x" >>Apps/Ledger/LedgerApp.swift'
+decide "WF42 code changed then reverted inside the PR (no net code change) -> Check skipped" code=false \
+    'echo "// x" >>Apps/Ledger/LedgerApp.swift' 'git commit -qam code' 'git revert --no-edit HEAD' 'echo more >>docs/ci-cd.md'
+decide "WF43a force-push replaces a code commit with docs only -> the new head skips Check" code=false \
+    'echo "// x" >>Apps/Ledger/LedgerApp.swift' 'git commit -qam code' 'git reset -q --hard main' 'echo more >>docs/ci-cd.md'
+decide "WF43b force-push replaces docs with code -> the new head runs Check" code=true \
+    'echo more >>docs/ci-cd.md' 'git commit -qam docs' 'git reset -q --hard main' 'echo "// x" >>Apps/Ledger/LedgerApp.swift'
+decide "WF44a base moved (main gained code), PR is docs only -> Check skipped" code=false \
+    'git switch -q main && echo "// main" >>Apps/Ledger/LedgerApp.swift && git commit -qam moved && git switch -q pr' \
+    'echo more >>docs/ci-cd.md'
+decide "WF44b the PR merged the moved main in, then docs -> Check skipped (main's code is the base)" code=false \
+    'git switch -q main && echo "// main" >>Apps/Ledger/LedgerApp.swift && git commit -qam moved && git switch -q pr' \
+    'git merge -q --no-edit main' 'echo more >>docs/ci-cd.md'
+decide "WF44c the PR merged main in and changed code -> Check runs" code=true \
+    'git switch -q main && echo "// main" >>docs/ci-cd.md && git commit -qam moved && git switch -q pr' \
+    'git merge -q --no-edit main' 'echo "// pr" >>LedgerKit/Sources/LedgerDomain/Weight.swift'
+
+# Check's `if:` compares the Scope output to 'true', so an empty output skips Check (the
+# job then shows "skipped", as a docs-only PR does). The link must be intact.
+check "WF45 Check's condition reads Scope's code output, which Scope's step writes" \
+    is "$(q pr '[.jobs.check.if, .jobs.scope.outputs.code, ([.jobs.scope.steps[] | select(.id == "scope") | .run | test("code=.*GITHUB_OUTPUT")] | tostring)] | join(" | ")')" \
+    "needs.scope.outputs.code == 'true' | \${{ steps.scope.outputs.code }} | [true]"
+
 # ---- nightly.yml -----------------------------------------------------------------------
 check "WF36 nightly is manual only (no schedule spends the free minutes) and runs one at a time" \
     is "$(q nightly '[.on | keys[]] | join(",")') $(q nightly '.concurrency.group')" "workflow_dispatch nightly"

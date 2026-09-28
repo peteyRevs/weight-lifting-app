@@ -255,3 +255,198 @@ Test: PC07. **Fix:** `case $CI_BUILD_NUMBER in ''|*[!0-9]*) exit 1;; esac`.
 - It is committed with mode 100755.
 - `xcodebuild -showBuildSettings` resolves `CURRENT_PROJECT_VERSION = 4242` for both
   `Ledger` and `LedgerWatch`.
+
+---
+
+## Round 2 (19d4050: fixes F1–F8, single macOS job, no branch protection)
+
+Tested 2026-09-27 at `19d4050`. I read only the "Where I changed the tester's tests" section of
+`implementation-notes.md`. Nothing is committed.
+
+### Audit of the implementer's changes to this suite
+
+My round-1 suite was untracked at `0c74369`, so `git diff 0c74369..19d4050` shows it as all new.
+To audit it, I rebuilt my round-1 files in scratch and diffed them against `19d4050`.
+
+- **Unchanged, byte for byte:** `lib.sh`, `run.sh`, `check-test-results.adv.sh`,
+  `check-wiring.adv.sh`, `ci-post-clone.adv.sh` and `release-please.adv.sh`.
+- **`workflows.adv.sh`: accepted.** Every change follows from Pete's decisions or a fix:
+  - WF04/05/07/08/17 now describe the design where Scope runs, then Check.
+  - WF11's jq now tolerates a workflow with no cache step. It is not weaker: the set of
+    cached paths must still be exactly `.derivedData/SourcePackages`.
+  - WF33/34 lose the release-PR dispatch (see R-D4).
+  - WF35 and WF36 are new.
+- **`coverage-gate.adv.sh`: accepted, except one side effect, which I repaired (R2 below).**
+  C09b's `feature.json` and the new C14b are correct. C14b even catches a mutant that C14
+  alone misses.
+
+### Findings
+
+#### R1 — The committed suite turned `check.sh` red (my test bug, high, fixed in the test)
+RP06 lists every tracked file that carries the `x-release-please-` marker. Once `19d4050`
+committed the suite, two of its own files matched: `release-please.adv.sh` and
+`ci-post-clone.adv.sh` quote the marker. In round 1 they were untracked, so this never showed.
+
+**Result at `19d4050`:** `scripts/check.sh --lint-only` exits 1 at step 2 (RP06), so G5 could
+not have merged it.
+
+**Fix (test only):** RP06 skips `scripts/tests/`. It now also searches untracked files, so a
+marker that is added but not yet committed is caught too. Verified by planting
+`Config/Probe.xcconfig` with a marker: RP06 fails, then passes again once the file is removed.
+
+#### R2 — The shared `"required": ["LedgerDomain"]` hid what C05, C09a and C31 test (weakening, repaired)
+With `required`, any unlisted module fails the gate by itself. After the change:
+- C05's report (Design + Feature) failed because neither module was required, not because
+  overall was below 80.
+- C09a failed because FeatureToday was not required, not because of `Feature*`.
+
+**Evidence:** two mutants survived the committed suite with zero failing cases:
+- the overall check removed (`row("Overall", …, 0)`);
+- every wildcard threshold 5 points lenient.
+
+**Repair:**
+- C05 and C09a use thresholds files that require exactly the modules they measure.
+- New C05b, C09c and C31b assert the only error line.
+- Both mutants are now caught: no-overall by C05/C05b, lenient-wildcard by C09a/C09c/C31b.
+
+#### R3 — A module gated only by `Feature*` can be excluded silently (bug, low)
+The new "cannot be both gated and excluded" check compares exact names
+(`set(limits) & set(excluded)`). `"excludedModules": ["FeatureToday"]` with the `Feature*`
+threshold is accepted. FeatureToday's 500 uncovered lines vanish, and the gate exits 0.
+
+It takes a visible config edit, and FeatureToday must not be in `required`. Test: C43.
+**Fix:** match each excluded module against the threshold patterns with `fnmatchcase`.
+
+#### R4 — `required` is not type-checked (bug, low)
+The gate still fails closed, but not with exit 2 ("bad input") as the header promises:
+- `"required": "LedgerDomain"` is split into characters, one "has no threshold" row per
+  letter, and exits 1.
+- `"required": ["LedgerDomain", 7]` crashes with a `TypeError` traceback, exit 1.
+
+`null` is rejected correctly (exit 2). Tests: C46, C47.
+**Fix:** validate `required` as a list of strings next to the number checks.
+
+#### R5 — A `.md` file in `Resources/Fonts/` ships in both apps while Scope calls the PR docs-only (bug, low)
+`Resources/Fonts` is a `PBXFileSystemSynchronizedRootGroup` in both the `Ledger` and
+`LedgerWatch` targets, so every file in it is bundled. The Scope step treats only `Apps/*`
+and `LedgerKit/*` as code whatever the extension. So a PR that only adds
+`Resources/Fonts/NOTES.md` runs no Check, yet changes both app bundles. A name that
+collides with another bundled resource would break the build ("Multiple commands produce").
+
+WF38 derives the synced folders from the pbxproj, so the test follows the project.
+**Fix:** treat `Resources/*` as code, like `Apps/*`, or any folder synced into a target.
+
+**Bundling evidence (full-gate build):** `Resources/Fonts/OFL.txt`, a non-code file like a
+`.md` would be, is inside both `Ledger.app` and `LedgerWatch.app`.
+
+### Design questions (round 2)
+
+- **R-D1 — The Check condition fails open.** Check's `if:` is
+  `needs.scope.outputs.code == 'true'`. A typo in the step id or output name would leave the
+  output empty and skip Check on every PR. Each skip looks exactly like a docs-only skip.
+  actionlint catches such typos, but it does not run in CI: WF01 is skipped when mise has no
+  actionlint, and `mise.toml` does not pin it. WF45 now guards the link statically.
+  Proposal: `if: needs.scope.outputs.code != 'false'`, so a missing value runs Check, and pin
+  actionlint in `mise.toml`.
+- **R-D2 — A skipped Check under G5.** G5 says "CI is green too whenever CI ran". A docs-only
+  PR shows Scope ✓ and Check *skipped*, which `gh pr checks` also counts as passing. The
+  Scope step no longer prints the `::notice::` that explained a skip. G5's local full
+  `check.sh` still covers a misjudged scope. Proposal: G5 treats a skipped Check as a pass
+  only when Scope's log says `code=false`, and restore the notice.
+- **R-D3 — No run ever saves the SPM cache on `main`.** PR caches are scoped to the PR's merge
+  ref, and other PRs can restore only from `main`. The nightly lost its cache step and is
+  manual; release-please runs on Linux without one. So every PR's first Check resolves
+  packages cold. This costs minutes, not correctness. Proposal: an occasional
+  `workflow_dispatch` of `pr.yml` on `main`.
+- **R-D4 — The release PR gets no CI.** A PR opened with `GITHUB_TOKEN` starts no workflow,
+  and the dispatch is gone to save minutes. The release PR edits `Config/Base.xcconfig`, so
+  only G5's local `check.sh` and Pete's release review cover it. The static RP02–RP05 checks
+  guard the marker line. This is acceptable under G5 as written. Recorded so the gap is
+  deliberate.
+- **R-D5 — The F2 fix fails closed but can be over-strict.** When the two platforms disagree,
+  the measurement with more lines wins wholesale. Say iOS covers 99 of 100 lines, and a
+  watch-only branch makes it 101 lines on watchOS, where no test runs it (0 covered). The
+  file then counts 0/101 = 0 %. The gate is never too lenient, but a module tested on one
+  platform only can become unpassable. The exact answer is a per-line union
+  (`xccov view --file`). Repro:
+  `iOS {"coveredLines":99,"executableLines":100}` with `watch {0, 101}` gives 0.00 %.
+
+### Scope job: what held (new cases WF39–WF45)
+
+**Rename, deletion and mixed-commit cases** (WF22, WF23, WF35, WF39–WF41):
+- Moving code or tests into `docs/` or `tasks/` runs Check.
+- A rename inside `docs/` skips it.
+- Deleting a `.md` under `LedgerKit/` runs Check.
+- Docs plus one Swift line runs Check.
+
+**History cases:**
+- A code change reverted within the PR skips Check. The merge tree has no code change, which
+  is correct (WF42).
+- A force-push that replaces code with docs, or docs with code, is judged on the new merge
+  only (WF43a/b).
+- When the base moves, Scope diffs against the new base (WF44a–c). A docs-only PR stays
+  docs-only even when main gained code, and even when the PR merged that main in. A PR that
+  merged main and changed code runs Check.
+- A depth-1 checkout fails the step rather than skipping Check (WF26).
+
+**Unusual file names:** git quotes non-ASCII and control characters (`"docs/…"`), so they
+match no docs pattern and run Check. Only the safe direction is possible.
+
+**Concurrency:** the group key and `cancel-in-progress` are unchanged (WF09). A cancel only
+ever hits the older SHA's run, and Scope and Check are cancelled together.
+
+**Caching:** only `.derivedData/SourcePackages` is cached, and every file in the key exists
+(WF11, WF12).
+
+**actionlint 1.7.12:** 0 errors on the new workflows.
+
+### The suite gates `check.sh`: live proof
+
+`scripts/tests/adversarial.test.sh` execs `run.sh` from step 2 (W20–W22 check this
+statically). I checked the loop live on the committed suite plus the RP06 fix, restoring
+each file afterwards and confirming with `git diff`:
+
+| Step | `check.sh --lint-only` | Failing cases |
+|---|---|---|
+| Committed tree | exit 0 | none |
+| `--no-renames` removed from `pr.yml` (F1 reopened) | exit 1 | WF22, WF23 |
+| `pr.yml` restored | exit 0 | none |
+| `coverage-gate.sh` back to ratio-wins (F2 reopened) | exit 1 | C12, C13 |
+| `coverage-gate.sh` restored | (restored) | |
+
+**Mutation checks on the coverage suite** (each mutant is caught):
+
+| Mutant | Caught by |
+|---|---|
+| no "has coverage now" failure | C36, C36b, C37b, C44 |
+| required modules not iterated | C14b, C37b, C38 |
+| no contradiction check | C41, C42, C45 |
+| ratio-wins | C12, C13, C49 |
+| no overall check | C05, C05b |
+| lenient wildcard | C09a, C09c, C31b |
+
+### Full gate on `19d4050`
+
+I ran the full gate once through the simulator lock, on `19d4050` plus the RP06 test fix,
+with the committed suite. Result: **green in 251 s**.
+- Step 2 passed: the adversarial suite and `coverage-gate.test.sh` (10 cases).
+- PR ran 17 targets and PR-Watch ran 8.
+- The coverage gate passed with `required: ["LedgerDomain"]`: 1381/1398 = 98.78 %.
+
+I deleted `.derivedData` afterwards.
+
+With my round-2 cases added, step 2 fails on R3–R5 until they are fixed. That is the
+intended loop.
+
+### Round 2 status
+
+The suite now has 194 cases: 190 pass and 4 fail. The runner exits 1 until R3, R4 and R5
+are fixed:
+
+| Case | Finding |
+|---|---|
+| C43 | R3 |
+| C46, C47 | R4 |
+| WF38 | R5 |
+
+Every F1–F8 case passes at `19d4050`.

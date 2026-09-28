@@ -10,6 +10,7 @@ SB="$ADV_TMP/sandbox"
 mkdir -p "$SB/scripts/tests" "$SB/bin"
 cp "${ADV_CHECK_SH:-$ROOT/scripts/check.sh}" "$SB/scripts/check.sh" # override: mutation-test this suite
 export LOG="$ADV_TMP/calls.log"
+is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
 stub() { # <path> <body>: a /bin/sh stub with the log/fail helpers in front of <body>
     printf '#!/bin/sh\nlog() { printf "%%s\\n" "$*" >>"$LOG"; }\nfail_if() { [ "${FAIL_AT:-}" = "$1" ] && exit "${FAIL_CODE:-1}"; return 0; }\n%s\n' "$2" >"$1"
@@ -152,5 +153,16 @@ check "W18 on Actions xcbeautify renders github-actions" \
     grep -q '^xcbeautify --renderer github-actions' "$LOG"
 run
 check "W19 locally no Actions reporter is passed" bash -c "! grep -q 'github-actions' '$LOG'"
+
+# ---- round 2: this suite is part of the gate ---------------------------------------
+# check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be
+# committed executable, and propagate its failure (exec, or an unguarded call).
+entry="$ROOT/scripts/tests/adversarial.test.sh"
+check "W20 check.sh step 2 runs every scripts/tests/*.test.sh" \
+    grep -qF 'for test in scripts/tests/*.test.sh; do "$test"; done' "$ROOT/scripts/check.sh"
+check "W21 scripts/tests/adversarial.test.sh is committed executable" \
+    is "$(git -C "$ROOT" ls-files -s scripts/tests/adversarial.test.sh | awk '{ print $1 }')" 100755
+check "W22 ... and it execs adversarial/run.sh (a failing suite fails step 2)" \
+    grep -qE '^exec "\$\(dirname "\$0"\)/adversarial/run\.sh"$' "$entry"
 
 finish
