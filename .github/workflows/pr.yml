@@ -1,0 +1,77 @@
+# The pull-request gate (docs/ci-cd.md §2). Both jobs run scripts/check.sh, as a
+# developer does. Branch protection requires the job names "Lint" and
+# "Check (iOS + watchOS)"; renaming one means updating the rule too.
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # release-please.yml runs the checks on its release PR this way
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: macos-26
+    timeout-minutes: 15
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the PR merge commit and its base, for the docs-only check
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Decide whether Check runs (skipped for docs-only PRs)
+        id: scope
+        run: |
+          code=true
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            printf 'Changed files:\n%s\n' "$changed"
+            if [[ -z "$(grep -vE '^(docs|tasks|design)/|\.md$' <<<"$changed" || true)" ]]; then
+              code=false
+              echo "::notice::Docs-only change: Check (iOS + watchOS) is skipped, which counts as passed."
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+      - name: Format, lint, package graph, script tests (check.sh --lint-only)
+        run: scripts/check.sh --lint-only
+
+  check:
+    name: Check (iOS + watchOS)
+    needs: lint
+    if: needs.lint.outputs.code == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version && xcrun simctl list runtimes
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Cache Swift package checkouts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/SourcePackages
+          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-
+      - name: Build, test iOS + watchOS, coverage gate (check.sh --skip-lint)
+        run: scripts/check.sh --skip-lint
+      - name: Upload result bundles and snapshot diffs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .derivedData/Results
+            .derivedData/SnapshotArtifacts
+          include-hidden-files: true # both live under .derivedData/
+          if-no-files-found: ignore
+          retention-days: 7

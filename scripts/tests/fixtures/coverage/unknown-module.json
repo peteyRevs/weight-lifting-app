@@ -1,0 +1,8 @@
+{
+  "coveredLines": 10, "executableLines": 10, "lineCoverage": 1,
+  "targets": [
+    { "name": "LedgerDependenciesTests", "coveredLines": 10, "executableLines": 10, "lineCoverage": 1,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/LedgerDependenciesTests.xctest/LedgerDependenciesTests",
+      "files": [ { "name": "Keys.swift", "path": "/ci/LedgerKit/Sources/LedgerDependencies/Keys.swift", "coveredLines": 10, "executableLines": 10, "lineCoverage": 1 } ] }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "coveredLines": 94, "executableLines": 100, "lineCoverage": 0.94,
+  "targets": [
+    { "name": "LedgerDomainTests", "coveredLines": 94, "executableLines": 100, "lineCoverage": 0.94,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/LedgerDomainTests.xctest/LedgerDomainTests",
+      "files": [ { "name": "Weight.swift", "path": "/ci/LedgerKit/Sources/LedgerDomain/Units/Weight.swift", "coveredLines": 94, "executableLines": 100, "lineCoverage": 0.94 } ] }
+  ]
+}

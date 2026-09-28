@@ -46,7 +46,8 @@ summary() {
 }
 trap 'status=$?; if [[ $status -ne 0 ]]; then printf "\n\033[31mcheck.sh FAILED (exit %s)\033[0m\n" "$status"; summary; fi' EXIT
 
-beautify() { mise exec -- xcbeautify ${CI:+--renderer github-actions}; }
+# On GitHub Actions, tools print workflow commands so findings annotate the PR diff.
+beautify() { mise exec -- xcbeautify ${GITHUB_ACTIONS:+--renderer github-actions}; }
 
 # ---- 0. tools ---------------------------------------------------------------
 step "0 · tools"
@@ -58,13 +59,14 @@ done_step "tools"
 if [[ $SKIP_LINT -eq 0 ]]; then
     # ---- 1. format ----------------------------------------------------------
     step "1 · format (swiftformat --lint)"
-    mise exec -- swiftformat --lint --swift-version 6.3 LedgerKit Apps
+    mise exec -- swiftformat --lint --swift-version 6.3 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
 
     # ---- 2. lint + package graph --------------------------------------------
-    step "2 · lint (swiftlint --strict) + package graph"
-    mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml
+    step "2 · lint (swiftlint --strict) + package graph + script tests"
+    mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}
     scripts/check-package-graph.sh
+    for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
 fi
 
@@ -121,11 +123,7 @@ done_step "watchOS"
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"
-if [[ -x scripts/coverage-gate.sh ]]; then
-    scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
-else
-    echo "coverage gate: F01"
-fi
+scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
 done_step "coverage"
 
 summary

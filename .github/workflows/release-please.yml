@@ -1,0 +1,36 @@
+# Versions and changelog from Conventional Commits (docs/ci-cd.md §6). Each push
+# to main opens or updates the release PR; merging it tags vX.Y.Z, which starts
+# Xcode Cloud "Release". MARKETING_VERSION is bumped in Config/Base.xcconfig.
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # release branch, tag, GitHub release
+      pull-requests: write # the release PR
+      issues: write # its labels
+      actions: write # the dispatch below
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+      # A PR opened or pushed with GITHUB_TOKEN starts no workflow, so its required
+      # checks would never report. A dispatch does start one, on the PR's head commit.
+      - name: Run the PR checks on the release PR
+        if: steps.release.outputs.pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.release.outputs.pr }}
+        run: gh workflow run pr.yml --repo "$GITHUB_REPOSITORY" --ref "$(jq -r .headBranchName <<<"$PR")"

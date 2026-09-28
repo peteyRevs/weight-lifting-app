@@ -3,6 +3,24 @@
 Decision: ADR-006. Evidence: `docs/research/R3-tooling-ci.md` (2026-09-16).
 Local parity: `docs/testing-strategy.md` §7 (`scripts/check.sh`) and §8 (test plans).
 
+**Verified 2026-09-27 (F01).** The committed files under `.github/`,
+`ci_scripts/` and `scripts/` are authoritative. The plan below differs from them in these ways:
+- `macos-26` (arm64, image 20260907) defaults to Xcode 26.6 (17F113) at
+  `/Applications/Xcode_26.6.app` and has iPhone 17 and Series 11 (46mm) on the 26.5
+  runtimes. Jobs select Xcode from `.xcode-version`. Actions are pinned by SHA
+  (checkout v7, cache v6, upload-artifact v7, mise-action v4, release-please-action v5).
+- `pr.yml` runs `check.sh --lint-only` / `--skip-lint` with `contents: read`. `Check` is
+  skipped, which counts as passed, when only `docs/`, `tasks/`, `design/` or `*.md` change.
+  Bundles upload only on failure, and only package checkouts are cached. There is no
+  `merge_group`, because personal repos have no merge queue. `workflow_dispatch` lets
+  release-please run the checks on its PR, since GITHUB_TOKEN PRs trigger no workflows.
+- §4 needs GitHub Pro on this private personal repo (API 403). With one maintainer, approvals
+  and Code Owner review can never be met, so they are off (`docs/xcode-cloud/README.md`).
+- §5: scripts run from `ci_scripts/`, so the post-clone path is `$CI_PRIMARY_REPOSITORY_PATH`.
+  External TestFlight needs a clean build, and App Review submission is manual.
+- §6: `bootstrap-sha` keeps pre-F01 history out of the first changelog.
+- `$(PROJECT_DIR)` expands in the test plans' `SNAPSHOT_ARTIFACTS`, as the generated `.xctestrun` shows.
+
 ## 1. Flow
 
 ```

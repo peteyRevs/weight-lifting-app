@@ -1,0 +1,96 @@
+# Nightly (docs/ci-cd.md §3): the full Nightly / Nightly-Watch plans (all UI and
+# performance tests, 2,000 property seeds) and a dependency report. A failure
+# opens an issue labelled "nightly", or comments on the one already open.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC ≈ 04:00 Chicago
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    name: ${{ matrix.plan }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: # one watch clone, as in check.sh step 4 (F00 implementation notes #17)
+        include:
+          - { plan: Nightly, scheme: Ledger, workers: "", destination: "platform=iOS Simulator,name=iPhone 17,OS=26.5" }
+          - { plan: Nightly-Watch, scheme: LedgerWatch, workers: "1", destination: "platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Cache Swift package checkouts (saved on main, so every PR can restore it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/SourcePackages
+          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-
+      - name: Test the ${{ matrix.plan }} plan
+        env:
+          PLAN: ${{ matrix.plan }}
+          SCHEME: ${{ matrix.scheme }}
+          DESTINATION: ${{ matrix.destination }}
+          WORKERS: ${{ matrix.workers }}
+        run: |
+          xcodebuild test -project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$DESTINATION" \
+            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
+            -resultBundlePath ".derivedData/Results/$PLAN.xcresult" -test-timeouts-enabled YES \
+            -parallel-testing-enabled YES ${WORKERS:+-parallel-testing-worker-count "$WORKERS"} \
+            -quiet | mise exec -- xcbeautify --renderer github-actions
+          scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
+      - name: Upload the result bundle
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-${{ matrix.plan }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .derivedData/Results
+          include-hidden-files: true # it lives under .derivedData/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  dependencies:
+    name: Dependency report
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+      - name: Available package updates (report only; bumps are deliberate PRs)
+        run: |
+          swift package --package-path LedgerKit update --dry-run | tee updates.txt
+          { echo '```'; sed -n '/Dry-run/,$p' updates.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    name: Report failure
+    needs: [test, dependencies]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the nightly issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create nightly --force --color B60205 --description "The nightly workflow failed"
+          open="$(gh issue list --label nightly --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [[ -n "$open" ]]; then
+            gh issue comment "$open" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --label nightly --title "Nightly failed on $(date -u +%F)" --body "The nightly workflow failed: $RUN_URL"
+          fi

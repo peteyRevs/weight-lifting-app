@@ -1,0 +1,26 @@
+{
+  "coveredLines": 216, "executableLines": 382, "lineCoverage": 0.5654,
+  "targets": [
+    { "name": "LedgerDomainTests", "coveredLines": 166, "executableLines": 220, "lineCoverage": 0.7545,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/LedgerDomainTests.xctest/LedgerDomainTests",
+      "files": [
+        { "name": "Weight.swift", "path": "/ci/LedgerKit/Sources/LedgerDomain/Units/Weight.swift", "coveredLines": 96, "executableLines": 100, "lineCoverage": 0.96 },
+        { "name": "Reps.swift", "path": "/ci/LedgerKit/Sources/LedgerDomain/Units/Reps.swift", "coveredLines": 20, "executableLines": 20, "lineCoverage": 1 },
+        { "name": "Strings.swift", "path": "/ci/LedgerKit/Sources/LedgerDomain/Generated/Strings.swift", "coveredLines": 0, "executableLines": 50, "lineCoverage": 0 },
+        { "name": "WeightTests.swift", "path": "/ci/LedgerKit/Tests/LedgerDomainTests/WeightTests.swift", "coveredLines": 50, "executableLines": 50, "lineCoverage": 1 }
+      ] },
+    { "name": "FeatureTodayTests", "coveredLines": 50, "executableLines": 150, "lineCoverage": 0.3333,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/FeatureTodayTests.xctest/FeatureTodayTests",
+      "files": [
+        { "name": "TodayStore.swift", "path": "/ci/LedgerKit/Sources/FeatureToday/TodayStore.swift", "coveredLines": 40, "executableLines": 50, "lineCoverage": 0.8 },
+        { "name": "TodayView+Previews.swift", "path": "/ci/LedgerKit/Sources/FeatureToday/TodayView+Previews.swift", "coveredLines": 0, "executableLines": 30, "lineCoverage": 0 },
+        { "name": "Weight.swift", "path": "/ci/LedgerKit/Sources/LedgerDomain/Units/Weight.swift", "coveredLines": 10, "executableLines": 100, "lineCoverage": 0.1 }
+      ] },
+    { "name": "LedgerAppKit", "coveredLines": 0, "executableLines": 4, "lineCoverage": 0,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/PackageFrameworks/LedgerAppKit.framework/LedgerAppKit",
+      "files": [ { "name": "AppRootView.swift", "path": "/ci/LedgerKit/Sources/LedgerAppKit/AppRootView.swift", "coveredLines": 0, "executableLines": 4, "lineCoverage": 0 } ] },
+    { "name": "Ledger.app", "coveredLines": 0, "executableLines": 8, "lineCoverage": 0,
+      "buildProductPath": "/ci/.derivedData/Build/Products/Debug-iphonesimulator/Ledger.app/Ledger",
+      "files": [ { "name": "LedgerApp.swift", "path": "/ci/Apps/Ledger/LedgerApp.swift", "coveredLines": 0, "executableLines": 8, "lineCoverage": 0 } ] }
+  ]
+}
