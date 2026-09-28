@@ -1,6 +1,6 @@
 # SwiftLint 0.65.x — see docs/engineering-standards.md §1. `--strict` everywhere:
 # a warning fails the local gate and CI. Custom rules encode the design-system
-# boundary (feature modules may not spell colours, fonts, spacing or radii) and
+# boundary (only LedgerDesign may spell colours, fonts, spacing or radii) and
 # the concurrency rules from engineering-standards §3.
 strict: true
 
@@ -37,11 +37,13 @@ opt_in_rules:
 
 # `id` is SwiftLint's own default; `lb` and `kg` are the unit symbols the domain names
 # (`Units.lb`, `Units.kg`, F02), too short for min_length but clearer than any longer name.
+# `xs` … `xl` are LedgerSpacing's steps (F06 brief), read as `LedgerSpacing.m`.
 identifier_name:
   excluded:
     - "^id$"
     - "^lb$"
     - "^kg$"
+    - "^(xs|s|m|l|xl)$"
 
 force_cast: error
 force_try: error
@@ -62,40 +64,37 @@ line_length:
   ignores_urls: true
 
 custom_rules:
-  # ---- design-system boundary: feature modules use LedgerDesign tokens only ----
-  feature_raw_color:
-    name: "Raw colour in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
+  # ---- design-system boundary: everything outside LedgerDesign uses its tokens ----
+  ledger_raw_color:
+    name: "Raw colour outside LedgerDesign"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    # LedgerDesign is the one module that turns raw values into tokens (F06).
+    excluded: &design_allowlist
+      - '.*LedgerKit/Sources/LedgerDesign/.*'
       - '.*LedgerTestSupport.*'
+      - '.*LedgerSnapshotTesting.*'
+      - '.*Tests/.*'
     regex: 'Color\((red|white|hue|\.sRGB|\.displayP3|uiColor)|Color\.(red|blue|green|orange|black|white|gray|yellow|pink|purple|indigo|mint|teal|cyan|brown|primary|secondary|accentColor)\b|\.(foregroundStyle|foregroundColor|background|tint|fill)\(\.(red|blue|green|orange|black|white|gray|yellow)\b|UIColor\(|#colorLiteral'
     message: "Use a LedgerDesign colour token, not a raw Color (docs/architecture.md §11)."
     severity: error
-  feature_raw_font:
-    name: "Raw font in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
+  ledger_raw_font:
+    name: "Raw font outside LedgerDesign"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded: *design_allowlist
     regex: '\.font\(\.(system|largeTitle|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|Font\.(system|custom)\(|\.fontWeight\('
     message: "Use a LedgerDesign type token, not a system font (docs/architecture.md §11)."
     severity: error
-  feature_raw_padding:
-    name: "Raw padding in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
+  ledger_raw_spacing:
+    name: "Raw spacing outside LedgerDesign"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded: *design_allowlist
     regex: '\.padding\((\.[a-zA-Z]+,\s*)?-?\d|(VStack|HStack|LazyVStack|LazyHStack|Grid)\((alignment:[^,)]+,\s*)?spacing:\s*\d'
     message: "Use a LedgerDesign spacing token, not a numeric literal."
     severity: error
-  feature_raw_radius:
-    name: "Raw corner radius in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
+  ledger_raw_radius:
+    name: "Raw corner radius outside LedgerDesign"
+    included: 'LedgerKit/Sources/.*|Apps/.*'
+    excluded: *design_allowlist
     regex: 'cornerRadius:\s*\d|\.cornerRadius\(\d'
     message: "Use a LedgerDesign radius token, not a numeric literal."
     severity: error

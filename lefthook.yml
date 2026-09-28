@@ -8,7 +8,7 @@ pre-commit:
       run: mise exec -- swiftformat --lint {staged_files}
     - name: swiftlint
       glob: "*.swift"
-      run: mise exec -- swiftlint lint --strict --quiet {staged_files}
+      run: mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml {staged_files}
 
 commit-msg:
   jobs:
