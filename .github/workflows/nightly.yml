@@ -1,14 +1,19 @@
-# Nightly (docs/ci-cd.md §3): the full Nightly / Nightly-Watch plans (all UI and
-# performance tests, 2,000 property seeds) and a dependency report. A failure
-# opens an issue labelled "nightly", or comments on the one already open.
+# Nightly (docs/ci-cd.md §3): the full Nightly / Nightly-Watch plans and a dependency
+# report; a failure opens an issue labelled "nightly" or comments on the open one.
+# Manual only: a schedule would spend the free macOS minutes (Pete, 2026-09-27).
 name: Nightly
 
 on:
-  schedule:
-    - cron: "0 9 * * *" # 09:00 UTC ≈ 04:00 Chicago
   workflow_dispatch:
 
+concurrency:
+  group: nightly
+
 permissions: {}
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
 
 jobs:
   test:
@@ -28,12 +33,6 @@ jobs:
       - name: Select Xcode from .xcode-version
         run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - name: Cache Swift package checkouts (saved on main, so every PR can restore it)
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .derivedData/SourcePackages
-          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-
       - name: Test the ${{ matrix.plan }} plan
         env:
           PLAN: ${{ matrix.plan }}

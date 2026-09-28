@@ -1,5 +1,4 @@
-# docs/ci-cd.md §4. Branch protection's "Require review from Code Owners" is off
-# while Pete is the only maintainer (docs/xcode-cloud/README.md explains why).
+# Review requests only: there is no branch protection (docs/ci-cd.md §4).
 *                                   @peteyRevs
 /LedgerKit/Sources/LedgerDomain/    @peteyRevs
 /docs/adr/                          @peteyRevs

@@ -1,114 +1,152 @@
 # F01 implementation notes
 
-Base: `main` 8404d02. Implementer pass on 2026-09-27. Nothing is committed or pushed. No GitHub or App Store Connect setting was changed.
+Base: `main` 8404d02. First pass committed as 0c74369. This round addresses the fix
+findings in `test-findings.md` and Pete's decisions of 2026-09-27; it is uncommitted.
+No GitHub or App Store Connect setting was changed.
 
 ## Decisions
 
-1. **`check.sh` remains the only definition of the gate.** `Lint` runs `check.sh --lint-only`
-   and `Check` runs `check.sh --skip-lint`. `check.sh` changed in three places, although it
-   is outside Touches:
-   - On GitHub Actions it passes SwiftLint `--reporter github-actions-logging` and SwiftFormat
-     `--reporter github-actions-log` (criterion 2). Neither tool detects Actions on its own
-     (verified). `beautify` now keys on `GITHUB_ACTIONS` too, for consistency.
-   - Step 2 runs `scripts/tests/*.test.sh`, as the brief's test plan asks.
-   - Step 5 always calls the coverage gate. The `coverage gate: F01` fallback is gone.
-2. **Coverage gate.** A module is its folder under `LedgerKit/Sources/<Module>/`, because
-   coverage is plan-wide (F00 #17). When a file is measured more than once, its best
-   measurement is kept. Percentages are floored to 2 decimals, so a value never rounds up
-   past a threshold. Thresholds live in `scripts/coverage-thresholds.json` (strategy §4),
-   and `Feature*` is written as a pattern.
-   - *Excluded:* `LedgerTestSupport`; `LedgerSnapshotTesting`, which is test-only like
-     TestSupport; the umbrella modules `LedgerAppKit` and `LedgerWatchAppKit`;
-     `*+Previews.swift`; and `*/Generated/*`.
-   - *Missing thresholds fail.* A module that has lines but no threshold fails the gate.
-     **`LedgerDependencies` has none on purpose**, since strategy §4 is silent on it. F07
-     must pick one (or exclude it as wiring) when it adds code there.
-3. **Docs-only PRs** skip `Check` through a job-level `if`, and a skipped job counts as passed.
-   A workflow-level `paths:` filter would leave the required check pending forever.
-4. **The release PR's checks.** A PR pushed with `GITHUB_TOKEN` starts no workflow.
-   `release-please.yml` therefore dispatches `pr.yml` on the release branch, which needs
-   `actions: write`. No secret or PAT is involved.
-5. **Least privilege.** `pr.yml` has `contents: read` only. `nightly.yml` defaults to `{}`
-   and grants per job: `contents: read`, plus `issues: write` for the report job only.
-   release-please gets `contents`, `pull-requests`, `issues` and `actions` write.
-   Actions are pinned by SHA with a version comment.
-6. **Caching and artifacts.**
-   - Only `.derivedData/SourcePackages` is cached (518 MB locally). The nightly saves that
-     cache on `main`, which is the only scope every PR can restore.
-   - DerivedData is not cached. Checkout mtimes invalidate it, it is several GB, and the
-     repo's cache cap is 10 GB.
-   - PR result bundles (about 79 MB each) upload only on failure, which saves private-repo
-     artifact storage.
-   - `include-hidden-files: true` is needed because upload-artifact skips dot-paths by default.
-7. **Nightly failures.** A failure opens one issue labelled `nightly`. Later failures comment on
-   that open issue instead of opening duplicates. The label is created idempotently.
-8. **release-please.** The config is the one in ci-cd.md §6 without the no-op `tag-separator`.
-   It adds `bootstrap-sha` = 8404d02, so the first release PR does not list all of F00/F02.
-   The `simple` type writes only `CHANGELOG.md`; `version.txt` is not created.
-9. **`ci_post_clone.sh`** writes to `$CI_PRIMARY_REPOSITORY_PATH/…`. Xcode Cloud runs scripts
-   from `ci_scripts/`, so the plan's relative path would have failed. The script also fails
-   when `CI_BUILD_NUMBER` is missing. The plan's `-downloadPlatform` branch is dropped
-   because no Xcode Cloud workflow tests.
+1. **`check.sh` is the only definition of the gate.** CI runs it unmodified. It lies
+   outside Touches but changed:
+   - On Actions it passes the SwiftLint (`github-actions-logging`) and SwiftFormat
+     (`github-actions-log`) reporters. Neither tool detects Actions itself (verified).
+     This gives criterion 2's file:line annotations.
+   - Step 2 runs `scripts/tests/*.test.sh`. That glob now includes the tester's suite, through
+     `scripts/tests/adversarial.test.sh` (159 cases, about 22 s, host-only).
+   - Step 5 always calls the coverage gate.
+   - Contradictory flags exit 2 (F7). The summary survives bash 3.2 (F6).
+2. **Pete: free Actions minutes, spending limit $0.**
+   - `pr.yml` has one macOS job, `Check`, which runs the whole `check.sh` (lint, iOS, watchOS,
+     coverage) in one VM, with a 30-minute timeout.
+   - A Linux `Scope` job runs first and skips `Check` for docs-only PRs, so those start no Mac.
+     It lists changed files with `--no-renames`, so a moved file counts at both paths (F1).
+     `*.md` files under `Apps/` or `LedgerKit/` count as code (D4).
+   - A new push cancels the superseded run.
+   - The nightly is manual (`workflow_dispatch`), with `concurrency` (D9).
+   - release-please runs on Linux. The dispatch of `pr.yml` onto its release PR is removed:
+     it would cost about 13 macOS minutes on every push to `main`. The person merging a
+     release PR runs `check.sh` on it first; the only code change there is `MARKETING_VERSION`.
+3. **Pete: no branch protection.** Enforcement is the orchestrator's merge policy: a green local
+   `check.sh` on the merge candidate, plus CI whenever CI ran. When the minutes run out, CI does
+   not run and the local gate output is the G4 evidence.
+   - This is recorded in ci-cd.md §4 and ADR-006's Consequences.
+   - The checklist no longer has protection steps. It keeps *Allow GitHub Actions to create
+     and approve pull requests*, which release-please needs.
+   - Criterion 6 is waived by this decision.
+4. **Coverage gate** (`scripts/coverage-gate.sh`, thresholds in `scripts/coverage-thresholds.json`):
+   - A module is its folder `LedgerKit/Sources/<Module>/`, because coverage is plan-wide (F00 #17).
+   - Percentages are floored, never rounded up.
+   - Excluded: `LedgerTestSupport`, `LedgerSnapshotTesting`, the umbrella modules `LedgerAppKit`
+     and `LedgerWatchAppKit`, `*+Previews.swift` and `*/Generated/*`.
+   - A file measured twice keeps the measurement with the most executable lines, then the most
+     covered (F2). One platform's lines therefore never hide the other's.
+   - **`required`** lists every module that has code (today: `LedgerDomain`).
+     - A required module missing from the report fails (F3).
+     - A measured module that is not listed fails with "add it to required". The list therefore
+       cannot go stale. When F06 or F05 add code, they add one line.
+   - A malformed thresholds file or report exits 2 (F5). So does a module that is both gated
+     and excluded (D5).
+   - `LedgerDependencies` has no threshold on purpose. F07 decides it (D6).
+5. **Caching and artifacts.**
+   - Only `.derivedData/SourcePackages` is cached.
+   - DerivedData is not cached. llbuild compares inode and mtime, so a restored tree rebuilds
+     anyway, and it is several GB.
+   - Result bundles (about 79 MB each) upload only on failure. `include-hidden-files` is set.
+6. **Everything else.**
+   - Least privilege: `pr.yml` has `contents: read`, and nightly defaults to `{}`.
+   - Actions are pinned by SHA.
+   - Every workflow with `run:` steps defaults to `shell: bash`, which adds pipefail (F4).
+   - The nightly opens or updates a single `nightly` issue.
+   - release-please's config sets `bootstrap-sha` = 8404d02.
+   - `ci_post_clone.sh` writes to `$CI_PRIMARY_REPOSITORY_PATH`, because scripts run from
+     `ci_scripts/`. It accepts only a whole-number build number (F8).
 
-## Deviations and open items
+## Where I changed the tester's tests, and why
 
-- **Branch protection** cannot follow ci-cd.md §4 as written:
-  - It needs GitHub Pro on this private personal repo. The API returns 403.
-  - A sole author can never meet required approvals or Code Owner review.
-  - Personal repos have no merge queue and no push restrictions. `merge_group` is dropped.
-  - The checklist and ci-cd.md record these points.
-- **Nightly dependency report** is written to the step summary instead of an artifact.
-- **Not done (proposed follow-ups):**
-  - SwiftLint analyzer (F00 #9). It is outside the brief's Scope and needs a non-`-quiet`
-    full build log plus an extra build.
-  - Dependabot for the SHA pins.
-  - testing-strategy §4 still names the jobs `test-ios` / `pr-gate` and does not mention
-    LedgerSnapshotTesting or LedgerDependencies.
-- **`check.sh:47`** has a pre-existing SC2154 shellcheck false positive (F00), which is untouched.
+Each change follows Pete's decision or a design the tests could not express. None weakens
+the property under test.
+- **Workflows suite:**
+  - WF04, WF05, WF07, WF08 and WF17, and the `scope` extraction, now describe the
+    single-job structure, `Scope → Check`.
+  - WF33 and WF34 now assert that release-please runs on Linux with no dispatch and no
+    `actions: write`.
+  - WF11 now tolerates a workflow with no cache step. The nightly lost its cache as
+    budget trimming.
+  - New cases: WF35 (D4: `*.md` under `LedgerKit/` runs Check) and WF36 (the nightly is
+    manual, one run at a time).
+- **Coverage suite:**
+  - The shared thresholds gain `"required": ["LedgerDomain"]`, and C09b uses a derived
+    file that also requires FeatureToday.
+  - C14 as written needed the gate to guess from source files that LedgerDomain has code
+    but LedgerDesign does not. That would be a heuristic. An explicit list that ratchets
+    is deterministic, and its shrinking shows in the diff (D2). C14b checks that the error
+    names LedgerDomain.
+
+## Design questions
+
+- D1 is answered by Pete: no protection (decision 3).
+- D2: any gate file can be edited by the PR it gates. Recommendation: the G3 reviewer prompt
+  asks "did the PR touch `scripts/`, `TestPlans/`, `.github/`, `ci_scripts/` or
+  `coverage-thresholds.json`?". CODEOWNERS binds nothing without protection.
+- D3: not added. G5 sets the squash subject explicitly (`gh pr merge --subject`), and that
+  subject, not the PR title, is what release-please reads.
+- D4, D5 and D9 are fixed. D6 is F07's. D8 is by design: paths resolve from the repo root,
+  like `check.sh`.
+- D7 (`SNAPSHOT_TESTING_RECORD` may not reach simulator tests) is F00/F06 code. It is
+  unverified until the first snapshot test exists.
 
 ## Verification
 
-- **Runner image** (`macos-26` = arm64, 20260907.0351.1): Xcode 26.6 (17F113) is the default
-  at `/Applications/Xcode_26.6.app`. The iOS 26.5 runtime has iPhone 17 and the watchOS 26.5
-  runtime has Series 11 (46mm). jq and gh are present.
-- **actionlint** 1.7.12, with shellcheck 0.11.0 on `run:` blocks: 0 errors in 3 workflows.
-  shellcheck on the new scripts: clean.
-- **Real coverage** (PR-iOS and PR-watchOS, identical per file): **LedgerDomain 1381/1398 =
-  98.78 %**, and overall is the same. No other module has executable lines yet; they are
-  placeholders. Exit 0.
-- **Gate failures:**
-  - `LedgerDomain` raised to 99 gives exit 1, a ✗ row, and the table in `$GITHUB_STEP_SUMMARY`.
-  - A missing threshold gives exit 1.
-  - A missing or incomplete bundle gives exit 2. This happened live while a run was rewriting it.
-- **Fixture test:** `scripts/tests/coverage-gate.test.sh` has 7 cases, including the brief's
-  94 % case. It caught both mutations tried: worst measurement wins, and an off-by-one threshold.
-- **Criterion 2, locally:** a planted force unwrap produces
-  `::error file=LedgerKit/Sources/LedgerDomain/CIProbe.swift,line=3,col=14::…`. A planted
-  format issue produces `::warning file=…,line=2::…`.
-- **Criterion 8, offline** (release-please 17.11.2 library, the config above):
-  - feat + fix + chore bumps 0.1.0 to 0.2.0. The changelog has only Features and Fixes, and
-    the `MARKETING_VERSION` line is bumped.
-  - chore/ci/docs/test alone give an empty changelog, so no release PR is opened.
-- **Post-clone**, run from `ci_scripts/` with `CI_BUILD_NUMBER=42`: `CURRENT_PROJECT_VERSION = 42`
-  for Ledger and LedgerWatch (`-showBuildSettings`). The marker comment leaves the built
-  `CFBundleShortVersionString` at 0.1.0.
-- **Snapshots:** `$(PROJECT_DIR)` expands in `SNAPSHOT_ARTIFACTS` (read from the generated
-  `.xctestrun`), so the brief's fallback is not needed.
-- **Nightly dependency commands** ran locally: 0 updates, and `Package.resolved` is untouched.
-- **Full `check.sh`** through the simulator lock, on the final tree: **green in 204 s**.
-  The script tests passed 7/7. PR ran and passed 17 targets and PR-Watch 8. The coverage
-  gate passed at 98.78 %.
+- **Runner image** (`macos-26` = arm64, 20260907): Xcode 26.6 (17F113) is the default at
+  `/Applications/Xcode_26.6.app`. iPhone 17 and Series 11 (46mm) run on 26.5. jq, gh and ruby
+  are present.
+- **Tests:**
+  - `scripts/tests/adversarial/run.sh`: all 6 suites pass. `coverage-gate.test.sh`: 10 cases.
+  - Mutations are caught: dropping `--no-renames` fails WF22 and WF23. The earlier ones still
+    hold: worst measurement wins, and an off-by-one threshold.
+- **Lint:** actionlint 1.7.12 with shellcheck 0.11.0 reports 0 errors, and shellcheck is clean
+  on the new scripts.
+- **Coverage:** LedgerDomain is at 1381/1398 = **98.78 %**, identical on iOS and watchOS, and
+  overall is the same. No other module has executable lines yet.
+- **Criterion 2:** a planted force unwrap gives `::error file=…/CIProbe.swift,line=3,col=14::…`.
+- **Criterion 8:** checked offline with the release-please 17.11.2 library. feat + fix + chore
+  go from 0.1.0 to 0.2.0, and only Features and Fixes appear in the changelog.
+- **Post-clone:** with `CI_BUILD_NUMBER=42`, both apps resolve `CURRENT_PROJECT_VERSION = 42`.
+  `abc`, `1.2.3.4` and a value with an embedded newline are refused, and the file is untouched.
+- **Full `check.sh`** through the simulator lock, from a cold DerivedData, on the final tree:
+  **green in 262 s**.
+  - Step 2 took 21 s, with all adversarial suites and 10 fixture cases passing.
+  - iOS took 169 s: 17 targets ran and passed.
+  - watchOS took 71 s: 8 targets ran and passed.
+  - Coverage was 98.78 %.
+- **Estimated macOS minutes per PR run: about 12–15**, billed per job and rounded up.
+  - Basis: the cold local run above (262 s). The runner is 3-core M1, against 10 cores here, so
+    compiling should take about 2.5–3× longer.
+  - Breakdown: setup and restore about 2 min, steps 0–2 about 1 min, iOS 6–8 min,
+    watchOS about 3 min.
+  - About 200 free minutes cover roughly 13–16 code PR runs a month. Docs-only PRs cost
+    only about a Linux minute.
+  - The first real run replaces this estimate.
 
 ## Pending (not verifiable locally)
 
-- **Criteria 1–5 and 10** need GitHub. The first `pr.yml` run on the F01 PR covers criterion 1:
-  timing, and the cache logs. The brief's probe PRs are the orchestrator's:
-  - `ci-probe/lint`: a force unwrap.
-  - `ci-probe/test`: a failing `#expect` in LedgerDomainTests.
-  - `ci-probe/coverage`: the LedgerDomain threshold set to 99.
-  - `ci-probe/snapshot`: after F06 lands snapshot tests.
-  - Criterion 10: `gh workflow run nightly.yml --ref <branch with a failing test>`, once F01 is on `main`.
-- **Squash title for this PR:** use `ci: …`. A `feat` title would make release-please open a
-  0.2.0 release PR on merge.
-- **Criteria 6, 7 and 9** are manual (Pete), in `docs/xcode-cloud/README.md` §2 and §7.
-  Pete's decisions come first: GitHub Pro or a public repo, and the Actions budget.
+- **Criteria 1–5 and 10** need GitHub. The first `pr.yml` run on the F01 PR covers
+  criterion 1 and the cache logs. Criterion 1 now means one `Check` job.
+- **Probe PRs:** the minutes budget argues for batching them into one throwaway PR with
+  separate commits, pushed one at a time:
+  - lint: a force unwrap;
+  - test: a failing `#expect` in LedgerDomainTests;
+  - coverage: the LedgerDomain threshold set to 99;
+  - snapshot: after F06 lands.
+- **Criterion 10:** `gh workflow run nightly.yml --ref <branch with a failing test>`, once
+  F01 is on `main`.
+- **Criteria 7 and 9 are manual** (Pete), in `docs/xcode-cloud/README.md` §6.
+- **Squash-merge F01 with a `ci:` subject.** A `feat` subject would make release-please open
+  a 0.2.0 release PR.
+- **Follow-ups not done:**
+  - SwiftLint analyzer (F00 #9);
+  - Dependabot for the SHA pins;
+  - Xcode 26 compilation caching (`COMPILATION_CACHE_ENABLE_CACHING`), to be measured once
+    real run times exist;
+  - testing-strategy §4 wording: the job names, `required`, and LedgerSnapshotTesting.
+- **`check.sh:47`** has a shellcheck SC2154 false positive from F00, left untouched.

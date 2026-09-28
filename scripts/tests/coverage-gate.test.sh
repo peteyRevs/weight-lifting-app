@@ -61,7 +61,22 @@ expect "| LedgerDomain | 0 / 1 | 0.00 % | 95 % | ✗ |"
 # 7 · a report without LedgerKit sources (coverage off) fails loudly
 echo '{"targets":[]}' >"$SCRATCH/empty.json"
 gate 1 "$SCRATCH/empty.json"
-expect "Overall: no LedgerKit source lines measured"
+expect "| LedgerDomain | 0 / 0 | 0.00 % | 95 % | ✗ |"
+expect "Overall: no lines measured"
+
+# 8 · a required module missing from the report fails (its test target was dropped)
+gate 1 "$FIXTURES/domain-94.json"
+expect "error: coverage gate: FeatureToday: no lines measured"
+
+# 9 · a measured module that is not required fails until it is added
+jq '.required = ["FeatureToday"]' "$LEDGER_COVERAGE_THRESHOLDS" >"$SCRATCH/not-required.json"
+LEDGER_COVERAGE_THRESHOLDS="$SCRATCH/not-required.json" gate 1 "$FIXTURES/ios.json"
+expect 'LedgerDomain has coverage now; add it to "required"'
+
+# 10 · bundles that disagree on a file's lines: the larger measurement wins
+echo '{"targets":[{"name":"T","files":[{"path":"/ci/LedgerKit/Sources/LedgerDomain/Units/Weight.swift","coveredLines":10,"executableLines":10}]}]}' >"$SCRATCH/small.json"
+gate 0 "$FIXTURES/ios.json" "$SCRATCH/small.json"
+expect "| LedgerDomain | 116 / 120 | 96.66 % | 95 % | ✓ |"
 
 [[ $FAILED -eq 0 ]] || exit 1
-echo "coverage-gate.test.sh: 7 cases passed"
+echo "coverage-gate.test.sh: 10 cases passed"

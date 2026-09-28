@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# The coverage gate (docs/testing-strategy.md §4): line coverage per LedgerKit
-# module against scripts/coverage-thresholds.json.
-#
-# Coverage is plan-wide and package targets are never coverage targets of their
-# own (F00 implementation notes #17), so a module is its source folder,
-# LedgerKit/Sources/<Module>/, not a target in the report. App shells and tests
-# never count. A file measured twice (two test bundles, iOS and watchOS) keeps
-# its best measurement. A module with lines but no threshold fails, so that
-# every new module gets one on purpose.
+# The coverage gate (docs/testing-strategy.md §4): line coverage per module of
+# LedgerKit/Sources/<Module>/ (coverage is plan-wide, F00 notes #17) against
+# scripts/coverage-thresholds.json. A file measured twice (two bundles, iOS and
+# watchOS) keeps the measurement with the most lines, then the most covered.
+# "required" lists every module with code: one missing from the report fails (its
+# test target was dropped), and a measured one fails until it is listed.
 #
 #   scripts/coverage-gate.sh <result.xcresult | xccov-report.json>...
 #
-# Prints a Markdown table, also appended to $GITHUB_STEP_SUMMARY when set.
+# Prints a Markdown table, also to $GITHUB_STEP_SUMMARY when set.
 # Exit 0: all thresholds met. 1: a threshold missed or missing. 2: bad input.
 set -euo pipefail
 
@@ -27,41 +24,56 @@ read -r -d '' GATE <<'PY' || true
 import fnmatch, json, math, os, re, subprocess, sys
 
 thresholds_file, inputs = sys.argv[1], sys.argv[2:]
-config = json.load(open(thresholds_file))
 source = re.compile(r"/LedgerKit/Sources/(([^/]+)/.+)$")
+
+def bad_input(message):
+    print(f"error: {message}", file=sys.stderr)
+    sys.exit(2)
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+try:
+    config = json.load(open(thresholds_file))
+    limits, excluded, excluded_files = config["modules"], config["excludedModules"], config["excludedFiles"]
+    required = config.get("required", [])
+    if not is_number(config["overall"]) or not all(v is None or is_number(v) for v in limits.values()):
+        raise ValueError("thresholds must be numbers")
+    if set(required) & set(excluded) or set(limits) & set(excluded):
+        raise ValueError("a module cannot be both gated and excluded")
+except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+    bad_input(f"{thresholds_file} is not a usable thresholds file: {error}")
 
 def report(path):
     if path.endswith(".json"):
-        return json.load(open(path))
-    run = subprocess.run(["xcrun", "xccov", "view", "--report", "--json", path], capture_output=True, text=True)
-    if run.returncode:
-        print(f"error: no coverage report in {path}: {run.stderr.strip()}", file=sys.stderr)
-        sys.exit(2)
-    return json.loads(run.stdout)
+        text = open(path).read()
+    else:
+        run = subprocess.run(["xcrun", "xccov", "view", "--report", "--json", path], capture_output=True, text=True)
+        if run.returncode:
+            bad_input(f"no coverage report in {path}: {run.stderr.strip()}")
+        text = run.stdout
+    try:
+        return [(f["path"], f["coveredLines"], f["executableLines"])
+                for t in json.loads(text).get("targets") or [] for f in t.get("files", [])]
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        bad_input(f"{path} is not an xccov report: {error}")
 
-def score(lines):
-    return (lines[0] / lines[1] if lines[1] else 1.0, lines[1])
-
-best = {}  # "<Module>/<path>" -> (covered, executable)
+best = {}  # "<Module>/<path>" -> (executable, covered): the largest measurement wins
 for path in inputs:
-    for target in report(path).get("targets", []):
-        for file in target.get("files", []):
-            match = source.search(file["path"])
-            if not match or match.group(2) in config["excludedModules"] \
-                    or any(fnmatch.fnmatch(match.group(1), p) for p in config["excludedFiles"]):
-                continue
-            name, lines = match.group(1), (file["coveredLines"], file["executableLines"])
-            if name not in best or score(lines) > score(best[name]):
-                best[name] = lines
+    for file_path, covered, executable in report(path):
+        match = source.search(file_path)
+        if not match or match.group(2) in excluded \
+                or any(fnmatch.fnmatch(match.group(1), p) for p in excluded_files):
+            continue
+        best[match.group(1)] = max(best.get(match.group(1), (0, 0)), (executable, covered))
 
 modules = {}
-for name, (covered, executable) in best.items():
+for name, (executable, covered) in best.items():
     total = modules.setdefault(name.split("/", 1)[0], [0, 0])
     total[0], total[1] = total[0] + covered, total[1] + executable
 modules = {m: t for m, t in sorted(modules.items()) if t[1]}
 
 def threshold(module):
-    limits = config["modules"]
     return limits.get(module, next((v for p, v in limits.items() if fnmatch.fnmatchcase(module, p)), None))
 
 rows, failures = ["### Coverage gate", "", "| Module | Lines | Coverage | Threshold | |", "|---|--:|--:|--:|:-:|"], []
@@ -70,16 +82,19 @@ def row(label, covered, executable, limit):
     if limit is None:
         failures.append(f"{label} has no threshold; add it to {thresholds_file}")
     elif not executable:
-        failures.append(f"{label}: no LedgerKit source lines measured (is code coverage on in the test plan?)")
+        failures.append(f"{label}: no lines measured (is code coverage on, and did its test target run?)")
     elif percent < limit:
         failures.append(f"{label} is at {percent:.2f} %, below its {limit} % threshold")
     ok = limit is not None and percent >= limit and executable
     rows.append(f"| {label} | {covered} / {executable} | {percent:.2f} % | {'none' if limit is None else f'{limit} %'} | {'✓' if ok else '✗'} |")
 
-for module, (covered, executable) in modules.items():
+for module in sorted(set(modules) | set(required)):
+    covered, executable = modules.get(module, (0, 0))
     row(module, covered, executable, threshold(module))
+    if module in modules and module not in required:
+        failures.append(f'{module} has coverage now; add it to "required" in {thresholds_file}')
 row("Overall", sum(t[0] for t in modules.values()), sum(t[1] for t in modules.values()), config["overall"])
-unmeasured = [m for m in config["modules"] if "*" not in m and m not in modules]
+unmeasured = [m for m in limits if "*" not in m and m not in modules and m not in required]
 if unmeasured:
     rows += ["", f"No executable lines measured yet: {', '.join(unmeasured)}."]
 

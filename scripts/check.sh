@@ -28,6 +28,11 @@ for arg in "$@"; do
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
+# --lint-only excludes every other flag, and --fast runs no snapshot tests to record.
+if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS) || FAST && RECORD_SNAPSHOTS )); then
+    echo "error: contradictory flags: $*" >&2
+    exit 2
+fi
 
 TIMINGS=()
 STEP_STARTED_AT=0
@@ -41,7 +46,7 @@ done_step() {
 }
 summary() {
     printf '\n\033[1m==> Summary\033[0m\n'
-    printf '%s\n' "${TIMINGS[@]}"
+    printf '%s\n' ${TIMINGS[@]+"${TIMINGS[@]}"} # bash 3.2: an empty array is unbound under set -u
     printf '%6ss  total\n' "$SECONDS"
 }
 trap 'status=$?; if [[ $status -ne 0 ]]; then printf "\n\033[31mcheck.sh FAILED (exit %s)\033[0m\n" "$status"; summary; fi' EXIT

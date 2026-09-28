@@ -5,21 +5,15 @@ Local parity: `docs/testing-strategy.md` §7 (`scripts/check.sh`) and §8 (test 
 
 **Verified 2026-09-27 (F01).** The committed files under `.github/`,
 `ci_scripts/` and `scripts/` are authoritative. The plan below differs from them in these ways:
-- `macos-26` (arm64, image 20260907) defaults to Xcode 26.6 (17F113) at
-  `/Applications/Xcode_26.6.app` and has iPhone 17 and Series 11 (46mm) on the 26.5
-  runtimes. Jobs select Xcode from `.xcode-version`. Actions are pinned by SHA
-  (checkout v7, cache v6, upload-artifact v7, mise-action v4, release-please-action v5).
-- `pr.yml` runs `check.sh --lint-only` / `--skip-lint` with `contents: read`. `Check` is
-  skipped, which counts as passed, when only `docs/`, `tasks/`, `design/` or `*.md` change.
-  Bundles upload only on failure, and only package checkouts are cached. There is no
-  `merge_group`, because personal repos have no merge queue. `workflow_dispatch` lets
-  release-please run the checks on its PR, since GITHUB_TOKEN PRs trigger no workflows.
-- §4 needs GitHub Pro on this private personal repo (API 403). With one maintainer, approvals
-  and Code Owner review can never be met, so they are off (`docs/xcode-cloud/README.md`).
-- §5: scripts run from `ci_scripts/`, so the post-clone path is `$CI_PRIMARY_REPOSITORY_PATH`.
-  External TestFlight needs a clean build, and App Review submission is manual.
-- §6: `bootstrap-sha` keeps pre-F01 history out of the first changelog.
-- `$(PROJECT_DIR)` expands in the test plans' `SNAPSHOT_ARTIFACTS`, as the generated `.xctestrun` shows.
+- `macos-26` (arm64) defaults to Xcode 26.6 (17F113) at `/Applications/Xcode_26.6.app`,
+  with iPhone 17 and Series 11 (46mm) on 26.5; jobs select Xcode from `.xcode-version`.
+  Actions are pinned by SHA. `$(PROJECT_DIR)` expands in test-plan environments.
+- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (all of `check.sh`),
+  behind a Linux `Scope` job that skips it when only `docs/`, `tasks/`, `design/` or `*.md`
+  outside `Apps/`/`LedgerKit/` change (renames count at both paths). Nightly is manual;
+  release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
+- §5: scripts run from `ci_scripts/` (use `$CI_PRIMARY_REPOSITORY_PATH`); external TestFlight
+  needs a clean build; App Review submission is manual. §6: `bootstrap-sha` skips pre-F01 history.
 
 ## 1. Flow
 
@@ -120,7 +114,6 @@ jobs:
           if-no-files-found: ignore
 ```
 
-Required check names for branch protection: **`Lint`**, **`Check (iOS + watchOS)`**.
 
 `scripts/coverage-gate.sh` (written in F01): runs
 `xcrun xccov view --report --json <xcresult>` for each bundle, merges by
@@ -174,19 +167,15 @@ jobs:
 Nightly failures open a GitHub issue via the workflow's `if: failure()`
 step (`gh issue create --label nightly`) — add in F01.
 
-## 4. Branch protection (`main`) — set by a human in F01
+## 4. No branch protection (Pete, 2026-09-27)
 
-- Require a pull request before merging; 1 approval; dismiss stale approvals; require review from Code Owners.
-- Require status checks: `Lint`, `Check (iOS + watchOS)`; require branches up to date (merge queue on).
-- Require conversation resolution. Require linear history (squash only). Block force pushes and deletions.
-- Restrict who can push: nobody directly; release-please bot allowed to open PRs.
-
-`CODEOWNERS`:
-```
-*                         @<pete-github-handle>
-/LedgerKit/Sources/LedgerDomain/      @<pete-github-handle>
-/docs/adr/                @<pete-github-handle>
-```
+The repo stays private on GitHub Free. Protection would need Pro, so nothing technically
+blocks a direct push to `main` or a red merge. Enforcement is the orchestrator's merge
+policy (G5): merge only when the full local `scripts/check.sh` is green on the merge
+candidate, and CI is green too whenever CI ran. When the month's free Actions minutes
+run out, CI does not run, and the local gate output in the PR is the G4 evidence.
+Revisit with Pro, a public repo, or a second maintainer. `CODEOWNERS` names
+`@peteyRevs` for review requests only.
 
 ## 5. Xcode Cloud
 
