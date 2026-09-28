@@ -169,13 +169,12 @@ step (`gh issue create --label nightly`) — add in F01.
 
 ## 4. No branch protection (Pete, 2026-09-27)
 
-The repo stays private on GitHub Free. Protection would need Pro, so nothing technically
-blocks a direct push to `main` or a red merge. Enforcement is the orchestrator's merge
-policy (G5): merge only when the full local `scripts/check.sh` is green on the merge
-candidate, and CI is green too whenever CI ran. When the month's free Actions minutes
-run out, CI does not run, and the local gate output in the PR is the G4 evidence.
-Revisit with Pro, a public repo, or a second maintainer. `CODEOWNERS` names
-`@peteyRevs` for review requests only.
+GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
+full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran.
+A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice).
+When the free minutes run out, CI does not run and the local gate output is the G4
+evidence. After a dependency bump, run `pr.yml` on `main` (`gh workflow run pr.yml`) once,
+so PRs can restore the package cache. Revisit with Pro, a public repo or a second maintainer.
 
 ## 5. Xcode Cloud
 

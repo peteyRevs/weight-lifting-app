@@ -1,8 +1,8 @@
 # F01 implementation notes
 
-Base: `main` 8404d02. First pass committed as 0c74369. This round addresses the fix
-findings in `test-findings.md` and Pete's decisions of 2026-09-27; it is uncommitted.
-No GitHub or App Store Connect setting was changed.
+Base: `main` 8404d02. Commits so far: 0c74369 (first pass), 19d4050 (F1–F8 and Pete's
+decisions) and cd2aae2 (tester round 2). The round-2 fixes below (R3–R5 and R-D1–R-D5) are
+uncommitted. No GitHub or App Store Connect setting was changed.
 
 ## Decisions
 
@@ -94,6 +94,52 @@ the property under test.
   like `check.sh`.
 - D7 (`SNAPSHOT_TESTING_RECORD` may not reach simulator tests) is F00/F06 code. It is
   unverified until the first snapshot test exists.
+
+## Round 2 (R3–R5 fixed; R-D1–R-D5 answered)
+
+**Fixes:**
+- **R3.** The gate rejects an excluded module that matches any threshold key, by name or
+  by pattern (`fnmatchcase`). It exits 2.
+- **R4.** `excludedModules`, `excludedFiles` and `required` must each be a list of strings,
+  or the gate exits 2.
+- **R5.** Docs-only is now an explicit allowlist: files under `docs/`, `tasks/` or
+  `design/`, and `*.md` at the repo root. Every other path, Markdown included, runs Check.
+  This covers `Resources/Fonts/` and every other synced folder, so `.github/*.md` runs
+  Check too. That is conservative, and cheap. New case WF46: a nested `.md` elsewhere runs
+  Check. Dropping the `*/*` line is caught by WF35, WF38, WF40 and WF46.
+
+**The RP06 class cannot recur here:**
+- RP06 now scans tracked and untracked files (the tester's fix). A scan therefore gives
+  the same result before and after a commit.
+- The only other git-state checks read file modes (`ls-files -s`: PC09, W20–W22). An
+  untracked file makes them fail, so they fail before the commit, never after it.
+- This round adds no new file. The gate run below therefore saw exactly the content that
+  will be committed.
+- Lesson for the implementer: run the final gate with every new file present in the form
+  it will be committed, and prefer scans that ignore git state.
+- **Full gate, round 2**, through the simulator lock: **green in 273 s**.
+  - Step 2 passed: 195 adversarial cases (WF01 actionlint now among them) and 10 fixture cases.
+  - PR ran 17 targets and PR-Watch 8. The coverage gate passed at 98.78 %.
+
+**Design questions:**
+- **R-D1: adopted.** Check's condition is `needs.scope.outputs.code != 'false'`, so a
+  missing output runs Check (WF45 updated). actionlint 1.7.12 and shellcheck 0.11.0 are now
+  pinned in `mise.toml`. The step-0 `mise install` installs them, so WF01 runs in the gate,
+  including in CI.
+- **R-D2: adopted.** The Scope step prints
+  `::notice::Docs-only change: Check is skipped.` ci-cd.md §4 says a skipped Check counts
+  only when Scope logged `code=false`.
+- **R-D3: adopted as procedure.** Seeding needs no extra workflow or trigger. After a
+  dependency bump, `gh workflow run pr.yml` on `main` once seeds the package cache
+  (ci-cd.md §4).
+- **R-D4: agreed, deliberate.** Only G5's local `check.sh` covers the release PR.
+- **R-D5: agreed, not fixed.** The fix fails closed, so it can be too strict but never too
+  lenient.
+  - It bites only when a platform-only branch runs in no test. Running that module's tests
+    on both platforms also covers it.
+  - The exact fix is a per-line union (`xcrun xccov view --archive --file`) for the files the
+    bundles disagree on. Proposed for when it first happens; it would not fit the line budget
+    now.
 
 ## Verification
 

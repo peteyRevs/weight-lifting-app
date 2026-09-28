@@ -40,19 +40,21 @@ jobs:
             changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"
             printf 'Changed files:\n%s\n' "$changed"
             while IFS= read -r file; do
-              case "$file" in
-                Apps/* | LedgerKit/*) code=true ;; # even their *.md files
-                docs/* | tasks/* | design/* | *.md | '') ;;
+              case "$file" in # docs-only is an allowlist: docs/, tasks/, design/, root-level *.md
+                docs/* | tasks/* | design/* | '') ;;
+                */*) code=true ;; # anything else in a folder, Markdown included
+                *.md) ;;
                 *) code=true ;;
               esac
             done <<<"$changed"
           fi
+          if [[ $code == false ]]; then echo "::notice::Docs-only change: Check is skipped."; fi
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
   check:
     name: Check
     needs: scope
-    if: needs.scope.outputs.code == 'true'
+    if: needs.scope.outputs.code != 'false' # a missing output runs Check
     runs-on: macos-26
     timeout-minutes: 30
     steps:

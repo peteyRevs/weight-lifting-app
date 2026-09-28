@@ -8,8 +8,8 @@
 #
 #   scripts/coverage-gate.sh <result.xcresult | xccov-report.json>...
 #
-# Prints a Markdown table, also to $GITHUB_STEP_SUMMARY when set.
-# Exit 0: all thresholds met. 1: a threshold missed or missing. 2: bad input.
+# Prints a Markdown table (also to $GITHUB_STEP_SUMMARY). Exit 0: all thresholds met;
+# 1: a threshold missed or missing; 2: bad input.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -37,10 +37,13 @@ try:
     config = json.load(open(thresholds_file))
     limits, excluded, excluded_files = config["modules"], config["excludedModules"], config["excludedFiles"]
     required = config.get("required", [])
+    lists = (excluded, excluded_files, required)
+    if not all(isinstance(names, list) and all(isinstance(n, str) for n in names) for names in lists):
+        raise ValueError("excludedModules, excludedFiles and required must be lists of names")
     if not is_number(config["overall"]) or not all(v is None or is_number(v) for v in limits.values()):
         raise ValueError("thresholds must be numbers")
-    if set(required) & set(excluded) or set(limits) & set(excluded):
-        raise ValueError("a module cannot be both gated and excluded")
+    if any(m in required or any(fnmatch.fnmatchcase(m, p) for p in limits) for m in excluded):
+        raise ValueError("a module cannot be both gated (by name or pattern) and excluded")
 except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
     bad_input(f"{thresholds_file} is not a usable thresholds file: {error}")
 

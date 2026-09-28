@@ -171,6 +171,8 @@ for dir in $(grep -v '^Apps/' <<<"$synced"); do
         "mkdir -p '$dir' && echo x >'$dir/NOTES.md'"
 done
 decide "WF39 a rename inside docs/ -> Check skipped" code=false 'git mv docs/ci-cd.md docs/ci.md'
+decide "WF46 [R5] a Markdown file in any folder outside docs/, tasks/, design/ -> Check runs" code=true \
+    'mkdir -p scripts && echo x >scripts/NOTES.md'
 decide "WF40 deleting a Markdown file under LedgerKit/ -> Check runs" code=true \
     'echo x >LedgerKit/Sources/LedgerDomain/Notes.md && git add -A && git commit -qm add && git switch -q main && git merge -q pr && git switch -q pr' \
     'git rm -q LedgerKit/Sources/LedgerDomain/Notes.md' 'echo more >>docs/ci-cd.md'
@@ -192,11 +194,11 @@ decide "WF44c the PR merged main in and changed code -> Check runs" code=true \
     'git switch -q main && echo "// main" >>docs/ci-cd.md && git commit -qam moved && git switch -q pr' \
     'git merge -q --no-edit main' 'echo "// pr" >>LedgerKit/Sources/LedgerDomain/Weight.swift'
 
-# Check's `if:` compares the Scope output to 'true', so an empty output skips Check (the
-# job then shows "skipped", as a docs-only PR does). The link must be intact.
+# Check's `if:` runs Check unless Scope said 'false' (R-D1: an empty output fails safe,
+# running Check). The link must still be intact.
 check "WF45 Check's condition reads Scope's code output, which Scope's step writes" \
     is "$(q pr '[.jobs.check.if, .jobs.scope.outputs.code, ([.jobs.scope.steps[] | select(.id == "scope") | .run | test("code=.*GITHUB_OUTPUT")] | tostring)] | join(" | ")')" \
-    "needs.scope.outputs.code == 'true' | \${{ steps.scope.outputs.code }} | [true]"
+    "needs.scope.outputs.code != 'false' | \${{ steps.scope.outputs.code }} | [true]"
 
 # ---- nightly.yml -----------------------------------------------------------------------
 check "WF36 nightly is manual only (no schedule spends the free minutes) and runs one at a time" \
