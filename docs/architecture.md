@@ -59,7 +59,7 @@ workout-app/
 │   │   ├── LedgerPersistence/      # GRDB schema, migrations, repositories, queries
 │   │   ├── LedgerHealth/           # HealthKit adapter (watch session, phone mirror, save)
 │   │   ├── LedgerSync/             # envelope transport (mirroring + WC), reconciliation, program push
-│   │   ├── LedgerDesign/           # tokens, Archivo font loading, components
+│   │   ├── LedgerDesign/           # tokens, Archivo font loading, components; Resources/Archivo[wdth,wght].ttf
 │   │   ├── LedgerActivityKit/      # ActivityAttributes shared by app + widget ext
 │   │   ├── LedgerDependencies/     # swift-dependencies keys (§13) + Unimplemented stubs; nonisolated
 │   │   ├── FeatureOnboarding/
@@ -78,7 +78,6 @@ workout-app/
 │   ├── LedgerWatch/                # watchOS app shell: composition root, WKApplicationDelegate
 │   ├── LedgerWidgets/              # iOS widget + Live Activity extension
 │   └── LedgerWatchWidgets/         # watch complications / Smart Stack
-├── Resources/Fonts/Archivo[wdth,wght].ttf
 ├── ci_scripts/ci_post_clone.sh     # Xcode Cloud bootstrap
 ├── release-please-config.json
 ├── .github/workflows/              # pr.yml (gates), nightly.yml (device-free long tests)
@@ -376,11 +375,9 @@ sync, R2 §3); it syncs to the phone via §8, and the phone syncs to iCloud.
 
 Source of truth: `docs/product-spec.md` §8. Encoded as:
 
-- `LedgerColor` — semantic tokens (`ground`, `ink`, `inkMuted(.x40)`, `hairline`, `accent`, `paper`…) with light + dark values from §8.1–8.3. Accent usage rule: once per screen, on the primary action.
-- `LedgerFont` — Archivo variable font bundled; width axis via
-  `UIFontDescriptor` + CoreText `kCTFontVariationAttribute` (`'wdth'` = 2003072104)
-  wrapped as `Font.ledger(.numeral(size:))` etc. Tabular numerals everywhere numbers appear. Dynamic Type scaling via `@ScaledMetric`-based sizes.
-- `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`.
+- `LedgerColor` — semantic tokens (`ground`, `surface`, `ink` at fixed alphas, `hairline`, `accent`, `accentText`, `watch…`) with light + dark values from §8.1–8.3. Adaptive colours are a dynamic `UIColor` on iOS; watchOS has one (dark) appearance. Accent usage rule: once per screen, on the primary action.
+- `LedgerFont` — 21 roles (`display` … `numeralS`, `watch…`) with the v2 prototype's size, `wght`, `wdth`, line height and tracking. The Archivo variable font ships once, as a `LedgerDesign` resource; the apps' `UIAppFonts` point into that resource bundle (`LedgerKit_LedgerDesign.bundle/…`), and previews and package tests register it on first use (`FontRegistration`). Axes are set with a `CTFontDescriptor` carrying `kCTFontVariationAttribute` (`'wght'` 2003265652, `'wdth'` 2003072104), wrapped as `Font(ctFont)`. Views use `.ledgerFont(.role)`, which scales the size with `@ScaledMetric` (Dynamic Type) and applies tracking, case and `lineHeight`. Tabular figures for every numeral role.
+- `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`, `LedgerMotion` (`snappy`, `ledgerBuzz(trigger:)` with a Reduce Motion opacity variant).
 - Components: `PrimaryButton`, `PillButton`, `HairlineList/Row`, `SetRow`
   (with steppers), `RestRing`, `WeekStrip`, `StatTile`, `ProgressSegments`,
   `Eyebrow`, `SwapSheet`, `TabBar` (native `TabView` tinted; the custom
@@ -451,8 +448,14 @@ useful `previewValue`. Stores never construct their dependencies.
 
 1. HealthKit mirroring reliability on 26.x/27.0 (R1 §2.5) → mitigated by watch
    authority, idempotent envelopes, WC fallback, device-only test checklist.
-2. Variable-font width axis on watchOS via CoreText: verify in M0 spike; fall
-   back to static Archivo Narrow/Condensed instances if needed.
+2. Variable-font width axis on watchOS via CoreText — **closed by the F06 spike
+   (2026-09-27): no fallback needed.** A `CTFontDescriptor` with
+   `kCTFontVariationAttribute` renders `wdth` 62 / 88 / 100 / 112 / 125 as
+   118 / 158 / 176 / 198 / 223 px wide ("0123456789", 30 pt, wght 700, 1×) on
+   the watchOS 26.5 simulator, identical to iOS 26.5
+   (`ArchivoFontTests.widthAxis_88versus112_rendersDifferentGlyphWidths`, with
+   the rendered sheet committed as a snapshot on both platforms). Still to see
+   on hardware: F20's device checklist; complications are unverified (R2 §6.2).
 3. CKSyncEngine + GRDB integration surface (SQLiteData fit) → M4 spike before committing.
 4. Xcode 27 is not on GitHub-hosted runners yet (R3 §4). We pin 26.6 locally and in CI; F32 migrates to 27 before the April 2027 App Store requirement. Any 27-only API is guarded with `#available` and feature-flagged.
 5. Xcode synchronized folders keep `project.pbxproj` nearly frozen; the rare edits (new target, entitlement) are done in Xcode by a human and verified by CI (ADR-003).
