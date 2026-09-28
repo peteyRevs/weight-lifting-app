@@ -9,7 +9,7 @@ public enum SessionBuilder {
     /// (rule 15). Rest, step, RPE, equipment, superset flag and targets are copied so later
     /// template edits never alter the session (rule 16). `lastPerformance` comes from `history`
     /// (`nil` on the first ever session). The cursor starts at (0, 0) (`nil` for an empty day),
-    /// `phase` is `.live`, `startedAt` is `now`, and `autoRest` is snapshotted from `settings`.
+    /// `phase` is `.live`, `startedAt` is `now`, and `autoRest` and `units` are snapshotted from `settings`.
     ///
     /// Child IDs are derived from `id` (`WorkoutExerciseID.derived`, `SetID.derived`), so the
     /// build is deterministic and needs no UUID source.
@@ -63,7 +63,8 @@ public enum SessionBuilder {
             startedAt: now,
             phase: .live,
             originDevice: device,
-            autoRest: settings.autoRest
+            autoRest: settings.autoRest,
+            units: settings.units
         )
     }
 
