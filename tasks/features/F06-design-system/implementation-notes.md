@@ -471,6 +471,42 @@ floor on the explicit-size path), 3 (precision boundary), 4 (difference image),
   from the third render on (181 pixels, glyph rasterisation), with or without
   this round's changes. It passes on both simulators, which is where the suite runs.
 
+## Verification — fix round 2 (2026-09-28)
+
+Adversarial round-2 findings addressed: 11–17 (see "Fix round 2"). Commit
+`7689a74`.
+
+- Host (`swift test --filter LedgerDesignTests`): all round-2 targets pass
+  (line box ×21 roles both tests, bare font = `.ledgerFont` ×21, precision
+  boundary ×6, size-change and marked difference images). The remaining host
+  failures are the known macOS gaps (no Dynamic Type; the spike records a
+  macOS reference, which was deleted, not committed).
+- Lint: `lint-rules.test.sh` 12/12, `lint-rules-adversarial.test.sh` 55/55,
+  `lint-rules-adversarial-round2.test.sh` 39/39 (was 16/39), all in `check.sh`
+  step 2; the whole repo lints clean.
+- `scripts/check.sh --record-snapshots` (through the lock): 14 references
+  re-recorded, every one because of this round:
+  - line placement (text lifted inside unchanged frames): the six
+    `phoneTypeRamp_appearance` images, `phoneTypeRamp_boldText.bold-dark-large`,
+    `watchTypeRamp_46mm.mm46`, `watchTypeRamp_boldText46mm.bold-mm46`, and
+    `watchPalette_46mm.mm46`, `phonePalette_scheme` dark, `phonePalette_increasedContrast`
+    dark (their name labels use `.ledgerFont`);
+  - line placement and the `accentText` swatch: `phonePalette_scheme` light and
+    `phonePalette_increasedContrast` light.
+  Image sizes are unchanged; the spike sheets re-recorded byte-identical.
+  `__Snapshots__` is 16 PNGs, 764 KB.
+- Full `scripts/check.sh` through the lock, three runs. The machine was
+  saturated while the gate cold-booted its simulator clones (load average
+  100–258; first-boot daemons in every clone). Run 1 failed on a 60 s time
+  allowance (`registration_resolvedFont_isTheBundledFile`, round 1, unchanged
+  here); run 2 failed only because the UI test runner "Timed out while loading
+  Accessibility", with every unit test passing. **Run 3 green**
+  (`check-full-3.log`, 2377 s):
+  - PR-iOS: **551 tests, 551 passed**; 17/17 test targets.
+  - PR-watchOS: **530 tests, 530 passed**; 8/8 test targets.
+- LedgerDesign line coverage: **95.7 %** iOS (201/210), **95.5 %** watchOS (189/198).
+- LedgerDesign product Swift against `main`: **+493 −4 = 497 changed lines**.
+
 ## How to verify by hand
 
 - Open `LedgerKit/Tests/LedgerDesignTests/__Snapshots__/ArchivoFontTests/*.png`:
