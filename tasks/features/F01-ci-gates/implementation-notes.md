@@ -1,8 +1,9 @@
 # F01 implementation notes
 
 Base: `main` 8404d02. Commits so far: 0c74369 (first pass), 19d4050 (F1–F8 and Pete's
-decisions), cd2aae2 (tester round 2) and 97fbab8 (R3–R5, R-D1–R-D5). The review fixes
-(B1, S1–S3 and the cheap nits) are uncommitted. No GitHub or App Store Connect setting was changed.
+decisions), cd2aae2 (tester round 2), 97fbab8 (R3–R5, R-D1–R-D5) and 268f58e (the review
+fixes: B1, S1–S3 and the cheap nits). The first-CI-run fix is uncommitted. No GitHub or App Store
+Connect setting was changed.
 
 ## Decisions
 
@@ -223,14 +224,151 @@ the property under test.
   - iOS took 169 s: 17 targets ran and passed.
   - watchOS took 71 s: 8 targets ran and passed.
   - Coverage was 98.78 %.
-- **Estimated macOS minutes per PR run: about 12–15**, billed per job and rounded up.
-  - Basis: the cold local run above (262 s). The runner is 3-core M1, against 10 cores here, so
-    compiling should take about 2.5–3× longer.
-  - Breakdown: setup and restore about 2 min, steps 0–2 about 1 min, iOS 6–8 min,
-    watchOS about 3 min.
-  - About 200 free minutes cover roughly 13–16 code PR runs a month. Docs-only PRs cost
+- **macOS minutes per PR run: the estimate was about 12–15; the first run
+  (36373847443) measured more**, billed per job and rounded up.
+  - The estimate's basis was the cold local run above (262 s), with compiling 2.5–3× slower
+    on the runner (3-core M1, against 10 cores here).
+  - Measured: the run took 20m29s, and its Check job took 20m08s (21 billed minutes). It stopped
+    at step 4, so watchOS and coverage are not in that figure.
+    - Setup: 17 s. Steps 0–2: 87 s.
+    - The iOS step took **1083 s (about 18 min)**: about 3 min of build, then **858 s of
+      testing** (IDETestOperationsObserverDebug), against about 1.5 min locally.
+  - So a green code PR costs at least 21 billed minutes plus the watchOS step. About 200
+    free minutes then cover at most 9 code PR runs a month, not 13–16. Docs-only PRs still cost
     only about a Linux minute.
-  - The first real run replaces this estimate.
+  - The build scaled as estimated; the test phase did not. See "First CI run", open question.
+
+## First CI run (PR #5, run 36373847443)
+
+**Failure.** Check passed steps 0–3, then failed 5 s into step 4 (watchOS) with exit 70
+(`gh run view 36373847443 --log-failed`, abridged):
+
+```
+xcodebuild: error: Unable to find a device matching the provided destination specifier:
+		{ platform:watchOS Simulator, OS:26.5, name:Apple Watch Series 11 (46mm) }
+	The requested device could not be found because multiple devices matched the request. (
+    SimDevice: Apple Watch Series 11 (46mm) (07C1BE1A-…, watchOS 26.5, Shutdown)
+    SimDevice: iPhone 17 Pro Max (841190F6-…, iOS 26.5, Shutdown)
+        PairedSim: … Apple Watch Series 11 (46mm) (07C1BE1A-…, watchOS 26.5, Shutdown)
+    SimDevice: iPhone 17 Pro Max (BA9128D4-…, iOS 26.2, Shutdown)
+        PairedSim: … Apple Watch Series 11 (46mm) (68A3C4E4-…, watchOS 26.2, Shutdown)
+check.sh FAILED (exit 70)
+```
+
+**Root cause.**
+- The runner image has an Apple Watch Series 11 (46mm) on watchOS 26.2, 26.4 and 26.5. It pairs
+  the 26.5 one and the 26.2 one, each with an iPhone 17 Pro Max.
+- For a destination by name, xcodebuild also matches each iPhone whose paired watch has that
+  name, and for those it ignores `OS`. `OS=26.5` therefore excluded the 26.2 watch, but not the
+  26.2 iPhone paired with it. Two different watches matched, so xcodebuild refused (exit 70).
+- The iOS step's "Using the first of multiple matching destinations" warning is harmless: it
+  names one UDID twice (arm64 and x86_64).
+- Measured locally, under the simulator lock (Xcode 26.6; this Mac has only the 26.5 runtimes):
+  - With one pair (the 26.5 Series 11 (46mm) and an iPhone 17 Pro Max), the old destination by
+    name still works: `test` exits 0 (131 s) and `build-for-testing` exits 0 (11 s). A watch and
+    the iPhone paired with it count as one device. On the runner, the second (26.2) pair made it
+    two.
+  - `OS` is ignored for paired iPhones: `name=Apple Watch Series 11 (46mm),OS=26.2` (no such
+    runtime here) exits 70 with "no available devices matched" when unpaired, and builds (exit 0)
+    once the 26.5 watch is paired.
+  - Two different same-named watches give the runner's exact error (exit 70). Here the second
+    one has to be a 26.5 twin (created, then deleted), which is ambiguous even unpaired. The
+    runner's exact shape (a twin on another runtime, reached only through its pair) needs a second
+    watchOS runtime, which was not installed for this.
+
+**Fix.**
+- `scripts/sim-destination.sh` turns `platform=…,name=…,OS=…` into `platform=…,id=<UDID>`. It
+  reads `simctl list devices available --json` and matches the runtime exactly. An `id=`
+  destination passes as is. No match exits 1 with nothing on stdout, so no xcodebuild runs.
+- It then unpairs every pair that holds that UDID. simctl's output goes to stderr.
+- `check.sh` resolves both destinations after the `--lint-only` and `--fast` exits, so only full
+  runs look anything up. The nightly's test step resolves its matrix destination the same way.
+- The UDID is the fix. `id=` resolves under the same conditions: with the target watch and a
+  same-named twin both paired, `build-for-testing` by id exits 0.
+- Unpairing is defence in depth, kept on purpose:
+  - Pairing changes how xcodebuild matches destinations (it drops `OS`, above), and that
+    behaviour is undocumented. With the device unpaired, the paired-device path cannot match it,
+    whatever Xcode does.
+  - No observed failure needs it: locally, `test` by id passed with the pair present.
+  - The cost is one `simctl list pairs` per destination. A developer who pairs simulators loses
+    only the pairs that hold the gate's two devices.
+
+**Tests.**
+- `sim-destination.adv.sh` (new, 20 cases) runs the real script against a fake `xcrun`
+  (`lib.sh` `fake_simctl`), which lists `scripts/tests/fixtures/simctl/macos-26.json`.
+  - The fixture has the runner's simulators and the two Series 11 (46mm) pairs from the log.
+  - It adds an iPhone 17 + Ultra 3 pair. That pair is assumed, because the log does not say
+    whether iPhone 17 is paired. It also adds an unavailable iPhone 17 twin.
+  - SD01–SD06: the defaults and overrides resolve, by name and OS or by id, in any key order.
+  - SD07–SD08: no match, or a failing simctl, fails closed.
+  - SD09–SD15: exactly the resolved device's pairs are unpaired, and a failing `simctl` fails.
+- `check-wiring.adv.sh`:
+  - W23: xcodebuild gets both defaults by UDID.
+  - W24: both are unpaired first.
+  - W25: `LEDGER_*_DEST` overrides reach xcodebuild as UDIDs.
+  - W26: a destination with no match stops check.sh before any xcodebuild.
+  - W27: `--lint-only` and `--fast` look nothing up.
+- `workflows.adv.sh` WF48: the nightly's test step, extracted and run for each matrix entry,
+  passes each simulator by UDID.
+
+**Verification.**
+- a. Every `scripts/tests/*.test.sh` passes. `adversarial.test.sh` ran 222 cases in 7 suites
+  (check-test-results 18, check-wiring 43, ci-post-clone 14, coverage-gate 60, release-please 16,
+  sim-destination 20, workflows 51). `coverage-gate.test.sh` ran 10 cases.
+- b. The new tests fail against the old code:
+  - HEAD's `check.sh` (`ADV_CHECK_SH`): W23–W26 fail. W27 passes, because HEAD looks nothing up
+    in any mode. A second mutant, which resolves before the `--lint-only`/`--fast` exits, fails
+    W27 (6 lookups instead of 0).
+  - `sim-destination.sh` without the unpair loop (`ADV_SIM_DESTINATION`): SD09, SD11, SD12 and
+    SD13 fail, and so do SD15 (`unpair` failing) and W24.
+  - HEAD's `nightly.yml`, swapped in for one run and then restored: WF48 fails.
+- c. The runner, reproduced locally. The simulator lock was held from pairing to cleanup, so no
+  other worktree saw the pair.
+  - Before: no pairs. The 26.5 Series 11 (46mm) was paired with the 26.5 iPhone 17 Pro Max.
+  - With that one pair, the old destination by name did **not** fail (see Root cause). Exit 70
+    came only when two different watches matched.
+  - The full `check.sh`, with the pair present, was **green in 208 s** (warm DerivedData).
+    - Step times: tools 0 s, format 0 s, lint and script tests 29 s, iOS 103 s, watchOS 74 s,
+      coverage 2 s.
+    - Step 2 ran 222 adversarial cases and 10 fixture cases.
+    - Before step 3 it printed `sim-destination: unpairing 42705AE5-…`. Afterwards,
+      `simctl list pairs` was empty.
+    - PR: 17 targets, 431 tests passed, on iPhone 17 (26.5, by UDID).
+    - PR-Watch: 8 targets, 422 tests passed, on the Series 11 (46mm) (26.5, by UDID).
+    - Coverage: LedgerDomain at 98.78 %.
+  - The two 26.5 Series 11 (46mm) twins created for the probes were deleted. No pair remains.
+  - **Environment (this Mac, not the repo).** The Command Line Tools updated to 27.0 at 16:20 on
+    2026-09-28.
+    - `sim-lock.py` runs under `/usr/bin/python3`, an xcrun shim, which exports
+      `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk`. That is now the macOS 27 SDK
+      (Swift 6.4), and Xcode 26.6's Swift 6.3.3 cannot read it.
+    - So every gate started through `sim-lock.py` fails in step 2, at `check-package-graph.sh`.
+      The first two attempts failed there.
+    - The green run used `sim-lock.py env -u SDKROOT …`. A terminal and CI set no `SDKROOT`.
+
+**Open question: why testing took 858 s on the runner.** Nothing is changed for it in this
+round; the next run gives a second data point. What is known:
+- The PR plan ran 17 targets on clones of iPhone 17: 15 logic-test processes, the app-hosted
+  SmokeTests, and the UI test (22.8 s) on a second clone.
+- LedgerDomainTests, which holds the 200-seed property tests, ran as one process.
+  - Its tests reported durations of up to 181.9 s, trivial ones included
+    (`SettingsTests.default_matchesPrototype`).
+  - Swift Testing runs them in parallel and times each from start to finish. So the process
+    probably lasted about 3 min, its tests queued for the runner's 3 cores.
+- The other 14 logic targets ran one or two tests each, none over 50 ms.
+- No test duration accounts for about 11 minutes (858 − 182 − 23 ≈ 650 s). That time went on
+  launching test processes, the app and clones, or on waiting between them.
+  - The log gives no per-target times: xcodebuild's output reached it in two bursts.
+  - Every logic target's results were in the first burst, at 03:37:36, about 4 min into
+    testing (which started about 03:33:23).
+  - SmokeTests' and the UI test's results were in the second, at 03:48:13. If the bursts
+    track completion, most of the gap is in those two app-hosted targets.
+- Candidates, none tested:
+  - the launch cost per target on a 3-core runner;
+  - the parallel-testing clones;
+  - iPhone 17 being paired on the runner (the log does not say; the fix now unpairs it).
+- If the next run is as slow, the result bundle's per-target timings split the time. It uploads
+  only on failure.
 
 ## Pending (not verifiable locally)
 

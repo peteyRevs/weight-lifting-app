@@ -39,7 +39,8 @@ jobs:
           DESTINATION: ${{ matrix.destination }}
           WORKERS: ${{ matrix.workers }}
         run: |
-          xcodebuild test -project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$DESTINATION" \
+          dest="$(scripts/sim-destination.sh "$DESTINATION")" # by UDID, as check.sh does
+          xcodebuild test -project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest" \
             -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
             -resultBundlePath ".derivedData/Results/$PLAN.xcresult" -test-timeouts-enabled YES \
             -parallel-testing-enabled YES ${WORKERS:+-parallel-testing-worker-count "$WORKERS"} \

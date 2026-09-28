@@ -41,6 +41,33 @@ $detail}"
 # is <actual> <expected>: for `check`; prints both on a mismatch.
 is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1; }; }
 
+# fake_simctl <bin dir>: puts an xcrun there whose `simctl list devices [available] --json` and
+# `simctl list pairs --json` print $SIMCTL_JSON (devices filtered like simctl), and whose `simctl
+# unpair` chatters on stdout. Each call is appended to $XCRUN_LOG; $XCRUN_FAIL names a failing one.
+fake_simctl() {
+    mkdir -p "$1"
+    cat >"$1/xcrun" <<'SH'
+#!/bin/sh
+printf '%s\n' "$*" >>"${XCRUN_LOG:-/dev/null}"
+case "$2 $3" in "${XCRUN_FAIL:-none}"*) echo "simctl: $2 $3 failed" >&2; exit 1 ;; esac
+case "$1 $2 $3" in
+    "simctl unpair "*) echo "Unpaired $3." ;;
+    "simctl list pairs") jq '{pairs}' "$SIMCTL_JSON" ;;
+    "simctl list devices")
+        case " $* " in
+            *" available "*) jq '{devices: (.devices | map_values(map(select(.isAvailable))))}' "$SIMCTL_JSON" ;;
+            *) jq '{devices}' "$SIMCTL_JSON" ;;
+        esac ;;
+    *) echo "fake xcrun: unexpected: $*" >&2; exit 64 ;;
+esac
+SH
+    chmod +x "$1/xcrun"
+}
+# The macos-26 runner's simulators and the pairs PR #5's first-run log names, plus an assumed
+# iPhone 17 + Ultra 3 pair (fake pair ids).
+SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/macos-26.json"
+export SIMCTL_JSON
+
 finish() {
     printf '%s: %d passed, %d failed, %d skipped\n' "$(basename "$0")" "$ADV_PASS" "$ADV_FAIL" "$ADV_SKIP"
     [[ $ADV_FAIL -eq 0 ]]

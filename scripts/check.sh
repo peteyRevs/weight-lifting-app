@@ -98,6 +98,8 @@ if [[ $FAST -eq 1 ]]; then
 fi
 
 mkdir -p "$RESULTS"
+IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")" # resolve each to one simulator by UDID and unpair it
+WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"
 
 # ---- 3. iOS build + PR plan -------------------------------------------------
 step "3 · iOS build + PR test plan"

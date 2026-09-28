@@ -1,0 +1,232 @@
+{
+  "devices": {
+    "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+      {
+        "lastBootedAt": null,
+        "udid": "DEAD0000-0000-4000-8000-000000000000",
+        "isAvailable": false,
+        "availabilityError": "runtime profile not found",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+        "state": "Shutdown",
+        "name": "iPhone 17"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "88931AEA-62E6-447F-8697-DCE00A671384",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+        "state": "Shutdown",
+        "name": "iPhone 17"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "841190F6-F927-4F0D-B152-62A06B4040CA",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+        "state": "Shutdown",
+        "name": "iPhone 17 Pro Max"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "CB15797E-6053-40B1-BB72-7F30D005A4F2",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Air",
+        "state": "Shutdown",
+        "name": "iPhone Air"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+      {
+        "lastBootedAt": null,
+        "udid": "25B395EC-01B8-4FB6-8D2A-1C484C360481",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+        "state": "Shutdown",
+        "name": "iPhone 17"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "BA9128D4-18C1-4D81-8EB6-C9DEA307B16B",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max",
+        "state": "Shutdown",
+        "name": "iPhone 17 Pro Max"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "A1194899-F789-4C4B-A9E2-EFDC6C72EB35",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Air",
+        "state": "Shutdown",
+        "name": "iPhone Air"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.watchOS-26-2": [
+      {
+        "lastBootedAt": null,
+        "udid": "7AD89FB6-EACA-47CD-B242-2419EED3CA74",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-40mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (40mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "6AD66354-805D-4D94-A277-25C1C81F0061",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-44mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (44mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "033F62E0-22D4-4ED8-B708-4A7AE4631E23",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-42mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (42mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "68A3C4E4-9BEC-4E3B-B42C-089AF0B78BF7",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-46mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (46mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "EF5BF1E3-741F-4DD8-862A-6C7CBA5C644A",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-3-49mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Ultra 3 (49mm)"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.watchOS-26-4": [
+      {
+        "lastBootedAt": null,
+        "udid": "763B62AE-9B6D-4143-B859-F277F6E2B77E",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-40mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (40mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "DD0CCFC9-2628-4F72-AE69-FF133A05BE3A",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-44mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (44mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "16F616F7-8578-4BBB-9C03-A193FFF485DE",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-42mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (42mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "BDADBF56-4804-4874-AFC3-99551888BB56",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-46mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (46mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "30360660-7EC3-4103-8E8C-B36C0F381B8C",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-3-49mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Ultra 3 (49mm)"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.watchOS-26-5": [
+      {
+        "lastBootedAt": null,
+        "udid": "16265CCF-DA78-4BF8-AF5F-8E9D91FFDFE8",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-40mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (40mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "4A6A1675-EFB0-402D-BFA2-6EE33247B24F",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-44mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (44mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "98D83340-55EC-4686-AE5E-5ABDF78767BF",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-42mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (42mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "07C1BE1A-2EFF-4897-8A98-D6E7C104E516",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-46mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 11 (46mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "AE814598-FAE8-4121-8669-0FD8A853007A",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-3-49mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Ultra 3 (49mm)"
+      }
+    ]
+  },
+  "pairs": {
+    "00000001-FA1E-4A1E-8A1E-000000000001": {
+      "watch": {
+        "name": "Apple Watch Series 11 (46mm)",
+        "udid": "07C1BE1A-2EFF-4897-8A98-D6E7C104E516",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone 17 Pro Max",
+        "udid": "841190F6-F927-4F0D-B152-62A06B4040CA",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    },
+    "00000002-FA1E-4A1E-8A1E-000000000002": {
+      "watch": {
+        "name": "Apple Watch Series 11 (46mm)",
+        "udid": "68A3C4E4-9BEC-4E3B-B42C-089AF0B78BF7",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone 17 Pro Max",
+        "udid": "BA9128D4-18C1-4D81-8EB6-C9DEA307B16B",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    },
+    "00000003-FA1E-4A1E-8A1E-000000000003": {
+      "watch": {
+        "name": "Apple Watch Ultra 3 (49mm)",
+        "udid": "AE814598-FAE8-4121-8669-0FD8A853007A",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone 17",
+        "udid": "88931AEA-62E6-447F-8697-DCE00A671384",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    }
+  }
+}

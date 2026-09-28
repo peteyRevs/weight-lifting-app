@@ -240,6 +240,27 @@ nightly_report 7
 check "WF31 a later failure comments on the open issue instead of opening another" \
     is "$(grep -c '^issue create' "$GH_LOG") $(grep -c '^issue comment 7 .*actions/runs/99' "$GH_LOG")" "0 1"
 
+# F01's first CI run: a watch destination by name was ambiguous on the runner (exit 70). The nightly's
+# test step runs here with the real scripts/sim-destination.sh against the runner's simulators.
+NB="$T/nightly-sandbox"
+mkdir -p "$NB/scripts" "$NB/bin"
+cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$NB/scripts/sim-destination.sh"
+fake_simctl "$NB/bin"
+printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = -destination ] && echo "$2" >>"$DEST_LOG"; shift; done\n' >"$NB/bin/xcodebuild"
+printf '#!/bin/sh\ncat\n' >"$NB/bin/mise"
+printf '#!/bin/sh\n' >"$NB/scripts/check-test-results.sh"
+chmod +x "$NB/bin/xcodebuild" "$NB/bin/mise" "$NB/scripts/check-test-results.sh"
+q nightly '.jobs.test.steps[] | select(.run // "" | test("xcodebuild test")) | .run' >"$T/nightly-test.sh"
+export DEST_LOG="$T/nightly-dest.log"; : >"$DEST_LOG"
+nightly_ok=0
+while IFS='|' read -r plan scheme workers destination; do # not tab: IFS whitespace drops the empty workers
+    (cd "$NB" && PLAN="$plan" SCHEME="$scheme" WORKERS="$workers" DESTINATION="$destination" PATH="$NB/bin:$PATH" \
+        bash -eo pipefail "$T/nightly-test.sh" >/dev/null 2>&1) && nightly_ok=$((nightly_ok + 1))
+done < <(q nightly '.jobs.test.strategy.matrix.include[] | [.plan, .scheme, .workers, .destination] | join("|")')
+check "WF48 the nightly tests each simulator by UDID (the runner's iPhone 17 and Series 11 on 26.5)" \
+    is "$nightly_ok $(tr '\n' ';' <"$DEST_LOG")" \
+    "2 platform=iOS Simulator,id=88931AEA-62E6-447F-8697-DCE00A671384;platform=watchOS Simulator,id=07C1BE1A-2EFF-4897-8A98-D6E7C104E516;"
+
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \
     is "$(q rp '[.on | keys[]] | join(",")') $(q rp '.on.push.branches | join(",")')" "push main"

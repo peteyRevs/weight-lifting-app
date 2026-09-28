@@ -9,7 +9,9 @@ source "$(dirname "$0")/lib.sh"
 SB="$ADV_TMP/sandbox"
 mkdir -p "$SB/scripts/tests" "$SB/bin"
 cp "${ADV_CHECK_SH:-$ROOT/scripts/check.sh}" "$SB/scripts/check.sh" # override: mutation-test this suite
-export LOG="$ADV_TMP/calls.log"
+cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$SB/scripts/sim-destination.sh" # the real one
+fake_simctl "$SB/bin" # ... against the runner's simulators; its calls go to $XCRUN_LOG, not $LOG
+export LOG="$ADV_TMP/calls.log" XCRUN_LOG="$ADV_TMP/xcrun.log"
 
 stub() { # <path> <body>: a /bin/sh stub with the log/fail helpers in front of <body>
     printf '#!/bin/sh\nlog() { printf "%%s\\n" "$*" >>"$LOG"; }\nfail_if() { [ "${FAIL_AT:-}" = "$1" ] && exit "${FAIL_CODE:-1}"; return 0; }\n%s\n' "$2" >"$1"
@@ -32,12 +34,12 @@ case "$1" in
         log "$id $*"; fail_if "$id" ;;
 esac'
 stub "$SB/bin/xcodebuild" '
-scheme=""; bundle=""
+scheme=""; bundle=""; dest=""
 while [ $# -gt 0 ]; do
-    case "$1" in -scheme) scheme="$2" ;; -resultBundlePath) bundle="$2" ;; esac
+    case "$1" in -scheme) scheme="$2" ;; -resultBundlePath) bundle="$2" ;; -destination) dest="$2" ;; esac
     shift
 done
-log "xcodebuild-$scheme"
+log "xcodebuild-$scheme $dest"
 mkdir -p "$bundle"
 echo "Test Suite All tests passed"
 fail_if "xcodebuild-$scheme"'
@@ -50,7 +52,7 @@ stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; fail_if script-test-b'
 
 # run [flags...]: the sandboxed check.sh; sets $code, $out and $calls (ids only).
 run() {
-    : >"$LOG"
+    : >"$LOG"; : >"$XCRUN_LOG"
     out="$(PATH="$SB/bin:$PATH" "$SB/scripts/check.sh" "$@" 2>&1)"
     code=$?
     calls="$(awk '{ print $1 }' "$LOG" | tr '\n' ' ')"
@@ -152,6 +154,30 @@ check "W18 on Actions xcbeautify renders github-actions" \
     grep -q '^xcbeautify --renderer github-actions' "$LOG"
 run
 check "W19 locally no Actions reporter is passed" bash -c "! grep -q 'github-actions' '$LOG'"
+
+# ---- F01's first CI run: xcodebuild exited 70 on the watch by name (paired with iPhones) -------
+unset LEDGER_IOS_DEST LEDGER_WATCH_DEST
+run
+check "W23 xcodebuild gets each default simulator by UDID (the runner's iPhone 17 and Series 11 on 26.5)" \
+    is "$(grep '^xcodebuild' "$LOG" | tr '\n' ';')" \
+    "xcodebuild-Ledger platform=iOS Simulator,id=88931AEA-62E6-447F-8697-DCE00A671384;xcodebuild-LedgerWatch platform=watchOS Simulator,id=07C1BE1A-2EFF-4897-8A98-D6E7C104E516;"
+check "W24 ... after unpairing both (the fixture pairs them: iPhone 17 + Ultra 3, Series 11 + 17 Pro Max)" \
+    is "$(grep '^simctl unpair' "$XCRUN_LOG" | tr '\n' ';')" \
+    "simctl unpair 00000003-FA1E-4A1E-8A1E-000000000003;simctl unpair 00000001-FA1E-4A1E-8A1E-000000000001;"
+LEDGER_IOS_DEST='platform=iOS Simulator,name=iPhone Air,OS=26.5' \
+    LEDGER_WATCH_DEST='platform=watchOS Simulator,id=98D83340-55EC-4686-AE5E-5ABDF78767BF' run
+check "W25 LEDGER_*_DEST overrides by name and OS, or by id, reach xcodebuild as UDIDs" \
+    is "$(grep '^xcodebuild' "$LOG" | tr '\n' ';')" \
+    "xcodebuild-Ledger platform=iOS Simulator,id=CB15797E-6053-40B1-BB72-7F30D005A4F2;xcodebuild-LedgerWatch platform=watchOS Simulator,id=98D83340-55EC-4686-AE5E-5ABDF78767BF;"
+LEDGER_WATCH_DEST='platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=27.0' run
+if [[ $code -ne 0 && "$calls" != *xcodebuild* ]]; then
+    pass "W26 a destination that matches no simulator stops check.sh before any xcodebuild"
+else
+    fail "W26 a destination that matches no simulator stops check.sh before any xcodebuild" "exit $code, calls: $calls"
+fi
+run --lint-only; lint_calls="$(wc -l <"$XCRUN_LOG" | tr -d ' ')"
+run --fast
+check "W27 --lint-only and --fast look up no simulator" is "$lint_calls $(wc -l <"$XCRUN_LOG" | tr -d ' ')" "0 0"
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be
