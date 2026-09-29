@@ -3,46 +3,67 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// Round 2: minimal repros for the host-contract questions (findings 12–14). These document the
-/// behaviour under each reading of the contract; they pass, and the findings ask which reading holds.
+/// Round 2: minimal repros for the host-contract questions (findings 12–14). Fix round 2 answered each
+/// (orchestrator decisions E, F and B); every test now asserts the answer on a host model, and keeps the
+/// wrong reading as a control that shows the rule is load-bearing.
 @Suite("WorkoutEngine · host contract (adversarial, round 2)", .tags(.domain))
 struct HostContractAdversarialTests {
     typealias Adv = EngineAdv
 
     static let unlog = WorkoutEvent.setUnlogged(exerciseIndex: 0, setID: Adv.sid(0, 0))
 
+    /// What `relaunchThenUnlog` observed.
+    struct Relaunch {
+        /// The set is done after a replay of the phone's log.
+        let done: Bool
+        /// The phone's own screen shows it done.
+        let shown: Bool
+        /// The un-log's stamp, and the largest stamp stored before it.
+        let unlogStamp: Date
+        let newestStored: Date
+    }
+
     /// The phone logs set (0, 0) at 100 s, is killed and relaunched, its clock steps back 5 s, and it
-    /// un-logs the set 2 s later. Returns whether the set is done after a replay of its log.
-    static func relaunchThenUnlog(_ policy: HostPolicy) async throws -> (done: Bool, shown: Bool) {
+    /// un-logs the set 2 s later.
+    static func relaunchThenUnlog(_ policy: HostPolicy) async throws -> Relaunch {
         var phone = SimHost(Adv.phone, offset: 0, policy: policy)
         _ = try await phone.create(.started(EventBuilders.seedSession()), real: 0)
         _ = try await phone.create(Adv.logged(0, 0, doneAt: 100), real: 100)
         await phone.relaunch()
+        let newestStored = try #require(await phone.log.map(\.wallClock).max())
         phone.offset -= 5
-        _ = try await phone.create(Self.unlog, real: 102)
+        let unlogged = try await phone.create(Self.unlog, real: 102)
         let replayed = await WorkoutEngine.replay(phone.log)
-        return (Adv.row(replayed, 0, 0)?.isDone == true, Adv.row(phone.state, 0, 0)?.isDone == true)
+        return Relaunch(
+            done: Adv.row(replayed, 0, 0)?.isDone == true,
+            shown: Adv.row(phone.state, 0, 0)?.isDone == true,
+            unlogStamp: unlogged.wallClock,
+            newestStored: newestStored
+        )
     }
 
     @Test(
         """
-        Finding 12 (documents): the HLC's newest stamp must survive a relaunch. Forgotten, the un-log after \
-        a 5 s step back sorts before the log and the set is done again; recovered from the log, it stays undone
+        Finding 12 / decision E: on relaunch the HLC's newest is the largest stored wallClock, so the un-log \
+        after a 5 s step back sorts after the log and the set stays undone; a host that forgets it loses the un-log
         """
     )
     func hlcAfterRelaunch_mustBeRecoveredFromTheLog() async throws {
-        let forgotten = try await Self.relaunchThenUnlog(HostPolicy(recoverClock: false))
-        #expect(forgotten.done, "the lifter's un-log is lost on every device")
-        #expect(forgotten.shown, "the phone's own screen flips back as it rebuilds")
         let recovered = try await Self.relaunchThenUnlog(HostPolicy(recoverClock: true))
+        #expect(recovered.unlogStamp > recovered.newestStored, "the first stamp after relaunch sorts after the log")
         #expect(!recovered.done)
         #expect(!recovered.shown)
+        // Control: the rule is load-bearing. Started empty, the clock stamps 97 s < 100 s.
+        let forgotten = try await Self.relaunchThenUnlog(HostPolicy(recoverClock: false))
+        #expect(forgotten.unlogStamp < forgotten.newestStored)
+        #expect(forgotten.done, "the lifter's un-log is lost on every device")
+        #expect(forgotten.shown, "the phone's own screen flips back as it rebuilds")
     }
 
     @Test(
         """
-        Finding 13 (documents): reducing what append returns in arrival order (StoringHost) is not replay. \
-        P logs 185 at 20 s while W, partitioned, set 200 at 10 s; on healing P shows 200, W and replay 185
+        Finding 13 / decision F: the documented loop (reduce when all that is new sorts after, else rebuild \
+        once) shows replay's 185; reducing in arrival order (StoringHost, the control) shows 200
         """
     )
     func arrivalOrderReduce_divergesFromReplay() async throws {
@@ -51,6 +72,12 @@ struct HostContractAdversarialTests {
             Adv.watch, seq: 1, at: 10
         )
         let log = Adv.env(Adv.logged(0, 0, pounds: "185", doneAt: 20), seq: 2, at: 20)
+        var host = SimHost(Adv.phone, offset: 0)
+        try await host.receive([Adv.start(), log])
+        try await host.receive([target])
+        #expect(Adv.row(host.state, 0, 0)?.weight == pounds("185"))
+        #expect(host.replayMismatches == 0)
+        // Control: the loop the round-1 docs described.
         var phone = StoringHost()
         _ = try await phone.receive([Adv.start(), log])
         _ = try await phone.receive([target])
@@ -64,23 +91,28 @@ struct HostContractAdversarialTests {
 
     @Test(
         """
-        Finding 13 (documents): a host that rebuilds from its store for one envelope of a batch, then reduces \
-        a later one of the same batch, applies that one twice (+60 s for one +30s)
+        Finding 13 / decision F: a batch that needs a rebuild is rebuilt once, so one +30s is +30 s; rebuilding \
+        for one envelope and then reducing a later one of the same batch (the control) applies it twice
         """
     )
     func rebuildThenReduceInOneBatch_appliesTwice() async throws {
-        let store = InMemoryEventStore()
         let applied = [Adv.start(), Adv.env(Adv.logged(0, 0, doneAt: 10), seq: 2, at: 10)]
-        var state = try await WorkoutEngine.replay(store.append(applied))
-        var newest = applied.max()
         let early = Adv.env(
             .setTargetChanged(exerciseIndex: 0, setID: Adv.sid(0, 1), weight: nil, reps: nil),
             Adv.watch,
             seq: 1,
             at: 5
         )
-        let extend = Adv.env(.restExtended(amount: .seconds(30)), Adv.watch, seq: 2, at: 20)
-        // Per envelope: rebuild when it sorts before the newest applied, else reduce.
+        let extend = Adv.env(Adv.extend(shown: true, tappedAt: 20), Adv.watch, seq: 2, at: 20)
+        var host = SimHost(Adv.phone, offset: 0)
+        try await host.receive(applied)
+        try await host.receive([early, extend])
+        #expect(host.state?.rest?.endsAt == engineTime(190))
+        #expect(host.replayMismatches == 0)
+        // Control, per envelope: rebuild when it sorts before the newest applied, else reduce.
+        let store = InMemoryEventStore()
+        var state = try await WorkoutEngine.replay(store.append(applied))
+        var newest = applied.max()
         for envelope in try await store.append([early, extend]) {
             if let current = newest, current < envelope {
                 state = WorkoutEngine.reduce(state, envelope).0
@@ -90,13 +122,12 @@ struct HostContractAdversarialTests {
             newest = max(newest ?? envelope, envelope)
         }
         #expect(state?.rest?.endsAt == engineTime(220))
-        #expect(await WorkoutEngine.replay(store.envelopes(for: Adv.workoutID))?.rest?.endsAt == engineTime(190))
     }
 
     @Test(
         """
-        Finding 14 (documents): with the watch's clock 20 s ahead, a +30s tapped on the phone with 10 s left \
-        on its screen is stamped after the rest's end, so it restarts a 30 s rest instead of extending to 180 s
+        Finding 14 / decision B: with the watch's clock 20 s ahead, a +30s tapped on the phone with 10 s left \
+        is stamped after the rest's end, yet extends to 180 s as the lifter saw it, on both devices
         """
     )
     func hlcDraggedStamp_turnsAnExtendIntoARestart() async throws {
@@ -115,21 +146,19 @@ struct HostContractAdversarialTests {
         let turned = try await watch.create(crown, real: 232)
         #expect(turned.wallClock == engineTime(252))
         try await phone.receive([turned])
-        // Real 240 s: the phone shows 10 s of rest left; the lifter taps +30s.
+        // Real 240 s: the phone shows 10 s of rest left; the lifter taps +30s, and the phone says so.
         let rest = try #require(phone.state?.rest)
         #expect(rest.remaining(at: phone.now(240)) == .seconds(10))
-        // Stamped with the phone's raw clock (before the amendment), the same tap extends as the lifter expects.
-        let raw = Adv.env(.restExtended(amount: .seconds(30)), seq: 3, at: 240)
-        #expect(WorkoutEngine.reduce(phone.state, raw).0?.rest == RestTimer(
-            endsAt: engineTime(280),
-            total: .seconds(180)
-        ))
-        let tap = try await phone.create(.restExtended(amount: .seconds(30)), real: 240)
+        let event = WorkoutEvent.restExtended(amount: .seconds(30), extendsShownRest: true, tappedAt: phone.now(240))
+        let tap = try await phone.create(event, real: 240)
         #expect(tap.wallClock == turned.wallClock.addingTimeInterval(0.001), "the stamp runs 12 s ahead of the phone")
-        // Rule 9 as the lifter saw it: endsAt 280 s, total 180 s. What the engine does at the stamp:
-        let after = try #require(phone.state?.rest)
-        #expect(after.total == .seconds(30))
-        #expect(after.endsAt == tap.wallClock.addingTimeInterval(30))
-        #expect(after.fraction(at: phone.now(240)) == 1, "the ring jumps back to full")
+        #expect(tap.wallClock > rest.endsAt, "stamped after the rest's end, as in finding 14")
+        // Rule 9 as the lifter saw it: endsAt 280 s, total 180 s, on both devices; the ring keeps its place.
+        let expected = RestTimer(endsAt: engineTime(280), total: .seconds(180))
+        #expect(phone.state?.rest == expected)
+        try await watch.receive([tap])
+        #expect(watch.state?.rest == expected)
+        let fraction = try #require(phone.state?.rest?.fraction(at: phone.now(240)))
+        #expect(abs(fraction - 40.0 / 180.0) < 1e-12, "the ring jumped to \(fraction)")
     }
 }

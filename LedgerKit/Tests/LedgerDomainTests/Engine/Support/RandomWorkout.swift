@@ -111,7 +111,7 @@ struct RandomWorkout {
             let seconds = int(30 ... 200)
             return .restStarted(endsAt: time.addingTimeInterval(Double(seconds)), total: .seconds(seconds))
         case 71 ..< 83:
-            return .restExtended(amount: .seconds(pick([15, 30, 45])))
+            return .restExtended(amount: .seconds(pick([15, 30, 45])), extendsShownRest: chance(70), tappedAt: time)
         case 83 ..< 90:
             return .restSkipped
         case 90 ..< 92:

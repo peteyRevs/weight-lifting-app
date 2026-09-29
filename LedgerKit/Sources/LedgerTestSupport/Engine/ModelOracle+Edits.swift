@@ -70,15 +70,16 @@ extension Model {
         }
     }
 
-    mutating func extendRest(by amount: Duration) {
-        let (seconds, limit) = (amount / .seconds(1), Self.restLimit)
-        if let rest = workout.rest, rest.endsAt > time {
+    /// "+30s": grows the rest the tapping device showed, else a fresh rest from the tap.
+    mutating func extendRest(by amount: Duration, shown: Bool, tappedAt: Date) {
+        if shown, let rest = workout.rest {
             // Each term is cut to ±limit first, so the sum cannot overflow; for the totals this model
             // writes (0…limit) the cut changes nothing once setRest caps the sum.
+            let limit = Self.restLimit
             let sum = min(max(rest.total, .zero - limit), limit) + min(max(amount, .zero - limit), limit)
-            setRest(endsAt: rest.endsAt.addingTimeInterval(seconds), total: sum, from: time)
+            setRest(endsAt: rest.endsAt.addingTimeInterval(amount / .seconds(1)), total: sum, from: tappedAt)
         } else {
-            setRest(endsAt: time.addingTimeInterval(seconds), total: amount, from: time)
+            setRest(endsAt: tappedAt.addingTimeInterval(amount / .seconds(1)), total: amount, from: tappedAt)
         }
     }
 
@@ -95,5 +96,74 @@ extension Model {
         workout.phase = phase
         workout.endedAt = endedAt
         workout.rest = nil
+    }
+}
+
+// MARK: - Malformed envelopes
+
+extension ModelOracle {
+    /// The payload window `EventEnvelope.isWellFormed` documents, written out: a day, in seconds.
+    static let payloadWindow: TimeInterval = 24 * 60 * 60
+
+    /// `false` for an envelope the rules skip: a stamp that is not a finite number, a payload date more
+    /// than a day from the stamp, a rest length below zero or above an hour, or a snapshot rest ending
+    /// more than an hour after the snapshot's start.
+    static func accepts(_ envelope: EventEnvelope) -> Bool {
+        let stamp = envelope.wallClock.timeIntervalSinceReferenceDate
+        guard stamp.isFinite else {
+            return false
+        }
+        for date in payloadDates(of: envelope.event) {
+            let gap = date.timeIntervalSinceReferenceDate - stamp
+            if !(gap >= -payloadWindow && gap <= payloadWindow) {
+                return false
+            }
+        }
+        for length in restLengths(of: envelope.event) where length < .zero || length > Model.restLimit {
+            return false
+        }
+        guard case let .started(snapshot) = envelope.event, let rest = snapshot.rest else {
+            return true
+        }
+        return rest.endsAt.timeIntervalSince(snapshot.startedAt) <= Model.restLimit / .seconds(1)
+    }
+
+    /// Every date an event carries.
+    static func payloadDates(of event: WorkoutEvent) -> [Date] {
+        switch event {
+        case let .started(snapshot):
+            var dates = [snapshot.startedAt]
+            dates += [snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self)
+            for exercise in snapshot.exercises {
+                dates += exercise.sets.compactMap(\.doneAt)
+            }
+            return dates
+        case let .setLogged(_, _, _, _, doneAt):
+            return [doneAt]
+        case let .setAdded(_, set):
+            return [set.doneAt].compactMap(\.self)
+        case let .restStarted(endsAt, _):
+            return [endsAt]
+        case let .restExtended(_, _, tappedAt):
+            return [tappedAt]
+        case let .finished(endedAt), let .discarded(endedAt):
+            return [endedAt]
+        default:
+            return []
+        }
+    }
+
+    /// Every rest length an event carries.
+    static func restLengths(of event: WorkoutEvent) -> [Duration] {
+        switch event {
+        case let .started(snapshot):
+            [snapshot.rest?.total].compactMap(\.self)
+        case let .restStarted(_, total):
+            [total]
+        case let .restExtended(amount, _, _):
+            [amount]
+        default:
+            []
+        }
     }
 }

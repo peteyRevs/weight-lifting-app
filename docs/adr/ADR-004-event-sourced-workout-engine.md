@@ -114,3 +114,46 @@ An envelope then sorts after every envelope its device had sent or received. Tha
 `seq` order and the causal order (seen before created ⇒ sorts before), while `wallClock` stays close to
 real time, which rule 9's rest arithmetic needs. The reducer does not stamp; it takes the stamp as a
 precondition (`EventEnvelope.wallClock`). Raw stamps would still converge, but on stamp order.
+
+**The clock rule (F04 fix round 2).** Two clocks travel in an envelope, and they mean different things:
+
+- A **payload time** (`setLogged.doneAt`, `restExtended.tappedAt`, `restStarted.endsAt`,
+  `finished`/`discarded` `endedAt`) is the originating device's clock at the action.
+- **`wallClock`** is the HLC ordering stamp only. The reducer never reads it as the time of an action
+  and never compares a payload time with it to decide behaviour. Its one other use is the sanity bound
+  below.
+
+So an event that needs a judgement about time carries the judgement, made on the device where the
+screen is known: "+30s" is `restExtended(amount:extendsShownRest:tappedAt:)`. It extends the rest the
+lifter saw running, or starts a fresh rest at the tap when the screen showed none (decision #7), whatever
+the stamps say. Under skew the HLC can stamp a tap after the end of a rest the lifter still saw running
+(F04 test findings, finding 14).
+
+**Malformed envelopes.** An envelope is malformed when its `wallClock` is not finite, a payload date lies
+more than 24 h from its `wallClock` (`EventEnvelope.payloadTimeWindow`; a non-finite date never lies within
+it), a rest length is outside `0 ... WorkoutEngine.longestRest`, or a `started` snapshot's rest could not
+be held by the engine. `reduce` and `replay` ignore it: no state change and no effects. It stays stored,
+because the store judges keys, not contents. The 24 h window is generous: it only has to catch absurd
+and non-finite times, which would otherwise trap `Duration` arithmetic or break `==` (finding 9).
+
+**Recovery on launch.** The HLC's `newest` must survive a relaunch (rule 6). Before the host stamps any
+envelope after a launch, it sets `newest` to the largest stored `wallClock` across the store's uncompacted
+logs (`WorkoutEventStore.uncompactedWorkoutIDs`). It skips a stored stamp that its drift bound would reject
+on receipt, so a corrupt stamp cannot drag its clock. Without this, a device whose clock stepped back
+across a relaunch stamps its next action before its last one, and replay undoes it on every device
+(finding 12).
+
+**The host loop.** `reduce` keeps no log, so it must never see an envelope twice. The host appends every
+envelope it receives to its store first, then takes what `append` newly stored:
+
+- if all of it sorts after the newest envelope already applied, it reduces it in sort order;
+- otherwise it rebuilds once with `replay` of the stored log, which already holds the whole batch.
+
+Effects (finding 13; orchestrator, 2026-09-29):
+
+- envelopes it created: `reduce`'s effects, `.persist` before `.transmit`;
+- envelopes it received and reduced in order: `reduce`'s effects without `.persist` and `.transmit`, so a
+  set logged on the other device still plays its haptic here (F17 criterion 9);
+- a rebuild: only `WorkoutEngine.effects(from:to:)` of the state before and after (materialise, drop the
+  log, schedule or cancel the rest notification, update the Live Activity), never a haptic, so a
+  reconnect that applies many envelopes at once does not buzz for each.

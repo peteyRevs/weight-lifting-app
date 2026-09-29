@@ -9,6 +9,7 @@ import LedgerDomain
 /// - finds a superset block by walking the `isSupersetWithPrevious` flags;
 /// - rebuilds the block's rounds with plain loops on every call;
 /// - caps every rest it writes at `restLimit`, spelled out below;
+/// - skips a malformed envelope (`accepts`, spelled out in `ModelOracle+Edits.swift`);
 /// - ignores effects.
 public struct ModelOracle: Sendable {
     public private(set) var state: WorkoutState?
@@ -17,6 +18,9 @@ public struct ModelOracle: Sendable {
 
     /// Applies one envelope, in the order given.
     public mutating func apply(_ envelope: EventEnvelope) {
+        guard Self.accepts(envelope) else {
+            return
+        }
         guard let current = state else {
             state = Self.snapshot(startedBy: envelope)
             return
@@ -24,18 +28,18 @@ public struct ModelOracle: Sendable {
         guard current.phase == .live, current.id == envelope.workoutID else {
             return
         }
-        var model = Model(workout: current, time: envelope.wallClock)
+        var model = Model(workout: current)
         model.apply(envelope.event)
         state = model.workout
     }
 
-    /// Replays a log: sorts it by (wall clock, device `uuidString`, seq), keeps only the workout the
-    /// first usable `started` begins, keeps the first copy of each (device, seq) among those, applies
-    /// that `started`, then everything else in order.
+    /// Replays a log: drops malformed envelopes, sorts the rest by (wall clock, device `uuidString`,
+    /// seq), keeps only the workout the first usable `started` begins, keeps the first copy of each
+    /// (device, seq) among those, applies that `started`, then everything else in order.
     ///
     /// The workout filter comes first because a (device, seq) pair repeats across workouts.
     public static func replay(_ log: [EventEnvelope]) -> WorkoutState? {
-        let sorted = log.sorted(by: precedes)
+        let sorted = log.filter(accepts).sorted(by: precedes)
         let workout = sorted.first { snapshot(startedBy: $0) != nil }?.workoutID
         var unique: [EventEnvelope] = []
         for envelope in sorted where envelope.workoutID == workout {
@@ -80,8 +84,9 @@ public struct ModelOracle: Sendable {
     }
 }
 
-/// The rules as plain edits of one live workout. `time` is the envelope's wall clock. Internal, not
-/// private, only so its per-row edits can live in `ModelOracle+Edits.swift`.
+/// The rules as plain edits of one live workout. Every time comes from the event; the envelope's wall
+/// clock only orders. Internal, not private, only so its per-row edits can live in
+/// `ModelOracle+Edits.swift`.
 struct Model {
     /// A row: `exercises[exercise].sets[set]`.
     struct Row: Equatable {
@@ -90,16 +95,15 @@ struct Model {
     }
 
     var workout: WorkoutState
-    let time: Date
 
     mutating func apply(_ event: WorkoutEvent) {
         switch event {
         case let .setLogged(exerciseIndex, setID, weight, reps, doneAt):
             logSet(exerciseIndex, setID, weight, reps, doneAt)
         case let .restStarted(endsAt, total):
-            setRest(endsAt: endsAt, total: total, from: time)
-        case let .restExtended(amount):
-            extendRest(by: amount)
+            workout.rest = RestTimer(endsAt: endsAt, total: total)
+        case let .restExtended(amount, shown, tappedAt):
+            extendRest(by: amount, shown: shown, tappedAt: tappedAt)
         case .restSkipped:
             workout.rest = nil
         case let .finished(endedAt):

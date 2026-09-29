@@ -523,3 +523,379 @@ Read from `xcrun xccov view --report --json .derivedData/Results/PR-{iOS,watchOS
 - Host `llvm-cov` agrees (`Engine/` 99.63 %), with the same missed line.
 - The saturation branch of `saturatingSum` is covered on the simulators by
   `longestRest_saturatesASnapshotRest`.
+
+---
+
+## Fix round 2 (2026-09-29)
+
+Input: `test-findings.md`, "# Round 2" (findings 9–14; tests in `Engine/Adversarial/`), and the orchestrator's
+decisions A–G. Before this round, 5 tests failed on the host and 3 on the simulators, all of them finding 9.
+Every test now passes. The only skip is the `.slow` replay-timing test.
+
+### Scope boundary
+
+- **F04 owns** the pure engine: the events, the envelope, validation (`isWellFormed`), `reduce`, `replay`,
+  `summary` and `effects(from:to:)`. It also owns the `WorkoutEventStore` protocol and its contract suite.
+- **F17 owns** the host: the live-workout actor loop, the HLC state and its persistence, the resend
+  handshake, and running effects on a rebuild.
+- F04 writes down what the host must do: the ADR-004 amendment, the doc comments, and "Inputs from F04" in
+  `tasks/features/F17-live-sync.md`. It builds no host. The host models (`SimHost`, `StoringHost`,
+  `LaunchStep`) live in the tests only. `StoringHost` was not promoted to `LedgerTestSupport`.
+
+### A. Hostile or absurd payload values (finding 9)
+
+**Orchestrator decision (2026-09-29, round 2).** One well-formedness predicate on `EventEnvelope`, used at
+the top of `reduce` and in `replay`'s filter. Separately, no Date or Duration arithmetic in `LedgerDomain`
+may trap on any input. A seeded property fuzzes extreme doubles.
+
+**Change:**
+- `EventEnvelope.isWellFormed`, public, in `EventEnvelope.swift`. An envelope is malformed when:
+  - its `wallClock` is not finite;
+  - any date it carries lies more than `EventEnvelope.payloadTimeWindow` (24 h) from its `wallClock`. That
+    covers `doneAt`, a `setAdded` set's `doneAt`, `restStarted.endsAt`, `tappedAt` and `endedAt`. In a
+    `started` snapshot it covers `startedAt`, `endedAt`, the rest's `endsAt` and every set's `doneAt`.
+    `abs(Δ) <= window` fails for NaN, so a non-finite date never lies within the window;
+  - a rest length (`restStarted.total`, `restExtended.amount`, a snapshot rest's `total`) lies outside
+    `0 ... longestRest`;
+  - a `started` snapshot's rest ends more than `longestRest` after the snapshot's `startedAt`: internally
+    invalid.
+- **Why 24 h is generous.** Both clocks read the same moment on one device, so a real envelope sits within
+  seconds of its stamp. The margin covers HLC drift, where `wallClock` runs ahead of the device clock by a
+  peer's skew. It also covers a long pause, for example a finish ended at the last set after hours of
+  "Still lifting?" (decision #8). The window only has to catch the absurd.
+- `reduce` returns `(state, [])` for a malformed envelope: no state change and no effects, not even
+  `.persist` or `.transmit`. A device that creates one therefore neither stores nor sends it. One received
+  from a peer stays stored, because the store judges keys, not contents.
+- `foldOrder` drops malformed envelopes before it sorts, so a malformed `started` never picks the workout.
+- Because every rest length is now validated, the reducer no longer clamps `restStarted` or the automatic
+  rest. Only "+30s" on a shown rest is still held, because it grows: its `total` saturates at the bound, and
+  its `endsAt` is at most `longestRest` after `tappedAt`, a payload time. `saturatingSum` now overflows only
+  upwards, since an amount is never negative. It is still needed: `reduce` may be handed any state.
+- A finite but absurd `wallClock` (say 1e21) is well-formed. It is only an ordering key, and F17's drift
+  bound owns it. The ring can no longer trap on it (A.2).
+- **Clamp or reject.** Finding 9's fix direction named both options: hold the dates, or saturate the ring.
+  The orchestrator chose rejection plus saturation, so both hold. The tester's tests that assumed the clamp
+  were retargeted to "malformed → ignored"; see the table below. A rejected envelope is not "a stored
+  envelope that no longer decodes", round 1's reason for clamping. It still decodes and is still stored;
+  the engine just skips it.
+
+**A.2 audit** of `LedgerKit/Sources/LedgerDomain`: every `.seconds(`, `Duration.seconds`, `Int(`,
+TimeInterval→Duration conversion, and `*` or `+` on Durations.
+
+| Site | Before | Now |
+|---|---|---|
+| `RestTimer.remaining(at:)` | `.seconds(max(0, Δ))` trapped at ±∞ and beyond ~1.7e20 s | saturates at 2^63 s. A non-finite interval (a non-finite `endsAt` or `now`, NaN included) is **zero: no rest** |
+| `RestTimer.fraction(at:)` | trapped through `remaining` | 0 when no rest is left, which covers every non-finite case |
+| `WorkoutState.elapsed(at:)` | saturating since round 1 | unchanged; the doc now says 2^63 s (the tester's nit) |
+| `RestDuration.duration` | `.seconds(Int)` of a value validated to 30…300 on decode | safe |
+| `WorkoutEngine.longestRest`, `EventEnvelope.payloadTimeWindow` | constants | safe |
+| `Date.adding(_:)` (Reduce), `isWellFormed` | `Duration / Duration` → Double; Date ± Double; `abs`, comparisons | never trap |
+| `saturatingSum` | overflow-reporting `Int128` add | safe |
+| `NumberText.fixed`: `Int(scaled.magnitude / divisor)` | not Date or Duration; called only with one fraction digit (divisor 10), so the quotient fits `Int` | safe |
+| `roundedToInt` (`NSDecimalNumber.intValue`), `CivilDate` `Int(String)` / `Double(dayNumber)`, `Identifiers` widenings | no trapping conversion | safe |
+
+The non-finite rule differs between the two saturating functions, deliberately. `elapsed(at: +∞)` is the
+cap: round 1's rule, which the tester's `elapsed_realisticAndSaturated` pins. `remaining(at:)` of a
+non-finite interval is zero, the orchestrator's "no rest" rule for A.2. Each doc comment states its rule.
+After A.1, no state the engine folds holds a non-finite date. So these rules matter only for a caller's own
+dates or a hostile `now`.
+
+**Tests:**
+- New `EnvelopeWellFormedTests` (7 tests): the window is a day; every payload date at and just beyond both
+  edges, ±∞ and NaN, for all six dated events; a non-finite stamp; rest lengths at and beyond both bounds;
+  the snapshot clauses; `reduce` returns `(state, [])`; `replay` and `ModelOracle.replay` drop a malformed
+  `started`.
+- New `ExtremeValuePropertyTests.extremeValues_neverTrap_andStateEqualsItself` (`.property`, seeded, on
+  `PropertySeed.all`):
+  - It builds logs whose dates are ±1e308, ±1e21, ±∞ or NaN about half the time, with stamps extreme 30 %
+    of the time, and whose Durations range from `.min` to `.max` attoseconds.
+  - It passes every log through a **binary property list**, because JSON cannot carry a non-finite date.
+  - It asserts: no trap; `replay(log) == replay(log)`; replay of a shuffle; `ModelOracle.replay`; every
+    folded state equals itself.
+  - At ten extreme `now` values it reads `elapsed`, `rest.remaining`, `rest.fraction`, `doneSets`,
+    `totalSets`, `volume`, `summary` and `effects(from:to:)` both ways.
+- New `RestTimerTests.remainingAndFraction_saturate` (F02's model suite).
+- `ModelOracle` gained `accepts`, written independently: it collects every payload date and rest length,
+  then checks them with its own arithmetic. So the oracle property, the garbage property (whose durations
+  reach a year and whose dates reach ±100,000 s) and the fuzz all compare two separate implementations of
+  the predicate.
+
+### B. The engine no longer judges intent from a clock (finding 14)
+
+**Orchestrator decision (2026-09-29, round 2).** `restExtended` carries the lifter's intent, decided on the
+originating device: `restExtended(amount: Duration, extendsShownRest: Bool, tappedAt: Date)`.
+
+**Change:**
+- When `extendsShownRest` is set and the state has a rest, the reducer extends it: `endsAt += amount` and
+  `total += amount`, held to `longestRest` as described in A, whatever any timestamp says. Otherwise it
+  starts `RestTimer(endsAt: tappedAt + amount, total: amount)` (decision #7).
+- The reducer reads no `wallClock` for behaviour any more. `apply` and `applyClockEvent` lost their
+  `at time:` parameter. The only remaining comparison of a payload time with `wallClock` is A's sanity
+  bound.
+- The clock rule is written into the ADR-004 amendment, the `WorkoutEvent` doc and the
+  `EventEnvelope.wallClock` doc:
+  - payload times (`doneAt`, `tappedAt`, `restStarted.endsAt`, `endedAt`) are the originating device's
+    clock at the action;
+  - `wallClock` is the HLC ordering stamp only.
+- The doc on the case tells the UI how to set the flag: the rest is shown running while
+  `RestTimer.remaining(at: now) > .zero`.
+- Round 1's deviation 3 ("a rest counts as running when `endsAt > wallClock`") is superseded: the
+  originating device decides.
+- `ModelOracle` implements the same rule in its own code.
+
+**Tests:**
+- `ReduceRestTests`:
+  - criterion 5, with both flag values when there is no rest;
+  - `extend_afterRestIsOver_startsFreshRest`, where the device says the rest is not shown;
+  - new `extend_followsTheLiftersIntent_notTheClock`: a shown rest extends although both clocks say it is
+    over, and a rest shown as over restarts although both say it runs. It replaces
+    `extend_atExactEnd_startsFreshRest`, whose premise, a judgement at the stamp, is gone.
+- The tester's `hlcDraggedStamp_turnsAnExtendIntoARestart` and `dragStamps_judgeRunningRestsOver` now pass
+  with the lifter's outcome (see the table below).
+
+### C. The store contract suite kills every mutant (finding 10)
+
+**Orchestrator decision (2026-09-29, round 2).** Fold the tester's store probes into
+`WorkoutEventStoreContractTests`, so that the suite kills every mutant. Keep the mutation test as the
+suite's own guard.
+
+**Change:**
+- `WorkoutEventStoreContractTests.swift` now holds `WorkoutEventStoreContract`: 9 named clauses, each run
+  on a fresh store. It returns `nil` when the store keeps the clause, or what the store did instead.
+  `violations(of:)` runs them all, so F05 can run the same list against its GRDB store.
+- The clauses are the tester's nine probes, adapted to D, plus my five round-1 cases, which they subsume:
+  1. new envelopes are returned in the order given, the stored set is right, and a re-append is a no-op;
+  2. a conflict across batches throws and stores nothing from the batch;
+  3. a conflict within one batch throws, stores nothing, and a retry succeeds;
+  4. the same key and event with another stamp is a conflict;
+  5. keys are per workout;
+  6. `highestSeq` is the maximum per workout and device, and `nil` before anything is stored;
+  7. every log is listed until it is compacted, whatever it holds: an early envelope, live, finished or
+     discarded;
+  8. `compact` deletes and unlists one workout's log and resets its `highestSeq`;
+  9. new: a malformed envelope is stored like any other.
+- The tester's `EventStoreContractProbes.swift` is deleted; its content lives in the suite.
+- `EventStoreMutationAdversarialTests` now runs `WorkoutEventStoreContract.violations`, not `StoreProbe`.
+- Two mutants mutated lists that no longer exist, so they were replaced:
+  - `liveIgnoresStarted` → `listsOnlyStartedLogs`: it misses an envelope that arrived before its `started`;
+  - `finishedOnlyIsTerminal` → `unlistsEndedLogs`: the old live list, which loses a workout killed before
+    materialisation.
+- One mutant was added: `dropsMalformed`. **The suite kills all 11**, and `InMemoryEventStore` passes it.
+
+### D. One lifecycle list (finding 11)
+
+**Orchestrator decision (2026-09-29, round 2).** Replace `liveWorkoutIDs()` and
+`unmaterializedWorkoutIDs()` with `uncompactedWorkoutIDs()`. The host classifies each log by `replay`.
+
+**Change:**
+- `WorkoutEventStore.uncompactedWorkoutIDs()` lists every stored, uncompacted log. The doc gives the
+  launch step: classify each log by `replay`.
+  - Live: resume it.
+  - Finished or discarded: materialise it or drop it, then compact it.
+  - `nil`: **never compact it**. Keep it and request a resend.
+- `InMemoryEventStore` implements it.
+- Whether the resend handshake should use the highest *contiguous* seq per device is F17's call. It is
+  recorded in the hand-off (G).
+
+**Tests:**
+- Contract clauses 7 and 8.
+- `EventStoreAdversarialTests`:
+  - its `Snapshot` is now `(listed, replayed)`;
+  - a test-side `LaunchStep` models the host rule;
+  - the three "(documents)" finding-11 tests now assert the contract.
+- `MaterializeAdversarialTests` uses the new list.
+
+### E. HLC recovery on launch (finding 12)
+
+**Orchestrator decision (2026-09-29, round 2).** On launch, the HLC's `newest` is the largest stored
+`wallClock` across the store's uncompacted logs. The host stamps no envelope before that recovery.
+
+**Change:**
+- The ADR-004 amendment gains "Recovery on launch". It adds that recovery skips a stored stamp that the
+  host's drift bound would reject on receipt, so a corrupt stamp cannot drag the clock.
+- The docs on `EventEnvelope.wallClock` and `uncompactedWorkoutIDs` point to it.
+
+**Tests:**
+- `SimHost.relaunch` (tests only) recovers from every envelope of every uncompacted log.
+- `HostContractAdversarialTests.hlcAfterRelaunch_mustBeRecoveredFromTheLog` asserts the rule:
+  - the first stamp after the relaunch sorts after the stored log;
+  - the un-log stands, both in replay and on the phone's screen;
+  - the forgetful host remains as the control.
+- At scale, `hlc_convergesAndKeepsEveryAction` asserts no early stamp across the relaunches in every
+  seeded session.
+
+### F. The host loop and rebuild effects (finding 13)
+
+**Orchestrator decision (2026-09-29, round 2).** Fix the docs on `append` and `reduce` to state the correct
+loop. Add one pure helper, `WorkoutEngine.effects(from:to:)`, and make the tester's `SimHost` use it.
+
+**Change:**
+- **The loop**, now in the `reduce` doc, the `append` doc and the ADR-004 amendment:
+  - append first;
+  - if everything `append` newly stored sorts after the newest envelope applied, reduce it in sort order;
+  - otherwise rebuild once by `replay`;
+  - for received envelopes, run only `effects(from:to:)`.
+  The phrase "the host reduces exactly these" is gone.
+- **`WorkoutEngine.effects(from old:, to new:) -> [Effect]`**, public, in `WorkoutEngine+Replay.swift`:
+  - when the workout has just ended: `.materialize(new)` if finished or `.discardLog` if discarded, then
+    `.cancelRestNotification`;
+  - when a finished workout changed: `.materialize(new)` again, an idempotent upsert. That includes a
+    rebuild from `nil`, the finding-13c case;
+  - otherwise, when the rest changed: schedule the new rest, or cancel;
+  - `.updateLiveActivity` whenever the state changed;
+  - **no haptics**, and no persist or transmit.
+- `.updateLiveActivity` goes beyond the decision's list (phase change, rest change, no haptics). A remote
+  weight change must still redraw the Live Activity (F21), and `reduce` emits the same effect under the same
+  condition. The order matches `reduce`'s.
+
+**Tests:**
+- New `EffectsFromToTests` (7 tests):
+  - one test per branch, including a late discard that overtakes a finish;
+  - property `matchesReduce_onEveryStep`: at every step of seeded random sessions, the rebuild effects
+    equal `reduce`'s own effects, less persist, transmit and haptics, and less a schedule or cancel that
+    leaves the rest unchanged;
+  - `rebuildEffects_materializeInEveryArrivalOrder`: 60 arrival orders, each materialising exactly the
+    replayed state. It closes 13c, where 20 of 60 orders never materialised.
+- `SimHost` runs `reduce`'s effects for its own envelopes and `effects(from:to:)` for received and rebuilt
+  ones. It tracks the notification, the materialised workout, a dropped log and remote haptics.
+  `hlc_convergesAndKeepsEveryAction` asserts, for every host of every seeded session:
+  - notification == `state.rest?.endsAt`;
+  - materialised == the final state when finished, or the log was dropped when discarded;
+  - zero remote haptics.
+- `HostContractAdversarialTests.arrivalOrderReduce_divergesFromReplay` and
+  `rebuildThenReduceInOneBatch_appliesTwice` assert the documented loop on `SimHost`, with the wrong loops
+  kept as controls.
+
+### G. Hand-off to F17
+
+**Orchestrator decision (2026-09-29, round 2).** Append "## Inputs from F04 (2026-09-29)" to
+`tasks/features/F17-live-sync.md`.
+
+It lists:
+- the host loop (F);
+- remote effects only from `effects(from:to:)`. This contradicts F17's criterion 9 and its Actor rule,
+  which play `.haptic` for remote envelopes, so they must be amended;
+- that F05 must delete a materialised workout when a late discard overtakes its finish;
+- HLC recovery (E);
+- the launch step, never compacting a log that replays to `nil`, and the open contiguous-seq question (D);
+- malformed envelopes;
+- F10's "Still lifting?" finish must not backdate `endedAt` beyond 24 h;
+- non-finite dates must be rejected at wire decode, because NaN ≠ NaN would make a re-sent copy a conflict;
+- the lossless date encoding: `.iso8601` drops sub-seconds and breaks ordering (round 1's finding);
+- the renamed event labels, including the new `restExtended` shape and what `WorkoutIntent.extendRest`
+  must carry.
+
+### Tests edited, and why
+
+The tester's adversarial tests:
+
+| Test | Edit | Justification |
+|---|---|---|
+| `RestBoundAdversarialTests.taps` (support) and its three callers | "+30s" in the new shape, `extendsShownRest: true`. Every tap in them lands before its rest's end | B. The assertions are unchanged |
+| `RestBoundAdversarialTests.bound_edges` | Four rows (one hour + 1 as, −1 as, `.max`, `.min`) now expect `nil`. The kept rows are unchanged | A: reject, not clamp; the tester named both options |
+| `RestBoundAdversarialTests.zeroAndNegativeExtensions` | A negative +N now leaves the rest as it was. "Shown" is modelled from the watch's screen. The zero rows are unchanged | A (a negative length is malformed) and B |
+| `autoRest_absurdDoneAt_endsNearItsEnvelope` → `…_isIgnored`; `snapshotRest_absurdEndsAt_isHeld` → `…_isIgnored`; `nanEndsAt_isHeld_andStateEqualsItself` → `nanEndsAt_isIgnored_andStateEqualsItself` | Same inputs. Each now asserts the envelope is malformed, the state has no rest (or nothing starts), and replay equals replay without it. The NaN test still asserts `replay == replay` | A. The question ("can this date reach the ring or break `==`?") is unchanged. The answer is now "it is ignored" |
+| The two finding-9 exit twins | Unchanged, plus a direct call of `remaining` and `fraction` on the decoded hostile date | With rejection, the engine path no longer reaches the ring. Without the extra call the twins would pass vacuously. A strengthening (A.2) |
+| `EventStoreAdversarialTests` lifecycle tests | `Snapshot(listed, replayed)`. An early-only log is now listed. `lifecycle_discarded` also runs the launch step | D |
+| `EventStoreAdversarialTests`: `unusableStarted_isLive_butReplaysToNil`, `compactedThenPeerResend_orphanLog`, `holeBeforeTerminal_neverHeals_andLaunchStepDropsIt` | Renamed `unusableStarted_isListed_andKeptForResend`, `compactedThenPeerResend_isListed_andKeptUntilHealed`, `holeBeforeTerminal_isKept_untilTheResendHeals`. They assert that the log is listed, kept by the launch step, and materialised once the resend fills it | D: the orchestrator's "(documents) → assertions of the new contract". The hole test still pins `highestSeq == 3` as F17's open question |
+| `EventStoreContractProbes.swift` | Deleted; its nine probes are the contract clauses | C |
+| `EventStoreMutationAdversarialTests` | Runs the contract suite. Two mutants replaced, one added (see C) | C and D. The mutated lists no longer exist |
+| `MaterializeAdversarialTests.rematerialization_convergesInEveryArrivalOrder` | `unmaterializedWorkoutIDs` → `uncompactedWorkoutIDs`, plus `replay` is finished | D. The count assertion is unchanged |
+| `HostContractAdversarialTests.hlcAfterRelaunch_mustBeRecoveredFromTheLog` | Asserts rule E: stamp order, and the set stays undone. The forgetful host is kept as a control | E |
+| `HostContractAdversarialTests.arrivalOrderReduce_divergesFromReplay`, `rebuildThenReduceInOneBatch_appliesTwice` | Assert the documented loop on `SimHost`. The tester's wrong loops are kept, unchanged, as controls | F |
+| `HostContractAdversarialTests.hlcDraggedStamp_turnsAnExtendIntoARestart` | The tap carries `extendsShownRest: true` and `tappedAt`. It expects the lifter's outcome on both devices: `endsAt` 280 s, `total` 180 s, and a ring at 40/180. It still asserts that the stamp lands after the rest's end | B: "must now pass, with the lifter's expected outcome" |
+| `HLCConvergenceAdversarialTests.dragStamps_judgeRunningRestsOver` | Asserts that taps stamped after their rest's end still occur (dragged > 0) and that none did other than what the lifter saw (0) | B |
+| `HLCConvergenceAdversarialTests.hlc_convergesAndKeepsEveryAction` | Adds the effects assertions (see F) | F; a strengthening |
+| `forgottenClockOnRelaunch_stampsEarly`, `naiveHostLoop_leavesReplay` | Display names "(documents)" → "(control for decision E/F)" | Answered questions. They remain the controls that show the rules have teeth |
+| `HLCHostAdversarialSupport.SimHost`, `HLCScenarioAdversarialSupport` (support) | `SimHost`: E recovery and F effects. `HLCScenario`: its "+30s" metric now compares with the lifter's expectation, and it counts the dragged stamps | E, F, B |
+| `RestAdversarialTests.extend` (support) and `concurrentExtends_bothCount` | The helper models the originating device: shown iff `remaining > 0` at the tap on its clock. All assertions are unchanged | B. The judgement moves to the device. With one clock the outcomes are identical |
+| `EngineAdversarialGenerators` (`EngineGen.plus30`), `EngineAdversarialSupport` (`EngineAdv.extend`) | "+30s" as the device sends it | B; support only |
+| `GarbagePropertyAdversarialTests`, `EngineTrapAdversarialTests`, `EffectsAdversarialTests`, `StartedTerminalAdversarialTests`, `BoundsAdversarialTests`, `CodableOrderingAdversarialTests` | The event shape only. Garbage now draws a random flag, which changes each seed's stream | B. The assertions are unchanged |
+
+The implementer's tests:
+
+| Test | Edit | Justification |
+|---|---|---|
+| `ReduceRestTests`: criterion 5, `extend_runningRest…`, `extendTwice…`, `extend_afterRestIsOver…` | The new event shape. Criterion 5 runs with both flag values | B |
+| `ReduceRestTests.extend_atExactEnd_startsFreshRest` | Replaced by `extend_followsTheLiftersIntent_notTheClock` | B: the engine no longer judges "at the exact end" |
+| `ReduceRestTests.longestRest_holdsHostileRests` | Now `longestRest_holdsGrownRests`: well-formed extensions past the bound | A: the hostile inputs are malformed now (`EnvelopeWellFormedTests`) |
+| `ReduceRestTests.longestRest_saturatesASnapshotRest` | Now `…_saturatesAHostileStateRest`, through a caller's state | A: such a snapshot is rejected. The saturation still guards `reduce`'s input |
+| `ReduceTerminalTests.summary_ofCorruptEndedAt_saturatesElapsed` | The finish is ignored. Saturation is asserted on a state that holds the date | A |
+| `ReduceTerminalTests.lateEvents`, `ConvergenceTests.criterion9…`, `EffectTests` "restExtended" row, `RandomWorkout` | The event shape only | B |
+| `WorkoutEventStoreContractTests` | Rewritten as the clauses | C and D |
+
+### Gate
+
+The full `scripts/check.sh` ran once through `sim-lock.py` on 2026-09-29 and is **green**. It took 545 s; the
+lock was free. The log is `scratchpad/f04-fix2-check.log` (orchestrator scratchpad).
+
+| Step | Result |
+|---|---|
+| 0–2: tools, format, lint (`--strict`), package graph | OK: 0 of 200 files need formatting; lint is clean; the package graph is unchanged |
+| 3: iOS `PR` plan (iPhone 17, 26.5) | **17 test targets ran and passed.** xcresult: 653 tests, 652 passed, **0 failed**, 1 skipped |
+| 4: watchOS `PR-Watch` plan (Apple Watch Series 11 46 mm, 26.5) | **8 test targets ran and passed.** xcresult: 644 tests, 643 passed, **0 failed**, 1 skipped |
+| 5: coverage gate | Not yet wired (F01); coverage was read by hand below |
+
+- The one skip in each bundle is `ReplayPerformanceTests` ("Replaying 500 shuffled envelopes takes under
+  5 ms"), which is `.slow` and runs on the nightly lane only.
+- `scripts/check.sh --fast`: 648 tests in 106 suites, all passing, the macOS exit tests included.
+- Nightly settings on the host (`LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=3000`): all 646
+  domain tests pass. That includes the 5 ms replay budget, and at 3,000 seeds the fuzz, the rebuild-effects
+  property, the HLC property with its effects assertions, the garbage property and the oracle property.
+  The log is `scratchpad/f04-fix2-nightly.log`.
+
+### Coverage
+
+Read from `xcrun xccov view --report --json .derivedData/Results/PR-{iOS,watchOS}.xcresult`, over
+`Sources/LedgerDomain/Engine/`. The figures are identical on both platforms:
+
+| File | Lines |
+|---|---|
+| `WorkoutEngine.swift` | 43/43 |
+| `WorkoutEngine+Replay.swift` | 46/46 |
+| `WorkoutEngine+Reduce.swift` | 184/185. The miss is still the unreachable `default:` in `applyClockEvent` |
+| `EventEnvelope.swift` | 65/65 |
+| **`Engine/` total** | **338/339 = 99.71 %** (brief: ≥ 95 %) |
+
+- `Model/RestTimer.swift` is 17/17.
+- Host `llvm-cov` agrees: `Engine/` 99.71 % of lines, and 100 % of functions.
+
+### Product lines
+
+`git diff --numstat main -- LedgerKit/Sources/LedgerDomain`: **699 added + 10 deleted = 709 changed product
+lines**, over the 500 budget by 209. Round 1 ended at 564.
+- This round added 219 lines (127 comment, 85 code, 7 blank) and deleted 80 (48 comment, 32 code).
+- Nothing was compressed. The overage goes to Pete, who chooses between a waiver and a split.
+
+| File | Changed vs `main` | Split |
+|---|---|---|
+| `Engine/WorkoutEvent.swift` | 50 | A |
+| `Engine/EventEnvelope.swift` (with `isWellFormed`) | 135 | A |
+| `Engine/Effect.swift` | 39 | A |
+| `Engine/EngineError.swift` | 11 | A |
+| `Protocols/WorkoutEventStore.swift` | 39 | A |
+| `Model/RestTimer.swift` | 14 | A |
+| `Model/WorkoutState.swift` | 16 | A |
+| `Rules/SessionBuilder.swift` | 5 | A |
+| `Engine/WorkoutEngine.swift` | 101 | 17 in A, 84 in B |
+| `Engine/WorkoutEngine+Reduce.swift` | 227 | B |
+| `Engine/WorkoutEngine+Replay.swift` (with `effects(from:to:)`) | 72 | B |
+
+**A clean split:**
+- **PR A, "event vocabulary + validation + store contract": 326 lines.**
+  - It holds every file marked A.
+  - It also holds the head of `WorkoutEngine.swift`: `public enum WorkoutEngine` with `longestRest` only
+    (17 lines). `isWellFormed` needs that bound, and it is the only code dependency across the split.
+  - Its tests: `EnvelopeWellFormedTests`, `EventCodableTests`, `EnvelopeOrderingTests`,
+    `WorkoutEventStoreContractTests`, `EventStoreMutationAdversarialTests`, `EventStoreAdversarialTests`
+    (less its host test), `CodableOrderingAdversarialTests`, `RestTimerTests`, `InMemoryEventStore`, and
+    `EventBuilders`.
+- **PR B, "reduce/replay/summary/effects": 383 lines.**
+  - It holds the rest of `WorkoutEngine.swift` (`reduce`, `step`, `snapshot`, `summary`), all of
+    `+Reduce` and all of `+Replay`.
+  - Its tests: every other engine suite, `ModelOracle`, and the host models.
+- Both halves are under 500. A lands first; B depends on it.
+
+### Orchestrator correction (2026-09-29): remote haptics
+
+Decision F said "no haptics for remote changes". That contradicts F17 criterion 9 and the architecture's Actor rule, a planned UX. Narrowed: a received envelope reduced in order runs `reduce`'s effects without `.persist`/`.transmit` (so its haptic plays); only a rebuild uses `effects(from:to:)`, which has no haptics. ADR-004 "The host loop", the `effects(from:to:)` doc comment and F17's hand-off say so.

@@ -64,7 +64,7 @@ struct EffectsAdversarialTests {
             ),
             Case(
                 description: "restExtended", before: resting,
-                envelope: Adv.env(.restExtended(amount: .seconds(30)), seq: 3, at: 10),
+                envelope: Adv.env(Adv.extend(shown: true, tappedAt: 10), seq: 3, at: 10),
                 extra: [.scheduleRestNotification(endsAt: engineTime(120))]
             ),
             Case(
@@ -147,7 +147,7 @@ extension EffectsAdversarialTests {
 
     @Test("Duplicate delivery: a restExtended delivered twice extends once, through the host and through replay.")
     func duplicateRestExtended_extendsOnce() async throws {
-        let envelope = Adv.env(.restExtended(amount: .seconds(30)), Adv.watch, seq: 1, at: 10)
+        let envelope = Adv.env(Adv.extend(shown: true, tappedAt: 10), Adv.watch, seq: 1, at: 10)
         var host = StoringHost()
         _ = try await host.receive(Self.resting + [envelope])
         _ = try await host.receive([envelope])

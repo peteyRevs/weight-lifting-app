@@ -17,8 +17,12 @@ struct HLCScenario {
 
     private(set) var hosts: [SimHost]
     private(set) var actions: [Action] = []
-    /// "+30s" taps whose device showed the rest running by its own clock, but whose stamp found it over.
+    /// "+30s" taps whose outcome on their own device was not what the lifter saw (fix round 2, decision
+    /// B): a rest shown running that was not extended, or a fresh rest that did not start at the tap.
     private(set) var extendsJudgedOver = 0
+    /// "+30s" taps on a rest shown running whose HLC stamp lies at or after that rest's end: the case the
+    /// engine used to judge over (finding 14). Counted to show the hazard still arises.
+    private(set) var extendsStampedAfterEnd = 0
     private var real: Double = 0
     private var cut: Set<[Int]> = []
     private var sent: [[EventEnvelope]]
@@ -93,12 +97,17 @@ struct HLCScenario {
             event = .restSkipped
         }
         let envelope = try await record(event, by: index)
-        guard case .restExtended = event, let rest = view.rest else {
+        guard case let .restExtended(amount, shown, tappedAt) = event else {
             return
         }
-        let lifterSawItRunning = rest.endsAt > hosts[index].now(real)
-        if lifterSawItRunning, rest.endsAt <= envelope.wallClock {
-            extendsJudgedOver += 1
+        // What the lifter saw: the shown rest grown by `amount`, else a fresh rest from the tap.
+        let seconds = amount / .seconds(1)
+        let expected = view.rest.flatMap { rest in
+            shown ? RestTimer(endsAt: rest.endsAt.addingTimeInterval(seconds), total: rest.total + amount) : nil
+        } ?? RestTimer(endsAt: tappedAt.addingTimeInterval(seconds), total: amount)
+        extendsJudgedOver += hosts[index].state?.rest == expected ? 0 : 1
+        if shown, let rest = view.rest, rest.endsAt <= envelope.wallClock {
+            extendsStampedAfterEnd += 1
         }
     }
 

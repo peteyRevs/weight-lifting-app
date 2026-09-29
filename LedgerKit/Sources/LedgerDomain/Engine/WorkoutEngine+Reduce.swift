@@ -2,9 +2,9 @@ import Foundation
 
 extension WorkoutEngine {
     /// Applies one event to a live state in place (rules 3–11) and returns the event's own effects, or
-    /// `nil` when the event is ignored outright (rule 1: a second `started`). `time` is the envelope's
-    /// `wallClock`, the time of events that carry none.
-    static func apply(_ event: WorkoutEvent, to state: inout WorkoutState?, at time: Date) -> [Effect]? {
+    /// `nil` when the event is ignored outright (rule 1: a second `started`). Every time it uses comes
+    /// from the event (the clock rule on `WorkoutEvent`).
+    static func apply(_ event: WorkoutEvent, to state: inout WorkoutState?) -> [Effect]? {
         switch event {
         case .started:
             nil
@@ -23,22 +23,18 @@ extension WorkoutEngine {
         case let .exerciseSwapped(exerciseIndex, exerciseID, name, alsoUpdateProgram):
             state?.swap(exerciseIndex, to: exerciseID, name: name, inProgram: alsoUpdateProgram)
         case .restStarted, .restExtended, .restSkipped, .finished, .discarded:
-            applyClockEvent(event, to: &state, at: time)
+            applyClockEvent(event, to: &state)
         }
     }
 
     /// Rules 9 and 10: the rest timer and the terminal events. Split from `apply`, which routes only
     /// these five cases here, to keep each switch within SwiftLint's complexity limit.
-    private static func applyClockEvent(
-        _ event: WorkoutEvent,
-        to state: inout WorkoutState?,
-        at time: Date
-    ) -> [Effect]? {
+    private static func applyClockEvent(_ event: WorkoutEvent, to state: inout WorkoutState?) -> [Effect]? {
         switch event {
         case let .restStarted(endsAt, total):
-            state?.startRest(RestTimer(endsAt: endsAt, total: total), at: time)
-        case let .restExtended(amount):
-            state?.extendRest(by: amount, at: time)
+            state?.startRest(RestTimer(endsAt: endsAt, total: total))
+        case let .restExtended(amount, extendsShownRest, tappedAt):
+            state?.extendRest(by: amount, extendsShownRest: extendsShownRest, tappedAt: tappedAt)
         case .restSkipped:
             state?.skipRest()
         case let .finished(endedAt):
@@ -87,7 +83,7 @@ private extension WorkoutState {
         var effects: [Effect] = [.haptic(.setLogged)]
         if autoRest, SupersetRounds.isLastOfRound(ref, block: blocks[blockIndex], exercises: exercises) {
             let groupRest = SupersetRounds.groupRest(block: blocks[blockIndex], exercises: exercises).duration
-            effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest), at: doneAt)
+            effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest))
         }
         cursor = nextCursor(after: ref, blocks: blocks, blockIndex: blockIndex) ?? cursor
         return effects
@@ -157,25 +153,27 @@ private extension WorkoutState {
         return []
     }
 
-    /// Rule 9: the rest runs until `timer.endsAt`; the notification is rescheduled for it. The timer
-    /// is first held to `WorkoutEngine.longestRest`: `total` into `0 ... longestRest`, and `endsAt` to
-    /// at most `longestRest` after `time`, when the rest starts.
-    mutating func startRest(_ timer: RestTimer, at time: Date) -> [Effect] {
-        let bound = WorkoutEngine.longestRest
-        let held = RestTimer(endsAt: min(timer.endsAt, time.adding(bound)), total: min(max(timer.total, .zero), bound))
-        rest = held
-        return [.scheduleRestNotification(endsAt: held.endsAt)]
+    /// Rule 9: the rest runs until `timer.endsAt`; the notification is rescheduled for it. Every caller
+    /// passes a timer within `WorkoutEngine.longestRest` (see there).
+    mutating func startRest(_ timer: RestTimer) -> [Effect] {
+        rest = timer
+        return [.scheduleRestNotification(endsAt: timer.endsAt)]
     }
 
-    /// Rule 9 and decision #7: "+30s" grows a running rest's `endsAt` and `total`. With no rest
-    /// running at `time` (none, or one already over), it starts a fresh rest of `amount` from `time`.
-    /// The new total saturates instead of overflowing, then `startRest` clamps it.
-    mutating func extendRest(by amount: Duration, at time: Date) -> [Effect] {
-        guard let running = rest, running.endsAt > time else {
-            return startRest(RestTimer(endsAt: time.adding(amount), total: amount), at: time)
+    /// Rule 9 and decision #7: "+30s" grows the rest the lifter saw running, `endsAt` and `total` alike.
+    /// When the device showed none, or the state has none, it starts a fresh rest of `amount` at
+    /// `tappedAt`. Timestamps never override `extendsShownRest`.
+    ///
+    /// The grown rest is held to `WorkoutEngine.longestRest`: `total` into `0 ... longestRest` (the
+    /// sum saturates first, because `reduce` may be handed any state), and `endsAt` to at most
+    /// `longestRest` after `tappedAt`.
+    mutating func extendRest(by amount: Duration, extendsShownRest: Bool, tappedAt: Date) -> [Effect] {
+        guard extendsShownRest, let shown = rest else {
+            return startRest(RestTimer(endsAt: tappedAt.adding(amount), total: amount))
         }
-        let total = running.total.saturatingSum(amount)
-        return startRest(RestTimer(endsAt: running.endsAt.adding(amount), total: total), at: time)
+        let bound = WorkoutEngine.longestRest
+        let total = min(max(shown.total.saturatingSum(amount), .zero), bound)
+        return startRest(RestTimer(endsAt: min(shown.endsAt.adding(amount), tappedAt.adding(bound)), total: total))
     }
 
     /// Rule 9: "Skip" stops the rest.
@@ -220,12 +218,10 @@ private extension Date {
 }
 
 private extension Duration {
-    /// `self + other`, pinned to the largest or smallest `Duration` where the sum would overflow.
+    /// `self + other`, pinned to the largest `Duration` where the sum would overflow. `other` is a
+    /// well-formed "+30s" amount, never negative, so the sum can only overflow upwards.
     func saturatingSum(_ other: Duration) -> Duration {
         let (sum, overflow) = attoseconds.addingReportingOverflow(other.attoseconds)
-        guard overflow else {
-            return Duration(attoseconds: sum)
-        }
-        return Duration(attoseconds: other > .zero ? .max : .min)
+        return Duration(attoseconds: overflow ? .max : sum)
     }
 }

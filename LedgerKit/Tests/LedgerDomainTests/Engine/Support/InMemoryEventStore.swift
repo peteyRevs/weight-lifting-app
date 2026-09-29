@@ -33,35 +33,11 @@ actor InMemoryEventStore: WorkoutEventStore {
         logs[workout]?.keys.filter { $0.device == device }.map(\.seq).max()
     }
 
-    func liveWorkoutIDs() -> [WorkoutID] {
-        workoutIDs { log in log.contains(where: Self.isStarted) && !log.contains(where: Self.isTerminal) }
-    }
-
-    func unmaterializedWorkoutIDs() -> [WorkoutID] {
-        workoutIDs { log in log.contains(where: Self.isTerminal) }
+    func uncompactedWorkoutIDs() -> [WorkoutID] {
+        Array(logs.keys)
     }
 
     func compact(workout: WorkoutID) {
         logs[workout] = nil
-    }
-
-    private func workoutIDs(where matches: ([EventEnvelope]) -> Bool) -> [WorkoutID] {
-        logs.filter { matches(Array($0.value.values)) }.map(\.key)
-    }
-
-    private static func isStarted(_ envelope: EventEnvelope) -> Bool {
-        if case .started = envelope.event {
-            return true
-        }
-        return false
-    }
-
-    private static func isTerminal(_ envelope: EventEnvelope) -> Bool {
-        switch envelope.event {
-        case .finished, .discarded:
-            true
-        default:
-            false
-        }
     }
 }

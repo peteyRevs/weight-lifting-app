@@ -100,7 +100,7 @@ struct EffectTests {
         Row(
             name: "restExtended",
             before: [.restStarted(endsAt: Engine.at(120), total: .seconds(90))],
-            event: .restExtended(amount: .seconds(30)),
+            event: Engine.extend(tapped: 30),
             own: [.scheduleRestNotification(endsAt: Engine.at(150))],
             changesState: true
         ),

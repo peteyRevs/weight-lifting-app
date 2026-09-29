@@ -39,6 +39,11 @@ struct HostPolicy: Sendable {
 /// - it appends every received batch first and applies only what `append` newly stored: `reduce`, in
 ///   sort order, when all of it sorts after the newest envelope applied (ADR-004 rule 2), else one
 ///   rebuild with `replay` of the store;
+/// - fix round 2 (decision F): it runs `reduce`'s effects for what it created, and only
+///   `WorkoutEngine.effects(from:to:)` for what it received or rebuilt, tracking the rest notification
+///   and the materialised workout they leave behind;
+/// - fix round 2 (decision E): on relaunch its clock's newest is the largest stored `wallClock` across
+///   the store's uncompacted logs;
 /// - `naive` shadows it with a host that reduces every newly stored envelope in arrival order.
 struct SimHost {
     let device: DeviceID
@@ -56,6 +61,14 @@ struct SimHost {
     private(set) var naiveMismatches = 0
     /// Envelopes this host created that did not sort after everything it had stored.
     private(set) var causalViolations: [EnvelopeKey] = []
+    /// The rest-over notification its effects left scheduled (it survives a relaunch, as the OS keeps it).
+    private(set) var notification: Date?
+    /// The workout its `.materialize` effects left stored (it survives a relaunch, as F05's store does).
+    private(set) var materialized: WorkoutState?
+    /// Whether a `.discardLog` ran.
+    private(set) var droppedLog = false
+    /// Haptics run for envelopes it received (must stay 0: remote changes never buzz).
+    private(set) var remoteHaptics = 0
 
     init(_ device: DeviceID, offset: Double, policy: HostPolicy = HostPolicy()) {
         self.device = device
@@ -85,7 +98,7 @@ struct SimHost {
         if let newest = seen.max(), !(newest < envelope) {
             causalViolations.append(envelope.key)
         }
-        try await apply(store.append([envelope]))
+        try await apply(store.append([envelope]), own: true)
         return envelope
     }
 
@@ -94,37 +107,77 @@ struct SimHost {
         for envelope in batch {
             clock.observe(envelope.wallClock)
         }
-        try await apply(store.append(batch))
+        try await apply(store.append(batch), own: false)
     }
 
-    /// Killed and relaunched: ADR-004 rule 6 replays the stored log.
+    /// Killed and relaunched: ADR-004 rule 6 replays the stored log, and the rebuild's effects run from
+    /// no state. With `recoverClock`, the ADR-004 amendment (fix round 2, decision E): before it stamps
+    /// anything, the clock's newest is the largest stored `wallClock` across the uncompacted logs.
     mutating func relaunch() async {
         let stored = await log
         state = WorkoutEngine.replay(stored)
         naive = state
         newestApplied = stored.max()
+        run(WorkoutEngine.effects(from: nil, to: state), own: false)
         clock = HybridClock()
-        if policy.recoverClock, let newest = newestApplied {
-            clock.observe(newest.wallClock)
+        guard policy.recoverClock else {
+            return
+        }
+        for workout in await store.uncompactedWorkoutIDs() {
+            for envelope in await store.envelopes(for: workout) {
+                clock.observe(envelope.wallClock)
+            }
+        }
+    }
+
+    /// Runs what it can observe of `effects`: the notification, materialisation and haptics.
+    private mutating func run(_ effects: [Effect], own: Bool) {
+        for effect in effects {
+            switch effect {
+            case let .scheduleRestNotification(endsAt):
+                notification = endsAt
+            case .cancelRestNotification:
+                notification = nil
+            case let .materialize(final):
+                materialized = final
+            case .discardLog:
+                droppedLog = true
+            case .haptic:
+                remoteHaptics += own ? 0 : 1
+            default:
+                break
+            }
         }
     }
 
     /// Applies what `append` newly stored. The whole batch is already in the store, so a rebuild covers
     /// all of it: reducing an envelope after a rebuild that included it would apply it twice (a real
     /// trap for F17, found while building this model).
-    private mutating func apply(_ fresh: [EventEnvelope]) async throws {
+    private mutating func apply(_ fresh: [EventEnvelope], own: Bool) async throws {
         for envelope in fresh {
             naive = WorkoutEngine.reduce(naive, envelope).0
         }
         guard let newestFresh = fresh.max() else {
             return
         }
+        let before = state
+        var reduced: [Effect]?
         if state != nil, let newest = newestApplied, fresh.allSatisfy({ newest < $0 }) {
+            reduced = []
             for envelope in fresh.sorted() {
-                state = WorkoutEngine.reduce(state, envelope).0
+                let (next, effects) = WorkoutEngine.reduce(state, envelope)
+                state = next
+                reduced? += effects
             }
         } else {
             state = await WorkoutEngine.replay(log)
+        }
+        // Decision F: its own envelope runs `reduce`'s effects; anything received or rebuilt runs only
+        // the rebuild effects.
+        if own, let reduced {
+            run(reduced, own: true)
+        } else {
+            run(WorkoutEngine.effects(from: before, to: state), own: false)
         }
         newestApplied = max(newestApplied ?? newestFresh, newestFresh)
         let replayed = await WorkoutEngine.replay(log)

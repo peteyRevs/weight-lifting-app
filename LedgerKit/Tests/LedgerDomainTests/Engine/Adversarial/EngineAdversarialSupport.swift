@@ -60,6 +60,20 @@ enum EngineAdv {
         )
     }
 
+    /// "+`seconds`" tapped at `seconds` by a device whose screen showed a rest running (`shown`) or not
+    /// (fix round 2, orchestrator decision B: the originating device decides).
+    static func extend(_ amount: Int = 30, shown: Bool, tappedAt seconds: Double) -> WorkoutEvent {
+        .restExtended(amount: .seconds(amount), extendsShownRest: shown, tappedAt: engineTime(seconds))
+    }
+
+    /// "+`amount`" as the device holding `state` sends it when tapped at `seconds` by its own clock: its
+    /// screen shows the rest running while some of it remains (`RestTimer.remaining(at:)` above zero).
+    static func extend(_ amount: Duration = .seconds(30), on state: WorkoutState?, at seconds: Double) -> WorkoutEvent {
+        let now = engineTime(seconds)
+        let shown = state?.rest.map { $0.remaining(at: now) > .zero } ?? false
+        return .restExtended(amount: amount, extendsShownRest: shown, tappedAt: now)
+    }
+
     /// Folds `envelopes` with `reduce` in the order given: the final state and each step's effects.
     static func fold(
         _ envelopes: [EventEnvelope],

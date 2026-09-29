@@ -24,7 +24,7 @@ struct ConvergenceTests {
         let phoneEvents = EventBuilders.log(
             from: [
                 Engine.logged(0, 0, at: 10),
-                .restExtended(amount: .seconds(30)),
+                Engine.extend(tapped: 30),
                 Engine.logged(0, 1, pounds: 190, at: 50),
                 .setTargetChanged(exerciseIndex: 1, setID: Engine.set(1, 0), weight: .pounds(60), reps: nil)
             ],

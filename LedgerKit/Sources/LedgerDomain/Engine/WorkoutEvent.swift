@@ -5,8 +5,12 @@ import Foundation
 ///
 /// Events address an exercise by its index in the `started` snapshot and a set by its `SetID`.
 /// A live workout never adds, removes or reorders exercises (it only gains sets), so both mean the
-/// same thing on every device. Events that need a time carry it; every other event happens at its
-/// envelope's `wallClock`.
+/// same thing on every device.
+///
+/// **Clock rule (ADR-004 amendment).** A payload time (`doneAt`, `tappedAt`, `restStarted.endsAt`,
+/// `endedAt`) is the originating device's clock at the action. The envelope's `wallClock` is only the
+/// hybrid-logical-clock ordering stamp: the reducer never reads it as the time of an action, and
+/// compares a payload time with it only to reject an absurd one (`EventEnvelope.isWellFormed`).
 ///
 /// Labels name the state field they write (`doneAt`, `exerciseID`, `endedAt`) rather than ADR-004's
 /// `at:`/`to:`/`by:`, which SwiftLint's `identifier_name` rejects as too short.
@@ -30,8 +34,13 @@ public enum WorkoutEvent: Hashable, Codable, Sendable {
     case exerciseSwapped(exerciseIndex: Int, exerciseID: ExerciseID, name: String, alsoUpdateProgram: Bool)
     /// Rule 9: a rest that ends at the absolute time `endsAt`, so every device shows the same countdown.
     case restStarted(endsAt: Date, total: Duration)
-    /// Rule 9 / decision #7: "+30s" adds `amount`.
-    case restExtended(amount: Duration)
+    /// Rule 9 / decision #7: "+30s" adds `amount`, as the lifter meant it. The originating device, which
+    /// knows what its screen showed, decides:
+    /// - `extendsShownRest` is `true` when it showed a rest running (`RestTimer.remaining(at: now)` above
+    ///   zero); the engine then extends the state's rest, whatever any timestamp says;
+    /// - otherwise, or when the state has no rest, the engine starts a fresh rest of `amount` at
+    ///   `tappedAt`, the device's clock at the tap ("+30s" at zero restarts a 30 s rest).
+    case restExtended(amount: Duration, extendsShownRest: Bool, tappedAt: Date)
     /// Rule 9: "Skip".
     case restSkipped
     /// Rule 10: terminal; the workout is saved.

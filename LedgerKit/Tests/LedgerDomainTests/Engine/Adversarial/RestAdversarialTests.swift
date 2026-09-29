@@ -23,7 +23,10 @@ struct RestAdversarialTests {
         seq: UInt64,
         by amount: Int = 30
     ) -> (WorkoutState?, [Effect]) {
-        WorkoutEngine.reduce(state, Adv.env(.restExtended(amount: .seconds(amount)), Adv.watch, seq: seq, at: seconds))
+        WorkoutEngine.reduce(
+            state,
+            Adv.env(Adv.extend(.seconds(amount), on: state, at: seconds), Adv.watch, seq: seq, at: seconds)
+        )
     }
 
     @Test("Criterion 5: no rest running, +30 s at t → RestTimer(endsAt: t + 30 s, total: 30 s).")
@@ -135,8 +138,8 @@ struct RestAdversarialTests {
     @Test("Rule 12: two devices extending concurrently both count, whatever the arrival order.")
     func concurrentExtends_bothCount() {
         let base = [Adv.start(), Adv.env(.restStarted(endsAt: engineTime(90), total: .seconds(90)), seq: 2, at: 0)]
-        let phone = Adv.env(.restExtended(amount: .seconds(30)), Adv.phone, seq: 3, at: 10)
-        let watch = Adv.env(.restExtended(amount: .seconds(30)), Adv.watch, seq: 1, at: 10)
+        let phone = Adv.env(Adv.extend(shown: true, tappedAt: 10), Adv.phone, seq: 3, at: 10)
+        let watch = Adv.env(Adv.extend(shown: true, tappedAt: 10), Adv.watch, seq: 1, at: 10)
         let expected = RestTimer(endsAt: engineTime(150), total: .seconds(150))
         #expect(WorkoutEngine.replay(base + [phone, watch])?.rest == expected)
         #expect(Replica(base + [watch, phone]).state?.rest == expected)

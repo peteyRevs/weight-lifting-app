@@ -32,7 +32,7 @@ struct GarbagePropertyAdversarialTests {
             )
         case 2 ... 7: return garbageRowEvent(snapshot: snapshot, at: date, using: &generator)
         case 8: return .restStarted(endsAt: date, total: amount)
-        case 9: return .restExtended(amount: amount)
+        case 9: return .restExtended(amount: amount, extendsShownRest: generator.chance(50), tappedAt: date)
         case 10: return .restSkipped
         case 11: return .finished(endedAt: date)
         default: return .discarded(endedAt: date)

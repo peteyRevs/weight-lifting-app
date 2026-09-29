@@ -104,7 +104,7 @@ struct BoundsAdversarialTests {
         let empty = EventBuilders.session([])
         var state = Adv.state(after: [Adv.start(empty)])
         #expect(state?.cursor == nil)
-        let events = Self.addressed(0, Adv.sid(0, 0)) + [.restExtended(amount: .seconds(30)), .restSkipped]
+        let events = Self.addressed(0, Adv.sid(0, 0)) + [Adv.extend(shown: true, tappedAt: 1), .restSkipped]
         for (offset, event) in events.enumerated() {
             state = WorkoutEngine.reduce(state, Adv.env(event, seq: UInt64(offset + 2), at: Double(offset + 1))).0
         }

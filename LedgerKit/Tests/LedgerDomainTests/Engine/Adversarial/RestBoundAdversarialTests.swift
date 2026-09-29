@@ -19,15 +19,12 @@ struct RestBoundAdversarialTests {
         ])?.rest
     }
 
-    /// `count` watch "+30s" taps, `spacing` seconds apart from `first` seconds.
+    /// `count` watch "+30s" taps, `spacing` seconds apart from `first` seconds, each on a rest the watch
+    /// shows running (every caller taps before the rest's end).
     static func taps(_ count: Int, from first: Double, spacing: Double) -> [EventEnvelope] {
         (0 ..< count).map { index in
-            Adv.env(
-                .restExtended(amount: .seconds(30)),
-                Adv.watch,
-                seq: UInt64(index + 1),
-                at: first + spacing * Double(index)
-            )
+            let seconds = first + spacing * Double(index)
+            return Adv.env(Adv.extend(shown: true, tappedAt: seconds), Adv.watch, seq: UInt64(index + 1), at: seconds)
         }
     }
 
@@ -70,35 +67,37 @@ struct RestBoundAdversarialTests {
         #expect(rest.endsAt == engineTime(100 + 0.125 * 129).addingTimeInterval(3600))
     }
 
-    @Test("The bound's edges: one hour is kept, one attosecond more is cut, zero stays, below zero goes to zero")
+    /// Retargeted in fix round 2 (orchestrator decision A: reject, not clamp). A length outside
+    /// `0 ... longestRest` makes the envelope malformed, so it is ignored: no rest, where round 1 clamped.
+    @Test("The bound's edges: one hour and zero are kept; one attosecond beyond either makes the envelope ignored")
     func bound_edges() {
         #expect(Self.rest(endsAt: 3610, total: Self.hour) == RestTimer(endsAt: engineTime(3610), total: Self.hour))
-        #expect(
-            Self.rest(endsAt: 3610.5, total: Self.hour + Duration(attoseconds: 1))
-                == RestTimer(endsAt: engineTime(3610), total: Self.hour)
-        )
+        #expect(Self.rest(endsAt: 3610.5, total: Self.hour + Duration(attoseconds: 1)) == nil)
         #expect(Self.rest(endsAt: 10, total: .zero) == RestTimer(endsAt: engineTime(10), total: .zero))
-        #expect(
-            Self.rest(endsAt: 5, total: Duration(attoseconds: -1)) == RestTimer(endsAt: engineTime(5), total: .zero)
-        )
-        #expect(Self.rest(endsAt: 3610, total: Duration(attoseconds: .max))?.total == Self.hour)
-        #expect(Self.rest(endsAt: 3610, total: Duration(attoseconds: .min))?.total == .zero)
+        #expect(Self.rest(endsAt: 5, total: Duration(attoseconds: -1)) == nil)
+        #expect(Self.rest(endsAt: 3610, total: Duration(attoseconds: .max)) == nil)
+        #expect(Self.rest(endsAt: 3610, total: Duration(attoseconds: .min)) == nil)
         // A rest that is already over when its envelope is stamped is kept as it is (rule 9: views derive "over").
         #expect(Self.rest(endsAt: -50, total: .seconds(60)) == RestTimer(endsAt: engineTime(-50), total: .seconds(60)))
     }
 
-    @Test("Zero and negative +N follow rule 9's arithmetic, with only the total held at zero")
+    /// Retargeted in fix round 2 (orchestrator decisions A and B): a negative +N is malformed and
+    /// ignored, where round 1 applied rule 9's arithmetic; the watch decides "shown" from its screen.
+    @Test("Zero +N follows rule 9's arithmetic; a negative +N is malformed and leaves the rest as it was")
     func zeroAndNegativeExtensions() {
         let resting = [Adv.start(), Adv.env(Adv.logged(0, 0, doneAt: 10), seq: 2, at: 10)]
         func after(_ amount: Duration, at seconds: Double = 20) -> RestTimer? {
-            Adv.state(after: resting + [Adv.env(.restExtended(amount: amount), Adv.watch, seq: 1, at: seconds)])?.rest
+            let shown = Adv.state(after: resting)
+            let tap = Adv.env(Adv.extend(amount, on: shown, at: seconds), Adv.watch, seq: 1, at: seconds)
+            return Adv.state(after: resting + [tap])?.rest
         }
-        #expect(after(.zero) == RestTimer(endsAt: engineTime(160), total: .seconds(150)))
-        #expect(after(.seconds(-60)) == RestTimer(endsAt: engineTime(100), total: .seconds(90)))
-        #expect(after(.seconds(-200)) == RestTimer(endsAt: engineTime(-40), total: .zero))
-        // No rest running (rule 9, decision #7): a fresh rest of `by` from the envelope, total held at ≥ 0.
+        let untouched = RestTimer(endsAt: engineTime(160), total: .seconds(150))
+        #expect(after(.zero) == untouched)
+        #expect(after(.seconds(-60)) == untouched)
+        #expect(after(.seconds(-200)) == untouched)
+        // No rest shown (rule 9, decision #7): a fresh rest of `amount` from the tap.
         #expect(after(.zero, at: 200) == RestTimer(endsAt: engineTime(200), total: .zero))
-        #expect(after(.seconds(-30), at: 200) == RestTimer(endsAt: engineTime(170), total: .zero))
+        #expect(after(.seconds(-30), at: 200) == untouched)
     }
 
     @Test("A three-hour workout's elapsed time and receipt are exact; the saturation only starts near 2^63 s")
@@ -133,8 +132,15 @@ extension RestBoundAdversarialTests {
         return try JSONDecoder().decode(Value.self, from: Data(hostile.utf8))
     }
 
-    @Test("Finding 9: an automatic rest from a JSON setLogged with doneAt 1e21 ends within an hour of its envelope")
-    func autoRest_absurdDoneAt_endsNearItsEnvelope() throws {
+    // Retargeted in fix round 2 (orchestrator decision A). Finding 9's fix direction named two options:
+    // hold every payload date to its envelope, or saturate the ring. The orchestrator chose a third that
+    // covers both: an envelope carrying an absurd or non-finite date is malformed and ignored (no state
+    // change, no effects), and the ring saturates anyway (the exit twins below). Each test keeps its input
+    // and its question ("can this date reach the rest ring or break ==?"); the expected state is now the
+    // one without the hostile envelope.
+
+    @Test("Finding 9: a JSON setLogged with doneAt 1e21 is malformed: ignored, so no rest reaches the ring")
+    func autoRest_absurdDoneAt_isIgnored() throws {
         let event = try Self.decoded(
             WorkoutEvent.setLogged(
                 exerciseIndex: 0, setID: Adv.sid(0, 0), weight: pounds("185"), reps: Reps(clamping: 5),
@@ -142,34 +148,38 @@ extension RestBoundAdversarialTests {
             ),
             markerAs: "1e21"
         )
-        let rest = try #require(Adv.state(after: [Adv.start(), Adv.env(event, Adv.watch, seq: 1, at: 20)])?.rest)
-        // RestTimer.remaining(at:) converts endsAt − now with Duration.seconds(Double), which traps past ~1.7e20 s.
-        let after = rest.endsAt.timeIntervalSince(engineTime(20))
-        #expect(after <= 3600, "the rest ends \(after) s after its envelope")
+        let hostile = Adv.env(event, Adv.watch, seq: 1, at: 20)
+        #expect(!hostile.isWellFormed)
+        #expect(WorkoutEngine.reduce(Adv.state(after: [Adv.start()]), hostile).1.isEmpty)
+        let state = try #require(Adv.state(after: [Adv.start(), hostile]))
+        #expect(state.rest == nil, "an automatic rest anchored at 1e21 would trap RestTimer.remaining(at:)")
+        #expect(Adv.row(state, 0, 0)?.isDone == false)
+        #expect(WorkoutEngine.replay([Adv.start(), hostile]) == state)
     }
 
-    @Test("Finding 9: a JSON started snapshot whose rest ends at 1e21 is held to the bound like every other rest")
-    func snapshotRest_absurdEndsAt_isHeld() throws {
+    @Test("Finding 9: a JSON started snapshot whose rest ends at 1e21 is malformed: no workout starts from it")
+    func snapshotRest_absurdEndsAt_isIgnored() throws {
         var snapshot = EventBuilders.seedSession()
         snapshot.rest = RestTimer(endsAt: Self.marker, total: .seconds(60))
         let hostile = try Self.decoded(snapshot, markerAs: "1e21")
-        let rest = try #require(Adv.state(after: [Adv.start(hostile)])?.rest)
-        let after = rest.endsAt.timeIntervalSince(engineTime(0))
-        #expect(after <= 3600, "the snapshot's rest ends \(after) s after its started")
+        #expect(!Adv.start(hostile).isWellFormed)
+        #expect(Adv.state(after: [Adv.start(hostile)]) == nil)
+        // A well-formed started from the peer still starts the workout, whatever sorts first.
+        let peer = Adv.start(EventBuilders.seedSession(), Adv.watch, seq: 1, at: 1)
+        #expect(WorkoutEngine.replay([Adv.start(hostile), peer]) == WorkoutEngine.replay([peer]))
     }
 
-    @Test("Finding 9: a binary-plist restStarted whose endsAt is NaN is held to the bound, and replay stays Equatable")
-    func nanEndsAt_isHeld_andStateEqualsItself() throws {
+    @Test("Finding 9: a binary-plist restStarted whose endsAt is NaN is malformed: ignored, and replay stays Equatable")
+    func nanEndsAt_isIgnored_andStateEqualsItself() throws {
         let nan = Date(timeIntervalSinceReferenceDate: .nan)
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         let wire = try encoder.encode(WorkoutEvent.restStarted(endsAt: nan, total: .seconds(90)))
         let event = try PropertyListDecoder().decode(WorkoutEvent.self, from: wire)
         let log = [Adv.start(), Adv.env(event, Adv.watch, seq: 1, at: 10)]
-        let rest = try #require(WorkoutEngine.replay(log)?.rest)
-        // `Date`'s `<=` is `!(rhs < lhs)`, which a NaN passes; compare the interval as a Double.
-        let after = rest.endsAt.timeIntervalSince(engineTime(10))
-        #expect(after <= 3600, "NaN passes min(): the rest ends \(after) s after its envelope")
+        let state = try #require(WorkoutEngine.replay(log))
+        #expect(state.rest == nil, "NaN passed min() in round 1 and reached the state")
+        #expect(state == WorkoutEngine.replay([Adv.start()]))
         let equal = WorkoutEngine.replay(log) == WorkoutEngine.replay(log)
         #expect(equal, "a NaN date makes the replayed state unequal to itself")
     }
@@ -195,6 +205,13 @@ extension RestBoundAdversarialTests {
                 }
                 let state = EngineAdv.state(after: [EngineAdv.start(), EngineAdv.env(event, seq: 2, at: 20)])
                 _ = state?.rest?.remaining(at: engineTime(30))
+                // Round 2: the engine now ignores the envelope, so also hand the decoded date to the ring
+                // directly, as any other decoder of a RestTimer could (decision A, defence in depth).
+                guard case let .setLogged(_, _, _, _, doneAt) = event else {
+                    exit(4)
+                }
+                let ring = RestTimer(endsAt: doneAt.addingTimeInterval(150), total: .seconds(150))
+                _ = (ring.remaining(at: engineTime(30)), ring.fraction(at: engineTime(30)))
             }
         }
 
@@ -216,6 +233,8 @@ extension RestBoundAdversarialTests {
                     exit(2)
                 }
                 _ = EngineAdv.state(after: [EngineAdv.start(hostile)])?.rest?.fraction(at: engineTime(30))
+                // Round 2: the engine now ignores the started, so also run the ring on the decoded rest.
+                _ = (hostile.rest?.remaining(at: engineTime(30)), hostile.rest?.fraction(at: engineTime(30)))
             }
         }
     }

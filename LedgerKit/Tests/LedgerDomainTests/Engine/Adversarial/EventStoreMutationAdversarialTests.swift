@@ -3,21 +3,22 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// Round 2: would a buggy store pass the contract? Each `Mutation` is one plausible F05 mistake. The
-/// probes in `StoreProbe` must catch every one and pass `InMemoryEventStore`. (Which of these mutants
-/// also pass the implementer's `WorkoutEventStoreContractTests` is recorded in test-findings.md, finding 10.)
+/// Round 2: would a buggy store pass the contract? Each `Mutation` is one plausible F05 mistake.
+/// Fix round 2 (finding 10) folded the tester's probes into `WorkoutEventStoreContract`, the suite F05
+/// runs, so this is now that suite's own guard: its clauses must catch every mutant and pass
+/// `InMemoryEventStore`.
 @Suite("WorkoutEventStore · contract mutants (adversarial, round 2)", .tags(.domain))
 struct EventStoreMutationAdversarialTests {
-    @Test("The in-memory reference store passes every probe")
+    @Test("The in-memory reference store passes every contract clause")
     func inMemoryStore_passesEveryProbe() async {
-        let found = await StoreProbe.violations { InMemoryEventStore() }
+        let found = await WorkoutEventStoreContract.violations { InMemoryEventStore() }
         #expect(found.isEmpty, "\(found)")
     }
 
-    @Test("Every mutant store fails at least one probe", arguments: MutantEventStore.Mutation.allCases)
+    @Test("Every mutant store fails at least one contract clause", arguments: MutantEventStore.Mutation.allCases)
     func mutant_isCaught(_ mutation: MutantEventStore.Mutation) async {
-        let found = await StoreProbe.violations { MutantEventStore(mutation) }
-        #expect(!found.isEmpty, "\(mutation) passed every probe")
+        let found = await WorkoutEventStoreContract.violations { MutantEventStore(mutation) }
+        #expect(!found.isEmpty, "\(mutation) passed every contract clause")
     }
 }
 
@@ -38,12 +39,16 @@ actor MutantEventStore: WorkoutEventStore {
         case keysAcrossWorkouts
         /// Reports the device's latest stored `seq`, not its highest.
         case highestSeqIsLatest
-        /// Lists every log with no terminal as live, started or not.
-        case liveIgnoresStarted
-        /// Treats only `finished` as terminal.
-        case finishedOnlyIsTerminal
+        /// Lists only logs that hold a `started` (round 2: replaces `liveIgnoresStarted`, whose list is
+        /// gone). An envelope that arrived before its `started` would never be noticed.
+        case listsOnlyStartedLogs
+        /// Lists only logs with no `finished` or `discarded`, the old live list (round 2: replaces
+        /// `finishedOnlyIsTerminal`). A kill before materialisation would lose the workout.
+        case unlistsEndedLogs
         /// Deletes every workout's log.
         case compactsEverything
+        /// Skips an envelope the engine would ignore (round 2): the store judges keys, not contents.
+        case dropsMalformed
     }
 
     let mutation: Mutation
@@ -57,7 +62,7 @@ actor MutantEventStore: WorkoutEventStore {
     func append(_ envelopes: [EventEnvelope]) throws -> [EventEnvelope] {
         var updated = logs
         var fresh: [EventEnvelope] = []
-        for envelope in envelopes {
+        for envelope in envelopes where mutation != .dropsMalformed || envelope.isWellFormed {
             guard let existing = stored(envelope, in: updated) else {
                 updated[envelope.workoutID, default: []].append(envelope)
                 fresh.append(envelope)
@@ -94,14 +99,17 @@ actor MutantEventStore: WorkoutEventStore {
         return mutation == .highestSeqIsLatest ? seqs.last : seqs.max()
     }
 
-    func liveWorkoutIDs() -> [WorkoutID] {
+    func uncompactedWorkoutIDs() -> [WorkoutID] {
         logs.filter { _, log in
-            (mutation == .liveIgnoresStarted || log.contains(where: Self.isStarted)) && !log.contains(where: isTerminal)
+            switch mutation {
+            case .listsOnlyStartedLogs:
+                log.contains(where: Self.isStarted)
+            case .unlistsEndedLogs:
+                !log.contains(where: Self.isTerminal)
+            default:
+                true
+            }
         }.map(\.key)
-    }
-
-    func unmaterializedWorkoutIDs() -> [WorkoutID] {
-        logs.filter { _, log in log.contains(where: isTerminal) }.map(\.key)
     }
 
     func compact(workout: WorkoutID) {
@@ -124,12 +132,10 @@ actor MutantEventStore: WorkoutEventStore {
         return false
     }
 
-    private func isTerminal(_ envelope: EventEnvelope) -> Bool {
+    private static func isTerminal(_ envelope: EventEnvelope) -> Bool {
         switch envelope.event {
-        case .finished:
+        case .finished, .discarded:
             true
-        case .discarded:
-            mutation != .finishedOnlyIsTerminal
         default:
             false
         }

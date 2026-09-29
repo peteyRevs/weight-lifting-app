@@ -24,7 +24,7 @@ struct ReduceTerminalTests {
             alsoUpdateProgram: true
         ),
         .restStarted(endsAt: Engine.at(600), total: .seconds(90)),
-        .restExtended(amount: .seconds(30)),
+        Engine.extend(tapped: 500),
         .restSkipped,
         .finished(endedAt: Engine.at(700)),
         .discarded(endedAt: Engine.at(700))
@@ -119,13 +119,22 @@ struct ReduceTerminalTests {
     }
 
     @Test(
-        "A decodable finish at an absurd or infinite time saturates the summary's elapsed instead of trapping",
+        """
+        A finish at an absurd or non-finite time is malformed and ignored; a state that holds one anyway \
+        saturates the summary's elapsed instead of trapping
+        """,
         arguments: [1e21, .infinity, .nan]
     )
     func summary_ofCorruptEndedAt_saturatesElapsed(seconds: Double) throws {
-        let (state, _) = try Engine.run([.finished(endedAt: Date(timeIntervalSinceReferenceDate: seconds))])
+        let absurd = Date(timeIntervalSinceReferenceDate: seconds)
+        let (state, effects) = try Engine.run([.finished(endedAt: absurd)])
+        #expect(try state == (Engine.live()) && effects.isEmpty)
+        // Fix round 2, decision A: `summary` still never traps, whatever state its caller (F05) hands it.
+        var ended = state
+        ended.phase = .finished
+        ended.endedAt = absurd
         let expected: Duration = seconds.isNaN ? .zero : .seconds(Double(Int64.max))
-        #expect(WorkoutEngine.summary(state, prs: []).elapsed == expected)
+        #expect(WorkoutEngine.summary(ended, prs: []).elapsed == expected)
     }
 
     @Test("Receipt rows use the units SessionBuilder snapshotted from Settings")

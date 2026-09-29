@@ -3,28 +3,36 @@ import Foundation
 /// The live workouts' envelope logs (ADR-004 rule 5). Declared here, implemented over GRDB in
 /// LedgerPersistence (F05).
 ///
-/// The host appends every envelope it receives for a workout before it reduces it, whatever the
+/// The host appends every envelope it receives for a workout before it applies it, whatever the
 /// effects, and appends its own through `Effect.persist`. So the store holds every envelope `replay`
-/// may apply, including those `WorkoutEngine.reduce` ignores.
+/// may apply, including those `WorkoutEngine.reduce` ignores, malformed ones included: the store never
+/// judges an envelope's contents, only its key.
 public protocol WorkoutEventStore: Sendable {
     /// Appends the envelopes. Idempotent on `EnvelopeKey` within a workout: an envelope already stored
     /// is skipped. Throws `EngineError.conflictingEnvelope` when a stored envelope with the same key
     /// differs (the precondition on `EventEnvelope`), and then stores nothing from the batch.
     ///
-    /// Returns the envelopes it newly stored, in the order given. The host reduces exactly these, which
-    /// is how it meets `WorkoutEngine.reduce`'s precondition that no envelope is reduced twice.
+    /// Returns the envelopes it newly stored, in the order given: the input to the host loop on
+    /// `WorkoutEngine.reduce`, which reduces them in sort order when they all sort after the newest
+    /// envelope applied, and otherwise rebuilds once with `replay`.
     func append(_ envelopes: [EventEnvelope]) async throws -> [EventEnvelope]
     /// Every stored envelope of the workout, in no particular order (`WorkoutEngine.replay` orders them).
     func envelopes(for workout: WorkoutID) async throws -> [EventEnvelope]
     /// The highest `seq` stored from `device` for the workout: the gap-replay handshake (F17), and the
     /// base of the device's own next `seq`.
     func highestSeq(for workout: WorkoutID, device: DeviceID) async throws -> UInt64?
-    /// Workouts whose log holds a `started` and no `finished` or `discarded` (resume on launch).
-    func liveWorkoutIDs() async throws -> [WorkoutID]
-    /// Workouts whose log holds a `finished` or `discarded` but has not been compacted. On launch the
-    /// host replays each, materialises a finished one or drops a discarded one, then compacts it. This
-    /// covers a kill after the terminal envelope is stored but before materialisation commits.
-    func unmaterializedWorkoutIDs() async throws -> [WorkoutID]
+    /// Every workout with a stored log that has not been compacted, whatever it holds.
+    ///
+    /// On launch the host classifies each by `WorkoutEngine.replay` of its log:
+    /// - live: it resumes the workout;
+    /// - finished or discarded: it materialises or drops it, then compacts it. This covers a kill
+    ///   after the terminal envelope is stored but before materialisation commits;
+    /// - `nil` (no usable `started`, for example after a lost message or a resend that followed a
+    ///   compaction): it never compacts the log. It keeps it and asks the peer to resend (F17).
+    ///
+    /// The largest `wallClock` across these logs also restores the hybrid logical clock before the host
+    /// stamps anything (ADR-004 amendment).
+    func uncompactedWorkoutIDs() async throws -> [WorkoutID]
     /// Deletes the workout's log once it is materialised (or discarded).
     func compact(workout: WorkoutID) async throws
 }

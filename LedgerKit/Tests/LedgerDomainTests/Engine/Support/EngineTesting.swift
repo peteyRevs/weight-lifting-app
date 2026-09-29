@@ -61,6 +61,12 @@ enum Engine {
         log.reduce(nil) { WorkoutEngine.reduce($0, $1).0 }
     }
 
+    /// "+`seconds`" tapped at `tapped` seconds by a device that showed a rest running (`shown`), or
+    /// none (decision #7).
+    static func extend(_ seconds: Int64 = 30, shown: Bool = true, tapped: TimeInterval) -> WorkoutEvent {
+        .restExtended(amount: .seconds(seconds), extendsShownRest: shown, tappedAt: at(tapped))
+    }
+
     static func set(_ exerciseIndex: Int, _ setIndex: Int) -> SetID {
         EventBuilders.setID(exerciseIndex, setIndex)
     }

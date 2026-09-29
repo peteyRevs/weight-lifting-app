@@ -125,7 +125,7 @@ enum EngineGen {
             let seconds = Double(restChoices.randomElement(using: &generator) ?? 90)
             return .restStarted(endsAt: now.addingTimeInterval(seconds), total: .seconds(seconds))
         case 30 ..< 40:
-            return .restExtended(amount: .seconds(30))
+            return plus30(on: state, at: now)
         case 40 ..< 46:
             return .restSkipped
         case 46 ..< 48:
@@ -133,6 +133,15 @@ enum EngineGen {
         default:
             return .discarded(endedAt: now)
         }
+    }
+}
+
+extension EngineGen {
+    /// "+30s" as the device holding `state` sends it when its clock reads `now` (fix round 2, decision
+    /// B): its screen shows the rest running while some of it remains.
+    static func plus30(on state: WorkoutState, at now: Date) -> WorkoutEvent {
+        let shown = state.rest.map { $0.remaining(at: now) > .zero } ?? false
+        return .restExtended(amount: .seconds(30), extendsShownRest: shown, tappedAt: now)
     }
 }
 

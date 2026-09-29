@@ -12,7 +12,7 @@ import Testing
         static func envelopes(at date: Date, row: Int, firstSeq: UInt64) -> [EventEnvelope] {
             let events: [WorkoutEvent] = [
                 EngineAdv.logged(0, row, doneAt: 0),
-                .restExtended(amount: .seconds(30)),
+                .restExtended(amount: .seconds(30), extendsShownRest: true, tappedAt: date),
                 .restStarted(endsAt: date, total: .seconds(30))
             ]
             return events.enumerated().map { offset, event in
@@ -36,12 +36,12 @@ import Testing
                 for seq in 3 ..< 40 {
                     state = WorkoutEngine.reduce(
                         state,
-                        EngineAdv.env(.restExtended(amount: huge), seq: UInt64(seq), at: 1)
+                        EngineAdv.env(EngineAdv.extend(huge, on: state, at: 1), seq: UInt64(seq), at: 1)
                     ).0
                 }
                 state = WorkoutEngine.reduce(
                     state,
-                    EngineAdv.env(.restExtended(amount: .seconds(Int64.min)), seq: 41, at: 2)
+                    EngineAdv.env(EngineAdv.extend(.seconds(Int64.min), on: state, at: 2), seq: 41, at: 2)
                 ).0
                 if state == nil {
                     exit(1)
@@ -65,7 +65,7 @@ import Testing
                 let log = [
                     EngineAdv.start(),
                     EngineAdv.env(event, EngineAdv.watch, seq: 1, at: 0),
-                    EngineAdv.env(.restExtended(amount: .seconds(30)), seq: 2, at: 10)
+                    EngineAdv.env(EngineAdv.extend(shown: true, tappedAt: 10), seq: 2, at: 10)
                 ]
                 _ = WorkoutEngine.replay(log)
             }

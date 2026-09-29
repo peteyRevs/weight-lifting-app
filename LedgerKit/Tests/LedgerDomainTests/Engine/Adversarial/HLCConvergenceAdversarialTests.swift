@@ -28,6 +28,18 @@ struct HLCConvergenceAdversarialTests {
             #expect(host.causalViolations.isEmpty, "\(host.device) stamped \(host.causalViolations) too early")
             #expect(host.state == expected, "\(host.device) did not converge")
             #expect(try await host.store.append(scenario.everything).isEmpty, "\(host.device) missed an envelope")
+            // Fix round 2 (decision F): the effects it ran leave the notification, the stored workout and
+            // the log as the state says, and no remote change buzzed.
+            #expect(host.notification == host.state?.rest?.endsAt, "\(host.device)'s rest notification is stale")
+            #expect(host.remoteHaptics == 0, "\(host.device) buzzed for a remote change")
+            switch host.state?.phase {
+            case .finished:
+                #expect(host.materialized == host.state, "\(host.device) did not materialise the final state")
+            case .discarded:
+                #expect(host.droppedLog, "\(host.device) kept a discarded log")
+            default:
+                #expect(host.materialized == nil)
+            }
         }
         #expect(scenario.lostActions(in: expected).isEmpty, "lost \(scenario.lostActions(in: expected))")
     }
@@ -52,7 +64,7 @@ struct HLCConvergenceAdversarialTests {
 
     /// A lost action needs the relaunched device's early stamp to land on a contested set, which random
     /// sessions rarely produce; `HostContractAdversarialTests` has the direct repro.
-    @Test("Finding 12 (documents): a host that forgets its HLC on relaunch stamps before envelopes it held")
+    @Test("Finding 12 (control for decision E): a host that forgets its HLC on relaunch stamps before what it held")
     func forgottenClockOnRelaunch_stampsEarly() async throws {
         var early = 0
         for seed in Self.sample {
@@ -63,7 +75,7 @@ struct HLCConvergenceAdversarialTests {
     }
 
     @Test(
-        "Finding 13 (documents): a host that reduces every newly stored envelope in arrival order leaves replay"
+        "Finding 13 (control for decision F): a host that reduces every new envelope in arrival order leaves replay"
     )
     func naiveHostLoop_leavesReplay() async throws {
         var diverged = 0
@@ -74,12 +86,21 @@ struct HLCConvergenceAdversarialTests {
         #expect(diverged > 0, "the naive loop never left replay in \(Self.sample.count) sessions")
     }
 
-    @Test("Finding 14 (documents): under ±30 s skew, some +30s taps on a rest the lifter sees running find it over")
+    /// Fix round 2 (decision B): `restExtended` carries the lifter's intent, so the drag no longer matters.
+    @Test(
+        """
+        Finding 14: under ±30 s skew some +30s taps on a rest the lifter sees running are stamped after its \
+        end, and every one still does what the lifter saw
+        """
+    )
     func dragStamps_judgeRunningRestsOver() async throws {
-        var judgedOver = 0
+        var (dragged, judgedOver) = (0, 0)
         for seed in Self.sample {
-            judgedOver += try await HLCScenario.run(HostPolicy(), seed: seed, steps: 40).extendsJudgedOver
+            let scenario = try await HLCScenario.run(HostPolicy(), seed: seed, steps: 40)
+            dragged += scenario.extendsStampedAfterEnd
+            judgedOver += scenario.extendsJudgedOver
         }
-        #expect(judgedOver > 0, "no +30s was judged over in \(Self.sample.count) sessions")
+        #expect(dragged > 0, "no +30s was stamped after its rest's end in \(Self.sample.count) sessions: no teeth")
+        #expect(judgedOver == 0, "\(judgedOver) +30s taps did not do what the lifter saw")
     }
 }

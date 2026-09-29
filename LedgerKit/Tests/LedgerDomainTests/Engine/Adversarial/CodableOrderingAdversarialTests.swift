@@ -49,7 +49,7 @@ struct CodableOrderingAdversarialTests {
     static func clockEvents() -> [WorkoutEvent] {
         [
             .restStarted(endsAt: .distantFuture, total: .nanoseconds(1)),
-            .restExtended(amount: .seconds(-30)),
+            .restExtended(amount: .seconds(-30), extendsShownRest: true, tappedAt: engineTime(12.345_678_9)),
             .restSkipped,
             .finished(endedAt: engineTime(3600.5)),
             .discarded(endedAt: .distantPast)
@@ -159,7 +159,7 @@ extension CodableOrderingAdversarialTests {
     )
     func conflictingKey_storeRejectsSecond_replayPrecondition() async throws {
         let logA = Adv.env(Adv.logged(0, 0, doneAt: 10), Adv.watch, seq: 1, at: 10)
-        let extendB = Adv.env(.restExtended(amount: .seconds(60)), Adv.watch, seq: 1, at: 10)
+        let extendB = Adv.env(Adv.extend(60, shown: true, tappedAt: 10), Adv.watch, seq: 1, at: 10)
         // A reinstalled or restored watch can reuse a seq it already sent (EngineError.conflictingEnvelope).
         for (first, second) in [(logA, extendB), (extendB, logA)] {
             let store: any WorkoutEventStore = InMemoryEventStore()

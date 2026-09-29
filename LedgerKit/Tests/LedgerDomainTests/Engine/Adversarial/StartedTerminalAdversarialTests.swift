@@ -90,7 +90,7 @@ extension StartedTerminalAdversarialTests {
                 alsoUpdateProgram: true
             ),
             .restStarted(endsAt: engineTime(seconds + 90), total: .seconds(90)),
-            .restExtended(amount: .seconds(30)),
+            Adv.extend(shown: true, tappedAt: seconds),
             .restSkipped,
             .finished(endedAt: engineTime(seconds)),
             .discarded(endedAt: engineTime(seconds))

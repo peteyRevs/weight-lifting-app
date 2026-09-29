@@ -120,7 +120,7 @@ extension MaterializeAdversarialTests {
     @Test(
         """
         Late envelopes: in every arrival order the stored record ends as replay of the whole log, or, when \
-        the finish never reached reduce on a live state, nothing is stored yet and the log is listed unmaterialized
+        the finish never reached reduce on a live state, nothing is stored yet and the listed log replays finished
         """
     )
     func rematerialization_convergesInEveryArrivalOrder() async throws {
@@ -149,7 +149,10 @@ extension MaterializeAdversarialTests {
             }
             if host.record == nil {
                 notYet += 1
-                #expect(try await host.host.store.unmaterializedWorkoutIDs() == [Adv.workoutID])
+                // Round 2 (decision D): the launch step lists the log and replay classifies it finished, so
+                // it is materialised there. `EffectsFromToTests` shows the rebuild effects do it at once.
+                #expect(try await host.host.store.uncompactedWorkoutIDs() == [Adv.workoutID])
+                #expect(try await host.host.replayed()?.phase == .finished)
             } else {
                 #expect(host.record == expected)
             }

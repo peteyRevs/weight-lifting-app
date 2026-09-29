@@ -105,8 +105,9 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
     }
 
     /// Rule 24: time since `startedAt`, frozen at `endedAt` once the workout ends; never negative.
-    /// It saturates at `Int64.max` seconds (NaN gives zero), because both dates can come from a peer's
-    /// envelope and `Duration.seconds` traps on a non-finite or out-of-range interval (F04 fix round 1).
+    /// It saturates at 2^63 s (`Double(Int64.max)`; NaN gives zero), because both dates can come from a
+    /// peer's envelope and `Duration.seconds` traps on a non-finite or out-of-range interval (F04 fix
+    /// round 1).
     public func elapsed(at now: Date) -> Duration {
         .seconds(min(max(0, (endedAt ?? now).timeIntervalSince(startedAt)), Double(Int64.max)))
     }

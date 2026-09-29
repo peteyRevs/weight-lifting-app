@@ -121,3 +121,61 @@ _Filled in by agents during delivery:_
 - `F17-live-sync/implementation-notes.md`
 - `F17-live-sync/test-findings.md`
 - `F17-live-sync/review.md`
+
+## Inputs from F04 (2026-09-29)
+
+F04 owns the pure engine and the `WorkoutEventStore` contract. F17 owns the host that runs them. The rules
+below are fixed by F04's fix round 2 (ADR-004 amendment, "The clock rule" onwards). Where they contradict
+this brief, they win, and the brief should be amended.
+
+1. **The host loop.** `reduce` keeps no log and must never see an envelope twice.
+   - Append every received batch to `WorkoutEventStore` first, whatever the effects.
+   - Take what `append` newly stored. If all of it sorts after the newest envelope already applied,
+     reduce it in sort order. Otherwise rebuild once with `WorkoutEngine.replay` of the stored log.
+     Never reduce an envelope of a batch after a rebuild that included it: that applies it twice.
+   - Own envelopes: stamp, reduce, run `reduce`'s effects (`.persist` before `.transmit`).
+   - The "Actor" rule above ("dedupe by `seen`, append, rebuild by replay") becomes this loop.
+2. **Remote effects depend on the path** (orchestrator, 2026-09-29; ADR-004 "The host loop"):
+   - reduced in order: `reduce`'s effects without `.persist`/`.transmit`, so criterion 9 stands (a remote
+     `.setLogged` plays `.haptic(.setLogged)` locally);
+   - applied by a rebuild: only `WorkoutEngine.effects(from:to:)` of the state before and after. It
+     emits materialise, `discardLog`, schedule or cancel of the rest notification, and
+     `.updateLiveActivity`, and never a haptic, so a reconnect burst does not buzz once per envelope.
+     Criterion 9 needs a companion case for this path.
+   - It re-emits `.materialize` whenever a finished state changes, including a rebuild from `nil` when
+     both finishes arrived before the `started`.
+   - It emits `.discardLog` when a late discard sorts before a finish that was already materialised.
+     F05 must then delete that workout; decide who owns that.
+3. **HLC recovery.** Before stamping anything after a launch, set the clock's `newest` to the largest
+   stored `wallClock` across `WorkoutEventStore.uncompactedWorkoutIDs()`. Skip a stored stamp your drift
+   bound would reject on receipt. The drift bound itself is still F17's (F04 fix round 1, finding 6).
+4. **Launch step and compaction.**
+   - `liveWorkoutIDs()` is gone. `uncompactedWorkoutIDs()` lists every stored log. Classify each by
+     `replay`: live means resume; finished or discarded means materialise or drop, then compact.
+   - A log that replays to `nil` is **never compacted**. Keep it, and request a resend.
+   - **Open for F17:** should the handshake base be the highest *contiguous* `seq` per device, rather than
+     `highestSeq`? With the maximum, a dropped seq 1–2 followed by a received seq 3 never heals.
+     `EventStoreAdversarialTests.holeBeforeTerminal_isKept_untilTheResendHeals` pins the hole.
+5. **Malformed envelopes** (`EventEnvelope.isWellFormed`) are no-ops for the engine but stay stored.
+   - A payload date more than 24 h from its stamp (`EventEnvelope.payloadTimeWindow`) is malformed. F10's
+     "Still lifting?" finish (decision #8) must not backdate `endedAt` by more than that; otherwise the
+     finish is ignored and the workout stays live.
+   - A NaN date is unequal to itself, so a store that compares envelopes with `==` would call a re-sent
+     copy a conflict. JSON cannot carry one. Reject non-finite dates when decoding a wire frame, before
+     anything is stored.
+6. **Lossless date encoding.** The codec above uses `.iso8601`, which drops fractional seconds. The
+   sender would then sort its own envelope by the precise stamp and the receiver by the truncated one,
+   and the devices diverge. Encode dates losslessly (the default `.deferredToDate` round-trips exactly,
+   `EventCodableTests`), or truncate `wallClock` when the envelope is created.
+7. **Renamed event labels** (SwiftLint `identifier_name` rejects `at:`, `to:`, `by:`):
+
+   | ADR-004 / brief | F04 |
+   |---|---|
+   | `setLogged(…, at:)` | `setLogged(…, doneAt:)` |
+   | `exerciseSwapped(…, to:, …)` | `exerciseSwapped(…, exerciseID:, …)` |
+   | `restExtended(by:)` | `restExtended(amount:extendsShownRest:tappedAt:)` |
+   | `finished(at:)`, `discarded(at:)` | `finished(endedAt:)`, `discarded(endedAt:)` |
+   | `Effect.scheduleRestNotification(at:)` | `Effect.scheduleRestNotification(endsAt:)` |
+
+   `WorkoutIntent.extendRest` must carry what the screen showed. The UI sets `extendsShownRest` when its
+   rest had time left (`RestTimer.remaining(at: now) > .zero`), and `tappedAt` is the intent's date.
