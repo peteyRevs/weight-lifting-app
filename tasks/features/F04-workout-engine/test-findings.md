@@ -587,3 +587,395 @@ clock the payload times (`doneAt`, `restStarted.endsAt`, `endedAt`) use.
 - Not one of 20,255 last-word logs or un-logs is lost.
 - The control shows the property has teeth: raw clocks give 817 early stamps and 4 lost actions in 100
   sessions.
+
+---
+
+# Round 3 — after fix round 2 (ab8faa1)
+
+Independent adversarial pass over `feat/F04-workout-engine` at `ab8faa1`: fix round 2 plus the orchestrator's
+correction on remote haptics. The contract is the brief, ADR-004 with its amendments (hybrid logical clock, the
+clock rule, malformed envelopes, recovery on launch, the host loop and its effects, as corrected), and the
+orchestrator decisions A–G and the correction in `implementation-notes.md`. I wrote the new tests from those
+texts and the public interfaces. My host model, `LiteralHost`, follows ADR-004's loop as written, with the
+corrected remote effects; it is not `SimHost`, `StoringHost` or `Replica`. I read the product code only to find
+root causes. No product code was edited.
+
+**Convention** (as in round 2): a failing test is a bug or a minor bug, and stays in the branch as a regression
+test. A spec question is pinned by a passing test marked "(documents)".
+
+## What I wrote
+
+24 new tests in 7 files under `LedgerKit/Tests/LedgerDomainTests/Engine/Adversarial/`:
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `Round3WellFormedAdversarialTests` | 7 | the predicate: false positives, its edges, dates it misses or checks for nothing; findings 15, 16 |
+| `Round3RestIntentAdversarialTests` | 5 | "+30s" intent under phone/watch races; finding 20 |
+| `Round3EffectsAdversarialTests` | 3 (1 property) | `effects(from:to:)` against `reduce`; the discard's order; finding 21 |
+| `Round3HostAdversarialSupport` | support | `LiteralHost`: the ADR-004 loop read literally, with a switch for the two readings of "applied" |
+| `Round3ScenarioAdversarialSupport` | support | seeded 2–3-device sessions: ±30 s skew, clock steps back, cut links, random-subset deliveries (a lost message, then its resend), shuffles, copies, relaunches |
+| `Round3HostAdversarialTests` | 6 (1 property) | the literal loop's convergence and effects; findings 17, 18, 19 |
+| `Round3StoreAdversarialTests` | 3 (one with 3 cases) | the contract suite against lossy stores; decision D around a discard; finding 22 |
+
+- **Host:** 16 pass and 8 fail: findings 15, 16 (three tests), 19, 21 and 22 (two tests).
+- **Simulators:** the same 24 tests run (none is an exit test); see "Gate".
+- **Property tests:** two on `PropertySeed.all`; two aggregates on its first 100 seeds.
+
+## Gate
+
+**Gate (2026-09-29):**
+- `scripts/check.sh --fast` (host): 672 tests in 111 suites; 664 pass and 8 fail. The 8 are this round's
+  regression tests for findings 15, 16 (three), 19, 21 and 22 (two). Format and lint pass. Log: scratchpad
+  `f04-g2r3-fast.log`.
+- Full `scripts/check.sh` through `sim-lock.py` (log: scratchpad `f04-g2r3-check.log`; the lock was acquired
+  after 285 s):
+  - Format passes (0 of 207 files), lint `--strict` passes, and the package graph matches.
+  - iOS `PR` plan: 677 tests; 668 pass, **8 fail**, 1 skipped (`ReplayPerformanceTests`, `.slow`). The 8 are
+    this round's. `check.sh` stops here (exit 65).
+- watchOS `PR-Watch` plan: I ran it on its own, with check.sh step 4's exact command, under the lock (log:
+  `f04-g2r3-watch.log`). 668 tests; 659 pass, **8 fail** (the same 8), 1 skipped.
+- No pre-existing test fails on any lane.
+
+**Nightly settings on the host** (`LEDGER_PROPERTY_SEED_COUNT=3000`):
+- `literalHost_convergesAndRebuildsNeverBuzz`, `matchesReduce_onIntentLogs`, the implementer's
+  `matchesReduce_onEveryStep` and `extremeValues_neverTrap_andStateEqualsItself`, and round 2's
+  `hlc_convergesAndKeepsEveryAction` all pass at 3,000 seeds (log: scratchpad `f04-g2r3-3000.log`).
+- Across those 3,000 literal-host sessions: 118,422 envelopes, 0 departures from replay, 0 haptics in a rebuild
+  or relaunch, and 17,980 remote haptics on the in-order path. 190 sessions end finished and 171 discarded.
+
+## Close-out of findings 9–14
+
+| # | Status | Evidence |
+|---|---|---|
+| 9 | **Resolved**, with residuals filed as finding 16 | The three retargeted `RestBoundAdversarialTests` and both exit twins pass. A JSON `doneAt` of 1e21, a 1e21 snapshot rest and a NaN `endsAt` are ignored, and none reaches the ring. The same decoded dates handed to `RestTimer` directly do not trap. `ExtremeValuePropertyTests` passes at 3,000 seeds. Residuals: a snapshot date the predicate never checks still breaks `==` (16a), and a well-formed rest can still show 23 h left (16c). |
+| 10 | **Resolved**, with a residual filed as finding 22 | `EventStoreMutationAdversarialTests`: the contract suite kills all 11 mutants and passes `InMemoryEventStore`. The two replaced mutants are the faithful analogues on the one remaining list. Residual: two more plausible stores pass every clause (22). |
+| 11 | **Resolved by decision** (D) | One list, `uncompactedWorkoutIDs()`, classified by `replay`; a log that replays to `nil` is never compacted. The three former "(documents)" tests now assert this contract, and they pass. The contiguous-seq question went to F17. The orphan logs left after a compaction or a discard are noted under "Out of scope". |
+| 12 | **Resolved by decision** (E) | ADR-004 "Recovery on launch". `hlcAfterRelaunch_mustBeRecoveredFromTheLog` passes, with the forgetful host kept as its control. `hlc_convergesAndKeepsEveryAction` passes at 3,000 seeds. `LiteralHost` recovers the clock from every uncompacted log. |
+| 13 | **Resolved by decision** (F and the correction) | The loop is written into ADR-004, `reduce`'s doc and `append`'s doc, and `effects(from:to:)` exists. `LiteralHost`, following the ADR's text, leaves replay 0 times in 3,000 sessions. Residuals: what "already applied" means (17), the reconnect burst on the in-order path (18), and docs and tests still stating the rule the correction replaced (19). |
+| 14 | **Resolved by decision** (B) | `restExtended(amount:extendsShownRest:tappedAt:)`. `hlcDraggedStamp_turnsAnExtendIntoARestart` passes with the lifter's outcome on both devices. `dragStamps_judgeRunningRestsOver` counts dragged stamps (more than 0) and taps that did otherwise than the lifter saw (0). The races hold (see "Attacked and held"). Residual: finding 20. |
+
+## Audit of the tests fix round 2 edited
+
+Every file `git show ab8faa1 -- LedgerKit/Tests` lists, plus the `ModelOracle` in `LedgerTestSupport`. Two
+assertions are rejected, both for the same reason (finding 19). Everything else is accepted.
+
+| Test (edit) | Verdict | Reason |
+|---|---|---|
+| `BoundsAdversarialTests`, `StartedTerminalAdversarialTests`, `GarbagePropertyAdversarialTests`, `CodableOrderingAdversarialTests` (event shape; garbage draws a random flag) | Accept | Decision B; the assertions are unchanged |
+| `EffectsAdversarialTests` (`restExtended` case and `duplicateRestExtended_extendsOnce`, shown rest) | Accept | Decision B; the effects expected are unchanged |
+| `EngineAdversarialSupport.extend`, `EngineAdversarialGenerators.plus30`, `RestAdversarialTests.extend`: shown iff `remaining > 0` at the tap, on the tapping device's clock | Accept | Exactly the rule the case's doc gives the UI (decision B). With one clock the outcomes are identical |
+| `RestAdversarialTests.concurrentExtends_bothCount` (both shown) | Accept | Both taps land before the rest's end; the assertion is unchanged |
+| `EngineTrapAdversarialTests.hugeDurations_doNotTrap` (amounts through `extend(on:)`) | Accept, with a note | Every huge amount is now malformed, so this round-1 exit test no longer reaches the saturation path. `longestRest_saturatesAHostileStateRest` covers that path |
+| `RestBoundAdversarialTests.taps`, `bound_edges`, `zeroAndNegativeExtensions` | Accept | Decision A rejects lengths outside `0 ... longestRest`, where round 1 clamped. The kept rows are unchanged |
+| `RestBoundAdversarialTests`: the three finding-9 tests retargeted to "…_isIgnored" | Accept | The question ("can this date reach the ring or break `==`?") stands, and the NaN test still asserts `replay == replay` |
+| The two finding-9 exit twins, which now also call `remaining` and `fraction` directly | Accept | A strengthening: without the direct call they would pass vacuously |
+| `EventStoreAdversarialTests`: lifecycle tests, `LaunchStep`, the three finding-11 tests | Accept, with a note | Decision D. `compactedThenPeerResend_isListed_andKeptUntilHealed` heals only because its comment has the watch relay the phone's own `started` (line 186). ADR-004 rule 4 resends a device's own envelopes only, and no brief specifies a relay (see "Out of scope") |
+| `EventStoreContractProbes` deleted; `EventStoreMutationAdversarialTests` runs the contract suite; two mutants replaced and one added | Accept | Decision C. The replaced mutants mutated lists that no longer exist; `listsOnlyStartedLogs` and `unlistsEndedLogs` are their analogues on the one list. All 11 are killed |
+| `MaterializeAdversarialTests.rematerialization_convergesInEveryArrivalOrder` | Accept | Decision D. The count assertion is unchanged, and it now also requires a finished replay |
+| `HostContractAdversarialTests`: `hlcAfterRelaunch…`, `arrivalOrderReduce…`, `rebuildThenReduceInOneBatch…` | Accept | Decisions E and F. Each asserts the rule, and keeps the wrong reading as a control |
+| `HostContractAdversarialTests.hlcDraggedStamp_turnsAnExtendIntoARestart` | Accept | Decision B: the lifter's outcome on both devices, and the stamp still lands after the rest's end |
+| `HLCConvergenceAdversarialTests.dragStamps_judgeRunningRestsOver`, and the controls' display names | Accept | Decision B; the hazard is still counted, so the test has teeth |
+| `HLCConvergenceAdversarialTests.hlc_convergesAndKeepsEveryAction`: notification, materialisation and dropped-log assertions | Accept | Decision F |
+| `hlc_convergesAndKeepsEveryAction`: `remoteHaptics == 0` | **Reject** | The orchestrator's correction: a remote envelope reduced in order plays its haptic (F17 criterion 9). Finding 19 |
+| `HLCHostAdversarialSupport.SimHost`: recovery on relaunch | Accept | Decision E |
+| `SimHost`: `effects(from:to:)` for every received envelope | **Reject** | The same correction. On the in-order path the host runs `reduce`'s effects less persist and transmit. Finding 19 |
+| `HLCScenarioAdversarialSupport` ("+30s" metric against the lifter's expectation; dragged stamps counted) | Accept | Decision B |
+| `ConvergenceTests`, `EffectTests`, `ReduceTerminalTests.lateEvents`, `EngineTesting.extend`, `RandomWorkout` (random flag) | Accept | The event shape only; `RandomWorkout` now covers both branches of the flag |
+| `ReduceRestTests`: criterion 5 with both flags; `extend_afterRestIsOver…`; `extend_followsTheLiftersIntent_notTheClock` replacing `extend_atExactEnd…` | Accept | Decision B: the engine no longer judges "at the exact end" |
+| `ReduceRestTests.longestRest_holdsGrownRests`, `longestRest_saturatesAHostileStateRest` | Accept | Decision A. The hostile inputs moved to `EnvelopeWellFormedTests`; the saturation still guards `reduce`'s input |
+| `ReduceTerminalTests.summary_ofCorruptEndedAt_saturatesElapsed` | Accept | The finish is ignored, and the saturation is asserted on a state that holds the date |
+| New `EffectsFromToTests`, except the next row | Accept, with a note | `matchesReduce_onEveryStep` is sound, but `RandomWorkout`'s snapshots never carry a rest, so it misses finding 21 |
+| `EffectsFromToTests.rebuildEffects_materializeInEveryArrivalOrder`: `host.remoteHaptics == 0` through `SimHost` | **Reject** (that assertion only) | In arrival orders where a remote set log sorts after everything applied, the corrected loop plays its haptic. The materialisation and notification assertions are accepted |
+| New `EnvelopeWellFormedTests` | Accept, with a note | One clause per test, at both edges. The predicate's list of dates misses `lastPerformance.date` (16a) |
+| New `ExtremeValuePropertyTests` | Accept, with a note | Its `replay(log) == replay(log)` cannot see a NaN nested in `exercises`: both states share the decoded array's storage, and `Array ==` returns early on identical storage (16a) |
+| `InMemoryEventStore.uncompactedWorkoutIDs`; `WorkoutEventStoreContractTests` rewritten as nine clauses | Accept, with a note | Decisions C and D. Its fixtures sit on whole and half seconds, so it cannot see a lossy store (finding 22) |
+| New `RestTimerTests.remainingAndFraction_saturate` | Accept | A.2 |
+| `ModelOracle`: `accepts`, and "+30s" by intent (`LedgerTestSupport`) | Accept | It is written independently and never calls the engine. Its date list mirrors the engine's, so it shares 16a |
+
+## New findings
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | 15 |
+| minor bug | 4 | 16, 19, 21, 22 |
+| spec question | 3 | 17, 18, 20 |
+
+### 15. bug — The 24 h payload window drops a "Still lifting?" Finish made more than a day after the last set; the workout stays live
+
+**Repro** (`Round3WellFormedAdversarialTests.stillLifting_finishOpenedDaysLater_isKept`):
+```swift
+replay([ start,
+         setLogged(0, 0, doneAt: 3600)          @ 3600,
+         finished(endedAt: 3600)                @ 3600 + 30 h ])   // the app is opened 30 h later
+// expected: .finished, endedAt 3600, elapsed 1 h.   actual: .live, endedAt nil.
+// Opened 20 h later (the control), it finishes.
+```
+
+**Expected:** F23 criterion 6 says: "Given a live workout with `lastActivityAt` older than 4 h, when the app
+opens, then a sheet offers Finish / Discard / Keep going; Finish uses the last activity time as `endedAt`."
+Decision #8 prompts "on next open", which can be days later: a workout left open from Saturday and opened on
+Monday. `payloadTimeWindow`'s own doc names this case as what the generous window is for
+(`EventEnvelope.swift:61`).
+
+**Actual:**
+- `endedAt` lies 30 h before the stamp, so the envelope is malformed.
+- On the device that creates it, `reduce` returns `(state, [])`: no `.persist`, no `.transmit` and no error. The
+  Finish does nothing, and the prompt comes back on every open.
+- Discard, at the current time, still works. "Keep going" and a later Finish record a workout of several days,
+  the "9-hour workouts" decision #8 exists to prevent.
+- No host can make this finish well-formed: the hybrid logical clock never stamps in the past.
+
+**Why it is F04's:** the predicate is F04's. The hand-off (`F17-live-sync.md:160–162`) tells F10 not to backdate
+beyond 24 h. But F10 excludes the prompt (`F10-active-workout.md:24`), and F23, which owns it, requires the
+opposite.
+
+**Fix direction:** the window exists to stop traps and NaN (ADR-004, "Malformed envelopes"). `endedAt` feeds only
+`elapsed`, which saturates, so a finite `endedAt` needs no lower bound, or a far wider one. The alternative is an
+orchestrator decision to amend F23 criterion 6, which then stores a wrong duration.
+
+### 16. minor bug — The predicate misses a date it should check, and checks one it should not
+
+All three need input no real device produces.
+
+**a. A snapshot's `lastPerformance.date` is never checked**
+(`snapshotLastPerformanceNaN_breaksEquality`):
+- With a NaN date, carried by a binary plist, the `started` is well-formed.
+- Two decodes of the same bytes replay to unequal states.
+- A re-sent copy makes `InMemoryEventStore.append` throw `conflictingEnvelope`, and the batch is all or nothing.
+- A single decoded log does not show it: `replay(log) == replay(log)` passes, because both states share the
+  snapshot's array storage and `Array ==` returns early on identical storage. `ExtremeValuePropertyTests` has the
+  same blind spot for any date nested in `exercises`.
+- JSON cannot carry NaN. F17's wire guard (hand-off item 5) covers it only if it rejects every non-finite date in
+  a frame.
+
+**b. A `setAdded` is dropped over a date `reduce` discards** (`setAdded_ignoredDoneAt_dropsTheAdd`). `reduce` adds
+the row undone and ignores the set's `doneAt`. Yet a `doneAt` more than a day from the stamp drops the whole add.
+
+**c. A well-formed rest can show 23 h left** (`eventRests_endWithinLongestRestOfTheirStamp`):
+- `restStarted(endsAt: stamp + 23 h, total: 90 s)` and `setLogged(doneAt: stamp + 23 h)` are both well-formed.
+- They give rests showing 23 h left against totals of 90 s and 150 s.
+- A `started` snapshot's rest must end within `longestRest` of its start ("a rest the engine could hold"), but the
+  event clauses have no such bound.
+- Round 1 clamped `endsAt` to `longestRest` after the rest's start. Round 2 removed that clamp because "every rest
+  length is now validated", but only `total` is.
+
+**Fix direction:**
+- check every date a snapshot carries for finiteness;
+- skip or clear `set.doneAt` in `setAdded`;
+- bound a rest's end by the stamp plus `longestRest`. A device's payload time never runs ahead of its own
+  stamp, so the window can be asymmetric.
+
+### 17. spec question — "The newest envelope already applied": the loop is right under one reading only
+
+ADR-004 (line 149), `reduce`'s doc (`WorkoutEngine.swift:26`) and F17's hand-off (line 133) all say the same:
+reduce when everything newly stored "sorts after the newest envelope already applied", else rebuild. That phrase
+has two readings.
+
+**A. Every envelope handed to `reduce` or `replay`, ignored or not.** This is the newest envelope stored before
+this append. `LiteralHost` under this reading leaves replay 0 times in 3,000 sessions.
+
+**B. Only envelopes `reduce` accepted** (`appliedMeaning_decidesALostFirstMessage`):
+1. The watch starts a workout (decision #16).
+2. The phone gets the watch's seq 2, a set log, before seq 1, the `started`: a lost message, then the resend.
+3. Seq 2 is ignored on `nil` and not counted as applied.
+4. The `started` then sorts after everything applied, so the phone reduces it, and never applies seq 2.
+5. Every later envelope also sorts after, so the phone shows set 1 undone until a relaunch. The watch shows it
+   done.
+
+Under reading B, the 3,000 random sessions leave replay 1,801 times.
+
+**Raw clocks** (`rawStamps_literalLoopLeavesReplay`):
+- ADR-004 says raw stamps "still converge, but on stamp order" (line 116), and that holds for `replay`.
+- A literal host under reading A still leaves replay: a third device hears a peer's early set log (stamp 91 s)
+  before the `started` (100 s), then reduces the `started` on the in-order path.
+- `Replica` and `SimHost` take the reduce path only when the state is not `nil`, which the ADR does not say, so
+  they rebuild instead.
+
+**Question:** should the loop say "every newly stored envelope sorts after the newest envelope stored before
+this append, **and** the state is not `nil`"? Those are the two conditions the test hosts already use.
+
+### 18. spec question — The in-order path buzzes once per envelope of a reconnect batch
+
+ADR-004 (lines 158–159) says a rebuild plays no haptic, "so a reconnect that applies many envelopes at once does
+not buzz for each". The doc on `effects(from:to:)` (`WorkoutEngine+Replay.swift:29–30`) says "a reconnect that
+delivers a dozen sets plays nothing". Both hold only when the reconnect rebuilds.
+
+**Repro** (`reconnectBatch_inOrder_buzzesPerSet`):
+- During a partition only the watch acts: it logs five sets.
+- The phone's reconnect batch all sorts after what the phone applied, so the phone reduces it in order and, per
+  the correction, plays `reduce`'s haptics: five buzzes.
+- Had the phone tapped Skip during the partition, the same batch would rebuild and play nothing.
+- In 3,000 random sessions the largest burst from one batch was 10.
+
+Which device buzzes depends on which one acted during the partition, not on anything the lifter chose.
+
+**Question:** should the in-order path play `reduce`'s haptics only for a batch of one envelope, or only for the
+last set log of a batch? F17 criterion 9 covers a single remote set.
+
+### 19. minor bug — The remote-haptics correction did not reach `reduce`'s and `Effect`'s docs, or the host model and its tests
+
+The correction reached ADR-004, the doc on `effects(from:to:)` and F17's hand-off. It is missing from:
+- `WorkoutEngine.swift:30–32`, which says the host "runs `effects(from:to:)` …, and only those, for what it
+  received. It runs the effects below only for an envelope it created".
+- `Effect.swift:15–16`, which says: "For envelopes it received, the host runs only
+  `WorkoutEngine.effects(from:to:)`".
+- `SimHost` (`HLCHostAdversarialSupport.swift:42–44, 70, 175–180`). It runs `effects(from:to:)` for a remote
+  envelope it reduced in order, and counts any remote haptic as a failure.
+- The tests built on `SimHost`: `hlc_convergesAndKeepsEveryAction` (`HLCConvergenceAdversarialTests.swift:34`)
+  and `rebuildEffects_materializeInEveryArrivalOrder` (`EffectsFromToTests.swift:155`) assert
+  `remoteHaptics == 0`.
+
+So no test exercises the corrected in-order path, and both properties would fail a host that follows the
+corrected ADR. F17's implementer reads `reduce`'s and `Effect`'s docs first.
+
+**Repro** (`simHost_playsTheInOrderRemoteHaptic`): a remote set log that sorts after everything the host applied
+plays one haptic on `LiteralHost`, and none on `SimHost`.
+
+**Fix:**
+- correct the two doc comments;
+- make `SimHost` run `reduce`'s effects, less persist and transmit, on the in-order path;
+- assert that a rebuild plays no haptic, rather than that no remote envelope does. `LiteralHost`'s property does
+  this: over 3,000 sessions, 0 haptics in a rebuild and 17,980 on the in-order path.
+
+### 20. spec question — "+30s" on a device that shows no rest replaces the peer's longer running rest
+
+**Repro** (`unseenRest_plus30Shortens`):
+1. The phone logs bench set 1 at 10 s. Its rest runs to 160 s.
+2. The watch has not heard of the log yet, from latency or a partition, so it shows no rest.
+3. The lifter taps +30s on the watch at 15 s: `extendsShownRest` is false, so a fresh 30 s rest starts at the tap.
+4. That tap is stamped after the log, so it replaces the 150 s rest.
+5. After a "+30s", the phone's ring drops from 145 s left to 30 s.
+
+The devices converge in every arrival order.
+
+**Question:** should a fresh "+30s" keep the later of the running rest's end and the tap plus the amount, so that
+"+30s" never shortens a rest? Or is this accepted, on the reading that the watch meant "start a rest"?
+
+### 21. minor bug — `reduce` never schedules a `started` snapshot's rest; the rebuild effects do
+
+**Repro** (`startedWithRest_reduceSchedulesItToo`): a `started` whose snapshot holds a rest ending at 90 s, total
+90 s, which is well-formed.
+- `effects(from: nil, to: state)` includes `.scheduleRestNotification(90 s)`.
+- `reduce(nil, started)` returns `[persist, transmit, updateLiveActivity]`.
+
+A device that applies its own `started`, or a received one in order, never schedules the rest-over notification;
+a device that rebuilds does.
+
+This input is contrived: `SessionBuilder`'s snapshots carry no rest. `matchesReduce_onEveryStep` cannot see it,
+because `RandomWorkout`'s snapshots carry none either.
+
+**Fix:** either `step` returns the snapshot rest's schedule on a `started`, or `isWellFormed` rejects a snapshot
+that has a rest.
+
+### 22. minor bug — The contract suite passes a store that loses sub-second precision, and one that keeps a copy per re-append
+
+**Repro** (`contract_catchesLossyStores`, with `LossyEventStore`):
+- **`millisecondsJSON` passes all nine clauses.**
+  - GRDB's default encoder for JSON columns writes dates as `.millisecondsSince1970`, and multiplying by 1,000
+    then dividing does not round-trip a `Date`.
+  - 508 of 1,000 sub-second stamps near the fixture read back different, as do 520 of 1,000 stamps spaced like
+    HLC stamps (probe: scratchpad `r3probe`).
+- **`keepsCopies`** (no unique index) passes all nine too, because the clauses compare what is stored as a `Set`.
+  F05's own criterion 7 would catch this one.
+- **`iso8601JSON`** (whole seconds; F17's brief sketches that codec) is caught, but only by the one half-second
+  fixture, in `conflictOnStampOnly`.
+
+Every other fixture sits on a whole or half second, which all three encodings round-trip exactly.
+
+**Consequence** (`iso8601Store_losesAnUnlog`):
+- A store that keeps whole seconds makes two causal envelopes from two devices within one second tie on
+  reload, so they sort by device ID.
+- The phone's un-log of the watch's set is then lost on replay: finding 6 again.
+- With millisecond loss, a re-sent envelope differs from the stored copy. A store that compares the incoming copy
+  with what it reads back then throws `conflictingEnvelope`, and rejects the whole batch.
+
+**Fix:**
+- add a clause: an envelope whose `wallClock` and payload dates are not whole milliseconds reads back `==`, and
+  re-appending it changes nothing;
+- compare stored logs as arrays, with a count check.
+
+## Out of scope, noted
+
+1. **Dropping a log at the terminal (F05 and F17).**
+   - The phone discards and runs `.discardLog`. The partitioned watch's envelopes then land in an empty log, which
+     replays to `nil`.
+   - Decision D keeps that log and asks for a resend, for ever: under ADR-004 rule 4 the watch resends only its
+     own envelopes, never the phone's `started` (`discardLogThenLatePeer_orphanIsKeptForever`).
+   - The watch never hears of the discard from the phone either, because the phone has no log left to resend.
+   - Compaction after materialisation has the same shape (round 1, "Open for F05 and F17").
+   - F17 should drop or compact a log only after the peer has acknowledged the terminal, or keep a tombstone.
+2. **F17's drift bound must stay well under `payloadTimeWindow`.**
+   - With a peer 24 h or more ahead, the hybrid logical clock drags this device's stamps so far from its payload
+     times that every timed action it creates is malformed.
+   - `reduce` then returns `(state, [])`, so the tap is neither stored nor sent, and nothing reports it
+     (`peerClockADayAhead_dragsStamps`: kept at 23 h, dropped at 24.5 h).
+   - The host should check `isWellFormed` before it creates an envelope, and report a failure.
+3. **Rest notifications in the past.** A late remote rest reaches the rebuild or in-order path with `endsAt`
+   already past, and is scheduled anyway. F23 criterion 1 handles this on the phone ("fires immediately if already
+   past"); the watch (F18) needs the same rule.
+4. **F05's brief is stale.**
+   - Criterion 8 still names `liveWorkoutIDs()`, which no longer exists.
+   - Its `workout_event.wall_clock TEXT` column holds milliseconds at most, if F05 ever orders or rebuilds
+     envelopes from it (finding 22).
+5. **The hand-off's "Still lifting?" item names F10.** The prompt belongs to F23 (finding 15).
+
+## Attacked and held
+
+**The predicate (decision A):**
+- These are well-formed and applied: a 3 h workout, a 45-minute rest before a set, a "+30s" after an hour's pause,
+  and a finish 20 h after the last set (`realisticLongSessions_areWellFormed`).
+- A peer 23 h ahead drags the stamps 23 h past the payload times, and the device's actions are kept.
+- The window's edges are inclusive at a realistic fractional 2026 stamp: within the binade, adding and
+  subtracting 86,400 s is exact. One millisecond beyond either edge is excluded.
+- DST changes nothing, because dates are absolute. Leap seconds cannot appear in a `Date`.
+- The verdict is plain IEEE arithmetic, so both devices reach the same one, given the lossless encoding the
+  hand-off requires.
+
+**Saturating arithmetic.** I grepped all of `LedgerDomain` for Duration, TimeInterval and Int conversions.
+Nothing on an engine path can trap:
+- `RestTimer.remaining`, `RestTimer.fraction` and `elapsed` saturate.
+- `Duration / Duration`, `Date ± Double` and `abs` never trap.
+- `saturatingSum` can overflow only upwards, and is pinned there.
+- `NumberText.fixed` is only ever called with one fraction digit, so its `Int(…)` fits.
+- `roundedToInt` goes through `NSDecimalNumber.intValue`, which does not trap.
+- The UUID derivation uses wrapping operations.
+- The fuzz passes at 3,000 seeds.
+
+**"+30s" under races (decision B).** Each race gives the same state in every arrival order, and `Replica`, which
+reduces or rebuilds, agrees with replay:
+- both devices extend: both count, +60 s in all;
+- a skip and an extend race: the later one wins. Skip first gives a fresh 30 s rest from the tap; extend first
+  gives no rest;
+- an extend lands after the rest was replaced: it grows the rest now running;
+- decision #7: "+30s" on a rest shown as over starts a fresh 30 s rest at the tap.
+
+**`effects(from:to:)` (decision F):**
+- It equals `reduce`'s effects, less persist, transmit, haptics and no-op schedules. That holds on 3,000 seeded
+  two-device intent logs with stale rows, both "+30s" flags, terminals and envelopes after the end.
+- It never plays a haptic.
+- A discard's order: `reduce` gives persist, transmit, `discardLog`, cancel, then redraw; a rebuild gives
+  `discardLog`, cancel, then redraw; from `nil` it gives the same.
+- It materialises on a rebuild from `nil` and on a finished state that changed. In every finished session of the
+  literal-host property, the stored workout equals the final state.
+
+**The literal host loop, under reading A:**
+- 3,000 seeds and 118,422 envelopes, over 2–3 devices with ±30 s skew, clock steps, partitions, lost and resent
+  messages, shuffles, copies and relaunches.
+- It leaves replay 0 times after any delivery, and every device converges.
+- The notification always equals the rest's end.
+- The stored workout equals the final state in all 190 finished sessions, and the log is dropped in all 171
+  discarded ones.
+- A rebuild or relaunch plays no haptic, while 17,980 remote haptics play on the in-order path.
+
+**The store:**
+- The contract suite kills all 11 mutants.
+- Classification by replay holds through the lifecycle:
+  - a log with only an early envelope is kept;
+  - a live log is resumed;
+  - a finished log is materialised and compacted;
+  - a discarded log is dropped and compacted;
+  - a hole before the terminal is kept until the resend fills it.
+
+---
+
+**Verdict:** G2 cannot close because finding 15 (bug): the 24 h payload window silently drops a "Still lifting?" Finish opened more than a day after the last set (F23 criterion 6), so the workout stays live; the rest held, and findings 16–22 are minor or spec questions.
