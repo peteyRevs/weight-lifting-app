@@ -258,3 +258,332 @@ generator never produced an unusable `started`.
   - Reps 0 on the wire fails to decode.
   - `<` is a strict total order on distinct keys. It equals the spelled-out
     `(wallClock, uuidString, seq)` order and `ModelOracle.precedes` for random device UUIDs.
+
+---
+
+# Round 2 — after fix round 1 (d2de958)
+
+Independent adversarial pass over `feat/F04-workout-engine` at `d2de958`. The contract is the brief, ADR-004
+with its 2026-09-29 amendment (hybrid logical clock), and the orchestrator decisions on findings 4–8
+recorded in `implementation-notes.md` ("Fix round 1"). I wrote the new tests from those texts and the public
+interfaces. The host models (`HybridClock`, `SimHost`) are my own, not the implementer's `HLCDevice` or
+`StoringHost`. I read the product code only to find root causes. No product code was edited.
+
+**Convention.** A test that fails is a bug or minor bug; it stays in the branch as a regression test. A
+spec question is pinned by a passing test marked "(documents)". That test shows the behaviour under each
+reading of the contract, so the gate stays red only for bugs.
+
+## What I wrote
+
+35 new tests in 9 files under `LedgerKit/Tests/LedgerDomainTests/Engine/Adversarial/`:
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `RestBoundAdversarialTests` | 11 (2 macOS exit) | `longestRest`, the saturating +30s sum, `elapsed`; finding 9 |
+| `EventStoreAdversarialTests` | 10 | `append` returning what it newly stored; live vs unmaterialized vs replay; finding 11 |
+| `EventStoreContractProbes` | support | 9 contract probes (`StoreProbe.violations`), usable by F05 against GRDB |
+| `EventStoreMutationAdversarialTests` | 2 (11 cases) | the probes pass `InMemoryEventStore` and kill 10 mutant stores; finding 10 |
+| `MaterializeAdversarialTests` | 3 (1 property) | `.materialize(finalState)`, `summary` from it, the re-materialisation rule |
+| `HLCHostAdversarialSupport` | support | `HybridClock` (the amendment's formula); `SimHost`, a host that stores first and reduces or rebuilds |
+| `HLCScenarioAdversarialSupport` | support | seeded 2–3-device sessions: ±30 s skew, clock steps back, per-link partitions, relaunches, batched, shuffled and duplicated delivery |
+| `HLCConvergenceAdversarialTests` | 5 (1 property) | HLC convergence and "every lifter action kept"; controls for findings 12–14 |
+| `HostContractAdversarialTests` | 4 | minimal repros for findings 12–14 |
+
+- **Host:** 30 pass, 5 fail. All five failures are finding 9: three plain tests and both exit tests.
+- **Simulators** (no exit tests): 33 run, 3 fail.
+- **Property tests:** the two `.property` tests run on `PropertySeed.all`; four aggregate tests run on its
+  first 100 seeds.
+
+## Results per plan
+
+**Gate (2026-09-29):**
+- `scripts/check.sh --fast` (host): 636 tests in 103 suites; 631 pass, 5 fail (finding 9).
+- `scripts/check.sh --lint-only`: format and lint (`--strict`) pass.
+- Full `scripts/check.sh` through `sim-lock.py` (log: scratchpad `f04-g2r2-check.log`):
+  - Format passes (0 of 198 files), lint `--strict` passes, and the package graph is unchanged.
+  - iOS `PR` plan: 641 tests; 637 pass, **3 fail**, 1 skipped (`ReplayPerformanceTests`, `.slow`).
+    The 3 failures are finding 9's plain tests, and `check.sh` stops here (exit 65).
+- watchOS `PR-Watch` plan: I ran it on its own, with check.sh step 4's exact command, under the lock (log:
+  `f04-g2r2-watch.log`). 632 tests; 628 pass, **3 fail** (the same three), 1 skipped.
+- No pre-existing test fails on any lane. The first full run (`f04-g2r2-check-run1.log`) compiled before
+  the final assertion of `hlcDraggedStamp_turnsAnExtendIntoARestart` existed. The run reported above covers
+  the final code.
+
+**Nightly settings on the host** (`LEDGER_PROPERTY_SEED_COUNT=3000`):
+- The HLC property and the materialise property pass at 3,000 seeds. Across those sessions: 92,738
+  envelopes, 20,255 last-word actions checked, none lost, 0 early stamps.
+- The round-1 regressions for findings 2 and 3 pass at 5,000 seeds.
+
+## Close-out of findings 1–3
+
+| # | Status | Evidence |
+|---|---|---|
+| 1 | **Resolved**, with a residual filed as finding 9 | Both round-1 exit tests (`decodedMaxDurationThenPlus30_doesNotTrap`, `hugeDurations_doNotTrap`) pass unchanged on the host. The clamp and the saturation hold at every edge I tried (see "Attacked and held"). The residual: the bound is measured from an anchor that is itself unchecked, so a stored envelope can still crash the rest UI. |
+| 2 | **Resolved** | `invalidFirstStarted_doesNotDropBufferedEnvelopes` passes. `garbage_replayMatchesOracle` passes at 200 seeds and at 5,000 (it failed at 2,000 before the fix). `foldOrder` now fronts only a usable `started`. |
+| 3 | **Resolved** | `strayWorkoutEnvelope_doesNotShadowSameKey` passes, including its assertion on the oracle. `foldOrder` filters before it dedupes: `$0.workoutID == workout && seen.insert($0.key).inserted`. The `&&` short-circuit is load-bearing, and a stray key is never inserted. The oracle's fix is its own loop code. |
+
+## Audit of the tests fix round 1 edited
+
+No edit is rejected. Every weakening or retarget rests on an orchestrator decision.
+
+| Test (edit) | Verdict | Reason |
+|---|---|---|
+| `EffectsAdversarialTests.reduceTwice_equalsOnce` → `duplicateInLog_replayEqualsOnce` | Accept | Decision 5 moves the idempotence law to `replay`. It still ties replay to a single `reduce` for every case. `reduce` has no log, so it cannot be idempotent for `restExtended`. |
+| `duplicateSetLogged_noSecondHaptic`, through `StoringHost` | Accept | Decision 5's precondition (dedupe by key before reducing). The assertions are unchanged. |
+| `duplicateRestExtended_extendsOnce`, through `StoringHost`, plus `replayed() == state` | Accept | Same decision, and the test is stronger. |
+| `terminalCases` (`finished`) expects `.materialize(final state)` | Accept | Decision 8. |
+| `TerminalOutcomeAdversarialTests.materialized` / `summaries` and callers | Accept | Decision 8. The numeric assertions are unchanged, and `materialized == [ended]` is added. |
+| The three `…_isPersisted` → `…_isStoredByHost` | Accept, with a note | Decision 4(b): the assertion moves from the effects to the host's store. Note: `envelopeBeforeStarted_isStoredByHost` asserts on `host.replayed()`, not `host.state`. `StoringHost.state` keeps that early set undone even after the `started` arrives. That is right for the decision, but `StoringHost` is not a correct host (finding 13). |
+| The three `ClockSkewAdversarialTests`, stamped by `HLCDevice` | Accept | Decision 6. `HLCDevice` uses the amendment's formula, identical to my independent `HybridClock`. The assertions are unchanged. |
+| New: `withoutHLCPrecondition_rawSkewedStamps_convergeOnStampOrder` | Accept | It documents the precondition, and asserts convergence over 24 arrival orders. |
+| `conflictingKey_replayDependsOnArrival` → `conflictingKey_storeRejectsSecond_replayPrecondition` | Accept | Decision 7 says `replay` breaks no tie. The old assertion demanded exactly what the decision rules out. The new one asserts that the store enforces the precondition in both arrival orders. |
+| `EffectTests.effects_finished`, `ReduceTerminalTests.finished_endsAndMaterializes`, `criterion12_programUpdate_survivesFinish` | Accept | Decision 8. |
+| `ReplayTests.foldOrder_dedupesAndLeadsWithStarted`: a log with no `started` folds to `[]` | Accept | Findings 2 and 3. `foldOrder` is internal, and `replay` of that log is `nil` as before. |
+| `EngineAdversarialSupport`: `StoringHost`, `HLCDevice` added | Accept as support | `StoringHost` must not be promoted to `LedgerTestSupport` as it is (finding 13). |
+| `ModelOracle.replay`, filter before dedupe (`LedgerTestSupport`) | Accept | The oracle had finding 3's bug. The fix is its own loop code, and it still never calls the engine. |
+
+## New findings
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | 9 |
+| minor bug | 1 | 10 |
+| spec question | 4 | 11, 12, 13, 14 |
+
+### 9. bug — Absurd or non-finite dates escape the rest bound: the rest ring traps on a JSON value, and NaN breaks `==`
+
+The fix measures "at most `longestRest` after the rest starts" from the rest's own anchor. It never checks
+the anchor.
+
+**Repro 1** (`RestBoundAdversarialTests.autoRest_absurdDoneAt_endsNearItsEnvelope`, and its exit twin):
+```swift
+// Default JSONDecoder; 1e21 is a finite JSON number.
+let event = decode(#"{"setLogged":{…,"doneAt":1e21}}"#)
+let rest = replay([start, env(event, watch, seq: 1, at: 20)])!.rest!   // auto rest anchored at doneAt
+rest.endsAt.timeIntervalSince(engineTime(20))   // 1e21, not ≤ 3600
+rest.remaining(at: now)                         // SIGTRAP: Duration.seconds(1e21 s)
+```
+
+**Repro 2** (`snapshotRest_absurdEndsAt_isHeld` and its exit twin): a JSON `started` snapshot whose `rest`
+ends at 1e21. The engine takes the snapshot's rest verbatim; only rests it writes are clamped. So
+`fraction(at:)` traps too.
+
+**Repro 3** (`nanEndsAt_isHeld_andStateEqualsItself`): a binary-plist `restStarted(endsAt: NaN)`.
+- `min(NaN, bound)` returns NaN, so the clamp keeps it.
+- `rest.endsAt` is NaN, and the notification is scheduled at NaN.
+- `replay(log) != replay(log)`, because `Date(NaN) != Date(NaN)`.
+- `Date`'s `<=` passes NaN, so a date comparison hides it.
+
+**Expected:** fix round 1's own bar, "no decodable envelope traps", and a replayed state that equals
+itself. **Actual:**
+- The envelope is stored (decision 4). Every relaunch replays it, and every rest view calls
+  `RestTimer.remaining` (F02), which traps: finding 1's crash loop, one layer up.
+- The fix notes hand hostile stamps to F17's HLC drift bound. That bound checks `wallClock` only. It
+  covers neither `doneAt` nor a snapshot's rest, so they have no owner.
+
+**Fix direction:** either
+- hold every date the engine takes from a payload (`doneAt`, `restStarted.endsAt`, the snapshot's `rest`)
+  to within `longestRest` of the envelope's `wallClock`, mapping non-finite values there; or
+- make `RestTimer.remaining` saturate, as `elapsed` now does, and state the NaN rule.
+
+The three plain tests assume the first option.
+
+### 10. minor bug — The store contract suite passes 6 of 10 plausible buggy stores
+
+`WorkoutEventStoreContractTests` is what F05 will run against its GRDB store. I ran it against ten
+single-fault mutants of `InMemoryEventStore`. Each mutant was a temporary patch, restored afterwards; the
+log is scratchpad `f04-r2-mutation.log`.
+
+It **misses six**:
+
+| Mutant | Why it matters |
+|---|---|
+| `append` returns new envelopes sorted by `seq`, not in the order given | The first batch in the suite is already sorted. |
+| A conflict inside one batch keeps the first envelope instead of throwing | The suite has no conflict within a batch. |
+| A same-key envelope with the same event but another `wallClock` is treated as a duplicate | That is a different envelope, and it breaks decision 7. |
+| `highestSeq` is the latest stored `seq`, not the maximum | The suite appends seqs in ascending order. |
+| `liveWorkoutIDs` lists a log that has no `started` | A received envelope that arrived before the `started` would be "resumed" as a workout that replays to `nil`. |
+| Only `finished` is terminal | A discarded workout is listed live forever, resumed on every launch, and never compacted. |
+
+It catches four: `append` returning the whole batch, keeping part of a rejected batch, keys shared across
+workouts, and `compact` deleting every log.
+
+**Repro:** `EventStoreMutationAdversarialTests` (`MutantEventStore`). My nine probes in `StoreProbe`
+catch all ten mutants and pass `InMemoryEventStore`.
+
+**Fix:** fold the probes, or equivalent cases, into `WorkoutEventStoreContractTests`.
+
+### 11. spec question — The store's lifecycle lists are predicates on event kinds, not on what replay makes of the log
+
+Three cases, all pinned by passing "(documents)" tests in `EventStoreAdversarialTests`:
+
+**a. A live log that replays to `nil`** (`unusableStarted_isLive_butReplaysToNil`). A log whose only
+`started` is unusable (not live, or for another workout) is listed live for ever. Resume replays it to
+`nil`.
+
+**b. An orphan log after compaction** (`compactedThenPeerResend_orphanLog`). Compaction resets
+`highestSeq` to `nil`. If F17 runs the "seq > N" handshake for that workout, the peer resends its whole
+log, with no `started`:
+- with no terminal in it, the log is on neither list and lingers (the implementer's open item);
+- with the peer's finish in it, it is listed unmaterialized and replays to `nil`.
+
+**c. A hole that never heals** (`holeBeforeTerminal_neverHeals_andLaunchStepDropsIt`):
+1. The phone receives the watch's seq 3 (its finish) without seq 1–2, for example a dropped mirroring
+   message.
+2. `highestSeq` is 3, so the handshake asks only for seq > 3, and the hole never heals.
+3. The documented launch step (replay, materialise or drop, then compact) finds `nil` to materialise, and
+   compacts.
+4. On the phone, which materialises, the workout never reaches history.
+
+**Questions:**
+- What does the launch step do with an unmaterialized log that replays to `nil`? Keep it and re-request
+  it, rather than compact it?
+- Should the handshake base be the highest *contiguous* seq per device, not the maximum?
+- Should the two lists be defined by replay (live means `replay` is live; unmaterialized means `replay` is
+  terminal)?
+
+### 12. spec question — The HLC's newest stamp must survive a relaunch; the amendment does not say where it lives
+
+The amendment defines `wallClock = max(now, newest seen or sent + 1 ms)` but not where "newest" lives. A
+host that keeps it in memory starts empty after a kill (ADR-004 rule 6).
+
+**Repro** (`HostContractAdversarialTests.hlcAfterRelaunch_mustBeRecoveredFromTheLog`):
+1. The phone logs a set at 100 s.
+2. It relaunches, and its clock steps back 5 s.
+3. It un-logs the set: stamp 97 s < 100 s.
+
+Replay applies the un-log first, so the set is **done again on every device**. The phone's own screen
+flips back as it rebuilds, which is finding 6 again.
+
+Recovering "newest" from the store's maximum `wallClock` fixes it. After decision 4 the store holds
+everything seen or sent. In random sessions a forgetful host stamped 38 envelopes early, in 19 of 100
+sessions (`forgottenClockOnRelaunch_stampsEarly`).
+
+**Question:** should the amendment say "on launch, `newest` = the largest stored `wallClock` of the
+workout"?
+
+### 13. spec question — The host loop is underspecified: "reduce exactly what `append` returns" is not replay, and a rebuild has no effects
+
+The docs give two readings:
+- `append`'s doc says "the host reduces exactly these"; `reduce`'s precondition says the same.
+- ADR-004 rule 2 and `replay`'s doc say a remote envelope is applied by rebuilding from the merged log.
+
+Three things go wrong between them:
+
+**a. Reducing in arrival order is not replay** (`arrivalOrderReduce_divergesFromReplay`). The fix round's
+`StoringHost` reduces every newly stored envelope in arrival order:
+1. W, partitioned, sets set 1's weight to 200 at 10 s.
+2. P logs it at 185 at 20 s.
+3. On healing, P shows 200, while W and replay show 185.
+
+The devices disagree until something rebuilds. In random partition sessions this loop left replay 1,081
+times, in 92 of 100 sessions (`naiveHostLoop_leavesReplay`).
+
+**b. Rebuilding for one envelope, then reducing the next, applies it twice**
+(`rebuildThenReduceInOneBatch_appliesTwice`). The store already holds the whole batch, so a rebuild
+covers every envelope in it. Reducing a later envelope of the same batch applies that envelope twice: one
++30s gave +60 s. My own first host model had exactly this bug, and it cost me an investigation. A loop that
+holds:
+- if every newly stored envelope sorts after the newest one applied, reduce them in sort order;
+- otherwise, rebuild once.
+
+`SimHost` does this, with 0 departures from replay over 3,000 seeds.
+
+**c. A rebuild returns no effects, and a finish reduced on `nil` is lost.** In
+`rematerialization_convergesInEveryArrivalOrder`, 20 of 60 arrival orders never ran a `.materialize`
+live: both finishes arrived before the `started`. Decision 4's "materialise *again*" assumes a first
+materialisation. Those workouts wait for the next launch (`unmaterializedWorkoutIDs` then covers them).
+A remote skip or finish applied by a rebuild likewise cancels no rest notification.
+
+**Question:** should the loop be written into `reduce`'s and `append`'s docs, or ADR-004 rule 2, as
+follows?
+- Reduce, or rebuild once, as in b.
+- On a rebuild, derive effects by diffing old and new state: a phase change gives materialise or
+  `discardLog` plus cancel; a rest change gives schedule or cancel.
+- Materialise whenever the replayed log is finished and differs from what is stored, including when
+  nothing is stored.
+
+F17 should then be given a correct host model, not `StoringHost`.
+
+### 14. spec question — Under HLC stamps, a "+30s" near the end of a rest restarts it instead of extending it
+
+`restExtended` carries no time of its own; ADR-004's `restExtended(by:at:)` did. So rule 9 judges "is a
+rest running?" at the envelope's `wallClock`. The HLC drags that stamp up to the peer's skew ahead of the
+lifter's clock. The rest's `endsAt` was anchored on the device clock (`doneAt`, which hosts fill from
+`now`, as the fix round's own `ClockSkewAdversarialTests` do).
+
+**Repro** (`hlcDraggedStamp_turnsAnExtendIntoARestart`), with the watch's clock 20 s ahead:
+1. At real 100 s the phone logs bench set 1. The rest runs to 250 s by the phone's clock.
+2. At real 232 s the lifter turns the watch crown for set 2's weight. The watch stamps 252 s.
+3. At real 240 s the phone shows 10 s of rest left, and the lifter taps +30s.
+4. The phone stamps 252.001 s, at or after the rest's end, so the engine starts a fresh 30 s rest: `endsAt`
+   282.001 s, total 30 s.
+5. The lifter expected `endsAt` 280 s and total 180 s. The ring jumps back to full.
+
+With raw clocks, the same tap extends (stamp 240 s), so the amendment introduced this. It hit 7 of 100
+random 40-step sessions (`dragStamps_judgeRunningRestsOver`).
+
+**Question:** should `restExtended` carry the device-clock time of the tap (as ADR-004 first had it), or
+the `endsAt` the lifter saw? Or is this accepted and documented? Either way, the amendment should say which
+clock the payload times (`doneAt`, `restStarted.endsAt`, `endedAt`) use.
+
+## Attacked and held
+
+**Rest bound (`longestRest`) and the +30s sum:**
+- Rests of 60–600 s, plus ten +30s taps, are unchanged (6 cases).
+- A 300 s automatic rest reaches exactly one hour after 110 taps. The 111th tap pins the total, and
+  `endsAt` still grows. The remaining time stays ≤ the total, so `fraction` ≤ 1.
+- 130 taps in 13 s hold `endsAt` at the last tap + 1 h.
+- Edges:
+  - exactly one hour is kept, and one attosecond more is cut;
+  - a zero total stays, and −1 attosecond goes to zero;
+  - both `Duration` extremes are handled;
+  - a rest already over when stamped is kept.
+- Zero and negative +N follow rule 9's arithmetic, with only the total floored at zero.
+
+**`elapsed`:**
+- A 3 h workout is exact to 10,800.25 s, in both `elapsed` and the receipt.
+- It is zero before the start.
+- Saturation starts only near 2^63 s; 1e18 s is below the cap.
+- Nit: the doc says "saturates at `Int64.max` seconds", but the value is `Double(Int64.max)` = 2^63 s, one
+  second more.
+
+**`append`:**
+- A partial batch returns only its new envelopes, once each, in the order given.
+- A conflict inside one batch rejects the whole batch, and a retry succeeds.
+- The same event with another stamp is a conflict.
+- One batch can carry the same key for two workouts.
+- An empty batch returns nothing.
+- A host fed a repeated envelope, then a half-new batch, runs exactly the new envelope's effects.
+
+**Lifecycle:**
+
+| Log | Live | Unmaterialized | Replays to |
+|---|---|---|---|
+| Early envelope only | no | no | `nil` |
+| Started | yes | no | live |
+| Finished | no | yes | finished |
+| Compacted | no | no | `nil`, and `highestSeq` is reset |
+| Discarded | no | yes | discarded |
+| Two racing terminals | no | yes | the first terminal |
+
+**Store contract:** `InMemoryEventStore` passes all nine probes.
+
+**Materialise:**
+- On a 3 h two-device workout, `.materialize` carries exactly the final state, which equals replay of the
+  reversed log.
+- `programUpdates` and the watch's weight bump survive.
+- `summary` from that state is exact: elapsed 3 h, 3 of 18 sets, 2,227.5 lb·reps, the PR passed
+  through, and the rows carry the swap.
+- On 3,000 random sessions there is exactly one payload when the first terminal is a finish, none for a
+  discard, and it equals the reduced state and shuffled replay.
+- Re-materialisation: in 40 of 60 arrival orders the record ends as replay of the whole log. The other 20
+  are listed unmaterialized.
+
+**HLC (200 seeds on the PR lane, 3,000 locally):**
+- Hosts that store first and then reduce or rebuild never leave replay.
+- Every stamp sorts after everything its device held.
+- All hosts converge, and none misses an envelope.
+- Not one of 20,255 last-word logs or un-logs is lost.
+- The control shows the property has teeth: raw clocks give 817 early stamps and 4 lost actions in 100
+  sessions.
