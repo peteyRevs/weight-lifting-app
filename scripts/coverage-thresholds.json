@@ -10,7 +10,7 @@
     "WatchFeatureWorkout": 70,
     "Feature*": 70
   },
-  "required": ["LedgerDomain"],
+  "required": ["LedgerDomain", "LedgerDesign"],
   "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
   "excludedFiles": ["*+Previews.swift", "*/Generated/*"]
 }

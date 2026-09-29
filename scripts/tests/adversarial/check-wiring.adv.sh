@@ -13,7 +13,14 @@ cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$SB/scripts/sim-d
 cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$SB/scripts/sim-boot.sh"                         # the real one
 fake_simctl "$SB/bin" # ... against the runner's simulators, logging to $LOG too: one ordered log
 export LOG="$ADV_TMP/calls.log" XCRUN_LOG="$ADV_TMP/calls.log"
-mkdir -p "$SB/hang" && ln -s /bin/sleep "$SB/hang/xcodebuild" # a hung xcodebuild, by process name
+# A hung xcodebuild, by process name: bash under a symlink named xcodebuild runs hang.sh. It tells W35's
+# watchdog it has started, then waits 60 s on a fifo nobody writes. Only a wait that runs out is logged.
+mkdir -p "$SB/hang" && ln -s /bin/bash "$SB/hang/xcodebuild" && mkfifo "$SB/hang/started" "$SB/hang/never"
+cat >"$SB/hang/hang.sh" <<'SH'
+exec 3<>"$(dirname "$0")/started" && echo started >&3 # fd 3 stays open, so the line waits for its reader
+read -r -t 60 <>"$(dirname "$0")/never" # a builtin: SIGINT ends this process, not a child
+echo "hang completed" >>"$LOG"
+SH
 
 stub() { # <path> <body>: a /bin/sh stub with the log/fail helpers in front of <body>
     printf '#!/bin/sh\nlog() { printf "%%s\\n" "$*" >>"$LOG"; }\nfail_if() { [ "${FAIL_AT:-}" = "$1" ] && exit "${FAIL_CODE:-1}"; return 0; }\n%s\n' "$2" >"$1"
@@ -43,11 +50,19 @@ while [ $# -gt 0 ]; do
     shift
 done
 log "xcodebuild-$action-$scheme $dest"
+printf "%s %s\\n" "$action-$scheme" "${TEST_RUNNER_SNAPSHOT_TESTING_RECORD-unset}" >>"$LOG.env"
 mkdir -p "$bundle"
 echo "Test Suite All tests passed"
-[ "${HANG_AT:-}" != "xcodebuild-$action-$scheme" ] || exec "$(dirname "$0")/../hang/xcodebuild" 60
+[ "${HANG_AT:-}" != "xcodebuild-$action-$scheme" ] || exec "$(dirname "$0")/../hang/xcodebuild" "$(dirname "$0")/../hang/hang.sh"
 fail_if "xcodebuild-$action-$scheme"'
 stub "$SB/bin/swift" 'log swift-test; fail_if swift-test'
+stub "$SB/bin/git" 'log "git $*"; fail_if git'
+# W35's watchdog sleeps until the hang has started, whatever the load; at most 60 s if it never does.
+mkdir -p "$SB/deadline" && cat >"$SB/deadline/sleep" <<'SH' && chmod +x "$SB/deadline/sleep"
+#!/bin/bash
+printf 'sleep %s\n' "$*" >>"$LOG"
+read -r -t 60 _ <>"$(dirname "$0")/../hang/started"
+SH
 stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-graph'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
@@ -57,7 +72,7 @@ stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; fail_if script-test-b'
 # run [flags...]: the sandboxed check.sh; sets $code, $out and $calls (ids only; simctl's simulator
 # lookups, list and unpair, are sim-destination.sh's and pinned by W23-W27).
 run() {
-    : >"$LOG"; : >"$LOG.args"
+    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"
     out="$(PATH="$SB/bin:$PATH" "$SB/scripts/check.sh" "$@" 2>&1)"
     code=$?
     calls="$(awk '$1 == "simctl" { if ($2 != "list" && $2 != "unpair") print "simctl-" $2; next } { print $1 }' "$LOG" |
@@ -78,7 +93,7 @@ simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
 simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-PR-Watch coverage-gate"
 FULL="$(echo $FULL) "
 
-unset FAIL_AT GITHUB_ACTIONS
+unset FAIL_AT GITHUB_ACTIONS SNAPSHOT_TESTING_RECORD TEST_RUNNER_SNAPSHOT_TESTING_RECORD
 run
 expect_exit "W01 full run with every step green exits 0" 0 "$code" "$out"
 if [[ "$calls" == "$FULL" ]]; then pass "W02 full run calls every step in order"; else
@@ -224,14 +239,48 @@ check "W34 any other boot error is shown and left to the wait (bootstatus -b boo
 
 # A CI step's timeout kills check.sh but not xcodebuild, so check.sh interrupts xcodebuild first. The
 # stub hangs 60 s as a process named xcodebuild; perl resets SIGINT, which a background caller ignores.
-SECONDS=0
+# The watchdog's sleep is the stub in $SB/deadline, which returns once the hang has started, so no
+# load can fire it early or late; "hang completed" in the log means no SIGINT arrived.
 : >"$LOG"
-out="$(HANG_AT=xcodebuild-test-without-building-Ledger LEDGER_XCODEBUILD_DEADLINE=3 PATH="$SB/bin:$PATH" \
+out="$(HANG_AT=xcodebuild-test-without-building-Ledger LEDGER_XCODEBUILD_DEADLINE=3 PATH="$SB/deadline:$SB/bin:$PATH" \
     perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV or die' "$SB/scripts/check.sh" --skip-lint 2>&1)"
 code=$?
 check "W35 LEDGER_XCODEBUILD_DEADLINE interrupts a hung xcodebuild (SIGINT, exit 130), failing check.sh" \
-    is "$code $((SECONDS < 30)) $(grep -c check-test-results "$LOG") $(grep -c 'check.sh FAILED (exit 130)' <<<"$out")" \
-    "130 1 0 1"
+    is "$code $(grep -c '^sleep 3$' "$LOG") $(grep -c 'hang completed' "$LOG") $(grep -c check-test-results "$LOG") \
+$(grep -c 'check.sh FAILED (exit 130)' <<<"$out")" "130 1 0 0 1"
+
+# ---- --record-snapshots: F06's run_plan keeps going after a failing plan, if tests ran ----------
+# The fake xcrun's `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (1).
+record_log() { # the lifecycle, plus each xcresulttool read of a bundle
+    sed -nE -e 's/^simctl (boot|bootstatus) ([^ ]+).*/\1 \2/p' \
+        -e 's/^xcodebuild-(build-for-testing|test-without-building)-[A-Za-z]+ .*id=([^,]+).*/\1 \2/p' \
+        -e 's/^xcresulttool get test-results summary --path .*/xcresulttool/p' "$LOG" | tr '\n' ';'
+}
+recorded="boot $I;build-for-testing $I;bootstatus $I;test-without-building $I;xcresulttool;\
+boot $W;build-for-testing $W;bootstatus $W;test-without-building $W;xcresulttool;"
+FAIL_AT=xcodebuild-test-without-building-Ledger FAIL_CODE=65 run --record-snapshots
+check "W36 record mode runs both platforms (boot, build, wait, test, read the bundle) though iOS's tests fail" \
+    is "$code $(record_log) $(grep -c '^check-test-results\|^coverage-gate' "$LOG")" "1 $recorded 0"
+run --record-snapshots; rec="$(grep '^test-without-building' "$LOG.env" | tr '\n' ';')"
+run; norm="$(grep '^test-without-building' "$LOG.env" | tr '\n' ';')"
+check "W37 record mode passes TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all to both test runs; a normal run does not" \
+    is "$rec $norm" "test-without-building-Ledger all;test-without-building-LedgerWatch all; \
+test-without-building-Ledger unset;test-without-building-LedgerWatch unset;"
+stopped() { # exit code, calls, then how often it said why / that references were recorded
+    printf '%s %s %s/%s' "$code" "$(record_log)" \
+        "$(grep -cxF 'error: the record run failed before any test ran (.derivedData/Results/PR-iOS.xcresult)' <<<"$out")" \
+        "$(grep -c 'references recorded' <<<"$out")"
+}
+ios_only="boot $I;build-for-testing $I;bootstatus $I;test-without-building $I;xcresulttool;"
+XCRUN_TEST_COUNT=0 run --record-snapshots; zero="$(stopped)"
+XCRUN_FAIL='get test-results' run --record-snapshots
+check "W38 a record run whose bundle reports no test (or cannot be read) fails there, before the watch" \
+    is "$zero; $(stopped)" "1 $ios_only 1/0; 1 $ios_only 1/0"
+run --record-snapshots
+check "W39 a green record run lists the changed references, then exits 1 with no results or coverage check" \
+    is "$code $(grep '^git' "$LOG") $(grep -c '^check-test-results\|^coverage-gate' "$LOG") \
+$(grep -cxF 'snapshot references recorded; re-run check.sh (without the flag) to verify them' <<<"$out")" \
+    "1 git status --short -- :(glob)**/__Snapshots__/** 0 1"
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be

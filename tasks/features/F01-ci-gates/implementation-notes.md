@@ -615,6 +615,131 @@ against `main`), up from 529, against the 500 budget.
 shows `xcodebuild test` with parallel testing on. It should describe build-for-testing, boot and
 serial testing.
 
+## Merge with F06 (main 12b03c2)
+
+HEAD 134deeb merges main, which carries F06 slice 1 (#6), into this branch. The orchestrator's run
+of that tree failed at step 5 (`f01-merged-full.log`), and its W35 failed once under load. This
+round fixes both, pins `--record-snapshots` with script tests, and explains the rsync noise.
+
+**1. Coverage: `LedgerDesign` is now required.**
+- `scripts/coverage-thresholds.json` now has `"required": ["LedgerDomain", "LedgerDesign"]`.
+  LedgerDesign keeps its 60 % threshold. It measures 95.52 % (192 / 201 lines).
+- **The threshold stays at 60.** testing-strategy §4: "Thresholds are only ever raised; raise when a
+  module beats its threshold by ≥ 3 points for two weeks." LedgerDesign has beaten its threshold
+  since #6 merged on 2026-09-29, so it has not yet done so for two weeks. It can rise on or after
+  2026-10-13 if it holds. The number then goes in §4 first, because C34 ("committed thresholds equal
+  testing-strategy §4") pins 60.
+- **Every other measured module is required or excluded.** Both bundles, read with `xccov`:
+  - iOS measures LedgerAppKit, LedgerDesign, LedgerDomain and LedgerSnapshotTesting.
+  - watchOS measures LedgerDesign, LedgerDomain, LedgerSnapshotTesting and LedgerWatchAppKit.
+  - LedgerAppKit, LedgerWatchAppKit and LedgerSnapshotTesting are in `excludedModules`.
+  - Every other module has 0 executable lines. `LedgerDependencies` is a placeholder with none. It
+    has no threshold, so the gate will stop on it when it gains code; that is by design.
+- testing-strategy.md does not list the required modules, so it is unchanged. The §4 wording is
+  still a follow-up (see "Pending").
+
+**2. W35 no longer depends on time.**
+- The old assertion `SECONDS < 30` failed under a concurrent build (`got: 130 0 0 1`).
+- There was a second dependency on time. The watchdog's real `sleep 3` fired 3 s after check.sh
+  started. If check.sh had not yet reached the hung xcodebuild by then, `pkill` found nothing. The
+  hang then ended by itself and the case failed. Probe (`f01-merge-w35-race.log`): with the iOS
+  build stub slowed 5 s, the old W35 fails (`got: 0 0 2 0`) and the new one passes.
+- **The hang.** It is `/bin/bash`, run under a symlink named `xcodebuild` so `pkill -x` still
+  matches, and it runs `hang.sh`:
+  1. It writes `started` to a fifo, and holds the fifo open.
+  2. It waits 60 s in the builtin `read -t` on a second fifo that nothing writes. The builtin
+     matters: SIGINT ends this process, and there is no child to outlive it.
+  3. Only if that wait runs out does it log `hang completed`.
+- **The watchdog.** For W35 only, `$SB/deadline` comes first on PATH, and its `sleep` stub logs its
+  argument. It returns when it reads `started`, or after 60 s if the hang never starts, so it
+  cannot be left behind.
+- **W35 asserts** exit 130, `sleep 3` (the deadline reached the watchdog), no `hang completed`, no
+  `check-test-results`, and "check.sh FAILED (exit 130)". It has no time bound.
+- **The rest of the suites**, checked with `grep -rn "SECONDS\|sleep\|timeout"`:
+  - Nothing else asserts elapsed time.
+  - W30 and W31 use `LEDGER_BOOT_TIMEOUT=1`, and W31's result does not depend on timing.
+  - W30 has one timing budget. After the erase, the fake `bootstatus` (sh, grep, echo) must finish
+    within that 1 s alarm. That is headroom of several hundred times over, and it asserts nothing
+    about time. It stays as it is: making it deterministic would need a change to `sim-boot.sh`.
+    Raising the timeout would only widen a tolerance.
+
+**3. `--record-snapshots` is pinned (W36–W39).**
+- The fake xcrun (`lib.sh`) answers `xcresulttool get test-results summary` with
+  `{"totalTestCount": $XCRUN_TEST_COUNT}` (default 1).
+- There is a `git` stub, so the sandbox's `git status` runs and is logged.
+- The xcodebuild stub writes each call's `TEST_RUNNER_SNAPSHOT_TESTING_RECORD` to `$LOG.env`.
+- The cases:
+  - **W36.** iOS's test run fails (exit 65), and record mode still runs, for both platforms: boot,
+    build-for-testing, bootstatus, test-without-building, then an xcresulttool read of the bundle.
+    It exits 1, with no results check and no coverage.
+  - **W37.** Both test runs get `TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all`. A normal run's test runs
+    have it unset.
+  - **W38.** A bundle that reports 0 tests, or that xcresulttool cannot read, stops the record run
+    after iOS. It exits 1, prints "the record run failed before any test ran
+    (.derivedData/Results/PR-iOS.xcresult)", and says nothing about references.
+  - **W39.** A green record run calls `git status --short -- :(glob)**/__Snapshots__/**`, runs no
+    results check and no coverage, and exits 1 with "snapshot references recorded; re-run
+    check.sh …".
+- **Mutants** (`ADV_CHECK_SH`, one at a time; `f01-merge-mutants.log`):
+
+  | Mutant of check.sh | Fails |
+  |---|---|
+  | `run_plan` without `\|\| true` | W36 |
+  | `test_platform` calls xcodebuild and check-test-results directly | W36, W38, W39 |
+  | exports only `SNAPSHOT_TESTING_RECORD` | W37 |
+  | no "no test ran" check | W38 |
+  | no `exit 1` after "references recorded" | W36, W39 |
+  | no watchdog | W35 (`hang completed` logged, exit 0) |
+  | watchdog sends SIGTERM | W35 (exit 143) |
+  | stops before the simulators | W35 among 29, and its watchdog `sleep` exits within 60 s |
+
+**4. The `rsync … Resources: (l)stat` lines come from a test, not from the build.**
+- **The cause.** All nine lines print in step 2, inside `ci-post-clone.adv.sh`, and nowhere
+  else. Its `clone()` rsynced `Resources`, which is gone since F06 moved the font to
+  `LedgerKit/Sources/LedgerDesign/Resources/`. The nine lines are one per `clone()` call: PC01,
+  PC04–PC06, PC07 three times, PC08 and PC12. rsync exited 23 and `clone()` ignored it.
+- **Fixed in the test.** `Resources` is gone from the list, and `clone()` now exits 1 when the copy
+  fails. With `Resources` added back, the suite stops at once. The gate run below prints no rsync
+  line.
+- **The stale `Fonts` synchronized group** (`path = Resources/Fonts` in the pbxproj) is harmless:
+  - Both build-for-testing bundles report `succeeded`, with 0 errors and 0 warnings
+    (`xcresulttool get build-results`).
+  - The watch build log (`.derivedData/Logs/Build/*.xcactivitylog`) never mentions
+    `Resources/Fonts`.
+  - `Ledger.app`, its embedded `LedgerWatch.app`, and `LedgerWatch.app` each contain
+    `LedgerKit_LedgerDesign.bundle/Archivo[wdth,wght].ttf` and `OFL.txt`, from the package, and no
+    other font.
+- **Pete's deletion of the group.** WF37 checked that the pbxproj's synced-folder list contains
+  `Resources/Fonts`, so it would have failed once the group was gone. It now checks for
+  `Apps/Ledger`, which holds before and after. WF38 then has no non-`Apps/` synced folder to try,
+  which is correct. No other script reads the group. The pbxproj is untouched (ADR-003).
+
+**Verification.**
+- **a. Script tests.** Every `scripts/tests/*.test.sh` passes (`f01-merge-script-tests.log`):
+  - adversarial: 239 cases in 7 suites (check-wiring 59, up from 55);
+  - coverage-gate 10;
+  - lint-rules 4 × 3;
+  - lint-rules-adversarial 55, round 2 39, round 3 44.
+
+  The mutants are in the table above.
+- **b. Through the lock, in one go** (`f01-merge-fix-verify.log`):
+  - **Full gate: green in 221 s**, `full exit 0`. Lint and script tests 54 s, iOS 81 s (tests 75),
+    watchOS 83 s (tests 69), coverage 2 s.
+    - PR: 17 targets passed. PR-Watch: 8 targets passed.
+    - Coverage: LedgerDesign 95.52 %, LedgerDomain 98.78 %, overall 98.37 %.
+  - **Record run: `record exit 1`, 229 s.**
+    - iOS's plan failed by design, with 12 references recorded: 11 token snapshots and the Archivo
+      width test. The run went on to watchOS, which recorded 4.
+    - It printed "snapshot references recorded; re-run check.sh …" and exited 1.
+    - All 16 reference PNGs were rewritten (their mtimes are from the run).
+  - **`git status --short`** lists only this round's 6 files and no PNG, so the references are
+    current.
+  - Neither run printed an rsync line.
+- **c. Budget.** Changed lines against `main`, outside `scripts/tests/` and `tasks/`: **637** (580
+  added + 57 deleted). This round adds none: `coverage-thresholds.json` is new against `main` and
+  stays 16 lines. HEAD (the merge) already counts 637, against 634 in the last round's notes.
+- Everything is uncommitted.
+
 ## Pending (not verifiable locally)
 
 - **Criteria 1–5 and 10** need GitHub. The first `pr.yml` run on the F01 PR covers

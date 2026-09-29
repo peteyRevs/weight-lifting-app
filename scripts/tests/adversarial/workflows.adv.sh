@@ -171,7 +171,7 @@ for gid, body in re.findall(r"([0-9A-F]{24}) /\* [^*]* \*/ = \{\s*isa = PBXFileS
     if gid in ids and m: print(m.group(1).strip('"'))
 PY
 )"
-check "WF37 the synced-folder list was read from the pbxproj" grep -q '^Resources/Fonts$' <<<"$synced"
+check "WF37 the synced-folder list was read from the pbxproj" grep -q '^Apps/Ledger$' <<<"$synced"
 for dir in $(grep -v '^Apps/' <<<"$synced"); do
     decide "WF38 [R5] a Markdown file in $dir/ (synced into an app target) -> Check runs" code=true \
         "mkdir -p '$dir' && echo x >'$dir/NOTES.md'"

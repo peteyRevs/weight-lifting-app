@@ -11,7 +11,8 @@ T="$ADV_TMP"
 # clone: a fresh copy of what the script and xcodebuild read, as Xcode Cloud clones it.
 clone() {
     rm -rf "$T/repo"; mkdir -p "$T/repo"
-    (cd "$ROOT" && rsync -a --exclude .build Ledger.xcodeproj Config Apps LedgerKit Resources TestPlans ci_scripts "$T/repo/")
+    (cd "$ROOT" && rsync -a --exclude .build Ledger.xcodeproj Config Apps LedgerKit TestPlans ci_scripts "$T/repo/") ||
+        exit 1 # a partial copy is not what Xcode Cloud clones
 }
 # post_clone [VAR=value...]: runs the real script from ci_scripts/ with only these CI vars.
 post_clone() {

@@ -48,6 +48,7 @@ is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1
 #   XCRUN_BOOTED=1         boot answers as simctl does for a booted simulator (exit 149);
 #   XCRUN_HANG=always      bootstatus never finishes (it sleeps until killed);
 #   XCRUN_HANG=unerased    bootstatus finishes only once $XCRUN_LOG shows that simulator erased.
+# `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (default 1) for any bundle.
 fake_simctl() {
     mkdir -p "$1"
     cat >"$1/xcrun" <<'SH'
@@ -71,6 +72,9 @@ case "$1 $2 $3" in
         esac
         echo "Finished" ;;
     "simctl shutdown "* | "simctl erase "*) ;;
+    "xcresulttool get test-results")
+        [ "$4" = summary ] || { echo "fake xcrun: unexpected: $*" >&2; exit 64; }
+        echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}" ;;
     *) echo "fake xcrun: unexpected: $*" >&2; exit 64 ;;
 esac
 SH
