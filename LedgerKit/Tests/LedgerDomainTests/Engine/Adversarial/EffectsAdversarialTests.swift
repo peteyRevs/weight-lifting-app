@@ -130,9 +130,10 @@ struct EffectsAdversarialTests {
 // MARK: - Duplicates (ADR-004 consequences: "idempotence: apply twice → same state")
 
 /// Finding 5 (orchestrator decision, 2026-09-29): `reduce` keeps no log, so its caller dedupes by key and
-/// reduces only what `WorkoutEventStore.append` newly stored; the idempotence law belongs to `replay`.
+/// applies only what `WorkoutEventStore.append` newly stored (since the re-plan, by one rebuild); the
+/// idempotence law belongs to `replay`.
 extension EffectsAdversarialTests {
-    @Test("Duplicate delivery: a host reducing only newly stored envelopes does not buzz or notify twice.")
+    @Test("Duplicate delivery: a host that rebuilds only for newly stored envelopes does not buzz or notify twice.")
     func duplicateSetLogged_noSecondHaptic() async throws {
         let envelope = Adv.env(Adv.logged(0, 0, doneAt: 10), Adv.watch, seq: 1, at: 10)
         var host = StoringHost()

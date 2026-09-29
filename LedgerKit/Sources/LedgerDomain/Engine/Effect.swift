@@ -11,9 +11,9 @@ public enum Haptic: String, Hashable, Codable, Sendable, CaseIterable {
     case workoutFinished
 }
 
-/// A side effect of reducing an envelope, returned as a value for the caller to run in order
-/// (ADR-004 rule 1). For envelopes it received, the host runs only `WorkoutEngine.effects(from:to:)`
-/// (the host loop on `WorkoutEngine.reduce`).
+/// A side effect, returned as a value for the caller to run in order (ADR-004 rule 1). The host runs
+/// `WorkoutEngine.reduce`'s effects for an envelope it created, and `WorkoutEngine.effects(from:to:)`
+/// when it rebuilds for envelopes it received (the host loop on `WorkoutEngine.reduce`).
 ///
 /// `.persist` comes before `.transmit`, so a device stores an envelope it created before any peer can
 /// see it. Its next `seq` is `WorkoutEventStore.highestSeq` + 1, so it never reuses a transmitted one.
@@ -23,9 +23,9 @@ public enum Effect: Hashable, Sendable {
     case scheduleRestNotification(endsAt: Date)
     case cancelRestNotification
     case updateLiveActivity
-    /// Append an envelope this device created to the local log (`WorkoutEventStore`). The host runs
-    /// it only for its own envelopes: it has already appended every envelope it received, before
-    /// reducing it and whatever the effects.
+    /// Append an envelope this device created to the local log (`WorkoutEventStore`). Only `reduce`
+    /// emits it, for the host's own envelopes: the host appends every envelope it receives itself,
+    /// before it rebuilds, whatever the envelope holds.
     case persist(EventEnvelope)
     /// Send the envelope to the peer. The session actor sends only its own device's envelopes (F17).
     case transmit(EventEnvelope)

@@ -162,18 +162,24 @@ private extension WorkoutState {
 
     /// Rule 9 and decision #7: "+30s" grows the rest the lifter saw running, `endsAt` and `total` alike.
     /// When the device showed none, or the state has none, it starts a fresh rest of `amount` at
-    /// `tappedAt`. Timestamps never override `extendsShownRest`.
+    /// `tappedAt`, unless the state's rest ends later than that fresh one would: "+30s" never shortens
+    /// a running rest (Pete, 2026-09-29), such as a peer's this device had not yet heard of, so that
+    /// rest is kept unchanged. The stamp never decides.
     ///
     /// The grown rest is held to `WorkoutEngine.longestRest`: `total` into `0 ... longestRest` (the
     /// sum saturates first, because `reduce` may be handed any state), and `endsAt` to at most
     /// `longestRest` after `tappedAt`.
     mutating func extendRest(by amount: Duration, extendsShownRest: Bool, tappedAt: Date) -> [Effect] {
-        guard extendsShownRest, let shown = rest else {
-            return startRest(RestTimer(endsAt: tappedAt.adding(amount), total: amount))
+        let fresh = RestTimer(endsAt: tappedAt.adding(amount), total: amount)
+        guard let running = rest else {
+            return startRest(fresh)
+        }
+        guard extendsShownRest else {
+            return running.endsAt > fresh.endsAt ? [] : startRest(fresh)
         }
         let bound = WorkoutEngine.longestRest
-        let total = min(max(shown.total.saturatingSum(amount), .zero), bound)
-        return startRest(RestTimer(endsAt: min(shown.endsAt.adding(amount), tappedAt.adding(bound)), total: total))
+        let total = min(max(running.total.saturatingSum(amount), .zero), bound)
+        return startRest(RestTimer(endsAt: min(running.endsAt.adding(amount), tappedAt.adding(bound)), total: total))
     }
 
     /// Rule 9: "Skip" stops the rest.

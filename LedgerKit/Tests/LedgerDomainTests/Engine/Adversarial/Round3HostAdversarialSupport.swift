@@ -3,29 +3,20 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-// Round 3 (G2, after fix round 2): a host written from ADR-004 "The host loop" as amended, including the
-// orchestrator's correction on remote haptics (2026-09-29). It is not `SimHost`, `StoringHost` or
-// `Replica`: those take the reduce path only when the state is not nil, which the ADR does not say, and
-// `SimHost` runs `effects(from:to:)` for every received envelope, the rule the correction replaced.
+// Round 3 (G2, after fix round 2): a host written from ADR-004 "The host loop". It is not `SimHost`,
+// `StoringHost` or `Replica`. Final fix round (re-plan 2026-09-29): the loop has one path for what a host
+// receives, so this model now follows it; the round-3 switch between two readings of "already applied"
+// (finding 17) went with the in-order path.
 
 /// One device's host, ADR-004 read literally:
 /// - its own envelope: stamp (hybrid logical clock), `seq` = `highestSeq` + 1, `reduce`, and run
 ///   `reduce`'s effects (`.persist` appends it, `.transmit` queues it);
-/// - a received batch: append it first; if everything `append` newly stored sorts after the newest
-///   envelope already applied, reduce it in sort order and run `reduce`'s effects without `.persist` and
-///   `.transmit`; otherwise rebuild once with `replay` and run only `effects(from:to:)`;
-/// - relaunch: replay the store, run `effects(from: nil, to:)`, and recover the clock from the store.
+/// - a received batch: append it first; if `append` stored anything new, rebuild once with `replay` and
+///   run `effects(from:to:)`;
+/// - relaunch: replay the store and recover the clock from it; the launch step plays nothing.
 struct LiteralHost {
     enum Path: Hashable {
-        case own, inOrder, rebuild, relaunch
-    }
-
-    /// Which envelopes count as "already applied" for the loop's test.
-    enum Applied {
-        /// Every envelope handed to `reduce` or `replay`, ignored or not.
-        case everyReduced
-        /// Only envelopes `reduce` accepted (non-empty effects), plus everything a rebuild covered.
-        case onlyAccepted
+        case own, rebuild
     }
 
     let device: DeviceID
@@ -33,10 +24,8 @@ struct LiteralHost {
     /// The device clock minus real time, in seconds.
     var offset: Double
     var hybrid = true
-    var applied = Applied.everyReduced
     private(set) var newestStamp: Date?
     private(set) var state: WorkoutState?
-    private(set) var newestApplied: EventEnvelope?
     private(set) var outbox: [EventEnvelope] = []
     private(set) var notification: Date?
     private(set) var materialized: WorkoutState?
@@ -79,7 +68,6 @@ struct LiteralHost {
         }
         state = next
         _ = try await run(effects, path: .own)
-        newestApplied = max(newestApplied ?? envelope, envelope)
         await check()
         return envelope
     }
@@ -89,54 +77,24 @@ struct LiteralHost {
         for envelope in batch where hybrid {
             newestStamp = max(newestStamp ?? envelope.wallClock, envelope.wallClock)
         }
-        let fresh = try await store.append(batch)
-        guard let newestFresh = fresh.max() else {
+        guard try await !store.append(batch).isEmpty else {
             return
         }
         let before = state
-        var accepted: EventEnvelope?
-        if fresh.allSatisfy({ envelope in newestApplied.map { $0 < envelope } ?? true }) {
-            var played = 0
-            for envelope in fresh.sorted() {
-                let (next, effects) = WorkoutEngine.reduce(state, envelope)
-                state = next
-                accepted = effects.isEmpty ? accepted : envelope
-                played += try await run(effects.filter(Self.isLocal), path: .inOrder)
-            }
-            largestBurst = max(largestBurst, played)
-        } else {
-            let stored = await log
-            state = WorkoutEngine.replay(stored)
-            accepted = stored.max()
-            _ = try await run(WorkoutEngine.effects(from: before, to: state), path: .rebuild)
-        }
-        let advance = applied == .everyReduced ? newestFresh : accepted
-        if let advance {
-            newestApplied = max(newestApplied ?? advance, advance)
-        }
+        state = await WorkoutEngine.replay(log)
+        let played = try await run(WorkoutEngine.effects(from: before, to: state), path: .rebuild)
+        largestBurst = max(largestBurst, played)
         await check()
     }
 
     /// Killed and relaunched (ADR-004 rule 6 and the amendment's recovery on launch).
     mutating func relaunch() async throws {
-        let stored = await log
-        state = WorkoutEngine.replay(stored)
-        newestApplied = stored.max()
-        _ = try await run(WorkoutEngine.effects(from: nil, to: state), path: .relaunch)
+        state = await WorkoutEngine.replay(log)
         newestStamp = nil
         for workout in await store.uncompactedWorkoutIDs() where hybrid {
             for envelope in await store.envelopes(for: workout) {
                 newestStamp = max(newestStamp ?? envelope.wallClock, envelope.wallClock)
             }
-        }
-    }
-
-    static func isLocal(_ effect: Effect) -> Bool {
-        switch effect {
-        case .persist, .transmit:
-            false
-        default:
-            true
         }
     }
 

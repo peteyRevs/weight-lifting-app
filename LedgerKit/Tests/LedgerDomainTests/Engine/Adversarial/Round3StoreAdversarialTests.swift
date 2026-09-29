@@ -21,18 +21,22 @@ struct Round3StoreAdversarialTests {
     func contract_catchesLossyStores(_ loss: LossyEventStore.Loss) async throws {
         let found = await WorkoutEventStoreContract.violations { LossyEventStore(loss) }
         #expect(!found.isEmpty, "\(loss) passed every contract clause")
-        // What the loss does to a real, sub-millisecond HLC stamp.
+        // What the loss does to a real, sub-millisecond HLC stamp. Final fix round: this store is lossy by
+        // construction, so this now pins that the loss is real (the clause above has something to catch).
         let store = LossyEventStore(loss)
         let precise = Adv.env(Adv.logged(0, 0, doneAt: 10.493_826_8), Adv.watch, seq: 1, at: 10.493_826_8)
         _ = try await store.append([precise])
         _ = try await store.append([precise])
-        #expect(await store.envelopes(for: Adv.workoutID) == [precise], "\(loss) does not read back exactly")
+        #expect(await store.envelopes(for: Adv.workoutID) != [precise], "\(loss) reads back exactly")
     }
 
+    /// Final fix round: the lossy store cannot be fixed, only rejected, so this now documents the
+    /// consequence and asserts that the contract suite rejects such a store.
     @Test(
         """
-        Finding 22, consequence: a store that keeps whole seconds reorders a causal pair from two devices \
-        within one second, so the phone's un-log of the watch's set is lost on replay (finding 6 again)
+        Finding 22, consequence (documents): a store that keeps whole seconds reorders a causal pair from two \
+        devices within one second, so the phone's un-log of the watch's set is lost on replay (finding 6 \
+        again); the contract suite rejects that store
         """
     )
     func iso8601Store_losesAnUnlog() async throws {
@@ -43,7 +47,8 @@ struct Round3StoreAdversarialTests {
         let store = LossyEventStore(.iso8601JSON)
         _ = try await store.append([Adv.start(), log, unlog])
         let stored = await WorkoutEngine.replay(store.envelopes(for: Adv.workoutID))
-        #expect(stored == precise, "the un-log is lost after a reload")
+        #expect(Adv.row(stored, 0, 0)?.isDone == true, "the un-log is lost after a reload")
+        #expect(await !WorkoutEventStoreContract.violations { LossyEventStore(.iso8601JSON) }.isEmpty)
     }
 }
 

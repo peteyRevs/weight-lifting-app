@@ -132,15 +132,21 @@ extension RestBoundAdversarialTests {
         return try JSONDecoder().decode(Value.self, from: Data(hostile.utf8))
     }
 
-    // Retargeted in fix round 2 (orchestrator decision A). Finding 9's fix direction named two options:
-    // hold every payload date to its envelope, or saturate the ring. The orchestrator chose a third that
-    // covers both: an envelope carrying an absurd or non-finite date is malformed and ignored (no state
-    // change, no effects), and the ring saturates anyway (the exit twins below). Each test keeps its input
-    // and its question ("can this date reach the rest ring or break ==?"); the expected state is now the
-    // one without the hostile envelope.
+    // Retargeted in fix round 2 (orchestrator decision A), and again in the final fix round (decision 2,
+    // no time windows). Finding 9's fix direction named two options: hold every payload date to its
+    // envelope, or saturate the ring. Pete chose the second: a finite date, however absurd, is accepted, and
+    // the ring saturates (the exit twins below); only a non-finite date is malformed. Each test keeps its
+    // input and its question ("can this date reach the rest ring or break ==?").
 
-    @Test("Finding 9: a JSON setLogged with doneAt 1e21 is malformed: ignored, so no rest reaches the ring")
-    func autoRest_absurdDoneAt_isIgnored() throws {
+    /// The ring at 30 s on a rest ending near 1e21: pinned at its cap, full, and equal to itself.
+    static func expectSaturated(_ rest: RestTimer?) {
+        #expect(rest?.remaining(at: engineTime(30)) == .seconds(Double(Int64.max)))
+        #expect(rest?.fraction(at: engineTime(30)) == 1)
+        #expect(rest == rest)
+    }
+
+    @Test("Finding 9: a JSON setLogged with doneAt 1e21 is kept; its automatic rest reaches the ring, which saturates")
+    func autoRest_absurdDoneAt_saturatesTheRing() throws {
         let event = try Self.decoded(
             WorkoutEvent.setLogged(
                 exerciseIndex: 0, setID: Adv.sid(0, 0), weight: pounds("185"), reps: Reps(clamping: 5),
@@ -149,24 +155,27 @@ extension RestBoundAdversarialTests {
             markerAs: "1e21"
         )
         let hostile = Adv.env(event, Adv.watch, seq: 1, at: 20)
-        #expect(!hostile.isWellFormed)
-        #expect(WorkoutEngine.reduce(Adv.state(after: [Adv.start()]), hostile).1.isEmpty)
+        #expect(hostile.isWellFormed)
         let state = try #require(Adv.state(after: [Adv.start(), hostile]))
-        #expect(state.rest == nil, "an automatic rest anchored at 1e21 would trap RestTimer.remaining(at:)")
-        #expect(Adv.row(state, 0, 0)?.isDone == false)
+        let far = Date(timeIntervalSinceReferenceDate: 1e21)
+        #expect(state.rest == RestTimer(endsAt: far.addingTimeInterval(150), total: .seconds(150)))
+        #expect(Adv.row(state, 0, 0)?.doneAt == far)
+        Self.expectSaturated(state.rest)
         #expect(WorkoutEngine.replay([Adv.start(), hostile]) == state)
     }
 
-    @Test("Finding 9: a JSON started snapshot whose rest ends at 1e21 is malformed: no workout starts from it")
-    func snapshotRest_absurdEndsAt_isIgnored() throws {
+    @Test("Finding 9: a JSON started snapshot whose rest ends at 1e21 starts the workout; the ring saturates")
+    func snapshotRest_absurdEndsAt_saturatesTheRing() throws {
         var snapshot = EventBuilders.seedSession()
         snapshot.rest = RestTimer(endsAt: Self.marker, total: .seconds(60))
         let hostile = try Self.decoded(snapshot, markerAs: "1e21")
-        #expect(!Adv.start(hostile).isWellFormed)
-        #expect(Adv.state(after: [Adv.start(hostile)]) == nil)
-        // A well-formed started from the peer still starts the workout, whatever sorts first.
+        #expect(Adv.start(hostile).isWellFormed)
+        let state = try #require(Adv.state(after: [Adv.start(hostile)]))
+        #expect(state.rest?.endsAt == Date(timeIntervalSinceReferenceDate: 1e21))
+        Self.expectSaturated(state.rest)
+        // The first usable started still picks the workout, as any well-formed one does.
         let peer = Adv.start(EventBuilders.seedSession(), Adv.watch, seq: 1, at: 1)
-        #expect(WorkoutEngine.replay([Adv.start(hostile), peer]) == WorkoutEngine.replay([peer]))
+        #expect(WorkoutEngine.replay([Adv.start(hostile), peer]) == state)
     }
 
     @Test("Finding 9: a binary-plist restStarted whose endsAt is NaN is malformed: ignored, and replay stays Equatable")
@@ -205,8 +214,8 @@ extension RestBoundAdversarialTests {
                 }
                 let state = EngineAdv.state(after: [EngineAdv.start(), EngineAdv.env(event, seq: 2, at: 20)])
                 _ = state?.rest?.remaining(at: engineTime(30))
-                // Round 2: the engine now ignores the envelope, so also hand the decoded date to the ring
-                // directly, as any other decoder of a RestTimer could (decision A, defence in depth).
+                // Round 2: also hand the decoded date to the ring directly, as any other decoder of a
+                // RestTimer could (decision A, defence in depth).
                 guard case let .setLogged(_, _, _, _, doneAt) = event else {
                     exit(4)
                 }
@@ -233,7 +242,7 @@ extension RestBoundAdversarialTests {
                     exit(2)
                 }
                 _ = EngineAdv.state(after: [EngineAdv.start(hostile)])?.rest?.fraction(at: engineTime(30))
-                // Round 2: the engine now ignores the started, so also run the ring on the decoded rest.
+                // Round 2: also run the ring on the decoded rest directly.
                 _ = (hostile.rest?.remaining(at: engineTime(30)), hostile.rest?.fraction(at: engineTime(30)))
             }
         }

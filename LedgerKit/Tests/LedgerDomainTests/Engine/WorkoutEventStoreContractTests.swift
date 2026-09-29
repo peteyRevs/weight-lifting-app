@@ -44,7 +44,8 @@ enum WorkoutEventStoreContract {
         Clause(name: "highestSeq is the maximum, per workout and device", check: highestSeqIsMaximum),
         Clause(name: "every log is listed until compacted, whatever it holds", check: everyLogListed),
         Clause(name: "compact deletes and unlists one workout's log", check: compactOne),
-        Clause(name: "a malformed envelope is stored like any other", check: malformedIsStored)
+        Clause(name: "a malformed envelope is stored like any other", check: malformedIsStored),
+        Clause(name: "an envelope reads back once and exactly, to below a millisecond", check: readsBackExactlyOnce)
     ]
 
     /// Every clause's complaint about a store from `make`.
@@ -189,11 +190,28 @@ extension WorkoutEventStoreContract {
     /// The store judges keys, never contents: a malformed envelope (`isWellFormed`) is stored and
     /// returned like any other, so every device's log agrees; the engine ignores it.
     static func malformedIsStored(_ store: any WorkoutEventStore) async throws -> String? {
-        let absurd = EngineAdv.env(EngineAdv.logged(0, 0, doneAt: 1e12), EventBuilders.watch, seq: 1, at: 5)
+        let absurd = EngineAdv.env(
+            EngineAdv.extend(7200, shown: true, tappedAt: 5), EventBuilders.watch, seq: 1, at: 5
+        )
         let fresh = try await store.append([start(workout), absurd])
         let again = try await store.append([absurd])
         let stored = try await Set(store.envelopes(for: workout))
         return !absurd.isWellFormed && fresh.count == 2 && again.isEmpty && stored.contains(absurd)
             ? nil : "returned \(fresh.count), then \(again.count); stored it: \(stored.contains(absurd))"
+    }
+
+    /// Finding 22: `<` and the conflict check compare dates, so a store must keep them exactly. An HLC
+    /// stamp and a payload date between milliseconds read back `==` (a store that writes milliseconds or
+    /// ISO 8601 fails), and a re-append keeps one copy (the log is compared as an array, count and all).
+    static func readsBackExactlyOnce(_ store: any WorkoutEventStore) async throws -> String? {
+        let precise = EngineAdv.env(
+            EngineAdv.logged(0, 0, doneAt: 10.493_826_8), EventBuilders.watch, seq: 1, at: 10.493_827_3
+        )
+        let fresh = try await store.append([precise])
+        let again = try await store.append([precise])
+        let stored = try await store.envelopes(for: workout)
+        let exact = stored == [precise]
+        return fresh == [precise] && again.isEmpty && exact
+            ? nil : "returned \(fresh.count), then \(again.count); read back \(stored.count), exact: \(exact)"
     }
 }

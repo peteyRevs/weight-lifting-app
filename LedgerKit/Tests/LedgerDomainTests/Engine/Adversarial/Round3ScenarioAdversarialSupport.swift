@@ -14,13 +14,11 @@ struct Round3Scenario {
     /// `delivered[sender][peer]`: the keys of `sender`'s envelopes that `peer` has been handed.
     private var delivered: [[Set<EnvelopeKey>]]
 
-    init(applied: LiteralHost.Applied, using generator: inout SeededGenerator) {
+    init(using generator: inout SeededGenerator) {
         let devices = [EngineAdv.phone, EngineAdv.watch, EngineAdv.tablet]
         let count = Int.random(in: 2 ... 3, using: &generator)
         hosts = devices.prefix(count).map { device in
-            var host = LiteralHost(device, offset: Double(Int.random(in: -30000 ... 30000, using: &generator)) / 1000)
-            host.applied = applied
-            return host
+            LiteralHost(device, offset: Double(Int.random(in: -30000 ... 30000, using: &generator)) / 1000)
         }
         delivered = Array(repeating: Array(repeating: [], count: count), count: count)
     }
@@ -30,13 +28,9 @@ struct Round3Scenario {
         hosts.flatMap(\.outbox)
     }
 
-    static func run(
-        seed: PropertySeed,
-        steps: Int = 40,
-        applied: LiteralHost.Applied = .everyReduced
-    ) async throws -> Round3Scenario {
+    static func run(seed: PropertySeed, steps: Int = 40) async throws -> Round3Scenario {
         var generator = seed.generator
-        var scenario = Round3Scenario(applied: applied, using: &generator)
+        var scenario = Round3Scenario(using: &generator)
         try await scenario.hosts[0].create(.started(EngineGen.session(using: &generator)), real: 0)
         try await scenario.deliver(using: &generator)
         for step in 0 ..< steps {

@@ -19,8 +19,8 @@ public struct EventEnvelope: Hashable, Codable, Sendable, Comparable {
     /// Strictly increasing per device within a workout, starting at 1.
     public let seq: UInt64
     /// The ordering stamp: the first key of `<`, and nothing else. The reducer never reads it as the
-    /// time of an action (the clock rule on `WorkoutEvent`); it only bounds payload times
-    /// (`isWellFormed`).
+    /// time of an action and never compares a payload time with it (the clock rule on `WorkoutEvent`);
+    /// `isWellFormed` only requires it to be finite.
     ///
     /// **Precondition (ADR-004 amendment, hybrid logical clock):** the host (F10/F17), not the reducer,
     /// stamps it as `max(now, newest wallClock seen or sent + 1 ms)`. An envelope then sorts after
@@ -50,76 +50,58 @@ public struct EventEnvelope: Hashable, Codable, Sendable, Comparable {
     }
 }
 
-// MARK: - Well-formedness (F04 fix round 2)
+// MARK: - Well-formedness (F04 fix round 2; re-plan 2026-09-29)
 
 public extension EventEnvelope {
-    /// How far a payload time may lie from its envelope's `wallClock`: 24 hours.
-    ///
-    /// Both clocks read the same moment on one device, so a real envelope sits within seconds of its
-    /// stamp. The window is generous on purpose. The hybrid logical clock drags `wallClock` ahead of the
-    /// device's clock by a peer's skew, and a device may record an action long after it happened, for
-    /// example a finish ended at the last set after hours of "Still lifting?" (decision #8). Only an
-    /// absurd or non-finite time falls outside it, which is all it is for: such a time would trap
-    /// `Duration` arithmetic or break `==` (NaN).
-    static let payloadTimeWindow = Duration.seconds(24 * 60 * 60)
-
     /// Whether `WorkoutEngine` may apply this envelope. A malformed envelope is a no-op for `reduce`
     /// and `replay`: no state change and no effects. It stays stored, like any envelope, so every
     /// device's log still agrees.
     ///
-    /// An envelope is malformed when:
-    /// - its `wallClock` is not finite;
-    /// - any date it carries (`doneAt`, a set's `doneAt`, `restStarted.endsAt`, `tappedAt`, `endedAt`,
-    ///   and in a `started` snapshot `startedAt`, `endedAt`, the rest's `endsAt` and every set's
-    ///   `doneAt`) lies more than `payloadTimeWindow` from `wallClock`; a non-finite date never lies
-    ///   within it;
+    /// An envelope is malformed only when:
+    /// - a date it carries is not finite: its `wallClock`, a payload date (`doneAt`, a set's `doneAt`,
+    ///   `restStarted.endsAt`, `tappedAt`, `endedAt`), or any date in a `started` snapshot (`startedAt`,
+    ///   `endedAt`, the rest's `endsAt`, every set's `doneAt` and every `lastPerformance.date`);
     /// - a rest length (`restStarted.total`, `restExtended.amount`, a snapshot rest's `total`) is
-    ///   negative or beyond `WorkoutEngine.longestRest`;
-    /// - a `started` snapshot's rest ends more than `longestRest` after the snapshot's `startedAt`.
+    ///   negative or beyond `WorkoutEngine.longestRest`.
+    ///
+    /// There is no time window (Pete, 2026-09-29): a finite date is accepted however far it lies from
+    /// `wallClock` or from any other date, such as a "Still lifting?" finish days after the last set
+    /// (F23 criterion 6). The engine's arithmetic saturates on such dates rather than trap.
     var isWellFormed: Bool {
-        guard wallClock.timeIntervalSinceReferenceDate.isFinite else {
-            return false
-        }
-        switch event {
+        wallClock.isFinite && event.isWellFormed
+    }
+}
+
+private extension WorkoutEvent {
+    /// Every date it carries is finite, and every rest length lies in `0 ... WorkoutEngine.longestRest`.
+    var isWellFormed: Bool {
+        switch self {
         case let .started(snapshot):
-            return isWellFormed(snapshot)
-        case let .setLogged(_, _, _, _, doneAt):
-            return isNear(doneAt)
+            let dates = [snapshot.startedAt, snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self)
+                + snapshot.exercises.flatMap(\.sets).compactMap(\.doneAt)
+                + snapshot.exercises.compactMap(\.lastPerformance?.date)
+            return dates.allSatisfy(\.isFinite) && snapshot.rest.map(\.total.isRestLength) ?? true
+        case let .setLogged(_, _, _, _, date), let .finished(date), let .discarded(date):
+            return date.isFinite
         case let .setAdded(_, set):
-            return set.doneAt.map(isNear) ?? true
-        case let .restStarted(endsAt, total):
-            return isNear(endsAt) && Self.isRestLength(total)
-        case let .restExtended(amount, _, tappedAt):
-            return isNear(tappedAt) && Self.isRestLength(amount)
-        case let .finished(endedAt), let .discarded(endedAt):
-            return isNear(endedAt)
+            return set.doneAt?.isFinite ?? true
+        case let .restStarted(date, length), let .restExtended(length, _, date):
+            return date.isFinite && length.isRestLength
         case .exerciseSelected, .setUnlogged, .setTargetChanged, .allSetsRepeated, .exerciseSwapped, .restSkipped:
             return true
         }
     }
+}
 
-    /// Whether `date` lies within `payloadTimeWindow` of `wallClock`. NaN fails every comparison.
-    private func isNear(_ date: Date) -> Bool {
-        abs(date.timeIntervalSince(wallClock)) <= Self.payloadTimeWindow / .seconds(1)
+private extension Date {
+    var isFinite: Bool {
+        timeIntervalSinceReferenceDate.isFinite
     }
+}
 
-    private static func isRestLength(_ length: Duration) -> Bool {
-        (.zero ... WorkoutEngine.longestRest).contains(length)
-    }
-
-    /// The `started` clauses of `isWellFormed`: every date near the stamp, and a rest the engine
-    /// could itself hold.
-    private func isWellFormed(_ snapshot: WorkoutState) -> Bool {
-        let setDates = snapshot.exercises.flatMap { $0.sets.compactMap(\.doneAt) }
-        let dates = [snapshot.startedAt] + [snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self) + setDates
-        guard dates.allSatisfy(isNear) else {
-            return false
-        }
-        guard let rest = snapshot.rest else {
-            return true
-        }
-        let latestEnd = snapshot.startedAt.addingTimeInterval(WorkoutEngine.longestRest / .seconds(1))
-        return Self.isRestLength(rest.total) && rest.endsAt <= latestEnd
+private extension Duration {
+    var isRestLength: Bool {
+        (.zero ... WorkoutEngine.longestRest).contains(self)
     }
 }
 

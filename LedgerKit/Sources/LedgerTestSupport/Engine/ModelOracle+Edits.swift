@@ -70,16 +70,20 @@ extension Model {
         }
     }
 
-    /// "+30s": grows the rest the tapping device showed, else a fresh rest from the tap.
+    /// "+30s": grows the rest the tapping device showed, else a fresh rest from the tap, except that a
+    /// rest already running past that fresh rest's end is left alone ("+30s" never shortens a rest).
     mutating func extendRest(by amount: Duration, shown: Bool, tappedAt: Date) {
+        let freshEnd = tappedAt.addingTimeInterval(amount / .seconds(1))
         if shown, let rest = workout.rest {
             // Each term is cut to ±limit first, so the sum cannot overflow; for the totals this model
             // writes (0…limit) the cut changes nothing once setRest caps the sum.
             let limit = Self.restLimit
             let sum = min(max(rest.total, .zero - limit), limit) + min(max(amount, .zero - limit), limit)
             setRest(endsAt: rest.endsAt.addingTimeInterval(amount / .seconds(1)), total: sum, from: tappedAt)
+        } else if let rest = workout.rest, rest.endsAt > freshEnd {
+            return
         } else {
-            setRest(endsAt: tappedAt.addingTimeInterval(amount / .seconds(1)), total: amount, from: tappedAt)
+            setRest(endsAt: freshEnd, total: amount, from: tappedAt)
         }
     }
 
@@ -102,30 +106,17 @@ extension Model {
 // MARK: - Malformed envelopes
 
 extension ModelOracle {
-    /// The payload window `EventEnvelope.isWellFormed` documents, written out: a day, in seconds.
-    static let payloadWindow: TimeInterval = 24 * 60 * 60
-
-    /// `false` for an envelope the rules skip: a stamp that is not a finite number, a payload date more
-    /// than a day from the stamp, a rest length below zero or above an hour, or a snapshot rest ending
-    /// more than an hour after the snapshot's start.
+    /// `false` for an envelope the rules skip: a stamp or any date it carries that is not a finite
+    /// number, or a rest length below zero or above an hour. There is no time window.
     static func accepts(_ envelope: EventEnvelope) -> Bool {
-        let stamp = envelope.wallClock.timeIntervalSinceReferenceDate
-        guard stamp.isFinite else {
+        let dates = [envelope.wallClock] + payloadDates(of: envelope.event)
+        for date in dates where !date.timeIntervalSinceReferenceDate.isFinite {
             return false
-        }
-        for date in payloadDates(of: envelope.event) {
-            let gap = date.timeIntervalSinceReferenceDate - stamp
-            if !(gap >= -payloadWindow && gap <= payloadWindow) {
-                return false
-            }
         }
         for length in restLengths(of: envelope.event) where length < .zero || length > Model.restLimit {
             return false
         }
-        guard case let .started(snapshot) = envelope.event, let rest = snapshot.rest else {
-            return true
-        }
-        return rest.endsAt.timeIntervalSince(snapshot.startedAt) <= Model.restLimit / .seconds(1)
+        return true
     }
 
     /// Every date an event carries.
@@ -136,6 +127,9 @@ extension ModelOracle {
             dates += [snapshot.endedAt, snapshot.rest?.endsAt].compactMap(\.self)
             for exercise in snapshot.exercises {
                 dates += exercise.sets.compactMap(\.doneAt)
+                if let last = exercise.lastPerformance {
+                    dates.append(last.date)
+                }
             }
             return dates
         case let .setLogged(_, _, _, _, doneAt):

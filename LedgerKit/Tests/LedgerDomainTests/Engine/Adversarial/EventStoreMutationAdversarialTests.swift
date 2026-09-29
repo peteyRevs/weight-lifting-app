@@ -49,6 +49,15 @@ actor MutantEventStore: WorkoutEventStore {
         case compactsEverything
         /// Skips an envelope the engine would ignore (round 2): the store judges keys, not contents.
         case dropsMalformed
+        /// Final fix round (finding 22): stores one more copy on each re-append (no unique index), while
+        /// `append` still returns only what is new.
+        case keepsCopies
+        /// Final fix round (finding 22): keeps `wallClock` to the millisecond, as a `REAL` or `TEXT` column
+        /// written in milliseconds would.
+        case stampToMilliseconds
+        /// Final fix round (finding 22): keeps payload dates to the millisecond, as GRDB's default JSON
+        /// column encoding (`.millisecondsSince1970`) would.
+        case payloadToMilliseconds
     }
 
     let mutation: Mutation
@@ -63,12 +72,16 @@ actor MutantEventStore: WorkoutEventStore {
         var updated = logs
         var fresh: [EventEnvelope] = []
         for envelope in envelopes where mutation != .dropsMalformed || envelope.isWellFormed {
+            let row = try row(envelope)
             guard let existing = stored(envelope, in: updated) else {
-                updated[envelope.workoutID, default: []].append(envelope)
+                updated[envelope.workoutID, default: []].append(row)
                 fresh.append(envelope)
                 continue
             }
-            if existing == envelope || (mutation == .conflictComparesEventOnly && existing.event == envelope.event) {
+            if existing == row || (mutation == .conflictComparesEventOnly && existing.event == envelope.event) {
+                if mutation == .keepsCopies {
+                    updated[envelope.workoutID, default: []].append(row)
+                }
                 continue
             }
             if mutation == .keepsFirstOfBatchConflict, fresh.contains(existing) {
@@ -117,6 +130,28 @@ actor MutantEventStore: WorkoutEventStore {
             logs = [:]
         } else {
             logs[workout] = nil
+        }
+    }
+
+    /// The envelope as this store keeps it.
+    private func row(_ envelope: EventEnvelope) throws -> EventEnvelope {
+        switch mutation {
+        case .stampToMilliseconds:
+            let milliseconds = (envelope.wallClock.timeIntervalSince1970 * 1000).rounded()
+            return EventEnvelope(
+                event: envelope.event, workoutID: envelope.workoutID, device: envelope.device, seq: envelope.seq,
+                wallClock: Date(timeIntervalSince1970: milliseconds / 1000)
+            )
+        case .payloadToMilliseconds:
+            let (encoder, decoder) = (JSONEncoder(), JSONDecoder())
+            encoder.dateEncodingStrategy = .millisecondsSince1970
+            decoder.dateDecodingStrategy = .millisecondsSince1970
+            return try EventEnvelope(
+                event: decoder.decode(WorkoutEvent.self, from: encoder.encode(envelope.event)),
+                workoutID: envelope.workoutID, device: envelope.device, seq: envelope.seq, wallClock: envelope.wallClock
+            )
+        default:
+            return envelope
         }
     }
 

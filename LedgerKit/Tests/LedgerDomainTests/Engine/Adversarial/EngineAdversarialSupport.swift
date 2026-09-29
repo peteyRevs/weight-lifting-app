@@ -168,14 +168,12 @@ struct DeviceRecorder {
     }
 }
 
-/// A device as ADR-004 rule 2 describes it: it keeps one envelope per key, applies an envelope that
-/// sorts after everything it has applied with `reduce`, and otherwise rebuilds the state from the
-/// merged, sorted log with `replay`.
+/// A device as ADR-004's host loop describes it for what it receives (re-plan 2026-09-29): it keeps one
+/// envelope per key and, whenever an envelope is new, rebuilds the state from the merged log with
+/// `replay`. It has no in-order `reduce` path.
 struct Replica {
     private(set) var log: [EnvelopeKey: EventEnvelope] = [:]
     private(set) var state: WorkoutState?
-    private(set) var newest: EventEnvelope?
-    private(set) var rebuilds = 0
 
     init(_ envelopes: [EventEnvelope] = []) {
         for envelope in envelopes {
@@ -192,33 +190,25 @@ struct Replica {
             return
         }
         log[envelope.key] = envelope
-        if state != nil, let newest, newest < envelope {
-            state = WorkoutEngine.reduce(state, envelope).0
-            self.newest = envelope
-        } else {
-            state = WorkoutEngine.replay(envelopes)
-            newest = log.values.max()
-            rebuilds += 1
-        }
+        state = WorkoutEngine.replay(envelopes)
     }
 }
 
-/// A host as the orchestrator's decisions of 2026-09-29 describe it (findings 4 and 5): it appends
-/// every envelope it receives to its store first, whatever the effects, and reduces only the
-/// envelopes the store newly accepted, in arrival order.
+/// A host as ADR-004's host loop describes it for what it receives (findings 4 and 5; re-plan
+/// 2026-09-29): it appends every envelope to its store first, whatever it holds, and when `append`
+/// stored anything new it rebuilds once with `replay` and runs `WorkoutEngine.effects(from:to:)`.
 struct StoringHost {
     let store: any WorkoutEventStore = InMemoryEventStore()
     private(set) var state: WorkoutState?
 
-    /// Receives `envelopes` and returns the effects of the ones it reduced.
+    /// Receives `envelopes` and returns the effects of the rebuild, if there was one.
     mutating func receive(_ envelopes: [EventEnvelope]) async throws -> [Effect] {
-        var effects: [Effect] = []
-        for envelope in try await store.append(envelopes) {
-            let (next, emitted) = WorkoutEngine.reduce(state, envelope)
-            state = next
-            effects += emitted
+        guard try await !store.append(envelopes).isEmpty else {
+            return []
         }
-        return effects
+        let before = state
+        state = try await replayed()
+        return WorkoutEngine.effects(from: before, to: state)
     }
 
     /// The state its stored log replays to.

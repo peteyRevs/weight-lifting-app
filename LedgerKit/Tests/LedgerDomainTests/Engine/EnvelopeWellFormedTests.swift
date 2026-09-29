@@ -3,12 +3,13 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// Fix round 2, orchestrator decision A: `EventEnvelope.isWellFormed`, one clause per test, and what
-/// `reduce` and `replay` do with a malformed envelope (nothing).
-@Suite("EventEnvelope · well-formedness (decision A)", .tags(.domain))
+/// Fix round 2, orchestrator decision A, as the re-plan (2026-09-29, decision 2) narrowed it:
+/// `EventEnvelope.isWellFormed` has no time window. One clause per test, and what `reduce` and `replay`
+/// do with a malformed envelope (nothing).
+@Suite("EventEnvelope · well-formedness (decision A, re-plan)", .tags(.domain))
 struct EnvelopeWellFormedTests {
-    static let day = EventEnvelope.payloadTimeWindow / .seconds(1)
     static let hour = WorkoutEngine.longestRest
+    static let day: TimeInterval = 86400
 
     /// `event` from the watch, stamped at 100 s.
     static func stamped(_ event: WorkoutEvent, at seconds: TimeInterval = 100) -> EventEnvelope {
@@ -20,26 +21,21 @@ struct EnvelopeWellFormedTests {
         Engine.at(100 + offset)
     }
 
-    /// Dates on and just beyond the window's edges, plus non-finite ones.
+    /// Any finite date is well-formed, however far from the stamp; a non-finite one never is.
     static let dates: [(Date, Bool)] = [
         (near(0), true),
-        (near(-day), true),
-        (near(day), true),
-        (near(-day - 0.001), false),
-        (near(day + 0.001), false),
-        (Date(timeIntervalSinceReferenceDate: 1e21), false),
+        (near(-day - 0.001), true),
+        (near(30 * day), true),
+        (Date(timeIntervalSinceReferenceDate: 1e21), true),
+        (Date(timeIntervalSinceReferenceDate: -.greatestFiniteMagnitude), true),
+        (.distantFuture, true),
         (Date(timeIntervalSinceReferenceDate: .infinity), false),
         (Date(timeIntervalSinceReferenceDate: -.infinity), false),
         (Date(timeIntervalSinceReferenceDate: .nan), false)
     ]
 
-    @Test("The payload window is a day")
-    func payloadWindow_isADay() {
-        #expect(EventEnvelope.payloadTimeWindow == .seconds(86400))
-    }
-
-    @Test("Every payload date must lie within a day of the stamp; a non-finite one never does")
-    func payloadDates_liesWithinTheWindow() {
+    @Test("Every payload date must be finite; there is no window around the stamp")
+    func payloadDates_mustBeFinite() {
         for (date, wellFormed) in Self.dates {
             let set = LoggedSet(
                 id: SetID(EventBuilders.uuid(0xADD)),
@@ -92,31 +88,37 @@ struct EnvelopeWellFormedTests {
         }
     }
 
-    @Test("A started snapshot: every date within the window, and a rest the engine could hold")
-    func startedSnapshot_isInternallyValid() {
+    @Test("A started snapshot: every date it carries finite, and a rest length the engine could hold")
+    func startedSnapshot_isInternallyPossible() {
         func started(_ edit: (inout WorkoutState) -> Void) -> EventEnvelope {
             var snapshot = EventBuilders.seedSession()
             edit(&snapshot)
             return Engine.envelope(.started(snapshot), 0, seq: 1)
         }
-        let absurd = Date(timeIntervalSinceReferenceDate: 1e21)
+        let nan = Date(timeIntervalSinceReferenceDate: .nan)
+        let far = Date(timeIntervalSinceReferenceDate: 1e21)
         #expect(started { _ in }.isWellFormed)
-        #expect(started { $0.rest = RestTimer(endsAt: $0.startedAt.addingTimeInterval(3600), total: Self.hour) }
+        // Far but finite dates, and a rest ending long after the start: no window, so well-formed.
+        #expect(started { $0.startedAt = far }.isWellFormed)
+        #expect(started { $0.rest = RestTimer(endsAt: $0.startedAt.addingTimeInterval(7200), total: Self.hour) }
             .isWellFormed)
-        #expect(!started { $0.startedAt = absurd }.isWellFormed)
-        #expect(!started { $0.endedAt = Date(timeIntervalSinceReferenceDate: .nan) }.isWellFormed)
-        #expect(!started { $0.exercises[0].sets[0].doneAt = absurd }.isWellFormed)
-        #expect(!started { $0.rest = RestTimer(endsAt: absurd, total: .seconds(60)) }.isWellFormed)
-        // Internally invalid: longer than an hour, or ending more than an hour after the workout starts.
+        #expect(!started { $0.startedAt = Date(timeIntervalSinceReferenceDate: .infinity) }.isWellFormed)
+        #expect(!started { $0.endedAt = nan }.isWellFormed)
+        #expect(!started { $0.exercises[0].sets[0].doneAt = nan }.isWellFormed)
+        #expect(!started { $0.rest = RestTimer(endsAt: nan, total: .seconds(60)) }.isWellFormed)
+        // Finding 16a: a last performance's date is a date the snapshot carries too.
+        #expect(!started { $0.exercises[0].lastPerformance = LastPerformance(
+            date: nan, sets: 3, reps: 8, load: .pounds(50)
+        ) }.isWellFormed)
+        // Internally impossible rests: a negative total, or one longer than the engine keeps.
+        #expect(!started { $0.rest = RestTimer(endsAt: $0.startedAt, total: .seconds(-1)) }.isWellFormed)
         #expect(!started { $0.rest = RestTimer(endsAt: $0.startedAt, total: Self.hour * 2) }.isWellFormed)
-        #expect(!started { $0.rest = RestTimer(endsAt: $0.startedAt.addingTimeInterval(3601), total: .seconds(60)) }
-            .isWellFormed)
     }
 
     @Test("reduce: a malformed envelope changes nothing and emits nothing, not even persist or transmit")
     func reduce_ignoresMalformed() throws {
         let live = try Engine.live()
-        let absurd = Self.stamped(Engine.logged(0, 0, at: 1e9))
+        let absurd = Self.stamped(Engine.logged(0, 0, at: .nan))
         #expect(!absurd.isWellFormed)
         let (state, effects) = WorkoutEngine.reduce(live, absurd)
         #expect(state == live)
@@ -131,7 +133,7 @@ struct EnvelopeWellFormedTests {
         var hostile = EventBuilders.session(EventBuilders.seedExercises, id: WorkoutID(EventBuilders.uuid(0xBAD)))
         hostile.startedAt = Date(timeIntervalSinceReferenceDate: .nan)
         let early = EventBuilders.envelope(.started(hostile), device: Engine.watch, seq: 1, at: Engine.at(-5))
-        let log = [early, Engine.started(), Engine.envelope(Engine.logged(0, 0, at: 1e9), 10, seq: 2)]
+        let log = [early, Engine.started(), Engine.envelope(Engine.logged(0, 0, at: .infinity), 10, seq: 2)]
         #expect(WorkoutEngine.foldOrder(log) == [Engine.started()])
         #expect(WorkoutEngine.replay(log) == WorkoutEngine.replay([Engine.started()]))
         #expect(ModelOracle.replay(log) == WorkoutEngine.replay(log))

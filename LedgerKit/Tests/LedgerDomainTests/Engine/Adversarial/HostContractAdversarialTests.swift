@@ -4,8 +4,9 @@ import LedgerTestSupport
 import Testing
 
 /// Round 2: minimal repros for the host-contract questions (findings 12–14). Fix round 2 answered each
-/// (orchestrator decisions E, F and B); every test now asserts the answer on a host model, and keeps the
-/// wrong reading as a control that shows the rule is load-bearing.
+/// (orchestrator decisions E, F and B), and the final fix round simplified the loop (re-plan 2026-09-29,
+/// decision 3); every test asserts the answer on a host model, and keeps the wrong reading as a control
+/// that shows the rule is load-bearing.
 @Suite("WorkoutEngine · host contract (adversarial, round 2)", .tags(.domain))
 struct HostContractAdversarialTests {
     typealias Adv = EngineAdv
@@ -57,13 +58,15 @@ struct HostContractAdversarialTests {
         let forgotten = try await Self.relaunchThenUnlog(HostPolicy(recoverClock: false))
         #expect(forgotten.unlogStamp < forgotten.newestStored)
         #expect(forgotten.done, "the lifter's un-log is lost on every device")
-        #expect(forgotten.shown, "the phone's own screen flips back as it rebuilds")
+        // Final fix round (decision 3): the host reduces its own envelope, so its screen shows the un-log
+        // that its own log, and every peer's, replays without: the precondition's breach made visible.
+        #expect(!forgotten.shown, "the phone's own screen shows the un-log its log has lost")
     }
 
     @Test(
         """
-        Finding 13 / decision F: the documented loop (reduce when all that is new sorts after, else rebuild \
-        once) shows replay's 185; reducing in arrival order (StoringHost, the control) shows 200
+        Finding 13 / decision 3: the documented loop (rebuild with replay whenever something is new) shows \
+        replay's 185; reducing in arrival order (the control) shows 200
         """
     )
     func arrivalOrderReduce_divergesFromReplay() async throws {
@@ -77,22 +80,18 @@ struct HostContractAdversarialTests {
         try await host.receive([target])
         #expect(Adv.row(host.state, 0, 0)?.weight == pounds("185"))
         #expect(host.replayMismatches == 0)
-        // Control: the loop the round-1 docs described.
-        var phone = StoringHost()
-        _ = try await phone.receive([Adv.start(), log])
-        _ = try await phone.receive([target])
-        var watch = StoringHost()
-        _ = try await watch.receive([Adv.start(), target])
-        _ = try await watch.receive([log])
-        #expect(Adv.row(phone.state, 0, 0)?.weight == pounds("200"))
-        #expect(Adv.row(watch.state, 0, 0)?.weight == pounds("185"))
-        #expect(try await Adv.row(phone.replayed(), 0, 0)?.weight == pounds("185"))
+        // Control: the loop the round-1 docs described, reducing each new envelope in arrival order.
+        let phone = Adv.state(after: [Adv.start(), log, target])
+        let watch = Adv.state(after: [Adv.start(), target, log])
+        #expect(Adv.row(phone, 0, 0)?.weight == pounds("200"))
+        #expect(Adv.row(watch, 0, 0)?.weight == pounds("185"))
+        #expect(Adv.row(WorkoutEngine.replay([Adv.start(), log, target]), 0, 0)?.weight == pounds("185"))
     }
 
     @Test(
         """
-        Finding 13 / decision F: a batch that needs a rebuild is rebuilt once, so one +30s is +30 s; rebuilding \
-        for one envelope and then reducing a later one of the same batch (the control) applies it twice
+        Finding 13 / decision 3: a batch is rebuilt once, so one +30s is +30 s; rebuilding for one envelope \
+        and then reducing a later one of the same batch (the control) applies it twice
         """
     )
     func rebuildThenReduceInOneBatch_appliesTwice() async throws {

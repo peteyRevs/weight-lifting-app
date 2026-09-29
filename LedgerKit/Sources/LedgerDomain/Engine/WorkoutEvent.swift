@@ -10,7 +10,7 @@ import Foundation
 /// **Clock rule (ADR-004 amendment).** A payload time (`doneAt`, `tappedAt`, `restStarted.endsAt`,
 /// `endedAt`) is the originating device's clock at the action. The envelope's `wallClock` is only the
 /// hybrid-logical-clock ordering stamp: the reducer never reads it as the time of an action, and
-/// compares a payload time with it only to reject an absurd one (`EventEnvelope.isWellFormed`).
+/// never compares a payload time with it.
 ///
 /// Labels name the state field they write (`doneAt`, `exerciseID`, `endedAt`) rather than ADR-004's
 /// `at:`/`to:`/`by:`, which SwiftLint's `identifier_name` rejects as too short.
@@ -39,7 +39,8 @@ public enum WorkoutEvent: Hashable, Codable, Sendable {
     /// - `extendsShownRest` is `true` when it showed a rest running (`RestTimer.remaining(at: now)` above
     ///   zero); the engine then extends the state's rest, whatever any timestamp says;
     /// - otherwise, or when the state has no rest, the engine starts a fresh rest of `amount` at
-    ///   `tappedAt`, the device's clock at the tap ("+30s" at zero restarts a 30 s rest).
+    ///   `tappedAt`, the device's clock at the tap ("+30s" at zero restarts a 30 s rest), unless the
+    ///   state's rest ends later than that: "+30s" never shortens a running rest.
     case restExtended(amount: Duration, extendsShownRest: Bool, tappedAt: Date)
     /// Rule 9: "Skip".
     case restSkipped

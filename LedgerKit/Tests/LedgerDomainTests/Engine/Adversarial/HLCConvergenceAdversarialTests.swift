@@ -4,8 +4,8 @@ import LedgerTestSupport
 import Testing
 
 /// Round 2: ADR-004's hybrid-logical-clock amendment under randomized partitions, ±30 s clock skew,
-/// clock steps back and relaunches, with hosts that store first and reduce only what `append` newly
-/// stored (finding 4 and 5 decisions).
+/// clock steps back and relaunches, with hosts on ADR-004's host loop (`SimHost`: reduce their own
+/// envelopes, append and rebuild for what they receive).
 @Suite("WorkoutEngine · HLC convergence (adversarial, round 2)", .tags(.domain))
 struct HLCConvergenceAdversarialTests {
     /// Seeds for the tests that count a hazard across many sessions.
@@ -29,9 +29,9 @@ struct HLCConvergenceAdversarialTests {
             #expect(host.state == expected, "\(host.device) did not converge")
             #expect(try await host.store.append(scenario.everything).isEmpty, "\(host.device) missed an envelope")
             // Fix round 2 (decision F): the effects it ran leave the notification, the stored workout and
-            // the log as the state says, and no remote change buzzed.
+            // the log as the state says. Final fix round (decision 3): one delivery buzzes at most once.
             #expect(host.notification == host.state?.rest?.endsAt, "\(host.device)'s rest notification is stale")
-            #expect(host.remoteHaptics == 0, "\(host.device) buzzed for a remote change")
+            #expect(host.largestRemoteBurst <= 1, "\(host.device) buzzed more than once for one delivery")
             switch host.state?.phase {
             case .finished:
                 #expect(host.materialized == host.state, "\(host.device) did not materialise the final state")
@@ -44,15 +44,16 @@ struct HLCConvergenceAdversarialTests {
         #expect(scenario.lostActions(in: expected).isEmpty, "lost \(scenario.lostActions(in: expected))")
     }
 
-    @Test("Control: with raw device clocks the same sessions still converge, but lose lifter actions")
+    /// Final fix round (decision 3): a host reduces its own envelope, which equals replay only under the HLC,
+    /// so with raw clocks a host's screen may leave replay; the control asserts that its log converges.
+    @Test("Control: with raw device clocks the same sessions' logs still converge, but lose lifter actions")
     func rawClocks_loseActions() async throws {
         var (checked, lost, early) = (0, 0, 0)
         for seed in Self.sample {
             let scenario = try await HLCScenario.run(HostPolicy(hybridClock: false), seed: seed)
             let expected = try #require(WorkoutEngine.replay(scenario.everything))
             for host in scenario.hosts {
-                #expect(host.state == expected)
-                #expect(host.replayMismatches == 0)
+                #expect(await WorkoutEngine.replay(host.log) == expected)
                 early += host.causalViolations.count
             }
             checked += scenario.lastWords.count

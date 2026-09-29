@@ -5,8 +5,8 @@ public extension WorkoutEngine {
     /// the envelopes arrived in and however often; `nil` when the log holds no usable `started`. It
     /// ignores malformed envelopes (`EventEnvelope.isWellFormed`), as `reduce` does.
     ///
-    /// This is how a device applies a remote envelope (rebuild from the merged log) and how it
-    /// resumes after a crash. It is a function of the envelope set only while each key names one
+    /// This is how a device applies what it received (the host loop on `reduce`) and how it resumes
+    /// after a crash. It is a function of the envelope set only while each key names one
     /// envelope (`EventEnvelope`); it breaks no tie between two envelopes that share a key.
     static func replay(_ log: [EventEnvelope]) -> WorkoutState? {
         var state: WorkoutState?
@@ -16,8 +16,12 @@ public extension WorkoutEngine {
         return state
     }
 
-    /// The effects a rebuild must run: what changed between the state before (`old`) and after (`new`)
-    /// the host applied envelopes it received (the host loop on `reduce`). They are, in order:
+    /// The effects a rebuild runs: what changed between the state before (`old`) and after (`new`) the
+    /// host rebuilt for envelopes it received (the host loop on `reduce`). They are, in order:
+    /// - one `.haptic(.setLogged)` while the workout is live (`new` is live) and at least one set is done
+    ///   in `new` that was not done in `old`, however many: a set logged on the other device buzzes here
+    ///   (F17 criterion 9), and a reconnect that brings a dozen buzzes once (Pete, 2026-09-29). A rebuild
+    ///   that ends finished or discarded never buzzes, even for a late set;
     /// - when the workout has just ended: `.materialize(new)` if finished or `.discardLog` if discarded,
     ///   then `.cancelRestNotification`;
     /// - when a finished workout changed (a late envelope sorted before its finish): `.materialize(new)`
@@ -26,16 +30,18 @@ public extension WorkoutEngine {
     ///   `.cancelRestNotification` when there is none;
     /// - `.updateLiveActivity` whenever the state changed.
     ///
-    /// There are no haptics: a rebuild can apply many envelopes at once, so a reconnect that delivers a
-    /// dozen sets plays nothing. (A received envelope reduced live, in order, runs `reduce`'s own effects,
-    /// haptic included; see ADR-004, "The host loop".) There is no `.persist` or `.transmit` either: the
-    /// host has stored what it received, and sends only its own envelopes.
+    /// There is no other haptic, and no `.persist` or `.transmit`: the host has stored what it received,
+    /// and sends only its own envelopes. A launch is not a rebuild: the launch step on
+    /// `WorkoutEventStore.uncompactedWorkoutIDs` resumes, materialises or drops each log, and plays nothing.
     static func effects(from old: WorkoutState?, to new: WorkoutState?) -> [Effect] {
         guard new != old else {
             return []
         }
+        let doneBefore = Set(old?.exercises.flatMap(\.sets).filter(\.isDone).map(\.id) ?? [])
+        let newlyDone = new?.phase == .live
+            && new?.exercises.flatMap(\.sets).contains { $0.isDone && !doneBefore.contains($0.id) } == true
         let ended = new.map { $0.phase != .live && $0.phase != old?.phase } ?? false
-        var effects: [Effect] = []
+        var effects: [Effect] = newlyDone ? [.haptic(.setLogged)] : []
         if let new, new.phase == .finished {
             effects.append(.materialize(new))
         } else if ended {

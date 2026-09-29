@@ -64,10 +64,28 @@ struct ReduceRestTests {
         // Stamped at 20 s and tapped at 25 s, both after the rest's end at 15 s.
         let late = try Engine.run([rest, Engine.extend(shown: true, tapped: 25)])
         #expect(late.state.rest == RestTimer(endsAt: Engine.at(45), total: .seconds(90)))
-        let running = WorkoutEvent.restStarted(endsAt: Engine.at(100), total: .seconds(90))
-        // Stamped at 20 s and tapped at 5 s, both well before the end at 100 s.
+        let running = WorkoutEvent.restStarted(endsAt: Engine.at(30), total: .seconds(90))
+        // Stamped at 20 s and tapped at 5 s, both before the end at 30 s; the fresh rest ends later, at 35 s.
         let early = try Engine.run([running, Engine.extend(shown: false, tapped: 5)])
         #expect(early.state.rest == RestTimer(endsAt: Engine.at(35), total: .seconds(30)))
+    }
+
+    @Test(
+        """
+        Decision 4 (re-plan): +30 s from a device that showed no rest never shortens the state's rest. One \
+        ending later than the fresh rest would is kept unchanged; one ending sooner is replaced
+        """
+    )
+    func extend_unshown_neverShortensARunningRest() throws {
+        let running = WorkoutEvent.restStarted(endsAt: Engine.at(100), total: .seconds(90))
+        let kept = try Engine.run([running, Engine.extend(shown: false, tapped: 20)])
+        #expect(kept.state.rest == RestTimer(endsAt: Engine.at(100), total: .seconds(90)))
+        #expect(kept.effects.count == 2, "only persist and transmit, the rest is unchanged: \(kept.effects)")
+        let replaced = try Engine.run([running, Engine.extend(shown: false, tapped: 80)])
+        #expect(replaced.state.rest == RestTimer(endsAt: Engine.at(110), total: .seconds(30)))
+        // At the fresh rest's exact end the state's rest does not run later, so the fresh one starts.
+        let tie = try Engine.run([running, Engine.extend(shown: false, tapped: 70)])
+        #expect(tie.state.rest == RestTimer(endsAt: Engine.at(100), total: .seconds(30)))
     }
 
     @Test("restStarted stores the absolute end, whenever the envelope is applied")

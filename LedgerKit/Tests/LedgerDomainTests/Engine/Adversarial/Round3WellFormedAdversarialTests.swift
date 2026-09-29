@@ -60,14 +60,15 @@ struct Round3WellFormedAdversarialTests {
         #expect(WorkoutEngine.summary(weekend, prs: []).elapsed == .seconds(3600))
     }
 
+    /// Final fix round (decision 2, no time windows): the 24.5 h row used to be dropped; now every skew is kept.
     @Test(
         """
-        Held, and a note for F17: with a peer 23 h ahead, the HLC drags this device's stamps 23 h past its \
-        payload times and its actions stay well-formed; past 24 h every timed action it creates is dropped
+        Held, and a note for F17: with a peer 23 h, 24.5 h or 30 days ahead, the HLC drags this device's \
+        stamps that far past its payload times, and its actions stay well-formed (there is no window)
         """
     )
     func peerClockADayAhead_dragsStamps() async throws {
-        for (skew, kept) in [(23.0, true), (24.5, false)] {
+        for skew in [23.0, 24.5, 30.0 * 24] {
             var phone = LiteralHost(Adv.phone, offset: 0)
             var watch = LiteralHost(Adv.watch, offset: skew * Self.hour)
             try await phone.create(.started(EventBuilders.seedSession()), real: 0)
@@ -75,12 +76,19 @@ struct Round3WellFormedAdversarialTests {
             try await watch.create(.restSkipped, real: 5)
             try await phone.receive(watch.outbox)
             let tap = try await phone.create(Adv.logged(0, 0, doneAt: 60), real: 60)
-            #expect((tap != nil) == kept, "skew \(skew) h")
-            #expect((Adv.row(phone.state, 0, 0)?.isDone == true) == kept)
+            #expect(tap != nil, "skew \(skew) h")
+            #expect(Adv.row(phone.state, 0, 0)?.isDone == true)
         }
     }
 
-    @Test("Held: the window's edges are inclusive at a realistic fractional stamp; DST changes nothing")
+    /// Final fix round (decision 2): the window and its edges are gone, so one millisecond beyond a day is
+    /// well-formed too.
+    @Test(
+        """
+        Held: at a realistic fractional stamp, a day either side and a millisecond beyond are well-formed; DST \
+        changes nothing
+        """
+    )
     func edges_atARealisticStamp() {
         let stamp = Date(timeIntervalSinceReferenceDate: 812_345_678.912_345_6)
         func logged(_ offset: Double) -> Bool {
@@ -93,7 +101,7 @@ struct Round3WellFormedAdversarialTests {
             ).isWellFormed
         }
         #expect(logged(Self.day) && logged(-Self.day))
-        #expect(!logged(Self.day + 0.001) && !logged(-Self.day - 0.001))
+        #expect(logged(Self.day + 0.001) && logged(-Self.day - 0.001))
         // 2026-11-01 06:00Z: US clocks fall back an hour. Dates are absolute, so the local repeat is invisible.
         let fallBack = Date(timeIntervalSince1970: 1_793_512_800)
         #expect(EventBuilders.envelope(.finished(endedAt: fallBack), seq: 2, at: fallBack.addingTimeInterval(-1800))
@@ -124,12 +132,13 @@ extension Round3WellFormedAdversarialTests {
         )
         #expect(!first.isWellFormed, "a non-finite date in the snapshot passes the predicate")
         #expect(WorkoutEngine.replay([first]) == WorkoutEngine.replay([resent]), "the same bytes replay unequal")
+        // Final fix round: NaN != NaN, so a store that compares by value still calls the resend a conflict.
+        // No predicate can change that; F17 rejects non-finite dates when it decodes a frame, before
+        // anything is stored (F17, "Inputs from F04", item 5). This pins why.
         let store = InMemoryEventStore()
         _ = try await store.append([first])
-        do {
-            _ = try await store.append([resent])
-        } catch {
-            Issue.record("a resend of the same started is rejected: \(error)")
+        await #expect(throws: EngineError.conflictingEnvelope(first.key)) {
+            try await store.append([resent])
         }
     }
 
@@ -148,21 +157,24 @@ extension Round3WellFormedAdversarialTests {
         #expect(state?.exercises[0].sets.count == 6, "the add was dropped")
     }
 
+    /// Final fix round (decision 2): bounding a rest's end by its stamp is a time window, which Pete ruled
+    /// out. The envelopes are kept as given; the ring's arithmetic saturates rather than trap.
     @Test(
         """
-        Finding 16c: a well-formed restStarted or setLogged can put a rest's end 23 h after its stamp, though \
-        a started snapshot's rest may end at most longestRest after its start ("a rest the engine could hold")
+        Finding 16c (documents): a restStarted or setLogged that puts a rest's end 23 h after its stamp is \
+        well-formed and applied as given; the ring's remaining time and fill stay finite
         """
     )
-    func eventRests_endWithinLongestRestOfTheirStamp() throws {
+    func eventRests_farFromTheirStamp_areAppliedAsGiven() {
         let far = engineTime(60 + 23 * Self.hour)
         let started = Adv.env(.restStarted(endsAt: far, total: .seconds(90)), Adv.watch, seq: 1, at: 60)
         let logged = Adv.env(Adv.logged(0, 0, doneAt: 60 + 23 * Self.hour), Adv.watch, seq: 1, at: 60)
-        for envelope in [started, logged] {
+        let expected = [RestTimer(endsAt: far, total: .seconds(90)), RestTimer(endsAt: far + 150, total: .seconds(150))]
+        for (envelope, rest) in zip([started, logged], expected) {
             #expect(envelope.isWellFormed)
-            let rest = try #require(WorkoutEngine.replay([Adv.start(), envelope])?.rest)
-            let left = rest.remaining(at: envelope.wallClock)
-            #expect(left <= WorkoutEngine.longestRest, "a \(rest.total) rest shows \(left) left")
+            #expect(WorkoutEngine.replay([Adv.start(), envelope])?.rest == rest)
+            #expect(rest.remaining(at: envelope.wallClock) > WorkoutEngine.longestRest)
+            #expect(rest.fraction(at: envelope.wallClock) == 1)
         }
     }
 }

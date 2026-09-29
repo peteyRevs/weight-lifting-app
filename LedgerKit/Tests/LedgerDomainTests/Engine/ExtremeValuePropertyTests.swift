@@ -3,8 +3,9 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// Fix round 2, orchestrator decision A: decodable envelopes carrying extreme doubles (±1e308, ±1e21,
-/// ±∞, NaN) in every date, and extreme `Duration`s. They go through a binary property list, which,
+/// Fix round 2, orchestrator decision A (narrowed by the re-plan's decision 2): decodable envelopes
+/// carrying extreme doubles (±1e308, ±1e21, ±∞, NaN) in every date, and extreme `Duration`s. They go through a binary
+/// property list, which,
 /// unlike JSON, carries non-finite dates. Nothing traps, a replayed state equals itself, and every
 /// public computed property of the result can be read at an extreme `now`.
 @Suite("WorkoutEngine · extreme values (decision A)", .tags(.domain, .property))
@@ -52,6 +53,10 @@ struct ExtremeValuePropertyTests {
         }
         if generator.chance(20) {
             snapshot.exercises[0].sets[0].doneAt = date(using: &generator)
+        }
+        if generator.chance(20) {
+            let date = date(using: &generator)
+            snapshot.exercises[1].lastPerformance = LastPerformance(date: date, sets: 3, reps: 8, load: .pounds(50))
         }
         return snapshot
     }
@@ -125,10 +130,14 @@ struct ExtremeValuePropertyTests {
         arguments: PropertySeed.all
     )
     func extremeValues_neverTrap_andStateEqualsItself(seed: PropertySeed) throws {
-        let log = try Self.decoded(Self.log(seed))
+        let raw = Self.log(seed)
+        let log = try Self.decoded(raw)
         var generator = seed.generator
         let replayed = WorkoutEngine.replay(log)
         #expect(replayed == WorkoutEngine.replay(log), "replay(log) != replay(log)")
+        // Two decodes share no storage, so a NaN nested in a snapshot cannot hide behind `Array ==`'s
+        // identity shortcut (finding 16a).
+        #expect(try replayed == WorkoutEngine.replay(Self.decoded(raw)), "two decodes of one log replay unequal")
         #expect(replayed == WorkoutEngine.replay(log.shuffled(using: &generator)))
         #expect(replayed == ModelOracle.replay(log))
         var state: WorkoutState?

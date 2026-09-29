@@ -21,7 +21,7 @@ struct Round3RestIntentAdversarialTests {
         for envelope in racing.reversed() {
             replica.receive(envelope)
         }
-        #expect(replica.state == states[0], "a device reducing or rebuilding disagrees with replay")
+        #expect(replica.state == states[0], "a device rebuilding on receipt disagrees with replay")
         return states[0]?.rest
     }
 
@@ -64,17 +64,22 @@ struct Round3RestIntentAdversarialTests {
         #expect(Self.rest([extend]) == RestTimer(endsAt: engineTime(200), total: .seconds(30)))
     }
 
+    /// Final fix round (decision 4, Pete: "+30s never shortens a running rest"): this pinned the phone's rest
+    /// dropping to 30 s; it now pins the rest kept unchanged, and that a tap later in the rest still restarts.
     @Test(
         """
-        Finding 20 (documents): the watch has not yet heard the phone's set log, so it shows no rest and \
-        its +30s starts a 30 s rest; stamped after the log, it replaces the phone's running 150 s rest, \
-        and the rest the phone shows drops from 145 s to 30 s
+        Finding 20: the watch has not yet heard the phone's set log, so it shows no rest and its +30s asks \
+        for a 30 s rest; stamped after the log, it keeps the phone's longer running rest unchanged, so the \
+        phone still shows 145 s left
         """
     )
-    func unseenRest_plus30Shortens() {
+    func unseenRest_plus30KeepsTheLongerRest() {
         let tap = Adv.env(Adv.extend(shown: false, tappedAt: 15), Adv.watch, seq: 1, at: 15)
         let rest = Self.rest([tap])
-        #expect(rest == RestTimer(endsAt: engineTime(45), total: .seconds(30)))
-        #expect(rest?.remaining(at: engineTime(15)) == .seconds(30), "the phone showed 145 s left")
+        #expect(rest == RestTimer(endsAt: engineTime(160), total: .seconds(150)))
+        #expect(rest?.remaining(at: engineTime(15)) == .seconds(145), "the phone showed 145 s left")
+        // Near the rest's end the fresh 30 s rest runs longer, so it starts.
+        let late = Adv.env(Adv.extend(shown: false, tappedAt: 140), Adv.watch, seq: 1, at: 140)
+        #expect(Self.rest([late]) == RestTimer(endsAt: engineTime(170), total: .seconds(30)))
     }
 }

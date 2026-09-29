@@ -120,16 +120,17 @@ struct ReduceTerminalTests {
 
     @Test(
         """
-        A finish at an absurd or non-finite time is malformed and ignored; a state that holds one anyway \
-        saturates the summary's elapsed instead of trapping
+        A finish at an absurd finite time is kept (no time window) and saturates the summary's elapsed; a \
+        non-finite one is malformed and ignored, and a state that holds one anyway saturates too
         """,
         arguments: [1e21, .infinity, .nan]
     )
     func summary_ofCorruptEndedAt_saturatesElapsed(seconds: Double) throws {
         let absurd = Date(timeIntervalSinceReferenceDate: seconds)
         let (state, effects) = try Engine.run([.finished(endedAt: absurd)])
-        #expect(try state == (Engine.live()) && effects.isEmpty)
-        // Fix round 2, decision A: `summary` still never traps, whatever state its caller (F05) hands it.
+        #expect((state.phase == .finished) == seconds.isFinite)
+        #expect(effects.isEmpty == !seconds.isFinite)
+        // `summary` never traps, whatever state its caller (F05) hands it.
         var ended = state
         ended.phase = .finished
         ended.endedAt = absurd
@@ -158,5 +159,28 @@ struct ReduceTerminalTests {
         #expect(WorkoutEngine.summary(state, prs: []).rows == [
             ReceiptRow(name: "Barbell Curl", target: "3 × 12 @ 35 kg", actual: ["—"])
         ])
+    }
+}
+
+// MARK: - "Still lifting?" (re-plan 2026-09-29, decision 2)
+
+extension ReduceTerminalTests {
+    @Test(
+        """
+        F23 criterion 6 (re-plan, decision 2): "Still lifting?" → Finish, opened 30 h or 30 days after the \
+        last set, ends the workout at the last set
+        """,
+        arguments: [30.0 * 3600, 30.0 * 86400]
+    )
+    func stillLifting_finishOpenedLater_endsAtTheLastSet(openedAfter: TimeInterval) throws {
+        let log = [
+            Engine.started(),
+            Engine.envelope(Engine.logged(0, 0, at: 3600), 3600, seq: 2),
+            Engine.envelope(.finished(endedAt: Engine.at(3600)), 3600 + openedAfter, seq: 3)
+        ]
+        let state = try #require(WorkoutEngine.replay(log))
+        #expect(state.phase == .finished && state.endedAt == Engine.at(3600))
+        #expect(WorkoutEngine.summary(state, prs: []).elapsed == .seconds(3600))
+        #expect(Engine.fold(log) == state)
     }
 }

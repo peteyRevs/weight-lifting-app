@@ -9,12 +9,16 @@ import Testing
 struct Round3EffectsAdversarialTests {
     typealias Adv = EngineAdv
 
-    /// `reduce`'s effects as a rebuild should run them: no persist, transmit or haptic, and no schedule or
+    /// `reduce`'s effects as a rebuild should run them: no persist or transmit, no haptic but the set
+    /// haptic when a set became done in a live workout (final fix round, decision 3), and no schedule or
     /// cancel that leaves the rest as it was (a replace with the same end).
     static func rebuildShare(of effects: [Effect], from old: WorkoutState?, to new: WorkoutState?) -> [Effect] {
         let ended = new.map { $0.phase != .live && $0.phase != old?.phase } ?? false
+        let newlyDone = new?.phase == .live && (new?.doneSets ?? 0) > (old?.doneSets ?? 0)
         return effects.filter { effect in
             switch effect {
+            case .haptic(.setLogged):
+                newlyDone
             case .persist, .transmit, .haptic:
                 false
             case .scheduleRestNotification, .cancelRestNotification:
@@ -29,7 +33,7 @@ struct Round3EffectsAdversarialTests {
         """
         Property: along seeded two-device intent logs (stale rows, shown and unshown +30s, terminals, envelopes \
         after the end), effects(from:to:) equals reduce's effects for the same step, less persist, transmit \
-        and haptics; it never buzzes
+        and every haptic but the set log that made a set done; it buzzes at most once
         """,
         .tags(.property),
         arguments: PropertySeed.all
@@ -49,7 +53,8 @@ struct Round3EffectsAdversarialTests {
             let (next, effects) = WorkoutEngine.reduce(state, envelope)
             let rebuild = WorkoutEngine.effects(from: state, to: next)
             #expect(rebuild == Self.rebuildShare(of: effects, from: state, to: next), "after \(event)")
-            #expect(!Adv.buzzes(rebuild))
+            #expect(rebuild.count(where: { $0 == .haptic(.setLogged) }) <= 1 && !rebuild
+                .contains(.haptic(.workoutFinished)))
             state = next
         }
     }

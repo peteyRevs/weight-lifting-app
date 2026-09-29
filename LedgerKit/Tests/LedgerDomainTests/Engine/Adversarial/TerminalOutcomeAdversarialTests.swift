@@ -125,8 +125,10 @@ extension TerminalOutcomeAdversarialTests {
     }
 
     // Finding 4 (orchestrator decision, 2026-09-29, option b): the host appends every envelope it
-    // receives for the workout before it reduces it, whatever the effects; `.persist` is for envelopes
-    // this device creates. So an envelope `reduce` ignores still reaches the log `replay` reads.
+    // receives for the workout before it applies it, whatever it holds; `.persist` is for envelopes this
+    // device creates. So an envelope `reduce` would ignore still reaches the log `replay` reads. Final fix
+    // round (decision 3): the host applies what it receives by one rebuild, so the effects asserted below
+    // are the rebuild's, where they were `reduce`'s.
 
     @Test("Rule 2 is about envelope order: an envelope arriving after the finish but sorting before it is stored.")
     func lateEnvelopeSortingBeforeFinish_isStoredByHost() async throws {
@@ -135,10 +137,12 @@ extension TerminalOutcomeAdversarialTests {
         var host = StoringHost()
         _ = try await host.receive([Adv.start(), finish])
         let effects = try await host.receive([watchLog])
-        #expect(effects.isEmpty, "reduce ignores it after the terminal, so it emits no .persist")
         #expect(try await Set(host.store.envelopes(for: Adv.workoutID)) == [Adv.start(), finish, watchLog])
-        // Replay applies it (it sorts before the finish); F05/F17 re-materialize when the final state changes.
-        #expect(try await Adv.row(host.replayed(), 1, 0)?.isDone == true)
+        // Replay applies it (it sorts before the finish), so the rebuild re-materialises, with no .persist
+        // and no haptic: the workout is over.
+        let replayed = try #require(try await host.replayed())
+        #expect(Adv.row(replayed, 1, 0)?.isDone == true)
+        #expect(effects == [.materialize(replayed), .updateLiveActivity])
     }
 
     @Test("Rule 1 says early envelopes are buffered: the host stores one that reduce on nil ignores.")
@@ -159,8 +163,9 @@ extension TerminalOutcomeAdversarialTests {
         var host = StoringHost()
         _ = try await host.receive([phoneStart])
         let effects = try await host.receive([watchStart])
-        #expect(effects.isEmpty, "a second started is ignored by reduce")
-        // Replay of both picks the watch's (it sorts first), as it does on the watch.
+        // Replay of both picks the watch's (it sorts first), as it does on the watch; the rebuild shows it.
+        #expect(effects == [.updateLiveActivity])
+        #expect(host.state?.autoRest == false)
         #expect(try await host.replayed()?.autoRest == false)
         #expect(WorkoutEngine.replay([phoneStart, watchStart])?.autoRest == false)
     }

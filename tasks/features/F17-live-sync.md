@@ -125,27 +125,30 @@ _Filled in by agents during delivery:_
 ## Inputs from F04 (2026-09-29)
 
 F04 owns the pure engine and the `WorkoutEventStore` contract. F17 owns the host that runs them. The rules
-below are fixed by F04's fix round 2 (ADR-004 amendment, "The clock rule" onwards). Where they contradict
-this brief, they win, and the brief should be amended.
+below are fixed by F04's fix rounds and its re-plan (2026-09-29; ADR-004 amendment, "The clock rule"
+onwards). Where they contradict this brief, they win, and the brief should be amended.
 
-1. **The host loop.** `reduce` keeps no log and must never see an envelope twice.
-   - Append every received batch to `WorkoutEventStore` first, whatever the effects.
-   - Take what `append` newly stored. If all of it sorts after the newest envelope already applied,
-     reduce it in sort order. Otherwise rebuild once with `WorkoutEngine.replay` of the stored log.
-     Never reduce an envelope of a batch after a rebuild that included it: that applies it twice.
-   - Own envelopes: stamp, reduce, run `reduce`'s effects (`.persist` before `.transmit`).
-   - The "Actor" rule above ("dedupe by `seen`, append, rebuild by replay") becomes this loop.
-2. **Remote effects depend on the path** (orchestrator, 2026-09-29; ADR-004 "The host loop"):
-   - reduced in order: `reduce`'s effects without `.persist`/`.transmit`, so criterion 9 stands (a remote
-     `.setLogged` plays `.haptic(.setLogged)` locally);
-   - applied by a rebuild: only `WorkoutEngine.effects(from:to:)` of the state before and after. It
-     emits materialise, `discardLog`, schedule or cancel of the rest notification, and
-     `.updateLiveActivity`, and never a haptic, so a reconnect burst does not buzz once per envelope.
-     Criterion 9 needs a companion case for this path.
-   - It re-emits `.materialize` whenever a finished state changes, including a rebuild from `nil` when
-     both finishes arrived before the `started`.
-   - It emits `.discardLog` when a late discard sorts before a finish that was already materialised.
+1. **The host loop** (re-plan 2026-09-29: one path per source). `reduce` keeps no log and must never see an
+   envelope twice.
+   - Own action: stamp it with the HLC, `reduce` it, run `reduce`'s effects in order (`.persist` appends it
+     to the store before `.transmit` sends it). The HLC sorts it after everything stored, so this equals
+     `replay`.
+   - Received frames: append every envelope to `WorkoutEventStore` first, whatever it holds. If `append`
+     stored anything new, rebuild with `WorkoutEngine.replay` of the stored log and run
+     `WorkoutEngine.effects(from: old, to: new)`. Never reduce a received envelope.
+   - The "Actor" rule above ("dedupe by `seen`, append, rebuild by replay") is this loop; its remote
+     effects are item 2's.
+2. **Remote effects are `effects(from:to:)`'s**, and nothing else:
+   - at most one `.haptic(.setLogged)` per rebuild, while the workout is live, when at least one set is done
+     that was not before. A single remote set buzzes (criterion 9 stands); a reconnect that brings many sets
+     buzzes once (Pete); a rebuild that ends finished or discarded never buzzes, even for a late set.
+     Criterion 9 needs companion cases for the batch and the terminal;
+   - materialise, `discardLog`, schedule or cancel of the rest notification, and `.updateLiveActivity`;
+   - it re-emits `.materialize` whenever a finished state changes, including a rebuild from `nil` when
+     both finishes arrived before the `started`;
+   - it emits `.discardLog` when a late discard sorts before a finish that was already materialised.
      F05 must then delete that workout; decide who owns that.
+   - The launch step (item 4) plays no haptic: nothing was just logged.
 3. **HLC recovery.** Before stamping anything after a launch, set the clock's `newest` to the largest
    stored `wallClock` across `WorkoutEventStore.uncompactedWorkoutIDs()`. Skip a stored stamp your drift
    bound would reject on receipt. The drift bound itself is still F17's (F04 fix round 1, finding 6).
@@ -156,10 +159,10 @@ this brief, they win, and the brief should be amended.
    - **Open for F17:** should the handshake base be the highest *contiguous* `seq` per device, rather than
      `highestSeq`? With the maximum, a dropped seq 1–2 followed by a received seq 3 never heals.
      `EventStoreAdversarialTests.holeBeforeTerminal_isKept_untilTheResendHeals` pins the hole.
-5. **Malformed envelopes** (`EventEnvelope.isWellFormed`) are no-ops for the engine but stay stored.
-   - A payload date more than 24 h from its stamp (`EventEnvelope.payloadTimeWindow`) is malformed. F10's
-     "Still lifting?" finish (decision #8) must not backdate `endedAt` by more than that; otherwise the
-     finish is ignored and the workout stays live.
+5. **Malformed envelopes** (`EventEnvelope.isWellFormed`) are no-ops for the engine but stay stored. An
+   envelope is malformed only when a date it carries is not finite or a rest length is outside
+   `0 ... longestRest`. There is no time window (Pete, 2026-09-29), so a "Still lifting?" Finish backdated
+   days is kept.
    - A NaN date is unequal to itself, so a store that compares envelopes with `==` would call a re-sent
      copy a conflict. JSON cannot carry one. Reject non-finite dates when decoding a wire frame, before
      anything is stored.
@@ -179,3 +182,11 @@ this brief, they win, and the brief should be amended.
 
    `WorkoutIntent.extendRest` must carry what the screen showed. The UI sets `extendsShownRest` when its
    rest had time left (`RestTimer.remaining(at: now) > .zero`), and `tappedAt` is the intent's date.
+8. **Out of scope for F04, noted by its tester (round 3):**
+   - *Dropping a log at the terminal:* after `.discardLog` or a compaction, a partitioned peer's late
+     envelopes wait in a log that replays to `nil` for a resend that never comes; drop or compact only
+     after the peer acknowledges the terminal, or keep a tombstone.
+   - *Drift bound:* still yours; with no payload window a peer far ahead no longer drops this device's
+     actions, but it still drags every stamp.
+   - *F05's stale brief:* criterion 8's `liveWorkoutIDs()` is now `uncompactedWorkoutIDs()`, and its
+     `wall_clock TEXT` column must keep full precision (the contract suite now fails a lossy store).

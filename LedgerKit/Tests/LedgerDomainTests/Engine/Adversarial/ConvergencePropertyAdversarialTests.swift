@@ -64,7 +64,10 @@ struct ConvergencePropertyAdversarialTests {
     }
 
     @Test(
-        "ADR-004 rule 2: a device folding in-order arrivals with reduce matches replay after every arrival.",
+        """
+        ADR-004 rule 2: a device matches replay after every arrival, and an envelope that sorts after all it \
+        holds reduces to replay's state (the host loop's own-action path)
+        """,
         arguments: PropertySeed.all
     )
     func incremental_matchesReplayAtEveryStep(seed: PropertySeed) {
@@ -78,8 +81,14 @@ struct ConvergencePropertyAdversarialTests {
         }
         var replica = Replica()
         for envelope in inbox {
+            let before = replica.state
+            let sortsLast = replica.envelopes.allSatisfy { $0.key != envelope.key && $0 < envelope }
             replica.receive(envelope)
             #expect(replica.state == WorkoutEngine.replay(replica.envelopes), "after \(envelope.event)")
+            // Final fix round (decision 3): `Replica` always rebuilds, so the reduce path is checked here.
+            if sortsLast, before != nil {
+                #expect(WorkoutEngine.reduce(before, envelope).0 == replica.state, "reduce of \(envelope.event)")
+            }
         }
     }
 

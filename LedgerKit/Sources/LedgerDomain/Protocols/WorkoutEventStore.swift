@@ -3,20 +3,21 @@ import Foundation
 /// The live workouts' envelope logs (ADR-004 rule 5). Declared here, implemented over GRDB in
 /// LedgerPersistence (F05).
 ///
-/// The host appends every envelope it receives for a workout before it applies it, whatever the
-/// effects, and appends its own through `Effect.persist`. So the store holds every envelope `replay`
-/// may apply, including those `WorkoutEngine.reduce` ignores, malformed ones included: the store never
+/// The host appends every envelope it receives for a workout before it rebuilds, whatever the envelope
+/// holds, and appends its own through `Effect.persist`. So the store holds every envelope `replay` may
+/// apply, including those `WorkoutEngine.reduce` ignores, malformed ones included: the store never
 /// judges an envelope's contents, only its key.
 public protocol WorkoutEventStore: Sendable {
     /// Appends the envelopes. Idempotent on `EnvelopeKey` within a workout: an envelope already stored
     /// is skipped. Throws `EngineError.conflictingEnvelope` when a stored envelope with the same key
     /// differs (the precondition on `EventEnvelope`), and then stores nothing from the batch.
     ///
-    /// Returns the envelopes it newly stored, in the order given: the input to the host loop on
-    /// `WorkoutEngine.reduce`, which reduces them in sort order when they all sort after the newest
-    /// envelope applied, and otherwise rebuilds once with `replay`.
+    /// Returns the envelopes it newly stored, in the order given. When there are any, the host rebuilds
+    /// with `WorkoutEngine.replay` of the stored log (the host loop on `WorkoutEngine.reduce`).
     func append(_ envelopes: [EventEnvelope]) async throws -> [EventEnvelope]
-    /// Every stored envelope of the workout, in no particular order (`WorkoutEngine.replay` orders them).
+    /// Every stored envelope of the workout, in no particular order (`WorkoutEngine.replay` orders them),
+    /// each once and exactly as appended: every date to full precision, because `<` and the conflict
+    /// check compare them.
     func envelopes(for workout: WorkoutID) async throws -> [EventEnvelope]
     /// The highest `seq` stored from `device` for the workout: the gap-replay handshake (F17), and the
     /// base of the device's own next `seq`.

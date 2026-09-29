@@ -60,8 +60,10 @@ struct EventStoreAdversarialTests {
         #expect(try await store.append([mine, theirs, mine]) == [mine, theirs])
     }
 
-    @Test("Host path: a batch that repeats an envelope, then a half-new batch, reduce each new envelope exactly once")
-    func host_reducesEachNewEnvelopeOnce() async throws {
+    /// Final fix round (decision 3): the host rebuilds for what it receives, so the second batch's effects
+    /// are the rebuild's (no persist or transmit), where they were `reduce`'s.
+    @Test("Host path: a batch that repeats an envelope, then a half-new batch, apply each new envelope exactly once")
+    func host_appliesEachNewEnvelopeOnce() async throws {
         let log = Adv.env(Adv.logged(0, 0, doneAt: 10), Adv.watch, seq: 1, at: 10)
         let extend = Adv.env(Adv.extend(shown: true, tappedAt: 20), Adv.watch, seq: 2, at: 20)
         var host = StoringHost()
@@ -69,7 +71,8 @@ struct EventStoreAdversarialTests {
         #expect(first.count(where: { $0 == .haptic(.setLogged) }) == 1)
         let before = host.state
         let second = try await host.receive([log, extend, log])
-        #expect(second == WorkoutEngine.reduce(before, extend).1)
+        #expect(second == WorkoutEngine.effects(from: before, to: host.state))
+        #expect(second == [.scheduleRestNotification(endsAt: engineTime(190)), .updateLiveActivity])
         #expect(host.state?.rest == RestTimer(endsAt: engineTime(190), total: .seconds(180)))
         #expect(try await host.replayed() == host.state)
     }

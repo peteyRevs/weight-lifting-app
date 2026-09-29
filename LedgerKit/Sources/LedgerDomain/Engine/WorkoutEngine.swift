@@ -17,19 +17,16 @@ public enum WorkoutEngine {
 
     /// Rules 1 and 2: the state after `envelope`, and what the caller should do about it.
     ///
-    /// **The host loop (ADR-004 rule 2).** `reduce` keeps no log, so it must never see an envelope
-    /// twice: a second "+30s" would extend again. ADR-004's idempotence law belongs to `replay`, which
-    /// dedupes. So the host (F17):
-    /// 1. Appends every envelope it receives for the workout to its `WorkoutEventStore` first, whatever
-    ///    the effects: `replay` may apply an envelope that `reduce` ignores here (one that sorts before
-    ///    the `started` or before the terminal).
-    /// 2. Takes what `append` newly stored. If every one of those envelopes sorts after the newest
-    ///    envelope already applied, it reduces them in sort order. Otherwise it rebuilds once, with
-    ///    `replay` of the stored log. That log already holds the whole batch, so reducing any envelope
-    ///    of the batch after the rebuild would apply it twice.
-    /// 3. Runs `effects(from:to:)` of the state before and after, and only those, for what it received.
-    ///    It runs the effects below only for an envelope it created, which the hybrid logical clock
-    ///    sorts after everything it holds.
+    /// **The host loop (ADR-004, re-plan 2026-09-29).** `reduce` keeps no log, so it must never see an
+    /// envelope twice: a second "+30s" would extend again. ADR-004's idempotence law belongs to `replay`,
+    /// which dedupes. So the host (F17):
+    /// - **Own action:** stamps it with the hybrid logical clock, reduces it, and runs these effects in
+    ///   order: `.persist` appends it to the store before `.transmit` sends it. The clock sorts it after
+    ///   everything stored, so reducing it on the host's state (`replay` of the stored log) gives what
+    ///   `replay` of the log with it would give.
+    /// - **Received envelopes:** appends them to its `WorkoutEventStore`, whatever they hold. When
+    ///   `append` stored anything new, it rebuilds with `replay` of the stored log and runs
+    ///   `effects(from:to:)` of the state before and after. It never reduces a received envelope.
     ///
     /// These are ignored, returning `(state, [])`:
     /// - a malformed envelope (`EventEnvelope.isWellFormed`);
@@ -39,9 +36,9 @@ public enum WorkoutEngine {
     /// - anything after `finished` or `discarded`.
     ///
     /// Otherwise the effects are, in order:
-    /// 1. `.persist` and `.transmit`, which the host runs only for an envelope it created. The envelope
-    ///    belongs in every log even when it changes nothing here, because a peer may order it differently.
-    /// 2. The event's own effects (rules 3, 9 and 10).
+    /// 1. `.persist` and `.transmit`. The envelope belongs in every log even when it changes nothing
+    ///    here, because a peer may order it differently.
+    /// 2. The event's own effects (rules 1, 3, 9 and 10).
     /// 3. `.updateLiveActivity` when the state changed.
     public static func reduce(_ state: WorkoutState?, _ envelope: EventEnvelope) -> (WorkoutState?, [Effect]) {
         var next = state
@@ -62,7 +59,8 @@ public enum WorkoutEngine {
                 return nil
             }
             state = snapshot
-            return []
+            // Rule 1: a snapshot's rest is scheduled like any rest the engine starts (finding 21).
+            return snapshot.rest.map { [.scheduleRestNotification(endsAt: $0.endsAt)] } ?? []
         }
         guard state?.phase == .live, state?.id == envelope.workoutID else {
             return nil

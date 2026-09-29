@@ -899,3 +899,194 @@ lines**, over the 500 budget by 209. Round 1 ended at 564.
 ### Orchestrator correction (2026-09-29): remote haptics
 
 Decision F said "no haptics for remote changes". That contradicts F17 criterion 9 and the architecture's Actor rule, a planned UX. Narrowed: a received envelope reduced in order runs `reduce`'s effects without `.persist`/`.transmit` (so its haptic plays); only a rebuild uses `effects(from:to:)`, which has no haptics. ADR-004 "The host loop", the `effects(from:to:)` doc comment and F17's hand-off say so.
+
+---
+
+## Re-plan (2026-09-29): final fix round
+
+Input: `test-findings.md`, "# Round 3" (findings 15–22, "Out of scope, noted"; tests in `Engine/Adversarial/`), and
+the re-plan the orchestrator agreed with Pete after G2 failed three times. F04 is frozen: this round fixes the
+listed findings, simplifies where told, and adds no mechanism. Before it, 8 tests failed on the host (17
+issues); now every test passes, and the only skip is the `.slow` replay-timing test.
+
+### Decisions → changes → tests
+
+| # | Decision (owner) | Change | Tests |
+|---|---|---|---|
+| 1 | Both devices stay fully live (Pete) | None: the context for 2–4 | — |
+| 2 | Validation has no time windows (Pete; findings 15, 16) | `EventEnvelope.payloadTimeWindow` and every comparison of a payload date with `wallClock` are gone. `isWellFormed` is now one allocation-free switch: malformed only when a date it carries is not finite (`wallClock`, every payload date, every snapshot date, `lastPerformance.date` included) or a rest length is outside `0 ... longestRest` (a snapshot rest's `total` included). The snapshot clause "its rest ends at most `longestRest` after `startedAt`" went too: it is a window between two dates, and Pete's list names only non-finite dates and out-of-bound lengths. `ModelOracle.accepts` rewritten independently to match | `Round3WellFormed…stillLifting_finishOpenedDaysLater_isKept` (unchanged, passes); new `ReduceTerminalTests.stillLifting_finishOpenedLater_endsAtTheLastSet` (30 h and 30 days); `EnvelopeWellFormedTests` (rewritten, below); the fuzz, strengthened |
+| 3 | The host loop is simplified (orchestrator; Pete's haptic rule; findings 13, 17, 18, 19) | Docs: ADR-004 "The host loop" rewritten; `reduce`, `append`, `envelopes(for:)`, `Effect`, `persist`, `replay` and `effects(from:to:)` docs; F17 "Inputs from F04" items 1, 2, 5. Code: `effects(from:to:)` leads with at most one `.haptic(.setLogged)`, when `new` is live and a set is done in `new` that was not in `old` (the live condition is the orchestrator's addition, below) | New `EffectsFromToTests.setHaptic_oncePerRebuild` (a single remote set: 1; a batch of 10: 1, also from `nil`; an un-log: 0; no newly done set, a re-log, a skip, a finish: 0) and `setHaptic_neverWhenTheWorkoutEnded`; `remoteSetLog_buzzesAndSchedules`; the host models and their tests (below) |
+| 4 | "+30s" never shortens a running rest (Pete; finding 20) | `extendRest`: with `extendsShownRest == false`, a state rest whose `endsAt` is later than `tappedAt + amount` is kept unchanged (no own effects), else the fresh rest starts. `true` is unchanged. The oracle's `extendRest` gained the same rule, in its own code | New `ReduceRestTests.extend_unshown_neverShortensARunningRest` (kept, replaced, and the tie, which restarts); `Round3RestIntent…unseenRest_plus30KeepsTheLongerRest` |
+| 5 (21) | `reduce` schedules a `started` snapshot's rest | `step` returns `.scheduleRestNotification(endsAt:)` for a snapshot with a rest | `Round3Effects…startedWithRest_reduceSchedulesItToo` (unchanged, passes); `matchesReduce_*` properties |
+| 5 (22) | The store contract catches lossy stores | New clause "an envelope reads back once and exactly, to below a millisecond": an HLC stamp and a payload date between milliseconds, appended twice, read back as exactly `[envelope]` (array, so the count counts). `envelopes(for:)`'s doc states it. Three new mutants: `keepsCopies`, `stampToMilliseconds`, `payloadToMilliseconds` | `EventStoreMutationAdversarialTests`: all **14** mutants killed, `InMemoryEventStore` passes. A probe showed each new mutant, and each `LossyEventStore` loss, is killed by the new clause alone (`iso8601JSON` also by `conflictOnStampOnly`). `Round3Store…contract_catchesLossyStores` passes for all three losses |
+| 5 (19) | Docs and tests agree with decision 3 | No doc or test says "remote changes never buzz" or implies a per-envelope remote buzz (grep for `never buzz`, `remote change`, `in order`, `newest … applied`, `reduced in order`, `per envelope` over sources, tests, ADR-004, F17 and F23) | — |
+| 6 | Out of scope stays out | F17 "Inputs from F04" item 8: dropping a log at the terminal, the drift bound, F05's stale brief. F23 gains "Inputs from F04": the "Still lifting?" Finish (and that the prompt is F23's, not F10's), rests already over (F18 needs criterion 1's rule), and the notification's "+30s" sending `extendsShownRest: false` | — |
+
+**Finding 16, re-checked under decision 2:**
+- **a** (`lastPerformance.date`): fixed. Every snapshot date is checked for finiteness. The fuzz now also
+  replays two independent decodes of each log, which share no storage, so a nested NaN can no longer hide
+  behind `Array ==`'s identity shortcut; its snapshots now carry extreme `lastPerformance` dates. What no
+  predicate can fix: a store that compares by value calls a NaN envelope's resend a conflict (NaN ≠ NaN).
+  That is F17's decode guard (hand-off item 5), and the tester's test now pins it.
+- **b** (`setAdded` dropped over a far `doneAt`): fixed; a finite `doneAt` no longer drops the add. A NaN
+  `doneAt` still makes it malformed, by Pete's rule ("a date it carries").
+- **c** (a well-formed rest showing 23 h left): accepted by decision. Bounding a rest's end by its stamp is a
+  time window. The rest is applied as given, and the ring saturates (`remaining`, `fraction` ≤ 1).
+
+**Host loop, as now written** (ADR-004, `reduce`'s doc, F17 item 1):
+- own action: stamp (HLC), `reduce`, run its effects in order; `.persist` is the append, before `.transmit`.
+  The HLC sorts it after everything stored, so this equals `replay` (stated in the ADR and the doc);
+- received envelopes: append; if anything is new, rebuild with `replay` and run `effects(from:to:)`. There is
+  no in-order path, so finding 17's "already applied" has nothing left to mean;
+- launch: the launch step replays each log and plays no haptic. This one sentence is new, and forced by
+  decision 3: once `effects(from:to:)` carries a haptic, a host that ran `effects(from: nil, to:)` on launch
+  would buzz for every set already done. The host models therefore run no effects on relaunch (the
+  notification and the stored workout survive it, as they would on a device).
+
+**Orchestrator addition (2026-09-29, after the first gate): the haptic only while the workout is live.**
+`effects(from:to:)` plays its `.haptic(.setLogged)` only when `new` is live. A rebuild that ends finished or
+discarded never buzzes, even when a late set became done: a set that arrives after a peer's finish but sorts
+before it (it re-materialises, silently), or a discarded log that arrives whole. "The launch step plays no
+haptic" stands. ADR-004 and F17 item 2 say "while the workout is live".
+- Code: one condition, `new?.phase == .live`, on `newlyDone`.
+- Tests: new `EffectsFromToTests.setHaptic_neverWhenTheWorkoutEnded` (a late set before a peer's finish: 0,
+  with the re-materialisation; a discarded log with a done set, from `nil` and from live: 0; the live single
+  set and a live batch: exactly 1, also from `nil`). `setHaptic_oncePerRebuild` still passes unchanged in
+  its assertions. The two property filters (`matchesReduce_onEveryStep`, `matchesReduce_onIntentLogs`) keep
+  the set haptic only for a live `new`.
+- Reverted to the tester's original: `Round3Effects…discardLog_order` (from `nil`, a discard is exactly the
+  drop again, no haptic).
+
+**Also changed, for the replay budget:** the first version of the new predicate built arrays per envelope and
+cost 0.6 ms of a 2.3 ms replay of 500 envelopes (host, debug), and the nightly run measured a 6.7 ms median
+under full parallel load. The single switch allocates only for a `started`: the predicate now costs 0.15 ms
+and replay 1.8 ms, round 1's figure, and it is 6 lines shorter.
+
+### Tests edited, and why
+
+The implementer's tests:
+
+| Test | Edit | Why |
+|---|---|---|
+| `EnvelopeWellFormedTests.payloadWindow_isADay` | Deleted | Decision 2: the window is gone |
+| `EnvelopeWellFormedTests.payloadDates_liesWithinTheWindow` | Now `payloadDates_mustBeFinite`: a day and a millisecond away, 30 days, 1e21, −1.8e308 and `distantFuture` are well-formed; ±∞ and NaN are not; all six dated events | Decision 2 |
+| `EnvelopeWellFormedTests.startedSnapshot_isInternallyValid` | Now `…_isInternallyPossible`: far dates and a rest ending 2 h after the start are well-formed; a non-finite date anywhere (a `lastPerformance.date` included) and a negative or over-an-hour total are not | Decision 2; finding 16a |
+| `EnvelopeWellFormedTests.reduce_ignoresMalformed`, `replay_dropsMalformed` | The malformed fixture is a NaN or ∞ `doneAt`, not 1e9 s | 1e9 is finite, so well-formed now. Assertions unchanged |
+| `ReduceRestTests.extend_followsTheLiftersIntent_notTheClock` | The running rest in the second half ends at 30 s, not 100 s | Decision 4 keeps a rest ending after the fresh one (100 s > 35 s). With 30 s, the tap still restarts although both clocks say the rest runs: the case's point, unchanged |
+| `ReduceTerminalTests.summary_ofCorruptEndedAt_saturatesElapsed` | A 1e21 finish is kept (the phase is finished) and saturates; ±∞ and NaN are still ignored | Decision 2 |
+| `EffectsFromToTests.remoteSetLog_schedulesWithoutHaptic` | Now `remoteSetLog_buzzesAndSchedules`; expects the haptic first | Decision 3 |
+| `EffectsFromToTests.lateEnvelope_rematerializes` | The "changed" case changes reps; a new case adds a late set log, which re-materialises without a buzz | Decision 3 and the orchestrator's addition (no haptic once the workout ended); the re-materialisation assertion is unchanged |
+| `EffectsFromToTests.matchesReduce_onEveryStep` | The filter keeps `.haptic(.setLogged)` when a set became done in a live workout | Decision 3 and the orchestrator's addition |
+| `EffectsFromToTests.rebuildEffects_materializeInEveryArrivalOrder` | `remoteHaptics == 0` → at most one per delivery, and at most 3 in all (an order that brings a set after both finishes plays none for it) | Decision 3 (finding 19's rejected assertion) and the orchestrator's addition |
+| `ExtremeValuePropertyTests` | Snapshots also vary `lastPerformance.date`; two independent decodes must replay equal | A strengthening: closes finding 16a's blind spot |
+| `WorkoutEventStoreContract.malformedIsStored` | Its malformed fixture is a 2 h "+30s", not a `doneAt` of 1e12 s | 1e12 is finite, so well-formed now |
+
+The tester's tests:
+
+| Test | Edit | Why |
+|---|---|---|
+| `Round3WellFormed…peerClockADayAhead_dragsStamps` | The 24.5 h row is now kept, and a 30-day row is added | Decision 2: there is no window to drop a dragged action |
+| `Round3WellFormed…edges_atARealisticStamp` | A day and a millisecond either side is well-formed; DST part unchanged | Decision 2: no edges |
+| `Round3WellFormed…snapshotLastPerformanceNaN_breaksEquality` | The first two assertions are unchanged and pass. The third (the store accepts the NaN resend) now asserts the conflict | NaN ≠ NaN, so any store that compares by value calls the resend a conflict; no predicate changes that. F17 rejects non-finite dates on decode (item 5) |
+| `Round3WellFormed…eventRests_endWithinLongestRestOfTheirStamp` | Now `eventRests_farFromTheirStamp_areAppliedAsGiven` (documents): well-formed, applied as given, the ring saturates | Decision 2: bounding a rest's end by its stamp is a time window |
+| `Round3RestIntent…unseenRest_plus30Shortens` | Now `unseenRest_plus30KeepsTheLongerRest`: the phone's 160 s / 150 s rest is unchanged and still shows 145 s; a tap at 140 s restarts (170 s) | Decision 4, as the orchestrator required |
+| `Round3RestIntent…rest` (helper) | Message text only | `Replica` now only rebuilds |
+| `Round3Effects…matchesReduce_onIntentLogs` (`rebuildShare`) | Keeps the set haptic when a set became done in a live workout; "never buzzes" → at most one set haptic and no finish haptic | Decision 3 and the orchestrator's addition |
+| `LiteralHost` (`Round3HostAdversarialSupport`) | One path: own → reduce; received → append, rebuild, `effects(from:to:)`. `Applied`, `newestApplied` and the `.inOrder` path removed; relaunch runs no effects | Decision 3 |
+| `Round3Scenario` | The `applied` parameter removed; the generator stream is unchanged | Decision 3 |
+| `Round3Host…literalHost_convergesAndRebuildsNeverBuzz` | Now `…_convergesAndBuzzesOncePerDelivery`: `largestBurst <= 1`; every other assertion unchanged | Decision 3, Pete's rule |
+| `Round3Host…inOrderRemoteEnvelopes_buzz` | Now `remoteSetLogs_buzz`: rebuild haptics > 0 | Decision 3: the haptic comes from the rebuild |
+| `Round3Host…appliedMeaning_decidesALostFirstMessage` | Now `lostFirstMessage_staysOnReplay`: 0 mismatches, both sets shown, 2 buzzes. The reading-B control and its 100-seed count are removed | Finding 17 asked which reading of "applied" holds; decision 3 removes the phrase, so reading B no longer describes any host |
+| `Round3Host…rawStamps_literalLoopLeavesReplay` | Now `rawStamps_oneLoopStaysOnReplay`: 0 mismatches (was 1), set done | Decision 3: a received envelope is never reduced, so the raw-stamp case the old loop got wrong now rebuilds |
+| `Round3Host…reconnectBatch_inOrder_buzzesPerSet` | Now `reconnectBatch_buzzesOnce`: 1 buzz whether or not the phone acted (was 5 and 0) | Decision 3, Pete's rule (finding 18) |
+| `Round3Host…simHost_playsTheInOrderRemoteHaptic` | Now `remoteSetLog_buzzesOnEveryHostModel`: `.rebuild` key; `SimHost` plays 1 | Decision 3 (finding 19): both models agree |
+| `Round3Store…contract_catchesLossyStores` | The contract assertion is unchanged and passes. The read-back assertion is flipped to `!=` | `LossyEventStore` is lossy by construction, so `==` could never hold (it failed for all three losses before and after any fix). It now pins that the loss is real |
+| `Round3Store…iso8601Store_losesAnUnlog` | Asserts the un-log is lost on that store, and that the contract suite rejects the store | The same: the store cannot be fixed, only rejected. The consequence is documented |
+| `SimHost` (`HLCHostAdversarialSupport`) | One path, as `LiteralHost`; `remoteHaptics` counts rebuild haptics, and `largestRemoteBurst` is new; relaunch runs no effects; `newestApplied` removed | Decision 3 (finding 19) |
+| `HLCConvergence…hlc_convergesAndKeepsEveryAction` | `remoteHaptics == 0` → `largestRemoteBurst <= 1` | Decision 3; finding 19's rejected assertion |
+| `HLCConvergence…rawClocks_loseActions` | `host.state == expected` and `replayMismatches == 0` → `replay(host.log) == expected`; the lost-action assertions are unchanged | Decision 3: a host reduces its own envelope, which equals replay only under the HLC. With raw clocks a host's screen can leave replay; its log still converges, which is what the control is about |
+| `HostContract…hlcAfterRelaunch_mustBeRecoveredFromTheLog` | The control's `forgotten.shown` is now `false`; the recovered case is unchanged | The old `SimHost` rebuilt its own envelope when it sorted early; the loop now reduces it. So the forgetful phone shows the un-log that its log, and every peer's, has lost: the breach is still visible (`forgotten.done`) |
+| `HostContract…arrivalOrderReduce_divergesFromReplay` | Name text; the control reduces in arrival order with `Adv.state(after:)` | `StoringHost` now follows the loop, so it can no longer be the control |
+| `HostContract…rebuildThenReduceInOneBatch_appliesTwice` | Name text only | Decision 3 |
+| `Replica` (`EngineAdversarialSupport`) | Rebuilds on every new envelope; `newest` and `rebuilds` removed | Decision 3 |
+| `StoringHost` (`EngineAdversarialSupport`) | Append; if anything is new, rebuild and return `effects(from:to:)` | Decision 3: it was round 1's per-envelope loop, a per-envelope remote buzz (finding 19) |
+| `ConvergenceProperty…incremental_matchesReplayAtEveryStep` | Also asserts that an envelope sorting after everything held reduces to replay's state | With `Replica` always rebuilding, the old check alone was vacuous. This keeps the reduce path under test: the own-action path's guarantee |
+| `EventStore…host_reducesEachNewEnvelopeOnce` | Now `host_appliesEachNewEnvelopeOnce`: the second batch's effects are the rebuild's (`[schedule 190 s, redraw]`), not `reduce`'s | Decision 3 |
+| `TerminalOutcome…lateEnvelopeSortingBeforeFinish_isStoredByHost` | Effects `[]` → `[materialize(replayed), redraw]` | Decision 3: the rebuild re-materialises, which the old per-envelope loop left to F05/F17; no haptic, the workout is over |
+| `TerminalOutcome…losingStarted_isStoredByHost` | Effects `[]` → `[redraw]`; the host's state has the watch's snapshot | Decision 3. The old loop kept the phone's snapshot, off replay |
+| `EffectsAdversarial…duplicateSetLogged_noSecondHaptic` | Name and doc text only | Decision 3 |
+| `RestBound…autoRest_absurdDoneAt_isIgnored`, `snapshotRest_absurdEndsAt_isIgnored` | Now `…_saturatesTheRing`: well-formed, applied, the ring pinned at its cap and full, `==` holds. The NaN test and both exit twins are unchanged (comments only) | Decision 2: finding 9's second option, saturation, is now the only one |
+| `EventStoreMutationAdversarialTests` | Three mutants added | Decision 5 (22) |
+
+Unchanged and passing: every other adversarial test, including `MaterializeAdversarialTests` (its
+`Materializer` now receives the rebuild's `.materialize`) and the `Replica` convergence tests.
+
+### Gate
+
+- **`scripts/check.sh --fast`** (host): OK. 674 tests in 111 suites pass; format (0 of 207 files) and lint
+  `--strict` are clean. Log: scratchpad `f04-fix3-fast.log`.
+- **Full `scripts/check.sh` through `sim-lock.py`, once** (2026-09-29): **green**, 219 s; the lock was free.
+  Log: scratchpad `f04-fix3-check.log`.
+
+  | Step | Result |
+  |---|---|
+  | 0–2: tools, format, lint (`--strict`), package graph | OK: 0 of 207 files need formatting; lint is clean; the graph matches |
+  | 3: iOS `PR` plan (iPhone 17, 26.5) | **17 test targets ran and passed.** xcresult: 679 tests, 678 passed, **0 failed**, 1 skipped |
+  | 4: watchOS `PR-Watch` plan (Apple Watch Series 11 46 mm, 26.5) | **8 test targets ran and passed.** xcresult: 670 tests, 669 passed, **0 failed**, 1 skipped |
+  | 5: coverage gate | Not yet wired (F01); read by hand below |
+
+  The one skip on each platform is `ReplayPerformanceTests` ("Replaying 500 shuffled envelopes takes under
+  5 ms"), `.slow`, nightly only.
+- **Nightly settings on the host** (`LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=3000`): all 672
+  domain tests pass, including the 5 ms replay budget and, at 3,000 seeds, the literal-host and HLC host
+  properties, both `matchesReduce_*` effect properties, the fuzz, the garbage property and the oracle
+  property. Log: scratchpad `f04-fix3-nightly.log`.
+
+**Second gate, after the orchestrator's live-only addition** (2026-09-29):
+- `scripts/check.sh --fast`: OK, 675 tests in 111 suites pass. Log: scratchpad `f04-fix3b-fast.log`.
+- Nightly settings on the host (3,000 seeds): all 673 domain tests pass, the 5 ms replay budget included.
+  Log: scratchpad `f04-fix3b-nightly.log`.
+- Full `scripts/check.sh` through `sim-lock.py`, once: **green**, 202 s; the lock was free. Log: scratchpad
+  `f04-fix3b-check.log`.
+
+  | Step | Result |
+  |---|---|
+  | 0–2: tools, format, lint (`--strict`), package graph | OK: 0 of 207 files need formatting; lint is clean; the graph matches |
+  | 3: iOS `PR` plan (iPhone 17, 26.5) | **17 test targets ran and passed.** xcresult: 680 tests, 679 passed, **0 failed**, 1 skipped |
+  | 4: watchOS `PR-Watch` plan (Apple Watch Series 11 46 mm, 26.5) | **8 test targets ran and passed.** xcresult: 671 tests, 670 passed, **0 failed**, 1 skipped |
+  | 5: coverage gate | Not yet wired (F01); read by hand below |
+
+  The one skip on each platform is still `ReplayPerformanceTests` (`.slow`, nightly only).
+
+### Coverage
+
+Read from `xcrun xccov view --report --json .derivedData/Results/PR-{iOS,watchOS}.xcresult` of the second
+gate, over `Sources/LedgerDomain/Engine/`. Identical on both platforms:
+
+| File | Lines |
+|---|---|
+| `EventEnvelope.swift` | 54/54 |
+| `WorkoutEngine.swift` | 46/46 |
+| `WorkoutEngine+Replay.swift` | 57/57 |
+| `WorkoutEngine+Reduce.swift` | 188/189. The miss is still the unreachable `default:` in `applyClockEvent` |
+| **`Engine/` total** | **345/346 = 99.71 %** (brief: ≥ 95 %). The first gate read 343/344, before the live condition |
+
+`Model/RestTimer.swift` is 17/17.
+
+### Line counts
+
+Measured from the merge base with `main` (`8404d02`; `main` has since moved on with F06, so a plain
+`git diff main` would count F06's files as deletions) to the working tree, after the live-only addition.
+
+- **Code only, `LedgerKit/Sources/LedgerDomain`: 392 lines changed** (387 added, 5 deleted). This is the
+  product code; `LedgerTestSupport` (`EventBuilders` and the oracle, 465 code lines) counts as test code
+  (orchestrator, 2026-09-29). All of `LedgerKit/Sources` together: 857. Measured by filtering
+  `git diff 8404d02 -- <path>` to `+`/`-` lines whose trimmed text is neither blank nor starts with `//` (so
+  `///` doc comments are excluded too). At `c696a4f` `LedgerDomain` was 393: this round changed 73 of its
+  code lines (36 added, 37 deleted). Removing the window and the second predicate switch paid for the
+  haptic, decision 4 and finding 21.
+- **Plain `git diff --numstat 8404d02`:** `LedgerDomain` 694 + 10 = **704** (710 at `c696a4f`);
+  `LedgerKit/Sources` 1,258 + 10 = 1,268; `LedgerKit/Tests` 7,504 + 1 = 7,505.
+- **PR body:** 392 product code lines is under Pete's 500 target, so no split line is needed. The split
+  considered earlier (fix round 2's A "event vocabulary + validation + store contract", B
+  "reduce/replay/summary/effects") stays on record in "Product lines" above.
