@@ -135,8 +135,11 @@ private nonisolated extension LedgerTypeSpec {
 
 public extension View {
     /// Sets text in a type role: Archivo at the role's axes, its size scaled with Dynamic Type and
-    /// its weight stepped up by Bold Text, plus the role's tracking, case and line height, with each
-    /// line placed in its line box where CSS places it.
+    /// its weight stepped up by Bold Text, plus the role's tracking, case and line height.
+    ///
+    /// The line height is SwiftUI's own: lines are spaced at the role's line height × size and
+    /// nothing inside the view moves. A single line therefore sits where SwiftUI puts it, up to
+    /// ~10 pt from the CSS prototype; components absorb that with spacing tokens (Pete, 2026-09-29).
     func ledgerFont(_ role: LedgerFont.Role) -> some View {
         modifier(LedgerTextStyle(role: role))
     }
@@ -150,15 +153,10 @@ struct LedgerTextStyle: ViewModifier {
     func body(content: Content) -> some View {
         let spec = role.spec
         let size = LedgerFont.scaledSize(role, dynamicTypeSize: dynamicTypeSize)
-        // SwiftUI puts a baseline 1 em below the top of its line box at any line height; CSS centres
-        // the font in the box. Lifting the text by the difference keeps the frame and the line pitch.
-        let lift = (1 - spec.lineHeight / 2 - ArchivoFont.baselineBelowMiddle) * size
         content
             .font(LedgerFont.font(role, size: size, legibilityWeight: legibilityWeight))
             .tracking(spec.tracking * size)
             .textCase(spec.isUppercase ? .uppercase : nil)
             .lineHeight(.multiple(factor: spec.lineHeight))
-            .padding(.top, -lift)
-            .padding(.bottom, lift)
     }
 }

@@ -78,7 +78,7 @@ nonisolated struct SRGB: Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-enum Resolve {
+nonisolated enum Resolve {
     /// A token resolved in a colour scheme through SwiftUI's own resolution path.
     static func color(_ color: Color, in scheme: ColorScheme) -> SRGB {
         var environment = EnvironmentValues()

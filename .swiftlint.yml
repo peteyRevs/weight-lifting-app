@@ -65,6 +65,9 @@ line_length:
 
 custom_rules:
   # ---- design-system boundary: everything outside LedgerDesign uses its tokens ----
+  # A tripwire, not a proof (Pete, 2026-09-29): the rule set below is frozen. What each rule
+  # catches, and the spellings it knowingly misses, are listed in docs/engineering-standards.md §7;
+  # "tokens only" is enforced by review (docs/subagent-workflow.md, review point 4).
   # Matches in comments and string literals are ignored. A literal 0 is allowed for spacing and
   # radii (flush stacks, square corners); any other number is a raw value.
   ledger_raw_color:
@@ -77,9 +80,11 @@ custom_rules:
       - '.*LedgerSnapshotTesting.*'
       - '.*Tests/.*'
     excluded_match_kinds: &not_code [comment, comment.mark, comment.url, doccomment, doccomment.field, string]
-    # Any Color(…) construction, Color.<named>, a named colour as a leading-dot value (argument,
-    # assignment, ternary, ??), `.init(red:…)`, a raw alpha on a token, UIKit/AppKit colours, literals.
-    regex: '\bColor(\.init)?\(|\bColor\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|primary|secondary|tertiary|quaternary|accentColor)\b|(?:[(\[,:]|(?<![=!<>])=(?!=)|\?\?|\?\s)\s*\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|primary|secondary|tertiary|quaternary|accentColor)\b|\.init\((\s*\.\w+\s*,)?\s*(red|white|hue|uiColor|nsColor|cgColor):|\bLedgerColor\.\w+\.opacity\(|\b(UI|NS)Color\b|#colorLiteral'
+    # Any Color(…) / Color.Resolved(…) construction; Color.<named or hierarchical style>; a named or
+    # hierarchical style as an argument; a named colour as a value (after `=`, `?`, `??`, `{`,
+    # `return`); `.init(red:…)` / `.color(red:…)`; a raw alpha on a token (`.opacity(…)`, `.secondary`…);
+    # UIKit/AppKit colours; colour literals.
+    regex: '\bColor(\.init|\.Resolved)?\(|\bColor\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor|primary|secondary|tertiary|quaternary|quinary)\b|[(\[,:]\s*\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor|primary|secondary|tertiary|quaternary|quinary)\b|(?:\{|\breturn|(?<![=!<>])=(?!=)|\?\?|\?\s)\s*\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor)\b|\.(init|color)\((\s*\.\w+\s*,)?\s*(red|white|hue|uiColor|nsColor|cgColor):|\bLedgerColor\.\w+\s*\.(opacity\(|(primary|secondary|tertiary|quaternary|quinary)\b)|\b(UI|NS)Color\b|#colorLiteral'
     message: "Use a LedgerDesign colour token, not a raw Color (docs/architecture.md §11)."
     severity: error
   ledger_raw_font:
@@ -87,10 +92,12 @@ custom_rules:
     included: 'LedgerKit/Sources/.*|Apps/.*'
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
-    # A system style anywhere in a `.font(…)` argument (not LedgerFont.font's role), Font(…), UIKit/AppKit
-    # fonts, weight/width/design/tracking/leading modifiers (the roles own them), a literal size for
-    # LedgerFont.font(_:size:), and a constant text size (`dynamicTypeSize: .large`, `.dynamicTypeSize(.large)`).
-    regex: '(?<!LedgerFont)\.font\([^()]*?\.(system|custom|init|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\bFont(\.init)?\(|\bFont\.(system|custom|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\b(UI|NS)Font\b|\.(bold|italic|fontWeight|fontWidth|fontDesign|tracking|kerning|lineSpacing|lineHeight)\(|\bLedgerFont\.font\([^()]*\bsize:\s*(CGFloat\(\s*)?\d|\bdynamicTypeSize(:|\(|,)\s*(DynamicTypeSize)?\.\w+\s*[,)]'
+    # A system style anywhere in a `.font(…)` or `\.font` environment argument (not LedgerFont.font's
+    # role) or assigned to a `Font`, Font(…), UIKit/AppKit fonts, weight/width/design/scale/tracking/
+    # leading modifiers (the roles own them), a literal size for LedgerFont.font(_:size:), a constant
+    # text size (`dynamicTypeSize: .large`, `\.dynamicTypeSize, .large`), and a pin at or below the
+    # default size (`.dynamicTypeSize(.large)`; a preview may pin a larger one).
+    regex: '(?:(?<!LedgerFont)\.font\(|\\\.font\s*,)[^()]*?\.(system|custom|init|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\bFont\s*=\s*\.(system|custom|init|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\bFont(\.init)?\(|\bFont\.(system|custom|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\b(UI|NS)Font\b|\.(bold|italic|fontWeight|fontWidth|fontDesign|monospaced|monospacedDigit|textScale|tracking|kerning|lineSpacing|lineHeight)\(|\bLedgerFont\.font\([^()]*\bsize:\s*(CGFloat\(\s*)?\d|\bdynamicTypeSize(:|,)\s*(DynamicTypeSize)?\.\w+\s*[,)]|\bdynamicTypeSize\(\s*(DynamicTypeSize)?\.(xSmall|small|medium|large)\s*\)'
     message: "Use a LedgerDesign type token, not a system font (docs/architecture.md §11)."
     severity: error
   ledger_raw_spacing:
@@ -99,8 +106,10 @@ custom_rules:
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
     # Padding, content margins and list spacing; EdgeInsets (also as `.init(top:…)`); stack, grid and
-    # Spacer spacing; and token arithmetic with a literal (`LedgerSpacing.m + 1`).
-    regex: '\.(padding|safeAreaPadding|contentMargins|listRowSpacing|listSectionSpacing)\(\s*(\.\w+\s*,|\[[^\]]*\]\s*,)?\s*(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|(\bEdgeInsets|\.init(?=\(\s*top:))\([^)]*:\s*-?(?:\d*\.)?\d*[1-9][\d.]*|\b(spacing|horizontalSpacing|verticalSpacing|minLength):\s*(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerSpacing\.\w+\s*[-+*/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+*/]\s*LedgerSpacing\.'
+    # Spacer spacing, including a literal in either arm of a simple ternary; and a token nudged by a
+    # literal (`LedgerSpacing.m + 1`, `/ 2`, `* 1.5`; a whole multiple such as `2 * LedgerSpacing.screen`
+    # is a count of tokens and passes).
+    regex: '\.(padding|safeAreaPadding|contentMargins|listRowSpacing|listSectionSpacing)\(\s*(\.\w+\s*,|\[[^\]]*\]\s*,)?\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|(\bEdgeInsets|\.init(?=\(\s*top:))\([^)]*:\s*-?(?:\d*\.)?\d*[1-9][\d.]*|\b(spacing|horizontalSpacing|verticalSpacing|minLength):\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerSpacing\.\w+\s*([-+/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\*\s*(CGFloat\(\s*)?\d*\.\d*[1-9]\d*)|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+]\s*LedgerSpacing\.|\d*\.\d*[1-9]\d*\s*\*\s*LedgerSpacing\.'
     message: "Use a LedgerDesign spacing token, not a numeric literal."
     severity: error
   ledger_raw_radius:
@@ -108,9 +117,10 @@ custom_rules:
     included: 'LedgerKit/Sources/.*|Apps/.*'
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
-    # Every corner-radius label (including RectangleCornerRadii's topLeading: …), `.cornerRadius(…)`, a
-    # cornerSize with a literal, and token arithmetic with a literal.
-    regex: '\b(cornerRadius|(top|bottom)(Leading|Trailing)(Radius)?):\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\.cornerRadius\(\s*(?:\d*\.)?\d*[1-9][\d.]*|\bcornerSize:\s*(CGSize|\.init)\([^)]*:\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerRadius\.\w+\s*[-+*/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+*/]\s*LedgerRadius\.'
+    # Every corner-radius label (including RectangleCornerRadii's topLeading: …), also in a simple
+    # ternary, `.cornerRadius(…)`, a cornerSize with a literal, iOS 26's `.fixed(…)` corner style, and a
+    # token nudged by a literal.
+    regex: '\b(cornerRadius|(top|bottom)(Leading|Trailing)(Radius)?):\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\.cornerRadius\(\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(?:\d*\.)?\d*[1-9][\d.]*|\bcornerSize:\s*(CGSize|\.init)\([^)]*:\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\b(corners|minimum|\w+Corner):\s*\.fixed\(\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerRadius\.\w+\s*([-+/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\*\s*(CGFloat\(\s*)?\d*\.\d*[1-9]\d*)|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+]\s*LedgerRadius\.|\d*\.\d*[1-9]\d*\s*\*\s*LedgerRadius\.'
     message: "Use a LedgerDesign radius token, not a numeric literal."
     severity: error
 

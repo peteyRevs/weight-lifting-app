@@ -55,7 +55,7 @@ nonisolated struct ContrastPair: Sendable, CustomTestStringConvertible {
 }
 
 @Suite("Contrast (adversarial)", .tags(.design))
-struct ContrastAdversarialTests {
+nonisolated struct ContrastAdversarialTests {
     static func ratio(_ pair: ContrastPair) -> Double {
         let background = Resolve.color(pair.background, in: pair.scheme)
         return Resolve.color(pair.foreground, in: pair.scheme).contrast(on: background)

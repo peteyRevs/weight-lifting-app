@@ -3,7 +3,7 @@ import Testing
 
 /// Spacing, radius and hairline scales against the brief's public surface and spec §8.6.
 @Suite("Layout tokens (adversarial)", .tags(.design))
-struct LayoutTokenAdversarialTests {
+nonisolated struct LayoutTokenAdversarialTests {
     @Test("Spacing is the brief's 4/8/12/16/24/32 scale plus the 26 pt v2 screen inset.")
     func spacing_values_matchBrief() {
         let scale = [

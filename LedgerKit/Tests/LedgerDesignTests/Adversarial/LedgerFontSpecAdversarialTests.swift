@@ -140,7 +140,7 @@ nonisolated struct RoleExpectation: Sendable, CustomTestStringConvertible {
 }
 
 @Suite("LedgerFont roles (adversarial)", .tags(.design))
-struct LedgerFontSpecAdversarialTests {
+nonisolated struct LedgerFontSpecAdversarialTests {
     @Test(
         "Each role's size, weight, width, tracking, line height, case and figures follow spec §8.5.",
         arguments: RoleExpectation.all

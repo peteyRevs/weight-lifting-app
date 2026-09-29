@@ -70,6 +70,16 @@ public nonisolated struct SnapshotAppearance: Sendable, CustomStringConvertible 
     #endif
 }
 
+public extension View {
+    /// Puts `appearance` in SwiftUI's own environment as well as in the snapshot's traits.
+    /// swift-snapshot-testing measures a `.sizeThatFits` view before it applies `traits`, so without
+    /// this a sheet at `.xLarge` or `.accessibility3` is laid out in its `.large` size and clipped at
+    /// the top and bottom (found in F06 fix round 3).
+    func snapshotAppearance(_ appearance: SnapshotAppearance) -> some View {
+        environment(\.dynamicTypeSize, appearance.dynamicTypeSize).environment(\.colorScheme, appearance.colorScheme)
+    }
+}
+
 /// Watch display sizes in points (docs/testing-strategy.md §2.5). One watch simulator renders
 /// all three as fixed layouts.
 public nonisolated enum WatchSize: String, CaseIterable, Sendable {

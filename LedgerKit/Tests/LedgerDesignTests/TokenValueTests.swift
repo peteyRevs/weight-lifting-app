@@ -5,7 +5,7 @@ import Testing
 /// F06 criterion 2: every colour token resolves to the spec's sRGB value (docs/product-spec.md
 /// §8.1–§8.3). Expected values are copied from the spec, not from `LedgerRGBA`.
 @Suite("TokenValues", .tags(.design))
-struct TokenValueTests {
+nonisolated struct TokenValueTests {
     nonisolated struct Case: Sendable, CustomTestStringConvertible {
         let name: String
         let color: Color
@@ -29,7 +29,7 @@ struct TokenValueTests {
         Case("surface", LedgerColor.surface, 0x131316),
         Case("ink", LedgerColor.ink, 0xF4F2ED),
         Case("inkSecondary", LedgerColor.inkSecondary, 0xF4F2ED, 0.72),
-        Case("inkMuted", LedgerColor.inkMuted, 0xF4F2ED, 0.48),
+        Case("inkMuted", LedgerColor.inkMuted, 0xF4F2ED, 0.51), // F06 fix round 3: AA on accentSoft
         Case("inkFaint", LedgerColor.inkFaint, 0xF4F2ED, 0.32),
         Case("inkDim", LedgerColor.inkDim, 0xF4F2ED, 0.28),
         Case("hairline", LedgerColor.hairline, 0xF4F2ED, 0.08),
@@ -46,7 +46,7 @@ struct TokenValueTests {
         Case("surface", LedgerColor.surface, 0xFFFFFF),
         Case("ink", LedgerColor.ink, 0x16150F),
         Case("inkSecondary", LedgerColor.inkSecondary, 0x16150F, 0.72),
-        Case("inkMuted", LedgerColor.inkMuted, 0x16150F, 0.60),
+        Case("inkMuted", LedgerColor.inkMuted, 0x16150F, 0.62), // F06 fix round 3: AA on accentSoft
         Case("inkFaint", LedgerColor.inkFaint, 0x16150F, 0.32),
         Case("inkDim", LedgerColor.inkDim, 0x16150F, 0.28),
         Case("hairline", LedgerColor.hairline, 0x16150F, 0.08),

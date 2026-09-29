@@ -4,10 +4,14 @@
 # alpha on a token, the tracking/leading/size/text-size font branches, content margins, Spacer
 # and token arithmetic. Same harness as rounds 1 and 2: one fixture file per case in a throwaway
 # tree that mirrors the repo, linted once with the repo's own .swiftlint.yml. A case expects one
-# rule, `any` ledger_raw_* rule, or `none`.
+# rule, `any` ledger_raw_* rule, `none`, or `limit`.
 #
-# Not wired into check.sh while it has open cases (it would stop the gate at step 2); see
-# tasks/features/F06-design-system/test-findings.md, "Round 3".
+# F06 fix round 3 — Pete's decision 2 (2026-09-29): "The design lint is a tripwire, not a proof."
+# The rule set is frozen; "tokens only" is enforced by review (docs/subagent-workflow.md, review
+# point 4). Cases the decision puts out of scope are kept below as `limit`: a documented known
+# limit (docs/engineering-standards.md §7) that the rules do not flag. A `limit` case fails only if
+# a rule starts flagging it, so the documented list stays true. Wired into check.sh step 2 since
+# fix round 3; see tasks/features/F06-design-system/test-findings.md, "Round 3".
 #
 #   scripts/tests/lint-rules-adversarial-round3.test.sh
 set -euo pipefail
@@ -87,6 +91,7 @@ fixture "$feature" B08 ledger_raw_font 'let titleFont: Font = .title
 fixture "$feature" B09 ledger_raw_font 'Text("x").environment(\.font, .system(size: 13))'
 # font: the size and design siblings of .fontWeight/.fontWidth/.fontDesign. `.textScale(.secondary)`
 # is only caught by accident: ledger_raw_color reads `(.secondary` as a colour (B10 is a control).
+# (Fix round 3: ledger_raw_font now flags `.textScale(` and `.monospaced(` as role properties.)
 fixture "$feature" B10 any 'Text("x").ledgerFont(.body).textScale(.secondary)'
 fixture "$feature" B11 ledger_raw_font 'Text("x").ledgerFont(.numeralL).monospaced()'
 # spacing and radius: a literal chosen by a ternary
@@ -95,36 +100,40 @@ fixture "$feature" B13 ledger_raw_spacing 'HStack(spacing: isCompact ? 4 : Ledge
 fixture "$feature" B14 ledger_raw_radius 'RoundedRectangle(cornerRadius: isSheet ? 28 : LedgerRadius.card)'
 # radius: the iOS 26 corner API (.rect(corners:), ConcentricRectangle)
 fixture "$feature" B15 ledger_raw_radius 'Rectangle().clipShape(.rect(corners: .concentric(minimum: .fixed(13))))'
-# a trailing comment inside the call: the match spans a comment token and SwiftLint drops it
-fixture "$feature" B16 ledger_raw_font 'Text("x").font(
+# a trailing comment inside the call: the match spans a comment token and SwiftLint drops it.
+# Known limit (decision 2): SwiftLint drops any match that contains a comment, and no simple rule
+# can skip the comment; the same call with the comment after it is flagged (K02, K04).
+fixture "$feature" B16 limit 'Text("x").font(
             isCompact // tight rows
                 ? .footnote
                 : .body
         )'
-fixture "$feature" B17 ledger_raw_spacing 'Text("x").padding(
+fixture "$feature" B17 limit 'Text("x").padding(
             .horizontal, // screen inset
             13
         )'
 
 # ---- escape hatches around the roles and tokens (design questions) ---------------------------
+# Known limits (decision 2): finding 22's escape hatches are documented in
+# docs/engineering-standards.md §7, not closed; review catches them. Each was `any` in round 3.
 # A cap on the text size: `.dynamicTypeSize(.large)` is flagged, `...large` is not.
-fixture "$feature" D01 any 'Text("x").ledgerFont(.body).dynamicTypeSize(...DynamicTypeSize.large)'
+fixture "$feature" D01 limit 'Text("x").ledgerFont(.body).dynamicTypeSize(...DynamicTypeSize.large)'
 # Shrinks a watch role below the 11 pt floor (criterion 4).
-fixture "$feature" D02 any 'Text("x").ledgerFont(.watchLabel).minimumScaleFactor(0.5)'
+fixture "$feature" D02 limit 'Text("x").ledgerFont(.watchLabel).minimumScaleFactor(0.5)'
 # The same raw alpha as LedgerColor.ink.opacity(0.6), applied to the view.
-fixture "$feature" D03 any 'Text("x").foregroundStyle(LedgerColor.ink).opacity(0.6)'
+fixture "$feature" D03 limit 'Text("x").foregroundStyle(LedgerColor.ink).opacity(0.6)'
 # A gap made with a frame, and a gap in a named constant.
-fixture "$feature" D04 any 'VStack(spacing: 0) { Text("x"); Spacer().frame(height: 13); Text("y") }'
-file_fixture "$feature" D05 any 'struct FixtureD05: View {
+fixture "$feature" D04 limit 'VStack(spacing: 0) { Text("x"); Spacer().frame(height: 13); Text("y") }'
+file_fixture "$feature" D05 limit 'struct FixtureD05: View {
     private let rowGap: CGFloat = 13
     var body: some View { Text("x").padding(.vertical, rowGap) }
 }'
 # System styles that are colours by another name.
-fixture "$feature" D06 any 'Rectangle().fill(.separator).frame(height: LedgerHairline.width)'
-fixture "$feature" D07 any 'Text("x").background(.ultraThinMaterial)'
+fixture "$feature" D06 limit 'Rectangle().fill(.separator).frame(height: LedgerHairline.width)'
+fixture "$feature" D07 limit 'Text("x").background(.ultraThinMaterial)'
 # Role properties outside the role.
-fixture "$feature" D08 any 'Text("x").ledgerFont(.caption).baselineOffset(2)'
-fixture "$feature" D09 any 'Text("x").ledgerFont(.body).textCase(.uppercase)'
+fixture "$feature" D08 limit 'Text("x").ledgerFont(.caption).baselineOffset(2)'
+fixture "$feature" D09 limit 'Text("x").ledgerFont(.body).textCase(.uppercase)'
 
 # ---- must not be flagged: sanctioned token use ----------------------------------------------
 fixture "$feature" P01 none 'Text("x").font(LedgerFont.font(.label, size: LedgerFont.scaledSize(.label, dynamicTypeSize: dynamicTypeSize)))'
@@ -196,7 +205,14 @@ print(" ".join(rules) or "none")
 PY
 )"
     label="${dir#"$work"/}/$id.swift"
-    if [[ "$expected" == none && "$hits" != none ]]; then
+    if [[ "$expected" == limit ]]; then
+        if [[ "$hits" != none ]]; then
+            echo "FAIL $label: documented limit is now flagged by $hits; update docs/engineering-standards.md §7"
+            failures=$((failures + 1))
+        else
+            echo "limit $label (known limit, decision 2)"
+        fi
+    elif [[ "$expected" == none && "$hits" != none ]]; then
         echo "FAIL $label: false positive — flagged by $hits"
         failures=$((failures + 1))
     elif [[ "$expected" == any && "$hits" == none ]]; then

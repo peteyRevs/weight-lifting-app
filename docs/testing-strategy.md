@@ -337,7 +337,10 @@ and attach screenshots for failures. A run with any failure blocks the tag.
 - Lanes are selected by **test plan** (target/suite granularity) and confirmed
   by the `LEDGER_TEST_LANE` env var read by traits: `.performance`/`.slow`
   suites are listed under `skippedTests` in the PR plans; `.device` suites are
-  `.enabled(if: TestLane.isDevice)`.
+  `.enabled(if: TestLane.isDevice)`. A single `.slow` test inside a PR suite
+  carries `.enabled(if: TestLane.runsSlowTests)` instead, which is true only
+  when `LEDGER_TEST_LANE` is `nightly` (F06: LedgerDesignTests' full
+  bare-font matrix; the PR lane runs a representative subset).
 
 | Lane | Plans | Runs |
 |---|---|---|

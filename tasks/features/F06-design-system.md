@@ -74,6 +74,18 @@ Components (each with all states + `#Preview` + snapshot):
 - watchOS variable-font axis support (spike).
 - Dynamic Type with a custom font on watchOS — verify `@ScaledMetric` behaviour.
 
+## Decisions during delivery (Pete, 2026-09-29, after slice 1 failed the adversarial gate three times)
+Recorded verbatim; they change this brief's contract. Implemented in fix round 3 (`F06-design-system/implementation-notes.md`).
+
+1. **Text uses native SwiftUI line height only.** Keep `.lineHeight(.multiple(factor:))`. Remove the CSS half-leading emulation (the `lift` computed from `ArchivoFont.baselineBelowMiddle` and the `.padding(.top, -lift).padding(.bottom, lift)`) and any code that exists only for it. Single lines may sit 1–10 pt off the HTML prototype; slice-2 components absorb that with spacing tokens.
+2. **The design lint is a tripwire, not a proof.**
+   - Close finding 21's 16 raw spellings where a rule can do it simply.
+   - Fix finding 23's false positives on sanctioned token use.
+   - Then freeze the rule set. Document it as a list, and document its known limits, finding 22's escape hatches included, in docs/engineering-standards.md next to the design-lint rule, or wherever the lint is documented today.
+   - State that "tokens only" is enforced by review (docs/subagent-workflow.md review point 4), and that the lint is not meant to catch every spelling.
+
+For criterion 8 this means: the rules and their known limits are listed in `docs/engineering-standards.md` §7 ("Design lint"), and the lint is not expected to flag the listed limits.
+
 ## Definition of Done
 Inherits `docs/engineering-standards.md` §12, plus:
 - [ ] Side-by-side screenshots of `DesignGallery` vs prototype sections attached to the PR.

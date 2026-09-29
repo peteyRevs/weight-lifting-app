@@ -8,9 +8,9 @@ import SwiftUI
 /// palette, which has a single appearance.
 ///
 /// Text and rules are one ink colour at fixed alphas. Every text token reaches WCAG AA (4.5:1)
-/// on `ground` and `surface` except `inkFaint` and `inkDim`, which are decorative. With iOS
-/// Increase Contrast the ink ladder steps up: text to 7:1, `inkFaint` to 4.5:1 (Pete, 2026-09-27;
-/// ratios in the F06 implementation notes).
+/// on `ground` and `surface`, bare or under `accentSoft`, except `inkFaint` and `inkDim`, which
+/// are decorative. With iOS Increase Contrast the ink ladder steps up: text to 7:1, `inkFaint` to
+/// 4.5:1 (Pete, 2026-09-27; ratios in the F06 implementation notes).
 public nonisolated enum LedgerColor {
     // MARK: Grounds
 
@@ -25,8 +25,9 @@ public nonisolated enum LedgerColor {
     public static let ink = Color(light: .ink, dark: .text)
     /// Secondary text, 72 % (Increase Contrast 86 %).
     public static let inkSecondary = ink(0.72, increased: 0.86)
-    /// Metadata and captions: 60 % on paper, 48 % on dark (the spec's 45 % is below AA).
-    public static let inkMuted = ink(0.48, light: 0.60, increased: 0.74)
+    /// Metadata and captions: 62 % on paper, 51 % on dark (the spec's 45 % is below AA, and these
+    /// keep AA on the `accentSoft` tint of a selected item too).
+    public static let inkMuted = ink(0.51, light: 0.62, increased: 0.74)
     /// Column headers and decorative labels, 32 %.
     public static let inkFaint = ink(0.32, increased: 0.60)
     /// Completed rows (`DIM` in the v2 prototype), 28 %.
