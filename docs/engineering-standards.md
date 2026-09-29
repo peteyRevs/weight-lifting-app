@@ -248,10 +248,15 @@ starts to flag it, so this list stays true.
 
 - Branch: `feat/F07-active-workout`, `fix/…`, `chore/…`. One feature brief per branch.
 - Commits: Conventional Commits (`feat(workout): …`, `fix(sync): …`, `test(domain): …`).
-- PRs: ≤ 500 changed lines excluding tests and snapshots. Larger = split.
+- PR size (Pete, 2026-09-29): count code only, excluding tests, snapshots, docs (`docs/`, `*.md`)
+  and comments. **500 lines is a target**: a PR over it says so in one line of its description and
+  names the split it considered. **Above ~1,000 lines, split** at a natural seam, merging the first
+  PR before opening the next (no stacked PRs). Never compress code or comments to fit.
 - PR description follows `.github/PULL_REQUEST_TEMPLATE.md` and links the
   feature brief.
-- `main` is protected: no direct pushes, required CI checks, linear history.
+- `main` changes only through squash-merged PRs (linear history). The repo is on GitHub Free with no
+  branch protection (Pete, 2026-09-27), so the merge gate is the orchestrator's policy: a green
+  local `scripts/check.sh` on the merge candidate, plus CI when it ran (`docs/ci-cd.md` §4).
 - Never commit secrets, provisioning profiles, or `.p8` keys.
 
 ---
