@@ -141,7 +141,8 @@ extension Round3HostAdversarialTests {
         if let skip {
             try await phone.create(.restSkipped, real: skip)
         }
-        try await phone.receive(watch.outbox.shuffled())
+        var generator = SeededGenerator(seed: 144)
+        try await phone.receive(watch.outbox.shuffled(using: &generator))
         #expect(phone.mismatches == 0)
         #expect(phone.state?.doneSets == 5)
         return phone

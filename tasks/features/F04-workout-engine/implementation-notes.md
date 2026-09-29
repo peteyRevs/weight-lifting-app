@@ -28,7 +28,7 @@ Every rule has at least one named test. File name = suite name, under `LedgerKit
 
 | Rule | Tests |
 |---|---|
-| 1 `started` | `ReduceStartedTests`: `started_onNil_yieldsSnapshot`, `started_onExistingState_isIgnored`, `eventBeforeStarted_isIgnored`, `started_invalidSnapshot_isIgnored`, `envelope_forAnotherWorkout_isIgnored`, `replay_buffersEventsSortedBeforeStarted`, `replay_withoutStarted_isNil` |
+| 1 `started` | `ReduceStartedTests`: `started_onNil_yieldsSnapshot`, `started_onExistingState_isIgnored`, `eventBeforeStarted_isIgnored`, `started_invalidSnapshot_isIgnored`, `envelope_forAnotherWorkout_isIgnored`, `replay_buffersEventsSortedBeforeStarted`, `replay_withoutStarted_isNil`; `Adversarial/Round3EffectsAdversarialTests.startedWithRest_reduceSchedulesItToo` |
 | 2 terminal | `ReduceTerminalTests`: `criterion6_afterFinished_everythingIsIgnored` (13 cases, one per event kind), `afterDiscarded_everythingIsIgnored` (13), `firstTerminalWins` |
 | 3 `setLogged` | `ReduceSetLoggedTests`: `criterion1_firstSet_startsRestAndAdvances`, `criterion2_superset_restsAfterRound_roundRobin`, `criterion3_lastSetOfExercise_movesToNextExercise`, `cursor_wrapsToEarliestUndoneRow`, `cursor_staysAfterLastRowOfWorkout`, `autoRestOff_startsNoRest`, `relog_updatesValuesOnly`, `negativeWeight_isClampedToZero`, `unknownSet_changesNothing` (3), `supersetDropRound_restsAfterLastDropRow` |
 | 4 `setUnlogged` | `ReduceUnlogTests`: `criterion4_unlog_keepsCursorAndRest`, `relogAfterUnlog_isTransitionAgain`, `unlog_unknownOrUndone_changesNothing` |
@@ -36,10 +36,10 @@ Every rule has at least one named test. File name = suite name, under `LedgerKit
 | 6 `setAdded` | `ReduceAddRepeatSwapTests`: `setAdded_appendsUndoneAddedRow`, `setAdded_isIdempotentBySetID` |
 | 7 `allSetsRepeated` | `ReduceAddRepeatSwapTests.allSetsRepeated_writesEveryRow` |
 | 8 `exerciseSwapped` | `ReduceAddRepeatSwapTests`: `exerciseSwapped_replacesIdentityOnly`, `criterion12_programUpdate_survivesFinish`, `programUpdates_latestPerSlot` |
-| 9 rest | `ReduceRestTests`: `criterion5_extendWithNoRest_startsRestFromNow`, `extend_runningRest_growsEndsAtAndTotal`, `extendTwice_addsBoth`, `extend_afterRestIsOver_startsFreshRest`, `extend_atExactEnd_startsFreshRest`, `restStarted_isAbsolute`, `skip_clearsRest` |
-| 10 `finished` / `discarded` | `ReduceTerminalTests`: `finished_endsAndMaterializes`, `discarded_endsAndDropsLog`, `summary_ofFinishedWorkout`, `summary_ofLiveWorkout_hasZeroElapsed`, `summary_usesSnapshottedUnits`; `EffectTests.effects_finished` |
+| 9 rest | `ReduceRestTests`: `criterion5_extendWithNoRest_startsRestFromNow`, `extend_runningRest_growsEndsAtAndTotal`, `extendTwice_addsBoth`, `extend_afterRestIsOver_startsFreshRest`, `extend_followsTheLiftersIntent_notTheClock`, `extend_unshown_neverShortensARunningRest`, `longestRest_holdsGrownRests`, `longestRest_saturatesAHostileStateRest`, `restStarted_isAbsolute`, `skip_clearsRest` |
+| 10 `finished` / `discarded` | `ReduceTerminalTests`: `finished_endsAndMaterializes`, `discarded_endsAndDropsLog`, `summary_ofFinishedWorkout`, `summary_ofLiveWorkout_hasZeroElapsed`, `summary_ofCorruptEndedAt_saturatesElapsed`, `summary_usesSnapshottedUnits`, `stillLifting_finishOpenedLater_endsAtTheLastSet`; `EffectTests.effects_finished` |
 | 11 `exerciseSelected` | `ReduceSelectTests`: `select_undoneRow_movesCursor`, `select_doneRow_isIgnored`, `select_missingRow_isIgnored` (4) |
-| 12 convergence | `ReplayTests`: `criterion7_shuffled100Times_sameState`, `criterion8_duplicatedLog_equalsDedupedReplay`, `replay_equalsSequentialReduce` (property), `resume_midWorkout_restoresState`, `foldOrder_dedupesAndLeadsWithStarted`. `ConvergenceTests`: `criterion9_partition_thenHeal_converges`, `randomPartition_converges` (property), `wallClockTie_breaksByDeviceThenSeq`. `EnvelopeOrderingTests`: `order_wallClockFirst`, `order_tieBreaksOnDevice`, `order_tieBreaksOnSeq`, `key_isDeviceAndSeq`, `order_isTotal_andMatchesUUIDStringOrder` (property) |
+| 12 convergence | `ReplayTests`: `criterion7_shuffled100Times_sameState`, `criterion8_duplicatedLog_equalsDedupedReplay`, `replay_equalsSequentialReduce` (property), `resume_midWorkout_restoresState`, `foldOrder_dedupesAndLeadsWithStarted`, `foldOrder_leadsWithUsableStarted_andKeepsOnlyItsWorkout`. `ConvergenceTests`: `criterion9_partition_thenHeal_converges`, `randomPartition_converges` (property), `wallClockTie_breaksByDeviceThenSeq`. `EnvelopeOrderingTests`: `order_wallClockFirst`, `order_tieBreaksOnDevice`, `order_tieBreaksOnSeq`, `key_isDeviceAndSeq`, `order_isTotal_andMatchesUUIDStringOrder` (property) |
 
 Also:
 
@@ -52,6 +52,18 @@ Also:
   - the new snapshot fields round-trip;
   - `EngineError` equality.
 - **`ModelOracleTests.oracle_reproducesCriteria1And2`** shows that the oracle is not vacuous.
+- **`EffectsFromToTests`** (a rebuild's effects, ADR-004 host loop): `unchanged_andStarted`,
+  `remoteSetLog_buzzesAndSchedules`, `remoteRestChanges`, `terminals`, `lateEnvelope_rematerializes`,
+  `setHaptic_oncePerRebuild`, `setHaptic_neverWhenTheWorkoutEnded`, and the properties
+  `matchesReduce_onEveryStep` and `rebuildEffects_materializeInEveryArrivalOrder`.
+- **`EnvelopeWellFormedTests`** (`isWellFormed`): `payloadDates_mustBeFinite`, `nonFiniteStamp_isMalformed`,
+  `restLengths_liesWithinTheBound`, `startedSnapshot_isInternallyPossible`, `reduce_ignoresMalformed`,
+  `replay_dropsMalformed`.
+- **`WorkoutEventStoreContractTests`**: the store contract's 10 clauses on `InMemoryEventStore`.
+- **`ExtremeValuePropertyTests.extremeValues_neverTrap_andStateEqualsItself`**: the fuzz.
+
+_Refreshed in the review should-fix round (N4). `extend_atExactEnd_startsFreshRest` was deleted in fix
+round 2 (B)._
 
 ## Acceptance criteria → tests
 
@@ -155,7 +167,7 @@ Also:
    **Orchestrator call:** F17's `WorkoutIntent` sketch uses `at:` everywhere and will hit the same rule. Either allowlist `^at$`, `^to$`, `^by$` in `.swiftlint.yml` (as F02 did for `lb`/`kg`) and restore the brief's labels, or keep these.
 3. **Rule 9 also restarts a rest that is already over.** The brief says "if `rest == nil`". A rest that reached zero stays in the state, because reaching zero is not an event. So a literal reading makes "+30s" after zero extend a past `endsAt`, leaving the timer at zero: exactly the hole decision #7 closes ("'+30s' at zero restarts a 30 s rest").
    - A rest counts as running when `endsAt > wallClock`.
-   - Tests: `extend_afterRestIsOver_startsFreshRest`, `extend_atExactEnd_startsFreshRest`.
+   - Tests: `extend_afterRestIsOver_startsFreshRest`, `extend_atExactEnd_startsFreshRest` (deleted in fix round 2, B: "+30s" now carries `extendsShownRest`).
 4. **Additive F02 changes:**
    - `WorkoutState.units: Units` (default `.lb`, snapshotted by `SessionBuilder` from `settings.units`, like `autoRest`). `summary` needs it for the receipt rows (`ReceiptRow(exercise:units:)`), and the reducer builds the summary for `.materialize`.
    - `WorkoutState.programUpdates: [SlotID: ExerciseID]` (default `[:]`; rule 8, criterion 12).
@@ -1090,3 +1102,56 @@ Measured from the merge base with `main` (`8404d02`; `main` has since moved on w
 - **PR body:** 392 product code lines is under Pete's 500 target, so no split line is needed. The split
   considered earlier (fix round 2's A "event vocabulary + validation + store contract", B
   "reduce/replay/summary/effects") stays on record in "Product lines" above.
+
+---
+
+## Review should-fix round (2026-09-29)
+
+Input: `review.md` (S1–S5, N1–N7) and `test-findings.md` "# Round 4" → "Out of scope, noted". F04 is frozen:
+the one code change is S5, in a test. Everything else is in docs and briefs. No `LedgerDomain` source
+changed, so the doc comments the review names in sources (`WorkoutEngine.swift`, `WorkoutEventStore.swift`,
+`Effect.swift`, `EventEnvelope.swift`) are unchanged; each points to ADR-004's amendment, which now
+carries the rules.
+
+| Item | Change |
+|---|---|
+| S1 | ADR-004 "Recovery on launch" gains two rules. **Recovery skips only non-finite stamps:** `newest` is the largest *finite* stored `wallClock`, so a stored `+∞` cannot make every later own envelope malformed. **A drift bound acts only on receipt:** it may reject a received stamp before `append` (not stored, not seen by the clock), and never makes the host skip, clamp or restamp a stored envelope. The old "skip a stored stamp the drift bound would reject" is gone. The own-action bullet now points to the two rules, and the received bullet says "once past F17's receipt checks". F17 item 3 states the same two rules, and item 1 points to them. This is the orchestrator's fix, not the review's fallback (append and replay when a stamp sorts early): with the bound only on receipt, an own stamp always sorts after everything stored |
+| S2 | **F05:** criterion 8 → `uncompactedWorkoutIDs()`; the `wall_clock` column is marked full precision; the test plan names the contract suite. New "Inputs from F04" covers: the shipped protocol (`append` returns the newly stored envelopes, all or nothing); no validation windows; running the contract suite, which must first move out of the `LedgerDomainTests` target; lossless dates; `.materialize(WorkoutState)` plus `summary`; a late discard that overtakes a finish; the renamed labels. It also carries the tester's round-4 note (a seconds-since-1970 store passes the contract), with "add a second stamp fixture to the read-back clause" left for F05 to decide. **F10:** the client comments (HLC stamp, launch step, `.materialize`); the effect names (`.persist`, `.transmit`, `.materialize`, `.discardLog`; no `.saveToHealth`); `exerciseSelected(exerciseIndex:setIndex:)` and `exerciseSwapped(exerciseIndex:exerciseID:name:alsoUpdateProgram:)`, with the two risks; criterion 7's `restExtended(amount:extendsShownRest:tappedAt:)`; criterion 12's launch step. The origin filter on haptics is dropped, because the engine decides which changes buzz, so `test_store_hapticOnlyForLocalOrigin` becomes `test_store_playsForwardedHaptics`. New "Inputs from F04" says F10 is the first host: HLC stamping and recovery, ADR-004's host loop, the effects, "+30s", the launch step, no windows, `alsoUpdateProgram` against `replaceSlotExercise` (F10 decides), and the cursor bounds-check (N7) |
+| S3 | `docs/architecture.md` §6: the shipped `WorkoutEngine` and `Effect` signatures, and a pointer to `LedgerDomain/Engine` and the ADR amendment. Its actor bullet now names HLC stamping and the rebuild; its recovery bullet names the launch step. ADR-004: an "Illustrative" line under the sketch |
+| S4 | F17 item 1: on `EngineError.conflictingEnvelope(key)`, append the batch one envelope at a time; drop the conflicting one and log it (`os.Logger`, no health values); keep the rest; rebuild once. A resent batch then cannot fail forever |
+| S5 | `Round3HostAdversarialTests.partition`: `watch.outbox.shuffled(using: &generator)` with `SeededGenerator(seed: 144)`. A grep finds no other unseeded `shuffled()`, `randomElement()` or `random(in:)` under `Engine/` |
+| Round 4, note 1 (F05, seconds since 1970) | F05 "Inputs from F04" item 4 |
+| Round 4, note 2 (absurd HLC stamps) | F17 item 9 |
+| Round 4, note 3 (a rebuild from nothing buzzes once) | F17 item 9. F17 owns the phone joining a live workout; F18 is the watch screens. Accepted under Pete's one-per-catch-up rule |
+
+**Nits:**
+
+| Nit | Outcome |
+|---|---|
+| N1 | Done. ADR-004 now reads "'+30s' on a screen that showed no rest never shortens a running rest", and states the `tappedAt + longestRest` cap on a shown rest |
+| N2 | Done in the briefs: F05 inputs items 5 (re-materialisation lasts only until compaction) and 6 (a late discard deletes a materialised workout). `Effect.swift`'s doc is skipped: it is source, and F04 is frozen |
+| N3 | Skipped. `EventEnvelope.swift:13` is a source doc comment, and F04 is frozen. ADR-004 and F17 item 1 already say that a received envelope is never reduced |
+| N4 | Done. The "Rules → tests" table (rules 1, 9, 10, 12) and its "Also" list (`EffectsFromToTests`, `EnvelopeWellFormedTests`, the contract suite, the fuzz) are refreshed, and deviation 3's deleted test is marked |
+| N5 | Skipped. It is code in `WorkoutEngine+Reduce.swift`, and the reviewer asks for no action while F04 is frozen |
+| N6 | Skipped here. The PR body is written when the PR opens. Both figures and the ruling are in "Line counts" above: `LedgerDomain` 392, all of `Sources` 857, and `LedgerTestSupport` (465) ruled test code |
+| N7 | Done through S2: F10 inputs item 8, which names F18 and F21 too. The `WorkoutState.cursor` doc is source, so it is unchanged |
+
+### Gate
+
+- **`scripts/check.sh --fast`** (host): OK. 689 tests in 116 suites pass, as in the tester's round 4, since
+  S5 adds no test. Format (0 of 253 files) and lint `--strict` are clean. Log: scratchpad
+  `f04-final-fast.log`.
+- **Full `scripts/check.sh` through `sim-lock.py`, once** (2026-09-29): **green** (`check.sh OK`) in 256 s.
+  Log: scratchpad `f04-final-check.log`.
+
+  | Step | Result |
+  |---|---|
+  | 0–2: tools, format, lint (`--strict`), package graph | OK: 0 of 253 files need formatting; lint and the four lint-rule suites are clean; the graph matches |
+  | 3: iOS `PR` plan (iPhone 17, 26.5) | **17 test targets ran and passed.** xcresult: 837 tests; 835 passed, **0 failed**, 2 skipped |
+  | 4: watchOS `PR-Watch` plan (Apple Watch Series 11 46 mm, 26.5) | **8 test targets ran and passed.** xcresult: 814 tests; 812 passed, **0 failed**, 2 skipped |
+  | 5: coverage gate | Not wired yet (F01) |
+
+  - The two skips on each platform are the same as round 4's: `ReplayPerformanceTests` (`.slow`, nightly
+    only), and F06's font-rendering test.
+  - The seeded `reconnectBatch_buzzesOnce` passed on both simulators.
+  - The totals equal the tester's round-4 gate, because no test was added or removed.

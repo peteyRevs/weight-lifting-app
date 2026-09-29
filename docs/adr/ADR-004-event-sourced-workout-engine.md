@@ -49,6 +49,9 @@ public struct WorkoutEngine {
 }
 ```
 
+Illustrative. The shipped API is F04's: see the amendment below, F17 "Inputs from F04" item 7, and
+`docs/architecture.md` §6.
+
 Rules:
 
 1. **Determinism.** `reduce` is pure. Effects (haptic, HealthKit write, local
@@ -126,9 +129,11 @@ So an event that needs a judgement about time carries the judgement, made on the
 screen is known: "+30s" is `restExtended(amount:extendsShownRest:tappedAt:)`. It extends the rest the
 lifter saw running, or starts a fresh rest at the tap when the screen showed none (decision #7), whatever
 the stamps say. Under skew the HLC can stamp a tap after the end of a rest the lifter still saw running
-(F04 test findings, finding 14). **"+30s" never shortens a running rest** (Pete, re-plan 2026-09-29):
-when the screen showed none but the state holds a rest ending later than the fresh one would, such as a
-peer's rest this device had not heard of yet, that rest is kept unchanged (finding 20).
+(F04 test findings, finding 14). **"+30s" on a screen that showed no rest never shortens a running
+rest** (Pete, re-plan 2026-09-29): when the state holds a rest ending later than the fresh one would,
+such as a peer's rest this device had not heard of yet, that rest is kept unchanged (finding 20). On a
+shown rest, the new end is capped at `tappedAt + longestRest`, so only a rest ending more than an hour
+after the tap can end earlier (F04 review N1).
 
 **Malformed envelopes** (re-plan 2026-09-29: Pete, no time windows). An envelope is malformed only when a
 date it carries is not finite (its `wallClock`, a payload date, or any date in a `started` snapshot), or a
@@ -141,10 +146,17 @@ from trapping. So a "Still lifting?" Finish made days after the last set ends th
 
 **Recovery on launch.** The HLC's `newest` must survive a relaunch (rule 6). Before the host stamps any
 envelope after a launch, it sets `newest` to the largest stored `wallClock` across the store's uncompacted
-logs (`WorkoutEventStore.uncompactedWorkoutIDs`). It skips a stored stamp that its drift bound would reject
-on receipt, so a corrupt stamp cannot drag its clock. Without this, a device whose clock stepped back
-across a relaunch stamps its next action before its last one, and replay undoes it on every device
-(finding 12).
+logs (`WorkoutEventStore.uncompactedWorkoutIDs`), under the two rules below. Without this, a device
+whose clock stepped back across a relaunch stamps its next action before its last one, and replay undoes
+it on every device (finding 12).
+
+- **Recovery skips only non-finite stamps** (F04 review S1). `newest` is the largest *finite* stored
+  `wallClock`; a stored `+∞` would otherwise stamp every later own envelope `+∞`, which `reduce` drops as
+  malformed, so every action would be lost without an error.
+- **A drift bound acts only on receipt** (F04 review S1). It may reject a received envelope's stamp
+  before `append`, so that envelope is neither stored nor seen by the clock; it never makes the host
+  skip, clamp or restamp an envelope already in its store, at recovery or anywhere else. So every stored
+  stamp counts toward `newest`, and the host loop's "own action: `reduce` equals `replay`" keeps holding.
 
 **The host loop** (re-plan 2026-09-29, replacing fix round 2's two paths; findings 13, 17, 18 and 19).
 `reduce` keeps no log, so it must never see an envelope twice. The host (F17) has one path for each
@@ -153,10 +165,11 @@ source:
 - **Its own action:** stamp it with the HLC, `reduce` it, and run `reduce`'s effects in order: `.persist`
   appends it to the store before `.transmit` sends it. The HLC sorts the envelope after everything stored,
   so reducing it on the host's state (`replay` of the stored log) gives what `replay` of the log with it
-  would give.
-- **Envelopes it received:** append them to the store first, whatever they hold. If `append` stored
-  anything new, rebuild with `replay` of the stored log, then run `WorkoutEngine.effects(from: old, to:
-  new)`. A received envelope is never reduced.
+  would give. The two rules under "Recovery on launch" keep that true.
+- **Envelopes it received:** append them to the store first, whatever they hold (once past F17's receipt
+  checks: the decode guard and the drift bound). If `append` stored anything new, rebuild with `replay`
+  of the stored log, then run `WorkoutEngine.effects(from: old, to: new)`. A received envelope is never
+  reduced.
 - **Launch:** the launch step replays each stored log (`WorkoutEventStore.uncompactedWorkoutIDs`) and plays
   no haptic, because nothing was just logged.
 

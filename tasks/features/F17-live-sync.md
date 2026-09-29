@@ -132,10 +132,16 @@ onwards). Where they contradict this brief, they win, and the brief should be am
    envelope twice.
    - Own action: stamp it with the HLC, `reduce` it, run `reduce`'s effects in order (`.persist` appends it
      to the store before `.transmit` sends it). The HLC sorts it after everything stored, so this equals
-     `replay`.
-   - Received frames: append every envelope to `WorkoutEventStore` first, whatever it holds. If `append`
-     stored anything new, rebuild with `WorkoutEngine.replay` of the stored log and run
-     `WorkoutEngine.effects(from: old, to: new)`. Never reduce a received envelope.
+     `replay`; item 3's two rules keep that true.
+   - Received frames: append every envelope to `WorkoutEventStore` first, whatever it holds (once past the
+     receipt checks: item 5's decode guard and item 3's drift bound). If `append` stored anything new,
+     rebuild with `WorkoutEngine.replay` of the stored log and run `WorkoutEngine.effects(from: old, to:
+     new)`. Never reduce a received envelope.
+   - A conflict in a received batch (F04 review S4). `append` is all or nothing, so on
+     `EngineError.conflictingEnvelope(key)` append that batch again one envelope at a time: drop the one
+     that conflicts, log its key (`os.Logger`, no health values), keep the rest, and rebuild once if any
+     were new. A device that reused a seq (a truncated log, a restore from backup) then cannot make a
+     resent batch fail forever.
    - The "Actor" rule above ("dedupe by `seen`, append, rebuild by replay") is this loop; its remote
      effects are item 2's.
 2. **Remote effects are `effects(from:to:)`'s**, and nothing else:
@@ -150,8 +156,14 @@ onwards). Where they contradict this brief, they win, and the brief should be am
      F05 must then delete that workout; decide who owns that.
    - The launch step (item 4) plays no haptic: nothing was just logged.
 3. **HLC recovery.** Before stamping anything after a launch, set the clock's `newest` to the largest
-   stored `wallClock` across `WorkoutEventStore.uncompactedWorkoutIDs()`. Skip a stored stamp your drift
-   bound would reject on receipt. The drift bound itself is still F17's (F04 fix round 1, finding 6).
+   stored `wallClock` across `WorkoutEventStore.uncompactedWorkoutIDs()`. The drift bound itself is still
+   F17's (F04 fix round 1, finding 6). Two rules (ADR-004 "Recovery on launch"; F04 review S1):
+   - Recovery skips only non-finite stamps: `newest` is the largest *finite* stored `wallClock`, because a
+     stored `+∞` would stamp every later own envelope `+∞`, which `reduce` drops as malformed.
+   - The drift bound acts only on receipt. It may reject a received envelope's stamp before `append` (the
+     envelope is then neither stored nor seen by the clock), but it never makes the host skip, clamp or
+     restamp an envelope already in its store, at recovery or anywhere else. So every stored stamp counts
+     toward `newest`, and item 1's "own action: `reduce` equals `replay`" keeps holding.
 4. **Launch step and compaction.**
    - `liveWorkoutIDs()` is gone. `uncompactedWorkoutIDs()` lists every stored log. Classify each by
      `replay`: live means resume; finished or discarded means materialise or drop, then compact.
@@ -189,4 +201,10 @@ onwards). Where they contradict this brief, they win, and the brief should be am
    - *Drift bound:* still yours; with no payload window a peer far ahead no longer drops this device's
      actions, but it still drags every stamp.
    - *F05's stale brief:* criterion 8's `liveWorkoutIDs()` is now `uncompactedWorkoutIDs()`, and its
-     `wall_clock TEXT` column must keep full precision (the contract suite now fails a lossy store).
+     `wall_clock TEXT` column must keep full precision (the contract suite now fails a lossy store). F05
+     and F10 now carry "Inputs from F04" sections.
+9. **Out of scope for F04, noted by its tester (round 4):**
+   - *The HLC cannot advance at absurd stamps:* above 2^44 s `+ 1 ms` rounds away, so item 3's drift bound
+     must reject such a (corrupt) stamp on receipt.
+   - *Joining mid-session buzzes once:* the phone's first rebuild from nothing, for a watch-started workout
+     with done sets, plays one `.haptic(.setLogged)`; accepted under Pete's one-per-catch-up rule (item 2).
