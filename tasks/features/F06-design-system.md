@@ -36,12 +36,16 @@ public enum LedgerColor {   // SwiftUI Color, adaptive light/dark via asset cata
 }
 public enum LedgerFont {
     public enum Role { case display, title, heading, body, bodyLight, label, eyebrow, numeralXL, numeralL, numeralM, numeralS, watchNumeral, watchLabel }
-    public static func font(_ role: Role) -> Font                         // Dynamic Type–scaled; tabular numerals for numeral roles
+    public static func font(_ role: Role, dynamicTypeSize: DynamicTypeSize, legibilityWeight: LegibilityWeight? = nil) -> Font  // Dynamic Type–scaled; tabular numerals for numeral roles
+    public static func font(_ role: Role, size: CGFloat, legibilityWeight: LegibilityWeight? = nil) -> Font                     // an already scaled size, floored
+    public static func scaledSize(_ role: Role, dynamicTypeSize: DynamicTypeSize) -> CGFloat
     public static func archivo(size: CGFloat, weight: CGFloat /* 300…700 */, width: CGFloat /* 88…112 */) -> Font
 }
 public enum LedgerSpacing { public static let xs: CGFloat = 4, s = 8, m = 12, l = 16, xl = 24, xxl = 32, screen = 26 }
 public enum LedgerRadius { public static let pill: CGFloat = 999, card = 26, sheet = 28, row = 16 }
-public enum LedgerMotion { public static let snappy: Animation; public static let buzz: Animation /* 3 × 0.38 s x-shake, respects Reduce Motion */ }
+extension View { public func ledgerFont(_ role: LedgerFont.Role) -> some View }  // the usual path: reads Dynamic Type and Bold Text from the environment
+public enum LedgerMotion { public static let snappy: Animation; public static func buzzKeyframes(reduceMotion: Bool) -> some Keyframes<BuzzFrame> /* 3 × 0.38 s x-shake, or an opacity pulse under Reduce Motion */ }
+extension View { public func ledgerBuzz(trigger: some Equatable & Sendable) -> some View }
 ```
 Token values come from spec §8: dark ground `#0B0B0D`, text `#F4F2ED`, alphas .72/.45/.32/.08/.14; light paper `#EFEDE6`, ink `#16150F`; accent `#FF5B22`; type sizes/weights/widths per role from §8.5 (numerals weight 700, width 88–92; labels 300/500; eyebrows 10 px 500 letter-spacing .18em uppercase).
 
@@ -73,6 +77,18 @@ Components (each with all states + `#Preview` + snapshot):
 ## Risks / unknowns
 - watchOS variable-font axis support (spike).
 - Dynamic Type with a custom font on watchOS — verify `@ScaledMetric` behaviour.
+
+## Decisions during delivery (Pete, 2026-09-29, after slice 1 failed the adversarial gate three times)
+Recorded verbatim; they change this brief's contract. Implemented in fix round 3 (`F06-design-system/implementation-notes.md`).
+
+1. **Text uses native SwiftUI line height only.** Keep `.lineHeight(.multiple(factor:))`. Remove the CSS half-leading emulation (the `lift` computed from `ArchivoFont.baselineBelowMiddle` and the `.padding(.top, -lift).padding(.bottom, lift)`) and any code that exists only for it. Single lines may sit 1–10 pt off the HTML prototype; slice-2 components absorb that with spacing tokens.
+2. **The design lint is a tripwire, not a proof.**
+   - Close finding 21's 16 raw spellings where a rule can do it simply.
+   - Fix finding 23's false positives on sanctioned token use.
+   - Then freeze the rule set. Document it as a list, and document its known limits, finding 22's escape hatches included, in docs/engineering-standards.md next to the design-lint rule, or wherever the lint is documented today.
+   - State that "tokens only" is enforced by review (docs/subagent-workflow.md review point 4), and that the lint is not meant to catch every spelling.
+
+For criterion 8 this means: the rules and their known limits are listed in `docs/engineering-standards.md` §7 ("Design lint"), and the lint is not expected to flag the listed limits.
 
 ## Definition of Done
 Inherits `docs/engineering-standards.md` §12, plus:

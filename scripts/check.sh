@@ -6,7 +6,8 @@
 #   scripts/check.sh --fast             host-side package tests only; no simulators
 #   scripts/check.sh --lint-only        steps 0–2 only
 #   scripts/check.sh --skip-lint        steps 3–5 only (CI runs lint in its own job)
-#   scripts/check.sh --record-snapshots re-record snapshot references, then fail
+#   scripts/check.sh --record-snapshots re-record snapshot references on both
+#                                       simulators, then fail; re-run to verify
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
@@ -64,6 +65,10 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     # ---- 2. lint + package graph --------------------------------------------
     step "2 · lint (swiftlint --strict) + package graph"
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml
+    scripts/tests/lint-rules.test.sh
+    scripts/tests/lint-rules-adversarial.test.sh
+    scripts/tests/lint-rules-adversarial-round2.test.sh
+    scripts/tests/lint-rules-adversarial-round3.test.sh
     scripts/check-package-graph.sh
     done_step "lint"
 fi
@@ -75,10 +80,31 @@ if [[ $LINT_ONLY -eq 1 ]]; then
 fi
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
-    # swift-snapshot-testing always fails the run that writes references.
-    export SNAPSHOT_TESTING_RECORD=all
+    # swift-snapshot-testing always fails the run that writes references. xcodebuild
+    # forwards only TEST_RUNNER_-prefixed variables to the simulator's test runner.
+    export SNAPSHOT_TESTING_RECORD=all TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all
     echo "recording snapshot references — this run is expected to fail"
 fi
+
+# In record mode a plan run fails by design; keep going so both simulators record.
+run_plan() { # <result bundle> <plan file> <xcodebuild args…>
+    local result="$1" plan="$2"
+    shift 2
+    if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
+        xcodebuild "$@" | beautify || true
+        # A failed build or simulator boot also fails the run: it is a recording only if tests ran.
+        local ran
+        ran="$(xcrun xcresulttool get test-results summary --path "$result" 2>/dev/null |
+            jq -r '.totalTestCount // 0' || true)"
+        if [[ "${ran:-0}" -eq 0 ]]; then
+            echo "error: the record run failed before any test ran ($result)" >&2
+            exit 1
+        fi
+    else
+        xcodebuild "$@" | beautify
+        scripts/check-test-results.sh "$result" "$plan"
+    fi
+}
 
 # ---- fast tier: host-side package tests, no simulator -----------------------
 if [[ $FAST -eq 1 ]]; then
@@ -96,13 +122,13 @@ mkdir -p "$RESULTS"
 step "3 · iOS build + PR test plan"
 rm -rf "$RESULTS/PR-iOS.xcresult"
 set -o pipefail
-xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
+run_plan "$RESULTS/PR-iOS.xcresult" TestPlans/PR.xctestplan \
+    test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
     -destination "$IOS_DEST" \
     -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
     -resultBundlePath "$RESULTS/PR-iOS.xcresult" \
     -parallel-testing-enabled YES -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 60 -quiet | beautify
-scripts/check-test-results.sh "$RESULTS/PR-iOS.xcresult" TestPlans/PR.xctestplan
+    -default-test-execution-time-allowance 60 -quiet
 done_step "iOS"
 
 # ---- 4. watchOS build + PR-Watch plan ---------------------------------------
@@ -110,14 +136,20 @@ step "4 · watchOS build + PR-Watch test plan"
 rm -rf "$RESULTS/PR-watchOS.xcresult"
 # One worker = one watch clone. A second clone intermittently fails to launch
 # the host app or UI runner ("Unknown application display identifier").
-xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
+run_plan "$RESULTS/PR-watchOS.xcresult" TestPlans/PR-Watch.xctestplan \
+    test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
     -destination "$WATCH_DEST" \
     -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
     -resultBundlePath "$RESULTS/PR-watchOS.xcresult" \
     -parallel-testing-enabled YES -parallel-testing-worker-count 1 -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 60 -quiet | beautify
-scripts/check-test-results.sh "$RESULTS/PR-watchOS.xcresult" TestPlans/PR-Watch.xctestplan
+    -default-test-execution-time-allowance 60 -quiet
 done_step "watchOS"
+
+if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
+    git status --short -- ':(glob)**/__Snapshots__/**'
+    echo "snapshot references recorded; re-run check.sh (without the flag) to verify them" >&2
+    exit 1
+fi
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"

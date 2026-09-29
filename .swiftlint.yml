@@ -1,6 +1,6 @@
 # SwiftLint 0.65.x — see docs/engineering-standards.md §1. `--strict` everywhere:
 # a warning fails the local gate and CI. Custom rules encode the design-system
-# boundary (feature modules may not spell colours, fonts, spacing or radii) and
+# boundary (only LedgerDesign may spell colours, fonts, spacing or radii) and
 # the concurrency rules from engineering-standards §3.
 strict: true
 
@@ -37,11 +37,13 @@ opt_in_rules:
 
 # `id` is SwiftLint's own default; `lb` and `kg` are the unit symbols the domain names
 # (`Units.lb`, `Units.kg`, F02), too short for min_length but clearer than any longer name.
+# `xs` … `xl` are LedgerSpacing's steps (F06 brief), read as `LedgerSpacing.m`.
 identifier_name:
   excluded:
     - "^id$"
     - "^lb$"
     - "^kg$"
+    - "^(xs|s|m|l|xl)$"
 
 force_cast: error
 force_try: error
@@ -62,41 +64,66 @@ line_length:
   ignores_urls: true
 
 custom_rules:
-  # ---- design-system boundary: feature modules use LedgerDesign tokens only ----
-  feature_raw_color:
-    name: "Raw colour in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
+  # ---- design-system boundary: everything outside LedgerDesign uses its tokens ----
+  # A tripwire, not a proof (Pete, 2026-09-29): the rule set below is frozen. What each rule
+  # catches, and the spellings it knowingly misses, are listed in docs/engineering-standards.md §7;
+  # "tokens only" is enforced by review (docs/subagent-workflow.md, review point 4).
+  # Matches in comments and string literals are ignored. A literal 0 is allowed for spacing and
+  # radii (flush stacks, square corners); any other number is a raw value.
+  ledger_raw_color:
+    name: "Raw colour outside LedgerDesign"
+    # Scope: the modules that can draw UI, i.e. the features, the two umbrellas and the app shells.
+    # LedgerDomain and the adapters are Foundation-only (engineering-standards §2), so a hit there is
+    # a false positive (F06 review S2); scoping them out left the regexes and the frozen set unchanged.
+    included: &ui_modules 'LedgerKit/Sources/(Feature\w*|WatchFeature\w*|LedgerAppKit|LedgerWatchAppKit)/.*|Apps/.*'
+    # LedgerDesign is the one module that turns raw values into tokens (F06).
+    excluded: &design_allowlist
+      - '.*LedgerKit/Sources/LedgerDesign/.*'
       - '.*LedgerTestSupport.*'
-    regex: 'Color\((red|white|hue|\.sRGB|\.displayP3|uiColor)|Color\.(red|blue|green|orange|black|white|gray|yellow|pink|purple|indigo|mint|teal|cyan|brown|primary|secondary|accentColor)\b|\.(foregroundStyle|foregroundColor|background|tint|fill)\(\.(red|blue|green|orange|black|white|gray|yellow)\b|UIColor\(|#colorLiteral'
+      - '.*LedgerSnapshotTesting.*'
+      - '.*Tests/.*'
+    excluded_match_kinds: &not_code [comment, comment.mark, comment.url, doccomment, doccomment.field, string]
+    # Any Color(…) / Color.Resolved(…) construction; Color.<named or hierarchical style>; a named or
+    # hierarchical style as an argument; a named colour as a value (after `=`, `?`, `??`, `{`,
+    # `return`); `.init(red:…)` / `.color(red:…)`; a raw alpha on a token (`.opacity(…)`, `.secondary`…);
+    # UIKit/AppKit colours; colour literals.
+    regex: '\bColor(\.init|\.Resolved)?\(|\bColor\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor|primary|secondary|tertiary|quaternary|quinary)\b|[(\[,:]\s*\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor|primary|secondary|tertiary|quaternary|quinary)\b|(?:\{|\breturn|(?<![=!<>])=(?!=)|\?\?|\?\s)\s*\.(red|orange|yellow|green|mint|teal|cyan|blue|indigo|purple|pink|brown|white|gray|black|accentColor)\b|\.(init|color)\((\s*\.\w+\s*,)?\s*(red|white|hue|uiColor|nsColor|cgColor):|\bLedgerColor\.\w+\s*\.(opacity\(|(primary|secondary|tertiary|quaternary|quinary)\b)|\b(UI|NS)Color\b|#colorLiteral'
     message: "Use a LedgerDesign colour token, not a raw Color (docs/architecture.md §11)."
     severity: error
-  feature_raw_font:
-    name: "Raw font in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
-    regex: '\.font\(\.(system|largeTitle|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|Font\.(system|custom)\(|\.fontWeight\('
+  ledger_raw_font:
+    name: "Raw font outside LedgerDesign"
+    included: *ui_modules
+    excluded: *design_allowlist
+    excluded_match_kinds: *not_code
+    # A system style anywhere in a `.font(…)` or `\.font` environment argument (not LedgerFont.font's
+    # role) or assigned to a `Font`, Font(…), UIKit/AppKit fonts, weight/width/design/scale/tracking/
+    # leading modifiers (the roles own them), a literal size for LedgerFont.font(_:size:), a constant
+    # text size (`dynamicTypeSize: .large`, `\.dynamicTypeSize, .large`), and a pin at or below the
+    # default size (`.dynamicTypeSize(.large)`; a preview may pin a larger one).
+    regex: '(?:(?<!LedgerFont)\.font\(|\\\.font\s*,)[^()]*?\.(system|custom|init|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\bFont\s*=\s*\.(system|custom|init|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\bFont(\.init)?\(|\bFont\.(system|custom|largeTitle|extraLargeTitle2?|title[23]?|headline|subheadline|body|callout|footnote|caption2?)\b|\b(UI|NS)Font\b|\.(bold|italic|fontWeight|fontWidth|fontDesign|monospaced|monospacedDigit|textScale|tracking|kerning|lineSpacing|lineHeight)\(|\bLedgerFont\.font\([^()]*\bsize:\s*(CGFloat\(\s*)?\d|\bdynamicTypeSize(:|,)\s*(DynamicTypeSize)?\.\w+\s*[,)]|\bdynamicTypeSize\(\s*(DynamicTypeSize)?\.(xSmall|small|medium|large)\s*\)'
     message: "Use a LedgerDesign type token, not a system font (docs/architecture.md §11)."
     severity: error
-  feature_raw_padding:
-    name: "Raw padding in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
-    regex: '\.padding\((\.[a-zA-Z]+,\s*)?-?\d|(VStack|HStack|LazyVStack|LazyHStack|Grid)\((alignment:[^,)]+,\s*)?spacing:\s*\d'
+  ledger_raw_spacing:
+    name: "Raw spacing outside LedgerDesign"
+    included: *ui_modules
+    excluded: *design_allowlist
+    excluded_match_kinds: *not_code
+    # Padding, content margins and list spacing; EdgeInsets (also as `.init(top:…)`); stack, grid and
+    # Spacer spacing, including a literal in either arm of a simple ternary; and a token nudged by a
+    # literal (`LedgerSpacing.m + 1`, `/ 2`, `* 1.5`; a whole multiple such as `2 * LedgerSpacing.screen`
+    # is a count of tokens and passes).
+    regex: '\.(padding|safeAreaPadding|contentMargins|listRowSpacing|listSectionSpacing)\(\s*(\.\w+\s*,|\[[^\]]*\]\s*,)?\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|(\bEdgeInsets|\.init(?=\(\s*top:))\([^)]*:\s*-?(?:\d*\.)?\d*[1-9][\d.]*|\b(spacing|horizontalSpacing|verticalSpacing|minLength):\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?-?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerSpacing\.\w+\s*([-+/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\*\s*(CGFloat\(\s*)?\d*\.\d*[1-9]\d*)|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+]\s*LedgerSpacing\.|\d*\.\d*[1-9]\d*\s*\*\s*LedgerSpacing\.'
     message: "Use a LedgerDesign spacing token, not a numeric literal."
     severity: error
-  feature_raw_radius:
-    name: "Raw corner radius in a feature module"
-    included: 'LedgerKit/Sources/(Feature|WatchFeature)[A-Za-z]+/.*'
-    excluded:
-      - '.*Tests/.*'
-      - '.*LedgerTestSupport.*'
-    regex: 'cornerRadius:\s*\d|\.cornerRadius\(\d'
+  ledger_raw_radius:
+    name: "Raw corner radius outside LedgerDesign"
+    included: *ui_modules
+    excluded: *design_allowlist
+    excluded_match_kinds: *not_code
+    # Every corner-radius label (including RectangleCornerRadii's topLeading: …), also in a simple
+    # ternary, `.cornerRadius(…)`, a cornerSize with a literal, iOS 26's `.fixed(…)` corner style, and a
+    # token nudged by a literal.
+    regex: '\b(cornerRadius|(top|bottom)(Leading|Trailing)(Radius)?):\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\.cornerRadius\(\s*(?:!?[\w.]+\s*\?\s*(?:[\w.]+\s*:\s*)?)?(?:\d*\.)?\d*[1-9][\d.]*|\bcornerSize:\s*(CGSize|\.init)\([^)]*:\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\b(corners|minimum|\w+Corner):\s*\.fixed\(\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\bLedgerRadius\.\w+\s*([-+/]\s*(CGFloat\(\s*)?(?:\d*\.)?\d*[1-9][\d.]*|\*\s*(CGFloat\(\s*)?\d*\.\d*[1-9]\d*)|\b(?:\d*\.)?\d*[1-9][\d.]*\s*[-+]\s*LedgerRadius\.|\d*\.\d*[1-9]\d*\s*\*\s*LedgerRadius\.'
     message: "Use a LedgerDesign radius token, not a numeric literal."
     severity: error
 
