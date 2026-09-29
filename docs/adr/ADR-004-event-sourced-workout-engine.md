@@ -98,3 +98,19 @@ Rules:
   type.
 - Timers are wall-clock based (`endsAt`), which also makes Live Activities and
   watch Smart Stack rendering trivial (they take a `Date` and count down).
+
+## Amendment (2026-09-29): hybrid logical clock stamping
+
+Rule 2 orders envelopes by `wallClock`. With raw device clocks, a device whose clock runs behind its
+peer's, or steps back after an NTP correction, can stamp an action earlier than the envelope it reacted
+to. Replay then applies the two in the wrong order, and a logged set or an un-log is lost on every
+device alike (F04 test findings, finding 6).
+
+So the host (F10/F17) stamps every envelope it creates with a hybrid logical clock:
+
+    wallClock = max(now, newest wallClock seen or sent + 1 ms)
+
+An envelope then sorts after every envelope its device had sent or received. That keeps each device's
+`seq` order and the causal order (seen before created ⇒ sorts before), while `wallClock` stays close to
+real time, which rule 9's rest arithmetic needs. The reducer does not stamp; it takes the stamp as a
+precondition (`EventEnvelope.wallClock`). Raw stamps would still converge, but on stamp order.

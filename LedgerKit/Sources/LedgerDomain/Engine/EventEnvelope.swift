@@ -2,9 +2,15 @@ import Foundation
 
 /// A `WorkoutEvent` as one device recorded it: the unit that is logged, sent and replayed (ADR-004).
 ///
-/// `key` (device, seq) names exactly one envelope: a device never reuses a `seq` within a workout, so
-/// two envelopes with the same key are copies of each other (`EngineError.conflictingEnvelope`
-/// otherwise). Under that invariant `<` is a strict total order on a workout's envelopes.
+/// **Precondition:** `key` (device, seq) names exactly one envelope within a workout, so two envelopes
+/// with the same key are copies of each other. Under it `<` is a strict total order on a workout's
+/// envelopes and `replay` is a function of the envelope set; nothing breaks a tie between two different
+/// envelopes that share a key. It is kept by:
+/// - the creating device, which takes its next `seq` from `WorkoutEventStore.highestSeq` and runs
+///   `.persist` before `.transmit`, so a seq it has sent is always in its store;
+/// - `WorkoutEventStore.append`, which throws `EngineError.conflictingEnvelope` for a second, different
+///   envelope with a stored key;
+/// - the receiving host (F17), which checks keys the same way before it reduces.
 public struct EventEnvelope: Hashable, Codable, Sendable, Comparable {
     public let event: WorkoutEvent
     public let workoutID: WorkoutID
@@ -14,6 +20,11 @@ public struct EventEnvelope: Hashable, Codable, Sendable, Comparable {
     public let seq: UInt64
     /// The creating device's clock when the event happened: the first ordering key, and the time
     /// of events that carry none (rule 9).
+    ///
+    /// **Precondition (ADR-004 amendment, hybrid logical clock):** the host (F10/F17), not the reducer,
+    /// stamps it as `max(now, newest wallClock seen or sent + 1 ms)`. An envelope then sorts after
+    /// every envelope its device had sent or received, which keeps each device's `seq` order and causal
+    /// order under clock skew. Raw clocks still converge, but on stamp order, not on what happened.
     public let wallClock: Date
 
     public init(event: WorkoutEvent, workoutID: WorkoutID, device: DeviceID, seq: UInt64, wallClock: Date) {

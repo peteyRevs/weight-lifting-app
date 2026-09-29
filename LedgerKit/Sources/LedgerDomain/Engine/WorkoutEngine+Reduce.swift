@@ -36,7 +36,7 @@ extension WorkoutEngine {
     ) -> [Effect]? {
         switch event {
         case let .restStarted(endsAt, total):
-            state?.startRest(RestTimer(endsAt: endsAt, total: total))
+            state?.startRest(RestTimer(endsAt: endsAt, total: total), at: time)
         case let .restExtended(amount):
             state?.extendRest(by: amount, at: time)
         case .restSkipped:
@@ -70,7 +70,7 @@ private extension WorkoutState {
 
     /// Rule 3: the set is done at `doneAt` with the logged values (the latest envelope wins). Only the
     /// not-done → done transition (rule 18) starts rest, for the last row of a round when auto rest is
-    /// on (rule 19), and advances the cursor (rule 20).
+    /// on (rule 19), and advances the cursor (rule 20). That rest starts at `doneAt`.
     mutating func logSet(_ id: SetID, of exerciseIndex: Int, weight: Weight, reps: Reps, doneAt: Date) -> [Effect] {
         guard let setIndex = row(of: id, in: exerciseIndex) else {
             return []
@@ -87,7 +87,7 @@ private extension WorkoutState {
         var effects: [Effect] = [.haptic(.setLogged)]
         if autoRest, SupersetRounds.isLastOfRound(ref, block: blocks[blockIndex], exercises: exercises) {
             let groupRest = SupersetRounds.groupRest(block: blocks[blockIndex], exercises: exercises).duration
-            effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest))
+            effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest), at: doneAt)
         }
         cursor = nextCursor(after: ref, blocks: blocks, blockIndex: blockIndex) ?? cursor
         return effects
@@ -157,19 +157,25 @@ private extension WorkoutState {
         return []
     }
 
-    /// Rule 9: the rest runs until `timer.endsAt`; the notification is rescheduled for it.
-    mutating func startRest(_ timer: RestTimer) -> [Effect] {
-        rest = timer
-        return [.scheduleRestNotification(endsAt: timer.endsAt)]
+    /// Rule 9: the rest runs until `timer.endsAt`; the notification is rescheduled for it. The timer
+    /// is first held to `WorkoutEngine.longestRest`: `total` into `0 ... longestRest`, and `endsAt` to
+    /// at most `longestRest` after `time`, when the rest starts.
+    mutating func startRest(_ timer: RestTimer, at time: Date) -> [Effect] {
+        let bound = WorkoutEngine.longestRest
+        let held = RestTimer(endsAt: min(timer.endsAt, time.adding(bound)), total: min(max(timer.total, .zero), bound))
+        rest = held
+        return [.scheduleRestNotification(endsAt: held.endsAt)]
     }
 
     /// Rule 9 and decision #7: "+30s" grows a running rest's `endsAt` and `total`. With no rest
     /// running at `time` (none, or one already over), it starts a fresh rest of `amount` from `time`.
+    /// The new total saturates instead of overflowing, then `startRest` clamps it.
     mutating func extendRest(by amount: Duration, at time: Date) -> [Effect] {
         guard let running = rest, running.endsAt > time else {
-            return startRest(RestTimer(endsAt: time.adding(amount), total: amount))
+            return startRest(RestTimer(endsAt: time.adding(amount), total: amount), at: time)
         }
-        return startRest(RestTimer(endsAt: running.endsAt.adding(amount), total: running.total + amount))
+        let total = running.total.saturatingSum(amount)
+        return startRest(RestTimer(endsAt: running.endsAt.adding(amount), total: total), at: time)
     }
 
     /// Rule 9: "Skip" stops the rest.
@@ -179,7 +185,7 @@ private extension WorkoutState {
     }
 
     /// Rule 10 (and spec rules 24, 31, 32): the workout ends at `endedAt`, which freezes elapsed
-    /// time, and its rest stops.
+    /// time, and its rest stops. A finished workout is materialised from its final state.
     mutating func end(_ phase: WorkoutPhase, at endedAt: Date) -> [Effect] {
         self.phase = phase
         self.endedAt = endedAt
@@ -187,7 +193,7 @@ private extension WorkoutState {
         guard phase == .finished else {
             return [.discardLog, .cancelRestNotification]
         }
-        return [.materialize(WorkoutEngine.summary(self, prs: [])), .haptic(.workoutFinished), .cancelRestNotification]
+        return [.materialize(self), .haptic(.workoutFinished), .cancelRestNotification]
     }
 
     /// Applies `edit` to set `id` of the exercise, when both exist.
@@ -210,5 +216,16 @@ private extension WorkoutState {
 private extension Date {
     func adding(_ duration: Duration) -> Date {
         addingTimeInterval(duration / .seconds(1))
+    }
+}
+
+private extension Duration {
+    /// `self + other`, pinned to the largest or smallest `Duration` where the sum would overflow.
+    func saturatingSum(_ other: Duration) -> Duration {
+        let (sum, overflow) = attoseconds.addingReportingOverflow(other.attoseconds)
+        guard overflow else {
+            return Duration(attoseconds: sum)
+        }
+        return Duration(attoseconds: other > .zero ? .max : .min)
     }
 }

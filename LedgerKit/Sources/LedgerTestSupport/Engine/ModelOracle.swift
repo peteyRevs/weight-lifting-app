@@ -8,6 +8,7 @@ import LedgerDomain
 /// - edits one `WorkoutState` in place;
 /// - finds a superset block by walking the `isSupersetWithPrevious` flags;
 /// - rebuilds the block's rounds with plain loops on every call;
+/// - caps every rest it writes at `restLimit`, spelled out below;
 /// - ignores effects.
 public struct ModelOracle: Sendable {
     public private(set) var state: WorkoutState?
@@ -28,12 +29,19 @@ public struct ModelOracle: Sendable {
         state = model.workout
     }
 
-    /// Replays a log: sorts it by (wall clock, device `uuidString`, seq), keeps the first copy of
-    /// each (device, seq), applies the first `started`, then everything else in order.
+    /// Replays a log: sorts it by (wall clock, device `uuidString`, seq), keeps only the workout the
+    /// first usable `started` begins, keeps the first copy of each (device, seq) among those, applies
+    /// that `started`, then everything else in order.
+    ///
+    /// The workout filter comes first because a (device, seq) pair repeats across workouts.
     public static func replay(_ log: [EventEnvelope]) -> WorkoutState? {
+        let sorted = log.sorted(by: precedes)
+        let workout = sorted.first { snapshot(startedBy: $0) != nil }?.workoutID
         var unique: [EventEnvelope] = []
-        for envelope in log.sorted(by: precedes) where !unique.contains(where: { sameKey($0, envelope) }) {
-            unique.append(envelope)
+        for envelope in sorted where envelope.workoutID == workout {
+            if !unique.contains(where: { sameKey($0, envelope) }) {
+                unique.append(envelope)
+            }
         }
         var oracle = ModelOracle()
         if let first = unique.firstIndex(where: { snapshot(startedBy: $0) != nil }) {
@@ -72,8 +80,9 @@ public struct ModelOracle: Sendable {
     }
 }
 
-/// The rules as plain edits of one live workout. `time` is the envelope's wall clock.
-private struct Model {
+/// The rules as plain edits of one live workout. `time` is the envelope's wall clock. Internal, not
+/// private, only so its per-row edits can live in `ModelOracle+Edits.swift`.
+struct Model {
     /// A row: `exercises[exercise].sets[set]`.
     struct Row: Equatable {
         let exercise: Int
@@ -88,7 +97,7 @@ private struct Model {
         case let .setLogged(exerciseIndex, setID, weight, reps, doneAt):
             logSet(exerciseIndex, setID, weight, reps, doneAt)
         case let .restStarted(endsAt, total):
-            workout.rest = RestTimer(endsAt: endsAt, total: total)
+            setRest(endsAt: endsAt, total: total, from: time)
         case let .restExtended(amount):
             extendRest(by: amount)
         case .restSkipped:
@@ -143,7 +152,7 @@ private struct Model {
                 longest = max(longest, workout.exercises[member].rest.seconds)
             }
             let total = Duration.seconds(longest)
-            workout.rest = RestTimer(endsAt: doneAt.addingTimeInterval(total / .seconds(1)), total: total)
+            setRest(endsAt: doneAt.addingTimeInterval(total / .seconds(1)), total: total, from: doneAt)
         }
         if let next = nextRow(after: row, members: members, rounds: rounds) {
             workout.cursor = Cursor(exerciseIndex: next.exercise, setIndex: next.set)
@@ -208,91 +217,5 @@ private struct Model {
             }
         }
         return result
-    }
-}
-
-// MARK: - The one-row and one-exercise edits
-
-private extension Model {
-    func find(_ setID: SetID, in exerciseIndex: Int) -> Int? {
-        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count else {
-            return nil
-        }
-        for (setIndex, set) in workout.exercises[exerciseIndex].sets.enumerated() where set.id == setID {
-            return setIndex
-        }
-        return nil
-    }
-
-    mutating func select(_ exerciseIndex: Int, _ setIndex: Int) {
-        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count,
-              setIndex >= 0, setIndex < workout.exercises[exerciseIndex].sets.count,
-              workout.exercises[exerciseIndex].sets[setIndex].doneAt == nil
-        else {
-            return
-        }
-        workout.cursor = Cursor(exerciseIndex: exerciseIndex, setIndex: setIndex)
-    }
-
-    mutating func changeTarget(_ exerciseIndex: Int, _ setID: SetID, _ weight: Weight?, _ reps: Reps?) {
-        guard let setIndex = find(setID, in: exerciseIndex) else {
-            return
-        }
-        if let weight {
-            workout.exercises[exerciseIndex].sets[setIndex].weight = weight < .zero ? .zero : weight
-        }
-        if let reps {
-            workout.exercises[exerciseIndex].sets[setIndex].reps = reps
-        }
-    }
-
-    mutating func addSet(_ exerciseIndex: Int, _ set: LoggedSet) {
-        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count else {
-            return
-        }
-        for exercise in workout.exercises {
-            for existing in exercise.sets where existing.id == set.id {
-                return
-            }
-        }
-        let weight = set.weight < .zero ? .zero : set.weight
-        let added = LoggedSet(id: set.id, weight: weight, reps: set.reps, kind: .added, doneAt: nil)
-        workout.exercises[exerciseIndex].sets.append(added)
-    }
-
-    mutating func repeatAll(_ exerciseIndex: Int, _ weight: Weight, _ reps: Reps) {
-        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count else {
-            return
-        }
-        for setIndex in 0 ..< workout.exercises[exerciseIndex].sets.count {
-            workout.exercises[exerciseIndex].sets[setIndex].weight = weight < .zero ? .zero : weight
-            workout.exercises[exerciseIndex].sets[setIndex].reps = reps
-        }
-    }
-
-    mutating func swap(_ exerciseIndex: Int, _ exerciseID: ExerciseID, _ name: String, _ alsoUpdateProgram: Bool) {
-        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count else {
-            return
-        }
-        workout.exercises[exerciseIndex].exerciseID = exerciseID
-        workout.exercises[exerciseIndex].name = name
-        if alsoUpdateProgram, let slotID = workout.exercises[exerciseIndex].slotID {
-            workout.programUpdates[slotID] = exerciseID
-        }
-    }
-
-    mutating func extendRest(by amount: Duration) {
-        let seconds = amount / .seconds(1)
-        if let rest = workout.rest, rest.endsAt > time {
-            workout.rest = RestTimer(endsAt: rest.endsAt.addingTimeInterval(seconds), total: rest.total + amount)
-        } else {
-            workout.rest = RestTimer(endsAt: time.addingTimeInterval(seconds), total: amount)
-        }
-    }
-
-    mutating func end(as phase: WorkoutPhase, at endedAt: Date) {
-        workout.phase = phase
-        workout.endedAt = endedAt
-        workout.rest = nil
     }
 }

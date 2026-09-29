@@ -264,3 +264,262 @@ To check that the oracle has teeth, break a rule in `WorkoutEngine+Reduce.swift`
 `?? order.prefix { $0 != ref }.first(where: isUndone)` line. Then run
 `swift test --package-path LedgerKit --filter ModelOracleTests`: it fails with the seed, the sequence,
 the step and the event.
+
+---
+
+## Fix round 1 (2026-09-29)
+
+Input: `test-findings.md` (findings 1–8, tests in `Engine/Adversarial/`) and the orchestrator's answers to
+the spec questions. Before this round, 15 adversarial tests failed on the host (13 on the simulators).
+All of them now pass, and no test is skipped or disabled apart from the nightly-only `.slow` replay-timing
+test.
+
+### Bugs
+
+**1. `Duration` overflow traps (bug).**
+- **Change:**
+  - New `WorkoutEngine.longestRest`, **one hour**. Rule 3 caps an exercise's rest at 300 s, and only
+    "+30s" grows a rest, so an hour is twelve times the longest configured rest. It is small enough that
+    no `Duration` sum near it can overflow, and it keeps the rest ring's scale meaningful.
+  - `startRest(_:at:)` holds every rest the engine writes: `total` is clamped into `0 ... longestRest`,
+    and `endsAt` to at most `longestRest` after the rest starts. A rest starts at the envelope's
+    `wallClock`, or at the set's `doneAt` for an automatic rest. Anchoring on `doneAt` matches rule 3,
+    and it keeps `logSet` within SwiftLint's five-parameter limit.
+  - `extendRest` adds totals with `saturatingSum` (`Int128` attoseconds with overflow reporting), then
+    clamps. Saturation is still needed after the clamp, because a `started` snapshot's own `rest` is
+    decoded unvalidated and can hold any `Duration`.
+  - Out-of-range values are clamped, not rejected. A rejected value would have to fail at decode, and a
+    stored envelope that no longer decodes would strand its whole log.
+  - `ModelOracle` writes the same bound independently (`restLimit`: cut each term to ±1 h, add, cap),
+    because the garbage property extends rests by up to a year.
+- **Found while fixing:**
+  - `Duration.seconds(Double)` traps on a non-finite value, or on one beyond about 1.7e20 s.
+  - A binary plist decodes an infinite `Date`, and JSON carries a finite one such as 1e21.
+  - Before this round, a decodable `finished(endedAt: 1e21)` therefore trapped `reduce` itself, through
+    the summary built for `.materialize`. After finding 8's change it would have trapped F05's
+    `WorkoutEngine.summary` call instead: the same crash loop, one step later.
+  - `WorkoutState.elapsed(at:)` now saturates at `Int64.max` seconds, and NaN gives zero.
+- **Tests:**
+  - `EngineTrapAdversarialTests.decodedMaxDurationThenPlus30_doesNotTrap` and `hugeDurations_doNotTrap`,
+    the tester's macOS exit tests, now pass unchanged.
+  - New, and run on the simulators too:
+    - `ReduceRestTests.longestRest_holdsHostileRests`;
+    - `ReduceRestTests.longestRest_saturatesASnapshotRest`, with both `Duration` extremes, which covers
+      the saturation branch;
+    - `ReduceTerminalTests.summary_ofCorruptEndedAt_saturatesElapsed` (1e21, +∞, NaN).
+
+**2. An unusable `started` reordered the log and dropped buffered envelopes (minor bug).**
+- **Change:** `foldOrder` finds the first *usable* `started` with `WorkoutEngine.snapshot(startedBy:)`,
+  the rule-1 predicate now shared with `step`, and moves only that envelope to the front. An unusable
+  `started` stays where it sorts, and `step` ignores it there.
+- **Tests:**
+  - `StartedTerminalAdversarialTests.invalidFirstStarted_doesNotDropBufferedEnvelopes` and
+    `GarbagePropertyAdversarialTests.garbage_replayMatchesOracle` now pass unchanged, including at 3,000
+    seeds.
+  - New: `ReplayTests.foldOrder_leadsWithUsableStarted_andKeepsOnlyItsWorkout` pins the fold order.
+
+**3. The dedupe ran before the workout filter (minor bug).**
+- **Change:**
+  - `foldOrder` keeps only the envelopes of the workout that the first usable `started` begins, and
+    dedupes by key after that.
+  - A log with no usable `started` has no workout, so `foldOrder` returns `[]`. `replay` returns `nil`,
+    as it did before.
+  - `ModelOracle.replay` gets the same fix, in its own loops (`first(where:)`, a filter loop and its own
+    `sameKey`). It still never calls `WorkoutEngine` or `SupersetRounds`.
+- **Tests:**
+  - `PartitionRaceAdversarialTests.strayWorkoutEnvelope_doesNotShadowSameKey` now passes unchanged,
+    including its assertion on the oracle.
+  - `ReplayTests.foldOrder_leadsWithUsableStarted_andKeepsOnlyItsWorkout` puts a stray envelope with the
+    same key before this workout's envelope.
+
+### Spec questions
+
+**4. Persisting ignored envelopes. Orchestrator decision (2026-09-29): option (b).**
+- **Rule:** the host (the live-workout actor, F17) appends every envelope it receives for the workout to
+  `WorkoutEventStore` before it reduces it, whatever the effects. The append is idempotent on the key.
+  `.persist` is only for envelopes this device creates.
+- **Where it is written down:** the doc comments on `reduce`, `Effect.persist` and `WorkoutEventStore`.
+- **Late envelopes after materialisation:** materialisation is an idempotent upsert keyed by
+  `WorkoutID`. The host materialises again when replaying a finished log gives a different final state.
+  This is a rule for F05 and F17, documented on `Effect.materialize`; F04 has no code for it.
+- **Tests:** `TerminalOutcomeAdversarialTests.{lateEnvelopeSortingBeforeFinish,envelopeBeforeStarted,
+  losingStarted}_isStoredByHost`. These replace the tester's three `…_isPersisted` tests; see "Tests
+  edited" below.
+
+**5. Duplicate delivery. Orchestrator decision (2026-09-29).**
+- **Rule:**
+  - `reduce` stays a pure function with no log.
+  - **Precondition:** the caller dedupes by `EnvelopeKey`, so it reduces only the envelopes the store
+    newly accepted.
+  - `WorkoutEventStore.append` now returns `[EventEnvelope]`: the envelopes it newly stored, in the
+    order given. A batch is all or nothing; when `append` throws, it stores none of it.
+  - ADR-004's idempotence law is `replay`'s.
+- **Where it is written down:** the doc comments on `reduce` and `append`.
+- **Tests:**
+  - `EffectsAdversarialTests.duplicateInLog_replayEqualsOnce`, retargeted from `reduceTwice_equalsOnce`.
+  - `duplicateSetLogged_noSecondHaptic` and `duplicateRestExtended_extendsOnce`, now through the host
+    path.
+  - `WorkoutEventStoreContractTests.append_returnsNewEnvelopes_andIsIdempotent`.
+- **Deferred to F17:** which effects a remote envelope may run. On reconnect, N remote `setLogged`s would
+  play N haptics, and a rest notification whose `endsAt` has passed would be scheduled.
+
+**6. Clock skew. Orchestrator decision (2026-09-29): hybrid logical clock stamping.**
+- **Rule:** `wallClock = max(now, newest wallClock seen or sent + 1 ms)`. The host stamps it (F10/F17);
+  the reducer does not. It keeps each device's `seq` order and the causal order.
+- **Where it is written down:** "Amendment (2026-09-29): hybrid logical clock stamping" in ADR-004, and
+  the doc comment on `EventEnvelope.wallClock`.
+- **Tests:**
+  - The three `ClockSkewAdversarialTests` now build their envelopes with `HLCDevice`, a test-support
+    HLC stamper. They pass with their original assertions.
+  - `withoutHLCPrecondition_rawSkewedStamps_convergeOnStampOrder` keeps the three raw-stamp logs as
+    documentation of the precondition.
+- **For F17:**
+  - An HLC takes a received stamp as a lower bound. A peer whose clock is far ahead, or a corrupt stamp,
+    would therefore drag this device's clock with it. Standard HLCs reject a remote stamp beyond a
+    maximum drift; F17 should do the same.
+  - That check also protects `RestTimer.remaining(at:)` (F02, UI only), which still converts with
+    `Duration.seconds(Double)`. A rest ends at most an hour after its start, but a hostile start (the
+    stamp or `doneAt`) could still put `endsAt` out of `Duration`'s range from `now`.
+
+**7. Conflicting keys. Orchestrator decision (2026-09-29).**
+- **Rule:**
+  - Unique keys are a precondition. `WorkoutEventStore.append` enforces it with
+    `EngineError.conflictingEnvelope`, and F17 must check keys on receive.
+  - A device takes its next `seq` from `highestSeq` in its store, and runs `.persist` before `.transmit`,
+    so a `seq` it has sent is always in its store.
+  - `replay` breaks no tie.
+- **Where it is written down:** the doc comments on `EventEnvelope` (the precondition and who keeps it),
+  `Effect` (the order), `replay` and `highestSeq`.
+- **Test:** `CodableOrderingAdversarialTests.conflictingKey_storeRejectsSecond_replayPrecondition`; see
+  "Tests edited".
+
+**8. The materialisation hand-off. Orchestrator decision (2026-09-29).**
+- **Change:**
+  - `WorkoutEventStore.unmaterializedWorkoutIDs()` lists logs that hold a terminal envelope and have not
+    been compacted. On launch the host replays each one, materialises it if finished or drops it if
+    discarded, then compacts it.
+  - `.materialize` now carries the final `WorkoutState`. F05 writes the sets and `programUpdates` from
+    it, and computes the `WorkoutSummary`, with PRs from history, through `WorkoutEngine.summary`.
+  - The reducer no longer builds a summary.
+- **Tests:**
+  - `EffectTests.effects_finished`, `ReduceTerminalTests.finished_endsAndMaterializes`,
+    `ReduceAddRepeatSwapTests.criterion12_programUpdate_survivesFinish` and the adversarial terminal
+    cases, all updated.
+  - `WorkoutEventStoreContractTests.liveAndUnmaterialized_untilCompacted`.
+
+### Tests edited, and why
+
+The tester's adversarial tests:
+
+| Test | Edit | Justification |
+|---|---|---|
+| `EffectsAdversarialTests.reduceTwice_equalsOnce` | Renamed `duplicateInLog_replayEqualsOnce`. For every case it asserts `replay(before + [e, e]) == replay(before + [e])`, and that both equal one `reduce` of `e` | Finding 5: the law moves to `replay`. Why this is not a weakening is explained below |
+| `EffectsAdversarialTests.duplicateSetLogged_noSecondHaptic` | The two deliveries go through `StoringHost`: store first, then reduce what is new | Finding 5's precondition. The assertions are unchanged: no second haptic or notification, same state |
+| `EffectsAdversarialTests.duplicateRestExtended_extendsOnce` | Same, plus `replayed() == state` | Same. `endsAt` is still +30 s once, through the host and through replay |
+| `EffectsAdversarialTests.terminalCases` (`finished`) | Expects `.materialize(final state)` | Finding 8. The expected list is unchanged otherwise |
+| `TerminalOutcomeAdversarialTests.materialized` and its callers | Returns states; `summaries` computes receipts through `WorkoutEngine.summary`, F05's path | Finding 8. Every numeric assertion is unchanged, plus `materialized == [ended]` |
+| `TerminalOutcomeAdversarialTests.lateEnvelopeSortingBeforeFinish_isPersisted`, `envelopeBeforeStarted_isPersisted` and `losingStarted_isPersisted` | Now `…_isStoredByHost`. Each asserts that `reduce` emits nothing, that the host's store holds the envelope, and that the store's replay applies it | Finding 4 (b). The tester's concern, that the envelope reaches the log replay reads so both logs agree, is asserted on the store. The empty effect list is now the documented contract |
+| The three `ClockSkewAdversarialTests` | Stamped by `HLCDevice`. Assertions unchanged; two of them also assert that the HLC ordered the stamp after the envelope it followed | Finding 6 |
+| New: `ClockSkewAdversarialTests.withoutHLCPrecondition_rawSkewedStamps_convergeOnStampOrder` | The tester's three raw-stamp logs. It asserts convergence over 24 arrival orders, and the documented stamp-order outcome (the causally later action loses) | Finding 6: kept as documentation, named for the precondition |
+| `CodableOrderingAdversarialTests.conflictingKey_replayDependsOnArrival` | Renamed `conflictingKey_storeRejectsSecond_replayPrecondition`. In both arrival orders the store keeps the first envelope, throws `conflictingEnvelope` for the second, and replay of the stored log equals replay with only the first | Finding 7: there is no replay tiebreak, so the test asserts the enforcement of the precondition. The old assertion required order-independence exactly where the design says the precondition is violated |
+| `EngineAdversarialSupport` | Adds `StoringHost` and `HLCDevice` | Support only |
+
+The implementer's tests:
+
+| Test | Edit | Justification |
+|---|---|---|
+| `EffectTests.effects_finished`, `ReduceTerminalTests.finished_endsAndMaterializes` and `ReduceAddRepeatSwapTests.criterion12_programUpdate_survivesFinish` | Expect `.materialize(state)` | Finding 8. Criterion 12 is now met through the state F05 receives |
+| `ReplayTests.foldOrder_dedupesAndLeadsWithStarted` | `foldOrder` of a log without a `started` is now `[]` | Findings 2 and 3: with no usable `started` there is no workout to fold. `replay` was already `nil` and is unchanged |
+
+**Why retargeting idempotence at `replay` is not a weakening.**
+- ADR-004's law is a property of the system: a device that receives an envelope twice ends where one copy
+  would have left it. That now holds, and is tested, on both paths where it can hold:
+  - replay, for every event kind (`duplicateInLog_replayEqualsOnce`, and criterion 8);
+  - the host path (`append` returns only new envelopes; the two `duplicate…` host tests).
+- The host tests also pin "no repeated side effects", which the old state-only check did not.
+- `reduce(reduce(s, e), e) == reduce(s, e)` cannot hold for a relative event like `restExtended` in a
+  function with no memory.
+  - Making it hold would mean carrying the set of seen keys in `WorkoutState`, which is the log itself,
+    stored a second time.
+  - A per-device high-water `seq` would not do: it would drop legitimate out-of-order arrivals.
+  - Either way, every state comparison would then include delivery bookkeeping.
+- The retargeted test still ties `reduce` to `replay` for every case.
+
+**New test code:**
+- `Engine/Support/InMemoryEventStore.swift`: the protocol's contract in memory, all-or-nothing batches.
+  F17 may promote it to `LedgerTestSupport`.
+- `Engine/WorkoutEventStoreContractTests.swift`, 5 tests: new envelopes and idempotence; conflicting
+  batches; keys per workout; `highestSeq`; live, unmaterialised and compacted logs. They go through
+  `any WorkoutEventStore`, so F05 can run the same assertions against GRDB.
+- `LedgerTestSupport/Engine/ModelOracle+Edits.swift`: `ModelOracle.swift` would have passed SwiftLint's
+  300-line `file_length` with the fixes. The per-row, rest and terminal edits moved to this sibling file
+  unchanged, and `Model` went from `private` to internal so they can extend it. This is one file
+  outside Touches.
+
+### Open for F05 and F17
+
+- **Compaction and late envelopes:**
+  - After `compact`, a late envelope for that workout arrives at a log with no `started`. It is not
+    live, not unmaterialised, and replays to `nil`, so the re-materialisation rule cannot apply to it.
+  - F05 and F17 should either compact only once the peer's handshake shows nothing older is in flight,
+    or drop envelopes for materialised workouts.
+  - Either way, a log with no `started` should not linger.
+- **The HLC drift bound** (finding 6) and **effects for remote envelopes** (finding 5), both above.
+
+### Product lines
+
+`git diff --numstat main -- LedgerKit/Sources/LedgerDomain`: **557 added + 7 deleted = 564 changed
+product lines, over the 500 budget by 64.**
+- This round added 120 lines (76 doc-comment lines, 41 code lines, 3 blank) and deleted 43.
+- Nothing was compressed to fit, as instructed. The orchestrator declares the budget.
+
+| File | +/− vs `main` |
+|---|---|
+| `Engine/WorkoutEngine+Reduce.swift` | +231 |
+| `Engine/WorkoutEngine.swift` | +91 |
+| `Engine/EventEnvelope.swift` | +60 |
+| `Engine/WorkoutEngine+Replay.swift` | +41 |
+| `Engine/WorkoutEvent.swift` | +41 |
+| `Engine/Effect.swift` | +38 |
+| `Protocols/WorkoutEventStore.swift` | +28 / −3 |
+| `Model/WorkoutState.swift` | +13 / −2 |
+| `Engine/EngineError.swift` | +11 |
+| `Rules/SessionBuilder.swift` | +3 / −2 |
+
+### Gate
+
+The full `scripts/check.sh` ran through `sim-lock.py` on 2026-09-29 and is **green**: 224 s, after 287 s
+waiting for the lock. The log is `scratchpad/f04-fix1-check.log` (orchestrator scratchpad).
+
+| Step | Result |
+|---|---|
+| 0–2: tools, format, lint (`--strict`), package graph | OK: 0 of 189 files need formatting; lint is clean; the package graph is unchanged |
+| 3: iOS `PR` plan (iPhone 17, 26.5) | **17 test targets ran and passed.** xcresult: 608 tests, 607 passed, **0 failed**, 1 skipped |
+| 4: watchOS `PR-Watch` plan (Apple Watch Series 11 46 mm, 26.5) | **8 test targets ran and passed.** xcresult: 599 tests, 598 passed, **0 failed**, 1 skipped |
+| 5: coverage gate | Not yet wired (F01); coverage was read by hand below |
+
+- The one skip in each bundle is `ReplayPerformanceTests` ("Replaying 500 shuffled envelopes takes
+  under 5 ms"), which is `.slow` and runs on the nightly lane only.
+- `scripts/check.sh --fast`: 601 tests in 97 suites, all passing. The macOS exit tests are among them,
+  including the two finding-1 trap tests.
+- Nightly settings on the host (`LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=3000`): all 598
+  domain tests pass. That includes the 5 ms replay budget, and the garbage and oracle properties at 3,000
+  seeds (finding 2 had failed at 2,000).
+
+### Coverage
+
+Read from `xcrun xccov view --report --json .derivedData/Results/PR-{iOS,watchOS}.xcresult`, over
+`Sources/LedgerDomain/Engine/`. The figures are identical on both platforms:
+
+| File | Lines |
+|---|---|
+| `WorkoutEngine.swift` | 43/43 |
+| `WorkoutEngine+Replay.swift` | 23/23 |
+| `WorkoutEngine+Reduce.swift` | 188/189. The miss is the unreachable `default:` in `applyClockEvent` (line 49) |
+| `EventEnvelope.swift` | 17/17 |
+| **`Engine/` total** | **271/272 = 99.63 %** (brief: ≥ 95 %) |
+
+- `WorkoutState.swift` is 48/48.
+- Host `llvm-cov` agrees (`Engine/` 99.63 %), with the same missed line.
+- The saturation branch of `saturatingSum` is covered on the simulators by
+  `longestRest_saturatesASnapshotRest`.

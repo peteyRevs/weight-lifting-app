@@ -90,7 +90,7 @@ struct ReduceAddRepeatSwapTests {
         ])
         #expect(state.phase == .finished)
         #expect(state.programUpdates == [slotID: dip])
-        #expect(effects.contains(.materialize(WorkoutEngine.summary(state, prs: []))))
+        #expect(effects.contains(.materialize(state)))
     }
 
     @Test("The latest program swap per slot wins; a later one-off swap leaves it; an ad-hoc exercise records none")

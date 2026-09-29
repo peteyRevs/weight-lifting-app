@@ -9,13 +9,19 @@ import Testing
 struct TerminalOutcomeAdversarialTests {
     typealias Adv = EngineAdv
 
-    static func materialized(_ effects: [Effect]) -> [WorkoutSummary] {
+    /// The final states `.materialize` hands to F05 (finding 8: it carries the state, not a summary).
+    static func materialized(_ effects: [Effect]) -> [WorkoutState] {
         effects.compactMap { effect in
-            if case let .materialize(summary) = effect {
-                return summary
+            if case let .materialize(state) = effect {
+                return state
             }
             return nil
         }
+    }
+
+    /// The receipt F05 computes from a materialised state, with no PRs.
+    static func summaries(_ effects: [Effect]) -> [WorkoutSummary] {
+        materialized(effects).map { WorkoutEngine.summary($0, prs: []) }
     }
 
     @Test("Rule 10 / spec §7.6: finished sets phase and endedAt, clears rest, and materializes a frozen summary.")
@@ -34,7 +40,8 @@ struct TerminalOutcomeAdversarialTests {
         #expect(ended.phase == .finished)
         #expect(ended.endedAt == engineTime(3600))
         #expect(ended.rest == nil, "spec §7.6 rule 31: finishing zeroes the rest")
-        let summaries = Self.materialized(effects)
+        #expect(Self.materialized(effects) == [ended])
+        let summaries = Self.summaries(effects)
         #expect(summaries.count == 1)
         let summary = try #require(summaries.first)
         #expect(summary.workoutID == Adv.workoutID)
@@ -66,7 +73,7 @@ struct TerminalOutcomeAdversarialTests {
             Adv.state(after: [Adv.start()]),
             Adv.env(.finished(endedAt: engineTime(-30)), Adv.watch, seq: 1, at: 1)
         )
-        let summary = try #require(Self.materialized(effects).first)
+        let summary = try #require(Self.summaries(effects).first)
         #expect(summary.elapsed == .zero)
     }
 
@@ -117,32 +124,44 @@ extension TerminalOutcomeAdversarialTests {
         #expect(Replica([Adv.start(), watchLog, finish]).state == merged)
     }
 
-    @Test("Rule 2 is about envelope order: an envelope arriving after the finish but sorting before it is persisted.")
-    func lateEnvelopeSortingBeforeFinish_isPersisted() {
+    // Finding 4 (orchestrator decision, 2026-09-29, option b): the host appends every envelope it
+    // receives for the workout before it reduces it, whatever the effects; `.persist` is for envelopes
+    // this device creates. So an envelope `reduce` ignores still reaches the log `replay` reads.
+
+    @Test("Rule 2 is about envelope order: an envelope arriving after the finish but sorting before it is stored.")
+    func lateEnvelopeSortingBeforeFinish_isStoredByHost() async throws {
         let finish = Adv.env(.finished(endedAt: engineTime(100)), seq: 2, at: 100)
         let watchLog = Adv.env(Adv.logged(1, 0, pounds: "55", reps: 10, doneAt: 90), Adv.watch, seq: 1, at: 90)
-        let finished = Adv.state(after: [Adv.start(), finish])
-        let (_, effects) = WorkoutEngine.reduce(finished, watchLog)
-        // Replay applies this envelope (it sorts before the finish), so the device must keep it; `.persist`
-        // is the engine's only way to say so (Effect.persist: "Append the envelope to the local log").
-        #expect(effects.contains(.persist(watchLog)), "reduce returned \(effects); the late set is never stored")
+        var host = StoringHost()
+        _ = try await host.receive([Adv.start(), finish])
+        let effects = try await host.receive([watchLog])
+        #expect(effects.isEmpty, "reduce ignores it after the terminal, so it emits no .persist")
+        #expect(try await Set(host.store.envelopes(for: Adv.workoutID)) == [Adv.start(), finish, watchLog])
+        // Replay applies it (it sorts before the finish); F05/F17 re-materialize when the final state changes.
+        #expect(try await Adv.row(host.replayed(), 1, 0)?.isDone == true)
     }
 
-    @Test("Rule 1 says early envelopes are buffered: reduce on nil still asks the device to persist one.")
-    func envelopeBeforeStarted_isPersisted() {
+    @Test("Rule 1 says early envelopes are buffered: the host stores one that reduce on nil ignores.")
+    func envelopeBeforeStarted_isStoredByHost() async throws {
         let early = Adv.env(Adv.logged(0, 0, doneAt: 5), Adv.watch, seq: 1, at: 5)
-        let (state, effects) = WorkoutEngine.reduce(nil, early)
-        #expect(state == nil)
-        #expect(effects.contains(.persist(early)), "reduce returned \(effects); the buffered envelope is never stored")
+        var host = StoringHost()
+        let effects = try await host.receive([early])
+        #expect(effects.isEmpty)
+        #expect(host.state == nil)
+        _ = try await host.receive([Adv.start()])
+        #expect(try await Adv.row(host.replayed(), 0, 0)?.isDone == true)
     }
 
-    @Test("A peer's earlier started that loses on this device is still persisted, or the two logs never agree.")
-    func losingStarted_isPersisted() {
+    @Test("A peer's earlier started that loses on this device is still stored, so the two logs agree.")
+    func losingStarted_isStoredByHost() async throws {
         let phoneStart = Adv.start(EventBuilders.seedSession(), Adv.phone, seq: 1, at: 5)
         let watchStart = Adv.start(EventBuilders.seedSession(autoRest: false), Adv.watch, seq: 1, at: 3)
-        let (_, effects) = WorkoutEngine.reduce(Adv.state(after: [phoneStart]), watchStart)
-        // Replay of both picks the watch's (it sorts first), so the phone must keep it.
+        var host = StoringHost()
+        _ = try await host.receive([phoneStart])
+        let effects = try await host.receive([watchStart])
+        #expect(effects.isEmpty, "a second started is ignored by reduce")
+        // Replay of both picks the watch's (it sorts first), as it does on the watch.
+        #expect(try await host.replayed()?.autoRest == false)
         #expect(WorkoutEngine.replay([phoneStart, watchStart])?.autoRest == false)
-        #expect(effects.contains(.persist(watchStart)), "reduce returned \(effects)")
     }
 }

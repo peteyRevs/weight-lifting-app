@@ -76,11 +76,12 @@ struct EffectsAdversarialTests {
 
     static func terminalCases() -> [Case] {
         let finished = Adv.env(.finished(endedAt: engineTime(50)), seq: 3, at: 50)
-        let summary = Adv.state(after: resting + [finished]).map { WorkoutEngine.summary($0, prs: []) }
+        // Finding 8 (orchestrator decision, 2026-09-29): `.materialize` carries the final state.
+        let final = Adv.state(after: resting + [finished])
         return [
             Case(
                 description: "finished", before: resting, envelope: finished,
-                extra: [.haptic(.workoutFinished), .cancelRestNotification] + (summary.map { [.materialize($0)] } ?? [])
+                extra: [.haptic(.workoutFinished), .cancelRestNotification] + (final.map { [.materialize($0)] } ?? [])
             ),
             Case(
                 description: "discarded", before: resting,
@@ -128,36 +129,44 @@ struct EffectsAdversarialTests {
 
 // MARK: - Duplicates (ADR-004 consequences: "idempotence: apply twice → same state")
 
+/// Finding 5 (orchestrator decision, 2026-09-29): `reduce` keeps no log, so its caller dedupes by key and
+/// reduces only what `WorkoutEventStore.append` newly stored; the idempotence law belongs to `replay`.
 extension EffectsAdversarialTests {
-    @Test("Duplicate delivery: a setLogged applied twice does not buzz or notify twice.")
-    func duplicateSetLogged_noSecondHaptic() {
+    @Test("Duplicate delivery: a host reducing only newly stored envelopes does not buzz or notify twice.")
+    func duplicateSetLogged_noSecondHaptic() async throws {
         let envelope = Adv.env(Adv.logged(0, 0, doneAt: 10), Adv.watch, seq: 1, at: 10)
-        let once = WorkoutEngine.reduce(Adv.state(after: [Adv.start()]), envelope)
-        let (twice, effects) = WorkoutEngine.reduce(once.0, envelope)
-        #expect(twice == once.0)
+        var host = StoringHost()
+        let first = try await host.receive([Adv.start(), envelope])
+        let once = host.state
+        #expect(first.contains(.haptic(.setLogged)))
+        let effects = try await host.receive([envelope])
+        #expect(host.state == once)
         #expect(!effects.contains(.haptic(.setLogged)), "second delivery re-emitted \(effects)")
         #expect(!Adv.schedulesRest(effects))
     }
 
-    @Test("Duplicate delivery: a restExtended applied twice by reduce extends once (replay already dedupes).")
-    func duplicateRestExtended_extendsOnce() {
+    @Test("Duplicate delivery: a restExtended delivered twice extends once, through the host and through replay.")
+    func duplicateRestExtended_extendsOnce() async throws {
         let envelope = Adv.env(.restExtended(amount: .seconds(30)), Adv.watch, seq: 1, at: 10)
-        let once = WorkoutEngine.reduce(Adv.state(after: Self.resting), envelope).0
-        let twice = WorkoutEngine.reduce(once, envelope).0
+        var host = StoringHost()
+        _ = try await host.receive(Self.resting + [envelope])
+        _ = try await host.receive([envelope])
         #expect(WorkoutEngine.replay(Self.resting + [envelope, envelope])?.rest?.endsAt == engineTime(120))
         #expect(
-            twice?.rest?.endsAt == engineTime(120),
-            "reduce extended a duplicate: \(String(describing: twice?.rest))"
+            host.state?.rest?.endsAt == engineTime(120),
+            "the host extended a duplicate: \(String(describing: host.state?.rest))"
         )
+        #expect(try await host.replayed() == host.state)
     }
 
     @Test(
-        "Every event is idempotent under reduce: applying an envelope twice equals applying it once.",
+        "Idempotence holds at replay: an envelope twice in the log replays like it once, and like one reduce.",
         arguments: cases
     )
-    func reduceTwice_equalsOnce(_ testCase: Case) {
-        let once = WorkoutEngine.reduce(Adv.state(after: testCase.before), testCase.envelope).0
-        let twice = WorkoutEngine.reduce(once, testCase.envelope).0
+    func duplicateInLog_replayEqualsOnce(_ testCase: Case) {
+        let once = WorkoutEngine.replay(testCase.before + [testCase.envelope])
+        let twice = WorkoutEngine.replay(testCase.before + [testCase.envelope, testCase.envelope])
         #expect(twice == once)
+        #expect(twice == WorkoutEngine.reduce(Adv.state(after: testCase.before), testCase.envelope).0)
     }
 }

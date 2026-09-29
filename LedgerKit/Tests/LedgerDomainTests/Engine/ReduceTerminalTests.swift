@@ -49,13 +49,13 @@ struct ReduceTerminalTests {
         #expect(effects.isEmpty)
     }
 
-    @Test("Rule 10: finished ends the workout, stops the rest and materialises its summary")
+    @Test("Rule 10: finished ends the workout, stops the rest and materialises its final state")
     func finished_endsAndMaterializes() throws {
         let (state, effects) = try Engine.run([Engine.logged(0, 0, at: 10), .finished(endedAt: Engine.at(1800))])
         #expect(state.phase == .finished)
         #expect(state.endedAt == Engine.at(1800))
         #expect(state.rest == nil)
-        #expect(effects.contains(.materialize(WorkoutEngine.summary(state, prs: []))))
+        #expect(effects.contains(.materialize(state)))
         #expect(effects.contains(.haptic(.workoutFinished)))
         #expect(effects.contains(.cancelRestNotification))
     }
@@ -116,6 +116,16 @@ struct ReduceTerminalTests {
     @Test("A workout that has not ended has zero elapsed in its summary")
     func summary_ofLiveWorkout_hasZeroElapsed() throws {
         #expect(try WorkoutEngine.summary(Engine.live(), prs: []).elapsed == .zero)
+    }
+
+    @Test(
+        "A decodable finish at an absurd or infinite time saturates the summary's elapsed instead of trapping",
+        arguments: [1e21, .infinity, .nan]
+    )
+    func summary_ofCorruptEndedAt_saturatesElapsed(seconds: Double) throws {
+        let (state, _) = try Engine.run([.finished(endedAt: Date(timeIntervalSinceReferenceDate: seconds))])
+        let expected: Duration = seconds.isNaN ? .zero : .seconds(Double(Int64.max))
+        #expect(WorkoutEngine.summary(state, prs: []).elapsed == expected)
     }
 
     @Test("Receipt rows use the units SessionBuilder snapshotted from Settings")

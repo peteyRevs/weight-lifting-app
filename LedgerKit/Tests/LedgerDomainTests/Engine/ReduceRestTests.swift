@@ -79,3 +79,45 @@ struct ReduceRestTests {
         #expect(idle.effects.contains(.cancelRestNotification))
     }
 }
+
+// MARK: - The rest bound (fix round 1, finding 1)
+
+extension ReduceRestTests {
+    /// `seconds` of wall clock plus the one-hour `WorkoutEngine.longestRest`.
+    static func bound(after seconds: TimeInterval) -> Date {
+        Engine.at(seconds).addingTimeInterval(WorkoutEngine.longestRest / .seconds(1))
+    }
+
+    @Test("A hostile rest is held to longestRest: total in 0…1 h, endsAt at most 1 h after the envelope")
+    func longestRest_holdsHostileRests() throws {
+        #expect(WorkoutEngine.longestRest == .seconds(3600))
+        let largest = Duration(attoseconds: .max)
+        let huge = try Engine.run([.restStarted(endsAt: .distantFuture, total: largest)])
+        #expect(huge.state.rest == RestTimer(endsAt: Self.bound(after: 10), total: WorkoutEngine.longestRest))
+        #expect(huge.effects.contains(.scheduleRestNotification(endsAt: Self.bound(after: 10))))
+        // +30 s on the held rest, then Int64.max seconds: pinned at the bound, never trapping.
+        let extended = try Engine.run([
+            .restStarted(endsAt: .distantFuture, total: largest),
+            .restExtended(amount: .seconds(30)),
+            .restExtended(amount: .seconds(Int64.max))
+        ])
+        #expect(extended.state.rest == RestTimer(endsAt: Self.bound(after: 30), total: WorkoutEngine.longestRest))
+        let negative = try Engine.run([.restStarted(endsAt: Engine.at(100), total: .seconds(-90))])
+        #expect(negative.state.rest == RestTimer(endsAt: Engine.at(100), total: .zero))
+    }
+
+    @Test(
+        "A snapshot rest at either Duration extreme, extended, saturates instead of overflowing",
+        arguments: [(Duration(attoseconds: .max), Duration.seconds(30)), (Duration(attoseconds: .min), .seconds(-30))]
+    )
+    func longestRest_saturatesASnapshotRest(total: Duration, amount: Duration) throws {
+        var snapshot = EventBuilders.seedSession()
+        snapshot.rest = RestTimer(endsAt: Engine.at(100), total: total)
+        let (state, _) = try Engine.run([.restExtended(amount: amount)], on: snapshot)
+        let expected = amount > .zero ? WorkoutEngine.longestRest : .zero
+        #expect(state.rest == RestTimer(
+            endsAt: Engine.at(100).addingTimeInterval(amount / .seconds(1)),
+            total: expected
+        ))
+    }
+}

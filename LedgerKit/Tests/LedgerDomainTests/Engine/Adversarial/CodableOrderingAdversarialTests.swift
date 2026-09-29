@@ -149,13 +149,27 @@ extension CodableOrderingAdversarialTests {
         }
     }
 
-    @Test("Rule 12 precondition: two different envelopes sharing a key make replay depend on arrival order.")
-    func conflictingKey_replayDependsOnArrival() {
+    /// Finding 7 (orchestrator decision, 2026-09-29): unique keys are a precondition, enforced by
+    /// `WorkoutEventStore.append` and checked by F17 on receive; `replay` breaks no tie.
+    @Test(
+        """
+        Rule 12 precondition: of two different envelopes sharing a key, the store keeps whichever came \
+        first and rejects the other, so the log that replay reads never holds both.
+        """
+    )
+    func conflictingKey_storeRejectsSecond_replayPrecondition() async throws {
         let logA = Adv.env(Adv.logged(0, 0, doneAt: 10), Adv.watch, seq: 1, at: 10)
-        let skipB = Adv.env(.restExtended(amount: .seconds(60)), Adv.watch, seq: 1, at: 10)
+        let extendB = Adv.env(.restExtended(amount: .seconds(60)), Adv.watch, seq: 1, at: 10)
         // A reinstalled or restored watch can reuse a seq it already sent (EngineError.conflictingEnvelope).
-        let first = WorkoutEngine.replay([Adv.start(), logA, skipB])
-        let second = WorkoutEngine.replay([Adv.start(), skipB, logA])
-        #expect(first == second, "replay is not a function of the envelope set when a key names two envelopes")
+        for (first, second) in [(logA, extendB), (extendB, logA)] {
+            let store: any WorkoutEventStore = InMemoryEventStore()
+            _ = try await store.append([Adv.start(), first])
+            await #expect(throws: EngineError.conflictingEnvelope(second.key)) {
+                try await store.append([second])
+            }
+            let stored = try await store.envelopes(for: Adv.workoutID)
+            #expect(Set(stored) == [Adv.start(), first])
+            #expect(WorkoutEngine.replay(stored) == WorkoutEngine.replay([Adv.start(), first]))
+        }
     }
 }

@@ -189,6 +189,57 @@ struct Replica {
     }
 }
 
+/// A host as the orchestrator's decisions of 2026-09-29 describe it (findings 4 and 5): it appends
+/// every envelope it receives to its store first, whatever the effects, and reduces only the
+/// envelopes the store newly accepted, in arrival order.
+struct StoringHost {
+    let store: any WorkoutEventStore = InMemoryEventStore()
+    private(set) var state: WorkoutState?
+
+    /// Receives `envelopes` and returns the effects of the ones it reduced.
+    mutating func receive(_ envelopes: [EventEnvelope]) async throws -> [Effect] {
+        var effects: [Effect] = []
+        for envelope in try await store.append(envelopes) {
+            let (next, emitted) = WorkoutEngine.reduce(state, envelope)
+            state = next
+            effects += emitted
+        }
+        return effects
+    }
+
+    /// The state its stored log replays to.
+    func replayed() async throws -> WorkoutState? {
+        try await WorkoutEngine.replay(store.envelopes(for: EngineAdv.workoutID))
+    }
+}
+
+/// A device that stamps what it records with ADR-004's hybrid logical clock (amendment 2026-09-29):
+/// `wallClock = max(now, newest wallClock seen or sent + 1 ms)`, where `now` is its own clock, which
+/// may be skewed or step back.
+struct HLCDevice {
+    let device: DeviceID
+    private(set) var seq: UInt64 = 0
+    private(set) var newest: Date?
+
+    init(_ device: DeviceID) {
+        self.device = device
+    }
+
+    /// Notes an envelope this device received.
+    mutating func receive(_ envelope: EventEnvelope) {
+        newest = max(newest ?? envelope.wallClock, envelope.wallClock)
+    }
+
+    /// Records `event` when this device's clock reads `clock` seconds after the fixture start.
+    mutating func record(_ event: WorkoutEvent, clock: Double) -> EventEnvelope {
+        let now = engineTime(clock)
+        let stamp = newest.map { max(now, $0.addingTimeInterval(0.001)) } ?? now
+        newest = stamp
+        seq += 1
+        return EventEnvelope(event: event, workoutID: EngineAdv.workoutID, device: device, seq: seq, wallClock: stamp)
+    }
+}
+
 extension SeededGenerator {
     /// A random (seeded) UUID.
     mutating func uuid() -> UUID {

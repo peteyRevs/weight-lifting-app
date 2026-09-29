@@ -75,6 +75,29 @@ struct ReplayTests {
         let second = Engine.envelope(.restSkipped, 6, from: Engine.watch, seq: 2)
         let order = WorkoutEngine.foldOrder([second, first, second, started, first])
         #expect(order == [started, first, second])
-        #expect(WorkoutEngine.foldOrder([second, first]) == [first, second])
+        // With no usable started there is no workout to fold (fix round 1, findings 2 and 3).
+        #expect(WorkoutEngine.foldOrder([second, first]).isEmpty)
+    }
+
+    @Test("Findings 2 and 3: only a usable started leads, and only its workout's envelopes are deduped and kept")
+    func foldOrder_leadsWithUsableStarted_andKeepsOnlyItsWorkout() {
+        var ended = EventBuilders.seedSession()
+        ended.phase = .finished
+        let other = WorkoutID(EventBuilders.uuid(0xF101))
+        let unusable = EventBuilders.envelope(.started(ended), device: Engine.watch, seq: 1, at: Engine.at(-20))
+        let early = Engine.envelope(Engine.logged(0, 0, at: -10), -10, from: Engine.watch, seq: 2)
+        // Same key as `late`, in another workout, and sorting before it.
+        let stray = EventBuilders.envelope(
+            .restSkipped,
+            device: Engine.watch,
+            seq: 3,
+            at: Engine.at(-5),
+            workoutID: other
+        )
+        let late = Engine.envelope(Engine.logged(0, 1, at: 5), 5, from: Engine.watch, seq: 3)
+        let log = [late, stray, Engine.started(), early, unusable]
+        #expect(WorkoutEngine.foldOrder(log) == [Engine.started(), unusable, early, late])
+        #expect(WorkoutEngine.replay(log) == Engine.fold([Engine.started(), early, late]))
+        #expect(WorkoutEngine.replay(log)?.doneSets == 2)
     }
 }

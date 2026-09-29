@@ -141,7 +141,7 @@ struct EffectTests {
         #expect((state != before) == row.changesState)
     }
 
-    @Test("finished yields persist, transmit, materialize(summary), the finish haptic, cancel, updateLiveActivity")
+    @Test("finished yields persist, transmit, materialize(final state), the finish haptic, cancel, updateLiveActivity")
     func effects_finished() throws {
         let live = try Engine.live()
         let envelope = Engine.envelope(.finished(endedAt: Engine.at(900)), 900, seq: 2)
@@ -150,7 +150,7 @@ struct EffectTests {
         #expect(effects == [
             .persist(envelope),
             .transmit(envelope),
-            .materialize(WorkoutEngine.summary(finished, prs: [])),
+            .materialize(finished),
             .haptic(.workoutFinished),
             .cancelRestNotification,
             .updateLiveActivity
