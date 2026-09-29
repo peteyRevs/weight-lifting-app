@@ -39,7 +39,14 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [x] F00 (#1, #3) · [ ] F01 · [x] F02 (#2 → #3) · [ ] F03 · [ ] F04 · [ ] F05 · [ ] F06 · [ ] F07
+- [x] F00 (#1, #3) · [~] F01 (#5) · [x] F02 (#2 → #3) · [ ] F03 · [~] F04 · [ ] F05 · [~] F06 (slice 1 #6; slices 2–3 open) · [ ] F07
+
+### Status — 2026-09-29
+
+- **F06 slice 1 merged** (#6, `12b03c2`): tokens, Archivo width axis (risk R2 closed), pixel snapshots, design lint. Slice 1 failed G2 three times; Pete re-planned: native `.lineHeight` only, and the design lint is a frozen tripwire (standards §7). **Pete, in Xcode:** delete the dangling `Fonts` synchronized group.
+- **F01** (#5): CI run 1 failed on an ambiguous watch destination (fixed: simulators by UDID). Run 2 timed out: parallel testing cloned never-booted simulators, and their first boots held up the app-hosted tests. Fixed: boot during the build, then `test-without-building` with parallel testing off. Run 3 on `4df4439`. G5 stops for Pete (ADR-006, releases, Xcode Cloud).
+- **F04** (branch `feat/F04-workout-engine`): G2 failed three times as fix rounds grew sync machinery. Pete re-planned: both devices stay fully live; "+30s" never shortens a running rest; one haptic per catch-up; validation without time windows; F04 frozen. Received envelopes always rebuild by replay (ADR-004). Final fix round, then a close-out round on the fixes only, then review.
+- **Process:** the PR size rule is now a 500-line code target with a split above ~1,000 (standards §10, Pete).
 
 ### F00 delivery — merged 2026-09-27 (#1; the gate's result check landed via #3)
 
@@ -66,7 +73,7 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 
 - [x] G0 brief: `tasks/features/F02-domain-core.md` (14 criteria, test plan) — approved with M0.
 - [x] G1 implementer: code + brief's tests, `check.sh --fast` green, coverage ≥ 95 %, implementation notes. (2026-09-26: 148 domain tests, 98.91 % lines; re-run green by orchestrator; committed `f30d94e`. Brief's rest-label example fixed to rule 39 in `76ebbdb`.)
-- [x] 500-line PR budget (standards §10): product code is ~2,200 lines. **Pete granted a one-time waiver (2026-09-26)** — F02 ships as one PR; say so in the PR body. Future briefs must be scoped to fit.
+- [x] 500-line PR budget (standards §10): product code is ~2,200 lines. **Pete granted a one-time waiver (2026-09-26)** — F02 ships as one PR; say so in the PR body. (Superseded 2026-09-29: the budget is now a target; split above ~1,000.)
 - [x] G2 adversarial tester (round 1): 209 tests, 8 failing from 3 bugs (A 11 kg step, B DST-at-midnight weeks, C 1.25 lb ties) + 7 spec questions. **Pete decided 2026-09-27: exact weights (Decimal grams; amends decision #9 → ADR-007) and a calendar-date program start.** Revision committed `f891e12` (ADR/docs) + `f8e1687` (code + adversarial suite): 367 domain tests green, 98.87 %. Round 2: tester auditing its changed tests + attacking the new Weight/CivilDate surface.
 - [x] G2 closed (round 2, 2026-09-27): tester accepted the implementer's test edits, +44 tests, no new bugs; 413 tests green at 2,000 seeds.
 - [x] G3 reviewer: approved, 0 Blocking / 4 Should fix / 9 Nits (`review.md`). Should-fix round in progress (CivilDate range, brzycki doc, SessionBuilder day source, lb/kg lint allowlist).

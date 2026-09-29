@@ -158,23 +158,35 @@ Concrete test names (file = suite = source type; see §6):
   `assertSnapshot(of:as:named:)`. Failures attach diff images to the xcresult
   (1.19.x native attachments, R3 §2) and also write to the
   `SNAPSHOT_ARTIFACTS` directory (set by the test plan).
-- Matrix, phone: `{light, dark} × {.large, .xxxLarge, .accessibility3}` = 6
-  images per component/screen state, rendered with `.image(layout:
-  .sizeThatFits, traits: variant.traits)` (components) or `.device(config:
-  .iPhone13Pro)` (screens — **verify in F06** the newest `ViewImageConfig`
-  in 1.19.5 and switch if an iPhone 17 config exists). Watch: always dark,
-  `.fixed` layouts at 42 mm 187×223, 46 mm 208×248, 49 mm 205×251 pt — one
-  watch simulator renders all three. **verify in F06** that the `.image`
-  strategy renders SwiftUI views on watchOS 26.5; fallback is `ImageRenderer`
-  → `CGImage` → `.image`.
+- Matrix, phone: `{light, dark} × {.large, .xLarge, .accessibility3}` = 6
+  images per component/screen state (`SnapshotAppearance.phoneMatrix`; F06
+  criterion 3 chose `.xLarge` over `.xxxLarge`), rendered at 1× with
+  `assertPhoneSnapshot(of:_:)` (components) or `.device(config:)` (screens).
+  The helper wraps `.image(layout: .sizeThatFits, traits:)` and applies
+  `snapshotAppearance(_:)`: the text size and scheme also go into SwiftUI's
+  environment (the library measures before it applies traits), and the view
+  takes its own height (the library proposes a zero size, which cuts
+  wrapping text to one line with "…"; F06 review S1). 1.19.6's newest `ViewImageConfig` is
+  `.iPhone13ProMax`; there is no iPhone 17 config (checked in F06), so
+  components render at `SnapshotConfig.phoneWidth` (402 pt). Watch: always
+  dark, fixed sizes 42 mm 187×223, 46 mm 208×248, 49 mm 205×251 pt
+  (`WatchSize`) — one watch simulator renders all three. swift-snapshot-testing
+  1.19.6 has no image strategy on watchOS (its view and `UIImage` strategies
+  are `#if os(iOS) || os(tvOS)`), so watch snapshots go through
+  `RenderedImage.render` (`ImageRenderer`, 1×) and the `.png` strategy in
+  `LedgerSnapshotTesting`, which applies the same precision and ΔE threshold.
+  It measures ΔE as CIE76, which is never smaller than the CIE94 that Core
+  Image measures for the library on iOS, so it is at least as strict.
 - Precision: `precision: 0.995, perceptualPrecision: 0.98`, set once in
   `SnapshotConfig` and never overridden per test.
 - Storage: PNGs in `__Snapshots__/` next to the test file, committed to git
   (~270 images ≈ 15 MB at launch; move to Git LFS if `__Snapshots__` exceeds
-  300 MB). Record policy: local default `.missing`; CI (`LEDGER_TEST_LANE`
-  set) `.never`; `scripts/snapshots-update.sh [filter]` runs the suites with
-  `SNAPSHOT_RECORD=all` on the pinned simulators (§7) and prints
-  `git status --short -- '**/__Snapshots__'`. References recorded on any other
+  300 MB). Record policy: swift-snapshot-testing's default `.missing` (a
+  missing reference is written and the test fails, so CI cannot pass on a
+  reference it recorded itself); `scripts/check.sh --record-snapshots` runs
+  both plans with `TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all` on the pinned
+  simulators (§7), prints `git status --short -- '**/__Snapshots__'` and
+  fails; a second, normal run proves the references. References recorded on any other
   device/OS are rejected in review.
 - Review policy: a PR that changes any PNG lists them under "Screenshots" in
   the PR template with the reason; the reviewer inspects GitHub's image diff
@@ -331,7 +343,10 @@ and attach screenshots for failures. A run with any failure blocks the tag.
 - Lanes are selected by **test plan** (target/suite granularity) and confirmed
   by the `LEDGER_TEST_LANE` env var read by traits: `.performance`/`.slow`
   suites are listed under `skippedTests` in the PR plans; `.device` suites are
-  `.enabled(if: TestLane.isDevice)`.
+  `.enabled(if: TestLane.isDevice)`. A single `.slow` test inside a PR suite
+  carries `.enabled(if: TestLane.runsSlowTests)` instead, which is true only
+  when `LEDGER_TEST_LANE` is `nightly` (F06: LedgerDesignTests' full
+  bare-font matrix; the PR lane runs a representative subset).
 
 | Lane | Plans | Runs |
 |---|---|---|

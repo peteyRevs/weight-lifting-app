@@ -146,7 +146,9 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
   populated, error). Previews use `LedgerTestSupport` fixtures.
 - Only `LedgerDesign` tokens for color, type, spacing, radius. A raw
   `Color(red:…)`, `.font(.system(size: 17))`, or `.padding(13)` in a feature
-  is a lint error.
+  is a lint error (the design lint below). "Tokens only" is enforced by
+  review (`docs/subagent-workflow.md`, review point 4); the lint is a
+  tripwire for common slips and is not meant to catch every spelling.
 - Every interactive control has an accessibility label; hit targets ≥ 44 pt
   (iOS) / follow watchOS defaults; Dynamic Type supported up to
   accessibility sizes; `.accessibilityIdentifier` on anything UI tests touch.
@@ -154,6 +156,67 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
   (`Localizable.xcstrings`). No string literals in `Text(...)` in features.
 - Animations are explicit (`withAnimation(.snappy)`) and respect
   `accessibilityReduceMotion`.
+
+### Design lint (`ledger_raw_*`): a tripwire, not a proof
+
+Pete's decision (2026-09-29). The four SwiftLint custom rules in
+`.swiftlint.yml` catch the raw values a feature author writes without meaning
+to bypass the tokens. They are not meant to catch every spelling: "tokens
+only" is enforced by review (`docs/subagent-workflow.md`, review point 4). The
+rule set is frozen; a spelling it misses is fixed in review, not by growing
+the regexes. Comments and string literals are ignored, and a literal `0` is
+allowed for spacing and radii.
+
+Scope: the modules that can draw UI. That is the `Feature*` and
+`WatchFeature*` targets, the `LedgerAppKit` and `LedgerWatchAppKit`
+umbrellas, and `Apps` (test targets excluded). `LedgerDesign` is where raw
+values become tokens. `LedgerDomain`, `LedgerDependencies`, the adapters
+(`LedgerPersistence`, `LedgerHealth`, `LedgerSync`) and `LedgerActivityKit`
+are Foundation-only (§2), so a hit there (a plate-colour enum's `.black`, a
+validator's `minLength: 2`) can only be a false positive. Narrowing the scope
+to exclude them (F06 review S2, 2026-09-29) is a false-positive fix under the
+decision above: the regexes did not change and stay frozen.
+`scripts/tests/lint-rules.test.sh` checks both sides of the scope.
+
+| Rule | Flags, outside `LedgerDesign` |
+|---|---|
+| `ledger_raw_color` | `Color(…)`, `Color.init(…)`, `Color.Resolved(…)`; `Color.orange`, `Color.secondary` and the other named and hierarchical styles; a named or hierarchical style (`.orange`, `.secondary` … `.quinary`) as an argument or after `:`; a named colour as a value after `=`, `?`, `??`, `{` or `return`; `.init(red:…)`, `.init(white:…)`, `.init(uiColor:…)` and the like, and `.color(red:…)`; a raw alpha on a token (`LedgerColor.ink.opacity(…)`, also with the chain wrapped, and `LedgerColor.accent.secondary`); `UIColor`, `NSColor`, `#colorLiteral` |
+| `ledger_raw_font` | a system style, `.system`, `.custom` or `.init` inside `.font(…)` or `.environment(\.font, …)`, or assigned to a `Font`; `Font(…)`; `UIFont`, `NSFont`; `.bold()`, `.italic()`, `.fontWeight(`, `.fontWidth(`, `.fontDesign(`, `.monospaced(`, `.monospacedDigit(`, `.textScale(`, `.tracking(`, `.kerning(`, `.lineSpacing(`, `.lineHeight(`; a literal `size:` in `LedgerFont.font(_:size:)`; a constant text size passed on (`dynamicTypeSize: .large`, `.environment(\.dynamicTypeSize, .large)`, `min(dynamicTypeSize, .accessibility2)`); `.dynamicTypeSize(.large)` or any pin at or below the default size |
+| `ledger_raw_spacing` | a non-zero literal in `.padding(`, `.safeAreaPadding(`, `.contentMargins(`, `.listRowSpacing(`, `.listSectionSpacing(`, `EdgeInsets(…)` / `.init(top:…)`, `spacing:`, `horizontalSpacing:`, `verticalSpacing:`, `minLength:`, also in either arm of a simple ternary (`flag ? 13 : LedgerSpacing.l`); a token nudged by a literal (`LedgerSpacing.m + 1`, `/ 2`, `* 1.5`) |
+| `ledger_raw_radius` | a non-zero literal for `cornerRadius:`, `topLeadingRadius:` …, `topLeading:` …, `.cornerRadius(`, a `cornerSize:`, iOS 26's `.fixed(…)` corner style (after `corners:`, `minimum:` or `…Corner:`), also in a simple ternary; a token nudged by a literal |
+
+Known limits: the lint does not flag these, and review has to.
+`scripts/tests/lint-rules-adversarial-round3.test.sh` keeps each as a `limit`
+case (the `Role.spec` one is in `lint-rules.test.sh`), which fails if a rule
+starts to flag it, so this list stays true.
+
+- A comment inside the call (`.padding(.horizontal, // inset` then `13)` on
+  the next line): SwiftLint drops every match that spans a comment.
+- A raw value held in a constant or property (`private let rowGap: CGFloat =
+  13`, then `.padding(.vertical, rowGap)`), a ternary on a compound condition,
+  `?? 13`, or arithmetic the regexes don't follow.
+- A size cap: `.dynamicTypeSize(...DynamicTypeSize.large)`, or a pin above the
+  default size (`.dynamicTypeSize(.xLarge)`). The larger pin is allowed so a
+  `#Preview` can show `.xLarge` or `.accessibility3`; a bounded range such as
+  `...DynamicTypeSize.accessibility2` is Apple's documented way to limit
+  growth where a layout truly cannot grow.
+- `.minimumScaleFactor(…)`, which can shrink a watch role below the 11 pt floor.
+- A raw alpha on the view (`.foregroundStyle(LedgerColor.ink).opacity(0.6)`);
+  view `.opacity` is also how fades are written.
+- Gaps made with a frame (`Spacer().frame(height: 13)`); frames are layout.
+- System colours under other names: `.separator`, materials such as
+  `.ultraThinMaterial`.
+- Role properties set outside the role: `.baselineOffset(…)`, `.textCase(…)`.
+- `LedgerFont.archivo(size:weight:width:)` with literals (public in the F06
+  brief; its intended callers are inside `LedgerDesign`).
+- A role's design size passed back as a fixed size
+  (`LedgerFont.font(.body, size: LedgerFont.Role.body.spec.size)`): it
+  drops Dynamic Type. `Role.spec` is public for the same reason as
+  `archivo(…)`; use `.ledgerFont(_:)` or `font(_:dynamicTypeSize:…)`.
+- A false positive, accepted: a feature enum case named like a hierarchical
+  style (`.primary`) is flagged as an argument or after `:` (a ternary's
+  second arm included), and one named like a colour (`.orange`) in any value
+  position; qualify it (`Emphasis.primary`).
 
 ---
 
@@ -185,10 +248,15 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 
 - Branch: `feat/F07-active-workout`, `fix/…`, `chore/…`. One feature brief per branch.
 - Commits: Conventional Commits (`feat(workout): …`, `fix(sync): …`, `test(domain): …`).
-- PRs: ≤ 500 changed lines excluding tests and snapshots. Larger = split.
+- PR size (Pete, 2026-09-29): count code only, excluding tests, snapshots, docs (`docs/`, `*.md`)
+  and comments. **500 lines is a target**: a PR over it says so in one line of its description and
+  names the split it considered. **Above ~1,000 lines, split** at a natural seam, merging the first
+  PR before opening the next (no stacked PRs). Never compress code or comments to fit.
 - PR description follows `.github/PULL_REQUEST_TEMPLATE.md` and links the
   feature brief.
-- `main` is protected: no direct pushes, required CI checks, linear history.
+- `main` changes only through squash-merged PRs (linear history). The repo is on GitHub Free with no
+  branch protection (Pete, 2026-09-27), so the merge gate is the orchestrator's policy: a green
+  local `scripts/check.sh` on the merge candidate, plus CI when it ran (`docs/ci-cd.md` §4).
 - Never commit secrets, provisioning profiles, or `.p8` keys.
 
 ---
