@@ -233,29 +233,39 @@ known equipment/muscle enums, alternatives resolve).
 ## 6. The live workout: `WorkoutEngine` (ADR-004)
 
 ```swift
-public struct WorkoutEngine {
-    public static func reduce(_ state: WorkoutState, _ e: EventEnvelope) -> (WorkoutState, [Effect])
-    public static func replay(_ log: [EventEnvelope]) -> WorkoutState      // sorted, deduped by (device, seq)
+public enum WorkoutEngine {
+    public static let longestRest: Duration                                            // 1 h
+    public static func reduce(_ state: WorkoutState?, _ envelope: EventEnvelope)
+        -> (WorkoutState?, [Effect])                                                   // own envelopes only
+    public static func replay(_ log: [EventEnvelope]) -> WorkoutState?                 // sorted, deduped by (device, seq)
+    public static func effects(from old: WorkoutState?, to new: WorkoutState?) -> [Effect]  // a rebuild's effects
+    public static func summary(_ state: WorkoutState, prs: [PersonalRecord]) -> WorkoutSummary
 }
-public enum Effect: Equatable, Sendable {
-    case haptic(Haptic)                 // .setLogged, .restOver, .prStart …
-    case scheduleRestNotification(at: Date)
+public enum Effect: Hashable, Sendable {
+    case haptic(Haptic)                 // .setLogged, .restOver, .personalRecord, .workoutFinished
+    case scheduleRestNotification(endsAt: Date)
     case cancelRestNotification
     case updateLiveActivity
-    case persistEnvelope(EventEnvelope)
-    case transmitEnvelope(EventEnvelope)
-    case saveToHealth(WorkoutSummary)
+    case persist(EventEnvelope)         // before .transmit
+    case transmit(EventEnvelope)
+    case materialize(WorkoutState)      // F05 writes the rows and the receipt (summary)
+    case discardLog
 }
 ```
 
+The shipped API is in `LedgerDomain/Engine` (with `WorkoutEventStore` in `LedgerDomain/Protocols`); the
+rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed envelopes, the host loop).
+
 - Both apps hold a `WorkoutSessionActor` (in `LedgerSync`) that owns the log,
-  applies local intents (creating envelopes with its `DeviceID` and next `seq`),
-  applies remote envelopes, and publishes `WorkoutState` as an `AsyncStream`.
+  applies local intents (creating envelopes with its `DeviceID`, next `seq` and
+  a hybrid-logical-clock `wallClock`), rebuilds by `replay` on received
+  envelopes, and publishes `WorkoutState` as an `AsyncStream`.
 - The rest timer is `RestTimer(endsAt: Date, total: Duration)`. Views render
   with `TimelineView`/`Text(timerInterval:)`; no tick events cross devices.
 - On `finished`, `LedgerPersistence` materialises normalized rows and computes
   PRs and misses; the event log is compacted after that transaction commits.
-- Recovery: on launch, an unfinished log → resume; both apps also hook
+- Recovery: on launch, each log in `WorkoutEventStore.uncompactedWorkoutIDs()`
+  is replayed: live → resume, ended → materialise or drop; both apps also hook
   HealthKit recovery (`handleActiveWorkoutRecovery` / `shouldHandleActiveWorkoutRecovery`).
 
 ---

@@ -20,4 +20,27 @@ struct RestTimerTests {
         #expect(timer.fraction(at: Fixtures.now.addingTimeInterval(10)) == 0)
         #expect(RestTimer(endsAt: Fixtures.now, total: .zero).fraction(at: Fixtures.now) == 0)
     }
+
+    @Test(
+        """
+        F04 fix round 2: remaining and fraction never trap. A huge interval saturates at 2^63 s; a \
+        non-finite endsAt or now means no rest left (zero)
+        """
+    )
+    func remainingAndFraction_saturate() {
+        let cap = Duration.seconds(Double(Int64.max))
+        let far = RestTimer(endsAt: Date(timeIntervalSinceReferenceDate: 1e21), total: .seconds(120))
+        #expect(far.remaining(at: Fixtures.now) == cap)
+        #expect(far.fraction(at: Fixtures.now) == 1)
+        #expect(timer.remaining(at: Date(timeIntervalSinceReferenceDate: -1e308)) == cap)
+        #expect(timer.remaining(at: Date(timeIntervalSinceReferenceDate: 1e308)) == .zero)
+        for bad in [Double.nan, .infinity, -.infinity] {
+            let date = Date(timeIntervalSinceReferenceDate: bad)
+            let broken = RestTimer(endsAt: date, total: .seconds(120))
+            #expect(broken.remaining(at: Fixtures.now) == .zero)
+            #expect(broken.fraction(at: Fixtures.now) == 0)
+            #expect(timer.remaining(at: date) == .zero)
+            #expect(timer.fraction(at: date) == 0)
+        }
+    }
 }

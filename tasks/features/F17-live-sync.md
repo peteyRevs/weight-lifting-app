@@ -121,3 +121,90 @@ _Filled in by agents during delivery:_
 - `F17-live-sync/implementation-notes.md`
 - `F17-live-sync/test-findings.md`
 - `F17-live-sync/review.md`
+
+## Inputs from F04 (2026-09-29)
+
+F04 owns the pure engine and the `WorkoutEventStore` contract. F17 owns the host that runs them. The rules
+below are fixed by F04's fix rounds and its re-plan (2026-09-29; ADR-004 amendment, "The clock rule"
+onwards). Where they contradict this brief, they win, and the brief should be amended.
+
+1. **The host loop** (re-plan 2026-09-29: one path per source). `reduce` keeps no log and must never see an
+   envelope twice.
+   - Own action: stamp it with the HLC, `reduce` it, run `reduce`'s effects in order (`.persist` appends it
+     to the store before `.transmit` sends it). The HLC sorts it after everything stored, so this equals
+     `replay`; item 3's two rules keep that true.
+   - Received frames: append every envelope to `WorkoutEventStore` first, whatever it holds (once past the
+     receipt checks: item 5's decode guard and item 3's drift bound). If `append` stored anything new,
+     rebuild with `WorkoutEngine.replay` of the stored log and run `WorkoutEngine.effects(from: old, to:
+     new)`. Never reduce a received envelope.
+   - A conflict in a received batch (F04 review S4). `append` is all or nothing, so on
+     `EngineError.conflictingEnvelope(key)` append that batch again one envelope at a time: drop the one
+     that conflicts, log its key (`os.Logger`, no health values), keep the rest, and rebuild once if any
+     were new. A device that reused a seq (a truncated log, a restore from backup) then cannot make a
+     resent batch fail forever.
+   - The "Actor" rule above ("dedupe by `seen`, append, rebuild by replay") is this loop; its remote
+     effects are item 2's.
+2. **Remote effects are `effects(from:to:)`'s**, and nothing else:
+   - at most one `.haptic(.setLogged)` per rebuild, while the workout is live, when at least one set is done
+     that was not before. A single remote set buzzes (criterion 9 stands); a reconnect that brings many sets
+     buzzes once (Pete); a rebuild that ends finished or discarded never buzzes, even for a late set.
+     Criterion 9 needs companion cases for the batch and the terminal;
+   - materialise, `discardLog`, schedule or cancel of the rest notification, and `.updateLiveActivity`;
+   - it re-emits `.materialize` whenever a finished state changes, including a rebuild from `nil` when
+     both finishes arrived before the `started`;
+   - it emits `.discardLog` when a late discard sorts before a finish that was already materialised.
+     F05 must then delete that workout; decide who owns that.
+   - The launch step (item 4) plays no haptic: nothing was just logged.
+3. **HLC recovery.** Before stamping anything after a launch, set the clock's `newest` to the largest
+   stored `wallClock` across `WorkoutEventStore.uncompactedWorkoutIDs()`. The drift bound itself is still
+   F17's (F04 fix round 1, finding 6). Two rules (ADR-004 "Recovery on launch"; F04 review S1):
+   - Recovery skips only non-finite stamps: `newest` is the largest *finite* stored `wallClock`, because a
+     stored `+∞` would stamp every later own envelope `+∞`, which `reduce` drops as malformed.
+   - The drift bound acts only on receipt. It may reject a received envelope's stamp before `append` (the
+     envelope is then neither stored nor seen by the clock), but it never makes the host skip, clamp or
+     restamp an envelope already in its store, at recovery or anywhere else. So every stored stamp counts
+     toward `newest`, and item 1's "own action: `reduce` equals `replay`" keeps holding.
+4. **Launch step and compaction.**
+   - `liveWorkoutIDs()` is gone. `uncompactedWorkoutIDs()` lists every stored log. Classify each by
+     `replay`: live means resume; finished or discarded means materialise or drop, then compact.
+   - A log that replays to `nil` is **never compacted**. Keep it, and request a resend.
+   - **Open for F17:** should the handshake base be the highest *contiguous* `seq` per device, rather than
+     `highestSeq`? With the maximum, a dropped seq 1–2 followed by a received seq 3 never heals.
+     `EventStoreAdversarialTests.holeBeforeTerminal_isKept_untilTheResendHeals` pins the hole.
+5. **Malformed envelopes** (`EventEnvelope.isWellFormed`) are no-ops for the engine but stay stored. An
+   envelope is malformed only when a date it carries is not finite or a rest length is outside
+   `0 ... longestRest`. There is no time window (Pete, 2026-09-29), so a "Still lifting?" Finish backdated
+   days is kept.
+   - A NaN date is unequal to itself, so a store that compares envelopes with `==` would call a re-sent
+     copy a conflict. JSON cannot carry one. Reject non-finite dates when decoding a wire frame, before
+     anything is stored.
+6. **Lossless date encoding.** The codec above uses `.iso8601`, which drops fractional seconds. The
+   sender would then sort its own envelope by the precise stamp and the receiver by the truncated one,
+   and the devices diverge. Encode dates losslessly (the default `.deferredToDate` round-trips exactly,
+   `EventCodableTests`), or truncate `wallClock` when the envelope is created.
+7. **Renamed event labels** (SwiftLint `identifier_name` rejects `at:`, `to:`, `by:`):
+
+   | ADR-004 / brief | F04 |
+   |---|---|
+   | `setLogged(…, at:)` | `setLogged(…, doneAt:)` |
+   | `exerciseSwapped(…, to:, …)` | `exerciseSwapped(…, exerciseID:, …)` |
+   | `restExtended(by:)` | `restExtended(amount:extendsShownRest:tappedAt:)` |
+   | `finished(at:)`, `discarded(at:)` | `finished(endedAt:)`, `discarded(endedAt:)` |
+   | `Effect.scheduleRestNotification(at:)` | `Effect.scheduleRestNotification(endsAt:)` |
+
+   `WorkoutIntent.extendRest` must carry what the screen showed. The UI sets `extendsShownRest` when its
+   rest had time left (`RestTimer.remaining(at: now) > .zero`), and `tappedAt` is the intent's date.
+8. **Out of scope for F04, noted by its tester (round 3):**
+   - *Dropping a log at the terminal:* after `.discardLog` or a compaction, a partitioned peer's late
+     envelopes wait in a log that replays to `nil` for a resend that never comes; drop or compact only
+     after the peer acknowledges the terminal, or keep a tombstone.
+   - *Drift bound:* still yours; with no payload window a peer far ahead no longer drops this device's
+     actions, but it still drags every stamp.
+   - *F05's stale brief:* criterion 8's `liveWorkoutIDs()` is now `uncompactedWorkoutIDs()`, and its
+     `wall_clock TEXT` column must keep full precision (the contract suite now fails a lossy store). F05
+     and F10 now carry "Inputs from F04" sections.
+9. **Out of scope for F04, noted by its tester (round 4):**
+   - *The HLC cannot advance at absurd stamps:* above 2^44 s `+ 1 ms` rounds away, so item 3's drift bound
+     must reject such a (corrupt) stamp on receipt.
+   - *Joining mid-session buzzes once:* the phone's first rebuild from nothing, for a watch-started workout
+     with done sets, plays one `.haptic(.setLogged)`; accepted under Pete's one-per-catch-up rule (item 2).

@@ -46,6 +46,11 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
     public var originDevice: DeviceID
     /// Settings "Auto rest timer" snapshotted at build time (decision #7; read by F04 rule 3).
     public var autoRest: Bool
+    /// Settings units snapshotted at build time: the units of the receipt rows (rule 30, F04 `summary`).
+    public var units: Units
+    /// Decision #13: the exercise each slot should hold in the program after this workout, recorded by
+    /// swaps with "Also update program" (latest swap per slot wins). F05 applies them on materialisation.
+    public var programUpdates: [SlotID: ExerciseID]
 
     public init(
         id: WorkoutID,
@@ -60,7 +65,9 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
         endedAt: Date? = nil,
         phase: WorkoutPhase,
         originDevice: DeviceID,
-        autoRest: Bool = true
+        autoRest: Bool = true,
+        units: Units = .lb,
+        programUpdates: [SlotID: ExerciseID] = [:]
     ) {
         self.id = id
         self.source = source
@@ -75,6 +82,8 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
         self.phase = phase
         self.originDevice = originDevice
         self.autoRest = autoRest
+        self.units = units
+        self.programUpdates = programUpdates
     }
 
     /// Sets ticked done, across every exercise and kind.
@@ -96,7 +105,10 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
     }
 
     /// Rule 24: time since `startedAt`, frozen at `endedAt` once the workout ends; never negative.
+    /// It saturates at 2^63 s (`Double(Int64.max)`; NaN gives zero), because both dates can come from a
+    /// peer's envelope and `Duration.seconds` traps on a non-finite or out-of-range interval (F04 fix
+    /// round 1).
     public func elapsed(at now: Date) -> Duration {
-        .seconds(max(0, (endedAt ?? now).timeIntervalSince(startedAt)))
+        .seconds(min(max(0, (endedAt ?? now).timeIntervalSince(startedAt)), Double(Int64.max)))
     }
 }
