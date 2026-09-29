@@ -71,6 +71,8 @@ jobs:
           restore-keys: spm-
       - name: Format, lint, script tests, iOS, watchOS, coverage (check.sh)
         timeout-minutes: 27 # fails the step before the job times out, so the bundles still upload
+        env:
+          LEDGER_XCODEBUILD_DEADLINE: 1500 # s: 2 min before that, check.sh interrupts xcodebuild (bundle finalized)
         run: scripts/check.sh
       - name: Upload result bundles and snapshot diffs
         if: failure()

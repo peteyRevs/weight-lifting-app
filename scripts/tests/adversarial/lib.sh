@@ -44,6 +44,10 @@ is() { [[ "$1" == "$2" ]] || { printf 'got:  %s\nwant: %s\n' "$1" "$2"; return 1
 # fake_simctl <bin dir>: puts an xcrun there whose `simctl list devices [available] --json` and
 # `simctl list pairs --json` print $SIMCTL_JSON (devices filtered like simctl), and whose `simctl
 # unpair` chatters on stdout. Each call is appended to $XCRUN_LOG; $XCRUN_FAIL names a failing one.
+# `simctl boot`, `bootstatus`, `shutdown` and `erase` succeed at once, except that:
+#   XCRUN_BOOTED=1         boot answers as simctl does for a booted simulator (exit 149);
+#   XCRUN_HANG=always      bootstatus never finishes (it sleeps until killed);
+#   XCRUN_HANG=unerased    bootstatus finishes only once $XCRUN_LOG shows that simulator erased.
 fake_simctl() {
     mkdir -p "$1"
     cat >"$1/xcrun" <<'SH'
@@ -58,13 +62,22 @@ case "$1 $2 $3" in
             *" available "*) jq '{devices: (.devices | map_values(map(select(.isAvailable))))}' "$SIMCTL_JSON" ;;
             *) jq '{devices}' "$SIMCTL_JSON" ;;
         esac ;;
+    "simctl boot "*)
+        if [ -n "${XCRUN_BOOTED:-}" ]; then echo "Unable to boot device in current state: Booted" >&2; exit 149; fi ;;
+    "simctl bootstatus "*)
+        case "${XCRUN_HANG:-}" in
+            always) exec sleep 60 ;;
+            unerased) grep -qx "simctl erase $3" "${XCRUN_LOG:-/dev/null}" || exec sleep 60 ;;
+        esac
+        echo "Finished" ;;
+    "simctl shutdown "* | "simctl erase "*) ;;
     *) echo "fake xcrun: unexpected: $*" >&2; exit 64 ;;
 esac
 SH
     chmod +x "$1/xcrun"
 }
-# The macos-26 runner's simulators and the pairs PR #5's first-run log names, plus an assumed
-# iPhone 17 + Ultra 3 pair (fake pair ids).
+# The macos-26 runner's simulators and the pairs PR #5's first-run log names, plus iPhone 17 + Ultra 3
+# (49mm) on 26.5, which the first run's session logs confirm (their clones were paired); fake pair ids.
 SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/macos-26.json"
 export SIMCTL_JSON
 

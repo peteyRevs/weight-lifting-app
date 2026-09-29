@@ -52,7 +52,7 @@ XCRUN_FAIL='list devices' resolve "$WATCH"
 check "SD08 simctl failing fails the resolution" is "$code [$out]" "1 []"
 
 # Unpairing: the fixture pairs the Series 11 (46mm) with iPhone 17 Pro Max (as the run's log shows),
-# and iPhone 17 with an Ultra 3 (assumed: the log does not say whether iPhone 17 is paired).
+# and iPhone 17 with an Ultra 3 (confirmed by the first run's session logs, which pair their clones).
 unpairs() { grep '^simctl unpair' "$XCRUN_LOG" | tr '\n' ';'; }
 : >"$XCRUN_LOG"
 resolve "$WATCH"

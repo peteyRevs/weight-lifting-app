@@ -23,10 +23,10 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      matrix: # one watch clone, as in check.sh step 4 (F00 implementation notes #17)
+      matrix:
         include:
-          - { plan: Nightly, scheme: Ledger, workers: "", destination: "platform=iOS Simulator,name=iPhone 17,OS=26.5" }
-          - { plan: Nightly-Watch, scheme: LedgerWatch, workers: "1", destination: "platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5" }
+          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=26.5" }
+          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode from .xcode-version
@@ -37,14 +37,16 @@ jobs:
           PLAN: ${{ matrix.plan }}
           SCHEME: ${{ matrix.scheme }}
           DESTINATION: ${{ matrix.destination }}
-          WORKERS: ${{ matrix.workers }}
-        run: |
-          dest="$(scripts/sim-destination.sh "$DESTINATION")" # by UDID, as check.sh does
-          xcodebuild test -project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest" \
-            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
-            -resultBundlePath ".derivedData/Results/$PLAN.xcresult" -test-timeouts-enabled YES \
-            -parallel-testing-enabled YES ${WORKERS:+-parallel-testing-worker-count "$WORKERS"} \
+        run: | # as check.sh steps 3–4: by UDID, built while the simulator boots, then tested on it alone
+          dest="$(scripts/sim-destination.sh "$DESTINATION")"
+          scripts/sim-boot.sh "$dest"
+          xcargs=(-project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest"
+            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages)
+          xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN-build.xcresult" \
             -quiet | mise exec -- xcbeautify --renderer github-actions
+          scripts/sim-boot.sh --wait "$dest"
+          xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN.xcresult" \
+            -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet | mise exec -- xcbeautify --renderer github-actions
           scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
       - name: Upload the result bundle
         if: ${{ !cancelled() }}

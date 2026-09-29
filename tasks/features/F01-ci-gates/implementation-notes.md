@@ -1,9 +1,9 @@
 # F01 implementation notes
 
 Base: `main` 8404d02. Commits so far: 0c74369 (first pass), 19d4050 (F1–F8 and Pete's
-decisions), cd2aae2 (tester round 2), 97fbab8 (R3–R5, R-D1–R-D5) and 268f58e (the review
-fixes: B1, S1–S3 and the cheap nits). The first-CI-run fix is uncommitted. No GitHub or App Store
-Connect setting was changed.
+decisions), cd2aae2 (tester round 2), 97fbab8 (R3–R5, R-D1–R-D5), 268f58e (the review
+fixes: B1, S1–S3 and the cheap nits) and 60cb474 (the first-CI-run fix). The second-CI-run fix is
+uncommitted. No GitHub or App Store Connect setting was changed.
 
 ## Decisions
 
@@ -297,8 +297,9 @@ check.sh FAILED (exit 70)
 - `sim-destination.adv.sh` (new, 20 cases) runs the real script against a fake `xcrun`
   (`lib.sh` `fake_simctl`), which lists `scripts/tests/fixtures/simctl/macos-26.json`.
   - The fixture has the runner's simulators and the two Series 11 (46mm) pairs from the log.
-  - It adds an iPhone 17 + Ultra 3 pair. That pair is assumed, because the log does not say
-    whether iPhone 17 is paired. It also adds an unavailable iPhone 17 twin.
+  - It adds an iPhone 17 + Ultra 3 pair. That pair was assumed, because the log does not say
+    whether iPhone 17 is paired; it is now confirmed (see "Second CI run"). It also adds an
+    unavailable iPhone 17 twin.
   - SD01–SD06: the defaults and overrides resolve, by name and OS or by id, in any key order.
   - SD07–SD08: no match, or a failing simctl, fails closed.
   - SD09–SD15: exactly the resolved device's pairs are unpaired, and a failing `simctl` fails.
@@ -346,8 +347,10 @@ check.sh FAILED (exit 70)
       The first two attempts failed there.
     - The green run used `sim-lock.py env -u SDKROOT …`. A terminal and CI set no `SDKROOT`.
 
-**Open question: why testing took 858 s on the runner.** Nothing is changed for it in this
-round; the next run gives a second data point. What is known:
+**Open question: why testing took 858 s on the runner. Closed** by "Second CI run (36489285602)
+and the slow test phase" below. The app-hosted LedgerTests and the UI test waited 517 s and 384 s to
+launch, because their parallel-testing clones of a never-booted iPhone 17 were still on their first
+boot. The notes as written before the second run:
 - The PR plan ran 17 targets on clones of iPhone 17: 15 logic-test processes, the app-hosted
   SmokeTests, and the UI test (22.8 s) on a second clone.
 - LedgerDomainTests, which holds the 200-seed property tests, ran as one process.
@@ -370,10 +373,255 @@ round; the next run gives a second data point. What is known:
 - If the next run is as slow, the result bundle's per-target timings split the time. It uploads
   only on failure.
 
+## Second CI run (36489285602) and the slow test phase
+
+**Failure.** Check timed out after 27 minutes, in step 3 (iOS). Steps 0–2 took 99 s and the iOS build
+167 s. Testing then ran until the step's timeout killed check.sh, 10 s into the UI test. It did not
+kill xcodebuild: the post-job cleanup reports "Terminate orphan process: pid (51394) (xcodebuild)". The
+uploaded `PR-iOS.xcresult` has no `Info.plist`, so xcresulttool cannot read it. The diagnosis rebuilt
+per-test times from file modification times.
+
+**Diagnosis** (a separate agent, high confidence, reproduced locally). The evidence is in the session
+scratchpad, `ci-diag/`: `v-*/timeline.txt` per variant, `variant.sh`, `variant-watch.sh`, `hog.sh`
+and `run1-action.json`.
+- The time does not go on the build (167 s on the runner), on per-target launches, on coverage
+  (about 4 s), or on a hang.
+- Parallel testing clones the runner's never-booted iPhone 17 twice. Each clone must finish a first
+  boot (data migration, then SpringBoard) before an app can launch in it.
+  - Logic tests do not wait for that.
+  - The app-hosted `LedgerTests` and the UI-test runner do.
+- Launch waits of the two app-hosted targets, from the bundles' session logs:
+
+  | Run | LedgerTests launch | LedgerUITests runner launch |
+  |---|--:|--:|
+  | Run 1, runner (parallel, clones) | 517.5 s | 383.8 s, after a 75.7 s install |
+  | v8: fresh device, 8 CPU hogs, parallel (the CI shape) | 376.1 s | 142.5 s |
+  | v1: fresh device, parallel | 96.6 s | 78.1 s |
+  | v9: fresh device, 8 CPU hogs, pre-booted, serial | 0.5 s | 0.2 s |
+
+  - Run 1: those two launches took 517 s and 384 s of its 858 s of testing.
+  - Run 2: LedgerTests waited about 15.5 min, and the step then timed out 10 s into the UI test.
+- Local variants: `test-without-building` of the PR plan on an iPhone 17 (26.5), in seconds. "Fresh"
+  means created and never booted, as on a runner. "Hogs" means 8 busy loops (`hog.sh 8`), which stand
+  in for the 3-core runner.
+
+  | Variant | Device | Parallel testing | `bootstatus -b` first | Boot | Test | Total |
+  |---|---|---|---|--:|--:|--:|
+  | v0 | existing | on | no | – | 139 | 139 |
+  | v1 | fresh | on | no | – | 202 | 202 |
+  | v12 | fresh | on, 1 worker | no | – | 126 | 126 |
+  | v10 | fresh | off | no | – | 85 | 85 |
+  | v2 | fresh | off | yes | 34 | 72 | 106 |
+  | v11 | existing | off | yes | 7 | 48 | 55 |
+  | **v8**, hogs (the CI shape) | fresh | on | no | – | **458** | **458** |
+  | **v9**, hogs | fresh | off | yes | 109 | 93 | **202** |
+
+- watchOS (PR-Watch, fresh Series 11 (46mm)):
+  - w1, the CI shape (parallel, 1 worker): 60 s.
+  - w2, pre-booted and serial: 56 s (boot 20 s + test 36 s).
+- With parallel testing off, Swift Testing also runs serially, in process. In the simulator that is
+  faster: the Domain tests took 12–16 s instead of 52 s. `-only-testing:LedgerDomainTests` took 27 s
+  (serial, no coverage) and 19 s (serial, coverage), against 71 s (parallel, coverage).
+- **The runner pairs iPhone 17 with an Apple Watch Ultra 3 (49mm), now confirmed.** Run 1's session
+  logs show `Clone 1 of iPhone 17 (…, iOS 26.5)` with `PairedSim: Clone 1 of Apple Watch Ultra 3
+  (49mm) (…, watchOS 26.5)`.
+  - The fixture's pair and the comments in `lib.sh` and `sim-destination.adv.sh` now say confirmed.
+    The pair ids stay fake.
+  - `sim-destination.sh` already unpairs it.
+
+**The change: the diagnosis's option 1.** It is in `check.sh`, so the local gate and CI run one code
+path, and the nightly's test step does the same.
+- **`scripts/sim-boot.sh`** (new, 37 lines).
+  - `sim-boot.sh <destination>` starts `xcrun simctl boot` on the destination's `id=` and returns at
+    once.
+    - A simulator that is already booted or booting is silent. The real simctl answers "Unable to
+      boot device in current state: Booted" with exit 149 (verified).
+    - Any other error is printed and left to `--wait`, because `bootstatus -b` boots the simulator
+      too and an erase may cure it.
+  - `sim-boot.sh --wait <destination>` runs `xcrun simctl bootstatus <udid> -b` with a timeout,
+    `LEDGER_BOOT_TIMEOUT` (default 240 s).
+    - On a failure or a timeout it runs `shutdown` (a failure is tolerated), `erase`, and one more
+      `bootstatus -b`.
+    - A second failure exits 1 with "error: simulator <udid> did not boot within 240s, even after
+      an erase". check.sh stops there, before any test run.
+    - On each failure, the last 4 lines of bootstatus's output go to stderr: the boot state it
+      reached. Otherwise that output stays out of the log (372 lines for v9's first boot).
+  - **The timeout** is perl's `alarm`, which survives `exec`. macOS has no coreutils `timeout`, and
+    perl ships with macOS and the runner.
+    - A bash polling loop would add up to 1 s to each of the roughly 70 waits in the adversarial
+      suite.
+    - A background killer either leaves an orphaned `sleep` or can kill a reused PID.
+  - **Why 240 s:**
+    - The runner's first boot takes about 1–2 min (the diagnosis). The slowest local first boot took
+      109 s (v9, hogs).
+    - The wait starts after the build, so a boot also gets the build's time (167 s for iOS on the
+      runner).
+    - A retry costs at most 2 × 240 s = 8 min. That still fits the 27-minute step alongside a normal
+      run's 12–17 min.
+- **`check.sh` steps 3 and 4** are now one function, `test_platform`, called once per platform. It
+  runs:
+  1. `sim-boot.sh`, which starts the boot.
+  2. `xcodebuild build-for-testing` with the scheme, plan, destination (by UDID) and derived-data
+     flags as before, `-quiet`, piped through xcbeautify.
+     - Its own bundle, `$RESULTS/<name>-build.xcresult` (about 75 KB), means a build failure still
+       leaves a bundle to upload. The `test` action's bundle used to hold the build log.
+  3. `sim-boot.sh --wait`.
+  4. `xcodebuild test-without-building` with the same arguments, the result bundle as before,
+     `-parallel-testing-enabled NO`, `-test-timeouts-enabled YES` and
+     `-default-test-execution-time-allowance 60`, piped through xcbeautify. Then
+     `check-test-results.sh`.
+  - The summary gets three lines per platform: build, boot and tests.
+  - The watch's `-parallel-testing-worker-count 1` is gone. It limited the clones to one (F00 #17),
+    and serial testing makes no clones.
+  - `--fast` and `--lint-only` exit before any of this, so they still touch no simulator (W27).
+  - The simulators stay booted after a run, as `xcodebuild test` leaves them. The next run's boot
+    then takes no time ("waited 0s").
+- **Watchdog.** A step timeout kills check.sh but not xcodebuild, and the bundle it leaves is
+  unreadable (above).
+  - `pr.yml` sets `LEDGER_XCODEBUILD_DEADLINE: 1500` on the check.sh step, whose timeout is 27 min
+    (1620 s).
+  - check.sh starts `(sleep "$LEDGER_XCODEBUILD_DEADLINE" && pkill -INT -P $$ -x xcodebuild) &` and
+    kills it on exit.
+  - `-P $$` confines it to check.sh's own xcodebuild. Locally, other worktrees run theirs.
+  - **Measured** through check.sh on the real xcodebuild, with the SIGINT at 30 s, mid-iOS-test:
+    - xcodebuild printed "** TEST EXECUTE INTERRUPTED **" at once.
+    - It then waited 30 s for the action log, warned that the log could not be saved, and exited 73,
+      31 s after the SIGINT.
+    - The bundle reads with xcresulttool: per-target results up to the interruption (9 targets
+      passed, the running one Failed).
+    - The 120 s margin covers the 31 s.
+  - It fires once. If the deadline falls between two xcodebuild runs, nothing is interrupted, and
+    the timeout acts as before. A first try at 45 s hit the gap after iOS testing.
+  - The nightly's steps have no step timeout (the job has 120 min), so the nightly has no watchdog.
+- **Nightly** (`nightly.yml`, test step): the same sequence, inline.
+  - Resolve by UDID, `sim-boot.sh`, `build-for-testing` (with its own bundle), `sim-boot.sh --wait`,
+    `test-without-building -parallel-testing-enabled NO`, then `check-test-results.sh`.
+  - The matrix's `workers` input is removed. With parallel testing off, a worker count means nothing:
+    xcodebuild runs one test process at a time, on the one simulator.
+
+**Tests.**
+- `lib.sh` `fake_simctl` now answers `boot`, `bootstatus`, `shutdown` and `erase`.
+  - `XCRUN_BOOTED=1` makes `boot` answer as simctl does for a booted simulator.
+  - `XCRUN_HANG=always` makes `bootstatus` hang until killed. `XCRUN_HANG=unerased` makes it hang
+    until the log shows that simulator erased.
+- `check-wiring.adv.sh` now has 55 cases, up from 43.
+  - The real `sim-boot.sh` runs in the sandbox; `ADV_SIM_BOOT` overrides it.
+  - The fake xcrun logs to the stubs' log, so the order of simctl and tool calls is visible.
+  - The xcodebuild stub's id now includes the action.
+  - W02, W04, W06, W09, W10, W23 and W25 name `build-for-testing` and `test-without-building`. W24
+    and W27 read the shared log. W27 now also covers booting and waiting.
+  - W28: per platform, boot, build-for-testing, bootstatus, then test-without-building, each by UDID.
+  - W29: both test runs pass `-parallel-testing-enabled NO`, with no YES and no worker count.
+  - W30: a boot that times out is erased and waited for once more (once per platform), and then the
+    tests run.
+  - W31: a second timeout stops check.sh before any test run and prints the error.
+  - W32: a bootstatus that fails, rather than hangs, takes the same path.
+  - W33: an already-booted simulator is fine and prints nothing.
+  - W34: any other boot error is printed, and the wait decides.
+  - W35: `LEDGER_XCODEBUILD_DEADLINE` interrupts a hung xcodebuild. check.sh exits 130, long before the
+    hang would end, and checks no test results.
+    - The hung stub `exec`s `/bin/sleep` through a symlink named `xcodebuild`, so `pkill -x` sees that
+      name.
+    - perl resets SIGINT for this case, because a caller that runs the suite in the background passes
+      SIGINT on as ignored.
+  - W04 injects a `build-for-testing` failure for each scheme: the calls end at the build and its
+    xcbeautify.
+- `workflows.adv.sh` now has 52 cases, up from 51.
+  - WF48 runs the nightly's test step with the real `sim-boot.sh` for each matrix entry. It checks
+    boot, build-for-testing, `bootstatus -b`, then test-without-building (parallel NO, no worker
+    count), each by UDID.
+  - WF49: Check's deadline falls 1–5 min before its step's timeout.
+- Cost: `check-wiring.adv.sh` takes 12 s instead of 3.5 s. The real `sim-boot.sh` runs in every case,
+  and W30 and W31 wait out 1-s boot timeouts and W35 a 3-s deadline.
+
+**Verification.**
+- **a. Script tests pass.** `adversarial.test.sh` ran 235 cases in 7 suites: check-test-results 18,
+  check-wiring 55, ci-post-clone 14, coverage-gate 60, release-please 16, sim-destination 20 and
+  workflows 52. `coverage-gate.test.sh` ran 10 cases.
+  - **Mutation checks**, one at a time:
+
+    | Mutant | Fails |
+    |---|---|
+    | HEAD's `check.sh` (`ADV_CHECK_SH`) | every new case, W28–W35, and the renamed W02, W04, W06, W09, W10, W23, W25 |
+    | `-parallel-testing-enabled YES` on the test runs | W29 |
+    | waiting for the boot before the build | W02, W04, W09, W28, W30–W32, W34 |
+    | no boot wait | W02, W04, W09, W28, W30–W32, W34 |
+    | no watchdog | W35 |
+    | `sim-boot.sh` without the retry | W30–W32 |
+    | `sim-boot.sh` retrying without the erase | W30–W32 |
+    | `sim-boot.sh` with boot errors fatal | W33, W34 |
+    | HEAD's `nightly.yml` (swapped in, then restored) | WF48 |
+    | HEAD's `pr.yml` (swapped in, then restored) | WF49 |
+
+    W33 first passed against HEAD, which never boots. It now also checks the lifecycle.
+- **b. Full gate** through the simulator lock, under normal local conditions (warm DerivedData, the
+  existing simulators): **green in 161 s**, against 208 s before.
+
+  | Step | Before (208 s run) | Now |
+  |---|--:|--:|
+  | tools, format | 0 s | 1 s |
+  | lint + script tests | 29 s | 32 s |
+  | iOS | 103 s | 67 s: build 27, boot 0, tests 40 |
+  | watchOS | 74 s | 59 s: build 22, boot 2, tests 35 |
+  | coverage | 2 s | 1 s |
+  | **total** | **208 s** | **161 s** |
+
+  - PR: 17 targets, 431 tests passed, on iPhone 17 itself, with no clones. PR-Watch: 8 targets, 422
+    tests passed. Coverage: LedgerDomain at 98.78 %.
+  - The log is `f01-speed-check.log` in the session scratchpad.
+- **c. Runner shape**, under the lock in one go (`scratchpad/f01probe/runner-shape.sh`).
+  - Setup: a freshly created, never-booted iPhone 17 (iOS 26.5) and Apple Watch Series 11 (46mm)
+    (watchOS 26.5), passed as `LEDGER_IOS_DEST` and `LEDGER_WATCH_DEST` by id, with `hog.sh 8`
+    running for the whole of check.sh and `CI=true`. DerivedData was warm, so the build hid less of
+    the boot than the runner's cold 167 s build will.
+  - The full check.sh was **green in 317 s**:
+
+    | Step | Time |
+    |---|--:|
+    | tools, format | 0 s |
+    | lint + script tests (235 + 10 cases, W35 included) | 53 s |
+    | iOS build (boot running) | 22 s |
+    | iOS boot wait | 60 s |
+    | iOS tests | 85 s |
+    | watchOS build (boot running) | 22 s |
+    | watchOS boot wait | 11 s |
+    | watchOS tests | 62 s |
+    | coverage | 2 s |
+    | **total** | **317 s** |
+
+  - **Against v8** (the same shape with parallel testing, 458 s of testing): after the build, iOS took
+    **145 s** (boot wait 60 s + tests 85 s).
+    - The first boot took about 82 s, the 22 s build plus the 60 s wait. v9, which did not overlap
+      the boot with a build, took 109 s.
+    - The bundle's own test time was 61 s.
+  - PR: 17 targets, 431 tests passed, on `f01-runner-iphone17` itself. PR-Watch: 8 targets, 422
+    tests passed. Coverage: 98.78 %. The log has no clone.
+  - Afterwards both devices were deleted (`simctl list` shows none) and no hog was left.
+    The log is `f01-runner-shape.log` in the session scratchpad.
+- **d.** Everything is uncommitted. `scripts/sim-boot.sh` is new and untracked, mode 100755.
+
+**Estimate.** The diagnosis estimates **12–17 runner-minutes per code-PR run** (billed per job, rounded
+up), against 21 or more before. Confidence is **medium** until a runner run confirms it.
+- The build scales as estimated (167 s for iOS on the runner), and the boot now overlaps it.
+- The uncertain part is serial testing on a 3-core runner, both platforms.
+- ci-cd.md's header (13–18 minutes) is left as it is. It agrees with this estimate, pending a run.
+
+**Budget.** Changed lines outside `scripts/tests/` and `tasks/`: **634** (insertions plus deletions
+against `main`), up from 529, against the 500 budget.
+- This round: `sim-boot.sh` +37, `check.sh` +35/−27, `nightly.yml` +12/−10, `pr.yml` +2.
+- Nothing was compressed to fit.
+
+**Left for the orchestrator.** testing-strategy.md §7 (F00's contract, outside F01's Touches) still
+shows `xcodebuild test` with parallel testing on. It should describe build-for-testing, boot and
+serial testing.
+
 ## Pending (not verifiable locally)
 
 - **Criteria 1–5 and 10** need GitHub. The first `pr.yml` run on the F01 PR covers
   criterion 1 and the cache logs. Criterion 1 now means one `Check` job.
+- **The next PR run tests the second-run fix.** Its summary's build, boot and tests lines give
+  the runner's boot wait and the serial test time, and so confirm or revise the 12–17 minute
+  estimate.
 - **Probe PRs:** the minutes budget argues for batching them into one throwaway PR with
   separate commits, pushed one at a time:
   - lint: a force unwrap;
@@ -394,4 +642,4 @@ round; the next run gives a second data point. What is known:
   - Xcode 26 compilation caching (`COMPILATION_CACHE_ENABLE_CACHING`), to be measured once
     real run times exist;
   - testing-strategy §4 wording: the job names, `required`, and LedgerSnapshotTesting.
-- **`check.sh:47`** has a shellcheck SC2154 false positive from F00, left untouched.
+- **`check.sh:54`** (the EXIT trap, `check.sh:47` before the second-run fix) has a shellcheck SC2154 false positive from F00, left untouched.
