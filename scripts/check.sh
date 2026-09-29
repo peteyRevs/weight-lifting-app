@@ -16,8 +16,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
-WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5}"
+IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
+WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0}"
 RESULTS=".derivedData/Results"
 
 FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0
@@ -66,8 +66,9 @@ fi
 # On GitHub Actions, tools print workflow commands so findings annotate the PR diff.
 beautify() { mise exec -- xcbeautify ${GITHUB_ACTIONS:+--renderer github-actions}; }
 
-# ---- 0. tools ---------------------------------------------------------------
-step "0 · tools"
+# ---- 0. Xcode and tools -----------------------------------------------------
+step "0 · Xcode and tools"
+scripts/check-xcode-version.sh # the pin in .xcode-version, as bootstrap.sh checks it
 mise install --quiet
 mise exec -- swiftformat --version
 mise exec -- swiftlint version
@@ -76,7 +77,7 @@ done_step "tools"
 if [[ $SKIP_LINT -eq 0 ]]; then
     # ---- 1. format ----------------------------------------------------------
     step "1 · format (swiftformat --lint)"
-    mise exec -- swiftformat --lint --swift-version 6.3 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
+    mise exec -- swiftformat --lint --swift-version 6.4 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
 
     # ---- 2. lint + package graph --------------------------------------------
@@ -123,7 +124,8 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
 # ---- fast tier: host-side package tests, no simulator -----------------------
 if [[ $FAST -eq 1 ]]; then
     step "3 · swift test (host, pure targets)"
-    swift test --package-path LedgerKit --filter 'LedgerDomainTests|LedgerPersistenceTests'
+    swift test --package-path LedgerKit --only-use-versions-from-resolved-file \
+        --filter 'LedgerDomainTests|LedgerPersistenceTests' # committed pins only, as steps 3-4
     done_step "swift test"
     summary
     printf '\n\033[32mcheck.sh (--fast) OK\033[0m\n'
@@ -137,9 +139,12 @@ WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"
 # ---- 3. iOS, 4. watchOS: build while the simulator boots, then test on it alone ----------
 # A fresh runner's simulators have never booted. Each parallel-testing clone paid that first boot
 # before an app-hosted test could launch, which ran out the CI step (F01 notes, "Second CI run").
+# Packages resolve only to the committed Package.resolved: a stale one fails the build rather than
+# being rewritten, as Swift 6.4 rewrote it (F32 notes, "Package pins").
 test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bundle name>
     local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
-        -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages)
+        -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+        -onlyUsePackageVersionsFromResolvedFile)
     step "$1 · $2 build (the simulator boots meanwhile)"
     scripts/sim-boot.sh "$5"
     rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
@@ -149,8 +154,10 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     scripts/sim-boot.sh --wait "$5"
     done_step "$2 boot"
     step "$1 · $2 $4 test plan"
+    # On a failure Xcode 27 runs `simctl diagnose`, which times out after 600 s here (F32 notes); the
+    # result bundle still holds every failure, log and attachment.
     run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
-        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" \
+        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" -collect-test-diagnostics never \
         -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet
     done_step "$2 tests"
 }

@@ -80,10 +80,19 @@ esac
 SH
     chmod +x "$1/xcrun"
 }
-# The macos-26 runner's simulators and the pairs PR #5's first-run log names, plus iPhone 17 + Ultra 3
-# (49mm) on 26.5, which the first run's session logs confirm (their clones were paired); fake pair ids.
-SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/macos-26.json"
-export SIMCTL_JSON
+# SIMCTL_JSON, the runner CI uses (F32): the xcode-27 image's iOS and watchOS 27.0 simulators, as its
+# README lists them (actions/runner-images images/macos/xcode-27-arm64-Readme.md, image 20260921.0210.1);
+# the UDIDs are made up. Its pairs are UNKNOWN: the README lists none, and no run has logged them yet.
+# The fixture assumes the pairs Xcode 27 made for the default set here when the 27.0 runtimes installed
+# (2026-09-29): Series 12 (46mm) + iPhone 18 Pro Max, Series 12 (42mm) + iPhone Air, Ultra 4 (49mm) +
+# iPhone 17. macos-26's pairs had the same shape. sim-destination.sh unpairs either way.
+SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/xcode-27.json"
+# SIMCTL_MACOS26, for the resolution cases the 27 image cannot show (same-named watches on three
+# runtimes, an unavailable twin): the macos-26 runner's simulators and the pairs PR #5's first-run log
+# names, plus iPhone 17 + Ultra 3 (49mm) on 26.5, which the first run's session logs confirm (their
+# clones were paired); fake pair ids.
+SIMCTL_MACOS26="$ROOT/scripts/tests/fixtures/simctl/macos-26.json"
+export SIMCTL_JSON SIMCTL_MACOS26
 
 finish() {
     printf '%s: %d passed, %d failed, %d skipped\n' "$(basename "$0")" "$ADV_PASS" "$ADV_FAIL" "$ADV_SKIP"

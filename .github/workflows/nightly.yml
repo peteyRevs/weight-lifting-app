@@ -17,7 +17,7 @@ defaults:
 jobs:
   test:
     name: ${{ matrix.plan }}
-    runs-on: macos-26
+    runs-on: xcode-27 # a preview image; the fallback is macos-26 with Xcode 26.6 (pr.yml, F32)
     timeout-minutes: 120
     permissions:
       contents: read
@@ -25,8 +25,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=26.5" }
-          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5" }
+          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=27.0" }
+          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode from .xcode-version
@@ -41,12 +41,14 @@ jobs:
           dest="$(scripts/sim-destination.sh "$DESTINATION")"
           scripts/sim-boot.sh "$dest"
           xcargs=(-project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest"
-            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages)
+            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+            -onlyUsePackageVersionsFromResolvedFile)
           xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN-build.xcresult" \
             -quiet | mise exec -- xcbeautify --renderer github-actions
           scripts/sim-boot.sh --wait "$dest"
           xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN.xcresult" \
-            -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet | mise exec -- xcbeautify --renderer github-actions
+            -collect-test-diagnostics never -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet |
+            mise exec -- xcbeautify --renderer github-actions
           scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
       - name: Upload the result bundle
         if: ${{ !cancelled() }}
@@ -60,7 +62,7 @@ jobs:
 
   dependencies:
     name: Dependency report
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
     permissions:
       contents: read

@@ -11,6 +11,9 @@ mkdir -p "$SB/scripts/tests" "$SB/bin"
 cp "${ADV_CHECK_SH:-$ROOT/scripts/check.sh}" "$SB/scripts/check.sh" # override: mutation-test this suite
 cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$SB/scripts/sim-destination.sh" # the real one
 cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$SB/scripts/sim-boot.sh"                         # the real one
+cp "${ADV_CHECK_XCODE:-$ROOT/scripts/check-xcode-version.sh}" "$SB/scripts/check-xcode-version.sh" # the real one
+cp "${ADV_BOOTSTRAP:-$ROOT/scripts/bootstrap.sh}" "$SB/scripts/bootstrap.sh"                     # the real one (W41)
+echo 27.0 >"$SB/.xcode-version" # the stub xcodebuild reports $XCODE_REPORTS, 27.0 by default
 fake_simctl "$SB/bin" # ... against the runner's simulators, logging to $LOG too: one ordered log
 export LOG="$ADV_TMP/calls.log" XCRUN_LOG="$ADV_TMP/calls.log"
 # A hung xcodebuild, by process name: bash under a symlink named xcodebuild runs hang.sh. It tells W35's
@@ -43,6 +46,10 @@ case "$1" in
         log "$id $*"; fail_if "$id" ;;
 esac'
 stub "$SB/bin/xcodebuild" '
+if [ "$1" = -version ]; then
+    log xcode-version; fail_if xcode-version
+    printf "Xcode %s\\nBuild version 27A266a\\n" "${XCODE_REPORTS:-27.0}"; exit 0
+fi
 printf "%s\\n" "$*" >>"$LOG.args"
 action="$1"; scheme=""; bundle=""; dest=""
 while [ $# -gt 0 ]; do
@@ -55,7 +62,7 @@ mkdir -p "$bundle"
 echo "Test Suite All tests passed"
 [ "${HANG_AT:-}" != "xcodebuild-$action-$scheme" ] || exec "$(dirname "$0")/../hang/xcodebuild" "$(dirname "$0")/../hang/hang.sh"
 fail_if "xcodebuild-$action-$scheme"'
-stub "$SB/bin/swift" 'log swift-test; fail_if swift-test'
+stub "$SB/bin/swift" 'log "swift-test $*"; fail_if swift-test'
 stub "$SB/bin/git" 'log "git $*"; fail_if git'
 # W35's watchdog sleeps until the hang has started, whatever the load; at most 60 s if it never does.
 mkdir -p "$SB/deadline" && cat >"$SB/deadline/sleep" <<'SH' && chmod +x "$SB/deadline/sleep"
@@ -83,9 +90,9 @@ lifecycle() {
     sed -nE -e 's/^simctl (boot|bootstatus|shutdown|erase) ([^ ]+).*/\1 \2/p' \
         -e 's/^xcodebuild-(build-for-testing|test-without-building)-[A-Za-z]+ .*id=([^,]+).*/\1 \2/p' "$LOG" | tr '\n' ';'
 }
-I=88931AEA-62E6-447F-8697-DCE00A671384 W=07C1BE1A-2EFF-4897-8A98-D6E7C104E516 # the runner's defaults
+I=46F7C9EA-B38C-445A-BAD9-8A70A603E9E1 W=2416B270-8634-4D4A-9084-2B04B4498921 # the defaults, on the xcode-27 image
 
-FULL="mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
+FULL="xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
 script-test-a script-test-b \
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR \
@@ -139,7 +146,7 @@ fi
 
 # ---- flags ----------------------------------------------------------------------
 run --skip-lint
-want="mise-install swiftformat-version swiftlint-version ${FULL#*script-test-b }"
+want="xcode-version mise-install swiftformat-version swiftlint-version ${FULL#*script-test-b }"
 if [[ $code -eq 0 && "$calls" == "$want" ]]; then pass "W09 --skip-lint runs tools, iOS, watchOS, coverage"; else
     fail "W09 --skip-lint runs tools, iOS, watchOS, coverage" "exit $code
 want: $want
@@ -188,24 +195,27 @@ check "W19 locally no Actions reporter is passed" bash -c "! grep -q 'github-act
 # ---- F01's first CI run: xcodebuild exited 70 on the watch by name (paired with iPhones) -------
 unset LEDGER_IOS_DEST LEDGER_WATCH_DEST
 run
-check "W23 xcodebuild gets each default simulator by UDID (the runner's iPhone 17 and Series 11 on 26.5)" \
+check "W23 xcodebuild gets each default simulator by UDID (the xcode-27 image's iPhone 17 and Series 12 on 27.0)" \
     is "$(grep '^xcodebuild' "$LOG" | tr '\n' ';')" \
     "xcodebuild-build-for-testing-Ledger platform=iOS Simulator,id=$I;xcodebuild-test-without-building-Ledger platform=iOS Simulator,id=$I;xcodebuild-build-for-testing-LedgerWatch platform=watchOS Simulator,id=$W;xcodebuild-test-without-building-LedgerWatch platform=watchOS Simulator,id=$W;"
-check "W24 ... after unpairing both (the fixture pairs them: iPhone 17 + Ultra 3, Series 11 + 17 Pro Max)" \
+check "W24 ... after unpairing both (the fixture pairs them as Xcode 27 does: iPhone 17 + Ultra 4, Series 12 + 18 Pro Max)" \
     is "$(grep '^simctl unpair' "$LOG" | tr '\n' ';')" \
-    "simctl unpair 00000003-FA1E-4A1E-8A1E-000000000003;simctl unpair 00000001-FA1E-4A1E-8A1E-000000000001;"
-LEDGER_IOS_DEST='platform=iOS Simulator,name=iPhone Air,OS=26.5' \
-    LEDGER_WATCH_DEST='platform=watchOS Simulator,id=98D83340-55EC-4686-AE5E-5ABDF78767BF' run
-air="platform=iOS Simulator,id=CB15797E-6053-40B1-BB72-7F30D005A4F2"
-s11="platform=watchOS Simulator,id=98D83340-55EC-4686-AE5E-5ABDF78767BF"
+    "simctl unpair 00002703-FA1E-4A1E-8A1E-000000002703;simctl unpair 00002701-FA1E-4A1E-8A1E-000000002701;"
+LEDGER_IOS_DEST='platform=iOS Simulator,name=iPhone Air,OS=27.0' \
+    LEDGER_WATCH_DEST='platform=watchOS Simulator,id=3A3B91C1-A67A-4F4E-9C2A-5DA1567C2D5F' run
+air="platform=iOS Simulator,id=3F725D53-2EEF-470E-A724-90E5D09B0BF1"
+s12="platform=watchOS Simulator,id=3A3B91C1-A67A-4F4E-9C2A-5DA1567C2D5F"
 check "W25 LEDGER_*_DEST overrides by name and OS, or by id, reach xcodebuild as UDIDs" \
-    is "$(grep '^xcodebuild' "$LOG" | cut -d ' ' -f 2- | tr '\n' ';')" "$air;$air;$s11;$s11;"
-LEDGER_WATCH_DEST='platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=27.0' run
-if [[ $code -ne 0 && "$calls" != *xcodebuild* ]]; then
-    pass "W26 a destination that matches no simulator stops check.sh before any xcodebuild"
-else
-    fail "W26 a destination that matches no simulator stops check.sh before any xcodebuild" "exit $code, calls: $calls"
-fi
+    is "$(grep '^xcodebuild' "$LOG" | cut -d ' ' -f 2- | tr '\n' ';')" "$air;$air;$s12;$s12;"
+# The image has no Series 11 and no 26.x runtime: F01's 26.5 defaults, or a Series 11 on 27.0, match nothing.
+for dest in 'Apple Watch Series 11 (46mm),OS=27.0' 'Apple Watch Series 11 (46mm),OS=26.5'; do
+    LEDGER_WATCH_DEST="platform=watchOS Simulator,name=$dest" run
+    if [[ $code -ne 0 && "$calls" != *xcodebuild* ]]; then
+        pass "W26 a destination that matches no simulator ($dest) stops check.sh before any xcodebuild"
+    else
+        fail "W26 a destination that matches no simulator ($dest) stops check.sh before any xcodebuild" "exit $code, calls: $calls"
+    fi
+done
 run --lint-only; lint_calls="$(grep -c '^simctl' "$LOG")"
 run --fast
 check "W27 --lint-only and --fast look up, boot or wait for no simulator" is "$lint_calls $(grep -c '^simctl' "$LOG")" "0 0"
@@ -248,6 +258,45 @@ code=$?
 check "W35 LEDGER_XCODEBUILD_DEADLINE interrupts a hung xcodebuild (SIGINT, exit 130), failing check.sh" \
     is "$code $(grep -c '^sleep 3$' "$LOG") $(grep -c 'hang completed' "$LOG") $(grep -c check-test-results "$LOG") \
 $(grep -c 'check.sh FAILED (exit 130)' <<<"$out")" "130 1 0 0 1"
+
+# ---- F32: step 0 fails on any Xcode but the pinned one, in every mode, as bootstrap.sh does ----------
+pinned_msg="error: this repo is pinned to Xcode 27.0 (.xcode-version) but
+       xcodebuild reports 26.6.
+       Select the right one:  sudo xcode-select -s /Applications/Xcode.app"
+for flags in "" --fast --lint-only --skip-lint --record-snapshots; do
+    XCODE_REPORTS=26.6 run $flags
+    check "W40 on Xcode 26.6 with 27.0 pinned, check.sh ${flags:-(full)} fails at step 0, before any tool, saying so" \
+        is "$code $calls$(grep -c '^error: this repo is pinned' <<<"$out")" "1 xcode-version 1"
+done
+check "W41 ... with bootstrap.sh's message, word for word" is "$(grep -A2 '^error: this repo is pinned' <<<"$out")" "$pinned_msg"
+: >"$LOG"
+out="$(XCODE_REPORTS=26.6 PATH="$SB/bin:$PATH" "$SB/scripts/bootstrap.sh" 2>&1)"; code=$?
+bootstrap_msg="$(grep -A2 '^error: this repo is pinned' <<<"$out")"; bootstrap_calls="$(tr '\n' ' ' <"$LOG")"
+: >"$LOG"
+PATH="$SB/bin:$PATH" "$SB/scripts/bootstrap.sh" >/dev/null 2>&1 # stops later, at the fake simctl
+check "W41 bootstrap.sh stops at the same check with the same message, and passes the pinned Xcode on to mise" \
+    is "$code $bootstrap_calls| $(head -2 "$LOG" | tr '\n' ' ')| $bootstrap_msg" "1 xcode-version | xcode-version mise-install | $pinned_msg"
+check "W42 one copy of the check: check.sh step 0 and bootstrap.sh both run scripts/check-xcode-version.sh" \
+    is "$(grep -c '^scripts/check-xcode-version\.sh' "$ROOT/scripts/check.sh" "$ROOT/scripts/bootstrap.sh" | tr '\n' ' ')$(grep -lF 'xcodebuild -version' "$ROOT"/scripts/*.sh | tr '\n' ' ')" \
+    "$ROOT/scripts/check.sh:1 $ROOT/scripts/bootstrap.sh:1 $ROOT/scripts/check-xcode-version.sh "
+
+# ---- F32: packages resolve only to the committed Package.resolved (Swift 6.4 rewrote a pin) --------
+run
+builds="$(grep -E '^(build-for-testing|test-without-building) ' "$LOG.args")"
+check "W43 every xcodebuild build and test run passes -onlyUsePackageVersionsFromResolvedFile" \
+    is "$(grep -c . <<<"$builds") $(grep -c -- ' -onlyUsePackageVersionsFromResolvedFile\( \|$\)' <<<"$builds")" "4 4"
+run --fast
+check "W44 --fast's swift test passes --only-use-versions-from-resolved-file" \
+    is "$code $(grep -c '^swift-test .*--only-use-versions-from-resolved-file' "$LOG")" "0 1"
+# Xcode 27 runs `simctl diagnose` after a failing test run; here it timed out after 600 s per platform.
+FAIL_AT=xcodebuild-test-without-building-Ledger run
+tests="$(grep '^test-without-building ' "$LOG.args")"
+check "W45 every test run, a failing one too, passes -collect-test-diagnostics never" \
+    is "$code $(grep -c . <<<"$tests") $(grep -c -- ' -collect-test-diagnostics never ' <<<"$tests")" "1 1 1"
+run
+tests="$(grep '^test-without-building ' "$LOG.args")"
+check "W45 ... (both platforms on a green run)" \
+    is "$(grep -c . <<<"$tests") $(grep -c -- ' -collect-test-diagnostics never ' <<<"$tests")" "2 2"
 
 # ---- --record-snapshots: F06's run_plan keeps going after a failing plan, if tests ran ----------
 # The fake xcrun's `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (1).

@@ -30,7 +30,7 @@ therefore waived; the merge gate is the orchestrator's policy.
 - [ ] **Export compliance:** each build waits at *Missing Compliance* until you answer *None of the
   algorithms mentioned above*. Adding `ITSAppUsesNonExemptEncryption = NO` stops the question; ask the orchestrator for that one-line change.
 
-## 3. Connect Xcode Cloud (Xcode 26.6, once F01 is on `main`)
+## 3. Connect Xcode Cloud (Xcode 27.0, once F01 is on `main`)
 
 - [ ] Open `Ledger.xcodeproj` on an up-to-date `main`. Go to Report navigator ▸ **Cloud ▸ Get Started**
   and choose product **Ledger**; the watch app is embedded. Install the **Xcode Cloud** GitHub App
@@ -40,7 +40,7 @@ therefore waived; the merge gate is the orchestrator's policy.
 
 | Section | Setting |
 |---|---|
-| Environment | Xcode **26.6**, not *Latest Release* (F32 moves it). Clean: off |
+| Environment | Xcode **27.0**, as `.xcode-version` pins it (F32), not *Latest Release*. Clean: off |
 | Start condition | **Branch Changes** ▸ Custom Branches ▸ `main`, and nothing else |
 | Actions | **Archive** ▸ iOS ▸ `Ledger` ▸ Deployment Preparation **TestFlight (Internal Testing Only)**. No Build or Test action; GitHub Actions tests |
 | Post-actions | **TestFlight Internal Testing** ▸ *Ledger Team* |
@@ -51,7 +51,7 @@ therefore waived; the merge gate is the orchestrator's policy.
 
 | Section | Setting |
 |---|---|
-| Environment | Xcode **26.6**. **Clean: on**, because Apple requires a clean build for external TestFlight |
+| Environment | Xcode **27.0**. **Clean: on**, because Apple requires a clean build for external TestFlight |
 | Start condition | **Tag Changes** ▸ Custom Tags ▸ `v` ▸ **Tags beginning with v**. Also add **Manual Start**, as a fallback |
 | Actions | **Archive** ▸ iOS ▸ `Ledger` ▸ Deployment Preparation **TestFlight and App Store** |
 | Post-actions | **TestFlight External Testing** ▸ *Beta* |
@@ -62,7 +62,7 @@ waits for Beta App Review (about 1–2 days).
 
 - [ ] Screenshot: `xcode-cloud-release.png`.
 
-## 6. Criteria 7 and 9
+## 6. Criteria 7 and 9, and F32's criterion 3
 
 - [ ] **7:** merge any PR to `main`. In the "Beta" log, `ci_post_clone.sh` prints
   `CURRENT_PROJECT_VERSION = N`, where N is the Xcode Cloud build number. TestFlight should show
@@ -72,3 +72,6 @@ waits for Beta App Review (about 1–2 days).
   it (criterion 8). The run on that merge tags `v0.2.0`, and "Release" should start through the Xcode
   Cloud GitHub App (a `GITHUB_TOKEN` tag still sends the webhook). If it doesn't, use Manual Start
   and tell the orchestrator. Screenshot: `xcode-cloud-release-run.png`.
+- [ ] **F32 criterion 3:** the "Beta" build from criterion 7, archived on Xcode 27.0, installs from
+  TestFlight on the iPhone, and its watch app installs on a watchOS 26 watch and a watchOS 27 watch (the
+  minimum stays watchOS 26). With one watch, tell the orchestrator which watchOS version you tried.

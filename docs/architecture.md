@@ -14,8 +14,8 @@ Read with: `docs/engineering-standards.md` (rules), `docs/product-spec.md`
 
 | Layer | Choice | Evidence |
 |---|---|---|
-| Language | Swift 6.3 (Xcode 26.6), Swift 6 language mode, strict concurrency `complete`; Swift 6.4 when we move to Xcode 27 | R1 §1, R2 §6, R3 §4 |
-| Toolchain | Xcode 26.6 now (installed locally and the default on GitHub `macos-26` runners). Xcode 27 shipped 2026-09-14 but is not on hosted runners yet; App Store requires the 27 SDKs from April 2027 → migration task F32 | R1 §1.1, R3 §4 |
+| Language | Swift 6.4 (Xcode 27.0), Swift 6 language mode, strict concurrency `complete` | R1 §1, R2 §6, R3 §4 |
+| Toolchain | Xcode 27.0 (Pete, 2026-09-29, F32), locally and on the GitHub `xcode-27` runner, a public preview image; fallback `macos-26` with Xcode 26.6. The App Store requires the 27 SDKs from April 2027 | R1 §1.1, R3 §4, ADR-006 |
 | Min OS | iOS 26.0 · watchOS 26.0 (iOS 26 on 86 % of recent iPhones; watchOS 27 drops Series 6–8 / SE 2 / Ultra 1) | R1 §1.2–1.3 |
 | UI | SwiftUI everywhere; `@Observable` stores; MainActor default isolation in UI targets | R2 §6 |
 | Persistence | GRDB.swift 7.11.x (SQLite) on phone **and** watch, CloudKit-shaped schema | R2 §1, ADR-002 |
@@ -28,7 +28,7 @@ Read with: `docs/engineering-standards.md` (rules), `docs/product-spec.md`
 | Live Activity | ActivityKit, started in `workoutSessionMirroringStartHandler`; `Text(timerInterval:)` for rest | R1 §4 |
 | Project | Committed `Ledger.xcodeproj` using Xcode synchronized folders; app targets depend only on umbrella package products; build settings in `.xcconfig`. No generator (XcodeGen has an open watch-embed bug on Xcode 26) | R3 §1, ADR-003 |
 | Tests | Swift Testing (unit/integration), swift-snapshot-testing 1.19.x (UI), XCUITest (critical flows + `performAccessibilityAudit`) | R3 §2 |
-| CI/CD | GitHub Actions `macos-26` for PR gates; Xcode Cloud for signing, TestFlight (main) and App Store (tags); release-please for versions/changelog | R3 §4–5, ADR-006 |
+| CI/CD | GitHub Actions `xcode-27` (preview) for PR gates; Xcode Cloud for signing, TestFlight (main) and App Store (tags); release-please for versions/changelog | R3 §4–5, ADR-006 |
 
 Third-party runtime dependencies are exactly two: **GRDB** and **swift-dependencies**.
 Test-only: **swift-snapshot-testing**. Nothing else without an ADR.
@@ -42,7 +42,7 @@ workout-app/
 ├── CLAUDE.md
 ├── Ledger.xcodeproj/               # committed; synchronized folders; rarely changes (ADR-003)
 ├── Config/                         # Base.xcconfig, Debug/Release, per-target xcconfig
-├── .xcode-version                  # 26.6
+├── .xcode-version                  # 27.0
 ├── mise.toml                       # pins swiftlint, swiftformat, lefthook
 ├── lefthook.yml                    # pre-commit: format + lint
 ├── .swiftlint.yml  .swiftformat
@@ -467,5 +467,5 @@ useful `previewValue`. Stores never construct their dependencies.
    the rendered sheet committed as a snapshot on both platforms). Still to see
    on hardware: F20's device checklist; complications are unverified (R2 §6.2).
 3. CKSyncEngine + GRDB integration surface (SQLiteData fit) → M4 spike before committing.
-4. Xcode 27 is not on GitHub-hosted runners yet (R3 §4). We pin 26.6 locally and in CI; F32 migrates to 27 before the April 2027 App Store requirement. Any 27-only API is guarded with `#available` and feature-flagged.
+4. Xcode 27 is only on GitHub's `xcode-27` preview image (actions/runner-images#14404). F32 pins 27.0 locally, in CI and in Xcode Cloud (Pete, 2026-09-29); if the preview breaks, CI falls back to `macos-26` with 26.6 (ADR-006, amendment). The minimum OS stays 26, so any 27-only API is guarded with `#available` and feature-flagged.
 5. Xcode synchronized folders keep `project.pbxproj` nearly frozen; the rare edits (new target, entitlement) are done in Xcode by a human and verified by CI (ADR-003).

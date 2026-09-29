@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# scripts/sim-destination.sh against the macos-26 runner's simulators (fixtures/simctl/macos-26.json,
-# from PR #5's first run): a watch destination by name also matched the iPhones paired with
-# same-named watches of any OS, and xcodebuild exited 70. By UDID it resolves; the resolved device
-# is also unpaired, as defence in depth. xcrun is faked (lib.sh fake_simctl): simctl lists the fixture.
+# scripts/sim-destination.sh against the runners' simulators (lib.sh: fixtures/simctl/xcode-27.json, the
+# image CI uses, and macos-26.json, from PR #5's first run): a watch destination by name also matched the
+# iPhones paired with same-named watches of any OS, and xcodebuild exited 70. By UDID it resolves; the
+# resolved device is also unpaired, as defence in depth. xcrun is faked (lib.sh fake_simctl): simctl
+# lists the fixture.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -11,17 +12,33 @@ T="$ADV_TMP"
 fake_simctl "$T/bin"
 export PATH="$T/bin:$PATH" XCRUN_LOG="$T/xcrun.log"
 
-WATCH='platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5'
-IOS='platform=iOS Simulator,name=iPhone 17,OS=26.5'
 # resolve <destination>: sets $out (stdout), $err (stderr) and $code.
 resolve() { out="$("$RESOLVE" "$1" 2>"$T/err")"; code=$?; err="$(cat "$T/err")"; }
 
-# check.sh's and the nightly's defaults (check.sh:17-18, nightly.yml matrix).
+# ---- the xcode-27 image: check.sh's and the nightly's defaults (check.sh:19-20, nightly.yml matrix) ----
+resolve 'platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0'
+check "SD16 the default watch resolves on the xcode-27 image to its Series 12 (46mm) on 27.0, by UDID" \
+    is "$code $out" "0 platform=watchOS Simulator,id=2416B270-8634-4D4A-9084-2B04B4498921"
+resolve 'platform=iOS Simulator,name=iPhone 17,OS=27.0'
+check "SD17 the default iPhone resolves on the xcode-27 image to its iPhone 17 on 27.0, by UDID" \
+    is "$code $out" "0 platform=iOS Simulator,id=46F7C9EA-B38C-445A-BAD9-8A70A603E9E1"
+for dest in 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=27.0' \
+    'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5' \
+    'platform=iOS Simulator,name=iPhone 17,OS=26.5'; do
+    resolve "$dest"
+    check "SD18 the xcode-27 image has no Series 11 and no 26.x runtime -> exit 1: $dest" \
+        is "$code [$out] $(grep -cF "$dest" <<<"$err")" "1 [] 1"
+done
+
+# ---- macos-26: F01's defaults, among same-named twins on 26.2, 26.4 and 26.5 ----
+export SIMCTL_JSON="$SIMCTL_MACOS26"
+WATCH='platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5'
+IOS='platform=iOS Simulator,name=iPhone 17,OS=26.5'
 resolve "$WATCH"
-check "SD01 the default watch resolves to the one 26.5 Series 11 (46mm), by UDID (not its 26.2/26.4 twins)" \
+check "SD01 a watch by name and OS resolves to the one 26.5 Series 11 (46mm), by UDID (not its 26.2/26.4 twins)" \
     is "$code $out" "0 platform=watchOS Simulator,id=07C1BE1A-2EFF-4897-8A98-D6E7C104E516"
 resolve "$IOS"
-check "SD02 the default iPhone resolves to the available iPhone 17 on 26.5 (an unavailable twin is skipped)" \
+check "SD02 an iPhone by name and OS resolves to the available iPhone 17 on 26.5 (an unavailable twin is skipped)" \
     is "$code $out" "0 platform=iOS Simulator,id=88931AEA-62E6-447F-8697-DCE00A671384"
 check "SD03 a resolved destination carries no name (xcodebuild then matches exactly one device)" \
     bash -c "! grep -q 'name=' <<<'$out'"

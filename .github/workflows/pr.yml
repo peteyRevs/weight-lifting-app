@@ -54,21 +54,24 @@ jobs:
     name: Check
     needs: scope
     if: needs.scope.outputs.code != 'false' # a missing output runs Check
-    runs-on: macos-26
+    # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). If it
+    # breaks, fall back to macos-26 with .xcode-version 26.6 and check.sh's 26.5 destinations (F32).
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
-      - name: Select Xcode from .xcode-version
+      - name: Select Xcode from .xcode-version # the xcode-27 image links Xcode_27.0.app to Xcode_27.app
         run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Cache Swift package checkouts
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .derivedData/SourcePackages
+          # An exact key only, no restore-keys: xcodebuild trusts checkouts over Package.resolved, so
+          # another run's checkouts would let a stale one build (F32 notes, "Package pins").
           key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-
       - name: Format, lint, script tests, iOS, watchOS, coverage (check.sh)
         timeout-minutes: 27 # fails the step before the job times out, so the bundles still upload
         env:

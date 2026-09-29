@@ -54,7 +54,7 @@ struct Round4StoreAdversarialTests {
         await #expect(throws: EngineError.conflictingEnvelope(log.key)) {
             try await store.append([log, next])
         }
-        let highest = try await store.highestSeq(for: Adv.workoutID, device: Adv.watch)
+        let highest = await store.highestSeq(for: Adv.workoutID, device: Adv.watch)
         #expect(highest == 1, "set 2 was not stored")
     }
 }
