@@ -423,3 +423,269 @@ the reference's size marking exactly the pixels beyond ΔE 2; an undecodable ref
 Lint: comments, doc comments, multi-line and raw string literals are exempt; `0` is allowed for spacing and radii;
 tokens inside `EdgeInsets`, negative tokens, `GridItem(spacing: LedgerSpacing.s)` and `.ledgerFont` pass; raw values
 inside LedgerDesign pass.
+
+---
+
+# Round 3 — after fix round 2 (`7689a74`)
+
+Scope: fix round 2's changes — `.ledgerFont`'s CSS half-leading lift, `accentText` light `#B2390E`, the `.png`
+comparator's whole-pixel boundary and size-change difference image, the rewritten `ledger_raw_*` regexes — plus the
+gate's flakiness (review point 6). Pete's decisions of 2026-09-27 are requirements (WCAG AA while keeping the look;
+Bold Text followed). Written from the brief, spec §8, the v1 and watch prototypes, the public declarations, `git show
+7689a74`, Archivo's own tables and the xcresults. `implementation-notes.md` was not read.
+
+## What was written
+
+| File | Attacks |
+|---|---|
+| `…/Adversarial/LedgerFontLinePlacementAdversarialTests.swift` | The lift at xSmall, xxxLarge, AX3 and AX5 for all 21 roles (baseline vs CSS for the scaled size, caps inside, frame = `L` × size); both baselines of a two-line block; `.firstTextBaseline` across four role pairs; a role set on a container around a child with its own role; a background under the text |
+| `…/Adversarial/AccentChipContrastAdversarialTests.swift` | Finding 14 as SwiftUI paints it: `accentText` on `accentSoft` over ground and surface, light and dark, with and without Increase Contrast (iOS), ratio from painted pixels; the watch's current exercise row (orange number, white name, muted scheme line on the 16 % tint over `#000`); `inkSecondary`/`inkMuted` on the tint `accentSoft`'s doc comment offers "behind a selected item" |
+| `…/Adversarial/ComparatorPropertyAdversarialTests.swift` | Property tests with a seeded SplitMix64: 40 random sizes up to 402×200 (every fifth an exact multiple of 200 px) with the changed pixels at random positions and sub-threshold noise on a third of the rest — `floor(0.5 %)` passes, one more fails; 24 random size changes — the difference image is the union canvas and marks exactly the non-overlap plus real changes; a transposed size; a 1×1 image |
+| `scripts/tests/lint-rules-adversarial-round3.test.sh` | 44 fixtures: 17 raw spellings, 9 escape hatches, 10 sanctioned uses that must pass, 3 false positives on sanctioned use, 5 controls. **Not wired into `check.sh`** (it fails today and would stop the gate at step 2) |
+
+Also run by hand: a Swift Testing probe package on the host (`swift test`, scratch, not committed) and a serial host run
+of `LedgerDesignTests` (`swift test --filter LedgerDesignTests --no-parallel`) for the flakiness analysis; Archivo's
+`MVAR`/metrics at five axis positions (Core Text, scratch).
+
+## Results
+
+Run on the pinned simulators through the simulator lock.
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | green: format, lint (round 3's Swift files included), the three wired lint scripts, package graph, host Domain + Persistence (419 tests) |
+| `scripts/check.sh` (full gate, via the lock) | steps 0–2 green; **step 3 fails**: the PR plan on iOS 26.5 recorded 431 tests, 430 passed, **1 failed: `TokenValueTests.geometryTokens_values_matchBrief`, "Test exceeded execution time allowance of 1 minute"** (finding 19). XCTest killed the `LedgerDesignTests` runner, so that target recorded no other result; every other target passed, `LedgerUITests/Smoke` included. `set -e` stops before step 4 |
+| `LedgerDesignTests` alone on iOS 26.5, the gate's flags plus `-only-testing:LedgerDesignTests` (same lock hold as the next row) | 133 test functions, 130 passed, **3 failed — all round 3**; implementer 35/35, round 1 63/63, round 2 23/23, round 3 9/12. 71 s, no timeout |
+| Step 4 by hand (`check.sh`'s own `xcodebuild` line) | PR-Watch on watchOS 26.5: 542 tests, 539 passed, **3 failed — all round 3**; implementer 32/32, round 1 60/60, round 2 17/17, round 3 9/12 |
+| `lint-rules-adversarial-round3.test.sh` (by hand) | 44 cases, **28 fail**: 16 raw spellings not flagged, 9 escape hatches, 3 false positives on sanctioned use; P01–P10, K01–K05 and B10 pass |
+| `lint-rules-adversarial.test.sh`, `…-round2.test.sh` | 55/55, 39/39 |
+| Host `swift test` | round 3's suites compile and agree; macOS resolves both schemes to the dark value, so only the dark contrast numbers mean anything there |
+
+Round 3's Swift suites: 12 test functions (71 cases for line placement, 15 contrast cases on iOS / 11 on watchOS, 66
+comparator cases).
+
+Failing tests (left in place):
+
+| # | Test | Severity |
+|---|---|---|
+| 18 | `LedgerFontLinePlacementAdversarialTests.nestedRoles_innerRole_placesItsOwnLine` (4/4 cases) and `background_underText_staysOnFrame` (21/21 roles); iOS + watchOS | **bug** |
+| 19 | the gate itself: `TokenValueTests.geometryTokens_values_matchBrief` timed out (fix round 2's run 1: `registration_resolvedFont_isTheBundledFile`) | **bug** (flaky gate, test-caused) |
+| 20 | `AccentChipContrastAdversarialTests.inkText_onSelectedItemTint_meetsAA` (3 of 4 cases on iOS; 4 of 4 on watchOS, where phone tokens resolve dark) | design question |
+| 21 | `lint-rules-adversarial-round3.test.sh` B01–B09, B11–B17 | **bug** |
+| 22 | `lint-rules-adversarial-round3.test.sh` D01–D09 | design questions |
+| 23 | `lint-rules-adversarial-round3.test.sh` Q01–Q03 | design questions (false positives) |
+
+## Close-out of findings 11–17
+
+| # | Status | Evidence (iOS 26.5 and watchOS 26.5 unless noted) |
+|---|---|---|
+| 11 | **Resolved** | `LedgerFontLineBoxAdversarialTests.singleLine_baseline_matchesCSSHalfLeading` 21/21 and `singleLine_capitalInk_staysInsideFrame` 21/21 pass. Round 3 extends it — every text size, two lines and baseline alignment hold — but the mechanism has side effects: finding 18 |
+| 12 | **Resolved** | round 2 lint P01–P03 pass (`lint-rules-adversarial-round2.test.sh` 39/39, now in `check.sh` step 2) |
+| 13 | **Resolved** | B01–B11 flagged (39/39); 16 further spellings in finding 21 |
+| 14 | **Resolved** | `IncreaseContrastAdversarialTests.accentText_onAccentSoft_meetsAA` passes (light/dark × ground/surface × Increase Contrast, iOS). Round 3 checks it as painted: `accentText_onPaintedAccentSoft_meetsAA` passes all 8 iOS cases (8-bit composites, which is what SwiftUI paints: light 4.52 on ground / 5.24 on surface, dark 5.32 / 4.90, unchanged by Increase Contrast), and `watchCurrentRow_textOnTint_meetsAA` the watch's current row (orange number 5.81, white name 18.0, muted scheme line 4.55). The margin on paper is 0.02 (observations); the neighbouring muted-text pair is finding 20 |
+| 15 | **Resolved** | `SnapshotDiffAdversarialTests.precision_boundary_holdsFromBothSides` 6/6, 402×999 included; round 3's 40-seed property holds |
+| 16 | **Resolved** | `sizeChange_attachesDifferenceImage` passes; round 3 checks the image's content (union canvas, 24 seeds) |
+| 17 | **Resolved as decided** | D01, D02, D04–D09 flagged and P04 passes (39/39); the escape hatches next to them are findings 22 and 23 |
+
+Pete's decisions hold: every round-1 contrast test (#5–8) and Bold Text test (#9) still passes on both platforms.
+
+## 18. `.ledgerFont`'s lift moves the whole modified view: nested roles add up and backgrounds leave their frame — bug
+
+- **Tests:** `LedgerFontLinePlacementAdversarialTests.nestedRoles_innerRole_placesItsOwnLine` (4 cases),
+  `background_underText_staysOnFrame` (21 cases).
+- **Cause (from `git show 7689a74`):** the CSS placement is `.padding(.top, -lift).padding(.bottom, lift)` on the
+  modifier's content, so it shifts everything inside the modified view, not the glyphs. `.ledgerFont` reads like
+  `.font` and SwiftUI code sets fonts on containers all the time (a row, a button label, a screen default).
+- **Repro 1, a role set on a container:** `VStack(spacing: 0) { Text("H").ledgerFont(inner) }.ledgerFont(outer)` against
+  `Text("H").ledgerFont(inner)`: same frame, but the inner baseline moves by the outer role's lift. In CSS a child
+  block's lines are placed by its own `line-height`.
+
+  | outer → inner | baseline shift |
+  |---|---|
+  | `display` → `numeralL` | 5.0 pt up (baseline 20.0 pt below the frame top, alone 25.0 pt); cap line 0.5 pt above the frame |
+  | `watchNumeral` → `caption` | 10.0 pt up (baseline 0.0 pt, alone 10.0 pt); capitals 8.0 pt above the frame |
+  | `eyebrow` → `numeralXL` | 2.0 pt up |
+  | `bodyLight` → `title` | 2.0 pt down |
+
+  (iOS 26.5 at the reference text size; the host gives the same numbers.)
+
+  With `watchNumeral` around a caption the caption's capitals are drawn ~8 pt above its own frame; a `.clipped()`
+  container, a scroll edge or a snapshot bound cuts them off.
+- **Repro 2, content that is not text:** `Text("H").padding(LedgerSpacing.s).background(Color.red).ledgerFont(role)` —
+  the red box should cover the view's frame exactly. It is drawn `lift` pt higher for **every** role:
+  `button` −2.5…29.5 pt over a 0…32 pt frame, `numeralL` −5.0…41.0 over 0…46,
+  `display` −5.0…51.5 over 0…56.5, `watchNumeral` −10.0…43.0 over 0…53, `body` −1.0…33.0 over 0…34, and `bodyLight`
+  +2.0…40.0 over 0…38 (its lift is negative). The box overflows the frame at the top, leaves a gap at the bottom, and no longer matches the
+  hit-test frame. The same happens to a hairline row's top rule, a capsule behind a button title, a set row's
+  background, an SF Symbol next to the title — whatever sits inside the view the role is applied to.
+- **Fix direction:** lift the text's lines, not the view — e.g. draw `Text` through a `TextRenderer` (iOS 18 /
+  watchOS 11) that translates each line by `-lift` for the innermost role, and move `.firstTextBaseline` /
+  `.lastTextBaseline` by the same amount so baseline alignment keeps working (it does today:
+  `firstTextBaseline_twoRoles_shareOneBaseline` holds and must keep holding). Whatever the mechanism, the four tests
+  above plus round 2's `LedgerFontLineBoxAdversarialTests` pin the behaviour.
+
+## 19. The 60 s allowance counts time spent waiting for the main actor, and `LedgerDesignTests` keeps it busy for about a minute — bug (flaky gate, P1 per standards §9)
+
+This is review point 6. Fix round 2's run 1 failed the allowance in `registration_resolvedFont_isTheBundledFile`, and
+**this round's gate failed the same way** in `TokenValueTests.geometryTokens_values_matchBrief`:
+`Test exceeded execution time allowance of 1 minute` at 60.000 s. Both tests do about a millisecond of work. The
+tests cause this; the saturated machine only moves the total over the line.
+
+- **Mechanism, reproduced deterministically on the host** (a scratch package, `swift test`, Swift Testing 1902):
+  a main-actor test with `.timeLimit(.minutes(1))` whose body ran for **0.0003 s** fails with
+  `Time limit was exceeded: 60.000 seconds` because another main-actor test held the main actor for 75 s. Swift
+  Testing starts every test case at once (48 one-second sleepers finish in 1.06 s on this host, so there is no
+  width limit), so each test's clock starts before it gets the main actor. Xcode applies the plan's allowance to
+  Swift Testing tests the same way: the gate's failure is XCTest's own "exceeded execution time allowance", and the
+  xcresult times below count the wait (`libXCTestSwiftSupport` reads `defaultTestExecutionTimeAllowance`).
+- **Why it hits LedgerDesignTests:** the target uses `defaultIsolation(MainActor.self)` (`Package.swift`
+  `uiSettings`), so every suite — the rendering ones and the ones that only compare constants — runs on the main
+  actor, one job at a time. A serial host run (`swift test --filter LedgerDesignTests --no-parallel`) puts the
+  target's main-actor work at 26.6 s, and **22.2 s of it is one test function**:
+  `LedgerFontSizingAdversarialTests.bareFont_everySizeAndWeight_matchesLedgerFont` (round 2, 21 roles × 12 text
+  sizes × 2 weights × 2 renders = 1,008 renders). On the iPhone 17 simulator of a busy machine that is about a
+  minute: the last green run (fix round 2) reports all 121 `LedgerDesignTests` tests ending between 55 and 61 s,
+  trivial ones such as "Spacing is the brief's 4/8/12/16/24/32 scale…" at 60.96 s, i.e. at the allowance. This
+  round's design-only iOS run (less load, 71 s in all) shows the queue directly: `geometryTokens_values_matchBrief`
+  reports 10.1 s and `registration_resolvedFont_isTheBundledFile` 10.2 s for 0.001 s of work, and the hog plus the
+  47 tests behind it end at 35–39 s. With the whole PR plan on parallel clones, the same queue crossed 60 s.
+- **Consequence beyond one red test:** when the allowance fires, XCTest kills the runner process, and every other
+  result in it is lost. This round's gate recorded **1** `LedgerDesignTests` result (431 tests in the plan, against
+  551 in fix round 2's green run); no design test, adversarial or not, reported pass or fail.
+- **Not the cause:** font registration. `FontRegistration` is a `static let` initialised once, and the tests show it
+  idempotent (`registration_calledRepeatedly_alwaysSucceeds`), safe under 64 concurrent callers, fine when someone
+  registered first (`registration_afterExternalRegistration_succeeds` covers the other order), and nothing
+  unregisters the font. Both victims finish in 0.001 s in the serial host run (`geometryTokens_values_matchBrief`
+  compares five constants).
+- **Concrete fix** (in the tests, not the product):
+  1. Make the suites that need no main actor `nonisolated` (token values, layout tokens, spec tables, contrast
+     maths, motion keyframes, registration): they stop queueing behind rendering.
+  2. Nest the rendering suites under one `@Suite(.serialized)` parent. Main-actor tests already run one at a time,
+     so this costs no parallelism, but each test's allowance then starts when it runs. Checked on the host: under a
+     serialized parent the same 0.001 s test passes after the 75 s hog.
+  3. Tag the 1,008-render matrix (round 2's own test) `.slow` (testing-strategy §6: `.slow` is > 2 s, skipped in
+     PR plans, run nightly) and keep a PR subset (e.g. xSmall, large, AX5 × regular/bold). Serialising alone is not enough: that one
+     function is itself about a minute under load.
+
+  Not a fix: raising the allowance or retrying (testing-strategy §5). Round 3's own suites add a few seconds of
+  main-actor work too (parameterised per role, so no single case is long); they belong under the same parent.
+
+**Run 2 of fix round 2 ("Timed out while loading Accessibility") is environmental.** The message comes from
+`XCUIApplication.launch()` waiting for the simulator's accessibility runtime, before any line of `Smoke` runs; the
+test's only time limit is `waitForExistence(timeout: 10)`, which is not the step that failed. It passed in this
+round's gate. The iOS lane runs `-parallel-testing-enabled YES` with no worker count, so Xcode boots fresh iPhone 17
+clones, and a clone's accessibility bootstrap is what times out on a machine running three worktrees' simulators.
+Nothing in the test can change that. If it recurs, pin the iOS worker count as step 4 already does for the watch
+("one worker = one watch clone"), or boot the destination before `xcodebuild test`.
+
+## 20. Muted text on the selected-item tint is below 4.5:1 — design question
+
+- **Test:** `AccentChipContrastAdversarialTests.inkText_onSelectedItemTint_meetsAA`.
+- **Attacks:** `accentSoft`'s doc comment ("Tinted fill behind a selected item") and the brief's NFR (informational
+  text ≥ 4.5:1). A selected row keeps its metadata line; the watch prototype does exactly that (current exercise
+  row: `.4` white scheme line on the 16 % tint), and on the watch it passes.
+- **Repro (painted by SwiftUI, standard contrast):** light on ground **4.33:1**, dark on ground **4.39:1**, dark on surface **4.22:1**
+  (light on surface 4.55:1 passes; iOS 26.5). `inkSecondary` passes everywhere
+  (6.3–8.2:1); with Increase Contrast `inkMuted` passes (.74 alpha).
+- **Question for Pete:** is muted text allowed on `accentSoft`? Options: say in the token docs that text on the tint
+  uses `inkSecondary` or `accentText`; raise `inkMuted` when it sits on the tint; or a lighter tint (12 % → ~9 %
+  light), which also widens finding 14's 0.02–0.04 margin.
+
+## 21. Design lint: 16 more raw spellings slip through — bug
+
+`scripts/tests/lint-rules-adversarial-round3.test.sh`, same harness as rounds 1 and 2.
+
+| Case | Snippet | Rule that should fire |
+|---|---|---|
+| B01 | `var accent: Color { .orange }` — a named colour after `{` (implicit return) | `ledger_raw_color` |
+| B02 | `return .green` in a computed colour | `ledger_raw_color` |
+| B03 | `.foregroundStyle(.quinary)` — the list stops at `quaternary` | `ledger_raw_color` |
+| B04 | `.foregroundStyle(LedgerColor.accent.secondary)` — a raw alpha on a token through `ShapeStyle`'s hierarchy, the same thing D05 (`.opacity(0.6)`) was decided to flag | `ledger_raw_color` |
+| B05 | `LedgerColor.ink⏎.opacity(0.6)` — D05 with the chain wrapped | `ledger_raw_color` |
+| B06 | `.foregroundStyle(Color.Resolved(red: 1, green: 0.36, blue: 0.13))` — `Color.Resolved` is a `ShapeStyle` | `ledger_raw_color` |
+| B07 | `context.fill(path, with: .color(red: 1, green: 0.36, blue: 0.13))` in a `Canvas` (a chart) | `ledger_raw_color` |
+| B08 | `let titleFont: Font = .title` then `.font(titleFont)` — the font rule has no `=` branch | `ledger_raw_font` |
+| B09 | `.environment(\.font, .system(size: 13))` | `ledger_raw_font` |
+| B11 | `.monospaced()` — the design sibling of `.fontDesign(` | `ledger_raw_font` |
+| B12 | `.padding(.horizontal, isCompact ? 13 : LedgerSpacing.l)` | `ledger_raw_spacing` |
+| B13 | `HStack(spacing: isCompact ? 4 : LedgerSpacing.s)` | `ledger_raw_spacing` |
+| B14 | `RoundedRectangle(cornerRadius: isSheet ? 28 : LedgerRadius.card)` | `ledger_raw_radius` |
+| B15 | `.clipShape(.rect(corners: .concentric(minimum: .fixed(13))))` — iOS 26's corner API (`Edge.Corner.Style.fixed`, `ConcentricRectangle`) | `ledger_raw_radius` |
+| B16 | a multi-line `.font(` ternary with a trailing `// comment` inside the call | `ledger_raw_font` |
+| B17 | a multi-line `.padding(` with a trailing `// comment` after `.horizontal,` | `ledger_raw_spacing` |
+
+B12–B14 are the spacing/radius versions of round 2's B02/B05 (a ternary). B16: `excluded_match_kinds` drops a
+match that contains a comment token, and the `.font(` branch's `[^()]*?` spans the whole argument; B17: `\s*` cannot
+cross the comment. The same call with the comment after it is flagged (K02, K04). B10 (`.textScale(.secondary)`) is
+flagged, but only because the colour rule reads `(.secondary` as a colour, so its message is wrong.
+
+## 22. Design lint: escape hatches next to the decided ones — design questions
+
+| Case | Snippet | Question |
+|---|---|---|
+| D01 | `.dynamicTypeSize(...DynamicTypeSize.large)` | Finding 17 flagged a pinned size (`.dynamicTypeSize(.large)`); a cap at the reference size has the same effect on every larger setting and passes. (`min(dynamicTypeSize, .accessibility2)` is flagged, by accident of the `,` branch: K03) |
+| D02 | `.ledgerFont(.watchLabel).minimumScaleFactor(0.5)` | Shrinks a watch role under the 11 pt floor (criterion 4) |
+| D03 | `.foregroundStyle(LedgerColor.ink).opacity(0.6)` | The raw alpha D05 bans, applied to the view |
+| D04, D05 | `Spacer().frame(height: 13)`; `private let rowGap: CGFloat = 13` then `.padding(.vertical, rowGap)` | Gaps made with a frame or a named constant; the regexes cannot follow a constant |
+| D06, D07 | `.fill(.separator)`, `.background(.ultraThinMaterial)` | System colours by another name; the spec has its own hairline and glass |
+| D08, D09 | `.baselineOffset(2)`, `.textCase(.uppercase)` after `.ledgerFont` | Role properties, like tracking and leading (finding 17 flagged those) |
+
+## 23. Design lint: false positives on sanctioned use — design questions
+
+| Case | Snippet | Flagged by |
+|---|---|---|
+| Q01 | `#Preview("AX3") { … .dynamicTypeSize(.accessibility3) }` in a feature — standards §7 asks for a preview per meaningful state and the DoD for Dynamic Type at XL | `ledger_raw_font` |
+| Q02 | `.frame(width: proxy.size.width - 2 * LedgerSpacing.screen)` — the content width between the screen insets | `ledger_raw_spacing` |
+| Q03 | `private let emphasis: Emphasis = .primary` with a feature enum `Emphasis { case primary, secondary }` — the new `=` branch widens round 2's observation about colour-named enum cases to every assignment | `ledger_raw_color` |
+
+Options: exempt `#Preview` bodies / `*+Previews.swift` from the text-size branch; flag token arithmetic only in spacing
+positions (`padding`, `spacing:`, `EdgeInsets`); accept Q03 and keep colour names out of feature enums.
+
+---
+
+## Audit of fix round 2's edits to the adversarial tests
+
+`git diff c39464c 7689a74 -- LedgerKit/Tests scripts TestPlans`: two Swift files (3 insertions / 2 deletions), one line
+in `check.sh` (round 2's lint script wired into step 2) and 14 re-recorded PNGs. `e39f72b` touches only `implementation-notes.md`.
+
+| Edit | Verdict |
+|---|---|
+| `LedgerColorAdversarialTests`: `orangeDeep` `0xC03D0F` → `0xB2390E`, with a comment citing finding 14 | Legitimate — the value Pete's AA decision now produces; the test still reads the token through three independent paths. Spec §8.1 still lists `#C63F0F` (see observations). |
+| `TokenValueTests` (implementer's): `accentText` → `0xB2390E` | Same. |
+| 14 references re-recorded (`phonePalette_*`, `phoneTypeRamp_*`, `watchPalette_46mm`, `watchTypeRamp_*`) | Justified by the stated causes: the labels and ramp lines move with the line placement (checked `watchPalette_46mm` before/after: labels ~1 pt higher, swatches unchanged) and the light `accentText` swatch changed. |
+
+No test function deleted, renamed, disabled, wrapped in `withKnownIssue` or given a wider tolerance (91 adversarial
+`@Test` functions before and after); no test plan changed; `lint-rules-adversarial.test.sh` and
+`lint-rules-adversarial-round2.test.sh` are unchanged and both now run in `check.sh` step 2. **Verdict: no
+adversarial test was weakened.**
+
+## Design observations (no failing test)
+
+- **Finding 14 passes by 0.02–0.04.** `accentText` on `accentSoft` over paper paints at 4.52:1; the painted values
+  match 8-bit sRGB compositing exactly (the failing `inkMuted` cases agree with that computation to three decimals).
+  Any change to paper, the tint or the text breaks it; `accentText_onPaintedAccentSoft_meetsAA` now pins it.
+- **"Keep the look".** `#B2390E` is ΔE76 7.8 from the spec's `#C63F0F` (L\* 41.9 against 46.4, same hue): a
+  visible darkening. On paper it is 5.14:1 (the spec value was 4.35). Spec §8.1 still lists `#C63F0F`.
+- **Archivo's vertical metrics are constant.** No `MVAR` table; ascent 878, descent 210, cap height 686 units at
+  wght 100–900 × wdth 62–125, so `ArchivoFont.baselineBelowMiddle` as one constant is sound.
+- **The watch lane did not enforce the allowance the way iOS does.** Fix round 2's green PR-Watch run reports
+  ~1,005–1,010 s for almost every `LedgerDesignTests` test with no timeout (this round's watch run: ~28 s); the iOS
+  lane kills the runner at 60 s. iOS is where finding 19 bites, but the fix applies to both.
+
+## Attacked and held (round 3)
+
+On iOS 26.5 and watchOS 26.5: `.ledgerFont` puts a lone line's baseline at CSS half-leading for the scaled size at
+xSmall, xxxLarge, AX3 and AX5 for all 21 roles, keeps capitals inside the frame and the frame at `L` × size; both
+baselines of a two-line block sit at CSS positions and the frame is `2L` × size; `.firstTextBaseline` aligns the ink
+of numeralXL/eyebrow, watchNumeral/watchLabel, display/bodyLight and numeralL/caption within a pixel (the lift
+moves the guides with the text). Archivo has no `MVAR`, so one ascent/descent constant is right at every axis
+position. `accentText` on `accentSoft` as painted meets 4.5:1 in both schemes, over ground and surface, with and
+without Increase Contrast; the watch's current exercise row meets it for all three texts. The comparator: 40 seeded
+sizes up to 402×200 with the changed pixels anywhere and sub-threshold noise elsewhere — exactly `floor(0.5 %)`
+passes and one more fails; 24 seeded size changes fail with a difference image the size of the union that marks
+exactly the non-overlap plus the real changes; a transposed size fails; a 1×1 image behaves. Lint: ten sanctioned
+spellings pass (`LedgerFont.font(_:size:)` with `scaledSize`, `.lineLimit`, `Spacer(minLength: 0)`, `Color.clear`
+and `.clear` in a gradient, adaptive layout on `dynamicTypeSize`, token-only radius and spacing arithmetic, a 44 pt
+frame, `.primaryAction`, ternaries between tokens); `LedgerDesign` may still spell everything. Font registration is
+not a flakiness source (idempotent, safe under 64 racing callers, order-independent, never unregistered). Fix round
+2's test edits weaken nothing, and its 14 re-recorded references have a stated visual cause.
