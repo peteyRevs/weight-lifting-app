@@ -1,0 +1,7 @@
+{
+  "overall": 80,
+  "modules": { "LedgerDomain": 95, "LedgerSync": 90, "Feature*": 70 },
+  "required": ["LedgerDomain", "FeatureToday"],
+  "excludedModules": ["LedgerAppKit"],
+  "excludedFiles": ["*+Previews.swift", "*/Generated/*"]
+}

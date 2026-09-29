@@ -1,0 +1,26 @@
+# Versions and changelog from Conventional Commits (docs/ci-cd.md §6): each push to main updates the
+# release PR (MARKETING_VERSION in Config/Base.xcconfig; CI never runs on it, so check.sh it locally).
+# Merging it tags vX.Y.Z for Xcode Cloud "Release".
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # release branch, tag, GitHub release
+      pull-requests: write # the release PR
+      issues: write # its labels
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0

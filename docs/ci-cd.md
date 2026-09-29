@@ -3,6 +3,17 @@
 Decision: ADR-006. Evidence: `docs/research/R3-tooling-ci.md` (2026-09-16).
 Local parity: `docs/testing-strategy.md` §7 (`scripts/check.sh`) and §8 (test plans).
 
+**Verified 2026-09-27 (F01).** `.github/`, `ci_scripts/` and `scripts/` are authoritative; the plan differs:
+- `macos-26` (arm64): Xcode 26.6 (17F113) at `/Applications/Xcode_26.6.app`, iPhone 17 and Series 11
+  (46mm) on 26.5; Xcode from `.xcode-version`; SHA-pinned actions; `$(PROJECT_DIR)` expands in test plans.
+- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (all of `check.sh`),
+  behind a Linux `Scope` job that skips it when only files under `docs/`, `tasks/` or `design/`,
+  or `*.md` at the repository root, change (renames count at both paths). Nightly is manual;
+  release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
+  §9 is superseded: a code PR costs about 13–18 macOS minutes, so ~200 cover 11–15 runs.
+- §5: scripts run from `ci_scripts/` (use `$CI_PRIMARY_REPOSITORY_PATH`); external TestFlight
+  needs a clean build; App Review submission is manual. §6: `bootstrap-sha` skips pre-F01 history.
+
 ## 1. Flow
 
 ```
@@ -102,7 +113,6 @@ jobs:
           if-no-files-found: ignore
 ```
 
-Required check names for branch protection: **`Lint`**, **`Check (iOS + watchOS)`**.
 
 `scripts/coverage-gate.sh` (written in F01): runs
 `xcrun xccov view --report --json <xcresult>` for each bundle, merges by
@@ -156,19 +166,13 @@ jobs:
 Nightly failures open a GitHub issue via the workflow's `if: failure()`
 step (`gh issue create --label nightly`) — add in F01.
 
-## 4. Branch protection (`main`) — set by a human in F01
+## 4. No branch protection (Pete, 2026-09-27)
 
-- Require a pull request before merging; 1 approval; dismiss stale approvals; require review from Code Owners.
-- Require status checks: `Lint`, `Check (iOS + watchOS)`; require branches up to date (merge queue on).
-- Require conversation resolution. Require linear history (squash only). Block force pushes and deletions.
-- Restrict who can push: nobody directly; release-please bot allowed to open PRs.
-
-`CODEOWNERS`:
-```
-*                         @<pete-github-handle>
-/LedgerKit/Sources/LedgerDomain/      @<pete-github-handle>
-/docs/adr/                @<pete-github-handle>
-```
+GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
+full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran.
+A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free
+minutes run out, CI does not run and the local gate output is the G4 evidence. Seeding the package
+cache on `main` costs a full Check: only if first runs show slow resolution. Revisit with Pro or a 2nd maintainer.
 
 ## 5. Xcode Cloud
 
@@ -241,7 +245,7 @@ or `BREAKING CHANGE:` → minor until 1.0, then major.
 
 | Where | What |
 |---|---|
-| GitHub | nothing signing-related. `GITHUB_TOKEN` least-privilege per workflow (`contents: read` except release-please). |
+| GitHub | nothing signing-related. `GITHUB_TOKEN` least-privilege per job (`contents: read`; release-please writes; the nightly report writes issues). |
 | Xcode Cloud | cloud-managed certificates/profiles; App Store Connect access via the team's Xcode Cloud role. |
 | Developer Macs | Xcode automatic signing for local device runs only. |
 

@@ -5,12 +5,13 @@
 #   scripts/check.sh                    full gate: format, lint, iOS, watchOS, coverage
 #   scripts/check.sh --fast             host-side package tests only; no simulators
 #   scripts/check.sh --lint-only        steps 0–2 only
-#   scripts/check.sh --skip-lint        steps 3–5 only (CI runs lint in its own job)
+#   scripts/check.sh --skip-lint        steps 3–5 only (no format, lint or script tests)
 #   scripts/check.sh --record-snapshots re-record snapshot references on both
 #                                       simulators, then fail; re-run to verify
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
+# Also read: LEDGER_BOOT_TIMEOUT (scripts/sim-boot.sh), LEDGER_XCODEBUILD_DEADLINE (CI, below).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -29,6 +30,11 @@ for arg in "$@"; do
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
+# --lint-only excludes every other flag, and --fast runs no snapshot tests to record.
+if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS) || FAST && RECORD_SNAPSHOTS )); then
+    echo "error: contradictory flags: $*" >&2
+    exit 2
+fi
 
 TIMINGS=()
 STEP_STARTED_AT=0
@@ -42,12 +48,23 @@ done_step() {
 }
 summary() {
     printf '\n\033[1m==> Summary\033[0m\n'
-    printf '%s\n' "${TIMINGS[@]}"
+    printf '%s\n' ${TIMINGS[@]+"${TIMINGS[@]}"} # bash 3.2: an empty array is unbound under set -u
     printf '%6ss  total\n' "$SECONDS"
 }
-trap 'status=$?; if [[ $status -ne 0 ]]; then printf "\n\033[31mcheck.sh FAILED (exit %s)\033[0m\n" "$status"; summary; fi' EXIT
+WATCHDOG=""
+trap 'status=$?; [[ -z $WATCHDOG ]] || kill "$WATCHDOG" 2>/dev/null || true
+if [[ $status -ne 0 ]]; then printf "\n\033[31mcheck.sh FAILED (exit %s)\033[0m\n" "$status"; summary; fi' EXIT
 
-beautify() { mise exec -- xcbeautify ${CI:+--renderer github-actions}; }
+# A CI step's timeout kills check.sh but not xcodebuild, whose result bundle then stays unfinished. So
+# pr.yml sets LEDGER_XCODEBUILD_DEADLINE, in seconds, short of that timeout: there check.sh interrupts
+# its xcodebuild, which finalizes the bundle and exits, failing the step before the timeout does.
+if [[ -n "${LEDGER_XCODEBUILD_DEADLINE:-}" ]]; then
+    (sleep "$LEDGER_XCODEBUILD_DEADLINE" && pkill -INT -P $$ -x xcodebuild) </dev/null >/dev/null 2>&1 &
+    WATCHDOG=$!
+fi
+
+# On GitHub Actions, tools print workflow commands so findings annotate the PR diff.
+beautify() { mise exec -- xcbeautify ${GITHUB_ACTIONS:+--renderer github-actions}; }
 
 # ---- 0. tools ---------------------------------------------------------------
 step "0 · tools"
@@ -59,17 +76,14 @@ done_step "tools"
 if [[ $SKIP_LINT -eq 0 ]]; then
     # ---- 1. format ----------------------------------------------------------
     step "1 · format (swiftformat --lint)"
-    mise exec -- swiftformat --lint --swift-version 6.3 LedgerKit Apps
+    mise exec -- swiftformat --lint --swift-version 6.3 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
 
     # ---- 2. lint + package graph --------------------------------------------
-    step "2 · lint (swiftlint --strict) + package graph"
-    mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml
-    scripts/tests/lint-rules.test.sh
-    scripts/tests/lint-rules-adversarial.test.sh
-    scripts/tests/lint-rules-adversarial-round2.test.sh
-    scripts/tests/lint-rules-adversarial-round3.test.sh
+    step "2 · lint (swiftlint --strict) + package graph + script tests"
+    mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}
     scripts/check-package-graph.sh
+    for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
 fi
 
@@ -117,33 +131,31 @@ if [[ $FAST -eq 1 ]]; then
 fi
 
 mkdir -p "$RESULTS"
+IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")" # resolve each to one simulator by UDID and unpair it
+WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"
 
-# ---- 3. iOS build + PR plan -------------------------------------------------
-step "3 · iOS build + PR test plan"
-rm -rf "$RESULTS/PR-iOS.xcresult"
-set -o pipefail
-run_plan "$RESULTS/PR-iOS.xcresult" TestPlans/PR.xctestplan \
-    test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
-    -destination "$IOS_DEST" \
-    -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
-    -resultBundlePath "$RESULTS/PR-iOS.xcresult" \
-    -parallel-testing-enabled YES -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 60 -quiet
-done_step "iOS"
-
-# ---- 4. watchOS build + PR-Watch plan ---------------------------------------
-step "4 · watchOS build + PR-Watch test plan"
-rm -rf "$RESULTS/PR-watchOS.xcresult"
-# One worker = one watch clone. A second clone intermittently fails to launch
-# the host app or UI runner ("Unknown application display identifier").
-run_plan "$RESULTS/PR-watchOS.xcresult" TestPlans/PR-Watch.xctestplan \
-    test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
-    -destination "$WATCH_DEST" \
-    -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages \
-    -resultBundlePath "$RESULTS/PR-watchOS.xcresult" \
-    -parallel-testing-enabled YES -parallel-testing-worker-count 1 -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 60 -quiet
-done_step "watchOS"
+# ---- 3. iOS, 4. watchOS: build while the simulator boots, then test on it alone ----------
+# A fresh runner's simulators have never booted. Each parallel-testing clone paid that first boot
+# before an app-hosted test could launch, which ran out the CI step (F01 notes, "Second CI run").
+test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bundle name>
+    local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
+        -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages)
+    step "$1 · $2 build (the simulator boots meanwhile)"
+    scripts/sim-boot.sh "$5"
+    rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
+    xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
+    done_step "$2 build"
+    step "$1 · $2 simulator boot"
+    scripts/sim-boot.sh --wait "$5"
+    done_step "$2 boot"
+    step "$1 · $2 $4 test plan"
+    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
+        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" \
+        -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet
+    done_step "$2 tests"
+}
+test_platform 3 iOS Ledger PR "$IOS_DEST" PR-iOS
+test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
     git status --short -- ':(glob)**/__Snapshots__/**'
@@ -153,11 +165,7 @@ fi
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"
-if [[ -x scripts/coverage-gate.sh ]]; then
-    scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
-else
-    echo "coverage gate: F01"
-fi
+scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
 done_step "coverage"
 
 summary

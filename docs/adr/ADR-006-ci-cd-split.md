@@ -43,3 +43,7 @@ Ruby is 2.6), and Apple has no official App Store Connect CLI.
   already offers 27, so the two pins are tracked together.
 - Budget estimate (R3): a PR run ≈ 25–35 macOS minutes; at ~40 PR runs/month
   ≈ $75–90/month plus nightly, within the included minutes of a Team plan.
+- **2026-09-27 (Pete):** GitHub Free with no branch protection, and a spending limit of $0.
+  CI runs within the free macOS minutes: one macOS job per PR, a manual nightly. The merge
+  gate is the orchestrator's policy of a green local `check.sh`, plus CI when it ran
+  (`docs/ci-cd.md` §4).

@@ -5,6 +5,8 @@ swiftlint = "0.65.1"
 swiftformat = "0.63.0"
 lefthook = "2.1.14"
 xcbeautify = "3.2.1"
+"aqua:rhysd/actionlint" = "1.7.12" # workflow lint, run by the adversarial suite (WF01)
+"aqua:koalaman/shellcheck" = "0.11.0" # actionlint checks run: blocks with it
 
 [settings]
 idiomatic_version_file_enable_tools = []
