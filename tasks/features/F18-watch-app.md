@@ -69,9 +69,10 @@ No new persisted types. Presentation derivations (pure, unit-tested, in `WatchPr
 - Snapshot (WatchFeatureWorkoutTests + LedgerDesignTests): each of the six screens × {42, 46, 49 mm} × {default, Always-On (`isLuminanceReduced`)} × {lb, kg}; `RestRing` at 0 %, 50 %, 100 %; `CrownWeight` at 3 and 4 digits.
 - UI (LedgerWatchUITests, nightly): flow `start → log 2 sets → rest → skip → list → end → save → summary`, plus `performAccessibilityAudit()` on set-ready and rest.
 - Device (F20): crown detents feel, buzz at zero with wrist down, Always-On after 15 s.
+- Reduce Motion (from F06 review N5): with Reduce Motion on, the buzz shows an opacity pulse and no shake. `accessibilityReduceMotion` is get-only in the 26.5 SDK and `ImageRenderer` can't sample mid-animation, so this is a UI test or a device check.
 
 ## Non-functional
-- Performance budget: crown detent → numeral update next frame (architecture §15; signpost `watch.crown`); screen transition < 100 ms; no per-second timers besides `TimelineView`/`Text(timerInterval:)`.
+- Performance budget: crown detent → numeral update next frame (architecture §15; signpost `watch.crown`), measured with `.ledgerFont`'s per-body font construction included (F06 review N2: ~43 µs per call on the host; if over budget, cache by role, size and weight, and decide where the cache lives per standards §3); screen transition < 100 ms; no per-second timers besides `TimelineView`/`Text(timerInterval:)`.
 - Accessibility: minimum label 11 pt (17 px ÷ 1.5, spec §4.1); Dynamic Type via `@ScaledMetric` up to the watch's largest size without clipping the 3-digit weight; contrast ≥ 4.5:1 for informational text (raise 35–45 % alphas to 55 % where text carries meaning — decisions "Accessibility" line); Reduce Motion honoured.
 - Offline behaviour: all screens work `.solo`; connection state shown as one line under the set label when not connected (copy from F17).
 

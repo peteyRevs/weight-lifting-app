@@ -54,6 +54,10 @@ let testedTargets: [(name: String, settings: [SwiftSetting])] =
         ("LedgerWatchAppKit", uiSettings)
     ]
 
+/// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
+/// PNGs as sources. Add a target here with its first snapshot suite.
+let snapshotTestTargets: Set<String> = ["LedgerDesign"]
+
 let package = Package(
     name: "LedgerKit",
     platforms: [
@@ -94,7 +98,13 @@ let package = Package(
         .target(name: "LedgerActivityKit", dependencies: ["LedgerDomain"], swiftSettings: coreSettings),
 
         // ---- design ---------------------------------------------------------
-        .target(name: "LedgerDesign", swiftSettings: uiSettings),
+        // Archivo ships inside LedgerDesign so previews, package tests and both apps load
+        // the same file; the apps' UIAppFonts point into this target's resource bundle (F06).
+        .target(
+            name: "LedgerDesign",
+            resources: [.copy("Resources/Archivo[wdth,wght].ttf"), .copy("Resources/OFL.txt")],
+            swiftSettings: uiSettings
+        ),
 
         // ---- features -------------------------------------------------------
         .target(name: "FeatureOnboarding", dependencies: featureSpine, swiftSettings: uiSettings),
@@ -168,6 +178,7 @@ let package = Package(
                 "LedgerTestSupport",
                 "LedgerSnapshotTesting"
             ],
+            exclude: snapshotTestTargets.contains(target.name) ? ["__Snapshots__"] : [],
             swiftSettings: target.settings
         )
     }

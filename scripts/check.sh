@@ -6,7 +6,8 @@
 #   scripts/check.sh --fast             host-side package tests only; no simulators
 #   scripts/check.sh --lint-only        steps 0–2 only
 #   scripts/check.sh --skip-lint        steps 3–5 only (no format, lint or script tests)
-#   scripts/check.sh --record-snapshots re-record snapshot references, then fail
+#   scripts/check.sh --record-snapshots re-record snapshot references on both
+#                                       simulators, then fail; re-run to verify
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
@@ -93,10 +94,31 @@ if [[ $LINT_ONLY -eq 1 ]]; then
 fi
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
-    # swift-snapshot-testing always fails the run that writes references.
-    export SNAPSHOT_TESTING_RECORD=all
+    # swift-snapshot-testing always fails the run that writes references. xcodebuild
+    # forwards only TEST_RUNNER_-prefixed variables to the simulator's test runner.
+    export SNAPSHOT_TESTING_RECORD=all TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all
     echo "recording snapshot references — this run is expected to fail"
 fi
+
+# In record mode a plan run fails by design; keep going so both simulators record.
+run_plan() { # <result bundle> <plan file> <xcodebuild args…>
+    local result="$1" plan="$2"
+    shift 2
+    if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
+        xcodebuild "$@" | beautify || true
+        # A failed build or simulator boot also fails the run: it is a recording only if tests ran.
+        local ran
+        ran="$(xcrun xcresulttool get test-results summary --path "$result" 2>/dev/null |
+            jq -r '.totalTestCount // 0' || true)"
+        if [[ "${ran:-0}" -eq 0 ]]; then
+            echo "error: the record run failed before any test ran ($result)" >&2
+            exit 1
+        fi
+    else
+        xcodebuild "$@" | beautify
+        scripts/check-test-results.sh "$result" "$plan"
+    fi
+}
 
 # ---- fast tier: host-side package tests, no simulator -----------------------
 if [[ $FAST -eq 1 ]]; then
@@ -127,14 +149,19 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     scripts/sim-boot.sh --wait "$5"
     done_step "$2 boot"
     step "$1 · $2 $4 test plan"
-    xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" \
-        -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 \
-        -quiet | beautify
-    scripts/check-test-results.sh "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan"
+    run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
+        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" \
+        -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet
     done_step "$2 tests"
 }
 test_platform 3 iOS Ledger PR "$IOS_DEST" PR-iOS
 test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+
+if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
+    git status --short -- ':(glob)**/__Snapshots__/**'
+    echo "snapshot references recorded; re-run check.sh (without the flag) to verify them" >&2
+    exit 1
+fi
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"
