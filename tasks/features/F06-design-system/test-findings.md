@@ -689,3 +689,172 @@ and `.clear` in a gradient, adaptive layout on `dynamicTypeSize`, token-only rad
 frame, `.primaryAction`, ternaries between tokens); `LedgerDesign` may still spell everything. Font registration is
 not a flakiness source (idempotent, safe under 64 racing callers, order-independent, never unregistered). Fix round
 2's test edits weaken nothing, and its 14 re-recorded references have a stated visual cause.
+
+---
+
+# Round 4 — close-out after the re-plan (`aaaaca1`)
+
+Scope: Pete's decisions of 2026-09-29 are the contract (brief, "Decisions during delivery"): (1) text uses SwiftUI's
+native `.lineHeight` only, and the CSS half-leading emulation is gone; (2) the design lint is a tripwire with a frozen,
+documented rule list (engineering-standards §7), and "tokens only" is enforced by review. This round closes out
+findings 18–23, audits every test edit fix round 3 made, and attacks only what fix round 3 introduced: the native
+line-height contract, `snapshotAppearance(_:)`, and the isolation and serialization of the design suites. New raw-value
+spellings are out of scope (decision 2). Read: the brief, rounds 1–3 of this file, only the "Fix round 3 (re-plan)"
+section of `implementation-notes.md`, engineering-standards §7, and `git show aaaaca1`.
+
+## What was written
+
+| File | Attacks |
+|---|---|
+| `…/Adversarial/NativeLineHeightAdversarialTests.swift` | Every role as a container around a child with its own role, and as a second `.ledgerFont` on top of it, pixel for pixel; a role on a container reaching a child with no role, pixel for pixel; a background under a symbol and two lines at xSmall and AX5; three hard-broken and three soft-wrapped lines at xSmall and AX5 (pitch = L × size ± 1 pt); every role's first and last baselines against a one-line partner at the reference size and AX5 (168 cases) |
+| `…/Adversarial/MutedTextContrastAdversarialTests.swift` | `inkMuted` as SwiftUI paints it on ground and surface, bare and under `accentSoft`, both schemes, with and without Increase Contrast (iOS); phone `inkMuted` on `watchGround`, bare and under the tint |
+| `…/Adversarial/SnapshotAppearanceAdversarialTests.swift` | The phone type ramp as swift-snapshot-testing's `.sizeThatFits` strategy lays it out with `snapshotAppearance`, at large, xLarge, AX3 and AX5: ink away from both edges, and the image as tall as the sheet at its own height (iOS); every watch snapshot sheet (ramp, bold ramp, palette) at 42, 46 and 49 mm and at AX3/AX5 on 46 mm: ink away from both edges |
+
+The first version of the height test compared the strategy's image with `ImageRenderer`'s and failed at xLarge by
+12 px. That was the two renderers rounding non-integral text sizes differently (observations), not truncation; the
+test now compares the strategy with itself at the sheet's own height (`.fixedSize(horizontal: false, vertical: true)`),
+same renderer and traits, and xLarge passes exactly.
+
+## Results
+
+Run through the simulator lock on the pinned simulators.
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06-closeout-check.log`; waited 122 s for another worktree's gate; 1-minute load average 23–206 while it ran) | Steps 0–2 green: format, lint, `lint-rules.test.sh` (4 rules × 3 modules), `…-adversarial` 55/55, `…-round2` 39/39, `…-round3` 44/44 (33 asserted plus 11 `limit`), package graph. **Step 3 fails only on round 4's finding:** the PR plan on iOS 26.5 recorded 574 tests, 572 passed, 1 skipped (the nightly-only full bare-font matrix), and **1 failed, `SnapshotAppearanceAdversarialTests.phoneRamp_strategyLayout_takesIdealHeight` at AX3 and AX5 (finding 24)**. There was no timeout, every other target passed (`LedgerUITests/Smoke` included), and nothing was retried. `set -e` stopped the script before step 4 |
+| Step 4 run by hand, with `check.sh`'s own `xcodebuild` line and `check-test-results.sh`, via the lock | PR-Watch on watchOS 26.5: 551 tests, 550 passed, 1 skipped (the same matrix), 0 failed; 8 of 8 targets |
+| Finding 19, measured in the gate | `LedgerDesignTests` recorded all its results (143 on iOS, 129 on watchOS; round 3's failing gate had recorded 1). The longest took **1.10 s on iOS** and 0.42 s on watchOS, against the 60 s allowance |
+| Before the gate: `LedgerDesignTests` alone on both simulators with the gate's flags, via the lock | watchOS: 129 passed, 1 skipped; every round-4 suite passed. iOS: every round-4 suite passed except the first version of the height test (see above). Then `SnapshotAppearanceAdversarialTests` alone on iOS twice: once for the diagnosis, and once to confirm the corrected test (large and xLarge pass; AX3 and AX5 fail) |
+| Host `swift test` | Round 4's suites compile, and the 8 host-runnable tests pass (the two strategy tests are iOS-only; macOS has no Dynamic Type) |
+
+## Close-out of findings 18–23
+
+| # | Status | Evidence (iOS 26.5 and watchOS 26.5 unless noted) |
+|---|---|---|
+| 18 | **Resolved** | The lift and both paddings are gone (`git show aaaaca1`, `LedgerFont.swift`). `LedgerFontLinePlacementAdversarialTests.nestedRoles_innerRole_placesItsOwnLine` 4/4 and `background_underText_staysOnFrame` 21/21 pass with their round-3 assertions. Round 4 pushes it further and it holds: `nestedRoles_everyOuterRole_leavesInnerRoleUntouched` 21/21 (all 21 roles as container and as a second modifier, pixel-identical), `containerRole_childWithoutRole_matchesDirectRole` 21/21, `background_extremeTextSizes_staysOnFrame` 42/42 |
+| (11) | **Resolved by decision** | Superseded by decision 1: the CSS positions are retired, and the retargeted tests (audit below) pass |
+| 19 | **Resolved** | `scripts/check.sh` ran once and was not retried. Every result was recorded on both lanes: 143 `LedgerDesignTests` results on iOS and 129 on watchOS, against 1 in round 3's gate. The longest took 1.10 s on iOS and 0.42 s on watchOS, against the 60 s allowance, while the 1-minute load average was 23–206. The only failure is round 4's new finding 24. The value suites are `nonisolated`, the rendering suites are serialized, and the 1,008-render matrix is nightly-only (audit below) |
+| 20 | **Resolved** (under Pete's AA decision of 2026-09-27) | `inkMuted` .51 dark / .62 light. `AccentChipContrastAdversarialTests.inkText_onSelectedItemTint_meetsAA` 4/4 on both platforms; round 4's `inkMuted_everyGroundAndTint_meetsAA` 8/8 on iOS (Increase Contrast included), 4/4 on watchOS, and `inkMuted_onWatchGround_meetsAA` passes. Recomputed below: the lowest is 4.60:1 |
+| 21 | **Resolved** (B01–B15); **resolved by decision** (B16, B17) | `lint-rules-adversarial-round3.test.sh`: B01–B15 each flagged by the rule it names (B10 by both colour and font); B16 and B17 are `limit` cases and documented in §7 ("A comment inside the call") |
+| 22 | **Resolved by decision** | D01–D09 are `limit` cases; each is one bullet of §7's known limits (D01 size cap; D02 `.minimumScaleFactor`; D03 alpha on the view; D04 frame gap; D05 constant; D06/D07 `.separator`, materials; D08/D09 `.baselineOffset`, `.textCase`) |
+| 23 | **Resolved** | Q01–Q03 pass; the spellings next to them are still flagged (round 2's D01, D04, D06 in `…-round2.test.sh` 39/39; round 3's K03 in `…-round3.test.sh` 44/44) |
+
+`inkMuted` recomputed from the token values, composited in gamma sRGB with 8-bit rounding at each layer, which is what
+SwiftUI paints (the painted-pixel tests agree). WCAG 2.x ratio against the surface directly behind the text; the
+tint is `accentSoft` (12 % light, 16 % dark) over that ground:
+
+| Scheme | Ground | bare | under `accentSoft` | Increase Contrast (.74), bare | Increase Contrast, under `accentSoft` |
+|---|---|---|---|---|---|
+| light (.62) | paper (`ground`) | 4.84 | 4.62 | 7.24 | 6.75 |
+| light (.62) | card (`surface`) | 5.10 | 4.87 | 7.83 | 7.25 |
+| dark (.51) | `ground` `#0B0B0D` | 5.05 | 4.76 | 9.70 | 8.55 |
+| dark (.51) | sheet (`surface`) `#131316` | 5.04 | 4.60 | 9.37 | 8.03 |
+| watch (phone tokens resolve dark, .51) | `watchGround` `#000` | 4.97 | 4.92 | n/a | n/a |
+
+Every cell is ≥ 4.5:1, so finding 20 closes. The margins are thin by design (one 0.01 alpha step past the threshold;
+.50 gives 4.44 on the sheet tint, .61 gives 4.48 on the paper tint). The unrounded composites differ from these by at
+most 0.02.
+
+## Audit of fix round 3's test edits
+
+`git show -w aaaaca1 -- LedgerKit/Tests scripts`: 143 → 144 `@Test` functions (one added, three renamed, none deleted,
+disabled or wrapped in `withKnownIssue`); no test plan changed; no tolerance widened.
+
+| Edit | Verdict |
+|---|---|
+| `LedgerFontLineBoxAdversarialTests.singleLine_baseline_matchesCSSHalfLeading` → `…_matchesNativeLineHeight`: the baseline equals the same "H" set with only the role's font and `.lineHeight(.multiple(factor:))` (± ½ pt), and the frame is L × size (± 1 pt) | **Accept** — decision 1 drops CSS placement. It still catches a lift coming back: the smallest former lift (`label`, 0.8 pt) is over ½ pt |
+| `LedgerFontLineBoxAdversarialTests.singleLine_capitalInk_staysInsideFrame`: the baseline-inside-the-frame half now skips roles with L < 1 | **Accept** — decision 1 ("1–10 pt off"). Only `watchNumeral` (0.86) is skipped; the cap-line half still covers all 21 roles |
+| `LedgerFontLinePlacementAdversarialTests.singleLine_everyTextSize_matchesCSS` → `…_matchesNativeLineHeight` | **Accept** — decision 1. The tolerance tightened, from 3 % + ½ pt to ½ pt; the cap-line and frame checks are unchanged |
+| `twoLines_bothBaselines_matchCSS` → `twoLines_baselinePitch_isLineHeightTimesSize` | **Accept** — decision 1 retires absolute positions and keeps the pitch. The 3 % + ½ pt tolerance is loose (1.6 pt for `display`), so round 4 adds ± 1 pt over three lines at xSmall and AX5 (holds) |
+| `nestedRoles_innerRole_placesItsOwnLine`, `firstTextBaseline_twoRoles_shareOneBaseline`, `background_underText_staysOnFrame`: assertions unchanged, one display name reworded | **Accept** |
+| `verticalMetrics()`, `cssBaseline(_:size:line:)` and `import CoreText` removed from both files | **Accept** — they served only the retired CSS assertions |
+| Round-3 lint script: B16, B17 from a rule to `limit` | **Accept** — decision 2 closes spellings "where a rule can do it simply". SwiftLint's `excluded_match_kinds` drops any match that spans a comment token, and removing `comment` from the list would bring back round 1's N09 false positive. Listed in §7 |
+| Round-3 lint script: D01–D09 from `any` to `limit` | **Accept** — decision 2 makes finding 22's escape hatches documented limits. All nine map to a §7 bullet (close-out table) |
+| The `limit` expectation itself: passes only while no rule flags the case, and fails with "update docs/engineering-standards.md §7" once one does | **Accept** — it keeps §7's list true |
+| Round-3 lint script wired into `check.sh` step 2 | **Accept** |
+| `TokenValueTests`, `ContrastAdversarialTests`, `LayoutTokenAdversarialTests`, `LedgerFontSpecAdversarialTests` and the `Resolve` helper made `nonisolated` | **Accept** — finding 19's root cause, main-actor queueing. They use no main-actor API (no `MainActor`, `await`, `Probe`, `ImageRenderer` or `UITraitCollection`), and Swift 6 checks it under `defaultIsolation(MainActor.self)` |
+| The other 21 suites nested in `@Suite("Rendering (serialized)", .serialized) enum RenderingSuites` | **Accept** — finding 19. With `-w` the diff is the wrapper, re-wrapped lines, three helper types moved into trailing extensions (SwiftLint `nesting`) and one display name shortened. `.serialized` is recursive, so each test's allowance starts when that test runs |
+| `IncreaseContrastTests` kept in the serialized group rather than made `nonisolated` | **Accept** — `UITraitCollection { $0.… = … }` mutates main-actor state |
+| `bareFont_everySizeAndWeight_matchesLedgerFont` tagged `.slow` and `.enabled(if: TestLane.runsSlowTests)`; new PR test `bareFont_representativeSizesAndWeights_matchesLedgerFont` (xSmall, large, AX5 × regular/bold) | **Accept** — finding 19, part 3. This is the one test whose own work (22 s serial on the host, about a minute on a loaded simulator) nears the 60 s allowance even when serialized; this is not about machine speed. `Nightly` and `Nightly-Watch` set `LEDGER_TEST_LANE=nightly` and allow 600 s, so the full matrix still runs there. The subset still guards what the matrix guards: both paths go through the same `scaledSize` and `font(_:size:legibilityWeight:)`, and the only size-dependent code is the floor (`max(size, minimumSize)`, reached at xSmall by the watch roles) and the AX curve (reached at AX5). The middle sizes stay pinned in the PR lane by `scaledSize_everyTextSize_followsScaledMetric` (all 12 sizes), `scaledSize_acrossTextSizes_monotonicUncappedFloored`, round 1's `.ledgerFont` growth test, and round 3's line placement at xxxLarge and AX3 (frame = L × `scaledSize` for `.ledgerFont`). The subset loses the bold comparison at the nine middle sizes, and weight does not depend on size in the code |
+| `TokenValueTests`, `LedgerColorAdversarialTests` (and its browser-composite check): `inkMuted` .48 → .51 dark, .60 → .62 light | **Accept** — finding 20's fix under the AA decision; the token changed, and three independent paths still read it |
+| 16 references re-recorded | **Accept** for the stated causes (native placement, the `inkMuted` swatch, the harness fix). The two AX3 phone ramps still record four samples cut to one line: finding 24 |
+
+**Verdict: no test was weakened beyond what decisions 1 and 2 retire.**
+
+## 24. The snapshot strategy still cuts wrapping text at AX3 and AX5 — minor bug (harness)
+
+- **Test:** `SnapshotAppearanceAdversarialTests.phoneRamp_strategyLayout_takesIdealHeight` (iOS). AX3 and AX5 fail;
+  large and xLarge pass.
+- **Attacks:** fix round 3's `snapshotAppearance(_:)` and what the notes say about it: after the fix the "whole ramp [is]
+  visible", the "…" endings at AX3 are "not clipping", and slice 2 "should use it on every phone snapshot".
+- **Cause:** swift-snapshot-testing 1.19 sizes a `.sizeThatFits` view with
+  `hostingController.sizeThatFits(in: CGSize(width: 0.0, height: 0.0))` (`SwiftUIView.swift`). The sheet's
+  `.frame(width: 402)` fixes the width, but every `Text` is offered zero height, and a `Text` offered no height takes
+  one line and truncates. `snapshotAppearance` fixed the text size the sheet is measured at. It did not change that
+  proposal.
+- **Repro** (iOS 26.5, dark): the strategy's image against the same strategy with
+  `.fixedSize(horizontal: false, vertical: true)`, which is the sheet at its own height with the same renderer and
+  traits. large 733 = 733 px, xLarge 795 = 795 px, but **AX3 1249 against 1454 px** and **AX5 1522 against 1919 px**.
+  The committed `phoneTypeRamp_appearance_matchesReference-_.{light,dark}-accessibility3.png` show "Train four day…",
+  "Upper A — Pus…", "Upper A — Push…" and "Same movement pattern,…". With `.fixedSize` each of those wraps to two
+  lines (the failing run attaches `snapshot-*.png` and `ownHeight-*.png`).
+- **Why it matters:**
+  - Criterion 3's AX3 cell is where a layout has to wrap, and the references record truncation instead (the HIG says
+    not to truncate at large text sizes).
+  - Multi-line text at an accessibility size, where decision 1's native line height is the whole contract, never
+    appears in a reference.
+  - Slice 2's components (an empty state's body, a sheet title, a set row) would be recorded the same way, so a
+    wrapping or line-height regression at AX3 could not fail a snapshot.
+
+  Nothing is clipped at the edges: `phoneRamp_strategyLayout_notClipped` holds up to AX5, with ink at least 8 px
+  from both edges.
+- **Fix direction:** in the harness, not the product. For example, `snapshotAppearance` (or a phone-sheet helper) adds
+  `.fixedSize(horizontal: false, vertical: true)`, and the two AX3 references are re-recorded. At large and xLarge
+  the height is unchanged (733 and 795 px).
+
+## Out of scope, noted
+
+- **Increase Contrast under the tint.** On paper under `accentSoft`, Increase Contrast `inkMuted` (.74) is 6.75:1 and
+  `inkFaint` (.60) 4.33:1. The ladder promises 7:1 and 4.5:1 on bare ground and surface only, and the brief's
+  4.5:1 holds for text, so this is not a re-plan item. If the ladder's promise is meant to hold on a selected item
+  too, it needs a step there.
+- **Two renderers, two roundings.** The same phone sheet is 12 px taller in `ImageRenderer` (807 px) than in the
+  snapshot strategy (795 px) at xLarge, and 14 px taller at AX3 and AX5 once wrapped. They agree at large (733 px),
+  where sizes are whole points. Watch snapshots and pixel probes use `ImageRenderer` and phone snapshots use
+  `UIHostingController`, so a test must not compare heights across the two.
+- **`watchNumeral` below its frame at large watch text sizes.** The 0.14 em overflow that decision 1 accepts grows with
+  the scaled size. Slice 3's watch components should size their spacing token for the largest supported watch text
+  size, not only the 46 mm default.
+
+- **The next gate timeout is in `LedgerDomainTests`, not F06.** In this gate's iOS lane, 369 of LedgerDomainTests'
+  413 results report more than 30 s (median 36 s, longest 44.25 s, "A drop row on the shorter member still waits for
+  the working rounds to finish"). The watch lane's longest is 27 s. Trivial tests such as
+  `ProgramTests.init_oneWeek_throwsTooFewWeeks` report 43 s. This is finding 19's pattern: every test's clock starts
+  at once, and the tests wait for workers. It leaves 16 s of headroom under the 60 s allowance on a loaded machine.
+  That target belongs to F02/F04 and is not part of this re-plan.
+
+## Attacked and held (round 4)
+
+On iOS 26.5 and watchOS 26.5:
+
+- **Nested roles.** Every one of the 21 roles, set on a container around a `bodyLight` or `watchNumeral` child, or
+  applied as a second `.ledgerFont` on top of it, draws the child pixel-identical to the child alone: case, tracking,
+  figures and line pitch included. A role on a container reaches a child without a role pixel-identically, for all
+  21 roles.
+- **Backgrounds.** A background under a symbol and two lines of text stays on the view's frame (± ½ pt) at xSmall and
+  AX5, for all 21 roles.
+- **Line pitch.** Three hard-broken and three soft-wrapped lines are L × size apart (± 1 pt), in a frame of 3L × size
+  (± 1 pt), at xSmall and AX5, for all 21 roles, `watchNumeral`'s 0.86 included.
+- **Baselines.** Each role's two-line block aligns its first and its last baseline with an `eyebrow` or `watchLabel`
+  partner, within 1 px at 2×, at the reference size and at AX5.
+- **`inkMuted` contrast.** As painted, it is ≥ 4.5:1 on every ground and tint (lowest 4.60, dark sheet under the
+  tint). With Increase Contrast it is ≥ 6.75, and on `watchGround` 4.97 bare and 4.92 under the tint.
+- **Snapshot sheets.** The phone ramp, as the snapshot strategy lays it out, keeps ink at least 8 px from both edges
+  at large, xLarge, AX3 and AX5. The watch ramp, bold ramp and palette keep ink at least 8 px from both edges at
+  42/46/49 mm defaults and at AX3/AX5.
+- **Isolation.** LedgerDesignTests has 25 suites: 21 under `RenderingSuites` and 4 `nonisolated`, and none of the
+  four touches the main actor. No other test target renders: no `ImageRenderer`, `assertSnapshot` or
+  `RenderedImage` in `LedgerKit/Tests` outside LedgerDesignTests, or in `Apps`.
+- **Lint.** The round-3 script passes 44/44, 11 of them `limit` cases, and §7's known limits match those 11 one for
+  one.
+- **Gate.** One run of `check.sh`, with no retry. Apart from finding 24, every test in both PR plans passes: iOS 572 passed and 1 skipped, and PR-Watch 550 passed and 1 skipped (step 4 by hand). No `LedgerDesignTests` test comes near the allowance
