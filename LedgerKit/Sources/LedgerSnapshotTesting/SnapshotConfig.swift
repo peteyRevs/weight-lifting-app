@@ -26,8 +26,9 @@ public nonisolated enum SnapshotConfig {
         #endif
     }
 
-    /// The platform a reference was recorded on. It is part of every reference name because
-    /// text rasterises differently on iOS and watchOS.
+    /// The platform a test runs on. A sheet recorded on both simulators (today only the width spike's)
+    /// carries it in its reference name, because text rasterises differently on iOS and watchOS.
+    /// On the Mac host (`swift test`) no reference is recorded (F06 review N3).
     public static var platform: String {
         #if os(watchOS)
             "watchOS"
@@ -71,12 +72,19 @@ public nonisolated struct SnapshotAppearance: Sendable, CustomStringConvertible 
 }
 
 public extension View {
-    /// Puts `appearance` in SwiftUI's own environment as well as in the snapshot's traits.
-    /// swift-snapshot-testing measures a `.sizeThatFits` view before it applies `traits`, so without
-    /// this a sheet at `.xLarge` or `.accessibility3` is laid out in its `.large` size and clipped at
-    /// the top and bottom (found in F06 fix round 3).
+    /// Lays the view out as a screen would at `appearance`, for swift-snapshot-testing's
+    /// `.sizeThatFits` layout, which measures the view before it applies `traits` and proposes it a
+    /// zero size (`sizeThatFits(in: .zero)` in 1.19):
+    /// - the text size and colour scheme also go into SwiftUI's environment, so a sheet at `.xLarge`
+    ///   or `.accessibility3` is not measured at `.large` and clipped (F06 fix round 3);
+    /// - the view takes its own height, so text wraps as it does on a device instead of being cut to
+    ///   one line with "…" (F06 review S1, finding 24).
+    ///
+    /// Phone snapshot tests go through `assertPhoneSnapshot(of:_:)`, which applies this.
     func snapshotAppearance(_ appearance: SnapshotAppearance) -> some View {
-        environment(\.dynamicTypeSize, appearance.dynamicTypeSize).environment(\.colorScheme, appearance.colorScheme)
+        environment(\.dynamicTypeSize, appearance.dynamicTypeSize)
+            .environment(\.colorScheme, appearance.colorScheme)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

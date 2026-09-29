@@ -653,3 +653,72 @@ specimens' 16 pt padding) and at least 9 px at `.xLarge` / `.accessibility3` (it
 - LedgerDesign product Swift against `main`: **+486 −4 = 490 changed lines** (≤ 500; was 497). This round: +11 −18.
 - Not touched: `Ledger.xcodeproj` (Pete still has to delete the dangling `Fonts` group), the test plans, the plans' 60 s
   allowance.
+
+## Fix round 4 (review should-fix)
+
+Against the G3 review (`review.md`: 0 Blocking, S1, S2, N1–N8) and the adversarial round 4's finding 24, on
+`e94b600`. No `LedgerDesign` source changed. Left alone, as the orchestrator asked: the review's merge note about
+F01 (the `check.sh` conflict and the lint scripts running twice).
+
+### Should fix → change → test
+
+| # | Change | Test |
+|---|---|---|
+| S1 / finding 24 | `snapshotAppearance(_:)` now also applies `.fixedSize(horizontal: false, vertical: true)`. swift-snapshot-testing 1.19 sizes a `.sizeThatFits` view with `sizeThatFits(in: .zero)`, which offers text no height and cuts it to one line with "…"; with the fixed size the sheet takes its own height and text wraps as on a device. New `assertPhoneSnapshot(of:_:named:modifyingTraits:)` (`LedgerSnapshotTesting/PhoneSnapshot.swift`, iOS) is the one way a phone test takes a snapshot: `snapshotAppearance`, the appearance's traits (plus `modifyingTraits`, used for Increase Contrast) and `SnapshotConfig`'s precisions, forwarding `#file`/`#filePath`/`#function` so reference names don't move. All four phone tests in `TokenSnapshotTests` use it; the Bold Text ramp and both palettes used to skip `snapshotAppearance`. `docs/testing-strategy.md` §2.5 now names the helper and why. Test-only code. | `SnapshotAppearanceAdversarialTests.phoneRamp_strategyLayout_takesIdealHeight` passes at large, xLarge, AX3 and AX5 (it failed at AX3 and AX5 in round 4), and `…_notClipped` still holds. The re-recorded AX3 references pin the wrapped layout: dropping the fixed size would make them 1249 px again and fail on size. I did not add a second "two-line string is taller" test; the round-4 test is that test, at AX3 and AX5 |
+| S2 | The four `ledger_raw_*` rules' `included` is now `'LedgerKit/Sources/(Feature\w*\|WatchFeature\w*\|LedgerAppKit\|LedgerWatchAppKit)/.*\|Apps/.*'`, written once (`&ui_modules`) and reused by the other three rules. The `*design_allowlist` excludes are kept. The regexes are unchanged. Under Pete's decision of 2026-09-29 (a tripwire with a frozen rule set) this is a false-positive fix: `LedgerDomain`, `LedgerDependencies`, the adapters and `LedgerActivityKit` are Foundation-only (standards §2), so any hit there is a false positive. Engineering-standards §7 says so next to the rule list, and names the scope. Module list checked against `LedgerKit/Package.swift` and architecture §3. | `lint-rules.test.sh`, 12 new checks: a Foundation-only file (`enum PlateColor { case black, red }`, `return .black`, `return .red`, `NameRule(minLength: 2)`) is flagged by exactly `ledger_raw_color` and `ledger_raw_spacing` in `FeatureToday`, `WatchFeatureWorkout`, `LedgerAppKit`, `LedgerWatchAppKit`, `Apps/Ledger` and `Apps/LedgerWatch`, and by nothing in the six Foundation-only modules. Against the old config the six Foundation-only checks fail (checked with a copy of the script pointed at `HEAD:.swiftlint.yml`). Rounds 1–3 unchanged: 55/55, 39/39, 44/44 |
+
+### Nits
+
+| # | Done? | Change | Test |
+|---|---|---|---|
+| N1 | Reworded | The `.png` comparator stays CIE76. Its doc comment and testing-strategy §2.5 now say it uses the library's ΔE threshold and that CIE76 is never smaller than the CIE94 Core Image measures, so it is at least as strict. I did not implement ΔE94: which chroma Core Image weights by (the reference's, or a mean) is not documented, so "matches the library" still wouldn't be provable, and the stricter comparison can't cause a false pass. | Comparator suites unchanged and green |
+| N2 | **Skipped** | Needs slice 3: a `.performance` test on the watch simulator once the watch components exist, and a decision on where a font cache would live (standards §3, global mutable state). The review itself defers it. | — |
+| N3 | Yes | The spike's `assertSnapshot` is `#if os(iOS) \|\| os(watchOS)`, so `swift test` on the Mac no longer writes `…macOS.png` into `__Snapshots__`. New `ConditionTrait.simulatorOnly` (`Support/Tags.swift`, `.disabled(if: SnapshotConfig.platform == "macOS")`) on the five tests that need Dynamic Type or pixel-stable renders: `TypeScaleTests` ×2, `LedgerFontRenderingAdversarialTests` ×2, `SnapshotHarnessAdversarialTests.render_sameViewRepeatedly_isPixelIdentical`. The three adversarial tests only gain the trait: no assertion changed, and the trait is a no-op on iOS and watchOS. `SnapshotConfig.platform`'s comment now says only the spike carries the platform in its name. | Host `swift test --filter LedgerDesignTests`: 122 tests, 0 failed (was 32 issues in 5 tests), 5 skipped on macOS plus the nightly-only matrix; no stray reference. Gate: the same tests run and pass on both simulators |
+| N4 | Yes | `check.sh --record-snapshots`: after each plan, `xcresulttool get test-results summary` must report `totalTestCount > 0`, or the script exits 1 with "the record run failed before any test ran". A `[[ -d "$result" ]]` check would not do: xcodebuild writes a result bundle even when it fails before any test. | A deliberately failed `xcodebuild test` (unknown destination) left a bundle with `totalTestCount` 0 and the check trips; the real record run (below) passed it on both platforms |
+| N5 | **Skipped** | No product or test change; it is a device check. F20's protocol is the M2 sync protocol, and its criterion 1 counts exactly 14 scenarios. The watch feature that first uses `ledgerBuzz` (F18) has no brief section for it yet. Which brief owns "buzz with Reduce Motion on shows an opacity pulse, no shake" is the orchestrator's call. | — |
+| N6 | Yes | Deleted the stale "Not wired into check.sh…" lines from `lint-rules-adversarial-round2.test.sh`'s header. Comment only. | 39/39 |
+| N7 | Yes | The brief's public-surface block now shows `font(_:dynamicTypeSize:legibilityWeight:)`, `font(_:size:legibilityWeight:)`, `scaledSize(_:dynamicTypeSize:)`, `View.ledgerFont(_:)`, `buzzKeyframes(reduceMotion:)` and `View.ledgerBuzz(trigger:)` in place of `font(_ role:)` and `buzz`. | — |
+| N8 | Yes (documented) | Standards §7 known limits: "a role's design size passed back as a fixed size (`LedgerFont.font(.body, size: LedgerFont.Role.body.spec.size)`) drops Dynamic Type". The slice-3 option (make `spec` internal along with `archivo(…)`) is a design change and left to slice 3. | `lint-rules.test.sh`: that spelling is not flagged, and the check fails once a rule starts to flag it, like round 3's `limit` cases, so §7 stays true |
+
+### Re-recorded references
+
+`scripts/check.sh --record-snapshots` ran once, fully, through the lock (`scratchpad/f06-fix4-record.log`, 242 s). The
+only failures were recordings: iOS 574 tests, 568 passed, 5 recordings, 1 skipped; watchOS 551 tests, 546 passed,
+4 recordings, 1 skipped. All 16 references were rewritten, and 14 came back byte-identical, including the two
+palettes, the two Increase Contrast palettes and the Bold Text ramp that now go through `assertPhoneSnapshot`. Two
+changed, both compared pixel by pixel with `HEAD` and opened:
+
+| Reference | Size | Eye check |
+|---|---|---|
+| `TokenSnapshotTests/phoneTypeRamp_appearance_matchesReference-_.dark-accessibility3.png` | 402×1249 → **402×1454** (finding 24's own-height figure) | No "…" anywhere. Each sample that was cut now wraps to two lines: display "Train four days / a week", title and heading "Upper A — / Push focus", bodyLight "Same movement pattern, / equipment you have.". The whole ramp is visible, display to numeralS. Ink margins: top 17, bottom 9, left 16, right 41 px |
+| `TokenSnapshotTests/phoneTypeRamp_appearance_matchesReference-_.light-accessibility3.png` | 402×1249 → **402×1454** | Same as dark; same margins |
+
+`__Snapshots__`: 16 PNGs, 908 KB (budget 6 MB).
+
+A process note: my first N4 edit dropped the `else` in `run_plan`. I read the diff before the record run finished,
+stopped that run (it hadn't written a reference), fixed the edit, checked it with `bash -n` and a diff, and restarted
+the run. Rule for next time: when an edit replaces a line of control flow, read the diff before running anything.
+
+### Verification — fix round 4 (2026-09-29)
+
+- `scripts/check.sh --fast`: green (format, lint, the four lint fixture scripts, package graph, host Domain +
+  Persistence 419 tests). `lint-rules.test.sh` is now 25 checks: 12 + 12 for the scope + 1 known limit.
+- Host `swift test --package-path LedgerKit --filter LedgerDesignTests`: 122 tests pass, 6 skipped (5 `simulatorOnly`
+  plus the nightly-only matrix), and nothing is written to `__Snapshots__` (N3). Before this round: 32 issues in 5
+  tests and a stray `…macOS.png`.
+- **Full `scripts/check.sh` through the simulator lock: green on the first run, once**
+  (`scratchpad/f06-final-check.log`, 200 s: iOS 109 s, watchOS 79 s; it waited 306 s for another worktree's run).
+  - PR-iOS: **574 tests, 573 passed, 0 failed, 1 skipped** (the nightly-only full bare-font matrix, `.slow`);
+    17/17 test targets. `SnapshotAppearanceAdversarialTests` passed in full, including
+    `phoneRamp_strategyLayout_takesIdealHeight` at AX3 and AX5 (finding 24), and all 11 `TokenSnapshots` cases
+    matched their references.
+  - PR-watchOS: **551 tests, 550 passed, 0 failed, 1 skipped** (the same `.slow` matrix); 8/8 test targets.
+  - Step 2: `lint-rules.test.sh` 25/25, `…-adversarial` 55/55, `…-round2` 39/39, `…-round3` 44/44; package graph
+    matches.
+- LedgerDesign line coverage (xccov, `Sources/LedgerDesign/`, the `LedgerDesignTests` copy): **95.5 %** iOS
+  (192/201), **95.2 %** watchOS (180/189); target 60 %. No product source changed. The uncovered lines are
+  `FontRegistration`'s failure logging and `LedgerMotion`'s `accessibilityReduceMotion` read (N5).
+- LedgerDesign product Swift against `main` (merge base `8404d02`): **+486 −4 = 490 changed lines**, unchanged
+  (≤ 500). This round's Swift is all test-only: `LedgerSnapshotTesting` (+1 file, `PhoneSnapshot.swift`) and
+  `LedgerDesignTests`.
+- Not touched: `Ledger.xcodeproj`, the test plans and their 60 s allowance, the lint regexes, and the F01 merge note.

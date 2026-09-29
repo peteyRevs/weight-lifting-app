@@ -12,46 +12,27 @@ extension RenderingSuites {
         #if os(iOS)
             @Test("The phone type ramp matches its references", arguments: SnapshotAppearance.phoneMatrix)
             func phoneTypeRamp_appearance_matchesReference(_ appearance: SnapshotAppearance) {
-                assertSnapshot(
-                    of: TypeRampSpecimen(roles: Specimen.phoneRoles, width: SnapshotConfig.phoneWidth)
-                        .snapshotAppearance(appearance),
-                    as: .image(
-                        precision: SnapshotConfig.precision,
-                        perceptualPrecision: SnapshotConfig.perceptualPrecision,
-                        layout: .sizeThatFits,
-                        traits: appearance.traits
-                    ),
-                    named: appearance.description
+                assertPhoneSnapshot(
+                    of: TypeRampSpecimen(roles: Specimen.phoneRoles, width: SnapshotConfig.phoneWidth),
+                    appearance
                 )
             }
 
             @Test("The phone palette matches its references", arguments: [ColorScheme.light, .dark])
             func phonePalette_scheme_matchesReference(_ scheme: ColorScheme) {
-                let appearance = SnapshotAppearance(scheme, .large)
-                assertSnapshot(
+                assertPhoneSnapshot(
                     of: PaletteSpecimen(swatches: PaletteSpecimen.phone, width: SnapshotConfig.phoneWidth),
-                    as: .image(
-                        precision: SnapshotConfig.precision,
-                        perceptualPrecision: SnapshotConfig.perceptualPrecision,
-                        layout: .sizeThatFits,
-                        traits: appearance.traits
-                    ),
-                    named: appearance.description
+                    SnapshotAppearance(scheme, .large)
                 )
             }
 
             @Test("The phone type ramp with Bold Text matches its reference (dark, large)")
             func phoneTypeRamp_boldText_matchesReference() {
                 let appearance = SnapshotAppearance(.dark, .large)
-                assertSnapshot(
+                assertPhoneSnapshot(
                     of: TypeRampSpecimen(roles: Specimen.phoneRoles, width: SnapshotConfig.phoneWidth)
                         .environment(\.legibilityWeight, .bold),
-                    as: .image(
-                        precision: SnapshotConfig.precision,
-                        perceptualPrecision: SnapshotConfig.perceptualPrecision,
-                        layout: .sizeThatFits,
-                        traits: appearance.traits
-                    ),
+                    appearance,
                     named: "bold-\(appearance)"
                 )
             }
@@ -62,16 +43,11 @@ extension RenderingSuites {
             )
             func phonePalette_increasedContrast_matchesReference(_ scheme: ColorScheme) {
                 let appearance = SnapshotAppearance(scheme, .large)
-                let traits = appearance.traits.modifyingTraits { $0.accessibilityContrast = .high }
-                assertSnapshot(
+                assertPhoneSnapshot(
                     of: PaletteSpecimen(swatches: PaletteSpecimen.phone, width: SnapshotConfig.phoneWidth),
-                    as: .image(
-                        precision: SnapshotConfig.precision,
-                        perceptualPrecision: SnapshotConfig.perceptualPrecision,
-                        layout: .sizeThatFits,
-                        traits: traits
-                    ),
-                    named: "increasedContrast-\(appearance)"
+                    appearance,
+                    named: "increasedContrast-\(appearance)",
+                    modifyingTraits: { $0.accessibilityContrast = .high }
                 )
             }
         #endif

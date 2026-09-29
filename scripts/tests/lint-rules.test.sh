@@ -2,7 +2,8 @@
 # Fixture test for the design-system lint rules (F06 acceptance criterion 8).
 # The same raw colour / font / spacing / radius code must fail in a feature
 # module and in an app shell, and pass inside LedgerDesign, the only module
-# allowed to spell raw values.
+# allowed to spell raw values. The rules cover only the modules that can draw
+# UI: Foundation-only code is not flagged (F06 review S2).
 #
 #   scripts/tests/lint-rules.test.sh      (run by check.sh step 2)
 set -euo pipefail
@@ -49,8 +50,37 @@ for i in "${!RULES[@]}"; do
     check "$rule passes inside LedgerDesign" '[[ -z "$design" ]]'
 done
 
+# Scope (F06 review S2, engineering-standards §7): Foundation-only code that spells a plate colour and
+# a name-length rule. Every module that can draw UI flags it; the Foundation-only modules do not.
+UI_MODULES=(LedgerKit/Sources/FeatureToday LedgerKit/Sources/WatchFeatureWorkout LedgerKit/Sources/LedgerAppKit
+    LedgerKit/Sources/LedgerWatchAppKit Apps/Ledger Apps/LedgerWatch)
+FOUNDATION_MODULES=(LedgerDomain LedgerDependencies LedgerPersistence LedgerHealth LedgerSync LedgerActivityKit)
+foundation_fixture() { # <module dir>
+    mkdir -p "$WORK/$1"
+    printf '%s\n' 'import Foundation' '' 'enum PlateColor { case black, red }' '' \
+        'struct NameRule { let minLength: Int }' '' 'let nameRule = NameRule(minLength: 2)' '' \
+        'func plateColor(kilograms: Int) -> PlateColor {' '    if kilograms >= 25 { return .red }' \
+        '    return .black' '}' >"$WORK/$1/Plate.swift"
+    echo "$WORK/$1/Plate.swift"
+}
+for module in "${UI_MODULES[@]}"; do
+    found="$(violations "$(foundation_fixture "$module")" | sort -u | tr '\n' ' ')"
+    check "colour and spacing rules reach ${module#LedgerKit/Sources/}" \
+        '[[ "$found" == "ledger_raw_color ledger_raw_spacing " ]]'
+done
+for module in "${FOUNDATION_MODULES[@]}"; do
+    found="$(violations "$(foundation_fixture "LedgerKit/Sources/$module")")"
+    check "Foundation-only $module is not flagged (return .black, minLength: 2)" '[[ -z "$found" ]]'
+done
+
+# Known limit (standards §7, F06 review N8): fails once a rule flags it, so §7's list stays true.
+spec="$(violations "$(fixture "LedgerKit/Sources/FeatureToday" \
+    'Text("a").font(LedgerFont.font(.body, size: LedgerFont.Role.body.spec.size))')")"
+check "known limit, not flagged: a role's spec size as a fixed size (else update standards §7)" '[[ -z "$spec" ]]'
+
 if [[ $failures -gt 0 ]]; then
     echo "lint-rules: $failures check(s) failed" >&2
     exit 1
 fi
-echo "lint-rules: ${#RULES[@]} rules × 3 modules OK"
+echo "lint-rules: ${#RULES[@]} rules × 3 modules OK; scope: ${#UI_MODULES[@]} UI modules flagged," \
+    "${#FOUNDATION_MODULES[@]} Foundation-only modules not flagged"

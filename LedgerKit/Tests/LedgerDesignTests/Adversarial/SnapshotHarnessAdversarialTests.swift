@@ -31,7 +31,7 @@ extension RenderingSuites {
             .background(LedgerColor.ground)
         }
 
-        @Test("Rendering the same view five times yields identical pixels (determinism).")
+        @Test("Rendering the same view five times yields identical pixels (determinism).", .simulatorOnly)
         func render_sameViewRepeatedly_isPixelIdentical() throws {
             let first = try #require(RenderedImage.render(Self.specimen, width: 240).flatMap(PixelBuffer.init))
             for attempt in 1 ... 4 {

@@ -1,4 +1,5 @@
 import Foundation
+import LedgerSnapshotTesting
 import Testing
 
 /// Tags live in the test target, not LedgerTestSupport (F00 implementation notes #6).
@@ -16,5 +17,14 @@ nonisolated enum TestLane {
     /// `.slow` tests run only in the nightly plans; the PR plans and `swift test` skip them.
     static var runsSlowTests: Bool {
         ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly"
+    }
+}
+
+extension Trait where Self == ConditionTrait {
+    /// For a test that needs Dynamic Type or pixel-stable renders, which only the iOS and watchOS
+    /// simulators give: `swift test` on the Mac host scales no text size, and its renders can differ
+    /// from run to run (F06 review N3).
+    nonisolated static var simulatorOnly: Self {
+        .disabled(if: SnapshotConfig.platform == "macOS", "needs Dynamic Type and stable renders: iOS or watchOS")
     }
 }

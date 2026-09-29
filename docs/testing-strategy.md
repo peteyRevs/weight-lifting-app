@@ -161,8 +161,12 @@ Concrete test names (file = suite = source type; see §6):
 - Matrix, phone: `{light, dark} × {.large, .xLarge, .accessibility3}` = 6
   images per component/screen state (`SnapshotAppearance.phoneMatrix`; F06
   criterion 3 chose `.xLarge` over `.xxxLarge`), rendered at 1× with
-  `.image(layout: .sizeThatFits, traits: appearance.traits)` (components)
-  or `.device(config:)` (screens). 1.19.6's newest `ViewImageConfig` is
+  `assertPhoneSnapshot(of:_:)` (components) or `.device(config:)` (screens).
+  The helper wraps `.image(layout: .sizeThatFits, traits:)` and applies
+  `snapshotAppearance(_:)`: the text size and scheme also go into SwiftUI's
+  environment (the library measures before it applies traits), and the view
+  takes its own height (the library proposes a zero size, which cuts
+  wrapping text to one line with "…"; F06 review S1). 1.19.6's newest `ViewImageConfig` is
   `.iPhone13ProMax`; there is no iPhone 17 config (checked in F06), so
   components render at `SnapshotConfig.phoneWidth` (402 pt). Watch: always
   dark, fixed sizes 42 mm 187×223, 46 mm 208×248, 49 mm 205×251 pt
@@ -170,7 +174,9 @@ Concrete test names (file = suite = source type; see §6):
   1.19.6 has no image strategy on watchOS (its view and `UIImage` strategies
   are `#if os(iOS) || os(tvOS)`), so watch snapshots go through
   `RenderedImage.render` (`ImageRenderer`, 1×) and the `.png` strategy in
-  `LedgerSnapshotTesting`, which applies the same precision / ΔE threshold.
+  `LedgerSnapshotTesting`, which applies the same precision and ΔE threshold.
+  It measures ΔE as CIE76, which is never smaller than the CIE94 that Core
+  Image measures for the library on iOS, so it is at least as strict.
 - Precision: `precision: 0.995, perceptualPrecision: 0.98`, set once in
   `SnapshotConfig` and never overridden per test.
 - Storage: PNGs in `__Snapshots__/` next to the test file, committed to git

@@ -72,7 +72,10 @@ custom_rules:
   # radii (flush stacks, square corners); any other number is a raw value.
   ledger_raw_color:
     name: "Raw colour outside LedgerDesign"
-    included: 'LedgerKit/Sources/.*|Apps/.*'
+    # Scope: the modules that can draw UI, i.e. the features, the two umbrellas and the app shells.
+    # LedgerDomain and the adapters are Foundation-only (engineering-standards §2), so a hit there is
+    # a false positive (F06 review S2); scoping them out left the regexes and the frozen set unchanged.
+    included: &ui_modules 'LedgerKit/Sources/(Feature\w*|WatchFeature\w*|LedgerAppKit|LedgerWatchAppKit)/.*|Apps/.*'
     # LedgerDesign is the one module that turns raw values into tokens (F06).
     excluded: &design_allowlist
       - '.*LedgerKit/Sources/LedgerDesign/.*'
@@ -89,7 +92,7 @@ custom_rules:
     severity: error
   ledger_raw_font:
     name: "Raw font outside LedgerDesign"
-    included: 'LedgerKit/Sources/.*|Apps/.*'
+    included: *ui_modules
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
     # A system style anywhere in a `.font(…)` or `\.font` environment argument (not LedgerFont.font's
@@ -102,7 +105,7 @@ custom_rules:
     severity: error
   ledger_raw_spacing:
     name: "Raw spacing outside LedgerDesign"
-    included: 'LedgerKit/Sources/.*|Apps/.*'
+    included: *ui_modules
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
     # Padding, content margins and list spacing; EdgeInsets (also as `.init(top:…)`); stack, grid and
@@ -114,7 +117,7 @@ custom_rules:
     severity: error
   ledger_raw_radius:
     name: "Raw corner radius outside LedgerDesign"
-    included: 'LedgerKit/Sources/.*|Apps/.*'
+    included: *ui_modules
     excluded: *design_allowlist
     excluded_match_kinds: *not_code
     # Every corner-radius label (including RectangleCornerRadii's topLeading: …), also in a simple

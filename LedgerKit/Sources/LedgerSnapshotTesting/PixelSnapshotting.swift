@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 
 public extension Snapshotting where Value == CGImage, Format == Data {
     /// PNG references compared with ``SnapshotConfig``'s precision: a pixel matches when its
-    /// CIE76 ΔE is at most `(1 − perceptualPrecision) × 100`, the threshold swift-snapshot-testing
-    /// applies with Core Image on iOS.
+    /// CIE76 ΔE is at most `(1 − perceptualPrecision) × 100`. That is swift-snapshot-testing's
+    /// threshold on iOS, where Core Image measures CIE94 instead; CIE76 is never smaller than CIE94,
+    /// so this comparison is at least as strict (F06 review N1).
     static var png: Snapshotting {
         Snapshotting(pathExtension: "png", diffing: .pixels, snapshot: PNG.encode)
     }

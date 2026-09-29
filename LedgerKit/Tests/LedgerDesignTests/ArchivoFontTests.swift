@@ -62,8 +62,11 @@ extension RenderingSuites {
             // Advance widths on the host differ by 26 % (160.3 vs 201.7 pt for "0123456789" at 30 pt).
             #expect(Double(wide) > Double(narrow) * 1.15, "wdth 88: \(narrow) px, wdth 112: \(wide) px")
 
-            let evidence = try #require(RenderedImage.render(Self.spikeSheet))
-            assertSnapshot(of: evidence, as: .png, named: SnapshotConfig.platform)
+            #if os(iOS) || os(watchOS)
+                // References exist for the two simulators; on the Mac host this would record a stray one.
+                let evidence = try #require(RenderedImage.render(Self.spikeSheet))
+                assertSnapshot(of: evidence, as: .png, named: SnapshotConfig.platform)
+            #endif
         }
 
         @Test("Spike: wght 700 lays down more ink than wght 300 on this platform")

@@ -101,6 +101,7 @@ extension RenderingSuites {
 
         @Test(
             ".ledgerFont scales every role with Dynamic Type: never shrinks as size grows; AX3 > large.",
+            .simulatorOnly,
             arguments: LedgerFont.Role.allCases
         )
         func role_ledgerFont_scalesWithDynamicType(role: LedgerFont.Role) throws {
@@ -116,6 +117,7 @@ extension RenderingSuites {
 
         @Test(
             "LedgerFont.font(role, dynamicTypeSize:) is Dynamic Type–scaled, as the brief's public surface promises.",
+            .simulatorOnly,
             arguments: [LedgerFont.Role.body, .numeralL]
         )
         func bareFont_accessibilitySize_scalesUp(role: LedgerFont.Role) throws {

@@ -4,9 +4,6 @@
 # fixture file per case in a throwaway tree that mirrors the repo, linted once with the repo's own
 # .swiftlint.yml. A case expects one rule, `any` ledger_raw_* rule, or `none`.
 #
-# Not wired into check.sh while it has open cases (it would stop the gate at step 2); see
-# tasks/features/F06-design-system/test-findings.md, "Round 2".
-#
 #   scripts/tests/lint-rules-adversarial-round2.test.sh
 set -euo pipefail
 

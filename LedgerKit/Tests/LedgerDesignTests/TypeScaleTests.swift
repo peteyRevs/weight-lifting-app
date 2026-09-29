@@ -53,6 +53,7 @@ extension RenderingSuites {
 
         @Test(
             "Dynamic Type scales the role size on this platform",
+            .simulatorOnly,
             arguments: [LedgerFont.Role.body, .numeralM, .watchTitle]
         )
         func ledgerFont_dynamicTypeSizes_scaleAroundReference(_ role: LedgerFont.Role) throws {
@@ -89,7 +90,7 @@ extension RenderingSuites {
             }
         }
 
-        @Test("Watch roles never scale below 11 pt, even at the smallest text size")
+        @Test("Watch roles never scale below 11 pt, even at the smallest text size", .simulatorOnly)
         func watchLabel_smallestTextSize_staysAtElevenPoints() throws {
             let label = try #require(RenderedImage.render(
                 Text("RESTING").ledgerFont(.watchLabel),

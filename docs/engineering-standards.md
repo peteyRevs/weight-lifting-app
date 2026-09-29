@@ -164,9 +164,19 @@ Pete's decision (2026-09-29). The four SwiftLint custom rules in
 to bypass the tokens. They are not meant to catch every spelling: "tokens
 only" is enforced by review (`docs/subagent-workflow.md`, review point 4). The
 rule set is frozen; a spelling it misses is fixed in review, not by growing
-the regexes. The rules cover `LedgerKit/Sources` and `Apps` except
-`LedgerDesign` and the test-only targets; comments and string literals are
-ignored, and a literal `0` is allowed for spacing and radii.
+the regexes. Comments and string literals are ignored, and a literal `0` is
+allowed for spacing and radii.
+
+Scope: the modules that can draw UI. That is the `Feature*` and
+`WatchFeature*` targets, the `LedgerAppKit` and `LedgerWatchAppKit`
+umbrellas, and `Apps` (test targets excluded). `LedgerDesign` is where raw
+values become tokens. `LedgerDomain`, `LedgerDependencies`, the adapters
+(`LedgerPersistence`, `LedgerHealth`, `LedgerSync`) and `LedgerActivityKit`
+are Foundation-only (§2), so a hit there (a plate-colour enum's `.black`, a
+validator's `minLength: 2`) can only be a false positive. Narrowing the scope
+to exclude them (F06 review S2, 2026-09-29) is a false-positive fix under the
+decision above: the regexes did not change and stay frozen.
+`scripts/tests/lint-rules.test.sh` checks both sides of the scope.
 
 | Rule | Flags, outside `LedgerDesign` |
 |---|---|
@@ -177,7 +187,8 @@ ignored, and a literal `0` is allowed for spacing and radii.
 
 Known limits: the lint does not flag these, and review has to.
 `scripts/tests/lint-rules-adversarial-round3.test.sh` keeps each as a `limit`
-case, which fails if a rule starts to flag it, so this list stays true.
+case (the `Role.spec` one is in `lint-rules.test.sh`), which fails if a rule
+starts to flag it, so this list stays true.
 
 - A comment inside the call (`.padding(.horizontal, // inset` then `13)` on
   the next line): SwiftLint drops every match that spans a comment.
@@ -198,6 +209,10 @@ case, which fails if a rule starts to flag it, so this list stays true.
 - Role properties set outside the role: `.baselineOffset(…)`, `.textCase(…)`.
 - `LedgerFont.archivo(size:weight:width:)` with literals (public in the F06
   brief; its intended callers are inside `LedgerDesign`).
+- A role's design size passed back as a fixed size
+  (`LedgerFont.font(.body, size: LedgerFont.Role.body.spec.size)`): it
+  drops Dynamic Type. `Role.spec` is public for the same reason as
+  `archivo(…)`; use `.ledgerFont(_:)` or `font(_:dynamicTypeSize:…)`.
 - A false positive, accepted: a feature enum case named like a hierarchical
   style (`.primary`) is flagged as an argument or after `:` (a ternary's
   second arm included), and one named like a colour (`.orange`) in any value

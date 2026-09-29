@@ -92,6 +92,14 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
     shift 2
     if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
         xcodebuild "$@" | beautify || true
+        # A failed build or simulator boot also fails the run: it is a recording only if tests ran.
+        local ran
+        ran="$(xcrun xcresulttool get test-results summary --path "$result" 2>/dev/null |
+            jq -r '.totalTestCount // 0' || true)"
+        if [[ "${ran:-0}" -eq 0 ]]; then
+            echo "error: the record run failed before any test ran ($result)" >&2
+            exit 1
+        fi
     else
         xcodebuild "$@" | beautify
         scripts/check-test-results.sh "$result" "$plan"
