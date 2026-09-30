@@ -42,11 +42,14 @@ struct SettingsRepositoryTests {
         try await repository.save(Self.custom)
         #expect(try await repository.load() == Self.custom)
         let rows = try await queue.read { database in
-            try Row.fetchAll(database, sql: "SELECT id, updated_at, typeof(payload) FROM settings").map { row in
-                [row[0], row[1], row[2]] as [String]
+            try Row.fetchAll(
+                database,
+                sql: "SELECT id, updated_at, CAST(payload_version AS TEXT), typeof(payload) FROM settings"
+            ).map { row in
+                [row[0], row[1], row[2], row[3]] as [String]
             }
         }
-        #expect(rows == [["singleton", ColumnCodec.timestamp(Self.clock), "text"]])
+        #expect(rows == [["singleton", ColumnCodec.timestamp(Self.clock), "1", "text"]])
     }
 
     @Test("observe emits the current settings, then each saved change")
@@ -62,12 +65,41 @@ struct SettingsRepositoryTests {
         #expect(await values.next() == changed)
     }
 
+    @Test("A stored row missing keys loads with each missing field's default (F28 adds iCloudEnabled)")
+    func load_rowMissingKeys_takesTheirDefaults() async throws {
+        let (repository, queue) = try Self.repository()
+        try await repository.save(Self.custom)
+        try await queue.write { database in
+            try database
+                .execute(sql: "UPDATE settings SET payload = json_remove(payload, '$.watchBuzz', '$.weekStart')")
+        }
+        var expected = Self.custom
+        expected.watchBuzz = Settings.default.watchBuzz
+        expected.weekStart = Settings.default.weekStart
+        #expect(try await repository.load() == expected)
+    }
+
+    @Test("A row in a later payload version fails load by name and is left as it is")
+    func load_laterPayloadVersion_throws_andKeepsTheRow() async throws {
+        let (repository, queue) = try Self.repository()
+        try await repository.save(Self.custom)
+        try await queue.write { try $0.execute(sql: "UPDATE settings SET payload_version = 2") }
+        await #expect(throws: LedgerPersistenceError.unknownPayloadVersion(2)) { try await repository.load() }
+        let kept = try await queue.read { try Int.fetchOne($0, sql: "SELECT payload_version FROM settings") }
+        #expect(kept == 2)
+        #expect(throws: LedgerPersistenceError.unknownPayloadVersion(3)) {
+            try SettingsCodec.decode(Data("{}".utf8), version: 3)
+        }
+    }
+
     @Test("An unreadable row fails load, and ends observe's stream instead of emitting")
     func unreadableRow_failsLoad_andEndsTheStream() async throws {
         let (repository, queue) = try Self.repository()
         try await queue.write { database in
-            try database
-                .execute(sql: "INSERT INTO settings (id, payload, updated_at) VALUES ('singleton', '{}', 'then')")
+            try database.execute(sql: """
+            INSERT INTO settings (id, payload_version, payload, updated_at)
+            VALUES ('singleton', 1, '{"units": "stone"}', 'then')
+            """)
         }
         await #expect(throws: DecodingError.self) { try await repository.load() }
         var emitted: [Settings] = []

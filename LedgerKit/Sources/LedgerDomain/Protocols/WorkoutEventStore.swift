@@ -17,8 +17,14 @@ public protocol WorkoutEventStore: Sendable {
     func append(_ envelopes: [EventEnvelope]) async throws -> [EventEnvelope]
     /// Every stored envelope of the workout, in no particular order (`WorkoutEngine.replay` orders them),
     /// each once and exactly as appended: every date to full precision, because `<` and the conflict
-    /// check compare them.
+    /// check compare them. A stored envelope this app version cannot read is left out and counted by
+    /// `unreadableCount(for:)`.
     func envelopes(for workout: WorkoutID) async throws -> [EventEnvelope]
+    /// How many of the workout's stored envelopes this app version cannot read: one written in a later
+    /// payload version, or damaged (F05). The store keeps them, so a later version can read them. While the
+    /// count is above zero the log is incomplete: the host resumes from what it can read, but never
+    /// materialises or compacts the log (F17, "Inputs from F05").
+    func unreadableCount(for workout: WorkoutID) async throws -> Int
     /// The highest `seq` stored from `device` for the workout: the gap-replay handshake (F17), and the
     /// base of the device's own next `seq`.
     func highestSeq(for workout: WorkoutID, device: DeviceID) async throws -> UInt64?
@@ -36,4 +42,11 @@ public protocol WorkoutEventStore: Sendable {
     func uncompactedWorkoutIDs() async throws -> [WorkoutID]
     /// Deletes the workout's log once it is materialised (or discarded).
     func compact(workout: WorkoutID) async throws
+}
+
+public extension WorkoutEventStore {
+    /// A store that keeps envelopes as values can read every one of them.
+    func unreadableCount(for _: WorkoutID) async throws -> Int {
+        0
+    }
 }

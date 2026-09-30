@@ -45,6 +45,13 @@
         "identifier": "LedgerHealthTests",
         "name": "LedgerHealthTests"
       }
+    },
+    {
+      "target": {
+        "containerPath": "container:LedgerKit",
+        "identifier": "LedgerPersistenceTests",
+        "name": "LedgerPersistenceTests"
+      }
     }
   ]
 }

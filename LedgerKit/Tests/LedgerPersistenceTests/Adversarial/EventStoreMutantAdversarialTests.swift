@@ -103,8 +103,9 @@ struct MutantGRDBStore: WorkoutEventStore {
             arguments += [column.isFinite ? column : nil, payload]
             try database.execute(
                 sql: """
-                INSERT OR IGNORE INTO workout_event (workout_id, device_id, seq, wall_clock, payload, created_at)
-                VALUES (?, ?, ?, ?, ?, 'now')
+                INSERT OR IGNORE INTO workout_event
+                    (workout_id, device_id, seq, wall_clock, payload_version, payload, created_at)
+                VALUES (?, ?, ?, ?, 1, ?, 'now')
                 """,
                 arguments: arguments
             )
@@ -213,7 +214,7 @@ extension MutantGRDBStore {
             }
             return try decoder.decode(EventEnvelope.self, from: payload)
         default:
-            return try EnvelopeCodec.decode(payload)
+            return try EnvelopeCodec.decode(payload, version: EnvelopeCodec.version)
         }
     }
 
@@ -227,8 +228,8 @@ extension MutantGRDBStore {
         try await store.queue.write { database in
             try database.execute(
                 sql: """
-                INSERT INTO workout_event (workout_id, device_id, seq, wall_clock, payload, created_at)
-                VALUES (?, ?, 1, NULL, ?, 'then')
+                INSERT INTO workout_event (workout_id, device_id, seq, wall_clock, payload_version, payload, created_at)
+                VALUES (?, ?, 1, NULL, 1, ?, 'then')
                 """,
                 arguments: [ColumnCodec.text(envelope.workoutID), ColumnCodec.text(envelope.device), unsorted]
             )

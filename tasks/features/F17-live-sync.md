@@ -215,3 +215,14 @@ onwards). Where they contradict this brief, they win, and the brief should be am
   NaN never equals itself, so re-appending such an envelope throws `conflictingEnvelope` in both stores
   and rejects the whole batch (F05 S1 notes). The batch-conflict rule above would then drop it one by
   one; dropping it on receipt is simpler.
+- **Unreadable envelopes** (orchestrator decision, 2026-09-30). A stored row this app version cannot
+  read is left out of `envelopes(for:)`, kept in the store, logged, and counted by
+  `WorkoutEventStore.unreadableCount(for:)`. Such a row was written by a later payload version (for example
+  a TestFlight build that was rolled back) or is damaged. While a log's count is above zero:
+  - replay and resume from the readable envelopes;
+  - never materialise or compact the log: compaction would delete rows a later version can read, and
+    materialising would save a workout with gaps;
+  - keep it listed, and tell the lifter that part of the workout needs a newer version of Ledger.
+
+  `append` skips an envelope whose key is held by an unreadable row. That envelope is neither new nor a
+  conflict.

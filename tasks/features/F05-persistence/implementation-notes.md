@@ -181,17 +181,27 @@ Closes criteria 1, 7 and 8.
 | 1. schema, indexes, foreign keys | `SchemaTests.v001_newDatabase_matchesCommittedDDL` (against `Fixtures/schema-v001.sql`), `inMemory_foreignKeysOn_v001Applied`, `foreignKeys_rejectOrphans_andCascade`, `uniqueIndexes_areOnlyPrimaryKeys_andTheEventKey`; file databases: `DatabaseTests.open_newFile_isWALAndMigrated`, `open_existingFile_keepsRows_andMigratesOnce`, `open_protectsTheFileAndItsCompanions` (host and device only, see decision 5) |
 | 7. duplicates, `highestSeq` | `WorkoutEventStoreTests.appendTwice_keepsEachKeyOnce_highestSeqPerDevice`; contract clauses `newInGivenOrder`, `highestSeqIsMaximum`, `fullWidthSeq`, `readsBackExactlyOnce`; `append_realStamps_readBackExactly` (seeded) |
 | 8. compaction | `WorkoutEventStoreTests.compact_deletesRows_andUnlistsTheWorkout`; contract clause `compactOne`. Materialisation itself is S3; this tests compaction of any stored log |
-| F04 "Inputs" 1–4 | `WorkoutEventStoreTests.contract_clauseHolds` (all 12 clauses), `append_writesTheDocumentedColumns`, `append_comparesDecodedEnvelopes_notBytes`, `uniqueKey_refusesASecondRow` |
+| F04 "Inputs" 1–4 | `WorkoutEventStoreTests.contract_clauseHolds` (all 13 clauses after fix round 1), `append_writesTheDocumentedColumns`, `append_comparesDecodedEnvelopes_notBytes`, `uniqueKey_refusesASecondRow` |
 | ADR-007 storage | `ColumnCodecTests` (examples, refusals, seeded round-trips of weights, volumes and `REAL` dates) |
-| Settings | `SettingsRepositoryTests` (defaults, round trip in one row, `observe` emissions, unreadable row) |
+| Settings | `SettingsRepositoryTests` (defaults, round trip in one row with `payload_version` 1, `observe` emissions, missing keys, a later payload version, an unreadable row) |
+| Versioned payloads (fix round 1) | `UnreadableEventRowTests` (a later version and damaged bytes: left out, counted, kept, their key skipped; version dispatch), `PayloadEvolutionAdversarialTests` (flipped to the decision), `SettingsTests.decoding_missingKeys_takeTheirDefaults`, `decoding_invalidPresentKey_throws`, contract clause `noneUnreadable` |
 
 ### Code lines
 
 Measured with a script that counts non-blank Swift lines that are not whole-line `//`/`///` comments
-(SQL inside the migration string counts as code): `LedgerPersistence` sources **495** (of which
-`Migrations.swift` 203, one column per line), `Package.swift` +2, `coverage-thresholds.json` ±1, minus
-the 3-line placeholder: about **495** in all, under the 500 target. The plan estimated ~390; the gap is the
-SQL layout (~95 estimated). Tests and `LedgerTestSupport`: 757 lines, not counted.
+(SQL inside the migration string counts as code).
+- **After fix round 1: about 580 lines, over the 500 target** (standards §10: under ~1,000, so no forced
+  split):
+  - `LedgerPersistence` sources 554 (`Migrations.swift` 205, one column per line; the event store 125);
+  - `LedgerDomain` +26 (tolerant `Settings` decoding, `unreadableCount`);
+  - `Package.swift` +2 and `coverage-thresholds.json` ±1, minus the 3-line placeholder.
+  - The two Device test plans gain 10 JSON lines each (configuration, not counted).
+- **The split considered:** (a) schema, `Columns`, `Database` and the settings repository, then (b) the event
+  store, its codec and the moved contract. Rejected: the event store is what the adversarial round and fix
+  round 1 exercised; the payload-version columns must land in v001 with the codecs that write them; and (a)
+  alone could not close criteria 7 and 8.
+- Before fix round 1: 495 lines. The plan estimated ~390; the gap is the SQL layout (~95 estimated).
+- Tests and `LedgerTestSupport` are not counted.
 
 ### Gate and coverage (2026-09-29, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0)
 
@@ -233,3 +243,78 @@ SQL layout (~95 estimated). Tests and `LedgerTestSupport`: 757 lines, not counte
    Then run `xcrun xcresulttool export attachments --path /tmp/timing.xcresult --output-path /tmp/att`;
    the exported `first-launch-open` text holds the median.
 5. Full gate: `scripts/check.sh` (through the shared lock when other worktrees use the simulators).
+
+### Fix round 1 (2026-09-30): the adversarial round's spec questions
+
+The adversarial round (`test-findings.md`, round 1) found no bug and asked three spec questions.
+
+**Orchestrator decision (2026-09-30), finding 1: versioned payloads, in v001.**
+- **Schema.** `workout_event` and `settings` gain `payload_version INTEGER NOT NULL`, with no default: every
+  writer states the version. `Fixtures/schema-v001.sql` is regenerated.
+- **Codecs.** `EnvelopeCodec` and `SettingsCodec` (in `GRDBSettingsRepository.swift`) write `version = 1`,
+  and `decode(_:version:)` switches on the version. Only `case 1` exists; any other version throws
+  `LedgerPersistenceError.unknownPayloadVersion(version)`, a new case. A v2 adds a case, and `version`
+  names the newest.
+- **Unreadable event rows** (a later version, or bytes the codec cannot decode) are handled like this:
+  - `envelopes(for:)` returns the readable envelopes, so one bad row no longer makes the whole log throw;
+  - each unreadable row is logged with `os.Logger` (`com.petearevalo.Ledger` / `persistence`: row id and
+    version public, the error private) and never deleted;
+  - `highestSeq` and `uncompactedWorkoutIDs` still count the row, because its key is taken;
+  - `append` skips an incoming envelope whose key such a row holds, since a key names one envelope, so the
+    incoming one is its copy. It is not new and not a conflict, so the batch goes on.
+- **The count** is a new `WorkoutEventStore` requirement, `unreadableCount(for:) -> Int`. It has a default
+  of `0` in a protocol extension, which is right for any store that keeps envelopes as values, so the
+  in-memory reference and the test stores are unchanged. `GRDBWorkoutEventStore` implements it. It is on
+  the Domain protocol because F17's host sees only that protocol (LedgerSync does not import
+  LedgerPersistence). The new contract clause `noneUnreadable` pins that a store reads back all it wrote.
+- **How F17 treats such a log** (written into F17's "Inputs from F05"): while the count is above zero,
+  replay and resume from the readable envelopes, but never materialise or compact the log. Compaction would
+  delete rows a later version can read, and materialising would save a workout with gaps. Keep it listed and
+  tell the lifter part of it needs a newer Ledger.
+- **Settings.** `Settings.init(from:)` in LedgerDomain now takes `Settings.default`'s value for every missing
+  key, so F28's `iCloudEnabled` cannot break `load()`. A key that is present must still be valid (an unknown
+  unit or a 17 s rest still throws). This is a Domain change because the type knows its defaults. A mirror
+  struct in Persistence would silently drop any field it forgot. A settings row in an unknown version makes
+  `load()` throw `unknownPayloadVersion` and is left as it is. F07 and F14 should fall back to defaults in
+  memory without saving over it.
+- **Tests.**
+  - `UnreadableEventRowTests`: a later version (a valid v1 payload marked v2) and damaged bytes are each
+    left out, counted, kept, and their key skipped, while the rest of the log reads back; plus version
+    dispatch.
+  - `SettingsRepositoryTests`: a row missing two keys loads with their defaults; a later version throws by
+    name and the row is kept; the row carries version 1.
+  - `SettingsTests` (Domain): tolerant decoding and still-invalid keys.
+  - The contract, now 13 clauses, passes on both stores.
+  - The adversarial round's two "(documents)" tests in `PayloadEvolutionAdversarialTests` now assert the
+    decided behaviour: the legacy row is left out and kept, and the settings row loads with the default.
+    Its mutant store and date test write and read `payload_version`.
+
+**Orchestrator decision (2026-09-30), finding 2: file protection in CI.**
+- The Mac-host test stays in `check.sh --fast`.
+- `TestPlans/Device.xctestplan` and `Device-Watch.xctestplan` already run package tests (`LedgerHealthTests`),
+  so they now also run **all of `LedgerPersistenceTests`**. On a device, `open_protectsTheFileAndItsCompanions`
+  runs. The simulators do not enforce protection classes (they accept one and keep none), so it is skipped
+  there. The timing test is nightly-only, so it is skipped too.
+  - **Why the whole target:** a test-plan selection of Swift Testing tests selected nothing on Xcode 27.
+    Both `selectedTests: ["DatabaseTests"]` and the three `DatabaseTests/<function>()` identifiers, as
+    the result bundle names them, made `xcodebuild` drop the bundle (`check-test-results.sh`: "did not run:
+    LedgerPersistenceTests"). With no selection, the bundle runs.
+  - **Checked on the iOS simulator** (Device plan, under the lock): 2 targets ran and passed.
+    `LedgerPersistenceTests` had 72 passed and 2 skipped (protection, timing).
+  - A real device run is F20's.
+- F20's brief gains "Inputs from F05": run both Device plans on every protocol run.
+
+**Orchestrator decision (2026-09-30), finding 3: `personal_record` is derived, local-only, never synced.**
+- `CREATE TABLE personal_record ( -- derived from logged_set: local-only, never synced` in v001, and the same
+  note in `Migrations.swift`'s doc comment.
+- F28's brief gains "Inputs from F05" with that line.
+
+**Gate after fix round 1 (2026-09-30):**
+- **`scripts/check.sh --fast`: green.** `LedgerPersistenceTests` 74 (the protection test included);
+  `LedgerDomainTests` 689 (the two new `SettingsTests`).
+- **Full gate, through the lock: green** (323 s; log `scratchpad/f05s1-fix1-check.log`). 17/17 PR targets
+  on iOS and 8/8 PR-Watch targets on watchOS. `LedgerPersistenceTests` on each simulator: 72 passed and 2
+  skipped by design.
+- **Coverage:** LedgerPersistence **100.00 %** (391/391), LedgerDomain 98.98 %, overall 98.85 %.
+- **Device plan on the iOS simulator** (log `scratchpad/f05s1-deviceplan.log`): 2/2 targets ran and passed.
+  The Device plans are not part of `check.sh`, so editing them after the full gate does not affect it.

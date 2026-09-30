@@ -1,8 +1,8 @@
 import Foundation
 import LedgerDomain
 
-/// The clauses of `WorkoutEventStore`'s doc comments (F04; F05 added `fullWidthSeq`, `nonFiniteIsStored`
-/// and the second stamp in `readsBackExactlyOnce`).
+/// The clauses of `WorkoutEventStore`'s doc comments (F04; F05 added `fullWidthSeq`, `nonFiniteIsStored`,
+/// `noneUnreadable` and the second stamp in `readsBackExactlyOnce`).
 extension WorkoutEventStoreContract {
     static func newInGivenOrder(_ store: any WorkoutEventStore) async throws -> String? {
         let (one, two, three) = (skip(1), skip(2), skip(3))
@@ -146,5 +146,15 @@ extension WorkoutEventStoreContract {
         let exact = stored == precise
         return fresh == precise && again.isEmpty && exact
             ? nil : "returned \(fresh.count), then \(again.count); read back \(stored.count), exact: \(exact)"
+    }
+
+    /// F05: everything a store wrote itself is readable, so `unreadableCount(for:)` is zero for its logs
+    /// and for a workout it holds nothing of. (Only rows written by a later app version, or damaged ones,
+    /// count; `UnreadableEventRowTests` covers those for the GRDB store.)
+    static func noneUnreadable(_ store: any WorkoutEventStore) async throws -> String? {
+        _ = try await store.append([start(workout), skip(2), logged(set: 0, doneAt: 3, seq: 3, stamp: 3)])
+        let mine = try await store.unreadableCount(for: workout)
+        let elsewhere = try await store.unreadableCount(for: other)
+        return mine == 0 && elsewhere == 0 ? nil : "counted \(mine) and \(elsewhere) unreadable"
     }
 }

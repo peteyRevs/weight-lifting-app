@@ -85,3 +85,12 @@ _Filled in by agents during delivery:_
 - `F20-device-test-protocol/implementation-notes.md`
 - `F20-device-test-protocol/test-findings.md`
 - `F20-device-test-protocol/review.md`
+
+## Inputs from F05 (2026-09-30)
+- Run the `Device` and `Device-Watch` test plans on every protocol run and record the result. Besides
+  `LedgerHealthTests`, they now run all of `LedgerPersistenceTests` (about 75 fast tests), so the database
+  is also exercised on real storage. In it, `DatabaseTests.open_protectsTheFileAndItsCompanions` checks
+  that the database file and its `-wal` get the requested data-protection class
+  (`completeUntilFirstUserAuthentication` by default). The simulators do not enforce protection classes
+  (they accept one and keep none), so the test is skipped there. It runs only on a device and on the Mac
+  host (`check.sh --fast`).

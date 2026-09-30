@@ -9,4 +9,6 @@ public enum LedgerPersistenceError: Error, Equatable, Sendable {
     case nonFiniteDate
     /// A stored identifier that is not a UUID string.
     case malformedIdentifier(String)
+    /// A stored JSON payload in a version this app version does not know: a later one wrote it.
+    case unknownPayloadVersion(Int)
 }

@@ -76,7 +76,7 @@ struct EventStoreDateAdversarialTests {
         let ordered = try await queue.read { database in
             try Data.fetchAll(database, sql: """
             SELECT payload FROM workout_event ORDER BY wall_clock, device_id, seq < 0, seq
-            """).map(EnvelopeCodec.decode)
+            """).map { try EnvelopeCodec.decode($0, version: EnvelopeCodec.version) }
         }
         #expect(ordered == log.sorted(by: <))
         let byStamp = try await queue.read { database in

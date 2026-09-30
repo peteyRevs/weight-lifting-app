@@ -44,7 +44,7 @@ CREATE TABLE logged_set (
     updated_at TEXT NOT NULL,
     deleted_at TEXT
 );
-CREATE TABLE personal_record (
+CREATE TABLE personal_record ( -- derived from logged_set: local-only, never synced
     id TEXT PRIMARY KEY NOT NULL,
     workout_id TEXT NOT NULL REFERENCES workout(id) ON DELETE CASCADE,
     exercise_id TEXT NOT NULL,
@@ -88,6 +88,7 @@ CREATE TABLE program_week (
 );
 CREATE TABLE settings (
     id TEXT PRIMARY KEY NOT NULL, -- always 'singleton'
+    payload_version INTEGER NOT NULL,
     payload TEXT NOT NULL, -- JSON Settings
     updated_at TEXT NOT NULL
 );
@@ -145,6 +146,7 @@ CREATE TABLE workout_event (
     device_id TEXT NOT NULL,
     seq INTEGER NOT NULL,
     wall_clock REAL,
+    payload_version INTEGER NOT NULL,
     payload BLOB NOT NULL,
     created_at TEXT NOT NULL
 );

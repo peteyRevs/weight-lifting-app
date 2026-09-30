@@ -24,11 +24,14 @@ enum Migrations {
 /// - `rpe_x2` is RPE × 2 (5…10 in steps of 0.5). Booleans are 0 or 1.
 /// - `workout.elapsed` is not stored: it is `ended_at − started_at` (`WorkoutState.elapsed(at:)`).
 /// - `personal_record` holds a `PersonalRecord`: `kind` is `estimatedOneRepMax` or `weightAtReps`
-///   (`reps` set only for the latter), and `previous_*` the record it beat.
+///   (`reps` set only for the latter), and `previous_*` the record it beat. It is derived data, recomputed
+///   from `logged_set`, so it is local-only and never synced (orchestrator decision, 2026-09-30; F28).
 /// - `workout_event` holds the live logs (ADR-004 rule 5), never synced: `payload` is the JSON
-///   envelope and the only thing read back; `seq` is the `UInt64`'s bit pattern; `wall_clock` is
+///   envelope and the only thing read back, in `payload_version` (`EnvelopeCodec`); `seq` is the
+///   `UInt64`'s bit pattern; `wall_clock` is
 ///   the stamp for queries, `NULL` when it is not finite. Its `id` is the rowid, since nothing
 ///   refers to a row.
+/// - `settings.payload` is the JSON `Settings` in `payload_version` (`GRDBSettingsRepository`).
 /// - Foreign keys cascade locally; every foreign key column is indexed, so a cascade never scans.
 private let schemaV001 = """
 CREATE TABLE exercise (
@@ -166,7 +169,7 @@ CREATE TABLE logged_set (
     updated_at TEXT NOT NULL,
     deleted_at TEXT
 );
-CREATE TABLE personal_record (
+CREATE TABLE personal_record ( -- derived from logged_set: local-only, never synced
     id TEXT PRIMARY KEY NOT NULL,
     workout_id TEXT NOT NULL REFERENCES workout(id) ON DELETE CASCADE,
     exercise_id TEXT NOT NULL,
@@ -196,11 +199,13 @@ CREATE TABLE workout_event (
     device_id TEXT NOT NULL,
     seq INTEGER NOT NULL,
     wall_clock REAL,
+    payload_version INTEGER NOT NULL,
     payload BLOB NOT NULL,
     created_at TEXT NOT NULL
 );
 CREATE TABLE settings (
     id TEXT PRIMARY KEY NOT NULL, -- always 'singleton'
+    payload_version INTEGER NOT NULL,
     payload TEXT NOT NULL, -- JSON Settings
     updated_at TEXT NOT NULL
 );

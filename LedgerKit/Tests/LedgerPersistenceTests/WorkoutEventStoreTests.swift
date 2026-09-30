@@ -48,7 +48,7 @@ struct WorkoutEventStoreTests {
         #expect(try await store.uncompactedWorkoutIDs() == [Contract.other])
     }
 
-    @Test("A row: UUID text keys, the seq's bit pattern, the stamp as REAL (NULL when not finite), a JSON blob")
+    @Test("A row: UUID text keys, the seq's bit pattern, the stamp as REAL (NULL when not finite), a v1 JSON blob")
     func append_writesTheDocumentedColumns() async throws {
         let (store, queue) = try Self.store()
         let finite = Contract.skip(.max, at: 10.493_826_8)
@@ -58,7 +58,8 @@ struct WorkoutEventStoreTests {
         _ = try await store.append([finite, infinite])
         let rows = try await queue.read { database in
             try Row.fetchAll(database, sql: """
-            SELECT workout_id, device_id, seq, wall_clock, typeof(payload) AS kind, payload, created_at
+            SELECT workout_id, device_id, seq, wall_clock, payload_version, typeof(payload) AS kind, payload,
+                created_at
             FROM workout_event ORDER BY id
             """).map(StoredEvent.init)
         }
@@ -68,8 +69,9 @@ struct WorkoutEventStoreTests {
         #expect(first.deviceID == ColumnCodec.text(EventBuilders.watch))
         #expect(first.seq == -1)
         #expect(first.wallClock == finite.wallClock.timeIntervalSinceReferenceDate)
+        #expect(first.payloadVersion == 1)
         #expect(first.kind == "blob")
-        #expect(try EnvelopeCodec.decode(first.payload) == finite)
+        #expect(try EnvelopeCodec.decode(first.payload, version: 1) == finite)
         #expect(first.createdAt == ColumnCodec.timestamp(Self.clock))
         #expect(second.wallClock == nil)
     }
@@ -83,8 +85,8 @@ struct WorkoutEventStoreTests {
         try await queue.write { database in
             try database.execute(
                 sql: """
-                INSERT INTO workout_event (workout_id, device_id, seq, wall_clock, payload, created_at)
-                VALUES (?, ?, 1, NULL, ?, 'then')
+                INSERT INTO workout_event (workout_id, device_id, seq, wall_clock, payload_version, payload, created_at)
+                VALUES (?, ?, 1, NULL, 1, ?, 'then')
                 """,
                 arguments: [ColumnCodec.text(Contract.workout), ColumnCodec.text(EventBuilders.phone), unsorted]
             )
@@ -98,8 +100,10 @@ struct WorkoutEventStoreTests {
         _ = try await store.append([Contract.skip(1)])
         await #expect(throws: DatabaseError.self) {
             try await queue.write { database in
-                try database.execute(sql: "INSERT INTO workout_event (workout_id, device_id, seq, payload, created_at) "
-                    + "SELECT workout_id, device_id, seq, payload, created_at FROM workout_event")
+                try database.execute(sql: """
+                INSERT INTO workout_event (workout_id, device_id, seq, payload_version, payload, created_at)
+                SELECT workout_id, device_id, seq, payload_version, payload, created_at FROM workout_event
+                """)
             }
         }
     }
@@ -128,6 +132,7 @@ private struct StoredEvent: Sendable {
     let deviceID: String
     let seq: Int64
     let wallClock: Double?
+    let payloadVersion: Int
     let kind: String
     let payload: Data
     let createdAt: String
@@ -137,6 +142,7 @@ private struct StoredEvent: Sendable {
         deviceID = row["device_id"]
         seq = row["seq"]
         wallClock = row["wall_clock"]
+        payloadVersion = row["payload_version"]
         kind = row["kind"]
         payload = row["payload"]
         createdAt = row["created_at"]
