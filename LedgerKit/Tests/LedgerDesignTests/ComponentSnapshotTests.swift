@@ -6,7 +6,7 @@ import Testing
 
 // F06 criterion 3 for the slice-2 components: each component's gallery (every state it has) in
 // the phone matrix, light and dark × large, xLarge and accessibility3, at the iPhone 17 width.
-// Recorded on the PR-plan simulator (iPhone 17, iOS 26.5). One suite per component.
+// Recorded on the PR-plan simulator (iPhone 17, iOS 27.0, the pin in scripts/check.sh). One suite per component.
 #if os(iOS)
     extension RenderingSuites {
         @Suite("PrimaryButtonSnapshots", .tags(.design, .snapshot))

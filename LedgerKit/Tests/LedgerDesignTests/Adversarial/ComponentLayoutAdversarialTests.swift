@@ -137,7 +137,14 @@
                     ("SetRow 1,002.5 × 12", AnyView(LayoutCases.setRow(number: "12", weight: "1,002.5", reps: "12"))),
                     (
                         "SetRowSteppers 2.5 kg / 1 rep",
-                        AnyView(SetRowSteppers(weightStep: "2.5 kg", repStep: "1 rep") { _ in } onReps: { _ in })
+                        AnyView(SetRowSteppers(
+                            weightStep: "2.5 kg",
+                            repStep: "1 rep",
+                            weight: "82.5 kilograms",
+                            reps: "12 reps",
+                            onWeight: { _ in },
+                            onReps: { _ in }
+                        ))
                     ),
                     ("SetRowHeader", AnyView(SetRowHeader(number: "#", weight: "lb", reps: "reps")))
                 ]

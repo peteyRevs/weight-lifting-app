@@ -22,8 +22,9 @@ nonisolated struct RestRingGeometryTests {
 
     @Test("progress 0.5 covers exactly half the circumference")
     func halfProgress_arcLength_isHalfTheCircumference() {
-        let half = Measured(RestRingGeometry.phone.arc(progress: 0.5, in: Self.frame))
-        let full = Measured(RestRingGeometry.phone.arc(progress: 1, in: Self.frame))
+        // The shape `RestRing` strokes, at the frame it renders at (review R2-N9).
+        let half = Measured(RestRingArc(progress: 0.5, geometry: .phone).path(in: Self.frame))
+        let full = Measured(RestRingArc(progress: 1, geometry: .phone).path(in: Self.frame))
         #expect(abs(half.length / full.length - 0.5) < 1e-9)
         #expect(abs(half.length - Self.circumference / 2) < Self.circumference / 2 * Self.bezier)
     }

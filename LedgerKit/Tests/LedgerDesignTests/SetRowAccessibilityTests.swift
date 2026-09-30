@@ -26,7 +26,7 @@
                     let elements = Self.row(state).accessibilityElements(appearance)
                     try #require(elements.count == 2, "\(elements)")
                     let (select, check) = (elements[0], elements[1])
-                    #expect(["2", "185", "5"].allSatisfy(select.label.contains))
+                    #expect(select.label == "2, 185, 5") // exact: "185" contains "5" (review R2-N8)
                     expectButton(select)
                     #expect(check.label == "Log set 2")
                     expectButton(check)
@@ -35,9 +35,9 @@
 
             /// S2-1: each state says what it is in words, and "selected" means one thing: logged.
             @Test(
-                "SetRow: the row says 'Current set' or 'Done'; only a logged check is selected, and it says 'Done'",
+                "SetRow: the row says its state in words; only a logged check is selected, and it says 'Done'",
                 arguments: [
-                    (SetRowState.pending, "", ""),
+                    (SetRowState.pending, "Pending", ""),
                     (SetRowState.active, "Current set", ""),
                     (SetRowState.done, "Done", "Done")
                 ]
@@ -84,8 +84,15 @@
                 arguments: sizes
             )
             func setRowSteppers_accessibility_twoAdjustableSteppers(_ appearance: SnapshotAppearance) throws {
-                let elements = SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-                    .accessibilityElements(appearance)
+                let elements = SetRowSteppers(
+                    weightStep: "5 lb",
+                    repStep: "1 rep",
+                    weight: "185 pounds",
+                    reps: "5 reps",
+                    onWeight: { _ in },
+                    onReps: { _ in }
+                )
+                .accessibilityElements(appearance)
                 try #require(elements.count == 2, "\(elements)")
                 #expect(elements.map(\.label) == ["5 lb", "1 rep"])
                 for stepper in elements {
@@ -94,8 +101,10 @@
                 }
             }
 
-            /// S2-2: the value is the current weight and reps, in the caller's words and units.
-            @Test("SetRowSteppers: each stepper's value is the current weight or reps, or the step without one")
+            /// S2-2, S2-7: the value is the current weight and reps, in the caller's words and units. The
+            /// values are required, so there is no fallback to test (fix round 2 removed the half that
+            /// pinned the step as a value, which the tester rejected).
+            @Test("SetRowSteppers: each stepper's value is the current weight or reps")
             func setRowSteppers_value_isTheCurrentQuantity() {
                 let given = SetRowSteppers(
                     weightStep: "5 lb",
@@ -106,8 +115,6 @@
                     onReps: { _ in }
                 )
                 #expect(given.accessibilityElements().map(\.value) == ["185 pounds", "5 reps"])
-                let fallback = SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-                #expect(fallback.accessibilityElements().map(\.value) == ["5 lb", "1 rep"])
             }
 
             /// S2-2: swipe up, and the value VoiceOver announces next is the new weight.
@@ -129,6 +136,8 @@
                 let steppers = SetRowSteppers(
                     weightStep: "5 lb",
                     repStep: "1 rep",
+                    weight: "185 pounds",
+                    reps: "5 reps",
                     onWeight: { steps.append("weight \($0)") },
                     onReps: { steps.append("reps \($0)") }
                 )

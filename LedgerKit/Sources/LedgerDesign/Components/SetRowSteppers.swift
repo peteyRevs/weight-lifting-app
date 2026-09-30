@@ -4,17 +4,17 @@ import SwiftUI
 /// the step ("5 LB", "1 REP") and "+". Each "−" and "+" is a 44 pt target. VoiceOver reads each
 /// pill as one adjustable element named by its step, with the current `weight` / `reps` as its
 /// value in the row's units ("185 pounds", "5 reps"): swipe up to add, down to take away, and
-/// VoiceOver announces the new value the caller passes back. Without a current value the value
-/// is the step. At accessibility text sizes the pills stack.
+/// VoiceOver announces the new value the caller passes back. The values are required, so a
+/// stepper never announces its step as its value. At accessibility text sizes the pills stack.
 public struct SetRowSteppers: View {
-    public enum Direction: Sendable {
+    public nonisolated enum Direction: Sendable {
         case decrement, increment
     }
 
     private let weightStep: String
     private let repStep: String
-    private let weight: String?
-    private let reps: String?
+    private let weight: String
+    private let reps: String
     private let onWeight: (Direction) -> Void
     private let onReps: (Direction) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -22,8 +22,8 @@ public struct SetRowSteppers: View {
     public init(
         weightStep: String,
         repStep: String,
-        weight: String? = nil,
-        reps: String? = nil,
+        weight: String,
+        reps: String,
         onWeight: @escaping (Direction) -> Void,
         onReps: @escaping (Direction) -> Void
     ) {
@@ -40,8 +40,8 @@ public struct SetRowSteppers: View {
             ? AnyLayout(VStackLayout(spacing: LedgerSpacing.s))
             : AnyLayout(HStackLayout(spacing: LedgerSpacing.s))
         layout {
-            StepperPill(step: weightStep, value: weight ?? weightStep, onStep: onWeight)
-            StepperPill(step: repStep, value: reps ?? repStep, onStep: onReps)
+            StepperPill(step: weightStep, value: weight, onStep: onWeight)
+            StepperPill(step: repStep, value: reps, onStep: onReps)
         }
         .padding(.bottom, LedgerSpacing.l)
     }

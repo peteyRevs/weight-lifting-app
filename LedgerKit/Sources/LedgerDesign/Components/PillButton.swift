@@ -2,9 +2,10 @@ import SwiftUI
 
 /// A small pill for secondary actions (v2): `.outline` ("Finish", "Repeat", a filter), `.filled`
 /// with ink (the selected filter), or `.ghost`, text only ("Cancel", "Skip setup", "+ Add set").
-/// The pill is drawn at its text size; the tappable area is at least 44 × 44 pt around it.
+/// `.filled` means selected, so VoiceOver hears it as selected too. The pill is drawn at its text
+/// size; the tappable area is at least 44 × 44 pt around it.
 public struct PillButton: View {
-    public enum Style: Sendable {
+    public nonisolated enum Style: Sendable {
         case outline, filled, ghost
     }
 
@@ -30,6 +31,7 @@ public struct PillButton: View {
                 .ledgerHitTarget()
         }
         .buttonStyle(LedgerPressStyle())
+        .accessibilityAddTraits(style == .filled ? .isSelected : [])
     }
 
     private var foreground: Color {

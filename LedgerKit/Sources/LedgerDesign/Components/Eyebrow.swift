@@ -3,7 +3,7 @@ import SwiftUI
 /// A small uppercase section label (v2: "UP NEXT" in orange; "RECENT", "REMAINING" muted).
 /// VoiceOver treats it as a heading, so the rotor can jump between sections.
 public struct Eyebrow: View {
-    public enum Tint: Sendable {
+    public nonisolated enum Tint: Sendable {
         /// The prototype's .32 ink, raised to `inkMuted` for AA: a section label carries meaning.
         case muted
         /// The live or next thing; orange text that reads on paper too (`accentText`).

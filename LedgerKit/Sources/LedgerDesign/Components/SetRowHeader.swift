@@ -18,6 +18,7 @@ public struct SetRowHeader: View {
             SetRowCheck(state: .pending).hidden()
         }
         .padding(.bottom, LedgerSpacing.s)
+        .accessibilityElement(children: .combine) // one stop that still names the units: "#, lb, reps"
     }
 
     private func heading(_ text: String) -> some View {

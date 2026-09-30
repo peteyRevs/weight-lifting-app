@@ -90,8 +90,15 @@
 
             @Test("Each stepper is adjustable with a 44 pt target at xSmall, xxxLarge and AX5", arguments: extremes)
             func steppers_atExtremeTextSizes_areAdjustableTargets(_ appearance: SnapshotAppearance) throws {
-                let elements = SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-                    .accessibilityElements(appearance)
+                let elements = SetRowSteppers(
+                    weightStep: "5 lb",
+                    repStep: "1 rep",
+                    weight: "185 pounds",
+                    reps: "5 reps",
+                    onWeight: { _ in },
+                    onReps: { _ in }
+                )
+                .accessibilityElements(appearance)
                 try #require(elements.count == 2, "\(appearance): \(elements)")
                 for stepper in elements {
                     #expect(stepper.traits.contains(.adjustable), "\(appearance): \(stepper)")
@@ -100,7 +107,8 @@
             }
 
             /// Sighted users see a done set by its muted numbers and filled disc. VoiceOver's row element
-            /// (the one that selects the set) should say so too; "selected" on it already means "active".
+            /// (the one that selects the set) should say so too. (Since S2-1 the row is never selected; its
+            /// value names the state. Comment updated in F06 slice 2 fix round 2, R2-N11.)
             @Test("A done set's row element reads differently from a pending set's")
             func setRow_doneRow_isDistinguishableFromPending() throws {
                 let done = AccessibilityCases.setRow(.done).accessibilityElements()
@@ -130,8 +138,15 @@
             /// up on "5 lb" says nothing about the weight it changed.
             @Test("Each stepper has a value for VoiceOver to announce after a swipe")
             func steppers_adjustable_haveAValue() throws {
-                let elements = SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-                    .accessibilityElements()
+                let elements = SetRowSteppers(
+                    weightStep: "5 lb",
+                    repStep: "1 rep",
+                    weight: "185 pounds",
+                    reps: "5 reps",
+                    onWeight: { _ in },
+                    onReps: { _ in }
+                )
+                .accessibilityElements()
                 try #require(elements.count == 2)
                 for stepper in elements {
                     #expect(!stepper.value.isEmpty, "\(stepper)")

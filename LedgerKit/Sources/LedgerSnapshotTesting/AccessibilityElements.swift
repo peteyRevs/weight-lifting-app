@@ -1,6 +1,7 @@
 #if os(iOS)
     import Darwin
     import SwiftUI
+    import Testing
     import UIKit
 
     /// One element of a hosted view's accessibility tree, as UIKit hands it to VoiceOver.
@@ -93,15 +94,20 @@
     /// AccessibilitySnapshot make UIKit and SwiftUI build their accessibility trees in a test process;
     /// without it a hosted SwiftUI view reports no elements (checked on iOS 26.5, F06 slice 2).
     private enum AccessibilityAutomation {
-        typealias IsEnabled = @convention(c) () -> Int32
-        typealias SetEnabled = @convention(c) (Int32) -> Void
+        /// `Boolean _AXSAutomationEnabled(void)` and `void _AXSSetAutomationEnabled(Boolean)`; `Boolean` is
+        /// an unsigned char.
+        typealias IsEnabled = @convention(c) () -> UInt8
+        typealias SetEnabled = @convention(c) (UInt8) -> Void
 
         static func whileEnabled<Result>(_ body: () -> Result) -> Result {
             guard let library = dlopen("/usr/lib/libAccessibility.dylib", RTLD_NOW),
                   let getter = dlsym(library, "_AXSAutomationEnabled"),
                   let setter = dlsym(library, "_AXSSetAutomationEnabled")
             else {
-                return body() // the tree stays empty, so every lookup in the test fails and says why
+                // Loud, not silent: without the switch every tree is empty, and a test that expects
+                // no elements of some kind would pass on nothing (review R2-N10).
+                Issue.record("libAccessibility's automation switch is unavailable; the accessibility tree is empty")
+                return body()
             }
             let setEnabled = unsafeBitCast(setter, to: SetEnabled.self)
             let wasEnabled = unsafeBitCast(getter, to: IsEnabled.self)()

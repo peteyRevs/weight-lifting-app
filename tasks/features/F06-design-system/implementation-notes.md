@@ -978,3 +978,118 @@ lock): **green**.
 - PR-watchOS: **827, 825 passed, 0 failed, 2 skipped**; 8/8; `LedgerDesignTests` 143.
 - The two skips per plan are the nightly-only tests.
 - Coverage gate: LedgerDesign **96.39 % (936 / 971)**, overall 98.05 %.
+
+### Slice 2 — fix round 2
+
+Against the close-out round (`8da388a`: test-findings "# Slice 2 — round 2", S2-6 and S2-7) and the slice-2 review
+(R2-S1 to R2-S3, R2-N1 to R2-N11), under the orchestrator's decisions. The aim was to fix the class, not the instances:
+pin the intended VoiceOver tree once, and make any structure change fail.
+
+**Decision 1: one intended VoiceOver tree for SetRow (S2-6 and the class).**
+- **What was wrong.** Fix round 1 stopped an outer label with `.accessibilityElement(children: .contain)` on the check.
+  My round-1 probe showed that an outer `View.accessibilityLabel` reaches every element and every `.contain` container
+  inside a view, whatever the structure: overlays, `.ignore`, a representation and `accessibilityLabel(content:)`. So a
+  boundary made of a container can only ever relabel that container, which is S2-6.
+- **Fix.** No container at all. `SetRow` owns its row summary. It has its own `accessibilityLabel(_:) -> SetRow`, the
+  pattern SwiftUI uses for `Text`'s modifiers (`Text.bold() -> Text`), which replaces the row summary and nothing else.
+  The tester's calls `AccessibilityCases.setRow(…).accessibilityLabel(spoken)` resolve to it unchanged, because a
+  concrete type's method wins over the protocol extension's.
+- **The tree is exactly two stops:**
+  - the row summary: label "2, 185, 5", or the feature's "Set 2, 185 pounds, 5 reps"; value "Pending", "Current set" or
+    "Done";
+  - the check, a button of its own: label `checkLabel` ("Log set 2", or "Undo set 2" once logged), with the value
+    "Done" and `.isSelected` when logged.
+- **Limit (documented on the method).** The override must be applied to the `SetRow` itself. After another modifier,
+  SwiftUI's own modifier applies and reaches both elements.
+- "Pending" is new: the decision lists it among the row's states. It is the third `String(localized:bundle: .module)`
+  word (architecture §11 notes the exception, R2-N5).
+
+**`AccessibilityTreeTests` (new, one table-driven test).**
+- `component_accessibilityTree_isExactlyTheTable` runs **37 cases**: every slice-2 component in every state it offers.
+  - PrimaryButton: with and without an icon, disabled, pressed.
+  - PillButton: outline, filled (selected), ghost, filled and pressed.
+  - IconPillButton: normal and pressed.
+  - Eyebrow: both tints.
+  - Decorative icon and rule: no stops.
+  - SetRowHeader.
+  - HairlineRow: title; detail; text accessory; button accessory; action and chevron; action and pressed.
+  - HairlineList.
+  - SetRow: pending, active, done, done and named, pending and pressed, drop set.
+  - Steppers: normal, pressed, stacked at AX3.
+  - The whole SetRow gallery, in order, at large and at AX3.
+  - RestRing: full, half, empty, named.
+- **What it asserts, exactly:** element count, order, label, value, traits (raw), and the containers between each element
+  and the hosting view. My helper flattens containers, so the test walks `accessibilityContainer` itself.
+- **The tables are literals.** Every case expects no container.
+- **Mutation check.** I put `.contain` back on the check for one run: all 8 SetRow cases failed, and the report shows
+  `… in [""]`, an unlabelled container. Then I reverted it.
+- **One case differed from my first table, and the component was right.** An action-less `HairlineRow` with a button
+  accessory is one element, "Dumbbell Bench Press, Use", with the button trait, and activating it fires the accessory
+  (the tester's `hairlineRow_buttonAccessory_isReachable` holds). It is one stop that names what "Use" applies to, so the
+  table pins it, and `HairlineRow`'s doc now says so. It had claimed the button stays its own control.
+
+**Decision 2: S2-7 = R2-S3.**
+- **Change.** `SetRowSteppers(weightStep:repStep:weight:reps:onWeight:onReps:)` now requires `weight` and `reps`. The
+  fallback that announced the step as the value is deleted.
+- **Call sites in the tester's files, updated by decision:**
+  - `ComponentAccessibilityAdversarialTests.swift`: two calls, which now pass "185 pounds" / "5 reps";
+  - `ComponentLayoutAdversarialTests.swift`: one call, which now passes "82.5 kilograms" / "12 reps".
+- The API changed by decision, and no assertion in those tests changed. The tester accepted the
+  `steppers_adjustable_haveAValue` edit in advance.
+- The rejected test, the second half of my `setRowSteppers_value_isTheCurrentQuantity`, which pinned the step as the
+  value, is **removed**. The test now checks only the given values. There is no fallback left to test.
+
+**Decision 3: R2-S1.**
+- `SetRowState`, `PillButton.Style`, `Eyebrow.Tint` and `SetRowSteppers.Direction` are `nonisolated`. `LedgerIcon` and
+  `RestRingGeometry` already were. These are all of slice 2's value types.
+- `ComponentValueTests` (new, `nonisolated`, runs on iOS, watchOS and the host) is the compile-level guard. It holds:
+  - a `nonisolated` `Equatable` presentation struct that stores all six types;
+  - a `Set` of states;
+  - an `actor` that compares a state.
+
+  None of it compiles while a conformance is main-actor-isolated.
+
+**Decision 4: R2-S2.** A `.filled` `PillButton` carries `.isSelected`, and the doc says `.filled` means selected. It is
+pinned in the tree table ("PillButton, filled (selected)", plus the pressed variant).
+
+**Decision 5: nits.**
+
+| Nit | Done? | Change |
+|---|---|---|
+| R2-N1 | Yes | `HairlineRow` doc: with an action the accessory must not be interactive. Without one, a button accessory makes the row one stop that activates it (pinned) |
+| R2-N2 | Yes | `SetRow` doc: `checkLabel` is the label of what activating it will do. The gallery's done row is "Undo set 1" (not drawn, so no reference changed) |
+| R2-N3 | **Skipped** | A device check (Voice Control and Full Keyboard Access on the steppers) belongs in F20's device checklist. That is the orchestrator's brief, and the check can't be run in a simulator test |
+| R2-N4 | Yes | `RestRing`'s label: `.lineLimit(1).minimumScaleFactor(0.5)`. Every current label fits, so no reference changed |
+| R2-N5 | Yes | architecture §11 names the three VoiceOver state words as the exception to "caller-localised strings" |
+| R2-N6 | **Skipped** | Keeping a chevron trailing at accessibility sizes (`ViewThatFits`) changes a layout and three references. It is a design decision the reviewer left to F09's review against Today |
+| R2-N7 | Yes | `SetRowHeader` is one element, "#, lb, reps" (pinned) |
+| R2-N8 | Yes | `select.label == "2, 185, 5"` exactly |
+| R2-N9 | Yes | Criterion 5 measures `RestRingArc(progress: 0.5, geometry: .phone).path(in:)`, the shape the ring strokes |
+| R2-N10 | Yes | The accessibility helper calls `Issue.record` when libAccessibility's switch is missing. The C prototypes use `UInt8` (`Boolean`) |
+| R2-N11 | Yes | `ComponentSnapshotTests`' header says iOS 27.0. The tester's stale comment in `ComponentAccessibilityAdversarialTests` (row "selected" = active) is updated, comment only |
+
+**Tester files touched this round:** the three stepper call sites (decision 2), one comment (R2-N11), and nothing else.
+`SetRowContainerAdversarialTests` (S2-6) passes unchanged in all three states, as do round 1's outer-label and state
+tests.
+
+**References.** None changed: every slice-2 and slice-1 reference matched in the gate, so no `--record-snapshots` run was
+needed. The gallery's changed `checkLabel`, the trait changes and the bounded ring label draw nothing new.
+
+**Size.**
+- Product `LedgerDesign/Components/`: **713 code lines**, up from 700 (+13), measured as before:
+  - SetRow +9: the summary method, "Pending", the explicit row label, `.contain` removed;
+  - RestRing +2: the label bound;
+  - PillButton +1: the selected trait;
+  - SetRowHeader +1: the combined element;
+  - SetRowSteppers ±0: optional values became required, and the fallback went.
+- Test-only: `AccessibilityTreeTests` 247 lines (new), `ComponentValueTests` 31 (new), and the helper +2 (100 → 102).
+
+**Gate.** Full `scripts/check.sh` through the lock (`scratchpad/f06s2-fix2-check.log`, 278 s after a 331 s wait for the
+lock): **green**.
+
+| Plan | Tests | Passed | Failed | Skipped | Targets | `LedgerDesignTests` |
+|---|---|---|---|---|---|---|
+| PR-iOS | 903 | 901 | 0 | 2 | 17/17 | 210 |
+| PR-watchOS | 828 | 826 | 0 | 2 | 8/8 | 144 |
+
+The skips are the two nightly-only tests. Coverage gate: LedgerDesign **96.44 % (949 / 984)**, overall 98.06 %.

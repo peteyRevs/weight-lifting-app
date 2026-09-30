@@ -2,8 +2,11 @@ import SwiftUI
 
 /// One row of a ``HairlineList``: a title, an optional detail line under it and an optional
 /// trailing accessory, under a one-point rule (v2 "RECENT": 500 15 px title, 300 12.5 px meta,
-/// 16 px vertical padding). With an `action` the whole row is one button. At accessibility text
-/// sizes the accessory moves under the title, so neither has to squeeze.
+/// 16 px vertical padding). VoiceOver reads the row as one element. With an `action` it is one
+/// button, so its accessory must not be interactive (text or an icon, as v2's "Use"). Without an
+/// action, one button accessory is allowed: the row reads as that button with the title first
+/// ("Dumbbell Bench Press, Use") and activates it. At accessibility text sizes the accessory moves
+/// under the title, so neither has to squeeze.
 public struct HairlineRow<Accessory: View>: View {
     private let title: String
     private let detail: String?

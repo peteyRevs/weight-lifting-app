@@ -1,6 +1,6 @@
 import SwiftUI
 
-public enum SetRowState: Sendable {
+public nonisolated enum SetRowState: Sendable {
     /// Not logged and not selected.
     case pending
     /// The selected set: orange label, orange rule above, orange ring on the check.
@@ -14,11 +14,13 @@ public enum SetRowState: Sendable {
 /// un-logs it. The rule above it turns orange while it is the active set. Stack rows in a
 /// ``HairlineList`` under a ``SetRowHeader``, with ``SetRowSteppers`` under the active row.
 ///
-/// VoiceOver reads two buttons. The row reads its three strings with its state as the value
-/// ("Current set", "Done"); a feature gives it a spoken label from outside,
-/// `.accessibilityLabel("Set 2, 185 pounds, 5 reps")`, and that label stops at the row. The check
-/// reads `checkLabel` ("Log set 2"), which a label from outside does not replace, and once done
-/// it is selected and says "Done".
+/// VoiceOver reads exactly two buttons, with no container around either (`AccessibilityTreeTests`
+/// pins the tree):
+/// - the row summary: its label is "2, 185, 5" until a feature names it with
+///   ``accessibilityLabel(_:)`` ("Set 2, 185 pounds, 5 reps"), and its value is the state in words
+///   ("Pending", "Current set", "Done");
+/// - the check: `checkLabel`, the label of what activating it will do ("Log set 2", or
+///   "Undo set 2" once logged), selected and "Done" once the set is logged.
 public struct SetRow: View {
     private let number: String
     private let weight: String
@@ -27,6 +29,7 @@ public struct SetRow: View {
     private let checkLabel: String
     private let onSelect: () -> Void
     private let onCheck: () -> Void
+    private var summary: String?
 
     public init(
         number: String,
@@ -61,16 +64,26 @@ public struct SetRow: View {
                     .ledgerHitTarget()
                 }
                 .buttonStyle(LedgerPressStyle())
+                .accessibilityLabel(summary ?? "\(number), \(weight), \(reps)")
                 .accessibilityValue(SetRowSpeech.state(state))
                 Button(action: onCheck) { SetRowCheck(state: state) }
                     .buttonStyle(LedgerPressStyle())
                     .accessibilityLabel(checkLabel)
                     .accessibilityValue(state == .done ? SetRowSpeech.done : "")
                     .accessibilityAddTraits(state == .done ? .isSelected : [])
-                    .accessibilityElement(children: .contain) // a label or value set on the row stops here
             }
             .padding(.vertical, LedgerSpacing.s)
         }
+    }
+
+    /// Names the row summary for VoiceOver ("Set 2, 185 pounds, 5 reps") and nothing else: the
+    /// check keeps `checkLabel`, and the state still follows as the value. Like `Text`'s own
+    /// modifiers, it returns a `SetRow`, so apply it to the row before any other modifier. SwiftUI's
+    /// `View.accessibilityLabel` would label every element inside, the check too.
+    public func accessibilityLabel(_ label: String) -> SetRow {
+        var copy = self
+        copy.summary = label
+        return copy
     }
 
     /// Done rows are muted, not the prototype's .28 `DIM`: the logged numbers still carry meaning
@@ -96,9 +109,13 @@ private nonisolated enum SetRowSpeech {
         String(localized: "Current set", bundle: .module, comment: "VoiceOver value of the active set row")
     }
 
+    static var pending: String {
+        String(localized: "Pending", bundle: .module, comment: "VoiceOver value of a set not yet logged or selected")
+    }
+
     static func state(_ state: SetRowState) -> String {
         switch state {
-        case .pending: ""
+        case .pending: pending
         case .active: current
         case .done: done
         }
@@ -138,7 +155,7 @@ struct SetRowGallery: View {
         VStack(spacing: 0) {
             SetRowHeader(number: "#", weight: "lb", reps: "reps")
             HairlineList {
-                SetRow(number: "1", weight: "185", reps: "5", state: .done, checkLabel: "Log set 1") {} onCheck: {}
+                SetRow(number: "1", weight: "185", reps: "5", state: .done, checkLabel: "Undo set 1") {} onCheck: {}
                 SetRow(number: "2", weight: "185", reps: "5", state: .active, checkLabel: "Log set 2") {} onCheck: {}
                 SetRowSteppers(
                     weightStep: "5 lb",

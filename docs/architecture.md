@@ -394,7 +394,9 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
   prototype bar is not replicated), watch variants where needed. Beside them: `LedgerIcon` (the
   spec's stroked icons, sized like a type role), `.ledgerHitTarget()` (44 pt) and `.ledgerPill`
   (a circular capsule, as CSS draws `border-radius: 999px`). Components take display strings the
-  caller has already localised.
+  caller has already localised, except `SetRow`'s three VoiceOver state words ("Pending", "Current
+  set", "Done"), which `LedgerDesign` localises itself (`String(localized:bundle: .module)`, English
+  until the module has a string catalog).
 - Every component has snapshot tests: light + dark × 3 Dynamic Type sizes;
   watch components at 42 / 46 / 49 mm.
 

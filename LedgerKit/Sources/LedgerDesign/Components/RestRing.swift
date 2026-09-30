@@ -28,6 +28,8 @@ public struct RestRing: View {
             Text(label)
                 .ledgerFont(.numeralS)
                 .foregroundStyle(LedgerColor.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5) // a clock string longer than "10:00" shrinks rather than wraps
         }
         .frame(width: size.diameter * scale, height: size.diameter * scale)
         .accessibilityElement(children: .combine)
