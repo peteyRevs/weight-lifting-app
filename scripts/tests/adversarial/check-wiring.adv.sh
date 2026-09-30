@@ -297,6 +297,17 @@ run
 tests="$(grep '^test-without-building ' "$LOG.args")"
 check "W45 ... (both platforms on a green run)" \
     is "$(grep -c . <<<"$tests") $(grep -c -- ' -collect-test-diagnostics never ' <<<"$tests")" "2 2"
+# F32 adversarial (tasks/features/F32-xcode-27-migration/test-findings.md): record mode takes the other
+# branch of run_plan, and swift test knows neither xcodebuild flag.
+run --record-snapshots
+builds="$(grep -E '^(build-for-testing|test-without-building) ' "$LOG.args")"
+tests="$(grep '^test-without-building ' "$LOG.args")"
+check "W46 --record-snapshots pins packages on all four xcodebuild calls and skips diagnostics on both test runs" \
+    is "$(grep -c . <<<"$builds") $(grep -c -- ' -onlyUsePackageVersionsFromResolvedFile\( \|$\)' <<<"$builds") \
+$(grep -c -- ' -collect-test-diagnostics never\( \|$\)' <<<"$tests")" "4 4 2"
+run --fast
+check "W47 --fast's swift test gets neither xcodebuild-only flag (swift test would reject it)" \
+    is "$code $(grep -c '^swift-test .*\(-collect-test-diagnostics\|-onlyUsePackageVersionsFromResolvedFile\)' "$LOG")" "0 0"
 
 # ---- --record-snapshots: F06's run_plan keeps going after a failing plan, if tests ran ----------
 # The fake xcrun's `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (1).

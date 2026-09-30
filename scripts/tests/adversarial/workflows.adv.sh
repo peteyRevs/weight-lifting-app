@@ -307,4 +307,13 @@ check "WF33 release-please token: contents, pull-requests, issues write; nothing
 check "WF34 release-please runs on Linux and starts no other workflow (no macOS minutes)" \
     is "$(q rp '.jobs["release-please"]."runs-on"') $(grep -c 'workflow run' "$WF/release-please.yml")" "ubuntu-latest 0"
 
+# F32 adversarial (tasks/features/F32-xcode-27-migration/test-findings.md): the toolchain pins are code. A PR
+# that changes only the Xcode pin, a lockfile, the formatter's Swift version or actionlint's labels starts Check.
+decide "WF59 only .xcode-version -> Check runs" code=true 'echo 27.1 >.xcode-version'
+decide "WF59 only LedgerKit/Package.resolved -> Check runs" code=true 'echo "{}" >LedgerKit/Package.resolved'
+decide "WF59 only the project's Package.resolved -> Check runs" code=true \
+    'mkdir -p Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm && echo "{}" >Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+decide "WF59 only .swiftformat -> Check runs" code=true 'echo "--swiftversion 6.4" >.swiftformat'
+decide "WF59 only .github/actionlint.yaml -> Check runs" code=true 'echo "self-hosted-runner: {}" >.github/actionlint.yaml'
+
 finish
