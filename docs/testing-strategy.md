@@ -188,6 +188,13 @@ Concrete test names (file = suite = source type; see §6):
   simulators (§7), prints `git status --short -- '**/__Snapshots__'` and
   fails; a second, normal run proves the references. References recorded on any other
   device/OS are rejected in review.
+- Accessibility (iOS): `View.accessibilityElements(_:)` in `LedgerSnapshotTesting` hosts a view
+  in a window at a matrix appearance and returns its elements as UIKit hands them to VoiceOver
+  (label, value, traits, frame); `withAccessibilityElements(_:_:)` gives the live elements, to
+  activate or adjust them. SwiftUI builds that tree only for an assistive technology, so the
+  helper turns on UIKit's accessibility automation (`_AXSSetAutomationEnabled`, private,
+  test-only, as KIF and AccessibilitySnapshot do) while it reads. A button's accessibility frame
+  is its tappable area, which is how `ComponentAccessibilityTests` checks the 44 pt target.
 - Review policy: a PR that changes any PNG lists them under "Screenshots" in
   the PR template with the reason; the reviewer inspects GitHub's image diff
   against the prototype screen label (workflow review point 4); more than 20

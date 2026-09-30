@@ -4,14 +4,15 @@ Branch `feat/F06-design-system` (from `main` 8404d02). F06 ships as three PRs,
 each through the full gate (engineering-standards §10: ≤ 500 changed product
 lines; the F02 waiver does not carry over). **This file covers slice 1:
 tokens, Archivo loading and the width-axis spike, the lint allowlist, and
-their tests and snapshots.**
+their tests and snapshots.** Slice 2 (the phone components) is in
+"Slice 2" at the end.
 
 ## Slice plan
 
 | Slice | Contents | Criteria |
 |---|---|---|
-| **1 (this PR)** | `Tokens/*` (colour light/dark/watch, type, spacing, radius, hairline, motion), `Fonts/*` (Archivo registration and axis instances), the `wdth` spike on both simulators, the design-lint allowlist and its fixture test, snapshot infrastructure in `LedgerSnapshotTesting` | 1, 2, 7, 8; the criterion 3 matrix is exercised by the token specimens |
-| 2 | The most-used phone primitives: `PrimaryButton`, `PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow`, `SetRow` + `SetRowSteppers` (the brief's `Stepper`), `RestRing`, with previews and the 6-image matrix each; `RestRingGeometryTests`, `ComponentAccessibilityTests` | 3 (these components), 5, 6 |
+| **1** (#6, merged) | `Tokens/*` (colour light/dark/watch, type, spacing, radius, hairline, motion), `Fonts/*` (Archivo registration and axis instances), the `wdth` spike on both simulators, the design-lint allowlist and its fixture test, snapshot infrastructure in `LedgerSnapshotTesting` | 1, 2, 7, 8; the criterion 3 matrix is exercised by the token specimens |
+| **2** (`feat/F06-slice2-components`) | The most-used phone primitives: `PrimaryButton`, `PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow`, `SetRow` + `SetRowSteppers` (the brief's `Stepper`), `RestRing`, with previews and the 6-image matrix each; `RestRingGeometryTests`, `ComponentAccessibilityTests` | 3 (these components), 5, 6 |
 | 3 | `WeekStrip`, `StatTile`, `ProgressSegments`, `SheetChrome`, `EmptyState`, `WatchPrimaryButton`, `WatchRestRing` (reuses slice 2's ring geometry), `WatchStatBlock` at 42 / 46 / 49 mm, and `DesignGallery` (token pages plus every component, named); side-by-side gallery vs prototype screenshots for the PR | 3 (the rest), 4, 9 |
 
 Slice 2 goes first because every Today and Active-workout screen (F09, F10)
@@ -722,3 +723,177 @@ the run. Rule for next time: when an edit replaces a line of control flow, read 
   (≤ 500). This round's Swift is all test-only: `LedgerSnapshotTesting` (+1 file, `PhoneSnapshot.swift`) and
   `LedgerDesignTests`.
 - Not touched: `Ledger.xcodeproj`, the test plans and their 60 s allowance, the lint regexes, and the F01 merge note.
+
+## Slice 2
+
+Branch `feat/F06-slice2-components` (from `main` 638013d). Scope: the slice-plan row for slice 2 —
+`PrimaryButton`, `PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow`, `SetRow` +
+`SetRowSteppers` (the brief's `Stepper`) and `RestRing`, in `LedgerKit/Sources/LedgerDesign/Components/`, with
+previews, the 6-image phone matrix each, `RestRingGeometryTests` (criterion 5) and `ComponentAccessibilityTests`
+(criterion 6). Nothing from slice 3 was started.
+
+### Components
+
+Every component uses tokens only (colour, `.ledgerFont` roles, spacing, radius, hairline); the few raw numbers
+are component dimensions that live here and nowhere else (54 pt CTA, 44 pt target, the ring's SVG proportions,
+the icon grid), each named and sourced. Each takes display strings the caller has already localised: features
+keep their copy in their own string catalogs (F09–F12 `Resources/Localizable.xcstrings`), and a
+`LocalizedStringKey` resolved inside `LedgerDesign` would look in the main bundle instead.
+
+| Component | Prototype source (v2 unless said) | Decisions |
+|---|---|---|
+| `PrimaryButton(_:icon:action:)` | Today "Start workout": `#FF5B22` pill, 600 16 px, 19 px padding, 10 px gap, 17 px arrow; disabled from v1 Library's add button (ink .10 fill, .38 text) | `button` role (700, decision 7), white on `accent`; full width, **min height 54** (spec §8.6) with `m` / `xl` padding so wrapped titles grow it; disabled: `hairline` fill, `inkMuted` label |
+| `PillButton(_:style:action:)` | "Finish" / "Repeat" (outline .16, 500 11.5–12.5 px), selected filter (filled with text colour, ground label), "Cancel" / "Skip setup" / "+ Add set" (ghost, 400 13 px at .32–.40) | `.outline` (`hairlineStrong` border, `ink`), `.filled` (`ink` fill, `ground` label), `.ghost` (`inkMuted`, no horizontal padding); `caption` role; the pill is drawn at text size, the target is ≥ 44 × 44 around it |
+| `IconPillButton(_:icon:action:)` | swap button: 38 pt circle, `.14` border, 17 px icon at .6 | 44 pt at the default size (the brief), growing with its icon; `hairlineStrong` ring, `inkSecondary` icon; the string is its VoiceOver label |
+| `Eyebrow(_:tint:)` | 500 10 px, .18 em, uppercase: "UP NEXT" orange, "RECENT" / "REMAINING" at .32–.34 | `eyebrow` role; `.accent` → `accentText`, `.muted` → `inkMuted`; `.isHeader` for the VoiceOver rotor |
+| `HairlineList { }`, `HairlineRule` | every v2 list: `border-top: 1px LINE` per row plus a closing rule | each row draws its own top rule (so `SetRow` can make its own orange), the list adds the closing one; `HairlineRule` is public for other rules |
+| `HairlineRow(_:detail:action:accessory:)` | RECENT / Library / REMAINING / swap rows: 16 px vertical padding, 500 15 px title, 300 12.5 px meta at .36–.38, trailing chevron / PR / "Use" | `body` title in `ink`, `label` detail in `inkMuted`, a generic trailing accessory; with an action the whole row is one button; at accessibility sizes the accessory moves under the title |
+| `SetRow(number:weight:reps:state:checkLabel:onSelect:onCheck:)`, `SetRowState` | set rows: grid `22px 1fr 1fr 42px`, gap 10, padding 15; label 400 12.5 px; values 700 24 px wdth 90 (= `numeralM`); 32 px check; colours from the script's `rows` mapping | row body and check are two sibling buttons; label `caption`; active: `accentText` label, `accentLine` rule, orange ring; done: muted values, tick in an `accent` disc; the label column is 22/12 em of `caption`, so it scales; values too long for their column at the largest sizes shrink (≥ 0.5) rather than break mid-number |
+| `SetRowHeader(number:weight:reps:)` (added) | column headings "#", "lb", "reps", 400 11 px at .30 | shares `SetColumns` with the rows and reserves the check column with a hidden `SetRowCheck`, so header and rows line up at every text size; F10 would otherwise have to copy the grid |
+| `SetRowSteppers(weightStep:repStep:onWeight:onReps:)` | two outlined pills (.12), "−" / "+" (300 20 px at .6), step "5 LB" / "1 REP" (400 10.5 px, .09 em, .32) | `hairlineStrong` pill, glyphs as `LedgerIcon.minus/plus` in `inkSecondary`, step in `eyebrow` / `inkMuted`; each "−" and "+" is a ≥ 44 pt target; pills stack at accessibility sizes |
+| `RestRing(progress:label:size:)`, `RestRingGeometry` | rest card ring: 64 px, r 29, stroke 2.5, track .12, `stroke-dasharray 182`, rotated −90°, label 500 16 px tabular; spec §8.8 | `progress` is the fraction of rest left, clamped to 0…1 (NaN → 0); the arc runs from 12 o'clock clockwise; track `hairlineStrong`, arc `accent` with round caps, label `numeralS` in `ink`; the ring (and stroke) scale with the label's Dynamic Type size; `RestRingArc` animates `progress`; `RestRingGeometry.phone` is public so slice 3's `WatchRestRing` adds `.watch` (200 / 88 / 9) |
+| `LedgerIcon`, `LedgerIconView(_:sizedAs:)` (supporting) | spec §8.7 "other icons": arrow, check, chevron, swap; the steppers' "−" / "+" | polylines on the 24-pt grid at the SVG stroke width, round caps and joins; sized like a type role so icons scale with the text beside them; stroke × 1.3 under Bold Text; hidden from VoiceOver |
+| `.ledgerHitTarget()`, `.ledgerPill` (supporting) | HIG 44 pt; CSS `border-radius: 999px` | the target modifier goes inside a button's label so the button and its accessibility frame are the full target; `.ledgerPill` is `Capsule(style: .circular)` (below) |
+
+Each component file ends with an internal `…Gallery` view holding every state (PrimaryButton: arrow, long title,
+disabled; PillButton: the three styles and a long title; SetRow: done, active with steppers, pending, a drop set).
+The `#Preview`s show those galleries and live together in `Components+Previews.swift`: testing-strategy §4 puts
+every `#Preview` body in a `*+Previews.swift` file, which the coverage gate (F01's `excludedFiles`) leaves out. The
+snapshot tests render the same galleries, and slice 3's `DesignGallery` can list them.
+
+### Decisions and deviations
+
+1. **Contrast, AA with the look kept (Pete, 2026-09-27).** Where the prototype draws meaningful text below AA,
+   the component uses the lowest AA token instead: `inkMuted` for the muted eyebrow (.32–.34), ghost pills
+   (.32–.40), row details (.36–.38), the set label (.40) and column headings (.30), the stepper step (.32), and
+   done set values (`DIM`, .28: logged numbers still carry meaning). For non-text (WCAG 1.4.11, 3:1), the set
+   row's check is the only mark of its control, so its rings move: pending .14 → `inkMuted` (5.0 dark / 4.8 light),
+   active .5 white → `accentText` (6.3 / 5.1). The active check is then the row's orange, which F10's criterion 13
+   already expects ("check on the active row"). Unchanged and still AA: white on `accent` in `PrimaryButton`
+   (3.1:1 at 700, decision 7) and the done tick; icons in `inkSecondary`. The ring's `accent` arc on paper is
+   2.6:1, but the countdown in its middle carries the same information, so the arc is not required to read it.
+2. **No new type roles.** Pill labels use `caption` (400 12; the prototype's are 500 11.5–14), the ring label
+   `numeralS` (700 15, tabular; the prototype's is 500 16 tabular: a ticking countdown needs tabular figures,
+   and v2's numbers are 700), the set label `caption`, the stepper step `eyebrow`. The stepper "−" / "+" are
+   drawn icons, not 300 20 px text.
+3. **Native line height (Pete's decision 1).** Components size themselves with spacing tokens and minimum
+   frames, not by matching CSS line boxes: the CTA is min 54 pt, rows pad `l` (16; prototype 13–17), the set row
+   pads `s` around its 44 pt check target (the prototype's 15 around a 32 pt circle), header gaps `s` (10).
+4. **Circular capsules.** `Capsule()` defaults to continuous corners on iOS 26 (Apple docs, `init(style:)`), and
+   CSS `border-radius: 999px` draws circular ends, so every pill is `.ledgerPill`. It also fixed a harness
+   problem found in the first recording: a continuous `Capsule` or `RoundedRectangle` stroke rendered through
+   swift-snapshot-testing's `layer.render(in:)` gets stray vertical segments outside each end (reproduced in a
+   throwaway test: `ImageRenderer`, a circular capsule and a custom path were all clean). Circles were unaffected.
+5. **Dynamic Type through AX5.** Icons and the ring scale with a text role; `HairlineRow` and `SetRowSteppers`
+   switch to a vertical layout at accessibility sizes; set numerals may shrink to half size only when a value
+   cannot fit its column. `allComponents_accessibility5` records every gallery at AX5 (below): text wraps,
+   nothing is cut.
+6. **Accessibility.** Buttons get `.isButton` from `Button`; `SetRow` is two elements, the row (its visible
+   text, `.isSelected` when active) and the check (`checkLabel`, `.isSelected` when done); each stepper is one
+   adjustable element named by its step, whose increment and decrement call the matching direction; `Eyebrow`
+   is a header; `RestRing` is one element with `.updatesFrequently`; icons are hidden.
+7. **Not built:** a full-width `PillButton` (v2's rest card puts "+30s" and "Skip rest" side by side at
+   flex 1) and designed disabled looks for `PillButton` / `IconPillButton`. Neither is in the brief; F10 can ask
+   for them (a `controlSize` variant would be the SwiftUI way). SwiftUI still blocks taps on a disabled pill and
+   reports `.notEnabled`.
+
+### Test infrastructure (test-only)
+
+- `LedgerSnapshotTesting/AccessibilityElements.swift`: `View.accessibilityElements(_:)` and
+  `withAccessibilityElements(_:_:)` host a view in a window at a matrix appearance and read UIKit's accessibility
+  tree. A probe showed a hosted SwiftUI view reports **no** elements in a test process until UIKit's
+  accessibility automation is on (`_AXSSetAutomationEnabled` in libAccessibility, private and test-only, as KIF
+  and AccessibilitySnapshot do); the helper turns it on while it reads and restores it. Without a window every
+  frame is zero, and a package test process has no window scene (`connectedScenes` is empty), so the window is
+  made with `UIWindow(frame:)`, deprecated in iOS 26, through a protocol and a deprecated wrapper so the build
+  stays warning-free (swift-snapshot-testing makes its windows the same way). testing-strategy §2.5 describes it.
+- A button's accessibility frame is its tappable area (probe: a 44 pt frame inside the label gives a 44 pt
+  element; the same frame outside, after `.accessibilityLabel`, does not), which is why `.ledgerHitTarget()`
+  goes inside the label and how the tests measure the target.
+- Isolation, as slice 1 set it up: `RestRingGeometryTests` is `nonisolated` (values only); the render, snapshot
+  and accessibility suites are nested in `RenderingSuites`. No matrix is heavy enough for `.slow`.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 3 (slice-2 components) | `ComponentSnapshotTests.swift`, one suite per component, each `…_appearance_matchesReference` over `SnapshotAppearance.phoneMatrix` through `assertPhoneSnapshot`: `PrimaryButtonSnapshotTests`, `PillButtonSnapshotTests`, `IconPillButtonSnapshotTests`, `EyebrowSnapshotTests`, `HairlineListSnapshotTests` (with `HairlineRow`), `SetRowSnapshotTests` (with `SetRowHeader`, `SetRowSteppers`), `RestRingSnapshotTests`. Beyond the matrix, `ComponentSheetSnapshotTests` records every gallery at AX5 and with Bold Text |
+| 5 | `RestRingGeometryTests`: half the circumference at 0.5 (half ÷ full ring = 0.5 to 1e-9; against 2π·29 within the 0.03 % Béziers allow, measured 0.014 %), 12 → 6 o'clock clockwise (a quarter ends at 3), proportional at 8 fractions, full ring = `stroke-dasharray` 182 and closes, empty at 0 / −0.001 / −0.5 / −∞ / NaN, full at 1 / 1.0001 / 1.5 / 30 / +∞, and half is half at the ring's rendered sizes up to AX5. `RestRingRenderTests.halfProgress_rendered_isOrangeOnTheRightHalfOnly` checks the rendered pixels (iOS and watchOS) |
+| 6 | `ComponentAccessibilityTests` (iOS, at `.large` and `.accessibility3`): `PrimaryButton` label = title, `.button`, ≥ 44 × 44 (and ≥ 54 tall), one element; disabled → `.notEnabled`; `PillButton` (3 styles), `IconPillButton`, tappable `HairlineRow`: label, `.button`, ≥ 44; a static `HairlineRow` is one non-button element; `SetRow` (3 states): row and check are labelled buttons ≥ 44, `.selected` as the state says, and activating each calls its own action; `SetRowSteppers`: two adjustable elements ≥ 44, and VoiceOver's increment / decrement step the right value the right way; `Eyebrow` is a header; `RestRing` reads its countdown and updates frequently |
+
+### New references (44 PNGs, 1×, iPhone 17 / iOS 26.5, recorded 17:02 under Xcode 26.6)
+
+All in `LedgerKit/Tests/LedgerDesignTests/__Snapshots__/ComponentSnapshotTests/`:
+
+- `{primaryButton,pillButton,iconPillButton,eyebrow,hairlineList,setRow,restRing}_appearance_matchesReference-_.{light,dark}-{large,xLarge,accessibility3}.png`
+  (42; heights at large / xLarge / AX3: PrimaryButton 262 / 262 / 313, PillButton 252 / 252 / 287,
+  IconPillButton 96 / 96 / 112, Eyebrow 114 / 126 / 192, HairlineList 295 / 307 / 534, SetRow 409 / 409 / 483,
+  RestRing 276 / 296 / 497; all 402 wide)
+- `allComponents_accessibility5_matchesReference.dark-accessibility5.png` (402 × 3149)
+- `allComponents_boldText_matchesReference.bold-dark-large.png` (402 × 1584)
+
+Recorded with `scripts/check.sh --record-snapshots` through the simulator lock (`scratchpad/f06s2-record.log`):
+the only failures were recordings (iOS 14 tests, watchOS 4, record mode fails every snapshot test), and every
+slice-1 reference came back byte-identical. Each PNG was opened and checked: the prototype's intent, nothing cut
+at any edge, text wrapping at AX3 (PrimaryButton's "Resume workout · 12:48", PillButton's long title, Eyebrow's
+"Estimated 1RM · 8 weeks", HairlineRow's accessory under its title) and at AX5 on the sheet, dark variants on
+`#0B0B0D`. Sampled rather than eyeballed where a thumbnail misleads: the active set row's rule is `#6D2B16`
+(accent at 40 % over the ground). `__Snapshots__` is 2.0 MB in all (budget 6 MB).
+
+### Size
+
+Measured with a script that counts Swift lines that are not blank and not a whole-line `//`, `///` or `/* */`
+comment, over the new files (everything here is new, so a diff adds nothing):
+
+| | Code lines |
+|---|---|
+| `LedgerDesign/Components/` (product) | **650** |
+| — of which galleries (`…Gallery`, reused by tests and slice 3) | ~87 |
+| — of which `Components+Previews.swift` | 34 |
+| Test-only: `LedgerSnapshotTesting/AccessibilityElements.swift` | 91 |
+| Tests: `ComponentAccessibilityTests` 170, `ComponentSnapshotTests` 92, `RestRingGeometryTests` 138 | 400 |
+
+Over the 500-line target and well under the ~1,000 split line (standards §10). The split considered: 2a,
+the controls (`LedgerIcon`, the three buttons, `Eyebrow`, ~260 lines), then 2b, the lists (`HairlineList` /
+`Row`, `SetRow` + header + steppers, `RestRing`, ~390). Not taken: 2b's set row needs 2a's icons and hit
+target, the two halves would not merge independently any sooner, and neither is near 1,000. Nothing was
+compressed to fit. The ~50 lines above the slice plan's 400–450 are `LedgerIcon` (the brief lists no icons,
+but `PrimaryButton(icon:)` and `IconPillButton` need them) and `SetRowHeader`.
+
+### Gate
+
+- Iteration: `scripts/check.sh --fast` green (format, lint and the four lint fixture scripts, package graph,
+  host Domain + Persistence 419 tests). Host `swift test --filter LedgerDesignTests`: 130 tests passed, no
+  warnings. `LedgerDesignTests` on each simulator on its own: iOS 173 (all passing once references existed),
+  watchOS 137 passed + 1 skipped.
+- **Full `scripts/check.sh` through the lock: green** (Xcode 26.6, 17:04–17:08; 248 s: lint 7 s, iOS 155 s,
+  watchOS 86 s):
+  - PR-iOS: **603 tests, 602 passed, 0 failed, 1 skipped** (the nightly-only bare-font matrix); 17/17 test
+    targets ran and passed. `LedgerDesignTests`: 173 results (slice 1: 143).
+  - PR-watchOS: **559 tests, 558 passed, 0 failed, 1 skipped**; 8/8 test targets. `LedgerDesignTests`: 138.
+  - Step 2: `lint-rules.test.sh` OK, round 1 55/55, round 2 39/39, round 3 44/44; package graph unchanged.
+- LedgerDesign line coverage (xccov, `Sources/LedgerDesign/`): **96.2 % (887 / 922)**, iOS and merged the way
+  testing-strategy §4 and F01's gate merge the bundles (per file, the larger measurement); slice 1: 95.5 %;
+  threshold 60 %. The components alone: 96.4 % (695 / 721). On the watchOS bundle alone LedgerDesign reads
+  25.4 %, because the phone components' snapshot and accessibility tests can only run on iOS
+  (swift-snapshot-testing has no watchOS image strategy; the accessibility tree is UIKit's); slice 3's watch
+  components bring their own watch snapshots.
+- **After that green run** the previews moved into `Components+Previews.swift` (testing-strategy §4's
+  convention, no rendering change), and the re-run could not build: at 17:13–17:17 `/Applications/Xcode.app`
+  was auto-updated to Xcode 27.0 (27A266a), replacing the pinned 26.6, with its license not accepted. Nothing
+  was recorded after the update, and no workaround was attempted. **Left:** one full `scripts/check.sh` through
+  the lock on the current tree once Xcode 26.6 is back; references should match as recorded, and the preview
+  move should lift coverage slightly (preview lines leave the count).
+
+### How to verify by hand
+
+- Open the 44 PNGs above (GitHub's image view, or Finder's Quick Look); compare
+  `setRow_…dark-large` with the v2 prototype's "Active workout" set rows, `hairlineList_…dark-large` with
+  Today's "RECENT", `primaryButton_…dark-large` with "Start workout", `restRing_…dark-large` with the rest card.
+- Xcode canvas: `LedgerKit/Sources/LedgerDesign/Components/Components+Previews.swift` has one preview per
+  component; use the canvas's Dynamic Type and colour-scheme variants, and Bold Text in Canvas Device Settings.
+- VoiceOver (device or simulator, once a screen uses them): a set row reads "2, 185, 5, selected, button" then
+  its check label; a stepper is "5 lb, adjustable" and swipe up / down steps it; eyebrows appear under the
+  rotor's Headings.
+- `ComponentAccessibilityTests` prints each element (label, traits, frame) in a failure message, so a failing
+  target shows its actual size.
