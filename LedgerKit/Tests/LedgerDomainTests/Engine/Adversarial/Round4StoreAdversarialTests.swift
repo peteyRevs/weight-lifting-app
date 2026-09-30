@@ -30,14 +30,15 @@ struct Round4StoreAdversarialTests {
 
     @Test(
         """
-        Out of scope, for F05 (documents): the exact read-back clause has one stamp fixture, and it happens to \
-        survive a trip through timeIntervalSince1970 (GRDB's .timeIntervalSince1970 date strategy); a store \
-        keeping wallClock that way passes every clause, while about half of real sub-second stamps read back \
-        one ulp off, and a store that compares a duplicate with what it reads back rejects the batch
+        Closed by F05: the exact read-back clause now also stamps 10.493_826_8, which a trip through \
+        timeIntervalSince1970 (GRDB's .timeIntervalSince1970 date strategy) alters, so the contract rejects a \
+        store keeping wallClock that way. About half of real sub-second stamps read back one ulp off, and a \
+        store that compares a duplicate with what it reads back rejects the batch
         """
     )
-    func since1970Stamps_passTheContract_butAlterHalfOfRealStamps() async throws {
-        #expect(await WorkoutEventStoreContract.violations { Since1970StampStore() }.isEmpty)
+    func since1970Stamps_failTheContract_andAlterHalfOfRealStamps() async throws {
+        let found = await WorkoutEventStoreContract.violations { Since1970StampStore() }
+        #expect(found.contains { $0.hasPrefix(Self.exactClause) }, "\(found)")
         var altered = 0
         for step in 1 ... 1000 {
             let stamp = engineTime(Double(step) * 0.731)
@@ -92,6 +93,11 @@ actor Since1970StampStore: WorkoutEventStore {
 
     func envelopes(for workout: WorkoutID) -> [EventEnvelope] {
         logs[workout, default: []]
+    }
+
+    /// It keeps envelopes as values, so it can read all of them.
+    func unreadableCount(for _: WorkoutID) -> Int {
+        0
     }
 
     func highestSeq(for workout: WorkoutID, device: DeviceID) -> UInt64? {

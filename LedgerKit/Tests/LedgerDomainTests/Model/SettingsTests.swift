@@ -25,4 +25,21 @@ struct SettingsTests {
         #expect(try Fixtures.json(settings).contains(#""plateInventory":{"#))
         #expect(try JSONDecoder().decode(Settings.self, from: data) == settings)
     }
+
+    @Test("A missing key decodes to its default, so settings stored before a field existed still load (F05)")
+    func decoding_missingKeys_takeTheirDefaults() throws {
+        #expect(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8)) == .default)
+        var settings = Settings.default
+        settings.units = .kg
+        settings.autoRest = false
+        let json = #"{"units":"kg","autoRest":false}"#
+        #expect(try JSONDecoder().decode(Settings.self, from: Data(json.utf8)) == settings)
+    }
+
+    @Test("A key that is present must still be valid: an unknown unit or a 17 s rest is refused")
+    func decoding_invalidPresentKey_throws() {
+        for json in [#"{"units":"stone"}"#, #"{"defaultRest":17}"#] {
+            #expect(throws: DecodingError.self) { try JSONDecoder().decode(Settings.self, from: Data(json.utf8)) }
+        }
+    }
 }

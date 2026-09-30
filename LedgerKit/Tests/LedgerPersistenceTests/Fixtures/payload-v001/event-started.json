@@ -1,0 +1,90 @@
+{
+  "device" : "00000000-0000-0000-0000-000000000D01",
+  "event" : {
+    "started" : {
+      "_0" : {
+        "autoRest" : false,
+        "cursor" : {
+          "exerciseIndex" : 0,
+          "setIndex" : 1
+        },
+        "endedAt" : 811236000,
+        "exercises" : [
+          {
+            "equipment" : "barbell",
+            "exerciseID" : "00000000-0000-0000-0000-000000000E01",
+            "id" : "00000000-0000-0000-0000-000000000E01",
+            "isSupersetWithPrevious" : false,
+            "lastPerformance" : {
+              "date" : 810624000,
+              "load" : {
+                "grams" : "81646.6266"
+              },
+              "reps" : 5,
+              "sets" : 5
+            },
+            "name" : "Barbell Bench Press",
+            "originalExerciseID" : "00000000-0000-0000-0000-000000000E01",
+            "rest" : 150,
+            "rpe" : 8.5,
+            "sets" : [
+              {
+                "doneAt" : 811228809.4938267,
+                "id" : "00000000-0000-0000-0000-0000000005E1",
+                "kind" : "working",
+                "reps" : 5,
+                "weight" : {
+                  "grams" : "83914.58845"
+                }
+              },
+              {
+                "id" : "00000000-0000-0000-0000-0000000005E0",
+                "kind" : "drop",
+                "reps" : 5,
+                "weight" : {
+                  "grams" : "83914.58845"
+                }
+              }
+            ],
+            "slotID" : "00000000-0000-0000-0000-000000000051",
+            "step" : {
+              "grams" : "2267.96185"
+            },
+            "targetLoad" : {
+              "grams" : "83914.58845"
+            },
+            "targetReps" : 5,
+            "targetSets" : 2
+          }
+        ],
+        "id" : "00000000-0000-0000-0000-000000000100",
+        "isDeload" : false,
+        "name" : "Upper A — Push focus",
+        "originDevice" : "00000000-0000-0000-0000-000000000D01",
+        "phase" : "live",
+        "programUpdates" : [
+          "00000000-0000-0000-0000-000000000051",
+          "00000000-0000-0000-0000-000000000E02"
+        ],
+        "rest" : {
+          "endsAt" : 811228959.5,
+          "total" : [
+            8,
+            2426047410323587072
+          ]
+        },
+        "source" : {
+          "dayTemplateID" : "00000000-0000-0000-0000-0000000000DA",
+          "programID" : "00000000-0000-0000-0000-00000000009A",
+          "weekIndex" : 2
+        },
+        "startedAt" : 811228800,
+        "tag" : "UA",
+        "units" : "kg"
+      }
+    }
+  },
+  "seq" : 1,
+  "wallClock" : 811228800,
+  "workoutID" : "00000000-0000-0000-0000-000000000100"
+}

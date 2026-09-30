@@ -1,0 +1,14 @@
+{
+  "device" : "00000000-0000-0000-0000-000000000D01",
+  "event" : {
+    "exerciseSwapped" : {
+      "alsoUpdateProgram" : true,
+      "exerciseID" : "00000000-0000-0000-0000-000000000E02",
+      "exerciseIndex" : 0,
+      "name" : "Incline DB Press"
+    }
+  },
+  "seq" : 6,
+  "wallClock" : 811228840,
+  "workoutID" : "00000000-0000-0000-0000-000000000100"
+}

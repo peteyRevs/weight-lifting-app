@@ -47,3 +47,30 @@ public struct Settings: Hashable, Codable, Sendable {
         plateInventory: [.lb: .standard(.lb), .kg: .standard(.kg)]
     )
 }
+
+// MARK: - Codable (tolerates missing keys)
+
+extension Settings {
+    private enum CodingKeys: String, CodingKey {
+        case units, defaultRest, plateMathEnabled, autoRest, watchBuzz, weekStart, plateInventory
+    }
+
+    /// A missing key, or one holding `null`, takes its `Settings.default` value, so settings stored or sent
+    /// before a field existed still decode (F05 orchestrator decision, 2026-09-30: F28 adds `iCloudEnabled`).
+    /// A key that holds a value must hold a valid one.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Settings.default
+        try self.init(
+            units: container.decodeIfPresent(Units.self, forKey: .units) ?? fallback.units,
+            defaultRest: container.decodeIfPresent(RestDuration.self, forKey: .defaultRest) ?? fallback.defaultRest,
+            plateMathEnabled: container.decodeIfPresent(Bool.self, forKey: .plateMathEnabled)
+                ?? fallback.plateMathEnabled,
+            autoRest: container.decodeIfPresent(Bool.self, forKey: .autoRest) ?? fallback.autoRest,
+            watchBuzz: container.decodeIfPresent(Bool.self, forKey: .watchBuzz) ?? fallback.watchBuzz,
+            weekStart: container.decodeIfPresent(Weekday.self, forKey: .weekStart) ?? fallback.weekStart,
+            plateInventory: container.decodeIfPresent([Units: PlateInventory].self, forKey: .plateInventory)
+                ?? fallback.plateInventory
+        )
+    }
+}

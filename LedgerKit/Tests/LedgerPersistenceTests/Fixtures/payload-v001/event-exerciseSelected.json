@@ -1,0 +1,12 @@
+{
+  "device" : "00000000-0000-0000-0000-000000000D01",
+  "event" : {
+    "exerciseSelected" : {
+      "exerciseIndex" : 0,
+      "setIndex" : 1
+    }
+  },
+  "seq" : 2,
+  "wallClock" : 811228803,
+  "workoutID" : "00000000-0000-0000-0000-000000000100"
+}
