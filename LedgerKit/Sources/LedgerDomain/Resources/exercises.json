@@ -3,8 +3,8 @@
     "The seeded exercise catalog (F03). Edit by hand; keep one object per exercise and the key order below.",
     "Never change, reuse or regenerate an existing id: ids are stored in lifters' databases, programs and alternatives. A new exercise gets a new random UUID (uppercase, e.g. from uuidgen).",
     "Changes are additive: add entries, fix text, loads or alternatives; never delete an entry.",
-    "After any change, bump ExerciseCatalog.version by one and append '<version> <sha256 of this file>' to catalog.version.sha (shasum -a 256 exercises.json). ExerciseCatalogTests fails until you do.",
-    "Rules (checked by ExerciseCatalog.seed() and ExerciseCatalogTests): startLoad lb and kg are multiples of the equipment's default step (lb: barbell 5, others 2.5; kg: barbell 2.5, others 1.25), kg = lb converted and rounded to the kg step; loadKind 'bodyweight' exactly when both loads are 0; at least two alternatives with the same pattern, never the exercise itself; names and aliases unique ignoring case; shortName upper case, unique, at most 14 characters (it is the watch label).",
+    "After any change, bump ExerciseCatalog.version above main's and put '<version> <sha256 of this file>' as the last line of catalog.version.sha (shasum -a 256 exercises.json). ExerciseCatalogTests and scripts/check-catalog-version.sh fail until you do.",
+    "Rules (checked by ExerciseCatalog.seed() and ExerciseCatalogTests): startLoad lb and kg are multiples of the equipment's default step (lb: barbell and kettlebell 5, others 2.5; kg: barbell 2.5, kettlebell 2, others 1.25) and follow the conservative start-load policy (ExerciseCatalog.swift; StartLoadPolicy in the tests), whose kg values are chosen in kg, not converted; loadKind 'bodyweight' exactly when both loads are 0; at least two alternatives with the same pattern, never the exercise itself; names and aliases unique ignoring case; shortName upper case, unique, at most 14 characters (it is the watch label).",
     "Pattern rules and deliberate exclusions: see ExerciseCatalog.swift and tasks/features/F03-exercise-catalog/implementation-notes.md."
   ],
   "exercises": [
@@ -16,7 +16,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 180, "kg": 82.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["EB0FC0F1-59AF-4445-8560-3198F298EF59", "10775544-0350-413A-835D-EA958A0902A0", "2BF340CA-A558-40D2-81D9-5BF2DF1EB60F", "46D64A8D-675A-4D62-8319-7C61894FE94B"],
       "aliases": ["Bench Press", "Flat Bench Press"]
     },
@@ -28,7 +28,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["998FF394-72D3-4D3A-89D6-9DCFA1399CCC", "B051BAE8-2560-46EB-B90C-09AB9E6463E1", "270DE1C9-481F-4904-BE85-070381E296C0"],
       "aliases": ["Floor Press"]
     },
@@ -40,7 +40,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["46D64A8D-675A-4D62-8319-7C61894FE94B", "EB0FC0F1-59AF-4445-8560-3198F298EF59", "0B95C6FC-86E6-432C-A4C9-6AAD3C725D98"],
       "aliases": ["Standing Cable Chest Press", "Standing Cable Press"]
     },
@@ -52,7 +52,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders"],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["0212B3A2-68ED-4183-B183-0850BEDB68F7", "9E694B60-EE39-4AE8-9FCC-37B1FCC635DC", "8F69AF9F-0254-44C4-8FC6-C96D24C5FF2D"],
       "aliases": ["Cable Fly", "High-to-Low Cable Fly", "Standing Cable Fly"]
     },
@@ -64,7 +64,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["270DE1C9-481F-4904-BE85-070381E296C0", "2BF340CA-A558-40D2-81D9-5BF2DF1EB60F", "A536A67E-55C5-4198-BDAE-A44D9091EFE4"],
       "aliases": ["Decline Barbell Bench Press"]
     },
@@ -102,7 +102,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["270DE1C9-481F-4904-BE85-070381E296C0", "46D64A8D-675A-4D62-8319-7C61894FE94B", "34ABACC5-2E75-4EE1-9F67-DC9E925E6D37", "998FF394-72D3-4D3A-89D6-9DCFA1399CCC"],
       "aliases": ["DB Bench Press", "Flat Dumbbell Press", "Dumbbell Chest Press"]
     },
@@ -114,7 +114,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["B33B4312-860A-456A-80BE-AFE2A7DFE844", "B051BAE8-2560-46EB-B90C-09AB9E6463E1", "EB0FC0F1-59AF-4445-8560-3198F298EF59"],
       "aliases": []
     },
@@ -126,7 +126,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["9E694B60-EE39-4AE8-9FCC-37B1FCC635DC", "AF149D78-2D3F-417A-8A25-FFA1593A685A", "E41BAB1A-3E85-4C2A-A1CB-CF4E85DE36C9"],
       "aliases": ["Dumbbell Flye", "Flat Dumbbell Fly"]
     },
@@ -138,7 +138,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders", "triceps"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["34ABACC5-2E75-4EE1-9F67-DC9E925E6D37", "53E0850E-0E64-4C7B-9CCD-0AB8F2E47D84", "41A13E83-B93F-4730-AB56-11DC64343A71"],
       "aliases": ["Incline Barbell Press", "Incline Barbell Bench Press"]
     },
@@ -150,7 +150,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders", "triceps"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["455BF551-6D52-4555-90CA-E4E112DBB1C9", "41A13E83-B93F-4730-AB56-11DC64343A71", "53E0850E-0E64-4C7B-9CCD-0AB8F2E47D84", "EB0FC0F1-59AF-4445-8560-3198F298EF59"],
       "aliases": ["Incline Dumbbell Press", "Incline Dumbbell Bench Press"]
     },
@@ -162,7 +162,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["0212B3A2-68ED-4183-B183-0850BEDB68F7", "8F69AF9F-0254-44C4-8FC6-C96D24C5FF2D", "9E694B60-EE39-4AE8-9FCC-37B1FCC635DC"],
       "aliases": ["Incline Dumbbell Flye", "Incline DB Fly"]
     },
@@ -174,7 +174,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["998FF394-72D3-4D3A-89D6-9DCFA1399CCC", "B33B4312-860A-456A-80BE-AFE2A7DFE844", "0B95C6FC-86E6-432C-A4C9-6AAD3C725D98"],
       "aliases": []
     },
@@ -186,7 +186,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders"],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["AF149D78-2D3F-417A-8A25-FFA1593A685A", "E41BAB1A-3E85-4C2A-A1CB-CF4E85DE36C9", "9E694B60-EE39-4AE8-9FCC-37B1FCC635DC"],
       "aliases": ["Low Cable Fly", "Low-to-High Cable Crossover"]
     },
@@ -198,7 +198,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["270DE1C9-481F-4904-BE85-070381E296C0", "EB0FC0F1-59AF-4445-8560-3198F298EF59", "10775544-0350-413A-835D-EA958A0902A0", "AEB824D6-5758-4481-8C9F-A926070F3D5B"],
       "aliases": ["Chest Press Machine", "Seated Chest Press"]
     },
@@ -210,7 +210,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders", "triceps"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["34ABACC5-2E75-4EE1-9F67-DC9E925E6D37", "455BF551-6D52-4555-90CA-E4E112DBB1C9", "53E0850E-0E64-4C7B-9CCD-0AB8F2E47D84"],
       "aliases": ["Incline Chest Press Machine", "Incline Machine Press"]
     },
@@ -222,7 +222,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders"],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["AF149D78-2D3F-417A-8A25-FFA1593A685A", "8F69AF9F-0254-44C4-8FC6-C96D24C5FF2D", "0212B3A2-68ED-4183-B183-0850BEDB68F7"],
       "aliases": ["Pec Deck Fly", "Machine Fly", "Butterfly"]
     },
@@ -247,7 +247,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["270DE1C9-481F-4904-BE85-070381E296C0", "46D64A8D-675A-4D62-8319-7C61894FE94B", "EB0FC0F1-59AF-4445-8560-3198F298EF59"],
       "aliases": ["Smith Machine Press", "Smith Bench Press"]
     },
@@ -259,7 +259,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["shoulders", "triceps"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["455BF551-6D52-4555-90CA-E4E112DBB1C9", "41A13E83-B93F-4730-AB56-11DC64343A71", "34ABACC5-2E75-4EE1-9F67-DC9E925E6D37"],
       "aliases": ["Smith Machine Incline Bench Press", "Smith Incline Press"]
     },
@@ -271,7 +271,7 @@
       "primaryMuscle": "chest",
       "secondaryMuscles": ["triceps", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["A536A67E-55C5-4198-BDAE-A44D9091EFE4", "270DE1C9-481F-4904-BE85-070381E296C0", "7F76825B-FD05-4A9B-886D-62096BC84B11", "79834236-6284-481F-9046-F090A2F7217C"],
       "aliases": ["Weighted Chest Dip", "Weighted Parallel Bar Dip"]
     },
@@ -296,7 +296,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["4A4094CF-D350-4601-8164-EA612CB28A79", "221C8216-4BC7-411E-A783-E61C7D4D8017", "ABB0096E-C05C-4ACF-A9DD-99A5B4CB3AD2"],
       "aliases": ["Seated Band Row", "Resistance Band Row"]
     },
@@ -308,7 +308,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 155, "kg": 70 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["4A4094CF-D350-4601-8164-EA612CB28A79", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "A9ED72CF-D506-430B-A12F-501D15B18E44", "BD900ADC-2F48-4A82-B0CB-303972C6A82A"],
       "aliases": ["Bent-Over Row", "Bent-Over Barbell Row"]
     },
@@ -320,7 +320,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["EFEA7F75-A67A-4E3B-A273-96C72D5E820C", "830026D8-8D64-4BB7-8F94-0CF98463178B"],
       "aliases": ["Shrug"]
     },
@@ -332,7 +332,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["3DB2AB9B-C411-4F81-BD87-3566FE116571", "EFEA7F75-A67A-4E3B-A273-96C72D5E820C"],
       "aliases": []
     },
@@ -344,7 +344,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "4A4094CF-D350-4601-8164-EA612CB28A79"],
       "aliases": ["Incline Dumbbell Row", "Prone Dumbbell Row"]
     },
@@ -356,7 +356,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["4A4094CF-D350-4601-8164-EA612CB28A79", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "90383748-7413-4398-99FA-6EB6E5F2969A", "45CD4C48-84A1-45F7-A4E3-C7E4FD48AF34"],
       "aliases": ["Machine Row", "Seated Row Machine", "Chest-Supported Machine Row"]
     },
@@ -381,7 +381,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["90383748-7413-4398-99FA-6EB6E5F2969A", "45CD4C48-84A1-45F7-A4E3-C7E4FD48AF34", "ABB0096E-C05C-4ACF-A9DD-99A5B4CB3AD2"],
       "aliases": ["Bent-Over Dumbbell Row", "Two-Arm Dumbbell Row"]
     },
@@ -393,7 +393,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["chest", "triceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["5173E647-F4C1-4B7D-AE19-DB56CD20F9F6", "70668DBA-BDE4-4E4D-9476-808EF724947A"],
       "aliases": ["DB Pullover"]
     },
@@ -405,7 +405,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["3DB2AB9B-C411-4F81-BD87-3566FE116571", "830026D8-8D64-4BB7-8F94-0CF98463178B"],
       "aliases": []
     },
@@ -430,7 +430,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "F1C49585-3AB1-4ED3-B4E7-65BF640F6938", "6C720AF2-ED1A-4742-9BD5-FB190B595FA7"],
       "aliases": ["Single-Arm Kettlebell Row"]
     },
@@ -442,7 +442,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 100, "kg": 45 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["0B716204-08B6-4839-98DA-6E728BA0CA55", "CEF6D6A6-A69F-42D2-99FA-8EBC8D6F808F", "597AD784-D549-4244-9789-E737A9FFE61A", "FDE0A19A-AAB8-4844-AFFB-D8B91A61FA69"],
       "aliases": ["Wide-Grip Lat Pulldown", "Wide-Grip Pulldown"]
     },
@@ -454,7 +454,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["glutes", "hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["8814CDA5-1EBE-44E3-839C-161F148E96CB", "6B979175-0E2B-4461-BAE6-3EC6FE6B4DA3", "2C203E1A-CAE0-40DE-B62A-D18195E4157F"],
       "aliases": ["Back Extension Machine", "Seated Back Extension"]
     },
@@ -466,7 +466,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["5F043F91-CD6E-4E9B-B12C-5B33ECB9B049", "0B716204-08B6-4839-98DA-6E728BA0CA55", "CEF6D6A6-A69F-42D2-99FA-8EBC8D6F808F"],
       "aliases": ["Machine Lat Pulldown", "Plate-Loaded Pulldown"]
     },
@@ -478,7 +478,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["chest", "triceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["C78E5653-7753-4693-B0FD-0ED0790525AB", "5173E647-F4C1-4B7D-AE19-DB56CD20F9F6"],
       "aliases": ["Pullover Machine"]
     },
@@ -490,7 +490,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 25, "kg": 12.5 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "F587F65C-763D-4B50-A5D5-F85E4A72AF8F", "0CDD6A64-DC47-44AB-9E2D-A13CDA544EAE"],
       "aliases": []
     },
@@ -515,7 +515,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["5F043F91-CD6E-4E9B-B12C-5B33ECB9B049", "469FAA27-AEBA-42CB-8261-E949CA7E4987", "B0E00A9C-FB3D-4101-AED5-66E18A331BB7"],
       "aliases": ["Close-Grip Lat Pulldown", "Close-Grip Pulldown", "V-Bar Pulldown"]
     },
@@ -527,7 +527,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["90383748-7413-4398-99FA-6EB6E5F2969A", "F587F65C-763D-4B50-A5D5-F85E4A72AF8F", "F1C49585-3AB1-4ED3-B4E7-65BF640F6938"],
       "aliases": []
     },
@@ -552,7 +552,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["glutes", "hamstrings", "forearms"],
       "pattern": "hinge",
-      "startLoad": { "lb": 135, "kg": 60 },
+      "startLoad": { "lb": 95, "kg": 40 },
       "alternatives": ["F5CB98F6-7533-4BE9-85FA-8013FF01B1C6", "7F67AE02-C7A7-45E1-AC09-50577BC7B2F2", "C6C70E2B-BB44-4A53-98DD-D4861B70E8D7"],
       "aliases": ["Block Pull"]
     },
@@ -564,7 +564,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["C4530A96-E97E-4994-84DD-C86753472427", "0B716204-08B6-4839-98DA-6E728BA0CA55", "5F043F91-CD6E-4E9B-B12C-5B33ECB9B049"],
       "aliases": ["Underhand Lat Pulldown", "Supinated Lat Pulldown"]
     },
@@ -576,7 +576,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "90383748-7413-4398-99FA-6EB6E5F2969A", "0CDD6A64-DC47-44AB-9E2D-A13CDA544EAE"],
       "aliases": ["Cable Row", "Low Cable Row", "Seated Row"]
     },
@@ -588,7 +588,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["4A4094CF-D350-4601-8164-EA612CB28A79", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "3FF1325A-F56F-4CB7-BEF2-321CEA9191FD"],
       "aliases": ["One-Arm Cable Row"]
     },
@@ -600,7 +600,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "0CDD6A64-DC47-44AB-9E2D-A13CDA544EAE", "90383748-7413-4398-99FA-6EB6E5F2969A", "ABB0096E-C05C-4ACF-A9DD-99A5B4CB3AD2"],
       "aliases": ["Dumbbell Row", "One-Arm Dumbbell Row", "Single-Arm DB Row"]
     },
@@ -612,7 +612,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["5F043F91-CD6E-4E9B-B12C-5B33ECB9B049", "0B716204-08B6-4839-98DA-6E728BA0CA55", "597AD784-D549-4244-9789-E737A9FFE61A"],
       "aliases": ["One-Arm Lat Pulldown", "Single-Arm Cable Pulldown"]
     },
@@ -624,7 +624,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["triceps", "core"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["C78E5653-7753-4693-B0FD-0ED0790525AB", "70668DBA-BDE4-4E4D-9476-808EF724947A"],
       "aliases": ["Straight-Arm Lat Pulldown", "Straight-Arm Cable Pulldown", "Cable Pullover"]
     },
@@ -636,7 +636,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["90383748-7413-4398-99FA-6EB6E5F2969A", "A9ED72CF-D506-430B-A12F-501D15B18E44", "3FF1325A-F56F-4CB7-BEF2-321CEA9191FD"],
       "aliases": ["Landmine Row"]
     },
@@ -648,7 +648,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["C4530A96-E97E-4994-84DD-C86753472427", "0865DC39-D829-4DFD-8E6D-6EE9302EB777", "B0E00A9C-FB3D-4101-AED5-66E18A331BB7"],
       "aliases": ["Weighted Chinup"]
     },
@@ -660,7 +660,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["biceps", "forearms"],
       "pattern": "verticalPull",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["CEF6D6A6-A69F-42D2-99FA-8EBC8D6F808F", "5F043F91-CD6E-4E9B-B12C-5B33ECB9B049", "DDBDDDBE-7821-4AB8-AE12-4C367922DB2F", "597AD784-D549-4244-9789-E737A9FFE61A"],
       "aliases": ["Weighted Pullup"]
     },
@@ -672,7 +672,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["440F9504-A554-4645-B037-6D92BBD7A4F1", "8FAE621B-9606-43F0-B135-3450962D1F7D", "F452F50B-EABF-4DF1-A338-0E588FEBBF69"],
       "aliases": ["Arnold Dumbbell Press"]
     },
@@ -696,7 +696,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["CFDB5B93-8A67-4E70-A79B-B39B31C95A04", "2E491F8D-2212-473E-B6D8-6C8A2C640EA5", "BAFC50B1-5B44-4B14-BB7F-58C97FCEDF4A"],
       "aliases": []
     },
@@ -708,7 +708,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["761BD1EA-54D1-4042-A979-3D3B36E08A41", "440F9504-A554-4645-B037-6D92BBD7A4F1", "F452F50B-EABF-4DF1-A338-0E588FEBBF69"],
       "aliases": ["Band Shoulder Press"]
     },
@@ -720,7 +720,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["C57978D1-F0D8-49FE-A0AD-D41ECC50DE8A", "7A72F71F-C57F-4483-81EB-B46750C0B227", "0A281016-6A02-459C-A7CC-23F7F41A6A0E"],
       "aliases": ["Resistance Band Pull-Apart"]
     },
@@ -732,7 +732,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back", "biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["F1D66E62-1A0B-434B-8B0F-D193AF8FF3C2", "78AAEA61-DD5F-46F6-AA33-077CC177960A", "0C53814D-43E8-4B89-B855-0DE1CA199F24"],
       "aliases": ["Upright Row"]
     },
@@ -744,7 +744,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 5, "kg": 2.5 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["FC22E9F4-4198-455A-ABC9-FF9C8680C80B", "CFDB5B93-8A67-4E70-A79B-B39B31C95A04"],
       "aliases": ["Cable Shoulder External Rotation"]
     },
@@ -768,7 +768,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 12.5, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["0C53814D-43E8-4B89-B855-0DE1CA199F24", "A5A8AAE9-A52B-4730-BA69-A3E17BCDC5E1", "F1D66E62-1A0B-434B-8B0F-D193AF8FF3C2"],
       "aliases": ["Single-Arm Cable Lateral Raise"]
     },
@@ -792,7 +792,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back", "biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["CB06692D-B97B-4A0C-9C40-A2E8938320F1", "18EC9F77-0DD1-4037-B7B8-8214744142AC", "78AAEA61-DD5F-46F6-AA33-077CC177960A"],
       "aliases": ["Rope Upright Row"]
     },
@@ -804,7 +804,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["chest"],
       "pattern": "isolation",
-      "startLoad": { "lb": 10, "kg": 5 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["C4CA8957-EE40-4162-8282-0467AF45AD8E", "0C53814D-43E8-4B89-B855-0DE1CA199F24"],
       "aliases": ["Front Raise", "Front Dumbbell Raise"]
     },
@@ -816,7 +816,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 10, "kg": 5 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["18EC9F77-0DD1-4037-B7B8-8214744142AC", "A5A8AAE9-A52B-4730-BA69-A3E17BCDC5E1", "78AAEA61-DD5F-46F6-AA33-077CC177960A"],
       "aliases": ["DB Lateral Raise", "Lateral Raise", "Side Lateral Raise", "Side Raise"]
     },
@@ -828,7 +828,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back"],
       "pattern": "isolation",
-      "startLoad": { "lb": 10, "kg": 5 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["0A281016-6A02-459C-A7CC-23F7F41A6A0E", "BAFC50B1-5B44-4B14-BB7F-58C97FCEDF4A", "2E491F8D-2212-473E-B6D8-6C8A2C640EA5", "CFDB5B93-8A67-4E70-A79B-B39B31C95A04"],
       "aliases": ["Bent-Over Reverse Fly", "Dumbbell Reverse Fly", "Bent-Over Rear Delt Raise"]
     },
@@ -840,7 +840,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back", "biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["CB06692D-B97B-4A0C-9C40-A2E8938320F1", "F1D66E62-1A0B-434B-8B0F-D193AF8FF3C2", "0C53814D-43E8-4B89-B855-0DE1CA199F24"],
       "aliases": []
     },
@@ -852,7 +852,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["C57978D1-F0D8-49FE-A0AD-D41ECC50DE8A", "0A281016-6A02-459C-A7CC-23F7F41A6A0E", "BAFC50B1-5B44-4B14-BB7F-58C97FCEDF4A"],
       "aliases": ["Rope Face Pull", "Cable Face Pull"]
     },
@@ -877,7 +877,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps", "core"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["440F9504-A554-4645-B037-6D92BBD7A4F1", "0F7EB855-B3FE-47B0-AD53-1BA809B9B8CA", "2C0875FB-69B5-4C58-9B3B-6257E20597A7"],
       "aliases": ["Kettlebell Press", "Single-Arm Kettlebell Press"]
     },
@@ -889,7 +889,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["chest", "triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 25, "kg": 12.5 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["DA5CE9D0-60A1-41BC-B634-A3516D27B544", "440F9504-A554-4645-B037-6D92BBD7A4F1", "F452F50B-EABF-4DF1-A338-0E588FEBBF69"],
       "aliases": ["Single-Arm Landmine Press", "Landmine Shoulder Press"]
     },
@@ -901,7 +901,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["18EC9F77-0DD1-4037-B7B8-8214744142AC", "0C53814D-43E8-4B89-B855-0DE1CA199F24"],
       "aliases": ["Lateral Raise Machine"]
     },
@@ -913,7 +913,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["440F9504-A554-4645-B037-6D92BBD7A4F1", "DA5CE9D0-60A1-41BC-B634-A3516D27B544", "02CEC653-799A-4F7C-A224-DAE6AA502E02"],
       "aliases": ["Shoulder Press Machine", "Seated Machine Shoulder Press"]
     },
@@ -925,7 +925,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps", "core"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 115, "kg": 52.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["440F9504-A554-4645-B037-6D92BBD7A4F1", "8FAE621B-9606-43F0-B135-3450962D1F7D", "182F1D32-5844-47D6-AFA9-6BBD98FCDB85", "2C0875FB-69B5-4C58-9B3B-6257E20597A7"],
       "aliases": ["OHP", "Standing Overhead Press", "Military Press", "Strict Press", "Barbell Overhead Press"]
     },
@@ -950,7 +950,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps", "quads"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["DA5CE9D0-60A1-41BC-B634-A3516D27B544", "2C0875FB-69B5-4C58-9B3B-6257E20597A7", "440F9504-A554-4645-B037-6D92BBD7A4F1"],
       "aliases": []
     },
@@ -962,7 +962,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["back"],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["7A72F71F-C57F-4483-81EB-B46750C0B227", "BAFC50B1-5B44-4B14-BB7F-58C97FCEDF4A", "CFDB5B93-8A67-4E70-A79B-B39B31C95A04"],
       "aliases": ["Reverse Pec Deck", "Machine Rear Delt Fly", "Reverse Fly Machine"]
     },
@@ -974,7 +974,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["DA5CE9D0-60A1-41BC-B634-A3516D27B544", "0F7EB855-B3FE-47B0-AD53-1BA809B9B8CA", "8FAE621B-9606-43F0-B135-3450962D1F7D"],
       "aliases": ["Seated Dumbbell Press", "Dumbbell Shoulder Press", "Dumbbell Overhead Press", "Seated DB Press"]
     },
@@ -986,7 +986,7 @@
       "primaryMuscle": "shoulders",
       "secondaryMuscles": ["triceps"],
       "pattern": "verticalPush",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["DA5CE9D0-60A1-41BC-B634-A3516D27B544", "8FAE621B-9606-43F0-B135-3450962D1F7D", "440F9504-A554-4645-B037-6D92BBD7A4F1"],
       "aliases": ["Smith Machine Shoulder Press", "Smith Shoulder Press"]
     },
@@ -998,7 +998,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "hamstrings"],
       "pattern": "squat",
-      "startLoad": { "lb": 250, "kg": 112.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["223208C8-E7BB-4514-A335-6FCC43A62E18", "95A724A5-2315-4150-883F-A00DCB71C1AC", "80834235-1B66-4070-8F6A-5A87794792FC", "BB256594-CE9F-464C-A052-638E76E9802C", "41DA4A00-D5D5-43F6-A4D9-ECF72FAA2053"],
       "aliases": ["Barbell Back Squat", "Squat", "High-Bar Squat", "Low-Bar Squat"]
     },
@@ -1010,7 +1010,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "hamstrings"],
       "pattern": "lunge",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["79916BF8-6C01-47FD-A7A2-0BFCFC3FE5D2", "E05A5291-1387-4F3D-B46A-372A391049F1", "5EA10F1C-2099-4BE8-8DDC-AA6E1B48D45F"],
       "aliases": ["Barbell Forward Lunge"]
     },
@@ -1022,7 +1022,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["FAD5B6AA-0CDA-41CD-BAA7-D567D489685C", "EFE2AF57-8154-487C-98F2-0AA7F4F6CDF5", "64BB8EF5-24C1-4E63-B715-905AC1A10202"],
       "aliases": []
     },
@@ -1034,7 +1034,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["BB256594-CE9F-464C-A052-638E76E9802C", "80834235-1B66-4070-8F6A-5A87794792FC", "2530E325-04DC-4F56-92F8-4C5ADB5FE196"],
       "aliases": ["Belt Squat Machine"]
     },
@@ -1072,7 +1072,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "hamstrings"],
       "pattern": "squat",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "95A724A5-2315-4150-883F-A00DCB71C1AC", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
       "aliases": ["Barbell Box Squat"]
     },
@@ -1084,7 +1084,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["FAD5B6AA-0CDA-41CD-BAA7-D567D489685C", "4614076F-92DD-405D-86A1-2DDE0FAEE125", "E05A5291-1387-4F3D-B46A-372A391049F1"],
       "aliases": ["Bulgarian Split Squat", "Rear-Foot-Elevated Split Squat", "RFESS"]
     },
@@ -1096,7 +1096,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["4614076F-92DD-405D-86A1-2DDE0FAEE125", "5EA10F1C-2099-4BE8-8DDC-AA6E1B48D45F", "64BB8EF5-24C1-4E63-B715-905AC1A10202"],
       "aliases": ["Dumbbell Forward Lunge"]
     },
@@ -1108,7 +1108,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["79916BF8-6C01-47FD-A7A2-0BFCFC3FE5D2", "ECEDD53E-6662-426A-81A5-DD469BEA3059", "FAD5B6AA-0CDA-41CD-BAA7-D567D489685C"],
       "aliases": ["Reverse Lunge"]
     },
@@ -1120,7 +1120,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["EFE2AF57-8154-487C-98F2-0AA7F4F6CDF5", "E05A5291-1387-4F3D-B46A-372A391049F1", "4614076F-92DD-405D-86A1-2DDE0FAEE125"],
       "aliases": ["Split Squat"]
     },
@@ -1132,7 +1132,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["4614076F-92DD-405D-86A1-2DDE0FAEE125", "EFE2AF57-8154-487C-98F2-0AA7F4F6CDF5"],
       "aliases": ["Step-Up", "Box Step-Up"]
     },
@@ -1144,7 +1144,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["79916BF8-6C01-47FD-A7A2-0BFCFC3FE5D2", "64BB8EF5-24C1-4E63-B715-905AC1A10202", "FE92B659-AD9F-4D65-9E95-3A85DCD23B07"],
       "aliases": ["Walking Lunge"]
     },
@@ -1156,7 +1156,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "squat",
-      "startLoad": { "lb": 185, "kg": 85 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "2530E325-04DC-4F56-92F8-4C5ADB5FE196", "BB256594-CE9F-464C-A052-638E76E9802C", "01AC7E22-3BB9-4D29-AF0D-D8318985A0C9"],
       "aliases": ["Barbell Front Squat"]
     },
@@ -1168,7 +1168,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "squat",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["F0BA035F-05BA-4FAF-A57E-5A35AD1550D5", "223208C8-E7BB-4514-A335-6FCC43A62E18", "80834235-1B66-4070-8F6A-5A87794792FC"],
       "aliases": ["Dumbbell Goblet Squat"]
     },
@@ -1180,7 +1180,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["80834235-1B66-4070-8F6A-5A87794792FC", "9416A1C6-3623-4F3E-964E-DB726F69DEFA", "223208C8-E7BB-4514-A335-6FCC43A62E18", "41DA4A00-D5D5-43F6-A4D9-ECF72FAA2053"],
       "aliases": ["Machine Hack Squat"]
     },
@@ -1192,7 +1192,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "squat",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["223208C8-E7BB-4514-A335-6FCC43A62E18", "F0BA035F-05BA-4FAF-A57E-5A35AD1550D5", "2530E325-04DC-4F56-92F8-4C5ADB5FE196"],
       "aliases": ["Double Kettlebell Front Squat"]
     },
@@ -1204,7 +1204,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "squat",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["2530E325-04DC-4F56-92F8-4C5ADB5FE196", "01AC7E22-3BB9-4D29-AF0D-D8318985A0C9", "85F9F74C-8E43-4F1F-B937-0A56948BB460"],
       "aliases": []
     },
@@ -1216,7 +1216,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "lunge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["4614076F-92DD-405D-86A1-2DDE0FAEE125", "79916BF8-6C01-47FD-A7A2-0BFCFC3FE5D2", "FE92B659-AD9F-4D65-9E95-3A85DCD23B07"],
       "aliases": []
     },
@@ -1228,7 +1228,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["7399A2E5-1901-40AD-8A94-99E28C0B3BC0", "D6D43614-C045-4698-AFBE-E1005C377755"],
       "aliases": ["Machine Leg Extension", "Quad Extension"]
     },
@@ -1240,7 +1240,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 320, "kg": 145 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["BB256594-CE9F-464C-A052-638E76E9802C", "04E1649C-01B6-4A94-A03D-7C41118D53BF", "73EE7555-DC9F-4D98-A87F-08C8817876F1", "9416A1C6-3623-4F3E-964E-DB726F69DEFA"],
       "aliases": ["45-Degree Leg Press", "Sled Leg Press"]
     },
@@ -1252,7 +1252,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["BB256594-CE9F-464C-A052-638E76E9802C", "80834235-1B66-4070-8F6A-5A87794792FC", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
       "aliases": []
     },
@@ -1290,7 +1290,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "squat",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "223208C8-E7BB-4514-A335-6FCC43A62E18", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
       "aliases": ["SSB Squat", "Safety Squat Bar Squat"]
     },
@@ -1302,7 +1302,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["80834235-1B66-4070-8F6A-5A87794792FC", "BB256594-CE9F-464C-A052-638E76E9802C", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
       "aliases": ["Horizontal Leg Press"]
     },
@@ -1327,7 +1327,7 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "BB256594-CE9F-464C-A052-638E76E9802C", "80834235-1B66-4070-8F6A-5A87794792FC"],
       "aliases": ["Smith Squat"]
     },
@@ -1339,7 +1339,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["2C203E1A-CAE0-40DE-B62A-D18195E4157F", "13DA2F3C-D737-4FAA-9DD8-D8F7E6C3DFD4", "8814CDA5-1EBE-44E3-839C-161F148E96CB"],
       "aliases": []
     },
@@ -1351,7 +1351,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "back", "forearms"],
       "pattern": "hinge",
-      "startLoad": { "lb": 315, "kg": 142.5 },
+      "startLoad": { "lb": 95, "kg": 40 },
       "alternatives": ["7F67AE02-C7A7-45E1-AC09-50577BC7B2F2", "ABA483B8-DDDE-433E-936C-208FA92A009E", "C6C70E2B-BB44-4A53-98DD-D4861B70E8D7", "B4F39482-13C9-43B5-A38A-F3FA522E5040"],
       "aliases": ["Conventional Deadlift", "Barbell Deadlift"]
     },
@@ -1363,7 +1363,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["C6C70E2B-BB44-4A53-98DD-D4861B70E8D7", "39B30281-D5DA-481A-8A33-990E08172B7C", "1BB4D066-14C1-434D-B202-8E85EFC658BE"],
       "aliases": ["DB RDL", "Dumbbell RDL"]
     },
@@ -1400,7 +1400,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "hinge",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["39B30281-D5DA-481A-8A33-990E08172B7C", "1BB4D066-14C1-434D-B202-8E85EFC658BE", "3582AED8-E923-4BED-A906-9687D87C3DE6"],
       "aliases": ["Single-Leg Kettlebell Deadlift", "Kettlebell Single-Leg RDL"]
     },
@@ -1412,7 +1412,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["calves"],
       "pattern": "isolation",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["60C1A421-610C-4FC2-8416-0DAC57FE29BC", "1EDB9656-4C95-43E2-A676-A2A09F845DEB", "C611210C-4F3C-466F-9506-854C39747657"],
       "aliases": ["Prone Leg Curl", "Lying Hamstring Curl"]
     },
@@ -1437,7 +1437,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 205, "kg": 92.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["3582AED8-E923-4BED-A906-9687D87C3DE6", "44A17422-918A-49C2-A384-8A6E3A459412", "2C203E1A-CAE0-40DE-B62A-D18195E4157F"],
       "aliases": ["RDL", "Barbell RDL", "Barbell Romanian Deadlift"]
     },
@@ -1449,7 +1449,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["calves"],
       "pattern": "isolation",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["4540E593-BF11-4214-BDFC-BD78C3BAD5F7", "1EDB9656-4C95-43E2-A676-A2A09F845DEB", "C611210C-4F3C-466F-9506-854C39747657"],
       "aliases": ["Seated Hamstring Curl"]
     },
@@ -1461,7 +1461,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "hinge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["529810C6-CAB3-4B30-A7F2-9D212F21D547", "3582AED8-E923-4BED-A906-9687D87C3DE6"],
       "aliases": ["Single-Leg RDL", "Single-Leg Dumbbell RDL"]
     },
@@ -1473,7 +1473,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["calves"],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["60C1A421-610C-4FC2-8416-0DAC57FE29BC", "4540E593-BF11-4214-BDFC-BD78C3BAD5F7"],
       "aliases": ["Standing Hamstring Curl"]
     },
@@ -1485,7 +1485,7 @@
       "primaryMuscle": "hamstrings",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["C6C70E2B-BB44-4A53-98DD-D4861B70E8D7", "3582AED8-E923-4BED-A906-9687D87C3DE6", "2C203E1A-CAE0-40DE-B62A-D18195E4157F"],
       "aliases": ["Stiff-Legged Deadlift", "SLDL"]
     },
@@ -1497,7 +1497,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["140DE938-6D14-4CD5-95BB-ED471D30819B", "1D4615F1-706A-497B-9AD1-BCD10DA52D54", "5CDF520E-F981-4723-9A02-DBB0FD5B1A33"],
       "aliases": []
     },
@@ -1521,7 +1521,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["905A746D-FBBE-4CB8-AC5F-D1E01EBAF698", "80B4316B-EB69-4EEB-89EC-D6AA26557E73", "09F43ABD-3D31-4000-ADC8-5C704DB665A2"],
       "aliases": []
     },
@@ -1533,7 +1533,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["C0B176D7-41B1-4818-881A-F69BF8AA4A7B", "159FA82A-FBD1-436B-86F7-87F7AE905369"],
       "aliases": ["Glute Kickback"]
     },
@@ -1557,7 +1557,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["13DA2F3C-D737-4FAA-9DD8-D8F7E6C3DFD4", "1D4615F1-706A-497B-9AD1-BCD10DA52D54", "905A746D-FBBE-4CB8-AC5F-D1E01EBAF698"],
       "aliases": []
     },
@@ -1582,7 +1582,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "quads", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 75, "kg": 35 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["8E597DB0-D0A8-419C-AB82-BF05AB4684DF", "7BA8C5EC-5EE5-45CD-BC4F-0B0C2EE68EE3"],
       "aliases": ["Hang Clean"]
     },
@@ -1594,7 +1594,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["09F43ABD-3D31-4000-ADC8-5C704DB665A2", "55A34FB3-C696-4182-B703-E45A21D17EC3", "7FAF9D8D-9F38-4EFA-B93E-1721668D110D"],
       "aliases": ["Barbell Hip Thrust"]
     },
@@ -1606,7 +1606,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "shoulders"],
       "pattern": "hinge",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["1D4615F1-706A-497B-9AD1-BCD10DA52D54", "28C0B3D1-E6D5-4809-B562-D238D550DD31", "7FD5EAC7-8142-4CF0-B1BD-E0E58610293F"],
       "aliases": []
     },
@@ -1618,7 +1618,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "quads"],
       "pattern": "hinge",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["1D4615F1-706A-497B-9AD1-BCD10DA52D54", "3582AED8-E923-4BED-A906-9687D87C3DE6", "7F67AE02-C7A7-45E1-AC09-50577BC7B2F2"],
       "aliases": []
     },
@@ -1630,7 +1630,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["shoulders", "hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["1D4615F1-706A-497B-9AD1-BCD10DA52D54", "7BA8C5EC-5EE5-45CD-BC4F-0B0C2EE68EE3"],
       "aliases": []
     },
@@ -1642,7 +1642,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["140DE938-6D14-4CD5-95BB-ED471D30819B", "1BB4D066-14C1-434D-B202-8E85EFC658BE", "13DA2F3C-D737-4FAA-9DD8-D8F7E6C3DFD4"],
       "aliases": ["Russian Kettlebell Swing", "Two-Hand Kettlebell Swing"]
     },
@@ -1654,7 +1654,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["C0B176D7-41B1-4818-881A-F69BF8AA4A7B", "159FA82A-FBD1-436B-86F7-87F7AE905369"],
       "aliases": ["Hip Abduction Machine", "Seated Hip Abduction", "Abductor Machine"]
     },
@@ -1666,7 +1666,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings"],
       "pattern": "hinge",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["905A746D-FBBE-4CB8-AC5F-D1E01EBAF698", "55A34FB3-C696-4182-B703-E45A21D17EC3", "80B4316B-EB69-4EEB-89EC-D6AA26557E73"],
       "aliases": ["Hip Thrust Machine"]
     },
@@ -1678,7 +1678,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "quads", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["7FD5EAC7-8142-4CF0-B1BD-E0E58610293F", "7BA8C5EC-5EE5-45CD-BC4F-0B0C2EE68EE3"],
       "aliases": []
     },
@@ -1690,7 +1690,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["8814CDA5-1EBE-44E3-839C-161F148E96CB", "676B19A7-BA09-4186-BA45-B5190D82D4EC", "140DE938-6D14-4CD5-95BB-ED471D30819B"],
       "aliases": ["Reverse Hyper"]
     },
@@ -1715,7 +1715,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["hamstrings", "quads", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 135, "kg": 60 },
+      "startLoad": { "lb": 95, "kg": 40 },
       "alternatives": ["F5CB98F6-7533-4BE9-85FA-8013FF01B1C6", "7F67AE02-C7A7-45E1-AC09-50577BC7B2F2", "1BB4D066-14C1-434D-B202-8E85EFC658BE"],
       "aliases": ["Sumo Barbell Deadlift"]
     },
@@ -1727,7 +1727,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["quads", "hamstrings", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 135, "kg": 60 },
+      "startLoad": { "lb": 95, "kg": 40 },
       "alternatives": ["F5CB98F6-7533-4BE9-85FA-8013FF01B1C6", "ABA483B8-DDDE-433E-936C-208FA92A009E", "B4F39482-13C9-43B5-A38A-F3FA522E5040"],
       "aliases": ["Hex Bar Deadlift"]
     },
@@ -1739,7 +1739,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["AC9C263B-654F-4CA1-BB80-7D3D4C13E78A", "87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "B478962E-E131-4EF7-8ADD-DDFE014EE33A"],
       "aliases": ["Standing Barbell Calf Raise"]
     },
@@ -1764,7 +1764,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "119B915F-A4F3-4525-A415-442C0265E0A7"],
       "aliases": ["Donkey Calf Raise Machine"]
     },
@@ -1776,7 +1776,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["3C27E348-12C7-4B46-B8AF-AD2B2D84EECB", "5BC2181E-ED94-4047-BB9A-E499D81FB871", "F2E920E2-69C5-4E20-B587-67EF22860A83"],
       "aliases": ["Standing Dumbbell Calf Raise"]
     },
@@ -1788,7 +1788,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 90, "kg": 41.25 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "7E992238-5B73-4F12-A179-612453339B5D", "01DBBE87-35F5-42DC-A371-1005C07BC900"],
       "aliases": ["Calf Press", "Leg Press Calf Press"]
     },
@@ -1800,7 +1800,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "8573D308-0604-4F63-9895-0FA8B234A9FE", "119B915F-A4F3-4525-A415-442C0265E0A7"],
       "aliases": ["Seated Calf Raise Machine"]
     },
@@ -1812,7 +1812,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["7E992238-5B73-4F12-A179-612453339B5D", "B478962E-E131-4EF7-8ADD-DDFE014EE33A"],
       "aliases": []
     },
@@ -1837,7 +1837,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["B478962E-E131-4EF7-8ADD-DDFE014EE33A", "C2BF5EC9-771E-418D-98D5-889EEC3A15F5"],
       "aliases": []
     },
@@ -1849,7 +1849,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "5BC2181E-ED94-4047-BB9A-E499D81FB871", "B478962E-E131-4EF7-8ADD-DDFE014EE33A"],
       "aliases": ["Smith Calf Raise"]
     },
@@ -1861,7 +1861,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 160, "kg": 72.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["7E992238-5B73-4F12-A179-612453339B5D", "119B915F-A4F3-4525-A415-442C0265E0A7", "AC9C263B-654F-4CA1-BB80-7D3D4C13E78A", "5BC2181E-ED94-4047-BB9A-E499D81FB871"],
       "aliases": ["Standing Calf Raise Machine", "Machine Calf Raise"]
     },
@@ -1873,7 +1873,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["582C2F5B-C093-435E-A4D1-6797DC73105E", "F25CA8D2-E55F-45B0-9DCB-B3463020204F"],
       "aliases": ["Resistance Band Curl", "Band Biceps Curl"]
     },
@@ -1885,7 +1885,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 75, "kg": 35 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["4BE7B55A-8EBD-4513-A296-9E6451B112C0", "F25CA8D2-E55F-45B0-9DCB-B3463020204F", "582C2F5B-C093-435E-A4D1-6797DC73105E"],
       "aliases": ["Standing Barbell Curl", "Barbell Biceps Curl"]
     },
@@ -1897,7 +1897,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["6C2540C1-DAF5-4ECB-B66E-C9EA231EB0CE", "4BE7B55A-8EBD-4513-A296-9E6451B112C0", "29D42BC6-C271-4DAB-B247-0532649A4132"],
       "aliases": ["Cable Biceps Curl", "Straight-Bar Cable Curl"]
     },
@@ -1909,7 +1909,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["8355AD87-E47C-4BB2-849E-C634D1ADADA8", "582C2F5B-C093-435E-A4D1-6797DC73105E"],
       "aliases": ["Rope Hammer Curl"]
     },
@@ -1921,7 +1921,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["278E0041-4972-4ACF-945F-D1BC933CAD62", "1FF7C341-DBE9-4F19-85B0-F6E30D55C8CC", "F25CA8D2-E55F-45B0-9DCB-B3463020204F"],
       "aliases": ["Seated Concentration Curl"]
     },
@@ -1933,7 +1933,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["6C2540C1-DAF5-4ECB-B66E-C9EA231EB0CE", "2C3613AF-0D6B-4B2C-8AB5-21C5D3634B82", "582C2F5B-C093-435E-A4D1-6797DC73105E", "8355AD87-E47C-4BB2-849E-C634D1ADADA8"],
       "aliases": ["Dumbbell Biceps Curl", "Standing Dumbbell Curl", "Alternating Dumbbell Curl"]
     },
@@ -1945,7 +1945,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["23868AF4-C19B-43C9-A20C-21F45D74E04F", "4CBA71F2-09EE-4ADB-986C-4D9AEE639690", "A855AA86-7A7A-4F73-99FA-978C49E0F1B6"],
       "aliases": []
     },
@@ -1957,7 +1957,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["6C2540C1-DAF5-4ECB-B66E-C9EA231EB0CE", "582C2F5B-C093-435E-A4D1-6797DC73105E", "23868AF4-C19B-43C9-A20C-21F45D74E04F"],
       "aliases": ["EZ Bar Curl", "EZ Curl"]
     },
@@ -1969,7 +1969,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["4AD7063B-02E9-4DA5-B1AC-E0EE6F688470", "F25CA8D2-E55F-45B0-9DCB-B3463020204F", "2C3613AF-0D6B-4B2C-8AB5-21C5D3634B82"],
       "aliases": ["Dumbbell Hammer Curl"]
     },
@@ -1981,7 +1981,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["F25CA8D2-E55F-45B0-9DCB-B3463020204F", "582C2F5B-C093-435E-A4D1-6797DC73105E", "1FF7C341-DBE9-4F19-85B0-F6E30D55C8CC"],
       "aliases": ["Incline Dumbbell Curl"]
     },
@@ -1993,7 +1993,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["23868AF4-C19B-43C9-A20C-21F45D74E04F", "278E0041-4972-4ACF-945F-D1BC933CAD62", "582C2F5B-C093-435E-A4D1-6797DC73105E"],
       "aliases": ["Preacher Curl Machine", "Machine Biceps Curl", "Machine Curl"]
     },
@@ -2005,7 +2005,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["4CBA71F2-09EE-4ADB-986C-4D9AEE639690", "278E0041-4972-4ACF-945F-D1BC933CAD62", "4BE7B55A-8EBD-4513-A296-9E6451B112C0"],
       "aliases": ["EZ-Bar Preacher Curl", "Barbell Preacher Curl"]
     },
@@ -2017,7 +2017,7 @@
       "primaryMuscle": "biceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["278E0041-4972-4ACF-945F-D1BC933CAD62", "A855AA86-7A7A-4F73-99FA-978C49E0F1B6", "2C3613AF-0D6B-4B2C-8AB5-21C5D3634B82"],
       "aliases": ["Dumbbell Spider Curl"]
     },
@@ -2029,7 +2029,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["B91DC81A-203D-4FD8-90E7-5A29623FCB17", "1828DA32-F886-41CD-B9AE-1CDBA839B470"],
       "aliases": ["Band Pushdown", "Resistance Band Pushdown"]
     },
@@ -2066,7 +2066,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 60, "kg": 27.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["1828DA32-F886-41CD-B9AE-1CDBA839B470", "1D7AA09C-304B-4C8C-813F-CC4CB22DF0DD", "8EA3D106-93EE-41BE-A8C6-16CE1C5BC1EC"],
       "aliases": ["Triceps Pushdown", "Cable Pushdown", "Straight-Bar Pushdown"]
     },
@@ -2078,7 +2078,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": ["chest", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 95, "kg": 42.5 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["5739FA38-E06B-445E-A195-52E028097DC8", "7F76825B-FD05-4A9B-886D-62096BC84B11", "B33B4312-860A-456A-80BE-AFE2A7DFE844"],
       "aliases": ["Close-Grip Barbell Bench Press", "CGBP"]
     },
@@ -2103,7 +2103,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 10, "kg": 5 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["D010B771-1436-44E0-9CAD-EAF4AD34E7B1", "B91DC81A-203D-4FD8-90E7-5A29623FCB17"],
       "aliases": ["Triceps Kickback", "Dumbbell Triceps Kickback"]
     },
@@ -2115,7 +2115,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["5006D164-29B4-4EC3-97AD-A6DD5E139846", "A4399547-8F42-4A64-BF61-9A4BA398F3DB", "A5AAFD57-0706-45AF-9725-E4EBDB11A7C2"],
       "aliases": ["Overhead Dumbbell Extension", "Dumbbell Overhead Extension", "Seated Dumbbell Triceps Extension"]
     },
@@ -2127,7 +2127,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["A4399547-8F42-4A64-BF61-9A4BA398F3DB", "3FF8EFBF-647B-404F-BD4B-98446F20C3A6"],
       "aliases": ["Lying Dumbbell Triceps Extension", "Dumbbell Lying Triceps Extension"]
     },
@@ -2139,7 +2139,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": ["chest", "shoulders"],
       "pattern": "horizontalPush",
-      "startLoad": { "lb": 70, "kg": 31.25 },
+      "startLoad": { "lb": 40, "kg": 20 },
       "alternatives": ["A536A67E-55C5-4198-BDAE-A44D9091EFE4", "2BF340CA-A558-40D2-81D9-5BF2DF1EB60F", "1244B784-8F3A-46A3-A503-545B76E7F3BA"],
       "aliases": ["Seated Dip Machine", "Triceps Dip Machine", "Seated Dip"]
     },
@@ -2151,7 +2151,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["B91DC81A-203D-4FD8-90E7-5A29623FCB17", "5006D164-29B4-4EC3-97AD-A6DD5E139846"],
       "aliases": ["Triceps Extension Machine"]
     },
@@ -2163,7 +2163,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["3FF8EFBF-647B-404F-BD4B-98446F20C3A6", "1828DA32-F886-41CD-B9AE-1CDBA839B470", "A4399547-8F42-4A64-BF61-9A4BA398F3DB"],
       "aliases": ["Overhead Cable Triceps Extension", "Cable Overhead Triceps Extension", "Overhead Rope Extension"]
     },
@@ -2175,7 +2175,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["B91DC81A-203D-4FD8-90E7-5A29623FCB17", "5006D164-29B4-4EC3-97AD-A6DD5E139846", "8EA3D106-93EE-41BE-A8C6-16CE1C5BC1EC"],
       "aliases": ["Rope Triceps Pushdown", "Cable Rope Pushdown"]
     },
@@ -2187,7 +2187,7 @@
       "primaryMuscle": "triceps",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["A5AAFD57-0706-45AF-9725-E4EBDB11A7C2", "5006D164-29B4-4EC3-97AD-A6DD5E139846", "B91DC81A-203D-4FD8-90E7-5A29623FCB17"],
       "aliases": ["EZ-Bar Skull Crusher", "Lying Triceps Extension", "Skullcrusher"]
     },
@@ -2199,7 +2199,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["46AC1671-1653-418D-975E-EF8C8858ECF1", "7E892C7E-8C56-42C0-98DD-1141E120BCFD"],
       "aliases": ["Wrist Curl", "Seated Barbell Wrist Curl"]
     },
@@ -2211,7 +2211,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 65, "kg": 30 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["FDDC2E02-E0E2-4D3D-B98A-F4FA605B5B79", "46AC1671-1653-418D-975E-EF8C8858ECF1"],
       "aliases": ["Behind-the-Back Barbell Wrist Curl"]
     },
@@ -2223,7 +2223,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 30, "kg": 13.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["9EE9DD13-C182-4E87-B4E5-1643B6C8E429", "5F444FC1-280E-4596-8A09-3D15E708C37F"],
       "aliases": ["Reverse-Grip Cable Curl"]
     },
@@ -2235,7 +2235,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["back", "core"],
       "pattern": "carry",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["278844DF-1953-4AA4-8237-94A0530C260E", "B3AED640-8B0A-476D-AE82-16D2DA3DB298", "E2776131-5C8A-417C-B114-BFCAF3E77235"],
       "aliases": ["Farmer's Carry", "Farmer's Walk", "Dumbbell Farmer's Walk"]
     },
@@ -2247,7 +2247,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 10, "kg": 5 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["9EE9DD13-C182-4E87-B4E5-1643B6C8E429", "5F444FC1-280E-4596-8A09-3D15E708C37F", "46AC1671-1653-418D-975E-EF8C8858ECF1"],
       "aliases": ["Reverse Wrist Curl"]
     },
@@ -2259,7 +2259,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 5, "kg": 2.5 },
       "alternatives": ["FDDC2E02-E0E2-4D3D-B98A-F4FA605B5B79", "0056AE4B-F7ED-44B8-8605-1FF616B0CA75"],
       "aliases": []
     },
@@ -2271,7 +2271,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["back", "core"],
       "pattern": "carry",
-      "startLoad": { "lb": 35, "kg": 16.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["1A7BBC9E-AFD0-4684-BA9E-11A3B5010724", "83F74455-53FE-4CDD-A068-DCC6582B6CF6", "E2776131-5C8A-417C-B114-BFCAF3E77235"],
       "aliases": ["Kettlebell Farmer's Walk"]
     },
@@ -2283,7 +2283,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 25, "kg": 10 },
       "alternatives": ["F12A5A3E-3CCB-4757-B2AC-B5A09E38A8CD", "5F444FC1-280E-4596-8A09-3D15E708C37F", "0056AE4B-F7ED-44B8-8605-1FF616B0CA75"],
       "aliases": ["Reverse Barbell Curl", "EZ-Bar Reverse Curl", "Reverse-Grip Curl"]
     },
@@ -2295,7 +2295,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["back", "core"],
       "pattern": "carry",
-      "startLoad": { "lb": 135, "kg": 60 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["1A7BBC9E-AFD0-4684-BA9E-11A3B5010724", "278844DF-1953-4AA4-8237-94A0530C260E"],
       "aliases": ["Trap Bar Farmer's Carry", "Trap Bar Walk"]
     },
@@ -2307,7 +2307,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["biceps"],
       "pattern": "isolation",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["9EE9DD13-C182-4E87-B4E5-1643B6C8E429", "F12A5A3E-3CCB-4757-B2AC-B5A09E38A8CD"],
       "aliases": ["Dumbbell Zottman Curl"]
     },
@@ -2332,7 +2332,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": [],
       "pattern": "core",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["95087B6E-BB0E-418D-A7F7-DA925D9FD83B", "7C3DB506-E67C-4F87-A221-51A68D272BB7"],
       "aliases": []
     },
@@ -2344,7 +2344,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": [],
       "pattern": "core",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["A7A72F40-D790-43CD-B57A-25CAAE83A6D6", "8BF30451-4E9C-4A5A-ABAF-F7D92B54DB28", "5B1F71BE-71A2-4F60-A0FB-3E5F91CB7711"],
       "aliases": ["Kneeling Cable Crunch"]
     },
@@ -2356,7 +2356,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": [],
       "pattern": "core",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["6652209F-3B0B-4E9C-8A56-5F871FFDD2C7", "F9E76A94-9F19-4C0A-92A4-806A8921C3D3", "7C3DB506-E67C-4F87-A221-51A68D272BB7"],
       "aliases": ["Pallof Press"]
     },
@@ -2368,7 +2368,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["shoulders"],
       "pattern": "core",
-      "startLoad": { "lb": 20, "kg": 8.75 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["95087B6E-BB0E-418D-A7F7-DA925D9FD83B", "D3330715-AE97-4E3F-A1F9-E1BA2C445303", "C51C88BF-A57F-4283-92C5-368D4176287E"],
       "aliases": ["Cable Wood Chop", "Woodchopper"]
     },
@@ -2432,7 +2432,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": [],
       "pattern": "core",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["3577D76F-D3D6-4C95-8DAE-8B0DE4510A67", "F9E76A94-9F19-4C0A-92A4-806A8921C3D3"],
       "aliases": ["Side Bend"]
     },
@@ -2470,7 +2470,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["shoulders"],
       "pattern": "carry",
-      "startLoad": { "lb": 25, "kg": 11.25 },
+      "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["278844DF-1953-4AA4-8237-94A0530C260E", "E2776131-5C8A-417C-B114-BFCAF3E77235"],
       "aliases": ["Front Rack Carry"]
     },
@@ -2482,7 +2482,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["shoulders", "hamstrings"],
       "pattern": "core",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["C9A0C8D3-CDF8-4277-A1A4-7107D80B579D", "4D878976-0A4A-49F1-AADC-70A90F54E697"],
       "aliases": []
     },
@@ -2494,7 +2494,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["shoulders"],
       "pattern": "core",
-      "startLoad": { "lb": 25, "kg": 12.5 },
+      "startLoad": { "lb": 10, "kg": 5 },
       "alternatives": ["F9E76A94-9F19-4C0A-92A4-806A8921C3D3", "C51C88BF-A57F-4283-92C5-368D4176287E"],
       "aliases": ["Landmine Twist", "Landmine 180"]
     },
@@ -2519,7 +2519,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": [],
       "pattern": "core",
-      "startLoad": { "lb": 50, "kg": 22.5 },
+      "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["1A67EAEF-63FF-446B-9612-B8A0A8D10D6D", "5B1F71BE-71A2-4F60-A0FB-3E5F91CB7711"],
       "aliases": ["Ab Crunch Machine", "Abdominal Crunch Machine", "Crunch Machine"]
     },
@@ -2570,7 +2570,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["forearms"],
       "pattern": "carry",
-      "startLoad": { "lb": 40, "kg": 18.75 },
+      "startLoad": { "lb": 15, "kg": 7.5 },
       "alternatives": ["1A7BBC9E-AFD0-4684-BA9E-11A3B5010724", "83F74455-53FE-4CDD-A068-DCC6582B6CF6", "278844DF-1953-4AA4-8237-94A0530C260E"],
       "aliases": ["Single-Arm Farmer's Carry"]
     },
@@ -2595,7 +2595,7 @@
       "primaryMuscle": "core",
       "secondaryMuscles": ["shoulders", "glutes"],
       "pattern": "core",
-      "startLoad": { "lb": 15, "kg": 6.25 },
+      "startLoad": { "lb": 15, "kg": 8 },
       "alternatives": ["3577D76F-D3D6-4C95-8DAE-8B0DE4510A67", "7C3DB506-E67C-4F87-A221-51A68D272BB7"],
       "aliases": ["TGU", "Kettlebell Get-Up"]
     },

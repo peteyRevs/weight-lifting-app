@@ -28,17 +28,35 @@ import Foundation
 ///
 /// ## Start loads
 ///
-/// `defaultStartLoad` holds both units. Each is a multiple of the equipment's default step in
-/// that unit, and the kilogram value is the pound value converted and rounded to the kilogram
-/// step. The 22 prototype entries keep spec §6.2's `W0`; the rest are conservative beginner loads.
-/// Dumbbell and kettlebell loads are per implement; landmine lifts count the plates only; band
-/// loads are the band's rated resistance; bodyweight exercises start at zero, and their weighted
-/// versions (Weighted Dip) give the added load.
+/// `defaultStartLoad` holds both units and follows one conservative, beginner-safe policy (Pete,
+/// 2026-09-30, decision #21), by equipment and movement class:
+///
+/// | Equipment | Compound | Isolation and core | Small raises |
+/// |---|---|---|---|
+/// | Barbell (bar included) | 45 lb / 20 kg, the empty bar | 25 lb / 10 kg, an EZ or fixed bar | — |
+/// | Dumbbell (per hand) | 15 lb / 7.5 kg | 10 lb / 5 kg | 5 lb / 2.5 kg |
+/// | Cable (per stack) | 30 lb / 15 kg | 20 lb / 10 kg | 10 lb / 5 kg |
+/// | Machine | 40 lb / 20 kg | 20 lb / 10 kg | 10 lb / 5 kg |
+/// | Kettlebell (per bell) | 25 lb / 12 kg | — | — |
+/// | Band (rated resistance) | 20 lb / 10 kg | 10 lb / 5 kg | 5 lb / 2.5 kg |
+/// | Bodyweight | 0 | 0 | — |
+///
+/// Four classes take their own value: deadlift-family floor pulls (deadlift, sumo, trap bar, rack
+/// pull) start at 95 lb / 40 kg, the bar with two small plates; landmine lifts count plates only,
+/// 10 lb / 5 kg; kettlebell upper-body, overhead and get-up work takes the lighter 15 lb / 8 kg
+/// bell; weighted dips and pull-ups add 10 lb / 5 kg. "Small raises" are delt raises and flies,
+/// rotator-cuff rotations, kickbacks, cable hip abduction and dumbbell wrist curls.
+///
+/// Each value is a multiple of the equipment's default step in that unit. The kg column is chosen
+/// in kg — the same setup with kg equipment (a 20 kg bar, 2.5 kg dumbbell and 5 kg stack steps,
+/// 4 kg bell sizes) — not converted from lb. Dumbbell and kettlebell loads are per implement;
+/// band loads are the band's rated resistance; carries count lengths as reps.
 public enum ExerciseCatalog {
-    /// The catalog's content version. Bump it by one with every change to `exercises.json` and
-    /// append the new SHA-256 to `catalog.version.sha` (criterion 7; a test fails until both are
-    /// done). Upgrades are additive: an id is never removed, reused or regenerated.
-    public static let version = 1
+    /// The catalog's content version. A change to `exercises.json` must raise it above `main`'s
+    /// (`scripts/check-catalog-version.sh`) and record the file's SHA-256 against it in
+    /// `catalog.version.sha` (criterion 7). Upgrades are additive: an id is never removed, reused or
+    /// regenerated.
+    public static let version = 2
 
     /// Every catalog exercise, in file order.
     ///

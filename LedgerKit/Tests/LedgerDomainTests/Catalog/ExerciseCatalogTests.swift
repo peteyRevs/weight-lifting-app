@@ -28,16 +28,15 @@ struct ExerciseCatalogTests {
     }
 
     @Test(
-        "Criterion 2: each spec §6.2 entry exists by name with its W0 in lb, and kg is lb rounded to the kg step",
+        "Criterion 2: each spec §6.2 entry exists by name and equipment with the policy's conservative loads",
         arguments: prototypeEntries
     )
-    func prototypeEntries_matchSpecW0(_ expected: PrototypeEntry) throws {
+    func prototypeEntries_usePolicyLoads(_ expected: PrototypeEntry) throws {
         let exercise = try #require(exercises.first { $0.name == expected.name })
         #expect(exercise.id.rawValue.uuidString == expected.id, "ids never change")
+        #expect(exercise.equipment == expected.equipment)
         #expect(exercise.defaultStartLoad[.lb] == .pounds(expected.pounds))
         #expect(exercise.defaultStartLoad[.kg] == .kilograms(expected.kilograms))
-        let converted = Weight.pounds(expected.pounds).rounded(toStep: exercise.equipment.defaultStep(in: .kg))
-        #expect(exercise.defaultStartLoad[.kg] == converted)
     }
 
     @Test("Criterion 3: every exercise has two or more alternatives; each exists, shares its pattern and is not itself")
@@ -105,14 +104,17 @@ struct ExerciseCatalogTests {
         }
     }
 
-    @Test("Every kg start load is the lb one converted and rounded to the kg step; only bodyweight starts at zero")
-    func kilogramStartLoads_areConvertedPounds() {
+    @Test("Every start load follows the conservative policy for its equipment and movement class (decision #21)")
+    func startLoads_followThePolicy() throws {
         for exercise in exercises {
-            let pounds = exercise.startLoad(in: .lb)
-            let kgStep = exercise.equipment.defaultStep(in: .kg)
-            #expect(exercise.startLoad(in: .kg) == pounds.rounded(toStep: kgStep), "\(exercise.name)")
-            #expect(pounds > .zero || exercise.equipment == .bodyweight, "\(exercise.name) starts at zero")
+            let expected = try #require(StartLoadPolicy.startLoad(for: exercise), "no policy cell: \(exercise.name)")
+            #expect(exercise.defaultStartLoad[.lb] == .pounds(expected.lb), "\(exercise.name)")
+            #expect(exercise.defaultStartLoad[.kg] == .kilograms(expected.kg), "\(exercise.name)")
         }
+        let names = Set(exercises.map(\.name))
+        let named = StartLoadPolicy.floorPulls.union(StartLoadPolicy.landmine)
+            .union(StartLoadPolicy.small).union(StartLoadPolicy.kettlebellUpper)
+        #expect(named.subtracting(names).isEmpty, "the policy names missing exercises: \(named.subtracting(names))")
     }
 
     @Test("Short names fit the watch: upper case, 1–14 characters, unique")
@@ -148,8 +150,9 @@ struct ExerciseCatalogTests {
         #expect(
             latest.sha == digest,
             """
-            exercises.json changed: bump ExerciseCatalog.version to \(ExerciseCatalog.version + 1) and append \
-            "\(ExerciseCatalog.version + 1) \(digest)" to catalog.version.sha
+            exercises.json changed. If this branch has not raised ExerciseCatalog.version yet, raise it \
+            to \(ExerciseCatalog.version + 1) and append "\(ExerciseCatalog.version + 1) \(digest)" to \
+            catalog.version.sha; if it has, make its last line "\(ExerciseCatalog.version) \(digest)"
             """
         )
     }
@@ -166,16 +169,19 @@ struct ExerciseCatalogTests {
     }
 }
 
-/// A spec §6.2 row. `kilograms` is worked by hand (lb × 0.45359237, nearest kg step), and `id` pins
-/// the entry's identity: ids are stored in lifters' databases and must never change.
+/// A spec §6.2 entry with the start load the policy gives it (criterion 2 as amended by Pete,
+/// 2026-09-30), read off the table by hand; `id` pins the entry's identity: ids are stored in lifters'
+/// databases and must never change.
 struct PrototypeEntry: Sendable, CustomTestStringConvertible {
     let name: String
+    let equipment: Equipment
     let pounds: Decimal
     let kilograms: Decimal
     let id: String
 
-    init(_ name: String, pounds: Decimal, kilograms: Decimal, id: String) {
+    init(_ name: String, _ equipment: Equipment, _ pounds: Decimal, _ kilograms: Decimal, _ id: String) {
         self.name = name
+        self.equipment = equipment
         self.pounds = pounds
         self.kilograms = kilograms
         self.id = id
@@ -187,26 +193,27 @@ struct PrototypeEntry: Sendable, CustomTestStringConvertible {
 }
 
 private let prototypeEntries: [PrototypeEntry] = [
-    PrototypeEntry("Barbell Bench Press", pounds: 180, kilograms: 82.5, id: "270DE1C9-481F-4904-BE85-070381E296C0"),
-    PrototypeEntry("Incline DB Press", pounds: 50, kilograms: 22.5, id: "34ABACC5-2E75-4EE1-9F67-DC9E925E6D37"),
-    PrototypeEntry("Low-to-High Cable Fly", pounds: 25, kilograms: 11.25, id: "0212B3A2-68ED-4183-B183-0850BEDB68F7"),
-    PrototypeEntry("Weighted Dip", pounds: 45, kilograms: 20, id: "2BF340CA-A558-40D2-81D9-5BF2DF1EB60F"),
-    PrototypeEntry("Barbell Row", pounds: 155, kilograms: 70, id: "90383748-7413-4398-99FA-6EB6E5F2969A"),
-    PrototypeEntry("Chest-Supported Row", pounds: 65, kilograms: 30, id: "A9ED72CF-D506-430B-A12F-501D15B18E44"),
-    PrototypeEntry("Lat Pulldown", pounds: 100, kilograms: 45, id: "5F043F91-CD6E-4E9B-B12C-5B33ECB9B049"),
-    PrototypeEntry("Weighted Pull-Up", pounds: 35, kilograms: 16.25, id: "0865DC39-D829-4DFD-8E6D-6EE9302EB777"),
-    PrototypeEntry("Overhead Press", pounds: 115, kilograms: 52.5, id: "DA5CE9D0-60A1-41BC-B634-A3516D27B544"),
-    PrototypeEntry("Cable Lateral Raise", pounds: 12.5, kilograms: 6.25, id: "18EC9F77-0DD1-4037-B7B8-8214744142AC"),
-    PrototypeEntry("Rear Delt Fly", pounds: 50, kilograms: 22.5, id: "0A281016-6A02-459C-A7CC-23F7F41A6A0E"),
-    PrototypeEntry("Back Squat", pounds: 250, kilograms: 112.5, id: "73EE7555-DC9F-4D98-A87F-08C8817876F1"),
-    PrototypeEntry("Front Squat", pounds: 185, kilograms: 85, id: "223208C8-E7BB-4514-A335-6FCC43A62E18"),
-    PrototypeEntry("Romanian Deadlift", pounds: 205, kilograms: 92.5, id: "C6C70E2B-BB44-4A53-98DD-D4861B70E8D7"),
-    PrototypeEntry("Deadlift", pounds: 315, kilograms: 142.5, id: "F5CB98F6-7533-4BE9-85FA-8013FF01B1C6"),
-    PrototypeEntry("Leg Press", pounds: 320, kilograms: 145, id: "80834235-1B66-4070-8F6A-5A87794792FC"),
-    PrototypeEntry("Seated Leg Curl", pounds: 90, kilograms: 41.25, id: "60C1A421-610C-4FC2-8416-0DAC57FE29BC"),
-    PrototypeEntry("Standing Calf Raise", pounds: 160, kilograms: 72.5, id: "87EF983A-8D62-488E-9AAE-7BECDBF6F5EF"),
-    PrototypeEntry("Barbell Curl", pounds: 75, kilograms: 35, id: "6C2540C1-DAF5-4ECB-B66E-C9EA231EB0CE"),
-    PrototypeEntry("Incline DB Curl", pounds: 30, kilograms: 13.75, id: "2C3613AF-0D6B-4B2C-8AB5-21C5D3634B82"),
-    PrototypeEntry("Cable Triceps Pushdown", pounds: 60, kilograms: 27.5, id: "B91DC81A-203D-4FD8-90E7-5A29623FCB17"),
-    PrototypeEntry("Overhead Cable Extension", pounds: 45, kilograms: 20, id: "5006D164-29B4-4EC3-97AD-A6DD5E139846")
+    // name, equipment, lb, kg, id
+    PrototypeEntry("Barbell Bench Press", .barbell, 45, 20, "270DE1C9-481F-4904-BE85-070381E296C0"),
+    PrototypeEntry("Incline DB Press", .dumbbell, 15, 7.5, "34ABACC5-2E75-4EE1-9F67-DC9E925E6D37"),
+    PrototypeEntry("Low-to-High Cable Fly", .cable, 20, 10, "0212B3A2-68ED-4183-B183-0850BEDB68F7"),
+    PrototypeEntry("Weighted Dip", .bodyweight, 10, 5, "2BF340CA-A558-40D2-81D9-5BF2DF1EB60F"),
+    PrototypeEntry("Barbell Row", .barbell, 45, 20, "90383748-7413-4398-99FA-6EB6E5F2969A"),
+    PrototypeEntry("Chest-Supported Row", .machine, 40, 20, "A9ED72CF-D506-430B-A12F-501D15B18E44"),
+    PrototypeEntry("Lat Pulldown", .cable, 30, 15, "5F043F91-CD6E-4E9B-B12C-5B33ECB9B049"),
+    PrototypeEntry("Weighted Pull-Up", .bodyweight, 10, 5, "0865DC39-D829-4DFD-8E6D-6EE9302EB777"),
+    PrototypeEntry("Overhead Press", .barbell, 45, 20, "DA5CE9D0-60A1-41BC-B634-A3516D27B544"),
+    PrototypeEntry("Cable Lateral Raise", .cable, 10, 5, "18EC9F77-0DD1-4037-B7B8-8214744142AC"),
+    PrototypeEntry("Rear Delt Fly", .machine, 10, 5, "0A281016-6A02-459C-A7CC-23F7F41A6A0E"),
+    PrototypeEntry("Back Squat", .barbell, 45, 20, "73EE7555-DC9F-4D98-A87F-08C8817876F1"),
+    PrototypeEntry("Front Squat", .barbell, 45, 20, "223208C8-E7BB-4514-A335-6FCC43A62E18"),
+    PrototypeEntry("Romanian Deadlift", .barbell, 45, 20, "C6C70E2B-BB44-4A53-98DD-D4861B70E8D7"),
+    PrototypeEntry("Deadlift", .barbell, 95, 40, "F5CB98F6-7533-4BE9-85FA-8013FF01B1C6"),
+    PrototypeEntry("Leg Press", .machine, 40, 20, "80834235-1B66-4070-8F6A-5A87794792FC"),
+    PrototypeEntry("Seated Leg Curl", .machine, 20, 10, "60C1A421-610C-4FC2-8416-0DAC57FE29BC"),
+    PrototypeEntry("Standing Calf Raise", .machine, 20, 10, "87EF983A-8D62-488E-9AAE-7BECDBF6F5EF"),
+    PrototypeEntry("Barbell Curl", .barbell, 25, 10, "6C2540C1-DAF5-4ECB-B66E-C9EA231EB0CE"),
+    PrototypeEntry("Incline DB Curl", .dumbbell, 10, 5, "2C3613AF-0D6B-4B2C-8AB5-21C5D3634B82"),
+    PrototypeEntry("Cable Triceps Pushdown", .cable, 20, 10, "B91DC81A-203D-4FD8-90E7-5A29623FCB17"),
+    PrototypeEntry("Overhead Cable Extension", .cable, 20, 10, "5006D164-29B4-4EC3-97AD-A6DD5E139846")
 ]
