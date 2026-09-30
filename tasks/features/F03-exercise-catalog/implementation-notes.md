@@ -171,6 +171,13 @@ Pete decided the two product questions from the first pass; the orchestrator dec
    machines and timed holds.
 5. **The version is bumped to 2**, and `2 <sha>` is appended. Line 1 records the first pass's
    content, which never reached main.
+6. **Upgrades refresh in place** (Pete, 2026-09-30, after F05 S2's review SF1). This replaces fix
+   round 2's "additive" wording (review S4).
+   - An upgrade adds new entries and rewrites the content of existing catalog rows by id.
+   - Custom exercises and rows the lifter deleted are never touched.
+   - F05 S2 implements it. The JSON note, `ExerciseCatalog.version`'s doc and the brief now say so.
+   - Version 3's history line was rewritten for the note's new bytes, as the history allows before
+     a merge.
 
 ## Fix round 2 (2026-09-30)
 

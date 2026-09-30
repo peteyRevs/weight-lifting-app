@@ -63,9 +63,9 @@ import Foundation
 public enum ExerciseCatalog {
     /// The catalog's content version. A change to `exercises.json` must raise it above `main`'s
     /// (`scripts/check-catalog-version.sh`) and record the file's SHA-256 against it in
-    /// `catalog.version.sha` (criterion 7). Upgrades are additive: an install that already has the
-    /// catalog receives the new entries only, and its existing rows stay as they are (F05), so a
-    /// correction to an existing entry reaches new installs only. An id is never removed, reused or
+    /// `catalog.version.sha` (criterion 7). Upgrades refresh in place (F05): an install that already
+    /// has the catalog receives the new entries and the corrected content of existing ones, keyed by
+    /// id; custom exercises and deleted rows are never touched. An id is never removed, reused or
     /// regenerated; the script fails if one main has is gone or moved to another entry.
     public static let version = 3
 
