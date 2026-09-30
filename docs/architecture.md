@@ -389,10 +389,15 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 - `LedgerColor` — semantic tokens (`ground`, `surface`, `ink` at fixed alphas, `hairline`, `accent`, `accentText`, `watch…`) with light + dark values from §8.1–8.3, nudged where needed so every text token meets WCAG AA (F06 notes, decision 7). Adaptive colours are a dynamic `UIColor` on iOS, with stronger ink alphas under Increase Contrast; watchOS has one (dark) appearance. Accent usage rule: once per screen, on the primary action.
 - `LedgerFont` — 21 roles (`display` … `numeralS`, `watch…`) with the v2 prototype's size, `wght`, `wdth`, line height and tracking. The Archivo variable font ships once, as a `LedgerDesign` resource; the apps' `UIAppFonts` point into that resource bundle (`LedgerKit_LedgerDesign.bundle/…`), and previews and package tests register it on first use (`FontRegistration`). Axes are set with a `CTFontDescriptor` carrying `kCTFontVariationAttribute` (`'wght'` 2003265652, `'wdth'` 2003072104), wrapped as `Font(ctFont)`. Views use `.ledgerFont(.role)`, which reads Dynamic Type and Bold Text from the environment (size on SwiftUI's custom-font curve for the role's text style; Bold Text = one weight step up) and applies tracking, case and `lineHeight`. The `Font` entry points take the text size explicitly (`LedgerFont.font(_:dynamicTypeSize:)`), because a Core Text instance cannot follow the environment by itself. Tabular figures for every numeral role; watch roles never go below 11 pt.
 - `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`, `LedgerMotion` (`snappy`, `ledgerBuzz(trigger:)` with a Reduce Motion opacity variant).
-- Components: `PrimaryButton`, `PillButton`, `HairlineList/Row`, `SetRow`
-  (with steppers), `RestRing`, `WeekStrip`, `StatTile`, `ProgressSegments`,
-  `Eyebrow`, `SwapSheet`, `TabBar` (native `TabView` tinted; the custom
-  prototype bar is not replicated), watch variants where needed.
+- Components: `PrimaryButton`, `PillButton`, `IconPillButton`, `HairlineList/Row`,
+  `SetRow` (with `SetRowHeader` and `SetRowSteppers`), `RestRing`, `WeekStrip`, `StatTile`,
+  `ProgressSegments`, `Eyebrow`, `SwapSheet`, `TabBar` (native `TabView` tinted; the custom
+  prototype bar is not replicated), watch variants where needed. Beside them: `LedgerIcon` (the
+  spec's stroked icons, sized like a type role), `.ledgerHitTarget()` (44 pt) and `.ledgerPill`
+  (a circular capsule, as CSS draws `border-radius: 999px`). Components take display strings the
+  caller has already localised, except `SetRow`'s three VoiceOver state words ("Pending", "Current
+  set", "Done"), which `LedgerDesign` localises itself (`String(localized:bundle: .module)`, English
+  until the module has a string catalog).
 - Every component has snapshot tests: light + dark × 3 Dynamic Type sizes;
   watch components at 42 / 46 / 49 mm.
 
