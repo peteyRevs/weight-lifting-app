@@ -154,7 +154,7 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 | R1 | HealthKit mirroring regressions on 26.x/27.0 | Watch authority + idempotent envelopes + WC fallback (ADR-005); device protocol F20 | F17 |
 | R2 | Archivo `wdth` axis on watchOS | M0 spike in F06; fallback to static instances | F06 |
 | R3 | XcodeGen watch-embed bug → committed project | ADR-003; human creates project in F00 | F00 |
-| R4 | Xcode 27 is only on GitHub's `xcode-27` preview image (actions/runner-images#14404) | F32 (Pete, 2026-09-29): pin 27.0 and run CI on `xcode-27`; if the preview breaks, fall back to `macos-26` with 26.6 (ADR-006 amendment). Close when a standard image carries Xcode 27 | F32 |
+| R4 | Xcode 27 is only on GitHub's `xcode-27` preview image (actions/runner-images#14404) | F32 (Pete, 2026-09-29): pin 27.0 and run CI on `xcode-27`; rolling back to 26.6 (still on `macos-26`) means reverting F32 as a whole, harder after each merge (ADR-006 amendment). Close when a standard image carries Xcode 27 | F32 |
 | R5 | CKSyncEngine × GRDB fit | F27 spike before commitment | F27 |
 | R6 | Agent-written code drifting from design | Snapshot tests + reviewer design-fidelity check (workflow §Reviewer) | all |
 

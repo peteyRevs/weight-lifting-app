@@ -17,7 +17,7 @@ defaults:
 jobs:
   test:
     name: ${{ matrix.plan }}
-    runs-on: xcode-27 # a preview image; the fallback is macos-26 with Xcode 26.6 (pr.yml, F32)
+    runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
     timeout-minutes: 120
     permissions:
       contents: read
@@ -30,7 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode from .xcode-version
-        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
+        run: scripts/check-xcode-version.sh
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Test the ${{ matrix.plan }} plan
         env:
@@ -69,7 +71,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode from .xcode-version
-        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
+        run: scripts/check-xcode-version.sh
       - name: Available package updates (report only; bumps are deliberate PRs)
         run: |
           swift package --package-path LedgerKit resolve && swift package --package-path LedgerKit update --dry-run | tee updates.txt

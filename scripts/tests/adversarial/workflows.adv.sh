@@ -74,11 +74,17 @@ check "WF12 every file in the cache key exists (hashFiles of a missing file is e
 # ---- every workflow ------------------------------------------------------------------
 unpinned="$(cat "$WF"/*.yml | grep -E '^\s*-?\s*uses:' | grep -vE 'uses:\s*[^@]+@[0-9a-f]{40}(\s|$)' || true)"
 check "WF13 every action is pinned to a full commit SHA" is "$unpinned" ""
+# The pin is read as check-xcode-version.sh reads it, whitespace and a CRLF stripped (F32 T4; WF57 runs it).
+IFS= read -r select_xcode <<'SH'
+sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app"
+SH
 xcode_ok=""
 for w in pr nightly; do
-    xcode_ok="$xcode_ok$(q $w '[.jobs[] | select(."runs-on" | startswith("ubuntu") | not) | [.steps[].run // "" | test("xcode-select -s \"/Applications/Xcode_\\$\\(cat \\.xcode-version\\)\\.app\"")] | any] | all')"
+    xcode_ok="$xcode_ok$(jq -r --arg sel "$select_xcode" '[.jobs[] | select(."runs-on" | startswith("ubuntu") | not)
+        | [.steps[].run // "" | contains($sel)] | any] | all' "$T/$w.json")"
 done
-check "WF14 every macOS job selects Xcode from .xcode-version" is "$xcode_ok" truetrue
+check "WF14 every macOS job selects Xcode from .xcode-version, read as check-xcode-version.sh reads it" \
+    is "$xcode_ok $(grep -cF "tr -d '[:space:]' < " "$ROOT/scripts/check-xcode-version.sh")" "truetrue 1"
 # The xcode-27 image's README: Xcode 27.0 (27A266a) is /Applications/Xcode_27.app, linked as Xcode_27.0.app.
 check "WF15 .xcode-version pins 27.0 (Xcode_27.0.app on the xcode-27 image)" is "$(tr -d '[:space:]' <"$ROOT/.xcode-version")" 27.0
 

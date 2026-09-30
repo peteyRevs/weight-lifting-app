@@ -11,8 +11,8 @@
 
 ## Runner and destinations (2026-09-29)
 - GitHub Actions: `runs-on: xcode-27` (preview; macOS 27.0, Xcode 27.0 27A266a at `/Applications/Xcode_27.app`,
-  linked as `Xcode_27.0.app`). Fallback if the preview breaks: `macos-26` with `.xcode-version` 26.6 and the
-  26.5 destinations.
+  linked as `Xcode_27.0.app`). If the preview breaks, rolling back to 26.6 means reverting F32 as a whole
+  (see Rollback); the `macos-26` image still carries 26.6.
 - `scripts/check.sh` and the nightly: `iPhone 17, OS=27.0` and `Apple Watch Series 12 (46mm), OS=27.0`.
   The image has no Series 11.
 - Criterion 3 (Xcode Cloud) is deferred to Pete's Xcode Cloud setup (`docs/xcode-cloud/README.md`), which
@@ -42,7 +42,9 @@ None.
 - Full PR + nightly suites; device sanity on both OS generations (F20 subset).
 
 ## Rollback
-- Revert the PR: the pin returns to 26.6, CI to `macos-26` and the destinations to the 26.5 Series 11 and iPhone 17 (runners keep 26.6 available through 2027 per the image policy — verify at the time). Locally that also needs Xcode 26.6 reinstalled.
+- Revert the PR as a whole: the pin returns to 26.6, CI to `macos-26` and the destinations to the 26.5 Series 11 and iPhone 17, with main's two lockfiles and 16 snapshot references (runners keep 26.6 available through 2027 per the image policy — verify at the time). Locally that also needs Xcode 26.6 reinstalled.
+- Switching only the label and the pin fails: Swift 6.3 resolves a different package graph than F32's lockfiles pin, and 8 of the 16 references fall outside tolerance on 26.5.
+- The revert gets harder with every merge on top: references recorded and pins resolved after F32 must be re-recorded and re-resolved on 26.6 as well.
 
 ## Definition of Done
 Inherits `docs/engineering-standards.md` §12.

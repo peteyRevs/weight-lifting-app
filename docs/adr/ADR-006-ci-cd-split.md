@@ -59,6 +59,10 @@ above and the `macos-26` in the Decision table.
 
 - `.xcode-version` is 27.0 on developer Macs, in GitHub Actions and in Xcode Cloud, whose workflows select
   Xcode 27.0 explicitly. The pins still move together.
-- If the preview image breaks, the fallback is `macos-26` with `.xcode-version` 26.6 and the 26.5
-  simulators. Rolling back means reverting F32, and locally it also means reinstalling Xcode 26.6.
+- Rolling back to 26.6 means reverting F32 as a whole: the pin, the runner, the destinations, both
+  lockfiles and the 16 snapshot references. Switching the label and the pin alone fails, because Swift 6.3
+  resolves a different package graph than F32's lockfiles pin and 8 references fall outside tolerance on
+  26.5. The revert gets harder with every merge on top: references recorded and pins resolved after F32
+  must be re-recorded and re-resolved on 26.6 as well. The `macos-26` image still carries 26.6; locally,
+  rolling back also means reinstalling it.
 - When `xcode-27` graduates or `macos-26` gains Xcode 27, choose the label again (`docs/ci-cd.md`).

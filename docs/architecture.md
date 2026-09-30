@@ -15,7 +15,7 @@ Read with: `docs/engineering-standards.md` (rules), `docs/product-spec.md`
 | Layer | Choice | Evidence |
 |---|---|---|
 | Language | Swift 6.4 (Xcode 27.0), Swift 6 language mode, strict concurrency `complete` | R1 §1, R2 §6, R3 §4 |
-| Toolchain | Xcode 27.0 (Pete, 2026-09-29, F32), locally and on the GitHub `xcode-27` runner, a public preview image; fallback `macos-26` with Xcode 26.6. The App Store requires the 27 SDKs from April 2027 | R1 §1.1, R3 §4, ADR-006 |
+| Toolchain | Xcode 27.0 (Pete, 2026-09-29, F32), locally and on the GitHub `xcode-27` runner, a public preview image; rolling back to 26.6 (still on `macos-26`) means reverting F32 as a whole. The App Store requires the 27 SDKs from April 2027 | R1 §1.1, R3 §4, ADR-006 |
 | Min OS | iOS 26.0 · watchOS 26.0 (iOS 26 on 86 % of recent iPhones; watchOS 27 drops Series 6–8 / SE 2 / Ultra 1) | R1 §1.2–1.3 |
 | UI | SwiftUI everywhere; `@Observable` stores; MainActor default isolation in UI targets | R2 §6 |
 | Persistence | GRDB.swift 7.11.x (SQLite) on phone **and** watch, CloudKit-shaped schema | R2 §1, ADR-002 |
@@ -467,5 +467,5 @@ useful `previewValue`. Stores never construct their dependencies.
    the rendered sheet committed as a snapshot on both platforms). Still to see
    on hardware: F20's device checklist; complications are unverified (R2 §6.2).
 3. CKSyncEngine + GRDB integration surface (SQLiteData fit) → M4 spike before committing.
-4. Xcode 27 is only on GitHub's `xcode-27` preview image (actions/runner-images#14404). F32 pins 27.0 locally, in CI and in Xcode Cloud (Pete, 2026-09-29); if the preview breaks, CI falls back to `macos-26` with 26.6 (ADR-006, amendment). The minimum OS stays 26, so any 27-only API is guarded with `#available` and feature-flagged.
+4. Xcode 27 is only on GitHub's `xcode-27` preview image (actions/runner-images#14404). F32 pins 27.0 locally, in CI and in Xcode Cloud (Pete, 2026-09-29); rolling back to 26.6, which `macos-26` still carries, means reverting F32 as a whole, lockfiles and snapshots included, and gets harder with each merge on top (ADR-006, amendment). The minimum OS stays 26, so any 27-only API is guarded with `#available` and feature-flagged.
 5. Xcode synchronized folders keep `project.pbxproj` nearly frozen; the rare edits (new target, entitlement) are done in Xcode by a human and verified by CI (ADR-003).

@@ -20,7 +20,7 @@ Goals, in priority order:
 1. A wrong prescription, a lost set, or a divergent phone/watch state is
    caught by a test before a human ever runs the app.
 2. Every test is deterministic: same inputs, same result, on any Mac and on
-   `macos-26` runners. A flaky test is a P1 bug (standards §9).
+   CI runners (`docs/ci-cd.md`). A flaky test is a P1 bug (standards §9).
 3. The PR lane finishes in ≤ 25 min wall-clock; everything slower runs nightly.
 4. Design fidelity is enforced mechanically (snapshots), not by eyeballing.
 

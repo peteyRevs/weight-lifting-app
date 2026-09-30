@@ -1,7 +1,7 @@
 # F32 implementation notes
 
-Base: `main` e94b501, branch `chore/F32-xcode-27`. Nothing is committed or pushed. No GitHub or Xcode Cloud
-setting was changed.
+Base: `main` e94b501, branch `chore/F32-xcode-27`. Committed as `950bba7` (not pushed); the fix round is
+uncommitted. No GitHub or Xcode Cloud setting was changed.
 
 Toolchain: Xcode 27.0 (27A266a), Apple Swift 6.4 (swiftlang-6.4.0.34.1). Simulator runtimes: iOS 27.0 (24A434)
 and watchOS 27.0 (24R362). The 26.5 runtimes are still installed.
@@ -302,3 +302,95 @@ Code, excluding tests, snapshots, docs and comments:
 | Test code: one line in `Round4StoreAdversarialTests.swift`; suites and fixture under `scripts/tests/` | 280 | 31 | not counted |
 
 The total is well under the 500-line target.
+
+## Fix round (review S1–S3, test findings T1–T5, nits)
+
+The orchestrator's decisions, each with its change and the test that holds it. Uncommitted; `project.pbxproj`
+is untouched, and no pin changed.
+
+| Item | Change | Test |
+|---|---|---|
+| **S1 = T1** both lockfiles agree | New `scripts/check-package-pins.sh`: `jq -S -c '.pins \| sort_by(.identity) \| .[]'` over each file, compared whole (identity, kind, location, version, revision, branch); `originHash`, order and layout are ignored. On a mismatch it prints a per-pin `diff -u` and how to re-resolve. `check.sh` step 2 runs it after `check-package-graph.sh`, so `--lint-only`, the full gate, `--fast` and `--record-snapshots` all run it, locally and on CI. `docs/ci-cd.md` says that the pins check covers LedgerKit's file. | PL01 unchanged and green. New in `xcode27.adv.sh`: **PL03** committed files agree; **PL04** the real regression, `LedgerKit/Package.resolved` from `e94b501` (Swift 6.3), fails and names both pins and the fix; **PL05** the reverse; **PL06** ×7 one pin differs (revision, version, location, kind, branch, one short, one extra), each failing from either file; **PL07** another `originHash`, reversed pins and keys, compact JSON still agree; **PL08** a missing, pin-less or truncated file never passes, both missing included. `check-wiring`: **W48** `--lint-only` runs it after the graph check and stops on it; W02 and W04 cover the full gate. |
+| **S2** rollback wording | Reworded in `pr.yml`, `nightly.yml`, ADR-006's amendment, `docs/ci-cd.md`, `docs/architecture.md` (§1 Toolchain and §17 risk 4), `tasks/todo.md` R4 and the brief (runner section and Rollback). Each now says: rolling back to 26.6 means reverting F32 as a whole, lockfiles and snapshots included; a label-and-pin switch alone fails; it gets harder with every merge on top; `macos-26` still carries 26.6. | Docs and comments. No "fall back to macos-26" wording is left (`git grep`). |
+| **S3** snapshot comment | `TokenSnapshotTests.swift:8-9` now says Series 12 46 mm, OS 27.0 (F32). | Comment only. Format and lint are clean. |
+| **T2** W45 | The `check-wiring` stub `xcodebuild` now records each run's action and the value of `-collect-test-diagnostics` wherever they appear in the arguments. W45 asserts every `test-without-building` run has `diagnostics=never`, on a failing run and on both platforms. | Mutants: the flag moved to the end (C7) **passes**, and so does the flag placed before the action; the flag dropped, or set to `on-failure`, fails W45 (and W46). |
+| **T3** a 27.0 beta passes | Accepted. `check-xcode-version.sh`'s header says it compares the version only: a 27.0 beta or RC reports 27.0 and passes, and the build number is not pinned. | none (documented behaviour) |
+| **T4** CRLF | The three Select steps now read the pin with `$(tr -d '[:space:]' < .xcode-version)`, the expression `check-xcode-version.sh` uses. Before, `cat` kept a `\r` or a space in the path. | **XV14**: `27.0\r\n` and ` 27.0 \r\n` pass the check. **WF57** (second case): with either pin, all three Select steps select `/Applications/Xcode_27.0.app`. **WF14** now requires the shared expression in every Mac job and in the script. |
+| **T5** nightly | Both nightly Mac jobs (the test matrix and the dependency report) gain a step "Check the selected Xcode against .xcode-version", `scripts/check-xcode-version.sh`, right after Select. `pr.yml` already has `check.sh` step 0. | **WF60**: in every Mac job the next `run` step after Select is `check-xcode-version.sh`, or `check.sh`, whose step 0 is the check (W40). WF56 still holds. |
+
+**Can the project's lockfile hold extras? Not today.**
+- The pbxproj has no `XCRemoteSwiftPackageReference` and no `XCLocalSwiftPackageReference`. LedgerKit is a
+  folder reference, the one package root, and the app targets depend only on its two umbrella products.
+- The two files are byte-identical (`cmp`), test-only packages included, so Xcode resolves LedgerKit's whole
+  graph, as `swift package resolve` does.
+- Extras would appear only if someone added a package to an app target in Xcode, which
+  engineering-standards §1 forbids. The check then fails (PL06 extra-pin), and its message says so.
+- **Does the suggested fix work?** On a scratch copy with the stale `e94b501` LedgerKit lockfile,
+  `swift package --package-path <copy> resolve` exited 0 in 15 s. It rewrote the file byte-identical to the
+  committed one, and the check then passed.
+
+**Mutation check.** Each mutant ran in a scratch copy of the tree with its own `--shared` clone, so the real
+index was never touched.
+
+| Mutant | Caught by |
+|---|---|
+| P1 pins compared by identity only | PL04, PL06 ×5 |
+| P2 identity and version only | PL04, PL06 (revision, location, kind, branch) |
+| P3 prints the diff but exits 0 | PL04, PL05, PL06 ×7 |
+| P4 whole files compared (`cat`: `originHash` counts) | PL04, PL07, PL08 |
+| P5 `jq` errors ignored (`\|\| true`) | PL08 |
+| P6 subset: only the project's extras fail | PL06 (extra-pin, one-pin-short) |
+| P7 pins not sorted | PL07. The first version compared two files in the same order and missed it, so PL07 now reverses one side only. |
+| C1 `check.sh` no longer runs the pins check | W02, W04, W48 |
+| C2 `check-package-pins.sh \|\| true` | W04 (package-pins), W48 |
+| X1 `check-xcode-version.sh` reads the pin with `head -1` (keeps `\r`) | XV14 |
+| Y1 Select steps back to `$(cat .xcode-version)` | WF14, WF57 (CRLF) |
+| Y2 / Y3 nightly check step dropped from the test job / the dependency report | WF60 |
+| Y4 nightly check step `\|\| true` | WF60 |
+
+WF01 (actionlint) also failed in every workflow mutant. That is an artefact of the scratch copy: mise does
+not trust its `mise.toml`, so WF01 fails on the unmutated copy too. It is not counted above.
+
+**Found, not changed (outside W45's scope):** W29, W43 and W46 select the stub's argument lines that
+*start* with the action. So a correct refactor that puts a flag before the action fails them falsely. They
+fail safe.
+
+**Nits.**
+- **Fixed (docs only):**
+  - N1: `testing-strategy.md` goal 2 now says "CI runners (`docs/ci-cd.md`)".
+  - N2: F07's risk now points at IssueReporting 2.x (`reportIssue`, `unimplemented`).
+  - N3: this file's header.
+- **Skipped:**
+  - N4 (the Swift version in both `.swiftformat` and `check.sh`). The fix is code or a new test, not docs,
+    and it predates F32.
+  - N5 (the fixture's assumed simulator pairs). It needs the pairs the first `xcode-27` CI run logs, which
+    do not exist yet.
+  - N6 (the snapshot table in the PR description). The PR is opened later. The 16-row table is ready in
+    "Snapshots" above.
+  - N7 (clean the main checkout after the merge). This is a post-merge step outside this worktree. The
+    command is in review.md N7.
+  - Not done: S1's optional strict `resolve` in the nightly report, which was not in the orchestrator's
+    list. With the pins check on every PR, LedgerKit's lockfile cannot drift from the CI-proven one.
+
+**Size of this round.**
+- Non-comment code: 19 lines in the new `check-package-pins.sh` and 17 changed lines in `check.sh`,
+  `check-xcode-version.sh` and the two workflows. About 36 lines, so F32 totals about 113.
+- Tests: +135 / -21 in three suites.
+
+**Verification.**
+- Every `scripts/tests/*.test.sh` exits 0.
+  - The adversarial suites pass **315, fail 0 and skip 2** (SD23 and PL02, both opt-in): check-wiring 77,
+    workflows 61, xcode27 44, sim-destination 25, check-test-results 18, ci-post-clone 14, coverage-gate 60,
+    release-please 16.
+  - coverage-gate 10 and the lint-rules suites also pass.
+- `scripts/check.sh --lint-only` is **OK in 43 s** (`f32-fix-lint.log`). Step 0 printed `Xcode 27.0 ✓` and
+  step 2 printed `package pins agree … (9 pins)`.
+- shellcheck 0.11.0 is clean, except for the known `check.sh:55` SC2154 and the suites' SC1091 info, both
+  also on HEAD.
+- **Full gate:** `sim-lock.py scripts/check.sh` (`f32-fix-check.log`), run warm because no pin changed.
+  - Result: **OK, exit 0, 365 s, 0 warnings.**
+  - Steps, in seconds: lint 47, iOS build 46, iOS boot 3, iOS tests 149, watchOS build 26, watchOS boot 0,
+    watchOS tests 91, coverage 2.
+  - Step 2 printed `package pins agree … (9 pins)`.
+  - `check-test-results.sh` saw 17 targets ran and passed for PR, and 8 for PR-Watch.
+  - Coverage: LedgerDomain 98.97 %, LedgerDesign 95.52 %, overall 98.61 %.

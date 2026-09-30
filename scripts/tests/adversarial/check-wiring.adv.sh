@@ -51,12 +51,14 @@ if [ "$1" = -version ]; then
     printf "Xcode %s\\nBuild version 27A266a\\n" "${XCODE_REPORTS:-27.0}"; exit 0
 fi
 printf "%s\\n" "$*" >>"$LOG.args"
-action="$1"; scheme=""; bundle=""; dest=""
+action="$1"; scheme=""; bundle=""; dest=""; diag=unset
 while [ $# -gt 0 ]; do
-    case "$1" in -scheme) scheme="$2" ;; -resultBundlePath) bundle="$2" ;; -destination) dest="$2" ;; esac
+    case "$1" in -scheme) scheme="$2" ;; -resultBundlePath) bundle="$2" ;; -destination) dest="$2" ;;
+        -collect-test-diagnostics) diag="$2" ;; build-for-testing | test-without-building) action="$1" ;; esac
     shift
 done
 log "xcodebuild-$action-$scheme $dest"
+printf "%s diagnostics=%s\\n" "$action" "$diag" >>"$LOG.diag"
 printf "%s %s\\n" "$action-$scheme" "${TEST_RUNNER_SNAPSHOT_TESTING_RECORD-unset}" >>"$LOG.env"
 mkdir -p "$bundle"
 echo "Test Suite All tests passed"
@@ -71,6 +73,7 @@ printf 'sleep %s\n' "$*" >>"$LOG"
 read -r -t 60 _ <>"$(dirname "$0")/../hang/started"
 SH
 stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-graph'
+stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
 stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; fail_if script-test-a'
@@ -79,7 +82,7 @@ stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; fail_if script-test-b'
 # run [flags...]: the sandboxed check.sh; sets $code, $out and $calls (ids only; simctl's simulator
 # lookups, list and unpair, are sim-destination.sh's and pinned by W23-W27).
 run() {
-    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"
+    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"; : >"$LOG.diag"
     out="$(PATH="$SB/bin:$PATH" "$SB/scripts/check.sh" "$@" 2>&1)"
     code=$?
     calls="$(awk '$1 == "simctl" { if ($2 != "list" && $2 != "unpair") print "simctl-" $2; next } { print $1 }' "$LOG" |
@@ -93,7 +96,7 @@ lifecycle() {
 I=46F7C9EA-B38C-445A-BAD9-8A70A603E9E1 W=2416B270-8634-4D4A-9084-2B04B4498921 # the defaults, on the xcode-27 image
 
 FULL="xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
-script-test-a script-test-b \
+package-pins script-test-a script-test-b \
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR \
 simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
@@ -289,14 +292,14 @@ run --fast
 check "W44 --fast's swift test passes --only-use-versions-from-resolved-file" \
     is "$code $(grep -c '^swift-test .*--only-use-versions-from-resolved-file' "$LOG")" "0 1"
 # Xcode 27 runs `simctl diagnose` after a failing test run; here it timed out after 600 s per platform.
+# The stub reads the flag's value wherever it sits, so moving the flag is not a failure (F32 T2).
 FAIL_AT=xcodebuild-test-without-building-Ledger run
-tests="$(grep '^test-without-building ' "$LOG.args")"
 check "W45 every test run, a failing one too, passes -collect-test-diagnostics never" \
-    is "$code $(grep -c . <<<"$tests") $(grep -c -- ' -collect-test-diagnostics never ' <<<"$tests")" "1 1 1"
+    is "$code $(grep '^test-without-building ' "$LOG.diag" | tr '\n' ';')" "1 test-without-building diagnostics=never;"
 run
-tests="$(grep '^test-without-building ' "$LOG.args")"
 check "W45 ... (both platforms on a green run)" \
-    is "$(grep -c . <<<"$tests") $(grep -c -- ' -collect-test-diagnostics never ' <<<"$tests")" "2 2"
+    is "$(grep '^test-without-building ' "$LOG.diag" | tr '\n' ';')" \
+    "test-without-building diagnostics=never;test-without-building diagnostics=never;"
 # F32 adversarial (tasks/features/F32-xcode-27-migration/test-findings.md): record mode takes the other
 # branch of run_plan, and swift test knows neither xcodebuild flag.
 run --record-snapshots
@@ -308,6 +311,12 @@ $(grep -c -- ' -collect-test-diagnostics never\( \|$\)' <<<"$tests")" "4 4 2"
 run --fast
 check "W47 --fast's swift test gets neither xcodebuild-only flag (swift test would reject it)" \
     is "$code $(grep -c '^swift-test .*\(-collect-test-diagnostics\|-onlyUsePackageVersionsFromResolvedFile\)' "$LOG")" "0 0"
+# F32 fix round (T1): LedgerKit's lockfile is checked against the project's in step 2 of every mode that
+# lints; W02 and W04 show the full gate runs it and stops on it.
+FAIL_AT=package-pins run --lint-only
+check "W48 --lint-only runs the package pins check after the graph check, and a mismatch fails it there" \
+    is "$code $calls" "1 xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint \
+package-graph package-pins "
 
 # ---- --record-snapshots: F06's run_plan keeps going after a failing plan, if tests ran ----------
 # The fake xcrun's `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (1).

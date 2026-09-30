@@ -8,16 +8,19 @@ authoritative; the plan differs:
 - **Xcode 27 (Pete, 2026-09-29, F32).** Every macOS job runs on `xcode-27` (arm64), a **public preview**
   image (actions/runner-images#14404): macOS 27.0, Xcode 27.0 (27A266a) at `/Applications/Xcode_27.app`,
   linked as `Xcode_27.0.app`, and iPhone 17 and Apple Watch Series 12 (46mm) on 27.0 (no Series 11). The
-  standard `macos-26` image has only Xcode 26.x. Fallback if the preview breaks: `macos-26` with
-  `.xcode-version` 26.6 and the 26.5 destinations (iPhone 17, Series 11 (46mm)). `.github/actionlint.yaml`
-  names the label, which actionlint 1.7.12 does not know yet.
+  standard `macos-26` image has only Xcode 26.x. It still carries 26.6, but rolling back to 26.6 means
+  reverting F32 as a whole, lockfiles and snapshot references included, and each later merge makes that
+  harder (ADR-006 amendment). `.github/actionlint.yaml` names the label, which actionlint 1.7.12 does not
+  know yet.
 - Xcode from `.xcode-version`, and `check.sh` step 0 fails on any other Xcode (as `bootstrap.sh` does);
   SHA-pinned actions; `$(PROJECT_DIR)` expands in test plans. Simulators by UDID (`sim-destination.sh`).
 - **Package pins (F32).** Every `xcodebuild` in `check.sh` and the nightly passes
   `-onlyUsePackageVersionsFromResolvedFile`, and `--fast` passes `--only-use-versions-from-resolved-file`,
   so a stale `Package.resolved` fails instead of being rewritten. Both tools trust existing checkouts, so
   only a cold package directory proves it: the PR cache restores on an exact key only (no `restore-keys`).
-  Verify a PR that changes pins after `rm -rf .derivedData/SourcePackages`.
+  Verify a PR that changes pins after `rm -rf .derivedData/SourcePackages`. `xcodebuild` reads only the
+  project's lockfile, so `check.sh` step 2 (`scripts/check-package-pins.sh`) fails unless
+  `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
 - **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (all of `check.sh`),

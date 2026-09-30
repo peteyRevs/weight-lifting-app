@@ -6,7 +6,7 @@ import Testing
 
 extension RenderingSuites {
     /// Specimen sheets of every token, recorded on the PR-plan simulators (iPhone 17 / Apple Watch
-    /// Series 11 46 mm, OS 26.5). The phone sheets run the criterion 3 matrix.
+    /// Series 12 46 mm, OS 27.0; F32). The phone sheets run the criterion 3 matrix.
     @Suite("TokenSnapshots", .tags(.design, .snapshot))
     struct TokenSnapshotTests {
         #if os(iOS)

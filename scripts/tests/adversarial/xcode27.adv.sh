@@ -57,6 +57,12 @@ for reported in 27.1 27 127.0 27.01 7.0 26.6; do
     check "XV06 pinned 27.0, Xcode $reported -> refused (no prefix, suffix or major-only match)" \
         is "$(refused 27.0 "$reported")" "1 11 0"
 done
+# F32 fix round (T4): a pin saved with a CRLF, or padded, reads as 27.0 here and in the CI Select steps (WF57).
+xv '27.0\r\n' 27.0
+crlf="$code $out"
+xv ' 27.0 \r\n' 27.0
+check "XV14 a pin with a CRLF, or padded with spaces, reads as 27.0 -> exit 0 (the Select steps agree: WF57)" \
+    is "$crlf|$code $out" "0 Xcode 27.0 ✓|0 Xcode 27.0 ✓"
 xv MISSING 27.0
 check "XV07 no .xcode-version -> non-zero, naming the file, no ✓" \
     is "$([[ $code -ne 0 ]] && echo nonzero) $(grep -c 'xcode-version' <<<"$out") $(grep -c '✓' <<<"$out")" "nonzero 1 0"
@@ -211,6 +217,77 @@ pins "$PROJECT_RESOLVED" >"$T/pins-project.json"
 check "PL01 [T1] LedgerKit/Package.resolved pins exactly what the project's (CI-proven) Package.resolved pins" \
     diff "$T/pins-project.json" "$T/pins-ledgerkit.json"
 
+# [T1, fix round] check.sh step 2 now enforces PL01 on every run that lints (--lint-only and the full gate,
+# locally and on CI: W02, W04, W48) with scripts/check-package-pins.sh. It runs here on copies of the lockfiles.
+PP="$T/pins"
+PROJECT_REL="Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+mkdir -p "$PP/repo/scripts" "$PP/repo/LedgerKit" "$PP/repo/$(dirname "$PROJECT_REL")" "$PP/files"
+cp "${ADV_CHECK_PINS:-$ROOT/scripts/check-package-pins.sh}" "$PP/repo/scripts/check-package-pins.sh" # override: mutants
+place() { if [[ "$1" == MISSING ]]; then rm -f "$2"; else cp "$1" "$2"; fi; }
+pinscheck() { # <LedgerKit's lockfile> <the project's lockfile>, either may be MISSING: sets $code, $out
+    place "$1" "$PP/repo/LedgerKit/Package.resolved"
+    place "$2" "$PP/repo/$PROJECT_REL"
+    out="$(cd "$T" && "$PP/repo/scripts/check-package-pins.sh" 2>&1)"
+    code=$?
+}
+committed="$ROOT/LedgerKit/Package.resolved"
+edit() { jq "$2" "$committed" >"$PP/files/$1.resolved" && echo "$PP/files/$1.resolved"; } # <name> <jq filter>
+
+pinscheck "$committed" "$PROJECT_RESOLVED"
+check "PL03 the committed lockfiles agree -> exit 0 (run from another directory)" \
+    is "$code $(grep -c '^package pins agree' <<<"$out")" "0 1"
+# The regression itself: main's LedgerKit/Package.resolved before F32, which Swift 6.3 wrote
+# (xctest-dynamic-overlay 1.13.1 where 6.4 pins swift-issue-reporting 2.1.1). check.sh needs full history.
+PRE_F32=e94b50131be8fc8042caa7314c998122862eb8fd
+if git -C "$ROOT" show "$PRE_F32:LedgerKit/Package.resolved" >"$PP/files/swift63.resolved" 2>/dev/null; then
+    pinscheck "$PP/files/swift63.resolved" "$PROJECT_RESOLVED"
+    check "PL04 [T1] a stale LedgerKit lockfile (main's before F32) -> exit 1, the diff naming both pins, and the fix" \
+        is "$code $(grep -c '^-{.*"identity":"swift-issue-reporting"' <<<"$out") \
+$(grep -c '^+{.*"identity":"xctest-dynamic-overlay"' <<<"$out") $(grep -c 'swift package --package-path LedgerKit resolve' <<<"$out")" \
+        "1 1 1 1"
+    pinscheck "$committed" "$PP/files/swift63.resolved"
+    check "PL05 ... and a stale project lockfile against a current LedgerKit one -> exit 1" is "$code" 1
+else
+    fail "PL04 a stale LedgerKit lockfile fails" "no $PRE_F32 here: check.sh needs full history (fetch-depth: 0)"
+fi
+# Any one pin that differs fails, whichever file holds it. The project's may not hold a package LedgerKit's
+# graph lacks either (an app-level package: engineering-standards §1).
+grdb='.pins[] | select(.identity == "grdb.swift")'
+for mutant in \
+    "revision:($grdb | .state.revision) = \"0000000000000000000000000000000000000000\"" \
+    "version:($grdb | .state.version) = \"7.11.0\"" \
+    "location:($grdb | .location) = \"https://github.com/someone/grdb.swift\"" \
+    "kind:($grdb | .kind) = \"localSourceControl\"" \
+    "branch:($grdb | .state) += {branch: \"master\"}" \
+    "one-pin-short:.pins |= .[1:]" \
+    "extra-pin:.pins += [{identity: \"swift-case-paths\", kind: \"remoteSourceControl\",
+        location: \"https://github.com/pointfreeco/swift-case-paths\",
+        state: {revision: \"1111111111111111111111111111111111111111\", version: \"1.7.2\"}}]"; do
+    mutated="$(edit "${mutant%%:*}" "${mutant#*:}")" || { fail "PL06 (${mutant%%:*})" "jq could not apply it"; continue; }
+    pinscheck "$mutated" "$PROJECT_RESOLVED"; ledgerkit_side="$code"
+    pinscheck "$committed" "$mutated"; project_side="$code"
+    check "PL06 one pin differs (${mutant%%:*}), in LedgerKit's lockfile or in the project's -> exit 1 both ways" \
+        is "$ledgerkit_side $project_side" "1 1"
+done
+# SwiftPM writes an originHash per root manifest (Xcode 26.6 wrote two over equal pins); order and layout
+# are not pins either.
+reshaped="$(edit reshaped '.originHash = "20eb7c62c8798f501f39bee916360b8758851e803db14d7500540cbf164a0a8d"
+    | .pins |= (reverse | map(to_entries | reverse | from_entries))')"
+jq -c . "$PROJECT_RESOLVED" >"$PP/files/compact.resolved"
+pinscheck "$reshaped" "$PP/files/compact.resolved"
+check "PL07 another originHash, pins and keys in another order, compact JSON -> still agree, exit 0" is "$code" 0
+printf '{"pins": [' >"$PP/files/truncated.resolved"
+echo '{"originHash": "x", "version": 3}' >"$PP/files/no-pins.resolved"
+unreadable=""
+tally() { unreadable="$unreadable$([[ $code -ne 0 ]] && echo nonzero || echo 0)$(grep -c '^package pins agree' <<<"$out") "; }
+pinscheck MISSING "$PROJECT_RESOLVED"; tally
+pinscheck "$committed" MISSING; tally
+pinscheck MISSING MISSING; tally
+pinscheck "$PP/files/no-pins.resolved" "$PP/files/no-pins.resolved"; tally
+pinscheck "$PP/files/truncated.resolved" "$PROJECT_RESOLVED"; tally
+check "PL08 a missing lockfile (either or both), neither with pins, or truncated JSON -> non-zero, never 'agree'" \
+    is "$unreadable" "nonzero0 nonzero0 nonzero0 nonzero0 nonzero0 "
+
 # A stale lockfile fails from cold packages. Opt-in: it clones every package (the local SwiftPM cache helps).
 if [[ "${ADV_COLD_PINS:-}" == 1 ]]; then
     CP="$T/cold"
@@ -302,18 +379,40 @@ SH
 printf '#!/bin/sh\nprintf "Xcode 27.0\\nBuild version 27A266a\\n"\n' >"$SEL/bin/xcodebuild"
 chmod +x "$SEL/bin/sudo" "$SEL/bin/xcode-select" "$SEL/bin/xcodebuild"
 export SELECTED="$SEL/selected"
-: >"$SELECTED"
-ran=""
-for w in pr nightly; do
-    while IFS= read -r step; do
-        [[ -z "$step" ]] && continue
-        (cd "$SEL/repo" && PATH="$SEL/bin:$PATH" bash -eo pipefail -c "$(jq -r '.' <<<"$step")") >/dev/null 2>&1 &&
-            ran="${ran}ok " || ran="${ran}failed "
-    done < <(jq -c '.jobs[] | select(."runs-on" | startswith("ubuntu") | not) | .steps[] | select(.run // "" | test("xcode-select -s")) | .run' \
-        "$T/$w.json")
-done
+select_steps() { # runs every Mac job's Select step against $SEL/repo/.xcode-version: "ok|failed ...", then the paths
+    : >"$SELECTED"
+    local w step ran=""
+    for w in pr nightly; do
+        while IFS= read -r step; do
+            [[ -z "$step" ]] && continue
+            (cd "$SEL/repo" && PATH="$SEL/bin:$PATH" bash -eo pipefail -c "$(jq -r '.' <<<"$step")") >/dev/null 2>&1 &&
+                ran="${ran}ok " || ran="${ran}failed "
+        done < <(jq -c '.jobs[] | select(."runs-on" | startswith("ubuntu") | not) | .steps[] | select(.run // "" | test("xcode-select -s")) | .run' \
+            "$T/$w.json")
+    done
+    printf '%s%s' "$ran" "$(sort -u "$SELECTED" | tr '\n' ' ')"
+}
 check "WF57 every Select step, run with the committed pin, selects an Xcode the xcode-27 image has" \
-    is "$ran$(sort -u "$SELECTED" | tr '\n' ' ')" "ok ok ok /Applications/Xcode_27.0.app "
+    is "$(select_steps)" "ok ok ok /Applications/Xcode_27.0.app "
+# F32 fix round (T4): a pin saved with a CRLF, or padded, reads as check-xcode-version.sh reads it (XV14).
+printf '27.0\r\n' >"$SEL/repo/.xcode-version"
+crlf="$(select_steps)"
+printf ' 27.0 \r\n' >"$SEL/repo/.xcode-version"
+check "WF57 ... and with a CRLF, or padded with spaces, the same Xcode (no Xcode_27.0\\r.app)" \
+    is "$crlf|$(select_steps)" "ok ok ok /Applications/Xcode_27.0.app |ok ok ok /Applications/Xcode_27.0.app "
+cp "$ROOT/.xcode-version" "$SEL/repo/.xcode-version"
+
+# F32 fix round (T5): every Mac job checks the selected Xcode against the pin before it builds: the nightly's
+# jobs in the run step right after Select, and Check by running check.sh, whose step 0 is that check (W40).
+checked="$(for w in pr nightly; do
+    jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
+        | [.value.steps[] | select(.run) | .run] as $runs
+        | ($runs | map(test("xcode-select -s")) | index(true)) as $sel
+        | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check(-xcode-version)?\\.sh$") then "checked" else "unchecked" end)"' \
+        "$T/$w.json"
+done | tr '\n' ' ')"
+check "WF60 each Mac job's next run step after Select checks the Xcode against .xcode-version (the nightly too)" \
+    is "$checked" "check:checked test:checked dependencies:checked "
 
 # actionlint: the config only teaches it the preview label; a mistyped label still fails.
 check "WF58 .github/actionlint.yaml declares the xcode-27 label and nothing else" \

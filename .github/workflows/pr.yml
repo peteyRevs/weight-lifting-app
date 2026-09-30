@@ -54,16 +54,19 @@ jobs:
     name: Check
     needs: scope
     if: needs.scope.outputs.code != 'false' # a missing output runs Check
-    # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). If it
-    # breaks, fall back to macos-26 with .xcode-version 26.6 and check.sh's 26.5 destinations (F32).
+    # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). macos-26
+    # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
+    # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
-      - name: Select Xcode from .xcode-version # the xcode-27 image links Xcode_27.0.app to Xcode_27.app
-        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+      # The xcode-27 image links Xcode_27.0.app to Xcode_27.app. The pin is read as check.sh step 0 reads
+      # it (check-xcode-version.sh), whitespace and a CRLF stripped.
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Cache Swift package checkouts
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

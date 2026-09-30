@@ -80,10 +80,11 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     mise exec -- swiftformat --lint --swift-version 6.4 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
 
-    # ---- 2. lint + package graph --------------------------------------------
-    step "2 · lint (swiftlint --strict) + package graph + script tests"
+    # ---- 2. lint + package graph and pins -----------------------------------
+    step "2 · lint (swiftlint --strict) + package graph and pins + script tests"
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}
     scripts/check-package-graph.sh
+    scripts/check-package-pins.sh # LedgerKit's lockfile pins what the project's (CI-proven) one pins
     for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
 fi
