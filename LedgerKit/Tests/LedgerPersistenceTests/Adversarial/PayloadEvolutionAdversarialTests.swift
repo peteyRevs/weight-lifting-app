@@ -19,7 +19,7 @@ struct PayloadEvolutionAdversarialTests {
         return Data(json.replacingOccurrences(of: "\"doneAt\"", with: "\"at\"").utf8)
     }
 
-    @Test("Decided: one payload the current codec cannot read is left out and kept; the rest of its log reads")
+    @Test("Decided: a payload the codec cannot read is left out and kept until a readable copy repairs it")
     func oneLegacyPayload_isLeftOut_andTheLogStillReads() async throws {
         let queue = try LedgerDatabase.inMemory()
         let store = GRDBWorkoutEventStore(queue, now: { EventBuilders.start })
@@ -42,11 +42,13 @@ struct PayloadEvolutionAdversarialTests {
         // The two readable envelopes still read back, so replay (and recovery, ADR-004 rule 6) can start.
         #expect(try await store.envelopes(for: Contract.workout) == readable)
         #expect(try await store.unreadableCount(for: Contract.workout) == 1)
-        // A redelivery of that key is skipped, and the legacy row is kept for a version that can read it.
-        #expect(try await store.append([legacy]).isEmpty)
-        #expect(try await queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM workout_event") } == 3)
         #expect(try await store.uncompactedWorkoutIDs() == [Contract.workout])
         #expect(try await store.highestSeq(for: Contract.workout, device: EventBuilders.watch) == 2)
+        // Fix round 2 (review SF2): a readable redelivery of that key repairs the legacy row and counts as new.
+        #expect(try await store.append([legacy]) == [legacy])
+        #expect(try await queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM workout_event") } == 3)
+        #expect(try await store.unreadableCount(for: Contract.workout) == 0)
+        #expect(try await Set(store.envelopes(for: Contract.workout)) == Set(readable + [legacy]))
     }
 
     @Test("Decided: a settings row written before a Settings field existed loads with that field's default")

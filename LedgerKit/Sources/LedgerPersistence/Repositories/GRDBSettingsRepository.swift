@@ -15,8 +15,9 @@ public struct GRDBSettingsRepository: SettingsRepository {
     }
 
     /// The saved settings, or `Settings.default` before the first save. A key missing from the stored
-    /// JSON takes its default (`Settings.init(from:)`). A row in a payload version this app does not know
-    /// throws `LedgerPersistenceError.unknownPayloadVersion`, and the row is left as it is.
+    /// JSON takes its default (`Settings.init(from:)`). A row this app cannot read throws and is left as it
+    /// is: `LedgerPersistenceError.unknownPayloadVersion` for a later payload version, `.malformedColumn`
+    /// for a damaged column, and `DecodingError` for JSON holding an invalid value.
     public func load() async throws -> Settings {
         try await queue.read { database in try Self.fetch(database) }
     }
@@ -38,7 +39,9 @@ public struct GRDBSettingsRepository: SettingsRepository {
         }
     }
 
-    /// The settings now, then after every save that changes them.
+    /// The settings now, then after every save that changes them. The stream ends, with the error logged,
+    /// when the row cannot be read (`load()` says why); F07 and F14 then fall back to the defaults in
+    /// memory without saving over the row.
     public func observe() -> AsyncStream<Settings> {
         ValueObservation.tracking { database in try Self.fetch(database) }
             .removeDuplicates()
@@ -47,12 +50,21 @@ public struct GRDBSettingsRepository: SettingsRepository {
 
     private static let rowID = "singleton"
 
+    /// Reads the columns as values, so a damaged one (a version stored as text or a blob, a payload that is
+    /// not UTF-8 text) throws `LedgerPersistenceError.malformedColumn` rather than trapping, and never
+    /// falls back to the defaults, which a later save would write over the lifter's settings.
     private static func fetch(_ database: Database) throws -> Settings {
         let sql = "SELECT payload_version, payload FROM settings WHERE id = ?"
         guard let row = try Row.fetchOne(database, sql: sql, arguments: [rowID]) else {
             return .default
         }
-        return try SettingsCodec.decode(Data((row["payload"] as String).utf8), version: row["payload_version"])
+        guard let version = Int.fromDatabaseValue(row["payload_version"]) else {
+            throw LedgerPersistenceError.malformedColumn("settings.payload_version")
+        }
+        guard let payload = String.fromDatabaseValue(row["payload"]) else {
+            throw LedgerPersistenceError.malformedColumn("settings.payload")
+        }
+        return try SettingsCodec.decode(Data(payload.utf8), version: version)
     }
 }
 

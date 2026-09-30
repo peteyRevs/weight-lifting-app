@@ -8,7 +8,8 @@ import Testing
 /// F05 S1 adversarial round 2 (close-out): `workout_event.payload_version` from the fix round. Every row is
 /// written in version 1, and no writer may leave it out. A row this app cannot read (a later or unknown
 /// version, a damaged version column, damaged bytes) is left out of its log in the log's order, counted per
-/// workout, kept byte for byte, and its key stays taken; compaction deletes it with its log.
+/// workout, kept byte for byte, and its key stays taken; compaction deletes it with its log. Fix round 2
+/// (review SF2, orchestrator decision): the first readable envelope appended with its key repairs it.
 @Suite("Adversarial S1 round 2 · payload versions", .tags(.persistence), .timeLimit(.minutes(1)))
 struct PayloadVersionAdversarialTests {
     typealias Contract = WorkoutEventStoreContract
@@ -33,17 +34,6 @@ struct PayloadVersionAdversarialTests {
     static func store() throws -> (GRDBWorkoutEventStore, DatabaseQueue) {
         let queue = try LedgerDatabase.inMemory()
         return (GRDBWorkoutEventStore(queue, now: { EventBuilders.start }), queue)
-    }
-
-    /// Every `workout_event` row, every column quoted, so any change of value or storage class shows.
-    static func dump(_ queue: DatabaseQueue) async throws -> [String] {
-        try await queue.read { database in
-            try String.fetchAll(database, sql: """
-            SELECT id || ',' || quote(workout_id) || ',' || quote(device_id) || ',' || seq || ',' || quote(wall_clock)
-                || ',' || quote(payload_version) || ',' || quote(payload) || ',' || quote(created_at)
-            FROM workout_event ORDER BY id
-            """)
-        }
     }
 
     @Test("Every row either writer makes is the integer 1, and a row without a version is refused")
@@ -84,7 +74,7 @@ struct PayloadVersionAdversarialTests {
     }
 
     @Test(
-        "Random damage: each log reads its readable rows in order, counts its unreadable ones, and a resend is a no-op",
+        "Random damage: each log reads its readable rows in order and counts the rest; a resend repairs exactly those",
         .tags(.property),
         arguments: PropertySeed.all
     )
@@ -115,44 +105,55 @@ struct PayloadVersionAdversarialTests {
             }
         }
         #expect(try await Set(store.uncompactedWorkoutIDs()) == Set(log.map(\.workoutID)), "\(seed)")
-        #expect(try await store.append(log.shuffled(using: &random)).isEmpty, "\(seed)")
         #expect(try await Self.dump(queue) == before, "\(seed)")
-    }
-
-    /// Up to five skips per device in each workout, keys unique per workout, shuffled across workouts.
-    static func randomLog(using random: inout SeededGenerator) -> [EventEnvelope] {
-        var log: [EventEnvelope] = []
-        for workout in workouts {
-            for device in devices {
-                let count = Int.random(in: 0 ... 5, using: &random)
-                log += (0 ..< count).map { Contract.skip(UInt64($0 + 1), device, in: workout) }
-            }
+        // Fix round 2: a resend repairs exactly the damaged rows, in the order given, and leaves every other
+        // row as it was.
+        let resend = log.shuffled(using: &random)
+        let lost = Set(damaged.map { log[$0] })
+        let repaired = resend.filter(lost.contains)
+        #expect(try await store.append(resend) == repaired, "\(seed)")
+        let after = try await Self.dump(queue)
+        #expect(before.indices.allSatisfy { damaged.contains($0) || before[$0] == after[$0] }, "\(seed)")
+        for workout in Self.workouts {
+            #expect(try await store.unreadableCount(for: workout) == 0, "\(seed)")
+            #expect(try await store.envelopes(for: workout) == log.filter { $0.workoutID == workout }, "\(seed)")
         }
-        return log.shuffled(using: &random)
     }
 
     @Test(
-        "A key whose row is unreadable stays taken: a copy or a rival is skipped, never a conflict or an overwrite",
+        "A key whose row is unreadable is repaired by the first readable envelope with it; then contents count",
         arguments: ["payload_version = 2", "payload = x'FFFE00'"]
     )
-    func append_overAnUnreadableKey_skipsIt(_ damage: String) async throws {
+    func append_overAnUnreadableKey_repairsIt(_ damage: String) async throws {
         let (store, queue) = try Self.store()
         _ = try await store.append([Contract.skip(1), Contract.skip(2)])
         try await queue.write { try $0.execute(sql: "UPDATE workout_event SET \(damage) WHERE seq = 1") }
         let unreadable = try await Self.dump(queue).first
-        #expect(try await store.append([Contract.skip(1), Contract.skip(3)]) == [Contract.skip(3)])
-        #expect(try await store.append([Contract.extend(1), Contract.skip(4)]) == [Contract.skip(4)])
-        // (documents) Two different envelopes with that key in one batch are both skipped too; with the key
-        // free, the second would conflict (the contract's conflictWithinBatch).
-        #expect(try await store.append([Contract.skip(1), Contract.extend(1)]).isEmpty)
-        // A rival of a readable key still rejects its whole batch.
-        await #expect(throws: EngineError.conflictingEnvelope(Contract.skip(2).key)) {
-            try await store.append([Contract.skip(1), Contract.skip(5), Contract.extend(2)])
+        // Two different envelopes with that key in one batch: the first repairs, the second conflicts, and the
+        // batch rolls back with the repair.
+        await #expect(throws: EngineError.conflictingEnvelope(Contract.skip(1).key)) {
+            try await store.append([Contract.extend(1), Contract.skip(1)])
         }
         #expect(try await Self.dump(queue).first == unreadable)
-        #expect(try await store.unreadableCount(for: Contract.workout) == 1)
-        #expect(try await store.envelopes(for: Contract.workout) == [2, 3, 4].map { Contract.skip($0) })
-        #expect(try await store.highestSeq(for: Contract.workout, device: EventBuilders.watch) == 4)
+        // (documents) The store cannot read what it replaces, so the first readable envelope wins, whichever it is.
+        #expect(try await store.append([Contract.extend(1), Contract.skip(3)]) == [
+            Contract.extend(1),
+            Contract.skip(3)
+        ])
+        #expect(try await store.unreadableCount(for: Contract.workout) == 0)
+        // Once readable, the key judges contents again, and a rival of a readable key rejects its whole batch.
+        await #expect(throws: EngineError.conflictingEnvelope(Contract.skip(1).key)) {
+            try await store.append([Contract.skip(4), Contract.skip(1)])
+        }
+        await #expect(throws: EngineError.conflictingEnvelope(Contract.skip(2).key)) {
+            try await store.append([Contract.skip(5), Contract.extend(2)])
+        }
+        #expect(try await store.envelopes(for: Contract.workout) == [
+            Contract.extend(1),
+            Contract.skip(2),
+            Contract.skip(3)
+        ])
+        #expect(try await store.highestSeq(for: Contract.workout, device: EventBuilders.watch) == 3)
     }
 
     @Test("Compacting a log deletes its unreadable rows with it and frees their keys; other logs keep theirs")
@@ -173,5 +174,30 @@ struct PayloadVersionAdversarialTests {
         #expect(try await store.unreadableCount(for: two) == 2)
         #expect(try await store.append(first) == first)
         #expect(try await store.envelopes(for: one) == first)
+    }
+}
+
+extension PayloadVersionAdversarialTests {
+    /// Every `workout_event` row, every column quoted, so any change of value or storage class shows.
+    static func dump(_ queue: DatabaseQueue) async throws -> [String] {
+        try await queue.read { database in
+            try String.fetchAll(database, sql: """
+            SELECT id || ',' || quote(workout_id) || ',' || quote(device_id) || ',' || seq || ',' || quote(wall_clock)
+                || ',' || quote(payload_version) || ',' || quote(payload) || ',' || quote(created_at)
+            FROM workout_event ORDER BY id
+            """)
+        }
+    }
+
+    /// Up to five skips per device in each workout, keys unique per workout, shuffled across workouts.
+    static func randomLog(using random: inout SeededGenerator) -> [EventEnvelope] {
+        var log: [EventEnvelope] = []
+        for workout in workouts {
+            for device in devices {
+                let count = Int.random(in: 0 ... 5, using: &random)
+                log += (0 ..< count).map { Contract.skip(UInt64($0 + 1), device, in: workout) }
+            }
+        }
+        return log.shuffled(using: &random)
     }
 }

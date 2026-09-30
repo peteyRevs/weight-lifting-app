@@ -107,6 +107,11 @@ actor MutantEventStore: WorkoutEventStore {
         logs[workout, default: []]
     }
 
+    /// It keeps envelopes as values, so it can read all of them.
+    func unreadableCount(for _: WorkoutID) -> Int {
+        0
+    }
+
     func highestSeq(for workout: WorkoutID, device: DeviceID) -> UInt64? {
         let seqs = logs[workout, default: []].filter { $0.device == device }.map(\.seq)
         return mutation == .highestSeqIsLatest ? seqs.last : seqs.max()

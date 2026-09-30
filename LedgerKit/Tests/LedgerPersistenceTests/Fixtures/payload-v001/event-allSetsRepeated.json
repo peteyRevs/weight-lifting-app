@@ -1,0 +1,15 @@
+{
+  "device" : "00000000-0000-0000-0000-000000000D01",
+  "event" : {
+    "allSetsRepeated" : {
+      "exerciseIndex" : 0,
+      "reps" : 5,
+      "weight" : {
+        "grams" : "86182.5503"
+      }
+    }
+  },
+  "seq" : 5,
+  "wallClock" : 811228830,
+  "workoutID" : "00000000-0000-0000-0000-000000000100"
+}

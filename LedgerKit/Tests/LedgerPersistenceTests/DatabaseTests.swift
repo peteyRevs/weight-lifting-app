@@ -48,8 +48,12 @@ struct DatabaseTests {
         #expect(migrations == 1)
     }
 
+    /// Close-out finding 5: the test must pass while the Mac or the device is locked. It first opens with the
+    /// product's class (`completeUntilFirstUserAuthentication`, open after the first unlock), then reopens the
+    /// file with `completeUnlessOpen` while the first queue is still open, and never reopens a file of that
+    /// class, which a locked device refuses. So it needs no `.complete` and runs on the host and devices alike.
     @Test(
-        "Every open sets the protection on the file and its -wal, and the default is complete until first unlock",
+        "Every open sets the requested protection on the file and its -wal; the default is the product's class",
         .disabled(if: !keepsFileProtection, "the simulators accept a protection class but keep none")
     )
     func open_protectsTheFileAndItsCompanions() throws {
@@ -62,14 +66,14 @@ struct DatabaseTests {
                 .map { try FileManager.default.attributesOfItem(atPath: $0)[.protectionKey] as? FileProtectionType }
         }
         // Each queue stays open while it is checked, so the -wal exists.
-        let strict = try LedgerDatabase.open(at: url, protection: .completeUnlessOpen)
-        try withExtendedLifetime(strict) {
-            let requested = try protections()
-            #expect(requested == [.completeUnlessOpen, .completeUnlessOpen])
-            let reopened = try LedgerDatabase.open(at: url)
+        let product = try LedgerDatabase.open(at: url)
+        try withExtendedLifetime(product) {
+            let defaults = try protections()
+            #expect(defaults == Array(repeating: .completeUntilFirstUserAuthentication, count: 2))
+            let reopened = try LedgerDatabase.open(at: url, protection: .completeUnlessOpen)
             try withExtendedLifetime(reopened) {
-                let defaults = try protections()
-                #expect(defaults == Array(repeating: .completeUntilFirstUserAuthentication, count: 2))
+                let requested = try protections()
+                #expect(requested == [.completeUnlessOpen, .completeUnlessOpen])
             }
         }
     }

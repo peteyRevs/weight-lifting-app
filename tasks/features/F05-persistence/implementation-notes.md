@@ -181,21 +181,24 @@ Closes criteria 1, 7 and 8.
 | 1. schema, indexes, foreign keys | `SchemaTests.v001_newDatabase_matchesCommittedDDL` (against `Fixtures/schema-v001.sql`), `inMemory_foreignKeysOn_v001Applied`, `foreignKeys_rejectOrphans_andCascade`, `uniqueIndexes_areOnlyPrimaryKeys_andTheEventKey`; file databases: `DatabaseTests.open_newFile_isWALAndMigrated`, `open_existingFile_keepsRows_andMigratesOnce`, `open_protectsTheFileAndItsCompanions` (host and device only, see decision 5) |
 | 7. duplicates, `highestSeq` | `WorkoutEventStoreTests.appendTwice_keepsEachKeyOnce_highestSeqPerDevice`; contract clauses `newInGivenOrder`, `highestSeqIsMaximum`, `fullWidthSeq`, `readsBackExactlyOnce`; `append_realStamps_readBackExactly` (seeded) |
 | 8. compaction | `WorkoutEventStoreTests.compact_deletesRows_andUnlistsTheWorkout`; contract clause `compactOne`. Materialisation itself is S3; this tests compaction of any stored log |
-| F04 "Inputs" 1–4 | `WorkoutEventStoreTests.contract_clauseHolds` (all 13 clauses after fix round 1), `append_writesTheDocumentedColumns`, `append_comparesDecodedEnvelopes_notBytes`, `uniqueKey_refusesASecondRow` |
+| F04 "Inputs" 1–4 | `WorkoutEventStoreTests.contract_clauseHolds` (all 14 clauses after fix round 2), `append_writesTheDocumentedColumns`, `append_comparesDecodedEnvelopes_notBytes`, `uniqueKey_refusesASecondRow` |
 | ADR-007 storage | `ColumnCodecTests` (examples, refusals, seeded round-trips of weights, volumes and `REAL` dates) |
 | Settings | `SettingsRepositoryTests` (defaults, round trip in one row with `payload_version` 1, `observe` emissions, missing keys, a later payload version, an unreadable row) |
 | Versioned payloads (fix round 1) | `UnreadableEventRowTests` (a later version and damaged bytes: left out, counted, kept, their key skipped; version dispatch), `PayloadEvolutionAdversarialTests` (flipped to the decision), `SettingsTests.decoding_missingKeys_takeTheirDefaults`, `decoding_invalidPresentKey_throws`, contract clause `noneUnreadable` |
+| Payload v1 frozen, repair, clock (fix round 2) | `PayloadV1FixtureTests` (13 envelope fixtures, settings, case coverage), `UnreadableEventRowTests` (six damages: left out, counted, kept; repaired; rollback), `DamagedSettingsRowTests`, contract clause `newestFiniteStamp`, `DatabaseTests.open_protectsTheFileAndItsCompanions` (lock-safe) |
 
 ### Code lines
 
 Measured with a script that counts non-blank Swift lines that are not whole-line `//`/`///` comments
 (SQL inside the migration string counts as code).
-- **After fix round 1: about 580 lines, over the 500 target** (standards §10: under ~1,000, so no forced
+- **After fix round 2: about 623 lines, over the 500 target** (standards §10: under ~1,000, so no forced
   split):
-  - `LedgerPersistence` sources 554 (`Migrations.swift` 205, one column per line; the event store 125);
-  - `LedgerDomain` +26 (tolerant `Settings` decoding, `unreadableCount`);
+  - `LedgerPersistence` sources 589 (`Migrations.swift` 205, one column per line; the event store 153);
+  - `LedgerDomain` +34 (tolerant `Settings` decoding; `unreadableCount` and `newestWallClock` on the
+    protocol, with the latter's default);
   - `Package.swift` +2 and `coverage-thresholds.json` ±1, minus the 3-line placeholder.
-  - The two Device test plans gain 10 JSON lines each (configuration, not counted).
+  - The Device test plans' JSON and the payload fixtures are configuration and test data, not counted.
+- After fix round 1: about 580.
 - **The split considered:** (a) schema, `Columns`, `Database` and the settings repository, then (b) the event
   store, its codec and the moved contract. Rejected: the event store is what the adversarial round and fix
   round 1 exercised; the payload-version columns must land in v001 with the codecs that write them; and (a)
@@ -261,7 +264,8 @@ The adversarial round (`test-findings.md`, round 1) found no bug and asked three
     version public, the error private) and never deleted;
   - `highestSeq` and `uncompactedWorkoutIDs` still count the row, because its key is taken;
   - `append` skips an incoming envelope whose key such a row holds, since a key names one envelope, so the
-    incoming one is its copy. It is not new and not a conflict, so the batch goes on.
+    incoming one is its copy. It is not new and not a conflict, so the batch goes on. **Amended in fix
+    round 2 (SF2): the incoming readable envelope now repairs the row.**
 - **The count** is a new `WorkoutEventStore` requirement, `unreadableCount(for:) -> Int`. It has a default
   of `0` in a protocol extension, which is right for any store that keeps envelopes as values, so the
   in-memory reference and the test stores are unchanged. `GRDBWorkoutEventStore` implements it. It is on
@@ -318,3 +322,109 @@ The adversarial round (`test-findings.md`, round 1) found no bug and asked three
 - **Coverage:** LedgerPersistence **100.00 %** (391/391), LedgerDomain 98.98 %, overall 98.85 %.
 - **Device plan on the iOS simulator** (log `scratchpad/f05s1-deviceplan.log`): 2/2 targets ran and passed.
   The Device plans are not part of `check.sh`, so editing them after the full gate does not affect it.
+
+### Fix round 2 (2026-09-30): the close-out round and the review
+
+Inputs: `test-findings.md` "# Slice S1 — round 2" (minor bugs 4 and 5) and `review.md` "## Slice S1" (SF1–SF3,
+N1–N9), at `0131cc7` (main `2bcb442` merged in).
+
+**Orchestrator decision (2026-09-30), SF1: golden version-1 payloads.**
+- **Fixtures.** `LedgerPersistenceTests/Fixtures/payload-v001/` holds 13 envelope fixtures, one per
+  `WorkoutEvent` case, and `settings.json`. They are pretty-printed JSON written once by version 1's
+  encoders; the one-off generator was deleted.
+  - The fixtures cover sub-millisecond stamps and payload dates, `Weight` as decimal text, seq `UInt64.max`
+    and 2⁶³, a `"NaN"` stamp, `"+Infinity"` and `"-Infinity"` payload dates, and a `started` snapshot with
+    every optional field set.
+- **Literals.** `Support/PayloadV1.swift` holds their literal values. Its doc comment states the rule: never
+  edit a fixture; a Domain `Codable` change that fails these tests ships as payload version 2.
+- **Tests.** `PayloadV1FixtureTests` checks three things:
+  - each fixture decodes with `decode(_:version: 1)` to its literal (bit-exact on the NaN stamp);
+  - the codec's output today is the same JSON object as the fixture;
+  - every `WorkoutEvent` case has a fixture. An exhaustive `switch` in `PayloadV1.caseName` makes a new case
+    fail to compile until it is listed.
+- **Mutation check (by hand):** renaming `EventEnvelope`'s `workoutID` key with no version bump, the
+  review's surviving mutant, fails all 14 envelope fixture cases and nothing else. Reverted.
+
+**Orchestrator decision (2026-09-30), SF2: repair on re-append.** This amends fix round 1's "skip".
+- **Behaviour.** When `append` meets a stored key whose row is unreadable (unknown version, damaged bytes, or
+  a column of the wrong kind), the incoming readable envelope overwrites that row's `wall_clock`,
+  `payload_version` and `payload`, and is returned as newly stored. The repair is logged at notice level.
+- **Scope.** The repair is part of the batch, so a conflict later in the batch rolls it back. The store
+  cannot read what it replaces, so the first readable envelope with the key wins, whichever it is. The
+  test marks this as "(documents)". After that, the key judges contents again.
+- **Tests:** `UnreadableEventRowTests.readableCopy_repairsTheRow` and `repair_inAConflictingBatch_rollsBack`,
+  over six damages; round 2's `PayloadVersionAdversarialTests` (the property test's resend now repairs
+  exactly the damaged rows, and the unreadable-key test is rewritten) and `PayloadEvolutionAdversarialTests`.
+  A readable row with a different envelope still conflicts (both suites, and the contract).
+- **Docs.** The protocol's `append` and `unreadableCount` doc comments, and F17's "Inputs from F05", say it.
+
+**Orchestrator decision (2026-09-30), SF3: clock recovery.**
+- **API.** `WorkoutEventStore.newestWallClock() async throws -> Date?`. `GRDBWorkoutEventStore` reads
+  `MAX(wall_clock)` directly, bounded to finite values, so unreadable rows count and NULL or non-finite stamps
+  do not.
+- **Default.** The protocol extension computes the same value from `envelopes(for:)` of the uncompacted logs.
+  That is correct for any store whose envelopes are all readable, so the in-memory reference and the test
+  stores need nothing.
+- **Tests.** A contract clause, `newestFiniteStamp`, runs on both stores: an empty store gives `nil`, ±∞/NaN
+  are skipped, the value is exact to the sub-millisecond, and compaction removes a log's stamps.
+  `UnreadableEventRowTests` shows an unreadable row's stamp is the newest.
+- **Docs.** F17's "Inputs from F05" says launch recovery uses it.
+
+**Orchestrator decision (2026-09-30), finding 4: a damaged settings column throws, never traps or defaults.**
+- **Fix.** `GRDBSettingsRepository.fetch` reads both columns as values:
+  - a version that is not an integer (text, a blob, or beyond `Int` on arm64_32) throws
+    `LedgerPersistenceError.malformedColumn("settings.payload_version")`;
+  - a payload that is not UTF-8 text throws `.malformedColumn("settings.payload")`. This is a new error case.
+- **Observation.** `observe()` then ends, with the error logged.
+- **Tests.** `DamagedSettingsRowTests` covers four shapes (version `'two'` and `x'01'`; payload `x'FFFE7B7D'`
+  and `x'80'`), and the row is kept. Round 2's exit test `damagedRow_failsLoad_neverTraps` now passes on the
+  host.
+  - A number in `payload` is not this kind of damage: `TEXT` affinity stores it as text, and load fails with
+    `DecodingError`, as for any invalid JSON.
+- **The event store (review N4).** It reads its columns the same way. A wrongly typed version or payload
+  makes the row unreadable and repairable, never a trap. `UnreadableEventRowTests` covers text and blob
+  versions and non-UTF-8 payloads.
+
+**Orchestrator decision (2026-09-30), finding 5: a protection test that passes while locked.**
+- **Why it failed.** The old test opened with `completeUnlessOpen` (class B), then reopened the file, which
+  a locked device refuses.
+- **The fix.** It now opens with the product's class (`completeUntilFirstUserAuthentication`), which opens
+  while locked after the first unlock. It then reopens with class B while the first queue is still open,
+  and never reopens a class-B file.
+  - It still proves that every open sets the requested class, on the file and its `-wal`.
+  - It needs no `.complete`, so it stays on the host and in the Device plans (skipped on simulators, which
+    keep no class).
+  - `.none` could not serve as the second class: on macOS it reads back as the default class.
+- **Not verified by me with a locked screen**; the reasoning is the tester's probe (a first open of either
+  class succeeds while locked; only a reopen of class B fails).
+
+**Nits.**
+
+| Nit | Done? | What or why not |
+|---|---|---|
+| N1 `unreadableCount` default | Done | The default is dropped. The requirement's doc says a wrapper must forward it, and each test conformer (the in-memory store, `MutantEventStore`, `Since1970StampStore`, `LossyEventStore`, `MutantGRDBStore`) returns 0 explicitly. `newestWallClock` keeps its default because it is derived from the protocol, not a constant. |
+| N2 settings stream ends silently | Done | The `observe()` doc comment, and "Inputs from F05" in F07 and F14: fall back to defaults in memory, never save over the row. |
+| N3 `null` taken as missing | Done | The doc says "missing, or holding `null`"; round 2's "(documents)" test pins it. |
+| N4 wrongly typed event columns trap | Done | Read as values; see finding 4. |
+| N5 double decode, repeated logging, statements per envelope | Partly | `append` now prepares its three statements once per transaction (`cachedStatement`). Skipped: one fetch for `envelopes` + `unreadableCount` and log-once need an API or state change (a design call), and logs are tens to hundreds of rows. |
+| N6 `highestSeq` temporary B-tree | Done | `COALESCE` of two `MAX` subqueries (negative seqs first), both covering-index searches; the contract's `fullWidthSeq` and the round-1 tests still pass. |
+| N7 byte-equality fast path | Skipped | It would make the GRDB store accept an exact NaN redelivery that the in-memory reference rejects, so the two stores would diverge on the contract. F17 drops non-finite stamps on receipt instead (decision 9). |
+| N8 escaping errors undocumented | Done | `LedgerPersistenceError`'s doc lists what reaches callers unwrapped. Wrapping them is S2's call. |
+| N9 criterion 8 only partly closed | Tracked | S3 re-closes it with a `materialize` → `compact` test. |
+| Architecture §7 lacks `personal_record` (round 2, noted) | Done | A row: derived, never synced (F05). |
+
+**Gate after fix round 2 (2026-09-30):**
+- **`scripts/check.sh --fast`: green.** `LedgerPersistenceTests` has 91 tests, round 2's exit test and the
+  protection test included; `LedgerDomainTests` has 689.
+- **Full gate, through the lock: green** (280 s; log `scratchpad/f05s1-fix2.log`). 17/17 PR targets on iOS
+  and 8/8 PR-Watch targets on watchOS. `LedgerPersistenceTests` on each simulator: 88 passed and 2 skipped
+  by design (protection, timing).
+- **Coverage:** LedgerPersistence **96.88 %** (405/418; threshold 90), LedgerDomain 98.82 %, overall 98.21 %.
+  - The iOS bundle measures every persistence file at 100 % (405/405).
+  - The watchOS bundle adds 13 lines. They are function records with zero counts (`StoredPayload.envelope()`
+    at line 152, and a closure of `envelopes(for:)` at line 65), placed where those functions stood before
+    this round; the current records (line 182: 9/9) are covered. That looks like a stale object in the
+    incremental watchOS build. `coverage-gate.sh` keeps the measurement with more lines, so it counts them.
+    It is not a gap in the code, and a clean build should drop it; worth knowing if the watch number ever
+    looks odd.
+- **The Device plans** were not re-run: this round did not change them.

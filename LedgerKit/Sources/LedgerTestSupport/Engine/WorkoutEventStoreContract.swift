@@ -4,9 +4,9 @@ import LedgerDomain
 /// `WorkoutEventStore`'s documented contract as named clauses, which every store runs: the in-memory
 /// reference in `LedgerDomainTests` and `GRDBWorkoutEventStore` in `LedgerPersistenceTests`.
 ///
-/// F04 wrote it in its test target; F05 moved it here, public API only, and added four clauses: a stamp
-/// that a trip through seconds since 1970 alters, a `seq` of `UInt64.max`, non-finite stamps, and
-/// `unreadableCount(for:)` of what the store itself wrote.
+/// F04 wrote it in its test target; F05 moved it here, public API only, and added five clauses: a stamp
+/// that a trip through seconds since 1970 alters, a `seq` of `UInt64.max`, non-finite stamps,
+/// `unreadableCount(for:)` of what the store itself wrote, and `newestWallClock()`.
 /// `EventStoreMutationAdversarialTests` (F04) checks that the clauses catch plausible store bugs.
 public enum WorkoutEventStoreContract {
     /// One clause: it gets a fresh, empty store and returns `nil` when the store keeps the clause, or
@@ -39,7 +39,8 @@ public enum WorkoutEventStoreContract {
         Clause(name: "a malformed envelope is stored like any other", check: malformedIsStored),
         Clause(name: "a non-finite date (±∞, NaN) is stored like any other", check: nonFiniteIsStored),
         Clause(name: "an envelope reads back once and exactly, to the last bit", check: readsBackExactlyOnce),
-        Clause(name: "a store can read every envelope it stored: none is unreadable", check: noneUnreadable)
+        Clause(name: "a store can read every envelope it stored: none is unreadable", check: noneUnreadable),
+        Clause(name: "newestWallClock is the largest finite stamp in any uncompacted log", check: newestFiniteStamp)
     ]
 
     /// Every clause's complaint about a store from `make`, which is called once per clause.

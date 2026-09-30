@@ -2,7 +2,7 @@ import Foundation
 import LedgerDomain
 
 /// The clauses of `WorkoutEventStore`'s doc comments (F04; F05 added `fullWidthSeq`, `nonFiniteIsStored`,
-/// `noneUnreadable` and the second stamp in `readsBackExactlyOnce`).
+/// `noneUnreadable`, `newestFiniteStamp` and the second stamp in `readsBackExactlyOnce`).
 extension WorkoutEventStoreContract {
     static func newInGivenOrder(_ store: any WorkoutEventStore) async throws -> String? {
         let (one, two, three) = (skip(1), skip(2), skip(3))
@@ -156,5 +156,26 @@ extension WorkoutEventStoreContract {
         let mine = try await store.unreadableCount(for: workout)
         let elsewhere = try await store.unreadableCount(for: other)
         return mine == 0 && elsewhere == 0 ? nil : "counted \(mine) and \(elsewhere) unreadable"
+    }
+
+    /// F05, ADR-004 "Recovery on launch": the hybrid logical clock restarts from the largest finite stamp
+    /// across the uncompacted logs, exactly, so a compacted log's stamps no longer count and non-finite
+    /// ones never do. (`UnreadableEventRowTests` adds unreadable rows for the GRDB store.)
+    static func newestFiniteStamp(_ store: any WorkoutEventStore) async throws -> String? {
+        let empty = try await store.newestWallClock()
+        let (infinite, nan) = (
+            Date(timeIntervalSinceReferenceDate: .infinity),
+            Date(timeIntervalSinceReferenceDate: .nan)
+        )
+        _ = try await store.append([
+            skip(1, at: 5), skip(2, at: 7.493_826_8), skip(1, in: other, at: 9),
+            EventBuilders.envelope(.restSkipped, device: EventBuilders.watch, seq: 3, at: infinite),
+            EventBuilders.envelope(.restSkipped, device: EventBuilders.watch, seq: 4, at: nan)
+        ])
+        let newest = try await store.newestWallClock()
+        try await store.compact(workout: other)
+        let remaining = try await store.newestWallClock()
+        return empty == nil && newest == at(9) && remaining == at(7.493_826_8)
+            ? nil : "got \([empty, newest, remaining])"
     }
 }

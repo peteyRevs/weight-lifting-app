@@ -55,9 +55,9 @@ extension Settings {
         case units, defaultRest, plateMathEnabled, autoRest, watchBuzz, weekStart, plateInventory
     }
 
-    /// A missing key takes its `Settings.default` value, so settings stored or sent before a field existed
-    /// still decode (F05 orchestrator decision, 2026-09-30: F28 adds `iCloudEnabled`). A key that is present
-    /// must still hold a valid value.
+    /// A missing key, or one holding `null`, takes its `Settings.default` value, so settings stored or sent
+    /// before a field existed still decode (F05 orchestrator decision, 2026-09-30: F28 adds `iCloudEnabled`).
+    /// A key that holds a value must hold a valid one.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = Settings.default

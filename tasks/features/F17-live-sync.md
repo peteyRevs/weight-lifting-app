@@ -224,5 +224,10 @@ onwards). Where they contradict this brief, they win, and the brief should be am
     materialising would save a workout with gaps;
   - keep it listed, and tell the lifter that part of the workout needs a newer version of Ledger.
 
-  `append` skips an envelope whose key is held by an unreadable row. That envelope is neither new nor a
-  conflict.
+  **Amended by F05 fix round 2 (review SF2):** when an envelope arrives whose key is held by an unreadable
+  row, `append` repairs the row. The incoming envelope overwrites it and is returned as newly stored, so the
+  host rebuilds as for any new envelope. A gap replay from the peer therefore heals a damaged row, and the
+  count drops.
+- **HLC recovery on launch** (review SF3): set `newest` from `WorkoutEventStore.newestWallClock()`, not from
+  the envelopes `envelopes(for:)` returns. It reads every uncompacted log's stamps, unreadable rows included,
+  and skips non-finite ones (ADR-004 amendment, "Recovery on launch").

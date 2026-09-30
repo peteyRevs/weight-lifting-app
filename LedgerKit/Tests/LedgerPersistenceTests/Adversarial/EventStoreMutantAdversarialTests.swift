@@ -151,6 +151,11 @@ struct MutantGRDBStore: WorkoutEventStore {
         }
     }
 
+    /// It writes only version-1 rows and never damages one, so none is unreadable.
+    func unreadableCount(for _: WorkoutID) async throws -> Int {
+        0
+    }
+
     func highestSeq(for workout: WorkoutID, device: DeviceID) async throws -> UInt64? {
         let order = mutation == .signedHighestSeq ? "seq DESC" : "seq < 0 DESC, seq DESC"
         let stored = try await queue.read { database in
