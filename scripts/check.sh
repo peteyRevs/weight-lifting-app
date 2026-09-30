@@ -8,6 +8,11 @@
 #   scripts/check.sh --skip-lint        steps 3–5 only (no format, lint or script tests)
 #   scripts/check.sh --record-snapshots re-record snapshot references on both
 #                                       simulators, then fail; re-run to verify
+#   scripts/check.sh --ios-only         steps 0–3 and 5: no watchOS step, and the coverage gate
+#                                       reads the iOS bundle alone. PR CI runs this (Pete,
+#                                       2026-09-30; docs/ci-cd.md); the full gate, before every
+#                                       merge, runs both. Combines with --skip-lint and
+#                                       --record-snapshots (iOS references only)
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
@@ -20,18 +25,19 @@ IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
 WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0}"
 RESULTS=".derivedData/Results"
 
-FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0
+FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --fast) FAST=1 ;;
         --lint-only) LINT_ONLY=1 ;;
         --skip-lint) SKIP_LINT=1 ;;
         --record-snapshots) RECORD_SNAPSHOTS=1 ;;
+        --ios-only) IOS_ONLY=1 ;;
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
-# --lint-only excludes every other flag, and --fast runs no snapshot tests to record.
-if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS) || FAST && RECORD_SNAPSHOTS )); then
+# --lint-only excludes every other flag, and --fast runs no simulator: no snapshots to record, no platform to pick.
+if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY) || FAST && (RECORD_SNAPSHOTS || IOS_ONLY) )); then
     echo "error: contradictory flags: $*" >&2
     exit 2
 fi
@@ -135,7 +141,7 @@ fi
 
 mkdir -p "$RESULTS"
 IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")" # resolve each to one simulator by UDID and unpair it
-WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"
+if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"; fi
 
 # ---- 3. iOS, 4. watchOS: build while the simulator boots, then test on it alone ----------
 # A fresh runner's simulators have never booted. Each parallel-testing clone paid that first boot
@@ -163,7 +169,14 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     done_step "$2 tests"
 }
 test_platform 3 iOS Ledger PR "$IOS_DEST" PR-iOS
-test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+if [[ $IOS_ONLY -eq 1 ]]; then
+    step "4 · watchOS skipped (--ios-only): the full gate and the nightly test it"
+    done_step "watchOS skipped (--ios-only)"
+    coverage=(--ios-only "$RESULTS/PR-iOS.xcresult")
+else
+    test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+    coverage=("$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult")
+fi
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
     git status --short -- ':(glob)**/__Snapshots__/**'
@@ -173,8 +186,12 @@ fi
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"
-scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
+scripts/coverage-gate.sh "${coverage[@]}"
 done_step "coverage"
 
 summary
-printf '\n\033[32mcheck.sh OK\033[0m\n'
+if [[ $IOS_ONLY -eq 1 ]]; then
+    printf '\n\033[32mcheck.sh (--ios-only) OK\033[0m\n' # not the full gate: that one tests watchOS too
+else
+    printf '\n\033[32mcheck.sh OK\033[0m\n'
+fi

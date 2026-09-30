@@ -1,6 +1,6 @@
 # ADR-006: GitHub Actions for quality gates; Xcode Cloud for signing and delivery; release-please for versions
 
-**Status:** Accepted · **Date:** 2026-09-16 · **Amended:** 2026-09-29 (Xcode 27) · **Evidence:** `docs/research/R3-tooling-ci.md` §4–§5
+**Status:** Accepted · **Date:** 2026-09-16 · **Amended:** 2026-09-29 (Xcode 27), 2026-09-30 (PR CI iOS-only) · **Evidence:** `docs/research/R3-tooling-ci.md` §4–§5
 
 ## Context
 
@@ -66,3 +66,7 @@ above and the `macos-26` in the Decision table.
   must be re-recorded and re-resolved on 26.6 as well. The `macos-26` image still carries 26.6; locally,
   rolling back also means reinstalling it.
 - When `xcode-27` graduates or `macos-26` gains Xcode 27, choose the label again (`docs/ci-cd.md`).
+- **2026-09-30: PR CI runs iOS only (Pete).** `Check` runs `scripts/check.sh --ios-only`, after F32's first
+  `xcode-27` run reached its 1,500 s deadline in the watchOS tests. watchOS stays in the full local gate,
+  green before every merge (G5), and in the manual nightly. This replaces "build iOS + watchOS" in the
+  Decision table's PR row.

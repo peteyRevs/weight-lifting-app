@@ -5,7 +5,11 @@
 # "required" lists every module with code: one missing from the report fails (its test target was
 # dropped), and a measured one fails until it is listed.
 #
-#   scripts/coverage-gate.sh <result.xcresult | xccov-report.json>...
+#   scripts/coverage-gate.sh [--ios-only] <result.xcresult | xccov-report.json>...
+#
+# --ios-only (check.sh --ios-only, PR CI): the inputs hold no watchOS bundle, so a required module listed
+# in "watchOnly" (only a watchOS bundle can measure it) is not failed for being missing; a note names it.
+# Every other module is gated as usual, and without the flag "watchOnly" changes nothing.
 #
 # Prints a Markdown table (also to $GITHUB_STEP_SUMMARY). Exit 0: all thresholds met; 1: a
 # threshold missed or missing; 2: bad input.
@@ -13,8 +17,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 THRESHOLDS="${LEDGER_COVERAGE_THRESHOLDS:-scripts/coverage-thresholds.json}"
+IOS_ONLY=0
+if [[ "${1:-}" == --ios-only ]]; then IOS_ONLY=1; shift; fi
 
-[[ $# -gt 0 ]] || { echo "usage: scripts/coverage-gate.sh <result.xcresult | report.json>..." >&2; exit 2; }
+[[ $# -gt 0 ]] || { echo "usage: scripts/coverage-gate.sh [--ios-only] <result.xcresult | report.json>..." >&2; exit 2; }
 for input in "$@"; do
     [[ -e "$input" ]] || { echo "error: $input does not exist" >&2; exit 2; }
 done
@@ -22,7 +28,7 @@ done
 read -r -d '' GATE <<'PY' || true
 import fnmatch, json, math, os, re, subprocess, sys
 
-thresholds_file, inputs = sys.argv[1], sys.argv[2:]
+thresholds_file, ios_only, inputs = sys.argv[1], sys.argv[2] == "1", sys.argv[3:]
 source = re.compile(r"/LedgerKit/Sources/(([^/]+)/.+)$")
 
 def bad_input(message):
@@ -35,10 +41,12 @@ def is_number(value):
 try:
     config = json.load(open(thresholds_file))
     limits, excluded, excluded_files = config["modules"], config["excludedModules"], config["excludedFiles"]
-    required = config.get("required", [])
-    lists = (excluded, excluded_files, required)
+    required, watch_only = config.get("required", []), config.get("watchOnly", [])
+    lists = (excluded, excluded_files, required, watch_only)
     if not all(isinstance(names, list) and all(isinstance(n, str) for n in names) for names in lists):
-        raise ValueError("excludedModules, excludedFiles and required must be lists of names")
+        raise ValueError("excludedModules, excludedFiles, required and watchOnly must be lists of names")
+    if any(m not in required for m in watch_only):
+        raise ValueError('every "watchOnly" module must be "required" too')
     if not is_number(config["overall"]) or not all(v is None or is_number(v) for v in limits.values()):
         raise ValueError("thresholds must be numbers")
     if any(m in required or any(fnmatch.fnmatchcase(m, p) for p in limits) for m in excluded):
@@ -78,7 +86,8 @@ modules = {m: t for m, t in sorted(modules.items()) if t[1]}
 def threshold(module):
     return limits.get(module, next((v for p, v in limits.items() if fnmatch.fnmatchcase(module, p)), None))
 
-rows, failures = ["### Coverage gate", "", "| Module | Lines | Coverage | Threshold | |", "|---|--:|--:|--:|:-:|"], []
+title = "### Coverage gate (iOS only)" if ios_only else "### Coverage gate"
+rows, failures = [title, "", "| Module | Lines | Coverage | Threshold | |", "|---|--:|--:|--:|:-:|"], []
 def row(label, covered, executable, limit):
     percent = math.floor(10000 * covered / executable) / 100 if executable else 0.0  # never rounds up
     if limit is None:
@@ -90,7 +99,8 @@ def row(label, covered, executable, limit):
     ok = limit is not None and percent >= limit and executable
     rows.append(f"| {label} | {covered} / {executable} | {percent:.2f} % | {'none' if limit is None else f'{limit} %'} | {'✓' if ok else '✗'} |")
 
-for module in sorted(set(modules) | set(required)):
+skipped = [m for m in watch_only if ios_only and m not in modules]  # one the inputs measured is gated as usual
+for module in sorted((set(modules) | set(required)) - set(skipped)):
     covered, executable = modules.get(module, (0, 0))
     row(module, covered, executable, threshold(module))
     if module in modules and module not in required:
@@ -99,6 +109,8 @@ row("Overall", sum(t[0] for t in modules.values()), sum(t[1] for t in modules.va
 unmeasured = [m for m in limits if "*" not in m and m not in modules and m not in required]
 if unmeasured:
     rows += ["", f"No executable lines measured yet: {', '.join(unmeasured)}."]
+if skipped:
+    rows += ["", f"Not gated in an iOS-only run (only watchOS measures them): {', '.join(skipped)}."]
 
 table = "\n".join(rows) + "\n"
 print(table, flush=True)
@@ -110,4 +122,4 @@ for failure in failures:
 sys.exit(1 if failures else 0)
 PY
 
-python3 -c "$GATE" "$THRESHOLDS" "$@"
+python3 -c "$GATE" "$THRESHOLDS" "$IOS_ONLY" "$@"

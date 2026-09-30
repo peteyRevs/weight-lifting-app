@@ -323,4 +323,59 @@ PY
 code=$?
 expect_exit "C34 committed thresholds equal testing-strategy §4" 0 "$code" "$(cat "$T/committed.txt")"
 
+# ---- F32: check.sh --ios-only (PR CI, Pete 2026-09-30) hands the gate the iOS bundle alone -------------
+# Only a required module listed in "watchOnly" may then be missing; without the flag the list changes nothing.
+nolines() { echo "error: coverage gate: $1: no lines measured (is code coverage on, and did its test target run?)"; }
+gate --ios-only "$T/exact.json"; alone="$code $(grep '^|' <<<"$out")"
+gate "$T/exact.json"
+check "C51 --ios-only with one bundle and no \"watchOnly\" module: the same rows and exit as without the flag" \
+    is "$alone" "$code $(grep '^|' <<<"$out")"
+gate --ios-only "$T/d94.json"
+check "C52 --ios-only: a module below its threshold in the one bundle still fails" \
+    is "$code $(errors)" "1 error: coverage gate: LedgerDomain is at 94.00 %, below its 95 % threshold"
+jq '.required += ["WatchFeatureWorkout"]' "$T/thresholds.json" >"$T/watch-req.json"
+jq '.watchOnly = ["WatchFeatureWorkout"]' "$T/watch-req.json" >"$T/watch-only.json"
+LEDGER_COVERAGE_THRESHOLDS="$T/watch-req.json" gate --ios-only "$T/exact.json"
+check "C53 --ios-only: a required module the iOS bundle lacks fails unless \"watchOnly\" lists it" \
+    is "$code $(errors)" "1 $(nolines WatchFeatureWorkout)"
+LEDGER_COVERAGE_THRESHOLDS="$T/watch-only.json" gate --ios-only "$T/exact.json"
+check "C54 --ios-only: a missing \"watchOnly\" module gets no row and a note, under an (iOS only) title; exit 0" \
+    is "$code $(grep -c '^| WatchFeatureWorkout' <<<"$out") $(grep -c '^### Coverage gate (iOS only)$' <<<"$out") \
+$(grep -cxF 'Not gated in an iOS-only run (only watchOS measures them): WatchFeatureWorkout.' <<<"$out")" "0 0 1 1"
+LEDGER_COVERAGE_THRESHOLDS="$T/watch-only.json" gate "$T/exact.json"
+check "C55 without --ios-only the same missing \"watchOnly\" module fails: it never passes silently in full mode" \
+    is "$code $(errors) $(grep -c 'Not gated\|iOS only' <<<"$out")" "1 $(nolines WatchFeatureWorkout) 0"
+report "$T/watch-alone.json" "W.xctest|WatchFeatureWorkout/A.swift|100/100"
+LEDGER_COVERAGE_THRESHOLDS="$T/watch-only.json" gate --ios-only "$T/watch-alone.json"
+check "C56 --ios-only skips only \"watchOnly\" modules: a missing LedgerDomain still fails" \
+    is "$code $(errors)" "1 $(nolines LedgerDomain)"
+report "$T/watch-low.json" "D.xctest|LedgerDomain/A.swift|1000/1000" "W.xctest|WatchFeatureWorkout/A.swift|69/100"
+LEDGER_COVERAGE_THRESHOLDS="$T/watch-only.json" gate --ios-only "$T/watch-low.json"
+check "C57 --ios-only: a \"watchOnly\" module the bundle does measure is gated as usual (69 % fails)" \
+    is "$code $(errors)" "1 error: coverage gate: WatchFeatureWorkout is at 69.00 %, below its 70 % threshold"
+for bad in '.watchOnly = ["WatchFeatureWorkuot"]' '.watchOnly = ["WatchFeatureWorkout"] | .required = ["LedgerDomain"]' \
+    '.watchOnly = "WatchFeatureWorkout"' '.watchOnly = null'; do
+    jq "$bad" "$T/watch-req.json" >"$T/bad-watch.json"
+    LEDGER_COVERAGE_THRESHOLDS="$T/bad-watch.json" gate --ios-only "$T/exact.json"; ios=$code
+    LEDGER_COVERAGE_THRESHOLDS="$T/bad-watch.json" gate "$T/exact.json"
+    check "C58 \"watchOnly\" must list \"required\" names; $bad is bad input (exit 2) in either mode" is "$ios $code" "2 2"
+done
+gate "$T/exact.json" --ios-only; late=$code
+gate --ios-only
+check "C59 --ios-only is a flag only before the reports (after one it is a missing report), and needs a report" \
+    is "$late $code" "2 2"
+# The committed list: a "watchOnly" module is required, and only the watch plan tests it (none has code today).
+python3 - "$ROOT/scripts/coverage-thresholds.json" "$ROOT/TestPlans" >"$T/watch-only.txt" 2>&1 <<'PY'
+import json, sys
+c, plans = json.load(open(sys.argv[1])), sys.argv[2]
+def targets(plan): return {t["target"]["name"] for t in json.load(open(f"{plans}/{plan}.xctestplan"))["testTargets"]}
+ios, watch, bad = targets("PR"), targets("PR-Watch"), []
+if not isinstance(c.get("watchOnly"), list): bad.append('"watchOnly" is not a list')
+for m in c.get("watchOnly") or []:
+    if m not in c["required"]: bad.append(f"{m}: not required")
+    if f"{m}Tests" not in watch or f"{m}Tests" in ios: bad.append(f"{m}: its tests are not in PR-Watch alone")
+print("\n".join(bad)); sys.exit(1 if bad else 0)
+PY
+expect_exit "C60 committed \"watchOnly\" modules are required and tested by the PR-Watch plan alone" 0 $? "$(cat "$T/watch-only.txt")"
+
 finish

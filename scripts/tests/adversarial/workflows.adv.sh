@@ -40,7 +40,7 @@ check "WF02 PR runs on pull_request to main and on workflow_dispatch" \
     "pull_request,workflow_dispatch main"
 check "WF03 no workflow-level paths filter (the Scope job decides, rename-safe)" \
     is "$(q pr '.on.pull_request | has("paths") or has("paths-ignore")')" false
-# Pete, 2026-09-27: free minutes, so ONE macOS job (lint + both platforms) behind a Linux scope job.
+# Pete, 2026-09-27: free minutes, so ONE macOS job (lint, then iOS since 2026-09-30) behind a Linux scope job.
 check "WF04 jobs are Scope then Check" is "$(q pr '[.jobs[].name] | join("|")')" "Scope|Check"
 check "WF05 Check needs Scope" is "$(q pr '.jobs.check.needs')" scope
 check "WF06 PR token is contents: read, with no job-level override" \
@@ -51,8 +51,14 @@ check "WF07 exactly one macOS job (Check, on the xcode-27 image); Scope runs on 
 check "WF50 the nightly's macOS jobs run on the xcode-27 image too; its report runs on Linux" \
     is "$(q nightly '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
     "test=xcode-27,dependencies=xcode-27,report=ubuntu-latest"
-check "WF08 Check runs the whole of check.sh, lint included" \
-    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" "scripts/check.sh"
+check "WF08 Check runs check.sh --ios-only, lint included (Pete, 2026-09-30; watchOS: the full local gate, nightly)" \
+    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" "scripts/check.sh --ios-only"
+check "WF61 [F32] ... and no job or step name in pr.yml claims watchOS; Check's step names --ios-only" \
+    is "$(q pr '[.jobs[] | .name, .steps[].name // empty] | map(select(test("watchOS"))) | length') \
+$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .name | test("iOS.*check\\.sh --ios-only")')" "0 true"
+check "WF62 [F32] the nightly still tests both platforms, and nothing in it runs --ios-only" \
+    is "$(q nightly '[.jobs.test.strategy.matrix.include[] | .scheme + ":" + .plan] | join(",")') \
+$(grep -c -- '--ios-only' "$WF/nightly.yml")" "Ledger:Nightly,LedgerWatch:Nightly-Watch 0"
 check "WF09 concurrency is per PR and cancels superseded runs" \
     is "$(q pr '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostring)')" \
     'pr-${{ github.event.pull_request.number || github.ref }} true'
