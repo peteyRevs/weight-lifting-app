@@ -412,3 +412,131 @@ is locked, but it does not let a new open succeed.
 Device plans run green there. Two minor bugs remain: finding 4, a damaged settings column traps where it should
 throw (a regression for non-UTF-8 bytes), and finding 5, the protection test fails whenever the host or device
 is locked. Each needs a small fix before G2 closes. No bug, and no new spec question.
+
+---
+
+# Slice S1 — round 3 (close-out)
+
+Scoped close-out over `feat/F05-persistence` at `209e364` (fix round 2). I read round 2's findings 4 and 5,
+the review's SF1 to SF3, fix round 2's notes and its orchestrator decisions (with the SF2 amendment), and
+`git show 209e364`. I attacked only that round's new surface. No product code was edited. The 31 mutants below
+ran one at a time in a copy of `LedgerKit` in the scratchpad (`f05r3-mut/`), never in the worktree.
+
+## What I wrote
+
+12 tests (1 property test on `PropertySeed.all`, tagged `.property`) in 5 files under
+`LedgerKit/Tests/LedgerPersistenceTests/Adversarial/`, about 0.5 s on the host.
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `RowRepairAdversarialTests` | 5 | SF2 over 9 damages (versions 2, `Int64.max`, `1e30`, `x''`, `''`; a truncated payload, `x'C0'`, `x'EDA080'`, the integer 7): a conflict on *another* key later in the batch rolls the repair back; two envelopes for one unreadable key in a batch (a copy repairs once, a rival conflicts in either order and rolls back); a later version and a damaged row are repaired alike, in place (same `id` and `created_at`, version 1, the incoming bytes *and stamp*); the same device and seq in another workout repairs nothing; one batch repairs two workouts in the order given; a repair by a NaN-stamped envelope stores a `NULL` `wall_clock` |
+| `ClockRecoveryAdversarialTests` | 3 (1 property) | SF3: an unreadable row in another workout holds the newest stamp, and compacting logs forgets theirs, down to `nil`; `NULL` and ±∞ written by another writer (`9e999`, `-9e999`) never count, while `-1e300` and `greatestFiniteMagnitude` do, exactly; a seeded model (200 seeds, 3 workouts, 2 devices, random damage, then 6 steps of random batches of copies, rivals and new keys, or compactions, with NaN, ±∞ and ±1e300 stamps) checks every `append` result or conflict, `envelopes`, `unreadableCount`, `highestSeq`, the listing and `newestWallClock` after each step |
+| `RepairModel` | support | the model: the protocol's doc comments plus SF2's repair and SF3's clock, as plain values |
+| `DamagedColumnAdversarialTests` | 3 | finding 4: 14 more damaged shapes of the settings row (versions `±1e30`, `9.3e18`, `x''`, `''`, `'1 one'`, `2.5`; payloads `x'C0'`, `x'EDA080'`, `{"u`, `x''`, `'null'`, `7`, `{}` plus a NUL): each fails `load` with the right error, `observe` ends with no value, the row is kept; an observation that is *running* when the row is damaged ends and emits nothing; (documents) a version of `1.5` reads as 1 |
+| `PayloadV1SpellingAdversarialTests` | 1 | SF1's gap (below): the version-1 spelling of every case of `Equipment`, `SetKind`, `WorkoutPhase`, `Units` and `Weekday`, both ways, and a new case fails until it is listed |
+
+## Results
+
+- **Full gate** (`scripts/check.sh` through `sim-lock.py` after `rm -rf .derivedData`, Xcode 27.0; log: scratchpad
+  `f05s1-r3.log`): **OK** (351 s).
+  - iOS `PR`: 17/17 targets, 939 tests (935 passed, 4 skipped).
+  - watchOS `PR-Watch`: 8/8 targets, 916 tests (912 passed, 4 skipped).
+  - `LedgerPersistenceTests` on each simulator: 100 passed (88 plus my 12), and 2 skipped by design
+    (protection, timing).
+  - **Coverage from the clean build:** LedgerPersistence **100.00 % (405/405)**, LedgerDomain 98.99 %, overall
+    98.87 %. The 13 stale watchOS lines that fix round 2 saw (405/418) are gone, so they were leftover objects
+    from an incremental build, not a gap.
+- **Host, with the screen locked** (`CGSSessionScreenIsLocked = Yes` before and after every run below):
+  - `scripts/check.sh --fast` (log: scratchpad `f05r3-fast.log`, 93 s): **OK.** Format and lint pass with my
+    files. `LedgerPersistenceTests` 103 pass (91 + my 12), the protection test included; `LedgerDomainTests` 689.
+  - `swift test --filter DatabaseTests` (log: scratchpad `f05r3-locked-db.log`): 3 pass.
+- **Mutants** (31, one at a time, host tests of both targets; results: scratchpad `f05r3-mut/results.txt`). All
+  behaviour mutants are killed. Details are under each close-out item. Six survive the fix round's own tests and
+  are caught only by mine:
+  - **G01**, a repair that keeps the row's old `wall_clock`. The fix round's damages keep the original stamp,
+    so nothing saw it;
+  - **G04**, `newestWallClock` without its finite bound. The contract's ±∞ stamps go in through `append`, which
+    stores `NULL`, so the bound is never exercised;
+  - **F01, F03, F04, F13**, a renamed enum value that the fixtures do not hold (see SF1).
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 0 | |
+| minor bug | 0 | |
+| spec question | 0 | |
+
+## Close-out
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| **4.** A damaged settings column traps | **Closed** | `fetch` reads both columns as values. The fix round's 4 shapes and my 14 all throw (`malformedColumn` by name, `unknownPayloadVersion(2)` for `2.5`, `DecodingError` for UTF-8 that is not settings JSON), never trap, never return the defaults, keep the row, and end `observe` with no value, also when the observation is already running. Round 2's exit test passes in `--fast`. Mutants G08 (lossy UTF-8), G09 (a damaged version reads as the defaults) and G10 (read as version 1) are killed. On arm64_32, a version beyond `Int32` now gives `nil` (`Int.fromDatabaseValue` is `Int64.fromDatabaseValue(…).flatMap { Int(exactly:) }` in GRDB 7.11.1) and throws; read from the source, not run |
+| **5.** The protection test fails while locked | **Closed** | With the screen locked: the test passes on its own and in `check.sh --fast`. **Control:** round 2's shape (open class B, then reopen), run in the same session, fails with `SQLite error 23: authorization denied`, so the lock was in force. **It still proves protection:** 6 mutants of `LedgerDatabase.open`, run while locked, all fail on an assertion rather than an error: no `protect` call, file only, companions only, the parameter ignored, only a new file, class B as the default. `-shm` is covered by round 1's `protection_isNeverAnotherClass`, which also passes while locked |
+| **SF1.** Nothing pins payload version 1 | **Closed** (with my pin) | 13 envelope fixtures, one per `WorkoutEvent` case, enforced by an exhaustive switch, plus `settings.json`, with every field away from its default. **Killed:** a renamed nested key (`LastPerformance.load`), a new required field (`RestTimer`), a renamed `Weight` key, `"NaN"` spelled `"nan"`, `Units` without `CodingKeyRepresentable`, the pinned enum values (`barbell`, `live`), and `Weekday` renumbered. **Survived every test in both targets:** renaming an enum value that no fixture holds (`Equipment.dumbbell`, `.band`, `SetKind.warmup`, `WorkoutPhase.finished`). 6 of 7 equipment values, `warmup`, `finished` and `discarded` were unpinned. Stored `started` snapshots carry every one of them, and a rename would make them unreadable, the failure SF1 exists to stop. `PayloadV1SpellingAdversarialTests` now pins them and kills all four |
+| **SF2.** A damaged row blocks its own repair | **Closed** | The first readable envelope repairs a later-version row and a damaged row alike, in place, and counts as new. A conflict anywhere in its batch, on its own key or another, rolls it back (the count returns to 1, row bytes unchanged). A copy in the same batch repairs once; a rival pair conflicts in either order. The repair is per workout, and `unreadableCount` drops to 0 in each workout it repaired. The 200-seed model agrees with the store on every result and read. **Parity:** the contract cannot make an unreadable envelope through the public API, so the in-memory store has none to repair and returns 0; on readable data both stores still pass all 14 clauses. Mutants G02 (the review's variant: skip later versions), G03 (repair not counted as new) and G07 (lookup ignores the workout) are killed, and G01 only by mine |
+| **SF3.** HLC recovery cannot see unreadable stamps | **Closed** | `newestWallClock()` counts unreadable rows (another workout's included), skips `NULL` and ±∞ (another writer's `9e999` included), keeps finite extremes exactly, forgets compacted logs, and is `nil` when none is left. The model checks it after every step. Mutants G05 (readable rows only) and G06 (the protocol default on the GRDB store) are killed, and G04 only by mine. G11 and G12, mutants of the protocol default, fail the contract on the in-memory store |
+
+## Audit of the tests the fix round edited
+
+- **`DatabaseTests.open_protectsTheFileAndItsCompanions`.** Sound: it passes while locked and still kills every
+  protection mutant (above). Its first check alone cannot show that `protect` runs, because the file inherits
+  the directory's class; the reopen with class B does.
+- **`UnreadableEventRowTests`** (rewritten). Sound over 6 damages: left out, counted, kept, the key and stamp
+  still count, repair, rollback, version dispatch. It could not see G01 (its damage keeps the stamp), rollback
+  caused by another key, or a repair leaking across workouts. My tests add all three.
+- **`DamagedSettingsRowTests`** (new). Sound: 4 shapes, error by name, `observe` ends, row kept. It could not
+  see an observation that was already running; mine adds it.
+- **`PayloadV1FixtureTests` / `PayloadV1`** (new). Sound for keys, labels, nested fields, `Weight` text, the
+  NaN and ±∞ strings, seq extremes and the settings keys. The fixtures hold one value per enum (SF1 above). The
+  encode check compares parsed `NSDictionary`s, so `true` equals `1` there, but the strict decode check catches
+  a `Bool` ↔ `Int` change, so nothing slips through.
+- **`PayloadVersionAdversarialTests`** (round 2's, edited). Sound. The property test now asserts that a resend
+  repairs exactly the damaged rows, in order, and leaves every other row byte-identical. The rewritten key test
+  pins "first readable wins" and the rolled-back rival pair. *Noted:* its comment that a version beyond `Int32`
+  traps on arm64_32 is stale since finding 4's fix. The exclusion it justifies is harmless.
+- **`PayloadEvolutionAdversarialTests`** (round 2's, edited). Sound: the legacy row is repaired by a readable
+  redelivery, and the row count and the unreadable count are asserted.
+- **The contract's `newestFiniteStamp`** runs on both stores. Its non-finite stamps are stored as `NULL`, so it
+  cannot exercise the GRDB store's finite bound (G04). My foreign-writer test does.
+- **The five test conformers** now return `unreadableCount` 0 explicitly (N1). Correct for each.
+
+## Attacked and held
+
+- **Repair** under 9 damages, both families: rollback on the same key and on another key, copies and rival pairs
+  in one batch, order with new and duplicate envelopes, two workouts in one batch, per-workout keys, row
+  identity kept, stamp rewritten, and a NaN stamp stored as `NULL`. 200 seeds against the model.
+- **Clock**: unreadable rows count across workouts; `NULL`, ±∞ and another writer's infinities do not;
+  `±1e300` and `greatestFiniteMagnitude` are exact; compaction forgets; empty is `nil`.
+- **`malformedColumn`**: 18 settings shapes in all, and the event rows' damages (the fix round's 6, and my 9 in
+  repair). None traps, none returns the defaults, every row is kept, and every `observe` ends, running or not.
+- **Finding 5** under a real lock, with a control and 6 mutants.
+- **SF1**: 13 format mutants. The 9 the fixtures cover are killed; the 4 they miss are killed by my pin.
+
+**Noted, not blocking:**
+- **A `wall_clock` of the wrong storage class misleads `newestWallClock()`.** SQLite's `MAX` ranks text and blobs
+  above numbers, and GRDB reads the winner with `sqlite3_column_double`. So one row whose `wall_clock` is text
+  or a blob makes the result wrong, even though that row still reads as an envelope:
+  - `'garbage'`, `''` or `x'00'` give `0` (2001-01-01), which hides the real newest stamp;
+  - `x'39653939'` gives `9e99`.
+
+  Only damage or another writer can do this, since `append` binds a `Double` or `NULL`. Then the clock recovers
+  from the physical clock, which matters only if that clock also stepped back. The fix is one clause:
+  `AND typeof(wall_clock) = 'real'`. Probe (scratchpad, deleted): five shapes.
+- **F28 will trip the settings fixture.** F28 adds `Settings.iCloudEnabled`. Mutant F08, an additive field with
+  a default, fails `settings_decodesToItsLiteral` (encode check) and round 2's seven-key pin. The fixtures'
+  rule then makes it settings payload version 2, although tolerant decoding was adopted so that this very field
+  could join version 1. That is safe either way: an older app sees a later version and keeps the row. But F28's
+  "Inputs from F05" says nothing about it. One line there would stop F28 from "fixing" the test instead.
+- **A later-version row is repaired with the version-1 copy** (decided in the SF2 amendment; the review had
+  proposed keeping the skip for later versions). After a rollback and a re-upgrade, whatever version 2 held
+  beyond version 1 in that envelope is gone. It needs a rollback, a peer's resend, and a version 2 that adds
+  content, and a key names one envelope anyway.
+- **`newestWallClock` keeps a protocol default.** A wrapper (F10, F17) that forgets to forward it silently drops
+  unreadable rows' stamps: the N1 footgun, for this requirement. `unreadableCount`'s doc says a wrapper must
+  forward; this one's does not.
+- **A fractional `REAL` version reads as its integer part** (`1.5` as 1, `2.5` as 2), from GRDB's
+  `Int64.fromDatabaseValue` (documents). Harmless.
+
+**Verdict: G2 can close.** Finding 4, finding 5, SF1, SF2 and SF3 are closed, with evidence on the host, with
+the screen locked, and on both simulators (full gate above). The fix round's one test gap in SF1, unpinned enum
+values, is closed by `PayloadV1SpellingAdversarialTests`. No bug, no minor bug and no spec question remain. The
+F28 input line and the `typeof` clause are optional, cheap follow-ups.
