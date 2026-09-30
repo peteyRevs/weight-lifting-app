@@ -1157,3 +1157,232 @@ a second time. S2-7 is open too: the no-value default brings S2-2 back. It needs
 the optional default. Everything else in fix round 1 holds. S2-1, S2-4 and S2-5 are resolved; S2-2 and S2-3 are
 resolved on their main paths. The disc meets 3:1 everywhere with the tick intact, and the new snapshots really
 exercise pressed and Increase Contrast.
+
+# Slice 2 — round 3 (close-out, `669d6d3`)
+
+Scope: fix round 2 only (`git show a9e9bd8`; implementation notes, "### Slice 2 — fix round 2"). `669d6d3` merges
+main and changes nothing under `LedgerKit/` or `Apps/` (`git diff a9e9bd8 669d6d3 --stat -- LedgerKit Apps` is
+empty). Pete's rules applied: WCAG AA with the look kept, and Bold Text followed. The design lint is a frozen
+tripwire, so no spellings were hunted. Toolchain: Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46 mm) on 27.0.
+
+## What was run
+
+- **A temporary probe**, `Adversarial/ZZS2R3Probe.swift`. It was deleted before the gate, and a copy is in scratchpad
+  `s2r3/`. It covered:
+  - 19 ways a feature can label a `SetRow`, plus the unlabelled row;
+  - lb and kg stepper harnesses, driven through `accessibilityIncrement` / `Decrement` and read back from the same
+    element objects;
+  - filled pills: static, disabled, pressed, at AX5, as a `HairlineRow` accessory, and a live two-pill filter;
+  - ten component states that the tree table does not list.
+- **Two mutation runs** of `LedgerDesignTests` on iOS, through the lock, with 14 product mutations in total. A script
+  applied them (`s2r3/mutate.py`), and `git checkout` reverted them. The tree was clean at `669d6d3` before the gate.
+- **Four host builds** (`swift build --build-tests`). Each removed `nonisolated` from one of the four enums.
+- **The full gate, once.**
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` + probe, iOS 27.0, via the lock (`s2r3/base.xcresult`) | 214 cases: 213 passed, 1 skipped, 0 failed |
+| Mutation run m1 (`s2r3/m1.xcresult`), 6 mutations | 10 tests failed. The tree test failed in 22 of its 37 cases. Every mutation was caught (table in the audit) |
+| Mutation run m2 (`s2r3/m2.xcresult`), 8 mutations | 11 tests failed. The tree test failed in 17 of its 37 cases. Every mutation was caught |
+| Host builds, `nonisolated` removed from one enum at a time | All four fail to compile in `ComponentValueTests.swift`. The errors: "main actor-isolated conformance of 'SetRowState' to 'Hashable' cannot be used in nonisolated context"; the same for `Equatable` in the `actor`; and the same for `PillButton.Style`, `Eyebrow.Tint` and `SetRowSteppers.Direction` |
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06s2-r3.log`) | **Green, 287 s, with no wait for the lock.** Steps 0–2 green. PR-iOS: 903 tests, 901 passed, 2 skipped, 0 failed, 17 of 17 targets. PR-Watch: 828, 826, 2, 0, 8 of 8. The skips are the two nightly-only tests. Every reference matched. Coverage: LedgerDesign 96.44 % (949 / 984), overall 98.06 %. The implementer's counts reproduce exactly |
+
+## Close-out of S2-6, S2-7 and R2-S1 to R2-S3
+
+| # | Status | Evidence |
+|---|---|---|
+| S2-6 | **Resolved** | No container is left anywhere. None of the 20 probe trees, in any state, at large or AX5, has a container above an element. Reintroducing one fails the tree test at once. m1 put `.contain` back on the check: all 8 SetRow cases failed with `in [""]`. m2 wrapped the whole row: all 8 failed again |
+| S2-7 | **Resolved** | `SetRowSteppers` has one public init, and it requires `weight` and `reps`. The fallback is gone. Both units are announced (below) |
+| R2-S1 | **Resolved** | All six public value types in `Components/` are `nonisolated`. `ComponentValueTests` really guards them: removing `nonisolated` from any one of the four breaks the build |
+| R2-S2 | **Resolved** | A filled pill's traits are button + selected (9). Outline and ghost are button (1); a disabled filled pill is 265. In a live filter, activating "Back" moves `selected` from "Chest" to "Back" on the same two element objects. Dropping the trait fails only the tree test (m1, 2 cases). Adding it to every style fails the outline and ghost cases (m2) |
+| R2-S3 | **Resolved** | Same fix as S2-7 |
+
+Re-check of S2-1 to S2-5:
+
+- **S2-1 holds.** The row's value is "Pending", "Current set" or "Done". The check is selected, with the value
+  "Done", only when the set is logged. The tree table pins this, and m2 showed that dropping either the value or the
+  trait fails it.
+- **S2-2 holds.** The values come from the caller:
+  - lb: 185 → 190 → 180 pounds;
+  - kg: 82.5 → 85.0 → 80.0 kilograms;
+  - reps: 2 → 1 rep → 3 reps.
+
+  Each change is on the same element object VoiceOver holds, and the kg steppers stack correctly at AX5.
+- **S2-3 holds only in the documented calling form; S2-8 below covers the rest.**
+- **S2-4 and S2-5 hold.** No colour or drawing code changed. The gate matched every reference, including the three
+  light `setRow_appearance` references that pin the `#B2390E` disc, and the pressed, Increase Contrast and light AX5
+  sheets.
+
+## Audit of fix round 2's test edits
+
+- `ComponentAccessibilityAdversarialTests.steppers_atExtremeTextSizes_areAdjustableTargets`: the call now passes
+  "185 pounds" / "5 reps", and the assertions are unchanged. **Accept.**
+- `ComponentAccessibilityAdversarialTests.steppers_adjustable_haveAValue`: the same call-site change, which I accepted
+  in advance, with the assertion unchanged. **Accept.** m2 showed it still fails when the stepper drops its value.
+- `ComponentLayoutAdversarialTests`, case "SetRowSteppers 2.5 kg / 1 rep": the call now passes "82.5 kilograms" /
+  "12 reps". The values are speech only and draw nothing, and the assertions are unchanged. **Accept.**
+- `ComponentAccessibilityAdversarialTests.setRow_doneRow_isDistinguishableFromPending`: the comment is updated
+  (R2-N11). The new wording is accurate. **Accept.**
+- `SetRowAccessibilityTests.setRow_accessibility_rowAndCheckAreButtons`: `contains` becomes the exact
+  `"2, 185, 5"`. **Accept**: it is stricter.
+- `SetRowAccessibilityTests.setRow_state_isSpokenInWords`: a pending row's value is now "Pending". **Accept**: it
+  follows the decision.
+- `SetRowAccessibilityTests`: stepper call sites in `…twoAdjustableSteppers` and `…stepsTheMatchingValue`.
+  **Accept.**
+- `SetRowAccessibilityTests.setRowSteppers_value_isTheCurrentQuantity`: the fallback half is removed. **Accept**: it
+  pinned the rejected behaviour, and with a single init that requires the values there is no fallback left to test.
+- `RestRingGeometryTests.halfProgress_arcLength_isHalfTheCircumference` now measures `RestRingArc.path(in:)`, the
+  shape the ring strokes. **Accept**: `RestRingArc` is `nonisolated`, so it still runs in a value suite.
+- The `ComponentSnapshotTests` header comment. **Accept.**
+- `AccessibilityAutomation`: `UInt8` prototypes, and `Issue.record` when the switch is missing. **Accept.**
+- `AccessibilityTreeTests` (new). **Accept.** All 14 mutations failed it. Where one run mutated a component twice,
+  each mutation showed separately in the failure's `found` line:
+
+  | Mutation | Cases that failed |
+  |---|---|
+  | `.contain` back on the check | 6 SetRow + 2 gallery |
+  | `.contain` around the whole row | 6 SetRow + 2 gallery |
+  | `.contain` around both steppers | 3 stepper + 2 gallery |
+  | Steppers swapped | 3 stepper + 2 gallery |
+  | The row's value removed | 6 SetRow + 2 gallery |
+  | A stepper's value removed | 3 stepper + 2 gallery |
+  | `.isSelected` dropped from the filled pill | 2 filled pill (no other test fails) |
+  | `.isSelected` added to every style | outline, ghost, button-accessory row |
+  | `.isSelected` dropped from the done check | done, done named, 2 gallery |
+  | `.updatesFrequently` dropped | 4 ring |
+  | `.isHeader` dropped | 2 Eyebrow |
+  | `.combine` dropped from the header | header + 2 gallery |
+  | `.combine` dropped from an action-less `HairlineRow` | detail, text accessory, button accessory |
+  | IconPillButton label dropped | 2 IconPillButton |
+
+  The 37 cases are the list the notes claim. It leaves out:
+  - disabled `PillButton` and `IconPillButton`;
+  - `HairlineRow` at accessibility sizes;
+  - an action row with a text accessory;
+  - the named row in the pending and active states.
+
+  The probe read all of them, and all are right (under "Attacked and held"). The table compares label, value, traits
+  and containers, not hints or frames. No component sets a hint, and the frames are asserted elsewhere.
+- `ComponentValueTests` (new). **Accept.** All four host mutations broke its build.
+- Three tests were not edited but now test something else. My `setRow_outerLabel_relabelsTheRowOnly` and
+  `SetRowContainerAdversarialTests`, and fix round 1's `setRow_outerLabel_namesTheRowOnly`, all call
+  `.accessibilityLabel` on a value typed `SetRow`. They now reach the new overload, not SwiftUI's modifier, so they
+  prove the documented form and nothing more. m1 showed that `SetRowContainerAdversarialTests` no longer notices an
+  unlabelled container. The tree test does. **Accept as far as they reach**, and S2-8 covers the other forms.
+
+## S2-8. A row label renames the check unless it is a `String` put on a bare `SetRow` — minor bug (accessibility API)
+
+Repro: the probe (`s2r3/ZZS2R3Probe.swift.bak`, test "overload resolution forms"; output in
+`s2r3/probe-out-base.txt`). The row is a done `SetRow` with `checkLabel: "Undo set 2"`, and every form applies the
+label "Set 2, 185 pounds, 5 reps":
+
+| Form | Row | Check |
+|---|---|---|
+| `row.accessibilityLabel("…")`: a literal, an interpolated literal, a `String` or `String(localized:)`; also inside `ForEach`, applied twice, at AX5, or in the pending and active states | "Set 2, 185 pounds, 5 reps" | "Undo set 2" ✓ |
+| `row.padding(0).accessibilityLabel(s)` | "Set 2, 185 pounds, 5 reps" | **"Set 2, 185 pounds, 5 reps"** |
+| `row.id(1).accessibilityLabel(s)` | same | **same** |
+| a function that returns `some View`, then `.accessibilityLabel(s)` | same | **same** |
+| `AnyView(row).accessibilityLabel(s)` | same | **same** |
+| `row.accessibilityLabel(Text(s))`, directly on the `SetRow` | same | **same** |
+| `row.accessibilityLabel(key)`, a `LocalizedStringKey`, directly on the `SetRow` | same | **same** |
+| `func f<V: View>(_ v: V) { v.accessibilityLabel(s) }` | same | **same** |
+
+In every other form VoiceOver hears the check as the row's words: "Set 2, 185 pounds, 5 reps, Done, selected, button".
+It loses "Undo set 2": the check now sounds like the row plus "selected", and nothing says that activating it
+un-logs the set. That is S2-3 exactly, and for these forms it is worse than fix round 1. There, the `.contain`
+boundary held whatever the form, and the check always kept its label (S2-6 was a duplicate on the container, not a
+lost name).
+
+**Cause.** `SetRow.accessibilityLabel(_ label: String) -> SetRow` shadows SwiftUI's `View.accessibilityLabel`. Swift
+picks between the two by the static type of the receiver and of the argument. Every call that doesn't match `(SetRow,
+String)` exactly compiles without a warning and falls back to SwiftUI's modifier, which labels both elements.
+
+**The doc names half the limit.** It warns about "another modifier". It doesn't warn that a `Text` or
+`LocalizedStringKey` argument, applied directly to the `SetRow` as the doc says, also misses the overload.
+
+**Engineering standards §7 makes those two forms the likely ones.** All user-visible strings go through the String Catalog, and
+`Text` / `LocalizedStringKey` are SwiftUI's catalog-typed labels. The bare literal goes the other way: it reaches the
+overload but is a plain `String`, so it is not looked up in the catalog either (under "Noted").
+
+**Impact.**
+- No shipped screen uses `SetRow` yet, so nothing is wrong on a device today.
+- F10 gets the bug the first time it labels a row in any of these seven forms.
+- No F06 test would catch it, because the tree table pins only the literal form.
+
+**Suggested fix (small).**
+- Give the row label a name that doesn't collide with SwiftUI's. Either:
+  - an init parameter, as S2-3 and S2-6 suggested (`SetRow(…, checkLabel:, accessibilityLabel: String? = nil, …)`); or
+  - a method only `SetRow` has (for example `.rowLabel(_:)`).
+- Then each wrong form above becomes a **compile error**, not a silent fallback. A `Text` doesn't convert to
+  `String`, and `.rowLabel` doesn't exist on `some View`.
+- Add a tree-table case for the new spelling. The doc should say that SwiftUI's `.accessibilityLabel` on a `SetRow`
+  renames both stops.
+
+## Noted, not blocking
+
+- **The same mechanism for other outer modifiers.** An outer `.accessibilityHint` or `.accessibilityValue` on a
+  `SetRow` reaches both elements. The probe shows the hint "Selects the set" on the check too, and a caller's value
+  "Logged" replacing the check's "Done". The component offers no hint or value from outside, and nothing invites a
+  feature to add one. The doc line suggested under S2-8 covers it.
+- **Localisation of the row label.** On the `String` overload a literal or interpolated label is used verbatim. It is
+  not looked up in, or extracted to, the String Catalog, as SwiftUI's own `.accessibilityLabel("…")` would be. That
+  is consistent with architecture §11 ("components take strings the caller has already localised"). The `SetRow` doc
+  could name `String(localized:)`.
+- **The tree table's gaps**, listed in the audit. Each was read in the probe and is correct.
+- **`ComponentValueTests` on the host.** The notes say it "runs on … the host". `check.sh --fast` builds
+  `LedgerDesignTests` on the host but runs only `LedgerDomainTests|LedgerPersistenceTests`. The guard is a compile
+  guard, so building is what counts, and the gate runs it on iOS and watchOS.
+
+## Attacked and held (round 3)
+
+- **Direct naming.** The row takes the label and keeps its state value, and the check keeps `checkLabel`, value and
+  trait. This holds for a literal, an interpolated literal, a `String` and `String(localized:)`. It holds in all three
+  states, inside `ForEach` in a `HairlineList`, when applied twice (the last label wins), and at dark AX5 (row
+  334.7 × 56.7, check 59.3 × 59.7). No container appears in any of the 20 trees.
+- **Stepper announcements in lb and kg.** Covered under S2-2 above.
+  - Labels stay "5 lb" / "2.5 kg" / "1 rep".
+  - Each value changes on the element object VoiceOver holds (`===` before and after), and the re-read agrees.
+  - Singular "1 rep" is the caller's word.
+  - The steppers are 197 × 44 side by side and stack to 402 × 54.7 at AX5.
+  - Neither stepper can be built without a value: there is one public init.
+- **Nonisolated enums.** `SetRowState`, `PillButton.Style`, `Eyebrow.Tint` and `SetRowSteppers.Direction` compile as
+  stored properties of a `nonisolated` `Equatable` struct, as a `Set` element, and in an `actor`. `LedgerIcon` and
+  `RestRingGeometry` already did. Each guard is proven by mutation.
+- **Filled pill.** It is selected at large and AX5, while pressed (tree table), and while disabled (265). A caller's
+  extra trait adds to `selected` rather than replacing it (`.isHeader` gives 65545). A filled pill as the accessory
+  of an action-less `HairlineRow` makes the merged row "Chest, On", button + selected, which is right for a toggle
+  row.
+- **States outside the table, read in the probe.**
+  - Disabled pills: 257. The disabled `IconPillButton`: 257.
+  - The swap row: one button, "Dumbbell Bench Press, Similar pattern · 2 × 70 lb, Use".
+  - `HairlineRow` at AX3: text accessory 64, button accessory 1. The chevron row at AX5 is a button.
+  - `RestRing` at AX5: 576. `Eyebrow` at AX5: 65600. The header at AX5: "#, kg, reps".
+  - The light AX5 gallery: the same 11 stops, in the same order, as the table's large and AX3 galleries.
+- **Scope of the edit.** Product changes are limited to what the notes list. `import Testing` sits in
+  `LedgerSnapshotTesting`, which only test targets depend on.
+
+## Verdict
+
+**G2 cannot close, because of S2-8.**
+
+- The fix round's own targets close: S2-6, S2-7 and R2-S1 to R2-S3 are resolved.
+- The tree table is a real tripwire: 14 of 14 mutations failed it.
+- S2-1, S2-2, S2-4 and S2-5 hold. The gate is green.
+- The row-label overload, however, protects the check only for a `String` on a bare `SetRow`. It fails for a `Text`
+  or a `LocalizedStringKey` passed directly, for any modifier before it, and for any type-erased path. In each of
+  those forms the check loses "Log set N" / "Undo set N" silently. The two catalog-typed forms are the ones the
+  string-catalog standard points features to, and the doc warns about neither.
+
+**What closes it.** Rename the label so it doesn't shadow SwiftUI's modifier (an init parameter, or a `SetRow`-only
+method), add one tree-table case, and extend the doc line. That is a few product lines.
+
+**Edits I accept in advance.** My tests that call `.accessibilityLabel(spoken)` on a `SetRow` may switch to the new
+spelling, with no assertion changed: `setRow_outerLabel_relabelsTheRowOnly` and
+`SetRowContainerAdversarialTests.setRow_outerLabel_doesNotLabelTheCheckContainer`. After the rename they would
+otherwise test SwiftUI's modifier and fail.
+
+**If the orchestrator or Pete accepts the overload as it is,** the doc must also name the `Text` / `LocalizedStringKey`
+limit. Then nothing else stands in the way of G2.
+
