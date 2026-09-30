@@ -64,16 +64,17 @@
     }
 
     extension RenderingSuites {
-        /// Decision of fix round 2 (F06 slice 2): the intended VoiceOver tree of every slice-2
-        /// component, in every state it offers, pinned exactly: element count, order, label, value and
-        /// traits. The expected trees are literal tables, so any accidental change of structure (an
-        /// element added, merged, reordered, relabelled, or a container that carries a label) fails
-        /// here. Decorative parts (icons, rules, the ring's arcs, the header's spacer check) appear in
-        /// no table because they are no stop. Hit targets and actions are tested beside it.
+        /// Decision of fix round 2 (F06 slice 2): the intended VoiceOver tree of every component, in
+        /// every state it offers, pinned exactly: element count, order, label, value and traits
+        /// (slice 3's components are in `AccessibilityTreeSlice3Tables.swift`). The expected trees are
+        /// literal tables, so any accidental change of structure (an element added, merged, reordered,
+        /// relabelled, or a container that carries a label) fails here. Decorative parts (icons, rules,
+        /// the ring's arcs, the header's spacer check, the week's dots) appear in no table because they
+        /// are no stop. Hit targets and actions are tested beside it.
         @Suite("AccessibilityTree", .tags(.design))
         struct AccessibilityTreeTests {
             @Test(
-                "Every slice-2 component in every state has exactly its intended VoiceOver tree",
+                "Every component in every state has exactly its intended VoiceOver tree",
                 arguments: TreeTables.cases
             )
             func component_accessibilityTree_isExactlyTheTable(_ tree: TreeCase) {
@@ -112,9 +113,9 @@
         }
     }
 
-    /// The tables: every slice-2 component in every state it offers, and its intended tree.
+    /// The tables: every component in every state it offers, and its intended tree.
     nonisolated enum TreeTables {
-        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings
+        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings + slice3
 
         nonisolated static let buttons: [TreeCase] = [
             TreeCase("PrimaryButton with an icon", [.button("Start workout")]) {

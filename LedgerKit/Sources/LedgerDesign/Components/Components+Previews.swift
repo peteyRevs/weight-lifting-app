@@ -51,3 +51,41 @@ import SwiftUI
     )
     .ledgerGalleryPage()
 }
+
+#Preview("WeekStrip") {
+    WeekStripGallery().ledgerGalleryPage()
+}
+
+#Preview("StatTile") {
+    StatTileGallery().ledgerGalleryPage()
+}
+
+#Preview("ProgressSegments") {
+    ProgressSegmentsGallery().ledgerGalleryPage()
+}
+
+#Preview("SheetChrome") {
+    SheetChromeGallery().ledgerGalleryPage()
+}
+
+#Preview("EmptyState") {
+    EmptyStateGallery().ledgerGalleryPage()
+}
+
+#Preview("WatchPrimaryButton") {
+    WatchPrimaryButtonGallery().ledgerWatchPage()
+}
+
+#Preview("WatchRestRing") {
+    WatchRestRingGallery().ledgerWatchPage()
+}
+
+#Preview("WatchStatBlock") {
+    WatchStatBlockGallery().ledgerWatchPage()
+}
+
+#if DEBUG
+    #Preview("DesignGallery") {
+        DesignGallery()
+    }
+#endif

@@ -390,15 +390,22 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 - `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`, `LedgerMotion` (`snappy`, `ledgerBuzz(trigger:)` with a Reduce Motion opacity variant).
 - Components: `PrimaryButton`, `PillButton`, `IconPillButton`, `HairlineList/Row`,
   `SetRow` (with `SetRowHeader` and `SetRowSteppers`), `RestRing`, `WeekStrip`, `StatTile`,
-  `ProgressSegments`, `Eyebrow`, `SwapSheet`, `TabBar` (native `TabView` tinted; the custom
-  prototype bar is not replicated), watch variants where needed. Beside them: `LedgerIcon` (the
-  spec's stroked icons, sized like a type role), `.ledgerHitTarget()` (44 pt) and `.ledgerPill`
-  (a circular capsule, as CSS draws `border-radius: 999px`). Components take display strings the
-  caller has already localised, except `SetRow`'s three VoiceOver state words ("Pending", "Current
-  set", "Done"), which `LedgerDesign` localises itself (`String(localized:bundle: .module)`, English
-  until the module has a string catalog).
+  `ProgressSegments`, `Eyebrow`, `SheetChrome` (the swap sheet's frame), `EmptyState`, and for the
+  watch `WatchPrimaryButton`, `WatchRestRing` (the phone ring's geometry at the watch's
+  proportions) and `WatchStatBlock`. `TabBar` is the native `TabView` tinted; the custom prototype
+  bar is not replicated. Beside them: `LedgerIcon` (the spec's stroked icons, sized like a type
+  role), `.ledgerHitTarget()` (44 pt) and `.ledgerPill` (a circular capsule, as CSS draws
+  `border-radius: 999px`). Components take display strings the
+  caller has already localised, except the VoiceOver state words of `SetRow` ("Pending", "Current
+  set", "Done") and `WeekStrip` ("Rest day", "Planned", "Today", "Done"), which `LedgerDesign`
+  localises itself (`String(localized:bundle: .module)`, English until the module has a string
+  catalog). Spoken text a component cannot know (a set's units, a day's full date) is an
+  initializer parameter (`accessibilitySummary`), never an overload of SwiftUI's modifiers.
+- `DesignGallery` (Debug builds only, `#if DEBUG`): every token and component under its name, for
+  the debug menu (F07).
 - Every component has snapshot tests: light + dark × 3 Dynamic Type sizes;
-  watch components at 42 / 46 / 49 mm.
+  watch components at 42 / 46 / 49 mm, each at its default text size and at AX3, the largest
+  watch text size.
 
 ---
 

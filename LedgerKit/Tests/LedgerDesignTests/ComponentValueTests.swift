@@ -21,6 +21,35 @@ nonisolated struct ComponentValueTests {
     }
 }
 
+/// Slice 3's value types, held the same way: F09's week and stats, F10's progress, F18's rest ring.
+@Suite("Slice3ComponentValues", .tags(.design))
+nonisolated struct Slice3ComponentValueTests {
+    @Test("Slice 3's value types compare and hash off the main actor, in a struct and in an actor")
+    func valueTypes_offTheMainActor_areEquatableAndHashable() async {
+        let day = WeekStrip.Day(weekday: "W", date: "19", mark: .today, accessibilitySummary: "Wednesday, August 19")
+        let model = TodayPresentation(
+            week: [day], mark: .today, segment: ProgressSegment(length: 5, state: .current), phase: .current,
+            ring: .watch
+        )
+        #expect(model == model)
+        #expect(model != TodayPresentation(
+            week: [], mark: .done, segment: ProgressSegment(length: 3, state: .done), phase: .upcoming, ring: .phone
+        ))
+        #expect(Set([WeekStrip.Mark.rest, .planned, .today, .done, .done]).count == 4)
+        #expect(Set([ProgressSegment.State.done, .current, .upcoming]).count == 3)
+        #expect(await ValueChecker().isToday(day))
+    }
+}
+
+/// A presentation value such as F09's and F10's: every slice-3 value type as a stored, compared property.
+private nonisolated struct TodayPresentation: Equatable, Sendable {
+    var week: [WeekStrip.Day]
+    var mark: WeekStrip.Mark
+    var segment: ProgressSegment
+    var phase: ProgressSegment.State
+    var ring: RestRingGeometry
+}
+
 /// A presentation value such as F10's: every slice-2 value type as a stored, compared property.
 private nonisolated struct SetRowPresentation: Equatable, Sendable {
     var state: SetRowState
@@ -35,5 +64,9 @@ private nonisolated struct SetRowPresentation: Equatable, Sendable {
 private actor ValueChecker {
     func isLogged(_ state: SetRowState) -> Bool {
         state == .done
+    }
+
+    func isToday(_ day: WeekStrip.Day) -> Bool {
+        day.mark == .today
     }
 }
