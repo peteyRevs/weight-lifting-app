@@ -29,6 +29,7 @@
                 "watchInk", "watchInkSecondary", "watchInkMuted", "watchOutline", "watchHairline", "watchTrack",
                 "xs · 4", "s · 8", "m · 12", "l · 16", "xl · 24", "xxl · 32", "screen · 26",
                 "row · 16", "card · 26", "sheet · 28", "pill · 999", "width · 1", "snappy", "buzz",
+                "buzzCycle · 0.38 s", "buzzRepeats · 3", "boldTextWeightStep · 100",
                 "arrow", "check", "chevron", "swap", "minus", "plus"
             ] + LedgerFont.Role.allCases.map(\.rawValue)
 
@@ -56,11 +57,13 @@
                     }
                 }
 
-                @Test("DesignGallery matches its references (large)", arguments: [ColorScheme.light, .dark])
-                func designGallery_scheme_matchesReference(_ scheme: ColorScheme) {
+                /// Dark only, the primary theme (review R3-S4): the gallery adds no pixels the component and
+                /// token references lack, and every design change re-records it.
+                @Test("DesignGallery matches its reference (dark, large)")
+                func designGallery_dark_matchesReference() {
                     assertPhoneSnapshot(
                         of: DesignGalleryContent().frame(width: SnapshotConfig.phoneWidth),
-                        SnapshotAppearance(scheme, .large)
+                        SnapshotAppearance(.dark, .large)
                     )
                 }
             #endif

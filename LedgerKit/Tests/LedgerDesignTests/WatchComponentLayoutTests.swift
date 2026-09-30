@@ -84,7 +84,7 @@ nonisolated struct WatchTypeFloorTests {
             )
             func watchRestRing_everyCell_fitsTheScreen(_ appearance: WatchAppearance) throws {
                 let image = try #require(RenderedImage.render(
-                    WatchRestRing(progress: 1, label: "10:00"),
+                    WatchRestRing(progress: 1, label: "10:00", accessibilitySummary: "10 minutes of rest left"),
                     dynamicTypeSize: appearance.dynamicTypeSize
                 ))
                 let screen = appearance.size.size
@@ -121,7 +121,7 @@ nonisolated struct WatchTypeFloorTests {
             }
 
             private func ring(_ label: String) -> AnyView {
-                AnyView(WatchRestRing(progress: 1, label: label))
+                AnyView(WatchRestRing(progress: 1, label: label, accessibilitySummary: "Rest"))
             }
 
             /// Two blocks side by side, as the summary screen sets them.

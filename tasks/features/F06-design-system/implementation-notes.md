@@ -1358,3 +1358,71 @@ debug-only gallery (201), which the slice plan puts here, and the previews. Noth
   `swift build -c release --package-path LedgerKit --target LedgerDesign`, then run `nm` on its `LedgerDesign.o`.
 - **Device (F20's checklist).** Present a `SheetChrome` in a `.sheet` and check that the system sheet takes the
   surface and the 28 pt corners (`presentationBackground` / `presentationCornerRadius` cannot be snapshot-tested).
+
+### Slice 3 — fix round 1
+
+Against the review's four Should fix items (review.md, R3-S1 to R3-S4) and the tester's four open findings
+(test-findings.md, S3-1 to S3-4). The four red adversarial tests pass, unchanged. The only edit to a tester's file
+passes the new required `accessibilitySummary` to `WatchRestRing` in `Slice3WatchAdversarialTests` (three calls); no
+assertion changed.
+
+A previous implementer session started this round and stopped part-way. Its work was reviewed item by item. The
+changes for the eight items were kept, with fixes. The nits it had also taken on are out of this round's scope and
+were reverted: R3-N1's `.clipped()`, R3-N3 (gallery text-size cap), R3-N4 (doc), R3-N5 (WeekStrip keys), R3-N7
+(`StatTileRow` gap), R3-N8 (`scripts/tests/design-gallery.test.sh`, and the hand-written lists it replaced),
+R3-N9 (docs and gallery summaries) and R3-N10 (`shrinkLimit` move, `minimumScaleFactor`, architecture §11). They stay
+on the follow-up list. R3-N6 stays in, because R3-S2 asks for it.
+
+| # | Change | Test that fails without it (mutation run, then restored) |
+|---|---|---|
+| R3-S1 | `SheetChrome` frames itself `.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)`, so in a `.sheet` it fills the detent and keeps its content at the top. The doc says so. With no height offered (snapshots, the gallery's `ScrollView`) it keeps its own height, and no reference moved | `Slice3ComponentAccessibilityTests.sheetChrome_sheetHeight_keepsTheTitleAtTheTop`: a marker directly above a 600 pt-tall chrome; the title's top is at most `l + 44` below it. Mutation (the old frame): fails in both cells; every reference still passes |
+| S3-1 | The title `Text` is `.fixedSize(horizontal: false, vertical: true)`, the tester's checked fix: a sheet's height never cuts it short | The tester's `sheetChrome_sheetSizedContainer_titleGetsEveryLine` passes. With R3-S1's frame in place, it also passes without `fixedSize`, so it no longer pins it. New: `sheetChrome_shorterThanItsContent_titleGetsEveryLine`, a 400 pt chrome with eight rows at AX3 and AX5, where the title must be as tall as the same title alone. Mutation (no `fixedSize`): at AX3 the title is 47 pt tall, one line, against 142 pt, three lines |
+| R3-S2 | The stat unit is `bodyLight` at `StatTile.unitEms` = 19/34 of the value's scaled size (v2 Today, 300 19 px beside 700 34 px), through `LedgerFont.font(_:size:legibilityWeight:)`. It scales with the value's text size and Bold Text, and no new role was added. With it, R3-N6: the unit run has `bodyLight`'s own tracking (0), not the numerals' −0.03 em. `valueLine` became `static` so a test can build it | `StatTileSnapshotTests` (the re-recorded references; mutation back to `bodyLight`'s own size: dark-large, dark-xLarge and light-xLarge fail) and the gallery reference. Tracking: new `StatTileValueLineTests.valueLine_unitRun_keepsItsOwnTracking`, which checks the run's attribute and that it wins on screen ("195 kg lifted" is ≥ 4 px wider than with the numerals' tracking on the unit; without the fix both measure 104 px). Mutation (no tracking): both expectations fail |
+| R3-S3 | `WatchRestRing(progress:label:accessibilitySummary:)`: the summary is required and the fallback to the label is gone. The gallery's rings read "2 minutes 30 seconds left", "1 minute 15 seconds left", "Rest over" | Tree table "WatchRestRing gallery: full, half, empty" now expects the summaries. Mutation (the ring reads its label): that case and "WatchRestRing named by the feature" fail. Leaving the argument out no longer compiles |
+| R3-S4 | `DesignGalleryTests.designGallery_dark_matchesReference`: dark only. Both old references deleted, one dark reference recorded under the new name | The test itself: a light reference cannot come back without a new recording. F06's `__Snapshots__` is now 4.3 MB |
+| S3-2 | The type page shows "boldTextWeightStep · 100". The motion page shows "buzzCycle · 0.38 s" and "buzzRepeats · 3" under the Play row | The tester's `gallery_everyPublicTokenConstant_isNamed` passes. `DesignGalleryTests.tokens` lists the three too. Mutation (no buzzRepeats caption): both fail |
+| S3-3 | `ProgressSegments` leaves segments of length ≤ 0 out of the `ForEach` and out of the gap count in `widths(of:in:)`, as if they were not there. The doc says so | The tester's `progressSegments_zeroLengthSegment_leavesNoGap` passes. `ProgressSegmentsLayoutTests.widths_nonPositiveLengths_drawNothingAndTakeNoGap`: `[0, −2, 3]` → `[0, 0, 100]`, and `[3, 0, 3]` → `[48.5, 0, 48.5]` (the tester's notes accepted this update in advance). Mutations: the `ForEach` without the filter fails the tester's test; the old gap count fails the unit test |
+| S3-4 | `.accessibilityAction(.escape, onCancel)` on the chrome: VoiceOver's two-finger scrub does what the cancel button does, in a `.sheet` with `interactiveDismissDisabled` or presented any other way. The doc says so | The tester's `sheetChrome_escapeGesture_callsOnCancel` passes. The tree tables now record, per stop, whether escape is handled (`TreeNode.escapes`, walked as UIKit routes it). Every `SheetChrome` stop expects it and every other stop expects none. Mutation (no action): the tester's test and the four SheetChrome tree cases fail |
+
+**Deviation from the prototype.** None new. The unit now follows v2's ratio. Exercise history's 15/30 (0.5 em) is
+drawn at 19/34 (0.56 em), which is close; F12 asks for a size variant if it needs the exact ratio.
+
+**References re-recorded (11), and why.**
+- `statTile_appearance_matchesReference-_.{light,dark}-{large,xLarge,accessibility3}.png` (6), and the four slice 3
+  sheets that hold `StatTileGallery`: `slice3Components_accessibility5…dark-accessibility5`,
+  `…_boldText…bold-dark-large` and `…_increasedContrast…increasedContrast-{light,dark}-large` (4). The cause is R3-S2
+  (and R3-N6): the unit is set at 19/34 of the value. The four sheets and the AX3 tiles still passed at the old size,
+  within tolerance, but they draw the changed component, so they were recorded again, as the review asks.
+  - Recorded under Xcode 27.0 on iPhone 17 / iOS 27.0 through the lock, with `SNAPSHOT_TESTING_RECORD=all` on those two
+    suites only.
+  - Every one was compared with `HEAD` pixel by pixel. The changes stay inside the stat tiles' value lines (for example
+    x 27–282, y 36–141 at dark-large). I opened each one: "/4", "k" and "×5" are larger and sit on the value's baseline.
+  - The two pressed sheets in the same suite came back byte-identical.
+- `designGallery_dark_matchesReference.dark-large.png` (new, 402 × 7010, replaces the 402 × 6946 pair). Against the
+  old dark image, it differs in three places: 24 pt more on the type page ("boldTextWeightStep · 100"), 40 pt more on
+  the motion page (the buzz captions), and the stat tile units. Everything else is row for row the same.
+- Deleted: `designGallery_scheme_matchesReference-_.{light,dark}-large.png`.
+
+**Size.** Measured as in slice 3: Swift lines that are neither blank nor comments, added and removed in the diff.
+- Product (`LedgerDesign`): +38 −23, net +15. `StatTile` +12 −7, `TokenPages` +14 −7, `WatchRestRing` +6 −6,
+  `ProgressSegments` +3 −2, `SheetChrome` +3 −1. The slice is now ≈ 758 code lines, over the 500 target and under
+  the ~1,000 split line. Nothing was compressed.
+- Tests: +119 −23. That covers the new `StatTileValueLineTests` (31), the two `SheetChrome` tests (+38), and the
+  escape column in the tree helper (+25) and tables (+9 −8).
+
+**Gate.**
+- `scripts/check.sh --fast`: green (687 host tests; `LedgerDesignTests` builds on the host).
+- `LedgerDesignTests` alone on iOS through the lock, before the gate: 258 cases, 257 passed, 1 skipped, 0 failed.
+  The mutation runs used the same script (`scratchpad/f06s3-fix1/`: `design-ios.sh`, `mutate.py`, results
+  `mutA`, `mutB`, `mutC`, `s31-without`, `mutTracking`). Sources were restored from backups after each run, and
+  `git diff --stat` was checked against the pre-mutation state.
+- **Full `scripts/check.sh` through the lock** (`scratchpad/f06s3-fix1/check.log`; 268 s: lint 42 s, iOS 107 s,
+  watchOS 89 s): **green, exit 0**.
+
+  | Plan | Tests | Passed | Failed | Skipped | `LedgerDesignTests` |
+  |---|---|---|---|---|---|
+  | PR-iOS | 951 | 949 | 0 | 2 | 257 passed, 1 skipped |
+  | PR-watchOS | 852 | 850 | 0 | 2 | 167 passed, 1 skipped |
+
+  The skips are the two nightly-only tests. Step 2 (format, lint, script tests) passed. Coverage gate:
+  **LedgerDesign 97.20 % (1944 / 2000)**, up from 97.10 %; overall 98.02 %.

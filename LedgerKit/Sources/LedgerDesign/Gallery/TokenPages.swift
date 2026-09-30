@@ -45,10 +45,13 @@
         }
     }
 
-    /// Every type role: its name, then sample copy set in it.
+    /// Bold Text's weight step, then every type role: its name, then sample copy set in it.
     struct TypeTokenPage: View {
         var body: some View {
             VStack(alignment: .leading, spacing: LedgerSpacing.m) {
+                Text(verbatim: "boldTextWeightStep · \(Int(LedgerFont.boldTextWeightStep))")
+                    .ledgerFont(.caption)
+                    .foregroundStyle(LedgerColor.ink)
                 ForEach(LedgerFont.Role.allCases, id: \.self) { role in
                     VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
                         Text(verbatim: role.rawValue).ledgerFont(.caption).foregroundStyle(LedgerColor.inkMuted)
@@ -118,21 +121,25 @@
         }
     }
 
-    /// The two motion tokens, played on demand: `snappy` moves a word, `buzz` shakes one (or pulses it
-    /// under Reduce Motion).
+    /// The motion tokens: `snappy` and the buzz, played on demand (`snappy` moves a word, `buzz` shakes
+    /// one, or pulses it under Reduce Motion), then the buzz's cycle and repeats.
     struct MotionTokenPage: View {
         @State private var plays = 0
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
         var body: some View {
-            HStack(spacing: LedgerSpacing.l) {
-                PillButton("Play") {
-                    withAnimation(reduceMotion ? nil : LedgerMotion.snappy) { plays += 1 }
+            VStack(alignment: .leading, spacing: LedgerSpacing.s) {
+                HStack(spacing: LedgerSpacing.l) {
+                    PillButton("Play") {
+                        withAnimation(reduceMotion ? nil : LedgerMotion.snappy) { plays += 1 }
+                    }
+                    Text(verbatim: "snappy")
+                        .offset(x: plays.isMultiple(of: 2) ? 0 : LedgerSpacing.l)
+                    Text(verbatim: "buzz")
+                        .ledgerBuzz(trigger: plays)
                 }
-                Text(verbatim: "snappy")
-                    .offset(x: plays.isMultiple(of: 2) ? 0 : LedgerSpacing.l)
-                Text(verbatim: "buzz")
-                    .ledgerBuzz(trigger: plays)
+                Text(verbatim: "buzzCycle · \(LedgerMotion.buzzCycle) s")
+                Text(verbatim: "buzzRepeats · \(LedgerMotion.buzzRepeats)")
             }
             .ledgerFont(.caption)
             .foregroundStyle(LedgerColor.ink)

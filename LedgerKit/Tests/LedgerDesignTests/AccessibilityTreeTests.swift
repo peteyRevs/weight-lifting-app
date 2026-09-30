@@ -5,21 +5,35 @@
     import Testing
     import UIKit
 
-    /// One VoiceOver stop, as the table writes it: label, value and traits, and the accessibility
-    /// containers between it and the hosting view (their labels, "" for an unlabelled one), all
-    /// compared exactly. Every table expects no container: a `.contain` group, labelled or not, is a
-    /// structure change (S2-6).
+    /// One VoiceOver stop, as the table writes it: label, value and traits, the accessibility
+    /// containers between it and the hosting view (their labels, "" for an unlabelled one), and whether
+    /// VoiceOver's escape gesture from it is handled, all compared exactly. Every table expects no
+    /// container: a `.contain` group, labelled or not, is a structure change (S2-6). Only a sheet's
+    /// stops escape (slice 3, S3-4).
     nonisolated struct TreeNode: Equatable, Sendable, CustomStringConvertible {
         let label: String
         let value: String
         let traits: UInt64
         let containers: [String]
+        let escapes: Bool
 
-        init(_ label: String, value: String = "", _ traits: UIAccessibilityTraits, containers: [String] = []) {
+        init(
+            _ label: String,
+            value: String = "",
+            _ traits: UIAccessibilityTraits,
+            containers: [String] = [],
+            escapes: Bool = false
+        ) {
             self.label = label
             self.value = value
             self.traits = traits.rawValue
             self.containers = containers
+            self.escapes = escapes
+        }
+
+        /// The same stop, from which VoiceOver's escape gesture is handled.
+        var escaping: Self {
+            Self(label, value: value, UIAccessibilityTraits(rawValue: traits), containers: containers, escapes: true)
         }
 
         static func button(_ label: String, value: String = "", _ extra: UIAccessibilityTraits = []) -> Self {
@@ -36,6 +50,7 @@
 
         var description: String {
             "\"\(label)\" value \"\(value)\" traits \(traits)" + (containers.isEmpty ? "" : " in \(containers)")
+                + (escapes ? " escapes" : "")
         }
     }
 
@@ -68,9 +83,9 @@
         /// every state it offers, pinned exactly: element count, order, label, value and traits
         /// (slice 3's components are in `AccessibilityTreeSlice3Tables.swift`). The expected trees are
         /// literal tables, so any accidental change of structure (an element added, merged, reordered,
-        /// relabelled, or a container that carries a label) fails here. Decorative parts (icons, rules,
-        /// the ring's arcs, the header's spacer check, the week's dots) appear in no table because they
-        /// are no stop. Hit targets and actions are tested beside it.
+        /// relabelled, a container that carries a label, an escape gained or lost) fails here.
+        /// Decorative parts (icons, rules, the ring's arcs, the header's spacer check, the week's dots)
+        /// appear in no table because they are no stop. Hit targets and actions are tested beside it.
         @Suite("AccessibilityTree", .tags(.design))
         struct AccessibilityTreeTests {
             @Test(
@@ -84,7 +99,8 @@
                             element.accessibilityLabel ?? "",
                             value: element.accessibilityValue ?? "",
                             element.accessibilityTraits,
-                            containers: Self.containers(above: element)
+                            containers: Self.containers(above: element),
+                            escapes: Self.escapes(from: element)
                         )
                     }
                 }
@@ -101,6 +117,20 @@
                     parent = container(of: current)
                 }
                 return labels
+            }
+
+            /// Whether VoiceOver's escape gesture from `element` is handled. UIKit offers it to the element,
+            /// then each accessibility container above it, then the views up from the hosting view. Handling
+            /// it runs the handler, which in the tables is a no-op.
+            static func escapes(from element: NSObject) -> Bool {
+                var candidate: NSObject? = element
+                while let current = candidate {
+                    if current.accessibilityPerformEscape() {
+                        return true
+                    }
+                    candidate = container(of: current) ?? (current as? UIView)?.superview
+                }
+                return false
             }
 
             static func container(of object: NSObject) -> NSObject? {

@@ -22,6 +22,53 @@
                 #expect(cancels == 1)
             }
 
+            /// Review R3-S1: a `.sheet` offers its root the whole detent. The chrome fills it and keeps the
+            /// title at the top (under its padding and beside the 44 pt cancel), not centred in the sheet.
+            /// The helper centres the view in its window, so the title is measured from a marker placed
+            /// directly above the sheet-sized frame.
+            @Test("SheetChrome in a sheet-sized container fills it and keeps its title at the top", arguments: sizes)
+            func sheetChrome_sheetHeight_keepsTheTitleAtTheTop(_ appearance: SnapshotAppearance) throws {
+                let sheet = VStack(spacing: 0) {
+                    Text(verbatim: "Sheet top")
+                    SheetChrome("Swap exercise", cancel: "Cancel") {} content: { Text(verbatim: "Content") }
+                        .frame(height: 600)
+                }
+                let elements = sheet.accessibilityElements(appearance)
+                let top = try #require(elements.first { $0.label == "Sheet top" }, "\(elements)")
+                let title = try #require(elements.first { $0.label == "Swap exercise" }, "\(elements)")
+                #expect(
+                    title.frame.minY - top.frame.maxY <= LedgerSpacing.l + LedgerHitTarget.minimum,
+                    "the title is \(title.frame.minY - top.frame.maxY) pt below the sheet's top: \(title)"
+                )
+            }
+
+            /// G2 S3-1: at a detent shorter than its content, the content gives way and the title keeps
+            /// every line it needs, as tall as the same title alone at the same width. At accessibility
+            /// sizes the cancel sits under the title, so the title has the sheet's full inner width.
+            @Test(
+                "SheetChrome shorter than its content still gives its title every line",
+                arguments: [DynamicTypeSize.accessibility3, .accessibility5]
+            )
+            func sheetChrome_shorterThanItsContent_titleGetsEveryLine(_ size: DynamicTypeSize) throws {
+                let appearance = SnapshotAppearance(.dark, size)
+                let title = "Replace Single-Arm Dumbbell Romanian Deadlift"
+                let sheet = SheetChrome(title, cancel: "Cancel") {} content: {
+                    ForEach(0 ..< 8, id: \.self) { row in
+                        Text(verbatim: "Alternative \(row + 1), same movement pattern")
+                    }
+                }
+                .frame(height: 400)
+                let alone = Text(title).ledgerFont(.subheading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, LedgerSpacing.xl)
+                let inSheet = try #require(sheet.accessibilityElements(appearance).first { $0.label == title })
+                let needed = try #require(alone.accessibilityElements(appearance).first)
+                #expect(
+                    abs(inSheet.frame.height - needed.frame.height) < 0.5,
+                    "\(size): \(inSheet.frame.size) in the sheet, \(needed.frame.size) alone"
+                )
+            }
+
             @Test("EmptyState: its action is a 44 pt button that calls it", arguments: sizes)
             func emptyState_action_isATargetThatActs(_ appearance: SnapshotAppearance) throws {
                 var clears = 0

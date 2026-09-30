@@ -9,6 +9,10 @@ import SwiftUI
 /// week"), else the strings as shown ("3/4, sessions this week"). Strings are shown as given;
 /// features pass copy from their catalog.
 public struct StatTile: View {
+    /// v2 Today: the unit is 300 19 px beside the 700 34 px value (Exercise history's 15 beside 30 is
+    /// close), so it scales with the value's text size and Bold Text.
+    static let unitEms: CGFloat = 19.0 / 34
+
     private let value: String
     private let unit: String?
     private let caption: String
@@ -32,8 +36,9 @@ public struct StatTile: View {
     }
 
     public var body: some View {
+        let valueSize = LedgerFont.scaledSize(.numeralXL, dynamicTypeSize: dynamicTypeSize)
         VStack(alignment: .leading, spacing: LedgerSpacing.s) {
-            Text(valueLine)
+            Text(Self.valueLine(value, unit: unit, valueSize: valueSize, legibilityWeight: legibilityWeight))
                 .ledgerFont(.numeralXL)
                 .foregroundStyle(LedgerColor.ink)
                 .lineLimit(1)
@@ -47,18 +52,22 @@ public struct StatTile: View {
         .accessibilityLabel(Text(verbatim: summary ?? spoken))
     }
 
-    /// The value, then the unit as a run in `bodyLight` and `inkMuted` (the prototype's .32 is below AA).
-    /// One line, so the unit sits on the value's baseline and the value's line box alone sets the
-    /// height: every tile's caption is the same distance below its number, unit or not.
-    private var valueLine: AttributedString {
+    /// The value, then the unit as a run in `bodyLight` at 19/34 of the value's size, `inkMuted` (the
+    /// prototype's .32 is below AA) and its role's own tracking, not the numerals'. One line, so the unit
+    /// sits on the value's baseline and the value's line box alone sets the height: every tile's caption
+    /// is the same distance below its number, unit or not.
+    static func valueLine(
+        _ value: String,
+        unit: String?,
+        valueSize: CGFloat,
+        legibilityWeight: LegibilityWeight?
+    ) -> AttributedString {
         var line = AttributedString(value)
         if let unit {
+            let unitSize = valueSize * Self.unitEms
             var small = AttributedString(unit)
-            small.font = LedgerFont.font(
-                .bodyLight,
-                dynamicTypeSize: dynamicTypeSize,
-                legibilityWeight: legibilityWeight
-            )
+            small.font = LedgerFont.font(.bodyLight, size: unitSize, legibilityWeight: legibilityWeight)
+            small.tracking = LedgerFont.Role.bodyLight.spec.tracking * unitSize
             small.foregroundColor = LedgerColor.inkMuted
             line += small
         }

@@ -92,10 +92,10 @@
             TreeCase(
                 "SheetChrome gallery, in order",
                 [
-                    .text("Swap exercise", .header), .button("Cancel"),
-                    .text("Same movement pattern, equipment you have."),
-                    .button("Dumbbell Bench Press, Similar pattern · 2 × 70 lb, Use"),
-                    .button("Smith Machine Press, Machine · bench occupied?, Use")
+                    TreeNode.text("Swap exercise", .header).escaping, TreeNode.button("Cancel").escaping,
+                    TreeNode.text("Same movement pattern, equipment you have.").escaping,
+                    TreeNode.button("Dumbbell Bench Press, Similar pattern · 2 × 70 lb, Use").escaping,
+                    TreeNode.button("Smith Machine Press, Machine · bench occupied?, Use").escaping
                 ]
             ) { SheetChromeGallery() },
             TreeCase(
@@ -131,9 +131,9 @@
             TreeCase(
                 "WatchRestRing gallery: full, half, empty",
                 [
-                    .text("2:30", .updatesFrequently),
-                    .text("1:15", .updatesFrequently),
-                    .text("0:00", .updatesFrequently)
+                    .text("2 minutes 30 seconds left", .updatesFrequently),
+                    .text("1 minute 15 seconds left", .updatesFrequently),
+                    .text("Rest over", .updatesFrequently)
                 ]
             ) { WatchRestRingGallery() },
             TreeCase("WatchRestRing named by the feature", [.text("1 minute 15 seconds left", .updatesFrequently)]) {
@@ -163,8 +163,10 @@
         ]
 
         /// A sheet with one line of content: its title as a heading, the cancel button, the content.
+        /// Every stop hands VoiceOver's escape to `onCancel` (S3-4).
         nonisolated static let sheet: [TreeNode] = [
-            .text("Swap exercise", .header), .button("Cancel"), .text("Content")
+            TreeNode.text("Swap exercise", .header).escaping, TreeNode.button("Cancel").escaping,
+            TreeNode.text("Content").escaping
         ]
 
         nonisolated static func day(_ label: String, _ mark: String) -> TreeNode {

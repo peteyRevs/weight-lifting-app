@@ -89,7 +89,8 @@
         }
 
         static func ring(_ progress: Double) throws -> PixelBuffer {
-            try render(WatchRestRing(progress: progress, label: "1:15").background(LedgerColor.watchGround))
+            try render(WatchRestRing(progress: progress, label: "1:15", accessibilitySummary: "Rest")
+                .background(LedgerColor.watchGround))
         }
     }
 
@@ -147,7 +148,7 @@
             func watchRestRing_largestText_fitsEveryScreen(_ screen: CGSize) throws {
                 for bold in [false, true] {
                     let ring = try WatchProbe.render(
-                        WatchRestRing(progress: 1, label: "10:00"),
+                        WatchRestRing(progress: 1, label: "10:00", accessibilitySummary: "Rest"),
                         size: .accessibility3,
                         bold: bold
                     )
@@ -211,7 +212,8 @@
                 let value = try WatchProbe.floorHeight("8", weight: 700, width: 92, tabular: true)
                 for size in WatchProbe.textSizes {
                     let stat = WatchStatBlock(digits, caption: "Sets").padding(8).background(Color.black)
-                    let ring = WatchRestRing(progress: 0, label: digits).padding(8).background(Color.black)
+                    let ring = WatchRestRing(progress: 0, label: digits, accessibilitySummary: "Rest").padding(8)
+                        .background(Color.black)
                     for (name, view) in [
                         ("WatchStatBlock value", AnyView(stat)),
                         ("WatchRestRing label", AnyView(ring))

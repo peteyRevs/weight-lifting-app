@@ -6,15 +6,16 @@ import SwiftUI
 /// clamped to 0…1. The ring grows and shrinks with its label's text size, so the label always fits;
 /// a label too long for it shrinks, never below the 11 pt watch floor.
 ///
-/// VoiceOver reads one element that updates frequently: `accessibilitySummary` if given ("1 minute
-/// 15 seconds left"; a bare "1:15" can sound like a time of day), else the label.
+/// VoiceOver reads one element that updates frequently, named by `accessibilitySummary`, the time left
+/// in words ("1 minute 15 seconds left"). It is required: a bare "1:15" can sound like a time
+/// of day, so the ring never reads its label.
 public struct WatchRestRing: View {
     private let progress: Double
     private let label: String
-    private let summary: String?
+    private let summary: String
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    public init(progress: Double, label: String, accessibilitySummary: String? = nil) {
+    public init(progress: Double, label: String, accessibilitySummary: String) {
         self.progress = progress
         self.label = label
         summary = accessibilitySummary
@@ -39,7 +40,7 @@ public struct WatchRestRing: View {
         }
         .frame(width: geometry.diameter * scale, height: geometry.diameter * scale)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: summary ?? label))
+        .accessibilityLabel(Text(verbatim: summary))
         .accessibilityAddTraits(.updatesFrequently)
     }
 }
@@ -48,9 +49,9 @@ public struct WatchRestRing: View {
 struct WatchRestRingGallery: View {
     var body: some View {
         VStack(spacing: LedgerSpacing.l) {
-            WatchRestRing(progress: 1, label: "2:30")
-            WatchRestRing(progress: 0.5, label: "1:15")
-            WatchRestRing(progress: 0, label: "0:00")
+            WatchRestRing(progress: 1, label: "2:30", accessibilitySummary: "2 minutes 30 seconds left")
+            WatchRestRing(progress: 0.5, label: "1:15", accessibilitySummary: "1 minute 15 seconds left")
+            WatchRestRing(progress: 0, label: "0:00", accessibilitySummary: "Rest over")
         }
         .frame(maxWidth: .infinity)
     }

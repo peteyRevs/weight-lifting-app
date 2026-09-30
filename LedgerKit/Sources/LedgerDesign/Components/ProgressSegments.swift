@@ -7,7 +7,7 @@ public nonisolated struct ProgressSegment: Equatable, Sendable {
     }
 
     /// The segment's share of the bar, relative to the others (the exercise's set count). Zero or
-    /// less draws nothing.
+    /// less draws nothing and takes no gap, as if the segment were not there.
     public let length: Int
     public let state: State
 
@@ -43,7 +43,7 @@ public struct ProgressSegments: View {
         GeometryReader { proxy in
             let widths = Self.widths(of: segments, in: proxy.size.width)
             HStack(spacing: Self.gap) {
-                ForEach(segments.indices, id: \.self) { index in
+                ForEach(segments.indices.filter { segments[$0].length > 0 }, id: \.self) { index in
                     Rectangle().fill(color(segments[index].state)).frame(width: widths[index])
                 }
             }
@@ -54,11 +54,13 @@ public struct ProgressSegments: View {
         .accessibilityValue(Text(verbatim: value))
     }
 
-    /// Each segment's width: `total` less the gaps, shared in proportion to the lengths.
+    /// Each segment's width: `total` less the gaps between the segments drawn, shared in proportion to
+    /// the lengths. A segment of zero or less gets 0 and no gap.
     nonisolated static func widths(of segments: [ProgressSegment], in total: CGFloat) -> [CGFloat] {
         let lengths = segments.map { CGFloat(max($0.length, 0)) }
+        let drawn = lengths.count { $0 > 0 }
         let sum = lengths.reduce(0, +)
-        let available = max(total - gap * CGFloat(max(segments.count - 1, 0)), 0)
+        let available = max(total - gap * CGFloat(max(drawn - 1, 0)), 0)
         return lengths.map { sum > 0 ? available * $0 / sum : 0 }
     }
 

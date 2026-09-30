@@ -19,10 +19,12 @@ nonisolated struct ProgressSegmentsLayoutTests {
         #expect(widths[3] == widths[4])
     }
 
-    @Test("A segment of zero or negative length draws nothing; the others share the width")
-    func widths_nonPositiveLengths_drawNothing() {
+    @Test("A segment of zero or negative length draws nothing and takes no gap; the others share the width")
+    func widths_nonPositiveLengths_drawNothingAndTakeNoGap() {
         let segments = [0, -2, 3].map { ProgressSegment(length: $0, state: .done) }
-        #expect(ProgressSegments.widths(of: segments, in: 100) == [0, 0, 100 - 2 * ProgressSegments.gap])
+        #expect(ProgressSegments.widths(of: segments, in: 100) == [0, 0, 100])
+        let middle = [3, 0, 3].map { ProgressSegment(length: $0, state: .done) }
+        #expect(ProgressSegments.widths(of: middle, in: 100) == [48.5, 0, 48.5], "one 3 pt gap, not two")
     }
 
     @Test("No segments, no length or no room draws nothing")

@@ -2,12 +2,13 @@ import SwiftUI
 
 /// A bottom sheet's frame (v2 "Swap exercise"): a title and a ghost cancel pill on one line (the
 /// pill under the title at accessibility text sizes), the content under them, on the raised surface
-/// with 28 pt top corners and a one-point rule along the top edge. Present it with `.sheet`: it also
-/// sets the sheet's background and corner radius, so the system sheet takes the same surface and
-/// shape.
+/// with 28 pt top corners and a one-point rule along the top edge. Present it with `.sheet`: it fills
+/// the sheet and keeps its content at the top, and it sets the sheet's background and corner radius,
+/// so the system sheet takes the same surface and shape. The title always gets every line it needs.
 ///
-/// VoiceOver reads the title as a heading, then the cancel button, then the content. `title` and
-/// `cancel` are shown as given; features pass copy from their catalog.
+/// VoiceOver reads the title as a heading, then the cancel button, then the content, and its escape
+/// gesture (a two-finger scrub) calls `onCancel`, as the cancel button does. `title` and `cancel` are
+/// shown as given; features pass copy from their catalog.
 public struct SheetChrome<Content: View>: View {
     private let title: String
     private let cancel: String
@@ -43,6 +44,7 @@ public struct SheetChrome<Content: View>: View {
                 Text(title)
                     .ledgerFont(.subheading)
                     .foregroundStyle(LedgerColor.ink)
+                    .fixedSize(horizontal: false, vertical: true) // a sheet's height must never cut it short
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
                 PillButton(cancel, style: .ghost, action: onCancel)
@@ -51,13 +53,14 @@ public struct SheetChrome<Content: View>: View {
         }
         .padding(.horizontal, LedgerSpacing.xl)
         .padding(.vertical, LedgerSpacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading) // fills a sheet, from the top
         .background(LedgerColor.surface, in: shape)
         .overlay {
             // CSS `border-top` on a rounded box: the rule runs along the top edge into both corners.
             shape.strokeBorder(LedgerColor.hairline, lineWidth: LedgerHairline.width)
                 .mask(alignment: .top) { Rectangle().frame(height: LedgerRadius.sheet) }
         }
+        .accessibilityAction(.escape, onCancel)
         .presentationBackground(LedgerColor.surface)
         .presentationCornerRadius(LedgerRadius.sheet)
     }
