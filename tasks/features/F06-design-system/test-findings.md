@@ -1601,3 +1601,131 @@ tests.
 **Edits I accept in advance.** If S3-4 is decided the other way, delete `sheetChrome_escapeGesture_callsOnCancel`
 and keep its positive control. If Pete rules `boldTextWeightStep` is not a gallery token, remove that one entry from
 `DesignGalleryAdversarialTests.tokens`.
+
+## Slice 3 — close-out round (`a19d20a`)
+
+Scope: fix round 1 only (R3-S1 to R3-S4, S3-1 to S3-4), attacked at the edges: text sizes xSmall to AX5, Bold Text,
+long and three-line titles, empty and one-line sheets, sheets shorter than their content, non-positive segments
+anywhere in the bar (including `Int.min`), empty units, both schemes. Toolchain as round 1.
+
+### What was written
+
+Two files in `LedgerKit/Tests/LedgerDesignTests/Adversarial/`, 10 test functions, iOS (`RenderingSuites`). No new
+references.
+
+| File | Attacks |
+|---|---|
+| `Slice3CloseoutSheetAdversarialTests.swift` | Title squeezed (300 pt under twelve rows) against the same chrome at its ideal height: three titles up to three lines, eight sizes xSmall–AX5, regular and Bold Text. Title at the top of an 874 pt sheet with no content and with one line, eight sizes. Scrolling content (twenty rows in a `ScrollView`) in a 437 pt (`.medium`) sheet: title at the top and whole at large, AX3, AX5. Non-scrolling content that outgrows a 437 pt sheet (**red, C3-1**). Escape from every stop, including a content row, at xSmall and AX5: `onCancel` once per stop, the row's action never. An escape set inside the content wins over the chrome's |
+| `Slice3CloseoutAdversarialTests.swift` | `ProgressSegments` drawn: `[0, 0, 3, 0]` is one run edge to edge; `[-5, 3, 0, Int.min, 3, -1]` is two runs, edge to edge, one 3 pt gap; `[0]`, `[0, 0, 0]`, `[-1, Int.min]` draw no ink. VoiceOver's frame is one element, full width, for `[0, 3]`, `[3, 0]`, `[0, 0]`, `[-2, 3, 0, 3]`. `StatTile` with value and unit both "8", at 3×, eight sizes, regular and Bold Text: the unit's digit is 19/34 of the value's (± 0.03) and on its baseline (± 2 px). An empty unit draws and reads exactly as no unit (light large, dark AX3) |
+
+**Mutation check.** One combined run, product files restored from backups and `git status` checked clean: title
+without `fixedSize`, no escape action, unit fixed at 13.5 pt, `ForEach` without the non-positive filter. Every new test
+that targets one of them failed (squeezed title, scrolling title, escape from every stop, unit ratio, both bar tests),
+along with the implementer's tests and the StatTile references.
+
+### Per item
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| R3-S1 (title at the top) | **Closed**, for the case it names: a detent taller than the content. Title at `l` below the sheet's top at every AX size, within `l … l + 44` beside the pill, empty or one-line content, xSmall–AX5. The edge where the content outgrows the sheet is new finding **C3-1** below | `sheetChrome_tallSheet_titleAtTheTop`, the implementer's `…sheetHeight_keepsTheTitleAtTheTop` |
+| S3-1 (every line) | **Closed.** My round-1 test passes at AX1–AX5. Squeezed against the same chrome at ideal height, every line at all eight sizes, bold too, three titles. The implementer's note is right that R3-S1's frame alone also passes my round-1 test; the squeezed test does not pass without `fixedSize` (mutation) | `sheetChrome_squeezed_titleKeepsEveryLine`, `sheetChrome_sheetSizedContainer_titleGetsEveryLine` |
+| R3-S2 (unit 19/34, own tracking, static `valueLine`) | **Closed.** Ratio and baseline hold xSmall–AX5, regular and bold: the body's `valueSize` matches what `.ledgerFont(.numeralXL)` draws. Tracking: the implementer's `StatTileValueLineTests` checks the run and that it wins on screen. `unit: ""` is pixel-identical to `nil` and reads the same | `statTile_unit_isNineteenThirtyFourthsOnTheBaseline`, `statTile_emptyUnit_isNoUnit` |
+| R3-S3 (summary required) | **Closed.** The initializer has no default and no fallback; every call site passes one. An empty summary reads `""`, not the label: the fallback is gone, not merely hidden | Tree tables; probe (below, not kept) |
+| R3-S4 (gallery dark only) | **Closed.** One test, `.dark, .large`. The light and old dark references are deleted; no script or doc names the old test | `DesignGalleryTests.designGallery_dark_matchesReference` |
+| S3-2 (three tokens) | **Closed.** My `gallery_everyPublicTokenConstant_isNamed` passes; the three captions are drawn (read in the reference) | Gallery reference, rows 815–839 and 2709–2749 |
+| S3-3 (no gap for ≤ 0) | **Closed**, anywhere in the bar: leading, trailing, several in a row, `Int.min`, all non-positive. VoiceOver's frame stays full width | Both bar tests, my round-1 `…zeroLengthSegment_leavesNoGap` |
+| S3-4 (escape → `onCancel`) | **Closed.** Every stop, a content button included, at xSmall and AX5; the row's own action is never run; an inner escape still wins, so a feature can override | Both escape tests, the tree tables' new `escapes` column |
+
+### Test-edit audit
+
+- **`Slice3WatchAdversarialTests`:** `git diff c1663fd a19d20a` shows three call sites that gain
+  `accessibilitySummary: "Rest"` and one line wrap. No assertion, argument or loop changed. None of my other files
+  changed.
+- **Implementer's tests:** `ProgressSegmentsLayoutTests` `[0, -2, 3]` → `[0, 0, 100]` (I accepted this in advance) and
+  a new `[3, 0, 3]` case. `DesignGalleryTests` drops light, as R3-S4 asks, and adds the three tokens. The tree tables
+  gain an `escapes` column, which is stricter: every other stop must *not* escape. `WatchComponentLayoutTests` only
+  passes summaries. Nothing was weakened.
+
+### Reference audit
+
+Decoded and diffed pixel by pixel against `c1663fd` (`scratchpad/f06s3-close/pngdiff.py`), and opened:
+- **The 6 `statTile_…` and the 4 slice-3 sheets:** same dimensions, and every changed pixel is inside the tiles' value
+  lines. For example x 27–282, y 36–141 at dark-large, and x 28–158, y 186–616 on the AX5 sheet. "/4", "k" and "×5"
+  are larger and sit on the value's baseline.
+- **The gallery, 402 × 6946 → 402 × 7010:**
+  - 24 inserted rows at 815: "boldTextWeightStep · 100".
+  - 40 at 2709: "buzzCycle · 0.38 s" and "buzzRepeats · 3".
+  - Two 25-row bands in the stat section: the units.
+  - Every other row is identical.
+
+### C3-1. A sheet whose content outgrows it pushes its title off the top — minor bug (layout)
+
+Repro (iOS 27.0):
+`Slice3CloseoutSheetAdversarialTests.sheetChrome_contentOutgrowsTheSheet_titleStaysAtTheTop`, which is red.
+
+```swift
+VStack(spacing: 0) {
+    Text(verbatim: "Sheet top")
+    SheetChrome("Swap exercise", cancel: "Cancel") {} content: { rows(20) }   // plain Text rows, no ScrollView
+        .frame(height: 437)                                                    // iPhone 17's .medium detent
+}
+```
+
+| Size | Title's top below the sheet's top | Expected |
+|---|---|---|
+| large | **−79.8 pt** | 16 … 60 |
+| AX3 | **−387.2 pt** | 16 |
+
+(A 300 pt probe with twelve rows gave −35, −232 and −330 pt at large, AX3 and AX5.)
+
+**Mechanism.** `.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)` gives only a maximum.
+SwiftUI's rule for a flexible frame is that, with no minimum, a child larger than the proposal sets the frame's size.
+So the chrome reports its full content height. The sheet's host then centres the oversized root, as the helper's
+frame does here. The top of the chrome, with its title, rule and corners, goes above the sheet's edge; the bottom goes
+below it.
+
+This contradicts the doc's new sentence, "it fills the sheet and keeps its content at the top". It is also the regime
+where the implementer's `sheetChrome_shorterThanItsContent_titleGetsEveryLine` runs (400 pt, eight rows, AX3 and AX5).
+That test passes on line count while the title is above the frame. It will be reached in practice: F10 picks a detent
+at the default text size, and Dynamic Type grows the rows past it. It is not a regression of round 1, because the
+pre-fix, content-sized chrome was centred the same way. It is the edge R3-S1's fix set out to own.
+
+**Checked fix.** `.frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)`. With both
+bounds given, the frame takes the proposed height, and the overflow falls off the bottom, not the top. It was tried
+for one run and then restored (`scratchpad/f06s3-close/fixcheck.sh`). All 268 `LedgerDesignTests` cases passed,
+C3-1 included, with every reference unchanged (the snapshot helpers and the gallery propose no height). Add one line
+to the doc: content that can outgrow the detent goes in a `ScrollView`.
+`sheetChrome_scrollingContent_titleAtTheTopAndWhole` shows that pattern holds up to AX5 today.
+
+### Noted, not raised
+
+- `WatchRestRing(…, accessibilitySummary: "")` is one element labelled `""`: VoiceOver says nothing useful. That is
+  caller misuse, not a fallback.
+- At AX sizes the stat unit (19/34 of `numeralXL`, which scales on `.largeTitle`'s flatter curve) is smaller than the
+  caption under it (`label`). That follows from the prototype's ratio R3-S2 asked for, and the unit is still ≥ 30 pt at
+  AX5.
+- With C3-1's fix, a sheet shorter than its *header* (a three-line title at AX5 in a ~300 pt sheet) clips at the bottom,
+  and the pill can be cut. Only a scrolling header avoids that, and it is F10's call.
+
+### Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` alone, iOS, via the lock (`scratchpad/f06s3-close/results/run2`) | 268 cases, 266 passed, 1 skipped, **1 failed: C3-1** (large and AX3) |
+| Checked fix for C3-1, via the lock (`fixcheck`) | 268 / 267 passed / 1 skipped / 0 failed; source restored, `git status` clean |
+| Combined mutation run, via the lock (`mutall`) | 12 failed tests, among them every new test aimed at a mutated line; sources restored |
+| `scripts/check.sh --fast` (`scratchpad/f06s3-closeout-fast.log`) | OK: 687 host tests, format and lint clean |
+| **Full `scripts/check.sh` via the lock** (`scratchpad/f06s3-closeout.log`) | **Exit 65.** Steps 0–2 green. Step 3 PR-iOS: 961 tests, 958 passed, 2 skipped, **1 failed: C3-1**. `set -e` stopped before step 4 |
+| Step 4 and 5 by hand, via the lock (`scratchpad/f06s3-closeout-step4.log`) | PR-Watch: 852 tests, 850 passed, 2 skipped, 0 failed; 8 of 8 targets. Coverage gate exit 0: LedgerDesign 97.20 %, overall 98.02 % |
+
+### Verdict
+
+**G2 does not close yet, but only because of one line.** All eight fix-round items are closed, and nothing was
+weakened. The references moved only where intended. C3-1 is a minor bug at the edge of R3-S1, with a checked
+one-token fix (`minHeight: 0`) and a doc line. Once they land and `sheetChrome_contentOutgrowsTheSheet_titleStaysAtTheTop`
+is green, G2 closes with no further round.
+
+**Edits I accept in advance.** The implementer may update `sheetChrome_shorterThanItsContent_titleGetsEveryLine` to
+also check the title's position. If the orchestrator or Pete rules that overflowing content is F10's problem alone and
+keeps the frame as it is, delete `sheetChrome_contentOutgrowsTheSheet_titleStaysAtTheTop`, and the doc must then say
+that content taller than the sheet has to scroll. G2 then closes as it stands.
