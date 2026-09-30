@@ -226,3 +226,251 @@ For G5: this PR carries architecture decisions made by the orchestrator, not Pet
 
 Per `docs/subagent-workflow.md` G5, the orchestrator should stop for Pete's review before merging, unless he
 has already signed off on them.
+
+# Slice S2 review
+
+Reviewer pass on `feat/F05-s2` at `641e4b2`, diff `git diff 1db1cf9...HEAD` (28 files). Scope: `SyncedRecord`
+and its child diff, `ColumnReader`/`JSONArray`, the five program record types and `ProgramRows`,
+`GRDBExerciseRepository` (search and seeding), `GRDBProgramRepository`, the two new `LedgerPersistenceError`
+cases, the LedgerTestSupport contracts and seeders, product decision #23, and the F07 and F12 brief lines.
+I did not review the adversarial tester's untracked files under `Adversarial/`.
+
+### What I ran
+
+- `/code-review high` on the diff. It raised 10 candidates. Each one is ranked below or answered under
+  "Considered and not raised".
+- `swift test --package-path LedgerKit --filter LedgerPersistenceTests` on the macOS host. I ran it on a
+  `git archive 641e4b2` copy in my scratchpad, so it could not disturb the tester's worktree. **All committed tests
+  pass**, with the timing suites skipped by design. That copy also held three throwaway probe tests (B1), which
+  are not committed anywhere.
+- SQL: every statement in the diff binds its values. The only interpolated identifiers are static table names
+  and `databaseDictionary` keys. Search runs no `LIKE`: the text is matched in Swift, so there is nothing to
+  escape. The equipment and muscle filters are bound named parameters.
+- Seeding: an entry whose name clashes with a stored exercise is logged and **still inserted** by its id
+  (`GRDBExerciseRepository.swift:93-101`). No path skips a catalog id over a name, and clause `seedNameClash`
+  pins this.
+- Exact weights (ADR-007): every weight column is a nullable `_e7g` `INTEGER`. They are written through
+  `Weight.e7g()`, which throws `inexactWeight` and never rounds, and read only from `INTEGER` storage
+  (`ColumnReader.integer`, which refuses the `REAL` truncation GRDB would do). I checked `47.25 lb` →
+  `214322394825` by hand. Criterion 2's round trip covers both lb and kg loads.
+- `SlotMissRecord.id`: I checked the RFC 9562 v5 layout. The namespace bytes are in network order, and the
+  version and variant masks are right (`&` binds tighter than `|` in Swift).
+
+### Blocking
+
+**B1. Saving a program that reuses another program's week, day or slot ids silently takes those rows over and
+corrupts the other program.**
+`LedgerKit/Sources/LedgerPersistence/Records/ProgramRows.swift:53-67`,
+`LedgerKit/Sources/LedgerPersistence/Records/SyncedRecord.swift:29-33,53-59`.
+`write` diffs only against the saving program's own live rows. An incoming id that is live under another
+program is not in `storedByID`, so it is upserted. `ON CONFLICT (id) DO UPDATE` then rewrites that row's
+`program_id` or `day_template_id` to the new program. `duplicateIdentifier` only catches clashes inside one
+save. I confirmed three outcomes with probes on the host:
+- **Copied block.** Program A is active. B gets a new `ProgramID` but reuses A's weeks and days, and is
+  saved. `save` succeeds, and every `day_template` row now belongs to B. `program(id: A)` then throws
+  `tooFewWeeks(count: 0)` on every read. Had A stayed active, `active()` would throw and `observeActive` would
+  end for good.
+- **Slots only.** B reuses A's day 0 slots under B's own days. `save` succeeds, and A reads back with day 0
+  empty. That is silent data loss with no error at all.
+- **Misses cleared on the copy** (what F24's `NextBlock.rollForward` specifies: "misses cleared"). A's live
+  `slot_miss` rows for the taken slots were never in B's stored set, so they are neither soft-deleted nor
+  replaced. B reads back **16 misses it does not have**, and the round trip is unequal.
+
+History makes this worse. `workout_exercise.slot_id` points at slot ids, so after the takeover block 1's
+sessions point at block 2's slots.
+
+This is not a far-fetched caller. F24's brief specifies
+`NextBlock.rollForward(_ program:…) -> Program` as a pure helper with no UUID source
+(`tasks/features/F24-progression-states.md:26`), so the obvious implementation keeps every child id. `rollForward` also cannot
+mint new ids without an injected UUID source.
+
+*Fix:*
+1. In `ProgramRows.write`, after reading the stored rows and before any upsert, take the incoming week, day and
+   slot ids that are not among this program's stored rows. Refuse any of them that exists, live or deleted,
+   under another program:
+   - weeks and days: `SELECT id FROM program_week WHERE id IN (…) AND program_id != ?`, and the same for
+     `day_template`;
+   - slots: `SELECT slot.id FROM slot JOIN day_template ON day_template.id = slot.day_template_id WHERE
+     slot.id IN (…) AND day_template.program_id != ?`.
+
+   Throw `LedgerPersistenceError.duplicateIdentifier("<table> <id>")`, which rolls back like every other
+   refusal. Misses are covered, because their ids derive from the slot's.
+2. Add a `ProgramRepositoryContract` clause: "a program naming another program's week, day or slot id is
+   refused, and the other program reads back unchanged". F07's fakes then keep the same rule.
+3. Add a line to F24's brief inputs saying that `rollForward` must mint new program, week, day and slot ids
+   from an injected UUID source.
+
+### Should fix
+
+**SF1. A catalog correction to a shipped id can never reach an installed device.**
+`GRDBExerciseRepository.swift:93-103`; notes decision 2 ("An upgrade only adds").
+A stored id is never written again. So a later catalog that fixes an existing entry is recorded as applied
+(its version is marked) but its content is dropped, whether the fix is a start load (F03 has already revised
+these twice: `4d7cf28`, `f0b444e`), curated alternatives or a typo. F03's brief says `version` is bumped "on
+every content change", which suggests content changes are meant to ship. Catalog rows are never synced
+(architecture §7) and never edited by the lifter (F12 edits custom exercises only), so updating them in place
+is safe.
+
+*Fix (decide, then act):*
+- **either** on an upgrade, overwrite the content of stored catalog rows the new catalog lists: live rows
+  with `is_custom = 0` and `catalog_version < version`, keeping `created_at`. Deleted rows stay deleted;
+- **or** keep additive-only and state it in F03's brief: after release, a shipped id's content is frozen, and
+  a correction needs a new id.
+
+The choice belongs to the orchestrator or Pete. The code today matches neither statement cleanly.
+
+**SF2. The search rule has one implementation, and neither F12 nor F07's fakes can reach it. The F12 line
+promises more than `search` gives.**
+`GRDBExerciseRepository.swift:145-168`, `tasks/features/F12-library-history.md:53`,
+`LedgerTestSupport/Persistence/ExerciseRepositoryContract.swift:148-153`.
+- `ExerciseSearch` is internal to LedgerPersistence, and a `Feature*` target never imports LedgerPersistence
+  (engineering-standards, module rules). F12's new line says in-memory filtering of `observeAll()` "must match
+  the same way", so F12 has to reimplement the fold. So does F07's `InMemoryExerciseRepository`.
+- The contract already carries a third copy, `String.folded`, which omits the trim that `key` applies.
+- F12's muscle pills are groups ("Legs", "Arms"). `search` takes one `MuscleGroup` and matches the primary
+  muscle only, so "`ExerciseRepository.search` implements it" is not true for those pills.
+
+*Fix:*
+1. Move the rule into LedgerDomain as one public pure helper, for example
+   `ExerciseSearch.key(_:)`, `matches(_ exercise:query:)` and a name-order comparator. Use it in
+   `GRDBExerciseRepository`, the contract's expected orders and F07's fake. This is a Foundation-only
+   addition; the brief says "no Domain type changes", so the orchestrator decides.
+2. Reword F12:53: `search` takes one primary muscle, so the group pills filter `observeAll()` in memory
+   through the shared helper, mapping each pill to its `MuscleGroup` set.
+
+**SF3. The contract leaves out behaviour that F07's fakes must share, and the Domain protocols do not
+document it.**
+`LedgerTestSupport/Persistence/ProgramRepositoryContract.swift:11-18`,
+`ExerciseRepositoryContract.swift:10-19`, `LedgerDomain/Protocols/Repositories.swift:7-24`.
+Several behaviours are pinned only by GRDB-only tests, so a fake that differs still passes F07 criterion 4:
+- `setActive` of an unknown or deleted program throws `missingRow` (`ProgramRepositoryTests.swift:159-173`);
+- duplicate child ids throw `duplicateIdentifier` (`:129-142`);
+- B1's cross-program refusal;
+- `seedIfNeeded` stores every entry as a catalog row whatever its `isCustom` says
+  (`ExerciseRepositoryTests.swift:75-89`).
+
+Meanwhile the contract asserts an order for `search` and `all()` (folded name, then id) that no protocol doc
+states. F10, F11 and F24's stores are written against the protocol and tested against the fakes.
+
+*Fix:* promote those four behaviours to clauses; `LedgerPersistenceError` is reachable from
+LedgerTestSupport. Add one-line doc comments to `ExerciseRepository.all/search/observeAll` (order and
+matching, pointing to decision #23) and to `ProgramRepository.save/setActive/delete` (what each throws, and
+that deletion is soft).
+
+### Nit
+
+**N1. `GRDBExerciseRepository.save` bumps `updated_at` even when nothing changed** (`GRDBExerciseRepository.swift:52-56`).
+The program path deliberately leaves unchanged rows alone for M4's last-writer-wins sync (notes decision 4).
+Saving an unchanged custom exercise could later overwrite a real edit made on the other device. *Fix:* fetch the
+stored row and go through `ExerciseRecord.write([record], over: stored, in:at:)`. It already skips unchanged rows.
+
+**N2. `delete` leaves `is_active = 1` on the deleted program** (`GRDBProgramRepository.swift:70-73`, `:95-102`).
+`activate` skips deleted rows, so the flag never clears. A later revival, by a sync (M4) or by `save` from a
+stale copy, can bring back two active programs. `fetchActive` then picks the one updated last, which is the
+revived one. *Fix:* in `delete`, also set `is_active = 0` on the program row in the same transaction.
+
+**N3. `seedIfNeeded` does not refuse duplicate ids inside one catalog** (`GRDBExerciseRepository.swift:93-103`).
+`storedIDs` is not updated inside the loop, so the second entry silently overwrites the first. F03 tests id
+uniqueness, but the program path throws for the same fault. *Fix:* check the ids up front and throw
+`duplicateIdentifier("exercise <id>")`.
+
+**N4. The two "unchanged write emits nothing" checks cannot fail** (`ObservationTests.swift:21-23`, `:35-37`).
+The bridge buffers `bufferingNewest(1)`, so a spurious emission from the no-op write is replaced by the next
+real one before `next()` reads it. The tests pass with or without `removeDuplicates()`. *Fix:* count
+`onChange` calls with GRDB's `ValueObservation.start(in:onError:onChange:)` behind a write barrier, or drop
+"and none for an unchanged write" from the test names.
+
+**N5. Public `Seeders.program` traps on inputs it accepts** (`LedgerTestSupport/Persistence/Seeders.swift:65-67`, `:99-100`).
+- `days > 7`: the weekday wraps and `Dictionary(uniqueKeysWithValues:)` traps.
+- `slotsPerDay > 32`: slot ids collide across days.
+- `exercises: []`: `% 0` traps.
+
+*Fix:* add `precondition`s with messages, or document the ranges; later features will reuse this seeder.
+
+**N6. F07's new input lines** (`tasks/features/F07-composition-di.md:98-103`).
+- `ExerciseCatalog.seed()` throws (F03 brief), so the call needs `try`. The brief should also say what launch
+  does when `seed()` or `seedIfNeeded` throws: log it and carry on without a catalog, or fail boot.
+- "9.2 ms … so it need not wait for the first frame" comes from the simulator running on the Mac's CPU. Keep
+  the notes' caveat, "F20 times a real watch".
+
+**N7. The F05 brief's test plan still says "search by prefix"** (`tasks/features/F05-persistence.md:104`).
+*Fix:* point it at decision #23.
+
+**N8. `rpe_x2` goes through `NSDecimalNumber.intValue`** (`Records/SlotRecords.swift:54`).
+The value is safe here, because it is always exact 10…20, but `intValue` is known to misreport some `Decimal`s.
+*Fix (optional):* expose `RPE`'s half-points in Domain, or use a rounded `Int` conversion with a `guard`.
+
+### Considered and not raised
+
+- Lower-case stored ids (code-review #4). Every writer uses `ColumnCodec.text`, which is upper-case `uuidString`,
+  and M4 will write through the same codec. A foreign writer is out of scope, as in S1.
+- The seed runs 2×214 statements (code-review #8), folds names twice per search (#9), and `observeActive`
+  re-fetches on writes to an inactive program (#10). All of these are within budget: seeding took 9.2 ms and
+  search 1.75 ms on the watch simulator, and program edits on the watch are rare. They are worth revisiting
+  only if F20's device numbers disagree.
+- Unreadable exercise rows are left out of `all()`, `search` and `observeAll`, while a program read throws.
+  This is the right split: a program is one aggregate, and leaving out a slot would let the next save delete
+  it (notes decision 7).
+- Decision #23 skips #21 and #22. Those two are on `feat/F03-exercise-catalog` ("Catalog start loads",
+  "Kettlebell step"), so the numbering is consistent. Whichever branch merges second must keep the table in
+  order.
+- The `now: Date.init` default arguments follow S1's precedent. Tests and F07 inject the clock.
+
+### PR size
+
+684 code lines, against the 500 target and under the ~1,000 split threshold, with the split considered and named
+(standards §10). The argument holds: slice (a) would ship `SyncedRecord.write` with no caller, so its tests
+would have to wait for (b), and a second gate costs more than about 285 lines of review. B1's fix adds about
+20 lines. **Complies.**
+
+### The review points
+
+1. **Module boundaries.** Clean.
+   - LedgerPersistence adds a `CryptoKit` import, a system framework available on watchOS, used for the v5
+     UUID.
+   - The contracts import only `Foundation` and `LedgerDomain`: no `@testable`, no `Testing`.
+   - No Domain file changes.
+2. **Concurrency.** Clean.
+   - Both repositories are `Sendable` structs over `DatabaseQueue`, with an injected clock.
+   - No UUID source is needed, because miss ids are derived.
+   - Records are built and validated before `queue.write`, and no transaction spans an `await`.
+   - Folding runs inside the read closure, off the main actor.
+3. **Error handling.** Nothing is swallowed.
+   - Unreadable exercise rows are logged with their id and kept, matching S1. Seed name clashes are logged at
+     notice level.
+   - Domain validation errors pass through unwrapped, as documented on `LedgerPersistenceError`.
+   - B1 is the gap: a save that should be refused succeeds.
+4. **Design fidelity** and 5. **Accessibility.** N/A (no UI).
+6. **Test quality.** Good.
+   - The tests assert behaviour: round trips, row counts with the arithmetic in comments, timestamps from a
+     `ManualClock`, and damage tables.
+   - There are no sleeps. Timing is nightly-only and uses medians.
+   - Weak spots: N4, and the missing cross-program case (B1).
+7. **Brief compliance.** Criteria 2 and 11 have tests (table below). Search follows decision #23 rather than
+   the brief's "prefix". F02 review N2's re-validation is done on both save and load.
+
+### Criteria → evidence
+
+| Criterion | Evidence | Verdict |
+|---|---|---|
+| 2. 8 × 4 program round-trips equal, misses included | `ProgramRepositoryTests.eightByFour_roundTripsEqual_includingMisses`, clauses `roundTrip`, `saveReplaces` | Met for one program; B1 breaks it once two programs share ids |
+| 11. Seed idempotent, custom kept, additive upgrade, no duplicates | clauses `seedIdempotent`, `seedUpgrade`, `seedNameClash`; `ExerciseRepositoryTests` seed tests | Met (SF1 is a policy gap beyond the criterion) |
+| Decision #23 search | clauses `searchText`, `searchFilters`, `searchWildcards` | Met in GRDB; SF2 for its other consumers |
+| Soft deletes and child diff in one transaction | `partialUpdate_diffsChildren`, `failedSave_changesNothing`, `ProgramSoftDeleteTests`, `DamagedProgramRowTests` (repair) | Met within one program; B1 across programs |
+| ADR-007 exact columns | `save_writesTheDocumentedColumns` (both repositories), `inexactLoad_isRefused`, `inexactStartLoad_isRefused`, `REAL` damage cases | Met |
+
+### Doc updates
+
+- **Decision #23:** accurate, and it matches the code and the contract.
+- **F07 (`:98-106`):** the foreign-key ordering, the seeding behaviour and the contract instructions are
+  accurate. See N6 (`try`, the failure path, the simulator caveat) and SF3 (the contract gaps the fakes inherit).
+- **F12 (`:53`):** not accurate as written for the group pills, and it asks F12 to copy a rule it cannot
+  import (SF2).
+
+### Verdict
+
+**Changes requested for G3: 1 Blocking, 3 Should fix, 8 Nits.**
+- B1 must be fixed before merge. It is a silent cross-program data loss through the public API, and F24's
+  specified `rollForward` would trigger it.
+- After B1 and its contract clause, this is approvable. SF1 needs a decision (orchestrator or Pete). SF2 and
+  SF3 are cheap now and expensive after F07 builds fakes against the current contract.
