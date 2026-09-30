@@ -858,3 +858,154 @@ On iOS 26.5 and watchOS 26.5:
 - **Lint.** The round-3 script passes 44/44, 11 of them `limit` cases, and §7's known limits match those 11 one for
   one.
 - **Gate.** One run of `check.sh`, with no retry. Apart from finding 24, every test in both PR plans passes: iOS 572 passed and 1 skipped, and PR-Watch 550 passed and 1 skipped (step 4 by hand). No `LedgerDesignTests` test comes near the allowance
+
+# Slice 2 — round 1 (`38d43a8`)
+
+Scope: slice 2's components (`PrimaryButton`, `PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow`,
+`SetRow` + `SetRowHeader` + `SetRowSteppers`, `RestRing`, `LedgerIcon`) against criteria 3 (these components), 5 and 6,
+the v2 prototype (`Ledger v2.dc.html` rest card and set rows; `LedgerTabs*.dc.html` for the icon stroke idiom) and
+Pete's decisions (AA with the look kept; the design lint is a frozen tripwire, so no new raw-value spellings were
+hunted). Read: the brief, the slice-plan row, engineering-standards §7 and the public component interfaces. The tests
+below were written and compiled before I read the implementation notes' "## Slice 2" section. Toolchain: Xcode 27.0,
+iPhone 17 and Apple Watch Series 12 (46 mm) on 27.0.
+
+## What was written
+
+Four files in `LedgerKit/Tests/LedgerDesignTests/Adversarial/`, 26 test functions. There are no new snapshot
+references: every assertion reads pixels, geometry or UIKit's accessibility tree, so no `--record-snapshots` run
+was needed.
+
+| File | Isolation | Attacks |
+|---|---|---|
+| `RestRingAdversarialTests.swift`: `RestRingGeometryAdversarialTests` | `nonisolated` (values; iOS and watchOS) | The arc against a model of the prototype's SVG (`circle` from 3 o'clock toward 6, `rotate(-90deg)`, `dasharray 182`, `dashoffset 182 − 182 × p`). 500 seeded progress values (`SplitMix64`, seed 20260929): starts at (32, 3), ends at the prototype's dash end. Tiny progress (least non-zero, least normal, 1e-12, 1e-6); −0, signalling NaN, the largest finite value; `1.0.nextDown` and 0.99; the phone geometry keeps r + stroke/2 inside the frame |
+| `RestRingAdversarialTests.swift`: `RestRingRenderingAdversarialTests` | `RenderingSuites` (iOS) | Rendered at xSmall, large, xLarge, xxxLarge, AX3 and AX5 in both schemes: no ink in a 12 pt padding around the frame, ring centred; the labels "2:30", "10:00" and "0:05" inside the track's inner edge and on one line; a quarter only in the top-right quadrant (from 12, reaching 3), three quarters leaving the top-left empty; half = the right half and 0.5 ± 0.05 of a full ring's orange |
+| `ComponentAccessibilityAdversarialTests.swift` | `RenderingSuites` (iOS) | At xSmall, xxxLarge and AX5: 12 tappable cases (both PrimaryButton forms, three pill styles, the icon button, two tappable HairlineRows, SetRow pending, active, done and drop set) are labelled buttons ≥ 44 × 44 in the expected number, and the steppers are adjustable and ≥ 44. What a done row and a done check say; stepper values; relabelling a set row and the ring from outside; decorative parts hidden (icon beside text, rules, the header's hidden check, the ring's arcs, the icon button's glyph); a button accessory inside an action-less HairlineRow stays reachable and fires; disabled pills report `.notEnabled` |
+| `ComponentLayoutAdversarialTests.swift` | `RenderingSuites` (iOS) | At large, xxxLarge, AX1, AX3 and AX5, regular and Bold Text. **Truncation**: two views that differ only in their last character must render differently ("1,002.5" / "1,002.0"; "102.5"; reps "12"; set label "12"; a 45-character exercise name with a detail and an accessory; a long `PrimaryButton` title with an icon; a long pill; a long eyebrow). A positive control shows the probe sees a real cut ("1,002,002,002,002.5" at AX5). **Width**: a set row "12 · 1,002.5 × 12", steppers "2.5 kg" / "1 rep" and the header stay within the 350 pt content width. A disabled `PrimaryButton` looks disabled |
+| `ComponentContrastAdversarialTests.swift` | `nonisolated` (iOS) | Every text/background pair the components introduce (4.5:1; 3:1 for the bold CTA label per Pete), and the non-text marks that identify a control or its state (WCAG 1.4.11, 3:1): the check's pending ring, active ring, done disc and done tick, and the glyphs. On ground and surface, light and dark, with and without Increase Contrast (resolved through SwiftUI's environment; a sanity test confirms `inkMuted` resolves to .74 under Increase Contrast) |
+
+Two first-draft assertions were dropped once the implementation notes showed them to be documented decisions (below):
+the ring's arc on paper, and a disabled look for `PillButton` / `IconPillButton`. The first iteration run still had
+them: arc 2.65:1 on paper, and disabled pills and the icon button pixel-identical to enabled in both schemes. One
+test was wrong and was fixed. At fractional ring sizes (xSmall, xLarge, xxxLarge) `ImageRenderer` leaves the image's
+outer pixels partly transparent, so "ink = unlike pixel (0, 0)" counted the whole ground. It now counts opaque pixels
+unlike `#0B0B0D`. A temporary probe that attached renders for an eye check (set rows at xxxLarge to AX5, the ring
+with "10:00", a long HairlineRow) was deleted before the gate.
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` alone on iOS 27.0 via the lock (iteration) | 197 cases. Failures: this round's findings, the two documented items above, and the test fault above (fixed) |
+| Slice-2 adversarial suites plus the probe on iOS via the lock (iteration) | 16 of 17 passed. The failure is S2-4. The frame test passes at all six sizes, and the positive control sees the cut |
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06s2-g2-check.log`; waited 372 s) | Steps 0–2 green: tools, format, lint (my four files included), package graph and pins, every `scripts/tests/*.test.sh`. **Step 3, PR plan on iPhone 17 / iOS 27.0: 892 tests, 885 passed, 2 skipped, 5 failed. The five are this round's red tests (S2-1 × 2, S2-2, S2-3, S2-4).** Every existing suite passed, including all 44 slice-2 snapshot references and `LedgerUITests/Smoke`. Longest case 5.93 s (`Smoke`); longest `LedgerDesignTests` case 0.68 s. No retry. `set -e` stopped the script before step 4 |
+| Step 4 by hand (`scratchpad/f06s2-g2-step4.sh`: check.sh's own build, boot, test and `check-test-results.sh` lines), via the lock | PR-Watch on Apple Watch Series 12 (46 mm) / watchOS 27.0: 827 tests, 825 passed, 2 skipped, 0 failed; 8 of 8 targets. `RestRingGeometryAdversarialTests` 5/5 |
+| Step 5 by hand: `scripts/coverage-gate.sh` on both bundles | Exit 0. LedgerDesign 96.20 % (887 / 922), overall 98.01 % |
+| `scripts/check.sh --fast` | OK: 687 host tests. My files compile for macOS too |
+
+## S2-1. A done set sounds like a pending one, and "selected" means two things — design question (accessibility)
+
+Repro (iOS 27.0): `ComponentAccessibilityAdversarialTests.setRow_doneRow_isDistinguishableFromPending` and
+`setRow_doneCheck_saysDoneInWords`, on `SetRow(number: "2", weight: "185", reps: "5", state: s, checkLabel: "Log set 2")`.
+
+| State | Row element (selects the set) | Check element |
+|---|---|---|
+| pending | "2, 185, 5", no value, button | "Log set 2", no value, button |
+| active | "2, 185, 5", button + **selected** | "Log set 2", button |
+| done | "2, 185, 5", button (**same as pending**) | "Log set 2", button + **selected** |
+
+A sighted lifter sees a done set at once: muted numbers and a filled orange disc. VoiceOver gives no sign of it on the
+row, and on the check the only sign is "selected", the word the row next to it uses for "active". The check's label
+also stays "Log set 2" on a set that is already logged, where activating it un-logs the set. The done state is
+announced, as the brief asks, but only as an ambiguous trait. Options: a value on the row ("Done", "Current set"), a
+value or `.isToggle` on the check, or a check label per state (`checkLabel` could take the state).
+
+## S2-2. The steppers are adjustable with no value — minor bug (accessibility)
+
+Repro: `ComponentAccessibilityAdversarialTests.steppers_adjustable_haveAValue`. Both elements are "5 lb" / "1 rep" with
+the adjustable trait and an empty value. VoiceOver announces an adjustable element's value after each swipe, so a
+swipe up on "5 lb" changes the weight and says nothing about it; the new weight is in the row above, which VoiceOver
+is not on. The label names the step, not the quantity ("Weight"). `SetRowSteppers(weightStep:repStep:onWeight:onReps:)`
+has no input for a value, so F10 cannot supply one. Suggested: label "Weight" / "Reps", value the current weight and
+reps, and the step as a hint.
+
+## S2-3. A set row cannot be given a spoken label, and an outer label renames the check — minor bug (accessibility API)
+
+Repro: `ComponentAccessibilityAdversarialTests.setRow_outerLabel_relabelsTheRowOnly`. VoiceOver reads the row as its
+bare strings, "2, 185, 5", with no units; a drop set reads "D, 155, 5". A feature's natural fix,
+`SetRow(…).accessibilityLabel("Set 2, 185 pounds, 5 reps")`, reaches **both** elements: the check is then read as
+"Set 2, 185 pounds, 5 reps" too, and loses "Log set 2". The component takes `checkLabel` but has no equivalent for the
+row. By contrast, `RestRing` is one element, and relabelling it from outside works
+(`restRing_outerLabel_replacesTheClockLabel`, held). That matters because VoiceOver reads a bare "2:30" like a time
+of day. Suggested: a `rowLabel` (or `accessibilityLabel:`) parameter beside `checkLabel`.
+
+## S2-4. The done check's orange disc is 2.65:1 on paper — design question (WCAG 1.4.11, light scheme)
+
+Repro: `ComponentContrastAdversarialTests.nonText_meetsThreeToOne`, case "SetRow check, done disc: accent on ground":
+light 2.65:1, and 2.65:1 with Increase Contrast, which leaves the accent family alone. It passes on the white card
+(3.10) and in dark (6.34 ground, 5.98 sheet). Slice 2's decision 1 raises the pending and active rings to ≥ 3:1
+because "the set row's check is the only mark of its control". In the done state that mark is the `accent` disc,
+and on paper it falls below the same bar. The white tick inside is 3.10:1 against the disc, so the state can be read
+from the tick. The control's outline cannot. Options: accept it (the tick carries the state; record it next to the
+ring-arc exemption), ring the done disc in `accentText` on paper (5.14:1), or fill it with `accentText` on paper
+(the tick would then be 6.03:1). Only light mode is affected.
+
+## S2-5. The snapshot tests never show a pressed control, Increase Contrast, or light at AX5 — minor (test coverage)
+
+Repro: `grep -rn "isPressed\|accessibilityContrast\|increasedContrast" LedgerKit/Tests/LedgerDesignTests/ComponentSnapshotTests.swift`
+finds nothing. The galleries cover every other state asked for (disabled `PrimaryButton`; pending, active and done set
+rows; the drop set "D"; every pill style; full, half and empty rings), in the 6-image matrix plus AX5 and Bold Text
+sheets. Not covered:
+- **Pressed**: `LedgerPressStyle`'s 0.6 dimming is in every button and in no test. `ButtonStyleConfiguration` cannot
+  be built in a test, so this needs a seam (for example an internal view that takes `isPressed`).
+- **Increase Contrast**: `hairline` and `hairlineStrong` step up to .20 / .30. Those are every rule, outline, pill
+  border and the ring's track, and no component render shows them.
+- **Light scheme at AX5 or with Bold Text**: both extra sheets are dark only.
+
+## Documented, not re-raised
+
+- The ring's `accent` arc is 2.65:1 on paper and 1.98:1 against its own light track. Decision 1 exempts it: the
+  countdown carries the same information.
+- `PillButton` and `IconPillButton` have no disabled look (decision 7). Measured: pixel-identical to enabled in both
+  schemes; VoiceOver says "dimmed" (`disabledSecondaryButtons_areNotEnabled`, held). `LedgerPressStyle`'s doc comment
+  ("the label draws its own idle and disabled looks") is true only of `PrimaryButton`.
+- The ring label is `numeralS` (700 15) against the prototype's 500 16 (decision 2); the prototype's track is .12
+  against `hairlineStrong` .14.
+
+## Attacked and held
+
+- **Ring geometry against the prototype.** For 500 seeded progress values the arc starts at (32, 3) and ends within
+  0.25 pt of the SVG dash's end. The prototype's 182 dash on a 182.21 circumference accounts for up to 0.21 of that.
+  Start at 12 o'clock and clockwise direction match `rotate(-90deg)` on an SVG circle. Tiny progress draws at most a
+  dot at 12 o'clock, never a full or reversed ring. −0 and signalling NaN draw nothing, and the largest finite value
+  draws the full 58 × 58 ring. `1.0.nextDown` ends at 12 o'clock, and 0.99 ends just left of it. Below 0, above 1,
+  ±∞ and NaN are already covered by `RestRingGeometryTests`.
+- **Ring as drawn, xSmall to AX5, both schemes.** Nothing lands in the padding: the stroke stays inside its frame
+  with margin, and the ring is centred to within 1 px. The quarter and three-quarter direction checks, and half as
+  the right half at 0.5 ± 0.05 of a full ring's orange, all hold at every size. "2:30", "10:00" and "0:05" stay
+  inside the track's inner edge by more than 1 pt, on one line, up to AX5.
+- **Reduce Motion.** No component animates on its own: there is no `.animation` or `withAnimation` in `Components/`.
+  `RestRingArc` sweeps only when a caller animates it, so honouring Reduce Motion is F10's job.
+- **Hit targets and labels at xSmall, xxxLarge and AX5.** All 12 tappable cases hold, and the steppers are 44 pt tall
+  at every size. Decorative icons, rules, the header's hidden check and the ring's arcs are hidden. A `PillButton`
+  inside an action-less `HairlineRow` stays a reachable button and fires.
+- **Dynamic Type through AX5, with and without Bold Text.** Nothing in the truncation list is cut, and the positive
+  control proves the probe can see a cut. Set rows, steppers and the header stay within 350 pt. Observed by eye: at
+  AX5 a four-digit weight shrinks to about half its scaled size beside full-size reps. That is decision 5's 0.5
+  floor, and it is still larger than at the default size.
+- **Contrast.** Every text pair holds in both schemes, with and without Increase Contrast. Lowest: `inkMuted` on
+  paper, 4.83:1. The rest: `accentText` 5.14 on paper, 6.34 on dark; the filled pill's ground on ink, 15.6 / 17.6;
+  white on accent, 3.10, which holds under Pete's 3:1 rule for the bold label. Non-text marks: pending ring ≥ 4.83,
+  active ring ≥ 5.14, done tick 3.10, glyphs (`inkSecondary`) ≥ 6.74. The one exception is S2-4.
+- **Tokens only (review).** Colour, type, spacing, radius and hairline all come from tokens. The remaining raw numbers
+  are named, sourced component dimensions inside `LedgerDesign`: 54 pt CTA, 44 pt target, ring 64 / 29 / 2.5, the
+  icon grid and stroke widths, the 22 / 12 label column, 0.6 pressed opacity, 1.3 Bold Text stroke and the 0.5 scale
+  floor.
+- **Criteria 5 and 6** hold beyond their own tests: the rendered half ring at every size and in both schemes, and
+  `PrimaryButton`'s label, button trait and 44 pt target at xSmall, xxxLarge and AX5.
+- **Previews compile.** `Components+Previews.swift` builds in the gate's Debug builds for iOS and watchOS.
+- **Isolation.** The two value suites are `nonisolated`, and the three rendering suites sit under `RenderingSuites`.
+  The only randomness is seeded.
+
+Verdict: criteria 3, 5 and 6 hold for slice 2, and the geometry, layout, hit targets and token use have no bugs. The
+slice is not ready to close: two minor accessibility bugs (S2-2, S2-3) and two design questions (S2-1 on the done-state
+announcement, S2-4 on the light-mode done disc) need a fix or Pete's call, and S2-5 is a test-coverage gap.
