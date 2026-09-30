@@ -33,13 +33,31 @@ extension View {
     }
 }
 
-/// The components' button style: the label draws its own idle and disabled looks, and dims
-/// while pressed.
+/// The components' button style: the label dims while pressed. `PrimaryButton` draws its own
+/// disabled look; the others have none (slice 2, decision 7).
 struct LedgerPressStyle: ButtonStyle {
     /// The label's opacity while a finger is down.
     static let pressedOpacity = 0.6
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? Self.pressedOpacity : 1)
+        PressedLook(isPressed: configuration.isPressed, label: configuration.label)
     }
+}
+
+/// The pressed look, apart from the style: a `ButtonStyleConfiguration` cannot be made outside a
+/// button, so previews and snapshot tests draw it with `ledgerDrawsPressed`.
+private struct PressedLook<Label: View>: View {
+    let isPressed: Bool
+    let label: Label
+    @Environment(\.ledgerDrawsPressed) private var drawsPressed
+
+    var body: some View {
+        label.opacity(isPressed || drawsPressed ? LedgerPressStyle.pressedOpacity : 1)
+    }
+}
+
+/// `nonisolated`, so the key `@Entry` generates is not main-actor-isolated by this module's default.
+nonisolated extension EnvironmentValues {
+    /// Draws every Ledger button as pressed: for previews and snapshot tests only.
+    @Entry var ledgerDrawsPressed: Bool = false
 }

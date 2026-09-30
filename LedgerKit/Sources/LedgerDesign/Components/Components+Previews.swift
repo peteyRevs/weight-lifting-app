@@ -41,6 +41,13 @@ import SwiftUI
 }
 
 #Preview("SetRowSteppers") {
-    SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-        .ledgerGalleryPage()
+    SetRowSteppers(
+        weightStep: "5 lb",
+        repStep: "1 rep",
+        weight: "185 pounds",
+        reps: "5 reps",
+        onWeight: { _ in },
+        onReps: { _ in }
+    )
+    .ledgerGalleryPage()
 }

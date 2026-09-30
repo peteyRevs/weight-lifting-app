@@ -79,78 +79,6 @@
                 #expect(!row.traits.contains(.button))
             }
 
-            @Test(
-                "SetRow: the row and its check are labelled buttons with 44 pt targets, selected as their state says",
-                arguments: [SetRowState.pending, .active, .done]
-            )
-            func setRow_accessibility_rowAndCheckAreButtons(_ state: SetRowState) throws {
-                for appearance in Self.sizes {
-                    let row = SetRow(
-                        number: "2",
-                        weight: "185",
-                        reps: "5",
-                        state: state,
-                        checkLabel: "Log set 2"
-                    ) {} onCheck: {}
-                    let elements = row.accessibilityElements(appearance)
-                    try #require(elements.count == 2, "\(elements)")
-                    let (select, check) = (elements[0], elements[1])
-                    #expect(["2", "185", "5"].allSatisfy(select.label.contains))
-                    expectButton(select)
-                    #expect(select.traits.contains(.selected) == (state == .active))
-                    #expect(check.label == "Log set 2")
-                    expectButton(check)
-                    #expect(check.traits.contains(.selected) == (state == .done))
-                }
-            }
-
-            @Test("SetRow: activating the row selects it; activating the check logs it")
-            func setRow_activation_callsTheMatchingAction() {
-                var calls: [String] = []
-                let row = SetRow(number: "1", weight: "185", reps: "5", state: .pending, checkLabel: "Log set 1") {
-                    calls.append("select")
-                } onCheck: {
-                    calls.append("check")
-                }
-                row.withAccessibilityElements { elements in
-                    _ = elements.first?.accessibilityActivate()
-                    _ = elements.last?.accessibilityActivate()
-                }
-                #expect(calls == ["select", "check"])
-            }
-
-            @Test(
-                "SetRowSteppers: each stepper is one adjustable element named by its step, 44 pt tall",
-                arguments: sizes
-            )
-            func setRowSteppers_accessibility_twoAdjustableSteppers(_ appearance: SnapshotAppearance) throws {
-                let elements = SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
-                    .accessibilityElements(appearance)
-                try #require(elements.count == 2, "\(elements)")
-                #expect(elements.map(\.label) == ["5 lb", "1 rep"])
-                for stepper in elements {
-                    #expect(stepper.traits.contains(.adjustable))
-                    expectTarget(stepper)
-                }
-            }
-
-            @Test("SetRowSteppers: VoiceOver's swipe up and down step the right value the right way")
-            func setRowSteppers_adjust_stepsTheMatchingValue() {
-                var steps: [String] = []
-                let steppers = SetRowSteppers(
-                    weightStep: "5 lb",
-                    repStep: "1 rep",
-                    onWeight: { steps.append("weight \($0)") },
-                    onReps: { steps.append("reps \($0)") }
-                )
-                steppers.withAccessibilityElements { elements in
-                    elements.first?.accessibilityIncrement()
-                    elements.first?.accessibilityDecrement()
-                    elements.last?.accessibilityIncrement()
-                }
-                #expect(steps == ["weight increment", "weight decrement", "reps increment"])
-            }
-
             @Test("Eyebrow is a heading")
             func eyebrow_accessibility_isHeader() throws {
                 let eyebrow = try #require(Eyebrow("Up next", tint: .accent).accessibilityElements().first)
@@ -170,7 +98,7 @@
     }
 
     /// A button: the trait, and a target of at least 44 × 44 pt.
-    private func expectButton(
+    func expectButton(
         _ element: AccessibilityElementSnapshot,
         sourceLocation: SourceLocation = #_sourceLocation
     ) {
@@ -180,7 +108,7 @@
 
     /// A hit target of at least 44 × 44 pt. UIKit's conversion to window coordinates can report a
     /// 44 pt frame as 43.999999999999886, so the comparison allows a thousandth of a point.
-    private func expectTarget(
+    func expectTarget(
         _ element: AccessibilityElementSnapshot,
         sourceLocation: SourceLocation = #_sourceLocation
     ) {

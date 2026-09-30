@@ -37,12 +37,22 @@
 
         /// Hosts the view as ``accessibilityElements(_:)`` does and hands `body` the live elements, for
         /// a test that performs their actions (`accessibilityActivate()`, `accessibilityIncrement()`).
-        ///
-        /// SwiftUI builds its accessibility tree only for an assistive technology, so this turns on
-        /// UIKit's accessibility automation while the view is hosted, and restores it afterwards.
         func withAccessibilityElements<Result>(
             _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large),
             _ body: ([NSObject]) -> Result
+        ) -> Result {
+            withLiveAccessibilityElements(appearance) { read in body(read()) }
+        }
+
+        /// Hosts the view and hands `body` a reader that lays the view out again and returns its
+        /// elements, for a test that changes the view's state through an element (an adjustable's
+        /// increment) and then reads what VoiceOver would announce.
+        ///
+        /// SwiftUI builds its accessibility tree only for an assistive technology, so this turns on
+        /// UIKit's accessibility automation while the view is hosted, and restores it afterwards.
+        func withLiveAccessibilityElements<Result>(
+            _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large),
+            _ body: (_ read: () -> [NSObject]) -> Result
         ) -> Result {
             let width = SnapshotConfig.phoneWidth
             let host = UIHostingController(rootView: snapshotAppearance(appearance).frame(width: width))
@@ -54,8 +64,11 @@
                     window.isHidden = true
                     window.rootViewController = nil
                 }
-                host.view.layoutIfNeeded()
-                return body(elements(in: host.view))
+                return body {
+                    host.view.setNeedsLayout()
+                    host.view.layoutIfNeeded()
+                    return elements(in: host.view)
+                }
             }
         }
     }

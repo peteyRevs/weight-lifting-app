@@ -14,7 +14,11 @@ public enum SetRowState: Sendable {
 /// un-logs it. The rule above it turns orange while it is the active set. Stack rows in a
 /// ``HairlineList`` under a ``SetRowHeader``, with ``SetRowSteppers`` under the active row.
 ///
-/// `checkLabel` is what VoiceOver reads for the check, which has no text ("Log set 1").
+/// VoiceOver reads two buttons. The row reads its three strings with its state as the value
+/// ("Current set", "Done"); a feature gives it a spoken label from outside,
+/// `.accessibilityLabel("Set 2, 185 pounds, 5 reps")`, and that label stops at the row. The check
+/// reads `checkLabel` ("Log set 2"), which a label from outside does not replace, and once done
+/// it is selected and says "Done".
 public struct SetRow: View {
     private let number: String
     private let weight: String
@@ -57,11 +61,13 @@ public struct SetRow: View {
                     .ledgerHitTarget()
                 }
                 .buttonStyle(LedgerPressStyle())
-                .accessibilityAddTraits(state == .active ? .isSelected : [])
+                .accessibilityValue(SetRowSpeech.state(state))
                 Button(action: onCheck) { SetRowCheck(state: state) }
                     .buttonStyle(LedgerPressStyle())
                     .accessibilityLabel(checkLabel)
+                    .accessibilityValue(state == .done ? SetRowSpeech.done : "")
                     .accessibilityAddTraits(state == .done ? .isSelected : [])
+                    .accessibilityElement(children: .contain) // a label or value set on the row stops here
             }
             .padding(.vertical, LedgerSpacing.s)
         }
@@ -79,10 +85,31 @@ public struct SetRow: View {
     }
 }
 
+/// What VoiceOver says for a set's state. English until LedgerDesign has a string catalog; the
+/// keys are the English text.
+private nonisolated enum SetRowSpeech {
+    static var done: String {
+        String(localized: "Done", bundle: .module, comment: "VoiceOver value of a logged set and of its check")
+    }
+
+    static var current: String {
+        String(localized: "Current set", bundle: .module, comment: "VoiceOver value of the active set row")
+    }
+
+    static func state(_ state: SetRowState) -> String {
+        switch state {
+        case .pending: ""
+        case .active: current
+        case .done: done
+        }
+    }
+}
+
 /// The round check: a tick in an orange disc once done, an orange ring on the active set, a
-/// muted ring otherwise. The prototype's rings (.14 pending, .5 active) are raised so the only
-/// mark of the control reaches WCAG's 3:1 for non-text, and the active one is the screen's
-/// orange (the next thing to touch).
+/// muted ring otherwise. Each state's only mark meets WCAG's 3:1 for non-text on paper, card and
+/// both dark grounds: the prototype's rings (.14 pending, .5 active) are raised, and the disc is
+/// `accentText`, which is the accent itself in dark and `#B2390E` on paper, where the accent is
+/// 2.65:1. The active ring is the screen's orange (the next thing to touch).
 struct SetRowCheck: View {
     let state: SetRowState
 
@@ -97,7 +124,7 @@ struct SetRowCheck: View {
 
     @ViewBuilder private var disc: some View {
         switch state {
-        case .done: Circle().fill(LedgerColor.accent)
+        case .done: Circle().fill(LedgerColor.accentText)
         case .active: Circle().strokeBorder(LedgerColor.accentText, lineWidth: LedgerHairline.width)
         case .pending: Circle().strokeBorder(LedgerColor.inkMuted, lineWidth: LedgerHairline.width)
         }
@@ -113,7 +140,14 @@ struct SetRowGallery: View {
             HairlineList {
                 SetRow(number: "1", weight: "185", reps: "5", state: .done, checkLabel: "Log set 1") {} onCheck: {}
                 SetRow(number: "2", weight: "185", reps: "5", state: .active, checkLabel: "Log set 2") {} onCheck: {}
-                SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }
+                SetRowSteppers(
+                    weightStep: "5 lb",
+                    repStep: "1 rep",
+                    weight: "185 pounds",
+                    reps: "5 reps",
+                    onWeight: { _ in },
+                    onReps: { _ in }
+                )
                 SetRow(
                     number: "3",
                     weight: "102.5",

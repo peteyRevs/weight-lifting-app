@@ -912,3 +912,69 @@ but `PrimaryButton(icon:)` and `IconPillButton` need them) and `SetRowHeader`.
   rotor's Headings.
 - `ComponentAccessibilityTests` prints each element (label, traits, frame) in a failure message, so a failing
   target shows its actual size.
+
+### Slice 2 — fix round 1
+
+Against the adversarial round (`4543e13`, test-findings "# Slice 2 — round 1", S2-1 to S2-5) and the orchestrator's
+decisions. The five red tests pass. One of the tester's files is edited, for S2-4 only (below).
+
+| # | Decision | Change | Tests |
+|---|---|---|---|
+| S2-1 | Announce state distinctly; don't reuse `.isSelected` | The row element no longer carries `.isSelected`. Its value says the state: "Current set" (active), "Done" (logged), none (pending). The check keeps `.isSelected` when done, as the tester's test asserts, and adds the value "Done". So "selected" now means one thing, logged, and each state is spoken in words. The two strings go through `String(localized:bundle: .module)` (English keys; LedgerDesign has no string catalog yet, so they read in English until one lands) | `setRow_doneRow_isDistinguishableFromPending`, `setRow_doneCheck_saysDoneInWords` (tester's, unchanged, pass); `SetRowAccessibilityTests.setRow_state_isSpokenInWords` (3 states) |
+| S2-2 | Steppers expose a value, and increment and decrement change it | `SetRowSteppers(weightStep:repStep:weight:reps:onWeight:onReps:)`: `weight` / `reps` are the current values in the row's units ("185 pounds", "5 reps"), each stepper's `accessibilityValue`. Both are optional, so the tester's call still compiles; without them the value is the step. The component stays stateless: the caller's new value is what VoiceOver announces after a swipe | `steppers_adjustable_haveAValue` (tester's, passes); `setRowSteppers_value_isTheCurrentQuantity`; `setRowSteppers_adjust_changesTheAnnouncedValue` (a `@State` harness: increment, 185 → 190 pounds; two decrements, 5 → 3 reps, read back through the tree) |
+| S2-3 | A combined spoken label a caller can override without renaming the check | The row element is the one a feature relabels from outside: `SetRow(…).accessibilityLabel("Set 2, 185 pounds, 5 reps")` names the row, and its state value still follows ("…, Done"). The check stays its own button with `checkLabel`. A probe on iOS 27 compared eight structures: an outer label and value reach every element inside a view, including one that sets its own label, through overlays, `.ignore` elements, a representation and `accessibilityLabel(content:)`. The one boundary that stops them is `.accessibilityElement(children: .contain)` on the check, which stays a button with its own label. That modifier is the change. Without an outer label the row reads its strings ("2, 185, 5"), since the component knows neither units nor words | `setRow_outerLabel_relabelsTheRowOnly` (tester's, passes); `setRow_outerLabel_namesTheRowOnly` (label, value "Done" on both, check label kept) |
+| S2-4 | Smallest change that brings the done disc to ≥ 3:1 on every background, both schemes, Increase Contrast | The done disc fills with `accentText` instead of `accent`. In dark the two are the same colour, so nothing changes there; on paper the disc is `#B2390E`. One token swap; no token value changes | `nonText_meetsThreeToOne` (tester's; pairs edited, see below) |
+| S2-5 | Targeted snapshots: pressed, Increase Contrast for components with a contrast change, one light AX5 SetRow | A seam for the pressed look: `LedgerPressStyle` draws through a small `PressedLook` view, which also reads an internal `ledgerDrawsPressed` environment value that only previews and tests set. A `ButtonStyleConfiguration` cannot be made outside a button. Three tests, five images: every component pressed (light and dark), every component with Increase Contrast (light and dark; every slice-2 component uses a token that steps up, so the one all-components sheet covers them), and `SetRowGallery` light at AX5 | `ComponentSheetSnapshotTests.allComponents_pressed_matchesReference`, `…_increasedContrast_…`, `setRow_lightAccessibility5_matchesReference` |
+
+S2-4, before and after (WCAG 2.x; Increase Contrast leaves the accent family alone, so it gives the same values):
+
+| Done check, light | Before (`accent #FF5B22`) | After (`accentText #B2390E`) |
+|---|---|---|
+| Disc on paper (`ground`) | **2.65** | **5.14** |
+| Disc on card (`surface`) | 3.10 | 6.03 |
+| White tick on the disc | 3.10 | 6.03 |
+| Dark (disc on ground / sheet, tick) | 6.34 / 5.98, 3.10 | unchanged |
+
+**Edit to a tester's test (S2-4).** `ComponentContrastAdversarialTests.ComponentColorPair.nonText` named the disc's
+colour, `LedgerColor.accent`, in two pairs ("done disc" on each ground, and "done tick" on the disc). The fix changes
+that colour, so both pairs now name `accentText`, with a comment citing S2-4. The 3:1 minimum, the grounds, both schemes
+and Increase Contrast are unchanged. No other tester test was touched.
+
+Other changes this round:
+- SwiftFormat's `environmentEntry` rule rewrote the hand-written environment key into `@Entry`. Under this module's
+  default MainActor isolation the key that macro generates is main-actor-isolated and cannot conform to `EnvironmentKey`
+  (build error). The fix, typechecked first on its own, is `nonisolated extension EnvironmentValues { @Entry var … }`:
+  no suppression, and the formatter is satisfied.
+- `LedgerSnapshotTesting`: `withLiveAccessibilityElements(_:_:)` hands a test a reader that lays the view out again, so
+  a state change made through an element (an increment) is visible in the next read without waiting. The
+  existing `withAccessibilityElements` is built on it.
+- My SetRow and stepper accessibility tests moved to `SetRowAccessibilityTests.swift`, because
+  `ComponentAccessibilityTests` would have passed SwiftLint's type-length limit. The old `.isSelected`-on-active assertion
+  became the S2-1 test.
+
+**References.** `scripts/check.sh --record-snapshots` through the lock (`scratchpad/f06s2-fix1-record.log`); the only
+failures were the recordings. **3 changed:** `setRow_appearance_matchesReference-_.light-{large,xLarge,accessibility3}.png`,
+compared with `HEAD` pixel by pixel, differ only inside the done disc (for example x 339–369, y 94–124 at large).
+The disc turns `#B2390E`, and nothing else moves. The dark SetRow references, both sheets and every other reference came
+back byte-identical. **5 new**, each opened:
+- `allComponents_pressed_matchesReference-_.pressed-{light,dark}-large.png`: every button at 0.6 (the CTAs, pills, icon
+  buttons, tappable rows, the set rows' row and check, the steppers). Eyebrows, static rows and rings are unchanged. Dark
+  is `#0B0B0D`.
+- `allComponents_increasedContrast_matchesReference-_.increasedContrast-{light,dark}-large.png`: rules, pill outlines,
+  ring tracks, check rings and the disabled CTA's fill step up (.20 / .30), muted text to .74, and the grounds and the
+  orange do not change.
+- `setRow_lightAccessibility5_matchesReference.light-accessibility5.png`: nothing cut; the steppers stack; "102.5" shrinks
+  beside a full-size "12".
+
+`__Snapshots__` is still about 2 MB.
+
+**Size.** Product `LedgerDesign/Components/`: **700 code lines** (was 650, +50: SetRow +24, of which ~10 are the
+localised state strings; SetRowSteppers +8; ControlStyle +11 for the pressed seam; previews +7), measured as before
+(non-blank, non-comment lines). Test-only: the helper +9 (91 → 100), tests +99, with the moved SetRow tests counted once.
+
+**Gate.** Full `scripts/check.sh` through the lock (`scratchpad/f06s2-fix1-check.log`, 286 s after a 153 s wait for the
+lock): **green**.
+- PR-iOS: **899 tests, 897 passed, 0 failed, 2 skipped**; 17/17 targets; `LedgerDesignTests` 206.
+- PR-watchOS: **827, 825 passed, 0 failed, 2 skipped**; 8/8; `LedgerDesignTests` 143.
+- The two skips per plan are the nightly-only tests.
+- Coverage gate: LedgerDesign **96.39 % (936 / 971)**, overall 98.05 %.

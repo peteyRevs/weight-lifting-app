@@ -63,11 +63,13 @@
         static let nonText: [Self] =
             onGrounds("SetRow check, pending ring: inkMuted", LedgerColor.inkMuted, minimum: 3)
                 + onGrounds("SetRow check, active ring: accentText", LedgerColor.accentText, minimum: 3)
-                + onGrounds("SetRow check, done disc: accent", LedgerColor.accent, minimum: 3)
+                // F06 slice 2 fix round 1 (S2-4): the done disc is now `accentText`, so the pairs name
+                // the colour the check draws. The 3:1 bar and every setting are unchanged.
+                + onGrounds("SetRow check, done disc: accentText", LedgerColor.accentText, minimum: 3)
                 + [Self(
-                    name: "SetRow check, done tick: onAccent on accent",
+                    name: "SetRow check, done tick: onAccent on accentText",
                     foreground: LedgerColor.onAccent,
-                    background: LedgerColor.accent,
+                    background: LedgerColor.accentText,
                     minimum: 3
                 )]
                 + onGrounds("IconPillButton and stepper glyphs: inkSecondary", LedgerColor.inkSecondary, minimum: 3)

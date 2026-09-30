@@ -65,14 +65,45 @@ import Testing
             }
         }
 
-        /// Every slice-2 component on one sheet, at the two settings the matrix leaves out: the
-        /// largest text size (the components claim to hold up through AX5 without clipping) and
-        /// Bold Text (they follow it).
+        /// Every slice-2 component on one sheet, at the settings the matrix leaves out: the largest
+        /// text size (the components claim to hold up through AX5 without clipping), Bold Text (they
+        /// follow it), every button pressed, and Increase Contrast, whose stronger hairlines and inks
+        /// are every rule, outline, ring track and muted label (fix round 1, S2-5). Plus the set row,
+        /// the densest component, in light at AX5. A few targeted images, not the full cross product.
         @Suite("ComponentSheetSnapshots", .tags(.design, .snapshot))
         struct ComponentSheetSnapshotTests {
             @Test("Every component at accessibility5 matches its reference (dark)")
             func allComponents_accessibility5_matchesReference() {
                 assertPhoneSnapshot(of: AllComponents().phonePage(), SnapshotAppearance(.dark, .accessibility5))
+            }
+
+            @Test("Every component, pressed, matches its references (large)", arguments: [ColorScheme.light, .dark])
+            func allComponents_pressed_matchesReference(_ scheme: ColorScheme) {
+                let appearance = SnapshotAppearance(scheme, .large)
+                assertPhoneSnapshot(
+                    of: AllComponents().phonePage().environment(\.ledgerDrawsPressed, true),
+                    appearance,
+                    named: "pressed-\(appearance)"
+                )
+            }
+
+            @Test(
+                "Every component with Increase Contrast matches its references (large)",
+                arguments: [ColorScheme.light, .dark]
+            )
+            func allComponents_increasedContrast_matchesReference(_ scheme: ColorScheme) {
+                let appearance = SnapshotAppearance(scheme, .large)
+                assertPhoneSnapshot(
+                    of: AllComponents().phonePage(),
+                    appearance,
+                    named: "increasedContrast-\(appearance)",
+                    modifyingTraits: { $0.accessibilityContrast = .high }
+                )
+            }
+
+            @Test("SetRow and its steppers match their reference at accessibility5 (light)")
+            func setRow_lightAccessibility5_matchesReference() {
+                assertPhoneSnapshot(of: SetRowGallery().phonePage(), SnapshotAppearance(.light, .accessibility5))
             }
 
             @Test("Every component with Bold Text matches its reference (dark, large)")
