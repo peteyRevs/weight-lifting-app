@@ -821,7 +821,7 @@ snapshot tests render the same galleries, and slice 3's `DesignGallery` can list
 | 5 | `RestRingGeometryTests`: half the circumference at 0.5 (half ÷ full ring = 0.5 to 1e-9; against 2π·29 within the 0.03 % Béziers allow, measured 0.014 %), 12 → 6 o'clock clockwise (a quarter ends at 3), proportional at 8 fractions, full ring = `stroke-dasharray` 182 and closes, empty at 0 / −0.001 / −0.5 / −∞ / NaN, full at 1 / 1.0001 / 1.5 / 30 / +∞, and half is half at the ring's rendered sizes up to AX5. `RestRingRenderTests.halfProgress_rendered_isOrangeOnTheRightHalfOnly` checks the rendered pixels (iOS and watchOS) |
 | 6 | `ComponentAccessibilityTests` (iOS, at `.large` and `.accessibility3`): `PrimaryButton` label = title, `.button`, ≥ 44 × 44 (and ≥ 54 tall), one element; disabled → `.notEnabled`; `PillButton` (3 styles), `IconPillButton`, tappable `HairlineRow`: label, `.button`, ≥ 44; a static `HairlineRow` is one non-button element; `SetRow` (3 states): row and check are labelled buttons ≥ 44, `.selected` as the state says, and activating each calls its own action; `SetRowSteppers`: two adjustable elements ≥ 44, and VoiceOver's increment / decrement step the right value the right way; `Eyebrow` is a header; `RestRing` reads its countdown and updates frequently |
 
-### New references (44 PNGs, 1×, iPhone 17 / iOS 26.5, recorded 17:02 under Xcode 26.6)
+### New references (44 PNGs, 1×; recorded on iPhone 17 / iOS 26.5 under Xcode 26.6, re-recorded under Xcode 27.0)
 
 All in `LedgerKit/Tests/LedgerDesignTests/__Snapshots__/ComponentSnapshotTests/`:
 
@@ -878,12 +878,27 @@ but `PrimaryButton(icon:)` and `IconPillButton` need them) and `SetRowHeader`.
   25.4 %, because the phone components' snapshot and accessibility tests can only run on iOS
   (swift-snapshot-testing has no watchOS image strategy; the accessibility tree is UIKit's); slice 3's watch
   components bring their own watch snapshots.
-- **After that green run** the previews moved into `Components+Previews.swift` (testing-strategy §4's
-  convention, no rendering change), and the re-run could not build: at 17:13–17:17 `/Applications/Xcode.app`
-  was auto-updated to Xcode 27.0 (27A266a), replacing the pinned 26.6, with its license not accepted. Nothing
-  was recorded after the update, and no workaround was attempted. **Left:** one full `scripts/check.sh` through
-  the lock on the current tree once Xcode 26.6 is back; references should match as recorded, and the preview
-  move should lift coverage slightly (preview lines leave the count).
+- The bullets above are the Xcode 26.6 run. The previews then moved into `Components+Previews.swift`
+  (testing-strategy §4's convention, no rendering change); the re-run on 26.6 could not build because
+  `/Applications/Xcode.app` was auto-updated to 27.0 mid-session. The work was committed as `079ddcd`, and Pete's
+  move to Xcode 27.0 (F32, PR #10) was merged into this branch (`9988347`).
+- **Xcode 27 re-record.** `scripts/check.sh --record-snapshots` through the lock on `9988347`
+  (`scratchpad/f06s2-27-record.log`; iPhone 17 / iOS 27.0, Apple Watch Series 12 46 mm / watchOS 27.0): **38 of
+  the 44 slice-2 references changed, all font rendering only; no layout change.** Each was compared with its 26.6
+  version from `079ddcd` (a side-by-side old | new | difference image per file, every one opened): identical
+  dimensions, identical line breaks and positions, 0.2–1.2 % of pixels different, every difference on glyph
+  edges, and no pixel off by more than 64 in any channel. Rules, rings, arcs, pill outlines, check discs and
+  icons are unmarked. The 6 `iconPillButton_…` references, which hold no text, came back byte-identical, and so
+  did every slice-1 reference (F32's). The only failures in that run were the recordings.
+- **Full `scripts/check.sh` through the lock on Xcode 27.0: green** (`scratchpad/f06s2-27-check.log`, 344 s,
+  after `rm -rf .derivedData/SourcePackages` for F32's new pins; step 0 confirmed the 27.0 pin):
+  - PR-iOS: **866 tests, 864 passed, 0 failed, 2 skipped** (the nightly-only bare-font matrix and
+    `ReplayPerformanceTests.replay_500Envelopes_under5ms`); 17/17 test targets. `LedgerDesignTests`: 173 results.
+  - PR-watchOS: **822 tests, 820 passed, 0 failed, 2 skipped** (the same two); 8/8 test targets.
+    `LedgerDesignTests`: 138.
+  - Step 2: the lint fixture scripts (55/55, 39/39, 44/44, `lint-rules.test.sh`), F32's Xcode-pin checks and
+    `coverage-gate.test.sh` (10 cases) pass; package graph unchanged.
+  - Step 5, F01's coverage gate: **LedgerDesign 96.20 % (887 / 922)**, threshold 60 %; overall 98.01 %.
 
 ### How to verify by hand
 
