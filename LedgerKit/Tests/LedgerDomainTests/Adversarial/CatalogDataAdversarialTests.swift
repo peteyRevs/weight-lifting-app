@@ -17,8 +17,8 @@ extension CatalogDataAdversarialTests {
         #expect(exercises.count == raw.count)
         #expect(exercises.map(\.id.rawValue.uuidString) == raw.map { ($0["id"] as? String ?? "").uppercased() })
         #expect(exercises.allSatisfy { !$0.isCustom })
-        // Library copy "Search 214 exercises" (spec §3.8): the count the design promises.
-        #expect(exercises.count == 214)
+        // No exact count: the Library's "Search %lld exercises" is a live count (F12 brief), so the
+        // prototype's 214 is not a promise (F03 review N6; fix round 2 added entries).
     }
 
     @Test("Every id is written as an upper-case, canonical, random (v4) UUID, and ids are unique.")
@@ -55,13 +55,23 @@ extension CatalogDataAdversarialTests {
 
     @Test("No entry in the file writes a key twice (the decoder would silently keep one value: finding 1).")
     func entries_noKeyWrittenTwice() throws {
-        let blocks = try CatalogUnderTest.text().matches(of: /(?s)\n    \{\n(.*?)\n    \}/)
-        #expect(try blocks.count == CatalogUnderTest.rawEntries().count)
-        for block in blocks {
-            let keys = String(block.output.1).split(separator: "\n")
-                .compactMap { $0.firstMatch(of: /^\s*"(\w+)":/).map { String($0.output.1) } }
+        let entries = try CatalogScan.entryKeys(in: CatalogUnderTest.text())
+        #expect(try entries.count == CatalogUnderTest.rawEntries().count)
+        for keys in entries {
             #expect(keys.count >= 10 && Set(keys).count == keys.count, "\(keys)")
         }
+    }
+
+    /// Finding 1, retargeted in fix round 2: the catalog is static bundled data, so this scan of the
+    /// one file the app loads is the guard, not the loader (`JSONDecoder` cannot report a repeat).
+    @Test("The file scan catches a key written twice in an entry, which the decoder alone would load silently.")
+    func duplicateKey_caughtByTheFileScan() throws {
+        let text = try CatalogUnderTest.text()
+        let line = "      \"shortName\": \"BENCH\",\n"
+        #expect(text.components(separatedBy: line).count == 2, "the fixture edits exactly one entry")
+        let doubled = text.replacingOccurrences(of: line, with: line + "      \"shortName\": \"BENCH PRESS\",\n")
+        #expect(CatalogScan.repeatedKeys(in: doubled) == [["shortName"]])
+        #expect(try CatalogScan.repeatedKeys(in: CatalogUnderTest.text()).isEmpty)
     }
 }
 

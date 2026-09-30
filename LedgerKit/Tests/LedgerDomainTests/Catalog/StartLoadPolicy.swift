@@ -21,23 +21,34 @@ enum StartLoadPolicy {
     }
 
     /// Deadlift-family pulls from the floor or pins: the bar needs plates to reach pulling height.
-    static let floorPulls: Set = ["Deadlift", "Sumo Deadlift", "Trap Bar Deadlift", "Rack Pull"]
+    static let floorPulls: Set = ["Deadlift", "Sumo Deadlift", "Rack Pull"]
     /// Landmine lifts count the plates only.
-    static let landmine: Set = ["T-Bar Row", "Meadows Row", "Landmine Press", "Landmine Rotation"]
-    /// Delt raises and flies, rotator-cuff rotations, kickbacks, cable hip abduction, dumbbell wrist curls.
+    static let landmine: Set = ["T-Bar Row", "Meadows Row", "Landmine Press", "Landmine Rotation", "Landmine Squat"]
+    /// Specialty bars start at their own empty weight (review S5): a safety squat bar or a trap bar.
+    static let specialtyBars: [String: Load] = [
+        "Safety Bar Squat": Load(65, 30), "Trap Bar Deadlift": Load(55, 25), "Trap Bar Carry": Load(55, 25)
+    ]
+    /// Isolation done with a straight bar from a rack takes the empty bar, not the EZ bar (review N3).
+    static let straightBarIsolation: Set = ["Barbell Shrug", "Barbell Calf Raise", "Behind-the-Back Wrist Curl"]
+    /// Delt raises and flies, rotator-cuff rotations, kickbacks, cable hip abduction and adduction,
+    /// dumbbell wrist curls.
     static let small: Set = [
         "Dumbbell Lateral Raise", "Dumbbell Front Raise", "Dumbbell Rear Delt Fly", "Dumbbell Kickback",
         "Dumbbell Wrist Curl", "Dumbbell Reverse Wrist Curl", "Cable Lateral Raise", "Cable Front Raise",
         "Cable Rear Delt Fly", "Cable External Rotation", "Cable Triceps Kickback", "Cable Glute Kickback",
-        "Cable Hip Abduction", "Machine Lateral Raise", "Rear Delt Fly", "Band Pull-Apart", "Band External Rotation"
+        "Cable Hip Abduction", "Cable Hip Adduction", "Machine Glute Kickback", "Machine Lateral Raise",
+        "Rear Delt Fly", "Band Pull-Apart", "Band External Rotation"
     ]
-    /// Kettlebell upper-body, overhead and get-up work takes the lighter bell.
+    /// Kettlebell upper-body, overhead, clean and get-up work takes the lighter bell.
     static let kettlebellUpper: Set = [
         "Kettlebell Overhead Press", "Kettlebell Row", "Kettlebell Floor Press", "Kettlebell Clean",
         "Kettlebell Snatch", "Turkish Get-Up", "Kettlebell Windmill"
     ]
 
     static func loadClass(of exercise: Exercise) -> LoadClass {
+        if straightBarIsolation.contains(exercise.name) {
+            return .compound
+        }
         if floorPulls.contains(exercise.name) {
             return .floorPull
         }
@@ -69,6 +80,6 @@ enum StartLoadPolicy {
 
     /// The policy's start load, or nil when the table has no cell for the exercise's class.
     static func startLoad(for exercise: Exercise) -> Load? {
-        table[exercise.equipment]?[loadClass(of: exercise)]
+        specialtyBars[exercise.name] ?? table[exercise.equipment]?[loadClass(of: exercise)]
     }
 }

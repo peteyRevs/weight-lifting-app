@@ -34,6 +34,7 @@ import Foundation
 /// | Equipment | Compound | Isolation and core | Small raises |
 /// |---|---|---|---|
 /// | Barbell (bar included) | 45 lb / 20 kg, the empty bar | 25 lb / 10 kg, an EZ or fixed bar | — |
+/// | Specialty bar (empty) | safety squat bar 65 lb / 30 kg; trap bar 55 lb / 25 kg | — | — |
 /// | Dumbbell (per hand) | 15 lb / 7.5 kg | 10 lb / 5 kg | 5 lb / 2.5 kg |
 /// | Cable (per stack) | 30 lb / 15 kg | 20 lb / 10 kg | 10 lb / 5 kg |
 /// | Machine | 40 lb / 20 kg | 20 lb / 10 kg | 10 lb / 5 kg |
@@ -41,26 +42,39 @@ import Foundation
 /// | Band (rated resistance) | 20 lb / 10 kg | 10 lb / 5 kg | 5 lb / 2.5 kg |
 /// | Bodyweight | 0 | 0 | — |
 ///
-/// Four classes take their own value: deadlift-family floor pulls (deadlift, sumo, trap bar, rack
-/// pull) start at 95 lb / 40 kg, the bar with two small plates; landmine lifts count plates only,
-/// 10 lb / 5 kg; kettlebell upper-body, overhead and get-up work takes the lighter 15 lb / 8 kg
-/// bell; weighted dips and pull-ups add 10 lb / 5 kg. "Small raises" are delt raises and flies,
-/// rotator-cuff rotations, kickbacks, cable hip abduction and dumbbell wrist curls.
+/// Some lifts take their own value:
+/// - specialty bars start at their own empty weight (the row above), whatever the lift's class;
+/// - deadlift-family floor pulls (deadlift, sumo deadlift, rack pull) start at 95 lb / 40 kg, the
+///   bar with two small plates at pulling height;
+/// - isolation done with a straight bar from a rack (shrug, calf raise, behind-the-back wrist curl)
+///   starts at the empty bar, 45 lb / 20 kg;
+/// - landmine lifts count plates only, 10 lb / 5 kg;
+/// - kettlebell upper-body, overhead, clean and get-up work takes the lighter 15 lb / 8 kg bell;
+/// - weighted dips and pull-ups add 10 lb / 5 kg.
+///
+/// "Small raises" are delt raises and flies, rotator-cuff rotations, kickbacks, cable hip abduction
+/// and adduction, and dumbbell wrist curls.
 ///
 /// Each value is a multiple of the equipment's default step in that unit. The kg column is chosen
 /// in kg — the same setup with kg equipment (a 20 kg bar, 2.5 kg dumbbell and 5 kg stack steps,
-/// 4 kg bell sizes) — not converted from lb. Dumbbell and kettlebell loads are per implement;
-/// band loads are the band's rated resistance; carries count lengths as reps.
+/// the 8, 12 and 16 kg bells beginners start on; kettlebells then step 2 kg, decision #22) — not
+/// converted from lb. Dumbbell and kettlebell loads are per implement; band loads are the band's
+/// rated resistance; carries count lengths as reps.
 public enum ExerciseCatalog {
     /// The catalog's content version. A change to `exercises.json` must raise it above `main`'s
     /// (`scripts/check-catalog-version.sh`) and record the file's SHA-256 against it in
-    /// `catalog.version.sha` (criterion 7). Upgrades are additive: an id is never removed, reused or
-    /// regenerated.
-    public static let version = 2
+    /// `catalog.version.sha` (criterion 7). Upgrades are additive: an install that already has the
+    /// catalog receives the new entries only, and its existing rows stay as they are (F05), so a
+    /// correction to an existing entry reaches new installs only. An id is never removed, reused or
+    /// regenerated; the script fails if one main has is gone or moved to another entry.
+    public static let version = 3
 
     /// Every catalog exercise, in file order.
     ///
-    /// - Throws: `CatalogError` for the first malformed entry (criterion 1). Nothing is skipped.
+    /// - Throws: `CatalogError` for the first malformed entry (criterion 1); nothing is skipped.
+    ///   `missingResource` covers a file missing from the module's bundle. Reading the file can also
+    ///   throw Foundation's own error, and `Bundle.module` itself traps if the whole bundle is missing
+    ///   (SwiftPM's generated accessor).
     public static func seed() throws -> [Exercise] {
         try exercises(from: resource("exercises", withExtension: "json"))
     }

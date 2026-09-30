@@ -17,8 +17,16 @@ enum PolicyOracle {
         }
     }
 
-    static let floorPulls: Set = ["Deadlift", "Sumo Deadlift", "Trap Bar Deadlift", "Rack Pull"]
-    static let landmine: Set = ["Landmine Press", "Landmine Rotation", "T-Bar Row", "Meadows Row"]
+    static let floorPulls: Set = ["Deadlift", "Sumo Deadlift", "Rack Pull"]
+    static let landmine: Set = ["Landmine Press", "Landmine Rotation", "T-Bar Row", "Meadows Row", "Landmine Squat"]
+    /// Fix round 2 (review S5): specialty bars start at their own empty weight.
+    static let specialtyBars: [String: Pair] = [
+        "Safety Bar Squat": Pair(lb: dec("65"), kg: dec("30")),
+        "Trap Bar Deadlift": Pair(lb: dec("55"), kg: dec("25")),
+        "Trap Bar Carry": Pair(lb: dec("55"), kg: dec("25"))
+    ]
+    /// Fix round 2 (review N3): straight-bar isolation from a rack starts at the empty bar.
+    static let straightBar: Set = ["Barbell Shrug", "Barbell Calf Raise", "Behind-the-Back Wrist Curl"]
 
     static func isCompound(_ exercise: Exercise) -> Bool {
         ![.isolation, .core].contains(exercise.pattern)
@@ -31,7 +39,7 @@ enum PolicyOracle {
         let deltWork = exercise.primaryMuscle == .shoulders && exercise.pattern == .isolation
             && ["Raise", "Fly", "Pull-Apart", "Rotation"].contains { name.contains($0) }
         return deltWork || name.contains("Kickback")
-            || (exercise.equipment == .cable && name.contains("Hip Abduction"))
+            || (exercise.equipment == .cable && (name.contains("Hip Abduction") || name.contains("Hip Adduction")))
             || (exercise.equipment == .dumbbell && name.contains("Wrist Curl"))
     }
 
@@ -43,7 +51,10 @@ enum PolicyOracle {
     }
 
     static func expected(_ exercise: Exercise) -> Pair {
-        let tier = isCompound(exercise) ? 0 : isSmallRaise(exercise) ? 2 : 1
+        if let bar = specialtyBars[exercise.name] {
+            return bar
+        }
+        let tier = isCompound(exercise) || straightBar.contains(exercise.name) ? 0 : isSmallRaise(exercise) ? 2 : 1
         let table: [(String, String)] = switch exercise.equipment {
         case .barbell:
             floorPulls.contains(exercise.name) ? [("95", "40")]

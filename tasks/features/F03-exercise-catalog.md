@@ -49,7 +49,7 @@ Rules: `id` is a stable UUID generated once and never regenerated (agents must n
 4. Given all names, when compared case-insensitively (including `aliases`), then there are no duplicates.
 5. Given each `MuscleGroup`, when counting exercises whose `primaryMuscle` matches, then the count is ≥ 10 (core ≥ 8).
 6. Given each `Equipment`, when counting, then barbell ≥ 30, dumbbell ≥ 40, cable ≥ 25, machine ≥ 25, bodyweight ≥ 25, kettlebell ≥ 10, band ≥ 8.
-7. Given the `version` constant, when the JSON changes in a PR, then a test fails unless `version` was incremented (test compares a SHA-256 of the file against `catalog.version.sha` committed next to it). _Extended 2026-09-30: `scripts/check-catalog-version.sh` (check.sh step 2) also compares against the merge base with main, so the version must rise above main's and the SHA history's merged lines never change._
+7. Given the `version` constant, when the JSON changes in a PR, then a test fails unless `version` was incremented (test compares a SHA-256 of the file against `catalog.version.sha` committed next to it). _Extended 2026-09-30: `scripts/check-catalog-version.sh` (check.sh step 2) also compares against the merge base with main, so the version must rise above main's, the SHA history's merged lines never change, and no exercise id main has may disappear or move to another entry. Upgrades are additive (F05): existing installs receive new entries only._
 8. Given the seed is applied twice (F05 `seedIfNeeded`), then no duplicate rows are created and custom exercises are untouched (contract test lives in F05; this brief provides the fixture).
 
 ## Test plan

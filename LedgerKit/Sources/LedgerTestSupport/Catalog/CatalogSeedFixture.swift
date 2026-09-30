@@ -58,7 +58,7 @@ public enum CatalogSeedFixture {
     public static let clash = Exercise(
         id: ExerciseID(EventBuilders.uuid(0xCA03)),
         name: "ZERCHER SQUAT",
-        shortName: "ZERCHER",
+        shortName: "ZERCHER SQ", // not custom's: the case isolates the name rule (review N7)
         equipment: .barbell,
         primaryMuscle: .quads,
         secondaryMuscles: [.glutes],

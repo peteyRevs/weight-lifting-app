@@ -2,9 +2,9 @@
   "contributing": [
     "The seeded exercise catalog (F03). Edit by hand; keep one object per exercise and the key order below.",
     "Never change, reuse or regenerate an existing id: ids are stored in lifters' databases, programs and alternatives. A new exercise gets a new random UUID (uppercase, e.g. from uuidgen).",
-    "Changes are additive: add entries, fix text, loads or alternatives; never delete an entry.",
-    "After any change, bump ExerciseCatalog.version above main's and put '<version> <sha256 of this file>' as the last line of catalog.version.sha (shasum -a 256 exercises.json). ExerciseCatalogTests and scripts/check-catalog-version.sh fail until you do.",
-    "Rules (checked by ExerciseCatalog.seed() and ExerciseCatalogTests): startLoad lb and kg are multiples of the equipment's default step (lb: barbell and kettlebell 5, others 2.5; kg: barbell 2.5, kettlebell 2, others 1.25) and follow the conservative start-load policy (ExerciseCatalog.swift; StartLoadPolicy in the tests), whose kg values are chosen in kg, not converted; loadKind 'bodyweight' exactly when both loads are 0; at least two alternatives with the same pattern, never the exercise itself; names and aliases unique ignoring case; shortName upper case, unique, at most 14 characters (it is the watch label).",
+    "Upgrades are additive: installs that already have the catalog receive new entries only, and their existing rows stay as they are (F05). So a fix to an existing entry reaches new installs only; prefer adding an entry, and never delete one.",
+    "After any change, raise ExerciseCatalog.version above main's and end catalog.version.sha with '<version> <SHA-256 of this file>'; scripts/check-catalog-version.sh (check.sh step 2) prints the exact line, and it and ExerciseCatalogTests fail until you do. The script also fails when an id main has is gone or now belongs to another entry.",
+    "Rules (checked by ExerciseCatalog.seed() and ExerciseCatalogTests): startLoad lb and kg are multiples of the equipment's default step (lb: barbell and kettlebell 5, others 2.5; kg: barbell 2.5, kettlebell 2, others 1.25) and follow the conservative start-load policy (ExerciseCatalog.swift; StartLoadPolicy in the tests), whose kg values are chosen in kg, not converted; loadKind 'bodyweight' exactly when both loads are 0; at least two alternatives with the same pattern, never the exercise itself; names and aliases unique ignoring case (aliases only guard this: they are neither stored nor searched, decision #23); shortName upper case, unique, at most 14 characters (the Program builder's day-chip label, spec 3.2).",
     "Pattern rules and deliberate exclusions: see ExerciseCatalog.swift and tasks/features/F03-exercise-catalog/implementation-notes.md."
   ],
   "exercises": [
@@ -167,6 +167,19 @@
       "aliases": ["Incline Dumbbell Flye", "Incline DB Fly"]
     },
     {
+      "id": "BEBD3259-B7E6-429F-9C8A-0761C95F12AE",
+      "name": "Incline Push-Up",
+      "shortName": "INC PUSH-UP",
+      "equipment": "bodyweight",
+      "primaryMuscle": "chest",
+      "secondaryMuscles": ["triceps", "shoulders"],
+      "pattern": "horizontalPush",
+      "startLoad": { "lb": 0, "kg": 0 },
+      "loadKind": "bodyweight",
+      "alternatives": ["0B95C6FC-86E6-432C-A4C9-6AAD3C725D98", "46D64A8D-675A-4D62-8319-7C61894FE94B", "EB0FC0F1-59AF-4445-8560-3198F298EF59"],
+      "aliases": ["Hands-Elevated Push-Up"]
+    },
+    {
       "id": "B051BAE8-2560-46EB-B90C-09AB9E6463E1",
       "name": "Kettlebell Floor Press",
       "shortName": "KB FLOOR",
@@ -236,7 +249,7 @@
       "pattern": "horizontalPush",
       "startLoad": { "lb": 0, "kg": 0 },
       "loadKind": "bodyweight",
-      "alternatives": ["FC8A56C3-B814-49B8-A382-DC3583342821", "EB0FC0F1-59AF-4445-8560-3198F298EF59", "AEB824D6-5758-4481-8C9F-A926070F3D5B", "A536A67E-55C5-4198-BDAE-A44D9091EFE4"],
+      "alternatives": ["BEBD3259-B7E6-429F-9C8A-0761C95F12AE", "FC8A56C3-B814-49B8-A382-DC3583342821", "EB0FC0F1-59AF-4445-8560-3198F298EF59", "AEB824D6-5758-4481-8C9F-A926070F3D5B", "A536A67E-55C5-4198-BDAE-A44D9091EFE4"],
       "aliases": ["Pushup", "Press-Up"]
     },
     {
@@ -320,7 +333,7 @@
       "primaryMuscle": "back",
       "secondaryMuscles": ["forearms"],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 10 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["EFEA7F75-A67A-4E3B-A273-96C72D5E820C", "830026D8-8D64-4BB7-8F94-0CF98463178B"],
       "aliases": ["Shrug"]
     },
@@ -345,7 +358,7 @@
       "secondaryMuscles": ["biceps", "shoulders"],
       "pattern": "horizontalPull",
       "startLoad": { "lb": 15, "kg": 7.5 },
-      "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "4A4094CF-D350-4601-8164-EA612CB28A79"],
+      "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "C66D31EE-B521-4DA9-AB27-E66AECC03CFE", "4A4094CF-D350-4601-8164-EA612CB28A79", "4947873C-DC05-400F-B6EE-3E357FC23A9A"],
       "aliases": ["Incline Dumbbell Row", "Prone Dumbbell Row"]
     },
     {
@@ -567,6 +580,18 @@
       "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["C4530A96-E97E-4994-84DD-C86753472427", "0B716204-08B6-4839-98DA-6E728BA0CA55", "5F043F91-CD6E-4E9B-B12C-5B33ECB9B049"],
       "aliases": ["Underhand Lat Pulldown", "Supinated Lat Pulldown"]
+    },
+    {
+      "id": "4947873C-DC05-400F-B6EE-3E357FC23A9A",
+      "name": "Seal Row",
+      "shortName": "SEAL ROW",
+      "equipment": "barbell",
+      "primaryMuscle": "back",
+      "secondaryMuscles": ["biceps", "shoulders"],
+      "pattern": "horizontalPull",
+      "startLoad": { "lb": 45, "kg": 20 },
+      "alternatives": ["A9ED72CF-D506-430B-A12F-501D15B18E44", "45CD4C48-84A1-45F7-A4E3-C7E4FD48AF34", "90383748-7413-4398-99FA-6EB6E5F2969A"],
+      "aliases": ["Barbell Seal Row"]
     },
     {
       "id": "4A4094CF-D350-4601-8164-EA612CB28A79",
@@ -1035,7 +1060,7 @@
       "secondaryMuscles": ["glutes"],
       "pattern": "squat",
       "startLoad": { "lb": 40, "kg": 20 },
-      "alternatives": ["BB256594-CE9F-464C-A052-638E76E9802C", "80834235-1B66-4070-8F6A-5A87794792FC", "2530E325-04DC-4F56-92F8-4C5ADB5FE196"],
+      "alternatives": ["BB256594-CE9F-464C-A052-638E76E9802C", "80834235-1B66-4070-8F6A-5A87794792FC", "2530E325-04DC-4F56-92F8-4C5ADB5FE196", "B8A7F96B-CE47-4A6C-BCBB-F535C2038FAD"],
       "aliases": ["Belt Squat Machine"]
     },
     {
@@ -1125,6 +1150,18 @@
       "aliases": ["Split Squat"]
     },
     {
+      "id": "FD27BAD1-97ED-4C02-9EE5-C8F9C4BCDB7C",
+      "name": "Dumbbell Squat",
+      "shortName": "DB SQUAT",
+      "equipment": "dumbbell",
+      "primaryMuscle": "quads",
+      "secondaryMuscles": ["glutes"],
+      "pattern": "squat",
+      "startLoad": { "lb": 15, "kg": 7.5 },
+      "alternatives": ["2530E325-04DC-4F56-92F8-4C5ADB5FE196", "F0BA035F-05BA-4FAF-A57E-5A35AD1550D5", "85F9F74C-8E43-4F1F-B937-0A56948BB460"],
+      "aliases": []
+    },
+    {
       "id": "9CF2E593-E85F-4CC1-B32D-25E13D047199",
       "name": "Dumbbell Step-Up",
       "shortName": "STEP-UP",
@@ -1169,7 +1206,7 @@
       "secondaryMuscles": ["glutes", "core"],
       "pattern": "squat",
       "startLoad": { "lb": 15, "kg": 7.5 },
-      "alternatives": ["F0BA035F-05BA-4FAF-A57E-5A35AD1550D5", "223208C8-E7BB-4514-A335-6FCC43A62E18", "80834235-1B66-4070-8F6A-5A87794792FC"],
+      "alternatives": ["F0BA035F-05BA-4FAF-A57E-5A35AD1550D5", "FD27BAD1-97ED-4C02-9EE5-C8F9C4BCDB7C", "223208C8-E7BB-4514-A335-6FCC43A62E18", "80834235-1B66-4070-8F6A-5A87794792FC"],
       "aliases": ["Dumbbell Goblet Squat"]
     },
     {
@@ -1218,6 +1255,18 @@
       "pattern": "lunge",
       "startLoad": { "lb": 25, "kg": 12 },
       "alternatives": ["4614076F-92DD-405D-86A1-2DDE0FAEE125", "79916BF8-6C01-47FD-A7A2-0BFCFC3FE5D2", "FE92B659-AD9F-4D65-9E95-3A85DCD23B07"],
+      "aliases": []
+    },
+    {
+      "id": "B8A7F96B-CE47-4A6C-BCBB-F535C2038FAD",
+      "name": "Landmine Squat",
+      "shortName": "LANDMINE SQ",
+      "equipment": "barbell",
+      "primaryMuscle": "quads",
+      "secondaryMuscles": ["glutes", "core"],
+      "pattern": "squat",
+      "startLoad": { "lb": 10, "kg": 5 },
+      "alternatives": ["2530E325-04DC-4F56-92F8-4C5ADB5FE196", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7", "223208C8-E7BB-4514-A335-6FCC43A62E18"],
       "aliases": []
     },
     {
@@ -1290,8 +1339,8 @@
       "primaryMuscle": "quads",
       "secondaryMuscles": ["glutes", "back"],
       "pattern": "squat",
-      "startLoad": { "lb": 45, "kg": 20 },
-      "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "223208C8-E7BB-4514-A335-6FCC43A62E18", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
+      "startLoad": { "lb": 65, "kg": 30 },
+      "alternatives": ["73EE7555-DC9F-4D98-A87F-08C8817876F1", "6C15C09E-D958-443B-BE33-286D215B298D", "223208C8-E7BB-4514-A335-6FCC43A62E18", "D7E5ED2B-6B45-48E4-A8CB-B73EC23428C7"],
       "aliases": ["SSB Squat", "Safety Squat Bar Squat"]
     },
     {
@@ -1534,7 +1583,7 @@
       "secondaryMuscles": ["hamstrings"],
       "pattern": "isolation",
       "startLoad": { "lb": 10, "kg": 5 },
-      "alternatives": ["C0B176D7-41B1-4818-881A-F69BF8AA4A7B", "159FA82A-FBD1-436B-86F7-87F7AE905369"],
+      "alternatives": ["9B1FE6A9-0634-4B49-AA9A-0A1F95967457", "C0B176D7-41B1-4818-881A-F69BF8AA4A7B", "159FA82A-FBD1-436B-86F7-87F7AE905369"],
       "aliases": ["Glute Kickback"]
     },
     {
@@ -1550,6 +1599,18 @@
       "aliases": ["Standing Cable Hip Abduction"]
     },
     {
+      "id": "4FCB0CF2-77A9-41D7-9A7A-9685D92CDBF2",
+      "name": "Cable Hip Adduction",
+      "shortName": "CB ADDUCTION",
+      "equipment": "cable",
+      "primaryMuscle": "glutes",
+      "secondaryMuscles": [],
+      "pattern": "isolation",
+      "startLoad": { "lb": 10, "kg": 5 },
+      "alternatives": ["BC99788F-BEEE-47C9-A349-5CB34E685F36", "6138F9D5-C5B6-41C8-BB17-2397FE581FF4"],
+      "aliases": ["Standing Cable Hip Adduction"]
+    },
+    {
       "id": "140DE938-6D14-4CD5-95BB-ED471D30819B",
       "name": "Cable Pull-Through",
       "shortName": "PULL-THROUGH",
@@ -1560,6 +1621,19 @@
       "startLoad": { "lb": 30, "kg": 15 },
       "alternatives": ["13DA2F3C-D737-4FAA-9DD8-D8F7E6C3DFD4", "1D4615F1-706A-497B-9AD1-BCD10DA52D54", "905A746D-FBBE-4CB8-AC5F-D1E01EBAF698"],
       "aliases": []
+    },
+    {
+      "id": "6138F9D5-C5B6-41C8-BB17-2397FE581FF4",
+      "name": "Copenhagen Adduction",
+      "shortName": "COPENHAGEN",
+      "equipment": "bodyweight",
+      "primaryMuscle": "glutes",
+      "secondaryMuscles": ["core"],
+      "pattern": "isolation",
+      "startLoad": { "lb": 0, "kg": 0 },
+      "loadKind": "bodyweight",
+      "alternatives": ["BC99788F-BEEE-47C9-A349-5CB34E685F36", "4FCB0CF2-77A9-41D7-9A7A-9685D92CDBF2"],
+      "aliases": ["Copenhagen Hip Adduction"]
     },
     {
       "id": "80B4316B-EB69-4EEB-89EC-D6AA26557E73",
@@ -1647,6 +1721,18 @@
       "aliases": ["Russian Kettlebell Swing", "Two-Hand Kettlebell Swing"]
     },
     {
+      "id": "9B1FE6A9-0634-4B49-AA9A-0A1F95967457",
+      "name": "Machine Glute Kickback",
+      "shortName": "MC GLUTE KICK",
+      "equipment": "machine",
+      "primaryMuscle": "glutes",
+      "secondaryMuscles": ["hamstrings"],
+      "pattern": "isolation",
+      "startLoad": { "lb": 10, "kg": 5 },
+      "alternatives": ["E1F3EED1-2FE8-4D86-A3E4-BB5E41811AAA", "B9D381E9-30A2-43A5-951C-9999DA11828C"],
+      "aliases": ["Glute Kickback Machine"]
+    },
+    {
       "id": "B9D381E9-30A2-43A5-951C-9999DA11828C",
       "name": "Machine Hip Abduction",
       "shortName": "HIP ABDUCT",
@@ -1657,6 +1743,18 @@
       "startLoad": { "lb": 20, "kg": 10 },
       "alternatives": ["C0B176D7-41B1-4818-881A-F69BF8AA4A7B", "159FA82A-FBD1-436B-86F7-87F7AE905369"],
       "aliases": ["Hip Abduction Machine", "Seated Hip Abduction", "Abductor Machine"]
+    },
+    {
+      "id": "BC99788F-BEEE-47C9-A349-5CB34E685F36",
+      "name": "Machine Hip Adduction",
+      "shortName": "HIP ADDUCT",
+      "equipment": "machine",
+      "primaryMuscle": "glutes",
+      "secondaryMuscles": [],
+      "pattern": "isolation",
+      "startLoad": { "lb": 20, "kg": 10 },
+      "alternatives": ["4FCB0CF2-77A9-41D7-9A7A-9685D92CDBF2", "6138F9D5-C5B6-41C8-BB17-2397FE581FF4"],
+      "aliases": ["Hip Adduction Machine", "Seated Hip Adduction", "Adductor Machine"]
     },
     {
       "id": "09F43ABD-3D31-4000-ADC8-5C704DB665A2",
@@ -1727,7 +1825,7 @@
       "primaryMuscle": "glutes",
       "secondaryMuscles": ["quads", "hamstrings", "back"],
       "pattern": "hinge",
-      "startLoad": { "lb": 95, "kg": 40 },
+      "startLoad": { "lb": 55, "kg": 25 },
       "alternatives": ["F5CB98F6-7533-4BE9-85FA-8013FF01B1C6", "ABA483B8-DDDE-433E-936C-208FA92A009E", "B4F39482-13C9-43B5-A38A-F3FA522E5040"],
       "aliases": ["Hex Bar Deadlift"]
     },
@@ -1739,7 +1837,7 @@
       "primaryMuscle": "calves",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 10 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["AC9C263B-654F-4CA1-BB80-7D3D4C13E78A", "87EF983A-8D62-488E-9AAE-7BECDBF6F5EF", "B478962E-E131-4EF7-8ADD-DDFE014EE33A"],
       "aliases": ["Standing Barbell Calf Raise"]
     },
@@ -2211,7 +2309,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": [],
       "pattern": "isolation",
-      "startLoad": { "lb": 25, "kg": 10 },
+      "startLoad": { "lb": 45, "kg": 20 },
       "alternatives": ["FDDC2E02-E0E2-4D3D-B98A-F4FA605B5B79", "46AC1671-1653-418D-975E-EF8C8858ECF1"],
       "aliases": ["Behind-the-Back Barbell Wrist Curl"]
     },
@@ -2295,7 +2393,7 @@
       "primaryMuscle": "forearms",
       "secondaryMuscles": ["back", "core"],
       "pattern": "carry",
-      "startLoad": { "lb": 45, "kg": 20 },
+      "startLoad": { "lb": 55, "kg": 25 },
       "alternatives": ["1A7BBC9E-AFD0-4684-BA9E-11A3B5010724", "278844DF-1953-4AA4-8237-94A0530C260E"],
       "aliases": ["Trap Bar Farmer's Carry", "Trap Bar Walk"]
     },
@@ -2337,6 +2435,19 @@
       "aliases": []
     },
     {
+      "id": "6778BE7E-FFD8-438E-B7F7-3FF829352C46",
+      "name": "Bicycle Crunch",
+      "shortName": "BICYCLE",
+      "equipment": "bodyweight",
+      "primaryMuscle": "core",
+      "secondaryMuscles": [],
+      "pattern": "core",
+      "startLoad": { "lb": 0, "kg": 0 },
+      "loadKind": "bodyweight",
+      "alternatives": ["5B1F71BE-71A2-4F60-A0FB-3E5F91CB7711", "C51C88BF-A57F-4283-92C5-368D4176287E", "7C3DB506-E67C-4F87-A221-51A68D272BB7"],
+      "aliases": []
+    },
+    {
       "id": "1A67EAEF-63FF-446B-9612-B8A0A8D10D6D",
       "name": "Cable Crunch",
       "shortName": "CABLE CRUNCH",
@@ -2361,6 +2472,18 @@
       "aliases": ["Pallof Press"]
     },
     {
+      "id": "C3FFC695-FC47-4E84-B82E-A025CD56A9A0",
+      "name": "Cable Side Bend",
+      "shortName": "CB SIDE BEND",
+      "equipment": "cable",
+      "primaryMuscle": "core",
+      "secondaryMuscles": [],
+      "pattern": "core",
+      "startLoad": { "lb": 20, "kg": 10 },
+      "alternatives": ["4D878976-0A4A-49F1-AADC-70A90F54E697", "F9E76A94-9F19-4C0A-92A4-806A8921C3D3"],
+      "aliases": ["Standing Cable Side Bend"]
+    },
+    {
       "id": "F9E76A94-9F19-4C0A-92A4-806A8921C3D3",
       "name": "Cable Woodchop",
       "shortName": "WOODCHOP",
@@ -2383,7 +2506,7 @@
       "startLoad": { "lb": 0, "kg": 0 },
       "loadKind": "bodyweight",
       "alternatives": ["D091433C-E371-48E3-8573-793B4E0A20EB", "4D458EE4-4CFE-44A7-B9C8-ACD668E1853B", "65B7D24A-968B-4231-A68C-BBD82B771366"],
-      "aliases": ["Captain's Chair Leg Raise", "Roman Chair Leg Raise", "Vertical Knee Raise"]
+      "aliases": ["Vertical Knee Raise"]
     },
     {
       "id": "5B1F71BE-71A2-4F60-A0FB-3E5F91CB7711",
@@ -2433,7 +2556,7 @@
       "secondaryMuscles": [],
       "pattern": "core",
       "startLoad": { "lb": 10, "kg": 5 },
-      "alternatives": ["3577D76F-D3D6-4C95-8DAE-8B0DE4510A67", "F9E76A94-9F19-4C0A-92A4-806A8921C3D3"],
+      "alternatives": ["C3FFC695-FC47-4E84-B82E-A025CD56A9A0", "F9E76A94-9F19-4C0A-92A4-806A8921C3D3"],
       "aliases": ["Side Bend"]
     },
     {
@@ -2546,7 +2669,7 @@
       "pattern": "core",
       "startLoad": { "lb": 0, "kg": 0 },
       "loadKind": "bodyweight",
-      "alternatives": ["F9E76A94-9F19-4C0A-92A4-806A8921C3D3", "D3330715-AE97-4E3F-A1F9-E1BA2C445303"],
+      "alternatives": ["F9E76A94-9F19-4C0A-92A4-806A8921C3D3", "D3330715-AE97-4E3F-A1F9-E1BA2C445303", "6778BE7E-FFD8-438E-B7F7-3FF829352C46"],
       "aliases": []
     },
     {

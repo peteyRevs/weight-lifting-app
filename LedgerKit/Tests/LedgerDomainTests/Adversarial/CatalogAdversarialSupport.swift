@@ -37,6 +37,28 @@ enum CatalogUnderTest {
     }
 }
 
+/// The file-level guard for finding 1: `JSONDecoder` keeps one value of a key written twice and
+/// reports nothing, so the bundled file's text is scanned instead.
+enum CatalogScan {
+    /// The entries of a file laid out like `exercises.json` (each `{` and `}` indented four spaces,
+    /// one key per line), each as the keys it writes, in order.
+    static func entryKeys(in text: String) -> [[String]] {
+        text.matches(of: /(?s)\n    \{\n(.*?)\n    \}/).map { block in
+            String(block.output.1).split(separator: "\n")
+                .compactMap { $0.firstMatch(of: /^\s*"(\w+)":/).map { String($0.output.1) } }
+        }
+    }
+
+    /// For each entry that writes a key more than once, those keys (sorted).
+    static func repeatedKeys(in text: String) -> [[String]] {
+        entryKeys(in: text)
+            .map { keys in
+                Dictionary(grouping: keys, by: \.self).filter { $0.value.count > 1 }.keys.sorted()
+            }
+            .filter { !$0.isEmpty }
+    }
+}
+
 /// Text keys for duplicate detection that are stricter than the loader's `lowercased()`.
 enum CatalogText {
     /// Compatibility-normalised (NFKC), case-, diacritic- and width-folded, with everything that is

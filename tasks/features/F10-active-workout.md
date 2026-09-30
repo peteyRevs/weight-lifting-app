@@ -85,6 +85,7 @@ DI key `workoutSession` (F07 list gains it). `LocalWorkoutSessionActor` executes
 ## Risks / unknowns
 - F04's `exerciseSelected(exerciseIndex:setIndex:)` moves the engine cursor only onto an undone row (rule 11); this brief keeps any other set selection store-local. If the watch needs the phone's selected set (F18), F04 adds `setSelected` and this store adopts it.
 - F04's `exerciseSwapped` carries the replacement's `name` and replaces only the exercise's identity (rule 8); equipment and steps are still resolved by the store via `ExerciseRepository`.
+- Swapping onto a kettlebell or other stepped equipment (F03 fix round 2; decision #22): F04 rule 27 keeps the original targets, so the swap sheet re-targets the undone sets to the replacement's step and sizes (its last-known load if any, else its own start load, rounded to its step), and the stepper uses the replacement's equipment step.
 - Rest card persisting at zero (for "+30s" per decision #7) deviates from the prototype, which hides it at zero.
 - `WorkoutRepository.finish(_:) -> WorkoutSummary` is assumed from F05; if named differently, adapt and note.
 

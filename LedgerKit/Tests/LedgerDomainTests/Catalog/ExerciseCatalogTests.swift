@@ -9,14 +9,17 @@ import Testing
 /// These tests read the module's own resource bundle, as `seed()` does in the app.
 @Suite("ExerciseCatalog", .tags(.domain))
 struct ExerciseCatalogTests {
+    /// Read and decoded once per run, not once per test case (review N8): Swift Testing builds an
+    /// instance for every case, and the parameterized tests have dozens.
+    private static let loaded = Result { try Loaded() }.mapError { LoadFailure(description: "\($0)") }
+
     let json: Data
     let entries: [CatalogEntry]
     let exercises: [Exercise]
 
     init() throws {
-        json = try ExerciseCatalog.resource("exercises", withExtension: "json")
-        entries = try ExerciseCatalog.entries(from: json)
-        exercises = try ExerciseCatalog.seed()
+        let catalog = try Self.loaded.get()
+        (json, entries, exercises) = (catalog.json, catalog.entries, catalog.exercises)
     }
 
     @Test("Criterion 1: seed() returns every entry, at least 200, as catalog exercises; the file is at most 200 KB")
@@ -112,13 +115,14 @@ struct ExerciseCatalogTests {
             #expect(exercise.defaultStartLoad[.kg] == .kilograms(expected.kg), "\(exercise.name)")
         }
         let names = Set(exercises.map(\.name))
-        let named = StartLoadPolicy.floorPulls.union(StartLoadPolicy.landmine)
-            .union(StartLoadPolicy.small).union(StartLoadPolicy.kettlebellUpper)
+        let named = StartLoadPolicy.floorPulls.union(StartLoadPolicy.landmine).union(StartLoadPolicy.small)
+            .union(StartLoadPolicy.kettlebellUpper).union(StartLoadPolicy.straightBarIsolation)
+            .union(StartLoadPolicy.specialtyBars.keys)
         #expect(named.subtracting(names).isEmpty, "the policy names missing exercises: \(named.subtracting(names))")
     }
 
-    @Test("Short names fit the watch: upper case, 1–14 characters, unique")
-    func shortNames_fitTheWatch() {
+    @Test("Short names fit the Program builder's day chips (spec §3.2): upper case, 1–14 characters, unique")
+    func shortNames_fitTheDayChips() {
         for exercise in exercises {
             #expect(exercise.shortName == exercise.shortName.uppercased(), "\(exercise.shortName)")
             #expect((1 ... 14).contains(exercise.shortName.count), "\(exercise.shortName)")
@@ -143,9 +147,11 @@ struct ExerciseCatalogTests {
     func versionSha_matchesFile() throws {
         let history = try versionHistory()
         let digest = SHA256.hash(data: json).map { String(format: "%02x", $0) }.joined()
-        #expect(history.map(\.version) == Array(1 ... history.count), "versions are 1, 2, 3 … in order")
+        let latest = try #require(history.last, "catalog.version.sha has no version lines")
+        // Versions rise, gaps allowed, as scripts/check-catalog-version.sh allows them (review S1).
+        let versions = history.map(\.version)
+        #expect(versions[0] >= 1 && zip(versions, versions.dropFirst()).allSatisfy { $0 < $1 }, "\(versions)")
         #expect(Set(history.map(\.sha)).count == history.count, "each version has its own content")
-        let latest = try #require(history.last)
         #expect(latest.version == ExerciseCatalog.version, "the last line is the current version")
         #expect(
             latest.sha == digest,
@@ -157,16 +163,35 @@ struct ExerciseCatalogTests {
         )
     }
 
-    /// The `<version> <sha256>` lines of `catalog.version.sha`; `#` lines are comments.
+    /// The `<version> <sha256>` lines of `catalog.version.sha`; `#` and blank lines are skipped, and
+    /// any other malformed line fails the test (never traps).
     private func versionHistory() throws -> [(version: Int, sha: String)] {
         let data = try ExerciseCatalog.resource("catalog.version", withExtension: "sha")
         let text = try #require(String(bytes: data, encoding: .utf8))
-        return try text.split(separator: "\n").filter { !$0.hasPrefix("#") }.map { line in
-            let fields = line.split(separator: " ")
-            let version = try #require(fields.count == 2 ? Int(fields[0]) : nil, "bad line: \(line)")
-            return (version, String(fields[1]))
+        let lines = text.split(separator: "\n").filter { !$0.hasPrefix("#") && !$0.allSatisfy(\.isWhitespace) }
+        return try lines.map { line in
+            let match = try #require(line.wholeMatch(of: /([0-9]{1,9}) ([0-9a-f]{64})/), "bad line: \(line)")
+            return try (#require(Int(match.output.1)), String(match.output.2))
         }
     }
+}
+
+/// The bundled file, its entries and `seed()`'s result.
+private struct Loaded {
+    let json: Data
+    let entries: [CatalogEntry]
+    let exercises: [Exercise]
+
+    init() throws {
+        json = try ExerciseCatalog.resource("exercises", withExtension: "json")
+        entries = try ExerciseCatalog.entries(from: json)
+        exercises = try ExerciseCatalog.seed()
+    }
+}
+
+/// Why the bundled catalog could not be read, kept as text so the cached result stays `Sendable`.
+private struct LoadFailure: Error {
+    let description: String
 }
 
 /// A spec §6.2 entry with the start load the policy gives it (criterion 2 as amended by Pete,

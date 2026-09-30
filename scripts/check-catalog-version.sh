@@ -3,6 +3,8 @@
 # above main's, because F05 re-seeds only when the version rises. The history in catalog.version.sha is
 # append-only: every line main has must still be there, unchanged and in order (a PR adds its own line
 # and may rewrite that one until it merges). ExerciseCatalogTests then check the last line against the file.
+# Ids are stored in lifters' databases, so every id main has must still be in the file, and an entry main
+# has must keep its id: an exercise whose name main has now under another id was re-rolled.
 #
 # The base is the merge base of HEAD with origin/main, or with main when there is no origin/main (a local
 # clone without a remote). The working tree is compared, so uncommitted edits count. CI checks out full
@@ -11,8 +13,8 @@
 #   scripts/check-catalog-version.sh   # used by check.sh step 2
 #
 # Exit 0: the catalog is unchanged, or changed with a higher version. 1: it changed and the version did
-# not rise, the version fell, or a line main has in catalog.version.sha changed. 2: no base, or a version
-# that cannot be read.
+# not rise, the version fell, a line main has in catalog.version.sha changed, or an id main has is gone or
+# re-rolled. 2: no base, or a version or catalog that cannot be read.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -30,7 +32,8 @@ if [[ -z "$base_ref" ]]; then
     exit 2
 fi
 if ! base="$(git merge-base HEAD "$base_ref")"; then
-    echo "error: HEAD shares no history with $base_ref, so the catalog has no base to compare against." >&2
+    echo "error: HEAD shares no history with $base_ref, so the catalog has no base to compare against" >&2
+    echo "       (or the clone is shallow: fetch with fetch-depth: 0)." >&2
     exit 2
 fi
 
@@ -61,10 +64,30 @@ if [[ "$(git rev-parse --verify --quiet "$base:$JSON" || true)" != "$(git hash-o
 if [[ $changed == true ]] && (( current <= previous )); then
     cat >&2 <<MSG
 error: $JSON differs from $base_ref ($short), but ExerciseCatalog.version is still $current.
-       Raise it to $((previous + 1)) or more in $SOURCE, and end $(basename "$HISTORY") with that version
-       and the file's SHA-256 (shasum -a 256 exercises.json): F05 re-seeds only when the version rises.
+       Raise it to $((previous + 1)) in $SOURCE and end $HISTORY with this line
+       (F05 re-seeds only when the version rises):
+$((previous + 1)) $(shasum -a 256 "$JSON" | cut -d' ' -f1)
 MSG
     exit 1
+fi
+
+# Every id main has stays, on the entry it names. Entries are read as "id<TAB>name" lines.
+pairs() { jq -r '.exercises[]? | select(type == "object") | [(.id // "" | tostring), (.name // "" | tostring)] | @tsv'; }
+if base_json="$(git show "$base:$JSON" 2>/dev/null)"; then
+    if ! before="$(pairs <<<"$base_json")" || ! after="$(pairs <"$JSON")"; then
+        echo "error: cannot read the ids of $JSON (here or at $base_ref)." >&2
+        exit 2
+    fi
+    lost="$(awk -F'\t' '$1 == "" { next } # no entry (the placeholder file), or one the loader rejects
+        NR == FNR { id[$1] = 1; owner[$2] = $1; next }
+        ($2 in owner) && owner[$2] != $1 { printf "  %s was %s and is now %s\n", $2, $1, owner[$2]; next }
+        !($1 in id) { printf "  %s (%s) is gone\n", $1, $2 }' \
+        <(printf '%s\n' "$after") <(printf '%s\n' "$before"))"
+    if [[ -n "$lost" ]]; then
+        printf 'error: ids %s has in %s were removed or re-rolled. Never remove or regenerate an id:\n%s\n' \
+            "$base_ref" "$(basename "$JSON")" "$lost" >&2
+        exit 1
+    fi
 fi
 
 # The lines main already has, without comments and blanks, must open the current history unchanged.

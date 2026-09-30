@@ -2,20 +2,22 @@
 
 Branch `feat/F03-exercise-catalog` (from `main` at `1d80613`).
 - **Implementer pass:** 2026-09-30, committed as `d80602f`.
-- **Fix round 1:** 2026-09-30, uncommitted. It applies Pete's and the orchestrator's decisions; see
-  "Decisions (2026-09-30)" below.
+- **Fix round 1:** 2026-09-30, committed as `4d7cf28`. It applies Pete's and the orchestrator's
+  decisions; see "Decisions (2026-09-30)" below.
+- **Fix round 2:** 2026-09-30, uncommitted. It answers the review (`review.md`) and the adversarial
+  round (`test-findings.md`); see "Fix round 2" below.
 
 ## What was built
 
-- **`LedgerDomain/Resources/exercises.json`**: the catalog, 214 exercises. Before this pass it was
+- **`LedgerDomain/Resources/exercises.json`**: the catalog, 224 exercises. Before this pass it was
   the placeholder `{"version":1,"exercises":[]}`. A `contributing` array at the top of the file tells
   editors never to regenerate an id, to bump the version and to append the SHA. The decoder
   ignores that array.
 - **`LedgerDomain/Resources/catalog.version.sha`**: the append-only history of
-  `<version> <sha256 of exercises.json>` lines (criterion 7). It holds two lines: version 1 (the
-  first pass, never merged) and version 2.
+  `<version> <sha256 of exercises.json>` lines (criterion 7). It holds three lines: versions 1 and 2
+  (the first pass and fix round 1, never merged) and version 3.
 - **`LedgerDomain/Catalog/ExerciseCatalog.swift`**:
-  - `version` (2) and `seed()`, which decodes and checks the bundled file and throws on the first
+  - `version` (3) and `seed()`, which decodes and checks the bundled file and throws on the first
     malformed entry;
   - internal `exercises(from:)`, `entries(from:)` and `resource(_:withExtension:)`, which the tests
     use;
@@ -44,12 +46,15 @@ Every id is a random UUIDv4, generated once for this pass. Ids are stored in lif
 referenced by programs, workouts and other entries' `alternatives`, and compared by F05's seed. An
 edit must never change, reuse or re-roll one. A new exercise gets a new `uuidgen` id.
 
-Three things guard this:
+Four things guard this:
 
 - the note at the top of the JSON;
 - the pinned ids of the 22 prototype entries in `ExerciseCatalogTests.prototypeEntries_usePolicyLoads`;
 - the SHA test (criterion 7), which fails on any change to the file;
-- `scripts/check-catalog-version.sh`, which fails a changed file unless the version rises above main's.
+- `scripts/check-catalog-version.sh`. It fails a changed file unless the version rises above
+  main's. Since fix round 2 (review S3) it also fails, whatever the version, when an id main has is
+  gone, or when an entry main has now carries another id (a re-roll or a swap). Renaming an entry
+  and keeping its id passes.
 
 The generator used for this pass stays in the session scratchpad. It is deliberately not
 committed: a script that rebuilds the file invites re-rolled ids. From now on the JSON is edited
@@ -67,6 +72,7 @@ Pete decided the two product questions from the first pass; the orchestrator dec
    | Equipment | Compound | Isolation and core | Small raises |
    |---|---|---|---|
    | Barbell (bar included) | 45 lb / 20 kg, the empty bar | 25 lb / 10 kg, an EZ or fixed bar | — |
+   | Specialty bar, empty (fix round 2) | safety squat bar 65 lb / 30 kg; trap bar 55 lb / 25 kg | — | — |
    | Dumbbell (per hand) | 15 lb / 7.5 kg | 10 lb / 5 kg | 5 lb / 2.5 kg |
    | Cable (per stack) | 30 lb / 15 kg | 20 lb / 10 kg | 10 lb / 5 kg |
    | Machine | 40 lb / 20 kg | 20 lb / 10 kg | 10 lb / 5 kg |
@@ -76,20 +82,27 @@ Pete decided the two product questions from the first pass; the orchestrator dec
 
    - **Class rules.** A class follows from the pattern: isolation and core patterns are
      "isolation", everything else is "compound". Four named classes override it:
-     - **floor pulls:** Deadlift, Sumo Deadlift, Trap Bar Deadlift and Rack Pull take
-       95 lb / 40 kg, the bar with two small plates at pulling height;
-     - **landmine:** T-Bar Row, Meadows Row, Landmine Press and Landmine Rotation take
-       10 lb / 5 kg of plates;
-     - **kettlebell upper body, overhead and get-ups:** the press, row, floor press, clean,
-       snatch, Turkish get-up and windmill take the lighter 15 lb / 8 kg bell;
+     - **floor pulls:** Deadlift, Sumo Deadlift and Rack Pull take 95 lb / 40 kg, the bar with
+       two small plates at pulling height (Trap Bar Deadlift moved to the specialty bars in fix
+       round 2);
+     - **specialty bars** (fix round 2, review S5): Safety Bar Squat 65 lb / 30 kg; Trap Bar
+       Deadlift and Trap Bar Carry 55 lb / 25 kg, each bar's own empty weight;
+     - **straight-bar isolation** (fix round 2, review N3): Barbell Shrug, Barbell Calf Raise and
+       Behind-the-Back Wrist Curl take the empty bar, 45 lb / 20 kg, not the EZ bar;
+     - **landmine:** T-Bar Row, Meadows Row, Landmine Press, Landmine Rotation and Landmine Squat
+       take 10 lb / 5 kg of plates;
+     - **kettlebell upper body, overhead, cleans and get-ups:** the press, row, floor press, clean,
+       snatch, Turkish get-up and windmill take the lighter 15 lb / 8 kg bell (the clean named in
+       #21 since fix round 2);
      - **weighted dips and pull-ups:** +10 lb / +5 kg.
    - **Small raises** are delt raises and flies, rotator-cuff rotations, triceps and glute
-     kickbacks, cable hip abduction and dumbbell wrist curls: 17 entries, listed in
-     `StartLoadPolicy.small`.
+     kickbacks, cable hip abduction and adduction, and dumbbell wrist curls: 19 entries, listed
+     in `StartLoadPolicy.small`.
    - **The kg rule.** Every value is a multiple of its equipment's step in that unit. The kg
      column is not a conversion: it is the same setup with kg equipment (a 20 kg bar, 2.5 kg
-     dumbbells, 5 kg stack plates, 4 kg bell sizes). It stays within 3.1 kg of the converted lb
-     value; the largest gap is 95 lb against 40 kg.
+     dumbbells, 5 kg stack plates, and the 8, 12 and 16 kg bells beginners start on; the
+     kettlebell step is 2 kg). It stays within 3.1 kg of the converted lb value; the largest gap
+     is 95 lb against 40 kg.
    - **Tests.** `ExerciseCatalogTests.startLoads_followThePolicy` checks every exercise against
      the test oracle `StartLoadPolicy`. It also checks that every name the policy lists exists.
      It replaces the first pass's "kg is converted lb" test. The criterion 2 table was read off
@@ -159,6 +172,128 @@ Pete decided the two product questions from the first pass; the orchestrator dec
 5. **The version is bumped to 2**, and `2 <sha>` is appended. Line 1 records the first pass's
    content, which never reached main.
 
+## Fix round 2 (2026-09-30)
+
+The orchestrator's decisions on `review.md` (0 Blocking, 5 Should fix, 11 Nit) and `test-findings.md`
+(finding 1 open), all applied.
+
+**Review should-fixes**
+
+- **S1, the version test.**
+  - `versionSha_matchesFile` now requires a non-empty history whose versions start at 1 or more and
+    rise, with gaps allowed, as the script allows (CV05). An empty history no longer traps
+    (`1 ... 0`); it fails with "catalog.version.sha has no version lines".
+  - Every non-comment, non-blank line must read `<version> <64 hex>`, or the test fails naming it.
+- **S2, the script's message.** It now prints the exact line to append, `N+1 <sha>`, computed from
+  the file at its repository path. The old relative `shasum -a 256 exercises.json`, which failed
+  from the root, is gone from the message, the JSON note and the history file's header. CV02
+  checks the printed line.
+- **S3, id stability.** `scripts/check-catalog-version.sh` reads `id → name` from main's file and
+  from the working tree, with `jq`, which check.sh step 2 already uses for the pins check. It
+  fails, whatever the version, when:
+  - an id main has is gone: an entry deleted or re-rolled;
+  - a name main has now carries another id: a re-roll, or two entries swapping ids.
+
+  Renaming an entry while keeping its id passes. main's placeholder file (no entries) reads as
+  nothing to protect. Adversarial cases CV18 (re-roll), CV19 (deletion), CV20 (swap) and CV21
+  (rename plus addition passes) were each mutation-checked.
+- **S4, additive upgrades.** The JSON note, `ExerciseCatalog.version`'s doc and the brief's
+  criterion 7 now say that an install with the catalog receives new entries only, and its
+  existing rows stay as they are (F05). A correction to an existing entry therefore reaches new
+  installs only. The note says to prefer adding and never to delete.
+- **S5, specialty bars.** Each starts at its own empty weight: Safety Bar Squat 65 lb / 30 kg,
+  Trap Bar Deadlift and Trap Bar Carry 55 lb / 25 kg. The trap bar's raised handles make it
+  pullable empty, so the trap-bar deadlift leaves the floor-pull class. This is in decision #21's
+  row, the `ExerciseCatalog` table and both policy oracles. The catalog has no other specialty
+  bar. The EZ bar already has its own cell (25 lb / 10 kg), and landmine lifts count plates.
+
+**Adversarial finding 1 (a key written twice loads silently): the file scan is the guard.** The
+catalog is static data bundled with the app. `seed()` only ever reads that one file, and the data
+tests scan its text on every test run (`entries_noKeyWrittenTwice`). Making the loader reject a
+repeated key would need a hand-written JSON tokenizer: neither `JSONDecoder` nor
+`JSONSerialization` reports repeats. That is a lot of loader code to guard a file already
+guarded. The red loader test is retargeted: `CatalogDataAdversarialTests.duplicateKey_caughtByTheFileScan`
+takes the bundled text, writes Barbell Bench Press's `shortName` a second time, and asserts that
+the scan (`CatalogScan.repeatedKeys`, extracted from the tester's scan into
+`CatalogAdversarialSupport`) reports exactly that key, and nothing on the untouched file.
+`CatalogEntry`'s doc comment says repeats and unknown keys are the scan's job.
+
+**Spec and content**
+
+- **The clean's bell:** decision #21's row and the `ExerciseCatalog` doc now name cleans among the
+  light-bell work (test finding 2).
+- **Short names** are the Program builder's day-chip label (spec §3.2 item 9: "chip row of up to 4
+  short exercise names (`CATALOG.sh`)"). The watch shows the full name (§4.3 `exName`). Fixed in
+  the JSON note, first-pass item 7 and the test, now `shortNames_fitTheDayChips` (test finding 5).
+- **F10:** one line in its Risks. A swap onto a kettlebell or other stepped equipment re-targets
+  the undone sets to the replacement's step and sizes, because F04 rule 27 keeps targets (test
+  finding 3; the review's F10 carry-forward).
+- **Hip adduction:** Machine Hip Adduction is in, with Cable Hip Adduction and Copenhagen
+  Adduction (reps) as its swaps; each takes the policy's cell (machine isolation 20 lb / 10 kg,
+  cable small 10 lb / 5 kg, bodyweight). They are filed under **glutes**, beside the abduction
+  machines, because `MuscleGroup` has no adductors. The hip abduction machine was already in, as
+  "Machine Hip Abduction" (alias "Hip Abduction Machine"). A second entry would have duplicated
+  it, so none was added.
+- **The version is bumped to 3**, and `3 <sha>` is appended.
+- **Aliases** follow decision #23 (Pete, 2026-09-30; F05 S2 records it): search matches name and
+  short name only. Aliases remain the uniqueness guard. The JSON note, `CatalogEntry`'s doc and
+  first-pass item 5 say so; no doc here calls them searchable.
+- **Power Clean and Pendlay Row** stay at the empty bar, as the orchestrator decided.
+
+**Nits fixed**
+
+- **N2:**
+  - "4 kg bell sizes" now reads "the 8, 12 and 16 kg bells beginners start on; kettlebells then
+    step 2 kg";
+  - `Exercise.defaultStep`'s doc folds in the kettlebell exception;
+  - `seed()`'s doc names the Foundation read error and `Bundle.module`'s trap;
+  - "Three things guard this" is now "Four", and the list names the id guard.
+- **N3:** straight-bar isolation from a rack (shrug, calf raise, behind-the-back wrist curl) starts
+  at the empty bar (45 lb / 20 kg), not the EZ bar.
+- **N5:**
+  - Machine Glute Kickback is back, as Cable Glute Kickback's first swap;
+  - Cable Side Bend is new, replacing Kettlebell Windmill as Dumbbell Side Bend's swap;
+  - Box Squat is now one of Safety Bar Squat's swaps, so no entry is an orphan.
+- **N6:** added Incline Push-Up (Push-Up's first swap), Seal Row, Landmine Squat (landmine plates),
+  Bicycle Crunch and Dumbbell Squat, each with swaps pointing both ways.
+- **N7 (part):** `clash` has its own short name, `ZERCHER SQ`.
+- **N8:** `ExerciseCatalogTests` reads and decodes the file once per run: a cached `Result` of a
+  `Sendable` struct.
+- **N9:** the no-shared-history error adds "(or the clone is shallow: fetch with fetch-depth: 0)".
+- **N11:** `CatalogEntry`'s doc says that unknown and repeated keys are not the loader's job.
+- **Test finding 8 (part):** Captain's Chair Knee Raise no longer carries "… Leg Raise" aliases,
+  which named a different movement.
+
+**Nits skipped, with reasons**
+
+- **N1, collapse the history to version 1:** the orchestrator asked for a bump. Lines 1 and 2
+  record this branch's earlier content and cost nothing. Versions only need to rise, and the
+  script keeps the lines frozen once merged.
+- **N4, floor-start lifts at the empty bar:** accepted by the orchestrator for Power Clean and
+  Pendlay Row. Stiff-Leg Deadlift follows the same reasoning: it is started from the hang or
+  blocks, and the error is on the light side.
+- **N5, Leg Extension's swaps** (Sissy Squat, Reverse Nordic): there is no other equipment-light
+  quad isolation worth a catalog entry. A band leg extension is rare in gyms.
+- **N7, alternatives for `added` and `clash`:** these are F05 seed inputs, and seeding checks no
+  alternatives. Giving them catalog ids needs a name lookup or pinned ids in test support, and
+  F05 decides how a skipped clash is handled (test finding 9).
+- **N10, `WTD PULL-UP` / `WTD DIP`:** `PULL-UP` and `DIP` are the prototype's `sh` for two of the 22
+  spec entries. Pete accepted exactly one `sh` deviation (`INC DB CURL`), so changing design copy
+  is his call.
+- **Test finding 8, straight-bar lifts:** fixed as N3. **Knee raise versus leg raise:** fixed
+  above.
+
+**The tester's committed suites**, updated where fix round 2 changed what they pin:
+
+- `CatalogLoadsAdversarialTests.PolicyOracle` gained the specialty bars, straight-bar isolation,
+  Landmine Squat and cable hip adduction;
+- `CatalogDataAdversarialTests` drops the exact `== 214` count (F12's count is live) and hosts
+  the retargeted finding 1 test;
+- `CatalogLoaderAdversarialTests` loses `duplicateKey_throws`, with a pointer to the new test;
+- `CatalogAdversarialSupport` gains `CatalogScan`.
+
+The shell suite needed no change: its `Raise it to 3` check still matches the new message.
+
 ## Decisions and deviations (first pass; items 1, 2 and 11 superseded above)
 
 1. ~~The prototype's W0 for the 22 entries and beginner loads elsewhere.~~ Superseded by decision
@@ -181,9 +316,9 @@ Pete decided the two product questions from the first pass; the orchestrator dec
    for `loadKind`, so the marker ends at validation: bodyweight equipment with a zero start
    carries the same meaning.
 5. **Aliases stay in the DTO.** `Exercise` has no aliases, and the brief forbids changing it. So
-   aliases (312 of them) do one job: they block a second entry under another name. Criterion 4
-   compares them ignoring case. If F12 wants alias search, `CatalogEntry.aliases` is there, and
-   `CatalogEntry` could become public.
+   aliases (319 of them) do one job: they block a second entry under another name. Criterion 4
+   compares them ignoring case. Pete decided on 2026-09-30 (decision #23, recorded by F05 S2) that
+   search matches name and short name only; aliases are neither stored nor searched.
 6. **Names.** The catalog uses standard gym names and spells out "Dumbbell". The two exceptions
    are spec names that criterion 2 fixes: "Incline DB Press" and "Incline DB Curl". Their
    spelled-out forms are aliases. The prototype's §6.3 swap-sheet names all resolve:
@@ -194,8 +329,10 @@ Pete decided the two product questions from the first pass; the orchestrator dec
    - except Assisted Pull-Up, which is excluded (see below).
 7. **Short names.** They are upper case like the prototype's `sh`, at most 14 characters, and
    unique across the catalog. A test enforces all three. The longest prototype `sh` is 9
-   characters; the watch's exercise name is 20 pt text in 196 pt. All 22 prototype `sh` values
-   are kept except one. **Deviation:** Incline DB Curl is `INC DB CURL`, not the prototype's
+   characters. A short name is the Program builder's day-chip label (spec §3.2, "chip row of up
+   to 4 short exercise names"); the watch shows the full name (spec §4.3, `exName`). Fix round 2
+   corrected the first pass, which called it the watch label. All 22 prototype `sh` values are
+   kept except one. **Deviation:** Incline DB Curl is `INC DB CURL`, not the prototype's
    `DB CURL`, so Dumbbell Curl can be `DB CURL` and an arm day never shows two identical labels.
    Prefixes follow the spec's abbreviations: DB, CB, MC, BW, plus KB and BAND.
 8. **Alternatives follow criterion 3 over the prototype.** The §6.3 pairs are kept wherever they
@@ -204,7 +341,7 @@ Pete decided the two product questions from the first pass; the orchestrator dec
    - Straight-Arm Pulldown for Lat Pulldown, also isolation;
    - Assisted Pull-Up, which is excluded.
 
-   Every entry has 2–5 alternatives, 615 in all. Most share the primary muscle. The exceptions
+   Every entry has 2–5 alternatives, 647 in all. Most share the primary muscle. The exceptions
    are same-family swaps across muscles: deadlift ↔ trap-bar/sumo, dip ↔ machine dip, and
    farmer's ↔ suitcase carry. Beyond the brief, a test requires every **isolation** alternative
    to train the same primary muscle, because `isolation` spans curls to calf raises.
@@ -245,14 +382,16 @@ Pete decided the two product questions from the first pass; the orchestrator dec
 
     Its doc comment spells out the scenario F05 criterion 11 asks for. `CatalogSeedFixtureTests`
     proves the fixture sets up those cases; the contract test is F05's.
-15. **214 entries**, which matches the design's "Search 214 exercises". F12 shows the live count
-    anyway. Six candidates were cut to get there: Jump Squat (a plyometric), Band Lateral Raise,
-    Bayesian Cable Curl, Machine Glute Kickback, Decline Dumbbell Press and Underhand Barbell Row.
+15. **Count.** The first pass shipped 214 entries to match the design's "Search 214 exercises".
+    F12 shows a live count, so that number bought nothing (review N6), and fix round 2 added ten:
+    224. Cut in the first pass and still out: Jump Squat (a plyometric), Band Lateral Raise,
+    Bayesian Cable Curl, Decline Dumbbell Press and Underhand Barbell Row. Machine Glute Kickback
+    came back in fix round 2.
 16. **File order**: entries are grouped by primary muscle in `MuscleGroup` order, then sorted by
     name. `seed()` returns file order.
 17. **Decode time.** The brief's budget is under 20 ms on iPhone. `ExerciseCatalogPerformanceTests`
     follows `ReplayPerformanceTests` and runs on the nightly lane only. The host median, debug
-    build, was **3.5 ms** in the first pass. The file is now 109,196 bytes against a 200 KB budget;
+    build, was **3.5 ms** in the first pass. The file is now 114,561 bytes against a 200 KB budget;
     the criterion 1 test checks the size.
 
 ## Pattern-assignment rules
@@ -262,16 +401,16 @@ swap only offers the same pattern (decision #13).
 
 | Pattern | Rule | Count |
 |---|---|---|
-| `horizontalPush` | Presses in front of the torso: flat, incline and decline presses, push-ups and dips. Dips stand in for a bench press, not an overhead press. | 21 |
+| `horizontalPush` | Presses in front of the torso: flat, incline and decline presses, push-ups and dips. Dips stand in for a bench press, not an overhead press. | 22 |
 | `verticalPush` | Presses overhead: overhead presses, the landmine press, pike and handstand push-ups. | 11 |
-| `horizontalPull` | Rows to the torso. | 13 |
+| `horizontalPull` | Rows to the torso. | 14 |
 | `verticalPull` | Pull-ups, chin-ups and pulldowns. | 10 |
-| `squat` | Two-legged, knee-dominant lifts: squats (front squat included), leg presses and hack squats. | 14 |
+| `squat` | Two-legged, knee-dominant lifts: squats (front squat included), leg presses and hack squats. | 16 |
 | `lunge` | Single-leg, knee-dominant lifts: lunges, split squats, step-ups and pistols. | 11 |
 | `hinge` | Hip-dominant lifts on one leg or two: deadlifts (RDL included), good mornings, hip thrusts, bridges, swings, cleans, back extensions and pull-throughs. | 27 |
 | `carry` | Loaded walks; reps count lengths. | 5 |
-| `core` | Trunk work that is not a carry: crunches, sit-ups, leg raises, rollouts, Pallof presses, chops, side bends and the Turkish get-up. | 22 |
-| `isolation` | Single-joint accessories, plus the small-muscle accessories whose only sensible swaps are other accessories for the same muscle: face pulls, upright rows, shrugs, pullovers and straight-arm pulldowns. | 80 |
+| `core` | Trunk work that is not a carry: crunches, sit-ups, leg raises, rollouts, Pallof presses, chops, side bends and the Turkish get-up. | 24 |
+| `isolation` | Single-joint accessories, plus the small-muscle accessories whose only sensible swaps are other accessories for the same muscle: face pulls, upright rows, shrugs, pullovers and straight-arm pulldowns. | 84 |
 
 ## Deliberately excluded
 
@@ -279,7 +418,7 @@ swap only offers the same pattern (decision #13).
 |---|---|
 | Assisted pull-up and assisted dip machines | The load is assistance, so more weight is easier. `Weight` has no negative load, and progression would add assistance. |
 | Timed holds: plank, side plank, wall sit, dead hang, hollow hold, L-sit | The log records reps, not time (spec §6.1 `LoggedSet`). Carries stay in, because the pattern exists and load is what progresses. |
-| Hip adduction machine, Copenhagen plank | `MuscleGroup` has no adductors (F02). Adding them needs the group first. |
+| Copenhagen plank | A timed hold. The hip adduction machine is **in** since fix round 2, with Cable Hip Adduction and Copenhagen Adduction (reps) as its swaps. `MuscleGroup` has no adductors (F02), so the three are filed under glutes, beside the abduction machines; an `adductors` group would be an F02 change and Pete's call (review G5). |
 | Neck work | There is no neck group. |
 | Sled push and pull, medicine ball, plate-only moves (plate front raise, plate pinch), wrist roller, rings or suspension trainer, battle ropes | There is no equipment type for them. A lifter can add them as custom exercises (F12). |
 | Snatch and clean & jerk | Competition lifts, left for a later version. Power Clean and Hang Power Clean are in, because strength programs use them. |
@@ -292,13 +431,13 @@ Primary muscle (criterion 5: at least 10 each, core at least 8):
 
 | chest | back | shoulders | quads | hamstrings | glutes | calves | biceps | triceps | forearms | core |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 22 | 32 | 27 | 28 | 13 | 20 | 11 | 13 | 14 | 10 | 24 |
+| 23 | 33 | 27 | 30 | 13 | 24 | 11 | 13 | 14 | 10 | 26 |
 
 Equipment (criterion 6: the minimum is in brackets):
 
 | barbell (30) | dumbbell (40) | cable (25) | machine (25) | bodyweight (25) | kettlebell (10) | band (8) |
 |---|---|---|---|---|---|---|
-| 41 | 43 | 30 | 35 | 39 | 15 | 11 |
+| 43 | 44 | 32 | 37 | 42 | 15 | 11 |
 
 Forearms (10) sits exactly at its minimum, so removing one forearm entry fails criterion 5. That
 is intended: the test protects the floor.
@@ -317,12 +456,13 @@ mapped below.
 | 4 | `test_noDuplicateNamesOrAliases` | `ExerciseCatalogTests.namesAndAliases_haveNoDuplicates` |
 | 5 | `test_muscleCoverage` | `ExerciseCatalogTests.muscleCoverage_meetsMinimum` (11 cases) |
 | 6 | `test_equipmentCoverage` | `ExerciseCatalogTests.equipmentCoverage_meetsMinimum` (7 cases) |
-| 7 | `test_versionShaMatchesFile` | `ExerciseCatalogTests.versionSha_matchesFile`, plus `scripts/check-catalog-version.sh` against main, tested by `catalog-version.adv.sh` (CV01–CV17) and wired into step 2 (check-wiring W02, W04, W57) |
+| 7 | `test_versionShaMatchesFile` | `ExerciseCatalogTests.versionSha_matchesFile`: versions rise, gaps allowed, as the script allows; an empty or malformed history fails cleanly. Plus `scripts/check-catalog-version.sh` against main (version, history and, since fix round 2, ids), tested by `catalog-version.adv.sh` (CV01–CV21) and the tester's `catalog-version-attack.adv.sh` (V01–V21), and wired into step 2 (check-wiring W02, W04, W57) |
 | 8 | fixture only (the contract test is F05's) | `CatalogSeedFixtureTests.upgrade_isAdditive`, `custom_clashesOnlyWithClash` |
-| — | `test_startLoadsAreMultiplesOfStep` | `ExerciseCatalogTests.startLoads_areMultiplesOfStep`, plus `startLoads_followThePolicy` (decision #21, all 214 entries against `StartLoadPolicy`) |
+| — | `test_startLoadsAreMultiplesOfStep` | `ExerciseCatalogTests.startLoads_areMultiplesOfStep`, plus `startLoads_followThePolicy` (decision #21, all 224 entries against `StartLoadPolicy`) |
 | — | (decision #22) | `ExerciseTests.kettlebell_defaultStep`, `kettlebell_startLoadFallback_landsOnABell`; `ProgressionRulesTests.prescribe_kettlebell_usesBellSteps`; `RepsRPERestAdversarialTests.defaultStep_perEquipmentAndUnit` |
-| — | `test_idsAreStableUUIDs` | `ExerciseCatalogTests.ids_areStableUUIDs`: the raw file's ids are canonical upper-case UUIDv4 strings and unique. Stability is also guarded by the pinned prototype ids and criterion 7. |
-| — | (beyond the brief) | `ExerciseCatalogTests.shortNames_fitTheWatch`; `CatalogEntryTests.validEntry_mapsEveryField`, `bodyweightEntries_decode`; `ExerciseCatalogPerformanceTests.seed_under20ms` (nightly) |
+| — | `test_idsAreStableUUIDs` | `ExerciseCatalogTests.ids_areStableUUIDs`: the raw file's ids are canonical upper-case UUIDv4 strings and unique. Stability across versions: the script's id guard (CV18–CV21), and the pinned prototype ids. |
+| — | adversarial finding 1 | `CatalogDataAdversarialTests.duplicateKey_caughtByTheFileScan` (retargeted from the loader; see "Fix round 2") and `entries_noKeyWrittenTwice` |
+| — | (beyond the brief) | `ExerciseCatalogTests.shortNames_fitTheDayChips`; `CatalogEntryTests.validEntry_mapsEveryField`, `bodyweightEntries_decode`; `ExerciseCatalogPerformanceTests.seed_under20ms` (nightly) |
 
 **Mutation checks**, run on the host; each time the file was restored byte for byte, and its SHA
 matches `catalog.version.sha`:
@@ -335,6 +475,10 @@ matches `catalog.version.sha`:
   suite failed in its `init()`.
 - Fix round 1: the script's four mutants, listed under decision 3, each failed at least one CV
   case.
+- Fix round 2: two mutants of the id guard (the check disabled; the re-roll rule removed) each
+  failed CV18–CV20 or CV18 and CV20. A comments-only history and a malformed history line each
+  failed `versionSha_matchesFile` with one clean issue ("catalog.version.sha has no version
+  lines", "bad line: …"), where the first pass trapped.
 
 ## Size
 
@@ -342,7 +486,7 @@ The measure is lines that are neither blank nor comment-only, per engineering st
 Comments are `//` and `///` in Swift and `#` in shell. Whole new files were counted with
 `grep -v '^[[:space:]]*$' FILE | grep -v '^[[:space:]]*//' | wc -l` (`#` for shell). Edits to
 existing files were counted over the `+` lines of `git diff -U0 1d80613 -- FILE`, with the same
-filters. All figures are for the branch against `main`, after fix round 1.
+filters. All figures are for the branch against `main`, after fix round 2.
 
 | Kind | File | Lines |
 |---|---|---|
@@ -351,36 +495,41 @@ filters. All figures are for the branch against `main`, after fix round 1.
 | Code | `Errors.swift` (`CatalogError`, added) | 13 |
 | Code | `Model/Exercise.swift` (kettlebell step: one arm changed, one added) | 2 |
 | Code | `Package.swift` (one resource declaration) | 1 |
-| Code | `scripts/check-catalog-version.sh` | 68 |
+| Code | `scripts/check-catalog-version.sh` | 87 |
 | Code | `scripts/check.sh` (the step 2 call) | 1 |
 | Code (test support) | `LedgerTestSupport/Catalog/CatalogSeedFixture.swift` | 46 |
-| **Code total** | | **239**, under the 500-line target |
-| Tests | the five files in `LedgerDomainTests/Catalog/` | 475 (191 + 178 + 57 + 32 + 17) |
+| **Code total** | | **258**, under the 500-line target |
+| Tests | the five files in `LedgerDomainTests/Catalog/` | 498 (206 + 178 + 65 + 32 + 17) |
 | Tests | kettlebell additions in `ExerciseTests`, `ProgressionRulesTests`, `RepsRPERestAdversarialTests` | 32 (14 + 10 + 8) |
-| Tests | `catalog-version.adv.sh`, plus the `check-wiring.adv.sh` additions | 80 (74 + 6) |
-| Data | `exercises.json` (`wc -l`; 109,196 bytes) | 2,616 |
-| Data | `catalog.version.sha` (`wc -l`) | 6 |
+| Tests | `catalog-version.adv.sh`, plus the `check-wiring.adv.sh` additions | 99 (93 + 6) |
+| Tests | fix round 2's edits to the tester's suites (`git diff --stat HEAD`) | +56 −18 |
+| Data | `exercises.json` (`wc -l`; 114,561 bytes) | 2,739 |
+| Data | `catalog.version.sha` (`wc -l`) | 7 |
 
 The JSON is pretty-printed one key per line, 12–13 lines per entry, and nothing is compressed.
 
 ## Gate
 
-**Fix round 1** was run on the final tree through the shared simulator lock:
-`sim-lock.py scripts/check.sh 2>&1 | tee …/scratchpad/f03-fix1.log` (2026-09-30).
+**Fix round 2** was run on the final tree through the shared simulator lock:
+`sim-lock.py scripts/check.sh 2>&1 | tee …/scratchpad/f03-fix2.log` (2026-09-30).
 
 | Check | Result |
 |---|---|
-| Full `scripts/check.sh` (format, lint, graph, pins, **catalog version**, script tests, iOS `PR`, watchOS `PR-Watch`, coverage) | **OK**, 267 s |
-| Step 2's new check | "exercise catalog changed since origin/main (1d80613): version 0 -> 2" |
-| Script suites | `catalog-version.adv.sh` 17 passed, 0 failed; `check-wiring.adv.sh` 105 passed, 0 failed |
-| iOS result bundle (`xcresulttool … PR-iOS.xcresult`) | **Passed**: 926 tests, 0 failed, 3 skipped (the nightly-lane suites), iPhone 17 (27.0) |
-| watchOS result bundle (`… PR-watchOS.xcresult`) | **Passed**: 851 tests, 0 failed, 3 skipped, Apple Watch Series 12 (46 mm) (27.0) |
+| Full `scripts/check.sh` (format, lint, graph, pins, catalog version and ids, script tests, iOS `PR`, watchOS `PR-Watch`, coverage) | **OK**, 277 s |
+| Step 2's catalog check | "exercise catalog changed since origin/main (1d80613): version 0 -> 3" |
+| Script suites | `catalog-version.adv.sh` 21/21, `catalog-version-attack.adv.sh` 24/24, `check-wiring.adv.sh` 105/105 |
+| iOS result bundle (`xcresulttool … PR-iOS.xcresult`) | **Passed**: 967 tests, 0 failed, 3 skipped (the nightly-lane suites), iPhone 17 (27.0). The tester's suites are included, and the finding 1 test is green. |
+| watchOS result bundle (`… PR-watchOS.xcresult`) | **Passed**: 892 tests, 0 failed, 3 skipped, Apple Watch Series 12 (46 mm) (27.0) |
 | Coverage gate | LedgerDomain **99.01 %** (1,817 / 1,835 lines; threshold 95 %); overall 98.12 % |
 | Changed files (`xccov`, both platforms) | `ExerciseCatalog.swift` 46 / 46, `CatalogEntry.swift` 37 / 37, `Exercise.swift` 31 / 31 |
-| `scripts/check.sh --fast` (before the full gate) | **OK**: 710 tests in 118 suites |
+| `scripts/check.sh --fast` (before the full gate) | **OK**: 751 tests in 123 suites |
 
-**First pass** (`d80602f`): the full gate was OK in 317 s. iOS ran 923 tests and watchOS 848, none
-failed. LedgerDomain coverage was 99.01 %.
+**Earlier rounds:**
+
+- **Fix round 1** (`4d7cf28`): the full gate was OK in 267 s. iOS ran 926 tests and watchOS 851,
+  none failed.
+- **First pass** (`d80602f`): the full gate was OK in 317 s. iOS ran 923 tests and watchOS 848,
+  none failed.
 
 ## How to verify by hand
 
@@ -391,7 +540,11 @@ failed. LedgerDomain coverage was 99.01 %.
    names the line to append. `scripts/check-catalog-version.sh` still passes on this branch,
    because version 2 is above main's 0; on a branch off a main that already holds version 2, it
    would fail. Revert the edit.
-3a. Run `bash scripts/tests/adversarial/catalog-version.adv.sh`: 17 cases, all `ok`.
+3a. Run `bash scripts/tests/adversarial/catalog-version.adv.sh` (21 cases) and
+    `bash scripts/tests/adversarial/catalog-version-attack.adv.sh` (24 cases): all `ok`.
+3b. For the id guard, change one `"id"` in `exercises.json` to a fresh `uuidgen` value and run
+    `scripts/check-catalog-version.sh`. On this branch it passes, because main has no ids yet;
+    CV18 shows the failure on a branch off a main that has them. Revert the edit.
 4. Recount from the file:
    `jq '.exercises | group_by(.primaryMuscle) | map({(.[0].primaryMuscle): length}) | add' LedgerKit/Sources/LedgerDomain/Resources/exercises.json`
    (use `.equipment` or `.pattern` for the other counts).
@@ -399,13 +552,13 @@ failed. LedgerDomain coverage was 99.01 %.
    `LEDGER_TEST_LANE=nightly swift test --package-path LedgerKit --filter ExerciseCatalogPerformanceTests`.
 6. Read the appendix below. It is the catalog as a lifter would review it.
 
-## Appendix: the catalog (version 2)
+## Appendix: the catalog (version 3)
 
-Generated from `exercises.json` version 2 for review; the JSON is the source of truth. Loads follow
+Generated from `exercises.json` version 3 for review; the JSON is the source of truth. Loads follow
 decision #21's policy. "BW" means bodyweight, a zero start with `loadKind`; "+n" is added load. Patterns
 are abbreviated: h-push, h-pull, v-push, v-pull.
 
-#### Chest (22)
+#### Chest (23)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
@@ -422,26 +575,27 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Incline Bench Press | INC BENCH | barbell | h-push | shoulders, triceps | 45 / 20 | Incline DB Press; Smith Machine Incline Press; Machine Incline Press | Incline Barbell Press; Incline Barbell Bench Press |
 | Incline DB Press | INCLINE | dumbbell | h-push | shoulders, triceps | 15 / 7.5 | Incline Bench Press; Machine Incline Press; Smith Machine Incline Press; Dumbbell Bench Press | Incline Dumbbell Press; Incline Dumbbell Bench Press |
 | Incline Dumbbell Fly | INC DB FLY | dumbbell | isolation | shoulders | 10 / 5 | Low-to-High Cable Fly; Dumbbell Fly; Pec Deck | Incline Dumbbell Flye; Incline DB Fly |
+| Incline Push-Up | INC PUSH-UP | bodyweight | h-push | triceps, shoulders | BW | Push-Up; Machine Chest Press; Dumbbell Bench Press | Hands-Elevated Push-Up |
 | Kettlebell Floor Press | KB FLOOR | kettlebell | h-push | triceps, shoulders | 15 / 8 | Dumbbell Floor Press; Barbell Floor Press; Push-Up | — |
 | Low-to-High Cable Fly | FLY | cable | isolation | shoulders | 20 / 10 | Cable Crossover; Incline Dumbbell Fly; Pec Deck | Low Cable Fly; Low-to-High Cable Crossover |
 | Machine Chest Press | CHEST PRESS | machine | h-push | triceps, shoulders | 40 / 20 | Barbell Bench Press; Dumbbell Bench Press; Smith Machine Bench Press; Cable Chest Press | Chest Press Machine; Seated Chest Press |
 | Machine Incline Press | MC INCLINE | machine | h-push | shoulders, triceps | 40 / 20 | Incline DB Press; Incline Bench Press; Smith Machine Incline Press | Incline Chest Press Machine; Incline Machine Press |
 | Pec Deck | PEC DECK | machine | isolation | shoulders | 20 / 10 | Cable Crossover; Dumbbell Fly; Low-to-High Cable Fly | Pec Deck Fly; Machine Fly; Butterfly |
-| Push-Up | PUSH-UP | bodyweight | h-push | triceps, shoulders, core | BW | Decline Push-Up; Dumbbell Bench Press; Cable Chest Press; Dip | Pushup; Press-Up |
+| Push-Up | PUSH-UP | bodyweight | h-push | triceps, shoulders, core | BW | Incline Push-Up; Decline Push-Up; Dumbbell Bench Press; Cable Chest Press; Dip | Pushup; Press-Up |
 | Smith Machine Bench Press | SMITH BENCH | machine | h-push | triceps, shoulders | 40 / 20 | Barbell Bench Press; Machine Chest Press; Dumbbell Bench Press | Smith Machine Press; Smith Bench Press |
 | Smith Machine Incline Press | SMITH INCLINE | machine | h-push | shoulders, triceps | 40 / 20 | Incline Bench Press; Machine Incline Press; Incline DB Press | Smith Machine Incline Bench Press; Smith Incline Press |
 | Weighted Dip | DIP | bodyweight | h-push | triceps, shoulders | +10 / +5 | Dip; Barbell Bench Press; Machine Dip; Decline Bench Press | Weighted Chest Dip; Weighted Parallel Bar Dip |
 
-#### Back (32)
+#### Back (33)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
 | Back Extension | BACK EXT | bodyweight | hinge | glutes, hamstrings | BW | Machine Back Extension; Reverse Hyperextension; Good Morning | Hyperextension; 45-Degree Back Extension; Roman Chair Back Extension |
 | Band Row | BAND ROW | band | h-pull | biceps, shoulders | 20 / 10 | Seated Cable Row; Inverted Row; Kettlebell Row | Seated Band Row; Resistance Band Row |
 | Barbell Row | ROW | barbell | h-pull | biceps, shoulders | 45 / 20 | Seated Cable Row; Single-Arm Dumbbell Row; Chest-Supported Row; Pendlay Row | Bent-Over Row; Bent-Over Barbell Row |
-| Barbell Shrug | SHRUG | barbell | isolation | forearms | 25 / 10 | Dumbbell Shrug; Cable Shrug | Shrug |
+| Barbell Shrug | SHRUG | barbell | isolation | forearms | 45 / 20 | Dumbbell Shrug; Cable Shrug | Shrug |
 | Cable Shrug | CB SHRUG | cable | isolation | forearms | 20 / 10 | Barbell Shrug; Dumbbell Shrug | — |
-| Chest-Supported Dumbbell Row | CS DB ROW | dumbbell | h-pull | biceps, shoulders | 15 / 7.5 | Chest-Supported Row; Single-Arm Dumbbell Row; Seated Cable Row | Incline Dumbbell Row; Prone Dumbbell Row |
+| Chest-Supported Dumbbell Row | CS DB ROW | dumbbell | h-pull | biceps, shoulders | 15 / 7.5 | Chest-Supported Row; Single-Arm Dumbbell Row; Seated Cable Row; Seal Row | Incline Dumbbell Row; Prone Dumbbell Row |
 | Chest-Supported Row | CS ROW | machine | h-pull | biceps, shoulders | 40 / 20 | Seated Cable Row; Single-Arm Dumbbell Row; Barbell Row; Chest-Supported Dumbbell Row | Machine Row; Seated Row Machine; Chest-Supported Machine Row |
 | Chin-Up | CHIN-UP | bodyweight | v-pull | biceps | BW | Reverse-Grip Lat Pulldown; Pull-Up; Weighted Chin-Up; Neutral-Grip Pull-Up | Chinup; Underhand Pull-Up |
 | Dumbbell Bent-Over Row | DB BO ROW | dumbbell | h-pull | biceps, shoulders | 15 / 7.5 | Barbell Row; Chest-Supported Dumbbell Row; Kettlebell Row | Bent-Over Dumbbell Row; Two-Arm Dumbbell Row |
@@ -460,6 +614,7 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Pull-Up | BW PULL-UP | bodyweight | v-pull | biceps, forearms | BW | Lat Pulldown; Weighted Pull-Up; Chin-Up; Neutral-Grip Pull-Up | Pullup; Overhand Pull-Up |
 | Rack Pull | RACK PULL | barbell | hinge | glutes, hamstrings, forearms | 95 / 40 | Deadlift; Trap Bar Deadlift; Romanian Deadlift | Block Pull |
 | Reverse-Grip Lat Pulldown | RG PULLDOWN | cable | v-pull | biceps | 30 / 15 | Chin-Up; Neutral-Grip Pulldown; Lat Pulldown | Underhand Lat Pulldown; Supinated Lat Pulldown |
+| Seal Row | SEAL ROW | barbell | h-pull | biceps, shoulders | 45 / 20 | Chest-Supported Row; Chest-Supported Dumbbell Row; Barbell Row | Barbell Seal Row |
 | Seated Cable Row | CABLE ROW | cable | h-pull | biceps, shoulders | 30 / 15 | Chest-Supported Row; Single-Arm Dumbbell Row; Barbell Row; Single-Arm Cable Row | Cable Row; Low Cable Row; Seated Row |
 | Single-Arm Cable Row | SA CABLE ROW | cable | h-pull | biceps, shoulders | 30 / 15 | Seated Cable Row; Single-Arm Dumbbell Row; Meadows Row | One-Arm Cable Row |
 | Single-Arm Dumbbell Row | DB ROW | dumbbell | h-pull | biceps, shoulders | 15 / 7.5 | Chest-Supported Row; Single-Arm Cable Row; Barbell Row; Kettlebell Row | Dumbbell Row; One-Arm Dumbbell Row; Single-Arm DB Row |
@@ -501,14 +656,14 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Seated Dumbbell Shoulder Press | DB OHP | dumbbell | v-push | triceps | 15 / 7.5 | Overhead Press; Arnold Press; Machine Shoulder Press | Seated Dumbbell Press; Dumbbell Shoulder Press; Dumbbell Overhead Press; Seated DB Press |
 | Smith Machine Overhead Press | SMITH OHP | machine | v-push | triceps | 40 / 20 | Overhead Press; Machine Shoulder Press; Seated Dumbbell Shoulder Press | Smith Machine Shoulder Press; Smith Shoulder Press |
 
-#### Quads (28)
+#### Quads (30)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
 | Back Squat | SQUAT | barbell | squat | glutes, hamstrings | 45 / 20 | Front Squat; Safety Bar Squat; Leg Press; Hack Squat; Smith Machine Squat | Barbell Back Squat; Squat; High-Bar Squat; Low-Bar Squat |
 | Barbell Lunge | BB LUNGE | barbell | lunge | glutes, hamstrings | 45 / 20 | Dumbbell Lunge; Barbell Split Squat; Dumbbell Walking Lunge | Barbell Forward Lunge |
 | Barbell Split Squat | BB SPLIT SQ | barbell | lunge | glutes | 45 / 20 | Dumbbell Split Squat; Dumbbell Bulgarian Split Squat; Barbell Lunge | — |
-| Belt Squat | BELT SQUAT | machine | squat | glutes | 40 / 20 | Hack Squat; Leg Press; Goblet Squat | Belt Squat Machine |
+| Belt Squat | BELT SQUAT | machine | squat | glutes | 40 / 20 | Hack Squat; Leg Press; Goblet Squat; Landmine Squat | Belt Squat Machine |
 | Bodyweight Lunge | BW LUNGE | bodyweight | lunge | glutes | BW | Dumbbell Lunge; Dumbbell Walking Lunge; Pistol Squat | Lunge; Forward Lunge |
 | Bodyweight Squat | BW SQUAT | bodyweight | squat | glutes | BW | Goblet Squat; Kettlebell Goblet Squat | Air Squat |
 | Box Squat | BOX SQUAT | barbell | squat | glutes, hamstrings | 45 / 20 | Back Squat; Safety Bar Squat; Belt Squat | Barbell Box Squat |
@@ -516,20 +671,22 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Dumbbell Lunge | DB LUNGE | dumbbell | lunge | glutes | 15 / 7.5 | Dumbbell Reverse Lunge; Dumbbell Walking Lunge; Barbell Lunge | Dumbbell Forward Lunge |
 | Dumbbell Reverse Lunge | DB REV LUNGE | dumbbell | lunge | glutes | 15 / 7.5 | Dumbbell Lunge; Kettlebell Reverse Lunge; Dumbbell Split Squat | Reverse Lunge |
 | Dumbbell Split Squat | DB SPLIT SQ | dumbbell | lunge | glutes | 15 / 7.5 | Dumbbell Bulgarian Split Squat; Barbell Split Squat; Dumbbell Reverse Lunge | Split Squat |
+| Dumbbell Squat | DB SQUAT | dumbbell | squat | glutes | 15 / 7.5 | Goblet Squat; Kettlebell Goblet Squat; Bodyweight Squat | — |
 | Dumbbell Step-Up | STEP-UP | dumbbell | lunge | glutes | 15 / 7.5 | Dumbbell Reverse Lunge; Dumbbell Bulgarian Split Squat | Step-Up; Box Step-Up |
 | Dumbbell Walking Lunge | WALK LUNGE | dumbbell | lunge | glutes | 15 / 7.5 | Dumbbell Lunge; Barbell Lunge; Bodyweight Lunge | Walking Lunge |
 | Front Squat | FRONT SQ | barbell | squat | glutes, core | 45 / 20 | Back Squat; Goblet Squat; Hack Squat; Kettlebell Front Squat | Barbell Front Squat |
-| Goblet Squat | GOBLET | dumbbell | squat | glutes, core | 15 / 7.5 | Kettlebell Goblet Squat; Front Squat; Leg Press | Dumbbell Goblet Squat |
+| Goblet Squat | GOBLET | dumbbell | squat | glutes, core | 15 / 7.5 | Kettlebell Goblet Squat; Dumbbell Squat; Front Squat; Leg Press | Dumbbell Goblet Squat |
 | Hack Squat | HACK SQUAT | machine | squat | glutes | 40 / 20 | Leg Press; Pendulum Squat; Front Squat; Smith Machine Squat | Machine Hack Squat |
 | Kettlebell Front Squat | KB FRONT SQ | kettlebell | squat | glutes, core | 25 / 12 | Front Squat; Kettlebell Goblet Squat; Goblet Squat | Double Kettlebell Front Squat |
 | Kettlebell Goblet Squat | KB GOBLET | kettlebell | squat | glutes, core | 25 / 12 | Goblet Squat; Kettlebell Front Squat; Bodyweight Squat | — |
 | Kettlebell Reverse Lunge | KB REV LUNGE | kettlebell | lunge | glutes | 25 / 12 | Dumbbell Reverse Lunge; Dumbbell Lunge; Bodyweight Lunge | — |
+| Landmine Squat | LANDMINE SQ | barbell | squat | glutes, core | 10 / 5 | Goblet Squat; Belt Squat; Front Squat | — |
 | Leg Extension | LEG EXT | machine | isolation | — | 20 / 10 | Sissy Squat; Reverse Nordic | Machine Leg Extension; Quad Extension |
 | Leg Press | LEG PRESS | machine | squat | glutes | 40 / 20 | Hack Squat; Seated Leg Press; Back Squat; Pendulum Squat | 45-Degree Leg Press; Sled Leg Press |
 | Pendulum Squat | PENDULUM | machine | squat | glutes | 40 / 20 | Hack Squat; Leg Press; Belt Squat | — |
 | Pistol Squat | PISTOL | bodyweight | lunge | glutes, core | BW | Dumbbell Bulgarian Split Squat; Bodyweight Lunge; Dumbbell Step-Up | Single-Leg Squat |
 | Reverse Nordic | REV NORDIC | bodyweight | isolation | — | BW | Sissy Squat; Leg Extension | Reverse Nordic Curl |
-| Safety Bar Squat | SSB SQUAT | barbell | squat | glutes, back | 45 / 20 | Back Squat; Front Squat; Belt Squat | SSB Squat; Safety Squat Bar Squat |
+| Safety Bar Squat | SSB SQUAT | barbell | squat | glutes, back | 65 / 30 | Back Squat; Box Squat; Front Squat; Belt Squat | SSB Squat; Safety Squat Bar Squat |
 | Seated Leg Press | MC LEG PRESS | machine | squat | glutes | 40 / 20 | Leg Press; Hack Squat; Belt Squat | Horizontal Leg Press |
 | Sissy Squat | SISSY SQUAT | bodyweight | isolation | — | BW | Leg Extension; Reverse Nordic | — |
 | Smith Machine Squat | SMITH SQUAT | machine | squat | glutes | 40 / 20 | Back Squat; Hack Squat; Leg Press | Smith Squat |
@@ -552,16 +709,18 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Standing Leg Curl | ST LEG CURL | machine | isolation | calves | 20 / 10 | Seated Leg Curl; Lying Leg Curl | Standing Hamstring Curl |
 | Stiff-Leg Deadlift | SLDL | barbell | hinge | glutes, back | 45 / 20 | Romanian Deadlift; Dumbbell Romanian Deadlift; Good Morning | Stiff-Legged Deadlift; SLDL |
 
-#### Glutes (20)
+#### Glutes (24)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
 | Band Pull-Through | BAND PULL-THRU | band | hinge | hamstrings | 20 / 10 | Cable Pull-Through; Kettlebell Swing; Band Good Morning | — |
 | Banded Lateral Walk | LATERAL WALK | band | isolation | — | 10 / 5 | Machine Hip Abduction; Cable Hip Abduction | Band Lateral Walk; Band Side Walk; Monster Walk |
 | Barbell Glute Bridge | BB BRIDGE | barbell | hinge | hamstrings | 45 / 20 | Hip Thrust; Glute Bridge; Machine Hip Thrust | — |
-| Cable Glute Kickback | GLUTE KICK | cable | isolation | hamstrings | 10 / 5 | Cable Hip Abduction; Banded Lateral Walk | Glute Kickback |
+| Cable Glute Kickback | GLUTE KICK | cable | isolation | hamstrings | 10 / 5 | Machine Glute Kickback; Cable Hip Abduction; Banded Lateral Walk | Glute Kickback |
 | Cable Hip Abduction | CB ABDUCTION | cable | isolation | — | 10 / 5 | Machine Hip Abduction; Banded Lateral Walk; Cable Glute Kickback | Standing Cable Hip Abduction |
+| Cable Hip Adduction | CB ADDUCTION | cable | isolation | — | 10 / 5 | Machine Hip Adduction; Copenhagen Adduction | Standing Cable Hip Adduction |
 | Cable Pull-Through | PULL-THROUGH | cable | hinge | hamstrings | 30 / 15 | Band Pull-Through; Kettlebell Swing; Hip Thrust | — |
+| Copenhagen Adduction | COPENHAGEN | bodyweight | isolation | core | BW | Machine Hip Adduction; Cable Hip Adduction | Copenhagen Hip Adduction |
 | Glute Bridge | GLUTE BRIDGE | bodyweight | hinge | hamstrings | BW | Barbell Glute Bridge; Single-Leg Hip Thrust; Hip Thrust | Bodyweight Glute Bridge; Hip Bridge |
 | Hang Power Clean | HANG CLEAN | barbell | hinge | hamstrings, quads, back | 45 / 20 | Power Clean; Kettlebell Clean | Hang Clean |
 | Hip Thrust | HIP THRUST | barbell | hinge | hamstrings | 45 / 20 | Machine Hip Thrust; Barbell Glute Bridge; Single-Leg Hip Thrust | Barbell Hip Thrust |
@@ -569,19 +728,21 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Kettlebell Deadlift | KB DEADLIFT | kettlebell | hinge | hamstrings, quads | 25 / 12 | Kettlebell Swing; Dumbbell Romanian Deadlift; Trap Bar Deadlift | — |
 | Kettlebell Snatch | KB SNATCH | kettlebell | hinge | shoulders, hamstrings | 15 / 8 | Kettlebell Swing; Kettlebell Clean | — |
 | Kettlebell Swing | KB SWING | kettlebell | hinge | hamstrings, back | 25 / 12 | Cable Pull-Through; Kettlebell Deadlift; Band Pull-Through | Russian Kettlebell Swing; Two-Hand Kettlebell Swing |
+| Machine Glute Kickback | MC GLUTE KICK | machine | isolation | hamstrings | 10 / 5 | Cable Glute Kickback; Machine Hip Abduction | Glute Kickback Machine |
 | Machine Hip Abduction | HIP ABDUCT | machine | isolation | — | 20 / 10 | Cable Hip Abduction; Banded Lateral Walk | Hip Abduction Machine; Seated Hip Abduction; Abductor Machine |
+| Machine Hip Adduction | HIP ADDUCT | machine | isolation | — | 20 / 10 | Cable Hip Adduction; Copenhagen Adduction | Hip Adduction Machine; Seated Hip Adduction; Adductor Machine |
 | Machine Hip Thrust | MC HIP THRUST | machine | hinge | hamstrings | 40 / 20 | Hip Thrust; Barbell Glute Bridge; Glute Bridge | Hip Thrust Machine |
 | Power Clean | POWER CLEAN | barbell | hinge | hamstrings, quads, back | 45 / 20 | Hang Power Clean; Kettlebell Clean | — |
 | Reverse Hyperextension | REVERSE HYPER | machine | hinge | hamstrings, back | 40 / 20 | Back Extension; Machine Back Extension; Cable Pull-Through | Reverse Hyper |
 | Single-Leg Hip Thrust | SL HIP THRUST | bodyweight | hinge | hamstrings | BW | Glute Bridge; Hip Thrust | — |
 | Sumo Deadlift | SUMO | barbell | hinge | hamstrings, quads, back | 95 / 40 | Deadlift; Trap Bar Deadlift; Kettlebell Deadlift | Sumo Barbell Deadlift |
-| Trap Bar Deadlift | TRAP BAR DL | barbell | hinge | quads, hamstrings, back | 95 / 40 | Deadlift; Sumo Deadlift; Rack Pull | Hex Bar Deadlift |
+| Trap Bar Deadlift | TRAP BAR DL | barbell | hinge | quads, hamstrings, back | 55 / 25 | Deadlift; Sumo Deadlift; Rack Pull | Hex Bar Deadlift |
 
 #### Calves (11)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
-| Barbell Calf Raise | BB CALF | barbell | isolation | — | 25 / 10 | Smith Machine Calf Raise; Standing Calf Raise; Dumbbell Calf Raise | Standing Barbell Calf Raise |
+| Barbell Calf Raise | BB CALF | barbell | isolation | — | 45 / 20 | Smith Machine Calf Raise; Standing Calf Raise; Dumbbell Calf Raise | Standing Barbell Calf Raise |
 | Bodyweight Calf Raise | BW CALF | bodyweight | isolation | — | BW | Single-Leg Calf Raise; Dumbbell Calf Raise | Calf Raise |
 | Donkey Calf Raise | DONKEY CALF | machine | isolation | — | 20 / 10 | Standing Calf Raise; Leg Press Calf Raise | Donkey Calf Raise Machine |
 | Dumbbell Calf Raise | DB CALF | dumbbell | isolation | — | 10 / 5 | Single-Leg Dumbbell Calf Raise; Barbell Calf Raise; Bodyweight Calf Raise | Standing Dumbbell Calf Raise |
@@ -635,30 +796,32 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
 | Barbell Wrist Curl | WRIST CURL | barbell | isolation | — | 25 / 10 | Dumbbell Wrist Curl; Behind-the-Back Wrist Curl | Wrist Curl; Seated Barbell Wrist Curl |
-| Behind-the-Back Wrist Curl | BTB WRIST | barbell | isolation | — | 25 / 10 | Barbell Wrist Curl; Dumbbell Wrist Curl | Behind-the-Back Barbell Wrist Curl |
+| Behind-the-Back Wrist Curl | BTB WRIST | barbell | isolation | — | 45 / 20 | Barbell Wrist Curl; Dumbbell Wrist Curl | Behind-the-Back Barbell Wrist Curl |
 | Cable Reverse Curl | CB REV CURL | cable | isolation | biceps | 20 / 10 | Reverse Curl; Zottman Curl | Reverse-Grip Cable Curl |
 | Dumbbell Farmer's Carry | FARMER CARRY | dumbbell | carry | back, core | 15 / 7.5 | Kettlebell Farmer's Carry; Trap Bar Carry; Suitcase Carry | Farmer's Carry; Farmer's Walk; Dumbbell Farmer's Walk |
 | Dumbbell Reverse Wrist Curl | DB REV WRIST | dumbbell | isolation | — | 5 / 2.5 | Reverse Curl; Zottman Curl; Dumbbell Wrist Curl | Reverse Wrist Curl |
 | Dumbbell Wrist Curl | DB WRIST | dumbbell | isolation | — | 5 / 2.5 | Barbell Wrist Curl; Dumbbell Reverse Wrist Curl | — |
 | Kettlebell Farmer's Carry | KB CARRY | kettlebell | carry | back, core | 25 / 12 | Dumbbell Farmer's Carry; Kettlebell Front Rack Carry; Suitcase Carry | Kettlebell Farmer's Walk |
 | Reverse Curl | REV CURL | barbell | isolation | biceps | 25 / 10 | Cable Reverse Curl; Zottman Curl; Dumbbell Reverse Wrist Curl | Reverse Barbell Curl; EZ-Bar Reverse Curl; Reverse-Grip Curl |
-| Trap Bar Carry | TRAP CARRY | barbell | carry | back, core | 45 / 20 | Dumbbell Farmer's Carry; Kettlebell Farmer's Carry | Trap Bar Farmer's Carry; Trap Bar Walk |
+| Trap Bar Carry | TRAP CARRY | barbell | carry | back, core | 55 / 25 | Dumbbell Farmer's Carry; Kettlebell Farmer's Carry | Trap Bar Farmer's Carry; Trap Bar Walk |
 | Zottman Curl | ZOTTMAN | dumbbell | isolation | biceps | 10 / 5 | Reverse Curl; Cable Reverse Curl | Dumbbell Zottman Curl |
 
-#### Core (24)
+#### Core (26)
 
 | Exercise | Short | Equipment | Pattern | Secondary | Start lb / kg | Alternatives | Also called |
 |---|---|---|---|---|---|---|---|
 | Ab Wheel Rollout | AB WHEEL | bodyweight | core | back, shoulders | BW | Dead Bug; Hanging Leg Raise | Ab Rollout; Ab Wheel |
 | Band Pallof Press | BAND PALLOF | band | core | — | 10 / 5 | Cable Pallof Press; Dead Bug | — |
+| Bicycle Crunch | BICYCLE | bodyweight | core | — | BW | Crunch; Russian Twist; Dead Bug | — |
 | Cable Crunch | CABLE CRUNCH | cable | core | — | 20 / 10 | Machine Crunch; Decline Sit-Up; Crunch | Kneeling Cable Crunch |
 | Cable Pallof Press | PALLOF | cable | core | — | 20 / 10 | Band Pallof Press; Cable Woodchop; Dead Bug | Pallof Press |
+| Cable Side Bend | CB SIDE BEND | cable | core | — | 20 / 10 | Dumbbell Side Bend; Cable Woodchop | Standing Cable Side Bend |
 | Cable Woodchop | WOODCHOP | cable | core | shoulders | 20 / 10 | Cable Pallof Press; Landmine Rotation; Russian Twist | Cable Wood Chop; Woodchopper |
-| Captain's Chair Knee Raise | CHAIR RAISE | bodyweight | core | — | BW | Hanging Knee Raise; Hanging Leg Raise; Reverse Crunch | Captain's Chair Leg Raise; Roman Chair Leg Raise; Vertical Knee Raise |
+| Captain's Chair Knee Raise | CHAIR RAISE | bodyweight | core | — | BW | Hanging Knee Raise; Hanging Leg Raise; Reverse Crunch | Vertical Knee Raise |
 | Crunch | CRUNCH | bodyweight | core | — | BW | Cable Crunch; Machine Crunch; Sit-Up | Abdominal Crunch; Floor Crunch |
 | Dead Bug | DEAD BUG | bodyweight | core | — | BW | Ab Wheel Rollout; Cable Pallof Press; Band Pallof Press | — |
 | Decline Sit-Up | DEC SIT-UP | bodyweight | core | — | BW | Sit-Up; Cable Crunch; Crunch | Decline Bench Sit-Up |
-| Dumbbell Side Bend | SIDE BEND | dumbbell | core | — | 10 / 5 | Kettlebell Windmill; Cable Woodchop | Side Bend |
+| Dumbbell Side Bend | SIDE BEND | dumbbell | core | — | 10 / 5 | Cable Side Bend; Cable Woodchop | Side Bend |
 | Hanging Knee Raise | HANG KNEE | bodyweight | core | forearms | BW | Hanging Leg Raise; Captain's Chair Knee Raise; Reverse Crunch | — |
 | Hanging Leg Raise | HANG LEG RAISE | bodyweight | core | forearms | BW | Hanging Knee Raise; Toes-to-Bar; Captain's Chair Knee Raise; Lying Leg Raise | — |
 | Kettlebell Front Rack Carry | RACK CARRY | kettlebell | carry | shoulders | 25 / 12 | Kettlebell Farmer's Carry; Suitcase Carry | Front Rack Carry |
@@ -667,7 +830,7 @@ are abbreviated: h-push, h-pull, v-push, v-pull.
 | Lying Leg Raise | LEG RAISE | bodyweight | core | — | BW | Reverse Crunch; Hanging Leg Raise; V-Up | Floor Leg Raise |
 | Machine Crunch | MC CRUNCH | machine | core | — | 20 / 10 | Cable Crunch; Crunch | Ab Crunch Machine; Abdominal Crunch Machine; Crunch Machine |
 | Reverse Crunch | REV CRUNCH | bodyweight | core | — | BW | Hanging Knee Raise; Lying Leg Raise; Crunch | — |
-| Russian Twist | RUSSIAN TWIST | bodyweight | core | — | BW | Cable Woodchop; Landmine Rotation | — |
+| Russian Twist | RUSSIAN TWIST | bodyweight | core | — | BW | Cable Woodchop; Landmine Rotation; Bicycle Crunch | — |
 | Sit-Up | SIT-UP | bodyweight | core | — | BW | Crunch; Decline Sit-Up; V-Up | Situp |
 | Suitcase Carry | SUITCASE | dumbbell | carry | forearms | 15 / 7.5 | Dumbbell Farmer's Carry; Kettlebell Front Rack Carry; Kettlebell Farmer's Carry | Single-Arm Farmer's Carry |
 | Toes-to-Bar | T2B | bodyweight | core | forearms | BW | Hanging Leg Raise; V-Up | T2B |

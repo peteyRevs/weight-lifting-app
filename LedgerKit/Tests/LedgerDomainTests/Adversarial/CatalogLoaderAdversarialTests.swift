@@ -218,11 +218,6 @@ extension CatalogLoaderAdversarialTests {
         #expect(throws: CatalogError.self) { try ExerciseCatalog.exercises(from: Data(text.utf8)) }
     }
 
-    @Test("A key written twice in one entry throws rather than one value silently winning.")
-    func duplicateKey_throws() {
-        let document = CatalogDocument().json.replacingOccurrences(
-            of: "\"name\": \"Alpha Press\"", with: "\"name\": \"Alpha Press\", \"name\": \"Bravo Press\""
-        )
-        #expect(throws: CatalogError.self) { try ExerciseCatalog.exercises(from: Data(document.utf8)) }
-    }
+    // Finding 1 (a key written twice) is guarded by the file scan, not the loader:
+    // CatalogDataAdversarialTests.duplicateKey_caughtByTheFileScan (F03 fix round 2).
 }

@@ -3,7 +3,9 @@ import Foundation
 /// One object in `Resources/exercises.json`, as written (F03 brief, "JSON schema").
 ///
 /// Every key is required except `loadKind`, so a misspelt key fails decoding instead of being
-/// ignored. A misspelt `loadKind` is still caught: its zero load then fails `exercise()`.
+/// ignored. A misspelt `loadKind` is still caught: its zero load then fails `exercise()`. A key the
+/// schema does not have (a per-exercise `"step"`, say) is ignored, and a key written twice keeps one
+/// value; the data tests scan the bundled file for both (F03 test findings, finding 1).
 struct CatalogEntry: Decodable, Sendable {
     /// The start load per unit, as exact decimals (`JSONDecoder` reads a `Decimal` from the digits).
     struct StartLoad: Decodable, Sendable {
@@ -27,8 +29,8 @@ struct CatalogEntry: Decodable, Sendable {
     let startLoad: StartLoad
     let loadKind: LoadKind?
     let alternatives: [ExerciseID]
-    /// Other names lifters use; they only guard against duplicate entries (criterion 4), since
-    /// `Exercise` has no aliases field (F02).
+    /// Other names lifters use. They only guard against duplicate entries (criterion 4): search
+    /// matches name and short name only, and aliases are neither stored nor searched (decision #23).
     let aliases: [String]
 
     /// The catalog `Exercise`, after the checks that need only this entry. The checks across

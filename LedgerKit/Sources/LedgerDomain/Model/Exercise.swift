@@ -4,8 +4,8 @@ import Foundation
 public enum Equipment: String, Codable, Sendable, CaseIterable {
     case barbell, dumbbell, cable, machine, bodyweight, kettlebell, band
 
-    /// Rule 1 / decision #9: lb — barbell 5, everything else 2.5; kg — barbell 2.5, everything else 1.25.
-    /// Decision #22 (Pete, 2026-09-30): kettlebells step 5 lb / 2 kg, the gap between bell sizes.
+    /// Rule 1 / decision #9, amended by #22 (Pete, 2026-09-30): lb — barbell and kettlebell 5, everything
+    /// else 2.5; kg — barbell 2.5, kettlebell 2 (the gap between bell sizes), everything else 1.25.
     public func defaultStep(in units: Units) -> Weight {
         switch (units, self) {
         case (.lb, .barbell), (.lb, .kettlebell): .pounds(5)
