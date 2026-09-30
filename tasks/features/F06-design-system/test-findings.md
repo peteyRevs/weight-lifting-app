@@ -1386,3 +1386,218 @@ otherwise test SwiftUI's modifier and fail.
 **If the orchestrator or Pete accepts the overload as it is,** the doc must also name the `Text` / `LocalizedStringKey`
 limit. Then nothing else stands in the way of G2.
 
+# Slice 3 — round 1 (`b97cc58`)
+
+Scope: slice 3's components (`WeekStrip`, `StatTile` / `StatTileRow`, `ProgressSegments`, `SheetChrome`, `EmptyState`,
+`WatchPrimaryButton`, `WatchRestRing`, `WatchStatBlock`) and the debug-only `DesignGallery`, against criteria 3 (the
+rest), 4 and 9, the prototypes (`Ledger v2.dc.html` Today, Active workout and swap sheet; `LedgerWatch.dc.html`;
+`LedgerTabs*.dc.html`) and Pete's rules (AA with the look kept, 3:1 state marks, Bold Text). Slice 2's accessibility
+rules were checked, not re-argued. The lint is a frozen tripwire, so no raw-value spellings were hunted. Read: the
+brief, the slice-plan row, engineering-standards §7 and the public interfaces. The tests were written and compiled
+before I read the notes' "## Slice 3". Toolchain: Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46 mm) on 27.0.
+
+## What was written
+
+Four files in `LedgerKit/Tests/LedgerDesignTests/Adversarial/`, 23 test functions in 7 suites. No new references:
+every assertion reads UIKit's accessibility tree, pixels or geometry.
+
+| File | Isolation | Attacks |
+|---|---|---|
+| `Slice3AccessibilityAdversarialTests.swift`: `Slice3AccessibilityAdversarialTests` | `RenderingSuites` (iOS) | At xSmall, xxxLarge, AX1 and AX5: a week across a month and a year (29 Dec – 4 Jan) and a Sunday-first week across a month read every day by its summary, in the caller's order, with the mark in words; columns in order and on screen. Right to left: the week mirrors and VoiceOver still starts at its first day. `ProgressSegments` is one element with the caller's words and full width in four states (not started, one exercise, finished, no exercises). `SheetChrome`'s cancel and `EmptyState`'s action are the only buttons, ≥ 44 pt and on screen. `WatchPrimaryButton` is one full-width button ≥ 44 pt tall at 162, 176, 187, 205, 208 and 211 pt. `StatTileRow` reads its tiles in order, side by side or stacked |
+| same file: `Slice3SheetAccessibilityAdversarialTests` | `RenderingSuites` (iOS) | `SheetChrome`'s title in a 402 × 874 container at AX1–AX5, read in a UIKit host against the same title alone. VoiceOver's escape gesture, routed as UIKit routes it (element, containers, views), with a positive control |
+| `Slice3LayoutAdversarialTests.swift` | `RenderingSuites` (iOS) | Last-character probes at large, xxxLarge, AX1, AX3 and AX5, regular and Bold Text: Today's tiles with a 124.8k week and a +12.5% delta; Exercise history's three tiles (402.5, 365×12, 1,248); dates "31" and three-letter weekdays; the sheet's cancel; a long empty-state action. Positive control: an absurd 1RM is cut and the probe sees it. `ProgressSegments` drawn: v2's five exercises span the width in five runs; a zero-length segment. `WeekStrip` right to left: today's orange lands in today's column counted from the right |
+| `Slice3WatchAdversarialTests.swift`: `Slice3WatchLayoutAdversarialTests` | `RenderingSuites` (watchOS) | At 42 mm, 46 mm and both 49 mm screens (Ultra 1–2 205 × 251 and Ultra 3–4 211 × 257, from the simulators' device profiles), at all ten watch text sizes (xSmall … AX3), regular and Bold Text: every gallery keeps its 12 pt inset on all four sides. The ring with "10:00" fits inside each screen's inset at AX3. The pill is one run ≥ 44 pt tall and full width at every size, enabled and disabled. `WatchRestRing` at 1.5, 1e300, `greatestFiniteMagnitude` and +∞ draws exactly the full ring; at −0.5, −1e300, −∞, NaN, −NaN, −0 and signalling NaN exactly the empty one, with no orange; 0.5 draws only the right half |
+| same file: `Slice3WatchTypeFloorAdversarialTests` | `RenderingSuites` (watchOS) | The 11 pt floor on rendered glyphs, not on `scaledSize`: at every watch text size, a stat value and a countdown of forty 8s shrink to Archivo's 11 pt digit height (built from the font file, at 3×) and no smaller; the caption "SETS" and a button title are never shorter than at 11 pt |
+| `DesignGalleryAdversarialTests.swift` | `RenderingSuites`, `#if DEBUG` (iOS) | Every `public static let` in `LedgerDesign/Tokens` (listed from the source, each referenced so a rename fails to compile), every type role and icon, is read by an element of the gallery under its name. Every public view in `Components/` (listed by grep) is named by a heading |
+
+Dropped after reading the notes: a contrast test that the progress bar's current segment stays 3:1 against the track
+with Increase Contrast. It fails, at 2.66:1 (light) and 2.58:1 (dark), and decision 1 records exactly that. One pair
+was moved out of the pixel probe: `ImageRenderer` cut a long sheet title where a UIKit host at the same ideal height
+did not (below), so the probe could not judge it. The hosted test above replaces it. Temporary probes were deleted
+before the gate.
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` alone, iOS 27.0, via the lock (iterations) | Final: 255 cases, 250 passed, 1 skipped, **4 failed: this round's findings** |
+| `LedgerDesignTests` alone, watchOS 27.0, via the lock | 167 cases, 166 passed, 1 skipped, 0 failed: every watch attack held |
+| Mutation runs, via the lock (`scratchpad/f06s3-mut/`), product files restored from backups afterwards and `git status` checked clean | Below, "Mutation check" |
+| `scripts/check.sh --fast` (`scratchpad/f06s3-g2-fast.log`) | OK: 687 host tests; the new files compile for macOS |
+| **Full `scripts/check.sh` via the lock** (`scratchpad/f06s3-g2.log`; no wait; 171 s) | Steps 0–2 green: tools, format, lint (the four files included), package graph and pins, every `scripts/tests/*.test.sh`. **Step 3, PR plan on iPhone 17 / iOS 27.0: 948 tests, 942 passed, 2 skipped, 4 failed: this round's four red tests** (`LedgerDesignTests` 250 / 1 / 4). Every existing suite passed, all 57 slice-3 references included. `set -e` stopped the script before step 4 |
+| Step 4 by hand (`scratchpad/f06s3-g2-step4.sh`, check.sh's own build, boot, test and `check-test-results.sh` lines), via the lock | PR-Watch on Apple Watch Series 12 (46 mm) / watchOS 27.0: 851 tests, 849 passed, 2 skipped, 0 failed; 8 of 8 targets |
+| Step 5 by hand: `scripts/coverage-gate.sh` on both bundles | Exit 0. LedgerDesign 97.10 % (1915 / 1972), overall 97.98 % |
+
+## S3-1. A sheet's title is cut short at AX2–AX4 once the sheet has a real height — minor bug (Dynamic Type layout)
+
+Repro (iOS 27.0): `Slice3SheetAccessibilityAdversarialTests.sheetChrome_sheetSizedContainer_titleGetsEveryLine`.
+
+```swift
+SheetChrome("Replace Barbell Bench Press", cancel: "Cancel") {} content: {
+    Text(verbatim: "Same movement pattern, equipment you have.")
+}
+.padding(LedgerSpacing.screen)
+.frame(height: 874, alignment: .top)   // a sheet-sized container, 402 wide
+```
+
+Read in the UIKit host of the accessibility helper, dark:
+
+| Title, size | Title frame in the sheet | The same title alone, same width |
+|---|---|---|
+| "Replace Barbell Bench Press", AX2 | 281 × 40.7 pt: one line | 254 × 81.3: two lines |
+| "Replace Single-Arm Dumbbell Romanian Deadlift", AX3 | 286 × 141.7: three lines | 285 × 188.7: four |
+| same, AX4 | 300 × 214.7 | 241 × 268.0 |
+
+AX1 and AX5 hold for these two titles. A render at 402 × 874 shows the cut: "Replace Barbell…" on one line, with the
+content well below and hundreds of points free. In the same host at the view's ideal height, the title is complete
+in every cell. That is how every snapshot is laid out (`snapshotAppearance`'s `fixedSize(horizontal: false,
+vertical: true)`, finding 24's fix). So no reference can show this, including `sheetChrome_…-accessibility3`, whose
+title is two words. A sheet, though, always has a height. The mechanism is SwiftUI's stack height sharing: the title
+sits in a header stack nested in the sheet's `VStack`, beside wrapping content. The flat stacks in `EmptyState` and a
+plain `VStack` of title, pill and text did not cut in the same probe. VoiceOver still reads the whole title. HIG,
+Typography: keep truncation to a minimum as the text size grows.
+
+**Checked fix.** `.fixedSize(horizontal: false, vertical: true)` on the title `Text`, tried for one run and then
+restored (`scratchpad/f06s3-mut/fixcheck.sh`). The test passes at AX1–AX5, and every other `LedgerDesignTests` case,
+all 57 slice-3 references included, is unchanged.
+
+## S3-2. The gallery does not name three public token constants — minor (criterion 9)
+
+Repro: `DesignGalleryAdversarialTests.gallery_everyPublicTokenConstant_isNamed`. The token list comes from
+`grep "public static" LedgerDesign/Tokens/*.swift`. Every colour, spacing step, radius, the hairline width, `snappy`,
+every type role and every icon is read under its name. Missing:
+- `LedgerMotion.buzzCycle` (0.38 s);
+- `LedgerMotion.buzzRepeats` (3);
+- `LedgerFont.boldTextWeightStep` (100).
+
+`DesignGalleryTests`' hand-written list stops at "2 motion tokens", so it passes. The first two are the brief's own
+"3 × 0.38 s" buzz. The fix is two or three captions on the motion and type pages ("buzzCycle · 0.38 s").
+
+## S3-3. A segment of no sets still takes a 3 pt gap — minor bug (layout)
+
+Repro: `Slice3LayoutAdversarialTests.progressSegments_zeroLengthSegment_leavesNoGap`, every segment done, on black:
+
+| Segments at 100 pt | Ink | Expected |
+|---|---|---|
+| `[0, 3]` | columns 3–99: the bar starts 3 pt in | 0–99 |
+| `[3, 0, 3]` | 0–46 and 53–99: a 6 pt gap | one 3 pt gap |
+
+`ProgressSegment.length` says "Zero or less draws nothing". `widths(of:in:)` also counts a gap for each such segment,
+and the `HStack` spaces the zero-width rectangle like any other. The VoiceOver frame moves with it: 399 pt wide from
+x = 3 for `[0, 3]`, where every other state is the full 402. It can happen when an exercise's sets are all removed
+mid-workout. Fix: drop non-positive segments before the `ForEach` and before counting gaps. `widths`' own test pins
+`[0, 0, 94]` for `[0, -2, 3]` at 100 pt, so it needs updating with the fix.
+
+## S3-4. VoiceOver's escape gesture never reaches `onCancel` — design question (accessibility)
+
+Repro: `Slice3SheetAccessibilityAdversarialTests.sheetChrome_escapeGesture_callsOnCancel`. The two-finger scrub is
+offered to the focused element, then up its accessibility containers and views. Nothing in `SheetChrome` handles it:
+`accessibilityPerformEscape()` returns false all the way up, and `onCancel` is not called. The positive control
+(`escapeProbe_actionAbove_isFound`) shows the probe finds an `.accessibilityAction(.escape)` set above the element. In
+a real `.sheet`, the system's own escape dismisses the sheet without `onCancel`. It does nothing when a feature sets
+`.interactiveDismissDisabled()`, or presents the chrome some other way. The component owns the cancel, so
+`.accessibilityAction(.escape, onCancel)` on it would make the gesture and the button do the same thing everywhere.
+The alternative is to leave escape to each feature. Pete's or the orchestrator's call; the Cancel button itself is a
+reachable 44 pt button at every size (held).
+
+## Mutation check
+
+Two plausible regressions got past every existing test. This round's tests now catch both. Product files were changed
+for one run each, then restored from backups (`scratchpad/f06s3-mut/mutate.py`), and `git status` was checked clean.
+
+| Mutation | Caught by the existing suite? | Caught by this round |
+|---|---|---|
+| `WatchStatBlock` and `WatchRestRing` shrink with `minimumScaleFactor(0.5)`, slice 2's phone idiom, instead of `shrinkLimit` | **No.** `WatchTypeFloorTests` checks the function, not its use; the 19 watch references and `WatchComponentLayoutTests` never shrink a value | `shrunkText_everyTextSize_neverBelowElevenPoints`: the stat value falls to 18–21 px at 3× against 11 pt's 23 px (≈ 8.6 pt at xSmall). The ring's countdown can't reach the floor at 0.5, so its mutation is a no-op |
+| `WeekStrip` pinned `.leftToRight` | **No.** No test or reference runs right to left | Both RTL tests: VoiceOver's frames and today's orange stay on the left |
+| `WatchPrimaryButton` `minHeight: 28` (the HIG's minimum) | Yes: `Slice3ComponentAccessibilityTests` (38 pt) and the gallery reference | Yes: 36.3 pt at xSmall, 42.7 at xxxLarge |
+| `StatTileRow` never stacks | Yes, by the AX3, AX5 and gallery references. The tree tables do not see it: the order is unchanged | — (layout, left to the references) |
+| `SheetChrome`'s cancel not wired to `onCancel` | Yes: `Slice3ComponentAccessibilityTests` | — |
+
+The implementation's own mutation run (8 mutations, 23 of 24 tree cases failed) covers structure. Together, the
+tables pin every VoiceOver tree. Text size, direction and layout are left to the references and to this round's
+tests.
+
+## Documented, not re-raised
+
+- The progress bar's current segment against the track under Increase Contrast: 2.66:1 light, 2.58:1 dark,
+  measured. Decision 1 records it: the words carry it, and the ground beside it is ≥ 5.1:1.
+- `done` wins over `today`, as in v1, so a strip cannot show "today, trained". F09's "Wednesday 16, today, planned"
+  reading can be composed from the summary and the `today` value.
+- `accessibilitySummary` is optional on `StatTile`, `WatchStatBlock` and `WatchRestRing`, falling back to the strings
+  shown. This matches `SetRow`'s `String?`. A bare "3/4" or "1:15" is ambiguous, which the docs say.
+- White on the orange watch pill is 3.10:1: bold, decision 7.
+- 49 mm is pinned at Ultra 1–2's 205 × 251 (decision 5). Ultra 3–4's 211 × 257 was added in these tests and holds.
+
+## Out of scope, noted
+
+- **The brief's 11 pt floor is below the HIG's watchOS minimum.** HIG, Accessibility and Typography: watchOS
+  default 16 pt, **minimum 12 pt**. Captions and labels are exactly 11 pt at 42 mm's default text size. That is a
+  brief-level choice for Pete, not a slice-3 defect.
+- **40 and 41 mm are not in the matrix.** watchOS 26 supports the SE 3 (40 mm, 162 × 197 pt) and Series 7–9 (41 mm,
+  176 × 215). At AX3 the ring is 149.3 pt: inside a 40 mm screen, but wider than its 138 pt inset. That is for
+  criterion 4's owner or F18.
+- **`RenderedImage` (`ImageRenderer`) and a UIKit host can lay out wrapping text differently.** Slice 2's `page`
+  probe, at 402 × ideal height, cut "Replace Single-Arm Dumbbell Romanian Deadlift" at AX3 ("…De…"). The hosted tree
+  at the same ideal height had all four lines. Every watch reference and watch layout test renders through
+  `ImageRenderer`. A difference there shows as a cut that isn't real, never as a hidden one. That is worth knowing
+  when a watch reference looks truncated.
+- `WatchStatBlock(isHighlighted:)` is colour only, and VoiceOver hears no difference. That is fine while the caption
+  says it ("New PR"); the doc could ask callers to keep it that way.
+- `ProgressSegments`' VoiceOver frame is 2 pt tall: reachable by swiping, hard to find by touch exploration.
+
+## Attacked and held
+
+- **House rules.** Every slice-3 component and state has a literal tree case. Spoken text comes from init parameters
+  (`accessibilitySummary`, `label` / `value`); there is no `func accessibility…` in `Components/`. `ProgressSegments`'
+  label and value and `WeekStrip.Day`'s summary are required. No slice-3 state is a selection. `WeekStrip.Mark` /
+  `Day` and `ProgressSegment` / `State` are `nonisolated`, compile-guarded by `Slice3ComponentValueTests`.
+- **WeekStrip.** A week across December / January and a Sunday-first week across a month read each day by its full
+  date, with "Done", "Today", "Planned" or "Rest day", in the caller's order. This holds at xSmall, xxxLarge, AX1 and
+  AX5, with columns in order and on screen. Right to left, the strip mirrors (VoiceOver's frames and today's orange)
+  and VoiceOver starts at the first day. Dates "31", "30" and three-letter weekdays are never cut, up to AX5 with Bold
+  Text. The first weekday per locale is the caller's order, which holds.
+- **ProgressSegments.** Not started, one exercise, finished and no exercises are each one element with the caller's
+  words. v2's five exercises span the full width in five runs. More-than-total done cannot be expressed: state is
+  per segment. The exception is S3-3.
+- **StatTile / StatTileRow.** 124.8k with a +12.5% delta, 402.5 / 365×12 / 1,248 in a row of three: nothing is cut at
+  large, xxxLarge, AX1, AX3 or AX5, regular or bold. The positive control sees a real cut. The tiles stack at AX sizes
+  and read in order at every size.
+- **SheetChrome / EmptyState.** The cancel and the action are the only buttons, ≥ 44 × 44 and on screen, at xSmall,
+  xxxLarge, AX1 and AX5. A long action title and "Cancem" are never cut. The exceptions are S3-1 and S3-4.
+- **Watch, criterion 4, beyond the six cells.** At 42, 46 and both 49 mm, all ten text sizes, regular and Bold Text:
+  no ink within 11 px of any edge. The ring fits every inset at AX3. The pill is ≥ 44 pt tall and full width at every
+  size, enabled and disabled; the HIG, Accessibility › Mobility, gives watchOS a 44 × 44 pt default and 28 × 28
+  minimum. On rendered glyphs, no watch text is under 11 pt at any size, and a shrinking value stops exactly there.
+- **WatchRestRing edges.** 0, 1, out of range both ways, ±∞, NaN (both signs), −0 and signalling NaN draw exactly
+  the empty or the full ring. Half is the right half.
+- **Contrast**, re-derived by hand from the token values; `Slice3ContrastTests` passes in the gate. Every new text pair
+  is ≥ 4.5:1 and every state mark ≥ 3:1, in both schemes and with Increase Contrast. The planned-day ring is
+  `inkMuted`, ≥ 4.83 (paper) and ≥ 5.1 (dark ground). The tightest pairs are the watch caption, 4.58:1 on black, and
+  white on the orange pill, 3.10 (bold). The watch palette has one appearance.
+- **DesignGallery in Release.** Compiled for the iOS simulator at `-O` without `DEBUG`, the module has no
+  `DesignGallery`, `DesignGalleryContent`, `GallerySection` or token-page symbols. The 15 component `…Gallery` views are
+  still compiled in. A Release-built probe app that uses `PrimaryButton`, linked `-dead_strip` as the project's
+  `DEAD_CODE_STRIPPING = YES` links, has none of them and none of their sample strings. Positive control: a
+  Debug-built probe app that shows `DesignGallery` has 28 gallery symbols and the strings. Built in the scratchpad
+  (`f06s3-rel/`); `project.pbxproj` was not touched.
+- **Criterion 9, components.** Every public view grep finds in `Components/` has a heading. The exception is S3-2.
+- **Snapshot coverage.** Every state each gallery offers is referenced in the matrix, plus pressed, Increase Contrast,
+  Bold Text and AX5. Not referenced: the finished bar, right to left and light AX5. This round's tests cover the
+  first two. S3-1 is invisible to the snapshots by construction.
+
+## Verdict
+
+**Slice 3 is close, not closed.** Criteria 3, 4 and 9 hold, except as listed. Slice 2's accessibility rules are
+followed throughout. The watch set holds under every attack: all ten text sizes, four screens, Bold Text, the floor
+on rendered glyphs, the ring's edges and the button's target. The gate is green apart from this round's four red
+tests.
+
+**What closes it:**
+- **S3-1**, a one-line fix, checked above;
+- **S3-2**, two or three gallery captions;
+- **S3-3**, drop non-positive segments;
+- **S3-4**, one modifier, or Pete's call to leave escape to the features.
+
+**Edits I accept in advance.** If S3-4 is decided the other way, delete `sheetChrome_escapeGesture_callsOnCancel`
+and keep its positive control. If Pete rules `boldTextWeightStep` is not a gallery token, remove that one entry from
+`DesignGalleryAdversarialTests.tokens`.
