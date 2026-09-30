@@ -29,6 +29,11 @@ actor InMemoryEventStore: WorkoutEventStore {
         Array(logs[workout, default: [:]].values)
     }
 
+    /// It keeps envelopes as values, so it can read all of them.
+    func unreadableCount(for _: WorkoutID) -> Int {
+        0
+    }
+
     func highestSeq(for workout: WorkoutID, device: DeviceID) -> UInt64? {
         logs[workout]?.keys.filter { $0.device == device }.map(\.seq).max()
     }

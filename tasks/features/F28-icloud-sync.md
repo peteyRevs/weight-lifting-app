@@ -50,3 +50,6 @@ Inherits `docs/engineering-standards.md` §12.
 
 ---
 _Filled in by agents during delivery:_ `F28-icloud-sync/{implementation-notes,test-findings,review}.md`
+
+## Inputs from F05 (2026-09-30)
+- `personal_record` (schema v001) is derived data, recomputed from `logged_set`, so it is local-only and never synced (orchestrator decision, 2026-09-30).
