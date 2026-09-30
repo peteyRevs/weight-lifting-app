@@ -428,3 +428,226 @@ N1–N9), at `0131cc7` (main `2bcb442` merged in).
     It is not a gap in the code, and a clean build should drop it; worth knowing if the watch number ever
     looks odd.
 - **The Device plans** were not re-run: this round did not change them.
+
+## Slice S2
+
+The catalog and programs, on `feat/F05-s2` (from `main` 1db1cf9, which holds S1). Closes criteria 2 and 11.
+Schema v001 is unchanged: everything fits it.
+
+### What landed
+
+- `LedgerPersistence/Records/`:
+  - `SyncedRecord.swift`: the protocol every row of a synced table conforms to, `upsert` and the child diff
+    `write(_:over:in:at:)`;
+  - `ColumnReader.swift`: strict column reads, and `JSONArray`;
+  - `ExerciseRecord.swift`, `ProgramRecords.swift` (program, week, day template), `SlotRecords.swift` (slot, miss);
+  - `ProgramRows.swift`: a program as its rows, the save diff and the load.
+- `LedgerPersistence/Repositories/GRDBExerciseRepository.swift` (with `ExerciseSearch`) and
+  `GRDBProgramRepository.swift`.
+- `LedgerPersistenceError`: two new cases, `duplicateIdentifier` and `missingRow`, and the documentation of the
+  errors that reach callers unwrapped (review N8).
+- `LedgerTestSupport/Persistence/`: `Seeders` (`catalog(count:version:)`, `program(…)`), and the contracts
+  `ExerciseRepositoryContract` (8 clauses) and `ProgramRepositoryContract` (6), on a shared `ContractClause`.
+- Docs: product decision #23, a line in F12's brief, and "Inputs from F05" in F07's brief.
+
+### Decisions and deviations
+
+1. **Search (Pete, 2026-09-30; product decision #23).** The query matches a substring anywhere in the name,
+   and also the short name.
+   - It ignores case and diacritics: both sides are trimmed and folded with `.caseInsensitive` and
+     `.diacriticInsensitive`, `locale: nil`, so the result is the same in every locale.
+   - The equipment filter and the muscle filter combine with the text. The muscle filter is the **primary
+     muscle** only (my reading: the prototype has one muscle per exercise; F12 maps its pills to groups).
+   - Aliases are not stored or searched.
+   - The text is matched in Swift, never in SQL, so `%` and `_` are plain characters (contract clause
+     `searchWildcards`). SQL filters `deleted_at`, equipment and muscle.
+   - Only rows whose name or short name match are decoded, which took the median search from 5.3 ms to
+     1.5 ms on the host.
+   - `all()`, `search` and `observeAll` return name order: the folded name, then the id.
+2. **Seeding (criterion 11, with the orchestrator's rule of 2026-09-30).**
+   - The applied version is `MAX(catalog_version)` over catalog rows. `seedIfNeeded` does nothing unless the
+     given version is higher, so the same version twice, or a lower one, changes nothing.
+   - An upgrade inserts every entry whose id is not stored. A stored id is never written again, even if
+     that row is deleted, so re-seeding never duplicates a catalog row.
+   - **An entry is never skipped over a name.** An entry named like a stored exercise, custom or not, is
+     inserted by its id beside it, and the clash is logged at notice level. Alternatives, program templates
+     and history refer to catalog ids, so every one must exist (orchestrator, from F03's adversarial round).
+     "Existing names are not duplicated" means catalog rows are not duplicated.
+   - Every catalog row the catalog lists then records the new version. So the applied version moves up even
+     when an upgrade adds nothing (a content-only bump), and a later launch does no work. Catalog rows are
+     never synced (architecture §7), so this metadata write needs no `updated_at`.
+   - Custom rows are never written (`… AND is_custom = 0`). Every entry is stored as a catalog row, whatever
+     its `isCustom` says.
+   - An upgrade only adds: an entry a later catalog drops stays, with its old version.
+   - It all runs in one write transaction. An inexact start load throws `inexactWeight`, and the entries
+     written before it roll back.
+3. **Soft deletes (ADR-002, architecture §7).**
+   - A save soft-deletes the weeks, days, slots and misses a program no longer has, setting `deleted_at` and
+     `updated_at`. `delete(_:)` does the same to the program and all its rows, in one transaction.
+   - Every read skips deleted rows.
+   - Saving a program again revives its rows, with the same ids and their `created_at`.
+   - Deleting an unknown program does nothing. Hard deletes are F29's.
+4. **The diff.**
+   - `ProgramRows.write` reads the program's live rows from all five tables before writing any, since
+     soft-deleting a day first would hide its slots. It then writes parents first, so every foreign key an
+     insert names already exists.
+   - Each record is compared with its stored row **as column values**, never decoded. An unchanged row is
+     left alone and keeps its `updated_at`. A new or changed one is upserted (`INSERT … ON CONFLICT (id) DO
+     UPDATE`, with `created_at` written once and `deleted_at` cleared).
+   - Because nothing is decoded, a save repairs a damaged row rather than failing on it, as S1's event store
+     does.
+   - Only rows that change get a new `updated_at`, which is what M4's last-writer-wins sync needs.
+   - `save` with `isActive` makes every other program inactive. `setActive` flips only the flags that change;
+     an unknown or deleted program throws `missingRow`.
+   - If a sync ever leaves two programs active, `active()` returns the one updated last.
+5. **Re-validation (F02 review N2).**
+   - `save` rebuilds every slot through `Slot.init` and the program through `Program.init` before it
+     writes, so a `var` assigned out of range throws `SlotValidationError` or `ProgramValidationError`.
+   - Every read validates the same way. A stored value out of range throws the same errors, never a crash.
+   - The domain errors are not wrapped (the call N8 left to S2): the same error means the same thing
+     whether it was caught on save or on load.
+   - Two weeks, days, slots or misses with one id throw `duplicateIdentifier`, since both would land in one
+     row. `Program.init` does not check ids.
+   - A slot whose exercise is not stored fails the `slot.exercise_id` foreign key, and the whole save rolls
+     back. F07 must seed the catalog before any program is saved.
+6. **Strict column reads.** A damaged-row test showed that GRDB's `Int64` conversion **truncates a `REAL`**:
+   an `_e7g` weight of 1.5 read as 1, with no error. `ColumnReader` therefore accepts:
+   - for an integer column, only `INTEGER` storage that fits the type (on arm64_32, `Int` is 32 bits);
+   - for a flag, only an integer;
+   - for text, `TEXT` or a `BLOB` holding UTF-8;
+   - for an enum or an id, only a value it can parse;
+   - for a JSON array, only JSON that decodes.
+
+   Anything else throws `malformedColumn("table.column")` or `malformedIdentifier`. **For S3:** read the
+   history columns through `ColumnReader`. S1's `payload_version` reads use GRDB's `Int` conversion, so
+   `2.5` reads as 2; `DamagedColumnAdversarialTests` pins that it then throws `unknownPayloadVersion(2)`.
+7. **Unreadable exercise rows follow S1's event rows.** A row with a muscle group a later version added, or
+   with damage, is left out of `all()`, `search` and `observeAll`, logged with its id, and kept.
+   `exercise(id:)` throws by name. A program, by contrast, is one aggregate: any bad row makes `active()`
+   and `program(id:)` throw, and ends `observeActive`. Leaving a slot out would let the next save delete it.
+8. **`slot_miss.id` is derived**: the RFC 9562 name-based UUID (version 5, SHA-1, via CryptoKit) of the week
+   index in the slot's namespace.
+   - One miss has one id on every device, so a sync merges the two copies rather than keeping both.
+     ADR-002 allows no `UNIQUE` constraint to prevent the duplicate.
+   - A miss removed and added again revives its row.
+   - The repository needs no UUID source.
+9. **JSON array columns** (`secondary_muscles`, `curated_alternatives`) go through `JSONArray`, a `Codable`
+   `DatabaseValueConvertible`. GRDB writes it as JSON **text**, e.g. `["triceps","shoulders"]`.
+   `String(decoding:as:)` is refused by the lint, and the failable initializer would leave an unreachable
+   branch.
+10. **`program(id:)`** is public on `GRDBProgramRepository` but not on the protocol, so the Domain is
+    unchanged. Criterion 2 loads inactive programs with it; F11 may promote it.
+11. **Contracts (for F07's fakes).**
+    - `ContractClause<Repository>` generalises S1's `WorkoutEventStoreContract.Clause`, which is unchanged.
+    - The two new contracts use public API only.
+    - A program clause needs a repository that accepts `ProgramRepositoryContract.exercises`; a GRDB one
+      needs them seeded first, because of the foreign key.
+12. **Timing** follows S1's `MigrationTimingTests`. `CatalogTimingTests` (`.performance`, nightly lane only)
+    times seeding 214 synthetic entries into a new **file** database, against `PerformanceBudget.catalogSeed`
+    (300 ms), and a search over 221 rows against `exerciseSearch` (10 ms, F12's per-keystroke budget). Each
+    uses the median of 5 runs after a warm-up, and attaches it to the result bundle. The PR lanes assert no
+    wall-clock time.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 2. program 8 × 4 round trip with misses | `ProgramRepositoryTests.eightByFour_roundTripsEqual_includingMisses` (active and inactive, by `active()` and `program(id:)`); contract clause `roundTrip` |
+| 11. seed idempotent, custom kept, additive upgrade, no duplicates | contract clauses `seedIdempotent`, `seedUpgrade`, `seedNameClash` (a custom exercise named like an entry: both exist, the catalog id resolves); `ExerciseRepositoryTests.seed_writesCatalogRows_withTheirVersion`, `upgrade_recordsItsVersion_evenWhenItAddsNothing`, `seed_neverRevivesADeletedCatalogRow`, `seed_214Entries_storesThemAll`, `inexactStartLoad_isRefused` (rollback) |
+| Search (decision #23) | contract clauses `searchText` (a substring mid-name, a short name, case, diacritics and blanks, no match, blank query), `searchFilters` (with equipment and muscle), `searchWildcards` (`%`, `_`, `B%h`) |
+| Diff in one transaction | `ProgramRepositoryTests.partialUpdate_diffsChildren` (row counts; unchanged rows keep `updated_at`; removed ones soft-deleted in one stamp), `failedSave_changesNothing` (a foreign-key failure on the last slot leaves every row as it was); contract clause `saveReplaces` |
+| Re-validation, and invalid stored data as an error | contract clause `revalidates`; `DamagedProgramRowTests` (18 damages across the five tables: `Slot`/`Program` validation errors, `malformedColumn`, `malformedIdentifier`; reads throw, `observeActive` ends, the row is kept, a save repairs it); `DamagedExerciseRowTests` (9 damages, and a malformed id) |
+| Active program, delete | contract clauses `oneActive`, `deleteHides`; `ProgramSoftDeleteTests` (soft delete and revival, `setActive` touching only changed rows, derived miss ids); `ProgramRepositoryTests.setActive_unknownProgram_throws`, `duplicateIdentifiers_areRefused`, `inexactLoad_isRefused` |
+| Observation, on the watch simulator too | `ObservationTests` (3 tests: emissions per change and none for an unchanged write), contract clauses `observeAll` and `observeActive`; all run in PR-Watch |
+| Seeding time on the watch (risk) | `CatalogTimingTests` (nightly), measured by hand below |
+| Columns as documented | `ExerciseRepositoryTests.save_writesTheDocumentedColumns`, `ProgramRepositoryTests.save_writesTheDocumentedColumns` |
+
+### Code lines
+
+Measured as in S1: non-blank Swift lines that are not whole-line `//` or `///` comments, SQL strings included,
+in product sources only. Counted with a script over `git ls-files --others` plus the added lines of
+`git diff -- LedgerKit/Sources`.
+
+- **684 lines, over the 500 target** (standards §10: under ~1,000, so no forced split). The plan estimated ~380.
+- New files: 682.
+  - `Records/`: `ProgramRows` 127, `ProgramRecords` 121, `SlotRecords` 82, `ColumnReader` 70, `SyncedRecord` 51,
+    `ExerciseRecord` 43.
+  - `Repositories/`: `GRDBExerciseRepository` 120, `GRDBProgramRepository` 68.
+- `LedgerPersistenceError`: +2.
+- Not counted: `LedgerTestSupport` 455 (seeders and the two contracts), tests 672, docs.
+- **Why above the estimate:**
+  - strict reads (`ColumnReader`, decision 6);
+  - soft deletes and the row diff (`SyncedRecord`, `ProgramRows.write`);
+  - four record types written out column by column, one per line.
+- **The split considered:** (a) the record layer (`SyncedRecord`, `ColumnReader`) and exercises, about 285
+  lines, closing criterion 11; then (b) programs, about 400, closing criterion 2. Rejected:
+  - (a) would ship `SyncedRecord.write`, the diff, with no caller, so its tests would move to (b);
+  - the slice plan pairs the two criteria in S2;
+  - a second PR costs another full gate and review round for about 285 lines.
+
+  It remains a clean seam if the orchestrator prefers it.
+
+### Gate and coverage (2026-09-30, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0)
+
+- **`scripts/check.sh --fast`: green.** `LedgerPersistenceTests` 130 tests on the host (then 132, with the two
+  coverage tests below); `LedgerDomainTests` 689.
+- **Full gate, through the lock: green** (`scripts/check.sh`, 300 s; log `scratchpad/f05s2-check.log`).
+  - Format, lint, package graph and pins, and script tests: OK.
+  - **17/17** PR targets passed on iOS, and **8/8** PR-Watch targets on watchOS.
+  - `LedgerPersistenceTests`, on each simulator: 125 passed, and 4 skipped by design. The skips are the
+    protection read-back and three nightly timings.
+- **Coverage:** LedgerPersistence **99.46 %** (1110/1116; threshold 90), LedgerDomain 98.99 %, LedgerDesign
+  96.46 %, overall 98.48 %.
+  - The 6 lines are closures that never run:
+    - the two `now: Date.init` default arguments (tests inject a clock);
+    - `SyncedRecord.write`'s `uniquingKeysWith:` (ids are primary keys);
+    - the `slotsByDay[…, default: []]` fallback;
+    - two fallbacks for a name or id that is not UTF-8.
+  - After that run I added two tests that exercise the last three: `emptyParts_roundTripEqual` (a day with no
+    slots) and two damages (`name = x'80'`, and an id `x'80'`).
+- **Re-run after those test-only additions:** see "Final gate" below.
+
+### Final gate (orchestrator, 2026-09-30, on the tree as committed)
+
+- The implementer's session ended before its re-run. The orchestrator ran `scripts/check.sh` through the lock on
+  the final tree: **OK in 289 s**. 17/17 PR targets on iOS and 8/8 PR-Watch targets on watchOS passed.
+- **Coverage:** LedgerPersistence **99.73 %** (1113/1116), LedgerDomain 98.99 %, LedgerDesign 96.46 %.
+  - The 3 lines still uncovered are the two `now: Date.init` default arguments and `SyncedRecord.write`'s
+    `uniquingKeysWith:`.
+
+### Watch seeding timing, by hand (`Nightly-Watch` plan, Apple Watch Series 12 (46mm) simulator, 27.0)
+
+`-only-testing:LedgerPersistenceTests/CatalogTimingTests`; log `scratchpad/f05s2-timing.log`, attachments exported
+from `scratchpad/f05s2-timing.xcresult`. Both tests passed.
+
+- **Seeding 214 entries into a new file database: median 9.2 ms** (runs 9.1–9.5 ms; warm-up 11.5 ms), against
+  the 300 ms budget. F05's risk ("seed after the first frame if > 300 ms") does not trigger. F07 can seed
+  during launch; its "Inputs from F05" says so.
+- **Search ("press") over 221 rows: median 1.75 ms** (warm-up 3.6 ms), against 10 ms.
+- Host, debug: seeding 9.6 ms, search 1.5 ms (5.3 ms before rows were matched before decoding).
+- The simulator runs on the Mac's CPU, so this rules out a design problem but is not the watch's figure. F20's
+  device protocol should time a real first launch, as for S1's migration.
+
+### How to verify by hand
+
+1. `scripts/check.sh --fast`: on the host, `LedgerPersistenceTests` passes (132 tests, the timings skipped).
+2. Criterion 2: `swift test --package-path LedgerKit --filter ProgramRepositoryTests`. Look at
+   `eightByFour_roundTripsEqual_includingMisses` and `partialUpdate_diffsChildren`; its expected row counts are
+   worked out in its comments.
+3. Criterion 11 and search: `swift test --package-path LedgerKit --filter ExerciseRepositoryTests`. The contract
+   clauses are listed by name, e.g. `seedNameClash` and `searchWildcards`.
+4. The diff bites. Make each change below, run `swift test --package-path LedgerKit --filter
+   'ProgramRepositoryTests|ProgramSoftDeleteTests'`, and revert:
+   - In `SyncedRecord.write`, always upsert (drop the unchanged `continue`): `partialUpdate_diffsChildren` fails
+     (unchanged rows get a new `updated_at`).
+   - Drop the soft-delete loop: `saveReplaces`, `deleteHides` and the row counts fail.
+5. Strict reads bite: in `ColumnReader.integer`, use `Value.fromDatabaseValue` instead. The `start_load_e7g =
+   0.5` and `sets = 3.5` damages then read as 0 and 3 and fail.
+6. Watch timing: under the simulator lock, run `xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch
+   -testPlan Nightly-Watch -destination "$(scripts/sim-destination.sh 'platform=watchOS Simulator,name=Apple
+   Watch Series 12 (46mm),OS=27.0')" -derivedDataPath .derivedData -clonedSourcePackagesDirPath
+   .derivedData/SourcePackages -onlyUsePackageVersionsFromResolvedFile
+   -only-testing:LedgerPersistenceTests/CatalogTimingTests -resultBundlePath /tmp/seed.xcresult`. Then run
+   `xcrun xcresulttool export attachments --path /tmp/seed.xcresult --output-path /tmp/att`; the
+   `catalog-seed` and `exercise-search` texts hold the medians.
+7. Full gate: `scripts/check.sh`, through the shared lock.

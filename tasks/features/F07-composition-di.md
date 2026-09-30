@@ -95,3 +95,12 @@ _Filled in by agents during delivery:_
   damaged column (`malformedColumn`) or invalid JSON (`DecodingError`). Fall back to `Settings.default` in
   memory, but never save it over the row: a later version, or the lifter, may still read it. Subscribe
   again after the lifter's next deliberate save.
+- Seed the catalog before any program is saved (F05 S2): `slot.exercise_id` is a foreign key, so a slot naming an
+  exercise the database lacks makes `ProgramRepository.save` throw a `DatabaseError` and store nothing.
+  `seedIfNeeded(ExerciseCatalog.seed(), version: ExerciseCatalog.version)` is safe on every launch: it does
+  nothing unless the version is higher than the applied one, then inserts every new catalog id (even one named
+  like a custom exercise). 214 entries took 9.2 ms on the watch simulator (budget 300 ms), so it need not wait
+  for the first frame.
+- Criterion 4's `RepositoryContractTests` for exercises and programs exist: run `ExerciseRepositoryContract.clauses`
+  and `ProgramRepositoryContract.clauses` (`LedgerTestSupport/Persistence`) against the `InMemory*` fakes, as the
+  GRDB suites do. A program clause's repository must accept slots naming `ProgramRepositoryContract.exercises`.

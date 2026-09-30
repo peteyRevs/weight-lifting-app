@@ -3,9 +3,11 @@ import Foundation
 /// Why LedgerPersistence refused to store or read a value (engineering-standards §8).
 ///
 /// Other errors reach callers unwrapped, and nothing is swallowed: GRDB's `DatabaseError` (SQLite itself,
-/// e.g. a locked or full disk), `EncodingError` (an envelope with a NaN `Weight`, which has no exact text),
-/// `DecodingError` (a settings payload whose JSON holds an invalid value), `EngineError.conflictingEnvelope`
-/// from `append`, and `CancellationError`.
+/// e.g. a locked or full disk, or a foreign key: a slot naming an exercise the database lacks),
+/// `EncodingError` (an envelope with a NaN `Weight`, which has no exact text), `DecodingError` (a settings
+/// payload whose JSON holds an invalid value), `EngineError.conflictingEnvelope` from `append`,
+/// `SlotValidationError` and `ProgramValidationError` (a program that fails its `init`s, when saved or when
+/// read back), and `CancellationError`.
 public enum LedgerPersistenceError: Error, Equatable, Sendable {
     /// ADR-007: a weight, or a volume in gram·reps, that is not a whole number of 10⁻⁷ g or lies beyond
     /// `Int64` (±922,337 t). The storage boundary rejects it rather than round it.
@@ -19,4 +21,9 @@ public enum LedgerPersistenceError: Error, Equatable, Sendable {
     /// A column that holds the wrong kind of value, e.g. a payload version stored as text or a payload
     /// that is not UTF-8 (`"table.column"`). Only damage or a foreign writer makes one.
     case malformedColumn(String)
+    /// Two values to be saved in one table share an id (`"table id"`), e.g. a slot copied without a new id:
+    /// both would land in one row, and one would be lost.
+    case duplicateIdentifier(String)
+    /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted.
+    case missingRow(String)
 }

@@ -27,6 +27,7 @@ any of them and the affected feature briefs will be updated.
 | 18 | Dates | A program **block** has a `startDate` (the first day of the week the user started), stored as a calendar date with no time or zone (`CivilDate`, ADR-007). Current week = weeks since `startDate`. Training on an unscheduled day → "Train off-schedule" picker of that week's days. Skipping a whole week counts as a miss for every slot (loads hold). Block end → "Start next block" flow (repeat with +progression or edit). | Spec has no real dates at all; this anchors everything. |
 | 19 | Account | None (see #2). | — |
 | 20 | Export / Health | CSV export of workouts + sets (share sheet). HealthKit workout type `traditionalStrengthTraining`, with heart-rate samples and active energy from the watch session; total volume in metadata. | Standard for the category. |
+| 23 | Exercise search | **Substring on name + short name; aliases not searched** (Pete, 2026-09-30). A query matches anywhere in an exercise's name or short name, ignoring case and diacritics: "bench" finds every bench variant, and "RDL" or "OHP" match short names. Equipment and muscle filters combine with it. Aliases are not stored or searched; they stay a catalog quality check in F03 (no schema change). | Prefix-only matching would miss "Chest-Supported Row" for "row" (F12 criterion 2), and short names are what lifters type. |
 
 ## Additional scoping calls
 
