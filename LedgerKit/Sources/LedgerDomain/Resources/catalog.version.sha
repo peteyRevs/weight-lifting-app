@@ -1,0 +1,4 @@
+# SHA-256 of exercises.json for each ExerciseCatalog.version, oldest first (F03 criterion 7).
+# When exercises.json changes: bump ExerciseCatalog.version by one and append a line
+# "<new version> <shasum -a 256 exercises.json>". Never edit or delete a line.
+1 7d904ad65effe2595c82139e1d00877da0572efb4d776295dbb88ca59445ecf4

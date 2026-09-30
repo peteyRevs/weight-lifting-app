@@ -80,7 +80,8 @@ let package = Package(
         // ---- core -----------------------------------------------------------
         .target(
             name: "LedgerDomain",
-            resources: [.copy("Resources/exercises.json")],
+            // catalog.version.sha pins exercises.json to ExerciseCatalog.version (F03 criterion 7).
+            resources: [.copy("Resources/exercises.json"), .copy("Resources/catalog.version.sha")],
             swiftSettings: coreSettings
         ),
         .target(

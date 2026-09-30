@@ -41,3 +41,32 @@ public enum SessionBuilderError: Error, Equatable, Sendable {
     /// A slot references an exercise missing from the `exercises` lookup.
     case unknownExercise(ExerciseID)
 }
+
+/// Why the bundled exercise catalog could not be loaded (F03 criterion 1). `ExerciseCatalog.seed()`
+/// throws on the first malformed entry; it never skips one.
+public enum CatalogError: Error, Equatable, Sendable {
+    /// The resource is not in the module bundle.
+    case missingResource(String)
+    /// The JSON is malformed, or an entry is missing a key or has a value of the wrong type or an
+    /// unknown enum case. Carries the decoder's description, which names the entry's index.
+    case unreadable(String)
+    /// Two entries share an id.
+    case duplicateID(ExerciseID)
+    /// A name or alias repeats another entry's name or alias, ignoring case (criterion 4).
+    case duplicateName(String)
+    /// The name, short name or an alias is empty or has leading or trailing whitespace.
+    case invalidText(ExerciseID)
+    /// A secondary muscle repeats the primary muscle or another secondary muscle.
+    case invalidMuscles(ExerciseID)
+    /// The start load in `Units` is negative or not a multiple of the equipment's default step.
+    case invalidStartLoad(ExerciseID, Units)
+    /// `loadKind: bodyweight` must go with bodyweight equipment and a zero load in both units, and
+    /// a zero load needs that `loadKind`.
+    case loadKindMismatch(ExerciseID)
+    /// Fewer than two alternatives, the exercise itself, or a repeated alternative (criterion 3).
+    case invalidAlternatives(ExerciseID)
+    /// An alternative's id is not in the catalog.
+    case unknownAlternative(ExerciseID, alternative: ExerciseID)
+    /// An alternative has a different movement pattern (criterion 3).
+    case alternativePatternMismatch(ExerciseID, alternative: ExerciseID)
+}
