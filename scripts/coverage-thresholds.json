@@ -11,6 +11,7 @@
     "Feature*": 70
   },
   "required": ["LedgerDomain", "LedgerDesign"],
+  "watchOnly": [],
   "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
   "excludedFiles": ["*+Previews.swift", "*/Generated/*"]
 }

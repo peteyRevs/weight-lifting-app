@@ -302,6 +302,9 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   (strips `.o`/`.framework`/`.app`), takes the higher value when a target
   appears in both, recomputes per-target coverage from `files[]` after
   exclusions, and compares with `scripts/coverage-thresholds.json`.
+  PR CI's `check.sh --ios-only` passes `--ios-only` and the iOS bundle alone
+  (Pete, 2026-09-30). Only a required module listed in `watchOnly` may then be
+  unmeasured; without the flag, `watchOnly` changes nothing.
 - Thresholds (line coverage): `LedgerDomain 95`, `LedgerPersistence 90`,
   `LedgerSync 90`, `LedgerHealth 80`, `LedgerActivityKit 70`, every
   `Feature*`/`WatchFeatureWorkout` 70, `LedgerDesign 60`, overall 80 (sum of

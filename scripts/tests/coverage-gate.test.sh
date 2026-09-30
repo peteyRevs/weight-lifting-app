@@ -78,5 +78,11 @@ echo '{"targets":[{"name":"T","files":[{"path":"/ci/LedgerKit/Sources/LedgerDoma
 gate 0 "$FIXTURES/ios.json" "$SCRATCH/small.json"
 expect "| LedgerDomain | 116 / 120 | 96.66 % | 95 % | ✓ |"
 
+# 11 · --ios-only (check.sh --ios-only, PR CI): the iOS report alone is gated as in case 1
+gate 0 --ios-only "$FIXTURES/ios.json"
+expect "### Coverage gate (iOS only)"
+expect "| LedgerDomain | 116 / 120 | 96.66 % | 95 % | ✓ |"
+expect "| Overall | 156 / 170 | 91.76 % | 80 % | ✓ |"
+
 [[ $FAILED -eq 0 ]] || exit 1
-echo "coverage-gate.test.sh: 10 cases passed"
+echo "coverage-gate.test.sh: 11 cases passed"

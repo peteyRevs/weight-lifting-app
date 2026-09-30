@@ -13,7 +13,8 @@ therefore waived; the merge gate is the orchestrator's policy.
 
 - [ ] **Billing ▸ Budgets (or Spending limits):** Actions at **$0**, so an exhausted month
   stops CI rather than charging. Free includes about 200 macOS minutes a month (macOS counts
-  10×). A PR run is about 12–15 of them, and docs-only PRs use none.
+  10×). A PR run is about 18–20 of them while packages resolve cold, fewer once the package cache
+  has saved (`docs/ci-cd.md`), and docs-only PRs use none.
 - [ ] **Actions ▸ General ▸ Workflow permissions:** keep *Read repository contents*. Tick
   **Allow GitHub Actions to create and approve pull requests**, which release-please needs.
 - [ ] **General ▸ Pull Requests:** untick *Allow merge commits* and *Allow rebase merging* (squash
