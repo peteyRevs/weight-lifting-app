@@ -208,3 +208,10 @@ onwards). Where they contradict this brief, they win, and the brief should be am
      must reject such a (corrupt) stamp on receipt.
    - *Joining mid-session buzzes once:* the phone's first rebuild from nothing, for a watch-started workout
      with done sets, plays one `.haptic(.setLogged)`; accepted under Pete's one-per-catch-up rule (item 2).
+
+## Inputs from F05 (2026-09-30)
+
+- Receipt must drop envelopes with non-finite stamps (`wallClock` or payload dates) before `append`:
+  NaN never equals itself, so re-appending such an envelope throws `conflictingEnvelope` in both stores
+  and rejects the whole batch (F05 S1 notes). The batch-conflict rule above would then drop it one by
+  one; dropping it on receipt is simpler.

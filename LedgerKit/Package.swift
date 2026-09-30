@@ -58,6 +58,9 @@ let testedTargets: [(name: String, settings: [SwiftSetting])] =
 /// PNGs as sources. Add a target here with its first snapshot suite.
 let snapshotTestTargets: Set<String> = ["LedgerDesign"]
 
+/// Test targets that read committed fixtures through `Bundle.module` (F05: `schema-v001.sql`).
+let testResources: [String: [Resource]] = ["LedgerPersistence": [.copy("Fixtures")]]
+
 let package = Package(
     name: "LedgerKit",
     platforms: [
@@ -179,6 +182,7 @@ let package = Package(
                 "LedgerSnapshotTesting"
             ],
             exclude: snapshotTestTargets.contains(target.name) ? ["__Snapshots__"] : [],
+            resources: testResources[target.name],
             swiftSettings: target.settings
         )
     }
