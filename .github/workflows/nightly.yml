@@ -1,0 +1,103 @@
+# Nightly (docs/ci-cd.md §3), manual only to save the free macOS minutes (Pete, 2026-09-27): the full
+# Nightly plans and a dependency report; a failure opens (or comments on) an issue labelled "nightly".
+name: Nightly
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+jobs:
+  test:
+    name: ${{ matrix.plan }}
+    runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { plan: Nightly, scheme: Ledger, destination: "platform=iOS Simulator,name=iPhone 17,OS=27.0" }
+          - { plan: Nightly-Watch, scheme: LedgerWatch, destination: "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
+        run: scripts/check-xcode-version.sh
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Test the ${{ matrix.plan }} plan
+        env:
+          PLAN: ${{ matrix.plan }}
+          SCHEME: ${{ matrix.scheme }}
+          DESTINATION: ${{ matrix.destination }}
+        run: | # as check.sh steps 3–4: by UDID, built while the simulator boots, then tested on it alone
+          dest="$(scripts/sim-destination.sh "$DESTINATION")"
+          scripts/sim-boot.sh "$dest"
+          xcargs=(-project Ledger.xcodeproj -scheme "$SCHEME" -testPlan "$PLAN" -destination "$dest"
+            -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+            -onlyUsePackageVersionsFromResolvedFile)
+          xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN-build.xcresult" \
+            -quiet | mise exec -- xcbeautify --renderer github-actions
+          scripts/sim-boot.sh --wait "$dest"
+          xcodebuild test-without-building "${xcargs[@]}" -resultBundlePath ".derivedData/Results/$PLAN.xcresult" \
+            -collect-test-diagnostics never -parallel-testing-enabled NO -test-timeouts-enabled YES -quiet |
+            mise exec -- xcbeautify --renderer github-actions
+          scripts/check-test-results.sh ".derivedData/Results/$PLAN.xcresult" "TestPlans/$PLAN.xctestplan"
+      - name: Upload the result bundle
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-${{ matrix.plan }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .derivedData/Results
+          include-hidden-files: true # it lives under .derivedData/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  dependencies:
+    name: Dependency report
+    runs-on: xcode-27
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - name: Check the selected Xcode against .xcode-version # pr.yml has check.sh step 0 for this
+        run: scripts/check-xcode-version.sh
+      - name: Available package updates (report only; bumps are deliberate PRs)
+        run: |
+          swift package --package-path LedgerKit resolve && swift package --package-path LedgerKit update --dry-run | tee updates.txt
+          { echo '```'; sed -n '/Dry-run/,$p' updates.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    name: Report failure
+    needs: [test, dependencies]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the nightly issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create nightly --force --color B60205 --description "The nightly workflow failed"
+          open="$(gh issue list --label nightly --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [[ -n "$open" ]]; then
+            gh issue comment "$open" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --label nightly --title "Nightly failed on $(date -u +%F)" --body "The nightly workflow failed: $RUN_URL"
+          fi

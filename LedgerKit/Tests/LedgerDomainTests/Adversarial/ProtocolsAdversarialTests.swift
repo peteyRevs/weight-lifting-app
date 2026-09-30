@@ -117,7 +117,7 @@ private struct BriefStatsQueries: StatsQueries {
     }
 }
 
-private struct BriefShapes: HealthStore, LiveWorkoutTransport, CompanionTransport, WorkoutEventStore {}
+private struct BriefShapes: HealthStore, LiveWorkoutTransport, CompanionTransport {}
 
 @Suite("Protocols (adversarial)", .tags(.domain))
 struct ProtocolsAdversarialTests {}

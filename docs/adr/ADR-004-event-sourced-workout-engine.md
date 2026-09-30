@@ -49,6 +49,9 @@ public struct WorkoutEngine {
 }
 ```
 
+Illustrative. The shipped API is F04's: see the amendment below, F17 "Inputs from F04" item 7, and
+`docs/architecture.md` §6.
+
 Rules:
 
 1. **Determinism.** `reduce` is pure. Effects (haptic, HealthKit write, local
@@ -98,3 +101,81 @@ Rules:
   type.
 - Timers are wall-clock based (`endsAt`), which also makes Live Activities and
   watch Smart Stack rendering trivial (they take a `Date` and count down).
+
+## Amendment (2026-09-29): hybrid logical clock stamping
+
+Rule 2 orders envelopes by `wallClock`. With raw device clocks, a device whose clock runs behind its
+peer's, or steps back after an NTP correction, can stamp an action earlier than the envelope it reacted
+to. Replay then applies the two in the wrong order, and a logged set or an un-log is lost on every
+device alike (F04 test findings, finding 6).
+
+So the host (F10/F17) stamps every envelope it creates with a hybrid logical clock:
+
+    wallClock = max(now, newest wallClock seen or sent + 1 ms)
+
+An envelope then sorts after every envelope its device had sent or received. That keeps each device's
+`seq` order and the causal order (seen before created ⇒ sorts before), while `wallClock` stays close to
+real time, which rule 9's rest arithmetic needs. The reducer does not stamp; it takes the stamp as a
+precondition (`EventEnvelope.wallClock`). Raw stamps would still converge, but on stamp order.
+
+**The clock rule (F04 fix round 2).** Two clocks travel in an envelope, and they mean different things:
+
+- A **payload time** (`setLogged.doneAt`, `restExtended.tappedAt`, `restStarted.endsAt`,
+  `finished`/`discarded` `endedAt`) is the originating device's clock at the action.
+- **`wallClock`** is the HLC ordering stamp only. The reducer never reads it as the time of an action
+  and never compares a payload time with it.
+
+So an event that needs a judgement about time carries the judgement, made on the device where the
+screen is known: "+30s" is `restExtended(amount:extendsShownRest:tappedAt:)`. It extends the rest the
+lifter saw running, or starts a fresh rest at the tap when the screen showed none (decision #7), whatever
+the stamps say. Under skew the HLC can stamp a tap after the end of a rest the lifter still saw running
+(F04 test findings, finding 14). **"+30s" on a screen that showed no rest never shortens a running
+rest** (Pete, re-plan 2026-09-29): when the state holds a rest ending later than the fresh one would,
+such as a peer's rest this device had not heard of yet, that rest is kept unchanged (finding 20). On a
+shown rest, the new end is capped at `tappedAt + longestRest`, so only a rest ending more than an hour
+after the tap can end earlier (F04 review N1).
+
+**Malformed envelopes** (re-plan 2026-09-29: Pete, no time windows). An envelope is malformed only when a
+date it carries is not finite (its `wallClock`, a payload date, or any date in a `started` snapshot), or a
+rest length (`restStarted.total`, `restExtended.amount`, a snapshot rest's `total`) lies outside
+`0 ... WorkoutEngine.longestRest`. `reduce` and `replay` ignore it: no state change and no effects. It
+stays stored, because the store judges keys, not contents. Nothing else is checked: a finite date is
+accepted however far it lies from its stamp or from other dates, because saturating arithmetic keeps it
+from trapping. So a "Still lifting?" Finish made days after the last set ends the workout at the last set
+(F23 criterion 6; finding 15).
+
+**Recovery on launch.** The HLC's `newest` must survive a relaunch (rule 6). Before the host stamps any
+envelope after a launch, it sets `newest` to the largest stored `wallClock` across the store's uncompacted
+logs (`WorkoutEventStore.uncompactedWorkoutIDs`), under the two rules below. Without this, a device
+whose clock stepped back across a relaunch stamps its next action before its last one, and replay undoes
+it on every device (finding 12).
+
+- **Recovery skips only non-finite stamps** (F04 review S1). `newest` is the largest *finite* stored
+  `wallClock`; a stored `+∞` would otherwise stamp every later own envelope `+∞`, which `reduce` drops as
+  malformed, so every action would be lost without an error.
+- **A drift bound acts only on receipt** (F04 review S1). It may reject a received envelope's stamp
+  before `append`, so that envelope is neither stored nor seen by the clock; it never makes the host
+  skip, clamp or restamp an envelope already in its store, at recovery or anywhere else. So every stored
+  stamp counts toward `newest`, and the host loop's "own action: `reduce` equals `replay`" keeps holding.
+
+**The host loop** (re-plan 2026-09-29, replacing fix round 2's two paths; findings 13, 17, 18 and 19).
+`reduce` keeps no log, so it must never see an envelope twice. The host (F17) has one path for each
+source:
+
+- **Its own action:** stamp it with the HLC, `reduce` it, and run `reduce`'s effects in order: `.persist`
+  appends it to the store before `.transmit` sends it. The HLC sorts the envelope after everything stored,
+  so reducing it on the host's state (`replay` of the stored log) gives what `replay` of the log with it
+  would give. The two rules under "Recovery on launch" keep that true.
+- **Envelopes it received:** append them to the store first, whatever they hold (once past F17's receipt
+  checks: the decode guard and the drift bound). If `append` stored anything new, rebuild with `replay`
+  of the stored log, then run `WorkoutEngine.effects(from: old, to: new)`. A received envelope is never
+  reduced.
+- **Launch:** the launch step replays each stored log (`WorkoutEventStore.uncompactedWorkoutIDs`) and plays
+  no haptic, because nothing was just logged.
+
+`effects(from:to:)` is the rebuild's diff: materialise or drop the log, schedule or cancel the rest
+notification, update the Live Activity, and **at most one** `.haptic(.setLogged)`, while the workout is
+live, when at least one set is done in `new` that was not done in `old`. So a single set logged on the other
+device buzzes here (F17 criterion 9), and a reconnect that brings many sets buzzes once (Pete). A rebuild
+that ends finished or discarded never buzzes, even for a late set (orchestrator), and a rebuild plays no
+other haptic.

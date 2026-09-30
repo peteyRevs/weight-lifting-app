@@ -1,0 +1,6 @@
+# actionlint 1.7.12 (mise.toml) predates the xcode-27 label, a GitHub-hosted preview image, not a
+# self-hosted runner (actions/runner-images#14404; rhysd/actionlint#739 asks to add it). Drop this
+# file once a pinned actionlint knows the label, or when pr.yml leaves it (F32).
+self-hosted-runner:
+  labels:
+    - xcode-27

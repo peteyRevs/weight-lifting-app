@@ -1,0 +1,177 @@
+{
+  "devices": {
+    "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+      {
+        "lastBootedAt": null,
+        "udid": "46F7C9EA-B38C-445A-BAD9-8A70A603E9E1",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+        "state": "Shutdown",
+        "name": "iPhone 17"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "12EE52D2-3247-4961-8935-B675F5010841",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17e",
+        "state": "Shutdown",
+        "name": "iPhone 17e"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "8A20D9BF-D302-48E7-8120-AC1510BC09C5",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
+        "state": "Shutdown",
+        "name": "iPhone 18 Pro"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "D58AF959-5F53-4301-80BE-E3855543DB2B",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro-Max",
+        "state": "Shutdown",
+        "name": "iPhone 18 Pro Max"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "3F725D53-2EEF-470E-A724-90E5D09B0BF1",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-Air",
+        "state": "Shutdown",
+        "name": "iPhone Air"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "D2437577-7DBD-48A3-BD65-7B91E8E0E237",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-A16",
+        "state": "Shutdown",
+        "name": "iPad (A16)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "A3377235-EAF5-404F-BAD0-2341124327D2",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air-11-inch-M4",
+        "state": "Shutdown",
+        "name": "iPad Air 11-inch (M4)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "9C5D1EDB-1427-49D4-A77B-F53192B007DA",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air-13-inch-M4",
+        "state": "Shutdown",
+        "name": "iPad Air 13-inch (M4)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "6AFBEF4F-C65A-478B-ACDA-C39DD6AD2467",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-mini-A17-Pro",
+        "state": "Shutdown",
+        "name": "iPad mini (A17 Pro)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "7081EA97-A853-44BB-8D7E-8A95BD7BBC07",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB",
+        "state": "Shutdown",
+        "name": "iPad Pro 11-inch (M5)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "D85311B3-0319-47A8-9986-A700FE21EE08",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB",
+        "state": "Shutdown",
+        "name": "iPad Pro 13-inch (M5)"
+      }
+    ],
+    "com.apple.CoreSimulator.SimRuntime.watchOS-27-0": [
+      {
+        "lastBootedAt": null,
+        "udid": "7A7FAEBB-A48B-4364-90E9-3B1DF9744FC0",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-40mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (40mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "F0B169D0-9CC9-40F6-A335-0F9240C09B9F",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-44mm",
+        "state": "Shutdown",
+        "name": "Apple Watch SE 3 (44mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "3A3B91C1-A67A-4F4E-9C2A-5DA1567C2D5F",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-12-42mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 12 (42mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "2416B270-8634-4D4A-9084-2B04B4498921",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-12-46mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Series 12 (46mm)"
+      },
+      {
+        "lastBootedAt": null,
+        "udid": "C07F8407-6456-4CFD-B9C8-4F801946EAAF",
+        "isAvailable": true,
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-4-49mm",
+        "state": "Shutdown",
+        "name": "Apple Watch Ultra 4 (49mm)"
+      }
+    ]
+  },
+  "pairs": {
+    "00002701-FA1E-4A1E-8A1E-000000002701": {
+      "watch": {
+        "name": "Apple Watch Series 12 (46mm)",
+        "udid": "2416B270-8634-4D4A-9084-2B04B4498921",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone 18 Pro Max",
+        "udid": "D58AF959-5F53-4301-80BE-E3855543DB2B",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    },
+    "00002702-FA1E-4A1E-8A1E-000000002702": {
+      "watch": {
+        "name": "Apple Watch Series 12 (42mm)",
+        "udid": "3A3B91C1-A67A-4F4E-9C2A-5DA1567C2D5F",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone Air",
+        "udid": "3F725D53-2EEF-470E-A724-90E5D09B0BF1",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    },
+    "00002703-FA1E-4A1E-8A1E-000000002703": {
+      "watch": {
+        "name": "Apple Watch Ultra 4 (49mm)",
+        "udid": "C07F8407-6456-4CFD-B9C8-4F801946EAAF",
+        "state": "Shutdown"
+      },
+      "phone": {
+        "name": "iPhone 17",
+        "udid": "46F7C9EA-B38C-445A-BAD9-8A70A603E9E1",
+        "state": "Shutdown"
+      },
+      "state": "(active, disconnected)"
+    }
+  }
+}

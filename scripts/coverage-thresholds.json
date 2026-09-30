@@ -1,0 +1,16 @@
+{
+  "overall": 80,
+  "modules": {
+    "LedgerDomain": 95,
+    "LedgerPersistence": 90,
+    "LedgerSync": 90,
+    "LedgerHealth": 80,
+    "LedgerActivityKit": 70,
+    "LedgerDesign": 60,
+    "WatchFeatureWorkout": 70,
+    "Feature*": 70
+  },
+  "required": ["LedgerDomain", "LedgerDesign"],
+  "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
+  "excludedFiles": ["*+Previews.swift", "*/Generated/*"]
+}

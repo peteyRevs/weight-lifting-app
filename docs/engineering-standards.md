@@ -15,10 +15,10 @@ Related: `docs/architecture.md`, `docs/testing-strategy.md`,
 
 | Item | Value |
 |---|---|
-| Language | Swift 6.3, Swift 6 language mode, strict concurrency `complete` |
+| Language | Swift 6.4, Swift 6 language mode, strict concurrency `complete` |
 | UI | SwiftUI only. No UIKit/WatchKit views except via documented, isolated wrappers in `LedgerDesign` |
 | Minimum OS | iOS 26.0, watchOS 26.0 |
-| Xcode | 26.6 (pinned in `.xcode-version`; CI uses the same). Xcode 27 migration is task F32 |
+| Xcode | 27.0 (pinned in `.xcode-version`; CI uses the same, on the `xcode-27` runner; F32). `scripts/check.sh` fails on any other Xcode |
 | Project | Committed `Ledger.xcodeproj` with synchronized folders (ADR-003). Adding files never touches the pbxproj. Never hand-edit `project.pbxproj`; target/entitlement changes are made in Xcode by a human |
 | Packages | All product code lives in the local Swift package `LedgerKit/`. App targets depend only on the umbrella products `LedgerAppKit` / `LedgerWatchAppKit`; adding a feature is a `Package.swift` edit |
 | Formatting | SwiftFormat 0.63.x (config: `.swiftformat`), pinned via `mise`, run by the lefthook pre-commit hook |

@@ -43,5 +43,17 @@ When the phone app is backgrounded and no watch is connected, a local notificati
 ## Definition of Done
 Inherits `docs/engineering-standards.md` §12.
 
+## Inputs from F04 (2026-09-29)
+
+- **"Still lifting?" Finish (criterion 6).** Send `finished(endedAt: lastActivityAt)` however long ago that
+  was: F04 has no time window, so the Finish is kept and the workout ends at the last activity
+  (`stillLifting_finishOpenedDaysLater_isKept`). The prompt is F23's, not F10's.
+- **Rests already over (criterion 1).** A late remote rest can reach the rebuild with `endsAt` already
+  past, and `effects(from:to:)` schedules it anyway; "fires immediately if already past" covers the phone,
+  and F18's watch needs the same rule.
+- **The notification's "+30s" (criterion 3).** It fires at rest zero, so it sends
+  `restExtended(amount: 30 s, extendsShownRest: false, tappedAt: now)`: a fresh 30 s rest, and never a
+  shorter one than a rest already running (ADR-004, "The clock rule").
+
 ---
 _Filled in by agents during delivery:_ `F23-rest-notifications/{implementation-notes,test-findings,review}.md`

@@ -64,7 +64,7 @@ CREATE TABLE logged_set (id TEXT PRIMARY KEY, workout_exercise_id TEXT NOT NULL 
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT);
 CREATE TABLE workout_health (workout_id TEXT PRIMARY KEY REFERENCES workout(id) ON DELETE CASCADE, avg_heart_rate INTEGER, max_heart_rate INTEGER,
   active_energy_kcal REAL, hk_workout_uuid TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);           -- never synced
-CREATE TABLE workout_event (id TEXT PRIMARY KEY, workout_id TEXT NOT NULL, device_id TEXT NOT NULL, seq INTEGER NOT NULL, wall_clock TEXT NOT NULL,
+CREATE TABLE workout_event (id TEXT PRIMARY KEY, workout_id TEXT NOT NULL, device_id TEXT NOT NULL, seq INTEGER NOT NULL, wall_clock TEXT NOT NULL /* full precision: "Inputs from F04" */,
   payload BLOB NOT NULL /* JSON EventEnvelope */, created_at TEXT NOT NULL);                                        -- never synced
 CREATE TABLE settings (id TEXT PRIMARY KEY /* always 'singleton' */, payload TEXT NOT NULL /* JSON Settings */, updated_at TEXT NOT NULL);
 CREATE TABLE device (id TEXT PRIMARY KEY, kind TEXT NOT NULL /* phone|watch */, name TEXT NOT NULL, created_at TEXT NOT NULL);   -- never synced
@@ -94,14 +94,14 @@ public struct GRDBExerciseRepository: ExerciseRepository { public init(_ db: Dat
 5. Given sets across 10 ISO weeks, when `e1RMByWeek(lastWeeks: 8)` runs, then each week's value is the max `e1rm_grams` of done sets in that week and weeks with no sets are absent.
 6. Given workouts in two consecutive weeks, when `weeklyVolume(in:)` runs for each, then values equal Σ weight×reps of done sets (drop/added included), and the Today delta can be computed from the two.
 7. Given a live workout's envelopes appended twice (duplicate keys), when read back, then each key appears once and `highestSeq` is correct per device.
-8. Given `compact(workout:)` after materialization, then `workout_event` rows for that workout are gone and `liveWorkoutIDs()` excludes it.
+8. Given `compact(workout:)` after materialization, then `workout_event` rows for that workout are gone and `uncompactedWorkoutIDs()` excludes it.
 9. Given 20 000 logged sets across 400 workouts, when each `StatsQueries` method runs, then p95 < 50 ms on the iOS simulator (`StatsQueriesPerformanceTests`, `.slow`, nightly).
 10. Given `observeRecent(limit: 10)`, when a workout is materialized, then the `AsyncStream` emits the new list within one event-loop turn.
 11. Given the seed catalog applied twice with the same version, then the `exercise` row count is unchanged and custom rows survive; with a higher version, new entries are added and existing names are not duplicated.
 12. Given a future migration `v002` added in a test, when migrating a database created at v001 with data, then data survives (scaffold `MigrationCompatibilityTests` iterating over committed `fixtures/db-v001.sqlite`).
 
 ## Test plan
-- Integration (LedgerPersistenceTests): `SchemaTests`, `ExerciseRepositoryTests` (search by prefix/equipment/muscle, custom save, seed idempotence), `ProgramRepositoryTests`, `WorkoutRepositoryTests` (materialize atomicity, updateSets re-materializes `e1rm_grams`, delete cascades), `StatsQueriesTests` (criteria 4–6, PR history, sessions this week, recentlyLogged order), `WorkoutEventStoreTests` (7, 8), `ObservationTests` (10), `MigrationCompatibilityTests` (12), `StatsQueriesPerformanceTests` (9, `.slow`).
+- Integration (LedgerPersistenceTests): `SchemaTests`, `ExerciseRepositoryTests` (search by prefix/equipment/muscle, custom save, seed idempotence), `ProgramRepositoryTests`, `WorkoutRepositoryTests` (materialize atomicity, updateSets re-materializes `e1rm_grams`, delete cascades), `StatsQueriesTests` (criteria 4–6, PR history, sessions this week, recentlyLogged order), `WorkoutEventStoreTests` (7, 8, and F04's contract suite: "Inputs from F04"), `ObservationTests` (10), `MigrationCompatibilityTests` (12), `StatsQueriesPerformanceTests` (9, `.slow`).
 - Seeders in LedgerTestSupport: `Seeders.history(exercises:workouts:setsPerWorkout:rng:)`.
 - Snapshot / UI: none.
 
@@ -124,3 +124,46 @@ _Filled in by agents during delivery:_
 - `F05-persistence/implementation-notes.md`
 - `F05-persistence/test-findings.md`
 - `F05-persistence/review.md`
+
+## Inputs from F04 (2026-09-29)
+
+F04 shipped the `WorkoutEventStore` protocol (`LedgerDomain/Protocols/WorkoutEventStore.swift`) and the engine
+that reads it. The host rules shared with F10 and F17 are in F17 "Inputs from F04"; ADR-004's amendment is the
+source. Where these contradict the brief above, they win.
+
+1. **The protocol as shipped:**
+   - `append(_:) async throws -> [EventEnvelope]` returns the envelopes it newly stored, in the order given.
+     It is all or nothing: on a stored key with a different envelope it throws
+     `EngineError.conflictingEnvelope(key)` and stores nothing from the batch;
+   - `envelopes(for:)` returns each stored envelope once and exactly as appended;
+   - `uncompactedWorkoutIDs()` replaces `liveWorkoutIDs()`: every stored log that is not compacted, whatever
+     it holds. The host's launch step classifies each by `WorkoutEngine.replay`, and never compacts a log
+     that replays to `nil`;
+   - `highestSeq(for:device:)` and `compact(workout:)` are unchanged.
+2. **No validation windows.** The store judges keys, never contents: a malformed envelope
+   (`EventEnvelope.isWellFormed`: a non-finite date, or a rest length outside `0 ... longestRest`) stays
+   stored, and any finite date is kept however far it lies from its stamp (Pete, 2026-09-29).
+3. **Run F04's contract suite against the GRDB store:** `WorkoutEventStoreContract.violations { … }` must be
+   empty. It lives in the test target (`LedgerKit/Tests/LedgerDomainTests/Engine/WorkoutEventStoreContractTests.swift`,
+   with `EngineAdv` and `InMemoryEventStore`), so move it where `LedgerPersistenceTests` can call it, for
+   example `LedgerTestSupport`.
+4. **Lossless dates.** `<` and the conflict check compare dates, so `wall_clock` and every date in `payload`
+   must read back exactly. ISO 8601 and millisecond columns fail the contract's exact read-back clause.
+   - *Tester's note (F04 round 4):* a store that keeps `wallClock` as seconds since 1970 (GRDB
+     `.timeIntervalSince1970`, `JSONEncoder` `.secondsSince1970`) passes all ten clauses, because the
+     clause's one stamp, `10.493_827_3`, survives that round trip; about half of real sub-second stamps
+     read back one ulp off, and a duplicate delivery then throws `conflictingEnvelope`. Store
+     `timeIntervalSinceReferenceDate`, or use the default codec.
+   - **For F05 to decide:** add a second stamp fixture that does not survive seconds since 1970 (the
+     tester suggests `10.493_826_8`) to the exact read-back clause when the suite moves. F04 is frozen, so
+     the clause is F05's to change.
+5. **Materialisation receives `.materialize(WorkoutState)`**, the final state, not a summary. F05 writes the
+   rows from it, reads `programUpdates` (the "Also update program" swaps; who applies them to the program is
+   F10's input item 7), and computes the receipt with PRs through `WorkoutEngine.summary(_:prs:)`. It is an idempotent upsert keyed by
+   `WorkoutID`: a rebuild emits it again when a late envelope changes a finished log, but only until the
+   log is compacted (F17 item 8).
+6. **A late discard can overtake a finish.** `.discardLog` also arrives when a discard sorts before a finish
+   that was already materialised; the materialised workout must then be deleted too. Who owns that is
+   open with F17 (item 2).
+7. **Renamed labels** (the JSON payload's keys): `restExtended(amount:extendsShownRest:tappedAt:)`,
+   `setLogged(…, doneAt:)`, `finished(endedAt:)`; the full table is F17 item 7.

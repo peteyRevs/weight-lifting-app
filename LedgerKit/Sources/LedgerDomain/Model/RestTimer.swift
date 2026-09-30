@@ -12,12 +12,20 @@ public struct RestTimer: Hashable, Codable, Sendable {
         self.total = total
     }
 
-    /// Rule 23: time left at `now`, never negative.
+    /// Rule 23: time left at `now`, never negative. It saturates at 2^63 s (`Double(Int64.max)`), and
+    /// an interval that is not finite (a non-finite `endsAt` or `now`, NaN included) means no rest left:
+    /// zero. `Duration.seconds` traps on a non-finite or out-of-range interval, and the dates can come
+    /// from anywhere a `RestTimer` decodes (F04 fix round 2).
     public func remaining(at now: Date) -> Duration {
-        .seconds(max(0, endsAt.timeIntervalSince(now)))
+        let left = endsAt.timeIntervalSince(now)
+        guard left.isFinite else {
+            return .zero
+        }
+        return .seconds(min(max(0, left), Double(Int64.max)))
     }
 
-    /// The share of the rest still to go at `now`, in 0…1 (the ring's fill); 0 when `total` is not positive.
+    /// The share of the rest still to go at `now`, in 0…1 (the ring's fill); 0 when `total` is not
+    /// positive or no rest is left, which includes every non-finite case of `remaining(at:)`.
     public func fraction(at now: Date) -> Double {
         guard total > .zero else {
             return 0
