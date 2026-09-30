@@ -53,7 +53,8 @@
             )
             func setRow_outerLabel_doesNotLabelTheCheckContainer(_ state: SetRowState) throws {
                 let spoken = "Set 2, 185 pounds, 5 reps"
-                let found = AccessibilityCases.setRow(state).accessibilityLabel(spoken)
+                // Fix round 3 (S2-8): the spoken label is `accessibilitySummary`; assertions unchanged.
+                let found = AccessibilityCases.setRow(state, summary: spoken)
                     .withAccessibilityElements { elements in
                         elements.map { ($0.accessibilityLabel ?? "", Self.containerLabels(above: $0)) }
                     }

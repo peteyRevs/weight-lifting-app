@@ -1093,3 +1093,69 @@ lock): **green**.
 | PR-watchOS | 828 | 826 | 0 | 2 | 8/8 | 144 |
 
 The skips are the two nightly-only tests. Coverage gate: LedgerDesign **96.44 % (949 / 984)**, overall 98.06 %.
+
+### Slice 2 — fix round 3 (Pete's re-plan)
+
+Round 3 (`4afdb8f`, test-findings "# Slice 2 — round 3") failed on S2-8 only. The `SetRow.accessibilityLabel(_:) ->
+SetRow` overload shadowed SwiftUI's modifier. It protected the check only for a `String` on a bare `SetRow`; a `Text`, a
+`LocalizedStringKey`, any modifier before it and any type-erased path compiled silently to SwiftUI's modifier and renamed
+the check too. Pete's re-plan, **"Rename & close"**, was done exactly as given, and nothing else changed in product code.
+
+**Product (SetRow only).**
+- **The overload is removed.** The row's spoken name is an initializer parameter, **`accessibilitySummary`**, which
+  cannot collide with `accessibilityLabel`. It comes in three public forms:
+  - `String?`, default `nil`: used as given, like every caller string in this module;
+  - `LocalizedStringKey`: looked up in the main bundle, as SwiftUI's own key parameters are;
+  - `Text`: for a feature's catalog with its bundle.
+
+  All three delegate to one private initializer that holds a `Text?`. The row element's label is
+  `summary ?? Text(verbatim: "2, 185, 5")`. The check keeps `checkLabel`.
+- **Every calling form resolves one way.** Compiled and run on the Mac before the change:
+  - omitted, `nil`, a literal, an interpolated literal, a `String` and `String(localized:)` take the `String?` form;
+  - a `LocalizedStringKey` value takes the key form;
+  - a `Text` takes the `Text` form.
+
+  There is no ambiguity error and no silent fallback. A value of any other type fails to compile.
+- **Doc on `SetRow`.** Name the row with `accessibilitySummary`, never with SwiftUI's `.accessibilityLabel` (or
+  `.accessibilityHint` / `.accessibilityValue`) on a `SetRow`: a modifier from outside reaches every element inside,
+  so the check would lose "Log set 2". The lint set is frozen, so there is no rule for it; review enforces it.
+
+**Compile-level guard.** The repo has no "must not compile" convention: no `#if false` blocks, and no compile-failure
+harness in `scripts/tests`. So, as the re-plan allows, **the guard is the removed overload**. `SetRow` has no
+`accessibilityLabel` of its own, so no spelling can resolve to a row-only relabel by accident. The only way to name the
+row is the typed initializer, and every form of that is pinned below.
+
+**Tests.**
+- **`AccessibilityTreeTests`.** The case "SetRow, done, named by the feature" is replaced by one case per initializer
+  form:
+  - a literal;
+  - a `String` (`String(localized:)`);
+  - a `LocalizedStringKey`;
+  - a `Text`;
+  - an explicit `nil`, which reads "2, 185, 5".
+
+  Each asserts the exact tree: the row named "Set 2, 185 pounds, 5 reps", value "Done"; the check "Undo set 2", "Done",
+  selected; no container. The table now has **41 cases**. The SetRow tables moved to `AccessibilityTreeSetRowTables.swift`,
+  because the file had passed SwiftLint's file and type-length limits. The assertions are unchanged.
+- **Tester's tests switched to the new API**, as round 3 accepted in advance. No assertion changed.
+  - `ComponentAccessibilityAdversarialTests.setRow_outerLabel_relabelsTheRowOnly` and
+    `SetRowContainerAdversarialTests.setRow_outerLabel_doesNotLabelTheCheckContainer` both applied
+    `.accessibilityLabel(spoken)` to a `SetRow`. With the overload gone, that call is SwiftUI's modifier, which labels
+    both elements, so both tests would fail for exactly the reason the doc now forbids it. They now build the row with
+    `accessibilitySummary: spoken`, through a `summary: String? = nil` parameter added to the tester's
+    `AccessibilityCases.setRow` helper. Each edit carries a comment citing S2-8.
+  - The test names still say "outer label". The names are the tester's, so they stay.
+- **My `SetRowAccessibilityTests`:** `setRow_outerLabel_namesTheRowOnly` became `setRow_summary_namesTheRowOnly`, with
+  the same assertions (row name and "Done"; check "Log set 2" and "Done").
+
+**References.** None changed: every reference matched in the gate, and nothing drawn changed.
+
+**Size.** Product `LedgerDesign/Components/`: **747 code lines**, up from 713 (+34, all in `SetRow.swift`, 140 → 174):
+three public initializers and one private one, less the removed method. The rest of the diff is tests and this note.
+
+**Gate.**
+- `scripts/check.sh --fast`: green (687 host tests; `LedgerDesignTests` builds on the host).
+- **Full `scripts/check.sh` through the lock** (`scratchpad/f06s2-fix3.log`, 275 s): **green**.
+  - PR-iOS: 903 tests, **901 passed, 0 failed**, 2 skipped (nightly-only); 17/17 targets.
+  - PR-watchOS: 828 tests, **826 passed, 0 failed**, 2 skipped; 8/8 targets.
+  - Coverage gate: LedgerDesign **96.46 % (956 / 991)**, overall 98.06 %.

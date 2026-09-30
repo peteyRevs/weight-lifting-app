@@ -52,11 +52,15 @@
                 #expect(check.traits.contains(.selected) == (state == .done), "\(check)")
             }
 
-            /// S2-3: a feature's spoken label reaches the row, and the check keeps its own.
-            @Test("SetRow: a spoken label from outside names the row, keeps the state and leaves the check alone")
-            func setRow_outerLabel_namesTheRowOnly() throws {
+            /// S2-3, S2-8: the feature's spoken summary names the row, and the check keeps its own label.
+            @Test("SetRow: accessibilitySummary names the row, keeps the state and leaves the check alone")
+            func setRow_summary_namesTheRowOnly() throws {
                 let spoken = "Set 2, 185 pounds, 5 reps"
-                let elements = Self.row(.done).accessibilityLabel(spoken).accessibilityElements()
+                let row = SetRow(
+                    number: "2", weight: "185", reps: "5", state: .done, checkLabel: "Log set 2",
+                    accessibilitySummary: spoken
+                ) {} onCheck: {}
+                let elements = row.accessibilityElements()
                 try #require(elements.count == 2, "\(elements)")
                 #expect(elements[0].label == spoken)
                 #expect(elements[0].value == "Done")

@@ -43,13 +43,16 @@
             ]
         }
 
-        static func setRow(_ state: SetRowState, number: String = "2") -> SetRow {
+        /// `summary` added in F06 slice 2 fix round 3 (S2-8, Pete's re-plan): the row's spoken name is
+        /// an initializer parameter now, not a label applied from outside.
+        static func setRow(_ state: SetRowState, number: String = "2", summary: String? = nil) -> SetRow {
             SetRow(
                 number: number,
                 weight: "185",
                 reps: "5",
                 state: state,
-                checkLabel: "Log set \(number)"
+                checkLabel: "Log set \(number)",
+                accessibilitySummary: summary
             ) {} onCheck: {}
         }
     }
@@ -158,7 +161,8 @@
             @Test("A feature can relabel a set row for VoiceOver without renaming its check")
             func setRow_outerLabel_relabelsTheRowOnly() throws {
                 let spoken = "Set 2, 185 pounds, 5 reps"
-                let elements = AccessibilityCases.setRow(.pending).accessibilityLabel(spoken).accessibilityElements()
+                // Fix round 3 (S2-8): the spoken label is `accessibilitySummary`; assertions unchanged.
+                let elements = AccessibilityCases.setRow(.pending, summary: spoken).accessibilityElements()
                 try #require(elements.count == 2, "\(elements)")
                 #expect(elements[0].label == spoken, "row: \(elements[0])")
                 #expect(elements[1].label == "Log set 2", "check: \(elements[1])")

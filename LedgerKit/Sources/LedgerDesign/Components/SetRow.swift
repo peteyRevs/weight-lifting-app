@@ -16,11 +16,15 @@ public nonisolated enum SetRowState: Sendable {
 ///
 /// VoiceOver reads exactly two buttons, with no container around either (`AccessibilityTreeTests`
 /// pins the tree):
-/// - the row summary: its label is "2, 185, 5" until a feature names it with
-///   ``accessibilityLabel(_:)`` ("Set 2, 185 pounds, 5 reps"), and its value is the state in words
-///   ("Pending", "Current set", "Done");
+/// - the row summary: its label is `accessibilitySummary` ("Set 2, 185 pounds, 5 reps"), or
+///   "2, 185, 5" without one, and its value is the state in words ("Pending", "Current set",
+///   "Done");
 /// - the check: `checkLabel`, the label of what activating it will do ("Log set 2", or
 ///   "Undo set 2" once logged), selected and "Done" once the set is logged.
+///
+/// Name the row with `accessibilitySummary`, never with SwiftUI's `.accessibilityLabel` (or
+/// `.accessibilityHint` / `.accessibilityValue`) on a `SetRow`: a modifier from outside reaches
+/// every element inside, so the check would lose "Log set 2" and read the row's words.
 public struct SetRow: View {
     private let number: String
     private let weight: String
@@ -29,22 +33,69 @@ public struct SetRow: View {
     private let checkLabel: String
     private let onSelect: () -> Void
     private let onCheck: () -> Void
-    private var summary: String?
+    private let summary: Text?
 
+    /// `accessibilitySummary` is the row's spoken name, in the caller's words and units, used as
+    /// given (pass `String(localized:)`); `nil`, or leaving it out, reads the three strings.
     public init(
         number: String,
         weight: String,
         reps: String,
         state: SetRowState,
         checkLabel: String,
+        accessibilitySummary: String? = nil,
         onSelect: @escaping () -> Void,
         onCheck: @escaping () -> Void
+    ) {
+        let spoken = accessibilitySummary.map { Text(verbatim: $0) }
+        self.init(number, weight, reps, state, checkLabel, spoken, onSelect, onCheck)
+    }
+
+    /// A key, looked up in the main bundle as SwiftUI's own `LocalizedStringKey` parameters are. A
+    /// feature module with its own catalog passes a `Text` with its bundle instead.
+    public init(
+        number: String,
+        weight: String,
+        reps: String,
+        state: SetRowState,
+        checkLabel: String,
+        accessibilitySummary: LocalizedStringKey,
+        onSelect: @escaping () -> Void,
+        onCheck: @escaping () -> Void
+    ) {
+        self.init(number, weight, reps, state, checkLabel, Text(accessibilitySummary), onSelect, onCheck)
+    }
+
+    /// Any `Text`, for example from a feature's catalog: `Text("set.summary \(n)", bundle: .module)`.
+    public init(
+        number: String,
+        weight: String,
+        reps: String,
+        state: SetRowState,
+        checkLabel: String,
+        accessibilitySummary: Text,
+        onSelect: @escaping () -> Void,
+        onCheck: @escaping () -> Void
+    ) {
+        self.init(number, weight, reps, state, checkLabel, accessibilitySummary, onSelect, onCheck)
+    }
+
+    private init(
+        _ number: String,
+        _ weight: String,
+        _ reps: String,
+        _ state: SetRowState,
+        _ checkLabel: String,
+        _ summary: Text?,
+        _ onSelect: @escaping () -> Void,
+        _ onCheck: @escaping () -> Void
     ) {
         self.number = number
         self.weight = weight
         self.reps = reps
         self.state = state
         self.checkLabel = checkLabel
+        self.summary = summary
         self.onSelect = onSelect
         self.onCheck = onCheck
     }
@@ -64,7 +115,7 @@ public struct SetRow: View {
                     .ledgerHitTarget()
                 }
                 .buttonStyle(LedgerPressStyle())
-                .accessibilityLabel(summary ?? "\(number), \(weight), \(reps)")
+                .accessibilityLabel(summary ?? Text(verbatim: "\(number), \(weight), \(reps)"))
                 .accessibilityValue(SetRowSpeech.state(state))
                 Button(action: onCheck) { SetRowCheck(state: state) }
                     .buttonStyle(LedgerPressStyle())
@@ -74,16 +125,6 @@ public struct SetRow: View {
             }
             .padding(.vertical, LedgerSpacing.s)
         }
-    }
-
-    /// Names the row summary for VoiceOver ("Set 2, 185 pounds, 5 reps") and nothing else: the
-    /// check keeps `checkLabel`, and the state still follows as the value. Like `Text`'s own
-    /// modifiers, it returns a `SetRow`, so apply it to the row before any other modifier. SwiftUI's
-    /// `View.accessibilityLabel` would label every element inside, the check too.
-    public func accessibilityLabel(_ label: String) -> SetRow {
-        var copy = self
-        copy.summary = label
-        return copy
     }
 
     /// Done rows are muted, not the prototype's .28 `DIM`: the logged numbers still carry meaning
