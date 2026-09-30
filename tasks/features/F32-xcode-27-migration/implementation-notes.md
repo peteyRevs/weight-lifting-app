@@ -1,7 +1,8 @@
 # F32 implementation notes
 
-Base: `main` e94b501, branch `chore/F32-xcode-27`. Committed as `950bba7` (not pushed); the fix round is
-uncommitted. No GitHub or Xcode Cloud setting was changed.
+Base: `main` e94b501, branch `chore/F32-xcode-27`. Committed as `950bba7`, `bcf1530` (adversarial round) and
+`ac2a08a` (fix round), and opened as PR #10. The CI-trial round at the end is uncommitted. No GitHub or
+Xcode Cloud setting was changed.
 
 Toolchain: Xcode 27.0 (27A266a), Apple Swift 6.4 (swiftlang-6.4.0.34.1). Simulator runtimes: iOS 27.0 (24A434)
 and watchOS 27.0 (24R362). The 26.5 runtimes are still installed.
@@ -394,3 +395,116 @@ fail safe.
   - Step 2 printed `package pins agree … (9 pins)`.
   - `check-test-results.sh` saw 17 targets ran and passed for PR, and 8 for PR-Watch.
   - Coverage: LedgerDomain 98.97 %, LedgerDesign 95.52 %, overall 98.61 %.
+
+## CI trial: PR CI runs iOS only (Pete, 2026-09-30)
+
+**The first `xcode-27` run** was run 36652681235 on PR #10, head `ac2a08a`. Check ran from 00:56:17 to
+01:23:23 UTC.
+- The steps before `check.sh` took 12 s: checkout, Select, mise, and a package-cache miss.
+- `check.sh` passed step 0 and the format check (2 s), then lint and the script tests (89 s).
+- The iOS build took **684 s**, including a cold package resolve. The exact-key cache has never saved,
+  because `actions/cache` saves only after a green job. Only package checkouts are cached, so every run
+  still compiles from scratch.
+- The iOS boot took 2 s and the iOS tests 285 s, in which all 17 test targets ran and passed.
+- The watchOS build took 283 s and its boot 1 s. The PR-Watch plan had tested for 148 s when the
+  deadline hit.
+- **The watchdog fired as designed.** At 1,500 s `LEDGER_XCODEBUILD_DEADLINE` interrupted xcodebuild
+  (`** TEST EXECUTE INTERRUPTED **`). `check.sh` failed with exit 75 after 1,506 s, before the step's
+  27-minute timeout, and the upload step saved the finalized bundles (83 s).
+
+**Decision (Pete, 2026-09-30): PR CI runs iOS only.** watchOS stays in the full local gate, which is green
+before every merge (G5), and in the manual nightly.
+
+| Where | Change |
+|---|---|
+| `check.sh` | New `--ios-only`: steps 0–3 and 5. Step 4 prints "watchOS skipped (--ios-only)" in the output and the summary, and the run ends `check.sh (--ios-only) OK`. The watch destination is not looked up or unpaired. The coverage gate gets `--ios-only` and the iOS bundle. With `--lint-only` or `--fast` the flag is rejected (exit 2, like `--lint-only --skip-lint`). It combines with `--skip-lint` and with `--record-snapshots`, which then records iOS references only. The default mode is unchanged. |
+| `coverage-gate.sh` | New `--ios-only`, first argument only. In that mode a required module listed in the new `watchOnly` key of `coverage-thresholds.json` is not failed for being missing. A note names it, and the title says "(iOS only)". A `watchOnly` module that the bundle does measure is gated as usual. `watchOnly` must name required modules (else exit 2). Without the flag it changes nothing. |
+| `coverage-thresholds.json` | `"watchOnly": []`. WatchFeatureWorkout has no code yet. Both required modules, LedgerDomain and LedgerDesign, are tested in the PR plan, and the iOS-only gate below measured them exactly as the full gate did. |
+| `pr.yml` | The Check step runs `scripts/check.sh --ios-only`, and its name is now "Format, lint, script tests, iOS, coverage (check.sh --ios-only)". A comment records the decision. The timeout and deadline are unchanged. `nightly.yml` is unchanged: its matrix tests Nightly and Nightly-Watch. |
+| Docs | `docs/ci-cd.md`: the header covers the decision and the new minutes, and §4 says the full local gate is a PR's only watchOS gate. ADR-006 has a dated line and a header marker. `docs/testing-strategy.md` §4 describes `--ios-only` and `watchOnly`. The G4 row in `docs/subagent-workflow.md` and the minutes in `docs/xcode-cloud/README.md` §1 are updated. The brief's criterion 1 does not name platforms, so it is unchanged. |
+
+**Minutes.** An iOS-only run is about 18 minutes of runner time from cold: the run above without its
+watchOS steps and upload. A code PR therefore costs roughly **18–20 macOS minutes** until the package
+cache saves after the first green run, and less after that. The warm figure is not measured yet.
+
+**Tests.**
+- **check-wiring:**
+  - W49: `--ios-only` runs steps 0–3 and 5 in order.
+  - W50: the coverage gate gets `--ios-only` and the iOS bundle alone.
+  - W51: only the iPhone is looked up, unpaired, booted, built and tested. No call names the watch.
+  - W52: the skip is printed in the output and the summary, with the `(--ios-only) OK` ending.
+  - W53 ×14: a failure at each step stops the run there.
+  - W54: `--skip-lint` combines with the flag, in either order.
+  - W55 ×4: `--lint-only` and `--fast` are rejected, in either order, exactly as W13's pair is.
+  - W56: record mode records iOS only.
+  - W40 now covers `--ios-only` too.
+  - W03 now asserts the exact full-mode arguments, so the default gets no `--ios-only`.
+- **coverage-gate:**
+  - C51: one bundle gives the same rows and exit as without the flag.
+  - C52: a module below its threshold still fails.
+  - C53: a required module missing from the iOS bundle fails unless it is `watchOnly`.
+  - C54: a missing `watchOnly` module gets a note and no row.
+  - C55: in full mode the same module fails.
+  - C56: only `watchOnly` modules are skipped.
+  - C57: a measured `watchOnly` module is gated as usual.
+  - C58 ×4: a bad `watchOnly` is exit 2 in either mode.
+  - C59: the flag counts only before the reports.
+  - C60: a committed `watchOnly` module is required and tested by the PR-Watch plan alone.
+  - Fixture case 11 runs `--ios-only` on the iOS fixture.
+- **workflows:**
+  - WF08: Check runs `scripts/check.sh --ios-only`.
+  - WF61: no pr.yml job or step name claims watchOS.
+  - WF62: the nightly tests both platforms, and nothing in it runs `--ios-only`.
+  - WF60's pattern now accepts `check.sh` with flags, because W40 shows step 0 runs in every mode.
+
+**Mutation check.** Each mutant failed exactly the cases listed. HEAD's scripts fail only new cases, plus
+W41, which reads the output of W40's last run. Workflow mutants were applied in place and restored byte for
+byte (`cmp`).
+
+| Mutant | Caught by |
+|---|---|
+| HEAD's `check.sh` (no flag) | W40, W41, W49–W56 |
+| M1 the flag ignored | W49–W56 |
+| M2 the watch destination is still resolved | W51 |
+| M3 the gate gets no `--ios-only` | W50 |
+| M4 the gate also gets the watch bundle | W50, W51 |
+| M5 / M6 the summary line / the step line dropped | W52 |
+| M7 / M8 `--fast` / `--lint-only` no longer conflicts | W55 ×2 each |
+| M9 full mode passes `--ios-only` | W03 |
+| M10 the run ends "check.sh OK" | W52 |
+| M11 record mode skips the reference listing | W56 |
+| M12 iOS-only skips the coverage gate | W49, W50, W53, W54 |
+| HEAD's `coverage-gate.sh` | C51–C54, C56, C57, C58 ×4 |
+| G1 every missing required module is skipped | C53, C56 |
+| G2 `watchOnly` is skipped in full mode too | C55 |
+| G3 no `watchOnly` ⊆ `required` check | C58 ×2 |
+| G4 a measured `watchOnly` module is skipped | C57 |
+| G5 the flag is not parsed | C51–C54, C56, C57 |
+| G6 / G8 / G9 no note / no title / the row kept | C54 |
+| G7 the flag accepted anywhere | C59 |
+| G10 `"watchOnly": null` read as empty | C58 |
+| Y1 pr.yml runs `check.sh` without the flag | WF08 |
+| Y2 the step name says watchOS again | WF61 |
+| Y3 / Y6 `\|\| true` / `; true` after it | WF08, WF60 |
+| Y4 the nightly's watch leg removed | WF29, WF48, WF51, WF53, WF62 |
+| Y5 `--ios-only` appears in nightly.yml | WF62 |
+
+**Verification.**
+- Every `scripts/tests/*.test.sh` exits 0.
+  - The adversarial suites all pass: check-wiring 102, coverage-gate 73, workflows 63, xcode27 44 with 2
+    opt-in skips, sim-destination 25, check-test-results 18, ci-post-clone 14 and release-please 16.
+  - coverage-gate.test.sh passes 11 cases, and the lint-rules suites pass too.
+- shellcheck reports the same findings as on HEAD, and nothing new.
+- `scripts/check.sh --lint-only` is OK in 92 s (`f32-ios-lint.log`).
+- **Full gate, default mode, both platforms**, through `sim-lock.py` (`f32-both.log`, warm): **OK, 337 s.**
+  - Steps, in seconds: lint 84, iOS build 16, iOS tests 125, watchOS build 16, watchOS tests 93,
+    coverage 2.
+  - 17 PR targets and 8 PR-Watch targets ran and passed.
+  - Coverage: LedgerDomain 98.97 %, LedgerDesign 95.52 %, overall 98.61 %.
+- **`CI=true scripts/check.sh --ios-only`**, through the lock (`f32-ios-only.log`, warm): **OK, 193 s.**
+  - Steps, in seconds: lint 56, iOS build 18, iOS tests 116, watchOS skipped, coverage 1.
+  - 17 PR targets ran and passed.
+  - "Coverage gate (iOS only)" gave the same three figures as the full gate.
+
+**Size.** Code, without comments: `check.sh` +18 −6, `coverage-gate.sh` +16 −8, the thresholds file +1 and
+`pr.yml` +2 −2. That is about 53 lines. The tests add 116 lines and remove 9.

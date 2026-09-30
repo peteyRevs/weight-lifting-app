@@ -403,12 +403,14 @@ check "WF57 ... and with a CRLF, or padded with spaces, the same Xcode (no Xcode
 cp "$ROOT/.xcode-version" "$SEL/repo/.xcode-version"
 
 # F32 fix round (T5): every Mac job checks the selected Xcode against the pin before it builds: the nightly's
-# jobs in the run step right after Select, and Check by running check.sh, whose step 0 is that check (W40).
+# jobs in the run step right after Select, and Check by running check.sh, whose step 0 is that check in every
+# mode, --ios-only included (W40).
 checked="$(for w in pr nightly; do
     jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
         | [.value.steps[] | select(.run) | .run] as $runs
         | ($runs | map(test("xcode-select -s")) | index(true)) as $sel
-        | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check(-xcode-version)?\\.sh$") then "checked" else "unchecked" end)"' \
+        | "\($job):\($runs[$sel + 1] // "none" | if test("^scripts/check-xcode-version\\.sh$|^scripts/check\\.sh( --[a-z-]+)*$")
+            then "checked" else "unchecked" end)"' \
         "$T/$w.json"
 done | tr '\n' ' ')"
 check "WF60 each Mac job's next run step after Select checks the Xcode against .xcode-version (the nightly too)" \

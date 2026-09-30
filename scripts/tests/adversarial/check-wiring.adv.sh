@@ -109,8 +109,8 @@ expect_exit "W01 full run with every step green exits 0" 0 "$code" "$out"
 if [[ "$calls" == "$FULL" ]]; then pass "W02 full run calls every step in order"; else
     fail "W02 full run calls every step in order" "want: $FULL
 got:  $calls"; fi
-check "W03 coverage gate reads both bundles" \
-    grep -q 'coverage-gate .derivedData/Results/PR-iOS.xcresult .derivedData/Results/PR-watchOS.xcresult' "$LOG"
+check "W03 coverage gate reads both bundles, in full mode (no --ios-only)" \
+    is "$(grep '^coverage-gate' "$LOG")" 'coverage-gate .derivedData/Results/PR-iOS.xcresult .derivedData/Results/PR-watchOS.xcresult'
 
 # Inject a failure at every step: non-zero exit, and the calls are exactly the steps
 # up to the failing one (xcodebuild's own xcbeautify shares its pipeline, so it runs).
@@ -266,7 +266,7 @@ $(grep -c 'check.sh FAILED (exit 130)' <<<"$out")" "130 1 0 0 1"
 pinned_msg="error: this repo is pinned to Xcode 27.0 (.xcode-version) but
        xcodebuild reports 26.6.
        Select the right one:  sudo xcode-select -s /Applications/Xcode.app"
-for flags in "" --fast --lint-only --skip-lint --record-snapshots; do
+for flags in "" --fast --lint-only --skip-lint --record-snapshots --ios-only; do
     XCODE_REPORTS=26.6 run $flags
     check "W40 on Xcode 26.6 with 27.0 pinned, check.sh ${flags:-(full)} fails at step 0, before any tool, saying so" \
         is "$code $calls$(grep -c '^error: this repo is pinned' <<<"$out")" "1 xcode-version 1"
@@ -350,6 +350,44 @@ check "W39 a green record run lists the changed references, then exits 1 with no
     is "$code $(grep '^git' "$LOG") $(grep -c '^check-test-results\|^coverage-gate' "$LOG") \
 $(grep -cxF 'snapshot references recorded; re-run check.sh (without the flag) to verify them' <<<"$out")" \
     "1 git status --short -- :(glob)**/__Snapshots__/** 0 1"
+
+# ---- F32: PR CI runs --ios-only (Pete, 2026-09-30); without the flag both platforms run (W01-W03) ------
+# The first xcode-27 run reached LEDGER_XCODEBUILD_DEADLINE in the watchOS tests (F32 notes, "CI trial").
+IOS_CALLS="${FULL%%simctl-boot xcodebuild-build-for-testing-LedgerWatch *}coverage-gate "
+run --ios-only
+check "W49 --ios-only runs steps 0-3 and 5 in order: tools, format, lint, script tests, iOS, its results, coverage" \
+    is "$code $calls" "0 $IOS_CALLS"
+check "W50 ... and the coverage gate gets --ios-only and the iOS bundle alone" \
+    is "$(grep '^coverage-gate' "$LOG")" "coverage-gate --ios-only .derivedData/Results/PR-iOS.xcresult"
+check "W51 ... and it looks up, unpairs, boots, builds and tests the iPhone only: no call names the watch" \
+    is "$(lifecycle) $(grep -c '^simctl list devices' "$LOG") $(grep '^simctl unpair' "$LOG" | tr '\n' ';') \
+$(cat "$LOG" "$LOG.args" | grep -c -e "$W" -e LedgerWatch -e PR-watchOS)" \
+    "boot $I;build-for-testing $I;bootstatus $I;test-without-building $I; 1 simctl unpair 00002703-FA1E-4A1E-8A1E-000000002703; 0"
+check "W52 ... and it says step 4 is skipped, in the output and the summary, and ends \"check.sh (--ios-only) OK\"" \
+    is "$(grep -c '==> 4 · watchOS skipped (--ios-only)' <<<"$out") $(grep -cE '^ +[0-9]+s  watchOS skipped \(--ios-only\)$' <<<"$out") \
+$(grep -c 'check\.sh (--ios-only) OK' <<<"$out") $(grep -c 'check\.sh OK' <<<"$out")" "1 1 1 0"
+for id in $IOS_CALLS; do
+    [[ "$id" == xcbeautify || "$id" == simctl-* ]] && continue # as W04
+    want=" $IOS_CALLS"; want="${want%%" $id "*} $id "; want="${want# }"
+    [[ "$id" == xcodebuild-* ]] && want="${want}xcbeautify "
+    FAIL_AT="$id" run --ios-only
+    check "W53 --ios-only: failure at $id stops check.sh there" is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed $want"
+done
+want="xcode-version mise-install swiftformat-version swiftlint-version ${IOS_CALLS#*script-test-b }"
+run --skip-lint --ios-only; either="$code $calls"
+run --ios-only --skip-lint
+check "W54 --ios-only --skip-lint, in either order, runs tools, iOS, its results and coverage" \
+    is "$either|$code $calls" "0 $want|0 $want"
+run --lint-only --skip-lint; w13="$code $calls|$(grep -c '^error: contradictory flags' <<<"$out")"
+for flags in "--ios-only --lint-only" "--lint-only --ios-only" "--ios-only --fast" "--fast --ios-only"; do
+    run $flags
+    check "W55 $flags is rejected as --lint-only --skip-lint is (W13): exit 2, before any step" \
+        is "$w13 $code $calls|$(grep -c '^error: contradictory flags' <<<"$out")" "2 |1 2 |1"
+done
+run --ios-only --record-snapshots
+check "W56 --ios-only --record-snapshots records on the iPhone alone, lists the references, exits 1 unchecked" \
+    is "$code $(record_log) $(grep '^test-without-building' "$LOG.env" | tr '\n' ';') $(grep -c '^git status' "$LOG") \
+$(grep -c '^check-test-results\|^coverage-gate' "$LOG")" "1 $ios_only test-without-building-Ledger all; 1 0"
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be

@@ -23,11 +23,21 @@ authoritative; the plan differs:
   `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
-- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (all of `check.sh`),
+- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (`check.sh --ios-only`),
   behind a Linux `Scope` job that skips it when only files under `docs/`, `tasks/` or `design/`,
   or `*.md` at the repository root, change (renames count at both paths). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
-  §9 is superseded: a code PR costs about 13–18 macOS minutes, so ~200 cover 11–15 runs.
+  §9 is superseded: a code PR costs about 18–20 macOS minutes while its packages resolve cold, and
+  less once the package cache has saved (it saves only after a green job). ~200 cover about 10 cold runs.
+- **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only`: steps 0–3
+  and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
+  run (36652681235) passed lint, the script tests and all 17 iOS test targets, then reached
+  `LEDGER_XCODEBUILD_DEADLINE` (1,500 s) in the watchOS tests and stopped, exit 75, as designed. Its iOS
+  build took 684 s, including a cold package resolve. watchOS is still tested before every merge by
+  the full local `check.sh` (§4), which runs both platforms, and by the manual nightly. A required
+  module that only a watch bundle can measure is listed in `watchOnly` in
+  `scripts/coverage-thresholds.json` (none today). Only `--ios-only` excuses it, and only while no
+  bundle measures it.
 - §5: scripts run from `ci_scripts/` (use `$CI_PRIMARY_REPOSITORY_PATH`); external TestFlight
   needs a clean build; App Review submission is manual. §6: `bootstrap-sha` skips pre-F01 history.
 
@@ -186,7 +196,8 @@ step (`gh issue create --label nightly`) — add in F01.
 ## 4. No branch protection (Pete, 2026-09-27)
 
 GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
-full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran.
+full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran. Since
+2026-09-30 CI tests iOS only, so that full local run is a PR's only watchOS gate.
 A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free
 minutes run out, CI does not run and the local gate output is the G4 evidence. Seeding the package
 cache on `main` costs a full Check: only if first runs show slow resolution. Revisit with Pro or a 2nd maintainer.
