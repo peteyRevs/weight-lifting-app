@@ -858,3 +858,531 @@ On iOS 26.5 and watchOS 26.5:
 - **Lint.** The round-3 script passes 44/44, 11 of them `limit` cases, and §7's known limits match those 11 one for
   one.
 - **Gate.** One run of `check.sh`, with no retry. Apart from finding 24, every test in both PR plans passes: iOS 572 passed and 1 skipped, and PR-Watch 550 passed and 1 skipped (step 4 by hand). No `LedgerDesignTests` test comes near the allowance
+
+# Slice 2 — round 1 (`38d43a8`)
+
+Scope: slice 2's components (`PrimaryButton`, `PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow`,
+`SetRow` + `SetRowHeader` + `SetRowSteppers`, `RestRing`, `LedgerIcon`) against criteria 3 (these components), 5 and 6,
+the v2 prototype (`Ledger v2.dc.html` rest card and set rows; `LedgerTabs*.dc.html` for the icon stroke idiom) and
+Pete's decisions (AA with the look kept; the design lint is a frozen tripwire, so no new raw-value spellings were
+hunted). Read: the brief, the slice-plan row, engineering-standards §7 and the public component interfaces. The tests
+below were written and compiled before I read the implementation notes' "## Slice 2" section. Toolchain: Xcode 27.0,
+iPhone 17 and Apple Watch Series 12 (46 mm) on 27.0.
+
+## What was written
+
+Four files in `LedgerKit/Tests/LedgerDesignTests/Adversarial/`, 26 test functions. There are no new snapshot
+references: every assertion reads pixels, geometry or UIKit's accessibility tree, so no `--record-snapshots` run
+was needed.
+
+| File | Isolation | Attacks |
+|---|---|---|
+| `RestRingAdversarialTests.swift`: `RestRingGeometryAdversarialTests` | `nonisolated` (values; iOS and watchOS) | The arc against a model of the prototype's SVG (`circle` from 3 o'clock toward 6, `rotate(-90deg)`, `dasharray 182`, `dashoffset 182 − 182 × p`). 500 seeded progress values (`SplitMix64`, seed 20260929): starts at (32, 3), ends at the prototype's dash end. Tiny progress (least non-zero, least normal, 1e-12, 1e-6); −0, signalling NaN, the largest finite value; `1.0.nextDown` and 0.99; the phone geometry keeps r + stroke/2 inside the frame |
+| `RestRingAdversarialTests.swift`: `RestRingRenderingAdversarialTests` | `RenderingSuites` (iOS) | Rendered at xSmall, large, xLarge, xxxLarge, AX3 and AX5 in both schemes: no ink in a 12 pt padding around the frame, ring centred; the labels "2:30", "10:00" and "0:05" inside the track's inner edge and on one line; a quarter only in the top-right quadrant (from 12, reaching 3), three quarters leaving the top-left empty; half = the right half and 0.5 ± 0.05 of a full ring's orange |
+| `ComponentAccessibilityAdversarialTests.swift` | `RenderingSuites` (iOS) | At xSmall, xxxLarge and AX5: 12 tappable cases (both PrimaryButton forms, three pill styles, the icon button, two tappable HairlineRows, SetRow pending, active, done and drop set) are labelled buttons ≥ 44 × 44 in the expected number, and the steppers are adjustable and ≥ 44. What a done row and a done check say; stepper values; relabelling a set row and the ring from outside; decorative parts hidden (icon beside text, rules, the header's hidden check, the ring's arcs, the icon button's glyph); a button accessory inside an action-less HairlineRow stays reachable and fires; disabled pills report `.notEnabled` |
+| `ComponentLayoutAdversarialTests.swift` | `RenderingSuites` (iOS) | At large, xxxLarge, AX1, AX3 and AX5, regular and Bold Text. **Truncation**: two views that differ only in their last character must render differently ("1,002.5" / "1,002.0"; "102.5"; reps "12"; set label "12"; a 45-character exercise name with a detail and an accessory; a long `PrimaryButton` title with an icon; a long pill; a long eyebrow). A positive control shows the probe sees a real cut ("1,002,002,002,002.5" at AX5). **Width**: a set row "12 · 1,002.5 × 12", steppers "2.5 kg" / "1 rep" and the header stay within the 350 pt content width. A disabled `PrimaryButton` looks disabled |
+| `ComponentContrastAdversarialTests.swift` | `nonisolated` (iOS) | Every text/background pair the components introduce (4.5:1; 3:1 for the bold CTA label per Pete), and the non-text marks that identify a control or its state (WCAG 1.4.11, 3:1): the check's pending ring, active ring, done disc and done tick, and the glyphs. On ground and surface, light and dark, with and without Increase Contrast (resolved through SwiftUI's environment; a sanity test confirms `inkMuted` resolves to .74 under Increase Contrast) |
+
+Two first-draft assertions were dropped once the implementation notes showed them to be documented decisions (below):
+the ring's arc on paper, and a disabled look for `PillButton` / `IconPillButton`. The first iteration run still had
+them: arc 2.65:1 on paper, and disabled pills and the icon button pixel-identical to enabled in both schemes. One
+test was wrong and was fixed. At fractional ring sizes (xSmall, xLarge, xxxLarge) `ImageRenderer` leaves the image's
+outer pixels partly transparent, so "ink = unlike pixel (0, 0)" counted the whole ground. It now counts opaque pixels
+unlike `#0B0B0D`. A temporary probe that attached renders for an eye check (set rows at xxxLarge to AX5, the ring
+with "10:00", a long HairlineRow) was deleted before the gate.
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` alone on iOS 27.0 via the lock (iteration) | 197 cases. Failures: this round's findings, the two documented items above, and the test fault above (fixed) |
+| Slice-2 adversarial suites plus the probe on iOS via the lock (iteration) | 16 of 17 passed. The failure is S2-4. The frame test passes at all six sizes, and the positive control sees the cut |
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06s2-g2-check.log`; waited 372 s) | Steps 0–2 green: tools, format, lint (my four files included), package graph and pins, every `scripts/tests/*.test.sh`. **Step 3, PR plan on iPhone 17 / iOS 27.0: 892 tests, 885 passed, 2 skipped, 5 failed. The five are this round's red tests (S2-1 × 2, S2-2, S2-3, S2-4).** Every existing suite passed, including all 44 slice-2 snapshot references and `LedgerUITests/Smoke`. Longest case 5.93 s (`Smoke`); longest `LedgerDesignTests` case 0.68 s. No retry. `set -e` stopped the script before step 4 |
+| Step 4 by hand (`scratchpad/f06s2-g2-step4.sh`: check.sh's own build, boot, test and `check-test-results.sh` lines), via the lock | PR-Watch on Apple Watch Series 12 (46 mm) / watchOS 27.0: 827 tests, 825 passed, 2 skipped, 0 failed; 8 of 8 targets. `RestRingGeometryAdversarialTests` 5/5 |
+| Step 5 by hand: `scripts/coverage-gate.sh` on both bundles | Exit 0. LedgerDesign 96.20 % (887 / 922), overall 98.01 % |
+| `scripts/check.sh --fast` | OK: 687 host tests. My files compile for macOS too |
+
+## S2-1. A done set sounds like a pending one, and "selected" means two things — design question (accessibility)
+
+Repro (iOS 27.0): `ComponentAccessibilityAdversarialTests.setRow_doneRow_isDistinguishableFromPending` and
+`setRow_doneCheck_saysDoneInWords`, on `SetRow(number: "2", weight: "185", reps: "5", state: s, checkLabel: "Log set 2")`.
+
+| State | Row element (selects the set) | Check element |
+|---|---|---|
+| pending | "2, 185, 5", no value, button | "Log set 2", no value, button |
+| active | "2, 185, 5", button + **selected** | "Log set 2", button |
+| done | "2, 185, 5", button (**same as pending**) | "Log set 2", button + **selected** |
+
+A sighted lifter sees a done set at once: muted numbers and a filled orange disc. VoiceOver gives no sign of it on the
+row, and on the check the only sign is "selected", the word the row next to it uses for "active". The check's label
+also stays "Log set 2" on a set that is already logged, where activating it un-logs the set. The done state is
+announced, as the brief asks, but only as an ambiguous trait. Options: a value on the row ("Done", "Current set"), a
+value or `.isToggle` on the check, or a check label per state (`checkLabel` could take the state).
+
+## S2-2. The steppers are adjustable with no value — minor bug (accessibility)
+
+Repro: `ComponentAccessibilityAdversarialTests.steppers_adjustable_haveAValue`. Both elements are "5 lb" / "1 rep" with
+the adjustable trait and an empty value. VoiceOver announces an adjustable element's value after each swipe, so a
+swipe up on "5 lb" changes the weight and says nothing about it; the new weight is in the row above, which VoiceOver
+is not on. The label names the step, not the quantity ("Weight"). `SetRowSteppers(weightStep:repStep:onWeight:onReps:)`
+has no input for a value, so F10 cannot supply one. Suggested: label "Weight" / "Reps", value the current weight and
+reps, and the step as a hint.
+
+## S2-3. A set row cannot be given a spoken label, and an outer label renames the check — minor bug (accessibility API)
+
+Repro: `ComponentAccessibilityAdversarialTests.setRow_outerLabel_relabelsTheRowOnly`. VoiceOver reads the row as its
+bare strings, "2, 185, 5", with no units; a drop set reads "D, 155, 5". A feature's natural fix,
+`SetRow(…).accessibilityLabel("Set 2, 185 pounds, 5 reps")`, reaches **both** elements: the check is then read as
+"Set 2, 185 pounds, 5 reps" too, and loses "Log set 2". The component takes `checkLabel` but has no equivalent for the
+row. By contrast, `RestRing` is one element, and relabelling it from outside works
+(`restRing_outerLabel_replacesTheClockLabel`, held). That matters because VoiceOver reads a bare "2:30" like a time
+of day. Suggested: a `rowLabel` (or `accessibilityLabel:`) parameter beside `checkLabel`.
+
+## S2-4. The done check's orange disc is 2.65:1 on paper — design question (WCAG 1.4.11, light scheme)
+
+Repro: `ComponentContrastAdversarialTests.nonText_meetsThreeToOne`, case "SetRow check, done disc: accent on ground":
+light 2.65:1, and 2.65:1 with Increase Contrast, which leaves the accent family alone. It passes on the white card
+(3.10) and in dark (6.34 ground, 5.98 sheet). Slice 2's decision 1 raises the pending and active rings to ≥ 3:1
+because "the set row's check is the only mark of its control". In the done state that mark is the `accent` disc,
+and on paper it falls below the same bar. The white tick inside is 3.10:1 against the disc, so the state can be read
+from the tick. The control's outline cannot. Options: accept it (the tick carries the state; record it next to the
+ring-arc exemption), ring the done disc in `accentText` on paper (5.14:1), or fill it with `accentText` on paper
+(the tick would then be 6.03:1). Only light mode is affected.
+
+## S2-5. The snapshot tests never show a pressed control, Increase Contrast, or light at AX5 — minor (test coverage)
+
+Repro: `grep -rn "isPressed\|accessibilityContrast\|increasedContrast" LedgerKit/Tests/LedgerDesignTests/ComponentSnapshotTests.swift`
+finds nothing. The galleries cover every other state asked for (disabled `PrimaryButton`; pending, active and done set
+rows; the drop set "D"; every pill style; full, half and empty rings), in the 6-image matrix plus AX5 and Bold Text
+sheets. Not covered:
+- **Pressed**: `LedgerPressStyle`'s 0.6 dimming is in every button and in no test. `ButtonStyleConfiguration` cannot
+  be built in a test, so this needs a seam (for example an internal view that takes `isPressed`).
+- **Increase Contrast**: `hairline` and `hairlineStrong` step up to .20 / .30. Those are every rule, outline, pill
+  border and the ring's track, and no component render shows them.
+- **Light scheme at AX5 or with Bold Text**: both extra sheets are dark only.
+
+## Documented, not re-raised
+
+- The ring's `accent` arc is 2.65:1 on paper and 1.98:1 against its own light track. Decision 1 exempts it: the
+  countdown carries the same information.
+- `PillButton` and `IconPillButton` have no disabled look (decision 7). Measured: pixel-identical to enabled in both
+  schemes; VoiceOver says "dimmed" (`disabledSecondaryButtons_areNotEnabled`, held). `LedgerPressStyle`'s doc comment
+  ("the label draws its own idle and disabled looks") is true only of `PrimaryButton`.
+- The ring label is `numeralS` (700 15) against the prototype's 500 16 (decision 2); the prototype's track is .12
+  against `hairlineStrong` .14.
+
+## Attacked and held
+
+- **Ring geometry against the prototype.** For 500 seeded progress values the arc starts at (32, 3) and ends within
+  0.25 pt of the SVG dash's end. The prototype's 182 dash on a 182.21 circumference accounts for up to 0.21 of that.
+  Start at 12 o'clock and clockwise direction match `rotate(-90deg)` on an SVG circle. Tiny progress draws at most a
+  dot at 12 o'clock, never a full or reversed ring. −0 and signalling NaN draw nothing, and the largest finite value
+  draws the full 58 × 58 ring. `1.0.nextDown` ends at 12 o'clock, and 0.99 ends just left of it. Below 0, above 1,
+  ±∞ and NaN are already covered by `RestRingGeometryTests`.
+- **Ring as drawn, xSmall to AX5, both schemes.** Nothing lands in the padding: the stroke stays inside its frame
+  with margin, and the ring is centred to within 1 px. The quarter and three-quarter direction checks, and half as
+  the right half at 0.5 ± 0.05 of a full ring's orange, all hold at every size. "2:30", "10:00" and "0:05" stay
+  inside the track's inner edge by more than 1 pt, on one line, up to AX5.
+- **Reduce Motion.** No component animates on its own: there is no `.animation` or `withAnimation` in `Components/`.
+  `RestRingArc` sweeps only when a caller animates it, so honouring Reduce Motion is F10's job.
+- **Hit targets and labels at xSmall, xxxLarge and AX5.** All 12 tappable cases hold, and the steppers are 44 pt tall
+  at every size. Decorative icons, rules, the header's hidden check and the ring's arcs are hidden. A `PillButton`
+  inside an action-less `HairlineRow` stays a reachable button and fires.
+- **Dynamic Type through AX5, with and without Bold Text.** Nothing in the truncation list is cut, and the positive
+  control proves the probe can see a cut. Set rows, steppers and the header stay within 350 pt. Observed by eye: at
+  AX5 a four-digit weight shrinks to about half its scaled size beside full-size reps. That is decision 5's 0.5
+  floor, and it is still larger than at the default size.
+- **Contrast.** Every text pair holds in both schemes, with and without Increase Contrast. Lowest: `inkMuted` on
+  paper, 4.83:1. The rest: `accentText` 5.14 on paper, 6.34 on dark; the filled pill's ground on ink, 15.6 / 17.6;
+  white on accent, 3.10, which holds under Pete's 3:1 rule for the bold label. Non-text marks: pending ring ≥ 4.83,
+  active ring ≥ 5.14, done tick 3.10, glyphs (`inkSecondary`) ≥ 6.74. The one exception is S2-4.
+- **Tokens only (review).** Colour, type, spacing, radius and hairline all come from tokens. The remaining raw numbers
+  are named, sourced component dimensions inside `LedgerDesign`: 54 pt CTA, 44 pt target, ring 64 / 29 / 2.5, the
+  icon grid and stroke widths, the 22 / 12 label column, 0.6 pressed opacity, 1.3 Bold Text stroke and the 0.5 scale
+  floor.
+- **Criteria 5 and 6** hold beyond their own tests: the rendered half ring at every size and in both schemes, and
+  `PrimaryButton`'s label, button trait and 44 pt target at xSmall, xxxLarge and AX5.
+- **Previews compile.** `Components+Previews.swift` builds in the gate's Debug builds for iOS and watchOS.
+- **Isolation.** The two value suites are `nonisolated`, and the three rendering suites sit under `RenderingSuites`.
+  The only randomness is seeded.
+
+Verdict: criteria 3, 5 and 6 hold for slice 2, and the geometry, layout, hit targets and token use have no bugs. The
+slice is not ready to close: two minor accessibility bugs (S2-2, S2-3) and two design questions (S2-1 on the done-state
+announcement, S2-4 on the light-mode done disc) need a fix or Pete's call, and S2-5 is a test-coverage gap.
+
+# Slice 2 — round 2 (close-out, `e085375`)
+
+Scope: fix round 1 only (implementation notes, "### Slice 2 — fix round 1"; `git show e085375`): the VoiceOver
+strings, the stepper values, the done disc in `accentText`, the `.contain` boundary on the check, the pressed seam and
+the five new references. Pete's rules applied: WCAG AA with the look kept, and Bold Text followed. The design lint is a
+frozen tripwire, so no spellings were hunted. Toolchain: Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46 mm) on
+27.0.
+
+## What was written
+
+- `Adversarial/SetRowContainerAdversarialTests.swift` (`RenderingSuites`, iOS): two functions, four cases. It reads the
+  accessibility containers above each element, which `accessibilityElements` flattens away: a positive control with no
+  outer label (passes), and S2-6 in the pending, active and done states (red).
+- A temporary probe, deleted before the gate. It dumped UIKit's whole tree, containers included, for each SetRow state,
+  with and without an outer label and hint, and for `SetRowGallery` at light large and dark AX5. It drove three stepper
+  harnesses (lb, kg, no value) and a live row through `accessibilityIncrement` / `Decrement` / `Activate`, and read
+  the values back from the same element objects VoiceOver holds.
+- The new and re-recorded references were opened and sampled pixel by pixel with a CoreGraphics tool (scratchpad
+  `s2r2/px`). The three changed `setRow_appearance` light references were diffed against `4543e13`.
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` alone on iOS 27.0 via the lock (iteration, with the new file) | 208 cases: 206 passed, 1 skipped, **1 failed: S2-6** in all three states. The positive control passes. Every fix-round test and every round-1 adversarial test passes |
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06s2-closeout.log`) | Steps 0–2 green: tools, format, lint (my new file included), package graph and pins, every `scripts/tests/*.test.sh`. **Step 3, PR plan on iPhone 17 / iOS 27.0: 901 tests, 898 passed, 2 skipped, 1 failed. The failure is S2-6's red test (three arguments).** Every other test passed, including the five new and three re-recorded references. `set -e` stopped the script before step 4 (193 s; the lock was free) |
+| Step 4 by hand (`scratchpad/s2r2/step4.sh`: check.sh's own build, boot, test and `check-test-results.sh` lines), via the lock | PR-Watch on Apple Watch Series 12 (46 mm) / watchOS 27.0: 827 tests, 825 passed, 2 skipped, 0 failed; 8 of 8 targets |
+| Step 5 by hand: `scripts/coverage-gate.sh` on both bundles | Exit 0. LedgerDesign 96.39 % (936 / 971), overall 98.05 % |
+
+## Close-out of S2-1 to S2-5
+
+| # | Status | Evidence |
+|---|---|---|
+| S2-1 | **Resolved** | The row's value is "Current set" when active, "Done" when done, and empty when pending. The row is never selected. The check is selected only when done, and then its value is "Done" (probe, `setRow_state_isSpokenInWords`, round 1's two tests green). On a live row, activating the check turns the same element object to "Log set 2", "Done", selected, in place. The label stays "Log set 2" on a logged set. That is the caller's `checkLabel`, which F10 can word per state, so it is not re-raised |
+| S2-2 | **Resolved when the caller passes a value; still open without one (S2-7)** | lb: "185 pounds", then "190 pounds" after an increment. kg: "82.5 kilograms", then "85.0 kilograms". Reps: "2 reps", then "1 rep", then "0 reps". All were read from the same element object, which the re-read returned identically, so VoiceOver keeps focus on it. Without a value, the value is the step and never changes (S2-7) |
+| S2-3 | **Resolved for the two elements; the label leaks one level up (S2-6)** | `.accessibilityLabel(…)` from outside renames the row, keeps its state value ("Done", "Current set") and leaves the check "Log set 2". But the same label now sits on the check's new container |
+| S2-4 | **Resolved** | The disc is `#B2390E` on paper (sampled in `setRow_appearance…light-large` and the light Increase Contrast sheet) and `#FF5B22` in dark. It is at least 3:1 on every background (table under "Attacked and held"). The re-recorded light references differ from `4543e13` only inside the disc: x 339–369, y 94–124 at large, x 338–369, y 93–124 at xLarge, x 328–375, y 91–139 at AX3 |
+| S2-5 | **Resolved** | Pressed and Increase Contrast are really drawn, and light AX5 is covered (pixel evidence under "Attacked and held") |
+
+## Audit of fix round 1's test edits
+
+- `ComponentContrastAdversarialTests.nonText`: the done disc and tick pairs now name `accentText`. **Accept.** They name
+  the colour the check now draws, and the bar, grounds, schemes and Increase Contrast are unchanged. This value test
+  would not notice a revert to `accent`, but the three light `setRow_appearance` references would, since they pin
+  `#B2390E`. No other file of mine was touched (`git show --stat e085375`).
+- `ComponentAccessibilityTests`: SetRow and stepper tests moved out, and `expectButton` / `expectTarget` became
+  internal. **Accept.** Nothing was lost. The dropped `.selected` checks live on in `setRow_state_isSpokenInWords`,
+  which is stricter (the row is never selected).
+- `SetRowAccessibilityTests.setRow_accessibility_rowAndCheckAreButtons`, `setRow_activation_callsTheMatchingAction`,
+  `setRowSteppers_accessibility_twoAdjustableSteppers`, `setRowSteppers_adjust_stepsTheMatchingValue` (moved): **Accept.**
+- `setRow_state_isSpokenInWords`: **Accept.**
+- `setRow_outerLabel_namesTheRowOnly`: **Accept as far as it reaches.** It reads leaf elements only, so it cannot see the
+  label landing on the check's container (S2-6).
+- `setRowSteppers_value_isTheCurrentQuantity`: **Reject the second half.** It asserts that a stepper without a value has
+  its label as its value (`["5 lb", "1 rep"]`), which pins the duplicate in S2-7. The first half is accepted.
+- `setRowSteppers_adjust_changesTheAnnouncedValue`: **Accept.** The probe adds what its re-read hides: the value changes
+  on the same element object, and the re-read returns that object.
+- `ComponentSheetSnapshotTests.allComponents_pressed_…`, `…_increasedContrast_…`, `setRow_lightAccessibility5_…`:
+  **Accept.** The pixels show the states are real (below).
+- `LedgerSnapshotTesting.withLiveAccessibilityElements`: **Accept.** It is test support, and `withAccessibilityElements`
+  keeps its behaviour on top of it.
+- Round 1's own `steppers_adjustable_haveAValue` was not edited. It now passes only on S2-7's fallback. It was written
+  before the API could take a value. The S2-7 fix may edit its call to pass one, and I accept that edit in advance.
+
+## S2-6. A label set on a SetRow from outside also labels the container around its check — minor bug (accessibility)
+
+Repro (iOS 27.0): `SetRowContainerAdversarialTests.setRow_outerLabel_doesNotLabelTheCheckContainer`, red in the pending,
+active and done states. The fix for S2-3 stops the outer label at `.accessibilityElement(children: .contain)` on the
+check. It stops there by landing on the container that modifier creates. The probe's tree for
+`SetRow(… .done …).accessibilityLabel("Set 2, 185 pounds, 5 reps")`:
+
+| Node | Element | Label | Value | Container type |
+|---|---|---|---|---|
+| row button | yes | "Set 2, 185 pounds, 5 reps" | "Done" | none |
+| the check's container | no | **"Set 2, 185 pounds, 5 reps"** (and an outer hint too) | — | `semanticGroup` (4), `shouldGroupAccessibilityChildren` |
+| └ check button | yes | "Log set 2" | "Done", selected | none |
+
+Without an outer label the container is unlabelled. That case is the positive control, and it passes. With one, the
+row's words are on a labelled semantic group that VoiceOver moves into on its way to the check. UIKit's documentation
+for `semanticGroup` says assistive technologies may read the container's `accessibilityLabel` "to output appropriate
+information about the semantic group". Apple's `.contain` example labels its containers ("Users", "Messages"). WWDC21
+10119 adds that these containers join VoiceOver's Containers rotor. So the set is likely spoken twice in a
+row: "Set 2, 185 pounds, 5 reps, Done, button", then the same words again before "Log set 2". This was not heard on a
+device this round; the tree state is measured. The doc comment on `SetRow` says the outer label "stops at the row",
+which the tree contradicts. `.contain` also puts every check alone in the Containers rotor, so that rotor jumps from
+check to check and skips the rows. The fix round's probe found `.contain` to be the only boundary an outer label
+respects, so the likely fix is S2-3's first suggestion: a spoken-label parameter on `SetRow` (for example
+`accessibilityLabel:` beside `checkLabel`) applied to the row button inside the component, with no outer label and no
+`.contain` needed.
+
+## S2-7. A stepper without a value repeats its label as its value, and a swipe changes nothing VoiceOver says — minor bug (accessibility API)
+
+Repro: the fix round's own `setRowSteppers_value_isTheCurrentQuantity` asserts that
+`SetRowSteppers(weightStep: "5 lb", repStep: "1 rep") { _ in } onReps: { _ in }` has values `["5 lb", "1 rep"]`: label
+"5 lb", value "5 lb". In the probe, a harness that omits the value moved its weight 185 → 190 → 180 (one increment,
+two decrements), and the element's value stayed "5 lb" throughout. That is S2-2 exactly: the swipe changes the weight, and VoiceOver
+repeats the step. It also says the step twice ("5 lb, 5 lb, adjustable"). `weight` and `reps` are optional with a `nil`
+default, so this is the API's default path, and F10 gets it silently by leaving them out. There is no new red test: the
+fix is an API shape (required parameters), which a runtime test cannot pin without failing to compile afterwards. The
+assertion above is the repro. Suggested: make `weight` and `reps` required and drop the fallback. My round-1 call and
+the fix round's no-value calls then pass values.
+Design question folded in: with a value, the label is still the step, so VoiceOver reads "5 lb, 185 pounds, adjustable"
+and "1 rep, 5 reps, adjustable". S2-2 suggested "Weight" / "Reps" as the label, with the step as a hint. That half was
+not taken, and a listener has to work out which of the two numbers is the weight.
+
+## Attacked and held (round 2)
+
+- **"Current set" and "Done" on the right elements.** The active row says "Current set" and its check says nothing extra.
+  A done row says "Done", and its check says "Done" with `selected`. A pending row and check have no value. This held at
+  light large and at dark AX5 in the gallery. "Selected … Done" on one check is redundant, not wrong: round 1's own test
+  required the trait.
+- **The check's own "Log set N" under `.contain`.** The check is a leaf button labelled "Log set 1/2/3" or "Log drop set",
+  44 × 44 at large and 59.3 × 59.3 at AX5, and activation fires `onCheck`. An outer label and hint never reach it.
+- **Rotor order through a row.** The swipe order is the same at light large and dark AX5 (steppers stacked): "#", "lb",
+  "reps", row 1, check 1, row 2, check 2, the weight stepper, the reps stepper, row 3, check 3, row D, check D. Each
+  row's check follows it, and the steppers sit between the active row and the next one. Without an outer label nothing
+  new is spoken (S2-6 covers the case with one).
+- **Stepper values.** lb and kg both announce the caller's words, and increment and decrement update the value on the
+  same element object in both directions. The component passes the caller's words through unchanged: "2 reps", then "1 rep",
+  then "0 reps". Singular and clamping are the caller's job.
+- **The `accentText` disc**, WCAG 2.x, ≥ 3:1. Increase Contrast leaves the accent family and both grounds unchanged, so
+  every row holds with it too:
+
+  | Scheme | Disc | On ground | On surface | On `accentSoft` over ground / surface | White tick on the disc |
+  |---|---|---|---|---|---|
+  | light | `#B2390E` | 5.14 (paper) | 6.03 (card) | 4.54 / 5.25 | 6.03 |
+  | dark | `#FF5B22` | 6.34 | 5.98 (sheet) | 5.32 / 4.92 | 3.10 |
+
+  While a finger is down the whole check is at 0.6. The disc is then 2.62–2.89:1 against the ground, and the light
+  tick 1.92–2.04:1 against the dimmed disc. That is transient press feedback over a state already announced, so it is
+  noted, not raised.
+- **The new snapshots, opened and sampled.** Pressed is real 0.6 compositing. The `PrimaryButton` fill is `#F99670`,
+  which is accent at .6 on paper, and the done disc is `#CB8164`. Static parts are unchanged: the rule under a static
+  row is `#DEDCD5`, hairline .08. Increase Contrast is real. That same rule is `#C3C2BB` (.20), in dark `#3A3939` against
+  `#1E1D1F`. Ring tracks, check rings and outlines are visibly darker, and muted text steps up. The disc is `#B2390E` in
+  light and `#FF5B22` in dark. Light AX5: nothing is cut, the steppers stack, and "102.5" shrinks beside a full-size
+  "12" (decision 5). One harmless oddity: the pressed sheet also dims the disabled "Save workout", a state a disabled
+  button never reaches.
+- **Scope of the edit.** Product changes are confined to `SetRow`, `SetRowSteppers`, `ControlStyle`, the previews and
+  the snapshot helper. The `ledgerDrawsPressed` key is internal, defaults to off, and only previews and tests set it.
+
+**G2 cannot close yet, because S2-6 is open.** With the outer label that `SetRow`'s doc comment prescribes,
+the row's spoken label also sits on a labelled semantic group around the check, where VoiceOver is likely to read it
+a second time. S2-7 is open too: the no-value default brings S2-2 back. It needs a small API change, or Pete accepting
+the optional default. Everything else in fix round 1 holds. S2-1, S2-4 and S2-5 are resolved; S2-2 and S2-3 are
+resolved on their main paths. The disc meets 3:1 everywhere with the tick intact, and the new snapshots really
+exercise pressed and Increase Contrast.
+
+# Slice 2 — round 3 (close-out, `669d6d3`)
+
+Scope: fix round 2 only (`git show a9e9bd8`; implementation notes, "### Slice 2 — fix round 2"). `669d6d3` merges
+main and changes nothing under `LedgerKit/` or `Apps/` (`git diff a9e9bd8 669d6d3 --stat -- LedgerKit Apps` is
+empty). Pete's rules applied: WCAG AA with the look kept, and Bold Text followed. The design lint is a frozen
+tripwire, so no spellings were hunted. Toolchain: Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46 mm) on 27.0.
+
+## What was run
+
+- **A temporary probe**, `Adversarial/ZZS2R3Probe.swift`. It was deleted before the gate, and a copy is in scratchpad
+  `s2r3/`. It covered:
+  - 19 ways a feature can label a `SetRow`, plus the unlabelled row;
+  - lb and kg stepper harnesses, driven through `accessibilityIncrement` / `Decrement` and read back from the same
+    element objects;
+  - filled pills: static, disabled, pressed, at AX5, as a `HairlineRow` accessory, and a live two-pill filter;
+  - ten component states that the tree table does not list.
+- **Two mutation runs** of `LedgerDesignTests` on iOS, through the lock, with 14 product mutations in total. A script
+  applied them (`s2r3/mutate.py`), and `git checkout` reverted them. The tree was clean at `669d6d3` before the gate.
+- **Four host builds** (`swift build --build-tests`). Each removed `nonisolated` from one of the four enums.
+- **The full gate, once.**
+
+## Results
+
+| Run | Result |
+|---|---|
+| `LedgerDesignTests` + probe, iOS 27.0, via the lock (`s2r3/base.xcresult`) | 214 cases: 213 passed, 1 skipped, 0 failed |
+| Mutation run m1 (`s2r3/m1.xcresult`), 6 mutations | 10 tests failed. The tree test failed in 22 of its 37 cases. Every mutation was caught (table in the audit) |
+| Mutation run m2 (`s2r3/m2.xcresult`), 8 mutations | 11 tests failed. The tree test failed in 17 of its 37 cases. Every mutation was caught |
+| Host builds, `nonisolated` removed from one enum at a time | All four fail to compile in `ComponentValueTests.swift`. The errors: "main actor-isolated conformance of 'SetRowState' to 'Hashable' cannot be used in nonisolated context"; the same for `Equatable` in the `actor`; and the same for `PillButton.Style`, `Eyebrow.Tint` and `SetRowSteppers.Direction` |
+| `scripts/check.sh`, full, **once**, via the lock (`scratchpad/f06s2-r3.log`) | **Green, 287 s, with no wait for the lock.** Steps 0–2 green. PR-iOS: 903 tests, 901 passed, 2 skipped, 0 failed, 17 of 17 targets. PR-Watch: 828, 826, 2, 0, 8 of 8. The skips are the two nightly-only tests. Every reference matched. Coverage: LedgerDesign 96.44 % (949 / 984), overall 98.06 %. The implementer's counts reproduce exactly |
+
+## Close-out of S2-6, S2-7 and R2-S1 to R2-S3
+
+| # | Status | Evidence |
+|---|---|---|
+| S2-6 | **Resolved** | No container is left anywhere. None of the 20 probe trees, in any state, at large or AX5, has a container above an element. Reintroducing one fails the tree test at once. m1 put `.contain` back on the check: all 8 SetRow cases failed with `in [""]`. m2 wrapped the whole row: all 8 failed again |
+| S2-7 | **Resolved** | `SetRowSteppers` has one public init, and it requires `weight` and `reps`. The fallback is gone. Both units are announced (below) |
+| R2-S1 | **Resolved** | All six public value types in `Components/` are `nonisolated`. `ComponentValueTests` really guards them: removing `nonisolated` from any one of the four breaks the build |
+| R2-S2 | **Resolved** | A filled pill's traits are button + selected (9). Outline and ghost are button (1); a disabled filled pill is 265. In a live filter, activating "Back" moves `selected` from "Chest" to "Back" on the same two element objects. Dropping the trait fails only the tree test (m1, 2 cases). Adding it to every style fails the outline and ghost cases (m2) |
+| R2-S3 | **Resolved** | Same fix as S2-7 |
+
+Re-check of S2-1 to S2-5:
+
+- **S2-1 holds.** The row's value is "Pending", "Current set" or "Done". The check is selected, with the value
+  "Done", only when the set is logged. The tree table pins this, and m2 showed that dropping either the value or the
+  trait fails it.
+- **S2-2 holds.** The values come from the caller:
+  - lb: 185 → 190 → 180 pounds;
+  - kg: 82.5 → 85.0 → 80.0 kilograms;
+  - reps: 2 → 1 rep → 3 reps.
+
+  Each change is on the same element object VoiceOver holds, and the kg steppers stack correctly at AX5.
+- **S2-3 holds only in the documented calling form; S2-8 below covers the rest.**
+- **S2-4 and S2-5 hold.** No colour or drawing code changed. The gate matched every reference, including the three
+  light `setRow_appearance` references that pin the `#B2390E` disc, and the pressed, Increase Contrast and light AX5
+  sheets.
+
+## Audit of fix round 2's test edits
+
+- `ComponentAccessibilityAdversarialTests.steppers_atExtremeTextSizes_areAdjustableTargets`: the call now passes
+  "185 pounds" / "5 reps", and the assertions are unchanged. **Accept.**
+- `ComponentAccessibilityAdversarialTests.steppers_adjustable_haveAValue`: the same call-site change, which I accepted
+  in advance, with the assertion unchanged. **Accept.** m2 showed it still fails when the stepper drops its value.
+- `ComponentLayoutAdversarialTests`, case "SetRowSteppers 2.5 kg / 1 rep": the call now passes "82.5 kilograms" /
+  "12 reps". The values are speech only and draw nothing, and the assertions are unchanged. **Accept.**
+- `ComponentAccessibilityAdversarialTests.setRow_doneRow_isDistinguishableFromPending`: the comment is updated
+  (R2-N11). The new wording is accurate. **Accept.**
+- `SetRowAccessibilityTests.setRow_accessibility_rowAndCheckAreButtons`: `contains` becomes the exact
+  `"2, 185, 5"`. **Accept**: it is stricter.
+- `SetRowAccessibilityTests.setRow_state_isSpokenInWords`: a pending row's value is now "Pending". **Accept**: it
+  follows the decision.
+- `SetRowAccessibilityTests`: stepper call sites in `…twoAdjustableSteppers` and `…stepsTheMatchingValue`.
+  **Accept.**
+- `SetRowAccessibilityTests.setRowSteppers_value_isTheCurrentQuantity`: the fallback half is removed. **Accept**: it
+  pinned the rejected behaviour, and with a single init that requires the values there is no fallback left to test.
+- `RestRingGeometryTests.halfProgress_arcLength_isHalfTheCircumference` now measures `RestRingArc.path(in:)`, the
+  shape the ring strokes. **Accept**: `RestRingArc` is `nonisolated`, so it still runs in a value suite.
+- The `ComponentSnapshotTests` header comment. **Accept.**
+- `AccessibilityAutomation`: `UInt8` prototypes, and `Issue.record` when the switch is missing. **Accept.**
+- `AccessibilityTreeTests` (new). **Accept.** All 14 mutations failed it. Where one run mutated a component twice,
+  each mutation showed separately in the failure's `found` line:
+
+  | Mutation | Cases that failed |
+  |---|---|
+  | `.contain` back on the check | 6 SetRow + 2 gallery |
+  | `.contain` around the whole row | 6 SetRow + 2 gallery |
+  | `.contain` around both steppers | 3 stepper + 2 gallery |
+  | Steppers swapped | 3 stepper + 2 gallery |
+  | The row's value removed | 6 SetRow + 2 gallery |
+  | A stepper's value removed | 3 stepper + 2 gallery |
+  | `.isSelected` dropped from the filled pill | 2 filled pill (no other test fails) |
+  | `.isSelected` added to every style | outline, ghost, button-accessory row |
+  | `.isSelected` dropped from the done check | done, done named, 2 gallery |
+  | `.updatesFrequently` dropped | 4 ring |
+  | `.isHeader` dropped | 2 Eyebrow |
+  | `.combine` dropped from the header | header + 2 gallery |
+  | `.combine` dropped from an action-less `HairlineRow` | detail, text accessory, button accessory |
+  | IconPillButton label dropped | 2 IconPillButton |
+
+  The 37 cases are the list the notes claim. It leaves out:
+  - disabled `PillButton` and `IconPillButton`;
+  - `HairlineRow` at accessibility sizes;
+  - an action row with a text accessory;
+  - the named row in the pending and active states.
+
+  The probe read all of them, and all are right (under "Attacked and held"). The table compares label, value, traits
+  and containers, not hints or frames. No component sets a hint, and the frames are asserted elsewhere.
+- `ComponentValueTests` (new). **Accept.** All four host mutations broke its build.
+- Three tests were not edited but now test something else. My `setRow_outerLabel_relabelsTheRowOnly` and
+  `SetRowContainerAdversarialTests`, and fix round 1's `setRow_outerLabel_namesTheRowOnly`, all call
+  `.accessibilityLabel` on a value typed `SetRow`. They now reach the new overload, not SwiftUI's modifier, so they
+  prove the documented form and nothing more. m1 showed that `SetRowContainerAdversarialTests` no longer notices an
+  unlabelled container. The tree test does. **Accept as far as they reach**, and S2-8 covers the other forms.
+
+## S2-8. A row label renames the check unless it is a `String` put on a bare `SetRow` — minor bug (accessibility API)
+
+Repro: the probe (`s2r3/ZZS2R3Probe.swift.bak`, test "overload resolution forms"; output in
+`s2r3/probe-out-base.txt`). The row is a done `SetRow` with `checkLabel: "Undo set 2"`, and every form applies the
+label "Set 2, 185 pounds, 5 reps":
+
+| Form | Row | Check |
+|---|---|---|
+| `row.accessibilityLabel("…")`: a literal, an interpolated literal, a `String` or `String(localized:)`; also inside `ForEach`, applied twice, at AX5, or in the pending and active states | "Set 2, 185 pounds, 5 reps" | "Undo set 2" ✓ |
+| `row.padding(0).accessibilityLabel(s)` | "Set 2, 185 pounds, 5 reps" | **"Set 2, 185 pounds, 5 reps"** |
+| `row.id(1).accessibilityLabel(s)` | same | **same** |
+| a function that returns `some View`, then `.accessibilityLabel(s)` | same | **same** |
+| `AnyView(row).accessibilityLabel(s)` | same | **same** |
+| `row.accessibilityLabel(Text(s))`, directly on the `SetRow` | same | **same** |
+| `row.accessibilityLabel(key)`, a `LocalizedStringKey`, directly on the `SetRow` | same | **same** |
+| `func f<V: View>(_ v: V) { v.accessibilityLabel(s) }` | same | **same** |
+
+In every other form VoiceOver hears the check as the row's words: "Set 2, 185 pounds, 5 reps, Done, selected, button".
+It loses "Undo set 2": the check now sounds like the row plus "selected", and nothing says that activating it
+un-logs the set. That is S2-3 exactly, and for these forms it is worse than fix round 1. There, the `.contain`
+boundary held whatever the form, and the check always kept its label (S2-6 was a duplicate on the container, not a
+lost name).
+
+**Cause.** `SetRow.accessibilityLabel(_ label: String) -> SetRow` shadows SwiftUI's `View.accessibilityLabel`. Swift
+picks between the two by the static type of the receiver and of the argument. Every call that doesn't match `(SetRow,
+String)` exactly compiles without a warning and falls back to SwiftUI's modifier, which labels both elements.
+
+**The doc names half the limit.** It warns about "another modifier". It doesn't warn that a `Text` or
+`LocalizedStringKey` argument, applied directly to the `SetRow` as the doc says, also misses the overload.
+
+**Engineering standards §7 makes those two forms the likely ones.** All user-visible strings go through the String Catalog, and
+`Text` / `LocalizedStringKey` are SwiftUI's catalog-typed labels. The bare literal goes the other way: it reaches the
+overload but is a plain `String`, so it is not looked up in the catalog either (under "Noted").
+
+**Impact.**
+- No shipped screen uses `SetRow` yet, so nothing is wrong on a device today.
+- F10 gets the bug the first time it labels a row in any of these seven forms.
+- No F06 test would catch it, because the tree table pins only the literal form.
+
+**Suggested fix (small).**
+- Give the row label a name that doesn't collide with SwiftUI's. Either:
+  - an init parameter, as S2-3 and S2-6 suggested (`SetRow(…, checkLabel:, accessibilityLabel: String? = nil, …)`); or
+  - a method only `SetRow` has (for example `.rowLabel(_:)`).
+- Then each wrong form above becomes a **compile error**, not a silent fallback. A `Text` doesn't convert to
+  `String`, and `.rowLabel` doesn't exist on `some View`.
+- Add a tree-table case for the new spelling. The doc should say that SwiftUI's `.accessibilityLabel` on a `SetRow`
+  renames both stops.
+
+## Noted, not blocking
+
+- **The same mechanism for other outer modifiers.** An outer `.accessibilityHint` or `.accessibilityValue` on a
+  `SetRow` reaches both elements. The probe shows the hint "Selects the set" on the check too, and a caller's value
+  "Logged" replacing the check's "Done". The component offers no hint or value from outside, and nothing invites a
+  feature to add one. The doc line suggested under S2-8 covers it.
+- **Localisation of the row label.** On the `String` overload a literal or interpolated label is used verbatim. It is
+  not looked up in, or extracted to, the String Catalog, as SwiftUI's own `.accessibilityLabel("…")` would be. That
+  is consistent with architecture §11 ("components take strings the caller has already localised"). The `SetRow` doc
+  could name `String(localized:)`.
+- **The tree table's gaps**, listed in the audit. Each was read in the probe and is correct.
+- **`ComponentValueTests` on the host.** The notes say it "runs on … the host". `check.sh --fast` builds
+  `LedgerDesignTests` on the host but runs only `LedgerDomainTests|LedgerPersistenceTests`. The guard is a compile
+  guard, so building is what counts, and the gate runs it on iOS and watchOS.
+
+## Attacked and held (round 3)
+
+- **Direct naming.** The row takes the label and keeps its state value, and the check keeps `checkLabel`, value and
+  trait. This holds for a literal, an interpolated literal, a `String` and `String(localized:)`. It holds in all three
+  states, inside `ForEach` in a `HairlineList`, when applied twice (the last label wins), and at dark AX5 (row
+  334.7 × 56.7, check 59.3 × 59.7). No container appears in any of the 20 trees.
+- **Stepper announcements in lb and kg.** Covered under S2-2 above.
+  - Labels stay "5 lb" / "2.5 kg" / "1 rep".
+  - Each value changes on the element object VoiceOver holds (`===` before and after), and the re-read agrees.
+  - Singular "1 rep" is the caller's word.
+  - The steppers are 197 × 44 side by side and stack to 402 × 54.7 at AX5.
+  - Neither stepper can be built without a value: there is one public init.
+- **Nonisolated enums.** `SetRowState`, `PillButton.Style`, `Eyebrow.Tint` and `SetRowSteppers.Direction` compile as
+  stored properties of a `nonisolated` `Equatable` struct, as a `Set` element, and in an `actor`. `LedgerIcon` and
+  `RestRingGeometry` already did. Each guard is proven by mutation.
+- **Filled pill.** It is selected at large and AX5, while pressed (tree table), and while disabled (265). A caller's
+  extra trait adds to `selected` rather than replacing it (`.isHeader` gives 65545). A filled pill as the accessory
+  of an action-less `HairlineRow` makes the merged row "Chest, On", button + selected, which is right for a toggle
+  row.
+- **States outside the table, read in the probe.**
+  - Disabled pills: 257. The disabled `IconPillButton`: 257.
+  - The swap row: one button, "Dumbbell Bench Press, Similar pattern · 2 × 70 lb, Use".
+  - `HairlineRow` at AX3: text accessory 64, button accessory 1. The chevron row at AX5 is a button.
+  - `RestRing` at AX5: 576. `Eyebrow` at AX5: 65600. The header at AX5: "#, kg, reps".
+  - The light AX5 gallery: the same 11 stops, in the same order, as the table's large and AX3 galleries.
+- **Scope of the edit.** Product changes are limited to what the notes list. `import Testing` sits in
+  `LedgerSnapshotTesting`, which only test targets depend on.
+
+## Verdict
+
+**G2 cannot close, because of S2-8.**
+
+- The fix round's own targets close: S2-6, S2-7 and R2-S1 to R2-S3 are resolved.
+- The tree table is a real tripwire: 14 of 14 mutations failed it.
+- S2-1, S2-2, S2-4 and S2-5 hold. The gate is green.
+- The row-label overload, however, protects the check only for a `String` on a bare `SetRow`. It fails for a `Text`
+  or a `LocalizedStringKey` passed directly, for any modifier before it, and for any type-erased path. In each of
+  those forms the check loses "Log set N" / "Undo set N" silently. The two catalog-typed forms are the ones the
+  string-catalog standard points features to, and the doc warns about neither.
+
+**What closes it.** Rename the label so it doesn't shadow SwiftUI's modifier (an init parameter, or a `SetRow`-only
+method), add one tree-table case, and extend the doc line. That is a few product lines.
+
+**Edits I accept in advance.** My tests that call `.accessibilityLabel(spoken)` on a `SetRow` may switch to the new
+spelling, with no assertion changed: `setRow_outerLabel_relabelsTheRowOnly` and
+`SetRowContainerAdversarialTests.setRow_outerLabel_doesNotLabelTheCheckContainer`. After the rename they would
+otherwise test SwiftUI's modifier and fail.
+
+**If the orchestrator or Pete accepts the overload as it is,** the doc must also name the `Text` / `LocalizedStringKey`
+limit. Then nothing else stands in the way of G2.
+

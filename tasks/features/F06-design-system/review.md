@@ -307,3 +307,378 @@ It is the same class of hatch as `archivo(size:weight:width:)`, already an open 
 - S2 is a scope change to the lint config. It should land here too, or go to Pete at G5 if "frozen" is taken to
   include scope.
 - The Nits can go to slice 2 or 3, or to the orchestrator (N6, N7).
+
+---
+
+## Slice 2
+
+Branch `feat/F06-slice2-components` at `e085375`. Scope: `git diff chore/F32-xcode-27...HEAD` (merge base `ac2a08a`).
+F32's files are reviewed separately (PR #10) and ignored here. In scope: the phone components (`PrimaryButton`,
+`PillButton`, `IconPillButton`, `Eyebrow`, `HairlineList` / `HairlineRow` / `HairlineRule`, `SetRow` + `SetRowHeader`
++ `SetRowSteppers`, `RestRing`, `LedgerIcon`, `ControlStyle`), the test helper `AccessibilityElements.swift`, 49 new
+references, and fix round 1 (S2-1 to S2-5). Reviewed against the brief (criteria 3, 5 and 6, and Pete's decisions of
+2026-09-29), the slice plan, engineering-standards §7 and §10, architecture §11, testing-strategy §2.5 and §6, and
+Pete's standing rules (WCAG AA while keeping the look; follow Bold Text). Findings are numbered R2-… so they don't
+collide with slice 1's S1/N1 or the tester's S2-1 to S2-5.
+
+What I ran, besides reading the diff:
+
+- `/code-review high` on the slice-2 diff. It returned 10 findings; their dispositions are at the end.
+- `scripts/check.sh --lint-only` fails, but only on `LedgerKit/Tests/LedgerDesignTests/Adversarial/ZZS2R2Probe.swift`. That
+  file is untracked, belongs to the tester's in-progress round 2, and is not in the diff, so I left it alone. On the diff's
+  22 committed Swift files:
+  - SwiftFormat `--lint`: 0 of 22 need formatting.
+  - SwiftLint: clean.
+  - All six `scripts/tests/*.test.sh`: OK.
+  - `check-package-graph.sh`: matches.
+- No simulator run, because the tester holds the lock. The gate evidence is the implementer's full `check.sh` on
+  Xcode 27 (notes, fix round 1): iOS 899 tests with 0 failed, watchOS 827 with 0 failed, LedgerDesign coverage 96.39 %.
+- I opened 12 references:
+  - `setRow_…` dark-large, light-large and dark-AX3, and the light AX5 SetRow sheet;
+  - `hairlineList_…` dark-large and light-AX3;
+  - `primaryButton_…dark-large`, `restRing_…dark-large`, `pillButton_…light-large`;
+  - the Bold Text, AX5 and Increase Contrast (light) sheets.
+
+  I compared them with `Ledger v2.dc.html`:
+  - markup: the Today CTA and RECENT rows, the set grid and steppers, the rest card, the swap sheet, the filter chips;
+  - script: the `rows` colour mapping and `restOffset2`.
+
+  I also compared the icon idiom with `LedgerTabs.dc.html` / `LedgerTabsDark.dc.html`: 24-point grid, `fill:none`,
+  round caps and joins, stroke 1.9.
+- A scratch SwiftPM probe, kept in the session scratchpad with no repo edits: isolated conformances under
+  `.defaultIsolation(MainActor.self)`, Swift 6.4 (R2-S1).
+- Size, counted with a script that skips blank and comment-only lines: **700 code lines** in
+  `LedgerDesign/Components/`, which confirms the notes. `AccessibilityElements.swift` has 100 test-only lines.
+
+**Verdict: approve. 0 Blocking, 3 Should fix, 11 Nits.**
+
+### Blocking
+
+None.
+
+### Should fix
+
+#### R2-S1. Four public value enums are main-actor-isolated, so their `Equatable` can't be used off the main actor
+
+`LedgerKit/Sources/LedgerDesign/Components/SetRow.swift:3` (`SetRowState`), `PillButton.swift:7` (`Style`),
+`Eyebrow.swift:6` (`Tint`), `SetRowSteppers.swift:10` (`Direction`).
+
+**Cause.**
+- `LedgerDesign` builds with `.defaultIsolation(MainActor.self)`.
+- These four enums are not marked `nonisolated`. The value types that are marked include slice 1's types and this
+  slice's own `LedgerIcon`, `RestRingGeometry`, `LedgerHitTarget` and `SetRowSpeech`.
+- So the four enums' synthesized conformances are main-actor-isolated (SE-0470).
+
+**Evidence.** A probe package with the same settings on Swift 6.4:
+
+| Code in a second MainActor-default module | Result |
+|---|---|
+| `nonisolated func isDone(_ s: SetRowState) -> Bool { s == .done }` | error: main actor-isolated conformance of 'SetRowState' to 'Equatable' cannot be used in nonisolated context |
+| `nonisolated struct RowModel: Equatable, Sendable { var state: SetRowState }` | same error |
+| `a == b` on `PillButton.Style` inside an `actor` | same error (actor-isolated context) |
+| all three, with `nonisolated` on the enums | builds |
+
+**Impact.** F10's nonisolated presentation values, and its value-only suites, can't compare a set's state. Testing-strategy
+and slice 1 make value-only suites `nonisolated`. The compiler catches it rather than a user, but F10 would then have to
+reopen `LedgerDesign`.
+
+**Fix.**
+- Declare all four as `public nonisolated enum …`. There is no behaviour change.
+- Add a `nonisolated` test that compares a value of each type. It works as a compile-time guard, for example a small
+  `ComponentValueTests`, or a case in `RestRingGeometryTests`.
+
+#### R2-S2. A filled `PillButton` means "selected", but VoiceOver isn't told
+
+`PillButton.swift:3-4` (the doc calls `.filled` "the selected filter"); `:21-33`.
+
+**Evidence.**
+- In v2 a filled pill only ever marks the selected Library filter or jump chip (script:
+  `bg: s.filter === f ? TEXT : 'transparent'`).
+- The component draws that state but adds no `.isSelected` trait.
+- So VoiceOver reads "Chest, button" and "Back, button" the same way. The state is visual only, which fails WCAG
+  1.3.1 / 4.1.2 under Pete's AA rule.
+- The style that means "selected" belongs to the component, so the trait does too.
+
+**Fix.**
+- Add `.accessibilityAddTraits(style == .filled ? .isSelected : [])` on the `Button`, and a line in the doc comment.
+- Add one assertion to `ComponentAccessibilityTests.pillButton_accessibility_labelledButtonWithTarget`: `.filled` is
+  `.selected`, and the other two styles are not.
+
+If the orchestrator would rather keep `.filled` as a neutral emphasis, the doc must say instead that the caller adds
+`.isSelected`. Either way, the contract should be written down before F-Library uses it.
+
+#### R2-S3. The steppers' current values are optional, and without them the step is read twice
+
+`SetRowSteppers.swift:25-26, 43-44`; doc `:7-8`.
+
+**Cause.** S2-2's fix made `weight` / `reps` each stepper's accessibility value, but kept them optional "so the tester's
+call still compiles". Without them, the value falls back to the step.
+
+**Impact.**
+- Without the values, the element has label "5 lb" and value "5 lb". VoiceOver reads "5 lb, 5 lb, adjustable".
+- After a swipe it announces the step again instead of the new weight. That is the S2-2 bug again, reached through
+  the default arguments.
+- F10 always knows the current weight and reps, so nothing needs the fallback.
+
+**Fix.**
+1. Make `weight:` and `reps:` required `String`s, and delete the fallback and its doc sentence.
+2. Update the call sites:
+   - the tester's `Adversarial/ComponentAccessibilityAdversarialTests.swift:93, 133` and
+     `Adversarial/ComponentLayoutAdversarialTests.swift:140`;
+   - this slice's `SetRowAccessibilityTests.swift:87, 109`. Delete the fallback half of
+     `setRowSteppers_value_isTheCurrentQuantity`.
+3. Handle the tester's files as S2-4 was handled: the orchestrator approves the call-site edits, and no assertion in
+   them changes.
+
+### Nits
+
+**R2-N1. A tappable `HairlineRow` wraps an interactive accessory in its own button.** `HairlineRow.swift:29-31, 50`.
+- `HairlineRow(…, action: select) { PillButton("Use") { use() } }` puts a button inside a button. VoiceOver merges
+  "Use" into the row, and activating it runs `select`.
+- The adversarial test covers only the row without an action.
+- v2's swap row is a single button with a plain-text "Use", and the gallery reproduces that correctly.
+
+**Fix:** state in the doc comment that with an `action`, the accessory must be non-interactive (text or an icon).
+
+**R2-N2. The done check's label.** `SetRow.swift:17-21, 141`. The doc and the gallery give a done row
+`checkLabel: "Log set 1"`, but activating that check un-logs the set. The API already lets a caller pass a label per
+state; nothing tells the caller to. **Fix:** give the gallery's done row, say, "Undo set 1", and add to the doc: "pass the
+label of what activating it will do". Hearing both "selected" and "Done" is S2-1's accepted outcome.
+
+**R2-N3. The stepper buttons are out of the accessibility tree.** `SetRowSteppers.swift:66`.
+- `.accessibilityElement(children: .ignore)` leaves one adjustable element per pill.
+- VoiceOver and Switch Control can step it.
+- Voice Control ("tap plus") and Full Keyboard Access may not be able to, and activating the pill does nothing.
+
+**Fix:**
+- Add a line to F20's device checklist: step the weight with Voice Control, and again with Full Keyboard Access.
+- If either can't, add `.accessibilityAction(named:)` pairs ("Add 5 lb" / "Remove 5 lb").
+
+**R2-N4. The `RestRing` label has no bound.** `RestRing.swift:28-30`. It takes any string with no `lineLimit(1)`.
+"10:00" fits up to AX5 (the tester checked). "1:30:00", or a longer localised string, would wrap inside the track.
+**Fix:** `.lineLimit(1).minimumScaleFactor(0.5)`, as `SetRow`'s numerals do, or document "a clock string of at most five
+characters".
+
+**R2-N5. `LedgerDesign` now owns two user-facing strings.** `SetRow.swift:88-106` against `docs/architecture.md:396-397`.
+- The same diff adds to architecture: "Components take display strings the caller has already localised."
+- "Done" and "Current set" are English keys in `Bundle.module`. The package has no catalog and no `defaultLocalization`.
+- That is harmless while the app is English-only, but the new sentence is already untrue.
+
+**Fix:** add "except `SetRow`'s two VoiceOver state words" to §11, or take the two strings as parameters.
+
+**R2-N6. At accessibility sizes a disclosure chevron drops under the text.** `HairlineRow.swift:39-41`; visible in
+`hairlineList_…light-accessibility3.png`.
+- Stacking is right for "Use" or a long "5 × 5 @ 185".
+- A chevron conventionally stays trailing, but here it lands at the leading edge under the detail.
+
+**Fix (optional):** use `ViewThatFits(in: .horizontal)` over the horizontal and vertical layouts, so a short title keeps
+its trailing chevron. That would also retire the `AnyLayout` switch repeated at `SetRowSteppers.swift:39-41`. Or leave
+it to F09's review against Today.
+
+**R2-N7. `SetRowHeader` reads as three VoiceOver stops.** `SetRowHeader.swift:15-21`: "#", "lb" and "reps" are three
+separate elements. **Fix:** `.accessibilityElement(children: .combine)`, so it is one stop that still gives the units.
+
+**R2-N8. An assertion that can't catch missing reps.** `SetRowAccessibilityTests.swift:29`:
+`["2", "185", "5"].allSatisfy(select.label.contains)`. "185" contains "5", so a label that lost its reps still passes.
+**Fix:** `#expect(select.label == "2, 185, 5")` (the reading the notes document), or give the fixture distinct reps such
+as "8".
+
+**R2-N9. Criterion 5 measures the geometry helper, not the shape the ring strokes.** `RestRingGeometryTests.swift:25-26`.
+`RestRing` strokes `RestRingArc`, which delegates to `RestRingGeometry.arc`. **Fix:** in
+`halfProgress_arcLength_isHalfTheCircumference`, measure `RestRingArc(progress: 0.5, geometry: .phone).path(in: Self.frame)`,
+so the brief's "path-length assertion on the rendered shape" holds literally. The pixel test already covers the view.
+
+**R2-N10. The accessibility helper falls back silently.** `LedgerSnapshotTesting/AccessibilityElements.swift:100-105`.
+- If `dlopen` or `dlsym` fails, every tree comes back empty.
+- The comment says each lookup then "fails and says why", but a failure only prints `[]`.
+- `decorativeParts_areHidden`'s header check (`!header.contains { … }`) would even pass on an empty tree.
+
+**Fix:**
+- Put `assertionFailure("libAccessibility automation is unavailable")` in the `else` branch, or import Testing and
+  `Issue.record` there.
+- While there, declare the two C prototypes with `UInt8` (the C `Boolean`) instead of `Int32`.
+
+**R2-N11. Two stale comments.**
+- `ComponentSnapshotTests.swift:9` says "iPhone 17, iOS 26.5". The references were re-recorded on iOS 27.0, the pin in
+  `scripts/check.sh:19`.
+- `Adversarial/ComponentAccessibilityAdversarialTests.swift:102-103`, the tester's file, says "selected" on the row means
+  "active". Since S2-1 the row carries no `.isSelected`.
+
+**For F10 (not a finding).** Inside the component, an active set differs from a pending one by colour only: the label,
+the rule and the ring. v2's non-colour cue is the steppers under the active row, so F10 should keep that composition
+(WCAG 1.4.1). VoiceOver already says "Current set".
+
+### Merge notes (not findings)
+
+- **PR description** (standards §10, testing-strategy §2.5):
+  - Include one line on size: 700 code lines, over the 500 target. The split considered was 2a, the controls (~260
+    lines), and 2b, the lists (~390); it was not taken because 2b needs 2a's icons and hit target.
+  - List the 49 new PNGs under "Screenshots". They are new references for new components, not re-recordings. On my
+    reading, the ">20 changed PNGs → `chore(snapshots):` PR" rule doesn't apply; the orchestrator should confirm.
+- **F32 has moved on.** `chore/F32-xcode-27` is now at `f8b2a0c` ("PR CI runs iOS only"), past this branch's merge base
+  `ac2a08a`. Land F32 first, then merge `main` into this branch before opening the slice-2 PR. No stacked PRs.
+- **The tester's round 2 is in progress in this worktree.** Its untracked files change as it runs: `ZZS2R2Probe.swift`
+  during my lint run, which failed SwiftFormat, and later `SetRowContainerAdversarialTests.swift`. This review covers
+  `e085375` only. Round 2's results, and any fixes they lead to, need their own check before merge.
+
+### The seven review points
+
+1. **Module boundaries: pass.**
+   - The components import only SwiftUI.
+   - `AccessibilityElements.swift` (Darwin, UIKit) lives in `LedgerSnapshotTesting`. The only targets that depend on it
+     are test targets (`package-graph.expected.txt`), and it is not a product.
+   - The package graph is unchanged.
+2. **Concurrency: pass, with R2-S1.**
+   - Views are MainActor through the module default.
+   - Types that must be nonisolated are marked: `LedgerIconShape` and `RestRingArc` (`Shape`), `RestRingGeometry`,
+     `LedgerIcon`, `LedgerHitTarget` and `SetRowSpeech`.
+   - `@Entry var ledgerDrawsPressed` sits in a `nonisolated extension EnvironmentValues`, so its generated key isn't
+     main-actor-bound.
+   - No `Task`, timers, clocks or `Date()`.
+   - Tests follow slice 1's rule:
+     - `RestRingGeometryTests`, `RestRingGeometryAdversarialTests` and `ComponentContrastAdversarialTests` hold values
+       only and are `nonisolated`.
+     - Every suite that renders or reads the accessibility tree is nested in `.serialized` `RenderingSuites`.
+   - The accessibility helper is synchronous on the main actor, so two reads can't interleave.
+3. **Error handling: pass.** There is nothing to handle, and there is no `try?`, `!` or `fatalError`. The
+   `@unknown default: break` in the adjustable action is right. R2-N10 covers the test helper.
+4. **Design fidelity and tokens only: pass.** See the table below.
+5. **Accessibility: pass, with R2-S2, R2-S3, R2-N1 to N3 and R2-N7.** See below.
+6. **Test quality: pass, with R2-N8 to N10.**
+   - Assertions read UIKit's accessibility tree, pixels and path geometry, not implementation details.
+   - No sleeps and no wall-clock time. Randomness is seeded (`SplitMix64`).
+   - The tester's truncation probe has a positive control.
+   - The stepper round trip (`SteppersHarness`, 185 → 190 pounds) checks what VoiceOver would announce, through the
+     tree.
+7. **Brief compliance: pass.** See the criteria table.
+
+#### Design fidelity (review point 4)
+
+| Component | v2 source | What the references show |
+|---|---|---|
+| `PrimaryButton` | Today "Start workout": `#FF5B22` pill, 600 16/1, padding 19 (≈ 54 tall), gap 10, 17 px arrow at stroke 1.9 | 54 pt pill, white 700 label with the arrow beside it; the gap is `s` (8). At AX5 the title wraps and the pill grows. Disabled: `hairline` fill, `inkMuted` label |
+| `PillButton` | "Finish" / "Repeat" outline at .16, 500 11.5–12.5; selected filter filled with the text colour; "Skip setup" ghost at .32, 400 13 | All three styles; the ghost sits flush left. `caption` 400 12 and `hairlineStrong` .14 are the nearest tokens (decision 2) |
+| `IconPillButton` | swap: 38 pt circle at .14, 17 px icon at .6, stroke 1.6 | 44 pt circle (the brief's size), `inkSecondary` icon; grows at AX5 |
+| `Eyebrow` | 500 10, .18 em; "UP NEXT" orange, "RECENT" .34 | Exactly the `eyebrow` role; muted raised to `inkMuted` |
+| `HairlineList` / `Row` | RECENT: padding 16, 500 15/1.2 title, 300 12.5 meta at .38, 15 px chevron at stroke 1.8 and .28, rules .08, a closing rule | Rules above every row plus a closing one; detail and chevron `inkMuted`; "Use" in `accentText`. AX3 stacks the accessory (R2-N6) |
+| `SetRow` + header | grid `22px 1fr 1fr 42px`, gap 10, padding 15. Label 400 12.5: .4 pending, orange active, DIM done. Values 700 24 wdth 90. Check 32 pt, ring .14 / .5 / orange disc with a white 2.4 tick. Active rule orange .4 | Columns line up under the header at every size. Active label, rule and ring are orange. Done values are muted and the disc filled (`#B2390E` on paper, S2-4). Drop set "D" shown; "102.5" shrinks only at AX5. The changes from v2 are the AA ones (decision 1) |
+| `SetRowSteppers` | two flex pills at .12; "−" / "+" 300 20 at .6; step 400 10.5, .09 em, .32 | Two equal pills with drawn glyphs in `inkSecondary`. The step uses `eyebrow`, whose tracking (.18 em) is wider than v2's .09 em (decision 2). Stacked at AX sizes |
+| `RestRing` | 64 pt, r 29, stroke 2.5, track .12, orange round-cap arc from 12 o'clock clockwise, label 500 16 tabular | Full, half and empty all correct; half is the right half. Label `numeralS` 700 15 (decision 2). Grows with Dynamic Type (137 pt at AX3) |
+| Icons | `LedgerTabs*.dc.html`: 24 grid, round caps and joins | `LedgerIcon` follows it. The tab bar itself is out of scope (native `TabView`) |
+
+The three sheets:
+- **Bold Text:** every label steps up one weight, icon strokes are 1.3× heavier, and numerals go to 800.
+- **Increase Contrast (light):** rules, pill outlines, ring tracks, check rings and the disabled fill step up, and the
+  orange stays the same.
+- **AX5:** nothing is cut. CTA titles wrap, steppers stack, and the ring reaches 186 pt.
+
+**Tokens only.**
+- Every colour is a `LedgerColor`, every text a `.ledgerFont` role, every gap a `LedgerSpacing` token, and every rule
+  `LedgerHairline.width`.
+- The raw numbers are named, sourced component dimensions inside `LedgerDesign`: 44 / 54 pt, the ring's 64 / 29 / 2.5,
+  the icon grid and stroke widths, the 22/12 label column, the 0.6 pressed opacity, the 1.3 Bold Text stroke and the 0.5
+  scale floor.
+- The diff has no `swiftlint:disable`, force unwrap, `@unchecked`, `DispatchQueue` or timer.
+
+#### Accessibility (review point 5)
+
+- **Labels and traits.**
+  - Every control is a `Button`, so it gets `.isButton`, and is labelled by its text. `IconPillButton` is labelled by
+    its string.
+  - Icons, rules and the header's spacer check are hidden. `Eyebrow` is `.isHeader`. `RestRing` is one element with
+    `.updatesFrequently`.
+  - `SetRow` is two buttons:
+    - the row, with the value "Current set" or "Done";
+    - the check, named by `checkLabel`, with `.isSelected` and the value "Done" once logged. Its `.contain` boundary
+      stops an outer label at the row.
+  - The steppers are one adjustable element each, whose value is the current quantity.
+- **44 pt targets.**
+  - `.ledgerHitTarget()` sits inside each label, so the accessibility frame is the target.
+  - Measured at xSmall, large, xxxLarge, AX3 and AX5 over 12 tappable cases plus the steppers.
+  - Each "−" and "+" is 44 pt by construction (`SetRowSteppers.swift:85`). Only the whole pill can be measured, because
+    it is one element.
+- **Dynamic Type to AX5.**
+  - All text uses roles. Icons, the label column, the check and the ring scale with a role.
+  - `HairlineRow` and the steppers stack at accessibility sizes.
+  - Numerals shrink, never below half size, only when they cannot fit.
+  - Covered by the AX5 sheets (dark, and light for SetRow) and by the tester's truncation probe.
+- **Bold Text.** Roles step up, and `LedgerIconView` strokes 1.3× heavier. Covered by the sheet, plus Bold Text in the
+  layout tests.
+- **Contrast.**
+  - `ComponentContrastAdversarialTests` covers every text pair at 4.5:1 and every control mark at 3:1 (WCAG 1.4.11),
+    in both schemes, with and without Increase Contrast.
+  - White on accent at 3.1:1 is Pete's decision 7 (HIG: bold text at any size needs 3:1).
+  - The arc's exemption on paper is documented: the countdown carries the same information.
+
+#### The two additions beyond the brief
+
+- **`LedgerIcon`: justified.** 86 lines, 60 of them code.
+  - The brief's `PrimaryButton(title:icon:action)` and `IconPillButton` need an icon type, and the brief never defines
+    one.
+  - Spec §8.7 lists these exact paths ("Other icons: … check, chevrons, arrow, swap").
+  - SF Symbols would change the geometry and weights. A `Shape` on the 24-point grid keeps the SVG stroke widths and
+    lets Bold Text thicken them.
+  - Drawing "−" / "+" replaces v2's 300 20 px text glyphs, which have no role (decision 2).
+  - The scope stays tight: only the icons slice 2 draws. No gear, search or back chevron yet.
+- **`SetRowHeader`: justified.** 50 lines, 38 of them code.
+  - v2's set grid has a heading row.
+  - Aligning it with the rows at every text size needs the same column maths: the label column in `caption` ems, and
+    the check column. So it shares `SetColumns` and reserves a hidden `SetRowCheck`.
+  - Without it, F10 would have to copy internal geometry.
+  - It is listed in architecture §11. R2-N7 covers its VoiceOver reading.
+
+#### `AccessibilityElements.swift` and the private automation flag
+
+- **Confined to tests: yes.**
+  - It lives in `LedgerSnapshotTesting`. Every target that depends on it is a `test` target
+    (`package-graph.expected.txt`), and it is not a package product.
+  - `Ledger.xcodeproj` does not reference it, and only files under `LedgerKit/Tests/LedgerDesignTests/` import it.
+  - The whole file is `#if os(iOS)`.
+  - `_AXSAutomationEnabled` / `_AXSSetAutomationEnabled` are looked up with `dlsym` at run time, so no binary links
+    against a private symbol, and nothing reaches an app build.
+- **Safe: yes.**
+  - It saves the previous automation state and restores it in `defer`.
+  - It runs synchronously on the main actor inside `.serialized` `RenderingSuites`, so no reads overlap.
+  - The window is hidden and detached in `defer`.
+  - The flag only makes UIKit and SwiftUI build their accessibility trees; it doesn't change rendering. In the same
+    record runs, every slice-1 reference came back byte-identical.
+  - KIF and AccessibilitySnapshot use the same technique, and testing-strategy §2.5 documents it.
+  - `UIWindow(frame:)`'s deprecation goes through a deprecated protocol witness rather than a suppression. That is fine
+    for test code, and swift-snapshot-testing builds its windows the same way.
+- **Residual risk.** A future iOS could rename the symbols. Today the tests would then fail without saying why; R2-N10
+  makes that loud.
+
+### `/code-review high`: what happened to its ten findings
+
+| Code-review finding | Disposition |
+|---|---|
+| A tappable `HairlineRow` nests an interactive accessory in its button | R2-N1 (a doc fix; v2 has no such row) |
+| The done check still says "Log set 2", and "Done" is heard twice | R2-N2. The caller can already pass a label per state; the double announcement is S2-1's decision |
+| The steppers' `.ignore` shuts out Voice Control and Full Keyboard Access | R2-N3 (verify on a device) |
+| The `RestRing` label is unbounded | R2-N4 |
+| White on accent (3.1:1) is under 14 pt at `.xSmall` | Rejected: Pete's decision 7 applies the HIG table, 3:1 for bold text at any size, which the notes cite |
+| `allSatisfy(contains)` can't catch missing reps | R2-N8 |
+| `scaledSize` runs on every body pass | Rejected here. Slice 1 measured `scaledSize` at 0.5 µs. The real cost is `.ledgerFont` at 43 µs, which is already slice 1's N2 (measure with slice 3's watch performance test) |
+| A stale doc comment in the adversarial test | R2-N11 |
+| `.filled` has no `.isSelected` | R2-S2 |
+| The `AnyLayout` switch is duplicated | Not a finding: two sites with different alignment and spacing. R2-N6's `ViewThatFits` would remove it anyway |
+
+### Criteria → evidence (slice 2)
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 3 | These components × {light, dark} × {L, XL, AX3} at the iPhone 17 width | Seven suites in `ComponentSnapshotTests.swift` over `SnapshotAppearance.phoneMatrix`, through `assertPhoneSnapshot`: 402 pt, 1×, precision 0.995 / 0.98. 42 references, recorded on iPhone 17 / iOS 27.0 (the `check.sh` pin). Another 7 targeted images: AX5 dark, Bold Text, pressed ×2, Increase Contrast ×2, SetRow light at AX5. The galleries hold every state: the disabled CTA, three pill styles, done / active / pending / drop set, full / half / empty ring. 12 opened and checked. **Met** |
+| 5 | `RestRing(progress: 0.5)` covers exactly half the circumference | `RestRingGeometryTests.halfProgress_arcLength_isHalfTheCircumference`: half ÷ full is 0.5 within 1e-9, and against 2π·29 within 0.03 %. Also: proportional at 8 fractions, the 182 dash, clamping, half is half at every size up to AX5. `RestRingRenderTests.halfProgress_rendered_isOrangeOnTheRightHalfOnly` checks pixels. The tester added 500 seeded values against the SVG dash, and "half is the right half" at 6 sizes × 2 schemes. **Met** (R2-N9 makes "rendered shape" literal) |
+| 6 | `PrimaryButton`: label = title, `.isButton`, ≥ 44 pt target | `ComponentAccessibilityTests.primaryButton_accessibility_labelledButtonWithTarget`, at large and AX3: label = title, `.button`, ≥ 44 × 44 and ≥ 54 tall, one element. `primaryButton_disabled_isNotEnabled`. The tester's extremes: xSmall, xxxLarge, AX5. **Met**, and extended to every tappable slice-2 component |
+| NFR | References ≤ 6 MB, 1× PNG | `__Snapshots__` totals 2.3 MB |
+| DoD | Previews for every state | `Components+Previews.swift`: one per component, each rendering its full gallery |
+
+### Verdict
+
+**Approve: 0 Blocking.** Land the three Should fix items in this PR, before F10 builds on the API. Each is small:
+- **R2-S1:** four keywords and one test.
+- **R2-S2:** one modifier and one assertion.
+- **R2-S3:** a signature change and five call sites, three of them in the tester's files.
+
+The Nits can go with them, or to the orchestrator: the second half of R2-N11 is in the tester's file, and R2-N3 is a
+device check for F20.
