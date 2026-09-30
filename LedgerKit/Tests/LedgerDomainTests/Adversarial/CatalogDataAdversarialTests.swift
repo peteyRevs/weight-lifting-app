@@ -71,6 +71,11 @@ extension CatalogDataAdversarialTests {
         #expect(text.components(separatedBy: line).count == 2, "the fixture edits exactly one entry")
         let doubled = text.replacingOccurrences(of: line, with: line + "      \"shortName\": \"BENCH PRESS\",\n")
         #expect(CatalogScan.repeatedKeys(in: doubled) == [["shortName"]])
+        // The same repeat on the original's line, as finding 1 first wrote it (close-out, round 2).
+        let sameLine = text.replacingOccurrences(
+            of: line, with: "      \"shortName\": \"BENCH\", \"shortName\": \"BENCH PRESS\",\n"
+        )
+        #expect(CatalogScan.repeatedKeys(in: sameLine) == [["shortName"]])
         #expect(try CatalogScan.repeatedKeys(in: CatalogUnderTest.text()).isEmpty)
     }
 }

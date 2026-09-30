@@ -19,21 +19,29 @@ enum PolicyOracle {
 
     static let floorPulls: Set = ["Deadlift", "Sumo Deadlift", "Rack Pull"]
     static let landmine: Set = ["Landmine Press", "Landmine Rotation", "T-Bar Row", "Meadows Row", "Landmine Squat"]
-    /// Fix round 2 (review S5): specialty bars start at their own empty weight.
-    static let specialtyBars: [String: Pair] = [
-        "Safety Bar Squat": Pair(lb: dec("65"), kg: dec("30")),
-        "Trap Bar Deadlift": Pair(lb: dec("55"), kg: dec("25")),
-        "Trap Bar Carry": Pair(lb: dec("55"), kg: dec("25"))
-    ]
     /// Fix round 2 (review N3): straight-bar isolation from a rack starts at the empty bar.
     static let straightBar: Set = ["Barbell Shrug", "Barbell Calf Raise", "Behind-the-Back Wrist Curl"]
+
+    /// Decision #21 as amended in fix round 2 (review S5): a specialty bar starts at its own empty
+    /// weight, whatever the lift. Read from the name, not a list, so a new safety-bar or trap-bar lift
+    /// cannot start at a standard bar's load unnoticed (close-out, round 2).
+    static func specialtyBar(_ exercise: Exercise) -> Pair? {
+        let name = exercise.name
+        if ["Safety Bar", "Safety Squat Bar", "SSB"].contains(where: name.contains) {
+            return Pair(lb: dec("65"), kg: dec("30"))
+        }
+        if ["Trap Bar", "Hex Bar"].contains(where: name.contains) {
+            return Pair(lb: dec("55"), kg: dec("25"))
+        }
+        return nil
+    }
 
     static func isCompound(_ exercise: Exercise) -> Bool {
         ![.isolation, .core].contains(exercise.pattern)
     }
 
-    /// "Delt raises and flies, rotator-cuff rotations, kickbacks, cable hip abduction and dumbbell
-    /// wrist curls" (a band pull-apart is a rear-delt fly).
+    /// "Delt raises and flies, rotator-cuff rotations, kickbacks, cable hip abduction and adduction,
+    /// and dumbbell wrist curls" (a band pull-apart is a rear-delt fly).
     static func isSmallRaise(_ exercise: Exercise) -> Bool {
         let name = exercise.name
         let deltWork = exercise.primaryMuscle == .shoulders && exercise.pattern == .isolation
@@ -43,15 +51,15 @@ enum PolicyOracle {
             || (exercise.equipment == .dumbbell && name.contains("Wrist Curl"))
     }
 
-    /// "Kettlebell upper-body, overhead and get-up work takes the lighter 15 lb / 8 kg bell." The
-    /// clean is on the notes' list though decision #21's wording does not name it (finding 2).
+    /// "Kettlebell upper-body, overhead, clean and get-up work takes the lighter 15 lb / 8 kg bell"
+    /// (decision #21 names the clean since fix round 2, finding 2).
     static func isLightBell(_ exercise: Exercise) -> Bool {
         [.chest, .back, .shoulders, .biceps, .triceps].contains(exercise.primaryMuscle)
             || ["Press", "Snatch", "Windmill", "Get-Up", "Clean"].contains { exercise.name.contains($0) }
     }
 
     static func expected(_ exercise: Exercise) -> Pair {
-        if let bar = specialtyBars[exercise.name] {
+        if let bar = specialtyBar(exercise) {
             return bar
         }
         let tier = isCompound(exercise) || straightBar.contains(exercise.name) ? 0 : isSmallRaise(exercise) ? 2 : 1

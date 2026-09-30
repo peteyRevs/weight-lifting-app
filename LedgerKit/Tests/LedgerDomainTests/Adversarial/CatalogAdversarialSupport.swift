@@ -40,12 +40,13 @@ enum CatalogUnderTest {
 /// The file-level guard for finding 1: `JSONDecoder` keeps one value of a key written twice and
 /// reports nothing, so the bundled file's text is scanned instead.
 enum CatalogScan {
-    /// The entries of a file laid out like `exercises.json` (each `{` and `}` indented four spaces,
-    /// one key per line), each as the keys it writes, in order.
+    /// The entries of a file laid out like `exercises.json` (each `{` and `}` indented four spaces),
+    /// each as every key it writes, in order. Every `"key":` counts, not only the first on a line, so a
+    /// repeat on the same line as the original (finding 1's own repro) and one inside `startLoad`'s
+    /// one-line object are caught too (close-out, round 2).
     static func entryKeys(in text: String) -> [[String]] {
         text.matches(of: /(?s)\n    \{\n(.*?)\n    \}/).map { block in
-            String(block.output.1).split(separator: "\n")
-                .compactMap { $0.firstMatch(of: /^\s*"(\w+)":/).map { String($0.output.1) } }
+            block.output.1.matches(of: /"(\w+)"\s*:/).map { String($0.output.1) }
         }
     }
 

@@ -237,3 +237,234 @@ failure is deliberate and left in place: it is the repro for finding 1.
   - 5: short name vs the watch label;
   - 9: the seed-clash rule.
 - Findings 6–8 are low-stakes content questions.
+
+# Round 2 — close-out
+
+Scope: `feat/F03-exercise-catalog` at `f0b444e` (fix round 2: catalog version 3, 224 exercises). I read
+this file's round 1, `review.md` (S1–S5), and two parts of `implementation-notes.md`: "Fix round 2" and
+"Decisions (2026-09-30)". I attacked only what changed. Mutants ran in a throwaway copy of the
+LedgerDomain target and its catalog suites (`scratchpad/f03-mut`), so the worktree's data was never
+edited.
+
+## Close-out
+
+| Item | Asked | Fix round 2 | Checked this round | Status |
+|---|---|---|---|---|
+| **Finding 1:** a key written twice | Make the loader reject it, or keep the file scan and drop the loader test | Option 2. `duplicateKey_throws` is gone; `duplicateKey_caughtByTheFileScan` and `CatalogScan` were added | The scan read only the first key on each line, so a repeat on the same line passed every test. That is the form finding 1's own repro used (M12b, M12c). I fixed this in the tests during close-out (new finding R2-1). A repeat is now caught on its own line (M10), on the same line (H1, H2) and inside `startLoad` (H3) | **Resolved**, after R2-1 |
+| **S1:** the version test traps and forbids gaps | Require a non-empty history that rises | The history must be non-empty, start at ≥ 1 and rise; gaps are allowed; each line must read `<n> <64 hex>` | M1–M8, below. An empty history now fails at `#require(history.last)` without a trap. A gap passes. The rest fail | **Resolved** |
+| **S2:** the script's message | Print the exact line from the repo path | Done; CV02 checks it | Read. The message prints `N+1 <sha>` for `$JSON` at its repo path | **Resolved** |
+| **S3:** ids unprotected | Fail when an id main has is gone | `jq` reads id → name from main and from the working tree. The script fails when an id is gone or a name main has now has another id. CV18–CV21 | I01–I13 and three script mutants, all killed. One blind spot is under Noted, item 1 | **Resolved** |
+| **S4:** "additive" is undefined | Say what an upgrade does | The JSON note, `ExerciseCatalog.version`'s doc and brief criterion 7 now say: new entries only, existing rows untouched | Read. The three texts agree with F05 S2's seeding rule | **Resolved** |
+| **S5:** Safety Bar Squat is below its bar | A specialty-bar class | The SSB starts at 65 lb / 30 kg. Trap Bar Deadlift and Trap Bar Carry start at 55 lb / 25 kg | See "Specialty bars" below | **Resolved** |
+| **2:** the clean's bell | Name cleans in #21, or use the heavier bell | #21 and the doc name cleans; "4 kg bell sizes" is reworded | Read; three oracles agree | **Resolved** |
+| **3:** a swap onto a kettlebell | Decide in F10 | A new line in F10's Risks: re-target to the new equipment's step and sizes (last-known load, else its start load) | Read | **Moved to F10** |
+| **4:** aliases never searched | Carry them to search, or record that they only guard duplicates | Decision #23 (Pete): search covers name and short name; aliases are neither stored nor searched and remain a duplicate guard. The JSON note and `CatalogEntry`'s doc say so | Read. #23 is recorded in the F05-persistence worktree (F05 S2, not yet committed) | **Resolved by decision (#23, Pete)** |
+| **5:** is the short name the watch label? | Adopt it on the watch, or call it a chip label | It is the Program builder's day-chip label (spec §3.2). The test is now `shortNames_fitTheDayChips` | Read | **Resolved** |
+| **6:** specialty bars | Use their typical empty weight | Same fix as S5 | See S5 | **Resolved** |
+| **7:** floor-start lifts at the empty bar | Consider the floor-pull class | The orchestrator kept Power Clean and Pendlay Row at the empty bar, and SLDL for the same reason (the error is on the light side) | — | **Resolved by decision (orchestrator)** |
+| **8a:** knee raise vs leg raise | — | "… Leg Raise" aliases are dropped from Captain's Chair Knee Raise | Diff | **Resolved** |
+| **8b:** `PULL-UP` / `DIP` short names | — | Kept: these are prototype `sh` values, and changing design copy is Pete's call (N10) | — | **Resolved by decision (left to Pete)** |
+| **8c:** Box Squat orphaned | — | Box Squat is now one of Safety Bar Squat's swaps | None of the 224 is an orphan | **Resolved** |
+| **8d:** straight-bar isolation on the EZ-bar value | — | Shrug, calf raise and behind-the-back wrist curl now start at 45 lb / 20 kg (N3) | Three oracles agree | **Resolved** |
+| **9:** a seed clash can leave dangling ids | F05 decides | F05 S2's rule: "an entry is never skipped over a name"; it is inserted by its id beside the clash | `CatalogSeedFixture`'s doc still says `clash` "is not inserted" (Noted, item 7) | **Moved to F05** |
+
+## Audit of the tests the fix round edited or retargeted
+
+| Test | Change | Verdict |
+|---|---|---|
+| `CatalogLoaderAdversarialTests.duplicateKey_throws` | Deleted, with a pointer to the scan | **Accepted.** This was round 1's option 2: the app loads one bundled file, and every test run scans it. The scan it relies on had a gap (R2-1, now fixed). |
+| `CatalogDataAdversarialTests.duplicateKey_caughtByTheFileScan` (new) | Doubles BENCH's `shortName` on a line of its own; asserts that the scan reports it and that the real file is clean | **Sound, but narrow.** It covered only the separate-line form. I added the same-line form (R2-1). |
+| `CatalogDataAdversarialTests.entries_noKeyWrittenTwice` | Uses `CatalogScan` | **Sound after R2-1.** It fails closed if the layout changes: re-indenting the file to 4 spaces (M16b) breaks its entry count. |
+| `CatalogDataAdversarialTests` count test | `== 214` dropped | **Accepted.** F12's count is live. The ≥ 200 floor (`seed_decodesAllEntries`) and "one exercise per raw entry, in order" remain. |
+| `CatalogLoadsAdversarialTests.PolicyOracle` (my oracle, edited by the implementer) | Specialty-bar and straight-bar name lists, Landmine Squat, cable hip adduction | **Correct against #21's amended row, but name-keyed.** A new specialty-bar lift at 45 lb passed it (M13). I now derive specialty bars from the name ("Safety Bar", "SSB", "Trap Bar", "Hex Bar"), so H4 fails and H5 passes. I also refreshed two stale doc comments (adduction; #21 now names the clean). |
+| `ExerciseCatalogTests.versionSha_matchesFile` | S1 rule and a strict line format | **Sound.** M0–M8 are below. It agrees with my round-1 `history_risesStrictly`, except that mine also rejects a leading zero. |
+| `ExerciseCatalogTests.startLoads_followThePolicy` + `StartLoadPolicy` | The new classes; `named ⊆ names` also covers the new lists | **Sound, and fails closed.** A new SSB lift at the correct 65 / 30 fails it until its list grows (H5). One at 45 / 20 passes it (M13), which my oracle now catches. |
+| `ExerciseCatalogTests.shortNames_fitTheDayChips` | Renamed from `…fitTheWatch` | Same assertions. **Sound.** |
+| `ExerciseCatalogTests` cached `Loaded` (N8) | One decode per run, cached as a `Result`; a failure is kept as text | **Sound.** A broken file fails every test, each with the loader's error in its message (M10's output). |
+| `CatalogSeedFixture.clash` | `shortName` → `ZERCHER SQ` | **Sound.** My fixture test compares names only. |
+| `catalog-version.adv.sh` (implementer) | Entries are now `{id, name}` objects; CV02 checks the printed line; CV18–CV21 | **Sound.** I read each case, and my I-cases cover the same ground independently. |
+
+**Version-test mutants** (M0–M8; the history is rewritten in the copy, and the SHA recomputed where the
+case needs it):
+
+| Mutant | Result |
+|---|---|
+| M0: unchanged | pass |
+| M1: comment lines only | fails at `#require(history.last)`; no trap, and the other 31 tests run |
+| M2: gap `1, 2, 4` with `version = 4` | pass (as CV05 and the script allow) |
+| M3: order `2, 1, 3` | fails ("rise") |
+| M4: CRLF on the last line | fails ("bad line") |
+| M5: first version `0` | fails ("rise") |
+| M6: a repeated SHA | fails ("own content") |
+| M7: the last line is `2` while the code says `3` | fails ("current version") |
+| M8: an indented `  # note` line | fails ("bad line"); the script also reads it as an entry line, so the two agree |
+
+## New findings
+
+### R2-1. The file scan missed a key repeated on the same line — minor; fixed in close-out (test-only)
+
+- **Where:** `CatalogScan.entryKeys` (`CatalogAdversarialSupport.swift`). It took only the *first*
+  `"key":` of each line.
+- **Repro, before the fix:**
+  - `"shortName": "SSB SQUAT", "shortName": "SSB",` (M12b) passed every catalog test.
+  - `"alternatives": [a, b, c], "alternatives": [a]` on Trap Bar Carry (M12c) passed as well.
+  - In each case the decoder kept the first value and said nothing, which is finding 1 exactly (its repro
+    used this same-line form).
+- **Fix:** the scan now counts every `"key":` in an entry's block. A same-line assertion is added to
+  `duplicateKey_caughtByTheFileScan`. H1–H3 are now caught; the real file stays clean (H0).
+- **Before this fix,** a repeat inside `startLoad`'s one-line object was already caught by the
+  exact-digits test and the policy oracles (M11, M11b).
+- **Status:** fixed in the worktree, uncommitted. The orchestrator commits it with this round.
+
+No other new defect.
+
+## Noted, not blocking
+
+1. **The id guard is keyed by name, so it misses an id reused in place.** Two cases pass the script:
+   - G1: an entry renamed into a different exercise with its id kept ("Row" → "Nordic Curl");
+   - G2: two entries that are both renamed and swap ids.
+
+   The gap is narrow in practice. Every one of the 224 entries is some other entry's alternative, so the
+   loader's same-pattern check fails any reuse that changes the pattern (and, for isolation, the primary
+   muscle). What can get through is a same-pattern "rename".
+
+   To close it, also fail when an id main has changes `equipment` or `pattern`.
+2. **The id guard can raise a false alarm.** Renaming an entry and giving its old name to a new entry is
+   read as a re-roll (G3). This is conservative, and the message names both ids.
+3. **The script lets a duplicated id on a new entry through (G4).** `seed()`'s `duplicateID` catches it on
+   every test run (`CatalogEntryTests` "repeated id"; the loader adversarial "duplicate id"). The gate as a
+   whole holds.
+4. **The script fails open on a leading-zero version.** Bash reads `010` as octal 8 and errors on `08`.
+   An arithmetic error evaluates as false, so for `08` the "fell" and "not raised" checks are both skipped
+   (O2: exit 0, "version 1 -> 08"). A real fall still fails the Swift history test, because main's lines
+   are frozen and versions must rise. Fix: `([1-9][0-9]*)` in `version_in`, or `10#$current`.
+5. **Hip adduction is filed under glutes.** The data is consistent: the three adduction entries form a
+   closed swap cluster and mix with no abduction entry. Adding an `adductors` group is still Pete's call
+   (review G5 #2), as the notes say; show him at G5. On the day chips, `HIP ABDUCT` and `HIP ADDUCT` differ
+   by one letter.
+6. **Machine Glute Kickback's second swap is Machine Hip Abduction.** That is the "different job" N5
+   criticised for Cable Glute Kickback. The ≥ 2 rule forces a second swap. Low.
+7. **`CatalogSeedFixture`'s doc disagrees with F05 S2.** Step 3 says `clash` "is not inserted". F05 S2's
+   rule says an entry is never skipped over a name. Align the doc when F05 S2 lands.
+8. **Process at G5:**
+   - #21 was edited in `product-decisions.md`; it is Pete's row (straight-bar isolation, specialty bars,
+     the clean).
+   - F03 cites #23, which exists only in the F05-persistence worktree. If F03 merges first, main cites a
+     decision it does not have yet.
+   - main is now at `1db1cf9` (F05 S1). It also touches `LedgerKit/Package.swift` and `F14-settings.md`.
+     This gate ran on the unrebased branch; the G5 run on the rebased candidate is the one that counts.
+
+## Attacked and held
+
+- **The id guard** (`catalog-version-attack.adv.sh` I01–I13, added this round; 39/39 in the suite). Each
+  case uses the real JSON layout and UUIDs.
+  - **First introduction:**
+    - over main's actual placeholder `{"version":1,"exercises":[]}`, it passes (I01);
+    - with no `exercises.json` at the base, it passes (I02).
+  - **Removed, re-rolled or swapped, with the version raised:**
+    - a re-roll fails and names both ids (I03);
+    - a deletion fails (I04);
+    - a swap fails and names both entries (I05);
+    - an entry that takes another's id fails (I06);
+    - an id re-spelt in lower case fails closed (I07).
+  - **An unreadable or missing working file:**
+    - an unreadable one exits 2 (I08);
+    - a deleted one never passes (I09). Without the id block, I09 *passes*, so the block also covers this
+      case.
+  - **No false alarm:** reorders, renames and additions with every id kept pass (I10).
+  - **CI checkouts:**
+    - on CI's detached merge commit, a re-roll fails (I11);
+    - a depth-2 checkout of the merge commit still finds main as the base and fails the re-roll (I12);
+    - a depth-1 checkout fails closed with exit 2 (I13);
+    - `pr.yml`'s Check job fetches with `fetch-depth: 0`.
+  - **Script mutants, each killed:**
+    - the id block removed (11 cases fail);
+    - the re-roll-by-name rule dropped (I03b, I05, I05b fail);
+    - the "gone" rule dropped (I04 fails).
+- **Gap tolerance, test vs script:**
+  - Both allow gaps (M2, CV05, V09).
+  - Both reject a fall, a changed merged line and a malformed line.
+  - The script never checks the last line against the code, but the test does (M7).
+  - A pointless bump (the version raised without a JSON change) passes the script, but the test's
+    distinct-SHA rule fails it.
+- **Specialty bars:**
+  - I searched every name and alias for safety, SSB, trap, hex, cambered, swiss, football, log, axle,
+    yoke, Smith, EZ and landmine. Only Safety Bar Squat, Trap Bar Deadlift and Trap Bar Carry use a
+    specialty bar.
+  - Each starts at its bar's weight in both units (65 lb / 30 kg; 55 lb / 25 kg). The values are on step
+    and within 0.52 kg of conversion.
+  - Smith and belt-squat lifts are machines at 40 lb / 20 kg. EZ-bar lifts are at 25 lb / 10 kg.
+  - Reverting the SSB to 45 / 20 (M14) fails both oracles. Trap Bar Carry at 55 lb / 20 kg (M15) fails
+    both too.
+- **The policy after the edits:** all 224 match the implementer's oracle and mine, and also a third
+  restatement of #21's amended row, written in Python from the text alone (0 mismatches). The largest
+  lb → kg gap is still Rack Pull's 3.09 kg.
+- **The hip adduction entries:**
+  - Machine Hip Adduction (machine isolation, 20 lb / 10 kg), Cable Hip Adduction (cable small raise,
+    10 lb / 5 kg) and Copenhagen Adduction (bodyweight 0 / 0, `loadKind` bodyweight) each sit in their
+    policy cell.
+  - Each is an isolation lift with glutes as its primary muscle, and each lists the other two as swaps,
+    both ways.
+  - The abduction entries are unchanged.
+- **Counts:**
+  - glutes went from 20 to 24;
+  - by muscle: chest 23, back 33, shoulders 27, quads 30, hamstrings 13, glutes 24, calves 11, biceps 13,
+    triceps 14, forearms 10, core 26;
+  - by equipment: barbell 43, dumbbell 44, cable 32, machine 37, bodyweight 42, kettlebell 15, band 11.
+
+  All match the notes' tables and clear criteria 5 and 6.
+- **Content of the 10 additions:**
+  - Incline Push-Up, Seal Row, Dumbbell Squat, Landmine Squat, Bicycle Crunch, Cable Side Bend, Machine
+    Glute Kickback and the three adduction entries are each in the right pattern and muscle, each at its
+    policy load.
+  - Each has ≥ 2 same-pattern swaps, and at least one entry lists it back.
+  - No catalog entry was removed. The only other changes are the load classes, alternatives and one alias
+    set described in the notes.
+  - None of the 224 is an orphan. The short names are unique and ≤ 14 characters.
+- **Duplicate keys:**
+  - on their own line: M10 is caught, and its bogus first `alternatives` loads, which proves first-wins;
+  - on the same line: caught since R2-1;
+  - nested in `startLoad`: caught by the digits test (M11, M11b) and now by the scan (H3);
+  - a layout change fails closed (M16b).
+
+## Gate
+
+One full run of `scripts/check.sh`, taken through the simulator lock (it waited for F06-slice3's run
+first) and logged to `scratchpad/f03-closeout.log`. The worktree held R2-1 and my test edits. It exited
+0 in 268 s and printed `check.sh OK`.
+
+| Step | Result |
+|---|---|
+| 0–1 | tools and format ✓ |
+| 2 | lint, graph and pins ✓. `check-catalog-version.sh`: "changed since origin/main (1d80613): version 0 -> 3". `catalog-version-attack.adv.sh` 39/39, `catalog-version.adv.sh` 21/21; every suite passed |
+| 3 | iOS PR plan: 967 tests, 964 passed, 3 skipped, **0 failed** |
+| 4 | watchOS PR-Watch: 892 tests, 889 passed, 3 skipped, **0 failed** |
+| 5 | coverage: LedgerDomain 99.01 %, LedgerDesign 96.46 %, overall 98.12 % ✓ |
+
+The edited tests pass on both platforms, by name in each result bundle:
+`duplicateKey_caughtByTheFileScan`, `entries_noKeyWrittenTwice`, `startLoads_followPolicy`,
+`startLoads_followThePolicy` and `versionSha_matchesFile`. The totals match round 1 (967 / 892): one
+test was removed (`duplicateKey_throws`) and one added.
+
+## Verdict
+
+**G2 can close.**
+
+- Finding 1 and S1–S5 are resolved.
+- The spec and content questions are each resolved, resolved by decision (#23 on aliases, Pete; floor
+  starts, the orchestrator; `PULL-UP` / `DIP`, left to Pete), or moved (3 → F10, 9 → F05).
+- The one new defect, R2-1, was in my own scan. It is fixed in the tests and green in the full gate.
+- Nothing under Noted blocks.
+
+**Commit these with this round** (tests only; no product or data file changed):
+- `LedgerKit/Tests/LedgerDomainTests/Adversarial/CatalogAdversarialSupport.swift`: R2-1, the scan;
+- `…/Adversarial/CatalogDataAdversarialTests.swift`: R2-1, the same-line case;
+- `…/Adversarial/CatalogLoadsAdversarialTests.swift`: the specialty-bar rule read from names, and two
+  stale comments;
+- `scripts/tests/adversarial/catalog-version-attack.adv.sh`: I01–I13, an `ADV_CHECK_CATALOG` override for
+  mutation runs, and the script copied in under its own name.
+
+**Show Pete at G5:**
+- #21's amended row;
+- filing adduction under glutes;
+- F03 citing #23 before F05 S2 records it on main.
