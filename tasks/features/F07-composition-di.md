@@ -73,7 +73,7 @@ Launch sequence (iOS, in `AppComposition.boot()` called from `LedgerApp.init`): 
 - `LedgerTestSupport` compiles for iOS, watchOS and macOS (host `swift test`).
 
 ## Risks / unknowns
-- swift-dependencies `Package@swift-6.3` resolution on Xcode 26.6 (R2 says it builds) — verify first.
+- swift-dependencies under Swift 6.4 (F32) resolves its default manifest, so IssueReporting is `swift-issue-reporting` 2.x, not `xctest-dynamic-overlay` 1.x: use its `reportIssue` and `unimplemented`.
 - Default MainActor isolation in `LedgerDependencies` (nonisolated target) vs `MainActor` UI clients — keep clients `Sendable`.
 
 ## Definition of Done

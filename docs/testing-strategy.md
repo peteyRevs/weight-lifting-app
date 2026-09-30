@@ -20,7 +20,7 @@ Goals, in priority order:
 1. A wrong prescription, a lost set, or a divergent phone/watch state is
    caught by a test before a human ever runs the app.
 2. Every test is deterministic: same inputs, same result, on any Mac and on
-   `macos-26` runners. A flaky test is a P1 bug (standards §9).
+   CI runners (`docs/ci-cd.md`). A flaky test is a P1 bug (standards §9).
 3. The PR lane finishes in ≤ 25 min wall-clock; everything slower runs nightly.
 4. Design fidelity is enforced mechanically (snapshots), not by eyeballing.
 
@@ -295,6 +295,9 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   (strips `.o`/`.framework`/`.app`), takes the higher value when a target
   appears in both, recomputes per-target coverage from `files[]` after
   exclusions, and compares with `scripts/coverage-thresholds.json`.
+  PR CI's `check.sh --ios-only` passes `--ios-only` and the iOS bundle alone
+  (Pete, 2026-09-30). Only a required module listed in `watchOnly` may then be
+  unmeasured; without the flag, `watchOnly` changes nothing.
 - Thresholds (line coverage): `LedgerDomain 95`, `LedgerPersistence 90`,
   `LedgerSync 90`, `LedgerHealth 80`, `LedgerActivityKit 70`, every
   `Feature*`/`WatchFeatureWorkout` 70, `LedgerDesign 60`, overall 80 (sum of

@@ -1,6 +1,6 @@
 # ADR-006: GitHub Actions for quality gates; Xcode Cloud for signing and delivery; release-please for versions
 
-**Status:** Accepted · **Date:** 2026-09-16 · **Evidence:** `docs/research/R3-tooling-ci.md` §4–§5
+**Status:** Accepted · **Date:** 2026-09-16 · **Amended:** 2026-09-29 (Xcode 27), 2026-09-30 (PR CI iOS-only) · **Evidence:** `docs/research/R3-tooling-ci.md` §4–§5
 
 ## Context
 
@@ -47,3 +47,26 @@ Ruby is 2.6), and Apple has no official App Store Connect CLI.
   CI runs within the free macOS minutes: one macOS job per PR, a manual nightly. The merge
   gate is the orchestrator's policy of a green local `check.sh`, plus CI when it ran
   (`docs/ci-cd.md` §4).
+
+## Amendment 2026-09-29: Xcode 27 on the `xcode-27` preview runner (Pete, F32)
+
+The App Store updated Pete's Mac from Xcode 26.6 to Xcode 27.0 (27A266a). Rather than reinstall 26.6,
+Pete decided to migrate now, which brings F32 forward from M5 to M0. The standard `macos-26` image has only
+Xcode 26.x, so the PR gate and the nightly move from `macos-26` to the GitHub-hosted **`xcode-27`** label.
+It is a public preview image (actions/runner-images#14404): macOS 27.0, with Xcode 27.0 as the default and
+iOS/watchOS 27.0 simulators. This replaces "Xcode 27 migration (F32) must wait for hosted runner images"
+above and the `macos-26` in the Decision table.
+
+- `.xcode-version` is 27.0 on developer Macs, in GitHub Actions and in Xcode Cloud, whose workflows select
+  Xcode 27.0 explicitly. The pins still move together.
+- Rolling back to 26.6 means reverting F32 as a whole: the pin, the runner, the destinations, both
+  lockfiles and the 16 snapshot references. Switching the label and the pin alone fails, because Swift 6.3
+  resolves a different package graph than F32's lockfiles pin and 8 references fall outside tolerance on
+  26.5. The revert gets harder with every merge on top: references recorded and pins resolved after F32
+  must be re-recorded and re-resolved on 26.6 as well. The `macos-26` image still carries 26.6; locally,
+  rolling back also means reinstalling it.
+- When `xcode-27` graduates or `macos-26` gains Xcode 27, choose the label again (`docs/ci-cd.md`).
+- **2026-09-30: PR CI runs iOS only (Pete).** `Check` runs `scripts/check.sh --ios-only`, after F32's first
+  `xcode-27` run reached its 1,500 s deadline in the watchOS tests. watchOS stays in the full local gate,
+  green before every merge (G5), and in the manual nightly. This replaces "build iOS + watchOS" in the
+  Decision table's PR row.

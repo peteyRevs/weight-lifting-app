@@ -91,7 +91,7 @@ merge. No single agent both writes and approves its own code.
 | G1 Local | Implementer | `scripts/check.sh` green; implementation notes written. |
 | G2 Adversarial | Tester | Tester's tests green after fixes; findings file empty or all resolved. |
 | G3 Review | Reviewer | Zero blocking findings. |
-| G4 CI | GitHub Actions | Lint, build (iOS + watchOS), all tests, coverage threshold, snapshot diff = 0. |
+| G4 CI | GitHub Actions | Lint, iOS build and tests, coverage threshold, snapshot diff = 0. iOS only since 2026-09-30 (Pete; `docs/ci-cd.md`): the full local `check.sh` at G1 and G5 covers watchOS. |
 | G5 Merge | Orchestrator (delegated by Pete, 2026-09-27) | G1–G4 green and zero Blocking findings → the orchestrator squash-merges with a conventional title and reports afterwards. It stops for Pete's review first when a PR carries a product/architecture decision or ADR, a waiver of a standard, anything touching signing, the App Store or releases, a pbxproj edit, or a finding it is unsure about. |
 | G6 Release | Human | TestFlight build validated on device (phone + watch) via the release checklist before tagging. |
 

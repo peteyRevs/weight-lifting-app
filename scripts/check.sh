@@ -8,6 +8,11 @@
 #   scripts/check.sh --skip-lint        steps 3–5 only (no format, lint or script tests)
 #   scripts/check.sh --record-snapshots re-record snapshot references on both
 #                                       simulators, then fail; re-run to verify
+#   scripts/check.sh --ios-only         steps 0–3 and 5: no watchOS step, and the coverage gate
+#                                       reads the iOS bundle alone. PR CI runs this (Pete,
+#                                       2026-09-30; docs/ci-cd.md); the full gate, before every
+#                                       merge, runs both. Combines with --skip-lint and
+#                                       --record-snapshots (iOS references only)
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
@@ -16,22 +21,23 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
-WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5}"
+IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
+WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0}"
 RESULTS=".derivedData/Results"
 
-FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0
+FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --fast) FAST=1 ;;
         --lint-only) LINT_ONLY=1 ;;
         --skip-lint) SKIP_LINT=1 ;;
         --record-snapshots) RECORD_SNAPSHOTS=1 ;;
+        --ios-only) IOS_ONLY=1 ;;
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
-# --lint-only excludes every other flag, and --fast runs no snapshot tests to record.
-if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS) || FAST && RECORD_SNAPSHOTS )); then
+# --lint-only excludes every other flag, and --fast runs no simulator: no snapshots to record, no platform to pick.
+if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY) || FAST && (RECORD_SNAPSHOTS || IOS_ONLY) )); then
     echo "error: contradictory flags: $*" >&2
     exit 2
 fi
@@ -66,8 +72,9 @@ fi
 # On GitHub Actions, tools print workflow commands so findings annotate the PR diff.
 beautify() { mise exec -- xcbeautify ${GITHUB_ACTIONS:+--renderer github-actions}; }
 
-# ---- 0. tools ---------------------------------------------------------------
-step "0 · tools"
+# ---- 0. Xcode and tools -----------------------------------------------------
+step "0 · Xcode and tools"
+scripts/check-xcode-version.sh # the pin in .xcode-version, as bootstrap.sh checks it
 mise install --quiet
 mise exec -- swiftformat --version
 mise exec -- swiftlint version
@@ -76,13 +83,14 @@ done_step "tools"
 if [[ $SKIP_LINT -eq 0 ]]; then
     # ---- 1. format ----------------------------------------------------------
     step "1 · format (swiftformat --lint)"
-    mise exec -- swiftformat --lint --swift-version 6.3 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
+    mise exec -- swiftformat --lint --swift-version 6.4 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
 
-    # ---- 2. lint + package graph --------------------------------------------
-    step "2 · lint (swiftlint --strict) + package graph + script tests"
+    # ---- 2. lint + package graph and pins -----------------------------------
+    step "2 · lint (swiftlint --strict) + package graph and pins + script tests"
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}
     scripts/check-package-graph.sh
+    scripts/check-package-pins.sh # LedgerKit's lockfile pins what the project's (CI-proven) one pins
     for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
 fi
@@ -123,7 +131,8 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
 # ---- fast tier: host-side package tests, no simulator -----------------------
 if [[ $FAST -eq 1 ]]; then
     step "3 · swift test (host, pure targets)"
-    swift test --package-path LedgerKit --filter 'LedgerDomainTests|LedgerPersistenceTests'
+    swift test --package-path LedgerKit --only-use-versions-from-resolved-file \
+        --filter 'LedgerDomainTests|LedgerPersistenceTests' # committed pins only, as steps 3-4
     done_step "swift test"
     summary
     printf '\n\033[32mcheck.sh (--fast) OK\033[0m\n'
@@ -132,14 +141,17 @@ fi
 
 mkdir -p "$RESULTS"
 IOS_DEST="$(scripts/sim-destination.sh "$IOS_DEST")" # resolve each to one simulator by UDID and unpair it
-WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"
+if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_DEST")"; fi
 
 # ---- 3. iOS, 4. watchOS: build while the simulator boots, then test on it alone ----------
 # A fresh runner's simulators have never booted. Each parallel-testing clone paid that first boot
 # before an app-hosted test could launch, which ran out the CI step (F01 notes, "Second CI run").
+# Packages resolve only to the committed Package.resolved: a stale one fails the build rather than
+# being rewritten, as Swift 6.4 rewrote it (F32 notes, "Package pins").
 test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bundle name>
     local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
-        -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages)
+        -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+        -onlyUsePackageVersionsFromResolvedFile)
     step "$1 · $2 build (the simulator boots meanwhile)"
     scripts/sim-boot.sh "$5"
     rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
@@ -149,13 +161,22 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     scripts/sim-boot.sh --wait "$5"
     done_step "$2 boot"
     step "$1 · $2 $4 test plan"
+    # On a failure Xcode 27 runs `simctl diagnose`, which times out after 600 s here (F32 notes); the
+    # result bundle still holds every failure, log and attachment.
     run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
-        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" \
+        test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" -collect-test-diagnostics never \
         -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet
     done_step "$2 tests"
 }
 test_platform 3 iOS Ledger PR "$IOS_DEST" PR-iOS
-test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+if [[ $IOS_ONLY -eq 1 ]]; then
+    step "4 · watchOS skipped (--ios-only): the full gate and the nightly test it"
+    done_step "watchOS skipped (--ios-only)"
+    coverage=(--ios-only "$RESULTS/PR-iOS.xcresult")
+else
+    test_platform 4 watchOS LedgerWatch PR-Watch "$WATCH_DEST" PR-watchOS
+    coverage=("$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult")
+fi
 
 if [[ $RECORD_SNAPSHOTS -eq 1 ]]; then
     git status --short -- ':(glob)**/__Snapshots__/**'
@@ -165,8 +186,12 @@ fi
 
 # ---- 5. coverage gate -------------------------------------------------------
 step "5 · coverage gate"
-scripts/coverage-gate.sh "$RESULTS/PR-iOS.xcresult" "$RESULTS/PR-watchOS.xcresult"
+scripts/coverage-gate.sh "${coverage[@]}"
 done_step "coverage"
 
 summary
-printf '\n\033[32mcheck.sh OK\033[0m\n'
+if [[ $IOS_ONLY -eq 1 ]]; then
+    printf '\n\033[32mcheck.sh (--ios-only) OK\033[0m\n' # not the full gate: that one tests watchOS too
+else
+    printf '\n\033[32mcheck.sh OK\033[0m\n'
+fi

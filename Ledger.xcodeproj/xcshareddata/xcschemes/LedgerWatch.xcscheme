@@ -58,7 +58,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8AAE5FD8306596DE0005BA68"
             BuildableName = "LedgerWatch.app"
-            BlueprintName = "LedgerWatch"
             ReferencedContainer = "container:Ledger.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -75,7 +74,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "8AAE5FD8306596DE0005BA68"
             BuildableName = "LedgerWatch.app"
-            BlueprintName = "LedgerWatch"
             ReferencedContainer = "container:Ledger.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

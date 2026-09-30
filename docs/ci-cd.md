@@ -3,14 +3,41 @@
 Decision: ADR-006. Evidence: `docs/research/R3-tooling-ci.md` (2026-09-16).
 Local parity: `docs/testing-strategy.md` §7 (`scripts/check.sh`) and §8 (test plans).
 
-**Verified 2026-09-27 (F01).** `.github/`, `ci_scripts/` and `scripts/` are authoritative; the plan differs:
-- `macos-26` (arm64): Xcode 26.6 (17F113) at `/Applications/Xcode_26.6.app`, iPhone 17 and Series 11
-  (46mm) on 26.5; Xcode from `.xcode-version`; SHA-pinned actions; `$(PROJECT_DIR)` expands in test plans.
-- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (all of `check.sh`),
+**Verified 2026-09-27 (F01), runner updated 2026-09-29 (F32).** `.github/`, `ci_scripts/` and `scripts/` are
+authoritative; the plan differs:
+- **Xcode 27 (Pete, 2026-09-29, F32).** Every macOS job runs on `xcode-27` (arm64), a **public preview**
+  image (actions/runner-images#14404): macOS 27.0, Xcode 27.0 (27A266a) at `/Applications/Xcode_27.app`,
+  linked as `Xcode_27.0.app`, and iPhone 17 and Apple Watch Series 12 (46mm) on 27.0 (no Series 11). The
+  standard `macos-26` image has only Xcode 26.x. It still carries 26.6, but rolling back to 26.6 means
+  reverting F32 as a whole, lockfiles and snapshot references included, and each later merge makes that
+  harder (ADR-006 amendment). `.github/actionlint.yaml` names the label, which actionlint 1.7.12 does not
+  know yet.
+- Xcode from `.xcode-version`, and `check.sh` step 0 fails on any other Xcode (as `bootstrap.sh` does);
+  SHA-pinned actions; `$(PROJECT_DIR)` expands in test plans. Simulators by UDID (`sim-destination.sh`).
+- **Package pins (F32).** Every `xcodebuild` in `check.sh` and the nightly passes
+  `-onlyUsePackageVersionsFromResolvedFile`, and `--fast` passes `--only-use-versions-from-resolved-file`,
+  so a stale `Package.resolved` fails instead of being rewritten. Both tools trust existing checkouts, so
+  only a cold package directory proves it: the PR cache restores on an exact key only (no `restore-keys`).
+  Verify a PR that changes pins after `rm -rf .derivedData/SourcePackages`. `xcodebuild` reads only the
+  project's lockfile, so `check.sh` step 2 (`scripts/check-package-pins.sh`) fails unless
+  `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
+- Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
+  timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
+- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (`check.sh --ios-only`),
   behind a Linux `Scope` job that skips it when only files under `docs/`, `tasks/` or `design/`,
   or `*.md` at the repository root, change (renames count at both paths). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
-  §9 is superseded: a code PR costs about 13–18 macOS minutes, so ~200 cover 11–15 runs.
+  §9 is superseded: a code PR costs about 18–20 macOS minutes while its packages resolve cold, and
+  less once the package cache has saved (it saves only after a green job). ~200 cover about 10 cold runs.
+- **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only`: steps 0–3
+  and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
+  run (36652681235) passed lint, the script tests and all 17 iOS test targets, then reached
+  `LEDGER_XCODEBUILD_DEADLINE` (1,500 s) in the watchOS tests and stopped, exit 75, as designed. Its iOS
+  build took 684 s, including a cold package resolve. watchOS is still tested before every merge by
+  the full local `check.sh` (§4), which runs both platforms, and by the manual nightly. A required
+  module that only a watch bundle can measure is listed in `watchOnly` in
+  `scripts/coverage-thresholds.json` (none today). Only `--ios-only` excuses it, and only while no
+  bundle measures it.
 - §5: scripts run from `ci_scripts/` (use `$CI_PRIMARY_REPOSITORY_PATH`); external TestFlight
   needs a clean build; App Review submission is manual. §6: `bootstrap-sha` skips pre-F01 history.
 
@@ -28,7 +55,7 @@ feature branch ──PR──▶ GitHub Actions: Lint ─▶ Check (iOS + watchO
 nightly 09:00 UTC ──▶ GitHub Actions: full UI suites, performance tests, dependency report
 ```
 
-Two systems, one build definition: both read `.xcode-version` (26.6), the
+Two systems, one build definition: both read `.xcode-version` (27.0), the
 same `Config/*.xcconfig`, and run the same `xcodebuild` invocations.
 
 ## 2. `.github/workflows/pr.yml`
@@ -169,7 +196,8 @@ step (`gh issue create --label nightly`) — add in F01.
 ## 4. No branch protection (Pete, 2026-09-27)
 
 GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
-full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran.
+full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran. Since
+2026-09-30 CI tests iOS only, so that full local run is a PR's only watchOS gate.
 A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free
 minutes run out, CI does not run and the local gate output is the G4 evidence. Seeding the package
 cache on `main` costs a full Check: only if first runs show slow resolution. Revisit with Pro or a 2nd maintainer.
@@ -186,7 +214,7 @@ exported to `docs/xcode-cloud/*.md` as screenshots/notes.
 | **PR sanity** (optional, off by default) | Pull request to `main` | Build only | none — GitHub Actions is the PR gate |
 
 - Signing: cloud-managed (Xcode Cloud creates and rotates certificates). No signing assets anywhere else.
-- Environment: Xcode 26.6 selected explicitly in the workflow (Xcode Cloud already offers 27; keep pinned until F32).
+- Environment: Xcode 27.0 selected explicitly in the workflow, matching `.xcode-version` (F32; not *Latest Release*).
 - Build number: `CURRENT_PROJECT_VERSION` = `CI_BUILD_NUMBER`, injected by `ci_scripts/ci_post_clone.sh`:
 
 ```bash
@@ -269,8 +297,9 @@ Levers if cost matters: run `Check` only when Swift/config files change
 
 `scripts/bootstrap.sh` contract (F00):
 1. `brew install mise` if missing; `mise install` (pins in `mise.toml`: swiftlint 0.65.x, swiftformat 0.63.x, lefthook 2.1.x, xcbeautify).
-2. `xcodebuild -version` must report 26.6 (else print the `.xcode-version` hint and exit 1).
-3. `xcodebuild -downloadPlatform iOS` and `-downloadPlatform watchOS` if the 26.5 runtimes are missing.
+2. `xcodebuild -version` must match `.xcode-version`, 27.0 (else print the `.xcode-version` hint and exit 1).
+   `scripts/check-xcode-version.sh` does it, for `bootstrap.sh` and for `check.sh` step 0 in every mode.
+3. `xcodebuild -downloadPlatform iOS` and `-downloadPlatform watchOS` if the 27.0 runtimes are missing.
 4. `mise x -- lefthook install`.
 5. `scripts/check.sh --fast` as a smoke.
 

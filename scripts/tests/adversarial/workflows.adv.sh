@@ -40,15 +40,25 @@ check "WF02 PR runs on pull_request to main and on workflow_dispatch" \
     "pull_request,workflow_dispatch main"
 check "WF03 no workflow-level paths filter (the Scope job decides, rename-safe)" \
     is "$(q pr '.on.pull_request | has("paths") or has("paths-ignore")')" false
-# Pete, 2026-09-27: free minutes, so ONE macOS job (lint + both platforms) behind a Linux scope job.
+# Pete, 2026-09-27: free minutes, so ONE macOS job (lint, then iOS since 2026-09-30) behind a Linux scope job.
 check "WF04 jobs are Scope then Check" is "$(q pr '[.jobs[].name] | join("|")')" "Scope|Check"
 check "WF05 Check needs Scope" is "$(q pr '.jobs.check.needs')" scope
 check "WF06 PR token is contents: read, with no job-level override" \
     is "$(q pr '.permissions | tojson') $(q pr '[.jobs[] | has("permissions")] | any')" '{"contents":"read"} false'
-check "WF07 exactly one macOS job (Check); Scope runs on Linux" \
-    is "$(q pr '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" "scope=ubuntu-latest,check=macos-26"
-check "WF08 Check runs the whole of check.sh, lint included" \
-    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" "scripts/check.sh"
+# Pete, 2026-09-29 (F32): Xcode 27 now, so every macOS job runs on the xcode-27 preview image.
+check "WF07 exactly one macOS job (Check, on the xcode-27 image); Scope runs on Linux" \
+    is "$(q pr '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" "scope=ubuntu-latest,check=xcode-27"
+check "WF50 the nightly's macOS jobs run on the xcode-27 image too; its report runs on Linux" \
+    is "$(q nightly '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
+    "test=xcode-27,dependencies=xcode-27,report=ubuntu-latest"
+check "WF08 Check runs check.sh --ios-only, lint included (Pete, 2026-09-30; watchOS: the full local gate, nightly)" \
+    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" "scripts/check.sh --ios-only"
+check "WF61 [F32] ... and no job or step name in pr.yml claims watchOS; Check's step names --ios-only" \
+    is "$(q pr '[.jobs[] | .name, .steps[].name // empty] | map(select(test("watchOS"))) | length') \
+$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .name | test("iOS.*check\\.sh --ios-only")')" "0 true"
+check "WF62 [F32] the nightly still tests both platforms, and nothing in it runs --ios-only" \
+    is "$(q nightly '[.jobs.test.strategy.matrix.include[] | .scheme + ":" + .plan] | join(",")') \
+$(grep -c -- '--ios-only' "$WF/nightly.yml")" "Ledger:Nightly,LedgerWatch:Nightly-Watch 0"
 check "WF09 concurrency is per PR and cancels superseded runs" \
     is "$(q pr '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostring)')" \
     'pr-${{ github.event.pull_request.number || github.ref }} true'
@@ -58,6 +68,9 @@ check "WF10 failure uploads Results and SnapshotArtifacts as results-* (criteria
 check "WF11 only package checkouts are cached (never build products or results)" \
     is "$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with.path' "$T/pr.json" "$T/nightly.json" | sort -u | tr '\n' ' ')" \
     ".derivedData/SourcePackages "
+check "WF52 [F32] the package cache restores on an exact key only (a stale Package.resolved then resolves cold, and fails)" \
+    is "$(jq -r '[.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" | tr '\n' ' ')" \
+    "[false] [] "
 missing=""
 for f in .xcode-version LedgerKit/Package.resolved Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved; do
     [[ -f "$ROOT/$f" ]] || missing="$missing $f"
@@ -67,12 +80,19 @@ check "WF12 every file in the cache key exists (hashFiles of a missing file is e
 # ---- every workflow ------------------------------------------------------------------
 unpinned="$(cat "$WF"/*.yml | grep -E '^\s*-?\s*uses:' | grep -vE 'uses:\s*[^@]+@[0-9a-f]{40}(\s|$)' || true)"
 check "WF13 every action is pinned to a full commit SHA" is "$unpinned" ""
+# The pin is read as check-xcode-version.sh reads it, whitespace and a CRLF stripped (F32 T4; WF57 runs it).
+IFS= read -r select_xcode <<'SH'
+sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app"
+SH
 xcode_ok=""
 for w in pr nightly; do
-    xcode_ok="$xcode_ok$(q $w '[.jobs[] | select(."runs-on" | startswith("macos")) | [.steps[].run // "" | test("xcode-select -s \"/Applications/Xcode_\\$\\(cat \\.xcode-version\\)\\.app\"")] | any] | all')"
+    xcode_ok="$xcode_ok$(jq -r --arg sel "$select_xcode" '[.jobs[] | select(."runs-on" | startswith("ubuntu") | not)
+        | [.steps[].run // "" | contains($sel)] | any] | all' "$T/$w.json")"
 done
-check "WF14 every macOS job selects Xcode from .xcode-version" is "$xcode_ok" truetrue
-check "WF15 .xcode-version pins 26.6" is "$(tr -d '[:space:]' <"$ROOT/.xcode-version")" 26.6
+check "WF14 every macOS job selects Xcode from .xcode-version, read as check-xcode-version.sh reads it" \
+    is "$xcode_ok $(grep -cF "tr -d '[:space:]' < " "$ROOT/scripts/check-xcode-version.sh")" "truetrue 1"
+# The xcode-27 image's README: Xcode 27.0 (27A266a) is /Applications/Xcode_27.app, linked as Xcode_27.0.app.
+check "WF15 .xcode-version pins 27.0 (Xcode_27.0.app on the xcode-27 image)" is "$(tr -d '[:space:]' <"$ROOT/.xcode-version")" 27.0
 
 # A `run:` without `shell:` is `bash -e {0}`: no pipefail, so `a | b` hides a's failure.
 # Only an explicit `shell: bash` (bash -eo pipefail) or `set -o pipefail` covers it.
@@ -242,7 +262,7 @@ check "WF31 a later failure comments on the open issue instead of opening anothe
 
 # F01's first CI run: a watch destination by name was ambiguous on the runner (exit 70). The second: parallel
 # testing's clones each paid a first boot, and the step timed out. The nightly's test step runs here with
-# the real sim-destination.sh and sim-boot.sh against the runner's simulators; xcrun and xcodebuild log to
+# the real sim-destination.sh and sim-boot.sh against the xcode-27 image's simulators; xcrun and xcodebuild log to
 # one file, in order.
 NB="$T/nightly-sandbox"
 mkdir -p "$NB/scripts" "$NB/bin"
@@ -251,33 +271,41 @@ cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$NB/scripts/sim-boot.sh"
 fake_simctl "$NB/bin"
 cat >"$NB/bin/xcodebuild" <<'SH'
 #!/bin/sh
-action="$1" dest="" parallel=""
+action="$1" dest="" parallel="" pinned=no diag=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -destination) dest="$2" ;; -parallel-testing-enabled) parallel="$parallel$2" ;;
         -parallel-testing-worker-count) parallel="$parallel+workers" ;;
+        -onlyUsePackageVersionsFromResolvedFile) pinned=yes ;; -collect-test-diagnostics) diag="$2" ;;
     esac
     shift
 done
 echo "xcodebuild $action $dest parallel=$parallel" >>"$XCRUN_LOG"
+echo "$action pinned=$pinned" >>"$XCRUN_LOG.pins"
+echo "$action diagnostics=$diag" >>"$XCRUN_LOG.diag"
 SH
 printf '#!/bin/sh\ncat\n' >"$NB/bin/mise"
 printf '#!/bin/sh\n' >"$NB/scripts/check-test-results.sh"
 chmod +x "$NB/bin/xcodebuild" "$NB/bin/mise" "$NB/scripts/check-test-results.sh"
 q nightly '.jobs.test.steps[] | select(.run // "" | test("xcodebuild test")) | .run' >"$T/nightly-test.sh"
-export XCRUN_LOG="$T/nightly.log"; : >"$XCRUN_LOG"
+export XCRUN_LOG="$T/nightly.log"; : >"$XCRUN_LOG"; : >"$XCRUN_LOG.pins"; : >"$XCRUN_LOG.diag"
 nightly_ok=0
 while IFS='|' read -r plan scheme destination; do
     (cd "$NB" && PLAN="$plan" SCHEME="$scheme" DESTINATION="$destination" PATH="$NB/bin:$PATH" \
         bash -eo pipefail "$T/nightly-test.sh" >/dev/null 2>&1) && nightly_ok=$((nightly_ok + 1))
 done < <(q nightly '.jobs.test.strategy.matrix.include[] | [.plan, .scheme, .destination] | join("|")')
-i="88931AEA-62E6-447F-8697-DCE00A671384" w="07C1BE1A-2EFF-4897-8A98-D6E7C104E516"
+i="46F7C9EA-B38C-445A-BAD9-8A70A603E9E1" w="2416B270-8634-4D4A-9084-2B04B4498921" # the xcode-27 image's
 check "WF48 the nightly boots, builds, waits for the boot and tests serially, each simulator by UDID" \
     is "$nightly_ok $(grep -E '^(simctl boot|xcodebuild)' "$XCRUN_LOG" | tr '\n' ';')" \
     "2 simctl boot $i;xcodebuild build-for-testing platform=iOS Simulator,id=$i parallel=;simctl bootstatus $i -b;\
 xcodebuild test-without-building platform=iOS Simulator,id=$i parallel=NO;simctl boot $w;\
 xcodebuild build-for-testing platform=watchOS Simulator,id=$w parallel=;simctl bootstatus $w -b;\
 xcodebuild test-without-building platform=watchOS Simulator,id=$w parallel=NO;"
+check "WF51 [F32] every nightly xcodebuild resolves packages only to the committed Package.resolved" \
+    is "$(tr '\n' ';' <"$XCRUN_LOG.pins")" \
+    "build-for-testing pinned=yes;test-without-building pinned=yes;build-for-testing pinned=yes;test-without-building pinned=yes;"
+check "WF53 [F32] every nightly test run passes -collect-test-diagnostics never (a 600 s simctl diagnose on failure)" \
+    is "$(grep '^test' "$XCRUN_LOG.diag" | tr '\n' ';')" "test-without-building diagnostics=never;test-without-building diagnostics=never;"
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
@@ -290,5 +318,14 @@ check "WF33 release-please token: contents, pull-requests, issues write; nothing
     "{} contents=write,issues=write,pull-requests=write"
 check "WF34 release-please runs on Linux and starts no other workflow (no macOS minutes)" \
     is "$(q rp '.jobs["release-please"]."runs-on"') $(grep -c 'workflow run' "$WF/release-please.yml")" "ubuntu-latest 0"
+
+# F32 adversarial (tasks/features/F32-xcode-27-migration/test-findings.md): the toolchain pins are code. A PR
+# that changes only the Xcode pin, a lockfile, the formatter's Swift version or actionlint's labels starts Check.
+decide "WF59 only .xcode-version -> Check runs" code=true 'echo 27.1 >.xcode-version'
+decide "WF59 only LedgerKit/Package.resolved -> Check runs" code=true 'echo "{}" >LedgerKit/Package.resolved'
+decide "WF59 only the project's Package.resolved -> Check runs" code=true \
+    'mkdir -p Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm && echo "{}" >Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+decide "WF59 only .swiftformat -> Check runs" code=true 'echo "--swiftversion 6.4" >.swiftformat'
+decide "WF59 only .github/actionlint.yaml -> Check runs" code=true 'echo "self-hosted-runner: {}" >.github/actionlint.yaml'
 
 finish

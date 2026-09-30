@@ -1,5 +1,5 @@
-# The PR gate (docs/ci-cd.md §2): one macOS job runs scripts/check.sh as a developer does, within
-# the free macOS minutes (Pete, 2026-09-27): docs-only PRs start no Mac; new pushes cancel old runs.
+# The PR gate (docs/ci-cd.md §2): one macOS job runs scripts/check.sh --ios-only as a developer does,
+# within the free macOS minutes (Pete, 2026-09-27): docs-only PRs start no Mac; new pushes cancel old runs.
 name: PR
 
 on:
@@ -54,26 +54,35 @@ jobs:
     name: Check
     needs: scope
     if: needs.scope.outputs.code != 'false' # a missing output runs Check
-    runs-on: macos-26
+    # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). macos-26
+    # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
+    # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
+      # The xcode-27 image links Xcode_27.0.app to Xcode_27.app. The pin is read as check.sh step 0 reads
+      # it (check-xcode-version.sh), whitespace and a CRLF stripped.
       - name: Select Xcode from .xcode-version
-        run: sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app" && xcodebuild -version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Cache Swift package checkouts
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .derivedData/SourcePackages
+          # An exact key only, no restore-keys: xcodebuild trusts checkouts over Package.resolved, so
+          # another run's checkouts would let a stale one build (F32 notes, "Package pins").
           key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: spm-
-      - name: Format, lint, script tests, iOS, watchOS, coverage (check.sh)
+      # iOS only (Pete, 2026-09-30): F32's first run here reached the deadline below in the watchOS tests,
+      # after a cold 684 s iOS build. watchOS stays in the full local gate, green before every merge
+      # (docs/ci-cd.md §4), and in the nightly.
+      - name: Format, lint, script tests, iOS, coverage (check.sh --ios-only)
         timeout-minutes: 27 # fails the step before the job times out, so the bundles still upload
         env:
           LEDGER_XCODEBUILD_DEADLINE: 1500 # s: 2 min before that, check.sh interrupts xcodebuild (bundle finalized)
-        run: scripts/check.sh
+        run: scripts/check.sh --ios-only
       - name: Upload result bundles and snapshot diffs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
