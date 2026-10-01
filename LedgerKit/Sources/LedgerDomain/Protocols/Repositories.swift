@@ -36,17 +36,43 @@ public protocol ProgramRepository: Sendable {
     func observeActive() -> AsyncStream<Program?>
 }
 
-/// Finished workouts (rule 31 materialisation; decision #11 history list and edits).
+/// Finished workouts (rule 31 materialisation; decision #11 history list and edits). `WorkoutRepositoryContract`
+/// in LedgerTestSupport pins what follows, for every implementation.
+///
+/// A workout's date, for ordering and for ranges, is when it ended (`endedAt`; F05 notes, open question 7).
 public protocol WorkoutRepository: Sendable {
-    /// Rule 31: stores the finished workout, its summary and PRs, and the slots whose `misses`
-    /// changed (rule 13), in one transaction.
+    /// Rule 31: stores the finished workout with its exercises and sets, `prs` as its personal records, and
+    /// the misses of `slotUpdates` (rule 13), in one transaction: all of it or nothing.
+    ///
+    /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, a
+    ///   changed one replaces its exercises, sets and records, and a deleted one comes back.
+    /// - Nothing of `summary` is stored: it is `WorkoutEngine.summary(workout, prs:)`, computed from the other
+    ///   arguments.
+    /// - Of each slot in `slotUpdates` only `misses` is written, replacing the slot's stored misses whole, so
+    ///   build each slot from the program as stored now. A slot that is not stored is skipped.
+    /// - `workout.programUpdates` is not applied.
+    ///
+    /// Throws `notFinished` unless the workout is `.finished` with an `endedAt`; `duplicateIdentifier` for an
+    /// exercise or set id used twice, or held by another stored workout (even a deleted one), and for a record
+    /// that names another workout; `nulInText` for a name or tag holding U+0000.
     func materialize(_ workout: WorkoutState, summary: WorkoutSummary, prs: [PersonalRecord], slotUpdates: [Slot])
         async throws
+    /// The stored workout, or `nil`. A history read resets the live-only fields: no `cursor`, no `rest`, no
+    /// `programUpdates`, no exercise's `lastPerformance`, and `autoRest` true.
     func workout(id: WorkoutID) async throws -> WorkoutState?
+    /// The `limit` workouts that ended last, newest first (of two that ended together, the smaller id first);
+    /// none when `limit` is below 1.
     func recent(limit: Int) async throws -> [WorkoutState]
+    /// The workouts that ended in `range` (its upper bound excluded), newest first, as `recent`.
     func workouts(in range: Range<Date>) async throws -> [WorkoutState]
+    /// Replaces the sets of one exercise of a stored workout. Everything computed from sets follows; the
+    /// workout's personal records are left as they are, and can be stale afterwards. An exercise of no stored
+    /// workout throws `missingRow`; a set id used twice, or held by another workout, `duplicateIdentifier`.
     func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws
+    /// Removes the workout, with its records, from every read and every stats query; materialising it again
+    /// brings it back. An unknown id does nothing.
     func delete(id: WorkoutID) async throws
+    /// `recent(limit:)` now, then after every change that alters it, and for no other write.
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]>
 }
 
@@ -57,19 +83,39 @@ public protocol SettingsRepository: Sendable {
     func observe() -> AsyncStream<Settings>
 }
 
-/// History aggregates (spec §6.1 "History", §7.7; decisions #3, #4, #15).
+/// History aggregates (spec §6.1 "History", §7.7; decisions #3, #4, #15), over the workouts a
+/// `WorkoutRepository` stores. `StatsQueriesContract` in LedgerTestSupport pins what follows.
+///
+/// Every query counts done sets of stored workouts only, and a workout's date is when it ended (F05 notes,
+/// open question 7). Which kinds of set count differs by query (F05 notes, open question 6):
+/// - the "Last" line counts `.working` sets;
+/// - the bests (`bestSet`, `bestE1RM`, `e1RMByWeek`) count `.working` and `.added` sets, those that can set a
+///   personal record (decision #3);
+/// - volume, `sessionCount` and `recentlyLogged` count every kind.
 public protocol StatsQueries: Sendable {
-    /// Spec §6.3 "Last" line.
+    /// Spec §6.3 "Last" line: the most recent workout with a done working set of the exercise (of two that
+    /// ended together, the smaller id), as its end date, the number of such sets, and the load and reps of the
+    /// heaviest of them (of two as heavy, the one with more reps). Rows of one workout that perform the
+    /// exercise count together. `nil` when there is none.
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance?
+    /// The heaviest set of the exercise, and of two as heavy the one with more reps; `nil` when there is none.
     func bestSet(exerciseID: ExerciseID) async throws -> (weight: Weight, reps: Reps)?
+    /// The best Brzycki estimate over sets of at most 12 reps (decision #4); `nil` when there is none.
     func bestE1RM(exerciseID: ExerciseID) async throws -> Weight?
-    /// Decision #4: the best e1RM per week, keyed by `WeekCalendar.isoWeekKey(for:)`.
+    /// Decision #4: the best e1RM of each of the last `lastWeeks` weeks of `calendar`, the current one
+    /// included, keyed by `WeekCalendar.isoWeekKey(for:)`. A week with no estimate has no key; `lastWeeks`
+    /// below 1 gives none.
     func e1RMByWeek(exerciseID: ExerciseID, lastWeeks: Int, calendar: WeekCalendar) async throws -> [WeekKey: Weight]
-    /// Rule 34 / decision #15.
+    /// Rule 34 / decision #15: Σ weight × reps over the done sets of the workouts that ended in `range`.
     func weeklyVolume(in range: Range<Date>) async throws -> Volume
-    /// Rule 35 / decision #15.
+    /// Rule 35 / decision #15: how many workouts ended in `range`, with or without a done set.
     func sessionsCompleted(in range: Range<Date>) async throws -> Int
+    /// How many workouts hold a done set of the exercise; one that performs it in two rows counts once.
     func sessionCount(exerciseID: ExerciseID) async throws -> Int
+    /// The records the exercise's stored workouts set, newest first by `achievedAt`; of two achieved together,
+    /// the estimated 1RM before the weight at reps.
     func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord]
+    /// The `limit` exercises with a done set in the most recent workouts, the latest first, and exercises of
+    /// one workout in id order; none when `limit` is below 1.
     func recentlyLogged(limit: Int) async throws -> [ExerciseID]
 }

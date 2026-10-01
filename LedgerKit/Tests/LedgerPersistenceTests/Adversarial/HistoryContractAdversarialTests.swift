@@ -31,20 +31,17 @@ struct HistoryContractAdversarialTests {
         return broken
     }
 
-    @Test("An honest in-memory history keeps all 21 clauses, so the contracts need no database")
+    @Test("An honest in-memory history keeps all 22 clauses, so the contracts need no database")
     func honestFake_keepsEveryClause() async {
-        #expect(Self.clauses.count == 21)
+        #expect(Self.clauses.count == 22)
         #expect(await Self.broken(by: []) == [])
     }
 
-    /// The faults no clause catches today. Each is a way a fake could differ from the GRDB types unnoticed.
-    static let uncaught: Set<Fault> = [
-        .tiesInInsertionOrder, .lastIsFirstSet, .bestsCountWarmups, .weeksInUTCFromMonday, .weeksByTickTime,
-        .sessionsNeedADoneSet, .recordsByWorkoutDate, .recentlyLoggedInWorkoutOrder, .editDropsRecords,
-        .emitsEveryWrite
-    ]
+    /// The faults no clause catches: none since S3 fix round 1, which closed the ten that round 1 listed here
+    /// (finding S3-4; orchestrator decision, 2026-10-01). A new fault that no clause catches fails the test.
+    static let uncaught: Set<Fault> = []
 
-    @Test("(documents) Which wrong fakes the contracts catch, and which they let through", arguments: Fault.allCases)
+    @Test("Every wrong fake breaks at least one contract clause", arguments: Fault.allCases)
     func wrongFake_isCaughtOrListed(fault: Fault) async {
         let broken = await Self.broken(by: [fault])
         #expect(broken.isEmpty == Self.uncaught.contains(fault), "\(fault.rawValue): \(broken)")

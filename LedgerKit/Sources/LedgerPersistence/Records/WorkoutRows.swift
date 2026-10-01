@@ -35,13 +35,17 @@ struct WorkoutRows {
     /// unchanged ones left alone, and live rows the workout no longer has soft-deleted
     /// (`SyncedRecord.write(_:over:in:at:)`). So writing the same workout twice changes nothing the second
     /// time, and writing a deleted workout brings it back.
+    ///
+    /// The children are diffed against every live row under the workout's id, whatever the state of the rows
+    /// above them. A workout or exercise row soft-deleted on its own (a sync applies a parent's deletion before
+    /// its children's) then cannot hide live rows the workout no longer has: the write soft-deletes them (S3-2).
     func write(_ database: Database, at timestamp: String) throws {
         // Every live row is read before any is written: soft-deleting an exercise first would hide its sets.
-        let stored = Selection.one(workoutID)
-        let storedWorkout = try stored.rows(Query.workouts, in: database)
-        let storedExercises = try stored.rows(Query.exercises, in: database)
-        let storedSets = try stored.rows(Query.sets, in: database)
-        let storedRecords = try stored.rows(Query.records, in: database)
+        let children = Selection.stored(workoutID)
+        let storedWorkout = try Selection.one(workoutID).rows(Query.workouts, in: database)
+        let storedExercises = try children.rows(Query.exercises, in: database)
+        let storedSets = try children.rows(Query.setsUnderAnyExercise, in: database)
+        let storedRecords = try children.rows(Query.records, in: database)
         try refuseOtherWorkoutsIDs(in: database)
         // Parents first, so every foreign key an insert names exists.
         try WorkoutRecord.write(workout.map { [$0] } ?? [], over: storedWorkout, in: database, at: timestamp)
@@ -54,9 +58,16 @@ struct WorkoutRows {
 
     /// Throws `duplicateIdentifier` when an exercise or a set of this workout has an id that another stored
     /// workout holds, live or deleted. Upserting it would move that row into this workout, and the other
-    /// workout would lose it (the takeover S2's review B1 found for programs). A personal record's id derives
-    /// from its workout's, so it cannot clash.
+    /// workout would lose it (the takeover S2's review B1 found for programs).
+    ///
+    /// A personal record's row id derives from the workout the record names, so a record that names another
+    /// workout would be written over that workout's record row. It is refused the same way, naming the
+    /// workout whose row it would take (S3-1).
     private func refuseOtherWorkoutsIDs(in database: Database) throws {
+        if let foreign = records?.first(where: { $0.record.workoutID != workoutID }) {
+            let owner = ColumnCodec.text(foreign.record.workoutID)
+            throw LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(owner)")
+        }
         try refuse(
             exercises.map(\.rowID),
             of: WorkoutExerciseRecord.databaseTableName,
@@ -88,6 +99,10 @@ struct WorkoutRows {
     /// A workout is one aggregate: a damaged row anywhere in it, or a case a later version added, makes the
     /// whole workout unreadable. When `strict`, that throws (`LedgerPersistenceError`); otherwise the workout
     /// is logged and left out, and stays stored, so one bad workout never hides the history around it.
+    ///
+    /// That includes a workout or exercise row whose id is not stored as text. SQL compares the id with its
+    /// children's text `…_id` and finds none, so reading on would return a workout with no exercises, or an
+    /// exercise with no sets (S3-3).
     static func fetch(_ selection: Selection, in database: Database, strict: Bool) throws -> [WorkoutState] {
         // Children are grouped by their parent's id as stored, so grouping never fails on a damaged id.
         let exerciseRows = try Dictionary(grouping: selection.rows(Query.exercises, in: database)) { row in
@@ -97,8 +112,10 @@ struct WorkoutRows {
             row["workout_exercise_id"] as DatabaseValue
         }
         let read = { (row: Row) in
+            try requireTextID(of: row, in: WorkoutRecord.databaseTableName)
             var state = try WorkoutRecord(row: row).workout
             state.exercises = try exerciseRows[row["id"], default: []].map { exerciseRow in
+                try requireTextID(of: exerciseRow, in: WorkoutExerciseRecord.databaseTableName)
                 var exercise = try WorkoutExerciseRecord(row: exerciseRow).exercise
                 exercise.sets = try setRows[exerciseRow["id"], default: []].map { try LoggedSetRecord(row: $0).set }
                 return exercise
@@ -110,7 +127,16 @@ struct WorkoutRows {
         }
     }
 
-    /// Which live workouts a read or a write is about: a subquery that selects their ids, and its arguments.
+    /// Throws `malformedColumn("table.id")` unless the row's id is stored as text.
+    private static func requireTextID(of row: Row, in table: String) throws(LedgerPersistenceError) {
+        guard case .string = (row["id"] as DatabaseValue).storage else {
+            throw .malformedColumn("\(table).id")
+        }
+    }
+}
+
+extension WorkoutRows {
+    /// Which workouts a read or a write is about: a subquery that selects their ids, and its arguments.
     struct Selection {
         fileprivate let sql: String
         fileprivate let arguments: StatementArguments
@@ -122,11 +148,19 @@ struct WorkoutRows {
             )
         }
 
+        /// The workout row `id`, live or deleted: what a write diffs the workout's children against.
+        static func stored(_ id: WorkoutID) -> Selection {
+            Selection(sql: "SELECT id FROM workout WHERE id = ?", arguments: [ColumnCodec.text(id)])
+        }
+
         /// The `limit` workouts that ended last; none when `limit` is not positive (SQLite reads a negative
         /// `LIMIT` as no limit at all).
         static func recent(limit: Int) -> Selection {
             Selection(
-                sql: "SELECT id FROM workout WHERE deleted_at IS NULL ORDER BY ended_at DESC, id LIMIT ?",
+                sql: """
+                SELECT id FROM workout WHERE deleted_at IS NULL AND phase = 'finished'
+                ORDER BY ended_at DESC, id LIMIT ?
+                """,
                 arguments: [max(0, limit)]
             )
         }
@@ -134,7 +168,10 @@ struct WorkoutRows {
         /// The workouts that ended in `range`.
         static func ended(in range: Range<Date>) -> Selection {
             Selection(
-                sql: "SELECT id FROM workout WHERE deleted_at IS NULL AND ended_at >= ? AND ended_at < ?",
+                sql: """
+                SELECT id FROM workout
+                WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at >= ? AND ended_at < ?
+                """,
                 arguments: [
                     range.lowerBound.timeIntervalSinceReferenceDate,
                     range.upperBound.timeIntervalSinceReferenceDate
@@ -168,6 +205,16 @@ struct WorkoutRows {
             JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
             WHERE workout_exercise.workout_id IN (\(selection)) AND workout_exercise.deleted_at IS NULL
                 AND logged_set.deleted_at IS NULL
+            ORDER BY logged_set.position, logged_set.id
+            """
+        }
+
+        /// Every live set under the workouts' exercise rows, live or deleted: what a write diffs its sets against.
+        static func setsUnderAnyExercise(_ selection: String) -> String {
+            """
+            SELECT logged_set.* FROM logged_set
+            JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
+            WHERE workout_exercise.workout_id IN (\(selection)) AND logged_set.deleted_at IS NULL
             ORDER BY logged_set.position, logged_set.id
             """
         }

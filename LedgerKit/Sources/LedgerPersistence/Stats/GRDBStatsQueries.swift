@@ -137,11 +137,16 @@ public struct GRDBStatsQueries: StatsQueries {
         }
     }
 
-    /// Rule 35: how many finished workouts ended in `range`.
+    /// Rule 35: how many finished workouts ended in `range`, with or without a done set.
+    ///
+    /// A workout row whose id is not stored as text is damage that no read returns (`WorkoutRows.fetch`), and
+    /// every other query misses it already, since its children's text `workout_id` never equals it. It is not
+    /// counted here either.
     public func sessionsCompleted(in range: Range<Date>) async throws -> Int {
         let sql = """
         SELECT COUNT(*) FROM workout
         WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at >= ? AND ended_at < ?
+            AND typeof(id) = 'text'
         """
         return try await queue.read { database in
             try SQL.count(sql, SQL.bounds(range), in: database)
@@ -206,9 +211,9 @@ private enum SQL {
     /// Decision #3: the kinds of set that can set a personal record.
     static let recordKinds = "AND logged_set.kind IN ('working', 'added')"
 
-    /// What a `SELECT COUNT(…)` counts: it always answers with one row, so its rows sum to the count.
+    /// What a `SELECT COUNT(…)` counts. It always answers with one row, so the `0` is never used.
     static func count(_ sql: String, _ arguments: StatementArguments, in database: Database) throws -> Int {
-        try Int.fetchAll(database, sql: sql, arguments: arguments).reduce(0, +)
+        try Int.fetchOne(database, sql: sql, arguments: arguments) ?? 0
     }
 
     /// A range's bounds for `ended_at >= ? AND ended_at < ?`.

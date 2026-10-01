@@ -231,3 +231,20 @@ onwards). Where they contradict this brief, they win, and the brief should be am
 - **HLC recovery on launch** (review SF3): set `newest` from `WorkoutEventStore.newestWallClock()`, not from
   the envelopes `envelopes(for:)` returns. It reads every uncompacted log's stamps, unreadable rows included,
   and skips non-finite ones (ADR-004 amendment, "Recovery on launch").
+
+## Inputs from F05 (2026-10-01, slice S3)
+
+- **A late discard that overtakes a materialised finish** (item 2 above): the host calls
+  `WorkoutRepository.delete(id:)`, then compacts the log. `delete` is a soft delete of the workout, its
+  exercises, sets and records; it does nothing for an unknown id.
+- **A late `.materialize` on a log that is not compacted brings back a deleted workout and overwrites edits**
+  (F05 test-findings S3-Q4). `materialize` is an upsert, and reviving a deleted workout is what a late finish
+  needs. But decision #11's delete and edit in History use the same rows: if the lifter deletes a workout, or
+  edits its sets with `updateSets`, and a late envelope then changes the finished log, the rebuild stores the
+  log's state again. So compact a finished log before History may edit or delete its workout, or remember the
+  deletion on the host. Decide which, with F13.
+- **A rebuild must materialise with records detected against the bests before the workout**, not the all-time
+  bests, which by then include it (F10 "Inputs from F05" items 2 to 4), and must not re-send an older
+  workout's slots as `slotUpdates` (item 6 there).
+- `materialize` refuses a state that is not `.finished` with an `endedAt` (`notFinished`), and a date that is not
+  finite (`nonFiniteDate`); `EventEnvelope.isWellFormed` already keeps such dates out of a replayed state.

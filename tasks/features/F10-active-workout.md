@@ -132,3 +132,37 @@ these contradict the brief above, they win.
    `replaceSlotExercise` runs at the swap or from `.materialize`.
 8. **Bounds-check `WorkoutState.cursor`** before indexing `exercises`: a `started` snapshot's cursor is not
    validated, and the engine keeps whatever cursor it has (F04 review N7). F18 and F21 read it too.
+
+## Inputs from F05 (2026-10-01, slice S3)
+
+`GRDBWorkoutRepository` and `GRDBStatsQueries` shipped. What the finish path must know:
+
+1. **`materialize` takes only a finished workout.** A state that is not `.finished`, or has no `endedAt`, throws
+   `LedgerPersistenceError.notFinished` and stores nothing. It is an upsert by `WorkoutID`, in one transaction,
+   so the launch step and a rebuild may call it again. Its `summary` argument is not stored (F05 follow-up drops
+   it); pass `WorkoutEngine.summary(state, prs:)`.
+2. **Personal records must be detected against the bests as they stood before the workout.**
+   `StatsQueries.bestE1RM` and `bestSet` are all-time and include the workout itself once it is stored. On an
+   ADR-004 rebuild (a late envelope after the first materialisation) a host that detects against them compares
+   the workout with itself; ties are not records, so it would store **no** records and `pr_count` 0 for a
+   workout that set one. Until the F05 follow-up below lands, detect once, before the first materialisation,
+   and keep that list for any rebuild of the same workout.
+3. **No query gives `PersonalRecords.detect`'s `bestWeightAtReps` input** (`[Reps: Weight]` per exercise); `bestSet`
+   is one set. F10 cannot detect weight-at-reps records from `StatsQueries` as it is. **F05 follow-up before F10
+   starts** (F05 notes, "S3 fix round 1"): bests that exclude a workout, or are as of a date, for both kinds.
+4. **Every record in `prs` must name the workout being materialised.** A record whose `workoutID` is another
+   workout's is refused with `duplicateIdentifier` and nothing is stored (it would overwrite that workout's
+   record). So never pass a list kept from another finish.
+5. **`programUpdates` is not applied by F05.** `materialize` writes no slot's exercise. Item 7 of "Inputs from
+   F04" stands: if a swap is to land with the workout, it must run inside `materialize`'s transaction (an F05
+   change, about 15 lines); a separate `replaceSlotExercise` call beside it is not atomic with the workout.
+6. **`slotUpdates` replace each slot's whole miss set.** Only `misses` is written, over the stored ones. Apply
+   `MissTracking.update` to the program **as stored at that moment**, never to a copy taken when the workout
+   started, and never re-send the slots of an older workout on a rebuild: either would clear misses recorded
+   since. A slot that is no longer stored (the program was edited or deleted during the workout) is logged and
+   skipped, and the workout is still stored.
+7. **`lastPerformance`** (for `SessionBuilder` and the swap's "last-known load") is the most recent workout with
+   a done **working** set of the exercise: the count of those sets, and the heaviest one's load and reps. A
+   workout's date is when it ended.
+8. **Refusals to surface:** `nulInText` (a workout or exercise name holding U+0000), `inexactWeight` (a weight
+   that is not a whole number of 10⁻⁷ g, e.g. an eighth of a pound) and `nonFiniteDate`. Each stores nothing.

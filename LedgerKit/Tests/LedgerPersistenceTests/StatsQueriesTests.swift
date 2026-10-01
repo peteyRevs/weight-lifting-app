@@ -56,6 +56,9 @@ struct StatsQueriesTests {
         #expect(try await stats.recentlyLogged(limit: 5) == [Self.bench.id])
         // A workout with no done set left is still a session; the discarded and the deleted one are not.
         #expect(try await stats.sessionsCompleted(in: week) == 3)
+        // The lists show what the stats count: the discarded and the deleted workout are in neither.
+        #expect(try await repositories.workouts.recent(limit: 9).map(\.id) == [hidden[1].id, hidden[2].id, kept.id])
+        #expect(try await repositories.workouts.workouts(in: week).count == 3)
         #expect(try await stats.e1RMByWeek(exerciseID: Self.bench.id, lastWeeks: 8, calendar: Contract.calendar)
             .count == 1)
     }

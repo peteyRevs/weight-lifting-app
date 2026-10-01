@@ -110,9 +110,10 @@ Concrete test names (file = suite = source type; see §6):
   nightly only): seed via `Seed.largeHistory(sets: 20_000, seed: 42)`
   (~600 workouts over 2 years); for each `StatsQueries` method — last
   performance, best set, e1RM by week, weekly volume + delta, sessions this
-  week, PR history — run once to warm up, then `ContinuousClock.measure` five
-  times; `#expect(median < .milliseconds(50))` (architecture §15). Budgets
-  live in `PerformanceBudget.swift` next to the tests, never inline.
+  week, PR history — run once to warm up, then `ContinuousClock.measure` 20
+  times; the 95th percentile (the 19th fastest) must be under 50 ms, as F05
+  criterion 9 says (architecture §15). Budgets live in `PerformanceBudget.swift`
+  next to the tests, never inline.
 
 ### 2.3 Sync (`LedgerSyncTests`) — target ≥ 90 %
 

@@ -115,6 +115,53 @@ struct DamagedWorkoutRowTests {
         try await repositories.history.materialize(Self.workout)
         #expect(try await repositories.workouts.workout(id: Self.workout.id) == Self.workout)
     }
+}
+
+/// Blob ids, and damaged values under the stats queries.
+extension DamagedWorkoutRowTests {
+    @Test("An exercise row whose id is a blob fails the read by name, never reads without its sets, and is repaired")
+    func blobExerciseID_isDamage() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let workouts = repositories.workouts
+        try await repositories.history.materialize(Self.workout)
+        try await repositories.history.materialize(Self.other)
+        try await repositories.damage(
+            "UPDATE workout_exercise SET id = CAST(id AS BLOB) WHERE id = ?",
+            [ColumnCodec.text(Self.workout.exercises[0].id)]
+        )
+        await #expect(throws: LedgerPersistenceError.malformedColumn("workout_exercise.id")) {
+            try await workouts.workout(id: Self.workout.id)
+        }
+        #expect(try await workouts.recent(limit: 5) == [Self.other])
+        try await repositories.history.materialize(Self.workout)
+        #expect(try await workouts.recent(limit: 5) == [Self.other, Self.workout])
+        let all = Date.distantPast ..< Date.distantFuture
+        #expect(try await repositories.stats.weeklyVolume(in: all) == Self.workout.volume + Self.other.volume)
+    }
+
+    @Test("A workout row whose id is a blob is left out of every list and count, kept, and never listed twice")
+    func blobWorkoutID_isDamage() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let workouts = repositories.workouts
+        let all = Date.distantPast ..< Date.distantFuture
+        try await repositories.history.materialize(Self.workout)
+        try await repositories.history.materialize(Self.other)
+        try await repositories.damage(
+            "UPDATE workout SET id = CAST(id AS BLOB) WHERE id = ?",
+            [ColumnCodec.text(Self.workout.id)]
+        )
+        #expect(try await workouts.workout(id: Self.workout.id) == nil)
+        #expect(try await workouts.recent(limit: 5) == [Self.other])
+        #expect(try await workouts.workouts(in: all) == [Self.other])
+        #expect(try await repositories.stats.sessionsCompleted(in: all) == 1)
+        #expect(try await repositories.stats.weeklyVolume(in: all) == Self.other.volume)
+        // A new materialisation stores the workout under its text id, beside the blob row, which stays.
+        try await repositories.history.materialize(Self.workout)
+        #expect(try await workouts.recent(limit: 5) == [Self.other, Self.workout])
+        #expect(try await repositories.stats.sessionsCompleted(in: all) == 2)
+        #expect(try await repositories.stats.weeklyVolume(in: all) == Self.workout.volume + Self.other.volume)
+        #expect(try await repositories.count("SELECT COUNT(*) FROM workout WHERE typeof(id) = 'blob'") == 1)
+    }
 
     @Test("A stats query over a damaged value throws by name; it never reads it as a rounded number")
     func damagedValue_failsTheStatsQuery() async throws {

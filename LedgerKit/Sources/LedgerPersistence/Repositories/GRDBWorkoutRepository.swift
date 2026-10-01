@@ -29,14 +29,17 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// - The stored totals (volume, done and total sets) are computed from `workout`'s sets, and the record
     ///   count is `prs.count`: `summary` is `WorkoutEngine.summary(workout, prs: prs)`, so it holds nothing
     ///   else to store.
-    /// - Of each slot in `slotUpdates`, only `misses` is written, over the slot's stored misses. A slot that is
-    ///   not stored, or is deleted (the program was edited or deleted during the workout), is logged and
-    ///   skipped: the workout is still stored.
+    /// - Of each slot in `slotUpdates`, only `misses` is written, and it replaces the slot's stored misses
+    ///   whole. So the caller builds each slot from the program as it is stored now: a copy taken when the
+    ///   workout started, or the slots of an older workout materialised again, would clear misses recorded
+    ///   since. A slot that is not stored, or is deleted (the program was edited or deleted during the
+    ///   workout), is logged and skipped: the workout is still stored.
     /// - `workout.programUpdates` is not applied here; F10 decides where a swap reaches the program.
     ///
     /// Throws `notFinished` unless `workout` is `.finished` with an `endedAt`; `duplicateIdentifier` for two
-    /// exercises or two sets sharing an id, or an exercise or set id that another stored workout holds (live
-    /// or deleted); `nulInText` for a name or tag holding U+0000; `inexactWeight` for a weight that is not a
+    /// exercises or two sets sharing an id, an exercise or set id that another stored workout holds (live or
+    /// deleted), or a record in `prs` that names another workout; `nulInText` for a name or tag holding U+0000;
+    /// `inexactWeight` for a weight that is not a
     /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite.
     public func materialize(
         _ workout: WorkoutState,
@@ -77,11 +80,14 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// set rows are soft-deleted, each set's e1RM is computed again, and so are the workout's totals. Rows
     /// that did not change keep their `updated_at`.
     ///
-    /// The workout's personal records are left as they are: detecting them again, for this workout and the
-    /// later ones, is the caller's (F13).
+    /// The workout's personal records and its record count are left as they are, so after an edit they can be
+    /// stale: a record may remain that no stored set supports, and an edit that deserves one creates none.
+    /// Nothing detects records again yet, here or in a caller (no query gives the bests as they stood before
+    /// a workout); see F13's "Inputs from F05".
     ///
     /// Throws `missingRow` when no live workout has the exercise; `duplicateIdentifier` for a set id used
-    /// twice, or held by another exercise or workout; and what reading the workout throws when it is damaged.
+    /// twice in the workout, or held by another workout (live or deleted); and what reading the workout throws
+    /// when it is damaged.
     public func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
         let timestamp = ColumnCodec.timestamp(now())
         let key = ColumnCodec.text(workoutExerciseID)

@@ -44,7 +44,10 @@ public enum WorkoutRepositoryContract {
         Clause("materialising a workout twice stores it once and changes nothing", materializeTwice),
         Clause("materialising a changed workout replaces its exercises and sets: removed, added, changed", replaces),
         Clause("a workout that is live, discarded or has no end throws notFinished; nothing is stored", notFinished),
-        Clause("recent and workouts(in:) are newest first by end date; a limit below 1 gives none", newestFirst),
+        Clause(
+            "recent and workouts(in:) are newest first by end date, then id; a limit below 1 gives none",
+            newestFirst
+        ),
         Clause("updateSets replaces one exercise's sets; an unknown exercise throws missingRow", updateSets),
         Clause("delete hides the workout, and materialising it again brings it back", deleteHides),
         Clause("slotUpdates write each stored slot's misses; an unknown slot is skipped", writesMisses),
@@ -53,8 +56,9 @@ public enum WorkoutRepositoryContract {
             "an exercise or set id another workout holds, even deleted, is refused; it is unchanged",
             otherWorkoutsIDs
         ),
+        Clause("a record naming another workout is refused; nothing is stored, and its records stay", foreignRecord),
         Clause("a name or tag holding U+0000 throws nulInText; nothing is stored", refusesNul),
-        Clause("observeRecent emits the list now, then after each change", observeRecent)
+        Clause("observeRecent emits the list now, then after each change of it, and for no other write", observeRecent)
     ]
 
     // MARK: Fixtures
@@ -184,17 +188,20 @@ public enum WorkoutRepositoryContract {
         var all = days.enumerated().map { workout(number: $0, endedAt: $1) }
         all[0].exercises = []
         all[1].exercises[3].sets = []
-        for workout in [all[1], all[2], all[0]] {
+        // Two end at the same instant: they list by id, whichever was stored first.
+        let twin = workout(number: 3, endedAt: days[2])
+        for workout in [twin, all[1], all[2], all[0]] {
             try await stores.materialize(workout)
         }
         let workouts = stores.workouts
         let wide = try await workouts.workouts(in: days[0] ..< days[2].addingTimeInterval(1))
         return try await ContractCheck.first(
-            ContractCheck.expect(workouts.recent(limit: 2), [all[2], all[1]], "recent(limit: 2)"),
+            ContractCheck.expect(workouts.recent(limit: 2), [all[2], twin], "recent(limit: 2), a tie by id"),
+            ContractCheck.expect(workouts.recent(limit: 3), [all[2], twin, all[1]], "recent(limit: 3)"),
             ContractCheck.expect(workouts.recent(limit: 0), [], "recent(limit: 0)"),
             ContractCheck.expect(workouts.recent(limit: -1), [], "recent(limit: -1)"),
             ContractCheck.expect(workouts.workouts(in: days[1] ..< days[2]), [all[1]], "a half-open range"),
-            ContractCheck.expect(wide, [all[2], all[1], all[0]], "a range holding all three")
+            ContractCheck.expect(wide, [all[2], twin, all[1], all[0]], "a range holding all four")
         )
     }
 }

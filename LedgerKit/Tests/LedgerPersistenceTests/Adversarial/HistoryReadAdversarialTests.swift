@@ -67,17 +67,19 @@ struct HistoryReadAdversarialTests {
         #expect(try await stack.workouts.recent(limit: 4) == Array(workouts.dropFirst()))
     }
 
-    /// (documents) Finding S3-N2. Only `materialize` writes `workout`, and only finished workouts. A row in
-    /// another phase, or with no end, can come from a foreign writer alone: the lists show it, the stats skip it.
-    @Test("(documents) A stored row that is not finished, or has no end, is listed by recent but counts for no stats")
+    /// Finding S3-N2. Only `materialize` writes `workout`, and only finished workouts. A row in another phase
+    /// can come from a foreign writer alone. Round 1 documented that the lists showed it while the stats
+    /// skipped it; since S3 fix round 1 (orchestrator decision, 2026-10-01) the lists skip it too. A finished
+    /// row with no end is still listed by `recent`, last (documents).
+    @Test("A stored row that is not finished is listed nowhere and counts for no stats; one with no end is listed last")
     func foreignPhase_isListedButNotCounted() async throws {
         let stack = try await S3Kit.stack()
         let workout = S3Kit.mixed(1)
         try await stack.materialize(workout)
         try await stack.execute("UPDATE workout SET phase = 'discarded'")
         let always = Date.distantPast ..< Date.distantFuture
-        #expect(try await stack.workouts.recent(limit: 5).map(\.phase) == [.discarded])
-        #expect(try await stack.workouts.workouts(in: always).count == 1)
+        #expect(try await stack.workouts.recent(limit: 5) == [])
+        #expect(try await stack.workouts.workouts(in: always) == [])
         #expect(try await stack.stats().sessionsCompleted(in: always) == 0)
         #expect(try await stack.stats().weeklyVolume(in: always) == .zero)
         try await stack.execute("UPDATE workout SET phase = 'finished', ended_at = NULL")

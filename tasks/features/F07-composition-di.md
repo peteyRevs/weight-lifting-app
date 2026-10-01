@@ -114,3 +114,22 @@ _Filled in by agents during delivery:_
     so the two cannot drift.
   - They throw the `LedgerPersistenceError`s the clauses expect: `missingRow` from `setActive`, and
     `duplicateIdentifier` for an id used twice in a program or held by another program, live or deleted.
+- **Workouts and stats (F05 S3, 2026-10-01).** `GRDBWorkoutRepository(queue, now:)` and
+  `GRDBStatsQueries(queue, now:)` take the injected date; the stats use it to say which week is the current one.
+  `InMemoryWorkoutRepository` and `InMemoryStatsQueries` run `WorkoutRepositoryContract.clauses` (12) and
+  `StatsQueriesContract.clauses` (9) over a `HistoryStores`: the three stores share one history, the program
+  store accepts slots naming `ProgramRepositoryContract.exercises`, and the stats read the current time as
+  `StatsQueriesContract.now`. What the fakes must honour, each pinned by a clause:
+  - a workout's date is when it ended; lists are newest first, then by id; a limit below 1 gives none; ranges
+    exclude their upper bound;
+  - a read resets the live-only fields (`WorkoutRepositoryContract.stored(_:)`);
+  - `materialize` is an upsert; it throws `notFinished`, `duplicateIdentifier` (an id used twice, or held by
+    another workout, even a deleted one) and `nulInText`, and then stores nothing; slot updates replace a slot's
+    misses and skip an unknown slot; `updateSets` keeps the workout's records and throws `missingRow`;
+  - `observeRecent` emits only when its list changes;
+  - the "Last" line counts done `.working` sets and shows the heaviest; the bests count `.working` and `.added`
+    sets only; volume, `sessionCount` and `recentlyLogged` count every kind; `sessionsCompleted` counts a workout
+    with no done set; weeks are the given calendar's, by the workout's end; records list by `achievedAt`.
+  - **Pending** (F05 notes, "S3 fix round 1"): a clause that a record naming another workout is refused, and
+    the F05 follow-up before F10, which changes both protocols (drops `materialize`'s `summary`, adds bests
+    before a workout).

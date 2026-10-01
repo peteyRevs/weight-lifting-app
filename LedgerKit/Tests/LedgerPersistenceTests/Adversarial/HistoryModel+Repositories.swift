@@ -13,6 +13,11 @@ extension HistoryModel: WorkoutRepository {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(workout.id.rawValue.uuidString)")
         }
+        if let foreign = prs.first(where: { $0.workoutID != workout.id }) {
+            throw LedgerPersistenceError.duplicateIdentifier(
+                "personal_record of workout \(foreign.workoutID.rawValue.uuidString)"
+            )
+        }
         try write { state in
             try store(workout, records: prs, in: &state)
             writeMisses(of: slotUpdates, in: &state)

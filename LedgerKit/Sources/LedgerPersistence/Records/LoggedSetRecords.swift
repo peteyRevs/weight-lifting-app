@@ -55,18 +55,14 @@ struct PersonalRecordRecord: SyncedRecord {
     static let databaseTableName = "personal_record"
 
     let record: PersonalRecord
-    /// The record's place among its workout's records, which gives the row its id.
-    let position: Int
+    let rowID: String
 
-    /// A `PersonalRecord` has no id, so the row's is derived from its workout and its place: materialising
-    /// the same records again writes the same rows.
-    var rowID: String {
-        ColumnCodec.derivedID(named: "personal_record \(position)", in: record.workoutID.rawValue).uuidString
-    }
-
+    /// `record` as the row at `position` among its workout's records. A `PersonalRecord` has no id, so the
+    /// row's is derived from the workout it names and its place: materialising the same records again writes
+    /// the same rows.
     init(_ record: PersonalRecord, position: Int) {
         self.record = record
-        self.position = position
+        rowID = ColumnCodec.derivedID(named: "personal_record \(position)", in: record.workoutID.rawValue).uuidString
     }
 
     init(row: Row) throws {
@@ -80,7 +76,7 @@ struct PersonalRecordRecord: SyncedRecord {
             achievedAt: read.date("achieved_at"),
             workoutID: read.identifier("workout_id")
         )
-        position = 0 // not stored: only the id depends on it, and a row read back is never written
+        rowID = try read.text("id")
     }
 
     func encode(to container: inout PersistenceContainer) throws {

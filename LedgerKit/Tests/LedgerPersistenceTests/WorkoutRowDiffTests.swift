@@ -179,8 +179,47 @@ extension WorkoutRowDiffTests {
         #expect(try await repositories.workouts.workout(id: scenario.workout.id) == scenario.workout)
     }
 
+    @Test("A record that names another workout is refused, naming that workout; nothing is written (S3-1)")
+    func recordOfAnotherWorkout_isRefused() async throws {
+        let scenario = try await Tests.Scenario()
+        let repositories = scenario.repositories
+        try await repositories.history.materialize(scenario.workout, prs: scenario.records)
+        let before = try await repositories.texts(Tests.everyRow)
+        repositories.clock.advance()
+        let other = Contract.workout(number: 1, endedAt: EventBuilders.start.addingTimeInterval(3600))
+        let own = Tests.records(of: other)[0]
+        let stored = ColumnCodec.text(scenario.workout.id)
+        await #expect(throws: LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(stored)")) {
+            try await repositories.history.materialize(other, prs: [own, scenario.records[1]])
+        }
+        #expect(try await repositories.texts(Tests.everyRow) == before)
+        // A record naming a workout that is not stored is refused the same way, before the foreign key is.
+        let unknown = Tests.records(of: Contract.workout(number: 9))[0]
+        let absent = ColumnCodec.text(Seeders.workoutID(9))
+        await #expect(throws: LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(absent)")) {
+            try await repositories.history.materialize(other, prs: [unknown])
+        }
+        #expect(try await repositories.texts(Tests.everyRow) == before)
+    }
+
+    @Test("A workout row soft-deleted on its own is repaired by a rebuild, and delete clears rows under it (S3-2)")
+    func loneSoftDeletedParent_hidesNoRows() async throws {
+        let scenario = try await Tests.Scenario()
+        let (repositories, workout) = (scenario.repositories, scenario.workout)
+        try await repositories.history.materialize(workout, prs: scenario.records)
+        try await repositories.execute("UPDATE workout SET deleted_at = 'then'")
+        try await repositories.execute("UPDATE workout_exercise SET deleted_at = 'then' WHERE position = 1")
+        let edited = Contract.edited(workout)
+        try await repositories.history.materialize(edited, prs: [scenario.records[0]])
+        #expect(try await repositories.workouts.workout(id: workout.id) == edited)
+        #expect(try await repositories.texts(Tests.liveCounts) == ["1 4 16 1 16"])
+        try await repositories.execute("UPDATE workout SET deleted_at = 'then'")
+        try await repositories.workouts.delete(id: workout.id)
+        #expect(try await repositories.texts(Tests.liveCounts) == ["0 0 0 0 16"])
+    }
+
     @Test("A record's row id is the version-5 UUID of its place in its workout: the same on every materialise")
-    func recordIDs_areDerived() throws {
+    func recordIDs_areDerived() async throws {
         let workout = Contract.workout()
         let records = Tests.records(of: workout)
         let first = PersonalRecordRecord(records[0], position: 0).rowID
@@ -195,6 +234,14 @@ extension WorkoutRowDiffTests {
         )
         #expect(first != PersonalRecordRecord(elsewhere, position: 0).rowID)
         #expect(first.dropFirst(14).first == "5") // the version nibble
+        // A record read from a row keeps the row's own id, whatever its place was (review N4).
+        let repositories = try await Repositories.withProgramExercises()
+        try await repositories.history.materialize(workout, prs: records)
+        let stored = try await repositories.queue.read { database in
+            try PersonalRecordRecord.fetchAll(database, sql: "SELECT * FROM personal_record ORDER BY kind")
+        }
+        #expect(stored.map(\.rowID) == [first, PersonalRecordRecord(records[1], position: 1).rowID])
+        #expect(stored.map(\.record) == records)
         // RFC 9562's own example: the version-5 UUID of "www.example.com" in the DNS namespace.
         let dns = try #require(UUID(uuidString: "6BA7B810-9DAD-11D1-80B4-00C04FD430C8"))
         let example = ColumnCodec.derivedID(named: "www.example.com", in: dns)

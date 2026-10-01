@@ -23,7 +23,9 @@ public enum LedgerPersistenceError: Error, Equatable, Sendable {
     case malformedColumn(String)
     /// Two values to be saved in one table share an id (`"table id"`), e.g. a slot copied without a new id:
     /// both would land in one row, and one would be lost. Also a week, day or slot id that another program
-    /// holds, live or deleted: saving it would move that row out of the other program.
+    /// holds, live or deleted: saving it would move that row out of the other program. The same for a workout's
+    /// exercise and set ids, and for a personal record that names another workout than the one it is stored
+    /// with (`"personal_record of workout id"`): it would replace that workout's record.
     case duplicateIdentifier(String)
     /// A text value to be saved holds U+0000 (`"table.column"`). SQLite would keep the text only up to it, so
     /// it is refused rather than stored cut short.

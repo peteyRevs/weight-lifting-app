@@ -192,17 +192,9 @@ public struct GRDBExerciseRepository: ExerciseRepository {
             """,
             arguments: ["equipment": equipment?.rawValue, "muscle": muscle?.rawValue]
         )
-        return ExerciseSearch.sorted(rows.filter(matches).compactMap(readable))
-    }
-
-    /// The row's exercise, or `nil` (logged) when this app cannot read it.
-    private static func readable(_ row: Row) -> Exercise? {
-        do {
-            return try ExerciseRecord(row: row).exercise
-        } catch {
-            let id = String.fromDatabaseValue(row["id"]) ?? "?"
-            Logger.persistence.error("Left out exercise row \(id, privacy: .public), which is unreadable: \(error)")
-            return nil
-        }
+        // A row this app cannot read is logged and left out (`Row.readable`).
+        return ExerciseSearch.sorted(rows.filter(matches).compactMap { row in
+            row.readable(as: ExerciseRecord.databaseTableName) { try ExerciseRecord(row: $0).exercise }
+        })
     }
 }

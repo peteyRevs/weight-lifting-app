@@ -33,10 +33,15 @@ public enum StatsQueriesContract {
     /// Stats weeks starting on Monday, in UTC (decision #15 with a Monday start is the ISO week).
     public static var calendar: WeekCalendar {
         get throws {
-            var utc = Calendar(identifier: .gregorian)
-            utc.timeZone = try timeZone
-            return try WeekCalendar(startDate: blockStart, weekStart: .monday, calendar: utc)
+            try calendar(weekStart: .monday)
         }
+    }
+
+    /// Stats weeks starting on `weekStart`, in UTC.
+    public static func calendar(weekStart: Weekday) throws -> WeekCalendar {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try timeZone
+        return try WeekCalendar(startDate: blockStart, weekStart: weekStart, calendar: utc)
     }
 
     static let bench = Workouts.exercises[0]
@@ -94,10 +99,13 @@ public enum StatsQueriesContract {
         )
     }
 
-    /// Criterion 4. 34 bench sessions two days apart, the last ending at `now`: four sets of 180 × 5, one of
-    /// 180 × 4, a 185 left undone, a done drop set and a done added set. The "Last" line counts the five done
-    /// working sets and shows the heaviest of them with the most reps. A later workout in which bench was not
-    /// done does not replace it; deleting the 34th falls back to the 33rd.
+    /// Criterion 4. 34 bench sessions two days apart, the last ending at `now`: a 180 × 4, a 175 × 5, three sets
+    /// of 180 × 5, a 185 left undone, a done drop set and a done added set. The "Last" line counts the five done
+    /// working sets and shows the heaviest of them with the most reps, which is not the first.
+    /// - A workout that ended at the same instant, stored first and with the larger id, does not replace it:
+    ///   of two workouts ending together, the one with the smaller id is the latest.
+    /// - A later workout in which bench was not done as a working set does not replace it either.
+    /// - Deleting the 34th falls back to the workout that ended with it.
     static func lastPerformance(_ stores: HistoryStores) async throws -> String? {
         for session in 0 ..< 33 {
             let pounds = Decimal(100 + 5 * (session / 2))
@@ -105,9 +113,12 @@ public enum StatsQueriesContract {
                 .straight(bench, sets: 5, reps: 5, pounds: pounds)
             ]))
         }
+        try await stores.materialize(Seeders.workout(number: 35, endedAt: now, [
+            .straight(bench, sets: 4, reps: 6, pounds: 170)
+        ]))
         let last = Seeders.workout(number: 33, endedAt: now, [
             Seeders.ExerciseLog(bench, [
-                .init(180, 5), .init(180, 5), .init(180, 4), .init(180, 5), .init(180, 5),
+                .init(180, 4), .init(175, 5), .init(180, 5), .init(180, 5), .init(180, 5),
                 .init(185, 5, done: false), .init(155, 8, .drop), .init(200, 3, .added)
             ]),
             .straight(row, sets: 3, reps: 8, pounds: 70)
@@ -122,28 +133,30 @@ public enum StatsQueriesContract {
         let sessions = try await stats.sessionCount(exerciseID: bench.id)
         let unknown = try await stats.lastPerformance(exerciseID: Workouts.exercises[5].id)
         try await stores.workouts.delete(id: last.id)
-        return try await ContractCheck.first(
+        let afterDelete = try await stats.lastPerformance(exerciseID: bench.id)
+        let twin = LastPerformance(date: now, sets: 4, reps: 6, load: .pounds(170))
+        return ContractCheck.first(
             ContractCheck.expect(
                 line,
                 LastPerformance(date: now, sets: 5, reps: 5, load: .pounds(180)),
-                "lastPerformance after 34 sessions"
+                "the Last line"
             ),
-            ContractCheck.expect(sessions, 35, "sessionCount: 34 sessions and one with a done warm-up"),
+            ContractCheck.expect(sessions, 36, "sessionCount: 35 sessions and one with a done warm-up"),
             ContractCheck.expect(unknown, nil, "lastPerformance of an exercise never logged"),
-            ContractCheck.expect(
-                stats.lastPerformance(exerciseID: bench.id),
-                LastPerformance(date: day(-2), sets: 5, reps: 5, load: .pounds(180)),
-                "lastPerformance after the 34th was deleted"
-            )
+            ContractCheck.expect(afterDelete, twin, "lastPerformance after the 34th was deleted")
         )
     }
 
-    /// The bests count done `.working` and `.added` sets. The heaviest set is 200 × 3 (added), over a heavier
-    /// drop set, a heavier undone set and a 200 × 2. The best estimate is 185 × 8, over the heavier 200 × 3 and
-    /// over a 150 × 20, which has no estimate.
+    /// The bests count done `.working` and `.added` sets, and no other kind.
+    /// - The heaviest set is 200 × 3 (added), over a 200 × 2, a heavier undone set, and a heavier drop set and
+    ///   warm-up.
+    /// - The best estimate is 185 × 8, over the heavier 200 × 3, a 150 × 20 (no estimate above 12 reps), and the
+    ///   drop set and the warm-up, whose estimates are both higher.
     static func bests(_ stores: HistoryStores) async throws -> String? {
         try await stores.materialize(Seeders.workout(number: 0, endedAt: day(-7), [
-            Seeders.ExerciseLog(bench, [.init(185, 8), .init(200, 2), .init(150, 20), .init(210, 1, .drop)]),
+            Seeders.ExerciseLog(bench, [
+                .init(185, 8), .init(200, 2), .init(150, 20), .init(250, 1, .drop), .init(240, 2, .warmup)
+            ]),
             .straight(row, sets: 3, reps: 8, pounds: 300)
         ]))
         try await stores.materialize(Seeders.workout(number: 1, endedAt: now, [
