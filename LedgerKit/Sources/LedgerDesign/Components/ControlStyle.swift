@@ -19,8 +19,18 @@ public extension Shape where Self == Capsule {
 }
 
 nonisolated enum LedgerHitTarget {
-    /// HIG: 44 × 44 pt on iOS.
+    /// HIG: 44 × 44 pt on iOS, and the default control size on watchOS (HIG, Accessibility › Mobility:
+    /// "watchOS 44x44 pt", minimum 28 × 28).
     static let minimum: CGFloat = 44
+}
+
+nonisolated extension LedgerFont {
+    /// The `minimumScaleFactor` for a line of `role` text set at `size` points that may shrink rather
+    /// than truncate: at most to half, and never below the role's floor. For the watch roles that floor
+    /// is 11 pt (F06 criterion 4), so no shrunk watch text is ever smaller.
+    static func shrinkLimit(_ role: Role, size: CGFloat) -> CGFloat {
+        min(1, max(0.5, role.spec.minimumSize / size))
+    }
 }
 
 extension View {
@@ -30,6 +40,14 @@ extension View {
         padding(LedgerSpacing.screen)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(LedgerColor.ground)
+    }
+
+    /// A watch component gallery as a watch screen shows it: the prototype's 20 px (13 pt) inset, on
+    /// black. The watch has one, dark, appearance.
+    func ledgerWatchPage() -> some View {
+        padding(LedgerSpacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LedgerColor.watchGround)
     }
 }
 

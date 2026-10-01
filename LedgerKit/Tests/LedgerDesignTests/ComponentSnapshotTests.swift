@@ -133,8 +133,9 @@ import Testing
         }
     }
 
-    private extension View {
-        /// A gallery as the phone shows it: screen inset, on the ground, 402 pt wide.
+    extension View {
+        /// A gallery as the phone shows it: screen inset, on the ground, 402 pt wide. Every phone
+        /// component suite uses it (slice 3's too).
         func phonePage() -> some View {
             ledgerGalleryPage().frame(width: SnapshotConfig.phoneWidth)
         }

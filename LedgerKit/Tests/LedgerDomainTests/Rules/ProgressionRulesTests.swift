@@ -255,6 +255,18 @@ struct ProgressionRulesTests {
         #expect(prescribe(bench, Fixtures.bench, week: 7, deload: true, units: .kg).load == .kilograms(82.5))
     }
 
+    @Test("Kettlebells progress a bell size at a time and deload to the nearest 2 kg / 5 lb (decision #22)")
+    func prescribe_kettlebell_usesBellSteps() throws {
+        let swing = Fixtures.exercise(30, "Kettlebell Swing", .kettlebell, pounds: 25, kilograms: 12)
+        let slot = try Fixtures.slot(swing, id: 10, reps: 10)
+        #expect(prescribe(slot, swing, week: 2).load == .pounds(35))
+        #expect(prescribe(slot, swing, week: 2, units: .kg).load == .kilograms(16))
+        #expect(prescribe(slot, swing, week: 2, units: .kg).step == .kilograms(2))
+        // 12 + 2 × 7 = 26 kg; × 0.85 = 22.1 → nearest 2 kg = 22. 25 + 5 × 7 = 60 lb; × 0.85 = 51 → 50.
+        #expect(prescribe(slot, swing, week: 7, deload: true, units: .kg).load == .kilograms(22))
+        #expect(prescribe(slot, swing, week: 7, deload: true).load == .pounds(50))
+    }
+
     @Test("Seed slots prescribe per spec §7.2", arguments: ProgressionFixtures.rows)
     func prescribe_table(row: ProgressionFixtures.Row) throws {
         let slot = try Fixtures.slot(

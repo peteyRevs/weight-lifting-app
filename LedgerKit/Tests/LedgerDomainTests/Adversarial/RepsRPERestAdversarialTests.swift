@@ -150,12 +150,18 @@ struct EquipmentWeekdayAdversarialTests {}
 
 extension EquipmentWeekdayAdversarialTests {
     @Test(
-        "Default steps: lb barbell 5 else 2.5; kg barbell 2.5 else 1.25 (rule 1, decision #9).",
+        "Default steps: lb barbell and kettlebell 5 else 2.5; kg barbell 2.5, kettlebell 2, else 1.25 (#9, #22).",
         arguments: Equipment.allCases
     )
     func defaultStep_perEquipmentAndUnit(equipment: Equipment) {
-        #expect(equipment.defaultStep(in: .lb) == (equipment == .barbell ? pounds("5") : pounds("2.5")))
-        #expect(equipment.defaultStep(in: .kg) == (equipment == .barbell ? kilos("2.5") : kilos("1.25")))
+        // Decision #22 (Pete, 2026-09-30): kettlebells step by the gap between bell sizes, 5 lb / 2 kg.
+        let (lb, kg) = switch equipment {
+        case .barbell: (pounds("5"), kilos("2.5"))
+        case .kettlebell: (pounds("5"), kilos("2"))
+        default: (pounds("2.5"), kilos("1.25"))
+        }
+        #expect(equipment.defaultStep(in: .lb) == lb)
+        #expect(equipment.defaultStep(in: .kg) == kg)
     }
 
     @Test("Weekday maps Foundation's Sunday-first numbering both ways.")

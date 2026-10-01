@@ -176,7 +176,12 @@ Concrete test names (file = suite = source type; see §6):
   `RenderedImage.render` (`ImageRenderer`, 1×) and the `.png` strategy in
   `LedgerSnapshotTesting`, which applies the same precision and ΔE threshold.
   It measures ΔE as CIE76, which is never smaller than the CIE94 that Core
-  Image measures for the library on iOS, so it is at least as strict.
+  Image measures for the library on iOS, so it is at least as strict. Watch
+  components go through `assertWatchSnapshot(of:_:)` over
+  `WatchAppearance.matrix`: each size at its default text size (`.large` at
+  42 mm, `.xLarge` at 46 and 49 mm) and at `.accessibility3`, the largest
+  watch text size (HIG, Typography), at the case's width and the view's own
+  height = 6 images per component state.
 - Precision: `precision: 0.995, perceptualPrecision: 0.98`, set once in
   `SnapshotConfig` and never overridden per test.
 - Storage: PNGs in `__Snapshots__/` next to the test file, committed to git

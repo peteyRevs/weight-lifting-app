@@ -34,7 +34,7 @@ public enum CSVExport { public static func render(workouts: [WorkoutState], exer
 `Settings` (F02) gains nothing; `SettingsRepository.observe()` drives live updates.
 
 ## Acceptance criteria
-1. Given units switched lb → kg, when Today, Active workout, Library, History render, then weights show kg and steps are 2.5/1.25 (verified through `Weight.formatted(in:)` and `Equipment.defaultStep(in:)` bindings; a UI test flips units and asserts a known set row).
+1. Given units switched lb → kg, when Today, Active workout, Library, History render, then weights show kg and steps are 2.5/1.25 (2 for kettlebells, decision #22) (verified through `Weight.formatted(in:)` and `Equipment.defaultStep(in:)` bindings; a UI test flips units and asserts a known set row).
 2. Given "Default rest" stepped, then values stay within 30–300 s in 15 s steps and new slots (F11) pick it up.
 3. Given "Plate math" on, then the bar and plate inventory editor is enabled with `PlateInventory.standard(units)` defaults; edits persist; F25 reads them.
 4. Given the Health row before authorization, then it reads "Apple Health · Not connected" and tapping opens the system Settings app; after F16, "Connected".

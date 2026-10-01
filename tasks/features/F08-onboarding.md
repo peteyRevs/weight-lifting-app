@@ -57,7 +57,7 @@ public enum ProgramTemplates {
 | `consistent` | 3×5 (hi 7), RPE 7, 120 s, linear | 3×8 (hi 10), RPE 7, 90 s, fixed | 2×12 (hi 14), RPE 7, 60 s, fixed |
 
 **Exception (canonical seed):** `both` × `four` is spec §6.4 verbatim (sets/reps/repsHi/RPE/rest/progression per slot, superset on Upper A 4–5 and Lower A 3–4, drop set on Upper B 4, fixed calf raise) with the §6.4 schedule (weeks 1–7 Mon UA · Wed LA · Fri UB · Sat LB; week 8 Mon UA · Wed LA · Fri UB, deload). Other goals on the 4-day keep the same exercises, supersets and drop set, and take prescriptions from the role table.
-Start load = `exercise.defaultStartLoad` rounded to the unit's step (lb 5 / 2.5, kg 2.5 / 1.25 by equipment); `Slot.step = nil` (resolve per unit at read time, F14). Deload maths is `ProgressionRules` (F02), not the template.
+Start load = `exercise.defaultStartLoad` rounded to the unit's step (`Equipment.defaultStep(in:)`: lb barbell and kettlebell 5, others 2.5; kg barbell 2.5, kettlebell 2, others 1.25 — decision #22); `Slot.step = nil` (resolve per unit at read time, F14). Deload maths is `ProgressionRules` (F02), not the template.
 
 **Templates** (day name · tag: slots with role → preview line). Every name must resolve in the F03 catalog (test-enforced).
 - 4-day "Upper / Lower" — UA/LA/UB/LB exactly §6.4; roles UA: Bench P, Incline DB S, CS Row S, Pulldown A, Lateral A · LA: Squat P, RDL S, Leg Press A, Calf A · UB: Pull-Up P, OHP S, Row S, Curl A · LB: Deadlift P, Front Squat S, Leg Curl A. Schedule as above.
@@ -89,7 +89,7 @@ Start load = `exercise.defaultStartLoad` rounded to the unit's step (lb 5 / 2.5,
 5. Given any step, when I tap "Skip setup", then the `both` × `four` program is generated and saved exactly as in 4, and I land on Today.
 6. Given `both` × `four`, when generated, then every slot equals spec §6.4 (assert full table) and the schedule equals the §6.4 seed including week 8's three days.
 7. Given any (goal, days) pair, when generated, then every slot value is inside spec §7.1 ranges (sets 1–12, reps 1–30, repsHi 2–40 and > reps, RPE 5–10 step 0.5, rest 30–300 step 15), every exercise name resolves in the F03 catalog, and the schedule has exactly `days` training days per week for weeks 1–7.
-8. Given units = kg (set before onboarding via F14 fixture), when generated, then every start load is a multiple of the kg step (2.5 kg barbell / 1.25 kg other) and the step-3 body says "kilograms".
+8. Given units = kg (set before onboarding via F14 fixture), when generated, then every start load is a multiple of the kg step (2.5 kg barbell / 2 kg kettlebell / 1.25 kg other) and the step-3 body says "kilograms".
 9. Given the same inputs and the same `uuid` sequence, when generated twice, then the two programs are `==` (determinism).
 10. Given a repository save failure, when I tap "Start training", then the screen shows "Couldn't save your program. Try again." with "Retry", nothing navigates, and Retry re-attempts with the same picks.
 11. Given onboarding completed on a Wednesday (2026-09-16, week start Monday), when Today loads, then `WeekCalendar.currentWeekIndex` is 0 and Today shows week 1 of 8 (`Program.startDate == 2026-09-14`).
