@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import GRDB
 import LedgerDomain
@@ -93,10 +92,6 @@ struct SlotMissRecord: SyncedRecord {
 
     /// RFC 9562 §5.5: the name-based UUID (SHA-1, version 5) of `week` as decimal text, in `slot`'s namespace.
     static func id(slot: SlotID, week: Int) -> UUID {
-        let namespace = withUnsafeBytes(of: slot.rawValue.uuid) { Array($0) }
-        var digest = Array(Insecure.SHA1.hash(data: namespace + Array(String(week).utf8)))
-        digest[6] = digest[6] & 0x0F | 0x50 // version 5
-        digest[8] = digest[8] & 0x3F | 0x80 // RFC 9562 variant
-        return UUID(uuid: digest.withUnsafeBytes { $0.loadUnaligned(as: uuid_t.self) })
+        ColumnCodec.derivedID(named: String(week), in: slot.rawValue)
     }
 }

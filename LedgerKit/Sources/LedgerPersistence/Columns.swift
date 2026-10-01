@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import LedgerDomain
 
@@ -42,6 +43,17 @@ enum ColumnCodec {
             throw .malformedIdentifier(text)
         }
         return ID(uuid)
+    }
+
+    /// RFC 9562 §5.5: the name-based UUID (SHA-1, version 5) of `name` in `namespace`. A row with no id in
+    /// the Domain gets one this way (`slot_miss`, `personal_record`): the same row has the same id on every
+    /// device and on every save, with no UUID source.
+    static func derivedID(named name: String, in namespace: UUID) -> UUID {
+        let prefix = withUnsafeBytes(of: namespace.uuid) { Array($0) }
+        var digest = Array(Insecure.SHA1.hash(data: prefix + Array(name.utf8)))
+        digest[6] = digest[6] & 0x0F | 0x50 // version 5
+        digest[8] = digest[8] & 0x3F | 0x80 // RFC 9562 variant
+        return UUID(uuid: digest.withUnsafeBytes { $0.loadUnaligned(as: uuid_t.self) })
     }
 
     // MARK: Sequence numbers

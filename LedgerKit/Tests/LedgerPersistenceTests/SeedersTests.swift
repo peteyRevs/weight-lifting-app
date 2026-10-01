@@ -34,4 +34,36 @@ struct SeedersTests {
         #expect(Set(slotIDs).count == 7 * 32)
         #expect(Set(program.weeks[0].schedule.values).count == 7)
     }
+
+    @Test("A seeded history is finished workouts 42 hours apart, of the size asked for, the same for one seed")
+    func history_isDeterministic_andSized() {
+        let catalog = Seeders.catalog(count: 12, version: 1).exercises
+        var first = SeededGenerator(seed: 42)
+        var second = SeededGenerator(seed: 42)
+        var other = SeededGenerator(seed: 43)
+        let history = Seeders.history(exercises: catalog, workouts: 40, setsPerWorkout: 50, rng: &first)
+        #expect(history == Seeders.history(exercises: catalog, workouts: 40, setsPerWorkout: 50, rng: &second))
+        #expect(history != Seeders.history(exercises: catalog, workouts: 40, setsPerWorkout: 50, rng: &other))
+        #expect(history.count == 40)
+        #expect(history.allSatisfy { $0.totalSets == 50 && $0.exercises.count == 5 && $0.phase == .finished })
+        #expect(Set(history.map(\.id)).count == 40)
+        #expect(Set(history.flatMap(\.exercises).flatMap(\.sets).map(\.id)).count == 2000)
+        #expect(history.last?.endedAt == EventBuilders.start)
+        #expect(history.first?.endedAt == EventBuilders.start.addingTimeInterval(-39 * 42 * 3600))
+        let sets = history.flatMap(\.exercises).flatMap(\.sets)
+        #expect(sets.contains { $0.kind == .drop } && sets.contains { !$0.isDone })
+        #expect(sets.allSatisfy { $0.reps.value <= 15 && $0.weight >= .pounds(45) && $0.weight <= .pounds(315) })
+    }
+
+    @Test("A history of fewer exercises than five, of none, or of no workouts still builds")
+    func history_smallShapes_build() {
+        var generator = SeededGenerator(seed: 1)
+        let two = Array(Seeders.catalog(count: 2, version: 1).exercises)
+        let small = Seeders.history(exercises: two, workouts: 3, setsPerWorkout: 5, rng: &generator)
+        #expect(small.map(\.totalSets) == [5, 5, 5])
+        #expect(small.allSatisfy { $0.exercises.map(\.sets.count) == [3, 2] })
+        let empty = Seeders.history(exercises: [], workouts: 2, setsPerWorkout: 5, rng: &generator)
+        #expect(empty.map(\.exercises.count) == [0, 0])
+        #expect(Seeders.history(exercises: two, workouts: -1, setsPerWorkout: 5, rng: &generator).isEmpty)
+    }
 }

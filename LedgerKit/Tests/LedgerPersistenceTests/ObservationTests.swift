@@ -5,10 +5,10 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// The repositories' `ValueObservation` streams (`observeAll`, `observeActive`): the current value first, then
-/// one value per change that alters it, and none for a write that does not. `LedgerPersistenceTests` runs in the
-/// PR-Watch plan too, so these emissions are checked on the watch simulator as well (F05 risk
-/// "ValueObservation on watchOS"). S3 adds `observeRecent` (criterion 10).
+/// The repositories' `ValueObservation` streams (`observeAll`, `observeActive`, `observeRecent`): the current
+/// value first, then one value per change that alters it, and none for a write that does not.
+/// `LedgerPersistenceTests` runs in the PR-Watch plan too, so these emissions are checked on the watch simulator
+/// as well (F05 risk "ValueObservation on watchOS").
 @Suite("Repository observation", .tags(.persistence), .timeLimit(.minutes(1)))
 struct ObservationTests {
     /// Every value `observation` emits, in order. The repositories' streams keep only the newest value, so a
@@ -75,5 +75,36 @@ struct ObservationTests {
         var active = second
         active.isActive = true
         #expect(await values.next() == active)
+    }
+
+    @Test("Criterion 10: observeRecent(limit: 10) emits the new list when a workout is materialised")
+    func observeRecent_emitsTheMaterialisedWorkout() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let workout = WorkoutRepositoryContract.workout()
+        var values = repositories.workouts.observeRecent(limit: 10).makeAsyncIterator()
+        #expect(await values.next() == [])
+        try await repositories.history.materialize(workout)
+        #expect(await values.next() == [workout])
+    }
+
+    @Test("observeRecent's observation emits each change of its list, and none for a write that leaves it alone")
+    func observeRecent_emitsOnChange_only() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let start = EventBuilders.start
+        let workouts = (0 ..< 3).map { number in
+            WorkoutRepositoryContract.workout(number: number, endedAt: start.addingTimeInterval(3600 * Double(number)))
+        }
+        let observation = GRDBWorkoutRepository.recentObservation(limit: 2)
+        var values = Self.everyValue(observation, in: repositories.queue).makeAsyncIterator()
+        #expect(await values.next() == [])
+        try await repositories.history.materialize(workouts[1])
+        #expect(await values.next() == [workouts[1]])
+        try await repositories.execute("UPDATE logged_set SET reps = reps") // a write that changes no value
+        try await repositories.history.materialize(workouts[1]) // the same workout again: no row changes
+        try await repositories.history.materialize(workouts[2])
+        #expect(await values.next() == [workouts[2], workouts[1]])
+        try await repositories.history.materialize(workouts[0]) // older than the newest two: the list is unchanged
+        try await repositories.workouts.delete(id: workouts[2].id)
+        #expect(await values.next() == [workouts[1], workouts[0]])
     }
 }

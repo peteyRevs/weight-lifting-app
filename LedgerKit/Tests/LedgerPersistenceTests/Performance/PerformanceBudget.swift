@@ -9,6 +9,12 @@ enum PerformanceBudget {
     static let catalogSeed: Duration = .milliseconds(300)
     /// F12's "search filter < 10 ms/keystroke": one `search` over the seeded catalog and a few custom rows.
     static let exerciseSearch: Duration = .milliseconds(10)
+    /// Criterion 9, architecture §15: any `StatsQueries` method over 20,000 logged sets, at the 95th percentile
+    /// of `statsRuns` runs.
+    static let statsQuery: Duration = .milliseconds(50)
+    /// How many timed runs of a stats query, after one untimed warm-up: enough for a 95th percentile (the 19th
+    /// fastest of 20).
+    static let statsRuns = 20
     /// How many timed runs a measured test takes the median of, after one untimed warm-up.
     static let runs = 5
 }

@@ -927,3 +927,296 @@ LedgerDomain 99.05 %, LedgerDesign 97.20 %, overall 98.52 %. `ProgramIdentityClo
 (S2-5's `danglingParent_isRepairedBySave` among them) and the search suites pass on the host too, which is the
 tester's condition for closing G2. The mutant results named above were in a scratchpad the restart removed; the
 tests they were checked against are in the tree.
+
+## Slice S3
+
+History and stats, on `feat/F05-s3` (from `feat/F05-s2` a38ed78, which is S2 awaiting merge as PR #17). Closes
+criteria 3, 4, 5, 6, 9, 10 and 12, and re-closes criterion 8 with a `materialize` → `compact` test (S1 review N9).
+Schema v001 is unchanged: everything fits it.
+
+### What landed
+
+- `LedgerPersistence/Records/`:
+  - `WorkoutRecords.swift`: `WorkoutRecord` and `WorkoutExerciseRecord`;
+  - `LoggedSetRecords.swift`: `LoggedSetRecord` (computes `e1rm_e7g`) and `PersonalRecordRecord`;
+  - `WorkoutRows.swift`: a workout as the rows of its four tables, the write diff, the owner check, and the
+    read (`fetch`) over a `Selection` of workouts.
+- `LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` and `LedgerPersistence/Stats/GRDBStatsQueries.swift`.
+- Small additions to S1/S2 files:
+  - `LedgerPersistenceError.notFinished`;
+  - `ColumnCodec.derivedID(named:in:)`: S2's version-5 UUID, moved out of `SlotMissRecord` so `personal_record`
+    rows use it too (`SlotMissRecord.id` now calls it; the ids are unchanged);
+  - `ColumnReader.reps`, `date`, `optionalDate`; `isNull` is no longer private;
+  - `Row.readable(as:_:)`: read a row, or log it and leave it out.
+- `LedgerTestSupport/Persistence/`:
+  - `Seeders+History.swift`: `Seeders.workout(…)`, `SetSpec`, `ExerciseLog`, and
+    `Seeders.history(exercises:workouts:setsPerWorkout:rng:endingAt:)`;
+  - `WorkoutRepositoryContract` (12 clauses) and `StatsQueriesContract` (9), both over `HistoryStores` (a
+    workout repository, stats queries and a program repository on one store), public API only;
+  - `ContractCheck.first(…)`: the first failed check of several, each of which may `await`.
+- Tests (`LedgerPersistenceTests`): `WorkoutRepositoryTests`, `WorkoutRowDiffTests`, `StatsQueriesTests`,
+  `DamagedWorkoutRowTests`, `MigrationCompatibilityTests`, `Performance/StatsQueriesPerformanceTests`, two tests
+  in `ObservationTests`, two in `SeedersTests`; `Fixtures/db-v001.sqlite`.
+
+### Decisions and deviations
+
+1. **`materialize` is an upsert keyed by the workout's id, in one write transaction.**
+   - It reads the workout's live rows from all four tables, then writes parents first through S2's
+     `SyncedRecord.write`: a new or changed row is upserted, an unchanged row is left alone, and a row the
+     workout no longer has is soft-deleted.
+   - So a second materialisation of the same state runs no `INSERT` or `UPDATE` at all, and a rebuild that
+     changed one set stamps only that row. A deleted workout comes back, with its `created_at`.
+   - `delete(id:)` is the same write with no rows: it soft-deletes the workout, its exercises, sets and
+     records (ADR-002; hard deletes are F29's). It does not undo the misses the workout recorded, and it leaves
+     `workout_health`.
+2. **Only a finished workout is stored (new error `notFinished`).** `materialize` throws unless the phase is
+   `.finished` and `endedAt` is set, and stores nothing. History, and every stats range, is keyed on `ended_at`,
+   so a live or endless workout has no place in it. A discarded workout is not stored: when a late discard
+   overtakes a finish (F04 input 6), the host calls `delete(id:)`.
+3. **The totals come from the state, not from `summary`.** `volume_e7g_reps`, `done_sets` and `total_sets` are
+   computed from the sets being written, and `pr_count` is `prs.count`. `summary` is
+   `WorkoutEngine.summary(workout, prs:)`, a function of the other two arguments, so it holds nothing else to
+   store, and columns taken from it could disagree with the rows. The parameter is unused (open question 1).
+4. **`slotUpdates` write misses only, and never fail the workout.** For each slot, its stored `slot_miss` rows
+   are made its `misses` through the diff a program save uses (derived ids, so a kept miss keeps its row). No
+   other slot field is written. A slot that is not stored, or is deleted (the program was edited or deleted
+   during the workout), is logged at notice level and skipped. The alternative, a foreign-key error, would
+   make that workout impossible to materialise for good.
+5. **`programUpdates` is not applied.** F10's input 7 leaves open whether a swap reaches the program at the
+   swap or from `.materialize`; `ProgramRepository` has no call for it yet.
+6. **History reads reset the live-only fields.** `cursor`, `rest`, `programUpdates` and each exercise's
+   `lastPerformance` are not stored and read back empty; `autoRest` reads back `true`.
+   `WorkoutRepositoryContract.stored(_:)` is that mapping, for F07's fake.
+7. **A workout's date is when it ended.** `recent`, `workouts(in:)`, every stats range, the week of a volume or
+   an e1RM, and the date of the "Last" line all use `ended_at` (the column `idx_workout_ended` indexes). A
+   workout then belongs to exactly one week, whenever its sets were ticked, and an edit that re-ticks a set
+   cannot move its volume to another week. Lists are newest first (`ended_at DESC`, then id). A limit below 1
+   gives none (SQLite reads a negative `LIMIT` as no limit).
+8. **e1RM is stored for every done set of at most 12 reps, whatever its kind** (the schema's comment). The
+   **bests** (`bestSet`, `bestE1RM`, `e1RMByWeek`) count only `.working` and `.added` sets, the sets
+   `PersonalRecords.detect` lets set a record (decision #3). Otherwise a drop or warm-up set could hold a best
+   that no record-eligible set is ever compared with. Volume counts every kind (rule 34), and the "Last" line
+   only `.working` sets (criterion 4).
+9. **The "Last" line** (criterion 4, rule 14) is the most recent workout in which the exercise has a done
+   working set: its end date, how many such sets, and the load and reps of the heaviest of them (of two as
+   heavy, the one with more reps). **`bestSet`** is the heaviest set, then more reps, as F12's brief words it.
+10. **`e1RMByWeek(lastWeeks:)`** covers the `lastWeeks` stats weeks ending with the one that holds the injected
+    `now`. Each workout's week is `calendar.firstDayOfWeek(containing:)`, compared in whole civil days, and the
+    key is `calendar.isoWeekKey(for:)`. Nothing loops over weeks, so `lastWeeks: .max` is safe; a `now` no
+    calendar holds gives `[:]`. The query reads every session of the exercise, since `WeekCalendar` cannot turn
+    a civil day back into a date for a SQL bound (1 ms at 20,000 sets).
+11. **`weeklyVolume`** follows the S1 plan: SQL groups by `weight_e7g` and sums only the reps; the products are
+    summed in `Decimal`. Exact at any size (`StatsQueriesTests.weeklyVolume_isExact`).
+12. **`sessionsCompleted`** counts the finished workouts that ended in the range, with or without a done set.
+    **`sessionCount`** counts the workouts with a done set of the exercise, of any kind. **`personalRecords`** is
+    newest first, and within a workout the estimated 1RM before the weight at reps. **`recentlyLogged`** orders
+    exercises by their latest workout, then by id.
+13. **`updateSets`** loads the workout that holds the exercise, replaces that exercise's sets and writes the
+    workout back through the same diff, in one transaction. So e1RMs and the workout's totals are computed
+    again, removed sets are soft-deleted, and unchanged rows keep `updated_at`. The record rows and `pr_count`
+    are left as they are (open question 4). An exercise of no live workout throws `missingRow`.
+14. **Ids are never taken over** (the class of S2's B1). An exercise or set id that another stored workout
+    holds, live or deleted, throws `duplicateIdentifier` before any row is written, from `materialize` and from
+    `updateSets`. Two exercises or two sets sharing an id in one workout throw the same. As in S2-5, a row whose
+    parent names no stored workout is damage, and a write repairs it.
+15. **`personal_record.id` is derived**: the version-5 UUID of the record's place among its workout's records,
+    in the workout's namespace. Materialising the same records again writes the same rows, with no UUID source.
+    The table is local-only, so the ids need not agree across devices.
+16. **Damaged rows** (S1 and S2's rule: kept, logged, never a trap).
+    - Every history column is read through `ColumnReader`. A `REAL` in an integer column, a date that is not a
+      finite `REAL`, reps below 1, an unknown case, a source with only some of its three columns, or a
+      malformed id throws by name.
+    - A workout is one aggregate. `workout(id:)` and `updateSets` throw; `recent`, `workouts(in:)` and
+      `observeRecent` log the workout, leave it out and return the rest, and the stream goes on.
+    - A stats aggregate over a damaged value throws by name. `personalRecords` and `recentlyLogged` leave an
+      unreadable row out.
+    - Nothing is deleted, and materialising the workout again repairs it, because the diff compares stored
+      rows as column values.
+    - Unlike S1's event store there is no count of unreadable workouts on the protocol (open question 9).
+17. **Refusals.** Text holding U+0000 throws `nulInText` (S2's check, in `SyncedRecord`). A weight that is not a
+    whole number of 10⁻⁷ g throws `inexactWeight`. A date that is not finite (`startedAt`, `endedAt`, a set's
+    `doneAt`, a record's `achievedAt`) throws `nonFiniteDate`. Each leaves the database as it was.
+18. **`fixtures/db-v001.sqlite`** (241 KB) is a database file that v001's code wrote through the repositories:
+    7 exercises (one custom), an active program and a deleted one, three workouts (one with records and
+    edited sets, one deleted), settings, the 13 `PayloadV1` envelopes as an uncompacted log, and one
+    `workout_health` and one `device` row. It is in rollback-journal mode, so it is one file.
+    - The one-off generator was deleted, as for S1's payload fixtures; the file is never regenerated.
+    - `MigrationCompatibilityTests` expects written-out values, not `Seeders` output, so a later change to a
+      seeder cannot move them.
+    - The test-only `v002_testOnly` adds a column to `workout`, a table with a foreign key to it, and an index.
+    - **Deviation from testing-strategy §2.2**, which describes `.sql` dumps and a `migrations.lock`: the brief's
+      Definition of Done names the `.sqlite` file, and S1 already pins the migration list
+      (`SchemaTests.inMemory_foreignKeysOn_v001Applied`) and the DDL (`schema-v001.sql`).
+19. **`StatsQueriesPerformanceTests`** seeds 400 workouts × 50 sets through `materialize` into a file database,
+    and checks each of the nine methods (and all-time volume) against `PerformanceBudget.statsQuery` (50 ms).
+    - **It asserts the 95th percentile of 20 runs**, as criterion 9 says, where testing-strategy §2.2 says the
+      median of five.
+    - It is `.performance` and `.slow` (a new tag), and enabled only in the nightly lane by
+      `TestLane.runsSlowTests`, as S1's and S2's timing tests are. The PR plans' `skippedTests` are unchanged.
+20. **Brief paths.** `Stats/StatsQueries.swift` in "Touches" is `Stats/GRDBStatsQueries.swift`, after the type.
+    `TestDatabase.swift` was never created: tests use `LedgerDatabase.inMemory()` (S1). `Seeders.history` has one
+    more parameter than the brief's, `endingAt`, with a default.
+21. **Not changed, on purpose:** `LedgerDomain` (no line), `docs/`, the other briefs, the test plans,
+    `Package.swift`, and `project.pbxproj`.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 3. five exercises materialise as rows with e1RM, records and misses, in one transaction; a failure leaves no rows | `WorkoutRepositoryTests.materialize_writesEveryTable_inOneTransaction` (row counts; a statement trace shows one `BEGIN` and one `COMMIT`), `materialize_computesE1RM` (all 19 sets), `materialize_writesTheDocumentedColumns`, `failedMaterialize_leavesNoRows` (a trigger fails the first record insert, after the workout, exercises and sets; then an inexact weight in the last set: every row and stamp as before), `nonFiniteDates_areRefused`; contract clauses `roundTrip`, `materializeTwice`, `replaces`, `notFinished`, `writesMisses`, `refusesNul` |
+| 4. `lastPerformance` after 34 bench sessions | contract clause `lastPerformance` (34 sessions; drop, added and undone sets ignored; a later workout without a done working set skipped; the 34th deleted) ; `StatsQueriesTests.exerciseTwiceInAWorkout_isOneSession` |
+| 5. `e1RMByWeek(lastWeeks: 8)` over 10 weeks | contract clause `e1RMByWeek` (two workouts in one week, a week with none, a week of 15-rep sets, weeks 8 and 9 outside, next week outside; `lastWeeks` 0 and 1); `StatsQueriesTests.e1RMByWeek_followsTheWeekStart` (Sunday against Monday start; `lastWeeks: .max`; a non-finite `now`) |
+| 6. `weeklyVolume` of two consecutive weeks, and the delta | contract clause `weeklyVolume` (drop, added and warm-up sets counted, undone not; a workout on the week's first instant; the delta); `StatsQueriesTests.weeklyVolume_isExact` |
+| 8. compaction after materialisation (S1 N9) | `WorkoutRowDiffTests.materializeThenCompact_keepsTheWorkout` |
+| 9. each stats method under 50 ms at 20,000 sets | `StatsQueriesPerformanceTests.everyQuery_underBudget` (nightly lane; run by hand below) |
+| 10. `observeRecent(limit: 10)` emits on materialise | `ObservationTests.observeRecent_emitsTheMaterialisedWorkout`, `observeRecent_emitsOnChange_only` (unbuffered: no value for a no-op write, a repeated materialise, or a workout outside the limit); contract clause `observeRecent`. All run in PR-Watch too |
+| 12. a v001 database with data survives a v002 | `MigrationCompatibilityTests.v002_keepsTheData`, `fixture_isAtV001` (applied migrations, DDL equal to `schema-v001.sql`, integrity, foreign keys, row counts), `open_readsAndWritesTheFixture` (the app's own `open(at:)`) |
+| Test plan: `updateSets`, delete cascades | `WorkoutRowDiffTests.updateSets_recomputesE1RM_andTotals`, `updateSets_unchanged_writesNoRow`, `delete_cascades_softly` (soft deletes in stored order; revival keeps `created_at`), `materializeTwice_writesNoRow`, `rematerialize_diffsRows`, `misses_ofASlotNotStored_areSkipped`, `recordIDs_areDerived`; contract clauses `updateSets`, `deleteHides`, `newestFirst`, `duplicateIDs`, `otherWorkoutsIDs` |
+| Test plan: PR history, sessions this week, recently logged | contract clauses `personalRecords`, `sessions`, `recentlyLogged`, `bests`, `emptyHistory`, `followsEdits`; `StatsQueriesTests.onlyLiveRowsOfFinishedWorkouts_count` |
+| Invalid stored data | `DamagedWorkoutRowTests` (23 damages across the three tables: `workout(id:)` and `updateSets` throw by name, the lists and the stream leave the workout out, the row is kept, a new materialise repairs it; three dangling parents; stats over damaged values; unreadable record rows and exercise ids) |
+| Seeder | `SeedersTests.history_isDeterministic_andSized`, `history_smallShapes_build` |
+
+**Mutation check (host, by hand, one at a time, file restored after each; script and results in scratchpad
+`f05s3/mut/`).** 26 mutants, all killed. Two survived the first run and each got a test: the misses of a slot
+that is not stored (the contract's unknown slot had no misses, so nothing was written either way), and a
+workout row soft-deleted on its own (its children's `deleted_at` hid it already). The others: e1RM for undone
+sets; undone sets counted; the bests or the "Last" line counting every kind; no owner check; no `notFinished`
+guard; an unclamped limit (both); duplicate emissions; the e1RM window a week too long; either range closed at
+the top; `workout(id:)` leaving a damaged workout out; `updateSets` clearing the records or `pr_count`; either
+list oldest first; the phase filter dropped; wrong totals; a partial source read as none; `bestSet` ties; a
+lenient date read; `sessionCount` counting rows; misses never cleared.
+
+### Code lines
+
+Measured as in S1 and S2: non-blank Swift lines that are not whole-line `//` or `///` comments, SQL strings
+included, in product sources only (`LedgerDomain`, `LedgerPersistence`). Counted with a script over
+`git ls-files --others` plus the added lines of `git diff -U0 -- LedgerKit/Sources/LedgerDomain
+LedgerKit/Sources/LedgerPersistence` (scratchpad `f05s3/count.sh`).
+
+- **662 lines added (655 net), over the 500 target** (standards §10: under ~1,000, so no forced split, and under
+  the ~700 at which this slice was to stop and propose one). The plan estimated ~455.
+- New files: 621.
+  - `Stats/GRDBStatsQueries` 162;
+  - `Records/WorkoutRows` 139, `WorkoutRecords` 123, `LoggedSetRecords` 103;
+  - `Repositories/GRDBWorkoutRepository` 94.
+- Existing files: +41, −7 (`ColumnReader` readers and `Row.readable`, `ColumnCodec.derivedID`, the error case).
+- `LedgerDomain`: 0.
+- Not counted: `LedgerTestSupport` (the seeders and the two contracts), tests, the fixture, docs.
+- **Why above the estimate:** strict reads and the leave-out rule for lists; the owner check; four record types
+  written out one column per line; ten SQL statements laid out a clause per line.
+- **The split considered: repository vs stats** (the plan's). (a) records, `WorkoutRows`, the repository, the
+  fixture and migration tests, about 500 lines, closing 3, 10 and 12; then (b) `GRDBStatsQueries` and its
+  contract, about 162, closing 4, 5, 6 and 9. Not taken: the slice stayed under the stop line, the stats tests
+  need the repository to seed anything, and (b) alone is a small PR that costs a second full gate and review
+  round. It remains a clean seam if the orchestrator prefers it.
+
+### Gate and coverage (2026-10-01, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0)
+
+- **Host:** `swift test --filter LedgerPersistenceTests`: 270 tests in 63 suites passed (the timing suites
+  skipped by design).
+- **Full gate, through the lock: green, exit 0** (`scripts/check.sh`, 402 s; log `scratchpad/f05s3/check-1.log`).
+  - Format, lint, the package graph and pins, and the script tests: OK.
+  - **17/17** PR targets passed on iOS (1,295 passed, 8 skipped by design), and **8/8** PR-Watch targets on
+    watchOS (1,186 passed, 8 skipped). The new suites ran on both: 33 test cases passed and 1 skipped (the
+    stats timing).
+  - Warnings: none new. The build prints the two "will never be executed" warnings of
+    `PayloadVersionAdversarialTests.swift:29` and `SettingsDecodingAdversarialTests.swift:123`, which S2's gate
+    log has too. This run compiled from scratch, so xcbeautify also printed "the following command failed with
+    exit code 0 but produced no further output" beside the files of that warning's compile batch (22 lines,
+    none of them a file of this slice; another worktree's log of the same morning has the same lines).
+- **Coverage:** LedgerPersistence **99.84 %** (1914/1917; threshold 90), LedgerDomain 99.05 %, LedgerDesign
+  97.20 %, overall 98.67 %.
+  - The 3 lines are closures that never run: the `now: Date.init` default arguments of the two new types (tests
+    inject a clock), and S2's `uniquingKeysWith:` in `SyncedRecord.write`.
+- These notes were written after the gate. They are docs only.
+
+### Criterion 9, by hand (`Nightly` and `Nightly-Watch` plans, under the lock)
+
+`-only-testing:LedgerPersistenceTests/StatsQueriesPerformanceTests`; script `scratchpad/f05s3/perf.sh`, log
+`perf.log`, attachments exported from `perf-ios.xcresult` and `perf-watch.xcresult`. Both runs passed. 20,000
+sets in 400 workouts, 12 exercises, a file database; 95th percentile of 20 runs after a warm-up, budget 50 ms:
+
+| Query | iPhone 17 simulator | Watch Series 12 simulator | Host (debug) |
+|---|--:|--:|--:|
+| `lastPerformance` | 0.86 ms | 0.85 ms | 0.59 ms |
+| `bestSet` | 0.70 ms | 0.69 ms | 0.41 ms |
+| `bestE1RM` | 0.65 ms | 0.65 ms | 0.37 ms |
+| `e1RMByWeek` (8 weeks) | 1.09 ms | 1.12 ms | 0.80 ms |
+| `weeklyVolume` (one week) | 0.13 ms | 0.13 ms | 0.13 ms |
+| `weeklyVolume` (all time) | 4.68 ms | 4.70 ms | 3.55 ms |
+| `sessionsCompleted` | 0.05 ms | 0.05 ms | 0.05 ms |
+| `sessionCount` | 0.66 ms | 0.69 ms | 0.39 ms |
+| `personalRecords` | 0.31 ms | 0.36 ms | 0.33 ms |
+| `recentlyLogged` | 6.92 ms | 6.95 ms | 3.67 ms |
+
+The slowest, `recentlyLogged`, scans every done set. The simulators run on the Mac's CPU, so this rules out a
+design problem but is not a device's figure (F20).
+
+### How to verify by hand
+
+1. `scripts/check.sh --fast`: on the host, `LedgerPersistenceTests` passes (270 tests).
+2. Criterion 3: `swift test --package-path LedgerKit --filter 'WorkoutRepositoryTests|WorkoutRowDiffTests'`.
+   `failedMaterialize_leavesNoRows` compares every row and stamp of five tables before and after.
+3. Criteria 4 to 6: `swift test --package-path LedgerKit --filter StatsQueriesTests`. The contract clauses are
+   listed by name; each one's doc comment in `StatsQueriesContract` works its expected values out.
+4. The tests bite. Make each change, run `swift test --package-path LedgerKit --filter LedgerPersistenceTests`,
+   and revert:
+   - in `GRDBStatsQueries`, empty `SQL.recordKinds`: the `bests` clause fails;
+   - in `WorkoutRows.write`, drop `refuseOtherWorkoutsIDs`: the `otherWorkoutsIDs` clause fails;
+   - in `LoggedSetRecord.encode`, compute the e1RM for undone sets: `materialize_computesE1RM` fails.
+5. Criterion 12: `sqlite3 LedgerKit/Tests/LedgerPersistenceTests/Fixtures/db-v001.sqlite 'SELECT * FROM
+   grdb_migrations; PRAGMA integrity_check; SELECT name, phase, done_sets, quote(deleted_at) FROM workout'`, then
+   `swift test --package-path LedgerKit --filter MigrationCompatibilityTests`.
+6. Criterion 9: on the host, `LEDGER_TEST_LANE=nightly swift test --package-path LedgerKit --filter
+   StatsQueriesPerformanceTests`. On a simulator, under the lock: `xcodebuild test -project Ledger.xcodeproj
+   -scheme Ledger -testPlan Nightly -destination "$(scripts/sim-destination.sh 'platform=iOS Simulator,name=iPhone
+   17,OS=27.0')" -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+   -onlyUsePackageVersionsFromResolvedFile -only-testing:LedgerPersistenceTests/StatsQueriesPerformanceTests
+   -resultBundlePath /tmp/stats.xcresult`, then `xcrun xcresulttool export attachments --path /tmp/stats.xcresult
+   --output-path /tmp/att`; `stats-queries.txt` holds each query's p95 and median.
+7. Full gate: `scripts/check.sh`, through the shared lock.
+
+### Open questions for the orchestrator
+
+Each is implemented in the conservative reading named, and none changed a doc, an ADR or a Domain protocol.
+
+1. **`materialize`'s `summary` parameter is unused** (decision 3). Recommendation: keep storing totals computed
+   from the state, and drop the parameter when F10 next touches the protocol (F10's brief assumed a
+   `finish(_:) -> WorkoutSummary` that does not exist either).
+2. **Who deletes a workout when a late discard overtakes its finish** (F04 input 6, F17 item 2). F05 now offers
+   what the host needs: `delete(id:)`, a soft delete that a later `.materialize` reverses. Recommendation: the
+   host calls it on `.discardLog`, then compacts.
+3. **`programUpdates`** is not applied (decision 5). Recommendation: F10 adds `replaceSlotExercise` to
+   `ProgramRepository`, as its brief plans, and calls it beside `materialize`; or the orchestrator asks F05 for
+   it inside `materialize`'s transaction, which is about 15 lines.
+4. **`updateSets` does not detect personal records again** (decision 13; F13's risk). The stored records can go
+   stale after an edit. Recommendation: a follow-up before F13, in which `updateSets` re-runs
+   `PersonalRecords.detect` for the exercise from that workout forward. It needs question 5's query.
+5. **`StatsQueries` has no query for `PersonalRecords.detect`'s `bestWeightAtReps` input** (`[Reps: Weight]` per
+   exercise); `bestSet` gives one set. F10 cannot detect weight-at-reps records from the protocol as it is.
+   Recommendation: add `bestWeightByReps(exerciseID:) -> [Reps: Weight]`, with a contract clause, in F10 or a
+   small F05 follow-up (one `GROUP BY reps` query).
+6. **Which sets count for the bests** (decision 8). Criterion 5 says "done sets"; F12's brief says only
+   `.working`; this slice follows decision #3 and `PersonalRecords.detect` (`.working` and `.added`).
+   Recommendation: keep it, and align F12's line.
+7. **A workout's date is `ended_at`** (decision 7). A workout started on Sunday night that ends after midnight
+   counts for Monday's week. Recommendation: keep it (one rule, indexed); the other choice is `started_at`.
+8. **The shape of the "Last" line when sets differ** (decision 9): the count of done working sets, and the
+   heaviest one's load and reps. Recommendation: keep it; rule 25's "Repeat last" then writes the top set.
+9. **Unreadable workouts are logged and left out of lists, but not counted on the protocol** (decision 16).
+   Recommendation: none needed until a screen wants to say "part of your history needs a newer Ledger"; then
+   add a count, as `unreadableCount(for:)` in S1.
+10. **Protocol doc comments.** `WorkoutRepository` and `StatsQueries` in `Repositories.swift` do not yet say what
+    the contracts pin (newest first, `ended_at`, limits below 1, `notFinished`, `missingRow`,
+    `duplicateIdentifier`, which sets count). I did not edit them, since that states a protocol's meaning.
+    Recommendation: approve copying the GRDB types' doc comments up, as S2's SF3 did.
+11. **Input lines for other briefs**, not written here:
+    - F07: run `WorkoutRepositoryContract.clauses` and `StatsQueriesContract.clauses` against the fakes, over a
+      `HistoryStores` whose stats read `StatsQueriesContract.now`; `GRDBStatsQueries(queue, now:)` takes the
+      injected date.
+    - F10: questions 1, 3 and 5; `materialize` throws `notFinished` for a live state; a slot update for a
+      slot that is no longer stored is skipped.
+    - F13: question 4; a damaged workout is missing from the list and `workout(id:)` throws.
+    - F17: question 2.
+12. **Criterion 9 asserts p95 of 20 runs**; testing-strategy §2.2 says the median of five (decision 19).
+    Recommendation: reword the strategy line to match the criterion.

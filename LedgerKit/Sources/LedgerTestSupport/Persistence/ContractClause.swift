@@ -24,6 +24,12 @@ enum ContractCheck {
         actual == expected ? nil : "\(what): got \(actual), expected \(expected)"
     }
 
+    /// The first issue among `checks`, in the order given, or `nil` when every one passed. Unlike a `??`
+    /// chain, every operand may `await`.
+    static func first(_ checks: String?...) -> String? {
+        checks.lazy.compactMap(\.self).first
+    }
+
     /// `nil` when `body` throws an error equal to `expected`, else what happened.
     static func expectError<Failure: Error & Equatable>(
         _ expected: Failure,

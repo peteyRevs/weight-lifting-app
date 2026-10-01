@@ -28,6 +28,10 @@ public enum LedgerPersistenceError: Error, Equatable, Sendable {
     /// A text value to be saved holds U+0000 (`"table.column"`). SQLite would keep the text only up to it, so
     /// it is refused rather than stored cut short.
     case nulInText(String)
-    /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted.
+    /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted, or
+    /// `updateSets` an exercise of no stored workout.
     case missingRow(String)
+    /// `materialize` was given a workout that is not finished (`"workout id"`): its phase is not `.finished`, or
+    /// it has no `endedAt`. History holds finished workouts only, so nothing is stored.
+    case notFinished(String)
 }

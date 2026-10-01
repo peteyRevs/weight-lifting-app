@@ -1,0 +1,192 @@
+import Foundation
+import GRDB
+import LedgerDomain
+
+/// A finished workout as the rows of its four tables (`workout`, `workout_exercise`, `logged_set`,
+/// `personal_record`). Saving writes them over the stored rows in the caller's transaction (`write`); reading
+/// assembles the first three into `WorkoutState`s (`fetch`).
+struct WorkoutRows {
+    let workoutID: WorkoutID
+    private var workout: WorkoutRecord?
+    private var exercises: [WorkoutExerciseRecord] = []
+    private var sets: [LoggedSetRecord] = []
+    /// The workout's personal records, or `nil` to leave the stored ones as they are.
+    private var records: [PersonalRecordRecord]?
+
+    /// The rows of `state`, with `records` as its personal records; `nil` keeps the stored records and their
+    /// count (an edit of a stored workout's sets).
+    init(_ state: WorkoutState, records: [PersonalRecord]?) {
+        workoutID = state.id
+        workout = WorkoutRecord(state, recordCount: records?.count)
+        exercises = state.exercises.enumerated().map { WorkoutExerciseRecord($1, workoutID: state.id, position: $0) }
+        sets = state.exercises.flatMap { exercise in
+            exercise.sets.enumerated().map { LoggedSetRecord($1, workoutExerciseID: exercise.id, position: $0) }
+        }
+        self.records = records?.enumerated().map { PersonalRecordRecord($1, position: $0) }
+    }
+
+    /// No rows at all: writing them soft-deletes the workout and everything in it.
+    init(deleting id: WorkoutID) {
+        workoutID = id
+        records = []
+    }
+
+    /// Makes the workout's live rows these, in the caller's transaction: new and changed rows are upserted,
+    /// unchanged ones left alone, and live rows the workout no longer has soft-deleted
+    /// (`SyncedRecord.write(_:over:in:at:)`). So writing the same workout twice changes nothing the second
+    /// time, and writing a deleted workout brings it back.
+    func write(_ database: Database, at timestamp: String) throws {
+        // Every live row is read before any is written: soft-deleting an exercise first would hide its sets.
+        let stored = Selection.one(workoutID)
+        let storedWorkout = try stored.rows(Query.workouts, in: database)
+        let storedExercises = try stored.rows(Query.exercises, in: database)
+        let storedSets = try stored.rows(Query.sets, in: database)
+        let storedRecords = try stored.rows(Query.records, in: database)
+        try refuseOtherWorkoutsIDs(in: database)
+        // Parents first, so every foreign key an insert names exists.
+        try WorkoutRecord.write(workout.map { [$0] } ?? [], over: storedWorkout, in: database, at: timestamp)
+        try WorkoutExerciseRecord.write(exercises, over: storedExercises, in: database, at: timestamp)
+        try LoggedSetRecord.write(sets, over: storedSets, in: database, at: timestamp)
+        if let records {
+            try PersonalRecordRecord.write(records, over: storedRecords, in: database, at: timestamp)
+        }
+    }
+
+    /// Throws `duplicateIdentifier` when an exercise or a set of this workout has an id that another stored
+    /// workout holds, live or deleted. Upserting it would move that row into this workout, and the other
+    /// workout would lose it (the takeover S2's review B1 found for programs). A personal record's id derives
+    /// from its workout's, so it cannot clash.
+    private func refuseOtherWorkoutsIDs(in database: Database) throws {
+        try refuse(
+            exercises.map(\.rowID),
+            of: WorkoutExerciseRecord.databaseTableName,
+            heldBy: Query.exerciseOwners,
+            in: database
+        )
+        try refuse(sets.map(\.rowID), of: LoggedSetRecord.databaseTableName, heldBy: Query.setOwners, in: database)
+    }
+
+    /// Throws `duplicateIdentifier("table id")` for the first of `ids` that `ownersSQL` finds under another
+    /// workout.
+    private func refuse(_ ids: [String], of table: String, heldBy ownersSQL: String, in database: Database) throws {
+        guard !ids.isEmpty else {
+            return
+        }
+        let taken = try String.fetchOne(
+            database,
+            sql: ownersSQL + "(\(databaseQuestionMarks(count: ids.count))) ORDER BY 1 LIMIT 1",
+            arguments: StatementArguments([ColumnCodec.text(workoutID)] + ids)
+        )
+        if let taken {
+            throw LedgerPersistenceError.duplicateIdentifier("\(table) \(taken)")
+        }
+    }
+
+    /// The live workouts `selection` picks, newest first (by `ended_at`, then id), each with its live exercises
+    /// and sets in their stored order.
+    ///
+    /// A workout is one aggregate: a damaged row anywhere in it, or a case a later version added, makes the
+    /// whole workout unreadable. When `strict`, that throws (`LedgerPersistenceError`); otherwise the workout
+    /// is logged and left out, and stays stored, so one bad workout never hides the history around it.
+    static func fetch(_ selection: Selection, in database: Database, strict: Bool) throws -> [WorkoutState] {
+        // Children are grouped by their parent's id as stored, so grouping never fails on a damaged id.
+        let exerciseRows = try Dictionary(grouping: selection.rows(Query.exercises, in: database)) { row in
+            row["workout_id"] as DatabaseValue
+        }
+        let setRows = try Dictionary(grouping: selection.rows(Query.sets, in: database)) { row in
+            row["workout_exercise_id"] as DatabaseValue
+        }
+        let read = { (row: Row) in
+            var state = try WorkoutRecord(row: row).workout
+            state.exercises = try exerciseRows[row["id"], default: []].map { exerciseRow in
+                var exercise = try WorkoutExerciseRecord(row: exerciseRow).exercise
+                exercise.sets = try setRows[exerciseRow["id"], default: []].map { try LoggedSetRecord(row: $0).set }
+                return exercise
+            }
+            return state
+        }
+        return try selection.rows(Query.workouts, in: database).compactMap { row in
+            try strict ? read(row) : row.readable(as: WorkoutRecord.databaseTableName, read)
+        }
+    }
+
+    /// Which live workouts a read or a write is about: a subquery that selects their ids, and its arguments.
+    struct Selection {
+        fileprivate let sql: String
+        fileprivate let arguments: StatementArguments
+
+        static func one(_ id: WorkoutID) -> Selection {
+            Selection(
+                sql: "SELECT id FROM workout WHERE id = ? AND deleted_at IS NULL",
+                arguments: [ColumnCodec.text(id)]
+            )
+        }
+
+        /// The `limit` workouts that ended last; none when `limit` is not positive (SQLite reads a negative
+        /// `LIMIT` as no limit at all).
+        static func recent(limit: Int) -> Selection {
+            Selection(
+                sql: "SELECT id FROM workout WHERE deleted_at IS NULL ORDER BY ended_at DESC, id LIMIT ?",
+                arguments: [max(0, limit)]
+            )
+        }
+
+        /// The workouts that ended in `range`.
+        static func ended(in range: Range<Date>) -> Selection {
+            Selection(
+                sql: "SELECT id FROM workout WHERE deleted_at IS NULL AND ended_at >= ? AND ended_at < ?",
+                arguments: [
+                    range.lowerBound.timeIntervalSinceReferenceDate,
+                    range.upperBound.timeIntervalSinceReferenceDate
+                ]
+            )
+        }
+
+        /// The rows `query` selects for these workouts.
+        fileprivate func rows(_ query: (String) -> String, in database: Database) throws -> [Row] {
+            try Row.fetchAll(database, sql: query(sql), arguments: arguments)
+        }
+    }
+
+    /// The live rows of the workouts a `Selection`'s subquery picks, children in their stored order (ties by
+    /// id, so the order is total), and the owner checks of `refuseOtherWorkoutsIDs`.
+    private enum Query {
+        static func workouts(_ selection: String) -> String {
+            "SELECT * FROM workout WHERE id IN (\(selection)) ORDER BY ended_at DESC, id"
+        }
+
+        static func exercises(_ selection: String) -> String {
+            """
+            SELECT * FROM workout_exercise WHERE workout_id IN (\(selection)) AND deleted_at IS NULL
+            ORDER BY position, id
+            """
+        }
+
+        static func sets(_ selection: String) -> String {
+            """
+            SELECT logged_set.* FROM logged_set
+            JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
+            WHERE workout_exercise.workout_id IN (\(selection)) AND workout_exercise.deleted_at IS NULL
+                AND logged_set.deleted_at IS NULL
+            ORDER BY logged_set.position, logged_set.id
+            """
+        }
+
+        static func records(_ selection: String) -> String {
+            "SELECT * FROM personal_record WHERE workout_id IN (\(selection)) AND deleted_at IS NULL ORDER BY id"
+        }
+
+        /// The ids, among those that follow in `IN (…)`, of exercises or sets of stored workouts other than
+        /// the first argument, deleted rows and workouts included. A row whose `workout_id` names no stored
+        /// workout is damage, not another workout's, so a save repairs it (as S2-5 for programs).
+        static let exerciseOwners = """
+        SELECT id FROM workout_exercise WHERE workout_id IS NOT ? AND workout_id IN (SELECT id FROM workout) AND id IN
+        """
+        static let setOwners = """
+        SELECT logged_set.id FROM logged_set
+        JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
+        WHERE workout_exercise.workout_id IS NOT ? AND workout_exercise.workout_id IN (SELECT id FROM workout)
+            AND logged_set.id IN
+        """
+    }
+}
