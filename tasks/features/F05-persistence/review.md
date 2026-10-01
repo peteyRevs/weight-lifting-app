@@ -474,3 +474,136 @@ would have to wait for (b), and a second gate costs more than about 285 lines of
   specified `rollForward` would trigger it.
 - After B1 and its contract clause, this is approvable. SF1 needs a decision (orchestrator or Pete). SF2 and
   SF3 are cheap now and expensive after F07 builds fakes against the current contract.
+
+# Slice S2 review — fix round 1
+
+Reviewer pass on `feat/F05-s2` at `57fdeb7`, diff `git diff ec6da47 57fdeb7` (29 files), with the notes' "### S2 fix
+round 1" section. Decisions taken after my first review and checked here, not re-argued: SF1 is decision #24
+(Pete), including the lifter-save rule; SF2 moves search into `LedgerDomain/Rules/ExerciseSearch.swift` (approved
+exception); S2-4 refuses NUL with `nulInText`. As before, I did not review the tester's untracked files.
+
+### What I ran
+
+- `swift test --package-path LedgerKit --filter 'LedgerPersistenceTests|ExerciseSearchTests|LedgerTestSupport'` on a
+  `git archive 57fdeb7` copy in my scratchpad. **All pass**: 214 persistence tests (the timing suites skipped by
+  design) and 3 `ExerciseSearch` tests.
+- Two throwaway probes on that copy, not committed anywhere. Both pass:
+  - a slot that a **live** program dropped (soft-deleted under its own live day) is still refused to a second
+    program by name, and stays under the first program's day;
+  - an **active** copy that reuses a week id is refused, writes no `program` row, and leaves the first program
+    active. So the refusal runs inside the save transaction, before `activate`.
+- `/code-review high` on the diff. It raised 8 candidates. Each one is ranked below or answered under
+  "Considered and not raised".
+- SQLite affinity check (for code-review #1): `INSERT` of `1350000000.0` or `CAST(7 AS REAL)` into an `INTEGER`
+  column is stored as `integer`. Only `9.3e18` and `1.5` stay `real`.
+
+### Prior findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| **B1** cross-program takeover | **Resolved** | `ProgramRows.swift:61` calls `refuseOtherProgramsIDs` after every stored-row read and before the first upsert (`:63`). `:73-93` throws `duplicateIdentifier("<table> <id>")`. The owner queries at `:157-162` have **no `deleted_at` filter on any table**, so deleted weeks, days and slots count. Slots are found through their day's `program_id`, so a slot under any day of another program is caught. `IS NOT ?` also catches a `NULL` owner. It runs in `GRDBProgramRepository.save`'s `queue.write` (`GRDBProgramRepository.swift:46-51`), so a refusal rolls back, and the probe confirms it. Contract clause `otherProgramsIDs` (`ProgramRepositoryContract+Identity.swift:47-81`). F24's brief has the UUID-source line (`F24-progression-states.md:53-56`). |
+| **SF1** catalog corrections | **Resolved** (decision #24) | `GRDBExerciseRepository.swift:119-146`: new ids are inserted, and live rows with `is_custom = 0 AND catalog_version < version` are refreshed. Deleted rows, custom rows and lifter-saved rows (`NULL` version) are excluded. The refresh goes through `ExerciseRecord.write` with the stored rows as `replaced`, so `created_at` is never rewritten and `updated_at` moves only on a content change. The `mark` at `:109-112` writes no `updated_at`, and `CatalogUpgradeTests:24-48` pins this per row. Lifter-save rule: `:70-73`, also without `updated_at` (`CatalogUpgradeTests:14-22`; clause `seedLeavesTheLifters`). Decision #24 is at `docs/product-decisions.md:31`. |
+| **SF2** one search rule | **Resolved** | `LedgerDomain/Rules/ExerciseSearch.swift:10-46` is public and pure. LedgerDomain still imports only Foundation (46 files, nothing else). The persistence copy and the contract's `String.folded` are gone. GRDB uses it at `GRDBExerciseRepository.swift:42-50` and `:194`; the contract uses it at `ExerciseRepositoryContract.swift:91`. F12:53 is reworded for group pills, and F07:113 points the fakes at it. |
+| **SF3** contract gaps and docs | **Resolved** | Clauses `setActiveMissing`, `duplicateChildren` and `otherProgramsIDs` (`ProgramRepositoryContract+Identity.swift:8,23,47`), and `seedCatalogRows` (`ExerciseRepositoryContract+Seeding.swift:51`). Protocol docs: `Repositories.swift:8-34`. |
+| N1 exercise save stamps an unchanged row | Resolved | `GRDBExerciseRepository.swift:64-69`; `ExerciseRepositoryTests.swift:39-46` |
+| N2 delete leaves `is_active` | Resolved | `GRDBProgramRepository.swift:76-80`; `ProgramSoftDeleteTests.swift:47` |
+| N3 duplicate catalog ids | Skipped; **the reason holds** | The tester's "(documents)" test pins "last wins", and F03 validates unique ids at build time. Behaviour is unchanged and stated at `GRDBExerciseRepository.swift:93`. Throwing remains a one-line change if the orchestrator wants it. See also new N-c on ordering. |
+| N4 observation checks could not fail | Resolved | `ObservationTests.swift:17-31` uses an unbuffered stream over the repository's own `DistinctObservation`. The no-op writes at `:42` and `:58` fire the update hook, and the notes' mutant (`removeDuplicates` never equal) fails both tests. |
+| N5 `Seeders` traps | Resolved | `Seeders.swift:69-74`, `:116-121`, `:150`; `SeedersTests` |
+| N6 F07 lines | Resolved | `F07-composition-di.md:100-108` (`try`, the failure path, the F20 caveat) |
+| N7 "search by prefix" | Resolved | `F05-persistence.md:104` |
+| N8 `rpe_x2` via `intValue` | Skipped; **the reason holds** | `RPE` stores `halfPoints: Int`, and `value` is `Decimal(halfPoints) / 2` (`RPE.swift:8,24-25`). So `value * 2` is always a small, compact `Decimal`, and `intValue` is exact. No reachable input misreports. |
+
+Adversarial items:
+- **S2-2:** `appliedVersion` (`:161-167`) is resolved.
+- **S2-3:** keying by `DatabaseValue` (`SyncedRecord.swift:57-75`) is resolved.
+- **S2-4:** the single NUL check in `upsert` (`SyncedRecord.swift:23-28`) is resolved. Every record write goes through it, and the
+  only other text writers bind UUIDs or JSON, which escapes NUL.
+
+### Blocking
+
+None.
+
+### Should fix
+
+None.
+
+### Nit
+
+**N-a. The NUL refusal is GRDB-only: the contract has no clause, and no input brief knows about it.**
+`SyncedRecord.swift:23-28`; `ExerciseRepositoryContract.swift`, `ProgramRepositoryContract.swift`;
+`F12-library-history.md:49`.
+F07's fakes will store `"a\u{0}b"` and read it back, so a store tested against them never sees `nulInText`. In the
+app, a pasted name holding U+0000 in F12's `CustomExerciseDraft`, or in F11's day name or tag, reaches `save` and
+throws an error that a Feature cannot match, because Features never import LedgerPersistence.
+*Fix:*
+- Add one clause per contract: "text holding U+0000 is refused with `nulInText("table.column")`; nothing is
+  saved". The program contract already imports LedgerPersistence, and the exercise contract can too.
+- Add one line to F12's draft rules, and the same to F11's inputs: names and tags refuse U+0000, or strip it,
+  before `exercise(id:)`.
+
+**N-b. `otherProgramsIDs` does not pin a row that a live program dropped, or deleted days and weeks.**
+`ProgramRepositoryContract+Identity.swift:47-81`.
+The clause checks a deleted program's slot only, and the live program's ids only while they are live. A fake that
+checks "other programs' rows, live rows only, plus every row of a deleted program" passes, yet hands a second
+program a slot the first one dropped in an edit. That slot is the one its history still points at.
+*Fix:* before the delete, save `first` with day 0's first slot removed, and expect `second`'s copy of that slot to
+throw `duplicateIdentifier("slot …")`. My probe does exactly this, and GRDB passes it.
+
+**N-c. Write order is no longer deterministic** (code-review #5).
+`GRDBExerciseRepository.swift:94-101`, `SyncedRecord.swift:69`.
+- The seed dedupes through `Dictionary(…).values`, so inserts, marks and clash logs come in a per-launch hash
+  order. Before, they followed the catalog's order.
+- `removed` lost its `.sorted()` because `DatabaseValue` is not `Comparable`, so soft deletes now run in hash order too.
+
+Nothing observable changes today. But logs and statement order should be reproducible, and M4's change capture may
+read them.
+*Fix:*
+- Dedupe with a seen-set while walking `catalog` in reverse (last wins), then restore the catalog's order.
+- Build `removed` by walking `stored` in its query order (`stored.map { $0["id"] }.filter { !ids.contains($0) }`).
+
+**N-d. The doc overclaims that the applied version always moves up** (code-review #3).
+`GRDBExerciseRepository.swift:87-88`.
+"So the applied version moves up even when an upgrade changes nothing" holds only when at least one listed row is
+inserted or refreshable. If every row a later catalog lists is lifter-saved or deleted, and it adds no ids,
+nothing is marked. Every launch then re-runs the three scans in a write transaction, as a no-op. No screen can
+reach this today, because nothing saves catalog rows.
+*Fix:* reword the doc to "…moves up whenever the upgrade writes a row; otherwise the next launch re-checks, as a
+no-op". Moving the applied version into its own metadata row is out of proportion for a state no screen can
+reach.
+
+### Considered and not raised
+
+- **code-review #1: a damaged `REAL` equal to the integer content is never repaired by a save.** It is
+  unreachable. Every compared numeric column is declared `INTEGER` (`Migrations.swift:45-49`, `:99-103`), and
+  SQLite's affinity stores an integral `REAL` as `integer` (checked above). A `REAL` that stays `REAL`
+  (`1.5`, `9.3e18`) never equals an `Int64` content value, so the diff rewrites it.
+- **code-review #2: a save that changes nothing still clears `catalog_version`.** That is decision #24's
+  lifter-save rule as confirmed ("a save clears `catalog_version`"). Catalog rows are not synced, so the
+  cross-device divergence in the scenario cannot happen. No screen saves a catalog row.
+- **code-review #4: a row deleted with `is_active = 1` before this fix keeps the flag.** Pre-fix S2 never
+  shipped: it is unmerged, with no TestFlight build. M4's revival path sets its own rules.
+- **code-review #6, the three owner queries on every save.** Three indexed `IN` lookups of at most 224 ids each,
+  on a rare write. Filtering to the ids missing from the stored sets would save microseconds and add a branch.
+- **code-review #7, folding twice** (same as code-review #9 in the first review). Within budget.
+- **code-review #8, `isInNameOrder` has no production caller.** My SF2 fix asked for a comparator, and F07's fakes
+  and F12's in-memory filter are its intended callers. `ExerciseSearchTests` pins that it agrees with `sorted`.
+- **The protocol docs name `duplicateIdentifier` and `missingRow`, which Features cannot import.** These are
+  programmer errors: `rollForward` mints ids, and the builder only activates saved programs. A Feature handles
+  them as unexpected. N-a is the only user-reachable case.
+- **The contract now imports LedgerPersistence.** LedgerTestSupport already depended on it (`Package.swift:128-137`),
+  and F07's fakes live there. Module boundaries are unchanged.
+
+### PR size
+
+775 code lines (+91), still under the ~1,000 split threshold, and the notes reproduce the count method. **Complies.**
+
+### Verdict
+
+**Approved for G3: 0 Blocking, 0 Should fix, 4 Nits.**
+- B1 is fixed at the root and pinned by a contract clause:
+  - deleted rows and slots under another program's days are covered;
+  - the check runs inside the save transaction.
+- SF1–SF3 implement the decisions as made. N3 and N8 are skipped for sound reasons.
+- N-a and N-b are cheap contract additions, best made before F07 builds its fakes. They can land in this PR or
+  in S3's first commit, as the orchestrator prefers. N-c and N-d are optional.
