@@ -4,14 +4,16 @@ import Foundation
 /// caller: `ExerciseRepository.search` and its name order (F05), the Library's pills filtering `observeAll()` in
 /// memory (F12), and the in-memory fakes (F07).
 ///
-/// Text is compared as its `key`: trimmed, and folded so that case and diacritics never matter ("Élévation" and
-/// "elevation" are one key). The folding is the same in every locale, so results do not depend on the device's
-/// language.
+/// Text is compared as its `key`: folded so that case, diacritics and width never matter ("Élévation",
+/// "elevation" and fullwidth "ＥＬＥＶＡＴＩＯＮ" are one key), then trimmed. The folding is Foundation's, the
+/// same in every locale, so results do not depend on the device's language; letters that are not a base letter
+/// plus a mark, such as "ı" and "Ø", stay themselves.
 public enum ExerciseSearch {
-    /// `text` trimmed of blanks and folded: the form every match and every name comparison uses.
+    /// `text` folded, then trimmed of blanks: the form every match and every name comparison uses. Trimming
+    /// last also removes a blank that folding uncovers (a blank carrying a combining mark).
     public static func key(_ text: String) -> String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Whether `exercise`'s name or short name contains `query`. A blank query matches every exercise.

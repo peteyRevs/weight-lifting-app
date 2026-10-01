@@ -43,6 +43,22 @@ struct ProgramSoftDeleteTests {
 
     /// Review N2: were the flag left set, a revival (a sync in M4, or a save from a stale copy) could leave two
     /// programs active, and the revived one, updated last, would win.
+    @Test("Soft deletes run in the stored rows' order, the same on every launch (review N-c)")
+    func softDeletes_runInStoredOrder() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let program = try Contract.program()
+        try await repositories.programs.save(program)
+        let stored = try await repositories.texts("""
+        SELECT slot.id FROM slot JOIN day_template ON day_template.id = slot.day_template_id
+        WHERE day_template.program_id = ? ORDER BY slot.position, slot.id
+        """, [ColumnCodec.text(program.id)])
+        let deletes = try await repositories.statements(startingWith: "UPDATE slot SET deleted_at") {
+            try await repositories.programs.delete(program.id)
+        }
+        #expect(stored.count == 20)
+        #expect(deletes.compactMap { $0.split(separator: "'").last.map(String.init) } == stored)
+    }
+
     @Test("delete makes the program inactive, so reviving its row never makes two programs active")
     func delete_clearsTheActiveFlag() async throws {
         let repositories = try await Repositories.withProgramExercises()

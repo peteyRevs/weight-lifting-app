@@ -6,6 +6,10 @@ import Testing
 /// case, diacritics, width and whitespace; blank queries; and the helper's laws (a key is a fixed point over
 /// text without a lone combining mark, the two `matches` agree, the name order is a strict total order that
 /// `sorted` follows whatever the input order).
+///
+/// S2 fix round 2 changed two "(documents)" pins here, as decided for nits S2-N1 and S2-N2: `key` now folds
+/// width, and folds before it trims. The fullwidth cases moved from `false` to `true`, and
+/// `blankWithAMark_isNotTrimmed` now expects the blank trimmed. Nothing else changed.
 @Suite("Adversarial S2 close-out · ExerciseSearch", .tags(.domain))
 struct ExerciseSearchCloseoutAdversarialTests {
     static func exercise(_ number: Int, _ name: String, short: String = "") -> Exercise {
@@ -43,9 +47,9 @@ struct ExerciseSearchCloseoutAdversarialTests {
         Case(name: "Bench Press", query: "\t\nbench press\r\n", matches: true),
         Case(name: "Bench Press", query: "\u{00A0}bench\u{3000}", matches: true), // NBSP, ideographic space
         Case(name: "  Bench Press  ", query: "bench press", matches: true),
-        // (documents) not folded: width, internal blanks, zero-width characters, dotless i
-        Case(name: "Bench Press", query: "ＢＥＮＣＨ", matches: false), // fullwidth Latin
-        Case(name: "ＢＥＮＣＨ Press", query: "bench", matches: false),
+        Case(name: "Bench Press", query: "ＢＥＮＣＨ", matches: true), // fullwidth Latin (S2 fix round 2: width folds)
+        Case(name: "ＢＥＮＣＨ Press", query: "bench", matches: true),
+        // (documents) not folded: internal blanks, zero-width characters, dotless i
         Case(name: "Bench Press", query: "bench  press", matches: false),
         Case(name: "Bench Press", query: "bench\u{00A0}press", matches: false),
         Case(name: "Bench Press", query: "bench\tpress", matches: false),
@@ -55,7 +59,7 @@ struct ExerciseSearchCloseoutAdversarialTests {
         Case(name: "Bench Press", query: "\u{200B}bench", matches: true)
     ]
 
-    @Test("Folding: case, diacritics and outer blanks never matter; width and inner blanks do", arguments: folding)
+    @Test("Folding: case, diacritics, width and outer blanks never matter; inner blanks do", arguments: folding)
     func folding_matchesAsDocumented(_ test: Case) {
         let exercise = Self.exercise(1, test.name)
         #expect(ExerciseSearch.matches(exercise, query: test.query) == test.matches)
@@ -74,14 +78,14 @@ struct ExerciseSearchCloseoutAdversarialTests {
         }
     }
 
-    /// Nit (documents): `key` trims before it folds, so a blank that folding uncovers (a space carrying a
-    /// combining mark) stays, and `key` is then not a fixed point. Folding first, then trimming, would make it
-    /// one. No keyboard types a lone combining mark after a space, so this only pins the behaviour.
-    @Test("(documents) A blank carrying a combining mark is folded to a blank that is not trimmed")
+    /// Nit S2-N1, fixed in S2 fix round 2: `key` used to trim before it folded, so a blank that folding
+    /// uncovers (a space carrying a combining mark) stayed, and `key` was not a fixed point. It now folds, then
+    /// trims, so the blank goes. The name is kept from the round that pinned the old behaviour.
+    @Test("A blank carrying a combining mark is folded to a blank, and trimmed (S2 fix round 2)")
     func blankWithAMark_isNotTrimmed() {
-        #expect(ExerciseSearch.key("bench \u{301}") == "bench ")
+        #expect(ExerciseSearch.key("bench \u{301}") == "bench")
         #expect(ExerciseSearch.key(ExerciseSearch.key("bench \u{301}")) == "bench")
-        #expect(!ExerciseSearch.matches(Self.exercise(1, "Bench"), query: "bench \u{301}"))
+        #expect(ExerciseSearch.matches(Self.exercise(1, "Bench"), query: "bench \u{301}"))
     }
 
     static let pieces = [

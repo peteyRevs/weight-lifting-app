@@ -52,6 +52,7 @@ public enum ProgramEditing {
 }
 public enum ProgramEditError: Error { case minimumTwoWeeks, weekHasLoggedSessions(Int), dayHasNoExercises }
 ```
+**Names:** a program name, a day name and a day tag the lifter types refuse control characters (Unicode `Cc`, which includes U+0000) before `programRepository.save`: F05 refuses U+0000 as `nulInText`, an error a Feature cannot match (F05 S2 review N-a).
 **Group-aware move (fixes the v1 gap):** blocks = maximal runs where `isSupersetWithPrevious == true` joins the previous slot. If the slot and its neighbour in the move direction are in the same block, swap them inside the block (letters recompute). Otherwise the whole block moves past the neighbouring block as a unit. Superset flags are recomputed so the first slot of every block has `isSupersetWithPrevious == false`.
 Builder meta uses `TimeEstimate.minutes` (decision #14) and `Σ(sets + dropSets)` for set counts. Deload preview uses `ProgressionRules` (decision #3: ×0.85 rounded to the slot's unit step). Removing the last week throws `.weekHasLoggedSessions(n)` if a finished workout has `source.weekIndex == last`.
 `ProgramRoute`: `.day(DayTemplateID)`. Loads display in `Settings.units` with per-unit steps (lb 5 / 2.5, kg 2.5 / 1.25; kettlebell 5 lb / 2 kg, decision #22); `Slot.step == nil` resolves to the equipment default for the current unit.

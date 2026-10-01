@@ -818,3 +818,112 @@ threshold ~1,000).
 - **Coverage:** LedgerPersistence **99.91 %** (1189/1190), LedgerDomain 99.00 %, LedgerDesign 96.46 %,
   overall 98.64 %.
 - These notes were finished after the gate. They are docs only.
+
+### S2 fix round 2 (2026-09-30): S2-5, the review's nits, the search key, F03 criterion 8
+
+Inputs: `test-findings.md` "# Slice S2 — close-out round" (S2-5, S2-N1, S2-N2), `review.md` "# Slice S2 review —
+fix round 1" (N-a to N-d), and F03 criterion 8, which is F05's now that F03 is on `main` (merged at `07fb6c8`).
+Every fix was checked by a mutant: the fix undone, the named test seen failing, the file restored (host, one at a
+time; script and results in scratchpad `f05s2-fix2-mut/`).
+
+**S2-5 (minor bug): a save repairs a week or day whose `program_id` names no program again.**
+- **Change.** As the tester proposed: the three owner queries of `refuseOtherProgramsIDs` count a row as another
+  program's only when its `program_id` (a slot: its day's) names a **stored** program, live or deleted:
+  `AND program_id IN (SELECT id FROM program)`. A dangling or blob `program_id` is damage, so the upsert writes
+  it back, as before fix round 1. The error now always names a real program's row.
+- **Test.** The tester's `ProgramIdentityCloseoutAdversarialTests.danglingParent_isRepairedBySave` (4 cases)
+  passes; it failed 3 of 4 before. Mutant (the filter removed): that test fails, and only it. The ten takeover
+  tests and every B1 test still pass.
+
+**N-a: NUL is now contract, and F11 and F12 refuse control characters.**
+- **Contract.** Two clauses named `refusesNul`:
+  - exercises: a name, then a short name, holding U+0000 throws `nulInText("exercise.name")` /
+    `("exercise.short_name")`, and so does a seed with one such entry; `all()` is then still `[landmine]`;
+  - programs: a program name, a day name, a day tag (edits of a stored program), and a new active program's name
+    throw `nulInText` by column; `active()` is still the stored program.
+
+  The exercise contract now imports LedgerPersistence, as the program contract already did. Clause counts: 13
+  for exercises, 10 for programs.
+- **Briefs.** F12's `CustomExerciseDraft` name rule and a new "Names" line in F11's domain section: refuse
+  control characters (Unicode `Cc`, U+0000 included) before `save`. The error copy is left to F12 and F11.
+- **Protocol docs.** `ExerciseRepository.save` and `ProgramRepository.save` name `nulInText`.
+- **Mutant** (the NUL check off): both `refusesNul` clauses fail.
+
+**N-b: `otherProgramsIDs` covers a slot a live program dropped.** Before the delete, the clause saves the first
+program with day 0's first slot removed and expects the second program's copy of that slot to throw
+`duplicateIdentifier("slot …")`. Mutant (slot owners counted only while live, or under a deleted program, which
+is the fake the review describes): the clause fails.
+
+**N-c: writes run in one order on every launch.**
+- **Changes.**
+  - `seedIfNeeded` dedupes with a seen-set over the reversed catalog and restores the catalog's order. The last
+    entry of a repeated id still wins, at its last position. Inserts, refreshes, version marks and clash logs
+    follow the catalog.
+  - `SyncedRecord.write` soft-deletes removed rows in `stored`'s order, which is each query's `ORDER BY`.
+- **Tests.**
+  - `CatalogUpgradeTests.seed_writesInCatalogOrder`: rowid order equals the bundled catalog's order.
+  - `ProgramSoftDeleteTests.softDeletes_runInStoredOrder`: a statement trace (`Repositories.statements`)
+    of `delete` shows the 20 slot soft deletes in `position, id` order.
+- **Mutants** (the `Dictionary(…).values` seed, the `storedByID.keys` deletes): each fails its test.
+
+**N-d: the doc of `seedIfNeeded`** now says the applied version moves up whenever the upgrade writes a row;
+otherwise the next launch checks again, as a no-op. Docs only.
+
+**S2-N1 and S2-N2: the search key folds width, and folds before it trims.**
+- **Change.** `ExerciseSearch.key` is now
+  `folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)`, then
+  `trimmingCharacters(in: .whitespacesAndNewlines)`. Fullwidth `ＢＥＮＣＨ` finds "Bench", and the blank that folding
+  uncovers in `"bench \u{301}"` is trimmed.
+- **`ı` and `Ø`: left as they are, by choice.** They are letters, not a base letter plus a mark, so
+  Foundation's locale-neutral folding keeps them. Mapping them would need a transliteration (`Latin-ASCII`) or
+  a hand table. The first also rewrites `ß`, ligatures and more, at a cost on every key. The second is a list
+  to maintain. Neither is trivial and safe, and the catalog is English. `ExerciseSearch`'s doc says so.
+- **Residue, documented in no test.** One fold is not always idempotent: a run of two or more lone combining
+  marks after a blank loses one mark per pass, and so do halfwidth kana sound marks. No keyboard types these,
+  and the tester's laws property test still passes. Folding to a fixed point would cost a second fold on every
+  key.
+- **Decision #23's row** now reads "ignoring case, diacritics and character width". F12's line, the contract
+  clause `searchText` (a new fullwidth `ＲＤＬ` case) and the GRDB doc comments follow it.
+- **Tests.**
+  - `ExerciseSearchTests.key_foldsWidth_thenTrims`: fullwidth letters, the uncovered blank, a key being its own
+    key, and `ı`/`Ø` kept;
+  - a fullwidth case in `matches_nameOrShortName`;
+  - the contract's `searchText`.
+
+  Mutants: without `.widthInsensitive`, those tests and the clause fail; trimming first, the key test fails.
+- **The one change to the tester's tests.** `ExerciseSearchCloseoutAdversarialTests` pinned the old behaviour
+  "(documents)", so it changes with the decision, as `nul_cutsTheName` did for S2-4:
+  - the two fullwidth folding cases now expect a match;
+  - `blankWithAMark_isNotTrimmed` now expects the blank trimmed (its name is kept; its title and doc say
+    why);
+  - the suite's doc comment records the change.
+
+  Every other case, `ı`, `Ø`, inner blanks and U+200B included, is unchanged.
+
+**F03 criterion 8: the seed contract against `CatalogSeedFixture`.**
+- **Contract clause `seedBundledCatalog`.** It follows the fixture's doc-comment scenario on the real catalog:
+  - `base()` seeds one exercise per entry, and `all()` equals the entries;
+  - after `custom` is saved, seeding `base()` again changes nothing;
+  - `upgrade()` adds `added` and `clash`, `clash` despite its name, and leaves `custom` as it was.
+- **GRDB test `CatalogUpgradeTests.bundledCatalog_upgradeStampsOnlyNewRows`.** Decision #24's refresh on 224
+  rows:
+  - the 224 base rows keep `created_at` and `updated_at`, and only `catalog_version` moves to the upgrade's;
+  - the two new rows carry the upgrade's stamp;
+  - the custom row stays byte for byte.
+- **Mutants.**
+  - A clash entry skipped: `seedBundledCatalog` and `seedNameClash` fail.
+  - The refresh stamping every row: the GRDB test and `upgrade_refreshesListedCatalogRows_inPlace` fail.
+
+**Skipped:** nothing. All four nits were cheap, and none conflicted with a tester's test.
+
+**Code lines** (same method; it reproduces 775 at `07fb6c8` against `main` 7740bd9): **777**, up 2 (target 500,
+split threshold ~1,000). The S2-5 filter and the seed's dedupe are written out one clause per line; the N-c change
+replaced a dictionary with a filter at no net cost. Not counted: `LedgerTestSupport` (+3 clauses), tests and docs.
+
+**Gate (orchestrator, 2026-10-01, on the tree as committed; Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0).**
+The round was cut off by a restart before its gate, so the orchestrator ran it: full `scripts/check.sh` exit 0
+in 460 s (iOS tests 180 s, watchOS tests 126 s). Coverage: LedgerPersistence **99.91 %** (1190/1191),
+LedgerDomain 99.05 %, LedgerDesign 97.20 %, overall 98.52 %. `ProgramIdentityCloseoutAdversarialTests`
+(S2-5's `danglingParent_isRepairedBySave` among them) and the search suites pass on the host too, which is the
+tester's condition for closing G2. The mutant results named above were in a scratchpad the restart removed; the
+tests they were checked against are in the tree.

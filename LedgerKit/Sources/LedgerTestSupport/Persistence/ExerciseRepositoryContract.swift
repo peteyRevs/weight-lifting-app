@@ -1,16 +1,18 @@
 import Foundation
 import LedgerDomain
+import LedgerPersistence
 
 /// `ExerciseRepository`'s contract as named clauses (F05): search matching and name order (`ExerciseSearch`;
 /// Pete, 2026-09-30; product decision #23), catalog seeding (criterion 11; the orchestrator's rule of
 /// 2026-09-30 that a catalog entry is never skipped over a name; product decision #24, upgrades refresh catalog
-/// rows in place) and observation. Every clause gets a fresh, empty repository.
+/// rows in place; F03's bundled catalog through `CatalogSeedFixture`), text holding U+0000 (refused, review N-a)
+/// and observation. Every clause gets a fresh, empty repository.
 public enum ExerciseRepositoryContract {
     public typealias Clause = ContractClause<any ExerciseRepository>
 
     public static let clauses: [Clause] = [
         Clause("a saved exercise reads back by id and in all(); saving it again overwrites it", saveReadsBack),
-        Clause("search matches a substring of the name or short name, ignoring case and diacritics", searchText),
+        Clause("search matches a substring of the name or short name, ignoring case, diacritics and width", searchText),
         Clause("search combines the text with the equipment and primary-muscle filters", searchFilters),
         Clause("search reads % and _ as plain characters", searchWildcards),
         Clause("seeding one version twice changes nothing, and never touches a custom exercise", seedIdempotent),
@@ -19,6 +21,8 @@ public enum ExerciseRepositoryContract {
         Clause("seeding stores every entry as a catalog exercise, whatever its isCustom says", seedCatalogRows),
         Clause("a higher version refreshes the catalog exercises it lists; one it no longer lists stays", seedRefresh),
         Clause("an upgrade leaves a custom exercise, and a catalog exercise the lifter saved", seedLeavesTheLifters),
+        Clause("the bundled catalog seeds, re-seeds and upgrades as F03's CatalogSeedFixture says", seedBundledCatalog),
+        Clause("a name or short name holding U+0000 is refused with nulInText; nothing is saved", refusesNul),
         Clause("observeAll emits the exercises now, then after each change", observeAll)
     ]
 
@@ -86,6 +90,7 @@ public enum ExerciseRepositoryContract {
             ("RDL", ["Romanian Deadlift"]), // the short name
             ("  ELEVATION ", ["Élévation Latérale"]), // case, diacritics and blanks
             ("élé", ["Élévation Latérale"]),
+            ("ＲＤＬ", ["Romanian Deadlift"]), // fullwidth, as a Japanese IME types it
             ("bench press", ["Barbell Bench Press"]),
             ("zzz", []),
             ("", ExerciseSearch.sorted(searchable).map(\.name))
@@ -146,5 +151,26 @@ public enum ExerciseRepositoryContract {
         return ContractCheck.expect(percent, ["Box Squat (50%)"], "search(\"%\")")
             ?? ContractCheck.expect(underscore, [], "search(\"_\")")
             ?? ContractCheck.expect(pattern, [], "search(\"B%h\")")
+    }
+
+    static func refusesNul(_ repository: any ExerciseRepository) async throws -> String? {
+        try await repository.save(landmine)
+        var name = landmine
+        name.name = "Land\u{0}mine"
+        var shortName = landmine
+        shortName.shortName += "\u{0}"
+        var catalog = Seeders.catalog(count: 2, version: 1).exercises
+        catalog[1].name = "\u{0}" + catalog[1].name
+        let named = await ContractCheck.expectError(LedgerPersistenceError.nulInText("exercise.name")) {
+            try await repository.save(name)
+        }
+        let short = await ContractCheck.expectError(LedgerPersistenceError.nulInText("exercise.short_name")) {
+            try await repository.save(shortName)
+        }
+        let seeded = await ContractCheck.expectError(LedgerPersistenceError.nulInText("exercise.name")) {
+            try await repository.seedIfNeeded(catalog, version: 1)
+        }
+        let all = try await repository.all()
+        return named ?? short ?? seeded ?? ContractCheck.expect(all, [landmine], "all() after the refused writes")
     }
 }

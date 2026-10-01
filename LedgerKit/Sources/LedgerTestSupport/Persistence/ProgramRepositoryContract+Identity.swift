@@ -3,7 +3,8 @@ import LedgerDomain
 import LedgerPersistence
 
 /// Ids and missing programs. Every week, day and slot id is a row id shared by all programs, so an id used twice
-/// in one program, or one that another program holds, is refused rather than taking that row over (review B1).
+/// in one program, or one that another program holds (even one it dropped or deleted), is refused rather than
+/// taking that row over (review B1, N-b).
 extension ProgramRepositoryContract {
     static func setActiveMissing(_ repository: any ProgramRepository) async throws -> String? {
         let unknown = try program(number: 9).id
@@ -67,6 +68,13 @@ extension ProgramRepositoryContract {
             }
         }
         let afterRefusals = try await repository.active()
+        // A slot the first program dropped is still its own (its history points at it), live program or not.
+        var dropped = first
+        dropped.days[0].slots.removeFirst()
+        try await repository.save(dropped)
+        let afterDrop = await ContractCheck.expectError(LedgerPersistenceError.duplicateIdentifier(cases[0].1)) {
+            try await repository.save(takesSlot)
+        }
         // A deleted program's ids are still its own: saving it again must bring back every row.
         try await repository.delete(first.id)
         let deleted = await ContractCheck.expectError(LedgerPersistenceError.duplicateIdentifier(cases[0].1)) {
@@ -75,6 +83,7 @@ extension ProgramRepositoryContract {
         try await repository.save(first)
         let restored = try await repository.active()
         return ContractCheck.expect(afterRefusals, first, "the first program after the refused saves")
+            ?? afterDrop.map { "a slot the live first program dropped: \($0)" }
             ?? deleted
             ?? ContractCheck.expect(restored, first, "the first program saved again after its delete")
     }

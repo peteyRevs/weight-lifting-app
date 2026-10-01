@@ -7,7 +7,8 @@ import Testing
 
 /// Product decision #24 (Pete, 2026-09-30): a catalog upgrade refreshes the live catalog rows it lists in place,
 /// and never touches a custom exercise, a catalog exercise the lifter saved, or a deleted row. The contract
-/// clauses `seedRefresh` and `seedLeavesTheLifters` hold the behaviour; these tests hold the columns.
+/// clauses `seedRefresh`, `seedLeavesTheLifters` and `seedBundledCatalog` (F03 criterion 8) hold the
+/// behaviour; these tests hold the columns.
 @Suite("GRDBExerciseRepository · catalog upgrades", .tags(.persistence), .timeLimit(.minutes(1)))
 struct CatalogUpgradeTests {
     @Test("A lifter's save of a catalog exercise clears its catalog version, changed or not, and stamps no change")
@@ -62,5 +63,55 @@ struct CatalogUpgradeTests {
         let after = try await repositories.queue.read { try Row.fetchOne($0, sql: row, arguments: [id])?.description }
         #expect(after == before && before != nil)
         #expect(try await repositories.texts("SELECT catalog_version FROM exercise ORDER BY id") == ["1", "2"])
+    }
+
+    @Test("F03 criterion 8 on the bundled catalog: one row per entry; the upgrade stamps only its new rows")
+    func bundledCatalog_upgradeStampsOnlyNewRows() async throws {
+        let repositories = try Repositories()
+        let base = try CatalogSeedFixture.base()
+        let upgrade = try CatalogSeedFixture.upgrade()
+        try await repositories.exercises.seedIfNeeded(base.exercises, version: base.version)
+        let seeded = repositories.clock.timestamp
+        repositories.clock.advance()
+        try await repositories.exercises.save(CatalogSeedFixture.custom)
+        let customRow = { @Sendable (database: Database) in
+            try Row.fetchOne(
+                database,
+                sql: "SELECT * FROM exercise WHERE id = ?",
+                arguments: [ColumnCodec.text(CatalogSeedFixture.custom.id)]
+            )?.description
+        }
+        let saved = try await repositories.queue.read(customRow)
+        repositories.clock.advance()
+        try await repositories.exercises.seedIfNeeded(base.exercises, version: base.version)
+        repositories.clock.advance()
+        try await repositories.exercises.seedIfNeeded(upgrade.exercises, version: upgrade.version)
+        let upgraded = repositories.clock.timestamp
+        let after = try await repositories.queue.read(customRow)
+        let rows = """
+        SELECT created_at || ' ' || updated_at || ' ' || catalog_version, COUNT(*) FROM exercise
+        WHERE is_custom = 0 GROUP BY 1 ORDER BY 1
+        """
+        let groups = try await repositories.queue.read { database in
+            try Row.fetchAll(database, sql: rows).map { "\($0[0] as String) × \($0[1] as Int)" }
+        }
+        #expect(base.exercises.count == 224)
+        #expect(groups == [
+            "\(seeded) \(seeded) \(upgrade.version) × 224", // refreshed, unchanged: only the version moves
+            "\(upgraded) \(upgraded) \(upgrade.version) × 2" // added and clash
+        ])
+        #expect(after == saved && saved != nil, "the custom exercise's row, byte for byte")
+    }
+
+    @Test("Seeding writes rows in the catalog's order, the same on every launch (review N-c)")
+    func seed_writesInCatalogOrder() async throws {
+        let repositories = try Repositories()
+        let base = try CatalogSeedFixture.base()
+        let inserts = try await repositories.statements(startingWith: "INSERT INTO exercise") {
+            try await repositories.exercises.seedIfNeeded(base.exercises, version: base.version)
+        }
+        #expect(inserts.count == base.exercises.count)
+        let order = try await repositories.texts("SELECT id FROM exercise ORDER BY rowid")
+        #expect(order == base.exercises.map { ColumnCodec.text($0.id) })
     }
 }

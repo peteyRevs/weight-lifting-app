@@ -1,9 +1,11 @@
 import Foundation
 import LedgerDomain
+import LedgerPersistence
 
 /// `ProgramRepository`'s contract as named clauses (F05): criterion 2's round trip, saves that replace a
 /// program's weeks, days, slots and misses, re-validation through `Slot.init` and `Program.init` (F02 review
-/// N2), the one active program, deletion, observation, and ids (review B1). Every clause gets a fresh, empty
+/// N2), text holding U+0000 (refused, review N-a), the one active program, deletion, observation, and ids
+/// (review B1). Every clause gets a fresh, empty
 /// repository that accepts slots naming `exercises` (a GRDB database must hold them first: `slot.exercise_id`
 /// is a foreign key).
 public enum ProgramRepositoryContract {
@@ -13,13 +15,14 @@ public enum ProgramRepositoryContract {
         Clause("a saved active program reads back equal, misses included (8 weeks × 4 days)", roundTrip),
         Clause("a second save replaces days, slots and misses: removed, added and changed", saveReplaces),
         Clause("save re-validates: a slot or program edited out of range throws and changes nothing", revalidates),
+        Clause("a program or day name, or a day tag, holding U+0000 throws nulInText; nothing is saved", refusesNul),
         Clause("exactly one program is active: setActive, or saving an active one, deactivates the other", oneActive),
         Clause("delete hides the program, and saving it again brings it back", deleteHides),
         Clause("observeActive emits the active program now, then after each change", observeActive),
         Clause("setActive of a program that is not saved, or is deleted, throws missingRow", setActiveMissing),
         Clause("two weeks, days or slots sharing an id throw duplicateIdentifier; nothing is saved", duplicateChildren),
         Clause(
-            "a week, day or slot id another program holds, even deleted, is refused; that program is unchanged",
+            "a week, day or slot id another program holds, even deleted or dropped, is refused; it is unchanged",
             otherProgramsIDs
         )
     ]
@@ -109,5 +112,31 @@ public enum ProgramRepositoryContract {
         }
         let stored = try await repository.active()
         return issue ?? inverted ?? weeks ?? ContractCheck.expect(stored, program, "active() after the refused saves")
+    }
+
+    static func refusesNul(_ repository: any ProgramRepository) async throws -> String? {
+        let program = try program()
+        try await repository.save(program)
+        var named = program
+        named.name += "\u{0}"
+        var dayNamed = program
+        dayNamed.days[0].name = "Day\u{0}1"
+        var tagged = program
+        tagged.days[1].tag = "\u{0}"
+        var other = try Self.program(number: 2, isActive: true)
+        other.name = "\u{0}"
+        let cases: [(Program, String)] = [
+            (named, "program.name"), (dayNamed, "day_template.name"), (tagged, "day_template.tag"),
+            (other, "program.name")
+        ]
+        for (refused, column) in cases {
+            let issue = await ContractCheck.expectError(LedgerPersistenceError.nulInText(column)) {
+                try await repository.save(refused)
+            }
+            if let issue {
+                return "\(column): \(issue)"
+            }
+        }
+        return try await ContractCheck.expect(repository.active(), program, "active() after the refused saves")
     }
 }

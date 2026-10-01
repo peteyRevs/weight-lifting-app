@@ -56,4 +56,24 @@ struct Repositories {
     func execute(_ sql: String, _ arguments: StatementArguments = []) async throws {
         try await queue.write { database in try database.execute(sql: sql, arguments: arguments) }
     }
+
+    /// The SQL, arguments expanded, of each statement `body` runs that starts with `prefix`, in the order run.
+    func statements(startingWith prefix: String, during body: () async throws -> Void) async throws -> [String] {
+        let log = StatementLog()
+        try await queue.writeWithoutTransaction { database in
+            database.trace { event in
+                if case let .statement(statement) = event, statement.sql.hasPrefix(prefix) {
+                    log.lines.withLock { $0.append(statement.expandedSQL) }
+                }
+            }
+        }
+        try await body()
+        try await queue.writeWithoutTransaction { database in database.trace() }
+        return log.lines.withLock { $0 }
+    }
+}
+
+/// What `Repositories.statements(startingWith:during:)` collects.
+final class StatementLog: Sendable {
+    let lines = Mutex<[String]>([])
 }

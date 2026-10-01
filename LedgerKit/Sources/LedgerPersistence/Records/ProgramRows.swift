@@ -67,8 +67,8 @@ struct ProgramRows {
         try SlotMissRecord.write(misses, over: storedMisses, in: database, at: timestamp)
     }
 
-    /// Throws `duplicateIdentifier` when a week, day or slot of this program has an id that another program
-    /// holds, live or deleted (review B1). Upserting it would move that row into this program, and the other
+    /// Throws `duplicateIdentifier` when a week, day or slot of this program has an id that another stored
+    /// program holds, live or deleted (review B1). Upserting it would move that row into this program, and the other
     /// program would lose it or become unreadable. A miss's id derives from its slot's, so slots cover misses.
     private func refuseOtherProgramsIDs(in database: Database) throws {
         try refuse(weeks.map(\.rowID), of: WeekRecord.databaseTableName, heldBy: Query.weekOwners, in: database)
@@ -152,13 +152,18 @@ struct ProgramRows {
             AND slot_miss.deleted_at IS NULL
         ORDER BY slot_miss.week_index, slot_miss.id
         """
-        /// The ids, among those that follow in `IN (…)`, of weeks, days or slots of programs other than the first
-        /// argument, deleted rows included.
-        static let weekOwners = "SELECT id FROM program_week WHERE program_id IS NOT ? AND id IN "
-        static let dayOwners = "SELECT id FROM day_template WHERE program_id IS NOT ? AND id IN "
+        /// The ids, among those that follow in `IN (…)`, of weeks, days or slots of stored programs other than the
+        /// first argument, deleted rows and programs included. A row whose `program_id` names no stored program
+        /// is damage, not another program's, so a save repairs it (S2-5).
+        static let weekOwners = """
+        SELECT id FROM program_week WHERE program_id IS NOT ? AND program_id IN (SELECT id FROM program) AND id IN
+        """
+        static let dayOwners = """
+        SELECT id FROM day_template WHERE program_id IS NOT ? AND program_id IN (SELECT id FROM program) AND id IN
+        """
         static let slotOwners = """
         SELECT slot.id FROM slot JOIN day_template ON day_template.id = slot.day_template_id
-        WHERE day_template.program_id IS NOT ? AND slot.id IN
+        WHERE day_template.program_id IS NOT ? AND day_template.program_id IN (SELECT id FROM program) AND slot.id IN
         """
     }
 }

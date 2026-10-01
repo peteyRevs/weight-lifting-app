@@ -33,7 +33,7 @@ public struct GRDBExerciseRepository: ExerciseRepository {
         }
     }
 
-    /// The exercises whose name or short name contains `query`, ignoring case and diacritics
+    /// The exercises whose name or short name contains `query`, ignoring case, diacritics and width
     /// (`ExerciseSearch`; Pete, 2026-09-30; product decision #23), with `equipment` and the primary muscle
     /// `muscle` when given, in name order. A blank query matches every exercise. The text is matched in Swift,
     /// never in SQL, so `%` and `_` are plain characters; it is matched on the two text columns before a row is
@@ -79,26 +79,27 @@ public struct GRDBExerciseRepository: ExerciseRepository {
     ///   row. A second run at the same version, or a lower one, changes nothing. A stored version that is not
     ///   an integer throws `malformedColumn`.
     /// - An entry whose id is not stored is inserted as a catalog row (`isCustom` false), even when its name
-    ///   matches a stored exercise's, custom or not, ignoring case and diacritics: alternatives, program
+    ///   matches a stored exercise's (`ExerciseSearch.key`), custom or not: alternatives, program
     ///   templates and history refer to catalog ids, so every one must exist (orchestrator, 2026-09-30). The
     ///   clash is logged; the stored exercise is left as it is.
     /// - An entry whose id is a live catalog row of an older version refreshes that row in place: its content
     ///   becomes the entry's, keeping `id` and `created_at`, and `updated_at` moves only if the content changed.
     /// - Each row inserted or refreshed records `version` in `catalog_version`, so the applied version moves up
-    ///   even when an upgrade changes nothing.
+    ///   whenever the upgrade writes a row. One that writes none (every listed row the lifter's or deleted, and
+    ///   no new id) leaves it, and the next launch checks again, as a no-op.
     ///
     /// A custom exercise, a catalog row the lifter saved, and a deleted row are never written; nor is a row
-    /// the catalog no longer lists. An inexact start load throws `inexactWeight` and seeds nothing.
+    /// the catalog no longer lists. An inexact start load throws `inexactWeight` and seeds nothing. Rows are
+    /// written in the catalog's order.
     public func seedIfNeeded(_ catalog: [Exercise], version: Int) async throws {
-        // One record per id (F03 checks ids are unique; should a broken bundle repeat one, its last entry wins).
-        let records = Dictionary(
-            catalog.map { entry in
-                var catalogEntry = entry
-                catalogEntry.isCustom = false
-                return (entry.id, ExerciseRecord(catalogEntry))
-            },
-            uniquingKeysWith: { _, last in last }
-        ).values
+        // One record per id, in the catalog's order (F03 checks ids are unique; should a broken bundle repeat
+        // one, its last entry wins).
+        var seen = Set<ExerciseID>()
+        let records = catalog.reversed().filter { seen.insert($0.id).inserted }.reversed().map { entry in
+            var catalogEntry = entry
+            catalogEntry.isCustom = false
+            return ExerciseRecord(catalogEntry)
+        }
         let timestamp = ColumnCodec.timestamp(now())
         try await queue.write { database in
             guard try Self.appliedVersion(database).map({ $0 < version }) ?? true else {
@@ -117,7 +118,7 @@ public struct GRDBExerciseRepository: ExerciseRepository {
     /// row of an older version, with the stored rows the latter replace. A new record named like a stored
     /// exercise is logged.
     private static func upgrade(
-        _ records: some Collection<ExerciseRecord>,
+        _ records: [ExerciseRecord],
         in database: Database,
         to version: Int
     ) throws -> (written: [ExerciseRecord], replaced: [Row]) {

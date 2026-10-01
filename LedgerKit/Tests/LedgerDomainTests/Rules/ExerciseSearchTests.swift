@@ -18,7 +18,7 @@ struct ExerciseSearchTests {
         )
     }
 
-    @Test("A key is trimmed and folded for case and diacritics, the same in every locale")
+    @Test("A key is folded for case and diacritics and trimmed, the same in every locale")
     func key_trimsAndFolds() {
         #expect(ExerciseSearch.key("  Élévation LATÉRALE \n") == "elevation laterale")
         #expect(ExerciseSearch.key("E\u{301}le\u{301}vation") == "elevation") // decomposed accents
@@ -26,7 +26,20 @@ struct ExerciseSearchTests {
         #expect(ExerciseSearch.key(" \t ").isEmpty)
     }
 
-    @Test("A query matches a substring of the name or the short name, ignoring case, diacritics and blanks")
+    @Test("A key folds width too, and trims after folding, so a key is its own key (S2 fix round 2)")
+    func key_foldsWidth_thenTrims() {
+        #expect(ExerciseSearch.key("ＢＥＮＣＨ Ｐｒｅｓｓ") == "bench press") // fullwidth letters
+        #expect(ExerciseSearch.key("bench \u{301}") == "bench") // the blank folding uncovers is trimmed
+        #expect(ExerciseSearch.key("\u{3000}Ｒｏｗ\t") == "row")
+        for text in ["bench \u{301}", "Ｅ\u{301}LE \u{301}", "  Élévation\u{A0}"] {
+            let key = ExerciseSearch.key(text)
+            #expect(ExerciseSearch.key(key) == key, "\(text.debugDescription)")
+        }
+        // Letters that are not a base letter plus a mark stay themselves (locale-neutral folding).
+        #expect(ExerciseSearch.key("Ilık Øresund") == "ilık øresund")
+    }
+
+    @Test("A query matches a substring of the name or short name, ignoring case, diacritics, width and blanks")
     func matches_nameOrShortName() {
         let row = Self.exercise(1, "Chest-Supported Row", short: "CS Row")
         let rdl = Self.exercise(2, "Romanian Deadlift", short: "RDL")
@@ -36,6 +49,7 @@ struct ExerciseSearchTests {
         #expect(ExerciseSearch.matches(rdl, query: "rdl"))
         #expect(ExerciseSearch.matches(lateral, query: "elev"))
         #expect(ExerciseSearch.matches(lateral, query: "É"))
+        #expect(ExerciseSearch.matches(rdl, query: "ｒｄｌ"), "fullwidth, as a Japanese IME types it")
         #expect(!ExerciseSearch.matches(rdl, query: "row"))
         #expect(!ExerciseSearch.matches(row, query: "row cs"), "the text never spans name and short name")
         #expect(ExerciseSearch.matches(rdl, query: ""), "a blank query matches every exercise")

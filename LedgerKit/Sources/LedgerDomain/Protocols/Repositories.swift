@@ -11,7 +11,8 @@ public protocol ExerciseRepository: Sendable {
     /// The live exercises that `ExerciseSearch.matches` the query (decision #23), with `equipment` and the
     /// primary muscle `muscle` when given, in name order.
     func search(_ query: String, equipment: Equipment?, muscle: MuscleGroup?) async throws -> [Exercise]
-    /// Inserts or overwrites the exercise; a saved exercise is the lifter's, so catalog upgrades leave it.
+    /// Inserts or overwrites the exercise; a saved exercise is the lifter's, so catalog upgrades leave it. A
+    /// name or short name holding U+0000 is refused (`nulInText`) and nothing is saved.
     func save(_ exercise: Exercise) async throws
     /// Seeds the bundled catalog (F03) when `version` is above the applied one: new ids are inserted and live
     /// catalog rows it lists are refreshed in place (decision #24). Never touches custom or deleted exercises.
@@ -25,7 +26,7 @@ public protocol ProgramRepository: Sendable {
     func active() async throws -> Program?
     /// Saves the program whole (weeks, days, slots, misses), re-validated through its `init`s; when active,
     /// every other program becomes inactive. An id used twice, or held by another program, throws
-    /// `duplicateIdentifier`; a failed save writes nothing.
+    /// `duplicateIdentifier`; a name or tag holding U+0000 throws `nulInText`; a failed save writes nothing.
     func save(_ program: Program) async throws
     /// Makes the program the one active one; one that is not saved, or is deleted, throws `missingRow`.
     func setActive(_ id: ProgramID) async throws

@@ -41,8 +41,8 @@ extension SyncedRecord {
 
     /// Makes `stored`, the live rows that `records` replace (fetched with `SELECT *`), into `records`, in the
     /// caller's transaction. A new or changed row is upserted and an unchanged one left alone, so its
-    /// `updated_at` stays; a stored row missing from `records` is soft-deleted. Stored rows are compared as
-    /// column values, never decoded, so a save repairs a damaged row rather than failing on it.
+    /// `updated_at` stays; a stored row missing from `records` is soft-deleted, in `stored`'s order. Stored rows
+    /// are compared as column values, never decoded, so a save repairs a damaged row rather than failing on it.
     ///
     /// Stored rows are keyed by their `id` value as stored, whatever its storage class. A damaged id (text that
     /// is not the record's, or a blob) then matches no record and is soft-deleted by that same value, so a save
@@ -66,7 +66,8 @@ extension SyncedRecord {
             }
             try upsert(content, in: database, at: timestamp)
         }
-        let removed = storedByID.keys.filter { !ids.contains($0) }
+        // In `stored`'s order, so statements run in one order on every launch (review N-c).
+        let removed = stored.map { $0["id"] as DatabaseValue }.filter { !ids.contains($0) }
         let softDelete = try database.cachedStatement(
             sql: "UPDATE \(databaseTableName) SET deleted_at = ?, updated_at = ? WHERE id = ?"
         )

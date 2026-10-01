@@ -1,8 +1,8 @@
 import Foundation
 import LedgerDomain
 
-/// Criterion 11, product decision #24 and observation. `all()` is compared as a set where the clause is not
-/// about order.
+/// Criterion 11, product decision #24, F03 criterion 8 and observation. `all()` is compared as a set where the
+/// clause is not about order.
 extension ExerciseRepositoryContract {
     static func seedIdempotent(_ repository: any ExerciseRepository) async throws -> String? {
         let catalog = Seeders.catalog(count: 5, version: 1)
@@ -99,6 +99,35 @@ extension ExerciseRepositoryContract {
         return ContractCheck.expect(custom, mine, "the custom exercise")
             ?? ContractCheck.expect(saved, edited, "the catalog exercise the lifter saved")
             ?? ContractCheck.expect(refreshed, second[1], "a catalog exercise the upgrade lists")
+    }
+
+    /// F03 criterion 8's scenario, as `CatalogSeedFixture` documents it, over the real bundled catalog.
+    static func seedBundledCatalog(_ repository: any ExerciseRepository) async throws -> String? {
+        let base = try CatalogSeedFixture.base()
+        let upgrade = try CatalogSeedFixture.upgrade()
+        try await repository.seedIfNeeded(base.exercises, version: base.version)
+        let seeded = try await repository.all()
+        try await repository.save(CatalogSeedFixture.custom)
+        try await repository.seedIfNeeded(base.exercises, version: base.version)
+        let reseeded = try await Set(repository.all())
+        try await repository.seedIfNeeded(upgrade.exercises, version: upgrade.version)
+        let upgraded = try await Set(repository.all())
+        let clash = try await repository.exercise(id: CatalogSeedFixture.clash.id)
+        let custom = try await repository.exercise(id: CatalogSeedFixture.custom.id)
+        return ContractCheck.expect(seeded.count, base.exercises.count, "one exercise per entry after seeding")
+            ?? ContractCheck.expect(Set(seeded), Set(base.exercises), "all() after seeding")
+            ?? ContractCheck.expect(
+                reseeded,
+                Set(base.exercises + [CatalogSeedFixture.custom]),
+                "all() after seeding the same version again"
+            )
+            ?? ContractCheck.expect(
+                upgraded,
+                Set(upgrade.exercises + [CatalogSeedFixture.custom]),
+                "all() after the upgrade"
+            )
+            ?? ContractCheck.expect(clash, CatalogSeedFixture.clash, "the entry named like the custom exercise")
+            ?? ContractCheck.expect(custom, CatalogSeedFixture.custom, "the custom exercise after the upgrade")
     }
 
     static func observeAll(_ repository: any ExerciseRepository) async throws -> String? {
