@@ -22,8 +22,12 @@ public enum LedgerPersistenceError: Error, Equatable, Sendable {
     /// that is not UTF-8 (`"table.column"`). Only damage or a foreign writer makes one.
     case malformedColumn(String)
     /// Two values to be saved in one table share an id (`"table id"`), e.g. a slot copied without a new id:
-    /// both would land in one row, and one would be lost.
+    /// both would land in one row, and one would be lost. Also a week, day or slot id that another program
+    /// holds, live or deleted: saving it would move that row out of the other program.
     case duplicateIdentifier(String)
+    /// A text value to be saved holds U+0000 (`"table.column"`). SQLite would keep the text only up to it, so
+    /// it is refused rather than stored cut short.
+    case nulInText(String)
     /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted.
     case missingRow(String)
 }

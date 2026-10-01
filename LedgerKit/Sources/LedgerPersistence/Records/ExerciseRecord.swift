@@ -1,8 +1,8 @@
 import GRDB
 import LedgerDomain
 
-/// An `exercise` row: the exercise's content. `catalog_version` is not content: only the seeder writes it
-/// (`GRDBExerciseRepository.seedIfNeeded`), so saving an exercise never changes it.
+/// An `exercise` row: the exercise's content. `catalog_version` is not content: the seeder sets it on the rows
+/// it inserts or refreshes, and a lifter's save clears it (`GRDBExerciseRepository`; product decision #24).
 struct ExerciseRecord: SyncedRecord {
     static let databaseTableName = "exercise"
 

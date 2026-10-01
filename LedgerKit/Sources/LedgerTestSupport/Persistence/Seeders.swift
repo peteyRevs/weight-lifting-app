@@ -4,6 +4,17 @@ import LedgerDomain
 /// Deterministic data for persistence tests (F05): a synthetic exercise catalog, standing in for F03's
 /// `ExerciseCatalog.seed()` so F05 does not depend on it, and programs over any exercises.
 public enum Seeders {
+    /// A shape `program` or `slot` cannot build: it would trap, or give two slots one id.
+    public struct UnsupportedShape: Error, Equatable {
+        public let parameter: String
+        public let value: Int
+
+        public init(parameter: String, value: Int) {
+            self.parameter = parameter
+            self.value = value
+        }
+    }
+
     /// A catalog as `ExerciseRepository.seedIfNeeded(_:version:)` takes it.
     public struct Catalog: Sendable {
         public let exercises: [Exercise]
@@ -44,6 +55,9 @@ public enum Seeders {
     /// `exercises` in turn. Day `d` runs on the `d`-th weekday from Monday. Slot fields vary with the slot's
     /// place (sets, reps, RPE, rest, progression, loads in lb and kg, a superset, a drop set), and every other
     /// slot has misses, so a round trip compares real values. `number` keeps the ids of two programs apart.
+    ///
+    /// `days` runs from 0 to 7 (one per weekday) and `slotsPerDay` from 0 to 32 (slot ids leave room for 32 a
+    /// day); outside either, or with no `exercises` for its slots, it throws `UnsupportedShape`.
     public static func program(
         number: Int = 0,
         weeks: Int = 8,
@@ -52,6 +66,12 @@ public enum Seeders {
         exercises: [ExerciseID],
         isActive: Bool = true
     ) throws -> Program {
+        guard (0 ... Weekday.allCases.count).contains(days) else {
+            throw UnsupportedShape(parameter: "days", value: days)
+        }
+        guard (0 ... slotsPerDayLimit).contains(slotsPerDay) else {
+            throw UnsupportedShape(parameter: "slotsPerDay", value: slotsPerDay)
+        }
         let dayTemplates = try (0 ..< days).map { day in
             try DayTemplate(
                 id: DayTemplateID(programUUID(number, 0x100 + day)),
@@ -84,7 +104,8 @@ public enum Seeders {
         )
     }
 
-    /// Slot `position` of day `day`.
+    /// Slot `position` (0 to 31) of day `day`; with no `exercises`, or another position, it throws
+    /// `UnsupportedShape`.
     public static func slot(
         _ number: Int,
         day: Int,
@@ -92,6 +113,12 @@ public enum Seeders {
         last: Bool,
         _ exercises: [ExerciseID]
     ) throws -> Slot {
+        guard !exercises.isEmpty else {
+            throw UnsupportedShape(parameter: "exercises", value: 0)
+        }
+        guard (0 ..< slotsPerDayLimit).contains(position) else {
+            throw UnsupportedShape(parameter: "position", value: position)
+        }
         let turn = day + position
         let reps = 3 + (2 * position + day) % 10
         let rpes: [Decimal] = [7, 7.5, 8, 8.5, 9]
@@ -118,6 +145,9 @@ public enum Seeders {
             try JSONDecoder().decode(CivilDate.self, from: Data(#""2026-08-17""#.utf8))
         }
     }
+
+    /// Slot ids are `0x1000 + 0x20 × day + position`, so a day has room for 32.
+    private static let slotsPerDayLimit = 0x20
 
     private static func programUUID(_ number: Int, _ offset: Int) -> UUID {
         EventBuilders.uuid(0x0B00_0000 + number << 16 + offset)

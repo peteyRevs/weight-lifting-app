@@ -11,28 +11,51 @@ import Testing
 /// "ValueObservation on watchOS"). S3 adds `observeRecent` (criterion 10).
 @Suite("Repository observation", .tags(.persistence), .timeLimit(.minutes(1)))
 struct ObservationTests {
-    @Test("observeAll emits the catalog now, then after a custom save, and skips a save that changes nothing")
+    /// Every value `observation` emits, in order. The repositories' streams keep only the newest value, so a
+    /// spurious emission there would be replaced by the next real one before a test read it (review N4); this
+    /// stream drops none, so a test sees one.
+    static func everyValue<Value: Equatable & Sendable>(
+        _ observation: DistinctObservation<Value>,
+        in queue: DatabaseQueue
+    ) -> AsyncStream<Value> {
+        AsyncStream { continuation in
+            let cancellable = observation.start(
+                in: queue,
+                scheduling: .async(onQueue: DispatchQueue(label: "ObservationTests"))
+            ) { _ in
+                continuation.finish()
+            } onChange: { value in
+                continuation.yield(value)
+            }
+            continuation.onTermination = { _ in cancellable.cancel() }
+        }
+    }
+
+    @Test("observeAll's observation emits the catalog, then after a custom save, and none for a no-op write")
     func observeAll_emitsOnChange_only() async throws {
         let repositories = try Repositories()
         let catalog = Seeders.catalog(count: 3, version: 1).exercises
         try await repositories.exercises.seedIfNeeded(catalog, version: 1)
-        var values = repositories.exercises.observeAll().makeAsyncIterator()
+        let observation = GRDBExerciseRepository.allObservation()
+        var values = Self.everyValue(observation, in: repositories.queue).makeAsyncIterator()
         #expect(await values.next().map(Set.init) == Set(catalog))
-        try await repositories.exercises.seedIfNeeded(catalog, version: 1) // no change
+        try await repositories.execute("UPDATE exercise SET name = name") // a write that changes no value
         try await repositories.exercises.save(ExerciseRepositoryContract.landmine)
         #expect(await values.next().map(Set.init) == Set(catalog + [ExerciseRepositoryContract.landmine]))
     }
 
-    @Test("observeActive emits nil, the program, each edit and nil after delete; an unchanged save emits nothing")
+    @Test("observeActive's observation emits nil, the program, each edit and nil after delete; none for a no-op write")
     func observeActive_emitsEachChange_only() async throws {
-        let programs = try await Repositories.withProgramExercises().programs
+        let repositories = try await Repositories.withProgramExercises()
+        let programs = repositories.programs
         let program = try ProgramRepositoryContract.program()
         let edited = try ProgramRepositoryContract.edited(program)
-        var values = programs.observeActive().makeAsyncIterator()
+        let observation = GRDBProgramRepository.activeObservation()
+        var values = Self.everyValue(observation, in: repositories.queue).makeAsyncIterator()
         #expect(await values.next() == .some(nil))
         try await programs.save(program)
         #expect(await values.next() == program)
-        try await programs.save(program) // no change
+        try await repositories.execute("UPDATE slot SET sets = sets") // a write that changes no value
         try await programs.save(edited)
         #expect(await values.next() == edited)
         try await programs.delete(program.id)

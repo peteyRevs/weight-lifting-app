@@ -41,6 +41,26 @@ struct ProgramSoftDeleteTests {
         #expect(try await repositories.texts(kept) == [created])
     }
 
+    /// Review N2: were the flag left set, a revival (a sync in M4, or a save from a stale copy) could leave two
+    /// programs active, and the revived one, updated last, would win.
+    @Test("delete makes the program inactive, so reviving its row never makes two programs active")
+    func delete_clearsTheActiveFlag() async throws {
+        let repositories = try await Repositories.withProgramExercises()
+        let first = try Contract.program(number: 1, isActive: true)
+        try await repositories.programs.save(first)
+        try await repositories.programs.delete(first.id)
+        let flag = "SELECT is_active FROM program WHERE id = ?"
+        #expect(try await repositories.count(flag, [ColumnCodec.text(first.id)]) == 0)
+        let second = try Contract.program(number: 2, isActive: true)
+        try await repositories.programs.save(second)
+        // A sync revives the first program's row with a later stamp.
+        try await repositories.execute(
+            "UPDATE program SET deleted_at = NULL, updated_at = '9999-12-31T00:00:00.000Z' WHERE id = ?",
+            [ColumnCodec.text(first.id)]
+        )
+        #expect(try await repositories.programs.active() == second)
+    }
+
     @Test("setActive flips only the flags that change, and saving the active program again writes nothing")
     func setActive_touchesOnlyChangedRows() async throws {
         let repositories = try await Repositories.withProgramExercises()

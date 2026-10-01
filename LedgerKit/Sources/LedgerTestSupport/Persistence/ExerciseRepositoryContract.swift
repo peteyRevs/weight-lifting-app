@@ -1,9 +1,10 @@
 import Foundation
 import LedgerDomain
 
-/// `ExerciseRepository`'s contract as named clauses (F05): search matching (Pete, 2026-09-30; product decision
-/// #23), catalog seeding (criterion 11, and the orchestrator's rule of 2026-09-30 that a catalog entry is never
-/// skipped over a name) and observation. Every clause gets a fresh, empty repository.
+/// `ExerciseRepository`'s contract as named clauses (F05): search matching and name order (`ExerciseSearch`;
+/// Pete, 2026-09-30; product decision #23), catalog seeding (criterion 11; the orchestrator's rule of
+/// 2026-09-30 that a catalog entry is never skipped over a name; product decision #24, upgrades refresh catalog
+/// rows in place) and observation. Every clause gets a fresh, empty repository.
 public enum ExerciseRepositoryContract {
     public typealias Clause = ContractClause<any ExerciseRepository>
 
@@ -13,8 +14,11 @@ public enum ExerciseRepositoryContract {
         Clause("search combines the text with the equipment and primary-muscle filters", searchFilters),
         Clause("search reads % and _ as plain characters", searchWildcards),
         Clause("seeding one version twice changes nothing, and never touches a custom exercise", seedIdempotent),
-        Clause("a higher version adds only the new ids; a lower one changes nothing", seedUpgrade),
+        Clause("a higher version adds the new ids without duplicating one; a lower one changes nothing", seedUpgrade),
         Clause("a catalog entry named like a custom exercise is seeded beside it", seedNameClash),
+        Clause("seeding stores every entry as a catalog exercise, whatever its isCustom says", seedCatalogRows),
+        Clause("a higher version refreshes the catalog exercises it lists; one it no longer lists stays", seedRefresh),
+        Clause("an upgrade leaves a custom exercise, and a catalog exercise the lifter saved", seedLeavesTheLifters),
         Clause("observeAll emits the exercises now, then after each change", observeAll)
     ]
 
@@ -84,7 +88,7 @@ public enum ExerciseRepositoryContract {
             ("élé", ["Élévation Latérale"]),
             ("bench press", ["Barbell Bench Press"]),
             ("zzz", []),
-            ("", searchable.map(\.name).sorted { $0.folded < $1.folded })
+            ("", ExerciseSearch.sorted(searchable).map(\.name))
         ]
         for (query, expected) in cases {
             let found = try await repository.search(query, equipment: nil, muscle: nil).map(\.name)
@@ -142,12 +146,5 @@ public enum ExerciseRepositoryContract {
         return ContractCheck.expect(percent, ["Box Squat (50%)"], "search(\"%\")")
             ?? ContractCheck.expect(underscore, [], "search(\"_\")")
             ?? ContractCheck.expect(pattern, [], "search(\"B%h\")")
-    }
-}
-
-extension String {
-    /// Case and diacritics folded, as the contract's expected orders compare names.
-    var folded: String {
-        folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 }

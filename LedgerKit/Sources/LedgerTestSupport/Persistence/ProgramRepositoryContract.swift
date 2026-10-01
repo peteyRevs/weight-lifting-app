@@ -3,8 +3,9 @@ import LedgerDomain
 
 /// `ProgramRepository`'s contract as named clauses (F05): criterion 2's round trip, saves that replace a
 /// program's weeks, days, slots and misses, re-validation through `Slot.init` and `Program.init` (F02 review
-/// N2), the one active program, deletion and observation. Every clause gets a fresh, empty repository that
-/// accepts slots naming `exercises` (a GRDB database must hold them first: `slot.exercise_id` is a foreign key).
+/// N2), the one active program, deletion, observation, and ids (review B1). Every clause gets a fresh, empty
+/// repository that accepts slots naming `exercises` (a GRDB database must hold them first: `slot.exercise_id`
+/// is a foreign key).
 public enum ProgramRepositoryContract {
     public typealias Clause = ContractClause<any ProgramRepository>
 
@@ -14,7 +15,13 @@ public enum ProgramRepositoryContract {
         Clause("save re-validates: a slot or program edited out of range throws and changes nothing", revalidates),
         Clause("exactly one program is active: setActive, or saving an active one, deactivates the other", oneActive),
         Clause("delete hides the program, and saving it again brings it back", deleteHides),
-        Clause("observeActive emits the active program now, then after each change", observeActive)
+        Clause("observeActive emits the active program now, then after each change", observeActive),
+        Clause("setActive of a program that is not saved, or is deleted, throws missingRow", setActiveMissing),
+        Clause("two weeks, days or slots sharing an id throw duplicateIdentifier; nothing is saved", duplicateChildren),
+        Clause(
+            "a week, day or slot id another program holds, even deleted, is refused; that program is unchanged",
+            otherProgramsIDs
+        )
     ]
 
     /// The exercises the contract's programs name.

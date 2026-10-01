@@ -1,7 +1,8 @@
 import Foundation
 import LedgerDomain
 
-/// Criterion 11 and observation. `all()` is compared as a set where the protocol promises no order.
+/// Criterion 11, product decision #24 and observation. `all()` is compared as a set where the clause is not
+/// about order.
 extension ExerciseRepositoryContract {
     static func seedIdempotent(_ repository: any ExerciseRepository) async throws -> String? {
         let catalog = Seeders.catalog(count: 5, version: 1)
@@ -45,6 +46,59 @@ extension ExerciseRepositoryContract {
         return ContractCheck.expect(all, Set(catalog.exercises + [mine]), "all() after seeding")
             ?? ContractCheck.expect(entry, catalog.exercises[1], "the catalog entry by id")
             ?? ContractCheck.expect(kept, mine, "the custom exercise")
+    }
+
+    static func seedCatalogRows(_ repository: any ExerciseRepository) async throws -> String? {
+        var catalog = Seeders.catalog(count: 2, version: 1).exercises
+        catalog[1].isCustom = true
+        try await repository.seedIfNeeded(catalog, version: 1)
+        var expected = catalog[1]
+        expected.isCustom = false
+        return try await ContractCheck.expect(repository.exercise(id: expected.id), expected, "an entry marked custom")
+    }
+
+    static func seedRefresh(_ repository: any ExerciseRepository) async throws -> String? {
+        let first = Seeders.catalog(count: 3, version: 1).exercises
+        try await repository.seedIfNeeded(first, version: 1)
+        // Version 2 corrects entry 0, lists entry 1 as it was, and no longer lists entry 2.
+        var corrected = first[0]
+        corrected.name += " (corrected)"
+        corrected.defaultStartLoad = [.lb: .pounds(135)]
+        corrected.curatedAlternatives = [Seeders.catalogID(2)]
+        try await repository.seedIfNeeded([corrected, first[1]], version: 2)
+        let upgraded = try await Set(repository.all())
+        // The same version again, with other content, changes nothing.
+        var ignored = corrected
+        ignored.name = "Ignored"
+        try await repository.seedIfNeeded([ignored], version: 2)
+        let again = try await repository.exercise(id: corrected.id)
+        return ContractCheck.expect(upgraded, [corrected, first[1], first[2]], "all() after the upgrade")
+            ?? ContractCheck.expect(again, corrected, "entry 0 after seeding version 2 again")
+    }
+
+    static func seedLeavesTheLifters(_ repository: any ExerciseRepository) async throws -> String? {
+        // The lifter's own exercise, holding the id of entry 2, which version 2 adds.
+        var mine = Seeders.catalogEntry(2)
+        mine.name = "Mine"
+        mine.isCustom = true
+        try await repository.save(mine)
+        let first = Seeders.catalog(count: 2, version: 1).exercises
+        try await repository.seedIfNeeded(first, version: 1)
+        var edited = first[0]
+        edited.name = "My Row"
+        try await repository.save(edited)
+        let second = Seeders.catalog(count: 3, version: 2).exercises.map { entry in
+            var changed = entry
+            changed.name += " v2"
+            return changed
+        }
+        try await repository.seedIfNeeded(second, version: 2)
+        let custom = try await repository.exercise(id: mine.id)
+        let saved = try await repository.exercise(id: edited.id)
+        let refreshed = try await repository.exercise(id: second[1].id)
+        return ContractCheck.expect(custom, mine, "the custom exercise")
+            ?? ContractCheck.expect(saved, edited, "the catalog exercise the lifter saved")
+            ?? ContractCheck.expect(refreshed, second[1], "a catalog exercise the upgrade lists")
     }
 
     static func observeAll(_ repository: any ExerciseRepository) async throws -> String? {

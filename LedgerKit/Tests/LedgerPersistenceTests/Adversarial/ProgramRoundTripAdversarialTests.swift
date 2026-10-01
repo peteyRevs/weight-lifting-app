@@ -95,18 +95,18 @@ struct ProgramRoundTripAdversarialTests {
         }
     }
 
-    /// Spec question (documents): GRDB binds a `String` as a C string (`sqlite3_bind_text(…, -1, …)`), so a name
-    /// is stored cut at its first NUL, and every later save of the same program sees a change and rewrites it.
-    @Test("(documents) A name holding NUL reads back cut at the NUL")
+    /// Spec question S2-4, decided (orchestrator, 2026-09-30: refuse, don't truncate). GRDB binds a `String` as a
+    /// C string (`sqlite3_bind_text(…, -1, …)`), so a name would be stored cut at its first NUL. The save is
+    /// refused instead, and nothing is written. (Changed by the implementer in S2 fix round 1, as instructed; it
+    /// documented the cut before.)
+    @Test("A name holding NUL is refused, and nothing is written")
     func nul_cutsTheName() async throws {
         let stack = try await S2Kit.stack()
         let program = try S2Kit.program(weeks: 2, days: 1, slotsPerDay: 1).rebuilt(name: "nul\u{0}inside")
-        try await stack.programs.save(program)
-        #expect(try await stack.programs.program(id: program.id)?.name == "nul")
-        let stored = try await stack.queue.read { database in
-            try Int.fetchOne(database, sql: "SELECT length(CAST(name AS BLOB)) FROM program")
+        await #expect(throws: LedgerPersistenceError.nulInText("program.name")) {
+            try await stack.programs.save(program)
         }
-        #expect(stored == 3, "the stored name is cut too")
+        #expect(try await ProgramRoundTripAdversarialTests.dump(stack.queue).isEmpty, "something was written")
     }
 
     @Test("Start dates at the civil extremes and leap days, every goal and days-per-week value round-trip")

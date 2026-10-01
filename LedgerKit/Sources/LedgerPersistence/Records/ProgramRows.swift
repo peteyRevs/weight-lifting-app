@@ -58,12 +58,38 @@ struct ProgramRows {
         let storedDays = try Row.fetchAll(database, sql: Query.days, arguments: key)
         let storedSlots = try Row.fetchAll(database, sql: Query.slots, arguments: key)
         let storedMisses = try Row.fetchAll(database, sql: Query.misses, arguments: key)
+        try refuseOtherProgramsIDs(in: database)
         // Parents first, so every foreign key an insert names exists.
         try ProgramRecord.write(program.map { [$0] } ?? [], over: storedProgram, in: database, at: timestamp)
         try WeekRecord.write(weeks, over: storedWeeks, in: database, at: timestamp)
         try DayTemplateRecord.write(days, over: storedDays, in: database, at: timestamp)
         try SlotRecord.write(slots, over: storedSlots, in: database, at: timestamp)
         try SlotMissRecord.write(misses, over: storedMisses, in: database, at: timestamp)
+    }
+
+    /// Throws `duplicateIdentifier` when a week, day or slot of this program has an id that another program
+    /// holds, live or deleted (review B1). Upserting it would move that row into this program, and the other
+    /// program would lose it or become unreadable. A miss's id derives from its slot's, so slots cover misses.
+    private func refuseOtherProgramsIDs(in database: Database) throws {
+        try refuse(weeks.map(\.rowID), of: WeekRecord.databaseTableName, heldBy: Query.weekOwners, in: database)
+        try refuse(days.map(\.rowID), of: DayTemplateRecord.databaseTableName, heldBy: Query.dayOwners, in: database)
+        try refuse(slots.map(\.rowID), of: SlotRecord.databaseTableName, heldBy: Query.slotOwners, in: database)
+    }
+
+    /// Throws `duplicateIdentifier("table id")` for the first of `ids` that `ownersSQL` finds under another
+    /// program.
+    private func refuse(_ ids: [String], of table: String, heldBy ownersSQL: String, in database: Database) throws {
+        guard !ids.isEmpty else {
+            return
+        }
+        let taken = try String.fetchOne(
+            database,
+            sql: ownersSQL + "(\(databaseQuestionMarks(count: ids.count))) ORDER BY 1 LIMIT 1",
+            arguments: StatementArguments([ColumnCodec.text(programID)] + ids)
+        )
+        if let taken {
+            throw LedgerPersistenceError.duplicateIdentifier("\(table) \(taken)")
+        }
     }
 
     /// The live program `id`, or `nil`. Stored values are validated as on construction: a damaged column
@@ -103,7 +129,8 @@ struct ProgramRows {
         )
     }
 
-    /// The live rows of one program, children in their stored order (ties by id, so the order is total).
+    /// The live rows of one program, children in their stored order (ties by id, so the order is total), and
+    /// the owner checks of `refuseOtherProgramsIDs`.
     private enum Query {
         static let program = "SELECT * FROM program WHERE id = ? AND deleted_at IS NULL"
         static let weeks = """
@@ -124,6 +151,14 @@ struct ProgramRows {
         WHERE day_template.program_id = ? AND day_template.deleted_at IS NULL AND slot.deleted_at IS NULL
             AND slot_miss.deleted_at IS NULL
         ORDER BY slot_miss.week_index, slot_miss.id
+        """
+        /// The ids, among those that follow in `IN (…)`, of weeks, days or slots of programs other than the first
+        /// argument, deleted rows included.
+        static let weekOwners = "SELECT id FROM program_week WHERE program_id IS NOT ? AND id IN "
+        static let dayOwners = "SELECT id FROM day_template WHERE program_id IS NOT ? AND id IN "
+        static let slotOwners = """
+        SELECT slot.id FROM slot JOIN day_template ON day_template.id = slot.day_template_id
+        WHERE day_template.program_id IS NOT ? AND slot.id IN
         """
     }
 }

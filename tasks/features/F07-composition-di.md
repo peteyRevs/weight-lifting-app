@@ -97,10 +97,20 @@ _Filled in by agents during delivery:_
   again after the lifter's next deliberate save.
 - Seed the catalog before any program is saved (F05 S2): `slot.exercise_id` is a foreign key, so a slot naming an
   exercise the database lacks makes `ProgramRepository.save` throw a `DatabaseError` and store nothing.
-  `seedIfNeeded(ExerciseCatalog.seed(), version: ExerciseCatalog.version)` is safe on every launch: it does
-  nothing unless the version is higher than the applied one, then inserts every new catalog id (even one named
-  like a custom exercise). 214 entries took 9.2 ms on the watch simulator (budget 300 ms), so it need not wait
-  for the first frame.
+  `try await exercises.seedIfNeeded(ExerciseCatalog.seed(), version: ExerciseCatalog.version)` (both calls
+  throw) is safe on every launch. It does nothing unless the version is higher than the applied one. Then it
+  inserts every new catalog id (even one named like a custom exercise) and refreshes the catalog rows it lists
+  in place (product decision #24).
+- If `seed()` or `seedIfNeeded` throws, F05 recommends logging it at fault level and carrying on rather than
+  failing boot (F07 decides). The seed rolls back whole and its version stays unapplied, so the next launch
+  retries, and the lifter's own data stays readable. Only saving a program that names a missing exercise fails.
+- 214 entries took 9.2 ms on the watch simulator (budget 300 ms). The simulator runs on the Mac's CPU, so that
+  rules out a design problem but is not the watch's figure: F20 times a real first launch before F07 relies on
+  seeding before the first frame.
 - Criterion 4's `RepositoryContractTests` for exercises and programs exist: run `ExerciseRepositoryContract.clauses`
   and `ProgramRepositoryContract.clauses` (`LedgerTestSupport/Persistence`) against the `InMemory*` fakes, as the
   GRDB suites do. A program clause's repository must accept slots naming `ProgramRepositoryContract.exercises`.
+  - The fakes search, filter and order with `ExerciseSearch` (LedgerDomain), the helper the GRDB repository uses,
+    so the two cannot drift.
+  - They throw the `LedgerPersistenceError`s the clauses expect: `missingRow` from `setActive`, and
+    `duplicateIdentifier` for an id used twice in a program or held by another program, live or deleted.

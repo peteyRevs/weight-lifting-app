@@ -17,7 +17,7 @@ struct ExerciseRepositoryTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
-    @Test("A saved exercise is one row: exact loads, JSON arrays as text, no catalog version, stamped once")
+    @Test("A saved exercise is one row: exact loads, JSON arrays as text, no catalog version; stamped on change")
     func save_writesTheDocumentedColumns() async throws {
         let repositories = try Repositories()
         var exercise = Contract.landmine
@@ -36,9 +36,13 @@ struct ExerciseRepositoryTests {
             "214322394825 200000000000 1 NULL text [\"triceps\",\"shoulders\"] [\"\(alternative)\"] "
                 + "\(created) \(created) NULL"
         ])
+        // Saved again unchanged, the row is left alone (review N1: M4's last-writer-wins sync reads updated_at).
         repositories.clock.advance()
         try await repositories.exercises.save(exercise)
         let stamps = "SELECT created_at || ' ' || updated_at FROM exercise"
+        #expect(try await repositories.texts(stamps) == ["\(created) \(created)"])
+        exercise.shortName = "Landmine (edited)"
+        try await repositories.exercises.save(exercise)
         #expect(try await repositories.texts(stamps) == ["\(created) \(repositories.clock.timestamp)"])
     }
 
@@ -98,7 +102,8 @@ struct ExerciseRepositoryTests {
         try await exercises.seedIfNeeded(fewer, version: 2)
         let versions = "SELECT catalog_version FROM exercise ORDER BY id"
         #expect(try await repositories.texts(versions) == ["2", "2", "1"])
-        // The entry version 2 dropped stays, as it was: an upgrade only adds.
+        // The entries version 2 lists are refreshed with no change, so no updated_at moves; the entry it dropped
+        // stays as it was.
         #expect(try await Set(exercises.all()) == Set(Seeders.catalog(count: 3, version: 1).exercises))
         let stamps = "SELECT DISTINCT updated_at FROM exercise"
         #expect(try await repositories.texts(stamps) == [ColumnCodec.timestamp(EventBuilders.start)])

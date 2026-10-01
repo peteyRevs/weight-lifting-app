@@ -68,4 +68,21 @@ struct DamagedExerciseRowTests {
         try await repositories.exercises.save(Seeders.catalogEntry(0))
         #expect(try await Set(repositories.exercises.all()) == [Seeders.catalogEntry(0), Seeders.catalogEntry(1)])
     }
+
+    /// S2-2: GRDB's integer read would clamp `9.3e18` to `Int64.max`, so every later upgrade would do nothing.
+    @Test(
+        "An applied catalog version that is not an integer makes seeding throw by name, and seeds nothing",
+        arguments: ["9.3e18", "1.5", "'v1'", "x'01'"]
+    )
+    func damagedCatalogVersion_throwsByName(value: String) async throws {
+        let repositories = try Repositories()
+        try await repositories.exercises.seedIfNeeded(Seeders.catalog(count: 2, version: 1).exercises, version: 1)
+        try await repositories.execute("UPDATE exercise SET catalog_version = \(value) WHERE id = ?", [
+            ColumnCodec.text(Seeders.catalogID(0))
+        ])
+        await #expect(throws: LedgerPersistenceError.malformedColumn("exercise.catalog_version")) {
+            try await repositories.exercises.seedIfNeeded(Seeders.catalog(count: 3, version: 2).exercises, version: 2)
+        }
+        #expect(try await repositories.count("SELECT COUNT(*) FROM exercise") == 2)
+    }
 }

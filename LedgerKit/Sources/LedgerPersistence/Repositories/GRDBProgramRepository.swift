@@ -36,8 +36,10 @@ public struct GRDBProgramRepository: ProgramRepository {
     ///   soft-deleted.
     /// - When `program.isActive`, every other program is made inactive.
     ///
-    /// Two days or slots sharing an id throw `duplicateIdentifier`, an inexact weight `inexactWeight`, and a
-    /// slot whose exercise is not stored a foreign-key `DatabaseError`; each leaves the database as it was.
+    /// Two weeks, days or slots sharing an id, or a week, day or slot id that another program holds (live or
+    /// deleted), throw `duplicateIdentifier`; text holding U+0000 throws `nulInText`, an inexact weight
+    /// `inexactWeight`, and a slot whose exercise is not stored a foreign-key `DatabaseError`. Each leaves the
+    /// database as it was.
     public func save(_ program: Program) async throws {
         let rows = try ProgramRows(program)
         let timestamp = ColumnCodec.timestamp(now())
@@ -66,18 +68,28 @@ public struct GRDBProgramRepository: ProgramRepository {
     }
 
     /// Soft-deletes the program and its weeks, days, slots and misses in one transaction; saving it again
-    /// brings them back. Deleting a program that is not stored does nothing.
+    /// brings them back. A deleted program is no longer active, so a revival (a stale save, or a sync) can
+    /// never leave two active. Deleting a program that is not stored does nothing.
     public func delete(_ id: ProgramID) async throws {
         let timestamp = ColumnCodec.timestamp(now())
-        try await queue.write { database in try ProgramRows(deleting: id).write(database, at: timestamp) }
+        try await queue.write { database in
+            try database.execute(
+                sql: "UPDATE program SET is_active = 0 WHERE id = ? AND deleted_at IS NULL",
+                arguments: [ColumnCodec.text(id)]
+            )
+            try ProgramRows(deleting: id).write(database, at: timestamp)
+        }
     }
 
     /// `active()` now, then after every change to it. The stream ends, with the error logged, when the active
     /// program cannot be read (`active()` says why).
     public func observeActive() -> AsyncStream<Program?> {
-        ValueObservation.tracking { database in try Self.fetchActive(database) }
-            .removeDuplicates()
-            .stream(in: queue)
+        Self.activeObservation().stream(in: queue)
+    }
+
+    /// `observeActive()`'s observation: `active()`, emitted only when it differs from the last value.
+    static func activeObservation() -> DistinctObservation<Program?> {
+        ValueObservation.tracking { database in try fetchActive(database) }.removeDuplicates()
     }
 
     /// The active live program. Should a sync ever leave two active, the one updated last wins.
