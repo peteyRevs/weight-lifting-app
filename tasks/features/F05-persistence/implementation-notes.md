@@ -1387,3 +1387,13 @@ from this round's decisions, so the orchestrator applied the patch as written:
   the tester's "(documents)" pin `foreignPhase_isListedButNotCounted` now expects the row in neither list.
 
 The tester audits both edits in the close-out round. The gate below ran on the tree with the patch applied.
+
+### S3 fix round 2 (orchestrator, 2026-10-01): S3-5
+
+The close-out round closed S3-1 to S3-4 and found **S3-5** (minor, foreign writer only): a workout or exercise
+row whose id is its uuid in lowercase passed the text check, matched none of its uppercase children, and read as
+an empty parent. The fix is the tester's, applied by the orchestrator: `WorkoutRows.requireTextID` also throws
+`malformedColumn` when the text parses as a uuid but is not its `uuidString`, so such a row is damage like a
+blob id (logged and left out, or thrown by the strict read). The same residue as S3-3 stays: until a write
+repairs it, `sessionsCompleted` counts such a workout row and it takes a place of `recent`'s limit. The
+tester's two tests (`HistoryCloseoutAdversarialTests.lowercase…`) pass unedited. Code lines: 687 → 691.

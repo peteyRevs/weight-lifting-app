@@ -1269,3 +1269,134 @@ Once the four failing tests pass (`recordOfAnotherWorkout_doesNotReplaceItsRecor
 `blobExerciseID_neverReadsAsAnEmptyExercise`, `blobWorkoutID_neverReadsAsAnEmptyWorkout`), a re-run of
 `WorkoutIdentityAdversarialTests`, `WorkoutRepairAdversarialTests` and the gate is enough to close G2; a short
 close-out is only needed if the fixes take another shape than the ones above.
+
+---
+
+# Slice S3 — close-out round
+
+Scoped close-out of S3 fix round 1 (`fb99948`, over my round 1 at `9664f9c`): S3-1 to S3-4, the edits to my
+files, the fixes themselves attacked for regressions, and mutants on the changed lines. I read
+`git diff 9664f9c..fb99948` and the notes' "S3 fix round 1" with the orchestrator's paragraph. No product code
+and no test of the implementer's was edited. Mutants and the proposed fix ran in scratchpad copies
+(`f05s3-g2/close/`, `f05s3-g2/mut`, `f05s3-g2/fix`), never in the worktree.
+
+## What I wrote
+
+12 tests (80 cases) in two files under `LedgerPersistenceTests/Adversarial/`; they run in under a second.
+
+| File | Tests (cases) | What it attacks |
+|---|---|---|
+| `WorkoutFixCloseoutAdversarialTests` | 4 (20) | S3-1's fix: a foreign record alone, after an own one, between two, of an unstored workout, two of them (the first is named), of a deleted workout; as a first materialisation and as a rebuild of a workout with records; then the edit, the delete and the other workout's records. Ten damages to a stored record row (kind, date, weight, a half-set previous, a text, blob and lowercase id, a dangling `workout_id`, a lone delete, a numeric exercise id), repaired by a rebuild. S3-2's fix: a second delete stamps nothing; a delete clears leftovers under a workout row deleted alone, and the workout comes back whole; a rebuild, an edit and a delete of a workout with exercise rows deleted alone touch no row of another workout that has the same damage |
+| `HistoryCloseoutAdversarialTests` | 8 (60) | S3-3's fix: lowercase uuid ids on an exercise row and on the workout row (S3-5); six parent ids that are text but no uuid (`'nope'`, `''`, `7`, a trailing blank, `7.5`). The phase filter: five foreign phases on the newest row take no place of the limit and move no other row; the observation emits once when a listed row leaves its phase and not for writes that change no list. The contracts: each of the 25 wrong fakes must be caught by the clause about what it gets wrong |
+
+## Results
+
+- **Host** (`swift test --filter 'LedgerDomainTests|LedgerPersistenceTests'`): exit 1, as expected.
+  `LedgerPersistenceTests` 344 tests: **342 pass, 2 fail**, both mine and both S3-5. `LedgerDomainTests` 762 pass.
+  My four round-1 bug tests pass.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0, with my two new files.
+- **Simulators** (through `sim-lock.py`, `-only-testing:LedgerPersistenceTests`; logs: scratchpad
+  `f05s3-g2/close/sim-*.log`): iOS `PR` exit 65 and watchOS `PR-Watch` exit 65, each 343 tests: 334 passed, 7
+  skipped by design, 2 failed, the same two.
+- **The full gate was not run**: two bug tests fail by design, so it would stop at the iOS plan.
+- **Mutants of the changed lines** (19, one at a time, host, the whole of `LedgerPersistenceTests`; scratchpad
+  `f05s3-g2/close/mut/`): 18 killed, 1 survives.
+  - **Survivor:** C16, `PersonalRecordRecord.init(row:)` falling back to an empty `rowID` when the id cannot be
+    read. It changes nothing: a record read from a row is never written. Review N4's change is pinned only by
+    `recordIDs_areDerived`, which reads readable rows.
+  - Killed by my tests only: C03 (the refusal naming the last foreign record, not the first), C05 (sets diffed
+    through live exercise rows only).
+  - Killed by the implementer's tests only: C12 (the storage refusal as `malformedIdentifier`), C15 (the
+    `typeof` predicate off). 14 are killed by both: the record check off or on the first record only; exercises
+    or records through the live workout row; the workout row read deleted too; deleted sets diffed; either
+    storage check off; either phase filter off or loosened; the record id from place 0; `Selection.stored`
+    narrowed.
+
+## Close-out of round 1's findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| S3-1 (minor bug) | **Closed** | `recordOfAnotherWorkout_doesNotReplaceItsRecords` passes, byte-identical to round 1. Six shapes of a foreign record are refused by the workout they name, before any row is written, as a first materialisation and as a rebuild; an unstored workout is now refused by name, not on the foreign key. Ten damaged record rows are repaired by a rebuild. The contract has the clause (22 now), and my honest model keeps it. |
+| S3-2 (minor bug) | **Closed** | `loneSoftDelete_isRepaired` (both cases) passes, byte-identical. `delete` is still idempotent to the byte, clears leftovers, and a rebuild after it reads back; no write touches another workout's rows, even one with the same damage. The 60-seed model test and the atomicity tests pass on the new diff. |
+| S3-3 (minor bug) | **Closed as stated; reopened as S3-5** | Both blob tests pass, byte-identical. A blob workout row is in no list and no count. But the fix tests the storage class only, and the same symptom remains through a text id: S3-5. |
+| S3-4 (contract gap) | **Closed** | All 25 wrong fakes break a clause, and each is caught by the clause about its own behaviour (`wrongFake_isCaughtByItsOwnClause`): none by accident. The honest model keeps all 22 clauses. |
+
+## Audit of the edits to my files
+
+`git diff 9664f9c..fb99948 -- LedgerKit/Tests/LedgerPersistenceTests/Adversarial/` touches three files and
+nothing else. `WorkoutIdentityAdversarialTests.swift` and `WorkoutRepairAdversarialTests.swift`, which hold the
+four bug tests, have no diff.
+
+| Edit | Faithful? | Weakened? |
+|---|---|---|
+| `HistoryContractAdversarialTests`: `uncaught` emptied, the title no longer "(documents)" | Yes: S3-4's decision. The body is unchanged. | No, stronger: a fake no clause catches now fails the test. |
+| `HistoryModel+Repositories`: the honest model refuses a record naming another workout; clause count 21 → 22 | Yes: S3-1's decision, with the product's error text. | No. The model test now also compares that refusal; no script makes a foreign record, so I added the six shapes by hand. |
+| `HistoryReadAdversarialTests.foreignPhase_isListedButNotCounted`: the lists now expect no row of another phase | Yes: review N1 and my S3-N2. The second half (a finished row with no end is listed last, and fails `lastPerformance` by name) is unchanged. | No: `== []` is stricter than the two counts it replaces. Nit: the function's name still says "isListed". |
+
+## S3-5. minor bug — A workout or exercise row whose id is its uuid in lowercase reads as a workout with no exercises, or an exercise with no sets
+
+S3-3's fix requires `TEXT` storage for a parent's id. `UUID(uuidString:)` also reads lowercase text, so
+`'ad53000b-…'` passes the storage check and `ColumnReader.identifier`. SQL compares text exactly: the row's
+children carry the uppercase `uuidString`, so the join and the grouping find none. It is S3-3's symptom through
+text, on the code path the fix added; it was there before the fix too.
+
+Observed, after `UPDATE workout_exercise SET id = lower(id)` on one row: `workout(id:)`, the strict read, returns
+the exercise with **no sets** and throws nothing; `recent` lists it so. A rebuild repairs it. After
+`UPDATE workout SET id = lower(id)`: `recent` lists the workout with **no exercises**; a rebuild inserts a second
+row, `recent` then lists the workout **twice** under one `WorkoutID`, `sessionsCompleted` counts two, and no
+write removes the lowercase row.
+
+**Reach.** A foreign writer only: `uuidString` is uppercase, and every id this app writes goes through it.
+Lowercase is what most other platforms write (SQL's `lower(hex(…))`, JavaScript, Kotlin, Python), so an import, a
+support script or a later non-Swift sync peer is the path. Text that is no uuid at all (`'nope'`, `''`, `7`) is
+refused by name and repaired, as before (`textIDThatIsNoUUID_isDamage`, passes).
+
+**Repro** (fail): `HistoryCloseoutAdversarialTests.lowercaseExerciseID_neverReadsAsAnEmptyExercise` and
+`lowercaseWorkoutID_neverReadsAsAnEmptyWorkout`. Each accepts either sound outcome, as the blob tests do.
+
+**Fix** (verified in the scratchpad, `f05s3-g2/close/proposed-fix-S3-5.diff`, 5 lines in
+`WorkoutRows.requireTextID`): also throw `malformedColumn("<table>.id")` when the text parses as a uuid whose
+`uuidString` is not that text. With it all 344 host tests pass. Left as it is by that fix, like S3-3's residue:
+`sessionsCompleted` still counts a workout row whose id is text but not this workout's own spelling, and such
+a row still takes a place of `recent`'s limit (S3-N1). The same holds for the program tables of S2, which I did
+not attack this round.
+
+## Attacked and held
+
+- **The record-owner refusal.** The first foreign record in the list is named; nothing is written, on a new
+  workout or a stored one; `updateSets` and `delete` of a workout with records are not refused; the other
+  workout's records are as stored afterwards. A stored record row damaged in any of ten ways is repaired by a
+  rebuild, with the right live row count and `pr_count`.
+- **The children diff.** A second `delete` writes no row. A delete of a workout whose row was deleted alone
+  clears its live children, and a rebuild then reads back whole with exact live counts. With the same damage
+  in two workouts, a rebuild, an edit or a delete of one leaves every stamp and the damage of the other. The
+  three stored-row queries are still ordered (`position, id`; `id`), so statements run in one order.
+- **Parent ids.** Six text ids that are no uuid fail `workout(id:)` by name (or read as no workout), hide only
+  their workout, and are repaired or superseded by a rebuild that is then listed once.
+- **`sessionsCompleted`'s `typeof` predicate.** `EXPLAIN QUERY PLAN` (by hand, the query's text): still
+  `SEARCH workout USING INDEX idx_workout_ended (ended_at>? AND ended_at<?)`.
+- **The phase filter.** `live`, `discarded`, an unknown phase, `FINISHED` and `''` on the newest row: `recent`
+  returns the next two, so the row takes no place of the limit; ranges and `sessionsCompleted` agree; a rebuild
+  brings the row back first. `recent`'s plan is what it was before the filter (a scan and a sort; by hand). The
+  observation emits once when a listed row leaves its phase, and not for a further change of the hidden row or
+  a workout outside the list.
+- **The contracts.** See S3-4 above.
+
+**Noted, not findings:**
+- **`workout(id:)` and `updateSets` do not filter on phase**, so a row of another phase is in no list but still
+  reads and edits by id. Only a foreign writer makes one.
+- **A blob or malformed workout row is logged on every list read and takes a place of the limit for good**
+  (S3-N1's case, now permanent for a blob row). Accepted as damage-only in the notes.
+
+## Verdict
+
+**G2 does not close yet: one small finding is open.**
+- S3-1, S3-2 and S3-4 are closed. S3-3 is closed as stated.
+- The three edits to my files are the three sanctioned ones, each faithful and none weaker.
+- 18 of 19 mutants of the changed lines are killed; the survivor changes no behaviour.
+- **S3-5** is S3-3's symptom through a lowercase text id: minor, foreign-writer only, a 5-line fix verified in
+  the scratchpad. If the orchestrator accepts it as damage-only instead, the two tests must be marked
+  "(documents)" by decision, since I may not weaken them myself.
+
+Once the two S3-5 tests pass (or are decided), the full gate on that tree is enough; no further round is
+needed. S3-Q1 and S3-Q2 stay pinned "(documents)", untouched.

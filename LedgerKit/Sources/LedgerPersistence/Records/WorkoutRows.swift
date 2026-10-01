@@ -127,9 +127,14 @@ struct WorkoutRows {
         }
     }
 
-    /// Throws `malformedColumn("table.id")` unless the row's id is stored as text.
+    /// Throws `malformedColumn("table.id")` unless the row's id is stored as text, in the spelling the app
+    /// writes (`uuidString`, uppercase).
     private static func requireTextID(of row: Row, in table: String) throws(LedgerPersistenceError) {
-        guard case .string = (row["id"] as DatabaseValue).storage else {
+        guard case let .string(text) = (row["id"] as DatabaseValue).storage else {
+            throw .malformedColumn("\(table).id")
+        }
+        // A uuid in another spelling (lowercase) parses, but SQL compares the text: it matches no child (S3-5).
+        if let uuid = UUID(uuidString: text), uuid.uuidString != text {
             throw .malformedColumn("\(table).id")
         }
     }
