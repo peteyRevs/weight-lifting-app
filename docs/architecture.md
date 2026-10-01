@@ -286,6 +286,7 @@ nullable `deleted_at` soft-delete for sync):
 | `program`, `program_week`, `day_template`, `slot`, `slot_miss` | programming | yes |
 | `workout`, `workout_exercise`, `logged_set` | finished history | yes |
 | `workout_health` | avg/max HR, active energy, HealthKit workout UUID | **never** (App Review 5.1.3(ii), R1 §3.4) |
+| `personal_record` | PRs, derived from `logged_set` and recomputed on a new device | never (F05) |
 | `workout_event` | live event log (envelopes) | never; compacted after finish |
 | `settings` | single-row preferences + plate inventory | yes |
 | `device` | this device's `DeviceID`, name, last sync marks | never |

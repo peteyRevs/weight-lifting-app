@@ -1,0 +1,36 @@
+{
+  "autoRest" : false,
+  "defaultRest" : 120,
+  "plateInventory" : {
+    "kg" : {
+      "bar" : {
+        "grams" : "15000"
+      },
+      "plates" : [
+        {
+          "grams" : "25000"
+        },
+        {
+          "grams" : "500"
+        }
+      ]
+    },
+    "lb" : {
+      "bar" : {
+        "grams" : "15875.73295"
+      },
+      "plates" : [
+        {
+          "grams" : "20411.65665"
+        },
+        {
+          "grams" : "566.9904625"
+        }
+      ]
+    }
+  },
+  "plateMathEnabled" : false,
+  "units" : "kg",
+  "watchBuzz" : false,
+  "weekStart" : 7
+}

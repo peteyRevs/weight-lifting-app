@@ -86,3 +86,12 @@ _Filled in by agents during delivery:_
 - `F07-composition-di/implementation-notes.md`
 - `F07-composition-di/test-findings.md`
 - `F07-composition-di/review.md`
+
+## Inputs from F05 (2026-09-30)
+- `LedgerDatabase.open(at:protection:)` is synchronous: call it off the main actor. It took 4.6 ms on the
+  watch simulator. Give the database a directory of its own, e.g. `Application Support/Database/ledger.sqlite`.
+- A settings row this app cannot read makes `SettingsRepository.load()` throw, and `observe()` then ends
+  without a value (review N2). The row may be in a later payload version (`unknownPayloadVersion`), hold a
+  damaged column (`malformedColumn`) or invalid JSON (`DecodingError`). Fall back to `Settings.default` in
+  memory, but never save it over the row: a later version, or the lifter, may still read it. Subscribe
+  again after the lifter's next deliberate save.

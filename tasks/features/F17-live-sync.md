@@ -208,3 +208,26 @@ onwards). Where they contradict this brief, they win, and the brief should be am
      must reject such a (corrupt) stamp on receipt.
    - *Joining mid-session buzzes once:* the phone's first rebuild from nothing, for a watch-started workout
      with done sets, plays one `.haptic(.setLogged)`; accepted under Pete's one-per-catch-up rule (item 2).
+
+## Inputs from F05 (2026-09-30)
+
+- Receipt must drop envelopes with non-finite stamps (`wallClock` or payload dates) before `append`:
+  NaN never equals itself, so re-appending such an envelope throws `conflictingEnvelope` in both stores
+  and rejects the whole batch (F05 S1 notes). The batch-conflict rule above would then drop it one by
+  one; dropping it on receipt is simpler.
+- **Unreadable envelopes** (orchestrator decision, 2026-09-30). A stored row this app version cannot
+  read is left out of `envelopes(for:)`, kept in the store, logged, and counted by
+  `WorkoutEventStore.unreadableCount(for:)`. Such a row was written by a later payload version (for example
+  a TestFlight build that was rolled back) or is damaged. While a log's count is above zero:
+  - replay and resume from the readable envelopes;
+  - never materialise or compact the log: compaction would delete rows a later version can read, and
+    materialising would save a workout with gaps;
+  - keep it listed, and tell the lifter that part of the workout needs a newer version of Ledger.
+
+  **Amended by F05 fix round 2 (review SF2):** when an envelope arrives whose key is held by an unreadable
+  row, `append` repairs the row. The incoming envelope overwrites it and is returned as newly stored, so the
+  host rebuilds as for any new envelope. A gap replay from the peer therefore heals a damaged row, and the
+  count drops.
+- **HLC recovery on launch** (review SF3): set `newest` from `WorkoutEventStore.newestWallClock()`, not from
+  the envelopes `envelopes(for:)` returns. It reads every uncompacted log's stamps, unreadable rows included,
+  and skips non-finite ones (ADR-004 amendment, "Recovery on launch").
