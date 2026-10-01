@@ -682,3 +682,447 @@ The three sheets:
 
 The Nits can go with them, or to the orchestrator: the second half of R2-N11 is in the tester's file, and R2-N3 is a
 device check for F20.
+
+## Slice 3
+
+Branch `feat/F06-slice3` at `b97cc58`. Scope: `git diff main...HEAD` (from `1d80613`).
+- Product: `WeekStrip`, `StatTile` / `StatTileRow`, `ProgressSegments`, `SheetChrome`, `EmptyState`,
+  `WatchPrimaryButton`, `WatchRestRing`, `WatchStatBlock`, and the Debug-only `DesignGallery` with its `TokenPages`.
+- Test support: `LedgerSnapshotTesting/WatchSnapshot.swift`.
+- 57 new references.
+
+Reviewed against:
+- the brief (criteria 3, 4 and 9, and "Decisions during delivery") and the slice plan;
+- engineering-standards §7 and §10, architecture §11, testing-strategy §2.5 and §6;
+- the slice-2 house rules (review "## Slice 2", test-findings S2-1 to S2-8);
+- Pete's standing rules: WCAG AA while keeping the look; follow Bold Text; the lint is a frozen tripwire.
+
+Findings are numbered R3-… so they don't collide with slice 2's R2-….
+
+What I ran, besides reading the diff:
+
+- **`/code-review high`** on the diff. It returned 10 findings; their dispositions are at the end.
+- **`scripts/check.sh --lint-only`: green (44 s).**
+  - Format and SwiftLint `--strict` pass.
+  - Every `scripts/tests/*.test.sh` passes, including the design-lint fixture, which reports 4 rules × 3 modules OK.
+  - `.swiftlint.yml`, `.swiftformat`, `scripts/` and `Package.swift` are untouched, so the frozen rule set did not move.
+  - The diff has no `swiftlint:disable`, `@unchecked`, force unwrap, `DispatchQueue`, `Task.detached`, timer, `Date()` or `print`.
+- **No simulator run**, because the tester holds the lock. The gate evidence is the implementer's full `check.sh`:
+  - PR-iOS: 931 tests, 0 failed.
+  - PR-watchOS: 845 tests, 0 failed.
+  - LedgerDesign coverage: 97.10 %.
+- **Release build check, into a scratch path** (not the tester's `.build`): `swift build -c release --target LedgerDesign`.
+  - Release `LedgerDesign.o` has **0** symbols matching `DesignGallery|GallerySection|TokenPage`, against 146 for
+    `WeekStrip` as a control.
+  - Debug has **361**.
+  - This reproduces the notes exactly.
+- **Size, by my own count** (Swift lines that are neither blank nor comment-only; new files whole, edited files by
+  added lines): **743** product, 43 test support, 739 tests. This reproduces the notes exactly.
+- **No existing reference changed**: 57 PNGs are added, and 0 are modified or deleted.
+- **References opened (14, plus the gallery)**:
+  - phone: `weekStrip`, `statTile`, `progressSegments` and `sheetChrome` dark-large; `statTile` light-AX3;
+    `emptyState` light-large;
+  - phone sheets: the dark AX5 sheet and the light Increase Contrast sheet;
+  - watch: `watchRestRing` mm46-xLarge and mm42-AX3; `watchStatBlock` mm46-xLarge and mm42-AX3;
+    `watchPrimaryButton` mm46-xLarge and mm42-AX3;
+  - the dark `DesignGallery`, cut into slices: the token pages, and the empty state through the watch sections.
+
+  Compared with:
+  - `Ledger v2.dc.html`: the week row and stat tiles, the `week` / `progressBars` script mapping, the swap sheet, and
+    Exercise history's tiles;
+  - `LedgerWatch.dc.html`: the buttons, the rest-timer SVG and the summary.
+
+  A CoreGraphics pixel probe (session scratchpad) measured the watch ring and found R3-N2.
+
+**Verdict: approve. 0 Blocking, 4 Should fix, 10 Nits.**
+
+### Blocking
+
+None.
+
+### Should fix
+
+#### R3-S1. `SheetChrome` doesn't fill the sheet, so presented with `.sheet` it floats mid-sheet
+
+`LedgerKit/Sources/LedgerDesign/Components/SheetChrome.swift:41-62` (doc `:5-7`: "Present it with `.sheet`").
+
+**Cause.** The chrome sizes itself to its content (`.frame(maxWidth: .infinity, alignment: .leading)` at `:54`, no
+height), then draws its own surface, 28 pt top corners and top rule on that content-sized box.
+- A `.sheet` proposes its whole detent to the root view.
+- SwiftUI centres a root view that is smaller than what it is offered.
+- So in F10's swap sheet (brief F10 criterion 8: ≤ 8 rows, at a detent taller than the content), the title sits in
+  the middle of the sheet. The chrome's top rule and rounded corners show as an arc across the middle, over
+  `presentationBackground(surface)`, which fills the rest in the same colour.
+- The snapshots can't show it: every helper fixes the vertical size (`snapshotAppearance` →
+  `.fixedSize(horizontal: false, vertical: true)`). The notes defer it to F20's device check.
+
+**Fix.**
+- Pin the content to the top and let the chrome fill what it is offered. Put
+  `.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)` in place of the `:54` frame, before
+  `.background(…, in: shape)`, so the surface and the rule start at the sheet's top edge.
+- Nothing else should move: the snapshot helpers and the gallery's `ScrollView` offer no height, so the chrome keeps
+  its own height there. Prove it with a normal run (no re-record expected).
+- Pin the new behaviour with a test in `Slice3ComponentAccessibilityTests`: host
+  `SheetChrome("Swap exercise", cancel: "Cancel") {} content: { … }.frame(height: 600)` and expect the
+  "Swap exercise" element's `frame.minY` ≤ `LedgerSpacing.l + LedgerHitTarget.minimum`, not ~250 pt down.
+- Say it in the doc: "fills the sheet and keeps its content at the top".
+
+#### R3-S2. The stat unit at 13.5 pt changes the look, and neither AA nor the HIG requires it
+
+`StatTile.swift:53-66`; notes "Slice 3", `StatTile` row ("No 300 ~19 pt role exists, so the unit is 13.5 pt").
+
+**Evidence.**
+- v2 Today sets "3" at 700 34 and "/4" at 300 19: the unit is 0.56 em of the value. Exercise history sets "195" at
+  30 and "×5" at 15: 0.5 em.
+- `bodyLight` makes it 13.5 / 34 = 0.40 em, 29 % smaller.
+- In `statTile_…dark-large` and `…light-accessibility3`, "/4" and "k" read as footnotes to the number, not as its
+  second half. These are Today's hero numbers.
+- AA does not require the change: `inkMuted` passes at any size.
+- The HIG does not require it either.
+- The reason given is slice 2's "no new roles". That rule doesn't force a fixed size here: `LedgerFont.font(_:size:
+  legibilityWeight:)` exists for "an already scaled size". `WeekStrip` already sizes its dot in ems of a role (5/12,
+  `WeekStrip.swift:56`), and `SetRow` sizes its label column the same way.
+
+**Fix (no new role, Dynamic Type and Bold Text kept).**
+```swift
+/// v2 Today: the unit is 300 19 px beside the 700 34 px value.
+static let unitEms: CGFloat = 19.0 / 34
+…
+let valueSize = LedgerFont.scaledSize(.numeralXL, dynamicTypeSize: dynamicTypeSize)
+small.font = LedgerFont.font(.bodyLight, size: valueSize * Self.unitEms, legibilityWeight: legibilityWeight)
+```
+- Give the run its own tracking at the same time (R3-N6).
+- Re-record the six `statTile_…` references, the AX5, Bold Text and Increase Contrast sheets and the gallery. List
+  the reason in the notes (a stated visual cause, testing-strategy §2.5).
+- If Pete would rather keep roles at their own sizes, record that as his decision in the notes' deviations. It
+  changes Today's look, so it shouldn't rest on an implementer convention.
+
+#### R3-S3. `WatchRestRing` speaks the countdown by default, the reading its own doc calls wrong
+
+`WatchRestRing.swift:9-10` (doc: "a bare '1:15' can sound like a time of day"), `:17`
+(`accessibilitySummary: String? = nil`), `:42` (`summary ?? label`).
+
+**Cause.** This is slice 2's S2-7 / R2-S3 pattern:
+- an optional spoken parameter whose fallback is known to mislead, so the bad reading is the API's default path;
+- F18 gets it silently by leaving the argument out;
+- F18 always knows the seconds left, so nothing needs the fallback.
+
+The ring is the watch's main screen during rest, and it `.updatesFrequently`, so VoiceOver keeps re-reading it.
+
+**Fix.**
+- Make it `init(progress: Double, label: String, accessibilitySummary: String)`, required, and delete the fallback
+  sentence.
+- Give `WatchRestRingGallery`'s three rings summaries ("2 minutes 30 seconds left", …).
+- Update the tree table's "WatchRestRing gallery" case to those labels
+  (`AccessibilityTreeSlice3Tables.swift:131-138`).
+
+`StatTile` and `WatchStatBlock` keep an optional summary: their fallbacks are fine for plain numbers (R3-N9).
+
+#### R3-S4. Snapshot budget: the gallery pair is a fifth of F06's references and duplicates the rest
+
+`DesignGalleryTests.swift:59-65`; `__Snapshots__/DesignGalleryTests/` (2 × 402 × 6946 px, 0.93 MB).
+
+**Where the budget stands.**
+- **F06 itself:** its NFR is met (4.8 of 6 MB), and this is F06's last slice, so F06 needs no more room.
+- **F09–F18:** their screen references go into their own targets' `__Snapshots__` and are not under F06's 6 MB.
+  testing-strategy §2.5 estimates ~270 images ≈ 15 MB at launch, and F06 now holds 122 images and 4.8 MB of that,
+  a third.
+- **The gallery pair:**
+  - It is the largest item.
+  - It adds no pixel coverage the component and token references lack.
+  - It has to be re-recorded whenever any component or token changes, so every future `LedgerDesign` tweak adds
+    ~0.95 MB to git history and two more PNGs to the ">20 changed PNGs" count.
+- Criterion 9's evidence is `sections_names_coverEveryComponentAndTokenType` and the tree test, not the image.
+
+**Fix (this PR).**
+- Keep one scheme: dark, the primary theme.
+- Replace `arguments: [ColorScheme.light, .dark]` with the dark appearance alone.
+- Delete `designGallery_scheme_matchesReference-_.light-large.png` (−462 KB; F06 ≈ 4.3 MB).
+
+**Follow-ups (orchestrator, not this PR).**
+- Add a lossless PNG pass to `--record-snapshots`. Measured on the 122 current references: re-deflating the existing
+  scanlines at zlib level 9 alone takes 4.75 MB to 3.77 MB (−20.5 %). An optimiser such as oxipng (not installed
+  here) typically does better. Comparison is on decoded pixels, so references stay valid; prove it with one normal
+  run.
+- Give testing-strategy §2.5 a per-target budget line (F06 ≤ 6 MB; each screen feature its own), so the ~15 MB
+  estimate becomes something a reviewer can check.
+
+### Nits
+
+**R3-N1. A zero-length segment still gets both gaps, and a bar narrower than its gaps overflows.**
+`ProgressSegments.swift:9-10, 45-48, 58-63`; `ProgressSegmentsLayoutTests.swift:22-26`.
+- The doc says a length ≤ 0 "draws nothing", but the `HStack` still puts a 3 pt gap on each side of the 0-wide
+  rectangle. `[3, 0, 3]` shows a 6 pt hole, and `[0, 3]` starts the bar 3 pt in. That is what CSS flex `gap` does
+  too, so it is faithful to v2, but the doc and the test (`[0, 0, 100 − 2 × gap]`) don't say so.
+- With less width than the gaps, `widths` returns zeros, but the `HStack` is still `gap × (n − 1)` wide and spills
+  past the frame.
+
+**Fix:** either leave non-positive segments out of both the gap count and the `ForEach` (then expect
+`[0, 0, 100]`), or say "the gaps stay, as CSS's do" in the doc. Add `.clipped()` for the degenerate width.
+
+**R3-N2. The ring's track has a 1 px seam at 12 o'clock.** `WatchRestRing.swift:29-30`; also slice 2's
+`RestRing.swift:25`.
+- The track strokes an open full-circle arc with butt caps. Where the arc's start meets its end, anti-aliasing leaves
+  a seam.
+- Measured on the empty ring: `#111111` on the `#212121` track at x 93 in `watchRestRing_…mm42-accessibility3` and
+  at x 102 in `…mm49-xLarge`.
+- The orange arc's round caps hide it whenever progress > 0, so it shows at "0:00" and on any part of the track the
+  arc doesn't cover.
+
+**Fix:** in `RestRingArc.path(in:)`, `closeSubpath()` when the fraction is 1, or stroke the track as
+`Circle().inset(by:)`. Re-record the three watch ring sets and the phone ring's. Low priority.
+
+**R3-N3. The gallery's watch sections overflow their 208 pt page at large phone text sizes.** `DesignGallery.swift:86-90`.
+- On iPhone, the watch roles follow the iOS curve. `watchCountdown` is relative to `.largeTitle`: 34 → 48 pt at AX2
+  and 52 pt at AX3.
+- So `WatchRestRing`'s 130.7 pt frame reaches ≈ 185 pt at AX2 and ≈ 200 pt at AX3, past the page's 184 pt content
+  width.
+- The gallery exists to check sizes like these. It is Debug-only, and the snapshot is at `.large`, so nothing else
+  catches it.
+
+**Fix:** `.dynamicTypeSize(...DynamicTypeSize.xxxLarge)` in `galleryWatchScreen()`, with a comment that the watch's
+own size curve shows only on a watch.
+
+**R3-N4. `ledgerWatchPage()`'s doc says 13 pt; the code pads 12.** `ControlStyle.swift:45-49` pads `LedgerSpacing.m`
+(12), and the layout tests assert 12.
+
+**Fix:** "the prototype's 20 px (13.3 pt) inset, at the nearest token `m` (12)".
+
+**R3-N5. `WeekStrip`'s "Done" reuses `SetRow`'s key and comment.** `WeekStrip.swift:113-114`.
+- The comment is "VoiceOver value of a logged set and of its check". The key has to keep that comment, or catalog
+  extraction warns.
+- So a translator never sees the trained-day meaning, and a language that needs different words gets one
+  translation.
+
+**Fix:** `String(localized: "weekStrip.mark.done", defaultValue: "Done", bundle: .module, comment: "VoiceOver value of
+a day already trained")`.
+
+**R3-N6. The numerals' tracking reaches the unit.** `StatTile.swift:36-40, 56-63`.
+- `.ledgerFont(.numeralXL)` applies −0.03 em × 34 ≈ −1 pt of tracking to the whole `Text`, unit run included.
+- `bodyLight` has no tracking.
+
+**Fix:** set the run's own `tracking` (SwiftUI's `AttributedString` `tracking` attribute, in the iOS 27 SDK) to the
+role's value (0). Do it with R3-S2.
+
+**R3-N7. `StatTileRow`'s gap matches neither prototype row.** `StatTile.swift:98`.
+- The gap is `xl` (24). v2 Today uses 32 (`xxl`), and Exercise history uses 26 (`screen`). The second Today tile
+  starts ~4 pt left of v2's.
+
+**Fix:** `xxl` (Today is the first user), or a `spacing:` parameter that defaults to it.
+
+**R3-N8. Criterion 9's coverage test compares against a hand-written list.** `DesignGalleryTests.swift:10-33` (its own
+comment says a new component left out of both "fails the review").
+
+**Fix:** a tripwire that needs no file access from unit tests (standards §9):
+- a `scripts/tests/design-gallery.test.sh` that greps `public struct (\w+).*: View` in `Components/` and the
+  `public enum` names in `Tokens/`;
+- it checks each appears in `GallerySection.all`;
+- it runs in step 2 with the other script tests.
+
+**R3-N9. The fallback reading of a slashed value.** `StatTile.swift:8-9`, `WatchStatBlock.swift:8-9`.
+- "3/4, sessions this week" and "12/15, Sets" can be spoken as a fraction or a date.
+- The docs show the right summary ("3 of 4 sessions this week") but don't say when one is needed.
+
+**Fix:** one doc line each: "pass a summary when the value has a slash, colon or unit abbreviation".
+
+**R3-N10. Housekeeping.**
+- `StatTileRow` is public but missing from architecture §11's component list (`docs/architecture.md:392`).
+- `LedgerFont.shrinkLimit` sits in `ControlStyle.swift:26-33`. Its home is `Tokens/LedgerFont.swift`.
+- `StatTile.swift:40` and `WeekStrip.swift:68, 73` hard-code `.minimumScaleFactor(0.5)`. That is what
+  `shrinkLimit` returns for a phone role, so one rule could live in one place.
+- `Slice3ContrastTests`, `Slice3ComponentValueTests`, `Slice3ComponentAccessibilityTests` and
+  `AccessibilityTreeSlice3Tables` name a delivery slice, not a source type (testing-strategy §6). After merge
+  "slice 3" means nothing. Rename them when next touched.
+
+**For F09, F10, F12 and F18 (not findings).**
+- **F09:** today and done differ by hue only.
+  - Dots: orange against grey, about 1.25:1 against each other in dark.
+  - Dates: orange against ink.
+  - Keep v2's date line ("Wednesday, August 19") above the strip, so "today" is never colour-only (WCAG 1.4.1).
+    VoiceOver already says "Today".
+  - As in v2, a trained today shows as done, and the today marker goes.
+- **F10:** present the swap sheet after R3-S1. F20's device check for `presentationBackground` /
+  `presentationCornerRadius` still applies.
+- **F12:** Exercise history's tiles are 700 30 (`numeralL`), with the 1RM in orange. `StatTile` offers
+  `numeralXL` only, so F12 asks for a size variant if it needs one.
+- **F18:** the outlined watch button ("+30s", "Done", "End workout") and the 52 px elapsed block are not built
+  (notes, decision 7).
+
+### Merge notes (not findings)
+
+- **PR description** (standards §10):
+  - Include one size line: **743 code lines, over the 500 target.** The split considered was 3a, the phone
+    components and the gallery (~590), and 3b, the watch components (~155).
+  - It was not taken because the gallery shows the watch components, so 3a would ship an incomplete gallery and 3b
+    would reopen it. Neither half is near the ~1,000 split line.
+  - I agree with that: the components alone are ~390 lines, and the rest is the Debug-only gallery (201) and
+    previews.
+- **Screenshots:** list the 57 new PNGs under "Screenshots" (51 after R3-S4). They are new references for new
+  components, not re-recordings. As in slice 2, my reading is that the ">20 changed PNGs → `chore(snapshots):`"
+  rule doesn't apply. The orchestrator should confirm.
+- **Brief DoD:** "Side-by-side screenshots of `DesignGallery` vs prototype sections attached to the PR". The notes
+  don't say these were made. The orchestrator produces them before opening the PR.
+- **`tasks/todo.md:42`** still says "F06 (slice 1 #6; slices 2–3 open)". The orchestrator updates it at merge
+  (code-review flagged it).
+- **The tester's round is in progress in this worktree**
+  (`Adversarial/Slice3AccessibilityAdversarialTests.swift` is untracked). This review covers `b97cc58` only.
+
+### The seven review points
+
+1. **Module boundaries: pass.**
+   - Every new product file imports only SwiftUI.
+   - `WatchSnapshot.swift` (SnapshotTesting, Testing) is in `LedgerSnapshotTesting`, which only test targets depend on.
+   - The package graph and `Package.swift` are unchanged.
+2. **Concurrency: pass.**
+   - The new value types are `nonisolated`: `WeekStrip.Mark`, `WeekStrip.Day`, `ProgressSegment`,
+     `ProgressSegment.State` and `WeekStripSpeech`.
+   - So are the helpers that must run off the main actor:
+     - `RestRingGeometry.watch` and `scaled(toDiameter:)` (in the `nonisolated` struct);
+     - `LedgerFont.shrinkLimit` (in a `nonisolated` extension);
+     - `ProgressSegments.widths`, `gap` and `height`.
+   - `Slice3ComponentValueTests` stores and compares all of them in a `nonisolated` struct and in an actor. That is
+     R2-S1's compile guard, extended.
+   - Views are MainActor through the module default. No `Task`, timer, clock or `Date()`.
+   - Value suites are `nonisolated`: `WatchTypeFloorTests`, `ProgressSegmentsLayoutTests`,
+     `WatchRestRingGeometryTests`, `Slice3ContrastTests` and `Slice3ComponentValueTests`.
+   - Every rendering, snapshot and accessibility suite is nested in `.serialized` `RenderingSuites`.
+3. **Error handling: pass.** Nothing can fail. `assertWatchSnapshot` records an `Issue` when a render fails, rather
+   than passing silently. There is no `try?`.
+4. **Design fidelity and tokens only: pass, with R3-S2, R3-N6 and R3-N7.** See the table below. The raw numbers are
+   all named, sourced component dimensions:
+   - 2 / 3 pt segments, 5/12 em dot, 208 pt watch page;
+   - the SVG's 200 / 88 / 9 and 196 px ÷ 1.5;
+   - the 0.5 scale floor.
+
+   Everything else is a token or a role.
+5. **Accessibility: pass, with R3-S3 and R3-N9.** See below.
+6. **Test quality: pass, with R3-N1 and R3-N8.**
+   - Assertions read UIKit's tree, pixels and path geometry.
+   - The truncation probe has a positive control (a 19-character value is cut and the probe sees it).
+   - The inset test would catch horizontal overflow: overflowing ink reaches the image edge.
+   - The watch ring is measured against the screen less its inset in all six cells.
+   - The notes report a mutation check: 23 of 24 new tree cases failed on exactly their component, and the 24th
+     (an empty week) has nothing to mutate. No sleeps and no wall-clock.
+   - Two limits are documented and acceptable: the gallery tree is read below its `ScrollView`, and watch trees are
+     read on iOS (the same SwiftUI modifiers).
+7. **Brief compliance: pass.** See the criteria table.
+
+#### Design fidelity (review point 4): deviations judged
+
+| Deviation | Justified by | Minimal? | Verdict |
+|---|---|---|---|
+| Planned day: a 1 pt `inkMuted` ring instead of v2's .18 dot | WCAG 1.4.11: the .18 dot is 1.4:1 | Yes. Same 5/12 em size and place, the lowest AA ink. A filled `inkMuted` dot would equal the done dot, leaving planned ≠ done to the date's colour alone. The ring differs in shape | **Accept.** Visible in `weekStrip_…` (Friday 21) at every size and with Increase Contrast |
+| `WatchPrimaryButton` ≥ 44 pt tall (v2 ≈ 39) | HIG, Accessibility › Mobility: watchOS default control 44 × 44 pt, minimum 28 | Yes, +5 pt with padding `m` / `l`. The label stays at `watchButton` (700 14 = v2's 21 px ÷ 1.5) | **Accept** |
+| Stat unit 13.5 pt instead of 19 | Neither: slice 2's "no new roles" | No: 19/34 em through `font(_:size:)` keeps the look within the rules | **R3-S2** |
+| `StatTileRow` added | HIG, Typography: fewer columns as text grows. The first AX3 recording broke "sessi / ons" | Yes: a 16-line layout switch, and v2 already sets tiles in rows | **Accept.** Add it to §11 (R3-N10) |
+| 743 code lines | Standards §10: over the 500 target, under the ~1,000 split line | The split considered is recorded (merge notes) | **Accept** |
+| Muted text raised to the lowest AA ink | Pete's AA rule. Weekday (.34), planned and rest dates (.4), unit (.32), caption (.42), sheet cancel (.4) → `inkMuted`; watch caption (.40) → `watchInkMuted` .46, measured 4.56:1 on black | Yes: the lowest token that passes | **Accept** |
+| `SheetChrome`: cancel under the title at AX sizes; padding `xl` / `l` against v2's 24 | HIG (no word breaks); Pete's decision 1 (native line height; the 44 pt cancel adds ~10 pt) | Yes | **Accept** |
+
+| Component | What the references show against the prototype |
+|---|---|
+| `WeekStrip` | Seven equal columns: weekday, date, dot. Done dates in ink, today orange, others muted. Done dot grey, today orange, planned a ring, rest none (v2's script mapping). At AX5 the letters and dates shrink and nothing wraps |
+| `StatTile` | 700 34 narrow tabular numerals, captions 8 pt below, " · +8%" in `accentText`; every caption on one line across tiles with and without a unit. The unit is small (R3-S2). Stacks at AX3 and AX5 |
+| `ProgressSegments` | Proportional 5 / 3 / 4 / 3 / 3 bars, 3 pt gaps, 2 pt high. Done grey (.51 ≈ v2's .5), current orange, upcoming faint; exact to `progressBars` |
+| `SheetChrome` | `#131316` surface, 28 pt circular top corners, the top rule running into the corners like CSS `border-top`, 600 21 title, muted "Cancel" trailing on the title's baseline, v2's swap rows beneath |
+| `EmptyState` | Heading, `bodyLight` muted body, an outlined secondary pill. No orange, so the screen's one accent stays free |
+| `WatchRestRing` | Measured: orange spans 120 px at 46 mm xLarge. That is the SVG's 185 of 200 units at 130.7 pt, so it matches v2's 196 px drawing ÷ 1.5. 12 → 6 o'clock clockwise at half; 34.7 pt countdown. R3-N2's seam |
+| `WatchStatBlock` | 20 pt stat numerals, uppercase tracked 11.3 pt captions, "2" orange for NEW PR, two by two. "LB MOVED" wraps at 42 mm AX3, and nothing is cut |
+| `WatchPrimaryButton` | Full-width orange pills with white 700 labels; pressed at 0.6; a long title wraps to two lines; disabled grey |
+| `DesignGallery` | 22 named sections: the 21 colours as named swatches (the watch set on black), the 21 type roles with samples, spacing bars, radii, hairline, "Play" for motion, 6 icons, then every component gallery, the watch ones on black at 208 pt |
+
+#### Accessibility (review point 5), against the house rules
+
+- **One intended VoiceOver tree per component:** met. The tree tables add 24 literal cases, every slice-3 component in
+  every state, for 65 in all. Each case pins count, order, label, value, traits and containers.
+- **Spoken text the component cannot know is an initializer parameter:** met, never a modifier overload.
+  - `WeekStrip.Day.accessibilitySummary` is required.
+  - `ProgressSegments` requires `label` and `value`.
+  - `StatTile`, `WatchStatBlock` and `WatchRestRing` take an optional summary; R3-S3 makes the ring's required.
+  - All are `String`, as architecture §11 says ("strings the caller has already localised"). `SetRow`'s extra
+    `LocalizedStringKey` / `Text` forms remain its own.
+- **State as a value:**
+  - a day's mark ("Done", "Today", "Planned", "Rest day");
+  - the progress ("Exercise 3 of 5");
+  - a disabled watch button is `.notEnabled`;
+  - the ring `.updatesFrequently`, with its time in the label, like slice 2's `RestRing`.
+- **Headings:** the sheet and empty-state titles are `.isHeader`, as is every gallery section. The test checks the
+  sections' order among the headings.
+- **44 pt targets:** measured through the tree at `.large` and AX3.
+  - The sheet's cancel and the empty state's action are `PillButton`s.
+  - The watch button is ≥ 44 tall and exactly 208 wide.
+  - Activation runs the action; disabled does nothing.
+- **AA and 3:1, both schemes, with and without Increase Contrast:** `Slice3ContrastTests` covers 16 text pairs and 10
+  mark pairs, plus the segments against their track.
+  - The two exemptions (the upcoming track and the watch ring's track) are unfilled remainders whose state is in
+    words, as slice 2's ring arc is.
+  - White on accent at 3.10:1 is Pete's decision 7. The HIG's contrast table allows 3:1 for bold text at any size.
+- **Dynamic Type:** AX5 (phone) and AX3 (watch) references show no cut and no word broken.
+- **Bold Text:** both sheets step every role up, and the unit follows `legibilityWeight`.
+- **Pressed and Increase Contrast images:** present where they differ. The watch has one appearance, so it has no
+  Increase Contrast image.
+
+#### Watch sizing and the 11 pt floor (criterion 4)
+
+- Every watch component sets text only in watch roles: `watchButton`, `watchCountdown`, `watchStat`, `watchCaption`.
+- Each role's `minimumSize` is 11, and both entry points enforce it: `scaledSize` and `font(_:size:)` floor at it.
+- Where a line may shrink, `shrinkLimit` stops `minimumScaleFactor` at 11 pt.
+- `WatchTypeFloorTests` checks every watch role at xSmall to AX3, and the smallest each may shrink to. It runs in
+  the watch plan.
+- 42 mm uses `.large` and 46 / 49 mm use `.xLarge`, the defaults (docs/testing-strategy.md §2.5).
+- The ring frame is 118.7 / 130.7 / 149.3 pt. At 42 mm AX3, 149.3 fits within 187 − 24, and the test asserts it in
+  all six cells.
+
+#### `DesignGallery` (criterion 9)
+
+- **Debug-only: verified.** Both files are wholly `#if DEBUG`, as are the preview and the test.
+  - Release object: 0 gallery symbols. Debug: 361.
+  - F07 criterion 7 opens it from a Debug-only menu.
+- **Every token and component, named: met.**
+  - The section names are exactly the 22 public component names and the 6 token types.
+  - VoiceOver finds all 21 colours, the 21 type roles, 7 spacing steps, 4 radii, the hairline, 2 motion tokens and
+    6 icons by name.
+  - The type page iterates `Role.allCases`, and the icon page iterates `LedgerIcon.allCases`.
+  - The colour, spacing and radius lists are literal. R3-N8 would guard them.
+- **Reduce Motion:** `MotionTokenPage` respects it: no `snappy` animation, and `ledgerBuzz` pulses instead of
+  shaking.
+
+### `/code-review high`: what happened to its ten findings
+
+| Code-review finding | Disposition |
+|---|---|
+| A zero-length segment keeps its gaps; the doc says "draws nothing" | R3-N1. Faithful to CSS flex `gap`, but the doc and test should say so |
+| Width below the gaps overflows the frame | R3-N1 (degenerate; `.clipped()`) |
+| "Done" key and comment shared with `SetRow` | R3-N5 |
+| The numerals' tracking reaches the unit run | R3-N6 |
+| The gallery's watch ring overflows at large phone text sizes | R3-N3 |
+| `ledgerWatchPage` doc says 13 pt, the code pads 12 | R3-N4 |
+| Criterion 9's test uses a hand-written list | R3-N8 |
+| `.minimumScaleFactor(0.5)` hard-coded beside `shrinkLimit` | R3-N10 |
+| `scaledSize` probes per `WeekStripDay` | Rejected: one extra 0.5 µs probe per column. The real cost is `.ledgerFont` (43 µs), already slice 1's N2 |
+| `tasks/todo.md` not updated | Merge note: the orchestrator owns `tasks/todo.md` (workflow, Orchestrator) |
+
+It did not raise R3-S1 to R3-S4 or R3-N2.
+
+### Criteria → evidence (slice 3)
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 3 | These components × {light, dark} × {L, XL, AX3} at the iPhone 17 width, 0.995 / 0.98 | `PhoneComponentSnapshotTests`: five suites over `SnapshotAppearance.phoneMatrix` through `assertPhoneSnapshot` (402 pt, 1×). 30 references, plus 6 more: AX5, Bold Text, pressed × 2, Increase Contrast × 2. Every gallery holds every state. Recorded on iPhone 17 / iOS 27.0, the `check.sh` pin; slices 1–2 came back byte-identical. **Met** |
+| 4 | Watch components at 42 / 46 / 49 mm: no label < 11 pt, nothing clips | `WatchComponentSnapshotTests`: 3 × 6 cells (default size and AX3 per case) plus Bold Text, 19 references. `WatchTypeFloorTests`: every watch role ≥ 11 pt at every watch size, also when shrunk. `WatchComponentLayoutTests`: a 12 pt inset in all six cells; the ring fits the screen less its inset; no text cut at 42 mm AX3, with a positive control. `WatchRestRingGeometryTests`: v2's 200 / 88 / 9 SVG, 553 dash, half = half. **Met** |
+| 9 | `DesignGallery` opened from the debug menu shows every component and token with its name | `DesignGalleryTests`: exact section names; every section a heading, in order; every token read by VoiceOver; references in light and dark (dark only after R3-S4). The menu itself is F07 criterion 7. **Met for F06** |
+| NFR | References ≤ 6 MB, 1× PNG | 4.8 MB in all (phone 1.3, watch 0.3, gallery 0.9). ≈ 4.3 MB after R3-S4 |
+| NFR | Informational text ≥ 4.5:1 | `Slice3ContrastTests` (both schemes, ± Increase Contrast) |
+| DoD | Previews for every state | `Components+Previews.swift`: one per new component, each its full gallery, and `DesignGallery` under `#if DEBUG` |
+| DoD | Side-by-side gallery vs prototype screenshots on the PR | Not yet made (merge notes) |
+
+### Verdict
+
+**Approve: 0 Blocking.** Land the four Should fix items in this PR, before F09, F10 and F18 build on these components:
+- **R3-S1:** one frame change, a doc line and one test (references unchanged).
+- **R3-S2:** a sourced em ratio for the unit, and the stat-tile references re-recorded with the reason, or Pete's
+  explicit decision to keep 13.5 pt.
+- **R3-S3:** make one parameter required, and update the gallery and one tree case.
+- **R3-S4:** drop the gallery's light reference.
+
+The Nits can go with them or to the follow-up list. R3-N2 touches slice 2's `RestRing` too. R3-N8 is a script test.

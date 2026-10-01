@@ -47,6 +47,16 @@ public nonisolated struct RestRingGeometry: Equatable, Sendable {
     /// The v2 rest card: a 64 pt ring, r 29, stroke 2.5 (`stroke-dasharray` 182).
     public static let phone = RestRingGeometry(diameter: 64, radius: 29, lineWidth: 2.5)
 
+    /// The watch rest screen: the SVG's 200-unit ring, r 88, stroke 9 (`stroke-dasharray` 553), drawn
+    /// 196 px wide at 1.5× a 46 mm display (spec §4.1), so 130.7 pt across.
+    public static let watch = RestRingGeometry(diameter: 200, radius: 88, lineWidth: 9).scaled(toDiameter: 196 / 1.5)
+
+    /// The same ring drawn `newDiameter` points across: radius and stroke scale with it.
+    func scaled(toDiameter newDiameter: CGFloat) -> RestRingGeometry {
+        let factor = newDiameter / diameter
+        return RestRingGeometry(diameter: newDiameter, radius: radius * factor, lineWidth: lineWidth * factor)
+    }
+
     /// `progress` as a fraction of the circle: clamped to 0…1, and 0 when it is not a number.
     static func fraction(_ progress: Double) -> Double {
         progress.isNaN ? 0 : min(max(progress, 0), 1)

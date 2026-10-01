@@ -86,6 +86,38 @@ nonisolated struct RestRingGeometryTests {
     }
 }
 
+/// The watch ring (F06 slice 3), `WatchRestRing`'s geometry: LedgerWatch's SVG ring, r 88 and stroke 9
+/// in a 200-unit box, drawn 196 px across at 1.5× a 46 mm display.
+@Suite("WatchRestRingGeometry", .tags(.design))
+nonisolated struct WatchRestRingGeometryTests {
+    static let watch = RestRingGeometry.watch
+    static let frame = CGRect(x: 0, y: 0, width: watch.diameter, height: watch.diameter)
+
+    @Test("The watch ring has the prototype's proportions and is 196 px ÷ 1.5 across")
+    func watchGeometry_proportions_matchThePrototypeSVG() {
+        #expect(abs(Self.watch.diameter - 196 / 1.5) < 1e-9)
+        #expect(abs(Self.watch.radius / Self.watch.diameter - 88.0 / 200) < 1e-12)
+        #expect(abs(Self.watch.lineWidth / Self.watch.diameter - 9.0 / 200) < 1e-12)
+    }
+
+    @Test("The watch ring's circumference, in the SVG's units, is its stroke-dasharray, 553")
+    func watchCircumference_inSVGUnits_matchesPrototypeDashArray() {
+        let full = Measured(RestRingArc(progress: 1, geometry: Self.watch).path(in: Self.frame))
+        #expect(Int((full.length * 200 / Self.watch.diameter).rounded()) == 553)
+        #expect(full.end.isClose(to: full.start), "a full ring closes at 12 o'clock")
+    }
+
+    @Test("Half the watch ring is half its circumference, from 12 o'clock to 6 clockwise")
+    func watchHalf_arc_isHalfTheCircumference() {
+        let half = Measured(RestRingArc(progress: 0.5, geometry: Self.watch).path(in: Self.frame))
+        let full = Measured(RestRingArc(progress: 1, geometry: Self.watch).path(in: Self.frame))
+        let centre = Self.watch.diameter / 2
+        #expect(abs(half.length / full.length - 0.5) < 1e-9)
+        #expect(half.start.isClose(to: CGPoint(x: centre, y: centre - Self.watch.radius)))
+        #expect(half.end.isClose(to: CGPoint(x: centre, y: centre + Self.watch.radius)))
+    }
+}
+
 /// A path's length (curves flattened into 256 chords each), start and end.
 private nonisolated struct Measured {
     var length: CGFloat = 0
