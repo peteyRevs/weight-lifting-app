@@ -1229,6 +1229,14 @@ state, which the previews (`Components+Previews.swift`), the snapshot tests and 
    - An outlined full-width watch button: LedgerWatch's "+30s", "Discard", "End workout" and "Done". F18 can add a
      style.
    - `WatchStatBlock`'s large elapsed variant (52 px): F18 can compose it.
+   - Found by the gallery-vs-prototype comparison (orchestrator, 2026-09-30), each left to the feature that
+     composes the screen:
+     - `StatTile` has no accent value. v2's Exercise history draws its "1RM est" value in the accent colour,
+       at 30 px. F12 adds an accent option, with a size variant if it needs the exact ratio.
+     - `WatchStatBlock` has no leading status dot. v2 puts an accent dot before the heart-rate value. F18
+       adds it.
+     - `WatchRestRing` shows only the countdown. v2 puts the heart rate (with its dot) under it. F18
+       overlays it, or adds a content slot.
    - `accessibilitySummary` on slice 2's `RestRing`, for parity with `WatchRestRing`: `RestRing` is one element, so
      SwiftUI's own `.accessibilityLabel` from outside names it correctly (pinned), and slice 2 was left untouched.
 
