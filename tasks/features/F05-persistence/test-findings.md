@@ -952,3 +952,320 @@ F12's call, not a defect.
 
 Once S2-5's test passes, G2 closes. A re-run of `ProgramIdentityCloseoutAdversarialTests` and the gate is
 enough; no further adversarial round is needed. S2-N1 and S2-N2 are nits that do not block.
+
+---
+
+# Slice S3 — adversarial round 1
+
+Independent adversarial pass over `feat/F05-s3` at `f5ab3fb` (S3: `GRDBWorkoutRepository`, `GRDBStatsQueries`,
+their records and `WorkoutRows`, the two history contracts, `Seeders+History`, the v001 fixture). As the
+orchestrator's brief for this round asked, I read the brief, the S3 notes and the product code first; my
+fixtures are still my own (`S3Kit`), not `Seeders` or the contracts' workouts, and my oracle (`HistoryModel`) is
+written from the protocols' doc comments and the notes' decisions, never from the SQL. No product code and no
+test of the implementer's was edited. Mutants and the proposed fixes ran in copies of `LedgerKit` in the
+scratchpad (`f05s3-g2/mut`, `f05s3-g2/fix`), never in the worktree.
+
+**Convention** (as in S1 and S2): a failing test is a bug or a minor bug and stays in the branch as a regression
+test; a spec question or a nit is pinned by a passing test marked "(documents)".
+
+## What I wrote
+
+60 tests in 14 files under `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/`, plus five support files (`S3Kit`,
+`S3Database`, `HistoryModel` in three files, `HistoryScript`). Two are nightly-lane only (`.slow`). No wall-clock
+assertion outside the nightly timing test; the observation test synchronises on the stream only.
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `HistoryModelAdversarialTests` + `HistoryModel`, `HistoryScript` | 2 (property; 60 seeds in the PR lane, all seeds nightly) | a random script of 14 operations per seed (materialise, rebuild, set edit, delete; about one in four spoiled: not finished, another workout's row or set id, an id twice) under a random time zone, week start and current time. After every operation the database and the in-memory model must have thrown the same error or neither, a refused call must change no row, and every read (`recent` at five limits, `workout(id:)`, four ranges) and every stats query (all nine, `e1RMByWeek` at six `lastWeeks` up to `.max`) must agree. The second test (nightly) shows the first one bites: a model with any one of 22 faults disagrees within 60 seeds |
+| `HistoryContractAdversarialTests` | 2 (25 faults) | the model with no fault keeps all 21 contract clauses; with each of 25 single faults (a plausible wrong fake) the contracts must catch it, or it is listed as a gap (S3-4) |
+| `WorkoutAtomicityAdversarialTests` | 4 (17 cases) | criterion 3: a trigger fails the `INSERT` or the `UPDATE` on each of the five tables in turn, for a first materialisation, a rebuild that changes and removes rows on every table, a set edit and a delete: every row and stamp as before, and the same call then succeeds |
+| `WorkoutIdentityAdversarialTests` | 4 (10 cases) | seven takeovers of another workout's row or set id (live, deleted, removed, a set under a removed row), through `materialize` and `updateSets`; a workout moving its own ids; a record naming another workout (S3-1), and one naming no stored workout |
+| `WorkoutRepairAdversarialTests` | 4 (5 cases) | a workout or exercise row soft-deleted on its own, then rebuilt (S3-2); a blob id on the workout row and on an exercise row (S3-3); a soft-deleted set under a live row |
+| `WorkoutValuesAdversarialTests` | 6 (31 cases) | every stored e1RM against an integer oracle (8 weights × 1 to 13 reps, every kind); weights at `Int64.max`, `.min`, ±1 unit and 0, reps and targets at `Int32`'s ends; five values beyond a column (⅛ lb, 10⁻⁸ g, an estimate and a volume beyond `Int64`, NaN) refused with every byte kept; nine dates at the ends of `Double` read back bit for bit and trap no query; nine hostile texts; U+0000 at six places in three columns |
+| `WorkoutLifecycleAdversarialTests` | 8 (13 cases) | three identical materialisations change no byte; five not-finished states leave a stored workout of that id; odd durations; a deleted workout rebuilt with other rows; five slot-update edges (unknown, removed, deleted program, one slot twice, inactive program); a miss cleared and recorded again, and a negative week; each of 19 stored fields changed one at a time; delete keeps misses and `workout_health` (documents) |
+| `WorkoutEditAdversarialTests` | 5 (9 cases) | an edit's e1RMs and totals, and which rows it stamps; removing every set; five targets no live workout has; four bad edits (a sibling row's set, an id twice, an inexact weight, a non-finite tick); what an edit leaves stale (documents, notes question 4) |
+| `HistoryReadAdversarialTests` | 6 (11 cases) | ties on `ended_at` in six storage orders; ranges and limits at their edges (empty, ±∞, `.max`, `.min`); an unreadable workout inside the limit (documents, S3-N1); rows of another phase or with no end (documents, S3-N2); the observation through records, misses, a no-op edit, a workout outside the limit, damage and repair; sixteen racing rebuilds |
+| `StatsQueriesAdversarialTests` | 8 (20 cases) | which kinds each query counts (documents, notes question 6); ties for the Last line, the bests and `recentlyLogged`; `personalRecords` order under ties, in six storage orders; a swapped or dropped row; only deleted workouts; reps summing beyond `Int64` (documents, S3-N3) |
+| `StatsWeeksAdversarialTests` | 5 (51 cases) | 6 time zones × 7 week starts; the week's first instant on five clock-change days and Samoa's skipped day, to the millisecond; ISO week 53 of 2026; a workout that crosses midnight (documents, notes question 7); `lastWeeks` at `.min`, −1, 0, 1, `.max`, and a `now` long before or after every workout |
+| `MigrationFixtureAdversarialTests` | 5 | criterion 12: the fixture's `sqlite_master`, columns, foreign keys and indexes equal a fresh `LedgerDatabase.inMemory()`; today's migrator and `open(at:)` change no row; every stored estimate and total recomputed; each fixture workout rematerialises as a no-op; a `v002` that rebuilds `workout` (create, copy, drop, rename) and drops an index keeps every row |
+| `StatsWorstCaseAdversarialTests` | 1 (nightly) | criterion 9 in the worst shape: 20,000 sets of one lift, each at its own weight, 400 workouts in one week, two records each |
+
+## Results
+
+- **Host** (`swift test --filter 'LedgerDomainTests|LedgerPersistenceTests'`, exit 1 as expected):
+  `LedgerPersistenceTests` 330 tests, **326 pass, 4 fail**, all 4 mine and all expected (S3-1 to S3-3).
+  `LedgerDomainTests` 762 pass. The implementer's and the S1/S2 tests all pass beside mine.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0. Format, `swiftlint --strict`, the package graph and pins and
+  the script tests pass with my files; they add no compiler warning.
+- **Simulators** (through `sim-lock.py`; `-only-testing:LedgerPersistenceTests`; logs: scratchpad
+  `f05s3-g2/sim-*.log`). I did not run the full gate, since four bug tests fail by design.
+  - iOS (`PR`, iPhone 17, 27.0): exit 65. 329 tests: 318 passed, 7 skipped by design, 4 failed, the same four.
+  - watchOS (`PR-Watch`, Apple Watch Series 12 (46mm), 27.0): exit 65. The same 318 / 7 / 4.
+- **Criterion 9, worst case** (`Nightly` and `Nightly-Watch`, `StatsWorstCaseAdversarialTests` alone): passes on
+  both, exit 0. Eight queries are under 8 ms. `weeklyVolume` over 20,000 distinct weights is **33 ms on the iPhone
+  simulator, 34 ms on the watch simulator** and 35 ms on the host, of a 50 ms budget (S3-N4).
+- **Model test at depth** (host, by hand): 3,000 seeds × 14 operations agree; all 22 visible faults are caught.
+- **Proposed fixes** (scratchpad `f05s3-g2/fix/proposed-fixes.diff`, 35 added lines in two files): with them the
+  whole of `LedgerPersistenceTests` passes on the host, the implementer's tests included.
+- **Mutants** (84, one at a time, host, the whole of `LedgerPersistenceTests`; `f05s3-g2/mut/mutants.py` and
+  `final-status.txt`). 78 are killed, 6 survive.
+  - **The 6 survivors change nothing through the API**; they differ only on rows the repository never writes:
+    M30 (`Query.sets` without the exercise's `deleted_at`), M41 and M42 (`updateSets`' owner query without either
+    `deleted_at`: the strict read that follows refuses anyway), M60 (`lastWeeks >= 0`: an empty window), M74 and
+    M78 (`personalRecords` without the workout's `deleted_at` or phase). M30 and M74 differ exactly in S3-2's
+    state.
+  - **17 are killed by my tests only**, so the implementer's tests and contracts miss them:
+    - a column: `original_exercise_id` written as the performed exercise (M08), `is_superset_with_previous`
+      (M09) and `is_deload` (M10) always false (no fixture of theirs sets one), a record's `achieved_at` rounded
+      to the second (M17);
+    - identity: the exercise owner check on live rows only (M19; their clause removes no row), deleted record
+      rows counted as stored, so never revived (M33), a cleared miss never recorded again (M44), negative weeks
+      dropped (M48);
+    - order: ties of `recent` and `workouts(in:)` (M24, M25, M83), of the Last line's workout (M52), of
+      `recentlyLogged` (M76), of `personalRecords` (M79);
+    - stats: warm-ups counted for the bests (M54), `bestE1RM` counting every kind (M56: their drop set has the
+      lower estimate), the week key taken an hour before the end (M80).
+  - 8 are killed by the implementer's tests only (strict reads of damaged rows, which I did not repeat), and 53
+    by both.
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 0 | |
+| minor bug | 4 | S3-1, S3-2, S3-3 (failing tests), S3-4 (contract gaps, pinned) |
+| spec question | 4 | S3-Q1 to S3-Q4 (pinned "(documents)"; three are the notes' own questions 4, 6, 7) |
+| nit | 4 | S3-N1 to S3-N4 |
+
+**Verdict:** G2 cannot close for S3 yet, and it is three small fixes away. Criteria 3, 4, 5, 6, 9, 10 and 12 hold
+on the host and both simulators, and the repository and the nine queries agree with an independent model over
+3,000 random histories. No finding is reachable by a lifter today: S3-1 needs a caller's mistake, S3-2 and S3-3
+need damage or a foreign writer.
+
+---
+
+## S3-1. minor bug — A record that names another workout replaces that workout's record row, silently
+
+`PersonalRecordRecord.rowID` derives from `record.workoutID` and the record's place in `prs`, and `encode` writes
+`workout_id = record.workoutID`. `materialize(workout, …, prs:)` never checks that a record names `workout`. So
+`materialize(B, prs: [r])` with `r.workoutID == A` computes the id of **A's** record at that place and upserts
+over it. `WorkoutRows.refuseOtherWorkoutsIDs` says "a personal record's id derives from its workout's, so it
+cannot clash"; that holds only when the record's workout is the one being written. This is the class of S2-1,
+on the one table the owner check leaves out.
+
+Observed:
+- A's stored bench record is gone; in its row is B's squat record, still under `workout_id = A`.
+  `personalRecords(bench)` loses A's record and `personalRecords(squat)` shows one for A, which did no squat.
+- B stores `pr_count = 1` and no record row; A's `pr_count` still counts the record it lost.
+- A record naming a workout that is not stored fails on the foreign key (`DatabaseError`, SQLite 19) and stores
+  nothing: loud, but not by name.
+
+**Reach.** `PersonalRecords.detect` stamps `workout.id`, so only a caller passing records detected for another
+workout hits it: F10 materialising with a list it kept from the previous finish, or a rebuild that reuses one.
+Nothing at the call says so, and the damage is to the other workout.
+
+**Repro** (fails): `WorkoutIdentityAdversarialTests.recordOfAnotherWorkout_doesNotReplaceItsRecords`:
+```swift
+try await stack.materialize(first, prs: [own])            // own: bench e1RM, workoutID = first
+let foreign = S3Kit.record(squat, .estimatedOneRepMax(.pounds(999)), in: first)
+try? await stack.materialize(second, prs: [foreign])      // expected: throws, or stores under second
+try await stats.personalRecords(exerciseID: bench)        // expected: [own]; actual: []
+```
+**Fix** (verified in the scratchpad): refuse it before any row is written, three lines in `materialize`:
+`if let foreign = prs.first(where: { $0.workoutID != workout.id }) { throw … }`, with a contract clause. The
+other choice, deriving the id and `workout_id` from the workout being written, makes the record read back with
+another `workoutID` than it was given.
+
+## S3-2. minor bug — A rebuild does not repair a workout whose row, or one of whose exercise rows, was soft-deleted alone: rows the workout no longer has stay live
+
+`WorkoutRows.write` reads the stored children through the **live** workout row (`Selection.one`) and, for sets,
+the **live** exercise rows (`Query.sets`). A live row under a soft-deleted parent is in none of those lists, so
+the diff never soft-deletes it. The upsert then revives the parent, and the old children are back.
+
+Observed, after `UPDATE workout SET deleted_at = …` (or the same on `workout_exercise`) and a rebuild with one
+exercise fewer and three sets fewer: `workout(id:)` returns two exercises where the state has one, and five sets
+where it has two; the live row counts and `weeklyVolume` include them. Nothing throws. The notes' decision 16
+says "materialising the workout again repairs it".
+
+**Reach.** Damage or a foreign writer only: the repository's own `delete` soft-deletes every row. Under M4's
+sync, rows arrive one at a time, so a parent's deletion can be applied before its children's; a rebuild in
+between then leaves this state for good, since the children's deletions are then older than their rows.
+
+**Repro** (fails, both cases): `WorkoutRepairAdversarialTests.loneSoftDelete_isRepaired`.
+
+**Fix** (verified in the scratchpad, about 15 lines in `WorkoutRows`): diff the children against every live row
+under the workout's id, whatever the state of the rows above them: exercises and records by `workout_id` with
+no `deleted_at` test on the workout, and sets through the workout's exercise rows, live or deleted. The stored
+workout row itself stays "live only", or an unchanged deleted row would not be revived. `delete` then also
+clears such leftovers. Every other test passes with it.
+
+## S3-3. minor bug — A workout or exercise row whose id is a blob reads as a workout with no exercises, or an exercise with no sets
+
+`ColumnReader.text` accepts a `BLOB` holding UTF-8, so `identifier("id")` accepts an id stored as a blob of its
+own text. SQL does not: `workout_exercise.workout_id IN (…)` and the join on `logged_set.workout_exercise_id`
+compare a blob with text and match nothing. `fetch` groups children by the id's `DatabaseValue`, with the same
+result.
+
+Observed, after `UPDATE workout_exercise SET id = CAST(id AS BLOB)` on one row:
+- `workout(id:)`, the strict read, returns the workout with that exercise holding **no sets**, and throws
+  nothing. `recent` lists it the same way. The stats lose the sets (the volume drops, silently). A new write
+  repairs it, as for any damaged id (S2-3).
+
+And after `UPDATE workout SET id = CAST(id AS BLOB)`:
+- `recent` lists the workout with **no exercises**; `workout(id:)` returns `nil`.
+- A new materialisation inserts a second row beside it, since the text id finds no row. `recent` then lists the
+  workout **twice**, once whole and once empty, under one `WorkoutID` (a `ForEach` over it has a duplicate id),
+  and `sessionsCompleted` counts two. No write ever removes the blob row.
+
+This breaks the rule the notes and `DamagedWorkoutRowTests` state: a damaged workout "throws by name" or is
+"left out", "never … a rounded number", that is, never another value. It is the kin of the dangling-parent
+case, which the implementer's `danglingParent_isRepaired` accepts as "reads without the row until a write"; the
+difference is that here the reader holds the damaged row in its hands, and the workout-row case is never
+repaired. **Reach:** damage or a foreign writer only, the class of S2-3.
+
+**Repro** (fail): `WorkoutRepairAdversarialTests.blobExerciseID_neverReadsAsAnEmptyExercise` and
+`blobWorkoutID_neverReadsAsAnEmptyWorkout`. Each accepts either sound outcome: the read fails or leaves the
+workout out, or it reads whole.
+
+**Fix** (verified in the scratchpad, 9 lines in `WorkoutRows.fetch`): require `TEXT` storage for the `id` of a
+workout row and of an exercise row, and throw `malformedColumn("workout.id")` otherwise. `workout(id:)` then
+throws, the lists leave the workout out, and after a new materialisation it is listed once. Left as it is by
+that fix, and for the orchestrator to accept or not: the blob workout row still counts in `sessionsCompleted`
+(`AND typeof(id) = 'text'` there would end it), and the stats cannot see the sets under a blob exercise id until
+a write repairs it.
+
+## S3-4. minor bug (contract gap) — Ten plausible wrong fakes pass both history contracts
+
+F07's in-memory fakes are tied to the GRDB semantics by `WorkoutRepositoryContract` and `StatsQueriesContract`
+alone. An honest in-memory history keeps all 21 clauses, so the contracts are implementable without a database.
+Of 25 single-fault fakes, the clauses catch 15 and let these 10 through. Each is observable against the GRDB
+types (the model test catches every one within 60 seeds), and six match a mutant of the product code that only
+my tests kill.
+
+| Fault the contracts miss | Why no clause sees it |
+|---|---|
+| lists tie-break in insertion order, not by id | no two contract workouts end at one instant |
+| the Last line shows the first done working set, not the heaviest | the heaviest set is the first in both clauses that read it |
+| the bests count warm-ups | no warm-up is heavier than the best |
+| `e1RMByWeek` ignores the calendar's week start and time zone | the contract's calendar is Monday, UTC (the Sunday case is in `StatsQueriesTests`, for GRDB only) |
+| a workout's week is its best set's tick, not its end | every contract workout lasts an hour, midweek |
+| `sessionsCompleted` counts only workouts with a done set | the clause's empty workout lies outside both ranges |
+| `personalRecords` ordered by the workout's end, not `achievedAt` | every fixture record is achieved at its workout's end |
+| `recentlyLogged` ties in row order, not id order | each workout of the clause has one done exercise |
+| `updateSets` drops the workout's records | no clause reads records after an edit |
+| `observeRecent` emits on every write | every write of the clause changes the list |
+
+**Pinned by** `HistoryContractAdversarialTests.wrongFake_isCaughtOrListed` (passes): the ten are listed in
+`uncaught`, so a clause that closes a gap fails the test until the list shrinks. **Fix:** one fixture line or
+one check each; the cheapest are a tie on `ended_at` in `newestFirst`, a done warm-up above the best in `bests`,
+the empty workout moved inside `lastWeek` in `sessions`, two done exercises in one workout in `recentlyLogged`,
+and a `personalRecords` read after `updateSets`. This blocks nothing in S3; it should land before F07 writes
+its fakes.
+
+---
+
+## Spec questions, pinned
+
+- **S3-Q1 (notes question 6): which sets count for the bests.** Criterion 5 says "done sets"; the slice counts
+  `.working` and `.added` for `bestSet`, `bestE1RM` and `e1RMByWeek`, `.working` only for the Last line, and
+  every kind for volume, `sessionCount` and `recentlyLogged`. So a session of warm-ups only is a session of the
+  exercise with no Last line. Pinned for all four kinds by `StatsQueriesAdversarialTests.kinds_countAsDocumented`.
+- **S3-Q2 (notes question 7): a workout's date is when it ended.** A workout begun on Sunday night and ended at
+  00:10 on Monday counts whole for Monday's week, for volume, sessions, `workouts(in:)` and the e1RM chart, even
+  when every set was ticked on Sunday. Pinned by `StatsWeeksAdversarialTests.midnightCrossing_countsForTheWeekItEndedIn`.
+- **S3-Q3 (notes question 4): what `updateSets` leaves stale.** Exactly the `personal_record` rows and
+  `pr_count`. Everything computed from sets moves. So after a lifter corrects a typo (225 to 125), History still
+  lists both records of that workout, above the best estimate any stored set gives, and a later edit that would
+  deserve a record never creates one. Pinned by `WorkoutEditAdversarialTests.edit_leavesRecordsStale`, for F13.
+- **S3-Q4 (new): a later `.materialize` brings back a workout the lifter deleted.** `delete` is a soft delete
+  that the next materialisation reverses, by design for F04 input 6. But decision #11's delete in History uses
+  the same call, and ADR-004 emits `.materialize` again when a late envelope changes a finished log that is not
+  yet compacted. The deleted workout then returns, with any `updateSets` edit overwritten by the log's state.
+  The host must compact before History may edit or delete, or the delete must be remembered. For F17 and F13;
+  pinned by `WorkoutLifecycleAdversarialTests.rematerializeAfterDelete_storesTheNewState`.
+
+## Nits
+
+- **S3-N1. An unreadable workout takes a place of the limit.** `recent(limit:)` picks its rows, then reads them:
+  with a damaged workout among the newest two, `recent(limit: 2)` returns one workout though three more are
+  readable. A History screen would show a short page. Fix, if wanted: none cheap in SQL; note it on the
+  protocol. Pinned (documents).
+- **S3-N2. The lists and the stats filter differently.** The stats require `phase = 'finished'`; `recent` and
+  `workouts(in:)` do not, and `recent` lists a row with no `ended_at` (last), which `lastPerformance` then fails
+  on by name. Only a foreign writer makes such a row. Fix: the same `phase` test in `Selection`. Pinned
+  (documents).
+- **S3-N3. `weeklyVolume` sums reps per weight in SQL.** Each workout's volume must fit its column, but across
+  workouts 2⁶³ reps at one weight overflow `SUM`, and SQLite fails the query ("integer overflow"). Loud, and
+  unreachable by lifting. Pinned (documents; 64-bit only).
+- **S3-N4. `weeklyVolume` is the one query near its budget in the worst shape:** 33 to 35 ms of 50 over 20,000
+  distinct weights, against 4.7 ms in the implementer's shape. The time is the `Decimal` product per distinct
+  weight, not the SQL. A real history has a few hundred distinct weights, so this is a margin to know about,
+  not a defect; F20 measures a device.
+
+---
+
+## Attacked and held
+
+- **Criterion 3.** A failed statement on any of the five tables, as an insert or an update, in a first
+  materialisation, a rebuild, an edit or a delete, leaves every row and stamp, and the call then succeeds. Three
+  identical materialisations change no byte after the first. Five not-finished states are refused by id and
+  leave a stored workout of that id alone. Every stored e1RM equals the integer oracle; 13 reps and undone sets
+  store `NULL`. Each of 19 stored fields is written and diffed.
+- **Ids (the class of S2-1), apart from S3-1.** Seven takeovers of a row or set id (of a live or deleted
+  workout, a removed row or set, a set under a removed row) are refused by table and id through `materialize`
+  and `updateSets`, with every byte of both workouts kept; both then save again. The model test adds random
+  takeovers, with the same error text on both sides. A workout moves its own ids freely, and a re-added id
+  revives its row, never a second one.
+- **Values.** Weights at both ends of `Int64`, one unit and zero, and reps and targets at `Int32`'s ends read
+  back equal. ⅛ lb, 10⁻⁸ g, an estimate or a volume beyond `Int64` and NaN are refused as `inexactWeight` with
+  nothing written. Dates at ±1e300, ±`greatestFiniteMagnitude`, `leastNonzeroMagnitude`, −0.0 and sub-microsecond
+  fractions read back bit for bit, order the lists, and trap no query under UTC, Samoa or Newfoundland time.
+  Emoji, SQL, wildcards, control characters and 10,000 characters are stored whole; U+0000 is refused by column
+  at six positions.
+- **Edits.** e1RMs and totals are exact after an edit; only changed rows are stamped; an edit to no sets, and
+  back, revives rows by id. Unknown, deleted and removed rows, and a set or workout id passed as a row id,
+  throw `missingRow` and change nothing. Four bad edits change nothing.
+- **Lists.** Ties on `ended_at` list by id in every storage order, under a limit too. Ranges hold the lower
+  bound and not the upper; empty, infinite and far ranges and limits of `Int.max` and `Int.min` are safe.
+- **Observation (criterion 10).** No emission for a change of records or misses only, a no-op edit, a delete of
+  an unknown workout, or a workout outside the limit; one for each change of the list; damage hides a workout,
+  the stream goes on, and a repair brings it back.
+- **Stats (criteria 4 to 6).** 3,000 random histories agree with the model on all nine queries, under four time
+  zones, seven week starts and three current times. Ties are deterministic: the Last line's workout by id, the
+  best set by reps, `recentlyLogged` by exercise id, `personalRecords` the same in six storage orders. A swapped
+  or dropped row stops counting. With only deleted workouts, every query answers as on an empty database.
+- **Weeks.** 42 time zone and week start pairs group 24 daily workouts as `WeekCalendar`'s own ranges. On five
+  clock-change days and Samoa's skipped day, a workout 1 ms before the week's first instant is last week's and
+  one on it is this week's. The last week of 2026 is keyed 2026-W53 on 2 January 2027. `lastWeeks` below 1 gives
+  none, `.max` every past week, and no value counts a later week.
+- **Criterion 12.** The fixture's schema equals a fresh database's object by object, column by column, with the
+  foreign keys and indexes; its header is clean; migrating and opening it change no row; every estimate and
+  total in it is what today's code computes; its workouts rematerialise as no-ops; a table-rebuild migration
+  keeps every row. The committed file equals the generator's output kept in the scratchpad, and no test opens
+  it in place.
+- **Criterion 9.** Passes in the worst shape on both simulators (S3-N4).
+- **Concurrency.** Sixteen racing rebuilds of one workout: readers see only whole states, and the stored rows
+  are exactly one of them.
+- **Slot updates.** Unknown, removed and deleted slots are skipped and the workout is stored; one slot twice
+  takes the last; an inactive program's slot is written; a cleared miss comes back, once.
+
+**Noted, not findings:**
+- **The same records in another order rewrite the record rows**, since a row's id is its place in `prs`. It is
+  harmless (the table is local-only), and `detect`'s order is stable.
+- **Deleting a workout keeps the misses it wrote and its `workout_health` row** (the notes, decision 1). Pinned
+  (documents).
+- **`materialize`'s doc on the protocol** says it stores the summary; nothing of it is stored (notes question 1).
+
+## Verdict
+
+**G2 cannot close for S3 yet.**
+- S3-1, S3-2 and S3-3 are minor: one needs a caller's mistake, two need damage. Each has a fix verified in the
+  scratchpad (35 lines in all, in `GRDBWorkoutRepository.materialize` and `WorkoutRows`), after which all 330
+  host tests pass.
+- S3-4 is ten gaps in the contracts, pinned; it should be closed before F07 relies on them, and can be closed in
+  the same fix round.
+- S3-Q1 to S3-Q3 are the notes' own questions, now characterised; S3-Q4 is new and is F17's and F13's.
+- The four nits block nothing.
+
+Once the four failing tests pass (`recordOfAnotherWorkout_doesNotReplaceItsRecords`, `loneSoftDelete_isRepaired`,
+`blobExerciseID_neverReadsAsAnEmptyExercise`, `blobWorkoutID_neverReadsAsAnEmptyWorkout`), a re-run of
+`WorkoutIdentityAdversarialTests`, `WorkoutRepairAdversarialTests` and the gate is enough to close G2; a short
+close-out is only needed if the fixes take another shape than the ones above.
