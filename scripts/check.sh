@@ -91,6 +91,7 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}
     scripts/check-package-graph.sh
     scripts/check-package-pins.sh # LedgerKit's lockfile pins what the project's (CI-proven) one pins
+    scripts/check-catalog-version.sh # a changed exercise catalog raises ExerciseCatalog.version (F03)
     for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
 fi

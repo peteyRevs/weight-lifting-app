@@ -57,7 +57,7 @@ public struct RestDuration: Hashable, Codable, Sendable { public let seconds: In
 /// Σ weight × reps, in exact gram·reps (ADR-007).
 public struct Volume: Hashable, Codable, Sendable, AdditiveArithmetic { public let gramReps: Decimal; public func formatted(in: Units) -> String /* "24,180" */; public func compact(in: Units) -> String /* "41.2k" */ }
 public enum Equipment: String, Codable, Sendable, CaseIterable { case barbell, dumbbell, cable, machine, bodyweight, kettlebell, band
-    public func defaultStep(in units: Units) -> Weight }        // lb: barbell 5, others 2.5 · kg: barbell 2.5, others 1.25
+    public func defaultStep(in units: Units) -> Weight }        // lb: barbell 5, others 2.5 · kg: barbell 2.5, others 1.25 (kettlebell 5 lb / 2 kg since decision #22)
 public enum MuscleGroup: String, Codable, Sendable, CaseIterable { case chest, back, shoulders, quads, hamstrings, glutes, calves, biceps, triceps, forearms, core }
 public enum MovementPattern: String, Codable, Sendable, CaseIterable { case horizontalPush, horizontalPull, verticalPush, verticalPull, squat, hinge, lunge, carry, isolation, core }
 public enum Progression: String, Codable, Sendable, CaseIterable { case linear, double, fixed }

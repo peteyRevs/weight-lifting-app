@@ -74,6 +74,7 @@ read -r -t 60 _ <>"$(dirname "$0")/../hang/started"
 SH
 stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-graph'
 stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins'
+stub "$SB/scripts/check-catalog-version.sh" 'log catalog-version; fail_if catalog-version'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
 stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; fail_if script-test-a'
@@ -96,7 +97,7 @@ lifecycle() {
 I=46F7C9EA-B38C-445A-BAD9-8A70A603E9E1 W=2416B270-8634-4D4A-9084-2B04B4498921 # the defaults, on the xcode-27 image
 
 FULL="xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
-package-pins script-test-a script-test-b \
+package-pins catalog-version script-test-a script-test-b \
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR \
 simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
@@ -317,6 +318,12 @@ FAIL_AT=package-pins run --lint-only
 check "W48 --lint-only runs the package pins check after the graph check, and a mismatch fails it there" \
     is "$code $calls" "1 xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint \
 package-graph package-pins "
+# F03 fix round 1: the catalog-version check follows the pins check in step 2 of every mode that lints;
+# W02 and W04 show the full gate runs it in order and stops on it.
+FAIL_AT=catalog-version run --lint-only
+check "W57 --lint-only runs the catalog-version check after the pins check, and a failing one fails it there" \
+    is "$code $calls" "1 xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint \
+package-graph package-pins catalog-version "
 
 # ---- --record-snapshots: F06's run_plan keeps going after a failing plan, if tests ran ----------
 # The fake xcrun's `xcresulttool get test-results summary` reports $XCRUN_TEST_COUNT tests (1).
