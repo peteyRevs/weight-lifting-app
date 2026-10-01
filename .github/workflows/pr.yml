@@ -1,5 +1,6 @@
-# The PR gate (docs/ci-cd.md §2): one macOS job runs scripts/check.sh --ios-only as a developer does,
-# within the free macOS minutes (Pete, 2026-09-27): docs-only PRs start no Mac; new pushes cancel old runs.
+# The PR gate (docs/ci-cd.md §2): scripts/check.sh as a developer runs it, split in two to spend fewer paid
+# macOS minutes (Pete, 2026-09-27 and 2026-09-30): a Linux job runs the static checks, then one macOS job
+# builds and tests iOS. Docs-only PRs start neither; new pushes cancel old runs.
 name: PR
 
 on:
@@ -50,15 +51,38 @@ jobs:
           if [[ $code == false ]]; then echo "::notice::Docs-only change: Check is skipped."; fi
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
+  static:
+    name: Static checks
+    needs: scope
+    if: needs.scope.outputs.code != 'false' # as Check: a missing output runs it
+    # Format, lint, the package graph and pins, and every script suite that runs anywhere, at a tenth of
+    # the macOS rate. The suites that need macOS ("# needs macOS:", scripts/tests/adversarial/run.sh) run
+    # in Check. Same tool versions as the Mac: mise.toml.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: Format, lint, package graph and pins, script tests (check.sh --static-only)
+        env:
+          # SwiftLint's Linux build loads SourceKit (libsourcekitdInProc.so) from here, the image's Swift
+          # toolchain. Without the library SwiftLint 0.65.1 stops with a fatal error; were the custom rules
+          # skipped instead, the lint-rules*.test.sh fixtures, which expect them to fire, would fail.
+          LINUX_SOURCEKIT_LIB_PATH: /usr/share/swift/usr/lib
+        run: scripts/check.sh --static-only
+
   check:
     name: Check
-    needs: scope
+    # After Static checks: a lint failure then costs no macOS minutes. Check is skipped, and the run is red.
+    needs: [scope, static]
     if: needs.scope.outputs.code != 'false' # a missing output runs Check
     # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). macos-26
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 47 # the step's 42, plus checkout, Xcode, mise, both caches and the failure upload
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,14 +99,34 @@ jobs:
           # An exact key only, no restore-keys: xcodebuild trusts checkouts over Package.resolved, so
           # another run's checkouts would let a stale one build (F32 notes, "Package pins").
           key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      # Compiled output, reused across runs: Xcode's compilation cache (LEDGER_COMPILATION_CACHE below). Each
+      # entry's key hashes the compiler, its arguments and every input's contents, so a fresh checkout's
+      # mtimes cannot fool it and a changed file always compiles. That makes restore-keys safe here, unlike
+      # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
+      # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
+      # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one.
+      # A PR's first run has nothing to restore; its later pushes and re-runs do (docs/ci-cd.md,
+      # "Compilation cache").
+      - name: Restore compiled output (Xcode compilation cache)
+        id: compilation-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
+          # The key without the commit: the newest cache this run may read, its PR's first, then main's.
+          restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
       # iOS only (Pete, 2026-09-30): F32's first run here reached the deadline below in the watchOS tests,
       # after a cold 684 s iOS build. watchOS stays in the full local gate, green before every merge
-      # (docs/ci-cd.md §4), and in the nightly.
-      - name: Format, lint, script tests, iOS, coverage (check.sh --ios-only)
-        timeout-minutes: 27 # fails the step before the job times out, so the bundles still upload
+      # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
+      # macOS run here.
+      - name: iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
+        timeout-minutes: 42 # fails the step before the job times out, so the bundles still upload
         env:
-          LEDGER_XCODEBUILD_DEADLINE: 1500 # s: 2 min before that, check.sh interrupts xcodebuild (bundle finalized)
-        run: scripts/check.sh --ios-only
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 2400, not
+          # 1500: a slow runner's cold build took 1,104 s, and one run hit 1,500 s only for that.
+          LEDGER_XCODEBUILD_DEADLINE: 2400
+          LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
+        run: scripts/check.sh --ios-only --skip-static
       - name: Upload result bundles and snapshot diffs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -94,3 +138,11 @@ jobs:
           include-hidden-files: true # both live under .derivedData/
           if-no-files-found: ignore
           retention-days: 7
+      # After a red run too, so the push that fixes it starts warm; the cache holds only finished
+      # compilations, each under its inputs' hash. Not when cancelled: a newer push is already running.
+      - name: Save compiled output
+        if: ${{ !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: ${{ steps.compilation-cache.outputs.cache-primary-key }}

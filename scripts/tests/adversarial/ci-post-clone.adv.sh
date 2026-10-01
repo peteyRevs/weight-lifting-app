@@ -2,6 +2,7 @@
 # ci_scripts/ci_post_clone.sh: Xcode Cloud runs it from ci_scripts/ after cloning;
 # it must set CURRENT_PROJECT_VERSION = CI_BUILD_NUMBER for BOTH apps (criterion 7)
 # and refuse to write a build number App Store Connect would reject.
+# needs macOS: PC12 asks xcodebuild -showBuildSettings for both apps' build number.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 

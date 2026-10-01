@@ -2,6 +2,7 @@
 # scripts/coverage-gate.sh against hostile xccov reports and threshold files.
 # Reports are built here in the shape `xcrun xccov view --report --json` prints
 # (targets[].files[] with an absolute path, coveredLines, executableLines).
+# needs macOS: C27 runs the real xccov (xcrun) on an empty bundle.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 

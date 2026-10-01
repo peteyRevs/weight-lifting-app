@@ -77,13 +77,13 @@ stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins
 stub "$SB/scripts/check-catalog-version.sh" 'log catalog-version; fail_if catalog-version'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
-stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; fail_if script-test-a'
-stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; fail_if script-test-b'
+stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-a'
+stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-b'
 
 # run [flags...]: the sandboxed check.sh; sets $code, $out and $calls (ids only; simctl's simulator
 # lookups, list and unpair, are sim-destination.sh's and pinned by W23-W27).
 run() {
-    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"; : >"$LOG.diag"
+    : >"$LOG"; : >"$LOG.args"; : >"$LOG.env"; : >"$LOG.diag"; : >"$LOG.suites"
     out="$(PATH="$SB/bin:$PATH" "$SB/scripts/check.sh" "$@" 2>&1)"
     code=$?
     calls="$(awk '$1 == "simctl" { if ($2 != "list" && $2 != "unpair") print "simctl-" $2; next } { print $1 }' "$LOG" |
@@ -281,7 +281,7 @@ PATH="$SB/bin:$PATH" "$SB/scripts/bootstrap.sh" >/dev/null 2>&1 # stops later, a
 check "W41 bootstrap.sh stops at the same check with the same message, and passes the pinned Xcode on to mise" \
     is "$code $bootstrap_calls| $(head -2 "$LOG" | tr '\n' ' ')| $bootstrap_msg" "1 xcode-version | xcode-version mise-install | $pinned_msg"
 check "W42 one copy of the check: check.sh step 0 and bootstrap.sh both run scripts/check-xcode-version.sh" \
-    is "$(grep -c '^scripts/check-xcode-version\.sh' "$ROOT/scripts/check.sh" "$ROOT/scripts/bootstrap.sh" | tr '\n' ' ')$(grep -lF 'xcodebuild -version' "$ROOT"/scripts/*.sh | tr '\n' ' ')" \
+    is "$(grep -c '^ *scripts/check-xcode-version\.sh' "$ROOT/scripts/check.sh" "$ROOT/scripts/bootstrap.sh" | tr '\n' ' ')$(grep -lF 'xcodebuild -version' "$ROOT"/scripts/*.sh | tr '\n' ' ')" \
     "$ROOT/scripts/check.sh:1 $ROOT/scripts/bootstrap.sh:1 $ROOT/scripts/check-xcode-version.sh "
 
 # ---- F32: packages resolve only to the committed Package.resolved (Swift 6.4 rewrote a pin) --------
@@ -395,6 +395,77 @@ run --ios-only --record-snapshots
 check "W56 --ios-only --record-snapshots records on the iPhone alone, lists the references, exits 1 unchecked" \
     is "$code $(record_log) $(grep '^test-without-building' "$LOG.env" | tr '\n' ';') $(grep -c '^git status' "$LOG") \
 $(grep -c '^check-test-results\|^coverage-gate' "$LOG")" "1 $ios_only test-without-building-Ledger all; 1 0"
+
+# ---- PR CI's split (ci-efficiency notes): static checks on Linux, the rest on macOS ------------------
+STATIC_CALLS="mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
+package-pins catalog-version script-test-a script-test-b "
+XCODE_REPORTS=26.6 run --static-only
+check "W58 --static-only runs steps 1-2 (no Xcode check: Linux has none), even with another Xcode on PATH" \
+    is "$code $calls|$(grep -c 'check\.sh (--static-only) OK' <<<"$out")" "0 $STATIC_CALLS|1"
+check "W59 ... and its script tests run the portable half of the adversarial suites" \
+    is "$(sort -u "$LOG.suites" | tr '\n' ' ')" "portable "
+for id in $STATIC_CALLS; do
+    FAIL_AT="$id" run --static-only
+    expect_exit "W60 --static-only: failure at $id fails" nonzero "$code"
+done
+run; full_suites="$(sort -u "$LOG.suites" | tr '\n' ' ')"
+run --lint-only
+check "W61 the full gate and --lint-only run every suite (LEDGER_ADV_SUITES unset)" \
+    is "$full_suites|$(sort -u "$LOG.suites" | tr '\n' ' ')" "unset |unset "
+# This suite runs in the portable half, so on Linux it inherits LEDGER_ADV_SUITES=portable from the outer
+# check.sh --static-only; a developer's shell may export one too. Neither narrows the gate.
+LEDGER_ADV_SUITES=portable run; full_suites="$(sort -u "$LOG.suites" | tr '\n' ' ')"
+LEDGER_ADV_SUITES=macos run --lint-only
+check "W69 ... whatever LEDGER_ADV_SUITES the caller exports: only --static-only picks a half" \
+    is "$full_suites|$(sort -u "$LOG.suites" | tr '\n' ' ')" "unset |unset "
+# --skip-static runs scripts/tests/adversarial.test.sh itself, with the macOS half; a stub stands in here
+# (only for these cases: the full gate's loop would run it too, and W02's list does not have it).
+stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial'
+run --ios-only --skip-static
+check "W62 --ios-only --skip-static (Check): step 0, the macOS script suites, then iOS and coverage; no format or lint" \
+    is "$code $calls" "0 xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos ${IOS_CALLS#*script-test-b }"
+FAIL_AT=adversarial run --ios-only --skip-static
+check "W63 ... and a failing macOS suite stops it before the iOS build" \
+    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos "
+rm "$SB/scripts/tests/adversarial.test.sh"
+rejected=""
+for flags in "--static-only --fast" "--static-only --lint-only" "--static-only --skip-lint" "--static-only --ios-only" \
+    "--static-only --record-snapshots" "--static-only --skip-static" "--skip-static --skip-lint" "--lint-only --skip-static"; do
+    run $flags
+    rejected="$rejected$code$(grep -c '^error: contradictory flags' <<<"$out")${calls:+ $calls} "
+done
+check "W64 --static-only with any other flag, and --skip-static with --skip-lint or --lint-only, exit 2 before any step" \
+    is "$rejected" "21 21 21 21 21 21 21 21 "
+# Xcode's compilation cache: on only where pr.yml sets LEDGER_COMPILATION_CACHE=YES, and only on the builds.
+cached() { grep -E '^(build-for-testing|test-without-building) ' "$LOG.args" | awk '{ print $1 ":" (/ COMPILATION_CACHE_ENABLE_CACHING=YES( |$)/ ? "on" : "off") }' | tr '\n' ' '; }
+LEDGER_COMPILATION_CACHE=YES run; on="$code $(cached)"
+run; off="$(cached)"
+LEDGER_COMPILATION_CACHE=1 run
+check "W65 LEDGER_COMPILATION_CACHE=YES turns caching on for both builds and nothing else; unset (local) or 1, off" \
+    is "$on|$off|$(cached)" "0 build-for-testing:on test-without-building:off build-for-testing:on test-without-building:off |\
+build-for-testing:off test-without-building:off build-for-testing:off test-without-building:off |\
+build-for-testing:off test-without-building:off build-for-testing:off test-without-building:off "
+
+# adversarial/run.sh picks the half: fake suites, one marked as needing macOS, in a copy of the runner.
+RS="$ADV_TMP/runner"
+mkdir -p "$RS"
+cp "${ADV_RUN_SH:-$ROOT/scripts/tests/adversarial/run.sh}" "$RS/run.sh"
+printf '#!/usr/bin/env bash\necho ran-portable\n' >"$RS/portable.adv.sh"
+printf '#!/usr/bin/env bash\n# needs macOS: a case runs xcrun\necho ran-macos\nexit "${MAC_FAILS:-0}"\n' >"$RS/mac.adv.sh"
+printf '#!/usr/bin/env bash\n# a comment that mentions # needs macOS: in passing\necho ran-mentions\n' >"$RS/mentions.adv.sh"
+suites() { # [LEDGER_ADV_SUITES] [filter]: the exit code and which fake suites ran
+    local o c
+    o="$(LEDGER_ADV_SUITES="${1-}" bash "$RS/run.sh" ${2:+"$2"} 2>&1)"; c=$?
+    printf '%s %s' "$c" "$(grep '^ran-' <<<"$o" | tr '\n' ' ')"
+}
+check "W66 run.sh: portable skips the suites marked \"# needs macOS:\", macos runs only those, unset or all runs every one" \
+    is "$(suites portable)|$(suites macos)|$(suites)|$(suites all)" \
+    "0 ran-mentions ran-portable |0 ran-macos |0 ran-macos ran-mentions ran-portable |0 ran-macos ran-mentions ran-portable "
+check "W67 run.sh: a failing macOS suite fails the macos half; a typo in the half exits 2; no suite matched exits 1" \
+    is "$(MAC_FAILS=1 suites macos)|$(suites portabel)|$(suites macos portable)" "1 ran-macos |2 |1 "
+marked="$(grep -l '^# needs macOS: ' "$ROOT"/scripts/tests/adversarial/*.adv.sh | xargs -n1 basename | tr '\n' ' ')"
+check "W68 the suites that need macOS, which run only on the Mac in PR CI, are exactly these four (each says why)" \
+    is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh xcode27.adv.sh "
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be
