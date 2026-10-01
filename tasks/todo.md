@@ -5,7 +5,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blo
 Plan documents: `docs/architecture.md` · `docs/engineering-standards.md` ·
 `docs/testing-strategy.md` · `docs/ci-cd.md` · `docs/subagent-workflow.md` ·
 `docs/product-spec.md` · `docs/product-decisions.md` · `docs/adr/` · `docs/research/`
-Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none approved yet.
+Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; M0's approved with the milestone (2026-09-24).
 
 ---
 
@@ -21,7 +21,7 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
   - [x] Xcode ▸ Settings ▸ Accounts: signed in (`Apple Development: Peter Arevalo` certificate issued 2026-09-22).
   - [x] Enrolled in the Apple Developer Program as an individual (2026-09-22).
   - [x] Team ID `95JAK545DF` recorded in `Config/Base.xcconfig`; confirmed paid Individual team (Xcode defaults, 2026-09-26).
-  - [ ] Register explicit App IDs: `com.petearevalo.Ledger` (HealthKit) and `com.petearevalo.Ledger.watchkitapp` (HealthKit). Xcode Cloud needs the watch ID registered by hand (R3 §4).
+  - [x] App IDs `com.petearevalo.Ledger` and `com.petearevalo.Ledger.watchkitapp` exist (registered by Xcode; found 2026-09-29). **Pete:** confirm HealthKit is ticked on both before F16.
   - [ ] Register iCloud container `iCloud.com.petearevalo.Ledger` (assigned to the iOS App ID in F28; App Group added in F21/F22).
 - [x] Create the GitHub repository (private) and push `main`. (2026-09-18: github.com/peteyRevs/weight-lifting-app)
 - [x] Approve starting M0. (Pete, 2026-09-24)
@@ -39,14 +39,15 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; none ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [x] F00 (#1, #3) · [~] F01 (#5) · [x] F02 (#2 → #3) · [ ] F03 · [~] F04 · [ ] F05 · [~] F06 (slice 1 #6; slices 2–3 open) · [ ] F07
+- [x] F00 (#1, #3) · [x] F01 (#5) · [x] F02 (#2 → #3) · [x] F03 (#14) · [x] F04 (#8) · [~] F05 (S1 #13; S2 in review; S3 open) · [x] F06 (#6, #11, #15) · [ ] F07
 
-### Status — 2026-09-29
+### Status — 2026-10-01
 
-- **F06 slice 1 merged** (#6, `12b03c2`): tokens, Archivo width axis (risk R2 closed), pixel snapshots, design lint. Slice 1 failed G2 three times; Pete re-planned: native `.lineHeight` only, and the design lint is a frozen tripwire (standards §7). **Pete, in Xcode:** delete the dangling `Fonts` synchronized group.
-- **F01** (#5): CI run 1 failed on an ambiguous watch destination (fixed: simulators by UDID). Run 2 timed out: parallel testing cloned never-booted simulators, and their first boots held up the app-hosted tests. Fixed: boot during the build, then `test-without-building` with parallel testing off. Run 3 on `4df4439`. G5 stops for Pete (ADR-006, releases, Xcode Cloud).
-- **F04** (branch `feat/F04-workout-engine`): G2 failed three times as fix rounds grew sync machinery. Pete re-planned: both devices stay fully live; "+30s" never shortens a running rest; one haptic per catch-up; validation without time windows; F04 frozen. Received envelopes always rebuild by replay (ADR-004). Final fix round, then a close-out round on the fixes only, then review.
-- **Process:** the PR size rule is now a 500-line code target with a split above ~1,000 (standards §10, Pete).
+- **On `main`:** F00–F04, F05 slice 1 (schema, exact columns, event store), F06 (all three slices) and F32 (Xcode 27.0 / Swift 6.4, pulled forward from M5 on 2026-09-29 after the App Store replaced Xcode 26.6). Released: v0.2.0. Release PR #12 (0.3.0) is open and is Pete's to merge.
+- **F05** ships in three slices: S1 merged (#13); S2 (exercise and program repositories, catalog seeding and upgrades) is through its fix rounds and next to open as a PR; S3 (history and stats queries) follows. F07 starts when F05 is whole.
+- **CI:** PR CI runs iOS only on the `xcode-27` preview runner (risk R4); watchOS is tested by the full local gate before every merge. Actions is paid since 2026-09-30 with a $60 monthly limit, so a PR is pushed once, after a green local gate. A CI efficiency change (static checks on Linux, Xcode's compilation cache, a longer deadline) is in progress.
+- **Process:** the PR size rule is a 500-line code target with a split above ~1,000 (standards §10, Pete, 2026-09-29). Merging is delegated to the orchestrator unless a PR carries a product or architecture decision (workflow G5).
+- **Open for Pete:** the iCloud container (before F28); Xcode Cloud workflows (before F30); in Xcode, delete the dangling `Fonts` synchronized group if it is still there.
 
 ### F00 delivery — merged 2026-09-27 (#1; the gate's result check landed via #3)
 
@@ -143,7 +144,7 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 | F31 | App Store release: assets, metadata, phased release | F30 |
 | F32 | Xcode 27 / Swift 6.4 migration (before April 2027 SDK requirement) | hosted-runner availability |
 
-- [ ] F31 · [ ] F32
+- [ ] F31 · [x] F32 (#10, done early: see M0 status)
 
 ---
 
