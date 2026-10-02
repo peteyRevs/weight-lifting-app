@@ -8,9 +8,10 @@ import LedgerDomain
 /// 1. Seed `base()`: one row per catalog exercise.
 /// 2. Save `custom`, the lifter's own exercise, then seed `base()` again at the same version: no
 ///    new rows, and `custom` is untouched.
-/// 3. Seed `upgrade()`, one version higher: `added` is inserted. `clash` is a new catalog entry
-///    named like `custom` in another case, so "existing names are not duplicated" means it is not
-///    inserted, and `custom` is still untouched.
+/// 3. Seed `upgrade()`, one version higher: `added` is inserted, and so is `clash`, a new catalog
+///    entry named like `custom` in another case. A catalog id is never skipped over a name clash
+///    (F05 S2), and `custom` is still untouched. Existing catalog rows are refreshed in place
+///    (decision #24).
 public enum CatalogSeedFixture {
     /// A catalog as `seedIfNeeded` receives it.
     public struct Catalog: Equatable, Sendable {
@@ -23,7 +24,7 @@ public enum CatalogSeedFixture {
         try Catalog(version: ExerciseCatalog.version, exercises: ExerciseCatalog.seed())
     }
 
-    /// `base()` plus `added` and `clash`, one version higher: an additive upgrade.
+    /// `base()` plus `added` and `clash`, one version higher.
     public static func upgrade() throws -> Catalog {
         let base = try base()
         return Catalog(version: base.version + 1, exercises: base.exercises + [added, clash])

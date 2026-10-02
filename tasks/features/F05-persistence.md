@@ -101,7 +101,7 @@ public struct GRDBExerciseRepository: ExerciseRepository { public init(_ db: Dat
 12. Given a future migration `v002` added in a test, when migrating a database created at v001 with data, then data survives (scaffold `MigrationCompatibilityTests` iterating over committed `fixtures/db-v001.sqlite`).
 
 ## Test plan
-- Integration (LedgerPersistenceTests): `SchemaTests`, `ExerciseRepositoryTests` (search by prefix/equipment/muscle, custom save, seed idempotence), `ProgramRepositoryTests`, `WorkoutRepositoryTests` (materialize atomicity, updateSets re-materializes `e1rm_grams`, delete cascades), `StatsQueriesTests` (criteria 4–6, PR history, sessions this week, recentlyLogged order), `WorkoutEventStoreTests` (7, 8, and F04's contract suite: "Inputs from F04"), `ObservationTests` (10), `MigrationCompatibilityTests` (12), `StatsQueriesPerformanceTests` (9, `.slow`).
+- Integration (LedgerPersistenceTests): `SchemaTests`, `ExerciseRepositoryTests` (search per product decision #23 with the equipment and muscle filters, custom save, seed idempotence, upgrades per decision #24), `ProgramRepositoryTests`, `WorkoutRepositoryTests` (materialize atomicity, updateSets re-materializes `e1rm_grams`, delete cascades), `StatsQueriesTests` (criteria 4–6, PR history, sessions this week, recentlyLogged order), `WorkoutEventStoreTests` (7, 8, and F04's contract suite: "Inputs from F04"), `ObservationTests` (10), `MigrationCompatibilityTests` (12), `StatsQueriesPerformanceTests` (9, `.slow`).
 - Seeders in LedgerTestSupport: `Seeders.history(exercises:workouts:setsPerWorkout:rng:)`.
 - Snapshot / UI: none.
 

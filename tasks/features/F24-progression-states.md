@@ -49,3 +49,8 @@ Inherits `docs/engineering-standards.md` §12.
 
 ---
 _Filled in by agents during delivery:_ `F24-progression-states/{implementation-notes,test-findings,review}.md`
+
+## Inputs from F05 (2026-09-30)
+- `NextBlock.rollForward` must mint new program, week, day and slot ids from an injected UUID source
+  (engineering-standards §4), so its signature above gains one. Every id is a row id shared by all programs:
+  `ProgramRepository.save` refuses a block that keeps its source's ids (`duplicateIdentifier`; F05 S2 review B1).

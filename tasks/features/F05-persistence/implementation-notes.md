@@ -428,3 +428,502 @@ N1–N9), at `0131cc7` (main `2bcb442` merged in).
     It is not a gap in the code, and a clean build should drop it; worth knowing if the watch number ever
     looks odd.
 - **The Device plans** were not re-run: this round did not change them.
+
+## Slice S2
+
+The catalog and programs, on `feat/F05-s2` (from `main` 1db1cf9, which holds S1). Closes criteria 2 and 11.
+Schema v001 is unchanged: everything fits it.
+
+### What landed
+
+- `LedgerPersistence/Records/`:
+  - `SyncedRecord.swift`: the protocol every row of a synced table conforms to, `upsert` and the child diff
+    `write(_:over:in:at:)`;
+  - `ColumnReader.swift`: strict column reads, and `JSONArray`;
+  - `ExerciseRecord.swift`, `ProgramRecords.swift` (program, week, day template), `SlotRecords.swift` (slot, miss);
+  - `ProgramRows.swift`: a program as its rows, the save diff and the load.
+- `LedgerPersistence/Repositories/GRDBExerciseRepository.swift` (with `ExerciseSearch`) and
+  `GRDBProgramRepository.swift`.
+- `LedgerPersistenceError`: two new cases, `duplicateIdentifier` and `missingRow`, and the documentation of the
+  errors that reach callers unwrapped (review N8).
+- `LedgerTestSupport/Persistence/`: `Seeders` (`catalog(count:version:)`, `program(…)`), and the contracts
+  `ExerciseRepositoryContract` (8 clauses) and `ProgramRepositoryContract` (6), on a shared `ContractClause`.
+- Docs: product decision #23, a line in F12's brief, and "Inputs from F05" in F07's brief.
+
+### Decisions and deviations
+
+1. **Search (Pete, 2026-09-30; product decision #23).** The query matches a substring anywhere in the name,
+   and also the short name.
+   - It ignores case and diacritics: both sides are trimmed and folded with `.caseInsensitive` and
+     `.diacriticInsensitive`, `locale: nil`, so the result is the same in every locale.
+   - The equipment filter and the muscle filter combine with the text. The muscle filter is the **primary
+     muscle** only (my reading: the prototype has one muscle per exercise; F12 maps its pills to groups).
+   - Aliases are not stored or searched.
+   - The text is matched in Swift, never in SQL, so `%` and `_` are plain characters (contract clause
+     `searchWildcards`). SQL filters `deleted_at`, equipment and muscle.
+   - Only rows whose name or short name match are decoded, which took the median search from 5.3 ms to
+     1.5 ms on the host.
+   - `all()`, `search` and `observeAll` return name order: the folded name, then the id.
+2. **Seeding (criterion 11, with the orchestrator's rule of 2026-09-30).** *Amended in fix round 1 (SF1,
+   product decision #24): an upgrade now also refreshes the live catalog rows it lists; see "S2 fix round 1".*
+   - The applied version is `MAX(catalog_version)` over catalog rows. `seedIfNeeded` does nothing unless the
+     given version is higher, so the same version twice, or a lower one, changes nothing. *(Fix round 1: read
+     strictly, so a value that is not an integer throws `malformedColumn`.)*
+   - An upgrade inserts every entry whose id is not stored. *(Fix round 1: a live catalog row of an older
+     version that the catalog lists is refreshed in place.)* A deleted row is never written again, so re-seeding
+     never duplicates or revives a catalog row.
+   - **An entry is never skipped over a name.** An entry named like a stored exercise, custom or not, is
+     inserted by its id beside it, and the clash is logged at notice level. Alternatives, program templates
+     and history refer to catalog ids, so every one must exist (orchestrator, from F03's adversarial round).
+     "Existing names are not duplicated" means catalog rows are not duplicated.
+   - Every catalog row the catalog lists then records the new version. So the applied version moves up even
+     when an upgrade adds nothing (a content-only bump), and a later launch does no work. Catalog rows are
+     never synced (architecture §7), so this metadata write needs no `updated_at`. *(Fix round 1: only the rows
+     it inserts or refreshes; deleted rows keep their version.)*
+   - Custom rows are never written (`… AND is_custom = 0`). Every entry is stored as a catalog row, whatever
+     its `isCustom` says.
+   - ~~An upgrade only adds~~ *(superseded by decision #24)*: an entry a later catalog drops stays, with its old
+     version and content.
+   - It all runs in one write transaction. An inexact start load throws `inexactWeight`, and the entries
+     written before it roll back.
+3. **Soft deletes (ADR-002, architecture §7).**
+   - A save soft-deletes the weeks, days, slots and misses a program no longer has, setting `deleted_at` and
+     `updated_at`. `delete(_:)` does the same to the program and all its rows, in one transaction.
+   - Every read skips deleted rows.
+   - Saving a program again revives its rows, with the same ids and their `created_at`.
+   - Deleting an unknown program does nothing. Hard deletes are F29's.
+4. **The diff.**
+   - `ProgramRows.write` reads the program's live rows from all five tables before writing any, since
+     soft-deleting a day first would hide its slots. It then writes parents first, so every foreign key an
+     insert names already exists.
+   - Each record is compared with its stored row **as column values**, never decoded. An unchanged row is
+     left alone and keeps its `updated_at`. A new or changed one is upserted (`INSERT … ON CONFLICT (id) DO
+     UPDATE`, with `created_at` written once and `deleted_at` cleared).
+   - Because nothing is decoded, a save repairs a damaged row rather than failing on it, as S1's event store
+     does.
+   - Only rows that change get a new `updated_at`, which is what M4's last-writer-wins sync needs.
+   - `save` with `isActive` makes every other program inactive. `setActive` flips only the flags that change;
+     an unknown or deleted program throws `missingRow`.
+   - If a sync ever leaves two programs active, `active()` returns the one updated last.
+5. **Re-validation (F02 review N2).**
+   - `save` rebuilds every slot through `Slot.init` and the program through `Program.init` before it
+     writes, so a `var` assigned out of range throws `SlotValidationError` or `ProgramValidationError`.
+   - Every read validates the same way. A stored value out of range throws the same errors, never a crash.
+   - The domain errors are not wrapped (the call N8 left to S2): the same error means the same thing
+     whether it was caught on save or on load.
+   - Two weeks, days, slots or misses with one id throw `duplicateIdentifier`, since both would land in one
+     row. `Program.init` does not check ids.
+   - A slot whose exercise is not stored fails the `slot.exercise_id` foreign key, and the whole save rolls
+     back. F07 must seed the catalog before any program is saved.
+6. **Strict column reads.** A damaged-row test showed that GRDB's `Int64` conversion **truncates a `REAL`**:
+   an `_e7g` weight of 1.5 read as 1, with no error. `ColumnReader` therefore accepts:
+   - for an integer column, only `INTEGER` storage that fits the type (on arm64_32, `Int` is 32 bits);
+   - for a flag, only an integer;
+   - for text, `TEXT` or a `BLOB` holding UTF-8;
+   - for an enum or an id, only a value it can parse;
+   - for a JSON array, only JSON that decodes.
+
+   Anything else throws `malformedColumn("table.column")` or `malformedIdentifier`. **For S3:** read the
+   history columns through `ColumnReader`. S1's `payload_version` reads use GRDB's `Int` conversion, so
+   `2.5` reads as 2; `DamagedColumnAdversarialTests` pins that it then throws `unknownPayloadVersion(2)`.
+7. **Unreadable exercise rows follow S1's event rows.** A row with a muscle group a later version added, or
+   with damage, is left out of `all()`, `search` and `observeAll`, logged with its id, and kept.
+   `exercise(id:)` throws by name. A program, by contrast, is one aggregate: any bad row makes `active()`
+   and `program(id:)` throw, and ends `observeActive`. Leaving a slot out would let the next save delete it.
+8. **`slot_miss.id` is derived**: the RFC 9562 name-based UUID (version 5, SHA-1, via CryptoKit) of the week
+   index in the slot's namespace.
+   - One miss has one id on every device, so a sync merges the two copies rather than keeping both.
+     ADR-002 allows no `UNIQUE` constraint to prevent the duplicate.
+   - A miss removed and added again revives its row.
+   - The repository needs no UUID source.
+9. **JSON array columns** (`secondary_muscles`, `curated_alternatives`) go through `JSONArray`, a `Codable`
+   `DatabaseValueConvertible`. GRDB writes it as JSON **text**, e.g. `["triceps","shoulders"]`.
+   `String(decoding:as:)` is refused by the lint, and the failable initializer would leave an unreachable
+   branch.
+10. **`program(id:)`** is public on `GRDBProgramRepository` but not on the protocol, so the Domain is
+    unchanged. Criterion 2 loads inactive programs with it; F11 may promote it.
+11. **Contracts (for F07's fakes).**
+    - `ContractClause<Repository>` generalises S1's `WorkoutEventStoreContract.Clause`, which is unchanged.
+    - The two new contracts use public API only.
+    - A program clause needs a repository that accepts `ProgramRepositoryContract.exercises`; a GRDB one
+      needs them seeded first, because of the foreign key.
+12. **Timing** follows S1's `MigrationTimingTests`. `CatalogTimingTests` (`.performance`, nightly lane only)
+    times seeding 214 synthetic entries into a new **file** database, against `PerformanceBudget.catalogSeed`
+    (300 ms), and a search over 221 rows against `exerciseSearch` (10 ms, F12's per-keystroke budget). Each
+    uses the median of 5 runs after a warm-up, and attaches it to the result bundle. The PR lanes assert no
+    wall-clock time.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 2. program 8 × 4 round trip with misses | `ProgramRepositoryTests.eightByFour_roundTripsEqual_includingMisses` (active and inactive, by `active()` and `program(id:)`); contract clause `roundTrip` |
+| 11. seed idempotent, custom kept, additive upgrade, no duplicates | contract clauses `seedIdempotent`, `seedUpgrade`, `seedNameClash` (a custom exercise named like an entry: both exist, the catalog id resolves); `ExerciseRepositoryTests.seed_writesCatalogRows_withTheirVersion`, `upgrade_recordsItsVersion_evenWhenItAddsNothing`, `seed_neverRevivesADeletedCatalogRow`, `seed_214Entries_storesThemAll`, `inexactStartLoad_isRefused` (rollback) |
+| Search (decision #23) | contract clauses `searchText` (a substring mid-name, a short name, case, diacritics and blanks, no match, blank query), `searchFilters` (with equipment and muscle), `searchWildcards` (`%`, `_`, `B%h`) |
+| Diff in one transaction | `ProgramRepositoryTests.partialUpdate_diffsChildren` (row counts; unchanged rows keep `updated_at`; removed ones soft-deleted in one stamp), `failedSave_changesNothing` (a foreign-key failure on the last slot leaves every row as it was); contract clause `saveReplaces` |
+| Re-validation, and invalid stored data as an error | contract clause `revalidates`; `DamagedProgramRowTests` (18 damages across the five tables: `Slot`/`Program` validation errors, `malformedColumn`, `malformedIdentifier`; reads throw, `observeActive` ends, the row is kept, a save repairs it); `DamagedExerciseRowTests` (9 damages, and a malformed id) |
+| Active program, delete | contract clauses `oneActive`, `deleteHides`; `ProgramSoftDeleteTests` (soft delete and revival, `setActive` touching only changed rows, derived miss ids); `ProgramRepositoryTests.setActive_unknownProgram_throws`, `duplicateIdentifiers_areRefused`, `inexactLoad_isRefused` |
+| Observation, on the watch simulator too | `ObservationTests` (3 tests: emissions per change and none for an unchanged write), contract clauses `observeAll` and `observeActive`; all run in PR-Watch |
+| Seeding time on the watch (risk) | `CatalogTimingTests` (nightly), measured by hand below |
+| Columns as documented | `ExerciseRepositoryTests.save_writesTheDocumentedColumns`, `ProgramRepositoryTests.save_writesTheDocumentedColumns` |
+
+### Code lines
+
+Measured as in S1: non-blank Swift lines that are not whole-line `//` or `///` comments, SQL strings included,
+in product sources only. Counted with a script over `git ls-files --others` plus the added lines of
+`git diff -- LedgerKit/Sources`.
+
+- **684 lines, over the 500 target** (standards §10: under ~1,000, so no forced split). The plan estimated ~380.
+- New files: 682.
+  - `Records/`: `ProgramRows` 127, `ProgramRecords` 121, `SlotRecords` 82, `ColumnReader` 70, `SyncedRecord` 51,
+    `ExerciseRecord` 43.
+  - `Repositories/`: `GRDBExerciseRepository` 120, `GRDBProgramRepository` 68.
+- `LedgerPersistenceError`: +2.
+- Not counted: `LedgerTestSupport` 455 (seeders and the two contracts), tests 672, docs.
+- **Why above the estimate:**
+  - strict reads (`ColumnReader`, decision 6);
+  - soft deletes and the row diff (`SyncedRecord`, `ProgramRows.write`);
+  - four record types written out column by column, one per line.
+- **The split considered:** (a) the record layer (`SyncedRecord`, `ColumnReader`) and exercises, about 285
+  lines, closing criterion 11; then (b) programs, about 400, closing criterion 2. Rejected:
+  - (a) would ship `SyncedRecord.write`, the diff, with no caller, so its tests would move to (b);
+  - the slice plan pairs the two criteria in S2;
+  - a second PR costs another full gate and review round for about 285 lines.
+
+  It remains a clean seam if the orchestrator prefers it.
+
+### Gate and coverage (2026-09-30, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0)
+
+- **`scripts/check.sh --fast`: green.** `LedgerPersistenceTests` 130 tests on the host (then 132, with the two
+  coverage tests below); `LedgerDomainTests` 689.
+- **Full gate, through the lock: green** (`scripts/check.sh`, 300 s; log `scratchpad/f05s2-check.log`).
+  - Format, lint, package graph and pins, and script tests: OK.
+  - **17/17** PR targets passed on iOS, and **8/8** PR-Watch targets on watchOS.
+  - `LedgerPersistenceTests`, on each simulator: 125 passed, and 4 skipped by design. The skips are the
+    protection read-back and three nightly timings.
+- **Coverage:** LedgerPersistence **99.46 %** (1110/1116; threshold 90), LedgerDomain 98.99 %, LedgerDesign
+  96.46 %, overall 98.48 %.
+  - The 6 lines are closures that never run:
+    - the two `now: Date.init` default arguments (tests inject a clock);
+    - `SyncedRecord.write`'s `uniquingKeysWith:` (ids are primary keys);
+    - the `slotsByDay[…, default: []]` fallback;
+    - two fallbacks for a name or id that is not UTF-8.
+  - After that run I added two tests that exercise the last three: `emptyParts_roundTripEqual` (a day with no
+    slots) and two damages (`name = x'80'`, and an id `x'80'`).
+- **Re-run after those test-only additions:** see "Final gate" below.
+
+### Final gate (orchestrator, 2026-09-30, on the tree as committed)
+
+- The implementer's session ended before its re-run. The orchestrator ran `scripts/check.sh` through the lock on
+  the final tree: **OK in 289 s**. 17/17 PR targets on iOS and 8/8 PR-Watch targets on watchOS passed.
+- **Coverage:** LedgerPersistence **99.73 %** (1113/1116), LedgerDomain 98.99 %, LedgerDesign 96.46 %.
+  - The 3 lines still uncovered are the two `now: Date.init` default arguments and `SyncedRecord.write`'s
+    `uniquingKeysWith:`.
+
+### Watch seeding timing, by hand (`Nightly-Watch` plan, Apple Watch Series 12 (46mm) simulator, 27.0)
+
+`-only-testing:LedgerPersistenceTests/CatalogTimingTests`; log `scratchpad/f05s2-timing.log`, attachments exported
+from `scratchpad/f05s2-timing.xcresult`. Both tests passed.
+
+- **Seeding 214 entries into a new file database: median 9.2 ms** (runs 9.1–9.5 ms; warm-up 11.5 ms), against
+  the 300 ms budget. F05's risk ("seed after the first frame if > 300 ms") does not trigger. F07 can seed
+  during launch; its "Inputs from F05" says so.
+- **Search ("press") over 221 rows: median 1.75 ms** (warm-up 3.6 ms), against 10 ms.
+- Host, debug: seeding 9.6 ms, search 1.5 ms (5.3 ms before rows were matched before decoding).
+- The simulator runs on the Mac's CPU, so this rules out a design problem but is not the watch's figure. F20's
+  device protocol should time a real first launch, as for S1's migration.
+
+### How to verify by hand
+
+1. `scripts/check.sh --fast`: on the host, `LedgerPersistenceTests` passes (132 tests, the timings skipped).
+2. Criterion 2: `swift test --package-path LedgerKit --filter ProgramRepositoryTests`. Look at
+   `eightByFour_roundTripsEqual_includingMisses` and `partialUpdate_diffsChildren`; its expected row counts are
+   worked out in its comments.
+3. Criterion 11 and search: `swift test --package-path LedgerKit --filter ExerciseRepositoryTests`. The contract
+   clauses are listed by name, e.g. `seedNameClash` and `searchWildcards`.
+4. The diff bites. Make each change below, run `swift test --package-path LedgerKit --filter
+   'ProgramRepositoryTests|ProgramSoftDeleteTests'`, and revert:
+   - In `SyncedRecord.write`, always upsert (drop the unchanged `continue`): `partialUpdate_diffsChildren` fails
+     (unchanged rows get a new `updated_at`).
+   - Drop the soft-delete loop: `saveReplaces`, `deleteHides` and the row counts fail.
+5. Strict reads bite: in `ColumnReader.integer`, use `Value.fromDatabaseValue` instead. The `start_load_e7g =
+   0.5` and `sets = 3.5` damages then read as 0 and 3 and fail.
+6. Watch timing: under the simulator lock, run `xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch
+   -testPlan Nightly-Watch -destination "$(scripts/sim-destination.sh 'platform=watchOS Simulator,name=Apple
+   Watch Series 12 (46mm),OS=27.0')" -derivedDataPath .derivedData -clonedSourcePackagesDirPath
+   .derivedData/SourcePackages -onlyUsePackageVersionsFromResolvedFile
+   -only-testing:LedgerPersistenceTests/CatalogTimingTests -resultBundlePath /tmp/seed.xcresult`. Then run
+   `xcrun xcresulttool export attachments --path /tmp/seed.xcresult --output-path /tmp/att`; the
+   `catalog-seed` and `exercise-search` texts hold the medians.
+7. Full gate: `scripts/check.sh`, through the shared lock.
+
+### S2 fix round 1 (2026-09-30): the adversarial round and the review
+
+Inputs: `test-findings.md` "# Slice S2 — adversarial round 1" (S2-1 to S2-4) and `review.md` "# Slice S2 review"
+(B1, SF1–SF3, N1–N8), at `ec6da47`. Every decision below was made by the orchestrator or Pete before the round.
+
+**B1 / S2-1 (blocking): a save never takes over another program's rows.**
+- **Change.** `ProgramRows.write` reads the stored rows, then, before any upsert, `refuseOtherProgramsIDs` looks
+  up the incoming week, day and slot ids under any *other* program, live or deleted (slots through their
+  day). A hit throws `duplicateIdentifier("<table> <id>")` and the transaction rolls back. Misses are covered,
+  because their ids derive from the slot's. Re-saving or reviving the program's own rows is unaffected: the
+  lookup excludes its own `program_id`.
+- **Contract.** New clause `otherProgramsIDs`: a second program naming the first one's slot, day or week id
+  is refused by name, and the first program reads back unchanged; after the first is deleted, the slot is
+  still refused, and saving the first again restores it whole.
+- **F24.** Its brief gains "Inputs from F05": `NextBlock.rollForward` mints new program, week, day and slot ids
+  from an injected UUID source.
+- **Tests.** The tester's `ProgramIdentityAdversarialTests.idsOfAnotherProgram_areRefused` (slot, day, week) and
+  `idsOfADeletedProgram_areRefused` now pass, as does the clause.
+
+**S2-2: the applied catalog version is read strictly.** `appliedVersion` reads `MAX(catalog_version)` through
+`ColumnReader.optionalInteger`, so anything but `INTEGER` (or `NULL` before the first seed) throws
+`malformedColumn("exercise.catalog_version")`. Test: `DamagedExerciseRowTests.damagedCatalogVersion_throwsByName`
+(`9.3e18`, `1.5`, `'v1'`, `x'01'`: throws by name, seeds nothing); the tester's `damagedCatalogVersion_neverTraps`
+passes (it accepts either outcome).
+
+**S2-3: a blob id is repaired like a text id.** Of the two options I took keying, because it is the more general
+one. `SyncedRecord.write` keys stored rows by their `id` **value as stored** (`DatabaseValue`), whatever its
+storage class, and soft-deletes a removed row by that same value. A blob id, valid UTF-8 or not, matches no
+record and is soft-deleted, so the save repairs the program. Before, the blob was keyed as text, and the soft
+delete then bound the key as text, which never matches a `BLOB`. Test: the tester's
+`ProgramWeightAdversarialTests.saveOverDamagedID_repairs("x'00'")` now passes, beside `'nope'` and `7`.
+
+**S2-4 (decided: refuse, don't truncate).**
+- **Change.** A new case, `LedgerPersistenceError.nulInText("table.column")`. The check is in one place,
+  `SyncedRecord`'s private `upsert`, which every record write goes through: exercises (save and seed) and all
+  five program tables. Text holding U+0000 throws before the statement runs, and the transaction rolls back.
+  Other control characters are stored whole.
+- **Tests.** `NulTextTests`: exercise name and short name, by save and by seed; a day's name and tag; other
+  control characters round-trip.
+- **The one change to the tester's tests:** `ProgramRoundTripAdversarialTests.nul_cutsTheName` documented the
+  cut. It now expects `nulInText("program.name")` and no rows written. Its name stayed; its title and doc
+  comment say what changed and why.
+
+**SF1 (Pete, 2026-09-30): catalog upgrades refresh catalog rows in place. Product decision #24.**
+- **Change.** `seedIfNeeded`, when `version` is above the applied one, writes:
+  - every entry whose id is not stored (an insert, as before, never skipped over a name);
+  - every entry whose id is a **live** row with `is_custom = 0` and `catalog_version < version`.
+  Both go through `ExerciseRecord.write`, the same diff programs use. So a refreshed row keeps its `id` and
+  `created_at`, and its `updated_at` moves only if its content changed. Each row written then records
+  `version`. Custom rows, deleted rows and rows the catalog no longer lists are not written at all, and keep
+  their old version.
+- **One rule I added, which needs the orchestrator's confirmation: a lifter's `save` clears
+  `catalog_version`.** The tester's `ExerciseSeedingAdversarialTests.upgrade_leavesStoredRowsAsTheyAre` saves
+  an edit of a catalog exercise (`isCustom` false), then upgrades, and expects the edit to survive. Under
+  decision #24 as worded, that row is a live catalog row of an older version, so it would be refreshed and
+  the test would fail, and I may not change it. With the version cleared, a saved row is the lifter's, and
+  `catalog_version < version` excludes it, so the decision's own selection rule stays as worded.
+  - Clearing is metadata like the seed's mark: it never moves `updated_at`.
+  - Product-wise it changes nothing today, since F12 edits custom exercises only.
+  - If the orchestrator prefers the plain reading, drop the one `UPDATE` in `save`, and the tester's test
+    and the clause `seedLeavesTheLifters` need changing.
+- **Duplicate ids in one catalog** keep the "last entry wins" behaviour the tester documents: the entries are
+  made unique by id first (see N3).
+- **Contract.** Two new clauses:
+  - `seedRefresh`: a corrected entry reads back corrected, an unlisted one stays, and a same-version reseed
+    changes nothing;
+  - `seedLeavesTheLifters`: a custom exercise holding a catalog id, and a catalog exercise the lifter saved,
+    survive an upgrade that changes them.
+  `seedUpgrade` is reworded ("adds the new ids without duplicating one").
+- **GRDB tests** (`CatalogUpgradeTests`):
+  - `upgrade_refreshesListedCatalogRows_inPlace`: per row, `created_at`, `updated_at`, version and a load, for a
+    corrected, an unchanged, an unlisted and a new entry;
+  - `upgrade_leavesADeletedCatalogRow`: the deleted row is byte for byte unchanged, its version included;
+  - `save_ofACatalogExercise_clearsItsVersion`.
+- **Docs.**
+  - `docs/product-decisions.md` #24, right after #23.
+  - Decision 2 above is amended.
+  - The protocol doc of `seedIfNeeded` is reworded.
+  - F07's seeding line now says the seed also refreshes. F03's files are untouched (PR #14 rewords them).
+
+**SF2 (decided: the rule moves into LedgerDomain; an approved exception to the brief's "no Domain type
+changes").**
+- **Change.** A new public, pure, Foundation-only helper, `LedgerDomain/Rules/ExerciseSearch.swift`:
+  - `key(_:)`;
+  - `matches(_:query:)`, and `matches(name:shortName:needle:)` for undecoded rows;
+  - the comparator `isInNameOrder(_:_:)`, and `sorted(_:)`, which folds each name once.
+  Persistence's internal copy is deleted. `GRDBExerciseRepository` matches rows before decoding through
+  `matches(name:shortName:needle:)` and orders with `sorted`.
+- **The contract** drops its `String.folded` copy, which also lacked the trim, and takes its expected order
+  from `ExerciseSearch.sorted`.
+- **Briefs.** F12's line now says that `search` takes one primary muscle, so the group pills filter
+  `observeAll()` in memory through `ExerciseSearch`, mapping each pill to its `MuscleGroup` set. F07's inputs
+  point the fakes at the helper.
+- **Tests.** `LedgerDomainTests/Rules/ExerciseSearchTests` (key, matching, name order: the comparator and
+  `sorted` agree), plus every search clause.
+
+**SF3: behaviour the fakes must share is now contract, and the protocols say it.**
+- **New clauses:**
+  - `ProgramRepositoryContract.setActiveMissing` (`missingRow` for an unsaved and a deleted program);
+  - `duplicateChildren` (`duplicateIdentifier` for a slot, a day and a week id used twice; nothing saved);
+  - `otherProgramsIDs` (B1);
+  - `ExerciseRepositoryContract.seedCatalogRows` (an entry marked custom is stored as a catalog row).
+  The new program clauses are in `ProgramRepositoryContract+Identity.swift`; the contract imports
+  `LedgerPersistence` for the error.
+- **Clause counts.** The exercise contract now has 11 clauses and the program contract 9.
+- **Protocol docs** (`LedgerDomain/Protocols/Repositories.swift`):
+  - `ExerciseRepository`: `all` (name order), `search` (`ExerciseSearch`, decision #23), `save` (a saved
+    exercise is the lifter's), `seedIfNeeded` (decision #24, replacing "Seeds or additively upgrades"),
+    `observeAll`;
+  - `ProgramRepository`: `save` (what it throws; nothing written on failure), `setActive` (`missingRow`),
+    `delete` (soft, and it makes the program inactive).
+
+**Nits.**
+
+| Nit | Done? | Change, and the test that pins it |
+|---|---|---|
+| N1 exercise `save` stamps an unchanged row | Done | `save` reads the live row and goes through `ExerciseRecord.write`, which skips an unchanged row. `save_writesTheDocumentedColumns` now checks that an identical save keeps `updated_at` and a changed one moves it. |
+| N2 `delete` leaves `is_active = 1` | Done | `delete` clears the flag on the live row, in the same transaction, before the soft delete. `ProgramSoftDeleteTests.delete_clearsTheActiveFlag`: the flag reads 0, and a sync-style revival with a later stamp leaves the other program active. |
+| N3 duplicate ids in one catalog | **Skipped** | The fix (throw `duplicateIdentifier`) contradicts the tester's `ExerciseSeedingAdversarialTests.duplicateIDsInTheCatalog`, a "(documents)" test pinning "the last entry wins", and item 4 is the only tester test I may change. Today the seed makes entries unique by id (the last wins) before its diff, so behaviour is unchanged. Throwing instead is a one-line change in `seedIfNeeded` plus that test, if the orchestrator wants it. F03 validates unique ids, so only a broken bundle reaches this. |
+| N4 "unchanged write emits nothing" could not fail | Done | `observeAll` and `observeActive` build their observation in `allObservation()` and `activeObservation()` (typed `DistinctObservation`). `ObservationTests` starts those same observations into an **unbuffered** stream, then makes a write that changes no value (`UPDATE … SET x = x`) before a real change. A spurious emission would now be read first. Mutant: `removeDuplicates(by: { _, _ in false })` fails both tests. |
+| N5 `Seeders` traps on inputs it accepts | Done | `program` and `slot` throw `Seeders.UnsupportedShape(parameter:value:)` outside the documented ranges: `days` 0–7, `slotsPerDay` 0–32, a slot `position` 0–31, and a non-empty `exercises`. I chose throwing over `precondition` because the functions already throw, and a trap cannot be tested on the simulators. `SeedersTests` covers each bound, and that the largest shape builds with distinct ids. |
+| N6 F07's lines | Done | F07's lines now have `try await … seedIfNeeded(ExerciseCatalog.seed(), …)` and the failure path. F05 recommends logging at fault level and carrying on, since the seed rolls back and retries next launch; F07 decides. The simulator caveat stays: F20 times a real watch. |
+| N7 F05 brief "search by prefix" | Done | The test plan points at decisions #23 and #24. |
+| N8 `rpe_x2` through `NSDecimalNumber.intValue` | **Skipped** | `RPE` holds whole half-points 10…20, for which `intValue` is exact. The review's first fix exposes `RPE`'s half-points in Domain, an API change outside the approved SF2 exception. The other, a rounded conversion with a `guard`, adds a branch no test can reach (coverage). Revisit if `RPE` ever gains a public half-point accessor. |
+
+**Mutation check (host, one at a time, file restored after each; scratchpad `f05s2-fix1-mut/`).** Every
+mutant was killed:
+
+| Mutant | Killed by |
+|---|---|
+| B1: no `refuseOtherProgramsIDs` | tester's two identity tests; clause `otherProgramsIDs` |
+| S2-2: the original lenient `Int.fetchOne` | `damagedCatalogVersion_throwsByName` |
+| S2-3: the original text keying | tester's `saveOverDamagedID_repairs` (`x'00'`) |
+| S2-4: no NUL check | `NulTextTests` (2), tester's `nul_cutsTheName` |
+| SF1: no refresh / no clearing on save / refreshing deleted rows / refreshing custom rows / stamping every refreshed row | `CatalogUpgradeTests` and clauses `seedRefresh`, `seedLeavesTheLifters`; tester's `upgrade_leavesStoredRowsAsTheyAre` and `idClash_leavesTheCustomRow`; `upgrade_recordsItsVersion_evenWhenItAddsNothing` |
+| SF2: no diacritic folding / no id tie-break | `ExerciseSearchTests`; clause `searchText` |
+| SF3: `setActive` without its check / no duplicate check / seed keeps `isCustom` | clauses `setActiveMissing`, `duplicateChildren`, `seedCatalogRows` |
+| N1, N2, N4 (each observation), N5 | the tests named in the nit table |
+
+**Code lines** (same method as above; it reproduces 684 at `641e4b2`): **775**, up 91 (target 500, split
+threshold ~1,000).
+- `GRDBExerciseRepository` 147 (+27: refresh, strict version, save through the diff, the observation);
+- `ProgramRows` 152 (+25: B1);
+- `ExerciseSearch` (LedgerDomain, new) 25; the old copy in `GRDBExerciseRepository` is gone, inside its +27;
+- `GRDBProgramRepository` 75 (+7: N2, the observation);
+- `SyncedRecord` 54 (+3: the NUL check; the unused instance `upsert` is removed);
+- `LedgerPersistenceError` +1, `DistinctObservation` +3.
+- Not counted: `LedgerTestSupport` (three clauses for programs, three for exercises, `UnsupportedShape`),
+  tests, docs.
+
+**Gate after fix round 1 (2026-09-30, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0):**
+- **`scripts/check.sh --fast`: green.** On the host, `LedgerPersistenceTests` has 214 tests. That includes the
+  tester's four former failures, now passing, and the timing tests, skipped. `ExerciseSearchTests` has 3.
+- **Full gate, through the lock: green, exit 0** (344 s; log `scratchpad/f05s2-fix1.log`).
+  - Format, lint, the package graph and pins, and the script tests: OK.
+  - **17/17** PR targets passed on iOS, and **8/8** PR-Watch targets on watchOS.
+  - `LedgerPersistenceTests` on each simulator: **209 passed, 4 skipped** by design (the protection
+    read-back and three nightly timings).
+- **Coverage:** LedgerPersistence **99.91 %** (1189/1190), LedgerDomain 99.00 %, LedgerDesign 96.46 %,
+  overall 98.64 %.
+- These notes were finished after the gate. They are docs only.
+
+### S2 fix round 2 (2026-09-30): S2-5, the review's nits, the search key, F03 criterion 8
+
+Inputs: `test-findings.md` "# Slice S2 — close-out round" (S2-5, S2-N1, S2-N2), `review.md` "# Slice S2 review —
+fix round 1" (N-a to N-d), and F03 criterion 8, which is F05's now that F03 is on `main` (merged at `07fb6c8`).
+Every fix was checked by a mutant: the fix undone, the named test seen failing, the file restored (host, one at a
+time; script and results in scratchpad `f05s2-fix2-mut/`).
+
+**S2-5 (minor bug): a save repairs a week or day whose `program_id` names no program again.**
+- **Change.** As the tester proposed: the three owner queries of `refuseOtherProgramsIDs` count a row as another
+  program's only when its `program_id` (a slot: its day's) names a **stored** program, live or deleted:
+  `AND program_id IN (SELECT id FROM program)`. A dangling or blob `program_id` is damage, so the upsert writes
+  it back, as before fix round 1. The error now always names a real program's row.
+- **Test.** The tester's `ProgramIdentityCloseoutAdversarialTests.danglingParent_isRepairedBySave` (4 cases)
+  passes; it failed 3 of 4 before. Mutant (the filter removed): that test fails, and only it. The ten takeover
+  tests and every B1 test still pass.
+
+**N-a: NUL is now contract, and F11 and F12 refuse control characters.**
+- **Contract.** Two clauses named `refusesNul`:
+  - exercises: a name, then a short name, holding U+0000 throws `nulInText("exercise.name")` /
+    `("exercise.short_name")`, and so does a seed with one such entry; `all()` is then still `[landmine]`;
+  - programs: a program name, a day name, a day tag (edits of a stored program), and a new active program's name
+    throw `nulInText` by column; `active()` is still the stored program.
+
+  The exercise contract now imports LedgerPersistence, as the program contract already did. Clause counts: 13
+  for exercises, 10 for programs.
+- **Briefs.** F12's `CustomExerciseDraft` name rule and a new "Names" line in F11's domain section: refuse
+  control characters (Unicode `Cc`, U+0000 included) before `save`. The error copy is left to F12 and F11.
+- **Protocol docs.** `ExerciseRepository.save` and `ProgramRepository.save` name `nulInText`.
+- **Mutant** (the NUL check off): both `refusesNul` clauses fail.
+
+**N-b: `otherProgramsIDs` covers a slot a live program dropped.** Before the delete, the clause saves the first
+program with day 0's first slot removed and expects the second program's copy of that slot to throw
+`duplicateIdentifier("slot …")`. Mutant (slot owners counted only while live, or under a deleted program, which
+is the fake the review describes): the clause fails.
+
+**N-c: writes run in one order on every launch.**
+- **Changes.**
+  - `seedIfNeeded` dedupes with a seen-set over the reversed catalog and restores the catalog's order. The last
+    entry of a repeated id still wins, at its last position. Inserts, refreshes, version marks and clash logs
+    follow the catalog.
+  - `SyncedRecord.write` soft-deletes removed rows in `stored`'s order, which is each query's `ORDER BY`.
+- **Tests.**
+  - `CatalogUpgradeTests.seed_writesInCatalogOrder`: rowid order equals the bundled catalog's order.
+  - `ProgramSoftDeleteTests.softDeletes_runInStoredOrder`: a statement trace (`Repositories.statements`)
+    of `delete` shows the 20 slot soft deletes in `position, id` order.
+- **Mutants** (the `Dictionary(…).values` seed, the `storedByID.keys` deletes): each fails its test.
+
+**N-d: the doc of `seedIfNeeded`** now says the applied version moves up whenever the upgrade writes a row;
+otherwise the next launch checks again, as a no-op. Docs only.
+
+**S2-N1 and S2-N2: the search key folds width, and folds before it trims.**
+- **Change.** `ExerciseSearch.key` is now
+  `folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)`, then
+  `trimmingCharacters(in: .whitespacesAndNewlines)`. Fullwidth `ＢＥＮＣＨ` finds "Bench", and the blank that folding
+  uncovers in `"bench \u{301}"` is trimmed.
+- **`ı` and `Ø`: left as they are, by choice.** They are letters, not a base letter plus a mark, so
+  Foundation's locale-neutral folding keeps them. Mapping them would need a transliteration (`Latin-ASCII`) or
+  a hand table. The first also rewrites `ß`, ligatures and more, at a cost on every key. The second is a list
+  to maintain. Neither is trivial and safe, and the catalog is English. `ExerciseSearch`'s doc says so.
+- **Residue, documented in no test.** One fold is not always idempotent: a run of two or more lone combining
+  marks after a blank loses one mark per pass, and so do halfwidth kana sound marks. No keyboard types these,
+  and the tester's laws property test still passes. Folding to a fixed point would cost a second fold on every
+  key.
+- **Decision #23's row** now reads "ignoring case, diacritics and character width". F12's line, the contract
+  clause `searchText` (a new fullwidth `ＲＤＬ` case) and the GRDB doc comments follow it.
+- **Tests.**
+  - `ExerciseSearchTests.key_foldsWidth_thenTrims`: fullwidth letters, the uncovered blank, a key being its own
+    key, and `ı`/`Ø` kept;
+  - a fullwidth case in `matches_nameOrShortName`;
+  - the contract's `searchText`.
+
+  Mutants: without `.widthInsensitive`, those tests and the clause fail; trimming first, the key test fails.
+- **The one change to the tester's tests.** `ExerciseSearchCloseoutAdversarialTests` pinned the old behaviour
+  "(documents)", so it changes with the decision, as `nul_cutsTheName` did for S2-4:
+  - the two fullwidth folding cases now expect a match;
+  - `blankWithAMark_isNotTrimmed` now expects the blank trimmed (its name is kept; its title and doc say
+    why);
+  - the suite's doc comment records the change.
+
+  Every other case, `ı`, `Ø`, inner blanks and U+200B included, is unchanged.
+
+**F03 criterion 8: the seed contract against `CatalogSeedFixture`.**
+- **Contract clause `seedBundledCatalog`.** It follows the fixture's doc-comment scenario on the real catalog:
+  - `base()` seeds one exercise per entry, and `all()` equals the entries;
+  - after `custom` is saved, seeding `base()` again changes nothing;
+  - `upgrade()` adds `added` and `clash`, `clash` despite its name, and leaves `custom` as it was.
+- **GRDB test `CatalogUpgradeTests.bundledCatalog_upgradeStampsOnlyNewRows`.** Decision #24's refresh on 224
+  rows:
+  - the 224 base rows keep `created_at` and `updated_at`, and only `catalog_version` moves to the upgrade's;
+  - the two new rows carry the upgrade's stamp;
+  - the custom row stays byte for byte.
+- **Mutants.**
+  - A clash entry skipped: `seedBundledCatalog` and `seedNameClash` fail.
+  - The refresh stamping every row: the GRDB test and `upgrade_refreshesListedCatalogRows_inPlace` fail.
+
+**Skipped:** nothing. All four nits were cheap, and none conflicted with a tester's test.
+
+**Code lines** (same method; it reproduces 775 at `07fb6c8` against `main` 7740bd9): **777**, up 2 (target 500,
+split threshold ~1,000). The S2-5 filter and the seed's dedupe are written out one clause per line; the N-c change
+replaced a dictionary with a filter at no net cost. Not counted: `LedgerTestSupport` (+3 clauses), tests and docs.
+
+**Gate (orchestrator, 2026-10-01, on the tree as committed; Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0).**
+The round was cut off by a restart before its gate, so the orchestrator ran it: full `scripts/check.sh` exit 0
+in 460 s (iOS tests 180 s, watchOS tests 126 s). Coverage: LedgerPersistence **99.91 %** (1190/1191),
+LedgerDomain 99.05 %, LedgerDesign 97.20 %, overall 98.52 %. `ProgramIdentityCloseoutAdversarialTests`
+(S2-5's `danglingParent_isRepairedBySave` among them) and the search suites pass on the host too, which is the
+tester's condition for closing G2. The mutant results named above were in a scratchpad the restart removed; the
+tests they were checked against are in the tree.

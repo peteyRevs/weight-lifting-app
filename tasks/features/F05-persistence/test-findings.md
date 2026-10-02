@@ -540,3 +540,415 @@ ran one at a time in a copy of `LedgerKit` in the scratchpad (`f05r3-mut/`), nev
 the screen locked, and on both simulators (full gate above). The fix round's one test gap in SF1, unpinned enum
 values, is closed by `PayloadV1SpellingAdversarialTests`. No bug, no minor bug and no spec question remain. The
 F28 input line and the `typeof` clause are optional, cheap follow-ups.
+
+---
+
+# Slice S2 — adversarial round 1
+
+Independent adversarial pass over `feat/F05-s2` at `641e4b2` (S2: `GRDBExerciseRepository`, `GRDBProgramRepository`,
+their records, `ColumnReader`, `SyncedRecord`, the two contracts and `Seeders`). I wrote the tests from the brief
+(criteria 2 and 11), product decisions #9, #18 and #23, ADR-002, ADR-007, spec §6.1 and §7.1–§7.7, the S1 code and
+tests on `main`, and the public interfaces and doc comments of the S2 code. I did not read
+`implementation-notes.md`, the implementer's S2 tests or the contract bodies until my tests were written; I read
+them and the product code afterwards, to find root causes and to separate documented decisions from findings. No
+product code was edited. The mutants below ran one at a time in a copy of `LedgerKit` in the scratchpad
+(`f05s2-mut/`), never in the worktree.
+
+**Convention** (as in S1): a failing test is a bug or a minor bug and stays in the branch as a regression test; a
+spec question is pinned by a passing test marked "(documents)".
+
+## What I wrote
+
+73 tests (3 property tests, tagged `.property`) in 15 files under `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/`,
+plus three support files (`S2Fixtures`, `S2Database`, `ProgramEditModel`). None is `.slow`: the whole set runs in
+about 3 s on the host. No wall-clock assertion; the observation tests synchronise on the stream only. The fixtures
+are my own (`S2Kit`), not `Seeders`, so they cannot share a blind spot with the implementer's.
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `ProgramRoundTripAdversarialTests` | 8 | criterion 2: 8 × 4 × 6 slots with misses through `active()`, `program(id:)` and a second repository, with exactly its live rows; a second identical save changes no byte; misses at −1, 99, `Int.min`, `Int.max`; days reversed, empty, unscheduled, one day on all seven weekdays; no days; emoji, combining marks, SQL, `%`/`_`/`\`, 10 000 characters; civil extremes 0001-01-01 and 9999-12-31, a leap day, every goal, `daysPerWeek` nil, 0, −1, `Int.min`/`.max`; a NUL (documents) |
+| `ProgramEditAdversarialTests` | 7 | a slot moved to another day while its old day is removed, in one save; slots swapped across days; a slot, day, week and miss removed, then re-added with the same ids; 12 random reorders of days, slots and schedules; 2 → 20 → 2 weeks; a failed save (unknown exercise in the last slot) leaves every byte; 9 slot and 5 program `var` mutations refused at save with nothing written |
+| `ProgramEditModelAdversarialTests` + `ProgramEditModel` | 1 (property, 200 seeds) | a random builder session of 8 saves (1–3 edits each: fields, adds, removals, moves across days, reorders, days and weeks added or removed, misses toggled, ids removed earlier added back, header changes; a delete then re-save at step 5): every save reads back equal with exactly its live row counts, no live row under a deleted parent, and a fresh repository agrees |
+| `ProgramTimestampAdversarialTests` | 5 | ADR-002's sync columns: one slot's edit moves only that slot's `updated_at`; a removed slot and its misses get `deleted_at` = `updated_at` = the save's time; `delete` moves `updated_at` on every row; a re-added slot clears `deleted_at` and keeps `created_at`; ISO 8601 UTC text |
+| `ProgramLifecycleAdversarialTests` | 8 | one active program across saves; an inactive save of the active program; `setActive` switching and repeated; `missingRow` for unknown and deleted ids; deleting the active program, twice, and an unknown id; a re-save after delete, whole and edited; delete scoped to its program; two live active rows (documents) |
+| `ProgramIdentityAdversarialTests` | 3 | duplicate slot (across days and within one), day and week ids in one program; a second program reusing the first one's slot, day or week id (finding S2-1); reusing a deleted program's slot id |
+| `ProgramWeightAdversarialTests` | 4 | ADR-007 on `start_load_e7g`/`step_e7g`: `Int64.max`, 1 unit, 1,000 lb on a 2.5 lb step, 1,250 g, stored as the exact count; NULL for nil; beyond `Int64`, ⅛ lb, 0.001 lb, 10⁻⁸ g, ⅓ g refused as `inexactWeight(value)` with every byte kept; a save over a damaged slot id (finding S2-3) |
+| `ExerciseSeedingAdversarialTests` | 9 | criterion 11: the same version twice (and a bigger catalog at it) changes no byte; entries read back equal; 1 → 2 additive, then 1 and 2 again change nothing, then 3; entries named like the custom one in other case and accents are all seeded; an entry holding a custom row's id leaves it; an inexact entry seeds nothing and the version stays unapplied; one id twice (documents); a lifter's edit and a deleted catalog row survive an upgrade; 8 racing seeds of versions 1 and 2 |
+| `ExerciseSearchAdversarialTests` | 6 (40 query cases) | decision #23: substrings mid-name, short names, case, diacritics both ways, precomposed and decomposed both ways, `%`, `_`, `\`, `[`, `*`, `?`, quotes, emoji; no match across name and short name; trimmed blanks, internal double spaces; empty, spaces, tabs and newlines with a filter; equipment and muscle by AND; primary muscle only; ß ⇄ ss (documents); `all()` order; deleted rows |
+| `ExerciseSearchPropertyAdversarialTests` | 1 (property, 60 seeds) | random names from 28 pieces (accented, decomposed, Turkish i, ligature, final sigma, ǅ, wildcards, emoji); queries cut from them and re-cased or stripped; `search` equals the folded-substring oracle, in `all()` order, with and without an equipment filter |
+| `ExerciseRoundTripAdversarialTests` | 6 | no loads, one unit only, `Int64` extremes, 10⁻⁷ g, negative loads; duplicate and ordered secondary muscles and alternatives; empty and 5 000-character text; every equipment × muscle; every 7th hundredth of a pound to 1,500 lb and 1.25 kg steps against the integer oracle (h × 45,359,237); inexact loads refused, the stored row kept; upsert and revival; `all()` order under 50 shuffled insert orders with folded ties |
+| `DamagedExerciseAdversarialTests` | 4 (31 damages) | unknown enums, bad JSON arrays (`[`, `null`, `{}`, `[1]`, unknown muscle, bad ids), REAL and text and blob loads, `±9.3e18`, flags `0.5`/`'yes'`/blob, non-UTF-8 names, malformed ids: left out of `all()`, `search` (filtered or not) and `observeAll()`, `exercise(id:)` throws; the row kept through a seed and another save; flags of 2 and −1 (documents); a damaged `catalog_version` (finding S2-2) |
+| `DamagedProgramAdversarialTests` | 4 (65 damages) | every table: bad civil dates, unknown goal and progression, fractional, text, blob and out-of-range integers, RPE ×2 of 9/21/17.5, rest 31 and 29.5, negative and zero steps, fractional loads, dangling and malformed schedule ids, bad slot and miss ids: `program(id:)` throws, `active()` throws or is nil, never a different program, the other program unaffected; a damaged active program ends `observeActive()`; a save repairs; flags of 2 (documents) |
+| `RepositoryObservationAdversarialTests` | 3 | `observeActive()` through saves, a change to `slot_miss` alone, `setActive`, delete and re-save; a position-only edit by another repository; `observeAll()` through a save, a seed, another writer's soft delete and a damaged row (the stream goes on) |
+| `RepositoryConcurrencyAdversarialTests` | 4 | both repositories `Sendable` across tasks; 16 racing saves of different edits leave exactly one, with exactly its rows; readers racing 16 saves see only whole programs; 8 racing `setActive` calls leave one active |
+
+## Results
+
+- **Host** (`swift test --filter LedgerPersistenceTests`): 204 tests, **200 pass, 4 fail**, all 4 mine and all
+  expected (findings S2-1 to S2-3). My 73: 69 pass, 4 fail: the slot, day and week cases of one test, one of six `catalog_version` cases, one of three
+  id cases, and one plain test.
+  The implementer's and S1's tests all pass beside mine. Format and `swiftlint --strict` pass with my files.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`, Xcode 27.0, 188 s; log: scratchpad `f05s2-g2.log`):
+  **exit 65**, as expected. Tools, format, lint, the package graph and pins, and the script tests pass. The iOS
+  `PR` plan ran 1,106 tests: 1,096 passed, 6 skipped, and 4 failed, exactly my four (S2-1 to S2-3). `set -e` then
+  stopped the gate before watchOS and coverage.
+- **watchOS, run separately** (the same destination and derived data, `PR-Watch` with
+  `-only-testing:LedgerPersistenceTests`, through the lock; log: scratchpad `f05s2-watch.log`): 203 tests, 195
+  passed, 4 skipped by design, and 4 failed, the same four. My files add no compiler warning on either platform.
+- **Mutants of the S2 code** (16, one at a time, host tests of `LedgerPersistenceTests`; results: scratchpad
+  `f05s2-mut/results.txt`). My tests kill all 16. The implementer's tests and contracts kill 11; these 5 are
+  caught only by mine:
+  - **M04**, a soft delete that leaves `updated_at` alone. A sync keyed on `updated_at` (M4) would never send the
+    deletion. (The implementer's `partialUpdate_diffsChildren` checks `deleted_at` only.)
+  - **M09**, **M10**, slots or days read back in id order instead of `position`. The implementer's fixtures create
+    ids in position order, so the order is never tested apart from the ids.
+  - **M14**, the applied catalog version taken as `MIN` instead of `MAX` of `catalog_version`.
+  - **M15**, `all()` sorted by folded name only, with no id tie-break: equal folded names ("Élévation",
+    "elevation", "ELEVATION") then come back in insertion order.
+
+  The others: search without trimming (M01), without diacritic folding (M02), on the name only (M03); an upsert
+  that never revives (M05); a diff that rewrites every row (M06); seeding that skips a name clash (M07), ignores
+  the version (M08), or overwrites stored ids (M13); misses never soft-deleted (M11); `setActive` that does not
+  clear the others (M12); `%` and `_` as wildcards (M16).
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | S2-1 |
+| minor bug | 2 | S2-2, S2-3 |
+| spec question | 1 | S2-4 |
+
+**Verdict:** G2 cannot close for S2 yet. Criteria 2 and 11 and decision #23 hold on the host and on both simulators.
+But S2-1 is a real bug: a program saved with another program's ids silently corrupts that program, the active
+one included. S2-2 and S2-3 are small fixes to strict reads. S2-4 is for the orchestrator.
+
+---
+
+## S2-1. bug — A program that reuses another program's slot, day or week id takes that row, silently
+
+`save` diffs a program against **its own** live rows only (`ProgramRows.write` reads them by `program_id`). A
+record whose id is not among them counts as new, and `SyncedRecord.upsert` writes it with
+`INSERT … ON CONFLICT (id) DO UPDATE SET program_id = excluded.program_id, …, deleted_at = NULL`. When the id
+already belongs to another program, live or deleted, that row is moved into the program being saved. No error is
+thrown. `duplicateIdentifier` covers only ids repeated inside one program.
+
+Consequences, all observed:
+- **A taken slot:** program 1 loses the slot. Program 2 then reads program 1's misses for that slot as its own:
+  they are joined through the slot id, and program 2 saved none. So neither program reads back as saved.
+- **A taken day:** program 1 is unreadable. Its weeks still schedule the day, which now belongs to program 2, so
+  `active()` throws `danglingSchedule` on every launch, and `observeActive()` ends. Program 2 reads program 1's
+  slots in that day as its own.
+- **A taken week:** program 1 is unreadable (`nonContiguousWeeks([1, 2])`).
+- **A deleted program's id:** program 2 takes the soft-deleted row and revives it. Restoring program 1 later
+  (`save` after `delete`) silently takes it back, and program 2 loses the slot.
+
+**Reach.** Every id is a primary key shared by all programs, and `Program.init` checks no ids. Rule 18's "Start
+next block" (repeat with +progression, F11) copies a block. A copy that keeps its days' or slots' ids is an easy
+slip, and it would corrupt the block it copied, the active one, with no error at save time. A sync merge (M4) that
+moves a row between programs is the same shape.
+
+**Repro** (fails): `ProgramIdentityAdversarialTests.idsOfAnotherProgram_areRefused` (slot, day, week) and
+`idsOfADeletedProgram_areRefused`:
+```swift
+try await programs.save(first)                       // active
+var days = second.days
+days[0].slots[0] = try first.days[0].slots[0].with(sets: 1, misses: [])
+try await programs.save(second.rebuilt(days: days))  // expected: throws; actual: succeeds
+try await programs.active() == first                 // expected: true; actual: one slot short
+// a taken day instead: active() throws danglingSchedule(weekIndex: 0, …)
+```
+**Expected:** the save throws (for example `duplicateIdentifier("slot <id>")`) and writes nothing; neither program
+changes. **Actual:** the save succeeds, and both programs change.
+
+**Fix options** (the implementer's choice): before upserting a record that is not among the program's stored rows,
+look its id up in the whole table (deleted rows included) and throw if it exists under another parent; or add
+`WHERE program_id = excluded.program_id` (the parent column for slots and misses) to the conflict clause and
+throw when the statement changes no row.
+
+## S2-2. minor bug — A `catalog_version` beyond `Int64` stops every later catalog upgrade, silently
+
+`seedIfNeeded` reads the applied version with `Int.fetchOne(… "SELECT MAX(catalog_version) …")`. That goes through
+`sqlite3_column_int64`, which does not check storage classes: a `REAL` beyond `Int64` clamps to `Int64.max`, and
+text or a blob reads as 0. So one damaged row with `catalog_version = 9.3e18` makes every later `seedIfNeeded`
+return without error and without seeding. New catalog exercises never appear, and a program template naming one
+fails the slot foreign key. Text, a blob or `''` read as 0 and re-seed, which is harmless.
+
+This is the non-strict read that `ColumnReader` exists to prevent (notes, decision 6), on the one column read
+outside it. **Reach:** damage or a foreign writer only.
+
+**Repro** (fails): `DamagedExerciseAdversarialTests.damagedCatalogVersion_neverTraps` with `9.3e18`: after seeding
+version 1, `UPDATE exercise SET catalog_version = 9.3e18`, then
+`seedIfNeeded([one, two], version: 2)`. **Expected:** it throws `malformedColumn("exercise.catalog_version")`, or it
+seeds (2 rows). **Actual:** it succeeds with 1 row. **Fix:** read `MAX(catalog_version)` as a `DatabaseValue` and
+require `INTEGER`, or add `AND typeof(catalog_version) = 'integer'`.
+
+## S2-3. minor bug — A row whose id is a blob survives every save and keeps its program unreadable
+
+`SyncedRecord.write` keys the stored rows by `String.fromDatabaseValue(row["id"])`. For a `BLOB` id that returns
+`nil`, so the row is never matched, never soft-deleted, and stays live under its parent. `ColumnReader` reads the
+same blob as UTF-8 text (`"\0"` for `x'00'`) and throws `malformedIdentifier`, so the program throws on every read,
+even after the lifter saves it again. Notes, decision 4: "a save repairs a damaged row rather than failing on it".
+Text ids (`'nope'`, `7`) are repaired, as promised. **Reach:** damage only.
+
+**Repro** (fails): `ProgramWeightAdversarialTests.saveOverDamagedID_repairs("x'00'")`:
+`UPDATE slot SET id = x'00' WHERE id = ?`, then `save(program)`. **Expected:** `active() == program`. **Actual:**
+throws `malformedIdentifier("\0")`. **Fix:** key stored rows by the same text `ColumnReader` accepts (`TEXT`, or a
+UTF-8 `BLOB`), or select `CAST(id AS TEXT)` in `Query`; or soft-delete any stored row whose id does not parse.
+
+## S2-4. spec question — Text is cut at its first NUL, on write
+
+GRDB binds a `String` with `sqlite3_bind_text(…, -1, …)`, a C string. A program, day or exercise name holding
+U+0000 is stored cut at it (`"nul\0inside"` → `"nul"`, 3 bytes). A later identical save sees a change and rewrites
+the row. No input path makes one today; F11 and F12 validate names. **Pinned by**
+`ProgramRoundTripAdversarialTests.nul_cutsTheName` (documents). **Options:** refuse control characters in the
+F11 and F12 name rules (F12 already trims), or accept the cut as GRDB's.
+
+---
+
+## Attacked and held
+
+- **Criterion 2.** 8 weeks × 4 days × 6 slots with misses round-trips through `active()`, `program(id:)` and a
+  fresh repository, with exactly the rows it implies. A second identical save changes no byte. Misses at any
+  `Int`, days in any order, empty and unscheduled days, a day on all seven weekdays, no days, every goal, civil
+  extremes, `daysPerWeek` at `Int` extremes, and hostile text all round-trip.
+- **The diff** (200 seeds × 8 saves of random builder edits, delete and re-save included): every save reads back
+  equal, with exact live counts and no live row under a deleted parent. A slot moved out of a day removed in the
+  same save survives with its misses. Removed slots, days, weeks and misses come back by id, with no second row.
+  Reorders round-trip.
+- **Sync columns.** Only the changed slot's `updated_at` moves. A removal or `delete` sets `deleted_at` and
+  `updated_at` to the save's time on every row it touches. A revival clears `deleted_at` and keeps
+  `created_at`.
+- **Atomicity and validation.** A foreign-key failure on the last slot, an inexact load, or 14 kinds of
+  out-of-range `var` edits leave every byte as it was.
+- **Active program.** One active program after any save or `setActive`; `missingRow` for unknown and deleted ids;
+  delete, re-delete and unknown delete behave; two active rows from a sync read the same one every time
+  (documents; the notes say the one updated last).
+- **Exact weights.** Slot and exercise loads at `Int64.max`, `Int64.min`, 1 unit and 0 read back equal. The stored
+  counts match the integer oracle for 21,429 pound values and 401 kilogram values. Five kinds of inexact value
+  are refused with the value, and nothing is written.
+- **Seeding (criterion 11).** Idempotent at one version, even with a bigger catalog. Additive upgrades; lower
+  versions do nothing. Name clashes in any case or accent are seeded beside the custom row. A custom row holding
+  a catalog id is untouched. An inexact entry rolls everything back and leaves the version unapplied. A lifter's
+  edit and a deleted catalog row survive upgrades. Eight racing seeds store each id once.
+- **Search (#23).** 40 query cases and 60 seeded property cases: substring on name and short name only, case and
+  diacritics folded both ways (decomposed input too), `%` `_` `\` `[` `*` `?` and quotes literal, blanks
+  (spaces, tabs, newlines) match all, trimmed; filters by AND, in `all()` order; deleted rows never found.
+- **Strict reads.** 31 exercise damages and 65 program damages: none traps, none reads as another value. An
+  unreadable exercise is left out of `all()`, `search` and `observeAll()` (which goes on); `exercise(id:)`
+  throws. A damaged program throws, ends `observeActive()`, leaves the other program readable, and a save
+  repairs it (apart from S2-3).
+- **Observation.** `observeActive()` follows a `slot_miss`-only change, a position-only change by another
+  repository, `setActive`, delete and re-save. `observeAll()` follows a save, a seed, another writer's soft
+  delete, and damage.
+- **Concurrency.** Both repositories are `Sendable`. Sixteen racing saves leave one whole edit with its rows.
+  Readers racing them see only whole programs. Eight racing `setActive` calls leave one active.
+
+**Noted, not findings:**
+- **Flags accept any integer** (`is_custom`, `is_deload`, `is_superset_with_previous` of 2 or −1 read as true),
+  while a fraction, text or a blob is refused. That is the notes' decision 6 ("for a flag, only an integer");
+  pinned by two "(documents)" tests.
+- **The muscle filter is the primary muscle only** (notes, decision 1, "my reading"). Decision #23 does not say
+  which. F12's pills group muscles ("Legs", "Arms"), so F12 should confirm that a secondary muscle never
+  matches. Pinned (documents).
+- **ß and "ss" find each other**, since `.caseInsensitive` folding is full case folding. Pinned (documents).
+- **A catalog listing one id twice stores the last entry.** The stored ids are read once, before the loop, so
+  both entries are upserted. F03 validates unique ids. Pinned (documents).
+- **The `catalog_version` of a damaged row** is still moved up by a seed that lists it. This is harmless and
+  documented.
+
+---
+
+# Slice S2 — close-out round
+
+Scoped close-out of fix round 1 (`57fdeb7`) on `feat/F05-s2`: S2-1 to S2-4, review SF1 (decision #24) and SF2
+(`ExerciseSearch`), the new contract clauses, and nits N1, N2 and N4. I read my round 1, the S2 review, the
+implementer's "S2 fix round 1" notes and the fix diff. No product code was edited. The mutants below ran one at
+a time in a copy of `LedgerKit` in the scratchpad (`f05s2-close-mut/`), never in the worktree.
+
+**The one edit to my tests.** `git diff ec6da47 57fdeb7 -- '*/Adversarial/'` touches one file,
+`ProgramRoundTripAdversarialTests.swift`, and in it one test: `nul_cutsTheName` now expects
+`nulInText("program.name")` and no rows, as decided for S2-4. Its doc comment says so. Nothing else of mine
+changed.
+
+## What I wrote
+
+27 tests (3 property tests) in 9 files: 22 under `LedgerPersistenceTests/Adversarial/`, 5 under
+`LedgerDomainTests/Adversarial/`. They run in under a second on the host. The fixtures are still my own (`S2Kit`,
+plus `S2CatalogKit`, an exercise repository with a settable clock and row probes).
+
+| File | Tests (cases) | What it attacks |
+|---|---|---|
+| `ProgramIdentityCloseoutAdversarialTests` | 4 (16) | S2-1: ten takeovers of program 1's ids by a stored program 2 (a deleted program's week, day or slot; a removed week, day or slot; a slot under a removed day; week + slot; day + slot; a taken slot after three new ones): refused by id, both programs byte for byte, then both save again and read back; the error names the table and id, weeks first; an id reused in another table (documents); a week or day whose `program_id` names no program (S2-5) |
+| `StrictReadCloseoutAdversarialTests` | 2 (53) | S2-2: `catalog_version` damaged to 11 values (`±9.3e18`, `1.5`, `0.5`, `''`, `'v1'`, `x'01'`, `x''`, a text beyond `Int64`, and `1.0`/`'1'`, which affinity stores as 1) on every catalog row, one of two, a deleted row and a custom row: either `malformedColumn("exercise.catalog_version")` with no byte changed, or the upgrade seeds and every live catalog row ends at integer 2; never a quiet no-op. S2-3: a blob id (`x'00'` or the text id's own bytes) on the program, week, day, slot and miss tables: a save repairs it and a second save changes nothing |
+| `NulTextCloseoutAdversarialTests` | 3 (25) | S2-4: NUL alone, leading, trailing, inside, before a combining mark, twice; in the program name, a day's name and tag (new program and edit), and an exercise's name and short name (save, seed, refresh): refused by column, no byte changed; other control characters and NUL lookalikes stored whole |
+| `CatalogRefreshCloseoutAdversarialTests` | 5 | SF1: six launches (2, 2, 3, 3, 3, 1) of an unchanged catalog move only `catalog_version`; nine single-field changes each refresh one row in place (id and `created_at` kept, `updated_at` moved, the other rows' metadata unchanged); an entry marked custom is no content change; deleted rows, a custom row holding a catalog id and a lifter-saved row survive a renaming upgrade byte for byte; a lifter's revival of a deleted catalog row is not refreshed |
+| `CatalogEdgeCloseoutAdversarialTests` | 5 | SF1 edges: versions 3, 2, 1, 0, −1 and `Int.min` after 3 change no byte; alternatives naming unstored ids (and one twice) refresh and read, through `all`, `exercise` and `search`; one inexact entry rolls back the whole refresh, the version stays unapplied, and the corrected catalog applies; an unlisted row keeps version 1 and is refreshed when version 5 lists it again; idempotent after that; a damaged catalog row (`equipment = 'hovercraft'`) is repaired by an unchanged upgrade |
+| `RepositoryNitsCloseoutAdversarialTests` | 2 | N1: three identical saves of a custom exercise keep `updated_at`; a change and a revival move it. N2: deleting an inactive program leaves the active one; deleting the active one clears its flag; a revival with a later `updated_at` is never active; a save makes it active again |
+| `SearchHelperCloseoutAdversarialTests` | 1 (60 seeds) | SF2 as a property: 14 random exercises (catalog and custom, three equipments and muscles), 10 queries each: `search(q, e, m)` equals `all()` filtered by `ExerciseSearch.matches` and both filters, and `all()` equals `ExerciseSearch.sorted` of the input |
+| `ExerciseSearchCloseoutAdversarialTests` (Domain) | 5 (181) | SF2: 20 folding cases on name and short name (case, both accent forms, Turkish İ, final sigma, outer blanks incl. NBSP and U+3000; width, inner blanks, `ı` and `Ø` not folded: documents); 11 10 blank queries; the trim-before-fold nit (documents); laws over 100 seeds (the two `matches` agree, `key` is a fixed point, a name finds itself); the name order over 50 seeds (irreflexive, asymmetric, `sorted` = `sorted(by: isInNameOrder)`, shuffle-invariant) |
+
+## Results
+
+- **Host** (`swift test`): `LedgerPersistenceTests` 235 tests. My 22 new ones: 21 pass and 1 fails, the
+  parameterised `danglingParent_isRepairedBySave` (3 of its 4 cases; finding S2-5). My 5 new Domain tests pass.
+  Every other test passes, the implementer's and mine from round 1 included. Format and `swiftlint --strict` are
+  clean on the new files.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`, Xcode 27.0, 255 s; log: scratchpad
+  `f05s2-closeout.log`): **exit 65**, as expected. Tools, format, lint, the package graph and pins, and the script
+  tests pass. The iOS `PR` plan ran 1,146 tests: 1,139 passed, 6 skipped, and 1 failed, exactly S2-5's test.
+  `set -e` then stopped the gate before watchOS and coverage.
+- **watchOS, run separately** (`PR-Watch` with `-only-testing:LedgerPersistenceTests`, through the lock; log:
+  scratchpad `f05s2-closeout-watch.log`): 235 tests, 230 passed, 4 skipped by design, and 1 failed, the same one.
+- **Mutants of the fix** (19, one at a time, host; results: scratchpad `f05s2-close-mut/results*.txt`): all 19
+  are killed. Two are killed by my close-out tests alone, and a third by my tests only:
+  - **B1, weeks and days checked against live rows only** (`AND deleted_at IS NULL` in the owner queries). The
+    implementer's clause covers a deleted program's slot only, so a removed week or day, or a deleted program's
+    week or day, could be taken again.
+  - **SF2, width folding added** (`.widthInsensitive`). Only my "(documents)" cases pin that width is not
+    folded.
+  - **S2-3, stored rows keyed as text again**: killed by my close-out blob tests and round 1's
+    `saveOverDamagedID_repairs`, by no test of the implementer's.
+
+  Killed by both suites: B1 without the slot check, or without the week check, or with live slots only; SF1
+  refreshing deleted rows, refreshing custom and lifter rows, stamping every refreshed row, not clearing the
+  version on save, refreshing at an equal version, not recording the version; S2-2 read leniently; S2-4
+  checking `name` only; SF2 without the trim; N1 stamping every save; N2
+  keeping the flag. **N4:** the two observation mutants, `removeDuplicates(by: { _, _ in false })`, are killed
+  by the implementer's `ObservationTests`, so those tests now fail on a spurious emission.
+
+| Class | Count | Findings |
+|---|---|---|
+| minor bug | 1 | S2-5 (new: a regression of the S2-1 fix) |
+| nit | 2 | S2-N1, S2-N2 (new, pinned "(documents)") |
+
+## Close-out of round 1's findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| S2-1 (bug) | **Closed** | My round-1 tests pass. All ten takeover variants are refused by id, both programs stay unchanged, and both save again afterwards. Mutants that check live rows only, or skip slots or weeks, are killed. The fix has one regression, S2-5 below. |
+| S2-2 (minor bug) | **Closed** | All 44 damage cases either throw `malformedColumn` by name and write nothing, or seed. None returns quietly. A custom row's damage is ignored, as it should be. |
+| S2-3 (minor bug) | **Closed** | A blob id is repaired on all five tables, including a blob with the text id's own bytes. A second save is a no-op. |
+| S2-4 (spec question, decided) | **Closed** | NUL is refused by column in all five text columns that domain values reach, by save, seed and refresh, and no byte is written. The JSON array columns hold enum raw values and UUIDs only, so a NUL cannot reach them. |
+
+SF1, SF2, N1, N2 and N4 hold as well; see "Attacked and held".
+
+## S2-5. minor bug — A save no longer repairs a week or day whose `program_id` names no program
+
+This regresses the B1 / S2-1 fix. `refuseOtherProgramsIDs` treats any `program_id IS NOT <this program>` as
+"another program holds this id", including a `program_id` that names **no** program: `'nope'`, or a blob of the
+program's own bytes. Such a row is damage or a foreign writer's, since a foreign key forbids it otherwise. The
+damaged week or day drops out of its program, so the program is unreadable (`danglingSchedule` or
+`nonContiguousWeeks`), and `active()` throws on every launch. Before fix round 1, saving the program repaired
+it: the upsert wrote `program_id` back. Now that save is refused with
+`duplicateIdentifier("day_template <id>")`, which names an owner that does not exist. So no save can ever
+repair the program. This breaks the notes' decision 4 ("a save repairs a damaged row rather than failing on it").
+A slot whose `day_template_id` names no day is still repaired, because the slot owner query joins
+`day_template`. **Reach:** damage only, the same class as S2-2 and S2-3.
+
+**Repro** (fails): `ProgramIdentityCloseoutAdversarialTests.danglingParent_isRepairedBySave`, three of its four
+cases:
+```swift
+try await programs.save(first)                                   // 2 weeks, 2 days, active
+UPDATE day_template SET program_id = 'nope' WHERE id = <day 2>   // foreign keys off
+try await programs.save(first)  // expected: repairs; actual: throws duplicateIdentifier("day_template <day 2>")
+try await programs.active()     // expected: first; actual: throws danglingSchedule
+```
+The same happens for `program_week.program_id = 'nope'` and for `day_template.program_id = CAST(program_id AS BLOB)`.
+
+**Verified in the scratchpad copy:**
+- Without `refuseOtherProgramsIDs`, as before the fix, this test passes.
+- With the fix below, every identity test passes: round 1's, the clause tests and my ten takeovers.
+
+**Fix:** refuse only ids whose owner is a stored program, by adding
+`AND program_id IN (SELECT id FROM program)` to `weekOwners` and `dayOwners`, and
+`AND day_template.program_id IN (SELECT id FROM program)` to `slotOwners`. That is three query strings, and the
+error then always names a real program's row.
+
+## S2-N1. nit — `ExerciseSearch.key` trims before it folds, so it is not a fixed point
+
+`key("bench \u{301}")` is `"bench "`. Folding strips the combining mark and uncovers a blank, which the trim
+already passed over. `key(key(x))` then differs from `key(x)`, and that query misses "Bench". The same holds for
+a fullwidth letter followed by a lone combining mark, where Foundation needs two passes. No keyboard types a lone
+combining mark after a space, so this only matters to anyone relying on `key` being idempotent: fakes, or a
+cached key. **Fix (optional):** fold, then trim. Pinned by `blankWithAMark_isNotTrimmed` (documents). The laws
+property test leaves lone combining marks out.
+
+## S2-N2. nit — The fold does not cover width, `ı` or `Ø`, while U+200B counts as a blank
+
+All four are pinned "(documents)", as consequences of decision #23's wording ("case and diacritics") and of
+Foundation:
+- fullwidth Latin (`ＢＥＮＣＨ`, as a Japanese IME can type it) finds nothing;
+- `ı` and `Ø` are letters, not marks, so `ilik` and `oresund` miss them;
+- Foundation's whitespace set still holds U+200B, so a zero-width space is trimmed as an outer blank.
+
+If F12 wants width folding, the fix is to add `.widthInsensitive` to `key`. The catalog is English, so this is
+F12's call, not a defect.
+
+---
+
+## Attacked and held
+
+- **S2-1 / B1.** Ten takeovers are refused by `duplicateIdentifier("<table> <id>")`, weeks before days before
+  slots:
+  - a deleted program's week, day or slot;
+  - a removed week, day or slot of a live program;
+  - a slot under a removed day;
+  - two ids at once;
+  - a taken slot listed after three new ones.
+
+  Each refusal leaves every row of both programs byte for byte. Afterwards both programs save again with their
+  own ids and read back, with exact live counts and the right one active. An id reused in another table is
+  accepted (documents).
+- **S2-2.** Forty-four damage cases: none returns quietly without seeding. A `REAL`, `TEXT` or `BLOB` maximum
+  throws `malformedColumn("exercise.catalog_version")` and writes nothing. A damaged row below an integer
+  maximum is refreshed to integer 2, so the seed repairs it. A custom row's damage is ignored. `1.0` and `'1'`
+  are no damage, since the column's `INTEGER` affinity stores them as 1.
+- **S2-3.** A blob id is repaired on all five program tables, including a blob holding the text id's own bytes.
+  The second save is a no-op. A blob program row is left as an inert, inactive orphan that nothing reads.
+- **S2-4.** NUL in any of the five text columns domain values reach is refused by column, as a new row and as
+  an edit, by save, seed and refresh, and nothing is written; a refused refresh leaves the version unapplied.
+  The JSON array columns cannot hold a NUL. U+0001, DEL, U+2400, a literal `\0`, a BOM and other controls are
+  stored whole.
+- **SF1 / decision #24.**
+  - Six launches of an unchanged catalog (2, 2, 3, 3, 3, 1) move only `catalog_version`. `created_at` and
+    `updated_at` stay.
+  - Each of nine field changes refreshes its row in place and moves only that row's `updated_at`. An entry
+    marked custom is no change, and the row stays a catalog row.
+  - Deleted rows, a custom row holding a catalog id, a lifter-saved row and a lifter-revived row are never
+    written.
+  - Lower and equal versions, down to `Int.min`, change no byte.
+  - Alternatives naming unstored ids refresh and read through `all`, `exercise` and `search`.
+  - One inexact entry rolls back the whole refresh, and the corrected catalog then applies.
+  - A row the catalog stops listing keeps its version, and is refreshed when a later catalog lists it again.
+  - A damaged catalog row is repaired by an unchanged upgrade.
+  - Every case is idempotent across repeated launches.
+- **SF2.** Over 60 seeds, `search` equals `all()` filtered by `ExerciseSearch.matches` and both filters, and
+  `all()` equals `ExerciseSearch.sorted`. Both `matches` agree. A name finds itself. The name order is a strict
+  total order that `sorted` follows whatever the input order. Folding holds across case, both accent forms,
+  Turkish İ, final sigma, and outer blanks including NBSP, U+3000, U+0085 and U+2028. Empty and blank queries
+  match everything, even an empty name.
+- **N1.** Three identical saves of a custom exercise keep `updated_at`. A change and a revival move it. A
+  lifter's unchanged save of a catalog row clears the version without moving `updated_at`.
+- **N2.** Deleting an inactive program leaves the active one. Deleting the active one clears its flag. A revival
+  with a later `updated_at` is never active, and a save makes it active again.
+- **N4.** See the mutants: the observation tests fail on a spurious emission.
+
+**Noted, not findings:**
+- **A lifter's save clears `catalog_version` without moving `updated_at`, so the change does not sync.** Under
+  M4, another device would still see the row as a catalog row. It could refresh the row over the lifter's edit,
+  and its newer `updated_at` would then win the merge. Today nothing reaches this, because F12 edits custom
+  exercises only. M4 should decide whether "the lifter's" is synced state.
+- **One damaged `catalog_version` maximum stops every upgrade, loudly and for good.** It throws on every launch
+  (F07 logs and carries on), and no seed repairs it. Only a lifter's save of that row clears it. This is the
+  outcome round 1 accepted. It is no longer silent.
+
+## Verdict
+
+**G2 cannot close for S2 yet, but it is one small fix away.**
+- S2-1 to S2-4 are closed.
+- SF1, SF2, N1, N2 and N4 hold on the host and on both simulators.
+- Every one of 19 mutants of the fix is killed.
+- The only edit to my tests is the decided S2-4 one.
+- S2-5 is a minor, damage-only regression of the S2-1 fix: three query strings, verified in the scratchpad.
+
+Once S2-5's test passes, G2 closes. A re-run of `ProgramIdentityCloseoutAdversarialTests` and the gate is
+enough; no further adversarial round is needed. S2-N1 and S2-N2 are nits that do not block.

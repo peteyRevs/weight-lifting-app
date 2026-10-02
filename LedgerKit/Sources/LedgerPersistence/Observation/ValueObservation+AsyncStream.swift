@@ -25,6 +25,11 @@ extension ValueObservation where Reducer: ValueReducer, Reducer.Value: Sendable 
     }
 }
 
+/// A repository's observation: a fetch, emitted only when its value differs from the last one.
+typealias DistinctObservation<Value: Equatable & Sendable> = ValueObservation<
+    ValueReducers.RemoveDuplicates<ValueReducers.Fetch<Value>>
+>
+
 extension Logger {
     /// LedgerPersistence's log (engineering-standards §8).
     static let persistence = Logger(subsystem: "com.petearevalo.Ledger", category: "persistence")
