@@ -7,6 +7,7 @@
 # No network and no simulator, unless opted in:
 #   ADV_REAL_SIMCTL=1  SD23 resolves check.sh's defaults on this Mac (simctl list only; unpair is faked)
 #   ADV_COLD_PINS=1    PL02 resolves a stale lockfile from cold packages (network; ~650 MB under $TMPDIR)
+# needs macOS: XV12 and XV13 go through Apple's /usr/bin/xcodebuild shim with DEVELOPER_DIR.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -329,7 +330,8 @@ check "WF54 every job in every workflow runs on ubuntu-* or on xcode-27 (Check, 
     is "$(grep -vE '=(ubuntu-[a-z0-9.-]+|xcode-27)$' <<<"$jobs" | tr '\n' ' ')|$(grep -c '=xcode-27$' <<<"$jobs")" "|3"
 
 # The package cache: its key must change with the Xcode and with either lockfile, and name only live files.
-key="$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with.key' "$T/pr.json")"
+key="$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | select(.with.path == ".derivedData/SourcePackages")
+    | .with.key' "$T/pr.json")" # the compilation cache's keys: WF64
 patterns="$(grep -o "hashFiles([^)]*)" <<<"$key" | grep -o "'[^']*'" | tr -d "'")"
 tracked="$(git -C "$ROOT" ls-files)"
 covered="" dead=""

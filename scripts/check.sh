@@ -13,10 +13,16 @@
 #                                       2026-09-30; docs/ci-cd.md); the full gate, before every
 #                                       merge, runs both. Combines with --skip-lint and
 #                                       --record-snapshots (iOS references only)
+#   scripts/check.sh --static-only      steps 1–2 without the script suites that need macOS, and step 0
+#                                       without the Xcode check: PR CI's Linux job (docs/ci-cd.md)
+#   scripts/check.sh --skip-static      steps 0 and 3–5, plus the script suites that need macOS: PR CI's
+#                                       macOS job, which runs after the Linux one. Combines with
+#                                       --ios-only and --record-snapshots
 #
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
-# Also read: LEDGER_BOOT_TIMEOUT (scripts/sim-boot.sh), LEDGER_XCODEBUILD_DEADLINE (CI, below).
+# Also read: LEDGER_BOOT_TIMEOUT (scripts/sim-boot.sh), LEDGER_XCODEBUILD_DEADLINE and
+# LEDGER_COMPILATION_CACHE (CI, below).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,7 +31,7 @@ IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
 WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0}"
 RESULTS=".derivedData/Results"
 
-FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0
+FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0 STATIC_ONLY=0 SKIP_STATIC=0
 for arg in "$@"; do
     case "$arg" in
         --fast) FAST=1 ;;
@@ -33,11 +39,15 @@ for arg in "$@"; do
         --skip-lint) SKIP_LINT=1 ;;
         --record-snapshots) RECORD_SNAPSHOTS=1 ;;
         --ios-only) IOS_ONLY=1 ;;
+        --static-only) STATIC_ONLY=1 ;;
+        --skip-static) SKIP_STATIC=1 ;;
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
-# --lint-only excludes every other flag, and --fast runs no simulator: no snapshots to record, no platform to pick.
-if (( LINT_ONLY && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY) || FAST && (RECORD_SNAPSHOTS || IOS_ONLY) )); then
+# --lint-only and --static-only exclude every other flag, and --fast runs no simulator: no snapshots to
+# record, no platform to pick. --skip-static runs part of what --skip-lint skips, and none of --lint-only.
+if (( (LINT_ONLY || STATIC_ONLY) && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IOS_ONLY || SKIP_STATIC)
+    || LINT_ONLY && STATIC_ONLY || FAST && (RECORD_SNAPSHOTS || IOS_ONLY) || SKIP_STATIC && SKIP_LINT )); then
     echo "error: contradictory flags: $*" >&2
     exit 2
 fi
@@ -69,18 +79,35 @@ if [[ -n "${LEDGER_XCODEBUILD_DEADLINE:-}" ]]; then
     WATCHDOG=$!
 fi
 
+# PR CI sets LEDGER_COMPILATION_CACHE=YES: xcodebuild then keeps each compilation's result in a
+# content-addressed cache, .derivedData/CompilationCache.noindex, which pr.yml restores and saves. A cache
+# key hashes the compiler, its arguments and every input's contents, never a file's mtime, so a fresh
+# checkout reuses it and a changed input misses it (docs/ci-cd.md). Locally it stays off.
+CACHE_SETTINGS=()
+if [[ "${LEDGER_COMPILATION_CACHE:-}" == YES ]]; then CACHE_SETTINGS=(COMPILATION_CACHE_ENABLE_CACHING=YES); fi
+
 # On GitHub Actions, tools print workflow commands so findings annotate the PR diff.
 beautify() { mise exec -- xcbeautify ${GITHUB_ACTIONS:+--renderer github-actions}; }
 
 # ---- 0. Xcode and tools -----------------------------------------------------
 step "0 · Xcode and tools"
-scripts/check-xcode-version.sh # the pin in .xcode-version, as bootstrap.sh checks it
+if [[ $STATIC_ONLY -eq 0 ]]; then
+    scripts/check-xcode-version.sh # the pin in .xcode-version, as bootstrap.sh checks it
+fi # --static-only runs on Linux, which has no Xcode: the macOS job's step 0 checks it
 mise install --quiet
 mise exec -- swiftformat --version
 mise exec -- swiftlint version
 done_step "tools"
 
-if [[ $SKIP_LINT -eq 0 ]]; then
+# PR CI splits the script suites: --static-only runs those that run anywhere, on Linux, and --skip-static
+# the adversarial suites whose header says "# needs macOS:" (scripts/tests/adversarial/run.sh). Only the
+# flag picks the half: a LEDGER_ADV_SUITES from the caller's environment is dropped, so the full gate and
+# --lint-only run every suite whatever the shell exports. It also keeps --static-only's choice out of the
+# check.sh runs inside check-wiring.adv.sh, which that suite's own cases start.
+unset LEDGER_ADV_SUITES
+if [[ $STATIC_ONLY -eq 1 ]]; then export LEDGER_ADV_SUITES=portable; fi
+
+if [[ $SKIP_LINT -eq 0 && $SKIP_STATIC -eq 0 ]]; then
     # ---- 1. format ----------------------------------------------------------
     step "1 · format (swiftformat --lint)"
     mise exec -- swiftformat --lint --swift-version 6.4 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
@@ -94,11 +121,15 @@ if [[ $SKIP_LINT -eq 0 ]]; then
     scripts/check-catalog-version.sh # a changed exercise catalog raises ExerciseCatalog.version (F03)
     for test in scripts/tests/*.test.sh; do "$test"; done
     done_step "lint"
+elif [[ $SKIP_STATIC -eq 1 ]]; then
+    step "2 · script tests that need macOS (--skip-static: the rest ran on Linux)"
+    LEDGER_ADV_SUITES=macos scripts/tests/adversarial.test.sh
+    done_step "macOS script tests"
 fi
 
-if [[ $LINT_ONLY -eq 1 ]]; then
+if [[ $LINT_ONLY -eq 1 || $STATIC_ONLY -eq 1 ]]; then
     summary
-    printf '\n\033[32mcheck.sh (--lint-only) OK\033[0m\n'
+    printf '\n\033[32mcheck.sh (%s) OK\033[0m\n' "$([[ $LINT_ONLY -eq 1 ]] && echo --lint-only || echo --static-only)"
     exit 0
 fi
 
@@ -156,7 +187,8 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     step "$1 · $2 build (the simulator boots meanwhile)"
     scripts/sim-boot.sh "$5"
     rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
-    xcodebuild build-for-testing "${xcargs[@]}" -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
+    xcodebuild build-for-testing "${xcargs[@]}" ${CACHE_SETTINGS[@]+"${CACHE_SETTINGS[@]}"} \
+        -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
     step "$1 · $2 simulator boot"
     scripts/sim-boot.sh --wait "$5"

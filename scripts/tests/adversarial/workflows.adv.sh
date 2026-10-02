@@ -40,19 +40,28 @@ check "WF02 PR runs on pull_request to main and on workflow_dispatch" \
     "pull_request,workflow_dispatch main"
 check "WF03 no workflow-level paths filter (the Scope job decides, rename-safe)" \
     is "$(q pr '.on.pull_request | has("paths") or has("paths-ignore")')" false
-# Pete, 2026-09-27: free minutes, so ONE macOS job (lint, then iOS since 2026-09-30) behind a Linux scope job.
-check "WF04 jobs are Scope then Check" is "$(q pr '[.jobs[].name] | join("|")')" "Scope|Check"
-check "WF05 Check needs Scope" is "$(q pr '.jobs.check.needs')" scope
+# Pete, 2026-09-27: free minutes, so ONE macOS job (iOS since 2026-09-30) behind a Linux scope job; since
+# 2026-09-30 the static checks run first, on Linux (ci-efficiency notes).
+check "WF04 jobs are Scope, Static checks, then Check" is "$(q pr '[.jobs[].name] | join("|")')" "Scope|Static checks|Check"
+check "WF05 Check needs Scope and Static checks; Static checks needs Scope, with Check's condition" \
+    is "$(q pr '(.jobs.check.needs | join(",")) + " " + .jobs.static.needs + " " + (.jobs.static.if == .jobs.check.if | tostring)')" \
+    "scope,static scope true"
 check "WF06 PR token is contents: read, with no job-level override" \
     is "$(q pr '.permissions | tojson') $(q pr '[.jobs[] | has("permissions")] | any')" '{"contents":"read"} false'
 # Pete, 2026-09-29 (F32): Xcode 27 now, so every macOS job runs on the xcode-27 preview image.
-check "WF07 exactly one macOS job (Check, on the xcode-27 image); Scope runs on Linux" \
-    is "$(q pr '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" "scope=ubuntu-latest,check=xcode-27"
+check "WF07 exactly one macOS job (Check, on the xcode-27 image); Scope and Static checks run on Linux" \
+    is "$(q pr '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
+    "scope=ubuntu-latest,static=ubuntu-latest,check=xcode-27"
 check "WF50 the nightly's macOS jobs run on the xcode-27 image too; its report runs on Linux" \
     is "$(q nightly '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
     "test=xcode-27,dependencies=xcode-27,report=ubuntu-latest"
-check "WF08 Check runs check.sh --ios-only, lint included (Pete, 2026-09-30; watchOS: the full local gate, nightly)" \
-    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" "scripts/check.sh --ios-only"
+check "WF08 Static checks runs check.sh --static-only; Check runs --ios-only --skip-static (watchOS: the full local gate, nightly)" \
+    is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" \
+    "scripts/check.sh --static-only;scripts/check.sh --ios-only --skip-static"
+check "WF63 Static checks installs the tools with mise before check.sh, selects no Xcode, and points SwiftLint at SourceKit" \
+    is "$(q pr '[.jobs.static.steps[] | .uses // .run | split("@")[0]] | join(" ")') \
+$(q pr '.jobs.static.steps[] | select(.run // "" | test("check.sh")) | .env.LINUX_SOURCEKIT_LIB_PATH')" \
+    "actions/checkout jdx/mise-action scripts/check.sh --static-only /usr/share/swift/usr/lib"
 check "WF61 [F32] ... and no job or step name in pr.yml claims watchOS; Check's step names --ios-only" \
     is "$(q pr '[.jobs[] | .name, .steps[].name // empty] | map(select(test("watchOS"))) | length') \
 $(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .name | test("iOS.*check\\.sh --ios-only")')" "0 true"
@@ -65,12 +74,27 @@ check "WF09 concurrency is per PR and cancels superseded runs" \
 check "WF10 failure uploads Results and SnapshotArtifacts as results-* (criteria 3, 5)" \
     is "$(q pr '.jobs.check.steps[] | select(.uses // "" | test("upload-artifact")) | [.if, (.with.name | startswith("results-")), (.with.path | test("\\.derivedData/Results") and test("\\.derivedData/SnapshotArtifacts")), .with["include-hidden-files"]] | map(tostring) | join(" ")')" \
     "failure() true true true"
-check "WF11 only package checkouts are cached (never build products or results)" \
+check "WF11 only package checkouts and Xcode's compilation cache are cached (never DerivedData's Build, or results)" \
     is "$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with.path' "$T/pr.json" "$T/nightly.json" | sort -u | tr '\n' ' ')" \
-    ".derivedData/SourcePackages "
+    ".derivedData/CompilationCache.noindex .derivedData/SourcePackages "
 check "WF52 [F32] the package cache restores on an exact key only (a stale Package.resolved then resolves cold, and fails)" \
-    is "$(jq -r '[.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" | tr '\n' ' ')" \
+    is "$(jq -r '[.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | select(.with.path == ".derivedData/SourcePackages")
+        | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" | tr '\n' ' ')" \
     "[false] [] "
+# The compilation cache (ci-efficiency notes): restored before check.sh, which turns it on, and saved after it,
+# on a red run too, under the restore step's key. Its keys hash the Xcode and both lockfiles; restore-keys are
+# the key without the commit, so a run starts from its PR's (or main's) newest cache.
+lockfiles="hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved')"
+check "WF64 the compilation cache: restore, check.sh with LEDGER_COMPILATION_CACHE=YES, then save under the same key, unless cancelled" \
+    is "$(q pr '.jobs.check.steps | map(select(.uses // .run | test("actions/cache/(restore|save)|check\\.sh")))
+        | map(.uses // .run | split("@")[0]) | join(" ")') \
+$(q pr '.jobs.check.steps[] | select(.uses // "" | test("actions/cache/restore")) | [.id, .with.key, .with["restore-keys"]] | join(" ")') \
+$(q pr '.jobs.check.steps[] | select(.uses // "" | test("actions/cache/save")) | [.if, .with.key, .with.path] | join(" ")') \
+$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.LEDGER_COMPILATION_CACHE')" \
+    "actions/cache/restore scripts/check.sh --ios-only --skip-static actions/cache/save \
+compilation-cache compilation-\${{ $lockfiles }}-\${{ github.sha }} compilation-\${{ $lockfiles }}- \
+\${{ !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }} \${{ steps.compilation-cache.outputs.cache-primary-key }} \
+.derivedData/CompilationCache.noindex YES"
 missing=""
 for f in .xcode-version LedgerKit/Package.resolved Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved; do
     [[ -f "$ROOT/$f" ]] || missing="$missing $f"
@@ -309,6 +333,9 @@ check "WF53 [F32] every nightly test run passes -collect-test-diagnostics never 
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
+check "WF65 the deadline is 2400 s (a slow runner's cold build took 1,104 s), and the job outlasts the step" \
+    is "$(q pr '.jobs.check | (.steps[] | select(.run // "" | test("check.sh"))) as $step
+        | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \(."timeout-minutes" > $step."timeout-minutes")"')" "2400 true"
 
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \
