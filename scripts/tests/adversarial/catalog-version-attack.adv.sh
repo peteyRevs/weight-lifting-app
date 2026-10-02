@@ -4,6 +4,7 @@
 # a CI-style detached merge commit, and shallow clones; since the close-out (round 2), the id guard
 # (ids removed, re-rolled, swapped or duplicated, on CI's checkouts too). Written from the F03 brief
 # (criterion 7 and its 2026-09-30 extension) and the script's own header. Bash 3.2, no network.
+# needs macOS: V10 edits a file with BSD sed (sed -i ''), which GNU sed reads as a script.
 set -uo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"

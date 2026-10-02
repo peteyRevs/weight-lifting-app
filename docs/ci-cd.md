@@ -23,13 +23,51 @@ authoritative; the plan differs:
   `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
-- **Free minutes (Pete, 2026-09-27).** `pr.yml` is one macOS job, `Check` (`check.sh --ios-only`),
-  behind a Linux `Scope` job that skips it when only files under `docs/`, `tasks/` or `design/`,
-  or `*.md` at the repository root, change (renames count at both paths). Nightly is manual;
+- **Free minutes (Pete, 2026-09-27); paid since 2026-09-30, with a $60 monthly limit.** `pr.yml` has one
+  macOS job, `Check` (`check.sh --ios-only --skip-static`). It runs after two Linux jobs: `Scope` skips
+  both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
+  change (renames count at both paths). `Static checks` comes next (below). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
-  §9 is superseded: a code PR costs about 18–20 macOS minutes while its packages resolve cold, and
-  less once the package cache has saved (it saves only after a green job). ~200 cover about 10 cold runs.
-- **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only`: steps 0–3
+  §9 is superseded: before the changes below, a green `Check` job took 846–1,302 s (15–22 billed
+  minutes) over the six green iOS-only runs to 2026-10-01, 805–1,262 s of it in `check.sh`. The notes
+  under "CI efficiency" say what is measured after them, and what only CI can measure.
+- **CI efficiency (2026-09-30; `tasks/features/F01-ci-gates/ci-efficiency-notes.md`).**
+  - *Static checks on Linux.* The `Static checks` job (`ubuntu-latest`, tools from `mise.toml`) runs
+    `check.sh --static-only`: format, lint, the package graph and pins, the catalog version, and every
+    script suite that runs anywhere. It has no Xcode, so step 0 checks only the tools. `Check` `needs:` it:
+    a red static check skips `Check`, costs no macOS minutes, and the run is red. `Check` runs the
+    adversarial suites whose header says `# needs macOS:` (one of their cases needs xcodebuild, xcrun,
+    Apple's `/usr/bin` shims or BSD sed): catalog-version-attack, ci-post-clone, coverage-gate and xcode27.
+    `adversarial/run.sh` picks the half from `LEDGER_ADV_SUITES` (`portable`, `macos`; unset runs all).
+    SwiftLint's Linux build loads SourceKit from the image's Swift toolchain, where the job points
+    `LINUX_SOURCEKIT_LIB_PATH`; without the library SwiftLint 0.65.1 stops with a fatal error, and the
+    lint-rules fixtures fail if a rule stops firing. `check-package-graph.sh` runs `swift package
+    describe`, so it too needs the image's Swift (6.4; `LedgerKit` asks for 6.2 or later). The full local
+    gate, and `--lint-only`, still run everything on the Mac, whatever `LEDGER_ADV_SUITES` the shell exports.
+  - *Compilation cache.* `Check` sets `LEDGER_COMPILATION_CACHE=YES`, so `check.sh`'s builds pass
+    `COMPILATION_CACHE_ENABLE_CACHING=YES` (Xcode 26+; locally it stays off). Xcode then keeps each Swift
+    and Clang compilation's result in `.derivedData/CompilationCache.noindex`, keyed by a hash of the
+    compiler, its arguments and every input's contents. Mtimes play no part, so a fresh checkout reuses it,
+    and a changed input always compiles. `pr.yml` restores it before `check.sh` and saves it after, on a red
+    run too, but not when cancelled. Keys hash `.xcode-version` and both lockfiles, plus the commit;
+    `restore-keys` are the key without the commit, so a run starts from its PR's newest cache, or main's.
+    The SwiftPM checkout cache stays exact-key (above). Xcode validates the cache once per boot
+    (`ValidateCAS`; `builtin/v1.validation` holds the boot time it last did), so a runner validates what
+    it restored: a corrupted cache was dropped and filled again there (`recovered from invalid data`),
+    while one corrupted after that check, on the same boot, failed the build (notes, "Measured"). The
+    keys are taken to hold absolute paths (not tested from a second path); GitHub keeps the checkout at
+    `/Users/runner/work/<repo>/<repo>`. A PR's first run has nothing to restore, since no job saves on
+    `main`; its later pushes and re-runs do. Measured on a developer Mac (2026-10-01; notes, "Measured"):
+    the iOS `build-for-testing` took 58–59 s with the cache off, 57 s filling an empty cache (1,113 misses)
+    and 17–18 s from a full one with nothing else built and every source's mtime moved (1,003–1,018 hits, no
+    miss). The cache was 1.0 GB, 343 MB through `tar | zstd`. The runner's figures are not known until a
+    PR's second run there.
+  - *No `main` warm-up job.* One would cost about as much per merge as it saves on each PR's first run
+    (notes). Revisit if most PRs get one run only.
+  - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 2,400 s; the step's timeout is 42 min and the job's 47.
+    A slow runner's cold iOS build took 1,104 s, and one run hit the old 1,500 s deadline only for that.
+- **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
+  `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
   run (36652681235) passed lint, the script tests and all 17 iOS test targets, then reached
   `LEDGER_XCODEBUILD_DEADLINE` (1,500 s) in the watchOS tests and stopped, exit 75, as designed. Its iOS
@@ -200,7 +238,8 @@ full local `scripts/check.sh` is green on the merge candidate and CI is green wh
 2026-09-30 CI tests iOS only, so that full local run is a PR's only watchOS gate.
 A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free
 minutes run out, CI does not run and the local gate output is the G4 evidence. Seeding the package
-cache on `main` costs a full Check: only if first runs show slow resolution. Revisit with Pro or a 2nd maintainer.
+cache on `main` costs a full Check: only if first runs show slow resolution. A red `Static checks` skips
+`Check`; that run is red, not docs-only. Revisit with Pro or a 2nd maintainer.
 
 ## 5. Xcode Cloud
 
