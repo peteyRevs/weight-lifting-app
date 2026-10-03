@@ -205,7 +205,8 @@ public struct GRDBStatsQueries: StatsQueries {
 extension GRDBStatsQueries {
     /// Product decision #27: the bests `PersonalRecords.detect` judges `workout` against, for each of
     /// `exerciseIDs`: over the done `.working` and `.added` sets of the stored workouts that come before it, by
-    /// start and then id, whether or not `workout` is stored. An exercise with no such set has no entry.
+    /// start and then id, never counting `workout` itself, stored or not (even a stored copy that started
+    /// earlier). A workout this app cannot read is left out. An exercise with no such set has no entry.
     public func bests(
         before workout: WorkoutState,
         for exerciseIDs: Set<ExerciseID>
@@ -223,8 +224,10 @@ extension GRDBStatsQueries {
     }
 
     /// The bests of `exercises` (`exercise_id` values, as stored) over the workouts before `position` in
-    /// history's order, in the caller's transaction, in whole 10⁻⁷ g: what `bests(before:for:)` returns, and
-    /// where `RecordReplay` starts. One row per exercise and rep count, through `idx_wex_exercise_workout`.
+    /// history's order, the workout at `position` excluded, in the caller's transaction, in whole 10⁻⁷ g: what
+    /// `bests(before:for:)` returns, and where `RecordReplay` starts. One row per exercise and rep count, through
+    /// `idx_wex_exercise_workout`. When the aggregate meets a damaged value, it walks the workouts one at a time
+    /// instead, and leaves the damaged one out (`RecordReplay.walkedBests`).
     static func bests(
         for exercises: [DatabaseValue],
         before position: RecordReplay.Position,
@@ -238,17 +241,23 @@ extension GRDBStatsQueries {
             MAX(logged_set.weight_e7g) AS weight_e7g, MAX(logged_set.e1rm_e7g) AS e1rm_e7g
         \(SQL.doneSets) \(SQL.recordKinds)
             AND workout_exercise.exercise_id IN (\(databaseQuestionMarks(count: exercises.count)))
-            AND (workout.started_at, workout.id) < (?, ?)
+            AND (workout.started_at, workout.id) < (?, ?) AND workout.id IS NOT ?
         GROUP BY workout_exercise.exercise_id, logged_set.reps
         ORDER BY workout_exercise.exercise_id, logged_set.reps
         """
-        let arguments = StatementArguments(exercises) + [position.startedAt, position.id]
-        var bests: [ExerciseID: PersonalRecords.Tally<Int64>] = [:]
-        for row in try Row.fetchAll(database, sql: sql, arguments: arguments) {
-            let exercise: ExerciseID = try ColumnReader(row: row, table: "workout_exercise").identifier("exercise_id")
-            try RecordReplay.add(row, to: &bests[exercise, default: .init()])
+        let arguments = StatementArguments(exercises) + [position.startedAt, position.id, position.id]
+        let rows = try Row.fetchAll(database, sql: sql, arguments: arguments)
+        do throws(LedgerPersistenceError) {
+            var bests: [ExerciseID: PersonalRecords.Tally<Int64>] = [:]
+            for row in rows {
+                let exercise: ExerciseID = try ColumnReader(row: row, table: "workout_exercise")
+                    .identifier("exercise_id")
+                try bests[exercise, default: .init()].add(row)
+            }
+            return bests
+        } catch {
+            return try RecordReplay.walkedBests(for: exercises, before: position, in: database)
         }
-        return bests
     }
 
     /// The SQL the stats queries share, for `RecordReplay`'s walk: the done sets that can set a record, of live

@@ -12,6 +12,14 @@ enum PerformanceBudget {
     /// Criterion 9, architecture §15: any `StatsQueries` method over 20,000 logged sets, at the 95th percentile
     /// of `statsRuns` runs.
     static let statsQuery: Duration = .milliseconds(50)
+    /// Architecture §15 (orchestrator, records follow-up fix round 1): recording a new workout at the end of
+    /// history, its record replay included, at 20,000 sets: the finish path, at the 95th percentile of
+    /// `statsRuns` runs.
+    static let recordNewWorkout: Duration = .milliseconds(50)
+    /// Architecture §15: a History write that detects records again (an edit, a delete, a late or moved workout),
+    /// at 20,000 sets in 400 workouts of up to five lifts, at the 95th percentile of `statsRuns` runs on a
+    /// simulator, Debug. A user action in History, not a frame (finding R-1).
+    static let historyWrite: Duration = .milliseconds(250)
     /// How many timed runs of a stats query, after one untimed warm-up: enough for a 95th percentile (the 19th
     /// fastest of 20).
     static let statsRuns = 20

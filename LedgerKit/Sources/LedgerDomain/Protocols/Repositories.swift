@@ -126,8 +126,9 @@ public protocol StatsQueries: Sendable {
     func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord]
     /// Product decision #27: the bests `PersonalRecords.detect` judges `workout` against, for each of
     /// `exerciseIDs`: those of the stored workouts that come before it, by start and then id (decision #26),
-    /// whether or not `workout` itself is stored. Counts the sets the other bests count (decision #25). An
-    /// exercise with no such set has no entry. For the live "PR!" moment, pass the active workout.
+    /// never `workout` itself, stored or not (not even a stored copy that started earlier). A workout this app
+    /// cannot read is left out. Counts the sets the other bests count (decision #25). An exercise with no such set
+    /// has no entry. For the live "PR!" moment, pass the active workout, and detect with `now: startedAt`.
     func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests
     /// The `limit` exercises with a done set in the most recent workouts, the latest first, and exercises of
     /// one workout in id order; none when `limit` is below 1.

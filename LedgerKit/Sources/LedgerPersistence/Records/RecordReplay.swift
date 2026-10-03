@@ -15,10 +15,12 @@ import LedgerDomain
 /// goes.
 ///
 /// - The walk reads, per workout, exercise and rep count, the heaviest weight and the best estimate: all that
-///   decision #3 compares. It compares them as whole 10⁻⁷ g (ADR-007; they order as the weights do), so the
-///   worst case, a typo fixed in the first of 400 workouts of one lift, stays inside the stats budget.
-/// - History is read as the stats queries read it: a damaged value that an aggregate returns throws by name, and
-///   the write stores nothing, rather than judge a record against history it cannot read.
+///   decision #3 compares. It compares them as whole 10⁻⁷ g (ADR-007; they order as the weights do). Records
+///   already stored as found are left out of the diff, so a write pays only for the records that change. A
+///   History write stays inside `historyWrite` (250 ms), a new workout at the end inside 50 ms (architecture §15).
+/// - A workout whose rows cannot be read is left out and logged, as the lists leave it out (orchestrator decision
+///   on R-Q1): the write goes through, and the workout keeps its stored records until a write repairs it.
+/// - `pr_count` is derived, like the records: a recount does not stamp `updated_at` (decision on R-SF2).
 enum RecordReplay {}
 
 /// Where a write starts, and what it touched.
@@ -101,85 +103,84 @@ extension RecordReplay {
 
 /// The replay.
 extension RecordReplay {
-    /// Adds a row of the walk, or of the bests before it, to `tally`: an exercise's record sets at one rep count
-    /// (column 1, `reps`), at their heaviest (column 2, `weight_e7g`) and best estimate (column 3, `e1rm_e7g`),
-    /// in whole 10⁻⁷ g. Read by index, as strictly as `ColumnReader` reads: GRDB finds a column by name with a
-    /// case-insensitive search, and for the worst case's 4,800 rows that cost 3 ms of 45 (Debug, host).
-    static func add(_ row: Row, to tally: inout PersonalRecords.Tally<Int64>) throws(LedgerPersistenceError) {
-        func integer(_ index: Int, _ column: String) throws(LedgerPersistenceError) -> Int64 {
-            guard case let .int64(value) = (row[index] as DatabaseValue).storage else {
-                throw .malformedColumn("logged_set.\(column)")
-            }
-            return value
-        }
-        guard let reps = try Int(exactly: integer(1, "reps")).flatMap(Reps.init) else {
-            throw .malformedColumn("logged_set.reps")
-        }
-        let estimate = (row[3] as DatabaseValue).isNull ? nil : try integer(3, "e1rm_e7g")
-        try tally.add(integer(2, "weight_e7g"), reps: reps, estimate: estimate)
-    }
-
     /// Makes the records of `scope`'s exercises, from its start onward, and the record counts of the workouts
     /// that hold them, what the invariant says, in the caller's transaction. Records that did not change keep
-    /// their rows and stamps (`SyncedRecord.write`), and statements run in one order for one history.
+    /// their rows and stamps, and statements run in one order for one history. A workout the walk cannot read
+    /// keeps its stored records (`Walk`).
     static func redetect(_ scope: Scope, in database: Database, at timestamp: String) throws {
         var recount = [ColumnCodec.text(scope.workoutID)]
         if let start = scope.start, !scope.exercises.isEmpty {
-            let records = try replay(scope.exercises, from: start, in: database)
+            let walk = try replay(scope.exercises, from: start, in: database)
             let stored = try storedRecords(of: scope.exercises, from: start, in: database)
-            try PersonalRecordRecord.write(records, over: stored, in: database, at: timestamp)
-            recount += records.map { ColumnCodec.text($0.workoutID) }
-            recount += stored.compactMap { String.fromDatabaseValue($0["workout_id"]) }
+                .filter { !walk.skipped.contains($0[1] as DatabaseValue) }
+            let storedByID = Dictionary(
+                stored.map { ($0[0] as DatabaseValue, $0) },
+                uniquingKeysWith: { old, _ in old }
+            )
+            // Records already stored as found are left out of the diff: most of a replay's records do not change.
+            let unchanged = Set(walk.records.filter { storedByID[$0.rowID.databaseValue].map($0.isStored) == true }
+                .map(\.rowID.databaseValue))
+            let changed = walk.records.filter { !unchanged.contains($0.rowID.databaseValue) }
+            let replaced = stored.filter { !unchanged.contains($0[0] as DatabaseValue) }
+            try PersonalRecordRecord.write(changed, over: replaced, in: database, at: timestamp)
+            recount += changed.map { ColumnCodec.text($0.workoutID) }
+            recount += replaced.compactMap { String.fromDatabaseValue($0[1]) }
         }
-        try writeCounts(of: Set(recount).sorted(), in: database, at: timestamp)
+        try writeCounts(of: Set(recount).sorted(), in: database)
     }
 
-    /// The records `PersonalRecords.found` finds for `exercises` in the workouts from `start` on, each judged
-    /// against the bests before it.
+    /// The walk over the workouts from `start` on, each judged against the bests before it.
     private static func replay(
         _ exercises: [DatabaseValue],
         from start: Position,
         in database: Database
-    ) throws -> [PersonalRecordRecord] {
-        var walk = try Walk(bests: GRDBStatsQueries.bests(for: exercises, before: start, in: database))
-        let rows = try Row.fetchCursor(
-            database,
-            sql: walkSQL(exercises: exercises.count),
-            arguments: StatementArguments(exercises) + [start.startedAt, start.id]
-        )
-        while let row = try rows.next() {
-            try walk.add(row)
-        }
-        try walk.close()
-        return walk.records
+    ) throws -> Walk {
+        let bests = try GRDBStatsQueries.bests(for: exercises, before: start, in: database)
+        var walk = Walk(bests: bests, judges: true, excluding: nil)
+        try walk.walk(database, sql: walkSQL(exercises: exercises.count, from: true), exercises, start)
+        return walk
     }
 
-    /// The walk: per workout from the start on (in history's order), exercise and rep count, the record sets'
-    /// heaviest weight and best estimate, and the workout's columns.
-    private static func walkSQL(exercises count: Int) -> String {
+    /// The bests before `position`, a workout at a time: what `GRDBStatsQueries.bests` falls back to when its
+    /// aggregate meets a damaged value, so that the damaged workout is left out rather than failing the write.
+    static func walkedBests(
+        for exercises: [DatabaseValue],
+        before position: Position,
+        in database: Database
+    ) throws -> [ExerciseID: PersonalRecords.Tally<Int64>] {
+        // Never the workout at `position` itself, even a stored copy that started earlier (review R-SF1).
+        var walk = Walk(bests: [:], judges: false, excluding: position.id.databaseValue)
+        try walk.walk(database, sql: walkSQL(exercises: exercises.count, from: false), exercises, position)
+        return walk.bests
+    }
+
+    /// The walk: per workout (in history's order) from `position` on, or before it, exercise and rep count, the
+    /// record sets' heaviest weight and best estimate, and the workout's columns.
+    private static func walkSQL(exercises count: Int, from: Bool) -> String {
         """
         SELECT workout_exercise.exercise_id AS exercise_id, logged_set.reps AS reps,
             MAX(logged_set.weight_e7g) AS weight_e7g, MAX(logged_set.e1rm_e7g) AS e1rm_e7g,
             workout.id AS workout_id, workout.started_at AS started_at, workout.is_deload AS is_deload
         \(GRDBStatsQueries.recordSets)
             AND workout_exercise.exercise_id IN (\(databaseQuestionMarks(count: count)))
-            AND (workout.started_at, workout.id) >= (?, ?)
+            AND \(from ? "(workout.started_at, workout.id) >= (?, ?)" : "(workout.started_at, workout.id) < (?, ?)")
         GROUP BY workout.id, workout_exercise.exercise_id, logged_set.reps
         ORDER BY workout.started_at, workout.id, workout_exercise.exercise_id, logged_set.reps
         """
     }
 
-    /// The live records of `exercises` in the live finished workouts from `start` on, in id order: the rows
-    /// `redetect` replaces.
+    /// The live records of `exercises` in the live finished workouts from `start` on, in id order, as
+    /// `PersonalRecordRecord.contentColumns`: the rows `redetect` replaces.
     private static func storedRecords(
         of exercises: [DatabaseValue],
         from start: Position,
         in database: Database
     ) throws -> [Row] {
-        try Row.fetchAll(
+        let columns = PersonalRecordRecord.contentColumns.map { "personal_record.\($0)" }.joined(separator: ", ")
+        return try Row.fetchAll(
             database,
             sql: """
-            SELECT personal_record.* FROM personal_record JOIN workout ON workout.id = personal_record.workout_id
+            SELECT \(columns) FROM personal_record JOIN workout ON workout.id = personal_record.workout_id
             WHERE personal_record.deleted_at IS NULL
                 AND personal_record.exercise_id IN (\(databaseQuestionMarks(count: exercises.count)))
                 AND workout.deleted_at IS NULL AND workout.phase = 'finished' AND workout.ended_at IS NOT NULL
@@ -190,9 +191,10 @@ extension RecordReplay {
         )
     }
 
-    /// Makes the `pr_count` of each live workout of `ids` its number of live records. Only a count that changed
-    /// is written, so a write that changes no record runs no `UPDATE`.
-    private static func writeCounts(of ids: [String], in database: Database, at timestamp: String) throws {
+    /// Makes the `pr_count` of each live workout of `ids` its number of live records, only where it changed.
+    /// The count is derived, like the records (local-only), so it does not stamp `updated_at`: a replay that
+    /// recounts a hundred workouts changes no synced row (orchestrator decision on R-SF2).
+    private static func writeCounts(of ids: [String], in database: Database) throws {
         let count = "SELECT COUNT(*) FROM personal_record WHERE workout_id = workout.id AND deleted_at IS NULL"
         let stale = try String.fetchAll(
             database,
@@ -208,64 +210,8 @@ extension RecordReplay {
             return
         }
         try database.execute(
-            sql: """
-            UPDATE workout SET pr_count = (\(count)), updated_at = ?
-            WHERE id IN (\(databaseQuestionMarks(count: stale.count)))
-            """,
-            arguments: [timestamp] + StatementArguments(stale)
+            sql: "UPDATE workout SET pr_count = (\(count)) WHERE id IN (\(databaseQuestionMarks(count: stale.count)))",
+            arguments: StatementArguments(stale)
         )
-    }
-}
-
-/// The replay's walk over its rows, in order. The rows of one workout's exercise come together: their tally is
-/// complete at the next workout or exercise, when it is judged against the bests before the workout (unless the
-/// workout is a deload) and then raises them.
-private struct Walk {
-    private(set) var bests: [ExerciseID: PersonalRecords.Tally<Int64>]
-    private(set) var records: [PersonalRecordRecord] = []
-    private var group: Group?
-    private var own = PersonalRecords.Tally<Int64>()
-
-    /// One workout's rows of one exercise: their keys as stored, and the first row, which holds the workout's
-    /// columns.
-    private struct Group {
-        let workoutKey: DatabaseValue
-        let exerciseKey: DatabaseValue
-        let exercise: ExerciseID
-        let row: Row
-    }
-
-    init(bests: [ExerciseID: PersonalRecords.Tally<Int64>]) {
-        self.bests = bests
-    }
-
-    mutating func add(_ row: Row) throws {
-        let workoutKey: DatabaseValue = row[4] // the columns of `walkSQL(exercises:)`, by index as in `add`
-        let exerciseKey: DatabaseValue = row[0]
-        if group?.workoutKey != workoutKey || group?.exerciseKey != exerciseKey {
-            try close()
-            let exercise: ExerciseID = try ColumnReader(row: row, table: "workout_exercise").identifier("exercise_id")
-            group = Group(workoutKey: workoutKey, exerciseKey: exerciseKey, exercise: exercise, row: row.copy())
-        }
-        try RecordReplay.add(row, to: &own)
-    }
-
-    /// Judges the open group, if any, and closes it.
-    mutating func close() throws {
-        guard let group else {
-            return
-        }
-        let read = ColumnReader(row: group.row, table: "workout")
-        if try !read.flag("is_deload") {
-            let found = PersonalRecords.found(own, over: bests[group.exercise] ?? .init())
-            if !found.isEmpty {
-                let workoutID: WorkoutID = try read.identifier("workout_id")
-                let startedAt = try ColumnCodec.seconds(read.date("started_at"))
-                records += found.map { PersonalRecordRecord($0, of: group.exercise, in: workoutID, at: startedAt) }
-            }
-        }
-        bests[group.exercise, default: .init()].add(own)
-        self.group = nil
-        own = PersonalRecords.Tally()
     }
 }

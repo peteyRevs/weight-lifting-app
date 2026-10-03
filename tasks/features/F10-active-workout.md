@@ -148,12 +148,14 @@ these contradict the brief above, they win.
    materialisations.
 3. **The live "PR!" moment** (haptic `.personalRecord`, the finish screen's list): call
    `StatsQueries.bests(before: state, for: Set(state.exercises.map(\.exerciseID)))` once the workout starts (and
-   again after a swap adds an exercise), then `PersonalRecords.detect(workout: state, against: bests, now:)` as
-   sets are logged. Those are the bests the store will judge the workout against: the stored workouts that
-   started before it (or with it and a smaller id), working and added sets only (decision #25). The workout
-   itself is never counted, stored or not. The finish screen's records are the same ones F05 then stores
-   (their `achievedAt` is the workout's start; read them back with `personalRecords(exerciseID:)` filtered by
-   workout, if needed).
+   again after a swap adds an exercise), then `PersonalRecords.detect(workout: state, against: bests, now:
+   state.startedAt)` as sets are logged. Pass the **start** as `now`: the store stamps a record's `achievedAt`
+   with its workout's start, so only then are the finish screen's records equal to the stored ones (review
+   R-N1; with another `now`, only the kinds and values agree). Those are the bests the store will judge the
+   workout against: the stored workouts that started before it (or with it and a smaller id), working and added
+   sets only (decision #25). The workout itself is never counted, stored or not, not even a stored copy of it
+   that started earlier (a rebuild whose start moved later; review R-SF1, fixed). A workout the store cannot read
+   is left out, as the store's replay leaves it out.
 4. **Records name only their own workout.** The S3 refusal of a record naming another workout went with the
    `prs` argument.
 5. **`programUpdates` is not applied by F05.** `materialize` writes no slot's exercise. Item 7 of "Inputs from
@@ -169,6 +171,6 @@ these contradict the brief above, they win.
    workout's date is when it started (product decision #26).
 8. **Refusals to surface:** `nulInText` (a workout or exercise name holding U+0000), `inexactWeight` (a weight
    that is not a whole number of 10⁻⁷ g, e.g. an eighth of a pound) and `nonFiniteDate`. Each stores nothing.
-   Since the records follow-up, `materialize` also throws `malformedColumn` when the history it judges the
-   workout against holds a damaged value of the same exercise (foreign damage only); the log stays
-   uncompacted, and a rebuild of the damaged workout repairs it.
+   A damaged workout elsewhere in the history never fails a `materialize` (orchestrator decision on R-Q1, F05
+   records fix round 1): the replay leaves out a workout it cannot read, logs it, and keeps its stored records
+   until a write repairs it.

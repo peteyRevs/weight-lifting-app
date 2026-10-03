@@ -123,8 +123,9 @@ extension StatsQueriesContract {
     }
 
     /// The bests before a workout count the done working and added sets of the stored workouts that start
-    /// before it, or with it and a smaller id: never the workout itself, a deleted workout, a warm-up, a drop or
-    /// an undone set. The workout need not be stored: a live one is judged the same way.
+    /// before it, or with it and a smaller id: never the workout itself (not even its stored copy, when that started
+    /// earlier: review R-SF1), a deleted workout, a warm-up, a drop or an undone set. The workout need not be
+    /// stored: a live one is judged the same way.
     static func bestsBefore(_ stores: HistoryStores) async throws -> String? {
         let first = session(0, startedAt: day(-6), [Seeders.ExerciseLog(bench, [
             .init(200, 5), .init(180, 8), .init(300, 1, .warmup), .init(290, 2, .drop), .init(240, 3, done: false)
@@ -147,9 +148,12 @@ extension StatsQueriesContract {
         beforeTwin.weightAtReps[bench.id]?[Reps(clamping: 5)] = .pounds(220)
         let (all, none, stats) = (Set([bench.id, row.id, squat.id]), PersonalRecords.Bests(), stores.stats)
         let rowOnly = PersonalRecords.Bests(weightAtReps: [row.id: [Reps(clamping: 15): .pounds(60)]])
+        var later = twin // as a rebuild that moves its start a day later would pass it
+        later.startedAt = day(-1)
         return try await ContractCheck.first(
             ContractCheck.expect(stats.bests(before: third, for: all), bestsBeforeThird, "before the third workout"),
             ContractCheck.expect(stats.bests(before: twin, for: all), beforeTwin, "before its twin, a larger id"),
+            ContractCheck.expect(stats.bests(before: later, for: all), beforeTwin, "never its own earlier copy"),
             ContractCheck.expect(stats.bests(before: live, for: all), bestsBeforeThird, "before a live workout"),
             ContractCheck.expect(stats.bests(before: first, for: all), none, "before the first"),
             ContractCheck.expect(stats.bests(before: twin, for: []), none, "for no exercise"),
@@ -169,6 +173,15 @@ extension WorkoutRepositoryContract {
         ]
     }
 
+    /// Makes the first sets of `workout`'s first exercise weigh `pounds`, through `updateSets`.
+    static func editSets(of workout: WorkoutState, to pounds: [Decimal], in stores: HistoryStores) async throws {
+        var sets = workout.exercises[0].sets
+        for (index, weight) in pounds.enumerated() {
+            sets[index].weight = .pounds(weight)
+        }
+        try await stores.workouts.updateSets(workoutExerciseID: workout.exercises[0].id, sets: sets)
+    }
+
     /// Bench 200 × 5, then 2,250 × 5 (a typo for 225), then 230 × 5, two days apart.
     struct TypoHistory {
         let first = StatsQueriesContract.session(0, startedAt: StatsQueriesContract.day(-6), [
@@ -185,7 +198,7 @@ extension WorkoutRepositoryContract {
     /// The typo case. Bench 200 × 5, then 2,250 × 5 (a typo for 225), then 230 × 5. While the typo stands the
     /// middle workout holds both records and the last none; corrected, both hold them; lowered below the first,
     /// only the last does, over 200; with the first deleted, over the middle's 195; and a rebuild of the middle
-    /// with the typo brings the first state back.
+    /// with the typo brings the first state back. Then `rebuildsMoveOrDrop`.
     static func recordsFollowEdits(_ stores: HistoryStores) async throws -> String? {
         let history = TypoHistory()
         let (first, typo, last) = (history.first, history.typo, history.last)
@@ -193,13 +206,7 @@ extension WorkoutRepositoryContract {
             try await stores.materialize(workout)
         }
         let records = { try await stores.stats.personalRecords(exerciseID: exercises[0].id) }
-        let edit = { (pounds: [Decimal]) in
-            var sets = typo.exercises[0].sets
-            for (index, weight) in pounds.enumerated() {
-                sets[index].weight = .pounds(weight)
-            }
-            try await stores.workouts.updateSets(workoutExerciseID: typo.exercises[0].id, sets: sets)
-        }
+        let edit = { (pounds: [Decimal]) in try await editSets(of: typo, to: pounds, in: stores) }
         let withTypo = try await records()
         try await edit([225])
         let corrected = try await records()
@@ -225,7 +232,38 @@ extension WorkoutRepositoryContract {
                 benchRecords(230, over: 200, in: last),
                 "after materialising the first again"
             ),
-            ContractCheck.expect(records(), typoRecords, "after a rebuild of the middle with the typo")
+            ContractCheck.expect(records(), typoRecords, "after a rebuild of the middle with the typo"),
+            rebuildsMoveOrDrop(stores, typo: typo, last: last)
+        )
+    }
+
+    /// After `recordsFollowEdits`, the typo stored and the last holding no record (review R-N2). A rebuild that
+    /// moves the typo workout after the last gives the last its records over the first's 200, and the typo its
+    /// own over 230. Moved back, then rebuilt without its bench, the typo leaves the last its records again. A
+    /// fake that replays only from a rebuild's new place, or only the exercises it now has, leaves the last's
+    /// records stale.
+    static func rebuildsMoveOrDrop(
+        _ stores: HistoryStores,
+        typo: WorkoutState,
+        last: WorkoutState
+    ) async throws -> String? {
+        let records = { try await stores.stats.personalRecords(exerciseID: exercises[0].id) }
+        var moved = typo
+        moved.startedAt = StatsQueriesContract.day(-1)
+        moved.endedAt = ending(startedAt: moved.startedAt)
+        try await stores.materialize(moved)
+        let afterMove = try await records()
+        try await stores.materialize(typo)
+        var dropped = typo
+        dropped.exercises = []
+        try await stores.materialize(dropped)
+        return try await ContractCheck.first(
+            ContractCheck.expect(
+                afterMove,
+                benchRecords(2250, over: 230, in: moved) + benchRecords(230, over: 200, in: last),
+                "after a rebuild moved the typo's workout after the last"
+            ),
+            ContractCheck.expect(records(), benchRecords(230, over: 200, in: last), "after a rebuild dropped its bench")
         )
     }
 }

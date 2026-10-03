@@ -137,17 +137,33 @@ struct PersonalRecordRecord: SyncedRecord {
         )
     }
 
+    /// The content columns, in the order of `content`: select them so to compare a stored row with
+    /// `isStored(in:)`.
+    static let contentColumns = [
+        "id", "workout_id", "exercise_id", "kind", "weight_e7g", "reps", "previous_kind", "previous_weight_e7g",
+        "previous_reps", "achieved_at"
+    ]
+
+    /// The row's content, in the order of `contentColumns`: what `encode(to:)` writes.
+    private var content: [DatabaseValue] {
+        [
+            rowID.databaseValue, ColumnCodec.text(workoutID).databaseValue, ColumnCodec.text(exerciseID).databaseValue,
+            kind.name.databaseValue, kind.e7g.databaseValue, kind.reps?.databaseValue ?? .null,
+            previous?.name.databaseValue ?? .null, previous?.e7g.databaseValue ?? .null,
+            previous?.reps?.databaseValue ?? .null, achievedAt.databaseValue
+        ]
+    }
+
+    /// Whether `row`, holding `contentColumns` in that order, holds this record already. The replay compares its
+    /// thousands of unchanged records so, without encoding them (product decision #27).
+    func isStored(in row: Row) -> Bool {
+        content.enumerated().allSatisfy { index, value in (row[index] as DatabaseValue) == value }
+    }
+
     func encode(to container: inout PersistenceContainer) throws {
-        container["id"] = rowID
-        container["workout_id"] = ColumnCodec.text(workoutID)
-        container["exercise_id"] = ColumnCodec.text(exerciseID)
-        container["kind"] = kind.name
-        container["weight_e7g"] = kind.e7g
-        container["reps"] = kind.reps
-        container["previous_kind"] = previous?.name
-        container["previous_weight_e7g"] = previous?.e7g
-        container["previous_reps"] = previous?.reps
-        container["achieved_at"] = achievedAt
+        for (column, value) in zip(Self.contentColumns, content) {
+            container[column] = value
+        }
     }
 
     private static let estimatedOneRepMax = "estimatedOneRepMax"

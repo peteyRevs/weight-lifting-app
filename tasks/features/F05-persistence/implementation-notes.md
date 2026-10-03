@@ -1846,3 +1846,142 @@ product sources only; new files whole plus the diff's added lines; scratchpad `f
    tester audits them in the adversarial round, as in S3 round 3.
 7. **F13's badge** still has no `personalRecords(workoutID:)` (S3 open question, F13 input 2). Recommendation:
    F13 adds it if it wants `pr_count`-free reads; `pr_count` is now always right.
+
+### Records fix round 1
+
+Inputs: `test-findings.md` "# Follow-up: records — adversarial round 1" (R-1, R-Q1, R-Q2) and `review.md`
+"# Follow-up: records review" (R-SF1, R-SF2, R-N1 to R-N3), at `5f9823e`, with the orchestrator's binding decisions.
+HEAD and the branch never moved: `git branch --show-current` printed `feat/F05-records` at the start and the end.
+Each change was checked with a mutant (undone, the named test failing, restored; host, one at a time; runner
+`scratchpad/f05rec/mut/run.py`, results in `results.txt`).
+
+**1. R-1: History writes get a budget of their own.**
+- `docs/architecture.md` §15 has two new rows, and `PerformanceBudget` two constants:
+  - `recordNewWorkout` (50 ms): recording a new workout at the end of history, its replay included, at 20,000
+    sets;
+  - `historyWrite` (250 ms): a History write that re-detects records (edit, delete, late or moved workout), at
+    20,000 sets, 400 workouts and up to 5 lifts, p95 on a simulator, Debug.
+- `RecordReplayPerformanceTests` now times three things, each against its own budget:
+  - the typo fixed in the first workout (`historyWrite`);
+  - `bests(before:for:)` (`statsQuery`);
+  - 20 **new** workouts recorded at the end of history (`recordNewWorkout`). Before, the same workout was
+    re-materialised; now this is exactly the finish path.
+- Sanctioned edit: `RecordReplayWorstCaseAdversarialTests.worseShape_underBudget` now asserts `historyWrite`. Its
+  title and doc say so; the shapes are unchanged.
+- **The cheap win** (about 30 lines): records already stored as found are left out of the diff.
+  - `PersonalRecordRecord.content` is one list of column values, used by both `encode(to:)` and
+    `isStored(in:)`, so they cannot disagree.
+  - The replay compares each found record with its stored row by index, and passes only the changed ones (and
+    the stored rows they replace) to `SyncedRecord.write`.
+  - Before, every record in scope was encoded and compared by column name; in a five-lift history that is
+    about 4,000 rows for a write that changes ten.
+  - No convergence or early-exit scheme was built.
+  - Mutants: "every record counts as stored" and "a record is stored when its id is" each fail 15 tests.
+
+| Write (20,000 sets, 400 workouts), p95 | Before, iPhone / watch / host | After, iPhone 17 sim | After, Watch S12 sim | After, host |
+|---|--:|--:|--:|--:|
+| One lift, the typo fixed in the first workout (implementer's) | 47.0 / 47.9 / 54 ms | 45.8 ms | 46.2 ms | 48 ms |
+| One lift, a 12-rep typo: both records of 399 workouts flip | 55 / 57 / 59 ms | 58.1 ms | 58.4 ms | 59 ms |
+| Five lifts, the first workout deleted from History | 110 / 114 / 117 ms | 63.9 ms | 64.5 ms | 61 ms |
+| Five lifts, a forgotten session lands first and is deleted | 147 / 153 / 153 ms | 103.4 ms | 118.0 ms | 96 ms |
+| Five lifts, the first rebuilt with a typo in each lift (3,990 records flip) | 203 / 213 / 197 ms | 218.3 ms | 220.9 ms | 199 ms |
+| A new workout recorded at the end (`recordNewWorkout`) | (11–12 ms, a rebuild) | 19.1 ms | 19.3 ms | 14 ms |
+| `bests(before:for:)` before a new workout | 9.2 ms | 9.2 ms | 9.4 ms | 6.6 ms |
+
+- **Where the numbers come from.**
+  - "Before" is the tester's round 1 on both simulators. The host column is measured on this machine with the
+    filter undone and redone in one sitting.
+  - "After" is the `Nightly` and `Nightly-Watch` plans under the lock, nothing else of mine running. Script
+    `f05rec/perf.sh`; attachments `att-ios-r1` and `att-watch-r1`.
+  - Every timing suite passed on both simulators: `RecordReplayPerformanceTests`,
+    `RecordReplayWorstCaseAdversarialTests`, `StatsQueriesPerformanceTests` and `StatsWorstCaseAdversarialTests`.
+    Criterion 9's worst stats p95 is `recentlyLogged`, 7.0 ms.
+- **What the filter does not help.** A write whose records mostly change still pays for every row it writes. The
+  five-lift rebuild is at 221 ms of 250 on the watch. Only an early exit or fewer rows written would lower it,
+  and this round builds neither.
+
+**2. R-Q1: skip and log.**
+- **The walk** (`Records/RecordReplay+Walk.swift`, moved to its own file for the 300-line file limit) now reads
+  a workout at a time.
+  - It buffers each exercise's tally until the next workout begins. If any of the workout's rows, or its own
+    columns, cannot be read, the whole workout is left out: judged for nothing, counted in no best, logged at
+    error level, and added to `skipped`.
+  - The diff then leaves the skipped workouts' stored records alone (`RecordReplay.redetect`), so they keep
+    their rows until a write repairs the workout.
+- **The bests before a write** (`GRDBStatsQueries.bests(for:before:in:)`) try the one aggregate query first. If
+  it meets a damaged value, they walk the same history a workout at a time (`RecordReplay.walkedBests`) and
+  leave the damaged one out.
+- **Tests:**
+  - `RecordReplayTests.damagedWorkout_isLeftOutOfTheReplay`:
+    - the lifter's edit and a new workout go through;
+    - the new one is judged against the readable history (over 190, not the damaged 210);
+    - the damaged workout's record rows are unchanged, its squat too when a rebuild walks past its bench;
+    - repairing it restores its records;
+    - `reps = 0` is left out the same way.
+  - `bestsOverDamage_leaveItOut_andNeverCountTheWorkout` covers the walked bests.
+  - Sanctioned edit: the tester's "(documents)" pin is now
+    `RecordReplayEdgeAdversarialTests.damagedHistory_isLeftOutOfWritesOfItsLift`, retitled with the decision.
+    It asserts the writes go through, and keeps the list, `workout(id:)` throws and delete-by-id checks.
+- **Mutants:**
+  - skipped workouts lose their stored records;
+  - a failed workout is judged anyway;
+  - no fallback for damaged bests;
+  - the fallback counts the workout itself;
+  - the walk excludes nothing.
+
+  All are killed.
+
+**3. R-SF2 = R-Q2: a recount does not stamp `updated_at`.**
+- `RecordReplay.writeCounts` sets `pr_count` alone, and only where it changed.
+- `RecordReplayTests.recount_stampsNoWorkoutRow`: fixing a typo in the first of five workouts changes the counts
+  of the four after it and none of their `updated_at`.
+- Mutant (stamp again): 2 tests fail.
+- `F28-icloud-sync.md` input: `pr_count` is derived locally, must not be synced or merged, and is rebuilt by
+  replay after a sync.
+
+**4. R-SF1: `bests(before:for:)` never counts the workout itself, not even a stored copy that started earlier.**
+- `GRDBStatsQueries.bests(for:before:in:)` adds `AND workout.id IS NOT ?`; the walked fallback excludes the same
+  id.
+- The protocol doc (`Repositories.swift`) and F10 input 3 say so.
+- Contract `bestsBefore` gains "never its own earlier copy": the twin asked about a day later than it is stored.
+  Mutant: the GRDB contract clause fails.
+- **Forced edit to the tester's `HistoryModel+Stats.swift`**: the honest model's `bests(before:for:)` excludes
+  its own stored copy, and the `.bestsBeforeIncludeIt` fault counts that copy when it is at or before the
+  place. Without it the honest model broke the strengthened clause. Every fault is still caught by its own
+  clause.
+
+**5. Nits.**
+- **R-N1**: F10 input 3 says to detect with `now: state.startedAt`. The doc comments of `WorkoutEngine.summary`
+  (F04's file, comment only) and of `StatsQueries.bests` say why: the store stamps `achievedAt` with the start.
+- **R-N2**: contract `recordsFollowEdits` ends with `rebuildsMoveOrDrop`. A rebuild moves the typo workout after
+  the last one, then one drops its bench. The mutants "scope ignores the old place" and "scope ignores the
+  stored exercises" are now killed by the GRDB contract clause too, so a fake that replays incrementally is
+  caught.
+- **R-N3**: F12 (a new "Inputs from F05" section) and F13 input 1 say that a deload sets no record but can be
+  the "previous" a later record beats.
+
+**6. `ProtocolsAdversarialTests`** (`LedgerDomainTests/Adversarial`, the F02/F04 tester's suite) was edited by
+the `prs:` removal in the first pass. This edit was forced and changes no assertion:
+- its `BriefWorkoutRepository` stub now declares `materialize(_:slotUpdates:)`;
+- its `BriefStatsQueries` stub gained `bests(before:for:)`, returning `PersonalRecords.Bests()`.
+
+**Code lines** (S3 method, against `efe0691`): **547 added, 438 net** for the whole PR. That is over the 500
+target, under the ~700 stop line and the ~1,000 split line.
+- This round alone: +180 −99 (net +81). Of that, 113 lines are the new `RecordReplay+Walk.swift`, about 70 of
+  which moved out of `RecordReplay.swift` for the 300-line file limit.
+- The rest: the skip-and-log buffering (about 35), the unchanged-record filter (about 30), the bests fallback (about 12).
+- The split considered: the Domain and replay core in one PR, and the round-1 fixes in another. Not taken:
+  every fix changes code that is not merged yet, and a stacked PR is ruled out.
+
+**Gate**: see "Gate (fix round 1)" below.
+
+**Gate (fix round 1)**, 2026-10-03, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0:
+- **Host:** `LedgerPersistenceTests` 370 tests in 86 suites pass; `LedgerDomainTests` 765 pass. Nightly lane on
+  the host: the model, oracle and contract-fault suites pass.
+- **Timing, both simulators, under the lock:** every timing suite passes (table above).
+- **Full gate, through the lock: green, exit 0** (`scripts/check.sh`, 379 s; log `scratchpad/f05rec/check-r1b.log`).
+  - **17/17** PR targets on iOS: 1,394 passed, 12 skipped by design.
+  - **8/8** PR-Watch targets: 1,285 passed, 12 skipped.
+- Warnings: none new. The only one is S1's `PayloadVersionAdversarialTests.swift:29` "will never be executed".
+- **Coverage:** LedgerPersistence **99.69 %** (2290/2297), LedgerDomain 99.08 % (1946/1964), LedgerDesign
+  97.20 %, overall 98.70 %.

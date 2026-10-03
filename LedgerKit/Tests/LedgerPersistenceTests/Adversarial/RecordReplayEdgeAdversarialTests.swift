@@ -75,12 +75,13 @@ struct RecordReplayEdgeAdversarialTests {
         #expect(bests.e1RM[S3Kit.bench] == OneRepMax.brzycki(weight: Weight(e7g: heavy), reps: .one))
     }
 
-    /// (documents) Notes, open question 2: a write reads the history it replays strictly. One damaged set of a
-    /// lift, in any workout before or after the one written, fails every write of that lift, by name, and stores
-    /// nothing. The damaged workout is in no list and `workout(id:)` throws, so no screen can reach it; only a
-    /// `delete(id:)` of it, by id, or a host's rebuild of it from an uncompacted log, lets the lift be stored again.
-    @Test("(documents) A damaged set of a lift fails every later write of that lift; other lifts are stored")
-    func damagedHistory_failsWritesOfItsLift() async throws {
+    /// Notes, open question 2, decided by the orchestrator (R-Q1, fix round 1: skip and log). The replay leaves out
+    /// a workout it cannot read, as the lists do: every write of the lift goes through, judged against the readable
+    /// history, and the damaged workout's own records stay as they are. The damaged workout is still in no list
+    /// and `workout(id:)` throws; a `delete(id:)` of it, by id, still works. (Sanctioned edit: this pinned the
+    /// strict read, "(documents)", and now pins the decision; everything else it checks is kept.)
+    @Test("A damaged set of a lift leaves its workout out of the replay; every write goes through (decision on R-Q1)")
+    func damagedHistory_isLeftOutOfWritesOfItsLift() async throws {
         let stack = try await S3Kit.stack()
         let damaged = Self.bench(1, day: -6, [S3Kit.set(100, 5)])
         try await stack.materialize(damaged)
@@ -89,21 +90,22 @@ struct RecordReplayEdgeAdversarialTests {
             damaged.exercises[0].id.rawValue.uuidString
         ])
         stack.clock.advance()
-        let before = try await stack.dump()
-        let refusal = LedgerPersistenceError.malformedColumn("logged_set.reps")
-        await #expect(throws: refusal) { try await stack.materialize(Self.bench(3, day: -1, [S3Kit.set(110, 5)])) }
-        await #expect(throws: refusal) { try await stack.materialize(Self.bench(4, day: -8, [S3Kit.set(90, 5)])) }
-        await #expect(throws: refusal) {
-            try await stack.workouts.updateSets(workoutExerciseID: S3Kit.rowID(2, 0), sets: [])
-        }
-        #expect(try await stack.dump() == before)
+        let records = { try await stack.stats().personalRecords(exerciseID: S3Kit.bench) }
+        try await stack.materialize(Self.bench(3, day: -1, [S3Kit.set(110, 5)]))
+        #expect(try await records().filter { $0.workoutID == S3Kit.workoutID(3) }.count == 2, "110 over 105")
+        try await stack.materialize(Self.bench(4, day: -8, [S3Kit.set(90, 5)]))
+        try await stack.workouts.updateSets(workoutExerciseID: S3Kit.rowID(2, 0), sets: [])
+        // Workout 4 is the first readable bench, workout 2 has no sets left, and 110 beats 90.
+        #expect(try await records().map(\.workoutID) == [S3Kit.workoutID(3), S3Kit.workoutID(3)])
         let squat = S3Kit.workout(5, [S3Kit.RowSpec(S3Kit.squat, [S3Kit.set(225, 5)])])
         try await stack.materialize(squat)
-        #expect(try await stack.workouts.recent(limit: 5).map(\.id) == [squat.id, S3Kit.workoutID(2)])
+        #expect(try await stack.workouts.recent(limit: 5).map(\.id) == [
+            squat.id, S3Kit.workoutID(3), S3Kit.workoutID(2), S3Kit.workoutID(4)
+        ])
         await #expect(throws: LedgerPersistenceError.self) { _ = try await stack.workouts.workout(id: damaged.id) }
         try await stack.workouts.delete(id: damaged.id)
         try await stack.materialize(Self.bench(3, day: -1, [S3Kit.set(110, 5)]))
-        #expect(try await stack.stats().personalRecords(exerciseID: S3Kit.bench).count == 2)
+        #expect(try await records().count == 2)
     }
 
     /// Round 1's `edit_recomputesDerivedColumns_andStampsOnlyChanges` lost its record half when records became

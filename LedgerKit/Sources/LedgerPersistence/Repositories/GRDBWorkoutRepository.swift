@@ -44,8 +44,8 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// Throws `notFinished` unless `workout` is `.finished` with an `endedAt`; `duplicateIdentifier` for two
     /// exercises or two sets sharing an id, or an exercise or set id that another stored workout holds (live or
     /// deleted); `nulInText` for a name or tag holding U+0000; `inexactWeight` for a weight that is not a
-    /// whole number of 10⁻⁷ g; `nonFiniteDate` for a date that is not finite; and what reading a damaged
-    /// workout throws, when records must be detected again in it.
+    /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite. A workout the record replay
+    /// cannot read is left out of it and logged; it never fails the write.
     public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(ColumnCodec.text(workout.id))")
@@ -88,8 +88,8 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// record it then deserves.
     ///
     /// Throws `missingRow` when no live workout has the exercise; `duplicateIdentifier` for a set id used
-    /// twice in the workout, or held by another workout (live or deleted); and what reading the workout, or a
-    /// later workout of the exercise, throws when it is damaged.
+    /// twice in the workout, or held by another workout (live or deleted); and what reading the workout throws
+    /// when it is damaged. A later workout the replay cannot read is left out and logged.
     public func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
         let timestamp = ColumnCodec.timestamp(now())
         let key = ColumnCodec.text(workoutExerciseID)

@@ -5,13 +5,14 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// Product decision #27's worst case: a typo fixed in the first of 400 workouts of one lift, 20,000 sets, every
-/// workout after the first setting both records. The edit replays all 400 workouts (`RecordReplay`), and each
-/// run changes 399 records: the 2,250 lb single takes every later estimate record away, and the fix gives them
-/// back. Like criterion 9's stats queries, the edit, and the bests query F10 calls before each workout, must
-/// take under `PerformanceBudget.statsQuery` (50 ms) at the 95th percentile, and a new workout of the lift,
-/// which replays only itself, too. Nightly lane only, like every timing test; each timing goes into the result
-/// bundle.
+/// Product decision #27's replay, timed in the implementer's shape: 400 workouts of one lift, 20,000 sets, every
+/// workout after the first setting both records. Nightly lane only, like every timing test; each timing goes into
+/// the result bundle. Three budgets (architecture §15):
+/// - a typo fixed in the first workout: the replay walks all 400 workouts and 399 records change each run (the
+///   2,250 lb single takes every later estimate record away, the fix gives them back), a History write
+///   (`PerformanceBudget.historyWrite`);
+/// - the bests F10 asks for before a new workout, a query (`statsQuery`);
+/// - recording new workouts at the end of history, each replaying only itself (`recordNewWorkout`).
 @Suite(
     "GRDBWorkoutRepository · record replay timing",
     .tags(.persistence, .performance, .slow),
@@ -39,7 +40,7 @@ struct RecordReplayPerformanceTests {
         return queue
     }
 
-    @Test("Fixing a typo in the first of 400 workouts of one lift, 20,000 sets, takes under 50 ms (95th percentile)")
+    @Test("A typo fixed in the first of 400 workouts, the bests before a new one, and new ones: each within budget")
     func typoInTheFirstWorkout_underBudget() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
@@ -50,36 +51,39 @@ struct RecordReplayPerformanceTests {
         let first = Self.workout(0).exercises[0]
         var typo = first.sets
         typo[0].weight = .pounds(2250)
-        let next = Self.workout(400)
-        let queries: [(name: String, run: @Sendable () async throws -> Void)] = [
-            ("bests(before:for:) the newest", { _ = try await stats.bests(before: next, for: [Self.lift.id]) }),
-            ("materialize a new workout", { try await workouts.materialize(next, slotUpdates: []) })
-        ]
         let clock = ContinuousClock()
-        var report: [String] = []
-        var timings: [Duration] = []
+        var edits: [Duration] = []
         for run in 0 ... PerformanceBudget.statsRuns { // the first run is the warm-up
             // While the typo stands no later estimate beats 2,250 lb; every later workout keeps its weight record.
             let typoStands = run.isMultiple(of: 2)
-            try await timings.append(clock.measure {
+            try await edits.append(clock.measure {
                 try await workouts.updateSets(workoutExerciseID: first.id, sets: typoStands ? typo : first.sets)
             })
             let records = try await stats.personalRecords(exerciseID: Self.lift.id).count
             #expect(records == (typoStands ? 399 : 399 * 2), "run \(run)")
         }
-        timings.removeFirst()
-        report.append(Self.line("updateSets of the first workout", timings))
-        #expect(Self.percentile95(timings) < PerformanceBudget.statsQuery, "updateSets: \(timings)")
-        for query in queries {
-            try await query.run() // warm-up
-            var runs: [Duration] = []
-            for _ in 0 ..< PerformanceBudget.statsRuns {
-                try await runs.append(clock.measure { try await query.run() })
-            }
-            report.append(Self.line(query.name, runs))
-            #expect(Self.percentile95(runs) < PerformanceBudget.statsQuery, "\(query.name): \(runs)")
+        // The last run left the typo in place: put the first workout back, untimed.
+        try await workouts.updateSets(workoutExerciseID: first.id, sets: first.sets)
+        let next = Self.workout(400)
+        var bests: [Duration] = []
+        var additions: [Duration] = []
+        for run in 0 ... PerformanceBudget.statsRuns { // the first run of each is the warm-up
+            try await bests.append(clock.measure { _ = try await stats.bests(before: next, for: [Self.lift.id]) })
+            let new = Self.workout(400 + run) // a new workout, at the end of history
+            try await additions.append(clock.measure { try await workouts.materialize(new, slotUpdates: []) })
         }
-        Attachment.record(report.joined(separator: "\n"), named: "record-replay.txt")
+        #expect(try await stats.personalRecords(exerciseID: Self.lift.id).count == 420 * 2)
+        let timed = [
+            ("updateSets of the first workout", edits, PerformanceBudget.historyWrite),
+            ("bests(before:for:) the newest", bests, PerformanceBudget.statsQuery),
+            ("materialize a new workout at the end", additions, PerformanceBudget.recordNewWorkout)
+        ]
+        for (name, timings, budget) in timed {
+            let runs = Array(timings.dropFirst())
+            #expect(Self.percentile95(runs) < budget, "\(name): \(runs)")
+        }
+        let report = timed.map { Self.line($0.0, Array($0.1.dropFirst())) }.joined(separator: "\n")
+        Attachment.record(report, named: "record-replay.txt")
     }
 
     static func percentile95(_ timings: [Duration]) -> Duration {

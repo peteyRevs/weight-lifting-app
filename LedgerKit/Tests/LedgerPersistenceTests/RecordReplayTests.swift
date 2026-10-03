@@ -173,51 +173,117 @@ extension RecordReplayTests {
         #expect(statements[3] == statements[0])
     }
 
-    @Test("A damaged set of the lift in a later workout fails the replay by name and writes nothing; others do not")
-    func damagedLaterWorkout_failsTheReplay() async throws {
+    /// Orchestrator decision on R-SF2: `pr_count` is derived, like `personal_record`, so a recount changes no
+    /// synced stamp. Fixing a typo in the first of five workouts changes the counts of the four after it, and none
+    /// of their `updated_at`.
+    @Test("A recount changes pr_count only: the later workouts' updated_at stays when the first one's typo goes")
+    func recount_stampsNoWorkoutRow() async throws {
+        let repositories = try Repositories()
+        let workouts = (0 ..< 5).map { Self.session(
+            $0,
+            day: Double(2 * $0 - 10),
+            [Self.lift(Self.bench, Decimal(200 + 5 * $0))]
+        ) }
+        var typo = workouts[0]
+        typo.exercises[0].sets[0].weight = .pounds(2250)
+        for workout in [typo] + workouts.dropFirst() {
+            try await repositories.history.materialize(workout)
+        }
+        let stamps = "SELECT updated_at FROM workout WHERE id != ? ORDER BY started_at"
+        let others: StatementArguments = [ColumnCodec.text(typo.id)]
+        let before = try await repositories.texts(stamps, others)
+        #expect(try await repositories.texts(Self.counts) == ["0", "0", "0", "0", "0"])
+        repositories.clock.advance()
+        try await repositories.workouts.updateSets(
+            workoutExerciseID: typo.exercises[0].id,
+            sets: workouts[0].exercises[0].sets
+        )
+        #expect(try await repositories.texts(Self.counts) == ["0", "2", "2", "2", "2"])
+        #expect(try await repositories.texts(stamps, others) == before)
+    }
+
+    /// When the bests' aggregate meets damage it walks the history a workout at a time (`RecordReplay.walkedBests`):
+    /// that walk too leaves the damaged workout out, and never counts the asked workout's own stored copy, even one
+    /// that started earlier (review R-SF1).
+    @Test("Over damaged history, the bests before a workout leave the damaged one out, and never count its own copy")
+    func bestsOverDamage_leaveItOut_andNeverCountTheWorkout() async throws {
+        let repositories = try Repositories()
+        let damaged = Self.session(0, day: -8, [Self.lift(Self.bench, 200)])
+        let readable = Self.session(1, day: -6, [Self.lift(Self.bench, 150)])
+        let stored = Self.session(2, day: -4, [Self.lift(Self.bench, 300)])
+        for workout in [damaged, readable, stored] {
+            try await repositories.history.materialize(workout)
+        }
+        try await repositories.execute(
+            "UPDATE logged_set SET weight_e7g = 'heavy' WHERE id = ?",
+            [ColumnCodec.text(damaged.exercises[0].sets[0].id)]
+        )
+        var moved = stored
+        moved.startedAt = EventBuilders.start.addingTimeInterval(-86400 * 2)
+        let bests = try await repositories.stats.bests(before: moved, for: [Self.bench.id])
+        #expect(bests.weightAtReps == [Self.bench.id: [Reps(clamping: 5): .pounds(150)]])
+    }
+
+    /// The previous bests of the records `workout` holds of the bench, in list order.
+    static func previous(in workout: WorkoutState, _ repositories: Repositories) async throws -> [PRKind?] {
+        try await repositories.stats.personalRecords(exerciseID: bench.id).filter { $0.workoutID == workout.id }
+            .map(\.previous)
+    }
+
+    /// Bench 5 × `pounds` lb, as a record's previous best: the estimate, then the weight.
+    static func over(_ pounds: Decimal) -> [PRKind?] {
+        let five = Reps(clamping: 5)
+        return [
+            OneRepMax.brzycki(weight: .pounds(pounds), reps: five).map(PRKind.estimatedOneRepMax),
+            .weightAtReps(.pounds(pounds), five)
+        ]
+    }
+
+    /// Orchestrator decision on R-Q1: the replay leaves out a workout it cannot read, as the lists do, and logs
+    /// it. The lifter's writes go through, judged against the readable history; the damaged workout's own record
+    /// rows stay as they are until a write repairs it.
+    @Test("A workout the replay cannot read is left out: writes go through, judged against the readable history")
+    func damagedWorkout_isLeftOutOfTheReplay() async throws {
         let repositories = try Repositories()
         let first = Self.session(0, day: -6, [Self.lift(Self.bench, 200), Self.lift(Self.squat, 100)])
         let damaged = Self.session(1, day: -4, [Self.lift(Self.bench, 210), Self.lift(Self.squat, 110)])
         try await repositories.history.materialize(first)
         try await repositories.history.materialize(damaged)
-        try await repositories.execute(
-            "UPDATE logged_set SET weight_e7g = 'heavy' WHERE id = ?",
-            [ColumnCodec.text(damaged.exercises[0].sets[0].id)]
-        )
-        let rows = """
-        SELECT id || updated_at || quote(deleted_at) FROM personal_record UNION ALL SELECT pr_count FROM workout
-        """
-        let before = try await repositories.texts(rows)
+        let key: StatementArguments = [ColumnCodec.text(damaged.exercises[0].sets[0].id)]
+        try await repositories.execute("UPDATE logged_set SET weight_e7g = 'heavy' WHERE id = ?", key)
+        let ownRows = "SELECT id || updated_at || weight_e7g FROM personal_record WHERE workout_id = ? ORDER BY id"
+        let damagedRows = try await repositories.texts(ownRows, [ColumnCodec.text(damaged.id)])
         repositories.clock.advance()
         var lighter = first.exercises[0].sets
         lighter[0].weight = .pounds(190)
-        let weight = LedgerPersistenceError.malformedColumn("logged_set.weight_e7g")
-        await #expect(throws: weight) {
-            try await repositories.workouts.updateSets(workoutExerciseID: first.exercises[0].id, sets: lighter)
-        }
-        // A new workout of the lift is judged against the damaged set: refused too, and nothing stored.
-        let next = Self.session(2, day: -2, [Self.lift(Self.bench, 220)])
-        await #expect(throws: weight) { try await repositories.history.materialize(next) }
-        #expect(try await repositories.texts(rows) == before)
-        #expect(try await repositories.workouts.workout(id: first.id) == first)
-        // The squat's history is readable: its edit goes through.
-        var squatSets = first.exercises[1].sets
-        squatSets[0].weight = .pounds(90)
-        try await repositories.workouts.updateSets(workoutExerciseID: first.exercises[1].id, sets: squatSets)
-        // Materialising the damaged workout again repairs it, and the bench edit goes through.
-        try await repositories.history.materialize(damaged)
         try await repositories.workouts.updateSets(workoutExerciseID: first.exercises[0].id, sets: lighter)
-        #expect(try await repositories.texts(Self.counts) == ["0", "4"])
-        // Reps below 1 are damage too, by name.
-        try await repositories.damage(
-            "UPDATE logged_set SET reps = 0 WHERE id = ?",
-            [ColumnCodec.text(damaged.exercises[0].sets[0].id)]
+        #expect(try await repositories.texts(ownRows, [ColumnCodec.text(damaged.id)]) == damagedRows)
+        // A new workout of the lift is judged against the readable history: over 190, not the damaged 210.
+        let next = Self.session(2, day: -2, [Self.lift(Self.bench, 205)])
+        try await repositories.history.materialize(next)
+        #expect(try await Self.previous(in: next, repositories) == Self.over(190))
+        // Materialising the damaged workout again repairs it: it holds the records, over 190, and the next none.
+        try await repositories.history.materialize(damaged)
+        #expect(try await Self.previous(in: damaged, repositories) == Self.over(190))
+        #expect(try await Self.previous(in: next, repositories) == [])
+        // Reps below 1 are left out the same way.
+        try await repositories.damage("UPDATE logged_set SET reps = 0 WHERE id = ?", key)
+        try await repositories.workouts.updateSets(
+            workoutExerciseID: first.exercises[0].id,
+            sets: first.exercises[0].sets
         )
-        await #expect(throws: LedgerPersistenceError.malformedColumn("logged_set.reps")) {
-            try await repositories.workouts.updateSets(
-                workoutExerciseID: first.exercises[0].id,
-                sets: first.exercises[0].sets
-            )
-        }
+        #expect(try await Self.previous(in: next, repositories) == Self.over(200))
+        #expect(try await Self.previous(in: damaged, repositories) == Self.over(190))
+        // A rebuild of both lifts walks past the damaged bench row to the same workout's squat: the whole workout is
+        // left out, its squat records too, kept as they are.
+        let squatRows = "SELECT id || updated_at FROM personal_record WHERE workout_id = ? AND exercise_id = ?"
+        let squatKey: StatementArguments = [ColumnCodec.text(damaged.id), ColumnCodec.text(Self.squat.id)]
+        let squatBefore = try await repositories.texts(squatRows, squatKey)
+        repositories.clock.advance()
+        var lighterSquat = first
+        lighterSquat.exercises[1].sets[0].weight = .pounds(80)
+        try await repositories.history.materialize(lighterSquat)
+        #expect(squatBefore.count == 2)
+        #expect(try await repositories.texts(squatRows, squatKey) == squatBefore)
     }
 }

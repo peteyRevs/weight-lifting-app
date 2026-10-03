@@ -144,12 +144,14 @@ extension HistoryModel: StatsQueries {
     }
 
     /// The bests of the live workouts before `workout` in history's order, folded with `PersonalRecords.Bests`,
-    /// for `exerciseIDs` only. The `.bestsBeforeIncludeIt` fault counts `workout`'s own place too.
+    /// for `exerciseIDs` only, never `workout`'s own stored copy (review R-SF1, fix round 1: even one that started
+    /// earlier). The `.bestsBeforeIncludeIt` fault counts that copy when it is at or before `workout`'s place.
     func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests {
         let key = (date(workout), workout.id.rawValue.uuidString)
         let all = state.withLock { historyOrder($0) }.reduce(into: PersonalRecords.Bests()) { bests, entry in
             let place = (date(entry.state), entry.state.id.rawValue.uuidString)
-            if place < key || (has(.bestsBeforeIncludeIt) && place == key) {
+            let counted = entry.state.id == workout.id ? has(.bestsBeforeIncludeIt) && place <= key : place < key
+            if counted {
                 bests.include(entry.state)
             }
         }

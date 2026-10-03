@@ -53,3 +53,4 @@ _Filled in by agents during delivery:_ `F28-icloud-sync/{implementation-notes,te
 
 ## Inputs from F05 (2026-09-30)
 - `personal_record` (schema v001) is derived data, recomputed from `logged_set`, so it is local-only and never synced (orchestrator decision, 2026-09-30).
+- `workout.pr_count` is derived locally too (F05 records follow-up, orchestrator decision on R-SF2, 2026-10-02): it must not be synced or merged, and a recount does not stamp `updated_at`. After a sync writes workout rows, rebuild `personal_record` and `pr_count` by F05's replay (`RecordReplay`) from the earliest workout it wrote.

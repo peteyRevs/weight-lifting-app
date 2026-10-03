@@ -84,7 +84,8 @@ public enum WorkoutEngine {
     ///
     /// Elapsed time is frozen at `endedAt` (zero for a workout that has not ended). `prs` come from
     /// the caller, which detects them against the bests before the workout (decision #3,
-    /// `StatsQueries.bests(before:for:)`); F05 stores its own, the same ones (product decision #27).
+    /// `StatsQueries.bests(before:for:)`); F05 stores its own (product decision #27), the same ones when the
+    /// caller detects with `now: state.startedAt`, as the store stamps `achievedAt` with the start.
     /// There is one row per exercise, in the workout's units.
     public static func summary(_ state: WorkoutState, prs: [PersonalRecord]) -> WorkoutSummary {
         WorkoutSummary(

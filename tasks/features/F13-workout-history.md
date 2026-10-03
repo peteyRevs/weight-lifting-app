@@ -65,8 +65,11 @@ _Filled in by agents during delivery:_
    which replaces S3's stale-records line). Inside the same write they detect the edited exercise's records
    again from that workout onward: a corrected typo (2,250 to 225) removes the false record, and a later workout
    gets the record it then deserves. `pr_count` follows. F13 does nothing for it, and criterion 4 ("editing a past
-   set updates my PRs") holds through the repository. An edit can throw `malformedColumn` when a later workout of
-   the same exercise holds a damaged value (foreign damage only); nothing is written then.
+   set updates my PRs") holds through the repository. A damaged workout elsewhere in the history never fails an
+   edit: the replay leaves it out and logs it (orchestrator decision on R-Q1).
+   - A deload sets no record, but its sets count toward the bests, so a later record's "previous" can be a
+     deload's set (contract clause `personalRecords`: 255 × 3 "over 250 × 5", the deload's). If the session log
+     shows "over …", expect it (review R-N3).
 2. **No query returns a workout's records, or their count, for the list badge** (criterion 1). `pr_count` is
    stored (and now always right) but nothing reads it, and `StatsQueries.personalRecords(exerciseID:)` is per
    exercise. Either call it for each exercise of a workout and filter by `workoutID`, or add

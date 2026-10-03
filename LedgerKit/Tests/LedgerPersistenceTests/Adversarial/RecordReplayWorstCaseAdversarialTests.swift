@@ -6,8 +6,9 @@ import Testing
 
 /// F05 records follow-up, adversarial round 1: product decision #27's replay in shapes worse than the
 /// implementer's (`RecordReplayPerformanceTests`), each still 20,000 sets in 400 workouts. Finding R-1: on both
-/// simulators every shape is over the 50 ms budget, so this test fails, and stays failing until the replay is
-/// faster or writes get a budget of their own. Nightly lane only, like every timing test.
+/// simulators every shape was over the 50 ms stats budget; the orchestrator gave History writes a budget of their
+/// own (`PerformanceBudget.historyWrite`, architecture §15; sanctioned edit, budget only). Nightly lane only, like
+/// every timing test.
 @Suite(
     "Adversarial records · replay timing, worse shapes",
     .tags(.persistence, .performance, .slow),
@@ -95,7 +96,7 @@ struct RecordReplayWorstCaseAdversarialTests {
     }
 
     @Test(
-        "Each worse shape's write takes under 50 ms (95th percentile of 20)",
+        "Each worse shape's write is within the History write budget (95th percentile of 20)",
         arguments: Shape.allCases
     )
     func worseShape_underBudget(shape: Shape) async throws {
@@ -121,6 +122,6 @@ struct RecordReplayWorstCaseAdversarialTests {
         let sorted = timings.sorted()
         let p95 = sorted[sorted.count * 95 / 100 - 1]
         Attachment.record("\(shape): p95 \(p95), median \(sorted[sorted.count / 2])", named: "replay-\(shape).txt")
-        #expect(p95 < PerformanceBudget.statsQuery, "\(shape): \(timings)")
+        #expect(p95 < PerformanceBudget.historyWrite, "\(shape): \(timings)")
     }
 }
