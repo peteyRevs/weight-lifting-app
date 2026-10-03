@@ -46,30 +46,30 @@ struct WorkoutRowDiffTests {
     func rematerialize_diffsRows() async throws {
         let scenario = try await Tests.Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        let records = scenario.records
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         let first = repositories.clock.timestamp
         repositories.clock.advance()
         let edited = Contract.edited(workout)
-        try await repositories.history.materialize(edited, prs: [records[1]])
+        try await repositories.history.materialize(edited)
         let edit = repositories.clock.timestamp
         #expect(try await repositories.workouts.workout(id: workout.id) == edited)
-        // Gone: the last exercise with its 3 sets, a set of the first exercise, and the second record.
-        #expect(try await repositories.texts(Self.deletedCounts, ["stamp": edit]) == ["0 1 4 1"])
-        // Written: the workout (name, totals, record count), two changed sets and the added one, and the
-        // first record, which now holds what the second did; plus the five soft deletes above.
-        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": edit]) == ["1 1 7 2"])
-        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": first]) == ["0 4 13 0"])
-        #expect(try await repositories.texts(Tests.liveCounts) == ["1 4 16 1 16"])
-        #expect(try await repositories.texts("SELECT pr_count || ' ' || created_at FROM workout") == ["1 \(first)"])
+        // Gone: the last exercise with its 3 sets, and a set of the first exercise.
+        #expect(try await repositories.texts(Self.deletedCounts, ["stamp": edit]) == ["0 1 4 0"])
+        // Written: the workout (name, totals, record count), two changed sets and the added one, plus the soft
+        // deletes above, and four new records: the second exercise's 57.5 × 10 and the third's added 75 × 6 now
+        // beat the earlier workout (product decision #27). The first exercise's two records stay as they were.
+        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": edit]) == ["1 1 7 4"])
+        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": first]) == ["0 4 13 2"])
+        #expect(try await repositories.texts(Tests.liveCounts) == ["2 9 35 6 16"])
+        let row = "SELECT pr_count || ' ' || created_at FROM workout WHERE id = ?"
+        #expect(try await repositories.texts(row, [ColumnCodec.text(workout.id)]) == ["6 \(first)"])
     }
 
-    @Test("updateSets computes the e1RMs and the workout's totals again, and leaves its records and other rows")
+    @Test("updateSets computes the e1RMs, the workout's totals and its records again, and leaves other rows")
     func updateSets_recomputesE1RM_andTotals() async throws {
         let scenario = try await Tests.Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        let records = scenario.records
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         let first = repositories.clock.timestamp
         repositories.clock.advance()
         var edited = workout
@@ -90,21 +90,26 @@ struct WorkoutRowDiffTests {
         )
         let heavy = try #require(OneRepMax.brzycki(weight: .pounds(200), reps: Reps(clamping: 3)))
         #expect(try estimates == [String(heavy.e7g()), "NULL", "944040000000", "944040000000"])
-        let totals = "SELECT volume_e7g_reps || ' ' || done_sets || ' ' || total_sets || ' ' || pr_count FROM workout"
-        #expect(try await repositories.texts(totals) == ["\(edited.volume.e7gReps()) 16 18 2"])
-        // Written: the workout's totals, two changed sets and the soft delete of the removed one.
-        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": edit]) == ["1 0 3 0"])
+        let totals = """
+        SELECT volume_e7g_reps || ' ' || done_sets || ' ' || total_sets || ' ' || pr_count FROM workout WHERE id = ?
+        """
+        #expect(try await repositories.texts(totals, [ColumnCodec.text(workout.id)]) == [
+            "\(edited.volume.e7gReps()) 16 18 2"
+        ])
+        // Written: the workout's totals, two changed sets, the soft delete of the removed one, and both records,
+        // in their own rows: 200 × 3 now holds the best estimate and the best weight (product decision #27).
+        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": edit]) == ["1 0 3 2"])
         #expect(try await repositories.texts(Self.deletedCounts, ["stamp": edit]) == ["0 0 1 0"])
-        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": first]) == ["0 5 16 2"])
-        #expect(try await repositories.stats.personalRecords(exerciseID: workout.exercises[0].exerciseID) == records)
+        #expect(try await repositories.texts(Self.updatedCounts, ["stamp": first]) == ["0 5 16 0"])
+        let kinds = try await repositories.stats.personalRecords(exerciseID: workout.exercises[0].exerciseID)
+        #expect(kinds.map(\.kind) == [.estimatedOneRepMax(heavy), .weightAtReps(.pounds(200), Reps(clamping: 3))])
     }
 
     @Test("updateSets with the sets it already has writes no row")
     func updateSets_unchanged_writesNoRow() async throws {
         let scenario = try await Tests.Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        let records = scenario.records
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         let before = try await repositories.texts(Tests.everyRow)
         repositories.clock.advance()
         try await repositories.workouts.updateSets(
@@ -118,8 +123,7 @@ struct WorkoutRowDiffTests {
     func delete_cascades_softly() async throws {
         let scenario = try await Tests.Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        let records = scenario.records
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         let first = repositories.clock.timestamp
         repositories.clock.advance()
         let deletes = try await repositories.statements(startingWith: "UPDATE logged_set") {
@@ -127,20 +131,24 @@ struct WorkoutRowDiffTests {
         }
         let deleted = repositories.clock.timestamp
         #expect(try await repositories.texts(Self.deletedCounts, ["stamp": deleted]) == ["1 5 19 2"])
-        #expect(try await repositories.texts(Tests.liveCounts) == ["0 0 0 0 16"])
+        #expect(try await repositories.texts(Tests.liveCounts) == ["1 5 19 0 16"]) // the earlier workout
         // One order on every launch: the sets by position, then id.
-        let ordered = try await repositories.texts("SELECT id FROM logged_set ORDER BY position, id")
+        let ordered = try await repositories.texts("""
+        SELECT logged_set.id FROM logged_set JOIN workout_exercise ON workout_exercise.id = workout_exercise_id
+        WHERE workout_id = ? ORDER BY logged_set.position, logged_set.id
+        """, [ColumnCodec.text(workout.id)])
         #expect(deletes.count == 19)
         #expect(zip(deletes, ordered).allSatisfy { $0.hasSuffix("WHERE id = '\($1)'") })
         repositories.clock.advance()
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         #expect(try await repositories.workouts.workout(id: workout.id) == workout)
-        #expect(try await repositories.texts(Tests.liveCounts) == ["1 5 19 2 16"])
-        #expect(try await repositories.texts("SELECT DISTINCT created_at FROM logged_set") == [first])
+        #expect(try await repositories.texts(Tests.liveCounts) == ["2 10 38 2 16"])
+        let created = "SELECT DISTINCT created_at FROM logged_set WHERE updated_at != created_at"
+        #expect(try await repositories.texts(created) == [first])
     }
 }
 
-/// Compaction after materialisation, and the derived ids of record rows.
+/// Compaction after materialisation, misses, a lone soft delete, and the derived ids of record rows.
 extension WorkoutRowDiffTests {
     @Test("Criterion 8: a log is compacted after its workout is materialised; the workout stays, the events go")
     func materializeThenCompact_keepsTheWorkout() async throws {
@@ -179,69 +187,51 @@ extension WorkoutRowDiffTests {
         #expect(try await repositories.workouts.workout(id: scenario.workout.id) == scenario.workout)
     }
 
-    @Test("A record that names another workout is refused, naming that workout; nothing is written (S3-1)")
-    func recordOfAnotherWorkout_isRefused() async throws {
-        let scenario = try await Tests.Scenario()
-        let repositories = scenario.repositories
-        try await repositories.history.materialize(scenario.workout, prs: scenario.records)
-        let before = try await repositories.texts(Tests.everyRow)
-        repositories.clock.advance()
-        let other = Contract.workout(number: 1, endedAt: EventBuilders.start.addingTimeInterval(3600))
-        let own = Tests.records(of: other)[0]
-        let stored = ColumnCodec.text(scenario.workout.id)
-        await #expect(throws: LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(stored)")) {
-            try await repositories.history.materialize(other, prs: [own, scenario.records[1]])
-        }
-        #expect(try await repositories.texts(Tests.everyRow) == before)
-        // A record naming a workout that is not stored is refused the same way, before the foreign key is.
-        let unknown = Tests.records(of: Contract.workout(number: 9))[0]
-        let absent = ColumnCodec.text(Seeders.workoutID(9))
-        await #expect(throws: LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(absent)")) {
-            try await repositories.history.materialize(other, prs: [unknown])
-        }
-        #expect(try await repositories.texts(Tests.everyRow) == before)
-    }
-
     @Test("A workout row soft-deleted on its own is repaired by a rebuild, and delete clears rows under it (S3-2)")
     func loneSoftDeletedParent_hidesNoRows() async throws {
         let scenario = try await Tests.Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        try await repositories.history.materialize(workout, prs: scenario.records)
-        try await repositories.execute("UPDATE workout SET deleted_at = 'then'")
-        try await repositories.execute("UPDATE workout_exercise SET deleted_at = 'then' WHERE position = 1")
+        try await repositories.history.materialize(workout)
+        let id: StatementArguments = [ColumnCodec.text(workout.id)]
+        try await repositories.execute("UPDATE workout SET deleted_at = 'then' WHERE id = ?", id)
+        try await repositories.execute(
+            "UPDATE workout_exercise SET deleted_at = 'then' WHERE position = 1 AND workout_id = ?",
+            id
+        )
         let edited = Contract.edited(workout)
-        try await repositories.history.materialize(edited, prs: [scenario.records[0]])
+        try await repositories.history.materialize(edited)
         #expect(try await repositories.workouts.workout(id: workout.id) == edited)
-        #expect(try await repositories.texts(Tests.liveCounts) == ["1 4 16 1 16"])
-        try await repositories.execute("UPDATE workout SET deleted_at = 'then'")
+        #expect(try await repositories.texts(Tests.liveCounts) == ["2 9 35 6 16"]) // as in `rematerialize_diffsRows`
+        try await repositories.execute("UPDATE workout SET deleted_at = 'then' WHERE id = ?", id)
         try await repositories.workouts.delete(id: workout.id)
-        #expect(try await repositories.texts(Tests.liveCounts) == ["0 0 0 0 16"])
+        #expect(try await repositories.texts(Tests.liveCounts) == ["1 5 19 0 16"])
     }
 
-    @Test("A record's row id is the version-5 UUID of its place in its workout: the same on every materialise")
+    @Test("A record's row id is the version-5 UUID of its workout, exercise and kind: the same however it changes")
     func recordIDs_areDerived() async throws {
-        let workout = Contract.workout()
-        let records = Tests.records(of: workout)
-        let first = PersonalRecordRecord(records[0], position: 0).rowID
-        #expect(first == PersonalRecordRecord(records[1], position: 0).rowID)
-        #expect(first != PersonalRecordRecord(records[0], position: 1).rowID)
-        let elsewhere = PersonalRecord(
-            exerciseID: records[0].exerciseID,
-            kind: records[0].kind,
-            previous: nil,
-            achievedAt: records[0].achievedAt,
-            workoutID: Seeders.workoutID(9)
-        )
-        #expect(first != PersonalRecordRecord(elsewhere, position: 0).rowID)
-        #expect(first.dropFirst(14).first == "5") // the version nibble
-        // A record read from a row keeps the row's own id, whatever its place was (review N4).
-        let repositories = try await Repositories.withProgramExercises()
-        try await repositories.history.materialize(workout, prs: records)
-        let stored = try await repositories.queue.read { database in
-            try PersonalRecordRecord.fetchAll(database, sql: "SELECT * FROM personal_record ORDER BY kind")
+        let scenario = try await Tests.Scenario()
+        let (repositories, workout) = (scenario.repositories, scenario.workout)
+        try await scenario.materialize()
+        func id(_ kind: String) -> String {
+            let name = "personal_record \(ColumnCodec.text(workout.exercises[0].exerciseID)) \(kind)"
+            return ColumnCodec.derivedID(named: name, in: workout.id.rawValue).uuidString
         }
-        #expect(stored.map(\.rowID) == [first, PersonalRecordRecord(records[1], position: 1).rowID])
-        #expect(stored.map(\.record) == records)
+        let read = { try await repositories.queue.read { database in
+            try PersonalRecordRecord.fetchAll(database, sql: "SELECT * FROM personal_record ORDER BY kind")
+        } }
+        let stored = try await read()
+        #expect(stored.map(\.rowID) == [id("estimatedOneRepMax"), id("weightAtReps")])
+        #expect(stored.map(\.record) == scenario.records) // a record read from a row keeps its id (review N4)
+        #expect(stored.first?.rowID.dropFirst(14).first == "5") // the version nibble
+        // An edit to 200 × 3 changes both records' values: in their own rows, none added or deleted.
+        var sets = workout.exercises[0].sets
+        sets[0].weight = .pounds(200)
+        sets[0].reps = Reps(clamping: 3)
+        try await repositories.workouts.updateSets(workoutExerciseID: workout.exercises[0].id, sets: sets)
+        let edited = try await read()
+        #expect(edited.map(\.rowID) == stored.map(\.rowID))
+        #expect(edited.map(\.record) != stored.map(\.record))
+        #expect(try await repositories.count("SELECT COUNT(*) FROM personal_record WHERE deleted_at IS NULL") == 2)
         // RFC 9562's own example: the version-5 UUID of "www.example.com" in the DNS namespace.
         let dns = try #require(UUID(uuidString: "6BA7B810-9DAD-11D1-80B4-00C04FD430C8"))
         let example = ColumnCodec.derivedID(named: "www.example.com", in: dns)

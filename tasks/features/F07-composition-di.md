@@ -116,20 +116,26 @@ _Filled in by agents during delivery:_
     `duplicateIdentifier` for an id used twice in a program or held by another program, live or deleted.
 - **Workouts and stats (F05 S3, 2026-10-01).** `GRDBWorkoutRepository(queue, now:)` and
   `GRDBStatsQueries(queue, now:)` take the injected date; the stats use it to say which week is the current one.
-  `InMemoryWorkoutRepository` and `InMemoryStatsQueries` run `WorkoutRepositoryContract.clauses` (12) and
-  `StatsQueriesContract.clauses` (9) over a `HistoryStores`: the three stores share one history, the program
+  `InMemoryWorkoutRepository` and `InMemoryStatsQueries` run `WorkoutRepositoryContract.clauses` (13) and
+  `StatsQueriesContract.clauses` (10) over a `HistoryStores`: the three stores share one history, the program
   store accepts slots naming `ProgramRepositoryContract.exercises`, and the stats read the current time as
   `StatsQueriesContract.now`. What the fakes must honour, each pinned by a clause:
-  - a workout's date is when it ended; lists are newest first, then by id; a limit below 1 gives none; ranges
-    exclude their upper bound;
+  - a workout's date is when it started (product decision #26); lists are newest first, then by id; a limit
+    below 1 gives none; ranges exclude their upper bound;
   - a read resets the live-only fields (`WorkoutRepositoryContract.stored(_:)`);
-  - `materialize` is an upsert; it throws `notFinished`, `duplicateIdentifier` (an id used twice, or held by
-    another workout, even a deleted one) and `nulInText`, and then stores nothing; slot updates replace a slot's
-    misses and skip an unknown slot; `updateSets` keeps the workout's records and throws `missingRow`;
+  - `materialize(_:slotUpdates:)` is an upsert; it throws `notFinished`, `duplicateIdentifier` (an id used twice,
+    or held by another workout, even a deleted one) and `nulInText`, and then stores nothing; slot updates
+    replace a slot's misses and skip an unknown slot; `updateSets` throws `missingRow`;
   - `observeRecent` emits only when its list changes;
   - the "Last" line counts done `.working` sets and shows the heaviest; the bests count `.working` and `.added`
     sets only; volume, `sessionCount` and `recentlyLogged` count every kind; `sessionsCompleted` counts a workout
-    with no done set; weeks are the given calendar's, by the workout's end; records list by `achievedAt`.
-  - **Pending** (F05 notes, "S3 fix round 1"): a clause that a record naming another workout is refused, and
-    the F05 follow-up before F10, which changes both protocols (drops `materialize`'s `summary`, adds bests
-    before a workout).
+    with no done set; weeks are the given calendar's, by the workout's start;
+  - **records are a function of history** (product decision #27, F05 records follow-up): after every write the
+    fake's records must equal `PersonalRecords.detect` replayed over its live workouts in order (by start, then
+    id), each judged against the bests before it, `achievedAt` its start. The simplest honest fake replays
+    from scratch after each write, folding `PersonalRecords.Bests.include`; clauses `recordsFollowEdits` (the
+    2,250 lb typo) and `personalRecords` (workouts stored newest first) catch a fake that skips the later
+    workouts or judges against the all-time bests. Records list newest first by `achievedAt`, then workout id,
+    the estimate first;
+  - `bests(before:for:)` folds the workouts before the given one (stored or not) by start, then id (clause
+    `bestsBefore`).

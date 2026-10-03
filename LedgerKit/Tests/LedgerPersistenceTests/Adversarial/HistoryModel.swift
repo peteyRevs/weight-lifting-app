@@ -15,13 +15,18 @@ final class HistoryModel: Sendable {
         case tiesInInsertionOrder, datedByEnd, hardDelete, keepsLiveFields, lastIsFirstSet, lastCountsEveryKind
         case lastOfAnyWorkout, bestsCountWarmups, bestsCountDrops, bestSetFewerReps, estimatesAbove12Reps
         case weeksInUTCFromMonday, weeksByTickTime, futureWeeksCount, volumeSkipsWarmups, sessionsNeedADoneSet
-        case sessionCountIgnoresDone, recordsByWorkoutDate, recordsInGivenOrder, recentlyLoggedInWorkoutOrder
+        case sessionCountIgnoresDone, recentlyLoggedInWorkoutOrder
         case editDropsRecords, emitsEveryWrite, missesAreMerged, closedRanges, negativeLimitIsAll
+        /// Product decision #27: records detected against the all-time bests, the workout's own sets included;
+        /// against every other workout's, later ones included; only for the workout written, never again for
+        /// the ones after it; and bests "before" a workout that include it.
+        case recordsAgainstAllTime, recordsAgainstOtherWorkouts, recordsSkipLaterWorkouts, bestsBeforeIncludeIt
     }
 
     struct Entry: Sendable {
         var state: WorkoutState
-        var records: [PersonalRecord]
+        /// Detected by `redetect`, never given (product decision #27).
+        var records: [PersonalRecord] = []
         var isDeleted = false
         var order: Int
     }
@@ -159,13 +164,13 @@ extension HistoryModel {
         }
     }
 
-    func store(_ workout: WorkoutState, records: [PersonalRecord]?, in state: inout State) throws {
+    func store(_ workout: WorkoutState, in state: inout State) throws {
         try refuseIDs(of: workout, in: state)
         try refuseNul(in: workout)
         let old = state.entries[workout.id]
         state.entries[workout.id] = Entry(
             state: stored(workout),
-            records: records ?? (has(.editDropsRecords) ? [] : old?.records ?? []),
+            records: old?.records ?? [],
             order: old?.order ?? state.entries.count
         )
         for exercise in workout.exercises {
@@ -173,6 +178,40 @@ extension HistoryModel {
             for set in exercise.sets {
                 state.setOwners[set.id] = workout.id
             }
+        }
+    }
+
+    /// The live workouts in history's order (product decision #26): by date, then id text.
+    func historyOrder(_ state: State) -> [Entry] {
+        state.entries.values.filter { !$0.isDeleted }.sorted { lhs, rhs in
+            (date(lhs.state), lhs.state.id.rawValue.uuidString) < (date(rhs.state), rhs.state.id.rawValue.uuidString)
+        }
+    }
+
+    /// Product decision #27, written from the protocol's doc rather than the SQL: every live workout's records
+    /// are `PersonalRecords.detect` against the bests of the workouts before it, replayed from scratch after
+    /// every write (the database replays only what a write touched). `changed` is the workout just written.
+    func redetect(after changed: WorkoutID, in state: inout State) {
+        let ordered = historyOrder(state)
+        let allTime = ordered.reduce(into: PersonalRecords.Bests()) { $0.include($1.state) }
+        var before = PersonalRecords.Bests()
+        for entry in ordered {
+            let id = entry.state.id
+            var against = before
+            if has(.recordsAgainstAllTime) {
+                against = allTime
+            }
+            if has(.recordsAgainstOtherWorkouts) {
+                against = ordered.filter { $0.state.id != id }.reduce(into: .init()) { $0.include($1.state) }
+            }
+            if !has(.recordsSkipLaterWorkouts) || id == changed {
+                state.entries[id]?.records = PersonalRecords.detect(
+                    workout: entry.state,
+                    against: against,
+                    now: entry.state.startedAt
+                )
+            }
+            before.include(entry.state)
         }
     }
 

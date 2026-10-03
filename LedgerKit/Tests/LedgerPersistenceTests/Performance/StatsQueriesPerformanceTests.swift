@@ -22,27 +22,15 @@ struct StatsQueriesPerformanceTests {
     static let exercises = Seeders.catalog(count: 12, version: 1).exercises
     static let now = EventBuilders.start
 
-    /// A file database holding `Seeders.history` of 400 workouts × 50 sets, every workout with a personal
-    /// record, written through the repository as the app writes them.
+    /// A file database holding `Seeders.history` of 400 workouts × 50 sets, written through the repository as
+    /// the app writes them, with the personal records it detects (product decision #27).
     static func seeded(in directory: TemporaryDirectory) async throws -> DatabaseQueue {
         let queue = try LedgerDatabase.open(at: directory.file("store/ledger.sqlite"))
         let workouts = GRDBWorkoutRepository(queue, now: { now })
         var generator = SeededGenerator(seed: 42)
         let history = Seeders.history(exercises: exercises, workouts: 400, setsPerWorkout: 50, rng: &generator)
         for workout in history {
-            let record = PersonalRecord(
-                exerciseID: workout.exercises[0].exerciseID,
-                kind: .weightAtReps(workout.exercises[0].targetLoad, Reps(clamping: workout.exercises[0].targetReps)),
-                previous: nil,
-                achievedAt: workout.endedAt ?? now,
-                workoutID: workout.id
-            )
-            try await workouts.materialize(
-                workout,
-                summary: WorkoutEngine.summary(workout, prs: [record]),
-                prs: [record],
-                slotUpdates: []
-            )
+            try await workouts.materialize(workout, slotUpdates: [])
         }
         return queue
     }

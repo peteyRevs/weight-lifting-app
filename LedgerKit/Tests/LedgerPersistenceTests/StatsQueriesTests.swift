@@ -129,9 +129,10 @@ struct StatsQueriesTests {
         let repositories = try Repositories()
         let workout = WorkoutRepositoryContract.workout()
         let records = WorkoutRepositoryTests.records(of: workout)
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(WorkoutRepositoryTests.earlier(than: workout))
+        try await repositories.history.materialize(workout)
         #expect(try await repositories.stats.personalRecords(exerciseID: Self.bench.id) == records)
-        try await repositories.execute("UPDATE workout SET ended_at = NULL")
+        try await repositories.execute("UPDATE workout SET ended_at = NULL") // both workouts
         let always = Date.distantPast ..< Date.distantFuture
         #expect(try await repositories.workouts.recent(limit: 5) == [])
         #expect(try await repositories.workouts.workouts(in: always) == [])

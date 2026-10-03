@@ -133,22 +133,28 @@ struct MigrationFixtureAdversarialTests {
         #expect(orphans == 0)
     }
 
-    @Test("A fixture workout materialised again through today's code writes no row: the rows are in today's shape")
+    /// F05 records follow-up (product decision #27): records are derived, so the fixture's, which v001's caller
+    /// gave, are detected again. Every other row stays as it was: the rows are in today's shape.
+    @Test("A fixture workout materialised again writes no row but its records, which are detected again")
     func fixtureWorkouts_rematerialiseAsNoOps() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only
         let fixture = try Self.copy(in: directory)
         let workouts = GRDBWorkoutRepository(fixture)
+        let synced = { (rows: [String]) in rows.filter { !$0.hasPrefix("personal_record: ") } }
         let before = try await fixture.read { try Self.rows($0) }
         for workout in try await workouts.recent(limit: 100) {
-            let records = try await GRDBStatsQueries(fixture)
-                .personalRecords(exerciseID: MigrationCompatibilityTests.bench)
-                .filter { $0.workoutID == workout.id }
-            let summary = WorkoutEngine.summary(workout, prs: records)
-            try await workouts.materialize(workout, summary: summary, prs: records, slotUpdates: [])
+            try await workouts.materialize(workout, slotUpdates: [])
         }
         let after = try await fixture.read { try Self.rows($0) }
-        #expect(after == before, "\(zip(after, before).first { $0 != $1 }.map { "\($0)" } ?? "")")
+        #expect(synced(after) == synced(before), "\(zip(after, before).first { $0 != $1 }.map { "\($0)" } ?? "")")
+        // The edited workout's bench ties the first workout's 185 × 5, and its incline's 27.5 kg × 10 beats 55 lb.
+        let stats = GRDBStatsQueries(fixture)
+        #expect(try await stats.personalRecords(exerciseID: MigrationCompatibilityTests.bench) == [])
+        let incline = try ExerciseID(#require(UUID(uuidString: "00000000-0000-0000-0000-00000CA00001")))
+        #expect(try await stats.personalRecords(exerciseID: incline).map(\.workoutID) == [
+            MigrationCompatibilityTests.edited, MigrationCompatibilityTests.edited
+        ])
     }
 }
 

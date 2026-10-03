@@ -21,7 +21,11 @@ public enum StatsQueriesContract {
         Clause("e1RMByWeek is each week's best estimate over the last 8 weeks; empty weeks are absent", e1RMByWeek),
         Clause("weeklyVolume is Σ weight × reps of done sets of every kind, week by week", weeklyVolume),
         Clause("sessionsCompleted counts workouts started in the range; sessionCount those with a done set", sessions),
-        Clause("personalRecords lists an exercise's records newest first, and follows its workouts", personalRecords),
+        Clause(
+            "personalRecords lists the records detected against the bests before each workout, newest first",
+            personalRecords
+        ),
+        Clause("bests(before:for:) count the record sets of the workouts before one, by start then id", bestsBefore),
         Clause("recentlyLogged lists exercises by their latest workout, newest first, up to the limit", recentlyLogged),
         Clause("every query follows updateSets and delete", followsEdits)
     ]

@@ -165,14 +165,16 @@ public struct GRDBStatsQueries: StatsQueries {
         }
     }
 
-    /// The personal records the exercise's workouts set, newest first; within a workout, the estimated 1RM
-    /// before the weight at reps. A record row this app cannot read is logged and left out, and stays stored.
+    /// The personal records the exercise's workouts set, newest first by `achievedAt` (the workout's start); of
+    /// two workouts that started together, the smaller id first, as `recent` lists them; within a workout, the
+    /// estimated 1RM before the weight at reps. A record row this app cannot read is logged and left out, and
+    /// stays stored.
     public func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord] {
         let sql = """
         SELECT personal_record.* FROM personal_record JOIN workout ON workout.id = personal_record.workout_id
         WHERE personal_record.exercise_id = ? AND personal_record.deleted_at IS NULL
             AND workout.deleted_at IS NULL AND workout.phase = 'finished' AND workout.ended_at IS NOT NULL
-        ORDER BY personal_record.achieved_at DESC, personal_record.kind, personal_record.id
+        ORDER BY personal_record.achieved_at DESC, personal_record.workout_id, personal_record.kind, personal_record.id
         """
         return try await queue.read { database in
             try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]).compactMap { row in
@@ -197,6 +199,61 @@ public struct GRDBStatsQueries: StatsQueries {
             }
         }
     }
+}
+
+/// The bests before a workout (product decision #27).
+extension GRDBStatsQueries {
+    /// Product decision #27: the bests `PersonalRecords.detect` judges `workout` against, for each of
+    /// `exerciseIDs`: over the done `.working` and `.added` sets of the stored workouts that come before it, by
+    /// start and then id, whether or not `workout` is stored. An exercise with no such set has no entry.
+    public func bests(
+        before workout: WorkoutState,
+        for exerciseIDs: Set<ExerciseID>
+    ) async throws -> PersonalRecords.Bests {
+        let position = try RecordReplay.Position(workout)
+        let exercises = exerciseIDs.map(ColumnCodec.text).sorted().map(\.databaseValue)
+        let tallies = try await queue
+            .read { database in try Self.bests(for: exercises, before: position, in: database) }
+        var bests = PersonalRecords.Bests()
+        for (exercise, tally) in tallies {
+            bests.e1RM[exercise] = tally.estimate.map(Weight.init(e7g:))
+            bests.weightAtReps[exercise] = tally.atReps.mapValues(Weight.init(e7g:))
+        }
+        return bests
+    }
+
+    /// The bests of `exercises` (`exercise_id` values, as stored) over the workouts before `position` in
+    /// history's order, in the caller's transaction, in whole 10⁻⁷ g: what `bests(before:for:)` returns, and
+    /// where `RecordReplay` starts. One row per exercise and rep count, through `idx_wex_exercise_workout`.
+    static func bests(
+        for exercises: [DatabaseValue],
+        before position: RecordReplay.Position,
+        in database: Database
+    ) throws -> [ExerciseID: PersonalRecords.Tally<Int64>] {
+        guard !exercises.isEmpty else {
+            return [:]
+        }
+        let sql = """
+        SELECT workout_exercise.exercise_id AS exercise_id, logged_set.reps AS reps,
+            MAX(logged_set.weight_e7g) AS weight_e7g, MAX(logged_set.e1rm_e7g) AS e1rm_e7g
+        \(SQL.doneSets) \(SQL.recordKinds)
+            AND workout_exercise.exercise_id IN (\(databaseQuestionMarks(count: exercises.count)))
+            AND (workout.started_at, workout.id) < (?, ?)
+        GROUP BY workout_exercise.exercise_id, logged_set.reps
+        ORDER BY workout_exercise.exercise_id, logged_set.reps
+        """
+        let arguments = StatementArguments(exercises) + [position.startedAt, position.id]
+        var bests: [ExerciseID: PersonalRecords.Tally<Int64>] = [:]
+        for row in try Row.fetchAll(database, sql: sql, arguments: arguments) {
+            let exercise: ExerciseID = try ColumnReader(row: row, table: "workout_exercise").identifier("exercise_id")
+            try RecordReplay.add(row, to: &bests[exercise, default: .init()])
+        }
+        return bests
+    }
+
+    /// The SQL the stats queries share, for `RecordReplay`'s walk: the done sets that can set a record, of live
+    /// finished workouts. Continue the `WHERE` with `AND …`.
+    static let recordSets = "\(SQL.doneSets) \(SQL.recordKinds)"
 }
 
 /// The SQL the stats queries share.

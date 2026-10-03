@@ -128,30 +128,35 @@ extension HistoryModel: StatsQueries {
         }
     }
 
-    /// Newest first by when each was achieved; of two achieved together, the estimated 1RM first. The model
-    /// leaves any further tie in the order given, so the property tests never make one.
+    /// Newest first by when each was achieved (the workout's start); of two workouts that start together, in
+    /// list order (the smaller id first); within a workout, in detection order (the estimated 1RM first).
     func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord] {
-        let entries = state.withLock { liveEntries($0) }
-        let records = entries.flatMap { entry in
-            entry.records.filter { $0.exerciseID == exerciseID }.map { (record: $0, workout: entry.state) }
-        }
-        func name(_ record: PersonalRecord) -> Int {
-            if case .estimatedOneRepMax = record.kind {
-                0
-            } else {
-                1
-            }
+        let records = state.withLock { liveEntries($0) }.flatMap { entry in
+            entry.records.filter { $0.exerciseID == exerciseID }
         }
         return records.enumerated().sorted { lhs, rhs in
-            let left = has(.recordsByWorkoutDate) ? date(lhs.element.workout) : lhs.element.record.achievedAt
-            let right = has(.recordsByWorkoutDate) ? date(rhs.element.workout) : rhs.element.record.achievedAt
-            if left != right {
-                return left > right
+            if lhs.element.achievedAt != rhs.element.achievedAt {
+                return lhs.element.achievedAt > rhs.element.achievedAt
             }
-            let kinds = (name(lhs.element.record), name(rhs.element.record))
-            return kinds.0 != kinds.1 && !has(.recordsInGivenOrder) ? kinds.0 < kinds.1 : lhs.offset < rhs.offset
+            return lhs.offset < rhs.offset
         }
-        .map(\.element.record)
+        .map(\.element)
+    }
+
+    /// The bests of the live workouts before `workout` in history's order, folded with `PersonalRecords.Bests`,
+    /// for `exerciseIDs` only. The `.bestsBeforeIncludeIt` fault counts `workout`'s own place too.
+    func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests {
+        let key = (date(workout), workout.id.rawValue.uuidString)
+        let all = state.withLock { historyOrder($0) }.reduce(into: PersonalRecords.Bests()) { bests, entry in
+            let place = (date(entry.state), entry.state.id.rawValue.uuidString)
+            if place < key || (has(.bestsBeforeIncludeIt) && place == key) {
+                bests.include(entry.state)
+            }
+        }
+        return PersonalRecords.Bests(
+            e1RM: all.e1RM.filter { exerciseIDs.contains($0.key) },
+            weightAtReps: all.weightAtReps.filter { exerciseIDs.contains($0.key) }
+        )
     }
 
     func recentlyLogged(limit: Int) async throws -> [ExerciseID] {

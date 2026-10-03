@@ -31,9 +31,9 @@ struct HistoryContractAdversarialTests {
         return broken
     }
 
-    @Test("An honest in-memory history keeps all 22 clauses, so the contracts need no database")
+    @Test("An honest in-memory history keeps all 23 clauses, so the contracts need no database")
     func honestFake_keepsEveryClause() async {
-        #expect(Self.clauses.count == 22)
+        #expect(Self.clauses.count == 23)
         #expect(await Self.broken(by: []) == [])
     }
 

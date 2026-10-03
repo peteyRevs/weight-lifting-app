@@ -8,7 +8,9 @@ import Testing
 /// Product decision #26 moved every list and stats query from `ended_at` to `started_at`, and v002 added
 /// `idx_workout_started (started_at DESC, id)` for them. Each query the change touched is run, its statements
 /// are traced, and `EXPLAIN QUERY PLAN` of each must use the index it was written for, and scan no history
-/// table without an index. No `ANALYZE` runs, as in the app.
+/// table without an index. No `ANALYZE` runs, as in the app. Product decision #27 added the bests before a
+/// workout and the replay an edit runs (`RecordReplay`): both reach an exercise's history through
+/// `idx_wex_exercise_workout`.
 @Suite("History query plans", .tags(.persistence), .timeLimit(.minutes(1)))
 struct QueryPlanTests {
     /// A query, how to run it, and the index its statement must reach the workouts through.
@@ -65,6 +67,23 @@ struct QueryPlanTests {
             )
         },
         Query(
+            description: "bests(before:for:)",
+            index: "SEARCH workout_exercise USING INDEX idx_wex_exercise_workout"
+        ) { repositories in
+            let middle = try #require(try await repositories.workouts.recent(limit: 20).last)
+            _ = try await repositories.stats.bests(before: middle, for: [bench])
+        },
+        Query(
+            description: "updateSets, which detects records again from the workout on",
+            index: "SEARCH workout_exercise USING INDEX idx_wex_exercise_workout"
+        ) { repositories in
+            let middle = try #require(try await repositories.workouts.recent(limit: 20).last)
+            let exercise = try #require(middle.exercises.first)
+            var sets = exercise.sets
+            sets.removeLast()
+            try await repositories.workouts.updateSets(workoutExerciseID: exercise.id, sets: sets)
+        },
+        Query(
             description: "recentlyLogged",
             index: "SCAN workout_exercise USING INDEX idx_wex_exercise_workout"
         ) { repositories in
@@ -72,7 +91,10 @@ struct QueryPlanTests {
         }
     ]
 
-    @Test("Each query the start date changed uses its index, and scans no history table bare", arguments: queries)
+    @Test(
+        "Each query the start date or the records changed uses its index, and scans no history table bare",
+        arguments: queries
+    )
     func query_usesItsIndex(_ query: Query) async throws {
         let repositories = try await Repositories.withProgramExercises()
         var generator = SeededGenerator(seed: 26)

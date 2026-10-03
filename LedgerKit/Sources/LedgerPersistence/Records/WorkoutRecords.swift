@@ -11,17 +11,13 @@ struct WorkoutRecord: SyncedRecord {
     static let databaseTableName = "workout"
 
     let workout: WorkoutState
-    /// How many personal records the workout set, or `nil` to leave the stored count as it is (an edit of
-    /// its sets does not detect records again).
-    let recordCount: Int?
 
     var rowID: String {
         ColumnCodec.text(workout.id)
     }
 
-    init(_ workout: WorkoutState, recordCount: Int?) {
+    init(_ workout: WorkoutState) {
         self.workout = workout
-        self.recordCount = recordCount
     }
 
     /// The totals (`volume_e7g_reps`, `done_sets`, `total_sets`, `pr_count`) are not read: `WorkoutState`
@@ -42,7 +38,6 @@ struct WorkoutRecord: SyncedRecord {
             originDevice: read.identifier("origin_device"),
             units: read.enumeration("units")
         )
-        recordCount = nil
     }
 
     /// The program week and day the workout was built from: all three columns, or none (an ad-hoc workout).
@@ -60,9 +55,10 @@ struct WorkoutRecord: SyncedRecord {
         return WorkoutSource(programID: programID, weekIndex: weekIndex, dayTemplateID: dayTemplateID)
     }
 
-    /// The totals come from the sets being stored with it, never from a summary handed in, so the columns
-    /// cannot disagree with the rows. A date that is not finite throws `nonFiniteDate`, and a volume beyond
-    /// the column `inexactWeight`.
+    /// The totals come from the sets being stored with it, so the columns cannot disagree with the rows.
+    /// `pr_count` is not written here: a new row starts at 0, and `RecordReplay` keeps it equal to the
+    /// workout's live records. A date that is not finite throws `nonFiniteDate`, and a volume beyond the column
+    /// `inexactWeight`.
     func encode(to container: inout PersistenceContainer) throws {
         container["id"] = rowID
         container["program_id"] = workout.source.map { ColumnCodec.text($0.programID) }
@@ -78,9 +74,6 @@ struct WorkoutRecord: SyncedRecord {
         container["volume_e7g_reps"] = try workout.volume.e7gReps()
         container["done_sets"] = workout.doneSets
         container["total_sets"] = workout.totalSets
-        if let recordCount {
-            container["pr_count"] = recordCount
-        }
         container["origin_device"] = ColumnCodec.text(workout.originDevice)
     }
 }

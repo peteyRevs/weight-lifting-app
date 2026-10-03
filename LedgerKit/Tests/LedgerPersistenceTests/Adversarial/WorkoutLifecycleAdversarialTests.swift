@@ -15,16 +15,16 @@ struct WorkoutLifecycleAdversarialTests {
         try await stack.programs.save(program)
         var slot = program.days[0].slots[1]
         slot.misses = [0, 2]
+        try await stack.materialize(S3Kit.baseline) // so that the workout sets records (product decision #27)
         let workout = S3Kit.mixed(1)
-        let records = [S3Kit.record(S3Kit.bench, .weightAtReps(.pounds(190), Reps(clamping: 3)), in: workout)]
-        try await stack.materialize(workout, prs: records, slots: [slot])
+        try await stack.materialize(workout, slots: [slot])
         let first = try await stack.dump()
         for _ in 0 ..< 2 {
             stack.clock.advance()
-            try await stack.materialize(workout, prs: records, slots: [slot])
+            try await stack.materialize(workout, slots: [slot])
             #expect(try await stack.dump() == first)
         }
-        #expect(try await stack.liveCounts() == S3Kit.expectedCounts([workout], records: 1))
+        #expect(try await stack.liveCounts() == S3Kit.expectedCounts([S3Kit.baseline, workout], records: 2))
     }
 
     @Test("A workout that is live, discarded or has no end is refused; a stored workout of that id keeps every byte")
@@ -65,8 +65,7 @@ struct WorkoutLifecycleAdversarialTests {
     func rematerializeAfterDelete_storesTheNewState() async throws {
         let stack = try await S3Kit.stack()
         let first = S3Kit.mixed(1)
-        let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: first)
-        try await stack.materialize(first, prs: [record])
+        try await stack.materialize(first)
         let created = try await stack.texts("SELECT created_at FROM workout")
         stack.clock.advance()
         try await stack.workouts.delete(id: first.id)

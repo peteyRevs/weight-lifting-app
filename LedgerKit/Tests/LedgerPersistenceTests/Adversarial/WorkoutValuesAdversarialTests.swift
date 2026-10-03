@@ -104,8 +104,7 @@ struct WorkoutValuesAdversarialTests {
         // mirrored one the end, so both columns still hold every extreme.
         var workout = S3Kit.mixed(1, endedAt: Date(timeIntervalSinceReferenceDate: -seconds))
         workout.startedAt = date
-        let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workout, at: date)
-        try await stack.materialize(workout, prs: [record])
+        try await stack.materialize(workout)
         let read = try #require(try await stack.workouts.workout(id: workout.id))
         #expect(read == workout)
         #expect(read.startedAt.timeIntervalSinceReferenceDate.bitPattern == (seconds + 0).bitPattern)
@@ -117,7 +116,7 @@ struct WorkoutValuesAdversarialTests {
         // No stats query traps on it, whatever the calendar makes of the date.
         let stats = stack.stats(now: date)
         #expect(try await stats.lastPerformance(exerciseID: S3Kit.bench)?.date == date)
-        #expect(try await stats.personalRecords(exerciseID: S3Kit.bench) == [record])
+        #expect(try await stats.personalRecords(exerciseID: S3Kit.bench) == []) // the lift's first workout
         for zone in ["UTC", "Pacific/Apia", "America/St_Johns"] {
             let weeks = try await stats.e1RMByWeek(
                 exerciseID: S3Kit.bench,
@@ -126,6 +125,14 @@ struct WorkoutValuesAdversarialTests {
             )
             #expect(weeks.count <= 1)
         }
+        // A twin that starts with it, with a larger id and a heavier bench, sets both records, achieved at the
+        // extreme date (product decision #27: records are detected, achieved at their workout's start).
+        var twin = S3Kit.workout(2, endedAt: workout.endedAt ?? date, [S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(200, 5)])])
+        twin.startedAt = date
+        try await stack.materialize(twin)
+        #expect(try await stats.personalRecords(exerciseID: S3Kit.bench).map(\.achievedAt) == [date, date])
+        #expect(try await stats.bests(before: twin, for: [S3Kit.bench]).bestSet(of: S3Kit.bench)?
+            .weight == .pounds(190))
     }
 
     @Test("Hostile text in the name, the tag and an exercise name is stored whole", arguments: [

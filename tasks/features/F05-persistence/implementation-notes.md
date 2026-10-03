@@ -1533,3 +1533,316 @@ write, per #27. F13's "Inputs from F05" already hands this to the F05 follow-up.
   - **Coverage:** LedgerPersistence **99.84 %** (1955/1958), LedgerDomain 99.05 %, LedgerDesign 97.20 %, overall
     98.68 %.
   - These notes were finished after the gate; docs only.
+
+## Follow-up: records (decision #27)
+
+On `feat/F05-records`, from main `efe0691` (S1–S3 merged). Product decision #27 (Pete, 2026-10-02): a corrected
+typo must never leave a false record. HEAD and the branch never moved: `git branch --show-current` printed
+`feat/F05-records` at the start and the end. No migration changed and no schema change was needed:
+`personal_record`, `pr_count`, `idx_wex_exercise_workout` and `idx_pr_workout` are v001's.
+
+### The invariant, and how each write keeps it
+
+> After every write, the live `personal_record` rows and each workout's `pr_count` equal
+> `PersonalRecords.detect` replayed over the live finished workouts in history's order (by start, then id;
+> decision #26), each workout judged against the bests as they stood **before** it, with `achievedAt` the
+> workout's start.
+
+A write changes one workout, so only the records of the exercises it touched, in that workout and the ones after
+it, can change. Each write computes that scope before it writes, writes its rows, then re-detects the scope
+(`RecordReplay.redetect`), all in its own write transaction:
+
+| Write | Scope: exercises | Scope: from |
+|---|---|---|
+| `materialize` (new, rebuild, revival, a late workout landing before stored ones) | the exercises of its live rows and live records before the write, and of the new state | the earlier of its stored place (if live) and its new place |
+| `updateSets` | the edited row's exercise only (the others keep their sets) | the workout's place |
+| `delete(id:)` | the exercises of its live rows and records | its place (its own records go with the soft delete) |
+
+`redetect`:
+1. **Bests before the start**: one aggregate query over the exercises' record sets of the workouts before it
+   (`GRDBStatsQueries.bests(for:before:in:)`, also behind the public query below).
+2. **The walk**: one query, in history's order, of each later workout's record sets of those exercises, grouped
+   per workout, exercise and rep count (the heaviest weight and the best stored `e1rm_e7g`). Each workout's tally
+   of an exercise is judged by `PersonalRecords.found` against the running bests (never for a deload, whose sets
+   still raise the bests), then raises them. Only what decision #3 compares is read.
+3. **The diff**: the found records against the live stored records of those exercises in the live finished
+   workouts from the start on (`SyncedRecord.write`): unchanged rows keep their stamps, a changed value updates
+   its own row, a lost record is soft-deleted.
+4. **The counts**: `pr_count` of the written workout and of every workout whose records were found or stored in
+   the scope, set to its live records, in one `UPDATE`, only where it changed (a no-op write runs no `UPDATE`).
+
+Statements run in one order for one history (ids sorted, rows ordered), and the record rows are a function of the
+history, whatever order the workouts were stored in (`RecordReplayTests.sameHistory_sameRows_sameStatements`).
+
+### Decisions and deviations
+
+1. **Records are no longer given.** `WorkoutRepository.materialize(_:summary:prs:slotUpdates:)` is now
+   `materialize(_:slotUpdates:)`: `prs` went because the store computes them, and `summary` because it was
+   never stored (S3 open question 1). So S3-1's refusal of a record naming another workout went too (it cannot
+   happen), with its contract clause and the tests of it (below).
+2. **`achievedAt` is the workout's start** (orchestrator brief: "your call, say why"). Records are a function of
+   history, so `achievedAt` must be one too; `now` at finish no longer exists for a rebuild or an edit. The start
+   is the workout's date everywhere else (decision #26): a record of a session begun at 11:30 pm is that day's,
+   in History and in the PR list alike, and `personalRecords`' newest-first order is the replay order reversed.
+   The end would put such a record on the next day. (Open question 1.)
+3. **`personalRecords` ties.** Records of workouts that started at the same instant now list by workout id (as
+   `recent`), then the estimate first; before, the second key was the kind and then the derived row id, which
+   is arbitrary. Since `achievedAt` is the start, such ties are now ordinary, so the order had to be total and
+   meaningful. Protocol doc updated.
+4. **Record row ids** are the version-5 UUID of (workout, exercise, kind), not of the record's place in the
+   workout's list. `detect` finds at most one record of each kind per exercise and workout, so this is unique; a
+   changed value updates its own row, and the replay can rewrite one exercise's records without knowing the
+   workout's other exercises. Rows written by S3's code (the v001 fixture) are replaced when their workout is
+   next written; the table is local-only.
+5. **Domain additions.** `PersonalRecords` gained:
+   - `Bests` (per exercise: best estimate, best weight at each rep count; `bestSet(of:)`; `include(_:)`, which
+     folds a workout in) and `detect(workout:against:now:)`: what the query returns and F10 passes to `detect`;
+   - `Tally<Value>`, `Found<Value>` and `found(_:over:)`: decision #3's rule for one exercise of one workout, over
+     any exactly ordered weight. `detect` calls it with `Weight`s; the replay calls it with whole 10⁻⁷ g, which
+     order the same (ADR-007). One rule, two units: the replay never does decimal arithmetic. `detect`'s
+     behaviour is unchanged (its 26 tests, F02's and the tester's, pass unedited).
+6. **The new query: `StatsQueries.bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async
+   throws -> PersonalRecords.Bests`.**
+   - *Before a workout, not before a date, and not "excluding a workout"*: history's order is (start, id), so a
+     date alone cannot place two workouts that started together, and "every other workout" would count later
+     ones (an ADR-004 rebuild of an old workout would then be judged against its successors).
+   - *A `WorkoutState`*: F10 has the live workout, which is not stored; its start and id are its place. A
+     stored workout is excluded by the same rule, so the same call serves a rebuild.
+   - *For given exercises*: the workout's own, or one exercise after a swap.
+   - *Returns `Bests`*, exactly `detect`'s two inputs (and `bestSet(of:)`, derived from the weights).
+   - It counts `.working` and `.added` done sets only (#25), deload workouts included, through
+     `idx_wex_exercise_workout`.
+7. **Strict reads.** The walk and the bests read history as the stats queries do: a damaged value that an
+   aggregate returns (a text weight, reps below 1, a malformed exercise id) throws `malformedColumn` by name, and
+   the write stores nothing. Never judging a record against history it cannot read is #27's point; it only
+   happens with foreign damage, and materialising the damaged workout repairs it
+   (`RecordReplayTests.damagedLaterWorkout_failsTheReplay`). The scope itself is read leniently, so a write can
+   still repair a damaged row of its own workout. (Open question 2.)
+8. **Performance work in shared code.** `SyncedRecord.write` now builds its upsert statement once per write
+   instead of once per row (records of one type share their columns): about 3 ms of the worst case. No behaviour
+   change; every repository's suites pass.
+9. **Not changed:** migrations, `project.pbxproj`, `Package.swift`, test plans, ADRs, `docs/`.
+
+### Protocol changes, and whom they affect
+
+```swift
+// WorkoutRepository
+- func materialize(_ workout: WorkoutState, summary: WorkoutSummary, prs: [PersonalRecord], slotUpdates: [Slot]) async throws
++ func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws
+// StatsQueries
++ func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests
+```
+Docs: `WorkoutRepository` states the invariant; `updateSets` and `delete` say they re-detect; `personalRecords`
+states `achievedAt` and the tie order. `WorkoutEngine.summary`'s doc says where its `prs` come from.
+
+- **F07**: fakes implement both; "Inputs from F05" rewritten (13 + 10 clauses, the invariant, the simplest
+  honest fake).
+- **F10**: no longer detects records for storage; for the live "PR!" moment it calls `bests(before:for:)` and
+  `detect(workout:against:now:)`. Inputs 1–4 and 8 rewritten; input 7's "ended" corrected to "started" (#26).
+- **F13**: criterion 4 holds through the repository; input 1 rewritten, input 2 notes `pr_count` is now right,
+  input 4's "ended" corrected (#26).
+- **F17**: a rebuild materialises the state alone; M4 sync that writes rows without `materialize` must re-detect.
+
+### Tests, and the tester-owned files this PR edits
+
+**New (mine):**
+- `RecordReplayTests` (7): counts through the typo, fixed and undone; a revived workout's count; a workout moved
+  later; an exercise dropped by a rebuild; an edit reads and writes only its exercise from its workout on; one
+  history, one set of rows and statements; strict reads of a damaged later workout.
+- `PersonalRecordsBestsTests` (3, Domain): `include`, `bestSet(of:)`, and `detect(against:)` replaying a history.
+- `Performance/RecordReplayPerformanceTests` (nightly lane): the worst case, below.
+- `QueryPlanTests`: `bests(before:for:)` and `updateSets`' replay reach the history through
+  `idx_wex_exercise_workout` and scan no history table bare.
+- Contract (`LedgerTestSupport`, `StatsQueriesContract+Records.swift`): clauses `personalRecords` (rewritten: six
+  workouts stored newest first; warm-up, drop, deload, a tie of starts by id, a delete), `bestsBefore` (new) and
+  `recordsFollowEdits` (new, replaces `foreignRecord`: the 2,250 lb typo through `updateSets`, `delete` and a
+  rebuild). `followsEdits` now expects the records to follow the edit. 23 clauses (13 + 10).
+
+**My S3 tests updated**: `WorkoutRepositoryTests.Scenario` stores an earlier workout (bench at 180 lb) first so
+the contract workout still sets two records, now detected; counts and stamps follow; `recordIDs_areDerived`
+checks the new derivation and that a changed value keeps its row; `recordOfAnotherWorkout_isRefused` deleted
+(S3-1 is moot); `DamagedWorkoutRowTests` and `StatsQueriesTests` store the earlier workout first.
+
+**Tester-owned edits.** The brief sanctions updating every caller of the old `materialize`; where a test's
+subject was a given record, its expectations had to become detected ones. Each is listed so the tester can audit:
+- `S3Kit` (helper): `record(_:_:over:in:)` takes the previous best and uses the start; new `baseline` and
+  `mixedRecords(of:)` (a workout before every `mixed` one, and the two records a mixed workout sets over it).
+  `S3Database.Stack.materialize(_:slots:)` lost `prs`.
+- `HistoryModel` (the oracle): records are no longer stored as given but replayed from scratch after every write
+  with `PersonalRecords.Bests` (a different algorithm from the store's incremental one); `bests(before:for:)`
+  added. Faults: `recordsByWorkoutDate` and `recordsInGivenOrder` removed (no longer expressible: records are
+  computed, `achievedAt` is the workout's date, and `detect` fixes the order); `editDropsRecords` kept (an edit
+  clears the workout's records); four added: `recordsAgainstAllTime`, `recordsAgainstOtherWorkouts`,
+  `recordsSkipLaterWorkouts`, `bestsBeforeIncludeIt`. `HistoryCloseoutAdversarialTests.catchingClause` maps
+  them; `HistoryContractAdversarialTests` counts 23 clauses. Every fault breaks its own clause, and the honest
+  model keeps all 23.
+- `HistoryScript` no longer makes records; `HistoryModelAdversarialTests` also compares `bests(before:for:)`
+  before every stored workout and an unstored one (without it the nightly "model test bites" missed
+  `bestsBeforeIncludeIt`).
+- Rewritten for detected records (subject kept): `WorkoutEditAdversarialTests.edit_leavesRecordsStale` (the S3-Q3
+  "(documents)" pin of the very gap this closes) is now `edit_detectsRecordsAgain` (the typo leaves no record; an
+  earlier edit gives a later workout its records); `StatsQueriesAdversarialTests.personalRecords_orderIsDeterministic`
+  (three workouts that start together, each setting records, in six store orders);
+  `WorkoutFixCloseoutAdversarialTests.damagedRecordRows_areRepaired`, `delete_isIdempotent_andClearsLeftovers`,
+  `repairs_touchOnlyTheirOwnWorkout` (store `S3Kit.baseline` first); `WorkoutAtomicityAdversarialTests`
+  (baseline first; one changed record; the set edit also fails on a record `UPDATE`);
+  `WorkoutLifecycleAdversarialTests.materialize_isIdempotent`; `WorkoutValuesAdversarialTests.extremeDates…`
+  (a twin sets records achieved at the extreme date); `HistoryReadAdversarialTests.observation_emitsOnlyOnChange`
+  (a baseline outside the list changes only records: no value); `MigrationFixtureAdversarialTests.fixtureWorkouts_rematerialiseAsNoOps`
+  (every row but the derived records stays; the fixture's given records are detected again).
+- Deleted (their subject, a given record naming another workout, no longer exists):
+  `WorkoutFixCloseoutAdversarialTests.foreignRecord_isRefusedByName` (6 cases),
+  `WorkoutIdentityAdversarialTests.recordOfAnotherWorkout_doesNotReplaceItsRecords` and
+  `recordOfAnUnknownWorkout_isRefused`, replaced by `records_nameTheirWorkout_andAreCounted` (its `pr_count`
+  check kept).
+- Unused record arguments dropped: `WorkoutStartDateAdversarialTests`, `StatsQueriesAdversarialTests.onlyDeletedWorkouts_readAsEmpty`,
+  `WorkoutLifecycleAdversarialTests.rematerializeAfterDelete…`, `StatsWeeksAdversarialTests`, the perf seeders.
+- **Sanctioned edit 1** (orchestrator): `StatsWorstCaseAdversarialTests` now has about 450 distinct weights
+  (every 2.5 lb, up to 1,122.5 lb) instead of 20,000; still 20,000 sets of one lift in one week, and every workout
+  after the first sets two records (399 × 2, asserted), now detected. `weeklyVolume` there: 3.9 ms (was 35).
+- **Sanctioned edit 2** (orchestrator): `HistoryReadAdversarialTests.foreignPhase_isListedButNotCounted` is now
+  `foreignPhase_isListedNowhere_andCountedNowhere`. Name only.
+
+### Criteria → tests
+
+| What #27 and the brief ask | Tests |
+|---|---|
+| A corrected typo leaves no false record; a later real lift becomes one | clause `recordsFollowEdits`; `RecordReplayTests.recordCounts_followEveryWrite`; `WorkoutEditAdversarialTests.edit_detectsRecordsAgain` |
+| `materialize` re-detects from its place on, a late workout before stored ones included | clause `personalRecords` (stored newest first); `HistoryModelAdversarialTests` (random histories against a from-scratch replay) |
+| `updateSets` and `delete` re-detect forward | clauses `recordsFollowEdits`, `followsEdits`, `personalRecords` (delete); `RecordReplayTests` |
+| Judged against the bests **before** the workout, by start then id | clauses `personalRecords` (twins), `bestsBefore`; faults `recordsAgainstAllTime`, `recordsAgainstOtherWorkouts`, `bestsBeforeIncludeIt` |
+| Scope: old place and old exercises | `RecordReplayTests.movedWorkout_redetectsFromItsOldPlace`, `droppedExercise_redetectsItsLaterWorkouts` |
+| Bounded: only the touched exercise, from the workout on, indexed | `RecordReplayTests.edit_touchesOnlyItsExercise_fromItsWorkoutOn`; `QueryPlanTests` (2 new) |
+| `pr_count` always equals the live records | `RecordReplayTests` (3), `WorkoutIdentityAdversarialTests.records_nameTheirWorkout_andAreCounted`, `WorkoutFixCloseoutAdversarialTests.damagedRecordRows_areRepaired` |
+| Same history, same rows, same statements | `RecordReplayTests.sameHistory_sameRows_sameStatements`; `StatsQueriesAdversarialTests.personalRecords_orderIsDeterministic` |
+| #25: working and added count, warm-ups and drops never | clauses `personalRecords`, `bestsBefore`; `PersonalRecordsBestsTests.include_countsRecordSetsOnly` |
+| One transaction: a failure writes nothing | `WorkoutAtomicityAdversarialTests` (record `INSERT`/`UPDATE` in every write), `RecordReplayTests.damagedLaterWorkout_failsTheReplay` |
+| The worst case within budget | `RecordReplayPerformanceTests` (nightly), below |
+
+### Mutants
+
+Host, one at a time, the file restored after each; runner and results in scratchpad `f05rec/mut/`
+(`run.py`, `results-round1.txt`, `progress2.log`). A mutant is killed when at least one named test fails.
+
+27 mutants, all killed (named: the tests that failed, or how many did):
+
+| Mutant | Killed by |
+|---|---|
+| `updateSets` does not re-detect | clause `recordsFollowEdits`, `RecordReplayTests` (11 tests) |
+| the walk covers only the changed workout (no forward walk) | `recordsFollowEdits`, `droppedExercise_…`, the fixture test (10) |
+| the bests "before" include the workout itself | 32 tests, clauses `bestsBefore`, `personalRecords` |
+| the bests are all-time | 32 tests |
+| `materialize`'s scope ignores the old place | `movedWorkout_redetectsFromItsOldPlace`; the model test |
+| `materialize`'s scope ignores the stored exercises | `droppedExercise_redetectsItsLaterWorkouts` (3) |
+| `delete` does not re-detect | the model test; clauses `personalRecords`, `recordsFollowEdits` |
+| the written workout is not recounted | `revivedWorkout_countsItsRecordsAgain` |
+| no `pr_count` at all | 9 tests |
+| `achievedAt` is not the start | 14 tests |
+| a deload sets records | clause `personalRecords` |
+| a deload's sets do not raise the bests | clause `personalRecords` |
+| the walk counts warm-ups and drops | clause `personalRecords`; the model test |
+| records of one instant tie by kind, not workout | `personalRecords_orderIsDeterministic` |
+| a tie is a record (`>=` in `found`) | 18 tests, Domain and persistence |
+| `Bests.include` counts warm-ups | `PersonalRecordsBestsTests.include_countsRecordSetsOnly`; the honest-model test |
+| a record's id ignores its kind | 48 tests |
+| groups split by workout only (exercises merged) | 11 tests |
+| groups keyed by start, not workout id | `personalRecords_orderIsDeterministic`; the model test |
+| a group keeps the previous group's tally | 15 tests |
+| an edit's scope covers every exercise | `edit_touchesOnlyItsExercise_fromItsWorkoutOn` |
+| the weight record's ceiling ignores more reps | Domain `PersonalRecordsTests` (5) |
+| `Tally.add(_:)` drops the estimate | 12 tests |
+| stale stored records are not replaced | 14 tests |
+| `delete` leaves its own records | `WorkoutAtomicityAdversarialTests`, `WorkoutFixCloseoutAdversarialTests` (4) |
+| the weight read from the wrong column | 27 tests |
+| reps below 1 clamped, not refused | `damagedLaterWorkout_failsTheReplay` |
+
+Contract clauses against wrong fakes: the tester's model with each of the four new faults
+(`recordsAgainstAllTime`, `recordsAgainstOtherWorkouts`, `recordsSkipLaterWorkouts`, `bestsBeforeIncludeIt`) breaks
+its own clause (`HistoryCloseoutAdversarialTests.wrongFake_isCaughtByItsOwnClause`), and in the nightly lane the
+model test bites for each of them. After the walk was restructured (the `Walk` type, reads by index), the
+mutants that touch it were run again on the final code, and all were killed again.
+
+### Worst case, timed
+
+`RecordReplayPerformanceTests` (nightly lane; `.performance`, `.slow`). 400 workouts of one lift, 50 sets each
+(20,000 sets), set *j* of workout *n* at 2.5 × (*n* + *j* + 1) lb for 1 + *j* % 12 reps, so every workout after
+the first sets both records (798, asserted). Each timed run is `updateSets` on the **first** workout, alternately
+writing a 2,250 lb typo into its first set (399 estimate records go) and fixing it (they come back): the replay
+walks all 400 workouts and rewrites 399 records each time. Also timed: `bests(before:for:)` before a new
+workout, and materialising that new workout (it replays only itself). 95th percentile of 20 runs after a
+warm-up, against `PerformanceBudget.statsQuery` (50 ms), the budget the brief names.
+
+| Timed | iPhone 17 simulator | Watch Series 12 simulator | Host (Debug) |
+|---|--:|--:|--:|
+| `updateSets` of the first of 400 workouts (the worst case) | 46.9 ms | 47.6 ms | 41–43 ms |
+| `bests(before:for:)` before a new workout | 9.2 ms | 9.2 ms | 6.1 ms |
+| materialising a new workout of the lift | 11.3 ms | 11.6 ms | 8.1 ms |
+
+Both simulators under the lock (`Nightly` and `Nightly-Watch`, with `StatsQueriesPerformanceTests` and
+`StatsWorstCaseAdversarialTests`, all passing; script `f05rec/perf.sh`, attachments `att-ios-v4`,
+`att-watch-v4`). Criterion 9 is unchanged (worst p95 `recentlyLogged` 7.6 ms), and the worst-case stats test's
+`weeklyVolume` is now 4.4 ms on the iPhone and 4.6 ms on the watch (was 33 to 35 ms).
+
+**How it got there.** The first cut read the walked workouts whole (`WorkoutRows.fetch`) and ran `detect` on
+them: 310 ms on the host. Then, each measured with a sampling profile: (1) the walk reads only per workout,
+exercise and rep count the heaviest weight and best stored estimate, grouped in SQL, and compares whole
+10⁻⁷ g through `PersonalRecords.found` (no decimal arithmetic): about 50 ms; (2) `found` finds the weight record
+in one pass over the reps, from most to fewest: −10 ms; (3) record rows hold their columns as integers, and
+`SyncedRecord.write` builds its upsert once per write, and the walk reads its columns by index: −8 ms. What is left is about a third SQLite (the walk's
+`GROUP BY` over 20,000 rows) and two thirds the 399 rows written and the 798 compared.
+
+### Code lines
+
+Same method as S1 to S3 (non-blank Swift lines that are not whole-line `//` or `///` comments, SQL included,
+product sources only; new files whole plus the diff's added lines; scratchpad `f05rec/count.sh`):
+**461 lines added, 357 net**, under the 500 target.
+- New: `Records/RecordReplay` 201.
+- `LedgerDomain/Rules/PersonalRecords` +106 −35 (`Bests`, `Tally`, `Found`, `found`; `detect` now calls `found`);
+  `Repositories` +2 −2 (the rest is doc comments).
+- `Records/LoggedSetRecords` +71 −27 (`PersonalRecordRecord` over integer columns), `Stats/GRDBStatsQueries` +44 −1,
+  `Records/SyncedRecord` +16 −11, `Repositories/GRDBWorkoutRepository` +13 −9, `Records/WorkoutRows` +7 −12,
+  `Records/WorkoutRecords` +1 −7.
+- Not counted: `LedgerTestSupport` (contract clauses), tests, docs.
+
+### Gate and coverage
+
+2026-10-02, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0.
+- **Host:** `swift test --filter LedgerPersistenceTests` 360 tests in 83 suites, `LedgerDomainTests` 765 in 126,
+  pass. Nightly lane on the host: the model tests (every seed, all 27 faults), the three timing suites, pass.
+- **Full gate, through the lock: green, exit 0** (`scripts/check.sh`, 370 s; log `scratchpad/f05rec/check-2.log`).
+  Format, lint, the package graph and pins, and the script tests: OK. **17/17** PR targets on iOS (1,385 passed,
+  11 skipped by design: the timing suites, one more than before) and **8/8** PR-Watch targets (1,276 passed,
+  11 skipped).
+- Warnings: none new; the log has only S1's `PayloadVersionAdversarialTests.swift:29` "will never be executed".
+- **Coverage:** LedgerPersistence **99.86 %** (2219/2222; threshold 90), LedgerDomain 99.08 % (1946/1964),
+  LedgerDesign 97.20 %, overall 98.75 %. The 3 persistence lines are S3's (the `now: Date.init` defaults and the
+  `?? 0` of `SQL.count`).
+- These notes were written after the gate; docs only.
+
+### Open questions for the orchestrator
+
+1. **`achievedAt` is the workout's start** (decision 2). Recommendation: keep; it is the workout's date
+   everywhere else (#26). The alternative, the end, puts a record of a late session on the next day.
+2. **Strict reads in a write** (decision 7). A damaged value of the same exercise in the history a write
+   replays (foreign damage only: a text weight, reps below 1) makes `materialize`, `updateSets` or `delete`
+   throw `malformedColumn` and store nothing, so a finish can fail until the damaged workout is materialised
+   again. Recommendation: keep (a record is never judged against unreadable history); F10 already keeps the log
+   uncompacted when `materialize` throws. The alternative is to leave unreadable rows out of the bests, which
+   can store a false record.
+3. **Timing margin.** The worst case is under the budget on both simulators, but the watch's p95 (47.6 ms; the iPhone 46.9 ms) is
+   close to 50 ms in a Debug build, as `StatsWorstCaseAdversarialTests` was before this PR's sanctioned edit. It
+   is a nightly test, so a loaded Mac can fail it. Recommendation: accept for now and let F20 time a device in
+   Release; if the nightly flakes, give writes their own budget in `PerformanceBudget` (an edit in History is a
+   user action, not a frame) rather than shrink the shape.
+4. **Records written before this PR** (the v001 fixture; no shipped database has workouts yet, F07 is not
+   wired) keep their old row ids and caller-given values until their workout is next written, when they are
+   detected again. Recommendation: nothing now. When M4 sync (F17) writes workout rows without `materialize`, it
+   must call the replay from the earliest workout it wrote (F17 input written).
+5. **Domain API added beyond the query**: `PersonalRecords.Bests`, `Tally`, `Found`, `found(_:over:)`,
+   `detect(workout:against:now:)`. `found` is the one rule both units share. Recommendation: keep; F10 needs
+   `Bests` and `detect(against:)`, and the replay needs `found`.
+6. **Tester-owned edits** beyond the two sanctioned ones are all forced by the protocol change (listed above):
+   two faults removed, four added, three tests deleted with the behaviour they pinned. Recommendation: the
+   tester audits them in the adversarial round, as in S3 round 3.
+7. **F13's badge** still has no `personalRecords(workoutID:)` (S3 open question, F13 input 2). Recommendation:
+   F13 adds it if it wants `pr_count`-free reads; `pr_count` is now always right.

@@ -243,8 +243,14 @@ onwards). Where they contradict this brief, they win, and the brief should be am
   edits its sets with `updateSets`, and a late envelope then changes the finished log, the rebuild stores the
   log's state again. So compact a finished log before History may edit or delete its workout, or remember the
   deletion on the host. Decide which, with F13.
-- **A rebuild must materialise with records detected against the bests before the workout**, not the all-time
-  bests, which by then include it (F10 "Inputs from F05" items 2 to 4), and must not re-send an older
-  workout's slots as `slotUpdates` (item 6 there).
+- **A rebuild materialises the state alone** (`materialize(_:slotUpdates:)`, F05 records follow-up): F05 detects
+  the records itself, against the bests before the workout, and those of every later workout that the rebuild
+  changes (product decision #27). A workout synced late, that started before workouts already stored, is
+  placed in the order and their records follow. The rebuild must still not re-send an older workout's slots as
+  `slotUpdates` (F10 "Inputs from F05", item 6).
+- **`personal_record` is local and derived**: two devices with the same finished history store the same records
+  (same rows, same ids), so the table never needs to sync. When M4 sync writes workout rows without
+  `materialize`, it must re-detect from the earliest workout it wrote (F05's `RecordReplay`), or records go
+  stale.
 - `materialize` refuses a state that is not `.finished` with an `endedAt` (`notFinished`), and a date that is not
   finite (`nonFiniteDate`); `EventEnvelope.isWellFormed` already keeps such dates out of a replayed state.

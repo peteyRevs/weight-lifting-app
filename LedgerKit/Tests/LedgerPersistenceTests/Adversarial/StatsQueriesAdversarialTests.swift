@@ -83,6 +83,9 @@ struct StatsQueriesAdversarialTests {
         #expect(try await stack.stats().recentlyLogged(limit: 3) == Array(expected.prefix(3)))
     }
 
+    /// Since the F05 records follow-up (product decision #27) records are detected, achieved at their workout's
+    /// start. Three workouts that start together, at 190, 200 and 210 lb after a 180 lb baseline, are judged in
+    /// id order, so each sets both records; at one instant they list by workout id, the estimate first.
     @Test(
         "Records achieved at one instant list the same way whatever order their workouts were stored in",
         arguments: 0 ..< 6
@@ -90,29 +93,24 @@ struct StatsQueriesAdversarialTests {
     func personalRecords_orderIsDeterministic(rotation: Int) async throws {
         var workouts = (1 ... 3).map { S3Kit.workout(
             $0,
-            endedAt: S3Kit.day(Double($0)),
-            [S3Kit.RowSpec(S3Kit.bench, [])]
+            endedAt: S3Kit.now,
+            [S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(Decimal(180 + 10 * $0), 5)])]
         ) }
-        func records(_ workout: WorkoutState) -> [PersonalRecord] {
-            [
-                S3Kit.record(S3Kit.bench, .weightAtReps(.pounds(200), Reps(clamping: 5)), in: workout, at: S3Kit.now),
-                S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(230)), in: workout, at: S3Kit.now),
-                S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(231)), in: workout, at: S3Kit.day(1))
-            ]
-        }
+        let baseline = S3Kit.workout(9, endedAt: S3Kit.day(-1), [S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(180, 5)])])
         let reference = try await S3Kit.stack()
-        for workout in workouts {
-            try await reference.materialize(workout, prs: records(workout))
+        for workout in [baseline] + workouts {
+            try await reference.materialize(workout)
         }
         let expected = try await reference.stats().personalRecords(exerciseID: S3Kit.bench)
-        #expect(expected.count == 9)
-        #expect(expected.prefix(3).allSatisfy { $0.achievedAt == S3Kit.day(1) })
-        #expect(expected.dropFirst(3).prefix(3).allSatisfy { $0.kind == .estimatedOneRepMax(.pounds(230)) })
+        #expect(expected.count == 6)
+        #expect(expected.allSatisfy { $0.achievedAt == workouts[0].startedAt })
+        #expect(expected.map(\.workoutID) == workouts.flatMap { [$0.id, $0.id] })
+        #expect(expected.last?.previous == .weightAtReps(.pounds(200), Reps(clamping: 5)))
         workouts.swapAt(rotation % 3, (rotation / 3 + 1) % 3)
         let stack = try await S3Kit.stack()
-        for workout in workouts.reversed() {
-            try await stack.materialize(workout, prs: records(workout))
-            try await stack.materialize(workout, prs: records(workout))
+        for workout in workouts.reversed() + [baseline] {
+            try await stack.materialize(workout)
+            try await stack.materialize(workout)
         }
         #expect(try await stack.stats().personalRecords(exerciseID: S3Kit.bench) == expected)
     }
@@ -143,8 +141,7 @@ struct StatsQueriesAdversarialTests {
         let stack = try await S3Kit.stack()
         for number in 1 ... 3 {
             let workout = S3Kit.mixed(number, endedAt: S3Kit.day(Double(-number)))
-            let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workout)
-            try await stack.materialize(workout, prs: [record])
+            try await stack.materialize(workout)
             try await stack.workouts.delete(id: workout.id)
         }
         let stats = stack.stats()
