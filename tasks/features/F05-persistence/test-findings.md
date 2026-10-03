@@ -1400,3 +1400,130 @@ not attack this round.
 
 Once the two S3-5 tests pass (or are decided), the full gate on that tree is enough; no further round is
 needed. S3-Q1 and S3-Q2 stay pinned "(documents)", untouched.
+
+---
+
+# Slice S3 — decision #26 check
+
+A scoped check of product decision #26 (Pete, 2026-10-02: a workout belongs to the day and the week it
+**started**), as built in `4473654` on `feat/F05-s3`; my last round was against `74d9e1a`, and `cd5d368` between
+them is a merge of main. I read `git diff cd5d368..4473654` and the notes' "S3 fix round 3". No product code and no
+test of the implementer's was edited. HEAD never moved: `git branch --show-current` printed `feat/F05-s3` at the
+start and the end. Mutants ran in a scratchpad copy (`f05s3-g2/d26/`), never in the worktree.
+
+## What I wrote
+
+6 tests (8 cases) in `Adversarial/WorkoutStartDateAdversarialTests.swift`:
+- a workout from 23:30 on New Year's Eve to 00:40 on New Year's Day, in three time zones: its day, ISO week 53,
+  month and year, and none of 2027;
+- equal starts with different ends (tie by id), and a later start that ended first;
+- a workout that ends before it starts (documents);
+- a finished row whose end was cleared: in no list, range or stat, it takes no place of the limit, it reads by
+  id, and a rebuild repairs it;
+- v002 on the v001 fixture under a later migration that fails, then opened twice;
+- a file that already holds an index named `idx_workout_started` (documents, S3-N5).
+
+## Results
+
+- **Host** (`swift test --filter 'LedgerDomainTests|LedgerPersistenceTests'`): exit 0. `LedgerPersistenceTests`
+  355 pass, `LedgerDomainTests` 762 pass.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`, 373 s; log: scratchpad `f05s3-g2/d26/check.log`):
+  **exit 0**. Format, lint, the package graph and pins, and the script tests pass. 17/17 PR targets on iOS and
+  8/8 PR-Watch targets on watchOS. LedgerPersistence coverage is 99.84 %.
+- **Mutants of the changed lines** (21, one at a time, host, the whole of `LedgerPersistenceTests`): 20 are killed,
+  each by both suites; 1 survives.
+  - **Killed:**
+    - each of the nine queries dated by the end again: `recent`'s selection and its read order, the
+      `workouts(in:)` range, the Last line's choice and its date, `e1RMByWeek`'s date, `weeklyVolume`,
+      `sessionsCompleted`, `recentlyLogged`;
+    - each of the five no-end filters removed;
+    - v002 as `(started_at)` alone, and on `ended_at`;
+    - `recent`'s ties reversed;
+    - the week, or the week key, taken an hour or four hours after the start;
+    - the range closed at the top.
+  - **Survivor E18:** `e1RMByWeek`'s `ORDER BY` on the end. It is equivalent: the rows are folded into a
+    maximum per week, so their order changes nothing.
+- **Grep:** outside `WorkoutRecord`'s own column, `ended_at` is left only in the five `ended_at IS NOT NULL`
+  filters.
+
+## Audit of the edits to my files
+
+`git diff cd5d368..4473654 -- LedgerKit/Tests/LedgerPersistenceTests/Adversarial/` touches the twelve files the
+orchestrator named and no other. For each, I checked that the edge each case tests is now held by the start.
+
+| File, edit | Faithful? | Weakened? Edge still exact? |
+|---|---|---|
+| `HistoryReadAdversarialTests.rangesAndLimits_atTheirEdges`: workout *i* starts at day *i* | Yes (#26: a range selects by start) | No assertion changed. `S3Kit.mixed` lasts 45 minutes, so each start is exactly day *i*: the empty range `day0 ..< day0`, the 1 ms range at day 3, and `last ..< ∞` sit on the starts. |
+| `HistoryReadAdversarialTests.foreignPhase_…`, second half | Yes (orchestrator decision: a finished row with no end counts nowhere) | Stricter: `recent == []`, and `lastPerformance == nil` replaces the named throw; `sessionsCompleted` and `weeklyVolume` are now checked too. Nit: the function name still says "isListed". |
+| `StatsWeeksAdversarialTests.session(_:at:)` takes the start; `inWeek` filters on `startedAt` | Yes | Every boundary moved with it. The clock-change offsets are relative to the week's first instant (−1 ms is last week, 0 is this week), and the year-end and `lastWeeks` dates are starts. All assertions are unchanged. |
+| `StatsWeeksAdversarialTests.midnightCrossing_…ItStartedIn` | Yes (#26) | It keeps round 1's point, a set ticked in the other week than the workout's date (now on Monday), and adds `sessionsCompleted` for last week. `lastWeeks: 2` is needed because the workout is now last week's. Key 2026-W37 is right. |
+| `StatsQueriesAdversarialTests.lastPerformance_tieOfWorkouts` | Yes (#26: the line's date is the start) | No: the date is now exactly the start, and the tie is unchanged. |
+| `StatsQueriesAdversarialTests.kinds_countAsDocumented` | Yes (#25 retitle) | Every assertion is unchanged. |
+| `WorkoutValuesAdversarialTests.extremeDates_…`: the extreme is the start, the mirror the end | Yes | No: both columns still hold every extreme. The bit-for-bit check is on the start, `read == workout` still covers the end, and the range and `lastPerformance` checks read the start. Start after end is now the common case there, which my new test covers on purpose. |
+| `HistoryModel.date`, `HistoryModel+Stats`, `.datedByStart` → `.datedByEnd` | Yes: the oracle is still written from the decision, not the SQL | No. The Last line and the week now read `date(workout)`, so one change to `date(_:)` moves all of them. The new fault is the decision's opposite. |
+| `HistoryScript.startDate()` | Yes: only the fixture changed | No: the 20 % of week-edge instants are now starts, where #26 makes them edges. |
+| `HistoryCloseoutAdversarialTests.catchingClause`: the renamed key | Yes | No: same clause. |
+| `SchemaAdversarialTests`, `FileDatabaseAdversarialTests`: the applied list is v001, v002 | Yes (real v002) | Stricter: the exact list instead of a count of one. |
+| `MigrationFixtureAdversarialTests`: migrate before comparing schemas; v001 alone before, completed after | Yes (real v002) | Stricter: the fixture must equal a new database once migrated, and both the plain migrate and `open(at:)` must complete it. |
+
+## New findings
+
+**S3-N5. nit — v002 is a plain `CREATE INDEX`.** A file that already holds an index of that name (a foreign tool,
+or a build that shipped one under that name) fails to open, for good. v001's statements are the same, and no
+path makes such a file today. If the orchestrator wants it: `CREATE INDEX IF NOT EXISTS`, with the shape checked by
+`SchemaTests`. Pinned by `WorkoutStartDateAdversarialTests.preexistingIndexName_failsTheMigration` (documents).
+
+There is no bug and no minor bug.
+
+## Attacked and held
+
+- **Across a boundary.** A workout from 23:30 on 31 December 2026 to 00:40 on 1 January 2027 belongs to 2026's
+  day, week (W53), month and year in UTC, at UTC+14 and at UTC−8: in `workouts(in:)`, `weeklyVolume`,
+  `sessionsCompleted`, `e1RMByWeek` and the Last line's date. It is in nothing of 2027.
+- **Ties.** Workouts started at one instant list by id whatever their ends, under a limit too; the Last line
+  reads the smaller id's, not the later end's. A later start lists first though it ended first.
+- **A start after its end** is stored (nothing refuses it), and every query dates it by its start. Pinned
+  (documents), for F04's clock rules.
+- **No end.** A finished row whose end was cleared is in no list, range or stat, takes no place of `recent`'s
+  limit, gives no record, best, week or Last line, and still reads by id; a rebuild brings it back. The grep
+  finds no other `ended_at` predicate.
+- **v002.**
+  - On the v001 fixture, a later migration that fails leaves v002 applied; two opens are no-ops and keep every
+    row.
+  - The index is `(started_at DESC, id)`.
+  - On a migrated old file, `recent` scans that index and a range searches it (by hand, `EXPLAIN QUERY PLAN`).
+    After an `ANALYZE` of a three-row table SQLite prefers a plain scan, as it should for three rows; the app
+    never runs `ANALYZE`.
+  - `QueryPlanTests` pins the plans and that `idx_workout_ended` is unused. Mutants E15 and E16 (other index
+    shapes) are killed.
+
+## The worst-case timing test (`StatsWorstCaseAdversarialTests`): a recommendation only
+
+It is **load-sensitive by design**, as every wall-clock timing test is, and it has the thinnest margin of them.
+Its tight query is `weeklyVolume` over 20,000 distinct weights: about 35 ms of 50 on an idle Mac.
+
+Today, with the Mac's load average at 34 to 40 from other worktrees:
+- alone, it passed;
+- inside the whole nightly `LedgerPersistenceTests` run it failed, with `weeklyVolume` at 44 to 52 ms;
+- S1's and S2's catalog timing tests failed beside it, at their own margins.
+
+So the failure says more about the machine than about the query. This is not a defect in the test as written,
+so I left it unedited. I recommend one of these:
+1. **Make the shape realistic** (preferred). Cap distinct weights at a lifter's real range, for example every
+   2.5 lb to 1,250 lb (500 weights). Keep the other worst-case traits: 20,000 sets of one lift, all in one week,
+   two records each. The `Decimal` cost per distinct weight is then a fortieth, and the test still guards what
+   it was written for: one lift, one week, every row read.
+2. Or keep the shape, and give it its own budget in `PerformanceBudget` (for example 100 ms, "worst case"), still
+   nightly only.
+
+Either way, the nightly lane should run timing tests on a quiet machine; that holds for the catalog tests too.
+
+## Verdict
+
+**G2 holds for decision #26, and G2 can close for S3.**
+- The twelve edits to my files are the sanctioned ones. Each is faithful and none weakens a test; three are
+  stricter.
+- Every boundary case still sits exactly on its edge, now held by the start.
+- 20 of 21 mutants of the changed lines are killed; the survivor is equivalent.
+- The new finding, S3-N5, is a nit.
+- The full gate is green on my final tree, which adds one test file.
