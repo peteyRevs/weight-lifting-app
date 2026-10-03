@@ -17,14 +17,9 @@ extension S3Kit {
             GRDBStatsQueries(queue, now: { now })
         }
 
-        /// Materialises `workout` with the receipt the engine computes for it.
-        func materialize(_ workout: WorkoutState, prs: [PersonalRecord] = [], slots: [Slot] = []) async throws {
-            try await workouts.materialize(
-                workout,
-                summary: WorkoutEngine.summary(workout, prs: prs),
-                prs: prs,
-                slotUpdates: slots
-            )
+        /// Materialises `workout`, with `slots` as its slot updates.
+        func materialize(_ workout: WorkoutState, slots: [Slot] = []) async throws {
+            try await workouts.materialize(workout, slotUpdates: slots)
         }
 
         func texts(_ sql: String, _ arguments: StatementArguments = []) async throws -> [String] {

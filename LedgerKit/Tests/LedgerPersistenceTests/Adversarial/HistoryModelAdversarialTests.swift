@@ -26,9 +26,8 @@ struct HistoryModelAdversarialTests {
     static func apply(_ operation: HistoryScript.Operation, to workouts: any WorkoutRepository) async -> String {
         await outcome {
             switch operation {
-            case let .materialize(workout, prs):
-                let summary = WorkoutEngine.summary(workout, prs: prs)
-                try await workouts.materialize(workout, summary: summary, prs: prs, slotUpdates: [])
+            case let .materialize(workout):
+                try await workouts.materialize(workout, slotUpdates: [])
             case let .updateSets(row, sets):
                 try await workouts.updateSets(workoutExerciseID: row, sets: sets)
             case let .delete(id):
@@ -90,6 +89,26 @@ struct HistoryModelAdversarialTests {
         return lines
     }
 
+    /// `bests(before:for:)` before each of `workouts` and before a workout that is not stored, starting at the
+    /// script's `now`, for every exercise of the script (F05 records follow-up, product decision #27). Each
+    /// answer is spelled with its keys in order, so two equal answers read the same.
+    static func bests(
+        _ stats: any StatsQueries,
+        before workouts: [WorkoutState],
+        _ script: HistoryScript
+    ) async throws -> [String] {
+        let probe = S3Kit.workout(99, endedAt: script.now, minutes: 0, [])
+        var lines: [String] = []
+        for workout in workouts + [probe] {
+            let bests = try await stats.bests(before: workout, for: Set(HistoryScript.exercises))
+            let e1RM = bests.e1RM.sorted { $0.key.rawValue.uuidString < $1.key.rawValue.uuidString }
+            let weights = bests.weightAtReps.sorted { $0.key.rawValue.uuidString < $1.key.rawValue.uuidString }
+                .map { ($0.key, $0.value.sorted { $0.key < $1.key }) }
+            lines.append("bests(before: \(workout.id)): \(e1RM) \(weights)")
+        }
+        return lines
+    }
+
     /// Runs seed's script against the database and a model with `faults`: the first disagreement, or `nil`.
     static func firstMismatch(_ seed: PropertySeed, faults: Set<HistoryModel.Fault> = []) async throws -> String? {
         var script = HistoryScript(seed: seed)
@@ -108,8 +127,11 @@ struct HistoryModelAdversarialTests {
             if stored != "ok", try await stack.dump() != before {
                 return "step \(step): a refused call changed rows"
             }
+            let live = try await stack.workouts.recent(limit: 100)
             let actual = try await reads(stack.workouts, script) + Self.stats(stats, script)
+                + bests(stats, before: live, script)
             let wanted = try await reads(model, script) + Self.stats(model, script)
+                + bests(model, before: live, script)
             if let mismatch = zip(actual, wanted).first(where: { $0 != $1 }) {
                 return "step \(step): got \(mismatch.0), expected \(mismatch.1)"
             }

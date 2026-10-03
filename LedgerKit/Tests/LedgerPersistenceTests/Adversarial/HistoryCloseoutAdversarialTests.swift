@@ -126,8 +126,9 @@ struct HistoryCloseoutAdversarialTests {
         .bestSetFewerReps: "bestSet", .estimatesAbove12Reps: "bestE1RM", .weeksInUTCFromMonday: "e1RMByWeek",
         .weeksByTickTime: "e1RMByWeek", .futureWeeksCount: "e1RMByWeek", .volumeSkipsWarmups: "weeklyVolume",
         .sessionsNeedADoneSet: "sessionsCompleted", .sessionCountIgnoresDone: "sessionCount",
-        .recordsByWorkoutDate: "personalRecords", .recordsInGivenOrder: "personalRecords",
         .recentlyLoggedInWorkoutOrder: "recentlyLogged", .editDropsRecords: "updateSets",
+        .recordsAgainstAllTime: "before each workout", .recordsAgainstOtherWorkouts: "before each workout",
+        .recordsSkipLaterWorkouts: "detect records again", .bestsBeforeIncludeIt: "bests(before:for:)",
         .emitsEveryWrite: "observeRecent", .missesAreMerged: "slotUpdates", .closedRanges: "workouts(in:)",
         .negativeLimitIsAll: "limit"
     ]

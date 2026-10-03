@@ -51,47 +51,119 @@ struct LoggedSetRecord: SyncedRecord {
 
 /// A `personal_record` row: one record a workout set (decision #3). The table is derived and local-only, never
 /// synced (`Migrations`).
+///
+/// It holds the record as its columns, weights in whole 10⁻⁷ g, so that the replay of product decision #27, which
+/// finds records in those units, writes and compares rows without decimal arithmetic.
 struct PersonalRecordRecord: SyncedRecord {
     static let databaseTableName = "personal_record"
 
-    let record: PersonalRecord
     let rowID: String
+    let workoutID: WorkoutID
+    private let exerciseID: ExerciseID
+    private let kind: KindColumns
+    private let previous: KindColumns?
+    private let achievedAt: Double
 
-    /// `record` as the row at `position` among its workout's records. A `PersonalRecord` has no id, so the
-    /// row's is derived from the workout it names and its place: materialising the same records again writes
-    /// the same rows.
-    init(_ record: PersonalRecord, position: Int) {
-        self.record = record
-        rowID = ColumnCodec.derivedID(named: "personal_record \(position)", in: record.workoutID.rawValue).uuidString
+    /// The record `found`, in whole 10⁻⁷ g, that `exerciseID` set in the workout `workoutID`, which started at
+    /// `achievedAt` (seconds since the reference date, as `started_at` holds it).
+    ///
+    /// A `PersonalRecord` has no id, so the row's is derived from the workout, the exercise and the kind, which
+    /// `PersonalRecords.found` finds at most once for an exercise of a workout. Detecting the same record again
+    /// writes the same row, and a record whose value changes keeps its row.
+    init(
+        _ found: PersonalRecords.Found<Int64>,
+        of exerciseID: ExerciseID,
+        in workoutID: WorkoutID,
+        at achievedAt: Double
+    ) {
+        let (columns, beaten) = switch found {
+        case let .estimate(value, over):
+            (
+                KindColumns(name: Self.estimatedOneRepMax, e7g: value, reps: nil),
+                KindColumns(name: Self.estimatedOneRepMax, e7g: over, reps: nil)
+            )
+        case let .weight(value, reps, over, overReps):
+            (
+                KindColumns(name: Self.weightAtReps, e7g: value, reps: reps.value),
+                KindColumns(name: Self.weightAtReps, e7g: over, reps: overReps.value)
+            )
+        }
+        self.init(workoutID: workoutID, exerciseID: exerciseID, kind: columns, previous: beaten, achievedAt: achievedAt)
     }
 
+    private init(
+        workoutID: WorkoutID,
+        exerciseID: ExerciseID,
+        kind: KindColumns,
+        previous: KindColumns?,
+        achievedAt: Double,
+        rowID: String? = nil
+    ) {
+        self.workoutID = workoutID
+        self.exerciseID = exerciseID
+        self.kind = kind
+        self.previous = previous
+        self.achievedAt = achievedAt
+        let name = "personal_record \(ColumnCodec.text(exerciseID)) \(kind.name)"
+        self.rowID = rowID ?? ColumnCodec.derivedID(named: name, in: workoutID.rawValue).uuidString
+    }
+
+    /// The row as stored, read strictly: a damaged column throws `malformedColumn`, an unknown kind too.
     init(row: Row) throws {
         let read = ColumnReader(row: row, table: Self.databaseTableName)
-        record = try PersonalRecord(
+        try self.init(
+            workoutID: read.identifier("workout_id"),
             exerciseID: read.identifier("exercise_id"),
             kind: Self.kind(read, "kind", "weight_e7g", "reps"),
-            previous: read.isNull("previous_kind")
-                ? nil
-                : Self.kind(read, "previous_kind", "previous_weight_e7g", "previous_reps"),
-            achievedAt: read.date("achieved_at"),
-            workoutID: read.identifier("workout_id")
+            previous: read.isNull("previous_kind") ? nil : Self.kind(
+                read,
+                "previous_kind",
+                "previous_weight_e7g",
+                "previous_reps"
+            ),
+            achievedAt: ColumnCodec.seconds(read.date("achieved_at")),
+            rowID: read.text("id")
         )
-        rowID = try read.text("id")
+    }
+
+    /// The record the row holds.
+    var record: PersonalRecord {
+        PersonalRecord(
+            exerciseID: exerciseID,
+            kind: kind.kind,
+            previous: previous?.kind,
+            achievedAt: Date(timeIntervalSinceReferenceDate: achievedAt),
+            workoutID: workoutID
+        )
+    }
+
+    /// The content columns, in the order of `content`: select them so to compare a stored row with
+    /// `isStored(in:)`.
+    static let contentColumns = [
+        "id", "workout_id", "exercise_id", "kind", "weight_e7g", "reps", "previous_kind", "previous_weight_e7g",
+        "previous_reps", "achieved_at"
+    ]
+
+    /// The row's content, in the order of `contentColumns`: what `encode(to:)` writes.
+    private var content: [DatabaseValue] {
+        [
+            rowID.databaseValue, ColumnCodec.text(workoutID).databaseValue, ColumnCodec.text(exerciseID).databaseValue,
+            kind.name.databaseValue, kind.e7g.databaseValue, kind.reps?.databaseValue ?? .null,
+            previous?.name.databaseValue ?? .null, previous?.e7g.databaseValue ?? .null,
+            previous?.reps?.databaseValue ?? .null, achievedAt.databaseValue
+        ]
+    }
+
+    /// Whether `row`, holding `contentColumns` in that order, holds this record already. The replay compares its
+    /// thousands of unchanged records so, without encoding them (product decision #27).
+    func isStored(in row: Row) -> Bool {
+        content.enumerated().allSatisfy { index, value in (row[index] as DatabaseValue) == value }
     }
 
     func encode(to container: inout PersistenceContainer) throws {
-        container["id"] = rowID
-        container["workout_id"] = ColumnCodec.text(record.workoutID)
-        container["exercise_id"] = ColumnCodec.text(record.exerciseID)
-        let kind = Self.columns(record.kind)
-        container["kind"] = kind.name
-        container["weight_e7g"] = try kind.weight.e7g()
-        container["reps"] = kind.reps
-        let previous = record.previous.map(Self.columns)
-        container["previous_kind"] = previous?.name
-        container["previous_weight_e7g"] = try previous?.weight.e7g()
-        container["previous_reps"] = previous?.reps
-        container["achieved_at"] = try ColumnCodec.seconds(record.achievedAt)
+        for (column, value) in zip(Self.contentColumns, content) {
+            container[column] = value
+        }
     }
 
     private static let estimatedOneRepMax = "estimatedOneRepMax"
@@ -100,27 +172,27 @@ struct PersonalRecordRecord: SyncedRecord {
     /// A record kind as its three columns; `reps` is `NULL` for an estimated 1RM.
     private struct KindColumns {
         let name: String
-        let weight: Weight
+        let e7g: Int64
         let reps: Int?
-    }
 
-    private static func columns(_ kind: PRKind) -> KindColumns {
-        switch kind {
-        case let .estimatedOneRepMax(weight): KindColumns(name: estimatedOneRepMax, weight: weight, reps: nil)
-        case let .weightAtReps(weight, reps): KindColumns(name: weightAtReps, weight: weight, reps: reps.value)
+        /// The kind, for columns that `init(_:of:in:at:)` or `kind(_:_:_:_:)` made.
+        var kind: PRKind {
+            let count = reps.flatMap(Reps.init)
+            return count.map { .weightAtReps(Weight(e7g: e7g), $0) } ?? .estimatedOneRepMax(Weight(e7g: e7g))
         }
     }
 
-    /// The record kind three columns hold; a kind this app does not know throws `malformedColumn`.
+    /// The record kind three columns hold; a kind this app does not know throws `malformedColumn`, and so do reps
+    /// below 1 in a weight at reps.
     private static func kind(
         _ read: ColumnReader,
         _ kind: String,
         _ weight: String,
         _ reps: String
-    ) throws(LedgerPersistenceError) -> PRKind {
+    ) throws(LedgerPersistenceError) -> KindColumns {
         switch try read.text(kind) {
-        case estimatedOneRepMax: try .estimatedOneRepMax(Weight(e7g: read.integer(weight)))
-        case weightAtReps: try .weightAtReps(Weight(e7g: read.integer(weight)), read.reps(reps))
+        case estimatedOneRepMax: try KindColumns(name: estimatedOneRepMax, e7g: read.integer(weight), reps: nil)
+        case weightAtReps: try KindColumns(name: weightAtReps, e7g: read.integer(weight), reps: read.reps(reps).value)
         default: throw .malformedColumn("\(databaseTableName).\(kind)")
         }
     }

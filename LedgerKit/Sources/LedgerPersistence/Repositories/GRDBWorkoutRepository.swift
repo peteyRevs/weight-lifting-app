@@ -7,6 +7,10 @@ import os
 /// the finished workouts. Deleted rows (`deleted_at`) are never read.
 ///
 /// A workout's date, for ordering and for ranges, is when it started (`started_at`; product decision #26).
+///
+/// The personal records are derived (product decision #27): every write detects them again, in its own
+/// transaction, for the exercises it touched from the workout it changed onward (`RecordReplay`), so they always
+/// equal `PersonalRecords.detect` replayed over history.
 public struct GRDBWorkoutRepository: WorkoutRepository {
     private let queue: DatabaseQueue
     private let now: @Sendable () -> Date
@@ -19,16 +23,17 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     }
 
     /// Stores the finished `workout` in one write transaction (rule 31): its row, its exercises and their sets
-    /// (each done set of at most 12 reps with its Brzycki e1RM), `prs` as its personal records, and the misses
-    /// of `slotUpdates` (rule 13). Any failure leaves the database as it was.
+    /// (each done set of at most 12 reps with its Brzycki e1RM), its personal records, and the misses of
+    /// `slotUpdates` (rule 13). Any failure leaves the database as it was.
     ///
     /// It is an upsert keyed by the workout's id, so materialising again is safe (ADR-004: a rebuild emits
     /// `.materialize` again when a late envelope changes a finished log). Rows that did not change are left
     /// alone, rows the workout no longer has are soft-deleted, and a deleted workout comes back.
     ///
-    /// - The stored totals (volume, done and total sets) are computed from `workout`'s sets, and the record
-    ///   count is `prs.count`: `summary` is `WorkoutEngine.summary(workout, prs: prs)`, so it holds nothing
-    ///   else to store.
+    /// - The stored totals (volume, done and total sets) are computed from `workout`'s sets.
+    /// - The records of every exercise the workout performs, or performed before this write, are detected
+    ///   again from the workout's place in history onward (product decision #27): a workout stored late, before
+    ///   others, changes theirs too.
     /// - Of each slot in `slotUpdates`, only `misses` is written, and it replaces the slot's stored misses
     ///   whole. So the caller builds each slot from the program as it is stored now: a copy taken when the
     ///   workout started, or the slots of an older workout materialised again, would clear misses recorded
@@ -37,23 +42,21 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// - `workout.programUpdates` is not applied here; F10 decides where a swap reaches the program.
     ///
     /// Throws `notFinished` unless `workout` is `.finished` with an `endedAt`; `duplicateIdentifier` for two
-    /// exercises or two sets sharing an id, an exercise or set id that another stored workout holds (live or
-    /// deleted), or a record in `prs` that names another workout; `nulInText` for a name or tag holding U+0000;
-    /// `inexactWeight` for a weight that is not a
-    /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite.
-    public func materialize(
-        _ workout: WorkoutState,
-        summary _: WorkoutSummary,
-        prs: [PersonalRecord],
-        slotUpdates: [Slot]
-    ) async throws {
+    /// exercises or two sets sharing an id, or an exercise or set id that another stored workout holds (live or
+    /// deleted); `nulInText` for a name or tag holding U+0000; `inexactWeight` for a weight that is not a
+    /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite. A workout the record replay
+    /// cannot read is left out of it and logged; it never fails the write.
+    public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(ColumnCodec.text(workout.id))")
         }
-        let rows = WorkoutRows(workout, records: prs)
+        let rows = WorkoutRows(workout)
         let timestamp = ColumnCodec.timestamp(now())
         try await queue.write { database in
+            var scope = try RecordReplay.Scope(ofStored: workout.id, in: database)
+            try scope.include(workout)
             try rows.write(database, at: timestamp)
+            try RecordReplay.redetect(scope, in: database, at: timestamp)
             try Self.writeMisses(of: slotUpdates, in: database, at: timestamp)
         }
     }
@@ -80,14 +83,13 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     /// set rows are soft-deleted, each set's e1RM is computed again, and so are the workout's totals. Rows
     /// that did not change keep their `updated_at`.
     ///
-    /// The workout's personal records and its record count are left as they are, so after an edit they can be
-    /// stale: a record may remain that no stored set supports, and an edit that deserves one creates none.
-    /// Product decision #27 has an edit re-check the records inside this write, against the bests as they
-    /// stood before the workout; that is the F05 follow-up before F07, not yet built.
+    /// The exercise's personal records are detected again, in the same transaction, from this workout onward
+    /// (product decision #27): correcting a typo removes the record it made, and gives a later workout the
+    /// record it then deserves.
     ///
     /// Throws `missingRow` when no live workout has the exercise; `duplicateIdentifier` for a set id used
     /// twice in the workout, or held by another workout (live or deleted); and what reading the workout throws
-    /// when it is damaged.
+    /// when it is damaged. A later workout the replay cannot read is left out and logged.
     public func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
         let timestamp = ColumnCodec.timestamp(now())
         let key = ColumnCodec.text(workoutExerciseID)
@@ -108,16 +110,23 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
                 throw LedgerPersistenceError.missingRow("workout_exercise \(key)")
             }
             workout.exercises[index].sets = sets
-            try WorkoutRows(workout, records: nil).write(database, at: timestamp)
+            let scope = try RecordReplay.Scope(editing: workout.exercises[index].exerciseID, of: workout)
+            try WorkoutRows(workout).write(database, at: timestamp)
+            try RecordReplay.redetect(scope, in: database, at: timestamp)
         }
     }
 
-    /// Soft-deletes the workout, its exercises, sets and personal records in one transaction; materialising it
-    /// again brings them back. Deleting a workout that is not stored does nothing. The misses it recorded
-    /// stay: they belong to the program.
+    /// Soft-deletes the workout, its exercises, sets and personal records in one transaction, and detects the
+    /// records of its exercises again in the workouts after it (product decision #27); materialising it again
+    /// brings them back. Deleting a workout that is not stored does nothing. The misses it recorded stay: they
+    /// belong to the program.
     public func delete(id: WorkoutID) async throws {
         let timestamp = ColumnCodec.timestamp(now())
-        try await queue.write { database in try WorkoutRows(deleting: id).write(database, at: timestamp) }
+        try await queue.write { database in
+            let scope = try RecordReplay.Scope(ofStored: id, in: database)
+            try WorkoutRows(deleting: id).write(database, at: timestamp)
+            try RecordReplay.redetect(scope, in: database, at: timestamp)
+        }
     }
 
     /// `recent(limit:)` now, then after every change that alters it.

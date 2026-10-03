@@ -3,32 +3,32 @@ import GRDB
 import LedgerDomain
 
 /// A finished workout as the rows of its four tables (`workout`, `workout_exercise`, `logged_set`,
-/// `personal_record`). Saving writes them over the stored rows in the caller's transaction (`write`); reading
-/// assembles the first three into `WorkoutState`s (`fetch`).
+/// `personal_record`). Saving writes the first three over the stored rows in the caller's transaction (`write`);
+/// reading assembles them into `WorkoutState`s (`fetch`). The records are derived: `RecordReplay` writes them
+/// after the workout's rows, in the same transaction (product decision #27).
 struct WorkoutRows {
     let workoutID: WorkoutID
     private var workout: WorkoutRecord?
     private var exercises: [WorkoutExerciseRecord] = []
     private var sets: [LoggedSetRecord] = []
-    /// The workout's personal records, or `nil` to leave the stored ones as they are.
-    private var records: [PersonalRecordRecord]?
+    /// Whether writing soft-deletes the workout's personal records (a delete); otherwise they are left to
+    /// `RecordReplay`.
+    private var deletesRecords = false
 
-    /// The rows of `state`, with `records` as its personal records; `nil` keeps the stored records and their
-    /// count (an edit of a stored workout's sets).
-    init(_ state: WorkoutState, records: [PersonalRecord]?) {
+    /// The rows of `state`.
+    init(_ state: WorkoutState) {
         workoutID = state.id
-        workout = WorkoutRecord(state, recordCount: records?.count)
+        workout = WorkoutRecord(state)
         exercises = state.exercises.enumerated().map { WorkoutExerciseRecord($1, workoutID: state.id, position: $0) }
         sets = state.exercises.flatMap { exercise in
             exercise.sets.enumerated().map { LoggedSetRecord($1, workoutExerciseID: exercise.id, position: $0) }
         }
-        self.records = records?.enumerated().map { PersonalRecordRecord($1, position: $0) }
     }
 
-    /// No rows at all: writing them soft-deletes the workout and everything in it.
+    /// No rows at all: writing them soft-deletes the workout and everything in it, its records included.
     init(deleting id: WorkoutID) {
         workoutID = id
-        records = []
+        deletesRecords = true
     }
 
     /// Makes the workout's live rows these, in the caller's transaction: new and changed rows are upserted,
@@ -45,29 +45,21 @@ struct WorkoutRows {
         let storedWorkout = try Selection.one(workoutID).rows(Query.workouts, in: database)
         let storedExercises = try children.rows(Query.exercises, in: database)
         let storedSets = try children.rows(Query.setsUnderAnyExercise, in: database)
-        let storedRecords = try children.rows(Query.records, in: database)
+        let storedRecords = deletesRecords ? try children.rows(Query.records, in: database) : []
         try refuseOtherWorkoutsIDs(in: database)
         // Parents first, so every foreign key an insert names exists.
         try WorkoutRecord.write(workout.map { [$0] } ?? [], over: storedWorkout, in: database, at: timestamp)
         try WorkoutExerciseRecord.write(exercises, over: storedExercises, in: database, at: timestamp)
         try LoggedSetRecord.write(sets, over: storedSets, in: database, at: timestamp)
-        if let records {
-            try PersonalRecordRecord.write(records, over: storedRecords, in: database, at: timestamp)
+        if deletesRecords {
+            try PersonalRecordRecord.write([], over: storedRecords, in: database, at: timestamp)
         }
     }
 
     /// Throws `duplicateIdentifier` when an exercise or a set of this workout has an id that another stored
     /// workout holds, live or deleted. Upserting it would move that row into this workout, and the other
     /// workout would lose it (the takeover S2's review B1 found for programs).
-    ///
-    /// A personal record's row id derives from the workout the record names, so a record that names another
-    /// workout would be written over that workout's record row. It is refused the same way, naming the
-    /// workout whose row it would take (S3-1).
     private func refuseOtherWorkoutsIDs(in database: Database) throws {
-        if let foreign = records?.first(where: { $0.record.workoutID != workoutID }) {
-            let owner = ColumnCodec.text(foreign.record.workoutID)
-            throw LedgerPersistenceError.duplicateIdentifier("personal_record of workout \(owner)")
-        }
         try refuse(
             exercises.map(\.rowID),
             of: WorkoutExerciseRecord.databaseTableName,

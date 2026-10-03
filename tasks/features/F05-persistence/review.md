@@ -895,3 +895,223 @@ about 10 lines; SF2 to SF4 add none to the count.
   Neither blocks the merge, because the code takes the conservative reading and the contract names it.
 - The G5 rule applies: this PR carries product decisions (6, 7), so the orchestrator stops for Pete before
   merging, or records why they can wait.
+
+# Follow-up: records review
+
+Reviewer pass on `feat/F05-records` at `aca3a82`, diff `git diff efe0691..aca3a82` (51 files), against product
+decisions #25–#27 and the notes' "## Follow-up: records (decision #27)". Scope: `RecordReplay`, its callers in
+`GRDBWorkoutRepository`, `bests(before:for:)`, the `PersonalRecordRecord` and `SyncedRecord` changes, the Domain
+additions in `PersonalRecords`, the two protocol changes, the contracts, the four briefs' input lines, and the edits
+to the tester's suites. I changed no code or test.
+
+### What I ran
+
+- **Host tests** on a `git archive aca3a82` copy in my scratchpad (`f05rec-g3/copy`), so the tester's worktree was
+  not disturbed. In the default lane, `LedgerPersistenceTests` and the `PersonalRecords` Domain suites pass.
+- **The nightly lane**, run alone:
+  - `HistoryModelAdversarialTests` and `HistoryCloseoutAdversarialTests`: 8 tests, pass;
+  - `RecordReplayPerformanceTests`: passes alone. It **failed** once when I ran it beside every other persistence
+    suite, as did S2's catalog timing tests. That is the contention risk of open question 3.
+- **An independent invariant probe** (throwaway, not committed). Six seeds × 120 random operations each:
+  - new workouts, and rebuilds under an existing id that move the start or change the exercises;
+  - `updateSets` and `delete`;
+  - starts that collide exactly; drop, warm-up, added and undone sets; reps 1–14; 10 % deloads.
+
+  After every operation the probe compared every live record and every `pr_count` with a from-scratch replay. The
+  replay sorted history by (start, id text) and folded `PersonalRecords.Bests.include` and `detect(now: start)`,
+  written from the protocol docs and not from the SQL. **0 mismatches in 720 writes.** The same probe found R-SF1.
+- **`EXPLAIN QUERY PLAN`** of the walk, the bests, the stored-records read and the count check (below).
+- **A stamp probe:** after editing the first of 30 bench workouts, **all 30** workout rows had a new `updated_at`
+  (R-SF2).
+- **The 461-line count**, with my own script (see "Size").
+
+**Line-by-line reading.**
+- **Transactions.** Each of the three writes is one `queue.write`. `materialize` reads its scope, writes its rows,
+  replays, then writes misses (`GRDBWorkoutRepository.swift` `materialize`). `updateSets` and `delete` do the same.
+  Every read the replay makes runs inside that transaction.
+- **Scope.** The scope is the union of:
+  - the stored workout's live exercises and the exercises of its live records (`RecordReplay.swift:71-79`);
+  - the exercises of the new state (`:90-98`).
+
+  It starts from the earlier of the stored place (when that workout is live and finished) and the new place. That
+  is **sufficient**: records of exercise E can change only in workouts at or after the earliest place whose sets of
+  E changed. It is **minimal** too. `updateSets` narrows it to the edited exercise (`:84-88`), which is right,
+  because the workout cannot move and its other rows keep their sets.
+- **Revival.** A deleted workout has no live rows, so its stored place is `nil` and the scope starts at its new
+  place, where it had no influence before.
+- **Deletion.** `delete` soft-deletes the workout's own records with its rows, then replays from its place.
+- **Counts.** `pr_count` is recounted for the written workout, and for every workout with a found or a stored
+  record in scope. That set is complete: a workout outside the scope keeps all of its records.
+- **The rule.** `found` is `detect`'s old rule, step for step.
+  - The ceiling is the heaviest prior weight at the same or more reps; on a tie the one with more reps is met
+    first, because the scan goes from most reps down and compares strictly.
+  - Among the workout's weights at each rep count, the heaviest that beats its ceiling wins; on a tie, more reps.
+  - The estimate needs a prior estimate. Ties are not records.
+
+  F02's and the tester's 26 `detect` tests pass unedited.
+- **Grouping.** The walk's grouping (per workout, exercise and rep count: `MAX(weight_e7g)` and
+  `MAX(e1rm_e7g)`) is exactly the tally that `found` reads.
+- **Exactness.** The stored `e1rm_e7g` is `OneRepMax.brzycki(...).e7g()`, the same whole-gram value `detect`
+  computes, so `Int64` and `Weight` order alike (ADR-007). No decimal arithmetic runs in the walk.
+- **#25 and deloads.** `SQL.recordKinds` serves both the walk and the bests. A deload is skipped for records, and its
+  tally still raises the bests (`Walk.close`, `RecordReplay.swift:254-270`), as `Bests.include` does.
+- **Determinism and ids.**
+  - The walk is ordered by start, id, exercise and reps. Scope ids are sorted. Upserts follow walk order and soft
+    deletes follow id order.
+  - Row ids are `uuid5(workout, "personal_record <exercise> <kind>")`, unique because `found` returns at most one
+    record of each kind.
+  - S3's position-derived rows are in the stored set, match no new id, and are soft-deleted when their workout is
+    next written.
+- **Indexes.** The walk and the bests enter through `idx_wex_exercise_workout`, then the workout primary key and
+  `idx_logged_set_wex`; only `GROUP BY` and `ORDER BY` use a temporary B-tree. The stored-records read uses
+  `idx_pr_exercise`, and the count check `idx_pr_workout` per workout. No history table is scanned bare, which
+  `QueryPlanTests` also pins.
+
+### Blocking
+
+None.
+
+### Should fix
+
+**R-SF1. `bests(before:for:)` counts the workout's own stored copy when that copy starts earlier.**
+`LedgerPersistence/Stats/GRDBStatsQueries.swift` (`bests(for:before:in:)`: `(workout.started_at, workout.id) <
+(?, ?)` has no `workout.id IS NOT ?`); `LedgerDomain/Protocols/Repositories.swift:129`;
+`tasks/features/F10-active-workout.md:154` ("The workout itself is never counted, stored or not").
+- When the workout is stored at an earlier start than the state passed (a rebuild whose start moved later), the
+  stored copy sorts before it and its sets count.
+- My probe hit this 9 times in 720 writes. **Every** mismatch between "detect against `bests(before:)`, then
+  materialise" and the stored records was this case. All fresh workouts matched.
+- The store's own replay is unaffected: it runs after the workout's rows are rewritten, so the old copy no longer
+  exists. That is why the invariant probe found 0 mismatches.
+
+So the stored records are right, but the public query does not do what F10's line promises. A rebuild's "PR!" or
+receipt would then disagree with what is stored. A start that moves is rare: it takes an F17 merge that revises
+the start.
+
+*Fix:*
+- Add `AND workout.id IS NOT ?` (the position's id) to the bests query. The replay is unchanged by it, because the
+  written workout is at or after its start.
+- Say "never counts `workout` itself" in the protocol doc.
+- Add a `bestsBefore` case: the twin stored at an earlier start, then asked about at a later one.
+
+This is about 2 lines and one clause, best made before F07 writes a fake against it.
+
+**R-SF2. Every write recount stamps the `updated_at` of each workout row it touches, on a synced table.**
+`LedgerPersistence/Records/RecordReplay.swift:210-216` (`UPDATE workout SET pr_count = …, updated_at = ?`);
+`tasks/features/F28-icloud-sync.md:55` (only `personal_record` is called derived and local).
+`pr_count` is derived data on the synced `workout` row. Fixing a typo in the first of N workouts of a lift changes
+the counts of up to N − 1 later workouts. My probe: all 30 of 30 rows were restamped.
+- Under M4's row-level last-writer-wins, that one edit uploads every later workout.
+- Each of those copies can overwrite a real concurrent edit of the same row on the other device (a renamed workout,
+  an edited set total).
+- Both devices derive the same counts anyway (F17's new line), so the stamp carries no information.
+
+*Fix:* decide this now, while no workout has synced:
+- **either** leave `updated_at` alone for a recount: the count is derived, and each device derives it;
+- **or** keep the stamp, and write in F28's inputs that `pr_count` is excluded from the synced fields and
+  recomputed on receipt.
+
+The first is one token, and keeps S3's rule that only a content change moves `updated_at`. Either way, add the F28
+line.
+
+### Nit
+
+**R-N1. The finish screen's records match the stored ones only if F10 passes the start as `now`.**
+`tasks/features/F10-active-workout.md:150-156`, `LedgerDomain/Engine/WorkoutEngine.swift:87` ("the same ones"),
+`LedgerDomain/Rules/PersonalRecords.swift:15` ("`achievedAt` is `now`"). `detect` stamps the `now` it is given, and
+the store stamps the start. *Fix:* in F10's input 3, write `detect(workout: state, against: bests, now:
+state.startedAt)`, or say that only the kinds and values agree.
+
+**R-N2. No contract clause moves a stored workout's start later, or drops an exercise in a rebuild.**
+`RecordReplayTests.swift:82,98` pin both, but only for GRDB. F07's suggested fake replays from scratch and passes
+anyway. A fake that replays incrementally from the new place would pass every clause while wrong. *Fix
+(optional):* one step in `recordsFollowEdits` that materialises the typo workout again a day later.
+
+**R-N3. A deload sets no record, yet can stand as the "previous" a later record beats.** This follows decision #27
+and the contract (255 × 3 "over 250 × 5", the deload). It is correct, but F12 and F13 should expect a record whose
+"previous" comes from a deload. *Fix:* an F12 and F13 input line, if the session log shows "over …".
+
+### Deviations
+
+| Deviation | Verdict | Reason |
+|---|---|---|
+| `materialize(_:slotUpdates:)`: `summary` and `prs` dropped (decision 1) | **Accepted** | Records are now a function of history, so a caller-supplied list could only disagree. S3-1's refusal is moot, because nothing names a workout. It also settles S3 open question 1. |
+| `achievedAt` = the workout's start (decision 2) | **Accepted** | A rebuild or an edit has no "now at finish"; the start is the workout's date under #26. See R-N1 for F10's call. |
+| `personalRecords` ties by workout id, then kind (decision 3) | **Accepted** | Starts now tie routinely, and the old key (derived row id) was arbitrary. |
+| Row id = v5 of (workout, exercise, kind) (decision 4) | **Accepted** | Unique by construction. A changed value updates its own row, so stamps move only on change. The table is local, so the re-keying of S3's rows is invisible. |
+| Strict reads in the walk (decision 7) | **Accepted** | Judging a record against history the app cannot read is what #27 forbids. Only foreign damage triggers it, and F10's log stays uncompacted. |
+| `SyncedRecord.write` builds the upsert once per write (decision 8) | **Accepted** | Same SQL. The statement is rebuilt whenever the column set changes (`statement?.columns != columns`), so mixed column sets stay correct. |
+
+### Forced edits to the tester's suites
+
+From a reviewer's side, **no behavioural coverage was lost**:
+- The three deleted tests (`foreignRecord_isRefusedByName`, `recordOfAnotherWorkout_…`, `recordOfAnUnknownWorkout_…`)
+  pinned behaviour of the `prs` argument, which no longer exists. `records_nameTheirWorkout_andAreCounted` keeps
+  their invariant part.
+- The two removed model faults describe behaviour that is now required (`recordsByWorkoutDate`) or inexpressible
+  (`recordsInGivenOrder`). The four new faults cover the real ways to be wrong under #27, and each breaks its own
+  clause.
+- The model (`HistoryModel.redetect`) is a from-scratch replay written from the protocol, independent of the SQL.
+  My probe is a second, separate one, and agrees.
+- One loss, and it is acceptable. `StatsWorstCaseAdversarialTests` no longer times `weeklyVolume` over 20,000
+  distinct weights, now about 450. That shape was unrealistic, and it flaked (S3-N4). Exactness does not depend on
+  how many weights there are, and `weeklyVolume_isExact` covers it.
+
+The tester's own audit of these edits is open question 6.
+
+### Domain API
+
+- **Kept small for what it must do.** RecordReplay lives in LedgerPersistence, so `found`, `Tally` and `Found` must
+  be visible across modules. `package` access would not hide them, because the Feature targets are in the same
+  package. `Bests` and `detect(against:)` are what F10 needs, and `bestSet(of:)` serves F12.
+- **Additive except `materialize`.** `materialize` has no consumer yet (F07 and F10 are unbuilt), so this is the
+  cheapest moment to change it.
+- **`bests(before: WorkoutState, …)`** uses only the start and the id. Passing the state lets F10 hand in the live
+  workout unchanged, and serves a rebuild. Fine, given R-SF1.
+- **Input lines.** F07, F13 and F17 are accurate. F10 is accurate except item 3's "never counted, stored or not"
+  (R-SF1) and the finish screen's `achievedAt` (R-N1). F28 has no line yet (R-SF2).
+
+### Open questions
+
+Category: **(a)** settle now; **(b)** hand off (brief named); **(c)** owner decides.
+
+| # | Question | Recommendation | Category |
+|---|---|---|---|
+| 1 | `achievedAt` is the workout's start | Keep. It follows #26 (Pete's), and a rebuild or an edit has no other stable instant. Tell F10 to pass the start (R-N1). | (a) |
+| 2 | Strict reads in a write | Keep. A false record is worse than a finish that waits for a repair, and only foreign damage reaches it. F10's and F13's lines already say what to do. | (a) |
+| 3 | Timing margin (worst case 41–48 ms of 50, Debug) | Accept: the shape (400 workouts, 20,000 sets of **one** lift, every workout a record) is far past real use, and the realistic finish costs about 1 ms per lift. It is still a flake risk: I saw it fail once under CPU contention. If the nightly flakes, add a write budget for a history edit to architecture §15 (an edit is a user action on the phone, not a frame) instead of shrinking the shape. F20 times a device in Release. | (b) F20; a new §15 budget is the orchestrator's |
+| 4 | Records written before this PR | Nothing now: no shipped database holds workouts, and a write re-keys them. F17's line covers M4 writes that bypass `materialize`. Add R-SF2's F28 line. | (a) |
+| 5 | Domain API beyond the query | Keep (see "Domain API"). | (a) |
+| 6 | Tester-owned edits | The tester audits them in this round. From my side no behavioural coverage was lost (above). | (a) tester |
+| 7 | F13's badge has no `personalRecords(workoutID:)` | F13 adds it if it needs it. `pr_count` is now right, but no API reads it either. | (b) F13 |
+
+### Considered and not raised
+
+- **The scope reads the stored place leniently** (`try?` on `started_at`, `RecordReplay.swift:68`). A damaged stored
+  start drops the old place from the scope. Only foreign damage produces one, and the write then repairs the row.
+- **A `DatabaseQueue` blocks reads during a write.** The worst-case edit holds it for about 50 ms (Mac CPU). Edits
+  happen on the phone, in History, as a user action. F20 will tell whether a device needs a pool.
+- **Two statements per write even when nothing changed** (the count check). The no-op path runs no `UPDATE`, and
+  `WorkoutRowDiffTests.materializeTwice_writesNoRow` checks that no stamp moves.
+- **`Tally.add` keeps a `nil` estimate for sets above 12 reps** while still raising the weights: it matches `detect`
+  and decision #4.
+- **The bests query takes an exercise list of any size.** It is bounded by one workout's exercises (≤ 10), far below
+  SQLite's variable limit.
+
+### Size
+
+**461 code lines added, 104 removed, 357 net: confirmed.** My script counts the added and removed lines of `git diff
+-U0 efe0691..aca3a82 -- LedgerKit/Sources/LedgerDomain LedgerKit/Sources/LedgerPersistence` that are neither blank
+nor whole-line comments, which is the S3 method. Under the 500 target, so §10 is met with no split. R-SF1 and R-SF2
+add about 3 lines.
+
+### Verdict
+
+**Approved for G3: 0 Blocking, 2 Should fix, 3 Nits.**
+- The invariant holds on every write path. An independent from-scratch replay agreed on all 720 random writes,
+  including moved starts, tied starts, revivals, deloads and every set kind.
+- The rule is `detect`'s, in exact integers. The scope is sufficient and minimal, and every query is indexed.
+- R-SF1 is a two-line fix to new public API, best made before F07 writes a fake against it.
+- R-SF2 is a design choice for synced rows that costs nothing now and much after M4. It needs a one-line decision
+  and an F28 line.
+- Nothing here needs Pete: #25–#27 are his, and this PR implements them as written.

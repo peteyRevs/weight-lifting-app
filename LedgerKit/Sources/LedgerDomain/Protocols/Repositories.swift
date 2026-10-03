@@ -41,23 +41,28 @@ public protocol ProgramRepository: Sendable {
 ///
 /// A workout's date, for ordering and for ranges, is when it started (`startedAt`; product decision #26), so a
 /// session begun at 11:30 pm and finished after midnight is the earlier day's, and that week's.
+///
+/// **Personal records are a function of history** (product decision #27). After every write, the stored records
+/// equal `PersonalRecords.detect` replayed over the stored workouts in order (by start, then id), each workout
+/// judged against the bests as they stood before it (`StatsQueries.bests(before:for:)`), with `achievedAt` its
+/// start. Each write re-checks them, in its own transaction, for the exercises it touched, from the workout it
+/// changed onward: so correcting a typo in an old workout removes the false record and gives a later workout
+/// the record it then deserves. Callers never supply records.
 public protocol WorkoutRepository: Sendable {
-    /// Rule 31: stores the finished workout with its exercises and sets, `prs` as its personal records, and
-    /// the misses of `slotUpdates` (rule 13), in one transaction: all of it or nothing.
+    /// Rule 31: stores the finished workout with its exercises and sets, and the misses of `slotUpdates`
+    /// (rule 13), and detects personal records again from it onward, in one transaction: all of it or nothing.
     ///
     /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, a
-    ///   changed one replaces its exercises, sets and records, and a deleted one comes back.
-    /// - Nothing of `summary` is stored: it is `WorkoutEngine.summary(workout, prs:)`, computed from the other
-    ///   arguments.
+    ///   changed one replaces its exercises and sets, and a deleted one comes back. A workout stored late, before
+    ///   others, takes its place in the order, and the records of those after it follow.
     /// - Of each slot in `slotUpdates` only `misses` is written, replacing the slot's stored misses whole, so
     ///   build each slot from the program as stored now. A slot that is not stored is skipped.
     /// - `workout.programUpdates` is not applied.
     ///
     /// Throws `notFinished` unless the workout is `.finished` with an `endedAt`; `duplicateIdentifier` for an
-    /// exercise or set id used twice, or held by another stored workout (even a deleted one), and for a record
-    /// that names another workout; `nulInText` for a name or tag holding U+0000.
-    func materialize(_ workout: WorkoutState, summary: WorkoutSummary, prs: [PersonalRecord], slotUpdates: [Slot])
-        async throws
+    /// exercise or set id used twice, or held by another stored workout (even a deleted one); `nulInText` for a
+    /// name or tag holding U+0000.
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws
     /// The stored workout, or `nil`. A history read resets the live-only fields: no `cursor`, no `rest`, no
     /// `programUpdates`, no exercise's `lastPerformance`, and `autoRest` true.
     func workout(id: WorkoutID) async throws -> WorkoutState?
@@ -66,13 +71,14 @@ public protocol WorkoutRepository: Sendable {
     func recent(limit: Int) async throws -> [WorkoutState]
     /// The workouts that started in `range` (its upper bound excluded), newest first, as `recent`.
     func workouts(in range: Range<Date>) async throws -> [WorkoutState]
-    /// Replaces the sets of one exercise of a stored workout. Everything computed from sets follows; the
-    /// workout's personal records are left as they are, and can be stale afterwards, until the F05 follow-up re-checks
-    /// them in this write (product decision #27). An exercise of no stored
-    /// workout throws `missingRow`; a set id used twice, or held by another workout, `duplicateIdentifier`.
+    /// Replaces the sets of one exercise of a stored workout. Everything computed from sets follows, personal
+    /// records included: that exercise's records are detected again from this workout onward, in the same
+    /// transaction (product decision #27). An exercise of no stored workout throws `missingRow`; a set id used
+    /// twice, or held by another workout, `duplicateIdentifier`.
     func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws
-    /// Removes the workout, with its records, from every read and every stats query; materialising it again
-    /// brings it back. An unknown id does nothing.
+    /// Removes the workout, with its records, from every read and every stats query, and detects the records of
+    /// its exercises again in the workouts after it; materialising it again brings it back. An unknown id does
+    /// nothing.
     func delete(id: WorkoutID) async throws
     /// `recent(limit:)` now, then after every change that alters it, and for no other write.
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]>
@@ -91,8 +97,8 @@ public protocol SettingsRepository: Sendable {
 /// Every query counts done sets of stored workouts only, and a workout's date is when it started (product
 /// decision #26). Which kinds of set count differs by query (product decision #25):
 /// - the "Last" line counts `.working` sets;
-/// - the bests (`bestSet`, `bestE1RM`, `e1RMByWeek`) count `.working` and `.added` sets, those that can set a
-///   personal record (decision #25; warm-ups and drop sets never count);
+/// - the bests (`bestSet`, `bestE1RM`, `e1RMByWeek`, `bests(before:for:)`) count `.working` and `.added` sets,
+///   those that can set a personal record (decision #25; warm-ups and drop sets never count);
 /// - volume, `sessionCount` and `recentlyLogged` count every kind.
 public protocol StatsQueries: Sendable {
     /// Spec §6.3 "Last" line: the most recent workout (by start) with a done working set of the exercise (of two
@@ -114,9 +120,16 @@ public protocol StatsQueries: Sendable {
     func sessionsCompleted(in range: Range<Date>) async throws -> Int
     /// How many workouts hold a done set of the exercise; one that performs it in two rows counts once.
     func sessionCount(exerciseID: ExerciseID) async throws -> Int
-    /// The records the exercise's stored workouts set, newest first by `achievedAt`; of two achieved together,
-    /// the estimated 1RM before the weight at reps.
+    /// The records the exercise's stored workouts set, newest first by `achievedAt` (the workout's start); of two
+    /// workouts that started together, the smaller id first (as `recent`); within a workout, the estimated 1RM
+    /// before the weight at reps.
     func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord]
+    /// Product decision #27: the bests `PersonalRecords.detect` judges `workout` against, for each of
+    /// `exerciseIDs`: those of the stored workouts that come before it, by start and then id (decision #26),
+    /// never `workout` itself, stored or not (not even a stored copy that started earlier). A workout this app
+    /// cannot read is left out. Counts the sets the other bests count (decision #25). An exercise with no such set
+    /// has no entry. For the live "PR!" moment, pass the active workout, and detect with `now: startedAt`.
+    func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests
     /// The `limit` exercises with a done set in the most recent workouts, the latest first, and exercises of
     /// one workout in id order; none when `limit` is below 1.
     func recentlyLogged(limit: Int) async throws -> [ExerciseID]

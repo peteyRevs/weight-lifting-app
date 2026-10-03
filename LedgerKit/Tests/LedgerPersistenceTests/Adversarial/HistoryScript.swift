@@ -6,7 +6,7 @@ import LedgerDomain
 /// repeated exercises are common.
 struct HistoryScript {
     enum Operation: Sendable {
-        case materialize(WorkoutState, [PersonalRecord])
+        case materialize(WorkoutState)
         case updateSets(WorkoutExerciseID, [LoggedSet])
         case delete(WorkoutID)
     }
@@ -72,23 +72,14 @@ struct HistoryScript {
         return S3Kit.workout(number, endedAt: start.addingTimeInterval(60 * minutes), minutes: minutes, rows)
     }
 
-    /// At most one record of each kind, for one exercise, achieved at a time only this workout has.
-    mutating func records(for workout: WorkoutState, number: Int) -> [PersonalRecord] {
-        let exercise = pick(Self.exercises)
-        let achieved = S3Kit.now.addingTimeInterval(Double(number))
-        let kinds: [PRKind] = [.weightAtReps(.pounds(105), Reps(clamping: 5)), .estimatedOneRepMax(.pounds(120))]
-        return kinds.filter { _ in chance(40) }.map { S3Kit.record(exercise, $0, in: workout, at: achieved) }
-    }
-
     /// The next operation: mostly materialisations of the six workouts, valid or not.
     mutating func next() -> Operation {
         let number = Int.random(in: 1 ... 6, using: &rng)
         switch Int.random(in: 0 ..< 100, using: &rng) {
         case 0 ..< 50:
             var workout = workout(number)
-            let prs = records(for: workout, number: number)
             spoil(&workout, number: number)
-            return .materialize(workout, prs)
+            return .materialize(workout)
         case 50 ..< 80:
             let row = Int.random(in: 0 ... 3, using: &rng)
             let other = chance(15) ? Int.random(in: 1 ... 6, using: &rng) : number

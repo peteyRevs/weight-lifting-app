@@ -5,9 +5,15 @@ import LedgerDomain
 import Testing
 
 /// F05 S3 adversarial round 1, criterion 9: the same 20,000 sets in 400 workouts as the implementer's timing
-/// test, in the shape that gives each query the most rows to read. Every set is of one lift, at its own
-/// weight (so volume groups 20,000 weights), every workout ended in the current week (so the week's volume
-/// and e1RM read them all), and every workout set two records. Nightly lane only, like every timing test.
+/// test, in the shape that gives each query the most rows to read. Every set is of one lift, every workout
+/// ended in the current week (so the week's volume and e1RM read them all), and every workout after the first
+/// sets two records. Nightly lane only, like every timing test.
+///
+/// Sanctioned edit (F05 records follow-up, orchestrator): the weights were 20,000 distinct ones, which put
+/// `weeklyVolume` at 35 ms of 50 and made the test fail under load (S3-N4). They are now about 450, every
+/// 2.5 lb up to 1,250 lb, more than a real history holds: workout *n*'s set *j* is 2.5 × (*n* + *j* + 1) lb, so
+/// each workout is one step heavier at every rep count than the one before, and sets both records against it
+/// (product decision #27: records are detected by the repository, no longer given).
 @Suite(
     "Adversarial S3 · stats timing, worst case",
     .tags(.persistence, .performance, .slow),
@@ -20,22 +26,13 @@ struct StatsWorstCaseAdversarialTests {
         let workouts = GRDBWorkoutRepository(queue, now: { S3Kit.now })
         for number in 0 ..< 400 {
             let sets = (0 ..< 50).map { S3Kit.set(
-                Decimal(4500 + number * 50 + $0) / 100,
+                Decimal(number + $0 + 1) * 2.5,
                 1 + $0 % 12,
                 $0 % 7 == 0 ? .added : .working
             ) }
             let ended = S3Kit.now.addingTimeInterval(Double(number - 399) * 60)
             let workout = S3Kit.workout(number, endedAt: ended, minutes: 1, [S3Kit.RowSpec(S3Kit.bench, sets)])
-            let records = [
-                S3Kit.record(S3Kit.bench, .estimatedOneRepMax(sets[11].weight), in: workout),
-                S3Kit.record(S3Kit.bench, .weightAtReps(sets[49].weight, Reps(clamping: 2)), in: workout)
-            ]
-            try await workouts.materialize(
-                workout,
-                summary: WorkoutEngine.summary(workout, prs: records),
-                prs: records,
-                slotUpdates: []
-            )
+            try await workouts.materialize(workout, slotUpdates: [])
         }
         return queue
     }
@@ -49,6 +46,7 @@ struct StatsWorstCaseAdversarialTests {
         let calendar = S3Kit.calendar()
         let week = calendar.week(containing: S3Kit.now)
         #expect(try await stats.sessionsCompleted(in: week) == 400)
+        #expect(try await stats.personalRecords(exerciseID: S3Kit.bench).count == 399 * 2)
         let queries: [(name: String, run: @Sendable () async throws -> Void)] = [
             ("lastPerformance", { _ = try await stats.lastPerformance(exerciseID: S3Kit.bench) }),
             ("bestSet", { _ = try await stats.bestSet(exerciseID: S3Kit.bench) }),

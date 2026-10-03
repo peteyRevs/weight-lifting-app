@@ -455,6 +455,8 @@ useful `previewValue`. Stores never construct their dependencies.
 | Cold launch to Today (iPhone 15 class) | < 600 ms |
 | Set logged → other device reflects (reachable) | < 1 s |
 | Any stats query (20 k sets) | < 50 ms |
+| Recording a new workout at the end of history, its record replay included (20 k sets) | < 50 ms |
+| A History write that re-detects records: edit, delete, late or moved workout (20 k sets, 400 workouts, 5 lifts; p95, simulator, Debug) | < 250 ms |
 | Watch set-ready screen update on crown detent | next frame |
 | App size (iOS) | < 15 MB |
 

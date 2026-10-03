@@ -18,24 +18,16 @@ public struct HistoryStores: Sendable {
         self.programs = programs
     }
 
-    /// Materialises `workout` with the receipt `WorkoutEngine.summary` computes for it, as F10 does.
-    public func materialize(
-        _ workout: WorkoutState,
-        prs: [PersonalRecord] = [],
-        slotUpdates: [Slot] = []
-    ) async throws {
-        try await workouts.materialize(
-            workout,
-            summary: WorkoutEngine.summary(workout, prs: prs),
-            prs: prs,
-            slotUpdates: slotUpdates
-        )
+    /// Materialises `workout`, with `slotUpdates` (none by default).
+    public func materialize(_ workout: WorkoutState, slotUpdates: [Slot] = []) async throws {
+        try await workouts.materialize(workout, slotUpdates: slotUpdates)
     }
 }
 
 /// `WorkoutRepository`'s contract as named clauses (F05 S3): criterion 3's materialisation as an idempotent
 /// upsert, what a stored workout reads back as, the newest-first lists, set edits, deletion, the misses of
-/// `slotUpdates`, ids, text holding U+0000 and observation. F07's in-memory fake runs the same clauses.
+/// `slotUpdates`, ids, personal records after an edit (product decision #27), text holding U+0000 and
+/// observation. F07's in-memory fake runs the same clauses.
 public enum WorkoutRepositoryContract {
     public typealias Clause = ContractClause<HistoryStores>
 
@@ -56,7 +48,10 @@ public enum WorkoutRepositoryContract {
             "an exercise or set id another workout holds, even deleted, is refused; it is unchanged",
             otherWorkoutsIDs
         ),
-        Clause("a record naming another workout is refused; nothing is stored, and its records stay", foreignRecord),
+        Clause(
+            "updateSets, delete and materialise detect records again from the workout on: a fixed typo leaves none",
+            recordsFollowEdits
+        ),
         Clause("a name or tag holding U+0000 throws nulInText; nothing is stored", refusesNul),
         Clause("observeRecent emits the list now, then after each change of it, and for no other write", observeRecent)
     ]

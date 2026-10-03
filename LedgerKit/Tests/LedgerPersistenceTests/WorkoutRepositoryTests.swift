@@ -30,32 +30,44 @@ struct WorkoutRepositoryTests {
     ORDER BY 1
     """
 
-    /// Two personal records of the contract workout's first exercise.
+    /// The contract workout of two days before `workout`, its first exercise at 180 lb where `workout` has 185:
+    /// its other exercises tie, so `workout` sets two records over it and no other.
+    static func earlier(than workout: WorkoutState) -> WorkoutState {
+        var earlier = Contract.workout(number: 1, endedAt: workout.startedAt.addingTimeInterval(-2 * 86400))
+        for index in earlier.exercises[0].sets.indices {
+            earlier.exercises[0].sets[index].weight = .pounds(180)
+        }
+        return earlier
+    }
+
+    /// The two personal records `workout` sets over `earlier(than:)` (product decision #27): a best estimate
+    /// and a best weight at 5 reps, achieved at its start.
     static func records(of workout: WorkoutState) -> [PersonalRecord] {
         let exercise = workout.exercises[0].exerciseID
-        let achievedAt = workout.endedAt ?? EventBuilders.start
-        return [
+        func record(_ kind: PRKind, over previous: PRKind) -> PersonalRecord {
             PersonalRecord(
                 exerciseID: exercise,
-                kind: .estimatedOneRepMax(Weight(grams: 94404)),
-                previous: .estimatedOneRepMax(Weight(grams: 91853)),
-                achievedAt: achievedAt,
-                workoutID: workout.id
-            ),
-            PersonalRecord(
-                exerciseID: exercise,
-                kind: .weightAtReps(.pounds(185), Reps(clamping: 5)),
-                previous: nil,
-                achievedAt: achievedAt,
+                kind: kind,
+                previous: previous,
+                achievedAt: workout.startedAt,
                 workoutID: workout.id
             )
+        }
+        let five = Reps(clamping: 5)
+        return [
+            record(
+                .estimatedOneRepMax(Weight(grams: 94404)), // 185 lb × 36 / 32, to the gram
+                over: .estimatedOneRepMax(OneRepMax.brzycki(weight: .pounds(180), reps: five) ?? .zero)
+            ),
+            record(.weightAtReps(.pounds(185), five), over: .weightAtReps(.pounds(180), five))
         ]
     }
 
-    /// The contract program stored in a database, the contract workout, its records, and a slot of the
-    /// program whose misses the workout changed.
+    /// The contract program and `earlier(than:)` the contract workout stored in a database, the contract
+    /// workout, the records it sets, and a slot of the program whose misses the workout changed.
     struct Scenario {
         let repositories: Repositories
+        let earlier: WorkoutState
         let workout: WorkoutState
         let records: [PersonalRecord]
         let slots: [Slot]
@@ -64,17 +76,19 @@ struct WorkoutRepositoryTests {
             repositories = try await Repositories.withProgramExercises()
             let program = try ProgramRepositoryContract.program()
             try await repositories.programs.save(program)
+            workout = Contract.workout()
+            earlier = WorkoutRepositoryTests.earlier(than: workout)
+            try await repositories.history.materialize(earlier)
             repositories.clock.advance()
             var slot = program.days[0].slots[0]
             slot.misses = [2]
             slots = [slot]
-            workout = Contract.workout()
             records = WorkoutRepositoryTests.records(of: workout)
         }
 
-        /// Materialises the workout with its records and its slot.
+        /// Materialises the workout with its slot.
         func materialize() async throws {
-            try await repositories.history.materialize(workout, prs: records, slotUpdates: slots)
+            try await repositories.history.materialize(workout, slotUpdates: slots)
         }
     }
 
@@ -94,8 +108,8 @@ struct WorkoutRepositoryTests {
         #expect(transactions == ["BEGIN IMMEDIATE TRANSACTION", "COMMIT TRANSACTION"])
         #expect(workout.exercises.count == 5)
         let bench = workout.exercises[0].exerciseID
-        // 16 misses of the program, and the one the workout recorded.
-        #expect(try await repositories.texts(Self.liveCounts) == ["1 5 19 2 17"])
+        // The earlier workout and this one, 16 misses of the program, and the one the workout recorded.
+        #expect(try await repositories.texts(Self.liveCounts) == ["2 10 38 2 17"])
         #expect(try await repositories.workouts.workout(id: workout.id) == workout)
         #expect(try await repositories.stats.personalRecords(exerciseID: bench) == scenario.records)
         #expect(try await repositories.programs.active()?.days[0].slots[0].misses == [2])
@@ -109,8 +123,9 @@ struct WorkoutRepositoryTests {
         let stored = try await repositories.texts("""
         SELECT logged_set.kind || ' ' || logged_set.reps || ' ' || quote(logged_set.e1rm_e7g)
         FROM logged_set JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
+        WHERE workout_id = ?
         ORDER BY workout_exercise.position, logged_set.position
-        """)
+        """, [ColumnCodec.text(workout.id)])
         func estimate(_ weight: Weight, _ reps: Int) throws -> String {
             let e1RM = try #require(OneRepMax.brzycki(weight: weight, reps: Reps(clamping: reps)))
             return try String(e1RM.e7g())
@@ -154,7 +169,7 @@ struct WorkoutRepositoryTests {
             try await repositories.history.materialize(inexact)
         }
         #expect(try await repositories.texts(Self.everyRow) == before)
-        #expect(try await repositories.texts(Self.liveCounts) == ["0 0 0 0 16"])
+        #expect(try await repositories.texts(Self.liveCounts) == ["1 5 19 0 16"])
     }
 }
 
@@ -163,29 +178,29 @@ extension WorkoutRepositoryTests {
     @Test("A workout row holds exact totals, REAL dates and its source; an exercise row its targets")
     func materialize_writesTheDocumentedColumns() async throws {
         let scenario = try await Scenario()
-        let (repositories, records) = (scenario.repositories, scenario.records)
+        let repositories = scenario.repositories
         var workout = scenario.workout
         workout.source = WorkoutSource(
             programID: ProgramID(EventBuilders.uuid(0x71)),
             weekIndex: 2,
             dayTemplateID: DayTemplateID(EventBuilders.uuid(0x72))
         )
-        try await repositories.history.materialize(workout, prs: records)
+        try await repositories.history.materialize(workout)
         let root = """
         SELECT week_index || ' ' || tag || ' ' || is_deload || ' ' || typeof(started_at) || ' ' || started_at
             || ' ' || ended_at || ' ' || phase || ' ' || units || ' ' || volume_e7g_reps || ' ' || done_sets
-            || ' ' || total_sets || ' ' || pr_count FROM workout
+            || ' ' || total_sets || ' ' || pr_count FROM workout WHERE id = ?
         """
         let volume = try workout.volume.e7gReps()
-        #expect(try await repositories.texts(root) == [
+        #expect(try await repositories.texts(root, [ColumnCodec.text(workout.id)]) == [
             "2 W0 0 real 811225200.0 811228800.0 finished lb \(volume) 18 19 2"
         ])
         let exercise = """
         SELECT position || ' ' || equipment || ' ' || step_e7g || ' ' || rest_seconds || ' ' || rpe_x2 || ' '
             || is_superset_with_previous || ' ' || target_sets || ' ' || target_reps || ' ' || target_load_e7g
-            || ' ' || quote(slot_id) FROM workout_exercise WHERE position = 0
+            || ' ' || quote(slot_id) FROM workout_exercise WHERE position = 0 AND workout_id = ?
         """
-        #expect(try await repositories.texts(exercise) == [
+        #expect(try await repositories.texts(exercise, [ColumnCodec.text(workout.id)]) == [
             "0 barbell 22679618500 90 16 0 5 5 839145884500 '00000000-0000-0000-0000-000000005107'"
         ])
         let record = """
@@ -193,17 +208,18 @@ extension WorkoutRepositoryTests {
             || quote(previous_weight_e7g) || ' ' || quote(previous_reps) || ' ' || achieved_at
         FROM personal_record ORDER BY kind
         """
+        // Achieved at the workout's start; the previous best is the earlier workout's 180 × 5 (918520000000 is
+        // 180 lb × 36 / 32 = 91,852.46 g, to the gram).
         #expect(try await repositories.texts(record) == [
-            "estimatedOneRepMax 944040000000 NULL 'estimatedOneRepMax' 918530000000 NULL 811228800.0",
-            "weightAtReps 839145884500 5 NULL NULL NULL 811228800.0"
+            "estimatedOneRepMax 944040000000 NULL 'estimatedOneRepMax' 918520000000 NULL 811225200.0",
+            "weightAtReps 839145884500 5 'weightAtReps' 816466266000 5 811225200.0"
         ])
     }
 
-    @Test("A date that is not finite is refused by name, in the workout, a set or a record; nothing is stored")
+    @Test("A date that is not finite is refused by name, in the workout or a set; nothing is stored")
     func nonFiniteDates_areRefused() async throws {
         let scenario = try await Scenario()
         let (repositories, workout) = (scenario.repositories, scenario.workout)
-        let records = scenario.records
         let never = Date(timeIntervalSinceReferenceDate: .infinity)
         var started = workout
         started.startedAt = Date(timeIntervalSinceReferenceDate: -.infinity)
@@ -216,16 +232,6 @@ extension WorkoutRepositoryTests {
                 try await repositories.history.materialize(refused)
             }
         }
-        let record = PersonalRecord(
-            exerciseID: records[0].exerciseID,
-            kind: records[0].kind,
-            previous: nil,
-            achievedAt: never,
-            workoutID: workout.id
-        )
-        await #expect(throws: LedgerPersistenceError.nonFiniteDate) {
-            try await repositories.history.materialize(workout, prs: [record])
-        }
-        #expect(try await repositories.texts(Self.liveCounts) == ["0 0 0 0 16"])
+        #expect(try await repositories.texts(Self.liveCounts) == ["1 5 19 0 16"])
     }
 }

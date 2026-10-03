@@ -74,7 +74,7 @@ struct HistoryReadAdversarialTests {
     /// row with no end is foreign damage too (`materialize` refuses a workout without one): since S3 fix round 3
     /// (orchestrator decision, 2026-10-02) it is listed nowhere and counted nowhere, and the "Last" line skips it.
     @Test("A stored row that is not finished, or has no end, is listed nowhere and counts for no stats")
-    func foreignPhase_isListedButNotCounted() async throws {
+    func foreignPhase_isListedNowhere_andCountedNowhere() async throws {
         let stack = try await S3Kit.stack()
         let workout = S3Kit.mixed(1)
         try await stack.materialize(workout)
@@ -106,8 +106,7 @@ struct HistoryReadAdversarialTests {
         // None of these changes the two newest workouts as values.
         var slot = program.days[0].slots[0]
         slot.misses = [0, 1, 2]
-        let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workouts[1])
-        try await stack.materialize(workouts[1], prs: [record], slots: [slot])
+        try await stack.materialize(workouts[1], slots: [slot])
         try await stack.workouts.updateSets(
             workoutExerciseID: workouts[1].exercises[0].id,
             sets: workouts[1].exercises[0].sets
@@ -115,6 +114,8 @@ struct HistoryReadAdversarialTests {
         try await stack.workouts.delete(id: workouts[0].id)
         try await stack.materialize(workouts[2])
         #expect(await values.next() == [workouts[2], workouts[1]])
+        // Outside the list, it gives the second newest its records (product decision #27): no value either.
+        try await stack.materialize(S3Kit.baseline)
         try await stack.materialize(workouts[0]) // third newest
         try await stack.workouts.delete(id: workouts[0].id)
         // Damage hides a workout, the stream goes on, and a repair brings it back.

@@ -148,33 +148,6 @@ extension WorkoutRepositoryContract {
         )
     }
 
-    /// A record is stored with the workout it names (review S3-SF1): one that names another workout would
-    /// replace that workout's record, so it is refused, naming that workout.
-    static func foreignRecord(_ stores: HistoryStores) async throws -> String? {
-        let first = workout(number: 1)
-        let second = workout(number: 2, endedAt: EventBuilders.start.addingTimeInterval(3600))
-        func record(_ exercise: Exercise, pounds: Decimal) -> PersonalRecord {
-            PersonalRecord(
-                exerciseID: exercise.id,
-                kind: .estimatedOneRepMax(.pounds(pounds)),
-                previous: nil,
-                achievedAt: EventBuilders.start,
-                workoutID: first.id
-            )
-        }
-        let own = record(exercises[0], pounds: 208)
-        try await stores.materialize(first, prs: [own])
-        let refused = await ContractCheck.expectError(
-            LedgerPersistenceError.duplicateIdentifier(key("personal_record of workout", first.id))
-        ) { try await stores.materialize(second, prs: [record(exercises[2], pounds: 999)]) }
-        return try await ContractCheck.first(
-            refused,
-            ContractCheck.expect(stores.workouts.recent(limit: 10), [first], "recent after the refused call"),
-            ContractCheck.expect(stores.stats.personalRecords(exerciseID: exercises[0].id), [own], "its record"),
-            ContractCheck.expect(stores.stats.personalRecords(exerciseID: exercises[2].id), [], "the other exercise")
-        )
-    }
-
     static func refusesNul(_ stores: HistoryStores) async throws -> String? {
         let workout = workout()
         try await stores.materialize(workout)

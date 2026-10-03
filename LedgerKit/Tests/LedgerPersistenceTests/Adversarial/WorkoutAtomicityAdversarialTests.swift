@@ -40,7 +40,8 @@ struct WorkoutAtomicityAdversarialTests {
         try await stack.execute("DROP TRIGGER injected")
     }
 
-    /// A stored program, a workout from one of its slots, two records, and the misses of two slots.
+    /// A stored program, a workout from one of its slots, the two records it sets over `S3Kit.baseline` (stored
+    /// first: records are detected, product decision #27), and the misses of two slots.
     struct Scenario {
         let stack: S3Kit.Stack
         let program: Program
@@ -52,11 +53,9 @@ struct WorkoutAtomicityAdversarialTests {
             stack = try await S3Kit.stack()
             program = try S2Kit.program(1, weeks: 3, days: 2, slotsPerDay: 2)
             try await stack.programs.save(program)
+            try await stack.materialize(S3Kit.baseline)
             workout = S3Kit.mixed(1)
-            records = [
-                S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workout),
-                S3Kit.record(S3Kit.bench, .weightAtReps(.pounds(190), Reps(clamping: 3)), in: workout)
-            ]
+            records = S3Kit.mixedRecords(of: workout)
             var first = program.days[0].slots[0]
             first.misses = [0, 1, 2]
             var second = program.days[1].slots[1]
@@ -64,8 +63,8 @@ struct WorkoutAtomicityAdversarialTests {
             slots = [first, second]
         }
 
-        func materialize(_ state: WorkoutState? = nil, records: [PersonalRecord]? = nil) async throws {
-            try await stack.materialize(state ?? workout, prs: records ?? self.records, slots: slots)
+        func materialize(_ state: WorkoutState? = nil) async throws {
+            try await stack.materialize(state ?? workout, slots: slots)
         }
     }
 
@@ -73,39 +72,41 @@ struct WorkoutAtomicityAdversarialTests {
     func failedFirstMaterialize_storesNothing(failure: Failure) async throws {
         let scenario = try await Scenario()
         try await Self.expectNoChange(under: failure, in: scenario.stack) { try await scenario.materialize() }
-        #expect(try await scenario.stack.liveCounts() == [0, 0, 0, 0])
+        #expect(try await scenario.stack.liveCounts() == S3Kit.expectedCounts([S3Kit.baseline]))
         #expect(try await scenario.stack.programs.active() == scenario.program)
         try await scenario.materialize()
         #expect(try await scenario.stack.workouts.workout(id: scenario.workout.id) == scenario.workout)
-        #expect(try await scenario.stack.liveCounts() == S3Kit.expectedCounts([scenario.workout], records: 2))
+        let counts = S3Kit.expectedCounts([S3Kit.baseline, scenario.workout], records: 2)
+        #expect(try await scenario.stack.liveCounts() == counts)
+        #expect(try await scenario.stack.stats().personalRecords(exerciseID: S3Kit.bench) == scenario.records)
     }
 
     /// The second materialisation renames the workout, changes a row and a set, removes a row with its sets,
-    /// drops a record, changes the other, and writes other misses: an `UPDATE` on every table.
+    /// changes a record (187.5 × 5 is the new best estimate), and writes other misses: an `UPDATE` on every
+    /// table.
     @Test("A re-materialisation that fails on any table's update or insert changes nothing", arguments: Failure.updates)
     func failedRematerialize_changesNothing(failure: Failure) async throws {
         let scenario = try await Scenario()
         var first = scenario.program.days[0].slots[0]
         first.misses = [2]
-        try await scenario.stack.materialize(scenario.workout, prs: scenario.records, slots: [first])
+        try await scenario.stack.materialize(scenario.workout, slots: [first])
         var edited = scenario.workout
         edited.name = "Session 1, rebuilt"
         edited.exercises[0].name = "Lift, renamed"
         edited.exercises[0].sets[1].weight = .pounds(187.5)
         edited.exercises.removeLast()
-        let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(216)), in: edited)
         try await Self.expectNoChange(under: failure, in: scenario.stack) {
-            try await scenario.materialize(edited, records: [record])
+            try await scenario.materialize(edited)
         }
         #expect(try await scenario.stack.workouts.workout(id: edited.id) == scenario.workout)
-        try await scenario.materialize(edited, records: [record])
+        try await scenario.materialize(edited)
         #expect(try await scenario.stack.workouts.workout(id: edited.id) == edited)
-        #expect(try await scenario.stack.liveCounts() == S3Kit.expectedCounts([edited], records: 1))
+        #expect(try await scenario.stack.liveCounts() == S3Kit.expectedCounts([S3Kit.baseline, edited], records: 2))
     }
 
-    @Test("A set edit that fails on the set or the workout row changes nothing", arguments: [
+    @Test("A set edit that fails on the set, the workout row or a record changes nothing", arguments: [
         Failure(event: "INSERT", table: "logged_set"), Failure(event: "UPDATE", table: "logged_set"),
-        Failure(event: "UPDATE", table: "workout")
+        Failure(event: "UPDATE", table: "workout"), Failure(event: "UPDATE", table: "personal_record")
     ])
     func failedUpdateSets_changesNothing(failure: Failure) async throws {
         let scenario = try await Scenario()
@@ -131,6 +132,6 @@ struct WorkoutAtomicityAdversarialTests {
         }
         #expect(try await scenario.stack.workouts.workout(id: scenario.workout.id) == scenario.workout)
         try await scenario.stack.workouts.delete(id: scenario.workout.id)
-        #expect(try await scenario.stack.liveCounts() == [0, 0, 0, 0])
+        #expect(try await scenario.stack.liveCounts() == S3Kit.expectedCounts([S3Kit.baseline]))
     }
 }

@@ -92,6 +92,14 @@ Inherits `docs/engineering-standards.md` §12, plus:
 - [ ] Every string above in the String Catalog with plurals (sessions, exercises).
 - [ ] Custom exercise round-trips through F11 picker and F10 swap (manual check noted).
 
+## Inputs from F05 (2026-10-02, records follow-up)
+- `StatsQueries.personalRecords(exerciseID:)` lists records that F05 detects itself, after every write (product
+  decision #27): `achievedAt` is the workout's start, newest first, then workout id, the estimate first.
+- **A deload sets no record, but its sets count toward the bests** (decision #25 counts working and added sets
+  of every stored workout). So a record's `previous` can be a deload's set: the contract's 255 × 3 "over 250 × 5"
+  beats a deload. A PR history row that shows "over …" must expect it (review R-N3).
+- `PersonalRecords.Bests.bestSet(of:)` gives the best set from `StatsQueries.bests(before:for:)`.
+
 ---
 _Filled in by agents during delivery:_
 - `F12-library-history/implementation-notes.md`

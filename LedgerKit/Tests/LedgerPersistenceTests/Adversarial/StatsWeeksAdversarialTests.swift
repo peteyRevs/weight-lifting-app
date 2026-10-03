@@ -35,12 +35,7 @@ struct StatsWeeksAdversarialTests {
         let model = HistoryModel(now: now)
         for workout in workouts {
             try await stack.materialize(workout)
-            try await model.materialize(
-                workout,
-                summary: WorkoutEngine.summary(workout, prs: []),
-                prs: [],
-                slotUpdates: []
-            )
+            try await model.materialize(workout, slotUpdates: [])
         }
         var answers: [[WeekKey: Weight]] = []
         for weeks in lastWeeks {

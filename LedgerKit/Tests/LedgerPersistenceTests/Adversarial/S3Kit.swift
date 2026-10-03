@@ -139,21 +139,6 @@ enum S3Kit {
         ])
     }
 
-    static func record(
-        _ exercise: ExerciseID,
-        _ kind: PRKind,
-        in workout: WorkoutState,
-        at achievedAt: Date? = nil
-    ) -> PersonalRecord {
-        PersonalRecord(
-            exerciseID: exercise,
-            kind: kind,
-            previous: nil,
-            achievedAt: achievedAt ?? workout.endedAt ?? now,
-            workoutID: workout.id
-        )
-    }
-
     // MARK: - Calendars
 
     static func calendar(_ zone: String = "UTC", weekStart: Weekday = .monday) -> WeekCalendar {
@@ -188,5 +173,48 @@ enum S3Kit {
             preconditionFailure("no such instant \(parts)")
         }
         return date
+    }
+}
+
+/// Records, which the repository detects (F05 records follow-up, product decision #27).
+extension S3Kit {
+    /// A record `exercise` sets in `workout`, as the repository detects it (product decision #27): beating
+    /// `previous`, achieved at the workout's start.
+    static func record(
+        _ exercise: ExerciseID,
+        _ kind: PRKind,
+        over previous: PRKind,
+        in workout: WorkoutState
+    ) -> PersonalRecord {
+        PersonalRecord(
+            exerciseID: exercise,
+            kind: kind,
+            previous: previous,
+            achievedAt: workout.startedAt,
+            workoutID: workout.id
+        )
+    }
+
+    /// Bench 180 × 5 and squat 225 × 12, three days ago: a workout before every `mixed(_:)` one (F05 records
+    /// follow-up). Records are detected, no longer given, so a test that needs a mixed workout to hold records
+    /// stores this first; the mixed workout then sets exactly the two of `mixedRecords(of:)`.
+    static let baseline = workout(90, endedAt: day(-3), [RowSpec(bench, [set(180, 5)]), RowSpec(squat, [set(225, 12)])])
+
+    /// The records a `mixed(_:)` workout sets over `baseline`: bench 185 × 5 beats its estimate, and 190 × 3 its
+    /// weight at 3 reps or more. Squat ties at 225 × 12, and 13 reps have no estimate and no history.
+    static func mixedRecords(of workout: WorkoutState) -> [PersonalRecord] {
+        let five = Reps(clamping: 5)
+        func estimate(_ pounds: Decimal) -> PRKind {
+            .estimatedOneRepMax(OneRepMax.brzycki(weight: .pounds(pounds), reps: five) ?? .zero)
+        }
+        return [
+            record(bench, estimate(185), over: estimate(180), in: workout),
+            record(
+                bench,
+                .weightAtReps(.pounds(190), Reps(clamping: 3)),
+                over: .weightAtReps(.pounds(180), five),
+                in: workout
+            )
+        ]
     }
 }

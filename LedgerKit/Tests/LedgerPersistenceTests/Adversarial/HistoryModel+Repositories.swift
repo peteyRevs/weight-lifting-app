@@ -4,22 +4,13 @@ import LedgerPersistence
 
 /// `HistoryModel` as the workout repository, and as the small program repository the misses need.
 extension HistoryModel: WorkoutRepository {
-    func materialize(
-        _ workout: WorkoutState,
-        summary _: WorkoutSummary,
-        prs: [PersonalRecord],
-        slotUpdates: [Slot]
-    ) async throws {
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(workout.id.rawValue.uuidString)")
         }
-        if let foreign = prs.first(where: { $0.workoutID != workout.id }) {
-            throw LedgerPersistenceError.duplicateIdentifier(
-                "personal_record of workout \(foreign.workoutID.rawValue.uuidString)"
-            )
-        }
         try write { state in
-            try store(workout, records: prs, in: &state)
+            try store(workout, in: &state)
+            redetect(after: workout.id, in: &state)
             writeMisses(of: slotUpdates, in: &state)
         }
     }
@@ -47,7 +38,12 @@ extension HistoryModel: WorkoutRepository {
                 throw LedgerPersistenceError.missingRow("workout_exercise \(workoutExerciseID.rawValue.uuidString)")
             }
             workout.exercises[index].sets = sets
-            try store(workout, records: nil, in: &state)
+            try store(workout, in: &state)
+            if has(.editDropsRecords) {
+                state.entries[workout.id]?.records = []
+            } else {
+                redetect(after: workout.id, in: &state)
+            }
         }
     }
 
@@ -55,11 +51,13 @@ extension HistoryModel: WorkoutRepository {
         try write { state in
             guard has(.hardDelete) else {
                 state.entries[id]?.isDeleted = true
+                redetect(after: id, in: &state)
                 return
             }
             state.entries[id] = nil
             state.exerciseOwners = state.exerciseOwners.filter { $0.value != id }
             state.setOwners = state.setOwners.filter { $0.value != id }
+            redetect(after: id, in: &state)
         }
     }
 

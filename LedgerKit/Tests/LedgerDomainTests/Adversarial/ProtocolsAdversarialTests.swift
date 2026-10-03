@@ -39,12 +39,7 @@ private struct BriefProgramRepository: ProgramRepository {
 }
 
 private struct BriefWorkoutRepository: WorkoutRepository {
-    func materialize(
-        _: WorkoutState,
-        summary _: WorkoutSummary,
-        prs _: [PersonalRecord],
-        slotUpdates _: [Slot]
-    ) async throws {}
+    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}
     func workout(id _: WorkoutID) async throws -> WorkoutState? {
         nil
     }
@@ -114,6 +109,10 @@ private struct BriefStatsQueries: StatsQueries {
 
     func recentlyLogged(limit _: Int) async throws -> [ExerciseID] {
         []
+    }
+
+    func bests(before _: WorkoutState, for _: Set<ExerciseID>) async throws -> PersonalRecords.Bests {
+        PersonalRecords.Bests()
     }
 }
 

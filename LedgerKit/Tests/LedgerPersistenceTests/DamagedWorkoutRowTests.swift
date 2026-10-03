@@ -207,7 +207,8 @@ extension DamagedWorkoutRowTests {
         let stats = repositories.stats
         let records = WorkoutRepositoryTests.records(of: Self.workout)
         let bench = Self.workout.exercises[0].exerciseID
-        try await repositories.history.materialize(Self.workout, prs: records)
+        try await repositories.history.materialize(WorkoutRepositoryTests.earlier(than: Self.workout))
+        try await repositories.history.materialize(Self.workout)
         for damage in [
             "kind = 'volume'",
             "reps = 0",
@@ -219,7 +220,7 @@ extension DamagedWorkoutRowTests {
             try await repositories.execute("UPDATE personal_record SET \(damage) WHERE reps IS NOT NULL")
             #expect(try await stats.personalRecords(exerciseID: bench) == [records[0]], "\(damage)")
             #expect(try await repositories.count("SELECT COUNT(*) FROM personal_record WHERE deleted_at IS NULL") == 2)
-            try await repositories.history.materialize(Self.workout, prs: records) // repairs or replaces the row
+            try await repositories.history.materialize(Self.workout) // repairs or replaces the row
             #expect(try await stats.personalRecords(exerciseID: bench) == records, "\(damage), repaired")
         }
         try await repositories.execute("UPDATE workout_exercise SET exercise_id = 'nope' WHERE position = 3")

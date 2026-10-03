@@ -118,8 +118,7 @@ struct WorkoutStartDateAdversarialTests {
         let stack = try await S3Kit.stack()
         let workout = S3Kit.mixed(1)
         let other = S3Kit.mixed(2, endedAt: S3Kit.day(-1))
-        let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workout)
-        try await stack.materialize(workout, prs: [record])
+        try await stack.materialize(workout)
         try await stack.materialize(other)
         try await stack.execute("UPDATE workout SET ended_at = NULL WHERE id = ?", [workout.id.rawValue.uuidString])
         let always = Date.distantPast ..< Date.distantFuture
@@ -131,14 +130,14 @@ struct WorkoutStartDateAdversarialTests {
         #expect(try await stats.personalRecords(exerciseID: S3Kit.bench) == [])
         #expect(try await stats.bestSet(exerciseID: S3Kit.bench)?.weight == .pounds(190))
         let model = HistoryModel(now: S3Kit.now)
-        try await model.materialize(other, summary: WorkoutEngine.summary(other, prs: []), prs: [], slotUpdates: [])
+        try await model.materialize(other, slotUpdates: [])
         let calendar = S3Kit.calendar()
         #expect(try await stats.e1RMByWeek(exerciseID: S3Kit.bench, lastWeeks: .max, calendar: calendar)
             == model.e1RMByWeek(exerciseID: S3Kit.bench, lastWeeks: .max, calendar: calendar))
         #expect(try await stats.lastPerformance(exerciseID: S3Kit.bench)?.date == other.startedAt)
         // By id it reads as stored, with no end; a rebuild repairs it.
         #expect(try await stack.workouts.workout(id: workout.id)?.endedAt == nil)
-        try await stack.materialize(workout, prs: [record])
+        try await stack.materialize(workout)
         #expect(try await stack.workouts.recent(limit: 1) == [workout])
     }
 }
