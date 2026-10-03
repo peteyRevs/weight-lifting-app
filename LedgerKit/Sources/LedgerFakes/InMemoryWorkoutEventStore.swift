@@ -15,14 +15,19 @@
             }
         }
 
-        /// Stores the envelopes whose key is new, all or none: a conflicting key rejects the whole batch.
+        /// Stores the envelopes whose key is new, all or none: one `EnvelopeCodec` cannot encode (a NaN weight
+        /// throws `EncodingError`), or a conflicting key, rejects the whole batch. Each is kept as the database
+        /// keeps it, decoded from its encoding, and compared with what it was stored as.
         public func append(_ envelopes: [EventEnvelope]) throws -> [EventEnvelope] {
+            let stored = try envelopes.map { envelope in
+                try EnvelopeCodec.decode(EnvelopeCodec.encode(envelope), version: EnvelopeCodec.version)
+            }
             var updated = logs
             var fresh: [EventEnvelope] = []
-            for envelope in envelopes {
+            for (envelope, kept) in zip(envelopes, stored) {
                 switch updated[envelope.workoutID]?[envelope.key] {
                 case nil:
-                    updated[envelope.workoutID, default: [:]][envelope.key] = envelope
+                    updated[envelope.workoutID, default: [:]][envelope.key] = kept
                     fresh.append(envelope)
                 case envelope:
                     continue

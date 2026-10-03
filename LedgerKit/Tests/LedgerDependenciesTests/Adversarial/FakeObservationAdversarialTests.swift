@@ -37,23 +37,21 @@ struct FakeObservationAdversarialTests {
     func firstValue_isTheStateWhenObserved() async throws {
         let repository = InMemorySettingsRepository()
         let stream = repository.observe()
-        try await repository.save(Self.settings(120))
-        var values = stream.makeAsyncIterator()
+        var values = stream.makeAsyncIterator() // S1 fix round 1 (sanctioned): read after each write
         #expect(await values.next() == .default)
+        try await repository.save(Self.settings(120))
         #expect(await values.next() == Self.settings(120))
     }
 
     @Test("Saves that change nothing emit nothing: the stream is the distinct values in order")
     func unchangedWrites_emitNothing() async throws {
         let repository = InMemorySettingsRepository()
-        let stream = repository.observe()
+        var values = repository.observe().makeAsyncIterator() // S1 fix round 1 (sanctioned): read after each change
+        var seen: [Int] = await values.next().map { [$0.defaultRest.seconds] } ?? []
+        // An unchanged save emits nothing: the value after it is the next real change, never a repeat.
         for seconds in [90, 120, 120, 90, 90, 150] {
             try await repository.save(Self.settings(seconds))
-        }
-        var values = stream.makeAsyncIterator()
-        var seen: [Int] = []
-        for _ in 0 ..< 4 {
-            if let value = await values.next() {
+            if seconds != seen.last, let value = await values.next() {
                 seen.append(value.defaultRest.seconds)
             }
         }
@@ -67,32 +65,38 @@ struct FakeObservationAdversarialTests {
         let program = try Fixtures.seedProgram()
         var broken = program
         broken.days[0].slots[1] = broken.days[0].slots[0]
-        await #expect(throws: RepositoryError.self) { try await repository.save(broken) }
-        try await repository.save(program)
-        var values = stream.makeAsyncIterator()
+        var values = stream.makeAsyncIterator() // S1 fix round 1 (sanctioned): read after each write
         #expect(await values.next() == .some(nil))
+        await #expect(throws: RepositoryError.self) { try await repository.save(broken) }
+        try await repository.save(program) // the refused save emitted nothing: the next value is this one
         #expect(await values.next() == program)
     }
 
     @Test("Fifty subscribers each see every change, in write order")
     func manySubscribers_seeEveryChange() async throws {
         let repository = InMemoryExerciseRepository()
-        let streams = (0 ..< 50).map { _ in repository.observeAll() }
-        for number in 0 ..< 5 {
-            try await repository.save(Self.exercise(number))
-        }
-        for stream in streams {
-            var values = stream.makeAsyncIterator()
-            var counts: [Int] = []
-            for _ in 0 ... 5 {
-                await counts.append(values.next()?.count ?? -1)
+        // S1 fix round 1 (sanctioned): every subscriber reads after each write.
+        var iterators = (0 ..< 50).map { _ in repository.observeAll().makeAsyncIterator() }
+        var counts = Array(repeating: [Int](), count: iterators.count)
+        for number in -1 ..< 5 {
+            if number >= 0 {
+                try await repository.save(Self.exercise(number))
             }
-            #expect(counts == [0, 1, 2, 3, 4, 5])
+            for index in iterators.indices {
+                await counts[index].append(iterators[index].next()?.count ?? -1)
+            }
+        }
+        for seen in counts {
+            #expect(seen == [0, 1, 2, 3, 4, 5])
         }
     }
 
-    @Test("Five hundred saves racing from as many tasks: none is lost, and the stream sees each state in order")
-    func racingWriters_loseNothing() async throws {
+    /// S1 fix round 1 (sanctioned): a stream keeps only its newest value, as GRDB's does, so it promises the final
+    /// state and order, not every state in between.
+    @Test(
+        "Five hundred saves racing from as many tasks: none is lost, and the stream ends on the final state, in order"
+    )
+    func racingWriters_endOnTheFinalState_inOrder() async throws {
         let repository = InMemoryExerciseRepository()
         let stream = repository.observeAll()
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -109,7 +113,8 @@ struct FakeObservationAdversarialTests {
                 break
             }
         }
-        #expect(counts == Array(0 ... 500))
+        #expect(counts.last == 500)
+        #expect(zip(counts, counts.dropFirst()).allSatisfy { $0 < $1 }, "\(counts)")
     }
 }
 
@@ -135,10 +140,14 @@ extension FakeObservationAdversarialTests {
     func consumerWritingBack_doesNotDeadlock() async throws {
         let repository = InMemorySettingsRepository()
         let stream = repository.observe()
+        // S1 fix round 1 (sanctioned): the consumer says when it has read its first value, and only then is 120
+        // saved, since a stream keeps only its newest value.
+        let (started, ready) = AsyncStream<Void>.makeStream()
         let consumer = Task {
             var seen: [Int] = []
             for await value in stream {
                 seen.append(value.defaultRest.seconds)
+                ready.yield()
                 if value.defaultRest.seconds == 120 {
                     try await repository.save(Self.settings(150))
                 }
@@ -148,6 +157,8 @@ extension FakeObservationAdversarialTests {
             }
             return seen
         }
+        var signals = started.makeAsyncIterator()
+        await signals.next()
         try await repository.save(Self.settings(120))
         #expect(try await consumer.value == [90, 120, 150])
     }
@@ -168,9 +179,9 @@ extension FakeObservationAdversarialTests {
         for _ in 0 ..< 100 {
             _ = repository.observe() // dropped at once, never iterated
         }
-        try await repository.save(Self.settings(120))
-        var values = other.makeAsyncIterator()
+        var values = other.makeAsyncIterator() // S1 fix round 1 (sanctioned): read after each write
         #expect(await values.next() == .default)
+        try await repository.save(Self.settings(120))
         #expect(await values.next() == Self.settings(120))
     }
 
@@ -181,9 +192,9 @@ extension FakeObservationAdversarialTests {
         let workout = try #require(Fixtures.history(weeks: 1).last)
         var slot = try #require(try await stores.programs.active()?.days[0].slots[0])
         slot.misses = [3]
-        try await stores.workouts.materialize(workout, slotUpdates: [slot])
-        var values = stream.makeAsyncIterator()
+        var values = stream.makeAsyncIterator() // S1 fix round 1 (sanctioned): the first value before the write
         _ = await values.next()
+        try await stores.workouts.materialize(workout, slotUpdates: [slot])
         #expect(await values.next()??.days[0].slots[0].misses == [3])
     }
 

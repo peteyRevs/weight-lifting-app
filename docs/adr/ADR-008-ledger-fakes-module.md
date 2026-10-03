@@ -31,7 +31,10 @@ A second problem surfaced while building the fakes. The contracts check the erro
    - the in-memory stores: `InMemoryExerciseRepository`, `InMemoryProgramRepository`,
      `InMemorySettingsRepository`, `InMemoryWorkoutEventStore` (moved from `LedgerDomainTests`),
      `InMemoryWorkoutRepository` and `InMemoryStatsQueries` (ported from F05's adversarial `HistoryModel`, without
-     its fault injection), bundled as `InMemoryStores` over one shared state;
+     its fault injection), bundled as `InMemoryStores`, linked where one database links them: the stats read the
+     workouts' history, a materialised workout's slot updates reach the programs in the same step, and a program
+     saved with a slot naming an exercise the exercise store lacks is refused (`unknownExercise`, the slot's
+     foreign key; product decision #28). Settings and the event store stand alone, as their tables do;
    - `Fixtures` (the spec's seed program with catalog ids, a session, a history, settings);
    - `FakeLinkBus`, a protocol-free in-memory network for sync tests, and empty fakes of the device protocols.
 2. **Edges.**
@@ -42,16 +45,26 @@ A second problem surfaced while building the fakes. The contracts check the erro
      `LedgerTestSupport` gets the fakes, `withTestDependencies` and the contracts.
    - `LedgerTestSupport` is no longer linked by any library target: only test targets and
      `LedgerSnapshotTesting` use it.
-   - Every test target also depends on `LedgerFakes` directly: Xcode measures coverage only of a test target's
+   - The test targets that run the fakes (`LedgerPersistenceTests`, `LedgerDependenciesTests`,
+     `LedgerSyncTests`) also depend on `LedgerFakes` directly: Xcode measures coverage only of a test target's
      direct dependencies, and the fakes are gated (the first full gate measured none of their lines).
 3. **`RepositoryError` moves to `LedgerDomain`**, beside the protocols that promise its cases, unchanged. The
    GRDB stores keep throwing it under its old name: `LedgerPersistence` declares
    `public typealias LedgerPersistenceError = RepositoryError`, so no call site, contract or suite changed. No case
    carries a GRDB or SQLite type.
 4. **Shared state behind a `Mutex`, not an actor.** The repository protocols' `observe…()` methods are
-   synchronous and must yield the current value before they return (as GRDB's `ValueObservation` does), so a fake
-   holds its state in a `Synchronization.Mutex` and runs each write whole under it. The event store, whose
-   protocol is all `async`, stays an actor. No `@unchecked Sendable` is needed.
+   synchronous, and no write made after the call may be missed. GRDB guarantees that by queueing the
+   observation's first fetch on the writer before any later write; a fake registers its observer, and yields
+   its first value, under a `Synchronization.Mutex` before `observe…()` returns, and runs each write whole under
+   it. A stream keeps only its newest value (`.bufferingNewest(1)`), as GRDB's bridge does. The event store,
+   whose protocol is all `async`, stays an actor. No `@unchecked Sendable` is needed.
+5. **The fakes refuse what the database refuses, by one rule** (S1 fix round 1). `StorageBoundary` in
+   `LedgerDomain` (a weight is a whole count of 10⁻⁷ g within `Int64`, a date is finite: ADR-007's storage
+   rules) is what LedgerPersistence's `ColumnCodec` and every fake call, as `ExerciseSearch` is shared.
+   `SettingsCodec` and `EnvelopeCodec` moved to `LedgerDomain` with it, so the fakes keep settings and
+   envelopes as their encoding stores them. Each fake checks a value in the order the database's rows meet its
+   faults, so two faults throw the same error on both. The contracts' `storageClauses` hold both
+   implementations to this; F05's in-memory oracles, which model history and not columns, run only `clauses`.
 
 ## Alternatives rejected
 
@@ -69,7 +82,8 @@ A second problem surfaced while building the fakes. The contracts check the erro
 ## Consequences
 
 - The apps' Debug builds link `LedgerFakes` (through `LedgerDependencies`); Release builds link an empty module.
-  Nothing outside `#if DEBUG` may name a fake.
+  Nothing outside `#if DEBUG` may name a fake: `LedgerDependencies`' preview values and `LedgerTestSupport`'s
+  `withTestDependencies` are wrapped too, so `swift build -c release` of the package builds.
 - `scripts/check-package-graph.sh` was re-recorded (`LedgerKit/package-graph.expected.txt`).
 - Coverage: `LedgerFakes` and `LedgerDependencies` are gated at 90 % (`scripts/coverage-thresholds.json`);
   `LedgerTestSupport` and `LedgerSnapshotTesting` stay excluded.

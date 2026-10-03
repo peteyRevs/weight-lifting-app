@@ -131,7 +131,9 @@ alone: the features' previews and `LedgerDependencies`' `previewValue`s use its
 seeded in-memory stores and fixtures, and only test targets link
 `LedgerTestSupport`. The repository errors the protocols promise moved to
 `LedgerDomain` (`RepositoryError`) with them, so the fakes throw what the GRDB
-stores throw; `LedgerPersistenceError` remains as a typealias.
+stores throw; `LedgerPersistenceError` remains as a typealias. So did the storage
+rules both share (`StorageBoundary`: exact weights, finite dates; ADR-007) and the
+settings and envelope encodings (`SettingsCodec`, `EnvelopeCodec`).
 
 Isolation defaults per target (Swift 6.2+ `defaultIsolation`):
 
@@ -441,9 +443,10 @@ Each feature exposes `public struct <Feature>Root: View` and `public enum
 `liveWorkoutTransport`, `companionTransport`, `haptics`, `notifications`,
 `liveActivities`, `logger` (a `LedgerLogger` over `os.Logger`), all in the
 nonisolated `LedgerDependencies` (F07). Each `liveValue` is an
-`Unimplemented*` stub (logs at fault level and throws
-`LedgerDependencyError.unimplemented(key:)`) until the composition root binds
-the real one; each `testValue` is the library's default, which fails the test
+`Unimplemented*` stub until the composition root binds the real one: a store
+stub logs at fault level and throws `LedgerDependencyError.unimplemented(key:)`
+(its `observe…()` logs and ends at once); the device stubs have no methods yet;
+`deviceID`'s logs and gives the nil UUID; each `testValue` is the library's default, which fails the test
 naming the key (the logger's discards); each `previewValue` is a `LedgerFakes`
 fake, the stores seeded with fixtures. Store tests start from the test values
 with `withTestDependencies` (`LedgerTestSupport`). Stores never construct their

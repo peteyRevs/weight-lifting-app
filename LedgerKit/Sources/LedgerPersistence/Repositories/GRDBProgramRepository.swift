@@ -37,9 +37,9 @@ public struct GRDBProgramRepository: ProgramRepository {
     /// - When `program.isActive`, every other program is made inactive.
     ///
     /// Two weeks, days or slots sharing an id, or a week, day or slot id that another stored program holds (live
-    /// or deleted), throw `duplicateIdentifier`; text holding U+0000 throws `nulInText`, an inexact weight
-    /// `inexactWeight`, and a slot whose exercise is not stored a foreign-key `DatabaseError`. Each leaves the
-    /// database as it was.
+    /// or deleted), throw `duplicateIdentifier`; a slot whose exercise is not stored throws `unknownExercise`
+    /// (checked next, before any row is written); text holding U+0000 throws `nulInText`, and an inexact weight
+    /// `inexactWeight`. Each leaves the database as it was.
     public func save(_ program: Program) async throws {
         let rows = try ProgramRows(program)
         let timestamp = ColumnCodec.timestamp(now())

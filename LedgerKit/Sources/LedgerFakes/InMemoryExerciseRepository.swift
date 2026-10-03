@@ -4,7 +4,8 @@
 
     /// `ExerciseRepository` in memory, keeping `ExerciseRepositoryContract` (LedgerTestSupport) as the GRDB
     /// repository does: it searches, filters and orders with `ExerciseSearch`, the helper the GRDB repository
-    /// uses, so the two cannot drift; and it seeds as product decision #24 says.
+    /// uses, so the two cannot drift; it seeds as product decision #24 says; and it refuses a start load the
+    /// database's columns cannot keep (`StorageBoundary`, ADR-007).
     public final class InMemoryExerciseRepository: ExerciseRepository {
         struct Row: Equatable, Sendable {
             var exercise: Exercise
@@ -23,8 +24,10 @@
 
         private let state: ObservedState<State, [Exercise]>
 
-        /// An empty repository, or one holding `catalog` as seeded at `version` (`seedIfNeeded`'s rule).
-        public init(catalog: [Exercise] = [], version: Int = 1) {
+        /// An empty repository, or one holding `catalog` as seeded at `version` (`seedIfNeeded`'s rule), by
+        /// default the bundled catalog's version, so the launch's `seedIfNeeded` is then the no-op it is on a
+        /// seeded database.
+        public init(catalog: [Exercise] = [], version: Int = ExerciseCatalog.version) {
             var initial = State()
             Self.seed(catalog, version: version, into: &initial)
             state = ObservedState(initial)
@@ -49,14 +52,14 @@
 
         /// Stores the exercise as the lifter's, so a catalog upgrade leaves it (decision #24).
         public func save(_ exercise: Exercise) async throws {
-            try Self.refuseNul(in: exercise)
+            try Self.checkRow(of: exercise)
             state.write { $0.rows[exercise.id] = Row(exercise: exercise, catalogVersion: nil) }
         }
 
         public func seedIfNeeded(_ catalog: [Exercise], version: Int) async throws {
             try state.write { current throws(RepositoryError) in
                 for entry in Self.written(catalog, at: version, over: current) {
-                    try Self.refuseNul(in: entry)
+                    try Self.checkRow(of: entry)
                 }
                 Self.seed(catalog, version: version, into: &current)
             }
@@ -96,14 +99,18 @@
             }
         }
 
-        /// Text holding U+0000 is refused, as SQLite would cut it short.
-        private static func refuseNul(in exercise: Exercise) throws(RepositoryError) {
-            if exercise.name.unicodeScalars.contains("\0") {
-                throw .nulInText("exercise.name")
-            }
-            if exercise.shortName.unicodeScalars.contains("\0") {
-                throw .nulInText("exercise.short_name")
-            }
+        /// Whether an exercise with `id` is stored: what a program slot's foreign key checks.
+        func holds(_ id: ExerciseID) -> Bool {
+            state.read { $0.rows[id] != nil }
+        }
+
+        /// The `exercise` row as the database writes it: its start loads in pounds, then kilograms, then its text
+        /// (U+0000 is refused, as SQLite would cut the text short at it).
+        private static func checkRow(of exercise: Exercise) throws(RepositoryError) {
+            try exercise.defaultStartLoad[.lb]?.checkStorable()
+            try exercise.defaultStartLoad[.kg]?.checkStorable()
+            try RowChecks.refuseNul(exercise.name, "exercise.name")
+            try RowChecks.refuseNul(exercise.shortName, "exercise.short_name")
         }
     }
 #endif

@@ -17,6 +17,12 @@ struct ExerciseRepositoryTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test("The GRDB repository keeps the storage clause", arguments: ExerciseRepositoryContract.storageClauses)
+    func storageClause_holds(_ clause: ExerciseRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories().exercises)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("A saved exercise is one row: exact loads, JSON arrays as text, no catalog version; stamped on change")
     func save_writesTheDocumentedColumns() async throws {
         let repositories = try Repositories()

@@ -1,4 +1,5 @@
 import SwiftUI
+import Testing
 
 /// Where a snapshot is drawn: the phone at `SnapshotConfig.phoneWidth`, or a watch case size.
 public nonisolated enum SnapshotDevice: Hashable, Sendable {
@@ -35,6 +36,25 @@ public nonisolated enum SnapshotCell: Sendable, CustomStringConvertible {
         }
     }
 
+    /// Whether the platform the test runs on draws this cell: phone cells on iOS, watch cells on watchOS, none
+    /// on the Mac host.
+    public var isDrawnHere: Bool {
+        switch self {
+        case .phone:
+            #if os(iOS)
+                true
+            #else
+                false
+            #endif
+        case .watch:
+            #if os(watchOS)
+                true
+            #else
+                false
+            #endif
+        }
+    }
+
     /// For example `dark-xLarge` or `mm46-accessibility3`; used in reference names.
     public var description: String {
         switch self {
@@ -47,7 +67,9 @@ public nonisolated enum SnapshotCell: Sendable, CustomStringConvertible {
 /// Asserts `view` against its references across the F06 matrix (`SnapshotCell.matrix`), one reference per cell,
 /// named `<name>-<cell>` (or `<cell>` without a name). The simulator a test runs on draws its own cells, phone
 /// cells on iOS and watch cells on watchOS, through `assertPhoneSnapshot` and `assertWatchSnapshot`, so every
-/// snapshot keeps their appearance steps and precisions; the Mac host draws none (F06 review N3).
+/// snapshot keeps their appearance steps and precisions; the Mac host draws none (F06 review N3). On a simulator,
+/// arguments that leave it no cell of its own (`themes: []`, or only the other platform's devices) fail the test
+/// rather than pass with nothing compared.
 public func assertLedgerSnapshot(
     of view: some View,
     named name: String? = nil,
@@ -60,7 +82,21 @@ public func assertLedgerSnapshot(
     line: UInt = #line,
     column: UInt = #column
 ) {
-    for cell in SnapshotCell.matrix(devices: devices, themes: themes, typeSizes: typeSizes) {
+    let cells = SnapshotCell.matrix(devices: devices, themes: themes, typeSizes: typeSizes)
+    #if os(iOS) || os(watchOS)
+        if !cells.contains(where: \.isDrawnHere) {
+            Issue.record(
+                "assertLedgerSnapshot has no cell to draw on \(SnapshotConfig.platform): nothing would be compared",
+                sourceLocation: SourceLocation(
+                    fileID: String(describing: fileID),
+                    filePath: String(describing: filePath),
+                    line: Int(line),
+                    column: Int(column)
+                )
+            )
+        }
+    #endif
+    for cell in cells {
         let reference = name.map { "\($0)-\(cell)" } ?? cell.description
         switch cell {
         case let .phone(appearance):

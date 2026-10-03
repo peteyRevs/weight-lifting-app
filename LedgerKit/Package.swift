@@ -56,6 +56,11 @@ let testedTargets: [(name: String, settings: [SwiftSetting])] =
         ("LedgerWatchAppKit", uiSettings)
     ]
 
+/// Test targets that link LedgerFakes directly, not only through LedgerTestSupport: Xcode measures the coverage
+/// of a test target's direct dependencies only, and LedgerFakes is gated (ADR-008). These are the suites that run
+/// the fakes: the contracts (Persistence), the fixtures and keys (Dependencies), the link bus (Sync).
+let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistence", "LedgerSync"]
+
 /// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
 /// PNGs as sources. Add a target here with its first snapshot suite.
 let snapshotTestTargets: Set<String> = ["LedgerDesign"]
@@ -185,14 +190,8 @@ let package = Package(
     ] + testedTargets.map { target in
         .testTarget(
             name: "\(target.name)Tests",
-            // LedgerFakes directly, not only through LedgerTestSupport: Xcode measures coverage of a test
-            // target's direct dependencies only, and the fakes are gated (ADR-008).
-            dependencies: [
-                .target(name: target.name),
-                "LedgerFakes",
-                "LedgerTestSupport",
-                "LedgerSnapshotTesting"
-            ],
+            dependencies: [.target(name: target.name), "LedgerTestSupport", "LedgerSnapshotTesting"]
+                + (fakesCoverageTargets.contains(target.name) ? ["LedgerFakes"] : []),
             exclude: snapshotTestTargets.contains(target.name) ? ["__Snapshots__"] : [],
             resources: testResources[target.name],
             swiftSettings: target.settings

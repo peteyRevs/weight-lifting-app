@@ -119,7 +119,10 @@ struct ProgramEditAdversarialTests {
             exercise: S2Kit.exerciseID(77)
         )
         stack.clock.advance()
-        await #expect(throws: DatabaseError.self) {
+        // S1 fix round 1 (sanctioned): the unknown exercise is refused by name now, before any row is written.
+        await #expect(throws: LedgerPersistenceError
+            .unknownExercise("exercise \(S2Kit.exerciseID(77).rawValue.uuidString)"))
+        {
             try await stack.programs.save(program.rebuilt(weeks: [program.weeks[0], program.weeks[1]].map {
                 Week(id: $0.id, index: $0.index, schedule: [:])
             }, days: days))

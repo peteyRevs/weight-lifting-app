@@ -116,10 +116,14 @@ struct ProgramRepositoryTests {
         let before = try await repositories.texts("SELECT id || updated_at || quote(deleted_at) FROM slot ORDER BY id")
         repositories.clock.advance()
         var edited = try Contract.edited(program)
-        // The last slot now names an exercise the database lacks, so its update fails after the program, its
-        // weeks and days, and every other slot were written.
-        edited.days[2].slots[4].exerciseID = Seeders.catalogID(4040)
-        await #expect(throws: DatabaseError.self) { try await repositories.programs.save(edited) }
+        // The last slot's start load is ⅛ lb, which its column cannot keep, so its encoding fails after the
+        // program, its weeks and days, and every other slot were written. (S1 fix round 1, sanctioned: an unknown
+        // exercise, the fault this used, is now refused before any row is written.)
+        let eighth = Weight.pounds(0.125)
+        edited.days[2].slots[4].startLoad = eighth
+        await #expect(throws: LedgerPersistenceError.inexactWeight(eighth.grams)) {
+            try await repositories.programs.save(edited)
+        }
         #expect(try await repositories.programs.active() == program)
         let after = try await repositories.texts("SELECT id || updated_at || quote(deleted_at) FROM slot ORDER BY id")
         #expect(after == before)
@@ -170,5 +174,14 @@ struct ProgramRepositoryTests {
         await #expect(throws: LedgerPersistenceError.missingRow("program \(ColumnCodec.text(program.id))")) {
             try await programs.setActive(program.id)
         }
+    }
+}
+
+/// The storage clauses (F07 S1 fix round 1): exact loads, and the slot's exercise refused by name.
+extension ProgramRepositoryTests {
+    @Test("The GRDB repository keeps the storage clause", arguments: ProgramRepositoryContract.storageClauses)
+    func storageClause_holds(_ clause: ProgramRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories.withProgramExercises().programs)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 }

@@ -3,10 +3,12 @@
 
     /// An in-memory store's state behind a `Mutex`, with the streams its `observe…()` methods return.
     ///
-    /// A `Mutex` rather than an actor (ADR-008): the protocols' `observe…()` are synchronous, and must yield the
-    /// current value before they return, so that a write made right after the call is the stream's second
-    /// value, as GRDB's `ValueObservation` behaves. Every write runs whole under the lock, then each stream
-    /// yields its value if it changed (GRDB's `removeDuplicates()`).
+    /// A `Mutex` rather than an actor (ADR-008): the protocols' `observe…()` are synchronous, and no write made
+    /// after the call may be missed. GRDB guarantees that by queueing the observation's first fetch on the writer
+    /// before any later write; here the observer is registered, and its first value yielded, under the lock
+    /// before `observe…()` returns. Every write runs whole under the lock, then each stream yields its value if it
+    /// changed (GRDB's `removeDuplicates()`). A stream buffers only its newest value, as GRDB's bridge does
+    /// (`.bufferingNewest(1)`): a consumer that falls behind sees the latest state, not every one in between.
     final class ObservedState<State: Sendable, Value: Equatable & Sendable>: Sendable {
         private struct Observer {
             let value: @Sendable (State) -> Value
@@ -61,7 +63,7 @@
         /// `value` of the state now, then after every write that changes it. Ending the stream (its consumer's
         /// task cancelled, or the iterator dropped) stops the observation.
         func observe(_ value: @escaping @Sendable (State) -> Value) -> AsyncStream<Value> {
-            let (stream, continuation) = AsyncStream<Value>.makeStream()
+            let (stream, continuation) = AsyncStream<Value>.makeStream(bufferingPolicy: .bufferingNewest(1))
             let id = guarded.withLock { guarded in
                 let current = value(guarded.state)
                 let id = guarded.nextObserver

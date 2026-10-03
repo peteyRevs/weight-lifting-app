@@ -192,3 +192,141 @@ the Mac host only (font registration) and are untouched here; the gate's simulat
 4. **Linked preview stores:** whether previews should share one `InMemoryStores` across keys (a process-wide
    value, i.e. global mutable state in Debug) so a live preview's write reaches the stats. Recommend not until a
    preview needs it; `withDependencies` covers that preview.
+
+### Inputs for S2
+- **`deviceID` must be bound** (review S1-N1): its live value is the nil UUID until the composition root binds the
+  `device` row's id. S2's composition suite should assert the composed app's `deviceID` is not the nil UUID, or
+  phone and watch would stamp events with one device and `(device, seq)` keys would collide.
+
+### S1 fix round 1 (G1 implementer, 2026-10-03)
+
+From `test-findings.md` "# Slice S1 — adversarial round 1" (F7-1 to F7-9) and `review.md` "# Slice S1 review"
+(S1-SF1 to SF4, N1 to N7), with the orchestrator's binding decisions 1–13.
+
+**Per decision, what changed and what proves it**
+
+| # | Finding | Change | Proving test(s) |
+|---|---|---|---|
+| 1 | F7-5, S1-SF1 | `LedgerTestSupport/WithTestDependencies.swift` wrapped in `#if DEBUG` (the only file naming a fake outside one). `swift build -c release` of the package exits 0 again (38 s). ADR-008's Consequences say so. **Check:** not added to `check.sh`: `scripts/tests/adversarial/check-wiring.adv.sh` pins every step `check.sh` runs, so a new step means reworking that suite, and the PR lane would pay ~40 s of macOS minutes per push. Follow-up recommendation: a `swift build -c release` step in the nightly lane | Release build exit 0; mutant M17 (unwrapped) fails with 14 errors |
+| 2 | F7-1 | New `LedgerDomain/Storage/StorageBoundary.swift` (`units(ofGrams:)`, `grams(units:)`, `seconds(_:)`, `Weight/Volume.checkStorable()`): ADR-007's rules, moved out of `ColumnCodec`, which now calls it. Every fake runs it over every weight and date GRDB encodes (set weights, done dates, the e1RM, targets, steps, the workout's volume and dates, slot start loads and steps, exercise start loads), in GRDB's order. New `storageClauses` on the workout, program and exercise contracts | `WorkoutRepositoryContract.storageClauses`, `ProgramRepositoryContract.storageClauses`, `ExerciseRepositoryContract.storageClauses` on GRDB and the fakes; `StorageBoundaryTests`; the tester's `exactness_fakeAnswersAsGRDB` (10 cases) |
+| 3 | F7-2 | `EnvelopeCodec` and `SettingsCodec` moved, unchanged, from LedgerPersistence to `LedgerDomain/Storage/` (now public). `InMemorySettingsRepository.save` stores `decode(encode(settings))`. `InMemoryWorkoutEventStore.append` encodes the whole batch first (an `EncodingError` stores nothing), keeps each envelope as decoded, and compares as GRDB does | `SettingsRepositoryContract.storageClauses`, `WorkoutEventStoreContract.storageClauses` on both; `StorageBoundaryTests.settingsCodec_roundTrips`/`envelopeCodec_roundTrips`; the tester's `encoding_fakeAnswersAsGRDB` (3) |
+| 4 | F7-3, S1-SF3 | New `RepositoryError.unknownExercise(String)` (payload `"exercise <id>"`, the first such slot in slot order). GRDB: `ProgramRows.refuseUnknownExercises`, inside the write transaction, after other programs' ids and before any row is written; a soft-deleted exercise still counts, as the foreign key sees it. Fakes: `InMemoryProgramRepository(programs:exercises:)` checks on `save` when given an exercise store; `InMemoryStores` gives it one. A `Seed`'s programs are stored state and are not checked (only `save` checks). `ProgramRepository.save` doc, F08 input line, and ADR-008's linked-stores wording are updated | `ProgramRepositoryContract.storageClauses` ("a slot naming an exercise that is not stored throws unknownExercise", on GRDB and on the fake linked to a catalog); `InMemoryContractTests.unlinkedPrograms_checkNoExercise`; the tester's `foreignKeys_fakeAnswersAsGRDB` |
+| 5 | F7-4 | `InMemoryHistory.store` checks in GRDB's order: start (the replay's place), other workouts' ids, the workout row (dates, volume, name, tag), the exercises (repeats, then step, target and name, each in turn), the sets (repeats, then weight, done date, e1RM, each in turn). The program and exercise fakes likewise (doc comments say so). Shared `LedgerFakes/Support/RowChecks.swift` | `WorkoutRepositoryContract.storageClauses` "with two faults…" (3 cases); the tester's `precedence_fakeAnswersAsGRDB` (2) |
+| 6 | F7-6 | `inMemoryStores(seed:)`'s stats read `@Dependency(\.date.now)` on every query, not once at bind time | the tester's `statsDate_isTheDateWhenBound` (unedited) |
+| 7 | F7-7, S1-N7 | `FakeLinkBus`: `advance(by:)` never moves time back (a negative interval moves it by nothing); a message from or to an endpoint the bus did not make is dropped, with no inbox made; a delay range outside `0 … Int64.max` ns traps at `init`/`setLink` (`precondition`; a negative delay would arrive before it was sent); the drawn delay is clamped below `Int64.max` | the tester's `negativeAdvance_keepsArrivalsMonotonic`, `foreignEndpoint_isNotAnInbox` (unedited); the trap has no test (it would end the process) |
+| 8 | F7-8 | `InMemoryExerciseRepository(catalog:version:)` defaults to `ExerciseCatalog.version` | `FakeStoreTests.catalogRepository_isSeededAtTheCatalogsVersion` |
+| 9 | F7-9 | `assertLedgerSnapshot` records an issue when the simulator it runs on has no cell of its own (`SnapshotCell.isDrawnHere`) | `SnapshotMatrixTests.noCellHere_failsTheTest` (simulators), `isDrawnHere_matchesThePlatform` |
+| 10 | S1-SF2 | `ObservedState` streams use `.bufferingNewest(1)`, as GRDB's bridge does; doc says so | `FakeStoreTests.slowConsumer_seesTheNewestOnly` |
+| 11 | S1-SF4 | `docs/engineering-standards.md` §4: the one exception sentence for ADR-008's `Mutex` fakes | — |
+| 12 | S1-N3 | `materialize` writes the misses inside the history write, once nothing can throw (lock order: history, then programs; never the reverse) | `FakeStoreTests.refusedMaterialisation_writesNoMisses` |
+| 12 | S1-N4 | ADR-008 decision 4 now states GRDB's real guarantee (the first fetch is queued on the writer before later writes); architecture §13 says what each kind of stub does | — |
+| 12 | S1-N5 | The direct `LedgerFakes` edge is narrowed from every test target to `LedgerPersistenceTests`, `LedgerDependenciesTests` and `LedgerSyncTests` (`fakesCoverageTargets` in `Package.swift`); graph re-recorded. Coverage still measured: see the gate below | coverage table |
+| 12 | S1-N6 | A test that ends an observation early, then writes, and observes again | `FakeStoreTests.endedObservation_stopsOnlyItself` |
+| 12 | S1-N1 | S2 input above | — |
+| 12 | S1-N2 | Noted only: a preview needing linked stores binds one `InMemoryStores` by hand (`withDependencies`); moving a `bind(_:)` into `LedgerDependencies` can wait for the first preview that needs it | — |
+| 13 | Criterion 5 | Not touched (the orchestrator rewords the brief) | — |
+
+**Storage clauses beside the contracts' `clauses`.** The new clauses live in each contract's `storageClauses`, which
+the GRDB suites and `InMemoryContractTests` run. They are not part of `clauses`: F05's oracles (`HistoryModel`
+with its fault list, the event-store models of F04) model history, not columns, and
+`HistoryContractAdversarialTests` pins `clauses.count == 23`.
+
+**Sanctioned edits to existing tests** (each approved by the orchestrator before it was made; the tester audits
+them in the close-out). No assertion of a documenting test was weakened.
+1. `FakesHistoryDifferentialAdversarialTests.firstLinkedMismatch`: the fake now saves `S2Kit.slotExercises`
+   first, as the GRDB stack holds them, so both sides start from the same database (decision 4 makes the linked
+   fake check slot exercises).
+2. Six `FakeObservationAdversarialTests` read after each write instead of after all of them, because a stream
+   keeps only its newest value (decision 10):
+   - `firstValue_isTheStateWhenObserved` and `cancelledConsumer_endsOnlyItsStream`: read the first value, then
+     write.
+   - `unchangedWrites_emitNothing`: reads after each real change, and after an unchanged save makes the next real
+     change and expects exactly it. Limit: with newest-only buffering, a spurious repeat that a later change
+     overwrites before the consumer reads is invisible to any consumer, so it is not observable.
+   - `refusedWrite_emitsNothing`: the first value, then the refused save, then a real save that must be the next
+     value.
+   - `manySubscribers_seeEveryChange`: each of the 50 subscribers reads after each write.
+   - `racingWriters_loseNothing`, renamed `racingWriters_endOnTheFinalState_inOrder`: asserts the last value is
+     the 500 state and every value seen is strictly increasing.
+3. Two more `FakeObservationAdversarialTests` (decision 10):
+   - `slotUpdates_emitTheActiveProgram`: reads the first value before `materialize`.
+   - `consumerWritingBack_doesNotDeadlock`: a handshake (the consumer signals after its first value, and only
+     then is 120 saved). Same `[90, 120, 150]`.
+4. `ProgramRepositoryTests.failedSave_changesNothing` (F05): its mid-save fault is now a ⅛ lb start load in the
+   last slot, expecting `inexactWeight`. The unknown exercise it used is now refused before any row is written.
+   A statement trace confirmed the new fault fires midway: 13 `INSERT`/`UPDATE` statements, then `ROLLBACK`, in
+   one transaction. So the test still fails if the save were not one transaction.
+5. `ProgramEditAdversarialTests.failedEdit_leavesTheSavedVersion` (F05 tester): expects
+   `unknownExercise("exercise …")` instead of `DatabaseError`; its rows-unchanged assertion stays.
+
+**Mutants** (one at a time, in a scratchpad copy of `LedgerKit`, `f07s1/mut/`; results `f07s1/mut/mutants.txt`).
+All killed:
+
+| Mutant | Killed by |
+|---|---|
+| M1 `StorageBoundary.units` never refuses | the exercise, program and workout storage clauses; `StorageBoundaryTests` |
+| M2 non-finite dates accepted | the workout storage clause; `StorageBoundaryTests` |
+| M3 the history fake skips the volume | the workout storage clause |
+| M4 the history fake checks set repeats before the workout row (old order) | the workout storage and contract clauses; the tester's F7-4 |
+| M5 the program fake skips the exercise check | the program storage clause; `unlinkedPrograms_checkNoExercise`; the tester's F7-3 |
+| M6 the program fake skips slot weights | the program storage clause; the tester's F7-1 |
+| M7 the exercise fake skips start loads | the exercise storage clause; the tester's F7-1 |
+| M8 the settings fake skips the codec | the settings storage clause; the tester's F7-2 |
+| M9 the event fake skips the codec | the event storage clause; the tester's F7-2 |
+| M10 GRDB lets the foreign key fail | the GRDB program storage clause; the tester's F7-3; `ProgramEditAdversarialTests.failedEdit` |
+| M11 streams buffer every value | `FakeStoreTests.slowConsumer_seesTheNewestOnly` |
+| M12 the stats' date frozen at bind | the tester's F7-6 |
+| M13 bus time moves back | the tester's F7-7 (negative advance) |
+| M14 the bus accepts foreign endpoints | the tester's F7-7 (foreign endpoint) |
+| M15 exercise store at version 1 | `FakeStoreTests.catalogRepository_isSeededAtTheCatalogsVersion` |
+| M16 misses written before the workout | `FakeStoreTests.refusedMaterialisation_writesNoMisses` |
+| M17 `WithTestDependencies.swift` outside `#if DEBUG` | `swift build -c release` (14 errors) |
+| M18 the zero-cell check removed | `SnapshotMatrixTests.noCellHere_failsTheTest` (run on the iOS simulator under the lock: TEST FAILED, only that test) |
+| M19 seeded programs checked for exercises | `unlinkedPrograms_checkNoExercise`; the tester's `slotUpdates_emitTheActiveProgram` |
+
+**Release build:** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`
+exit 0 (38 s).
+
+**Host:** `swift test`, whole package: everything passes, including every tester suite of round 1 and the
+13 known issues of criterion 3. The only failures are `LedgerDesignTests`' Archivo font suites (52 issues),
+which fail on the Mac host only, as on `main`.
+
+**Full gate** (`scripts/check.sh` under the lock): **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch). Summary: tools 0 s, format 0 s, lint 60 s, iOS build 40 s, iOS tests 200 s, watchOS build 29 s,
+watchOS tests 174 s, coverage 1 s, total 505 s. **No new warnings.** Two warnings show, neither from this round:
+- `PayloadVersionAdversarialTests.swift:29` "will never be executed" (F05, an `Int.bitWidth` branch);
+- an unnecessary `try` at `FakeObservationAdversarialTests.swift:213` (the tester's round-1 line, unchanged:
+  `InMemoryWorkoutEventStore.envelopes(for:)` does not throw on the concrete actor). That file is the tester's,
+  so I left it.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 194 / 203 | 95.56 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1313 / 1328 | 98.87 % | 90 % | ✓ |
+| LedgerPersistence | 2257 / 2271 | 99.38 % | 90 % | ✓ |
+| Overall | 7719 / 7831 | 98.56 % | 80 % | ✓ |
+
+**Code lines** (non-blank, non-comment; tracked files by `git diff -U0`, new files counted whole):
+
+| Module | Fix round 1 | Whole slice vs `a8080ff` |
+|---|---|---|
+| LedgerDomain | +83 (48 of them moved: the two codecs; new: `StorageBoundary` 31, `unknownExercise` 1, docs aside) | +99 |
+| LedgerPersistence | +14 / −62 (the codecs moved out, `ColumnCodec` delegating, the exercise check +12) | +16 / −74 |
+| LedgerDependencies | 0 | +360 / −3 |
+| `Package.swift` | +3 / −6 | +7 / −7 |
+| **Product** | **+100 / −68, net +32** (≈ 50 of it moved code) | **+482 / −84** (≈ 50 moved) |
+| LedgerFakes | +103 / −57 | +1,221 |
+| LedgerTestSupport | +289 / −53 (the storage clauses 232) | +347 / −3 |
+| LedgerSnapshotTesting | +32 / −1 | +99 |
+| Tests | +278 / −33 | +1,985 / −68 |
+
+**Open questions**
+1. A `swift build -c release` lane: nightly, not the PR gate (decision 1's budget; `check-wiring.adv.sh` pins the
+   gate's steps). Recommend adding it to the nightly workflow with F01's next CI change.
+2. The tester's unnecessary `try` (`FakeObservationAdversarialTests.swift:213`): a one-character fix for the
+   tester's close-out.
+3. Whether a workout naming an exercise that is not stored should also be refused: it is not, on either side
+   (`workout_exercise.exercise_id` has no foreign key, so history keeps workouts of deleted or unknown
+   exercises). No change recommended.

@@ -131,6 +131,9 @@ struct FakesHistoryDifferentialAdversarialTests {
         var random = seed.generator
         let stack = try await S3Kit.stack()
         let fakes = InMemoryStores()
+        for exercise in S2Kit.slotExercises { // the exercises the GRDB stack holds (S1 fix round 1, sanctioned)
+            try await fakes.exercises.save(exercise)
+        }
         let programs = try [
             S2Kit.program(1, weeks: 3, days: 2, slotsPerDay: 2),
             S2Kit.program(2, weeks: 3, days: 2, slotsPerDay: 2, isActive: false)

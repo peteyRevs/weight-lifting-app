@@ -4,8 +4,13 @@
 
     /// `ProgramRepository` in memory, keeping `ProgramRepositoryContract` (LedgerTestSupport) as the GRDB
     /// repository does: a save is re-validated through the models' `init`s, ids are shared by every program
-    /// (one another program holds, even deleted or dropped, is refused), and deletion is soft. It does not check
-    /// that slots name stored exercises, which only a database's foreign key can do.
+    /// (one another program holds, even deleted or dropped, is refused), weights are refused as the database's
+    /// columns refuse them (`StorageBoundary`), and deletion is soft.
+    ///
+    /// Given an exercise store (as `InMemoryStores` gives it), `save` refuses a slot naming an exercise that store
+    /// does not hold with `unknownExercise`, as the database's foreign key does (product decision #28). Without
+    /// one, it checks no exercise. Only `save` checks: programs given to `init` are stored state, kept as given
+    /// (like a database restored as it was).
     public final class InMemoryProgramRepository: ProgramRepository {
         struct Stored: Sendable {
             var program: Program
@@ -25,17 +30,20 @@
         }
 
         private let state: ObservedState<State, Program?>
+        private let exercises: InMemoryExerciseRepository?
 
-        /// An empty repository, or one holding `programs`, saved in order. A program that would fail a save is
-        /// left out.
-        public init(programs: [Program] = []) {
+        /// An empty repository, or one holding `programs`, stored in order with every check of a save but the
+        /// exercise check (a program that would fail one is left out). With `exercises`, `save` refuses a slot
+        /// naming an exercise that store does not hold.
+        public init(programs: [Program] = [], exercises: InMemoryExerciseRepository? = nil) {
             var initial = State()
             for program in programs {
                 // A seed that fails validation is a fixture bug, which `FixturesTests` catches; the store
                 // then starts without it.
-                try? Self.store(program, in: &initial)
+                try? Self.store(program, in: &initial, exercises: nil)
             }
             state = ObservedState(initial)
+            self.exercises = exercises
         }
 
         public func active() async throws -> Program? {
@@ -43,7 +51,7 @@
         }
 
         public func save(_ program: Program) async throws {
-            try state.write { current in try Self.store(program, in: &current) }
+            try state.write { current in try Self.store(program, in: &current, exercises: exercises) }
         }
 
         public func setActive(_ id: ProgramID) async throws {
@@ -92,19 +100,30 @@
     }
 
     fileprivate extension InMemoryProgramRepository {
-        /// Saves `program` into `state`, or throws and leaves it: re-validated first, then its ids checked, then
-        /// its text, as the GRDB repository checks them.
-        static func store(_ program: Program, in state: inout State) throws {
+        /// Saves `program` into `state`, or throws and leaves it, checked in the order the GRDB repository meets
+        /// each fault: re-validated first, then ids another program holds, then each slot's exercise (when
+        /// `exercises` is given), then each row as it is written: the program's name, the weeks (a repeated id),
+        /// the days (a repeated id, then each one's name and tag), the slots (a repeated id, then each one's start
+        /// load and step).
+        static func store(_ program: Program, in state: inout State, exercises: InMemoryExerciseRepository?) throws {
             let valid = try revalidated(program)
+            let slots = valid.days.flatMap(\.slots)
             try refuseOtherProgramsIDs(of: valid, in: state)
-            try refuseNul(valid.name, "program.name")
-            try refuseRepeats(valid.weeks.map(\.id), "program_week")
-            try refuseRepeats(valid.days.map(\.id), "day_template")
-            for day in valid.days {
-                try refuseNul(day.name, "day_template.name")
-                try refuseNul(day.tag, "day_template.tag")
+            if let exercises, let unknown = slots.map(\.exerciseID).first(where: { !exercises.holds($0) }) {
+                throw RepositoryError.unknownExercise("exercise \(unknown.rawValue.uuidString)")
             }
-            try refuseRepeats(valid.days.flatMap(\.slots).map(\.id), "slot")
+            try RowChecks.refuseNul(valid.name, "program.name")
+            try RowChecks.refuseRepeats(valid.weeks.map(\.id), "program_week")
+            try RowChecks.refuseRepeats(valid.days.map(\.id), "day_template")
+            for day in valid.days {
+                try RowChecks.refuseNul(day.name, "day_template.name")
+                try RowChecks.refuseNul(day.tag, "day_template.tag")
+            }
+            try RowChecks.refuseRepeats(slots.map(\.id), "slot")
+            for slot in slots {
+                try slot.startLoad?.checkStorable()
+                try slot.step?.checkStorable()
+            }
             if valid.isActive {
                 for key in state.programs.keys {
                     state.programs[key]?.program.isActive = false
@@ -174,19 +193,6 @@
             let taken = ids.filter { owners[$0].map { $0 != program } ?? false }.map(\.rawValue.uuidString)
             if let first = taken.min() {
                 throw .duplicateIdentifier("\(table) \(first)")
-            }
-        }
-
-        static func refuseRepeats(_ ids: [some TypedIdentifier], _ table: String) throws(RepositoryError) {
-            var seen = Set<UUID>()
-            if let repeated = ids.first(where: { !seen.insert($0.rawValue).inserted }) {
-                throw .duplicateIdentifier("\(table) \(repeated.rawValue.uuidString)")
-            }
-        }
-
-        static func refuseNul(_ text: String, _ column: String) throws(RepositoryError) {
-            if text.unicodeScalars.contains("\0") {
-                throw .nulInText(column)
             }
         }
     }

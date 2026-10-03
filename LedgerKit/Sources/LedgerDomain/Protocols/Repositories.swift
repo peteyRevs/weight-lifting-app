@@ -26,7 +26,9 @@ public protocol ProgramRepository: Sendable {
     func active() async throws -> Program?
     /// Saves the program whole (weeks, days, slots, misses), re-validated through its `init`s; when active,
     /// every other program becomes inactive. An id used twice, or held by another program, throws
-    /// `duplicateIdentifier`; a name or tag holding U+0000 throws `nulInText`; a failed save writes nothing.
+    /// `duplicateIdentifier`; a slot naming an exercise that is not stored throws `unknownExercise` (seed the
+    /// catalog first; product decision #28); a name or tag holding U+0000 throws `nulInText`; a failed save writes
+    /// nothing.
     func save(_ program: Program) async throws
     /// Makes the program the one active one; one that is not saved, or is deleted, throws `missingRow`.
     func setActive(_ id: ProgramID) async throws

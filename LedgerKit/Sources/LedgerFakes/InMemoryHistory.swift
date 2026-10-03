@@ -66,10 +66,27 @@
 
         // MARK: Writes
 
-        /// Stores `workout` over any copy of it, deleted or not, or throws and stores nothing.
+        /// Stores `workout` over any copy of it, deleted or not, or throws and stores nothing. The checks run in
+        /// the order the GRDB repository meets them, so a workout with two faults throws the same error on both:
+        /// its start (its place in the record replay), ids another workout holds (exercises, then sets, the
+        /// smallest first), then each row as it is written: the workout (its dates and volume, then its name and
+        /// tag), the exercises (a repeated id, then each one's step and target load, then its name), and the sets
+        /// (a repeated id, then each one's weight, done date and e1RM). Weights and dates are checked by
+        /// `StorageBoundary`, the rule the database's columns use (ADR-007).
         mutating func store(_ workout: WorkoutState) throws(RepositoryError) {
-            try refuseIDs(of: workout)
-            try Self.refuseNul(in: workout)
+            _ = try StorageBoundary.seconds(workout.startedAt)
+            try refuseOtherWorkoutsIDs(of: workout)
+            try Self.checkRow(of: workout)
+            try RowChecks.refuseRepeats(workout.exercises.map(\.id), "workout_exercise")
+            for exercise in workout.exercises {
+                try exercise.step.checkStorable()
+                try exercise.targetLoad.checkStorable()
+                try RowChecks.refuseNul(exercise.name, "workout_exercise.name")
+            }
+            try RowChecks.refuseRepeats(workout.exercises.flatMap(\.sets).map(\.id), "logged_set")
+            for set in workout.exercises.flatMap(\.sets) {
+                try Self.checkRow(of: set)
+            }
             entries[workout.id] = Entry(workout: Self.stored(workout), records: entries[workout.id]?.records ?? [])
             for exercise in workout.exercises {
                 exerciseOwners[exercise.id] = workout.id
@@ -95,9 +112,8 @@
             }
         }
 
-        /// Throws `duplicateIdentifier` as the GRDB repository orders it: ids another workout holds (exercises,
-        /// then sets, the smallest id first), then an id used twice (exercises, then sets, the first repeat).
-        private func refuseIDs(of workout: WorkoutState) throws(RepositoryError) {
+        /// Throws `duplicateIdentifier` for the smallest exercise id, then set id, that another workout holds.
+        private func refuseOtherWorkoutsIDs(of workout: WorkoutState) throws(RepositoryError) {
             let exercises = workout.exercises.map(\.id)
             let sets = workout.exercises.flatMap(\.sets).map(\.id)
             let takenExercises = exercises.filter { exerciseOwners[$0].map { $0 != workout.id } ?? false }
@@ -108,25 +124,27 @@
             if let taken = takenSets.map(\.rawValue.uuidString).min() {
                 throw .duplicateIdentifier("logged_set \(taken)")
             }
-            var seenExercises = Set<WorkoutExerciseID>()
-            for id in exercises where !seenExercises.insert(id).inserted {
-                throw .duplicateIdentifier("workout_exercise \(id.rawValue.uuidString)")
-            }
-            var seenSets = Set<SetID>()
-            for id in sets where !seenSets.insert(id).inserted {
-                throw .duplicateIdentifier("logged_set \(id.rawValue.uuidString)")
-            }
         }
 
-        private static func refuseNul(in workout: WorkoutState) throws(RepositoryError) {
-            if workout.name.unicodeScalars.contains("\0") {
-                throw .nulInText("workout.name")
+        /// The `workout` row: its dates and volume, then its text.
+        private static func checkRow(of workout: WorkoutState) throws(RepositoryError) {
+            _ = try StorageBoundary.seconds(workout.startedAt)
+            if let endedAt = workout.endedAt {
+                _ = try StorageBoundary.seconds(endedAt)
             }
-            if workout.tag.unicodeScalars.contains("\0") {
-                throw .nulInText("workout.tag")
+            try workout.volume.checkStorable()
+            try RowChecks.refuseNul(workout.name, "workout.name")
+            try RowChecks.refuseNul(workout.tag, "workout.tag")
+        }
+
+        /// A `logged_set` row: its weight, its done date, and the e1RM a done set stores.
+        private static func checkRow(of set: LoggedSet) throws(RepositoryError) {
+            try set.weight.checkStorable()
+            if let doneAt = set.doneAt {
+                _ = try StorageBoundary.seconds(doneAt)
             }
-            if workout.exercises.contains(where: { $0.name.unicodeScalars.contains("\0") }) {
-                throw .nulInText("workout_exercise.name")
+            if set.isDone {
+                try OneRepMax.brzycki(weight: set.weight, reps: set.reps)?.checkStorable()
             }
         }
     }

@@ -59,6 +59,7 @@ struct ProgramRows {
         let storedSlots = try Row.fetchAll(database, sql: Query.slots, arguments: key)
         let storedMisses = try Row.fetchAll(database, sql: Query.misses, arguments: key)
         try refuseOtherProgramsIDs(in: database)
+        try refuseUnknownExercises(in: database)
         // Parents first, so every foreign key an insert names exists.
         try ProgramRecord.write(program.map { [$0] } ?? [], over: storedProgram, in: database, at: timestamp)
         try WeekRecord.write(weeks, over: storedWeeks, in: database, at: timestamp)
@@ -74,6 +75,20 @@ struct ProgramRows {
         try refuse(weeks.map(\.rowID), of: WeekRecord.databaseTableName, heldBy: Query.weekOwners, in: database)
         try refuse(days.map(\.rowID), of: DayTemplateRecord.databaseTableName, heldBy: Query.dayOwners, in: database)
         try refuse(slots.map(\.rowID), of: SlotRecord.databaseTableName, heldBy: Query.slotOwners, in: database)
+    }
+
+    /// Throws `unknownExercise("exercise id")` for the first slot, in slot order, whose exercise has no row: the
+    /// slot's foreign key would fail. Checked before any row is written, so the error is named rather than
+    /// SQLite's `DatabaseError`, and LedgerFakes' linked program store refuses the same way (product decision
+    /// #28). A soft-deleted exercise still has its row, as the foreign key sees it.
+    private func refuseUnknownExercises(in database: Database) throws {
+        var stored: Set<String> = []
+        for exerciseID in slots.map({ ColumnCodec.text($0.slot.exerciseID) }) where !stored.contains(exerciseID) {
+            guard try Int.fetchOne(database, sql: Query.exercise, arguments: [exerciseID]) != nil else {
+                throw LedgerPersistenceError.unknownExercise("exercise \(exerciseID)")
+            }
+            stored.insert(exerciseID)
+        }
     }
 
     /// Throws `duplicateIdentifier("table id")` for the first of `ids` that `ownersSQL` finds under another
@@ -132,6 +147,7 @@ struct ProgramRows {
     /// The live rows of one program, children in their stored order (ties by id, so the order is total), and
     /// the owner checks of `refuseOtherProgramsIDs`.
     private enum Query {
+        static let exercise = "SELECT 1 FROM exercise WHERE id = ?"
         static let program = "SELECT * FROM program WHERE id = ? AND deleted_at IS NULL"
         static let weeks = """
         SELECT * FROM program_week WHERE program_id = ? AND deleted_at IS NULL ORDER BY week_index, id

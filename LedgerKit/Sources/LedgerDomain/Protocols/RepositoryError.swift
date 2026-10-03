@@ -7,11 +7,10 @@ import Foundation
 /// LedgerPersistence).
 ///
 /// Other errors reach callers unwrapped, and nothing is swallowed: an implementation's own (LedgerPersistence:
-/// GRDB's `DatabaseError` from SQLite itself, e.g. a locked or full disk, or a foreign key: a slot naming an
-/// exercise the database lacks), `EncodingError` (an envelope with a NaN `Weight`, which has no exact text),
-/// `DecodingError` (a settings payload whose JSON holds an invalid value), `EngineError.conflictingEnvelope` from
-/// `append`, `SlotValidationError` and `ProgramValidationError` (a program that fails its `init`s, when saved or
-/// when read back), and `CancellationError`.
+/// GRDB's `DatabaseError` from SQLite itself, e.g. a locked or full disk), `EncodingError` (settings or an envelope
+/// with a NaN `Weight`, which has no exact text), `DecodingError` (a settings payload whose JSON holds an invalid
+/// value), `EngineError.conflictingEnvelope` from `append`, `SlotValidationError` and `ProgramValidationError` (a
+/// program that fails its `init`s, when saved or when read back), and `CancellationError`.
 public enum RepositoryError: Error, Equatable, Sendable {
     /// ADR-007: a weight, or a volume in gram·reps, that is not a whole number of 10⁻⁷ g or lies beyond
     /// `Int64` (±922,337 t). The storage boundary rejects it rather than round it.
@@ -37,6 +36,11 @@ public enum RepositoryError: Error, Equatable, Sendable {
     /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted, or
     /// `updateSets` an exercise of no stored workout.
     case missingRow(String)
+    /// A program's slot names an exercise that is not stored (`"exercise id"`, the first in slot order): saving it
+    /// would point the slot at nothing. Seed the catalog, or save the custom exercise, before the program (F05
+    /// "Inputs"; product decision #28: until the catalog is seeded, saving a program that names one fails, and
+    /// F08's onboarding offers a retry). Nothing is saved.
+    case unknownExercise(String)
     /// `materialize` was given a workout that is not finished (`"workout id"`): its phase is not `.finished`, or
     /// it has no `endedAt`. History holds finished workouts only, so nothing is stored.
     case notFinished(String)

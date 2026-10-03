@@ -126,3 +126,11 @@ _Filled in by agents during delivery:_
 - `F08-onboarding/implementation-notes.md`
 - `F08-onboarding/test-findings.md`
 - `F08-onboarding/review.md`
+
+## Inputs from F07 (2026-10-03, S1 fix round 1)
+- Saving a program whose slot names an exercise that is not stored throws
+  `RepositoryError.unknownExercise("exercise <id>")` (the first such slot, in slot order), on GRDB and on
+  LedgerFakes' linked `InMemoryStores`, and saves nothing. Until the catalog is seeded (product decision #28: a
+  failed seed is logged and retried), the seed program's save fails this way: catch this case to offer the
+  retry, and test it on `InMemoryStores` whose exercise store lacks the catalog (`.inMemoryStores(seed: .empty)`).
+- Programs given to `InMemoryStores` through its `Seed` are stored state and are not checked; only `save` is.

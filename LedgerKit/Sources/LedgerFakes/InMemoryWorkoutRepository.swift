@@ -7,7 +7,8 @@
     /// records that are a function of history (decision #27), replayed from scratch after every write.
     ///
     /// `InMemoryStatsQueries` reads the same history, and `materialize`'s `slotUpdates` write their misses to
-    /// `programs`, so the three answer as one database would.
+    /// `programs` in the same step as the workout, so the three answer as one database would. Weights and dates
+    /// are refused as the database's columns refuse them (`StorageBoundary`, ADR-007).
     public final class InMemoryWorkoutRepository: WorkoutRepository {
         let history: ObservedState<InMemoryHistory, [WorkoutState]>
         private let programs: InMemoryProgramRepository
@@ -36,8 +37,11 @@
             try history.write { current throws(RepositoryError) in
                 try current.store(workout)
                 current.detectRecords()
+                // Last, once nothing can throw, and under this write's lock: no reader sees the workout without
+                // its misses, as the database's one transaction (the program store's lock is only ever taken
+                // inside this one, never the other way round).
+                programs.writeMisses(of: slotUpdates)
             }
-            programs.writeMisses(of: slotUpdates)
         }
 
         public func workout(id: WorkoutID) async throws -> WorkoutState? {

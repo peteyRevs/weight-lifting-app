@@ -67,25 +67,3 @@ public struct GRDBSettingsRepository: SettingsRepository {
         return try SettingsCodec.decode(Data(payload.utf8), version: version)
     }
 }
-
-/// `Settings` as `settings.payload`: JSON with sorted keys, decoded by the row's payload version
-/// (orchestrator decision, 2026-09-30). Version 1 is the only one so far.
-enum SettingsCodec {
-    /// The payload version `encode` writes.
-    static let version = 1
-
-    static func encode(_ settings: Settings) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        return try encoder.encode(settings)
-    }
-
-    static func decode(_ payload: Data, version: Int) throws -> Settings {
-        switch version {
-        case 1:
-            try JSONDecoder().decode(Settings.self, from: payload)
-        default:
-            throw LedgerPersistenceError.unknownPayloadVersion(version)
-        }
-    }
-}

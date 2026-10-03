@@ -12,24 +12,17 @@ import LedgerDomain
 /// - history dates are `REAL` seconds since 2001 (`timeIntervalSinceReferenceDate`), exact and
 ///   range-queryable, where GRDB writes millisecond text.
 enum ColumnCodec {
-    /// A gram is 10⁷ stored units.
-    private static let unitExponent = 7
-
     // MARK: Exact mass (ADR-007)
 
-    /// `grams` as a whole count of 10⁻⁷ g. It only moves the decimal exponent, so it never rounds: a
-    /// value that is not a whole count (⅛ lb is 566,990,462.5 units), NaN, or one beyond `Int64` throws.
+    /// `grams` as a whole count of 10⁻⁷ g (`StorageBoundary`, the rule LedgerFakes shares): a value that is not a
+    /// whole count (⅛ lb is 566,990,462.5 units), NaN, or one beyond `Int64` throws `inexactWeight`.
     static func e7g(grams: Decimal) throws(LedgerPersistenceError) -> Int64 {
-        let units = Decimal(sign: .plus, exponent: unitExponent, significand: grams)
-        guard let count = Int64(units.description) else {
-            throw .inexactWeight(grams)
-        }
-        return count
+        try StorageBoundary.units(ofGrams: grams)
     }
 
     /// The grams a stored count of 10⁻⁷ g stands for, exactly.
     static func grams(e7g count: Int64) -> Decimal {
-        Decimal(sign: count < 0 ? .minus : .plus, exponent: -unitExponent, significand: Decimal(count.magnitude))
+        StorageBoundary.grams(units: count)
     }
 
     // MARK: Identifiers
@@ -69,13 +62,10 @@ enum ColumnCodec {
 
     // MARK: Dates
 
-    /// `date` as seconds since 2001 for a `REAL` column. Throws for ±∞ and NaN, which SQLite cannot
-    /// keep (it stores NaN as `NULL`).
+    /// `date` as seconds since 2001 for a `REAL` column (`StorageBoundary`). Throws `nonFiniteDate` for ±∞ and
+    /// NaN, which SQLite cannot keep (it stores NaN as `NULL`).
     static func seconds(_ date: Date) throws(LedgerPersistenceError) -> Double {
-        guard let seconds = finiteSeconds(date) else {
-            throw .nonFiniteDate
-        }
-        return seconds
+        try StorageBoundary.seconds(date)
     }
 
     /// `date` as seconds since 2001, or `nil` when it is not finite.

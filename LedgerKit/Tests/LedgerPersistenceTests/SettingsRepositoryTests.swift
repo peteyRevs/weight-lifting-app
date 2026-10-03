@@ -35,6 +35,12 @@ struct SettingsRepositoryTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test("The GRDB repository keeps the storage clause", arguments: SettingsRepositoryContract.storageClauses)
+    func storageClause_holds(_ clause: SettingsRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Self.repository().0)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("Before the first save, load returns the defaults")
     func load_beforeAnySave_returnsDefaults() async throws {
         let (repository, _) = try Self.repository()
