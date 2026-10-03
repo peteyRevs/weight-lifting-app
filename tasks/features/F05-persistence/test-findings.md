@@ -1527,3 +1527,187 @@ Either way, the nightly lane should run timing tests on a quiet machine; that ho
 - 20 of 21 mutants of the changed lines are killed; the survivor is equivalent.
 - The new finding, S3-N5, is a nit.
 - The full gate is green on my final tree, which adds one test file.
+
+---
+
+# Follow-up: records — adversarial round 1
+
+Adversarial pass over `feat/F05-records` at `aca3a82` (from main `efe0691`): product decision #27, personal
+records always replayed from history. I read #25–#27, the notes' "## Follow-up: records (decision #27)", and the
+diff. No product code was edited, and HEAD never moved: `git branch --show-current` printed `feat/F05-records` at
+the start and the end. Mutants ran in a scratchpad copy (`f05s3-g2/rec/mut/`), never in the worktree.
+
+**The invariant under test.** After every write, the live `personal_record` rows and every `pr_count` equal
+`PersonalRecords.detect` replayed over live finished history in decision #26's order (start, then id), each
+workout judged against the bests before it.
+
+## What I wrote
+
+8 tests in 4 files under `Adversarial/`, plus `RecordOracle.swift`.
+
+- **`RecordOracle`.** Decisions #3, #25 and #27 written again from the text, judging set by set, as the slices
+  before the follow-up did. It shares nothing with the new `PersonalRecords.found`, `Tally` or `Bests`.
+  - **Why it is needed.** The store's replay and my `HistoryModel` now both run through `found` (the model calls
+    `detect`, which calls it). So the model test can no longer catch a bug in `found`.
+- **`RecordReplayAdversarialTests`** (property tests: 60 seeds in the PR lane, all seeds nightly).
+  - **Random writes.** 16 random writes per seed: materialise (new workouts, rebuilds that move a workout's
+    start, deload on or off, lifts added, dropped or swapped, revivals), `updateSets` (including rows that are
+    not stored) and `delete`. The pools are three lifts, six weights (0 g and 10⁻⁷ g included), six rep counts,
+    every set kind, and three equal start days.
+  - **Checked after each write:**
+    - every lift's `personalRecords`;
+    - every live workout's `pr_count`;
+    - `bests(before:for:)` before every live workout, and before six unstored ones at stored starts with smaller
+      and larger ids.
+  - **And:** `PersonalRecords.detect` against the oracle over random histories.
+- **`RecordReplayEdgeAdversarialTests`** (5 tests):
+  - one final history reached by direct writes and by a winding path (a start moved twice, deletes, a revival,
+    a deload) gives byte-equal record rows and counts;
+  - weights at the end of `Int64`: one unit heavier is a weight record, and an estimate equal to the gram is
+    not;
+  - damaged history (documents, R-Q1);
+  - round 1's record-stamp check, re-expressed;
+  - a stray record row written by older code is dropped.
+- **`RecordReplayWorstCaseAdversarialTests`** (nightly lane, `.serialized`): four shapes worse than the
+  implementer's (R-1).
+
+## Results
+
+- **Host** (`swift test --filter 'LedgerDomainTests|LedgerPersistenceTests'`): exit 0. `LedgerPersistenceTests`
+  368 pass, `LedgerDomainTests` 765 pass.
+- **Nightly lane, host**:
+  - The oracle tests pass at **3,000 seeds**.
+  - **`RecordReplayWorstCaseAdversarialTests` fails** on all four shapes (R-1), and stays failing.
+  - The implementer's `RecordReplayPerformanceTests` passes on a quiet machine. It failed at a load average of
+    15 or more.
+- **Simulators, under the lock** (`Nightly` / `Nightly-Watch`, these two suites only): exit 65 on both, my timing
+  test alone failing. The implementer's passes there at 47.0 ms (iPhone) and 47.9 ms (watch).
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **The full gate was not run**, because one of my tests fails by design (R-1). Its suite is nightly-only, so the
+  PR plans skip it, but the rule is to run the gate only when all my tests pass.
+- **The oracle bites.** Each of six one-line mistakes in it fails the tests: deloads setting records, deloads not
+  raising the bests, warm-ups and drop sets counting, a tie counting as a record, `achievedAt` taken from the end,
+  and bests "before" a workout including it.
+- **Mutants of the changed lines** (32, one at a time, host, `LedgerDomainTests` and `LedgerPersistenceTests`):
+  1 is a compile error and is set aside, 30 are killed, and 1 survives.
+  - **Survivor R12.** The scope reads a soft-deleted workout's start too. That only adds work: the replay starts
+    earlier, but the outcome is the same, so the mutant is equivalent.
+  - **Killed by my tests only:**
+    - R07, the scope without the exercises of a workout's records (by the stray-record test);
+    - R20, `personalRecords`' tie order reversed;
+    - R25 and R26, `found`'s tie rules (a ceiling of equal weight keeps the most reps; so does the record).
+      The implementer's 26 `detect` tests do not pin these ties.
+  - **Killed by both suites:** the walk's start and order; deload records and bests; the scope's old place,
+    old exercises and include; every recount path; the stored-records start; strict reps; the group key; a
+    record lost; the bests "before" boundary and kinds; the row id without its exercise; `found`'s `>=`;
+    `Tally`'s merges; `Bests.include` kinds; the ceiling's rep bound; `delete` and `materialize` without a
+    replay.
+
+## Audit of the edits to my suites
+
+`git diff efe0691..aca3a82 -- LedgerKit/Tests/LedgerPersistenceTests/Adversarial/` touches 20 files, each named in
+the notes' list. Nothing beyond that list was edited.
+
+| Edit | Forced? | Faithful? | Coverage lost, and where it is now |
+|---|---|---|---|
+| `StatsWorstCaseAdversarialTests` capped at about 450 distinct weights; records detected (399 × 2 asserted) | Sanctioned | Yes. It is the shape I recommended. | None. |
+| `foreignPhase_…` renamed | Sanctioned | Yes. | None. |
+| S3-1's three foreign-record tests deleted; `records_nameTheirWorkout_andAreCounted` added | Yes. `prs:` is gone, so a record cannot name another workout. | Yes. It keeps the `pr_count` check and adds "every record names its workout". | The takeover class is now covered by the derived row id, v5 of (workout, exercise, kind). R23 is killed. |
+| `edit_leavesRecordsStale` → `edit_detectsRecordsAgain` | Yes. It pinned the gap #27 closes. | Yes, and stronger: it adds the reverse edit. | None. |
+| `S3Kit.record(_:_:over:in:)`, `baseline`, `mixedRecords(of:)`; `Stack.materialize(_:slots:)` | Yes. | Yes. | None. |
+| `HistoryModel`: replays records from scratch; `bests(before:for:)`; faults `recordsByWorkoutDate` and `recordsInGivenOrder` removed, four added | Yes. Records are computed now, and the two faults are inexpressible. | Yes. | Shared code: the model's replay calls `detect` → `found`, the same rule the store uses, so a bug in `found` passes the model test. Now covered by `RecordOracle` (it kills R25 and R26). |
+| `HistoryScript`: no records; `HistoryModelAdversarialTests` compares `bests(before:)` | Yes. | Yes. | The script makes no deloads. Now covered by the oracle test (deload records and bests are both killed there). |
+| `edit_recomputesDerivedColumns_andStampsOnlyChanges`: the record-stamp assertion became `== []` | Yes. The edited workout is now a lift's first, so it has no records. | Weaker: the stamp check is vacuous. | Re-expressed in `editChangingNoRecord_stampsNoRecord`, which has four records and two edits that change none. |
+| `WorkoutAtomicityAdversarialTests`: baseline first, one changed record; the edit also fails on a record `UPDATE` | Yes. | Yes. The rebuild no longer drops a record, but a soft delete and a change are both `UPDATE`s. | None. |
+| `damagedRecordRows_areRepaired`, `delete_isIdempotent…`, `repairs_touchOnlyTheirOwnWorkout`, `materialize_isIdempotent`, the observation test, `personalRecords_orderIsDeterministic`, `extremeDates…`, the fixture no-op | Yes. | Yes. Each kept its subject, re-expressed with detected records (the twin at the extreme date and the six-way store-order tie are good). | None. |
+| `StatsQueriesAdversarialTests.onlyDeletedWorkouts`, `StatsWeeks`, `WorkoutStartDate`, `rematerializeAfterDelete` | Yes (an unused argument). | Yes. | None. |
+
+`LedgerDomainTests/Adversarial/ProtocolsAdversarialTests` changed too. It belongs to the F02/F04 tester and is
+outside my audit.
+
+## R-1. minor bug (performance) — A multi-lift write replays far over the 50 ms budget
+
+The implementer's worst case (one lift, `updateSets` of the first of 400 workouts, 50 sets each) is 47 ms. Three
+realistic shapes with the same 20,000 sets in 400 workouts are well over that, and so is a stricter one-lift typo.
+95th percentile of 20 runs (median in parentheses), Debug:
+
+| Shape | iPhone 17 sim | Watch S12 sim | Host, quiet |
+|---|--:|--:|--:|
+| Implementer's: one lift, a typo flips 399 estimate records | 47.0 ms | 47.9 ms | 41–47 ms |
+| One lift; the typo is at 12 reps, so both records of all 399 later workouts flip | **55 ms** (49) | **57 ms** (51) | 50 ms (45) |
+| **Five lifts × 10 sets; the lifter deletes the first workout from History** (two rep counts per lift) | **110 ms** (108) | **114 ms** (112) | 110 ms (107) |
+| Five lifts; a forgotten light session lands before the first and is deleted again | **147 ms** | **153 ms** | 141 ms |
+| Five lifts; the first workout is rebuilt with a typo in each lift (3,990 records flip) | **203 ms** | **213 ms** | 188 ms |
+
+**Why.** A `delete` or a `materialize` replays every lift of its workout, not one. The walk's cost grows with the
+groups it judges (workout × lift × rep count), not with the records it writes. In the realistic delete only ten
+records change, and it still takes 110 ms; the first workout of a five-lift history is the worst place to delete.
+No mutant or correctness test is involved: the answers are right.
+
+**Reach.** A History delete or edit of an old workout, on a long history, on the phone. On a device in Release
+it may be faster (F20 measures that). The materialisation of a new workout replays only itself (11 ms).
+
+**Repro** (fails, nightly lane): `RecordReplayWorstCaseAdversarialTests.worseShape_underBudget`, all four shapes.
+
+**Options** (the orchestrator's choice; notes question 3 already leans to the second):
+1. Give writes a budget of their own in `PerformanceBudget`. A History edit or delete is a user action, not a
+   frame; for example 250 ms, with a test that holds these shapes to it.
+2. Make the walk cheaper per group, as the profile directs: sort the prior rep counts once per lift instead of
+   per judgement, read the workout's columns once per workout, and replay one lift per pass. Then keep 50 ms.
+
+The worst case in the notes ("the worst case within budget") should name the multi-lift shapes either way.
+
+## Spec questions
+
+- **R-Q1 (notes question 2): one damaged set blocks every write of its lift, and no screen can reach it.**
+  - Pinned by `RecordReplayEdgeAdversarialTests.damagedHistory_failsWritesOfItsLift` (documents).
+  - A set with `reps = 0` in an early bench workout makes every later write of a workout holding bench throw
+    `malformedColumn("logged_set.reps")` and store nothing: a new workout, a late one, and an edit alike. Other
+    lifts still store.
+  - The damaged workout is in no list and `workout(id:)` throws, so History cannot show it, and the lifter cannot
+    delete it.
+  - What lifts the block:
+    - a `delete(id:)` of it, by id (it works, and the next bench workout then stores, with its records);
+    - a host's rebuild of it from a log that is still uncompacted. After compaction, nothing else does.
+  - Today this is foreign damage only. But F10 keeps the log uncompacted on a failed `materialize`, so the
+    lifter's new bench sessions pile up unsaved.
+  - Recommendation: keep the strict read for the bests (#27's point), and give F13 or F07 a recovery path:
+    either list unreadable workouts with a "delete" affordance, or have the replay skip a workout that fails its
+    strict read, with a logged warning and its records cleared.
+- **R-Q2 (new, for F17): `pr_count` is derived but lives on the synced `workout` row.** A replay updates the
+  `pr_count` and `updated_at` of every later workout whose count changed. A typo fixed in an old workout can stamp
+  hundreds of `workout` rows as changed, so M4 sync sends them all. Each device computes the same counts, so it
+  converges, but it is traffic for derived data. F17 should treat `pr_count` as local (not sync it), or not stamp
+  `updated_at` for a count-only change.
+
+## Attacked and held
+
+- **The invariant.** 3,000 random histories agree with the independent oracle after every write: records,
+  `pr_count` and `bests(before:)` (for stored and unstored places, ties of start by id included). They cover late
+  workouts landing first, moved starts, deloads (no records, but they raise the bests), #25's kinds, lifts swapped,
+  dropped and added, deletes, revivals, and `updateSets` of rows that are not stored (`missingRow`, nothing
+  changed).
+- **Ties.** An equal estimate or weight is no record, including an estimate equal after rounding to the gram while
+  the weight is one 10⁻⁷ g heavier (that is a weight record). Starts that tie list by id.
+- **Determinism.** One final history gives the same record rows (ids, values, `achieved_at`) and counts, whatever
+  writes, rebuilds, deletes and revivals led to it.
+- **Stamps.** An edit that changes no record leaves every record row's stamp, and every other workout's
+  `pr_count` and stamp.
+- **Legacy rows.** A record row of a lift the workout lacks (as older code could write) is dropped by the next
+  write, and the count follows.
+- **Extremes.** Weights at the end of `Int64` compare exactly in the walk and in `bests(before:)`.
+- **`achievedAt`** is the workout's start everywhere (the oracle's end-dated variant fails).
+
+## Verdict
+
+**G2 holds for correctness but cannot close as it stands, because of R-1.**
+- The invariant held against an oracle that shares no code with the replay, over 3,000 random histories.
+- 30 of 31 valid mutants are killed; the survivor is equivalent.
+- The audit found every edit forced and faithful. One assertion went vacuous and is re-expressed in my tests.
+- **R-1** is a performance finding, not a wrong answer: realistic multi-lift deletes and rebuilds take 2–4 times
+  the 50 ms budget on both simulators. The decision is the orchestrator's: a write budget of its own (then my
+  test is re-pointed at it), or a faster walk.
+- **R-Q1 and R-Q2** need a decision but block nothing in this PR.
+
+Once R-1 is decided and `worseShape_underBudget` passes against the chosen budget, G2 closes; a re-run of the
+nightly timing suites on both simulators is enough.
