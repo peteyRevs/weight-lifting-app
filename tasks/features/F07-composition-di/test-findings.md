@@ -1,0 +1,281 @@
+# Slice S1 — adversarial round 1
+
+Independent adversarial pass (G2) over `feat/F07-s1-keys-fakes` at `87812d2` (`git diff a8080ff..87812d2`: the
+dependency keys and `Unimplemented*` stubs, the `LedgerFakes` module, `withTestDependencies`, the `RepositoryError`
+move, `assertLedgerSnapshot`). I read the brief (criteria 3, 4, 5 and "Inputs from F05"), the implementation notes,
+ADR-008, product decisions #23–#30, the F05 contracts and the F05 findings, then the code. No product code was
+edited and nothing was committed. Mutants ran one at a time in a copy of `LedgerKit` in the scratchpad
+(`f07s1-g2/mut-src/`), never in the worktree.
+
+**Convention** (as in F05): a failing test documents a bug, minor bug or nit and stays failing until the fix; a
+spec question is pinned by a test that fails on the behaviour I propose, and says so in its name.
+
+## What I wrote
+
+The differential suites drive GRDB in-memory and `InMemoryStores` with the same seeded script and compare every
+outcome (same error or none) and every read after every step. They reuse F05's generators (`HistoryScript`,
+`ProgramEditor`, the event store model's envelopes) and read helpers (`HistoryModelAdversarialTests.reads/stats/
+bests`), so the fakes are held to what GRDB was held to. No wall-clock assertion anywhere; the observation tests
+synchronise on the streams only.
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `LedgerPersistenceTests/Adversarial/FakesHistoryDifferentialAdversarialTests` | 2 (property, 60 seeds each) | `HistoryScript` (materialise, spoiled workouts, `updateSets` across workouts, deletes and takeovers of deleted ids) on both: outcomes, a refused call leaves the fake unchanged, every read, every stats query under random zones/week starts/now, `bests(before:for:)`; then two programs with workouts materialised with slot updates (live, dropped, deleted, unknown, repeated slots), saves dropping and restoring a slot, deletes and activations: outcomes, `active()`, `recent` |
+| `…/FakesCatalogDifferentialAdversarialTests` | 2 (property, 60 seeds each) | `ProgramEditor` builder sessions on program 1 while program 2 takes slot, day and week ids program 1 holds or held, U+0000 in a name or tag (with and without a repeated slot), deletes, `setActive` of live, deleted and unknown ids; catalog seeds at random versions 0–4 with repeated ids, clashing names (case, diacritics, full width, `%`, `_`), U+0000, interleaved with custom and catalog saves: outcomes, `all()`, `exercise(id:)`, 36 searches |
+| `…/FakesStoreDifferentialAdversarialTests` | 2 (property, 60 seeds each) | settings with random fields saved in turn; event appends (duplicates, rivals, seqs across 2^63, every event kind with extreme fields) and compactions: results, logs, `highestSeq`, listings, `unreadableCount`, `newestWallClock` |
+| `…/FakesBoundaryAdversarialTests` | 5 (19 cases) | one call on fresh GRDB and fresh fakes: ⅛ lb weights, a 10⁹ kg set, ±∞ dates, unnormalised plates, NaN weights, a slot naming an unstored exercise, two faults in one workout; deleted programs/workouts and held set ids |
+| `…/FixturesDatabaseAdversarialTests` | 4 | the preview seed stored through GRDB as launch would (catalog seeded first), and the preview's fakes answering every read and stats query as that database does; the seed session materialised with slot updates; `history(weeks: 20/60)` ids distinct, deterministic, storing whole |
+| `LedgerDependenciesTests/Adversarial/FakeObservationAdversarialTests` | 13 | first value before the call returns, only changes emitted, a refused write emits nothing, 50 subscribers, 500 racing writers (the stream sees exactly 0…500 in order), racing materialisations keep records a function of history, a consumer writing back from inside the stream, cancelled and dropped streams, slot updates reaching `observeActive`, 100 racing appends; `withTestDependencies` in 19 parallel tasks, fresh UUIDs per run, the stats' date (F7-6) |
+| `LedgerSyncTests/Adversarial/FakeLinkBusAdversarialTests` | 11 | determinism with every knob on (5 endpoints, broadcast, loss, duplication, delay, partition and heal), no duplicate unless configured (50 seeds), duplication 1 → exactly two copies, arrival order and send order on ties, FIFO without delay, partitions symmetric and per pair, heal before arrival, 200 endpoints, empty bus, loss 1; negative `advance` and a foreign endpoint (F7-7) |
+
+## Results
+
+- **Host**, my suites: 39 tests; **32 pass, 7 fail**, all expected: the four boundary tests F7-1 to F7-4 (16 of 19
+  cases; the 3 "held" cases pass), F7-6, and the two F7-7 tests. Every random differential (8 × 60 seeds) passes:
+  inside what the contracts and F05's generators exercise, the fakes answer exactly as GRDB does.
+- **Host**, the implementer's suites beside mine (`InMemoryContract|Fixtures|DependencyKeys|PreviewValue|
+  UnimplementedStub|FakeTransport|SettingsRepository|EventStore`): all pass.
+- **Lint**: `scripts/check.sh --lint-only` exit 0 with my files (format, `swiftlint --strict`, package graph, script tests).
+- **Full gate**: not run, by the brief's rule (my documenting tests fail by design).
+- **Release** (criterion of ADR-008): see F7-5 and "Attacked and held".
+- **Full host run** (`swift test`, whole package, exit 1): every failure is either `LedgerDesignTests`' Archivo
+  font suites (52 issues, host-only, as on `main`) or one of my 7 documenting tests; all other tests
+  pass, with the implementer's 13 known issues (criterion 3) recorded as known.
+- **Mutants of the new code** (24, one at a time in a scratchpad copy; results `f07s1-g2/mutants/results.txt`):
+  every non-equivalent mutant is killed by the implementer's tests, mine, or both.
+  - Killed by both (15): tie order of `newestFirst` (M1), ids held by another workout accepted (M2), delete not
+    replaying records (M3), `updateSets` reaching a deleted workout (M4), a saved catalog row keeping its version
+    (M8), unchanged values emitted (M9), no first value (M10), drop sets counted in bests (M11), event append not
+    all-or-none (M16), week ids of other programs unchecked (M18), `recentlyLogged` counting undone sets (M21),
+    "Last" showing the lightest set (M22), misses merged instead of replaced (M23), `setActive` of a deleted
+    program (M24); and the delivery order of messages due together (M14).
+  - Killed by the implementer's only (3): partition not checked at delivery (M13), reads keeping `lastPerformance`
+    (M17), `withTestDependencies` leaving the calendar (M19). Covered; my scripts never set those inputs.
+  - Survived both, **equivalent** (6): misses written into a deleted program (M5) and a deleted program left
+    active (M6) — a deleted program is unreadable and a revival replaces it whole; seeding refreshing a row of the
+    same version (M7) — unreachable behind the applied-version guard; `bests(before:)` with `<=` (M12) — equal
+    place means equal id, already excluded; writes not done on a copy (M15) — every write body throws before it
+    mutates, so the copy is defensive today (it matters once F7-1 adds checks); duplication drawn with `<=` (M20) —
+    differs only when the generator returns exactly 0.0.
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | F7-1 |
+| minor bug | 2 | F7-2, F7-5 |
+| spec question | 2 | F7-3, F7-6 |
+| nit | 4 | F7-4, F7-7, F7-8, F7-9 |
+
+**Verdict:** G2 cannot close for S1 yet. Criteria 3, 4 and 5 hold: every contract runs on the fakes, the fakes match
+GRDB on every random script inside the contracts' ground, observation is race-free, and the keys fail by name. But
+F7-1 is a real gap in what the fakes are for: they accept every weight and date the database refuses at ADR-007's
+boundary, so F08–F15 tests cannot see that error path. F7-2 and F7-5 are small fixes. F7-3 and F7-6 are for the
+orchestrator; the nits can ride along.
+
+---
+
+## F7-1. bug — The fakes accept weights and dates the database refuses (ADR-007's storage boundary)
+
+The GRDB stores refuse, at the column codecs, any weight that is not a whole number of 10⁻⁷ g or lies beyond
+`Int64` (`inexactWeight`), and any non-finite date (`nonFiniteDate`): set weights, targets, steps, start loads,
+the derived e1RM and volume, `startedAt`, `endedAt`, `doneAt`. ADR-007 put that check at the storage boundary on
+purpose: the domain may compute a weight that cannot be stored exactly, and the store must say so rather than
+round. None of the fakes checks either. Every case below succeeds on the fake and throws on GRDB:
+
+| Call | GRDB |
+|---|---|
+| `materialize` with a set of ⅛ lb, a target load of ⅛ lb, or a 10⁹ kg set | `inexactWeight(…)` |
+| `materialize` with `startedAt`, `endedAt` or a set's `doneAt` at +∞ | `nonFiniteDate` |
+| `updateSets` with a ⅛ lb set | `inexactWeight(227079.68023125)` |
+| `ProgramRepository.save` with a slot start load of ⅛ lb | `inexactWeight(56.69904625)` |
+| `ExerciseRepository.save` / `seedIfNeeded` with a default load of ⅛ lb | `inexactWeight(56.69904625)` |
+
+**Reach.** The fakes are what F08–F15 are tested against (and what previews run on). A feature that hands the
+store an unrounded weight — a kg ⇄ lb conversion at three decimals, a percentage of a training max, a plate
+remainder — passes every store test and throws on the device, where the app's error path for a failed
+materialisation (the lifter's finished workout) has never run. This is exactly the bug class ADR-007 exists for,
+and the fake hides it.
+
+**Repro** (fails): `FakesBoundaryAdversarialTests.exactness_fakeAnswersAsGRDB` (10 cases), e.g.
+```swift
+var workout = S3Kit.workout(1, [RowSpec(bench, [set(100, 5)])])
+workout.exercises[0].sets[0].weight = .pounds(0.125)
+try await grdb.workouts.materialize(workout, slotUpdates: [])   // throws inexactWeight(227079.68023125)
+try await fakes.workouts.materialize(workout, slotUpdates: [])  // succeeds; recent() has it
+```
+
+**Fix.** Share the predicate rather than copy it, as `ExerciseSearch` is shared: move "a whole number of 10⁻⁷ g
+within `Int64`" (today `ColumnCodec.e7g`) and "a finite date" into `LedgerDomain` (e.g. `Weight.storageUnits()
+throws(RepositoryError)`), have `ColumnCodec` call it, and have each fake run it over every weight and date GRDB
+encodes (including the e1RM and volume it derives) before its own checks, in GRDB's order (see F7-4). Then add the
+cases above to the contracts (`WorkoutRepositoryContract`, `ProgramRepositoryContract`,
+`ExerciseRepositoryContract`), so both implementations are held to them by name.
+
+## F7-2. minor bug — Settings and envelopes are stored as given, not as their encoding stores them
+
+`GRDBSettingsRepository.save` stores `Settings` as JSON, and `load()` decodes it; `GRDBWorkoutEventStore.append`
+encodes each envelope. The fakes keep the Swift value. Where the encoding is not the identity, they differ:
+
+- `PlateInventory.plates` is a `public var`. Its `init` and decoder normalise (positive, no repeats, heaviest
+  first), assignment does not. Saved with `plates = [5, 45, 5, 0]` lb, GRDB loads `[45, 5]`; the fake loads
+  `[5, 45, 5, 0]`.
+- A NaN weight (`Weight(grams: .nan)`) in settings or in an envelope: GRDB throws `EncodingError.invalidValue`
+  ("A non-finite decimal has no exact text"); the fake stores it and returns it.
+
+**Reach.** F14's plate-inventory editor is the obvious writer of `plates`. Its tests would pass on the fake with an
+unsorted list the app never shows; plate math (rule 38) reading the inventory back would see a different list in
+tests and in the app. The NaN case is the event-store twin of F7-1: F10/F17 tests would never meet the
+`EncodingError` the device throws.
+
+**Repro** (fails): `FakesBoundaryAdversarialTests.encoding_fakeAnswersAsGRDB` (3 cases).
+
+**Fix.** `InMemorySettingsRepository.save` encodes with the same `JSONEncoder` settings (sorted keys) and stores the
+decoded value (so it throws `EncodingError` and normalises as GRDB does); `InMemoryWorkoutEventStore.append` encodes
+each envelope first. Both are a few lines. The random settings differential (`settings_fakeMatchesGRDB`) then also
+covers unnormalised inventories.
+
+## F7-3. spec question — A program whose slot names an exercise that is not stored saves on the fake
+
+GRDB refuses it with SQLite's foreign-key `DatabaseError` (F05 "Inputs": seed the catalog before any program is
+saved). `InMemoryProgramRepository` says in its doc comment that it does not check, "which only a database's
+foreign key can do". But `InMemoryStores` holds the exercises beside the programs, so the linked fake could check,
+and F07 S2's own launch order (seed, then programs) is exactly what such a check would test.
+
+**Reach.** F08 (onboarding writes the seed program) and F11 (builder, custom exercises) can save a program naming
+an exercise that was never saved — a custom exercise created in the same flow, saved in the wrong order — and pass
+every test.
+
+**Repro** (fails on the behaviour proposed): `FakesBoundaryAdversarialTests.foreignKeys_fakeAnswersAsGRDB`.
+
+**Question for the orchestrator.** (a) Have GRDB translate the foreign-key failure into a named case (e.g.
+`RepositoryError.missingRow("exercise <id>")`), add a contract clause, and let the linked `InMemoryStores` program
+repository refuse the same way (the standalone `InMemoryProgramRepository()` stays permissive for the contracts'
+`ProgramRepositoryContract.exercises`); or (b) accept and document it in the brief's "fakes differ from GRDB" list
+(which does not exist yet; F7-1/F7-2 would go there too if not fixed). I recommend (a): a raw `DatabaseError` is
+also what F05's error doc says callers must not need to understand.
+
+## F7-4. nit — With two faults in one workout, the fake throws a different error than GRDB
+
+`InMemoryHistory.store` says it throws "`duplicateIdentifier` as the GRDB repository orders it", and it checks all
+ids first, then U+0000. GRDB checks other workouts' ids, then writes the workout row (its U+0000 check), then the
+exercise rows (repeated exercise ids, then each exercise's U+0000), then the set rows (repeated set ids). So:
+
+| Workout | GRDB | fake |
+|---|---|---|
+| name with U+0000 and a repeated set id | `nulInText("workout.name")` | `duplicateIdentifier("logged_set …")` |
+| an exercise name with U+0000 and a repeated set id | `nulInText("workout_exercise.name")` | `duplicateIdentifier("logged_set …")` |
+
+Only the error differs (both store nothing). **Repro** (fails): `FakesBoundaryAdversarialTests.precedence_fakeAnswersAsGRDB`.
+**Fix:** order the fake's checks as GRDB writes (other workouts' ids; workout text; repeated exercise ids; each
+exercise's text; repeated set ids), or soften the doc comment. Fold into F7-1's fix, which adds checks to the same
+sequence.
+
+## F7-5. minor bug — The package no longer builds in Release: `LedgerTestSupport` names fakes outside `#if DEBUG`
+
+ADR-008: "Release builds link an empty module. Nothing outside `#if DEBUG` may name a fake." Every `LedgerFakes`
+file is wrapped, and `LedgerDependencies` imports and names fakes only under `#if DEBUG`. But
+`LedgerTestSupport/WithTestDependencies.swift` names `InMemoryStores` and `Fixtures` unconditionally, so in Release
+`LedgerTestSupport` (and `LedgerSnapshotTesting` and every test target after it) does not compile:
+
+```
+$ cd LedgerKit && swift build -c release --only-use-versions-from-resolved-file   # exit 1
+Sources/LedgerTestSupport/WithTestDependencies.swift:59:40: error: cannot find type 'InMemoryStores' in scope
+Sources/LedgerTestSupport/WithTestDependencies.swift:73:26: error: cannot find 'Fixtures' in scope  (+4 more)
+```
+On `main` (`a8080ff`, `git archive` into the scratchpad) the same command builds everything: exit 0.
+
+**Reach.** No lane builds the package in Release today, and the apps' Release builds do not compile
+`LedgerTestSupport` (see "Attacked and held"), so nothing ships broken. But `swift build -c release`, `swift test
+-c release` (e.g. timing the F05 performance budgets in an optimised build) and any Release test plan now fail to
+compile, and the ADR's rule is broken in the one module that re-exports the fakes.
+
+**Fix.** Wrap `WithTestDependencies.swift` (and `inMemoryStores(seed:)`) in `#if DEBUG`, as every fake is; check
+`swift build -c release` passes (about 40 s on this Mac for the whole package; a candidate for the nightly lane).
+
+## F7-6. spec question — `inMemoryStores(seed:)` freezes the stats' date when it is called
+
+The stats of `inMemoryStores` read `date` "as it stands when called" (documented). So
+```swift
+withTestDependencies { $0.inMemoryStores(); $0.date = .constant(later) } operation: { … }
+```
+gives a test whose `@Dependency(\.date)` is `later` while `statsQueries` decides "this week" from `Fixtures.now`.
+The order of two lines in `configure` silently changes which week the stats call current; the GRDB stores in S2
+will read the injected date at query time.
+
+**Repro** (fails on the behaviour proposed): `TestDependenciesAdversarialTests.statsDate_isTheDateWhenBound`
+("F7-6: the stats of inMemoryStores read the date the test set, even when set after binding them").
+
+**Proposal.** Read the date at query time: `InMemoryStores(seed: seed, now: { @Dependency(\.date) var date;
+return date.now })` (the task-local values of the operation), which is what S2's composition root will do for
+GRDB (`now:` closures over the dependency). Or keep it and make the doc comment a warning in the testing strategy.
+
+## F7-7. nit — `FakeLinkBus` accepts inputs that break its own guarantees
+
+- `advance(by:)` a negative interval moves the bus's time back, so an inbox's arrivals can decrease
+  (`[10 s, −10 s]`), breaking "in arrival order". **Repro** (fails):
+  `FakeLinkBusAdversarialTests.negativeAdvance_keepsArrivalsMonotonic`.
+- An endpoint of another bus (`Bus(endpoints: 8).endpoints[7]` used on a two-endpoint bus) gets an inbox, which no
+  broadcast reaches. **Repro** (fails): `FakeLinkBusAdversarialTests.foreignEndpoint_isNotAnInbox`.
+- A delay range wider than `Int64.max` nanoseconds (~292 years) traps in `duration(in:using:)`
+  (`Int64(Double.random(in: 0 ... 1) * span)`). No test: a trap would take the test process down.
+
+**Fix:** `precondition`/`reportIssue` on a negative interval, an unknown endpoint and an out-of-range delay (or
+clamp and drop). Tests of F17 are the only users; cheap to close now.
+
+## F7-8. nit — `InMemoryExerciseRepository(catalog:)` says the catalog was seeded at version 1
+
+Its `version` defaults to 1, while `ExerciseCatalog.version` is 3 and `InMemoryStores.Seed.catalogVersion`
+defaults to `ExerciseCatalog.version`. A test that builds the repository with `ExerciseCatalog.seed()` and then
+runs the launch's `seedIfNeeded(ExerciseCatalog.seed(), version: ExerciseCatalog.version)` goes through the upgrade
+path (refreshing every catalog row) instead of the no-op the app performs on a seeded database. **Fix:** default
+`version` to `ExerciseCatalog.version`. No test (no observable difference with today's catalog).
+
+## F7-9. nit — `assertLedgerSnapshot` can assert nothing and pass
+
+On a simulator it draws only its own platform's cells, and `themes: []` or `devices: [.watch(…)]` on iOS (or
+`[.phone]` on watchOS) leaves the loop with no cell to draw: the test passes with no reference recorded or
+compared. The Mac host drawing none is documented (F06 N3); on a simulator it is a silent false green. **Fix:**
+`reportIssue` when a simulator run draws zero cells. No test (the wrapper only draws on simulators; the lane runs
+there).
+
+## Attacked and held
+
+- **Fakes vs GRDB inside the contracts' ground** — 8 random differentials × 60 seeds: every outcome and read
+  agrees for history (records replayed per decision #27 incl. late inserts, edits and deletes; #25's set kinds;
+  #26's start dates; ranges, limits ≤ 0, ties by id; `bests(before:)` of stored and unstored workouts), slot
+  updates (dropped, deleted, unknown and repeated slots; misses replaced whole; revival), programs (ids held by
+  another program live or deleted, U+0000 precedence within programs, deletes, `setActive` of deleted/unknown,
+  one active), exercises (#23 search incl. full width, diacritics, `%`/`_`; #24 seeding incl. version 0, repeated
+  ids last-wins, saved catalog rows never refreshed, NUL rolling back the whole seed), settings, the event store.
+  A refused call never changes the fake (all-or-nothing writes).
+- **Observation** (`ObservedState`, `Mutex` + continuations yielded under the lock): the first value is there
+  before `observe…()` returns; only changes; a refused write emits nothing; 50 subscribers; 500 racing saves are
+  all kept and the stream sees exactly the states 0…500 in order (no lost or reordered emission); a consumer that
+  saves from inside the loop does not deadlock (yield only enqueues); cancelled and never-iterated streams end
+  without affecting others; slot updates emit on `observeActive` as GRDB's `slot_miss` tracking does; racing
+  materialisations leave records equal to the same history stored in turn; 100 racing event appends.
+- **Keys (criterion 3)**: the implementer's 13 known-issue cases name each key; the library's default `testValue`
+  reports and falls back to the preview value, so an unconfigured test fails loudly. `withTestDependencies` is
+  per-task: 19 parallel tests with their own `inMemoryStores` never see each other's writes; UUIDs restart at 0
+  every run; no `prepareDependencies` anywhere. `deviceID` live is the nil UUID and logs (documented deviation 6).
+- **Fixtures**: the preview seed stores whole in GRDB with the catalog seeded first (every slot names a catalog
+  exercise), and the preview's fakes answer every read and per-exercise stats query exactly as that database does;
+  the seed session materialises with slot updates; `history(weeks: 20/60)` keeps workout, exercise and set ids
+  distinct and is deterministic.
+- **`FakeLinkBus` (criterion 5)**: deterministic per seed with every knob on (and different across seeds); never a
+  duplicate without duplication (50 seeds × 4 endpoints × 200 broadcasts); duplication 1 gives exactly two copies;
+  arrival order with send order on ties; FIFO per pair without delay; partitions cut both directions and only
+  their pair; a partition healed before arrival delivers; 200 endpoints broadcast 39,800 messages correctly.
+  Criterion 5's "≥ 70" is per seed: I agree with the implementer's open question 2.
+- **`RepositoryError` move**: all nine cases identical to the old `LedgerPersistenceError`; `LedgerDomain` imports
+  Foundation only; no case carries a GRDB/SQLite type; the typealias keeps every call site.
+- **Package graph**: features reach `LedgerDomain`, `LedgerDesign`, `LedgerDependencies`, `LedgerFakes` and
+  swift-dependencies only; `LedgerDependencies → LedgerFakes → LedgerDomain`; no feature reaches
+  `LedgerTestSupport`, `LedgerPersistence`, `LedgerHealth` or `LedgerSync`, directly or transitively; no feature
+  source imports them.
+- **Release (ADR-008), apps**: `xcodebuild -configuration Release build` of `Ledger` (generic iOS Simulator) and
+  `LedgerWatch` (generic watchOS Simulator), through `sim-lock.py`, fresh derived data: both exit 0, no compiler
+  warning. Neither binary has a `LedgerFakes`, `InMemoryStores`, `Fixtures`, `PreviewStores` or `FakeLinkBus`
+  symbol. On the host, `swift build -c release` compiles `LedgerFakes` to an object with no global symbols and
+  `LedgerDependencies` with no fake symbol; only `LedgerTestSupport` fails (F7-5). (Seen in passing, not part of
+  S1: the Release app binaries carry `__profc`/`__profd` coverage counters, presumably from the test plans'
+  coverage setting; worth a look before the first archive.)
