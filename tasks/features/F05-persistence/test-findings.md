@@ -1878,3 +1878,52 @@ word and I will.
 
 Once R-2's two tests pass, a re-run of `RecordFixCloseoutAdversarialTests` and the full gate is enough to close
 G2.
+
+## R-2 verification
+
+The orchestrator decided R-2 (skip per (workout, lift)) and applied my proposed fix, uncommitted, on top of
+`f10382b`. HEAD and the branch never moved (`feat/F05-records` at the start and the end).
+
+- **The fix is the one I verified.** `diff -r` of `LedgerKit/Sources` against my scratchpad copy: identical.
+- **R-2: closed.** `RecordFixCloseoutAdversarialTests.damagedOtherLift_doesNotChangeTheRecords` and
+  `bestsOfALift_doNotDependOnTheOthersAsked` pass, unedited.
+- **The implementer's changed assertion** (`RecordReplayTests.damagedWorkout_isLeftOutOfTheReplay`): faithful to
+  the decision. Its comment and title now say a lift is left out, and the readable squat of the damaged workout
+  is judged again.
+  - Nit: it checks only that the squat rows changed (`squatAfter != squatBefore`, `id || updated_at`). A rewrite
+    to a wrong value would pass it too. `previous(in: damaged)` for squat, against the 80 lb best, would pin the
+    value.
+  - My R-2 tests pin the outcome in the meantime.
+- **The properties still hold, at 3,000 seeds each** (nightly lane, host):
+  - the damage-injection oracle property;
+  - the round-1 oracle property;
+  - `detect` against the oracle;
+  - the S3 model test and its "bites" test.
+- **Sanctioned edit to my test.** `RecordReplayWorstCaseAdversarialTests`' `fiveLiftsRebuild` now puts its typo
+  in one lift. The rebuild still walks all five lifts over 400 workouts, and that lift's 798 records flip (3,990
+  before). The delete and late-workout shapes keep their five-lift walk unchanged. The doc comment records the
+  change.
+- **Timing**: `Nightly` and `Nightly-Watch` under the lock, on a quiet Mac (load average about 5): **exit 0 on
+  both**. p95 (median in parentheses):
+
+| Timed | Budget | iPhone 17 sim | Watch S12 sim |
+|---|--:|--:|--:|
+| Five lifts, the first rebuilt, one lift's typo (798 flips) | 250 | 137.6 ms (128.3) | 138.2 ms (129.7) |
+| Five lifts, a late workout lands first and is deleted | 250 | 105.5 ms | 107.2 ms |
+| Five lifts, the first workout deleted from History | 250 | 65.3 ms | 65.7 ms |
+| One lift, a 12-rep typo, both records of 399 workouts | 250 | 58.4 ms | 60.6 ms |
+| Implementer's: one lift, the typo fixed in the first workout | 250 | 46.6 ms | 47.0 ms |
+| A new workout recorded at the end | 50 | 20.2 ms | 19.2 ms |
+| `bests(before:for:)` before a new workout | 50 | 9.4 ms | 9.5 ms |
+
+  The narrowest margin is now 45 % (137.6 ms of 250), so these should survive the 1.5× to 2× slowdown a loaded
+  Mac caused in round 1.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`, 395 s; scratchpad `f05s3-g2/rec/check-r2.log`):
+  **exit 0**.
+  - Format, lint, the package graph and pins, and the script tests (PC12 included) pass.
+  - 17/17 PR targets on iOS and 8/8 PR-Watch targets on watchOS pass.
+  - Coverage: LedgerPersistence 99.39 % (threshold 90).
+- Host, `LedgerDomainTests` and `LedgerPersistenceTests`: 765 and 375 pass, exit 0.
+
+**Verdict: G2 closes for the records follow-up.** R-1, R-2, R-Q1, R-Q2 and R-SF1 are closed. The nits (R-N4,
+R-N5, and the weak assertion above) block nothing.

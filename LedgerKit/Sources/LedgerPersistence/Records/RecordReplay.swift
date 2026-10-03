@@ -112,7 +112,7 @@ extension RecordReplay {
         if let start = scope.start, !scope.exercises.isEmpty {
             let walk = try replay(scope.exercises, from: start, in: database)
             let stored = try storedRecords(of: scope.exercises, from: start, in: database)
-                .filter { !walk.skipped.contains($0[1] as DatabaseValue) }
+                .filter { !walk.skipped.contains([$0[1] as DatabaseValue, $0[2] as DatabaseValue]) }
             let storedByID = Dictionary(
                 stored.map { ($0[0] as DatabaseValue, $0) },
                 uniquingKeysWith: { old, _ in old }

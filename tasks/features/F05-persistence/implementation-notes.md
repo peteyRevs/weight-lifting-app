@@ -1985,3 +1985,20 @@ target, under the ~700 stop line and the ~1,000 split line.
 - Warnings: none new. The only one is S1's `PayloadVersionAdversarialTests.swift:29` "will never be executed".
 - **Coverage:** LedgerPersistence **99.69 %** (2290/2297), LedgerDomain 99.08 % (1946/1964), LedgerDesign
   97.20 %, overall 98.70 %.
+
+### Records fix round 2 (orchestrator, 2026-10-03): R-2
+
+The close-out round closed R-1, R-SF1 and R-SF2/R-Q2, and found **R-2** (minor, damage only): the walk skipped a
+whole workout when any row it read failed, but it reads only the lifts a write covers, so a workout with a damaged
+bench counted for squat in a squat-only write and not in one that also covered bench. Records then depended on
+which write came last. **Decision: skip per (workout, lift).** A lift whose rows cannot be read is left out; a
+workout whose own columns cannot be read leaves out every lift; `skipped` is keyed by `[workout.id,
+exercise_id]`, and the diff keeps a skipped lift's stored rows. The fix is the tester's (verified in its scratch
+copy), applied by the orchestrator to `RecordReplay+Walk.swift` and `RecordReplay.swift`. The tester's
+`RecordFixCloseoutAdversarialTests.damagedOtherLift_doesNotChangeTheRecords` and
+`bestsOfALift_doNotDependOnTheOthersAsked` pass unedited; host persistence suite 375/375.
+
+One implementer test changed with the decision: `RecordReplayTests.damagedWorkout_isLeftOutOfTheReplay` pinned
+"the whole workout is left out, its squat records too". It now asserts that the readable squat of the damaged
+workout is judged again (its two record rows change after the first workout's squat is lightened); everything
+else it checks is unchanged, and its title says "a lift".

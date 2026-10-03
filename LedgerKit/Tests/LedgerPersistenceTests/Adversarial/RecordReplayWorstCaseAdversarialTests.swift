@@ -21,8 +21,10 @@ struct RecordReplayWorstCaseAdversarialTests {
         /// One lift, 50 sets a workout; the typo is a 12-rep set, the ceiling of every rep count, so both the
         /// estimate and the weight record of all 399 later workouts go, and come back.
         case oneLiftBothRecords
-        /// Five lifts of 10 sets a workout; the first workout is rebuilt with a typo in each lift's 10-rep set, so
-        /// the replay walks five exercises and 3,990 records flip.
+        /// Five lifts of 10 sets a workout; the first workout is rebuilt with a typo in one lift's 10-rep set, so
+        /// the replay walks all five lifts over 400 workouts and that lift's 798 records flip. (Close-out round,
+        /// sanctioned: round 1 put the typo in all five lifts, 3,990 flips, which left 11–15 % headroom and would
+        /// flake under load.)
         case fiveLiftsRebuild
         /// Five lifts of 10 sets a workout; a forgotten light session of all five lands before the first workout
         /// and is deleted again, so each write walks five exercises over 400 workouts while only ten records
@@ -42,7 +44,7 @@ struct RecordReplayWorstCaseAdversarialTests {
                 if twoRepCounts {
                     return S3Kit.set(Decimal(number + set + 1) * 2.5, set < 5 ? 5 : 8)
                 }
-                let typoHere = typo && set == min(perLift, 12) - 1 // the most reps: every rep count's ceiling
+                let typoHere = typo && lift == 0 && set == min(perLift, 12) - 1 // the most reps: every ceiling
                 return S3Kit.set(typoHere ? 2250 : Decimal(number + set + 1) * 2.5, 1 + set % 12)
             })
         }

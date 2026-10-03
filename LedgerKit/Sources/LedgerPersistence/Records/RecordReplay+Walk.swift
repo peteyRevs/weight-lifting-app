@@ -13,8 +13,9 @@ import os
 struct Walk {
     private(set) var bests: [ExerciseID: PersonalRecords.Tally<Int64>]
     private(set) var records: [PersonalRecordRecord] = []
-    /// The `workout.id` values, as stored, of the workouts left out.
-    private(set) var skipped: Set<DatabaseValue> = []
+    /// The `[workout.id, exercise_id]` values, as stored, of the lifts of workouts left out: a lift whose rows
+    /// cannot be read, or every lift of a workout whose own columns cannot be.
+    private(set) var skipped: Set<[DatabaseValue]> = []
     private let judges: Bool
     /// A workout the walk never reads: the one whose bests before it are gathered.
     private let excluded: DatabaseValue?
@@ -26,13 +27,13 @@ struct Walk {
         let key: DatabaseValue
         let row: Row
         var lifts: [Lift] = []
-        var failure: LedgerPersistenceError?
     }
 
     private struct Lift {
         let key: DatabaseValue
-        let exercise: ExerciseID
+        let exercise: ExerciseID?
         var tally = PersonalRecords.Tally<Int64>()
+        var failure: LedgerPersistenceError?
     }
 
     init(bests: [ExerciseID: PersonalRecords.Tally<Int64>], judges: Bool, excluding excluded: DatabaseValue?) {
@@ -68,21 +69,22 @@ struct Walk {
             close()
             open = Open(key: key, row: row.copy())
         }
-        guard open?.failure == nil else {
+        let exerciseKey: DatabaseValue = row[0]
+        if open?.lifts.last?.key != exerciseKey {
+            let exercise: ExerciseID? = try? ColumnReader(row: row, table: "workout_exercise").identifier("exercise_id")
+            var lift = Lift(key: exerciseKey, exercise: exercise)
+            if exercise == nil {
+                lift.failure = .malformedColumn("workout_exercise.exercise_id")
+            }
+            open?.lifts.append(lift)
+        }
+        guard let last = open?.lifts.indices.last, open?.lifts[last].failure == nil else {
             return
         }
         do throws(LedgerPersistenceError) {
-            let exerciseKey: DatabaseValue = row[0]
-            if open?.lifts.last?.key != exerciseKey {
-                let exercise: ExerciseID = try ColumnReader(row: row, table: "workout_exercise")
-                    .identifier("exercise_id")
-                open?.lifts.append(Lift(key: exerciseKey, exercise: exercise))
-            }
-            if let last = open?.lifts.indices.last {
-                try open?.lifts[last].tally.add(row)
-            }
+            try open?.lifts[last].tally.add(row)
         } catch {
-            open?.failure = error
+            open?.lifts[last].failure = error
         }
     }
 
@@ -93,27 +95,36 @@ struct Walk {
         }
         open = nil
         let read = ColumnReader(row: workout.row, table: "workout")
+        let isDeload: Bool
+        let workoutID: WorkoutID
+        let startedAt: Double
         do throws(LedgerPersistenceError) {
-            if let failure = workout.failure {
-                throw failure
-            }
-            let isDeload = try read.flag("is_deload")
-            let workoutID: WorkoutID = try read.identifier("workout_id")
-            let startedAt = try ColumnCodec.seconds(read.date("started_at"))
-            for lift in workout.lifts {
-                if judges, !isDeload {
-                    let found = PersonalRecords.found(lift.tally, over: bests[lift.exercise] ?? .init())
-                    records += found.map { PersonalRecordRecord($0, of: lift.exercise, in: workoutID, at: startedAt) }
-                }
-                bests[lift.exercise, default: .init()].add(lift.tally)
-            }
+            isDeload = try read.flag("is_deload")
+            workoutID = try read.identifier("workout_id")
+            startedAt = try ColumnCodec.seconds(read.date("started_at"))
         } catch {
-            skipped.insert(workout.key)
-            let id = String.fromDatabaseValue(workout.key) ?? "?"
-            Logger.persistence.error(
-                "Records replay left out workout \(id, privacy: .public), which is unreadable: \(error)"
-            )
+            for lift in workout.lifts {
+                skip(workout.key, lift.key, error)
+            }
+            return
         }
+        for lift in workout.lifts {
+            guard let exercise = lift.exercise, lift.failure == nil else {
+                skip(workout.key, lift.key, lift.failure ?? .malformedColumn("workout_exercise.exercise_id"))
+                continue
+            }
+            if judges, !isDeload {
+                let found = PersonalRecords.found(lift.tally, over: bests[exercise] ?? .init())
+                records += found.map { PersonalRecordRecord($0, of: exercise, in: workoutID, at: startedAt) }
+            }
+            bests[exercise, default: .init()].add(lift.tally)
+        }
+    }
+
+    private mutating func skip(_ workout: DatabaseValue, _ lift: DatabaseValue, _ error: LedgerPersistenceError) {
+        skipped.insert([workout, lift])
+        let id = String.fromDatabaseValue(workout) ?? "?"
+        Logger.persistence.error("Records replay left out a lift of workout \(id, privacy: .public): \(error)")
     }
 }
 

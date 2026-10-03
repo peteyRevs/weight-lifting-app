@@ -242,7 +242,7 @@ extension RecordReplayTests {
     /// Orchestrator decision on R-Q1: the replay leaves out a workout it cannot read, as the lists do, and logs
     /// it. The lifter's writes go through, judged against the readable history; the damaged workout's own record
     /// rows stay as they are until a write repairs it.
-    @Test("A workout the replay cannot read is left out: writes go through, judged against the readable history")
+    @Test("A lift the replay cannot read is left out: writes go through, judged against the readable history")
     func damagedWorkout_isLeftOutOfTheReplay() async throws {
         let repositories = try Repositories()
         let first = Self.session(0, day: -6, [Self.lift(Self.bench, 200), Self.lift(Self.squat, 100)])
@@ -274,8 +274,8 @@ extension RecordReplayTests {
         )
         #expect(try await Self.previous(in: next, repositories) == Self.over(200))
         #expect(try await Self.previous(in: damaged, repositories) == Self.over(190))
-        // A rebuild of both lifts walks past the damaged bench row to the same workout's squat: the whole workout is
-        // left out, its squat records too, kept as they are.
+        // A rebuild of both lifts walks past the damaged bench row to the same workout's squat. Only the damaged lift
+        // is left out (review R-2): the readable squat is judged again, over the lighter 80, so its records change.
         let squatRows = "SELECT id || updated_at FROM personal_record WHERE workout_id = ? AND exercise_id = ?"
         let squatKey: StatementArguments = [ColumnCodec.text(damaged.id), ColumnCodec.text(Self.squat.id)]
         let squatBefore = try await repositories.texts(squatRows, squatKey)
@@ -283,7 +283,12 @@ extension RecordReplayTests {
         var lighterSquat = first
         lighterSquat.exercises[1].sets[0].weight = .pounds(80)
         try await repositories.history.materialize(lighterSquat)
+        let squatAfter = try await repositories.texts(squatRows, squatKey)
         #expect(squatBefore.count == 2)
-        #expect(try await repositories.texts(squatRows, squatKey) == squatBefore)
+        #expect(squatAfter != squatBefore)
+        // Both records stand, each now over the lightened 80 lb squat.
+        let squatPrevious = try await repositories.stats.personalRecords(exerciseID: Self.squat.id)
+            .filter { $0.workoutID == damaged.id }.map(\.previous)
+        #expect(squatPrevious == Self.over(80))
     }
 }
