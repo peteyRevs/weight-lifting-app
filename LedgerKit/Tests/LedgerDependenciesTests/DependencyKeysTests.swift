@@ -89,8 +89,9 @@ struct DependencyKeysTests {
     @Test("inMemoryStores binds the six stores to one state: a materialised workout reaches the stats")
     func inMemoryStores_linksEveryStore() async throws {
         let workout = try #require(Fixtures.history(weeks: 1).last)
+        let catalog = try ExerciseCatalog.seed()
         try await withTestDependencies {
-            try $0.inMemoryStores(seed: InMemoryStores.Seed(programs: [Fixtures.seedProgram()]))
+            try $0.inMemoryStores(seed: InMemoryStores.Seed(catalog: catalog, programs: [Fixtures.seedProgram()]))
         } operation: {
             @Dependency(\.workoutRepository) var workouts
             @Dependency(\.statsQueries) var stats
@@ -105,9 +106,36 @@ struct DependencyKeysTests {
             #expect(try await stats.sessionCount(exerciseID: Fixtures.CatalogID.benchPress) == 1)
             #expect(try await stats.sessionsCompleted(in: .distantPast ..< .distantFuture) == 1)
             #expect(try await programs.active()?.days.first?.slots.first?.misses == [4])
-            #expect(try await exercises.all().isEmpty)
+            #expect(try await exercises.all().count == catalog.count)
             #expect(try await settings.load() == .default)
             #expect(try await events.uncompactedWorkoutIDs().isEmpty)
         }
+    }
+
+    @Test("Stores kept after the operation answer with the date configure ended with, set after binding too (F7-11)")
+    func keptStores_answerWithTheConfiguredDate() async throws {
+        let workout = try #require(Fixtures.history(weeks: 1).last)
+        let later = Fixtures.now.addingTimeInterval(14 * 86400)
+        var bound: InMemoryStores?
+        try await withTestDependencies {
+            bound = $0.inMemoryStores()
+            $0.date = .constant(later)
+        } operation: {
+            @Dependency(\.workoutRepository) var workouts
+            try await workouts.materialize(workout, slotUpdates: [])
+        }
+        let stores = try #require(bound)
+        let calendar = try WeekCalendar(
+            startDate: Fixtures.seedProgram().startDate,
+            weekStart: .monday,
+            calendar: Fixtures.calendar
+        )
+        // From `later`, the workout is two weeks back, outside the last week.
+        let byWeek = try await stores.stats.e1RMByWeek(
+            exerciseID: Fixtures.CatalogID.benchPress,
+            lastWeeks: 1,
+            calendar: calendar
+        )
+        #expect(byWeek.isEmpty)
     }
 }

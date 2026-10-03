@@ -66,6 +66,11 @@ A second problem surfaced while building the fakes. The contracts check the erro
    faults, so two faults throw the same error on both. The contracts' `storageClauses` hold both
    implementations to this; F05's in-memory oracles, which model history and not columns, run only `clauses`.
 
+**Amendment (2026-10-03, F07 S1 fix round 2; flagged to Pete at merge):** `LedgerFakes` also depends on
+swift-issue-reporting's `IssueReporting`, which is Foundation-only and already linked through Dependencies, so
+that `InMemoryStores` can fail the test that seeds a state no database could hold: a program naming exercises the
+seed's catalog lacks (finding F7-10).
+
 ## Alternatives rejected
 
 - **Keep `LedgerTestSupport` in the spine.** Leaves the transitive link to the whole stack that the module rule

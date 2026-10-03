@@ -16,6 +16,7 @@ let coreSettings: [SwiftSetting] = [.defaultIsolation(nil)]
 let dependenciesProduct: Target.Dependency = .product(name: "Dependencies", package: "swift-dependencies")
 let grdbProduct: Target.Dependency = .product(name: "GRDB", package: "GRDB.swift")
 let snapshotProduct: Target.Dependency = .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
+let issueReportingProduct: Target.Dependency = .product(name: "IssueReporting", package: "swift-issue-reporting")
 
 /// Every feature module depends on the same spine (F00 target table; ADR-008 swapped LedgerTestSupport for
 /// LedgerFakes, so a feature's previews reach fixtures without linking Persistence, Health or Sync).
@@ -84,6 +85,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", .upToNextMinor(from: "7.11.1")),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMinor(from: "1.17.0")),
+        // IssueReporting (already resolved through swift-dependencies) lets LedgerFakes fail the test that seeds a
+        // state no database could hold (ADR-008, F07 S1 fix round 2).
+        .package(url: "https://github.com/pointfreeco/swift-issue-reporting", .upToNextMinor(from: "2.1.1")),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", .upToNextMinor(from: "1.19.5"))
     ],
     targets: [
@@ -134,7 +138,11 @@ let package = Package(
         // ---- previews' and tests' fakes (ADR-008) ----------------------------
         // In-memory stores, fixtures and device fakes over LedgerDomain alone, every source inside `#if DEBUG`:
         // linked by the apps through LedgerDependencies' `previewValue`s, empty in a Release build.
-        .target(name: "LedgerFakes", dependencies: ["LedgerDomain"], swiftSettings: coreSettings),
+        .target(
+            name: "LedgerFakes",
+            dependencies: ["LedgerDomain", issueReportingProduct],
+            swiftSettings: coreSettings
+        ),
 
         // ---- test-only helpers (never linked by an app target) ---------------
         .target(

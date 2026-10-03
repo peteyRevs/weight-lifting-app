@@ -95,18 +95,31 @@ extension InMemoryContractTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
-    @Test("Without an exercise store, a program store checks no slot's exercise; seeded programs are never checked")
+    @Test("Without an exercise store, a program store checks no slot's exercise")
     func unlinkedPrograms_checkNoExercise() async throws {
         let program = try ProgramRepositoryContract.program()
         let unlinked = InMemoryProgramRepository()
         try await unlinked.save(program)
-        let seeded = InMemoryStores(seed: InMemoryStores.Seed(programs: [program]))
         #expect(try await unlinked.active() == program)
-        #expect(try await seeded.programs.active() == program)
-        await #expect(throws: RepositoryError.unknownExercise(
-            "exercise \(program.days[0].slots[0].exerciseID.rawValue.uuidString)"
-        )) {
-            try await seeded.programs.save(program)
+    }
+
+    @Test("A seed is stored as given; one whose programs name exercises its catalog lacks reports them (F7-10)")
+    func seeds_holdOnlyWhatADatabaseCould() async throws {
+        let program = try ProgramRepositoryContract.program()
+        let legal = InMemoryStores(seed: InMemoryStores.Seed(
+            catalog: ProgramRepositoryContract.exercises,
+            programs: [program]
+        ))
+        #expect(try await legal.programs.active() == program)
+        try await legal.programs.save(program)
+        let missing = ProgramRepositoryContract.exercises[5].id
+        withKnownIssue {
+            _ = InMemoryStores(seed: InMemoryStores.Seed(
+                catalog: Array(ProgramRepositoryContract.exercises.prefix(5)),
+                programs: [program]
+            ))
+        } matching: { issue in
+            issue.description.contains(missing.rawValue.uuidString)
         }
     }
 }

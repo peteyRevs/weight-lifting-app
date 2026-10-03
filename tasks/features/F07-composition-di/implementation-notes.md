@@ -330,3 +330,76 @@ watchOS tests 174 s, coverage 1 s, total 505 s. **No new warnings.** Two warning
 3. Whether a workout naming an exercise that is not stored should also be refused: it is not, on either side
    (`workout_exercise.exercise_id` has no foreign key, so history keeps workouts of deleted or unknown
    exercises). No change recommended.
+
+### S1 fix round 2 (G1 implementer, 2026-10-03)
+
+From `test-findings.md` "# Slice S1 — close-out round" (F7-10, F7-11), with the orchestrator's decisions and
+rulings.
+
+**F7-10: a seed a database could not hold.**
+- **Change.** `InMemoryStores.Seed.missingExercises` (`LedgerFakes/InMemoryStores.swift:42`) lists the exercises the
+  seed's programs name that its catalog lacks. When there are any, `InMemoryStores.init` (`:71`) calls
+  `reportIssue` naming their ids, which fails the test that made the seed, then stores the seed as given.
+- **Dependency.** That needs `LedgerFakes → IssueReporting` (ruling A). It's in `Package.swift` (the
+  `swift-issue-reporting` package was already resolved through swift-dependencies, so both `Package.resolved` files
+  are unchanged and `check-package-pins.sh` agrees). The graph is re-recorded, ADR-008 has a dated amendment, and
+  the architecture §3 and standards §2 lines are updated.
+- **Seeds.** `Seed.preview()` already held the catalog. Every other seed in the package now holds its programs'
+  exercises.
+- **Proving tests.** `InMemoryContractTests.seeds_holdOnlyWhatADatabaseCould` (a legal seed saves back; an
+  illegal one reports the missing id) and the tester's `seededProgram_savesBackUnchanged` (edited as sanctioned,
+  below).
+
+**F7-11: the stats' date after the operation.**
+- **Change.** `withTestDependencies` (`LedgerTestSupport/WithTestDependencies.swift:21`, `:44`) sets a task-local
+  `TestScope` around both `configure` and the operation. `inMemoryStores(seed:)` (`:72`) gives the stores a
+  `StatsClock` and registers it with the scope. When `configure` returns, the scope binds every clock to the
+  `date` it ended with.
+- **The two date sources.** Inside the operation (`TestScope.current` is set), the stats read the `date`
+  dependency on each query, so a `date` set after `.inMemoryStores` in `configure`, or by a nested
+  `withDependencies`, is honoured (F7-6). After the operation (no scope), they read the date `configure` ended
+  with, so a store the test kept needs no dependency and records no issue (F7-11). Bound outside
+  `withTestDependencies`, the clock keeps the `date` as it stood at binding.
+- **Proving tests.** The tester's `statsAfterTheOperation_needNoDependency`, `statsDate_isTheDateWhenBound` and
+  `statsDate_followsTheOperationsDate`, all unedited. Also `DependencyKeysTests.keptStores_answerWithTheConfiguredDate`:
+  the date set after binding, read after the operation.
+
+**Sanctioned edits** (approved before they were made):
+1. `FakeObservationAdversarialTests.slotUpdates_emitTheActiveProgram`: its seed gains `ExerciseCatalog.seed()`
+   (setup only).
+2. `StoresCloseoutAdversarialTests.seededProgram_savesBackUnchanged`: the catalog-less seed is kept, wrapped in
+   `withKnownIssue` matching the missing id (bench press's). A second, legal seed (the catalog with the program)
+   asserts its original claim: active, then saved back unchanged.
+3. My own tests, so their seeds are legal:
+   - `DependencyKeysTests.inMemoryStores_linksEveryStore`: the seed holds the catalog, and its exercise
+     assertion is now the catalog's count instead of empty.
+   - `FakeStoreTests.refusedMaterialisation_writesNoMisses`: the seed holds the catalog.
+   - `InMemoryContractTests.unlinkedPrograms_checkNoExercise`: split. The unlinked half stays; the seeded half
+     became `seeds_holdOnlyWhatADatabaseCould`.
+
+**Mutants** (one at a time, scratchpad copy `f07s1/mut2/`, results `mut2/mutants.txt`). All killed:
+
+| Mutant | Killed by |
+|---|---|
+| P1 an illegal seed is not reported | `seeds_holdOnlyWhatADatabaseCould`; tester's `seededProgram_savesBackUnchanged` |
+| P2 `missingExercises` always empty | the same two |
+| P3 the stats ignore the dependency inside the operation | tester's `statsDate_followsTheOperationsDate` |
+| P4 the stats always read the dependency | `keptStores_answerWithTheConfiguredDate`; tester's `statsAfterTheOperation_needNoDependency` |
+| P5 the configured date never bound | `keptStores_answerWithTheConfiguredDate` |
+
+**Release build:** `swift build -c release` exits 0.
+
+**Full gate** (`scripts/check.sh` under the lock): **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch). Summary: tools 1 s, format 0 s, lint 62 s, iOS build 40 s, iOS tests 203 s, watchOS build 31 s,
+watchOS tests 183 s, coverage 2 s, total 522 s.
+- **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29` "will never be executed". The tester removed
+  the unnecessary `try` in the close-out.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 194 / 203 | 95.56 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerPersistence | 2257 / 2271 | 99.38 % | 90 % | ✓ |
+| Overall | 7733 / 7845 | 98.57 % | 80 % | ✓ |

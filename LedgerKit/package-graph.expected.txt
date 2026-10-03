@@ -22,7 +22,7 @@ library LedgerDesign: -
 test LedgerDesignTests: LedgerDesign, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerDomain: -
 test LedgerDomainTests: LedgerDomain, LedgerSnapshotTesting, LedgerTestSupport
-library LedgerFakes: LedgerDomain
+library LedgerFakes: IssueReporting, LedgerDomain
 library LedgerHealth: LedgerDomain
 test LedgerHealthTests: LedgerHealth, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerPersistence: GRDB, LedgerDomain

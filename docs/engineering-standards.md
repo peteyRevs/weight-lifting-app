@@ -46,7 +46,7 @@ LedgerDomain        pure Swift; Foundation only. Models, WorkoutEngine, rules, p
    │
    └── App targets         Ledger (iOS), LedgerWatch (watchOS), widgets.
                            The ONLY place concrete implementations are wired together.
-LedgerFakes         in-memory stores, fixtures, device fakes; LedgerDomain only, #if DEBUG.
+LedgerFakes         in-memory stores, fixtures, device fakes; LedgerDomain (+ IssueReporting), #if DEBUG.
                     Linked by the features (previews) and LedgerDependencies (previewValue) (ADR-008).
 LedgerTestSupport   contracts, builders, withTestDependencies; re-exports LedgerFakes. Test-only.
 ```

@@ -187,7 +187,9 @@ extension FakeObservationAdversarialTests {
 
     @Test("A materialised workout's slot updates reach observeActive, as the database's observation of slot_miss does")
     func slotUpdates_emitTheActiveProgram() async throws {
-        let stores = try InMemoryStores(seed: InMemoryStores.Seed(programs: [Fixtures.seedProgram()]))
+        let stores = try InMemoryStores( // S1 fix round 2 (sanctioned): the seed holds the program's exercises
+            seed: InMemoryStores.Seed(catalog: ExerciseCatalog.seed(), programs: [Fixtures.seedProgram()])
+        )
         let stream = stores.programs.observeActive()
         let workout = try #require(Fixtures.history(weeks: 1).last)
         var slot = try #require(try await stores.programs.active()?.days[0].slots[0])

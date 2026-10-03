@@ -12,10 +12,18 @@ struct StoresCloseoutAdversarialTests {
     @Test("F7-10: a program seeded without the catalog can be saved back unchanged, as no database could refuse it")
     func seededProgram_savesBackUnchanged() async throws {
         let program = try Fixtures.seedProgram()
-        let stores = InMemoryStores(seed: InMemoryStores.Seed(programs: [program]))
+        // S1 fix round 2 (sanctioned): a seed whose programs name exercises its catalog lacks is a state no
+        // database can hold, so building it now reports an issue naming them; the legal seed saves back unchanged.
+        let missing = Fixtures.CatalogID.benchPress.rawValue.uuidString
+        withKnownIssue {
+            _ = InMemoryStores(seed: InMemoryStores.Seed(programs: [program]))
+        } matching: { issue in
+            issue.description.contains(missing)
+        }
+        let stores = try InMemoryStores(seed: InMemoryStores.Seed(catalog: ExerciseCatalog.seed(), programs: [program]))
         #expect(try await stores.programs.active() == program)
         // A database holding this program holds its exercises (the slots' foreign key), so saving it back
-        // unchanged succeeds there. The fake holds a state no database can, then refuses its own program.
+        // unchanged succeeds there.
         await #expect(throws: Never.self) { try await stores.programs.save(program) }
     }
 

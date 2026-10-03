@@ -1,12 +1,15 @@
 #if DEBUG
     import Foundation
+    import IssueReporting
     import LedgerDomain
 
     /// The six in-memory stores, linked where one database links them: the stats read the workouts' history; a
     /// materialised workout's slot updates reach the programs in the same step; and a program saved with a slot
     /// naming an exercise the exercise store does not hold is refused (`unknownExercise`), as the slot's foreign
     /// key refuses it. Settings and the event store stand alone, as their tables do. Built from a `Seed`, which is
-    /// stored state: kept as given, without the exercise check (like a database restored as it was).
+    /// stored state: kept as given, without a save's checks (like a database restored as it was). A seed whose
+    /// programs name exercises its catalog lacks is a state no database can hold (the slots' foreign key), so it
+    /// reports an issue naming them, which fails the test that made it (finding F7-10).
     public struct InMemoryStores: Sendable {
         /// What the stores hold when they are built.
         public struct Seed: Sendable {
@@ -35,6 +38,12 @@
                 self.envelopes = envelopes
             }
 
+            /// The exercises the programs' slots name that `catalog` lacks: none for a seed a database could hold.
+            public var missingExercises: Set<ExerciseID> {
+                let named = Set(programs.flatMap(\.days).flatMap(\.slots).map(\.exerciseID))
+                return named.subtracting(catalog.map(\.id))
+            }
+
             /// Nothing stored: a first launch before seeding.
             public static let empty = Seed()
 
@@ -59,6 +68,10 @@
 
         /// - Parameter now: the stats' current time, which says which week is the current one.
         public init(seed: Seed = .empty, now: @escaping @Sendable () -> Date = { Fixtures.now }) {
+            if !seed.missingExercises.isEmpty {
+                let missing = seed.missingExercises.map(\.rawValue.uuidString).sorted().joined(separator: ", ")
+                reportIssue("InMemoryStores: the seed's programs name exercises its catalog lacks: \(missing)")
+            }
             exercises = InMemoryExerciseRepository(catalog: seed.catalog, version: seed.catalogVersion)
             programs = InMemoryProgramRepository(programs: seed.programs, exercises: exercises)
             workouts = InMemoryWorkoutRepository(programs: programs, workouts: seed.workouts)

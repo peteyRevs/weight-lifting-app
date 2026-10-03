@@ -108,7 +108,7 @@ workout-app/
 │  App targets (Ledger, LedgerWatch, widgets): the composition root.        │
 │  The only place live implementations are bound to Domain protocols.      │
 └───────────────────────────────────────────────────────────────────────────┘
-LedgerFakes → depends on LedgerDomain only, all of it `#if DEBUG`: the in-memory stores, fixtures and device fakes
+LedgerFakes → depends on LedgerDomain (+ IssueReporting), all of it `#if DEBUG`: the in-memory stores, fixtures and device fakes
     that previews and tests share (ADR-008).
 LedgerTestSupport / LedgerSnapshotTesting → depend on everything; imported by tests only.
 LedgerDependencies → depends on LedgerDomain, LedgerFakes (+ swift-dependencies); Features import it for

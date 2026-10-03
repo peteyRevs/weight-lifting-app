@@ -42,7 +42,9 @@ struct FakeStoreTests {
 
     @Test("A materialisation that is refused writes none of its slot updates")
     func refusedMaterialisation_writesNoMisses() async throws {
-        let stores = try InMemoryStores(seed: InMemoryStores.Seed(programs: [Fixtures.seedProgram()]))
+        let stores = try InMemoryStores(
+            seed: InMemoryStores.Seed(catalog: ExerciseCatalog.seed(), programs: [Fixtures.seedProgram()])
+        )
         var workout = try #require(Fixtures.history(weeks: 1).last)
         workout.name += "\u{0}"
         var slot = try #require(try await stores.programs.active()?.days[0].slots[0])
