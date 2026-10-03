@@ -3,30 +3,43 @@ import GRDB
 @testable import LedgerPersistence
 import Testing
 
-/// Criterion 1: schema v001 as `LedgerDatabase` creates it, pinned by `Fixtures/schema-v001.sql`, the
-/// `sqlite_master` text of every table and index. v001 is frozen once merged, so the fixture changes
-/// only when a later migration adds to the schema.
-@Suite("Schema v001", .tags(.persistence))
+/// Criterion 1: the schema as `LedgerDatabase` creates it, pinned migration by migration: `Fixtures/schema-v001.sql`
+/// and `schema-v002.sql` are the `sqlite_master` text of every table and index after each one. A merged migration
+/// is frozen, so a fixture is only ever added, with the migration that changes the schema.
+@Suite("Schema", .tags(.persistence))
 struct SchemaTests {
-    @Test("A new database's tables and indexes match the committed Fixtures/schema-v001.sql")
-    func v001_newDatabase_matchesCommittedDDL() throws {
-        let actual = try LedgerDatabase.inMemory().read(Self.dump)
-        let url = try #require(Bundle.module.url(
-            forResource: "schema-v001",
-            withExtension: "sql",
-            subdirectory: "Fixtures"
-        ))
+    /// Every migration, and the fixture of the schema just after it.
+    static let migrations = [("v001_createSchema", "schema-v001"), ("v002_workoutStartedIndex", "schema-v002")]
+
+    @Test("Each migration leaves the tables and indexes of its committed Fixtures/schema-vNNN.sql", arguments: 0 ..< 2)
+    func eachMigration_matchesCommittedDDL(index: Int) throws {
+        let (migration, fixture) = Self.migrations[index]
+        let queue = try DatabaseQueue()
+        try LedgerDatabase.migrator.migrate(queue, upTo: migration)
+        let actual = try queue.read(Self.dump)
+        let url = try #require(Bundle.module.url(forResource: fixture, withExtension: "sql", subdirectory: "Fixtures"))
         let expected = try String(contentsOf: url, encoding: .utf8)
         #expect(actual == expected, "a merged migration never changes; add a new one. The schema is now:\n\(actual)")
     }
 
-    @Test("Foreign keys are on, v001 is applied, and the migration list is the committed one")
-    func inMemory_foreignKeysOn_v001Applied() throws {
+    @Test("A new database is at the last migration's schema")
+    func newDatabase_isAtTheLatestSchema() throws {
+        let url = try #require(Bundle.module.url(
+            forResource: "schema-v002",
+            withExtension: "sql",
+            subdirectory: "Fixtures"
+        ))
+        #expect(try LedgerDatabase.inMemory().read(Self.dump) == String(contentsOf: url, encoding: .utf8))
+    }
+
+    @Test("Foreign keys are on, every migration is applied, and the migration list is the committed one")
+    func inMemory_foreignKeysOn_allApplied() throws {
         let queue = try LedgerDatabase.inMemory()
+        let all = Self.migrations.map(\.0)
         #expect(try queue.read { try Bool.fetchOne($0, sql: "PRAGMA foreign_keys") } == true)
-        #expect(try queue.read { try LedgerDatabase.migrator.appliedIdentifiers($0) } == ["v001_createSchema"])
+        #expect(try queue.read { try LedgerDatabase.migrator.appliedIdentifiers($0) } == Set(all))
         // Append-only (engineering-standards §6): a merged migration is never renamed, reordered or removed.
-        #expect(LedgerDatabase.migrator.migrations == ["v001_createSchema"])
+        #expect(LedgerDatabase.migrator.migrations == all)
     }
 
     @Test("A child row needs its parent, and deleting the parent cascades to its children")

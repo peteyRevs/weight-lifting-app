@@ -1,0 +1,176 @@
+import Foundation
+import LedgerDomain
+
+/// `HistoryModel` as the stats queries: each one computed from the live workouts' states, in memory.
+extension HistoryModel: StatsQueries {
+    /// The sets of `exercise` in `workout`, across every row that performs it, in row order.
+    private func sets(of exercise: ExerciseID, in workout: WorkoutState) -> [LoggedSet] {
+        workout.exercises.filter { $0.exerciseID == exercise }.flatMap(\.sets)
+    }
+
+    /// The done sets of `exercise` that can hold a best: `.working` and `.added` (decision #3).
+    private func recordSets(of exercise: ExerciseID, in workout: WorkoutState) -> [LoggedSet] {
+        var kinds: Set<SetKind> = [.working, .added]
+        if has(.bestsCountWarmups) {
+            kinds.insert(.warmup)
+        }
+        if has(.bestsCountDrops) {
+            kinds.insert(.drop)
+        }
+        return sets(of: exercise, in: workout).filter { $0.isDone && kinds.contains($0.kind) }
+    }
+
+    private func estimate(_ set: LoggedSet) -> Weight? {
+        if has(.estimatesAbove12Reps), set.reps.value > OneRepMax.maximumReps, set.reps.value < 37 {
+            return Weight(grams: set.weight.grams * 36 / Decimal(37 - set.reps.value))
+        }
+        return OneRepMax.brzycki(weight: set.weight, reps: set.reps)
+    }
+
+    private func isHeavier(_ lhs: LoggedSet, _ rhs: LoggedSet) -> Bool {
+        lhs.weight != rhs.weight ? lhs.weight > rhs.weight : lhs.reps > rhs.reps
+    }
+
+    func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {
+        let workouts = state.withLock { live($0) }
+        for workout in workouts {
+            let all = sets(of: exerciseID, in: workout)
+            let counted = all.filter { $0.isDone && ($0.kind == .working || has(.lastCountsEveryKind)) }
+            let shown = has(.lastIsFirstSet) ? counted.first : counted.min(by: isHeavier)
+            guard let shown else {
+                if has(.lastOfAnyWorkout), !all.isEmpty {
+                    return nil
+                }
+                continue
+            }
+            return LastPerformance(date: date(workout), sets: counted.count, reps: shown.reps.value, load: shown.weight)
+        }
+        return nil
+    }
+
+    func bestSet(exerciseID: ExerciseID) async throws -> (weight: Weight, reps: Reps)? {
+        let sets = state.withLock { live($0) }.flatMap { recordSets(of: exerciseID, in: $0) }
+        let best = sets.min { lhs, rhs in
+            has(.bestSetFewerReps) && lhs.weight == rhs.weight ? lhs.reps < rhs.reps : isHeavier(lhs, rhs)
+        }
+        return best.map { ($0.weight, $0.reps) }
+    }
+
+    func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
+        state.withLock { live($0) }.flatMap { recordSets(of: exerciseID, in: $0) }.compactMap(estimate).max()
+    }
+
+    func e1RMByWeek(
+        exerciseID: ExerciseID,
+        lastWeeks: Int,
+        calendar given: WeekCalendar
+    ) async throws -> [WeekKey: Weight] {
+        let calendar = has(.weeksInUTCFromMonday) ? S3Kit.calendar() : given
+        guard lastWeeks > 0, calendar.firstDayOfWeek(containing: now) != nil else {
+            return [:]
+        }
+        var best: [WeekKey: Weight] = [:]
+        for workout in state.withLock({ live($0) }) {
+            let sets = recordSets(of: exerciseID, in: workout)
+            let top = sets.compactMap { set in estimate(set).map { (estimate: $0, set: set) } }
+                .max { $0.estimate < $1.estimate }
+            guard let top else {
+                continue
+            }
+            let dated = has(.weeksByTickTime) ? top.set.doneAt ?? date(workout) : date(workout)
+            guard isInLastWeeks(dated, lastWeeks, calendar) else {
+                continue
+            }
+            let key = calendar.isoWeekKey(for: dated)
+            best[key] = max(best[key] ?? top.estimate, top.estimate)
+        }
+        return best
+    }
+
+    /// Whether `date` falls in one of the `count` stats weeks that end with the one holding `now`, found by
+    /// walking the weeks back as ranges of instants.
+    private func isInLastWeeks(_ date: Date, _ count: Int, _ calendar: WeekCalendar) -> Bool {
+        var week = calendar.week(containing: now)
+        if date >= week.upperBound {
+            return has(.futureWeeksCount)
+        }
+        var back = 0
+        while back < count {
+            if week.contains(date) {
+                return true
+            }
+            let previous = calendar.previousCompleteWeek(before: week.lowerBound)
+            if previous == week {
+                return false
+            }
+            week = previous
+            back += 1
+        }
+        return false
+    }
+
+    func weeklyVolume(in range: Range<Date>) async throws -> Volume {
+        let sets = state.withLock { live($0) }.filter { contains(range, date($0)) }
+            .flatMap { $0.exercises.flatMap(\.sets) }
+            .filter { $0.isDone && !(has(.volumeSkipsWarmups) && $0.kind == .warmup) }
+        return sets.reduce(Volume.zero) { $0 + Volume(weight: $1.weight, reps: $1.reps) }
+    }
+
+    func sessionsCompleted(in range: Range<Date>) async throws -> Int {
+        state.withLock { live($0) }.count { workout in
+            contains(range, date(workout)) && (!has(.sessionsNeedADoneSet) || workout.doneSets > 0)
+        }
+    }
+
+    func sessionCount(exerciseID: ExerciseID) async throws -> Int {
+        state.withLock { live($0) }.count { workout in
+            sets(of: exerciseID, in: workout).contains { $0.isDone || has(.sessionCountIgnoresDone) }
+        }
+    }
+
+    /// Newest first by when each was achieved; of two achieved together, the estimated 1RM first. The model
+    /// leaves any further tie in the order given, so the property tests never make one.
+    func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord] {
+        let entries = state.withLock { liveEntries($0) }
+        let records = entries.flatMap { entry in
+            entry.records.filter { $0.exerciseID == exerciseID }.map { (record: $0, workout: entry.state) }
+        }
+        func name(_ record: PersonalRecord) -> Int {
+            if case .estimatedOneRepMax = record.kind {
+                0
+            } else {
+                1
+            }
+        }
+        return records.enumerated().sorted { lhs, rhs in
+            let left = has(.recordsByWorkoutDate) ? date(lhs.element.workout) : lhs.element.record.achievedAt
+            let right = has(.recordsByWorkoutDate) ? date(rhs.element.workout) : rhs.element.record.achievedAt
+            if left != right {
+                return left > right
+            }
+            let kinds = (name(lhs.element.record), name(rhs.element.record))
+            return kinds.0 != kinds.1 && !has(.recordsInGivenOrder) ? kinds.0 < kinds.1 : lhs.offset < rhs.offset
+        }
+        .map(\.element.record)
+    }
+
+    func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
+        var latest: [ExerciseID: (date: Date, place: Int)] = [:]
+        for workout in state.withLock({ live($0) }) {
+            for (place, exercise) in workout.exercises.enumerated() where exercise.sets.contains(where: \.isDone) {
+                let found = (date: date(workout), place: place)
+                latest[exercise.exerciseID] = latest[exercise.exerciseID]
+                    .map { $0.date >= found.date ? $0 : found } ?? found
+            }
+        }
+        let ordered = latest.sorted { lhs, rhs in
+            if lhs.value.date != rhs.value.date {
+                return lhs.value.date > rhs.value.date
+            }
+            return has(.recentlyLoggedInWorkoutOrder)
+                ? lhs.value.place < rhs.value.place
+                : lhs.key.rawValue.uuidString < rhs.key.rawValue.uuidString
+        }
+        return limit < 0 && has(.negativeLimitIsAll) ? ordered.map(\.key) : ordered.prefix(max(0, limit)).map(\.key)
+    }
+}

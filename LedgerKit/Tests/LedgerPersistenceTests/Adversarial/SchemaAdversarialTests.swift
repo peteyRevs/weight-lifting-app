@@ -29,7 +29,10 @@ struct SchemaAdversarialTests {
         try LedgerDatabase.migrator.migrate(queue)
         try LedgerDatabase.migrator.migrate(queue)
         #expect(try queue.read(SchemaTests.dump) == before)
-        #expect(try queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") } == 1)
+        // Every migration once (S3 fix round 3 added v002, product decision #26).
+        #expect(try queue.read(LedgerDatabase.migrator.appliedIdentifiers) == [
+            "v001_createSchema", "v002_workoutStartedIndex"
+        ])
         #expect(try queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM device") } == 1)
         #expect(try queue.read(LedgerDatabase.migrator.hasCompletedMigrations))
     }

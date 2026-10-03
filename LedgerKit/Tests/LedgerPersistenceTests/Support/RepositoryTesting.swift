@@ -23,17 +23,27 @@ final class ManualClock: Sendable {
     }
 }
 
-/// The exercise and program repositories over one fresh in-memory database, on one `ManualClock`.
+/// The repositories and the stats queries over one fresh in-memory database, on one `ManualClock`. The stats
+/// read the current time as `StatsQueriesContract.now`, whatever the clock says.
 struct Repositories {
     let queue: DatabaseQueue
     let clock = ManualClock()
     let exercises: GRDBExerciseRepository
     let programs: GRDBProgramRepository
+    let workouts: GRDBWorkoutRepository
+    let stats: GRDBStatsQueries
 
     init() throws {
         queue = try LedgerDatabase.inMemory()
         exercises = GRDBExerciseRepository(queue, now: clock.now)
         programs = GRDBProgramRepository(queue, now: clock.now)
+        workouts = GRDBWorkoutRepository(queue, now: clock.now)
+        stats = GRDBStatsQueries(queue, now: { StatsQueriesContract.now })
+    }
+
+    /// What a history contract clause runs against (`WorkoutRepositoryContract`, `StatsQueriesContract`).
+    var history: HistoryStores {
+        HistoryStores(workouts: workouts, stats: stats, programs: programs)
     }
 
     /// With `ProgramRepositoryContract.exercises` seeded, which every contract program names.
@@ -55,6 +65,15 @@ struct Repositories {
 
     func execute(_ sql: String, _ arguments: StatementArguments = []) async throws {
         try await queue.write { database in try database.execute(sql: sql, arguments: arguments) }
+    }
+
+    /// Runs `sql` with foreign keys off, as damage or a foreign writer could leave a row.
+    func damage(_ sql: String, _ arguments: StatementArguments = []) async throws {
+        try await queue.writeWithoutTransaction { database in
+            try database.execute(sql: "PRAGMA foreign_keys = OFF")
+            defer { try? database.execute(sql: "PRAGMA foreign_keys = ON") } // restoring; the write already ran
+            try database.execute(sql: sql, arguments: arguments)
+        }
     }
 
     /// The SQL, arguments expanded, of each statement `body` runs that starts with `prefix`, in the order run.

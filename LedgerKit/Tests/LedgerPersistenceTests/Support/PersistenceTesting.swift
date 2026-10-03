@@ -9,6 +9,8 @@ extension Tag {
     @Tag static var property: Self
     /// Timing tests against a budget in `PerformanceBudget`; nightly lane only (testing-strategy §6).
     @Tag static var performance: Self
+    /// Tests that take more than about two seconds; nightly lane only (testing-strategy §6).
+    @Tag static var slow: Self
 }
 
 /// The lane a test plan runs in, from its `LEDGER_TEST_LANE` variable (testing-strategy §6).

@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import LedgerDomain
+import os
 
 /// Reads a row's columns strictly, for the records' `init(row:)`. A `NULL` in a required column, a value of
 /// another kind, an unknown enum case or a malformed id throws `LedgerPersistenceError`, where GRDB's
@@ -63,6 +64,27 @@ struct ColumnReader {
         try optionalInteger(column).map(Weight.init(e7g:))
     }
 
+    /// A repetition count: an integer of at least 1.
+    func reps(_ column: String) throws(LedgerPersistenceError) -> Reps {
+        guard let reps = try Reps(integer(column)) else {
+            throw malformed(column)
+        }
+        return reps
+    }
+
+    /// A history date: only a finite `REAL`, seconds since 2001 (`ColumnCodec.seconds`).
+    func date(_ column: String) throws(LedgerPersistenceError) -> Date {
+        let stored: DatabaseValue = row[column]
+        guard case let .double(seconds) = stored.storage, seconds.isFinite else {
+            throw malformed(column)
+        }
+        return ColumnCodec.date(seconds: seconds)
+    }
+
+    func optionalDate(_ column: String) throws(LedgerPersistenceError) -> Date? {
+        isNull(column) ? nil : try date(column)
+    }
+
     /// The elements of a JSON array column (`JSONArray`).
     func array<Element: Codable & Sendable>(_ column: String) throws(LedgerPersistenceError) -> [Element] {
         guard let array = JSONArray<Element>.fromDatabaseValue(row[column]) else {
@@ -71,7 +93,7 @@ struct ColumnReader {
         return array.elements
     }
 
-    private func isNull(_ column: String) -> Bool {
+    func isNull(_ column: String) -> Bool {
         (row[column] as DatabaseValue).isNull
     }
 
@@ -96,5 +118,24 @@ struct JSONArray<Element: Codable & Sendable>: Codable, DatabaseValueConvertible
 
     func encode(to encoder: any Encoder) throws {
         try elements.encode(to: encoder)
+    }
+}
+
+extension Row {
+    /// What `read` makes of this row, or `nil` when this app cannot read it (a case a later version added, or
+    /// damage). For lists: the row is logged by its id, left out, and stays stored, so one bad row never
+    /// hides the rest (S1's event rows, S2's exercises).
+    ///
+    /// The row must have an `id` column, which names it in the log.
+    func readable<Value>(as table: String, _ read: (Row) throws -> Value) -> Value? {
+        do {
+            return try read(self)
+        } catch {
+            let id = String.fromDatabaseValue(self["id"]) ?? "?"
+            Logger.persistence.error(
+                "Left out \(table, privacy: .public) row \(id, privacy: .public), which is unreadable: \(error)"
+            )
+            return nil
+        }
     }
 }

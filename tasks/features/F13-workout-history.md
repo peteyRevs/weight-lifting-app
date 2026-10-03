@@ -58,3 +58,29 @@ _Filled in by agents during delivery:_
 - `F13-workout-history/implementation-notes.md`
 - `F13-workout-history/test-findings.md`
 - `F13-workout-history/review.md`
+
+## Inputs from F05 (2026-10-01, slice S3)
+
+1. **`updateSets` leaves the workout's personal records and `pr_count` as they are** (F05 test-findings S3-Q3,
+   review S3-SF3). Everything computed from sets moves (e1RMs, totals, every stats query), but after a lifter
+   corrects a typo (225 to 125) History still lists that workout's records, and an edit that deserves a record
+   creates none. This brief's risk line assigns the recomputation to F05, and criterion 4's story is "editing a
+   past set updates my PRs": it needs the **F05 follow-up** (bests as they stood before a workout, and
+   re-detection from that workout forward; F05 notes, "S3 fix round 1"). Until it lands, F13 cannot do it
+   itself: no query gives the bests before a workout.
+2. **No query returns a workout's records, or their count, for the list badge** (criterion 1). `pr_count` is
+   stored but nothing reads it, and `StatsQueries.personalRecords(exerciseID:)` is per exercise. Either call it
+   for each exercise of a workout and filter by `workoutID`, or ask the F05 follow-up for
+   `personalRecords(workoutID:)` (`idx_pr_workout` already serves it).
+3. **An unreadable workout is left out of the lists and is not counted.** `recent`, `workouts(in:)` and
+   `observeRecent` log a workout this app version cannot read (damage, or a case a later version added) and
+   return the rest; `workout(id:)` throws for it. It still takes a place of `recent`'s limit, so a page can be
+   short. No call says how many were left out.
+4. **Lists are newest first by when a workout ended, then by id**; a limit below 1 gives none; a range excludes
+   its upper bound. A workout that crosses midnight belongs to the day and week it ended in (open with Pete).
+5. **A history read resets the live-only fields**: no `cursor`, `rest` or `programUpdates`, and `autoRest` true.
+6. **Delete is a soft delete that a later materialisation reverses.** While a finished log is not compacted, a
+   late envelope makes the host materialise again, which brings a deleted workout back and overwrites an
+   `updateSets` edit with the log's state (F05 test-findings S3-Q4). History may edit or delete a workout only
+   once its log is compacted (F17 "Inputs from F05").
+7. `delete` keeps the misses the workout recorded and its `workout_health` row.

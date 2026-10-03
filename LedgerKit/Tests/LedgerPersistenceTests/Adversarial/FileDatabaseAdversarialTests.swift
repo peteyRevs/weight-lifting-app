@@ -92,8 +92,9 @@ struct FileDatabaseAdversarialTests {
         #expect(FileManager.default.fileExists(atPath: url.path(percentEncoded: false)))
         let reopened = try LedgerDatabase.open(at: url)
         #expect(try await GRDBWorkoutEventStore(reopened).envelopes(for: Contract.workout) == [Contract.skip(1)])
-        let migrations = try await reopened.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") }
-        #expect(migrations == 1)
+        // Every migration once (S3 fix round 3 added v002, product decision #26).
+        let migrations = try await reopened.read(LedgerDatabase.migrator.appliedIdentifiers)
+        #expect(migrations == ["v001_createSchema", "v002_workoutStartedIndex"])
     }
 
     // MARK: Helpers
