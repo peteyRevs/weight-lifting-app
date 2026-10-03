@@ -13,7 +13,7 @@ import Testing
 struct WorkoutEventStoreContractTests {
     @Test("The in-memory reference store keeps the clause", arguments: WorkoutEventStoreContract.clauses)
     func clause_holds(_ clause: WorkoutEventStoreContract.Clause) async throws {
-        let issue = try await clause.check(InMemoryEventStore())
+        let issue = try await clause.check(InMemoryWorkoutEventStore())
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 }

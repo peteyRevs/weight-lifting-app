@@ -17,12 +17,13 @@ let dependenciesProduct: Target.Dependency = .product(name: "Dependencies", pack
 let grdbProduct: Target.Dependency = .product(name: "GRDB", package: "GRDB.swift")
 let snapshotProduct: Target.Dependency = .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
 
-/// Every feature module depends on the same spine (F00 target table).
+/// Every feature module depends on the same spine (F00 target table; ADR-008 swapped LedgerTestSupport for
+/// LedgerFakes, so a feature's previews reach fixtures without linking Persistence, Health or Sync).
 let featureSpine: [Target.Dependency] = [
     "LedgerDomain",
     "LedgerDesign",
     "LedgerDependencies",
-    "LedgerTestSupport",
+    "LedgerFakes",
     dependenciesProduct
 ]
 
@@ -35,7 +36,8 @@ let iOSFeatures = [
     "FeatureSettings"
 ]
 
-/// One test target per source target, except the two test-only helpers.
+/// One test target per source target, except the test and preview helpers (LedgerFakes, LedgerTestSupport,
+/// LedgerSnapshotTesting), whose suites run in the targets that use them.
 let testedTargets: [(name: String, settings: [SwiftSetting])] =
     [
         ("LedgerDomain", coreSettings),
@@ -89,7 +91,7 @@ let package = Package(
         ),
         .target(
             name: "LedgerDependencies",
-            dependencies: ["LedgerDomain", dependenciesProduct],
+            dependencies: ["LedgerDomain", "LedgerFakes", dependenciesProduct],
             swiftSettings: coreSettings
         ),
         .target(
@@ -124,12 +126,18 @@ let package = Package(
         ),
         .target(name: "WatchFeatureWorkout", dependencies: featureSpine, swiftSettings: uiSettings),
 
+        // ---- previews' and tests' fakes (ADR-008) ----------------------------
+        // In-memory stores, fixtures and device fakes over LedgerDomain alone, every source inside `#if DEBUG`:
+        // linked by the apps through LedgerDependencies' `previewValue`s, empty in a Release build.
+        .target(name: "LedgerFakes", dependencies: ["LedgerDomain"], swiftSettings: coreSettings),
+
         // ---- test-only helpers (never linked by an app target) ---------------
         .target(
             name: "LedgerTestSupport",
             dependencies: [
                 "LedgerDomain",
                 "LedgerDependencies",
+                "LedgerFakes",
                 "LedgerPersistence",
                 "LedgerHealth",
                 "LedgerSync",
@@ -177,8 +185,11 @@ let package = Package(
     ] + testedTargets.map { target in
         .testTarget(
             name: "\(target.name)Tests",
+            // LedgerFakes directly, not only through LedgerTestSupport: Xcode measures coverage of a test
+            // target's direct dependencies only, and the fakes are gated (ADR-008).
             dependencies: [
                 .target(name: target.name),
+                "LedgerFakes",
                 "LedgerTestSupport",
                 "LedgerSnapshotTesting"
             ],

@@ -2,6 +2,8 @@
   "overall": 80,
   "modules": {
     "LedgerDomain": 95,
+    "LedgerDependencies": 90,
+    "LedgerFakes": 90,
     "LedgerPersistence": 90,
     "LedgerSync": 90,
     "LedgerHealth": 80,
@@ -10,7 +12,7 @@
     "WatchFeatureWorkout": 70,
     "Feature*": 70
   },
-  "required": ["LedgerDomain", "LedgerDesign", "LedgerPersistence"],
+  "required": ["LedgerDomain", "LedgerDependencies", "LedgerDesign", "LedgerFakes", "LedgerPersistence"],
   "watchOnly": [],
   "excludedModules": ["LedgerTestSupport", "LedgerSnapshotTesting", "LedgerAppKit", "LedgerWatchAppKit"],
   "excludedFiles": ["*+Previews.swift", "*/Generated/*"]

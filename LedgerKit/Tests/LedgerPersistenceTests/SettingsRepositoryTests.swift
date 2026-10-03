@@ -29,6 +29,12 @@ struct SettingsRepositoryTests {
         return (GRDBSettingsRepository(queue, now: { clock }), queue)
     }
 
+    @Test("The GRDB repository keeps the contract clause", arguments: SettingsRepositoryContract.clauses)
+    func contract_clauseHolds(_ clause: SettingsRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Self.repository().0)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("Before the first save, load returns the defaults")
     func load_beforeAnySave_returnsDefaults() async throws {
         let (repository, _) = try Self.repository()

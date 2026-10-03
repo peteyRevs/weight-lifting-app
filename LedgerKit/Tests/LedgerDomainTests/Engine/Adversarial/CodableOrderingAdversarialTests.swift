@@ -162,7 +162,7 @@ extension CodableOrderingAdversarialTests {
         let extendB = Adv.env(Adv.extend(60, shown: true, tappedAt: 10), Adv.watch, seq: 1, at: 10)
         // A reinstalled or restored watch can reuse a seq it already sent (EngineError.conflictingEnvelope).
         for (first, second) in [(logA, extendB), (extendB, logA)] {
-            let store: any WorkoutEventStore = InMemoryEventStore()
+            let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
             _ = try await store.append([Adv.start(), first])
             await #expect(throws: EngineError.conflictingEnvelope(second.key)) {
                 try await store.append([second])

@@ -1,36 +1,37 @@
-library FeatureHistory: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureHistoryTests: FeatureHistory, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureLibrary: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureLibraryTests: FeatureLibrary, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureOnboarding: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureOnboardingTests: FeatureOnboarding, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureProgram: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureProgramTests: FeatureProgram, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureSettings: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureSettingsTests: FeatureSettings, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureToday: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureTodayTests: FeatureToday, LedgerSnapshotTesting, LedgerTestSupport
-library FeatureWorkout: Dependencies, LedgerActivityKit, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test FeatureWorkoutTests: FeatureWorkout, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureHistory: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureHistoryTests: FeatureHistory, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureLibrary: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureLibraryTests: FeatureLibrary, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureOnboarding: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureOnboardingTests: FeatureOnboarding, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureProgram: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureProgramTests: FeatureProgram, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureSettings: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureSettingsTests: FeatureSettings, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureToday: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureTodayTests: FeatureToday, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library FeatureWorkout: Dependencies, LedgerActivityKit, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test FeatureWorkoutTests: FeatureWorkout, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerActivityKit: LedgerDomain
-test LedgerActivityKitTests: LedgerActivityKit, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerActivityKitTests: LedgerActivityKit, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerAppKit: Dependencies, FeatureHistory, FeatureLibrary, FeatureOnboarding, FeatureProgram, FeatureSettings, FeatureToday, FeatureWorkout, LedgerActivityKit, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerHealth, LedgerPersistence, LedgerSync
-test LedgerAppKitTests: LedgerAppKit, LedgerSnapshotTesting, LedgerTestSupport
-library LedgerDependencies: Dependencies, LedgerDomain
-test LedgerDependenciesTests: LedgerDependencies, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerAppKitTests: LedgerAppKit, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library LedgerDependencies: Dependencies, LedgerDomain, LedgerFakes
+test LedgerDependenciesTests: LedgerDependencies, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerDesign: -
-test LedgerDesignTests: LedgerDesign, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerDesignTests: LedgerDesign, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerDomain: -
-test LedgerDomainTests: LedgerDomain, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerDomainTests: LedgerDomain, LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport
+library LedgerFakes: LedgerDomain
 library LedgerHealth: LedgerDomain
-test LedgerHealthTests: LedgerHealth, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerHealthTests: LedgerFakes, LedgerHealth, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerPersistence: GRDB, LedgerDomain
-test LedgerPersistenceTests: LedgerPersistence, LedgerSnapshotTesting, LedgerTestSupport
+test LedgerPersistenceTests: LedgerFakes, LedgerPersistence, LedgerSnapshotTesting, LedgerTestSupport
 library LedgerSnapshotTesting: LedgerTestSupport, SnapshotTesting
 library LedgerSync: LedgerDomain
-test LedgerSyncTests: LedgerSnapshotTesting, LedgerSync, LedgerTestSupport
-library LedgerTestSupport: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerHealth, LedgerPersistence, LedgerSync
+test LedgerSyncTests: LedgerFakes, LedgerSnapshotTesting, LedgerSync, LedgerTestSupport
+library LedgerTestSupport: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes, LedgerHealth, LedgerPersistence, LedgerSync
 library LedgerWatchAppKit: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerHealth, LedgerPersistence, LedgerSync, WatchFeatureWorkout
-test LedgerWatchAppKitTests: LedgerSnapshotTesting, LedgerTestSupport, LedgerWatchAppKit
-library WatchFeatureWorkout: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerTestSupport
-test WatchFeatureWorkoutTests: LedgerSnapshotTesting, LedgerTestSupport, WatchFeatureWorkout
+test LedgerWatchAppKitTests: LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport, LedgerWatchAppKit
+library WatchFeatureWorkout: Dependencies, LedgerDependencies, LedgerDesign, LedgerDomain, LedgerFakes
+test WatchFeatureWorkoutTests: LedgerFakes, LedgerSnapshotTesting, LedgerTestSupport, WatchFeatureWorkout

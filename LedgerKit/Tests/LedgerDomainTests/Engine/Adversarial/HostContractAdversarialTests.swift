@@ -109,7 +109,7 @@ struct HostContractAdversarialTests {
         #expect(host.state?.rest?.endsAt == engineTime(190))
         #expect(host.replayMismatches == 0)
         // Control, per envelope: rebuild when it sorts before the newest applied, else reduce.
-        let store = InMemoryEventStore()
+        let store = InMemoryWorkoutEventStore()
         var state = try await WorkoutEngine.replay(store.append(applied))
         var newest = applied.max()
         for envelope in try await store.append([early, extend]) {

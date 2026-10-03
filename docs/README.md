@@ -11,7 +11,7 @@ Start here. Read top to bottom the first time; afterwards jump to what you need.
 | [`testing-strategy.md`](testing-strategy.md) | Test pyramid, per-layer approach, determinism, coverage gates, device protocol, `check.sh` contract. |
 | [`ci-cd.md`](ci-cd.md) | GitHub Actions gates, Xcode Cloud delivery, release-please, branch protection, costs. |
 | [`subagent-workflow.md`](subagent-workflow.md) | Implement → adversarial test → review → CI → human merge pipeline; prompt templates. |
-| [`adr/`](adr/) | Why: native Swift (001), GRDB (002), committed project (003), event-sourced engine (004), sync channels (005), CI split (006). |
+| [`adr/`](adr/) | Why: native Swift (001), GRDB (002), committed project (003), event-sourced engine (004), sync channels (005), CI split (006), exact weights (007), the previews' and tests' fakes module (008). |
 | [`research/`](research/) | Dated evidence (2026-09-16) behind the decisions: Apple platform (R1), data layer (R2), tooling/CI (R3). |
 | [`../tasks/todo.md`](../tasks/todo.md) | Milestones M0–M5, feature IDs, dependencies, risk register, review log. |
 | [`../tasks/features/`](../tasks/features/) | One brief per feature (F00–F32); the contract each subagent implements against. |

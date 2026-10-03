@@ -62,6 +62,7 @@ workout-app/
 │   │   ├── LedgerDesign/           # tokens, Archivo font loading, components; Resources/Archivo[wdth,wght].ttf
 │   │   ├── LedgerActivityKit/      # ActivityAttributes shared by app + widget ext
 │   │   ├── LedgerDependencies/     # swift-dependencies keys (§13) + Unimplemented stubs; nonisolated
+│   │   ├── LedgerFakes/            # in-memory stores, fixtures, device fakes; #if DEBUG (ADR-008)
 │   │   ├── FeatureOnboarding/
 │   │   ├── FeatureToday/
 │   │   ├── FeatureWorkout/         # active workout, rest, swap, receipt
@@ -70,7 +71,7 @@ workout-app/
 │   │   ├── FeatureHistory/         # workout list, workout detail
 │   │   ├── FeatureSettings/
 │   │   ├── WatchFeatureWorkout/    # all watch screens
-│   │   ├── LedgerTestSupport/      # fakes, fixtures, builders, in-memory DB
+│   │   ├── LedgerTestSupport/      # contracts, builders, withTestDependencies; re-exports LedgerFakes (test-only)
 │   │   └── LedgerSnapshotTesting/  # snapshot helpers + device/theme/type matrix (test-only)
 │   └── Tests/                      # one test target per source target
 ├── Apps/
@@ -100,15 +101,18 @@ workout-app/
 │   (GRDB)     │ │ (HealthKit)│ │ (HK+WC)  │ │ (SwiftUI)  │ │Kit (ActivityK)│
 └───────▲──────┘ └─────▲──────┘ └──▲───────┘ └─▲──────────┘ └─▲─────────────┘
         │              │           │           │              │
-        │   Feature* → LedgerDomain, LedgerDesign, LedgerDependencies, LedgerTestSupport,
+        │   Feature* → LedgerDomain, LedgerDesign, LedgerDependencies, LedgerFakes,
         │              swift-dependencies (+ LedgerActivityKit for FeatureWorkout's Live Activity)
         │              │           │           │              │
 ┌───────┴──────────────┴───────────┴───────────┴──────────────┴─────────────┐
 │  App targets (Ledger, LedgerWatch, widgets): the composition root.        │
 │  The only place live implementations are bound to Domain protocols.      │
 └───────────────────────────────────────────────────────────────────────────┘
-LedgerTestSupport / LedgerSnapshotTesting → depend on everything; imported by tests and previews only.
-LedgerDependencies → depends on LedgerDomain (+ swift-dependencies); Features import it for `@Dependency` keys; the App shells bind live values.
+LedgerFakes → depends on LedgerDomain only, all of it `#if DEBUG`: the in-memory stores, fixtures and device fakes
+    that previews and tests share (ADR-008).
+LedgerTestSupport / LedgerSnapshotTesting → depend on everything; imported by tests only.
+LedgerDependencies → depends on LedgerDomain, LedgerFakes (+ swift-dependencies); Features import it for
+    `@Dependency` keys; its `previewValue`s are LedgerFakes' seeded stores; the App shells bind live values.
 ```
 
 `Package.swift` encodes exactly these edges. A feature that needs data calls a
@@ -119,21 +123,22 @@ binds to `GRDBWorkoutRepository` via `swift-dependencies`.
 edge list; `scripts/check-package-graph.sh` fails the gate when `Package.swift`
 and the table disagree, so an edge cannot be added quietly (F00).
 
-**Open question (raised in F00, decide in F06/F07):** feature targets link
-`LedgerTestSupport` so that `#Preview` bodies can use its fixtures. Because
-`LedgerTestSupport` itself depends on Persistence, Health, Sync and Design,
-this gives every feature a transitive link to the whole stack, which is exactly
-what the rule above is meant to prevent. The alternative is a small
-`LedgerPreviewFixtures` target that depends on `LedgerDomain` only. The edge is
-kept for now because F00's target table specifies it, and the cost is invisible
-while every module is a placeholder.
+**Previews and the spine (decided in F07, ADR-008).** F00 linked every feature
+to `LedgerTestSupport` so `#Preview` bodies could use its fixtures, which gave
+every feature a transitive link to Persistence, Health and Sync. Pete's decision
+B1 replaced that edge with `LedgerFakes`, a small target over `LedgerDomain`
+alone: the features' previews and `LedgerDependencies`' `previewValue`s use its
+seeded in-memory stores and fixtures, and only test targets link
+`LedgerTestSupport`. The repository errors the protocols promise moved to
+`LedgerDomain` (`RepositoryError`) with them, so the fakes throw what the GRDB
+stores throw; `LedgerPersistenceError` remains as a typealias.
 
 Isolation defaults per target (Swift 6.2+ `defaultIsolation`):
 
 | Targets | Default isolation | Why |
 |---|---|---|
 | Feature*, WatchFeature*, App shells, LedgerDesign | `MainActor` | UI code; matches Apple DTS guidance (R2 §6) |
-| LedgerDomain, LedgerPersistence, LedgerHealth, LedgerSync, LedgerActivityKit, LedgerDependencies | `nonisolated` | value types + actors; no implicit main-thread hops |
+| LedgerDomain, LedgerPersistence, LedgerHealth, LedgerSync, LedgerActivityKit, LedgerDependencies, LedgerFakes, LedgerTestSupport | `nonisolated` | value types + actors; no implicit main-thread hops |
 | App-hosted test targets (`LedgerTests`, `LedgerUITests`, `LedgerWatchTests`, `LedgerWatchUITests`) | `nonisolated` | `XCTestCase`'s overrides are nonisolated, so a MainActor default does not compile; tests mark `@MainActor` where they touch UI (Apple's 26.6 template pattern). Package test targets inherit their source target's setting. |
 
 In the Xcode project this lives in `Config/Ledger.xcconfig` and
@@ -366,7 +371,7 @@ tests cover shuffle/duplicate/partition scenarios.
   a user-facing state.
 
 `HealthStore` is a Domain protocol with a `LiveHealthStore` actor and a
-`FakeHealthStore` in `LedgerTestSupport`; all logic that reacts to health
+`FakeHealthStore` in `LedgerFakes` (ADR-008); all logic that reacts to health
 events is tested through the fake.
 
 ---
@@ -430,12 +435,19 @@ Each feature exposes `public struct <Feature>Root: View` and `public enum
 
 ## 13. Dependency injection keys (`swift-dependencies`)
 
-`date`, `uuid`, `calendar`, `locale`, `continuousClock`, `exerciseRepository`,
-`programRepository`, `workoutRepository`, `workoutEventStore`,
-`settingsRepository`, `statsQueries`, `healthStore`, `liveWorkoutTransport`,
-`companionTransport`, `haptics`, `notifications`, `liveActivities`, `logger`.
-Each has `liveValue`, `testValue` (unimplemented → test failure), and where
-useful `previewValue`. Stores never construct their dependencies.
+`date`, `uuid`, `calendar`, `locale`, `continuousClock` (the library's), and
+`deviceID`, `exerciseRepository`, `programRepository`, `workoutRepository`,
+`workoutEventStore`, `settingsRepository`, `statsQueries`, `healthStore`,
+`liveWorkoutTransport`, `companionTransport`, `haptics`, `notifications`,
+`liveActivities`, `logger` (a `LedgerLogger` over `os.Logger`), all in the
+nonisolated `LedgerDependencies` (F07). Each `liveValue` is an
+`Unimplemented*` stub (logs at fault level and throws
+`LedgerDependencyError.unimplemented(key:)`) until the composition root binds
+the real one; each `testValue` is the library's default, which fails the test
+naming the key (the logger's discards); each `previewValue` is a `LedgerFakes`
+fake, the stores seeded with fixtures. Store tests start from the test values
+with `withTestDependencies` (`LedgerTestSupport`). Stores never construct their
+dependencies.
 
 ---
 

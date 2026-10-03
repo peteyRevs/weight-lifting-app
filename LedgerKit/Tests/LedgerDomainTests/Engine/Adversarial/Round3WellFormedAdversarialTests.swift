@@ -135,7 +135,7 @@ extension Round3WellFormedAdversarialTests {
         // Final fix round: NaN != NaN, so a store that compares by value still calls the resend a conflict.
         // No predicate can change that; F17 rejects non-finite dates when it decodes a frame, before
         // anything is stored (F17, "Inputs from F04", item 5). This pins why.
-        let store = InMemoryEventStore()
+        let store = InMemoryWorkoutEventStore()
         _ = try await store.append([first])
         await #expect(throws: EngineError.conflictingEnvelope(first.key)) {
             try await store.append([resent])

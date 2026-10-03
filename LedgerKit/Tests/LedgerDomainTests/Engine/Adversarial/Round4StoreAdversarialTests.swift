@@ -18,7 +18,7 @@ struct Round4StoreAdversarialTests {
     )
     func contract_killsItsFourteenMutants() async {
         #expect(MutantEventStore.Mutation.allCases.count == 14)
-        #expect(await WorkoutEventStoreContract.violations { InMemoryEventStore() }.isEmpty)
+        #expect(await WorkoutEventStoreContract.violations { InMemoryWorkoutEventStore() }.isEmpty)
         for mutation in MutantEventStore.Mutation.allCases {
             let found = await WorkoutEventStoreContract.violations { MutantEventStore(mutation) }
             #expect(!found.isEmpty, "\(mutation) survives")
@@ -60,7 +60,7 @@ struct Round4StoreAdversarialTests {
     }
 }
 
-/// `InMemoryEventStore`'s rules, with `wallClock` kept as seconds since 1970 in a `Double` (as a `REAL`
+/// `InMemoryWorkoutEventStore`'s rules, with `wallClock` kept as seconds since 1970 in a `Double` (as a `REAL`
 /// column written with GRDB's `.timeIntervalSince1970` strategy would), and a conflict check that compares
 /// an incoming envelope with what it reads back.
 actor Since1970StampStore: WorkoutEventStore {

@@ -6,12 +6,12 @@ import Testing
 /// Round 2: would a buggy store pass the contract? Each `Mutation` is one plausible F05 mistake.
 /// Fix round 2 (finding 10) folded the tester's probes into `WorkoutEventStoreContract`, the suite F05
 /// runs, so this is now that suite's own guard: its clauses must catch every mutant and pass
-/// `InMemoryEventStore`.
+/// `InMemoryWorkoutEventStore`.
 @Suite("WorkoutEventStore · contract mutants (adversarial, round 2)", .tags(.domain))
 struct EventStoreMutationAdversarialTests {
     @Test("The in-memory reference store passes every contract clause")
     func inMemoryStore_passesEveryProbe() async {
-        let found = await WorkoutEventStoreContract.violations { InMemoryEventStore() }
+        let found = await WorkoutEventStoreContract.violations { InMemoryWorkoutEventStore() }
         #expect(found.isEmpty, "\(found)")
     }
 
@@ -22,7 +22,7 @@ struct EventStoreMutationAdversarialTests {
     }
 }
 
-/// `InMemoryEventStore`'s logic with one deliberate bug.
+/// `InMemoryWorkoutEventStore`'s logic with one deliberate bug.
 actor MutantEventStore: WorkoutEventStore {
     enum Mutation: String, CaseIterable, Sendable {
         /// Returns the whole batch, not only what it newly stored.

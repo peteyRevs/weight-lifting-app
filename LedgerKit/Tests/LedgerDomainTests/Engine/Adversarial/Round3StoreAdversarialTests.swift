@@ -63,7 +63,7 @@ extension Round3StoreAdversarialTests {
         """
     )
     func discardLogThenLatePeer_orphanIsKeptForever() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let phone = [Adv.start(), Adv.env(.discarded(endedAt: engineTime(50)), seq: 2, at: 50)]
         _ = try await store.append(phone)
         #expect(try await WorkoutEngine.replay(store.envelopes(for: Adv.workoutID))?.phase == .discarded)

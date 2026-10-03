@@ -20,7 +20,7 @@ struct LiteralHost {
     }
 
     let device: DeviceID
-    let store = InMemoryEventStore()
+    let store = InMemoryWorkoutEventStore()
     /// The device clock minus real time, in seconds.
     var offset: Double
     var hybrid = true

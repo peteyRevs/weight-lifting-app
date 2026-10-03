@@ -46,7 +46,9 @@ LedgerDomain        pure Swift; Foundation only. Models, WorkoutEngine, rules, p
    │
    └── App targets         Ledger (iOS), LedgerWatch (watchOS), widgets.
                            The ONLY place concrete implementations are wired together.
-LedgerTestSupport   fakes, fixtures, builders, in-memory DB, snapshot helpers. Test-only.
+LedgerFakes         in-memory stores, fixtures, device fakes; LedgerDomain only, #if DEBUG.
+                    Linked by the features (previews) and LedgerDependencies (previewValue) (ADR-008).
+LedgerTestSupport   contracts, builders, withTestDependencies; re-exports LedgerFakes. Test-only.
 ```
 
 Rules:
@@ -143,7 +145,7 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 
 - One primary view per file, ≤ 150 lines. Extract subviews early.
 - Every view has a `#Preview` for each meaningful state (empty, loading,
-  populated, error). Previews use `LedgerTestSupport` fixtures.
+  populated, error). Previews use `LedgerFakes` fixtures and the keys' seeded `previewValue`s (ADR-008).
 - Only `LedgerDesign` tokens for color, type, spacing, radius. A raw
   `Color(red:…)`, `.font(.system(size: 17))`, or `.padding(13)` in a feature
   is a lint error (the design lint below). "Tokens only" is enforced by
