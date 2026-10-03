@@ -119,7 +119,7 @@ struct HistoryCloseoutAdversarialTests {
     /// its name. A fake caught only by some other clause is caught by accident, and the next fixture change
     /// could let it through again.
     static let catchingClause: [HistoryModel.Fault: String] = [
-        .tiesInInsertionOrder: "newest first", .datedByStart: "newest first", .hardDelete: "even deleted",
+        .tiesInInsertionOrder: "newest first", .datedByEnd: "newest first", .hardDelete: "even deleted",
         .keepsLiveFields: "reads back equal", .lastIsFirstSet: "lastPerformance",
         .lastCountsEveryKind: "lastPerformance",
         .lastOfAnyWorkout: "lastPerformance", .bestsCountWarmups: "bestSet", .bestsCountDrops: "bestSet",

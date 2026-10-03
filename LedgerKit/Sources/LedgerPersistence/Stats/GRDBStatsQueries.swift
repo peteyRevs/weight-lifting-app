@@ -5,11 +5,14 @@ import LedgerDomain
 /// `StatsQueries` over the finished workouts `GRDBWorkoutRepository` stores.
 ///
 /// - Every query counts **done** sets of live, finished workouts only.
-/// - A workout's date is when it ended (`ended_at`): that is the date of a "Last" line, the week a workout's
-///   volume and e1RM fall in, and what a range selects. So a workout belongs to one week, whenever its sets
-///   were ticked.
+/// - A workout's date is when it **started** (`started_at`; product decision #26): that is the date of a "Last"
+///   line, the week a workout's volume and e1RM fall in, and what a range selects. So a session begun at
+///   11:30 pm and finished after midnight belongs to the day, and the week, it began in, whenever its sets
+///   were ticked. A row with no end is foreign damage (a finished workout always has one), and no query
+///   counts it.
 /// - The bests (`bestSet`, `bestE1RM`, `e1RMByWeek`) count the sets that can set a personal record:
-///   `.working` and `.added` (decision #3, `PersonalRecords.detect`). Volume counts every kind (rule 34).
+///   `.working` and `.added`, never warm-ups or drop sets (product decision #25; `PersonalRecords.detect` counts
+///   the same). Volume counts every kind (rule 34).
 /// - Weights are never multiplied or summed in SQL (ADR-007): SQL compares and orders the exact `_e7g`
 ///   integers, and volume is summed in `Decimal`.
 /// - Columns are read strictly (`ColumnReader`): a damaged value throws `malformedColumn`, never traps and
@@ -25,17 +28,17 @@ public struct GRDBStatsQueries: StatsQueries {
         self.now = now
     }
 
-    /// The "Last" line (spec §6.3, rule 14): the most recent workout in which the exercise has a done
-    /// `.working` set, as its end date, how many such sets it has, and the load and reps of the heaviest of
+    /// The "Last" line (spec §6.3, rule 14): the most recent workout (by start) in which the exercise has a
+    /// done `.working` set, as its start date, how many such sets it has, and the load and reps of the heaviest of
     /// them (of two as heavy, the one with more reps). `nil` when there is none.
     public func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {
         let sql = """
-        SELECT workout.ended_at AS ended_at, logged_set.weight_e7g AS weight_e7g, logged_set.reps AS reps
+        SELECT workout.started_at AS started_at, logged_set.weight_e7g AS weight_e7g, logged_set.reps AS reps
         \(SQL.doneSets) AND logged_set.kind = 'working' AND workout_exercise.exercise_id = :exercise
             AND workout.id = (
                 SELECT workout.id
                 \(SQL.doneSets) AND logged_set.kind = 'working' AND workout_exercise.exercise_id = :exercise
-                ORDER BY workout.ended_at DESC, workout.id LIMIT 1
+                ORDER BY workout.started_at DESC, workout.id LIMIT 1
             )
         ORDER BY logged_set.weight_e7g DESC, logged_set.reps DESC
         """
@@ -46,7 +49,7 @@ public struct GRDBStatsQueries: StatsQueries {
             }
             let set = ColumnReader(row: top, table: "logged_set")
             return try LastPerformance(
-                date: ColumnReader(row: top, table: "workout").date("ended_at"),
+                date: ColumnReader(row: top, table: "workout").date("started_at"),
                 sets: rows.count,
                 reps: set.reps("reps").value,
                 load: Weight(e7g: set.integer("weight_e7g"))
@@ -97,35 +100,35 @@ public struct GRDBStatsQueries: StatsQueries {
             return [:]
         }
         let sql = """
-        SELECT workout.ended_at AS ended_at, MAX(logged_set.e1rm_e7g) AS e1rm_e7g
+        SELECT workout.started_at AS started_at, MAX(logged_set.e1rm_e7g) AS e1rm_e7g
         \(SQL.doneSets) \(SQL.recordKinds) AND workout_exercise.exercise_id = ? AND logged_set.e1rm_e7g IS NOT NULL
-        GROUP BY workout.id ORDER BY workout.ended_at, workout.id
+        GROUP BY workout.id ORDER BY workout.started_at, workout.id
         """
         return try await queue.read { database in
             var best: [WeekKey: Weight] = [:]
             for row in try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]) {
-                let endedAt = try ColumnReader(row: row, table: "workout").date("ended_at")
+                let startedAt = try ColumnReader(row: row, table: "workout").date("started_at")
                 let estimate = try Weight(e7g: ColumnReader(row: row, table: "logged_set").integer("e1rm_e7g"))
                 // Whole weeks back from the current one; a workout dated after it counts for no week.
-                guard let week = calendar.firstDayOfWeek(containing: endedAt),
+                guard let week = calendar.firstDayOfWeek(containing: startedAt),
                       (0 ..< lastWeeks).contains(currentWeek.days(since: week) / 7)
                 else {
                     continue
                 }
-                let key = calendar.isoWeekKey(for: endedAt)
+                let key = calendar.isoWeekKey(for: startedAt)
                 best[key] = max(best[key] ?? estimate, estimate)
             }
             return best
         }
     }
 
-    /// Rule 34: Σ weight × reps over the done sets, of every kind, of the workouts that ended in `range`. The
+    /// Rule 34: Σ weight × reps over the done sets, of every kind, of the workouts that started in `range`. The
     /// Today delta (decision #15) is this for the current week against the previous complete week.
     public func weeklyVolume(in range: Range<Date>) async throws -> Volume {
         // One row per distinct weight, so SQL sums only the reps and the product is exact `Decimal`.
         let sql = """
         SELECT logged_set.weight_e7g AS weight_e7g, SUM(logged_set.reps) AS reps
-        \(SQL.doneSets) AND workout.ended_at >= ? AND workout.ended_at < ?
+        \(SQL.doneSets) AND workout.started_at >= ? AND workout.started_at < ?
         GROUP BY logged_set.weight_e7g ORDER BY logged_set.weight_e7g
         """
         return try await queue.read { database in
@@ -137,7 +140,7 @@ public struct GRDBStatsQueries: StatsQueries {
         }
     }
 
-    /// Rule 35: how many finished workouts ended in `range`, with or without a done set.
+    /// Rule 35: how many finished workouts started in `range`, with or without a done set.
     ///
     /// A workout row whose id is not stored as text is damage that no read returns (`WorkoutRows.fetch`), and
     /// every other query misses it already, since its children's text `workout_id` never equals it. It is not
@@ -145,7 +148,8 @@ public struct GRDBStatsQueries: StatsQueries {
     public func sessionsCompleted(in range: Range<Date>) async throws -> Int {
         let sql = """
         SELECT COUNT(*) FROM workout
-        WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at >= ? AND ended_at < ?
+        WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at IS NOT NULL
+            AND started_at >= ? AND started_at < ?
             AND typeof(id) = 'text'
         """
         return try await queue.read { database in
@@ -167,7 +171,7 @@ public struct GRDBStatsQueries: StatsQueries {
         let sql = """
         SELECT personal_record.* FROM personal_record JOIN workout ON workout.id = personal_record.workout_id
         WHERE personal_record.exercise_id = ? AND personal_record.deleted_at IS NULL
-            AND workout.deleted_at IS NULL AND workout.phase = 'finished'
+            AND workout.deleted_at IS NULL AND workout.phase = 'finished' AND workout.ended_at IS NOT NULL
         ORDER BY personal_record.achieved_at DESC, personal_record.kind, personal_record.id
         """
         return try await queue.read { database in
@@ -182,9 +186,9 @@ public struct GRDBStatsQueries: StatsQueries {
     /// and left out.
     public func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
         let sql = """
-        SELECT workout_exercise.exercise_id AS id, MAX(workout.ended_at) AS ended_at
+        SELECT workout_exercise.exercise_id AS id, MAX(workout.started_at) AS started_at
         \(SQL.doneSets)
-        GROUP BY workout_exercise.exercise_id ORDER BY ended_at DESC, workout_exercise.exercise_id LIMIT ?
+        GROUP BY workout_exercise.exercise_id ORDER BY started_at DESC, workout_exercise.exercise_id LIMIT ?
         """
         let table = WorkoutExerciseRecord.databaseTableName
         return try await queue.read { database in
@@ -197,18 +201,19 @@ public struct GRDBStatsQueries: StatsQueries {
 
 /// The SQL the stats queries share.
 private enum SQL {
-    /// The done sets of live, finished workouts, joined to their exercise and workout. Continue the
-    /// `WHERE` with `AND …`.
+    /// The done sets of live, finished workouts, joined to their exercise and workout. A finished workout always
+    /// has an end (`materialize` refuses one without), so a row with none is foreign damage and counts nowhere.
+    /// Continue the `WHERE` with `AND …`.
     static let doneSets = """
     FROM logged_set
     JOIN workout_exercise ON workout_exercise.id = logged_set.workout_exercise_id
     JOIN workout ON workout.id = workout_exercise.workout_id
     WHERE logged_set.deleted_at IS NULL AND logged_set.done_at IS NOT NULL
         AND workout_exercise.deleted_at IS NULL
-        AND workout.deleted_at IS NULL AND workout.phase = 'finished'
+        AND workout.deleted_at IS NULL AND workout.phase = 'finished' AND workout.ended_at IS NOT NULL
     """
 
-    /// Decision #3: the kinds of set that can set a personal record.
+    /// Product decision #25: the kinds of set that count toward a best (as `PersonalRecords.detect`).
     static let recordKinds = "AND logged_set.kind IN ('working', 'added')"
 
     /// What a `SELECT COUNT(…)` counts. It always answers with one row, so the `0` is never used.
@@ -216,7 +221,7 @@ private enum SQL {
         try Int.fetchOne(database, sql: sql, arguments: arguments) ?? 0
     }
 
-    /// A range's bounds for `ended_at >= ? AND ended_at < ?`.
+    /// A range's bounds for `started_at >= ? AND started_at < ?`.
     static func bounds(_ range: Range<Date>) -> StatementArguments {
         [range.lowerBound.timeIntervalSinceReferenceDate, range.upperBound.timeIntervalSinceReferenceDate]
     }

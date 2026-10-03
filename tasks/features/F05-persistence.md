@@ -91,7 +91,7 @@ public struct GRDBExerciseRepository: ExerciseRepository { public init(_ db: Dat
 2. Given a program with 8 weeks × 4 days saved via `GRDBProgramRepository.save`, when loaded, then it round-trips `Equatable`-equal including `misses`.
 3. Given a finished `WorkoutState` with 5 exercises, when `materialize` runs, then `workout`, `workout_exercise`, `logged_set` (with `e1rm_grams` computed), PRs and `slot_miss` rows are written in **one** transaction; a failure injected mid-way leaves no rows.
 4. Given 34 sessions of bench, when `lastPerformance(exerciseID:)` runs, then it returns the most recent finished workout's working sets as (date, sets, reps, load) per spec rule 14.
-5. Given sets across 10 ISO weeks, when `e1RMByWeek(lastWeeks: 8)` runs, then each week's value is the max `e1rm_grams` of done sets in that week and weeks with no sets are absent.
+5. Given sets across 10 ISO weeks, when `e1RMByWeek(lastWeeks: 8)` runs, then each week's value is the max `e1rm_grams` of done working and added sets in that week (product decision #25: warm-ups and drop sets never count toward a best) and weeks with no sets are absent.
 6. Given workouts in two consecutive weeks, when `weeklyVolume(in:)` runs for each, then values equal Σ weight×reps of done sets (drop/added included), and the Today delta can be computed from the two.
 7. Given a live workout's envelopes appended twice (duplicate keys), when read back, then each key appears once and `highestSeq` is correct per device.
 8. Given `compact(workout:)` after materialization, then `workout_event` rows for that workout are gone and `uncompactedWorkoutIDs()` excludes it.

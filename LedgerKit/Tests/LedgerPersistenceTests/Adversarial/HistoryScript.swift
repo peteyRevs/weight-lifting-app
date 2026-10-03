@@ -40,8 +40,10 @@ struct HistoryScript {
         Int.random(in: 0 ..< 100, using: &rng) < percent
     }
 
-    /// An end date: a week boundary of the calendar, or a few fixed times on a day within ten weeks of `now`.
-    mutating func endDate() -> Date {
+    /// A start date: a week boundary of the calendar, or a few fixed times on a day within ten weeks of `now`.
+    /// Round 1 used these as end dates; since product decision #26 a workout's date is its start, so the start
+    /// now lands on these edges (S3 fix round 3).
+    mutating func startDate() -> Date {
         let week = calendar.week(containing: now)
         if chance(20) {
             return pick([week.lowerBound, week.upperBound, week.lowerBound.addingTimeInterval(-0.5), now])
@@ -65,7 +67,9 @@ struct HistoryScript {
         let rows = (0 ..< Int.random(in: 0 ... 3, using: &rng)).map { _ in
             S3Kit.RowSpec(pick(Self.exercises), sets())
         }
-        return S3Kit.workout(number, endedAt: endDate(), minutes: pick([30, 600, 20000]), rows)
+        let start = startDate()
+        let minutes = pick([30.0, 600, 20000])
+        return S3Kit.workout(number, endedAt: start.addingTimeInterval(60 * minutes), minutes: minutes, rows)
     }
 
     /// At most one record of each kind, for one exercise, achieved at a time only this workout has.

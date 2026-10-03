@@ -10,9 +10,11 @@ import Testing
 /// back from `now`; the query counts civil days. They must agree.
 @Suite("Adversarial S3 · stats weeks", .tags(.persistence), .timeLimit(.minutes(1)))
 struct StatsWeeksAdversarialTests {
-    /// Bench workout `number` ending at `date`: one set whose estimate grows with `number`.
+    /// Bench workout `number` starting at `date` and lasting `minutes`: one set whose estimate grows with
+    /// `number`. A workout's week is the one it started in (product decision #26), so each case places the start
+    /// on the edge it tests (round 1 placed the end there, when the slice dated by the end).
     static func session(_ number: Int, at date: Date, minutes: Double = 45) -> WorkoutState {
-        S3Kit.workout(number, endedAt: date, minutes: minutes, [
+        S3Kit.workout(number, endedAt: date.addingTimeInterval(60 * minutes), minutes: minutes, [
             S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(Decimal(100 + number), 5)])
         ])
     }
@@ -68,7 +70,7 @@ struct StatsWeeksAdversarialTests {
         let answers = try await Self.agree(workouts, now: now, calendar, lastWeeks: [1, 2, 3, 100])
         // Stated directly for one week: the days from the week's start to its end, the last of them the best.
         let week = calendar.week(containing: now)
-        let inWeek = workouts.indices.filter { week.contains(workouts[$0].endedAt ?? now) }
+        let inWeek = workouts.indices.filter { week.contains(workouts[$0].startedAt) }
         #expect(inWeek.count == 7)
         #expect(answers[0] == [calendar.isoWeekKey(for: now): Self.estimate(inWeek.max() ?? 0)])
         #expect(answers[1].count == 2 && answers[3].count >= 3)
@@ -127,24 +129,28 @@ struct StatsWeeksAdversarialTests {
         #expect(sunday[0].values.sorted() == [Self.estimate(2)])
     }
 
-    /// (documents) Notes, question 7: a workout's date is when it ended.
-    @Test("(documents) A workout begun on Sunday night that ends after midnight counts for Monday's week, whole")
-    func midnightCrossing_countsForTheWeekItEndedIn() async throws {
+    /// Product decision #26 (Pete, 2026-10-02; round 1 documented the slice's first reading, by the end, as notes
+    /// question 7): a workout's date is when it started. One begun at 23:30 on Sunday and finished at 00:40 on
+    /// Monday counts whole for Sunday's week, with weeks starting on Monday, even with a set ticked after
+    /// midnight.
+    @Test("Decision #26: a workout begun on Sunday night that ends after midnight counts for Sunday's week, whole")
+    func midnightCrossing_countsForTheWeekItStartedIn() async throws {
         let stack = try await S3Kit.stack()
         let calendar = S3Kit.calendar()
-        let monday = S3Kit.instant("UTC", 2026, 9, 14, 0, 10)
-        var workout = Self.session(1, at: monday, minutes: 100)
-        workout.exercises[0].sets[0].doneAt = monday.addingTimeInterval(-3600) // ticked on Sunday
+        let sunday = S3Kit.instant("UTC", 2026, 9, 13, 23, 30)
+        var workout = Self.session(1, at: sunday, minutes: 70)
+        workout.exercises[0].sets[0].doneAt = sunday.addingTimeInterval(3600) // ticked on Monday
         try await stack.materialize(workout)
         let stats = stack.stats()
         let thisWeek = calendar.week(containing: S3Kit.now)
         let lastWeek = calendar.previousCompleteWeek(before: S3Kit.now)
-        #expect(try await stats.weeklyVolume(in: thisWeek) == workout.volume)
-        #expect(try await stats.weeklyVolume(in: lastWeek) == .zero)
-        #expect(try await stats.sessionsCompleted(in: lastWeek) == 0)
-        #expect(try await stack.workouts.workouts(in: lastWeek) == [])
-        let weeks = try await stats.e1RMByWeek(exerciseID: S3Kit.bench, lastWeeks: 1, calendar: calendar)
-        #expect(weeks == [WeekKey(year: 2026, week: 38): Self.estimate(1)])
+        #expect(try await stats.weeklyVolume(in: lastWeek) == workout.volume)
+        #expect(try await stats.weeklyVolume(in: thisWeek) == .zero)
+        #expect(try await stats.sessionsCompleted(in: thisWeek) == 0)
+        #expect(try await stats.sessionsCompleted(in: lastWeek) == 1)
+        #expect(try await stack.workouts.workouts(in: thisWeek) == [])
+        let weeks = try await stats.e1RMByWeek(exerciseID: S3Kit.bench, lastWeeks: 2, calendar: calendar)
+        #expect(weeks == [WeekKey(year: 2026, week: 37): Self.estimate(1)])
     }
 
     @Test("lastWeeks below 1 gives none; 1 the current week, later days included; .max every past week, no later one")

@@ -100,13 +100,15 @@ struct WorkoutValuesAdversarialTests {
     func extremeDates_roundTripAndTrapNoQuery(seconds: Double) async throws {
         let stack = try await S3Kit.stack()
         let date = Date(timeIntervalSinceReferenceDate: seconds)
-        var workout = S3Kit.mixed(1, endedAt: date)
-        workout.startedAt = Date(timeIntervalSinceReferenceDate: -seconds)
+        // The extreme date is the start, the date every list and query reads (product decision #26), and the
+        // mirrored one the end, so both columns still hold every extreme.
+        var workout = S3Kit.mixed(1, endedAt: Date(timeIntervalSinceReferenceDate: -seconds))
+        workout.startedAt = date
         let record = S3Kit.record(S3Kit.bench, .estimatedOneRepMax(.pounds(215)), in: workout, at: date)
         try await stack.materialize(workout, prs: [record])
         let read = try #require(try await stack.workouts.workout(id: workout.id))
         #expect(read == workout)
-        #expect(read.endedAt?.timeIntervalSinceReferenceDate.bitPattern == (seconds + 0).bitPattern)
+        #expect(read.startedAt.timeIntervalSinceReferenceDate.bitPattern == (seconds + 0).bitPattern)
         #expect(try await stack.workouts.recent(limit: 1) == [workout])
         let forever = Date(timeIntervalSinceReferenceDate: .infinity)
         #expect(try await stack.workouts.workouts(in: date ..< forever) == [workout])

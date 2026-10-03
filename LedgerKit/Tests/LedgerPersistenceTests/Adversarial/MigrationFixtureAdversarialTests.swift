@@ -49,11 +49,14 @@ struct MigrationFixtureAdversarialTests {
         }
     }
 
-    @Test("The fixture's schema is what the migrator builds today: every object, column, key and index, and no more")
+    /// Since S3 fix round 3 (v002, product decision #26) the fixture is migrated first: an old database brought
+    /// to the latest version must equal a new one.
+    @Test("The fixture, migrated, has the schema the migrator builds today: every object, column, key and index")
     func fixtureSchema_equalsAFreshDatabase() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only
         let fixture = try Self.copy(in: directory)
+        try LedgerDatabase.migrator.migrate(fixture)
         let fresh = try LedgerDatabase.inMemory()
         let stored = try await fixture.read { try Self.schema($0) }
         let built = try await fresh.read { try Self.schema($0) }
@@ -73,13 +76,16 @@ struct MigrationFixtureAdversarialTests {
         defer { try? directory.remove() } // cleanup only
         let fixture = try Self.copy(in: directory)
         let before = try await fixture.read { try Self.rows($0) }
-        #expect(try await fixture.read { try LedgerDatabase.migrator.hasCompletedMigrations($0) })
+        // The fixture is at v001; today's migrator brings it to the latest (S3 fix round 3 added v002).
+        #expect(try await fixture.read(LedgerDatabase.migrator.appliedIdentifiers) == ["v001_createSchema"])
         try LedgerDatabase.migrator.migrate(fixture)
+        #expect(try await fixture.read(LedgerDatabase.migrator.hasCompletedMigrations))
         #expect(try await fixture.read { try Self.rows($0) } == before)
         try fixture.close()
         let opened = try LedgerDatabase.open(at: directory.file("fixture.sqlite"))
         #expect(try await opened.read { try Self.rows($0) } == before)
         #expect(try await opened.read { try String.fetchOne($0, sql: "PRAGMA journal_mode") } == "wal")
+        #expect(try await opened.read(LedgerDatabase.migrator.hasCompletedMigrations))
     }
 
     @Test("Every stored estimate and total of the fixture is what today's code computes from its rows")

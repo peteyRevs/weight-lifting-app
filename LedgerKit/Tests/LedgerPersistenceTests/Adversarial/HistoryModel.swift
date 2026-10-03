@@ -12,7 +12,7 @@ import Synchronization
 final class HistoryModel: Sendable {
     /// One plausible mistake of a fake.
     enum Fault: String, CaseIterable, Sendable {
-        case tiesInInsertionOrder, datedByStart, hardDelete, keepsLiveFields, lastIsFirstSet, lastCountsEveryKind
+        case tiesInInsertionOrder, datedByEnd, hardDelete, keepsLiveFields, lastIsFirstSet, lastCountsEveryKind
         case lastOfAnyWorkout, bestsCountWarmups, bestsCountDrops, bestSetFewerReps, estimatesAbove12Reps
         case weeksInUTCFromMonday, weeksByTickTime, futureWeeksCount, volumeSkipsWarmups, sessionsNeedADoneSet
         case sessionCountIgnoresDone, recordsByWorkoutDate, recordsInGivenOrder, recentlyLoggedInWorkoutOrder
@@ -56,8 +56,10 @@ final class HistoryModel: Sendable {
 
     // MARK: - Reads
 
+    /// When the workout started (product decision #26, S3 fix round 3; round 1 dated by the end, as the slice
+    /// did then). The `.datedByEnd` fault dates by the end instead.
     func date(_ workout: WorkoutState) -> Date {
-        (has(.datedByStart) ? workout.startedAt : workout.endedAt) ?? workout.startedAt
+        has(.datedByEnd) ? workout.endedAt ?? workout.startedAt : workout.startedAt
     }
 
     /// The live workouts with their records, newest first; ties by id text, as the stored id sorts.

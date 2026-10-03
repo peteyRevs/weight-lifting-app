@@ -117,10 +117,28 @@ struct StatsQueriesTests {
         let stats = repositories.stats
         #expect(try await stats.sessionCount(exerciseID: Self.bench.id) == 1)
         #expect(try await stats.lastPerformance(exerciseID: Self.bench.id) == LastPerformance(
-            date: Contract.now,
+            date: Contract.now.addingTimeInterval(-3600), // the workout's start (product decision #26)
             sets: 3,
             reps: 3,
             load: .pounds(190)
         ))
+    }
+
+    @Test("A finished row with no end is foreign damage: listed nowhere, counted nowhere, its records hidden")
+    func finishedRowWithNoEnd_countsNowhere() async throws {
+        let repositories = try Repositories()
+        let workout = WorkoutRepositoryContract.workout()
+        let records = WorkoutRepositoryTests.records(of: workout)
+        try await repositories.history.materialize(workout, prs: records)
+        #expect(try await repositories.stats.personalRecords(exerciseID: Self.bench.id) == records)
+        try await repositories.execute("UPDATE workout SET ended_at = NULL")
+        let always = Date.distantPast ..< Date.distantFuture
+        #expect(try await repositories.workouts.recent(limit: 5) == [])
+        #expect(try await repositories.workouts.workouts(in: always) == [])
+        #expect(try await repositories.stats.personalRecords(exerciseID: Self.bench.id) == [])
+        #expect(try await repositories.stats.sessionsCompleted(in: always) == 0)
+        #expect(try await repositories.stats.weeklyVolume(in: always) == .zero)
+        #expect(try await repositories.stats.lastPerformance(exerciseID: Self.bench.id) == nil)
+        #expect(try await repositories.stats.recentlyLogged(limit: 5) == [])
     }
 }

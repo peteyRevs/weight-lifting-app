@@ -6,34 +6,34 @@ extension StatsQueriesContract {
     /// Criterion 5. Bench in ten consecutive weeks, the current one included. Each workout has three sets of
     /// its load, and a drop set and a warm-up with far higher estimates, which no week counts.
     /// - The week four weeks back has no workout and the one five weeks back only sets of 15 reps, so neither
-    ///   has a key. Last week has three workouts, and the best estimate wins.
+    ///   has a key. Last week has four workouts, and the best estimate wins.
     /// - The workouts eight and nine weeks back are outside the last 8, and so is one dated next week.
-    /// - A workout belongs to the week it **ended** in: the current week's best ended ten minutes into the week,
-    ///   with every set ticked the Sunday before.
-    /// - The weeks are the calendar's: last week's best ended on Sunday noon, so with weeks starting on Sunday
-    ///   it is the current week's best.
+    /// - A workout belongs to the week it **started** in (product decision #26): last week's best began at 23:30
+    ///   on Sunday and ended at 00:40 on Monday, with its bench sets ticked after midnight. The current week's
+    ///   best began ten minutes into the week.
+    /// - The weeks are the calendar's: with weeks starting on Sunday, last week's Sunday workouts are the
+    ///   current week's, and the late one is its best.
     static func e1RMByWeek(_ stores: HistoryStores) async throws -> String? {
         let calendar = try calendar
         let monday = calendar.week(containing: now).lowerBound
-        typealias Session = (endedAt: Date, set: Seeders.SetSpec)
+        typealias Session = (startedAt: Date, set: Seeders.SetSpec)
+        let late: Session = (monday.addingTimeInterval(-1800), .init(215, 5))
         let best: [Session] = [
-            (monday.addingTimeInterval(600), .init(205, 5)), (monday.addingTimeInterval(-12 * 3600), .init(210, 5)),
+            (monday.addingTimeInterval(600), .init(205, 5)), late,
             (day(-14), .init(190, 4)), (day(-21), .init(180, 6)), (day(-42), .init(175, 5)), (day(-49), .init(170, 5))
         ]
         let others: [Session] = [
             (now, .init(195, 5)), (day(-7), .init(185, 8)), (day(-7), .init(190, 5)), (day(-35), .init(100, 15)),
-            (day(-56), .init(300, 1)), (day(-63), .init(300, 1)), (day(7), .init(400, 1))
+            (day(-56), .init(300, 1)), (day(-63), .init(300, 1)), (day(7), .init(400, 1)),
+            (monday.addingTimeInterval(-12 * 3600), .init(210, 5))
         ]
-        let uncounted: [Seeders.SetSpec] = [.init(500, 1, .drop), .init(450, 2, .warmup)]
         for (number, session) in (others + best).enumerated() {
-            try await stores.materialize(Seeders.workout(number: number, endedAt: session.endedAt, [
-                Seeders.ExerciseLog(bench, Array(repeating: session.set, count: 3) + uncounted),
-                .straight(row, sets: 3, reps: 5, pounds: 500)
-            ]))
+            let isLate = session.startedAt == late.startedAt
+            try await materializeWeek(number, startedAt: session.startedAt, session.set, late: isLate, in: stores)
         }
         var expected: [WeekKey: Weight] = [:]
         for session in best {
-            expected[calendar.isoWeekKey(for: session.endedAt)] = e1RM(session.set)
+            expected[calendar.isoWeekKey(for: session.startedAt)] = e1RM(session.set)
         }
         let sundays = try Self.calendar(weekStart: .sunday)
         let stats = stores.stats
@@ -47,10 +47,33 @@ extension StatsQueriesContract {
             ContractCheck.expect(one, [calendar.isoWeekKey(for: now): e1RM(best[0].set)], "e1RMByWeek(lastWeeks: 1)"),
             ContractCheck.expect(
                 fromSunday,
-                [sundays.isoWeekKey(for: now): e1RM(best[1].set)],
+                [sundays.isoWeekKey(for: now): e1RM(late.set)],
                 "e1RMByWeek(lastWeeks: 1) with weeks starting on Sunday"
             )
         )
+    }
+
+    /// A bench workout of three sets of `set`, a drop set and a warm-up with far higher estimates, after three
+    /// rows of another exercise. It lasts an hour, or 70 minutes when `late`, so a late one's bench sets are
+    /// ticked after midnight.
+    private static func materializeWeek(
+        _ number: Int,
+        startedAt start: Date,
+        _ set: Seeders.SetSpec,
+        late: Bool,
+        in stores: HistoryStores
+    ) async throws {
+        let minutes = late ? 70 : 60
+        let uncounted: [Seeders.SetSpec] = [.init(500, 1, .drop), .init(450, 2, .warmup)]
+        try await stores.materialize(Seeders.workout(
+            number: number,
+            endedAt: Workouts.ending(startedAt: start, minutes: minutes),
+            minutes: minutes,
+            [
+                .straight(row, sets: 3, reps: 5, pounds: 500),
+                Seeders.ExerciseLog(bench, Array(repeating: set, count: 3) + uncounted)
+            ]
+        ))
     }
 
     /// The Brzycki estimate of `set`; `.zero` above 12 reps, which no expected value here has.
@@ -58,24 +81,27 @@ extension StatsQueriesContract {
         OneRepMax.brzycki(weight: set.weight, reps: Reps(clamping: set.reps)) ?? .zero
     }
 
-    /// Criterion 6. Two workouts this week (one ending on the week's first instant) and one in the previous
+    /// Criterion 6. Two workouts this week (one starting on the week's first instant) and two in the previous
     /// complete week, each with drop, added and warm-up sets and a set left undone. Each week's volume is the
-    /// sum of its workouts' `WorkoutState.volume`, and the Today delta is their difference.
+    /// sum of its workouts' `WorkoutState.volume`, and the Today delta is their difference. One of last week's
+    /// began at 23:30 on its last day and ended after midnight: it is last week's (product decision #26).
     static func weeklyVolume(_ stores: HistoryStores) async throws -> String? {
         let calendar = try calendar
         let thisWeek = calendar.week(containing: now)
         let lastWeek = calendar.previousCompleteWeek(before: now)
         let current = [
             Workouts.workout(number: 0, endedAt: now),
-            Workouts.workout(number: 1, endedAt: thisWeek.lowerBound)
+            Workouts.workout(number: 1, endedAt: Workouts.ending(startedAt: thisWeek.lowerBound))
         ]
-        let previous = Seeders.workout(number: 2, endedAt: lastWeek.lowerBound.addingTimeInterval(3600), [
+        let previous = Seeders.workout(number: 2, endedAt: Workouts.ending(startedAt: lastWeek.lowerBound), [
             Seeders.ExerciseLog(
                 bench,
                 [.init(180, 5), .init(180, 5), .init(152.5, 7, .drop), .init(185, 3, done: false)]
             )
         ])
-        for workout in current + [previous] {
+        let lateStart = thisWeek.lowerBound.addingTimeInterval(-1800)
+        let late = Workouts.workout(number: 3, endedAt: Workouts.ending(startedAt: lateStart, minutes: 70), minutes: 70)
+        for workout in current + [previous, late] {
             try await stores.materialize(workout)
         }
         let volume = try await stores.stats.weeklyVolume(in: thisWeek)
@@ -84,16 +110,18 @@ extension StatsQueriesContract {
         let both = try await stores.stats.weeklyVolume(in: lastWeek.lowerBound ..< thisWeek.upperBound)
         return ContractCheck.first(
             ContractCheck.expect(volume, expected, "this week's volume"),
-            ContractCheck.expect(before, Volume(gramReps: Weight.pounds(2867.5).grams), "last week's volume"),
-            ContractCheck.expect(volume - before, expected - previous.volume, "the Today delta"),
-            ContractCheck.expect(both, expected + previous.volume, "the volume of both weeks")
+            ContractCheck.expect(before, previous.volume + late.volume, "last week's volume"),
+            ContractCheck.expect(previous.volume, Volume(gramReps: Weight.pounds(2867.5).grams), "a week's arithmetic"),
+            ContractCheck.expect(volume - before, expected - previous.volume - late.volume, "the Today delta"),
+            ContractCheck.expect(both, expected + previous.volume + late.volume, "the volume of both weeks")
         )
     }
 
-    /// `sessionsCompleted` counts the workouts that ended in a range, with or without a done set: last week
-    /// holds an empty workout and one on the week's first instant, and not the one a second before it.
-    /// `sessionCount` counts the workouts with a done set of the exercise, of any kind. A workout that performs
-    /// bench in two rows is one session, and its working sets are one "Last" line.
+    /// `sessionsCompleted` counts the workouts that started in a range (product decision #26), with or without
+    /// a done set: last week holds an empty workout, one on the week's first instant, and one begun at 23:30 on
+    /// its last day that ended after midnight; not the one a second before the week. `sessionCount` counts the
+    /// workouts with a done set of the exercise, of any kind. A workout that performs bench in two rows is one
+    /// session, and its working sets are one "Last" line, dated when the workout started.
     static func sessions(_ stores: HistoryStores) async throws -> String? {
         let calendar = try calendar
         let thisWeek = calendar.week(containing: now)
@@ -102,13 +130,19 @@ extension StatsQueriesContract {
         let twice: [Seeders.ExerciseLog] = [
             .straight(bench, sets: 3, reps: 5, pounds: 180), .straight(bench, sets: 1, reps: 3, pounds: 190)
         ]
+        let rowOnce: [Seeders.ExerciseLog] = [.straight(row, sets: 1, reps: 8, pounds: 70)]
+        func starting(_ start: Date, minutes: Int = 60) -> Date {
+            Workouts.ending(startedAt: start, minutes: minutes)
+        }
+        let late = thisWeek.lowerBound.addingTimeInterval(-1800)
         let workouts = [
-            Seeders.workout(number: 0, endedAt: thisWeek.lowerBound, twice),
+            Seeders.workout(number: 0, endedAt: starting(thisWeek.lowerBound), twice),
             Seeders.workout(number: 1, endedAt: now, [undone, .straight(row, sets: 3, reps: 8, pounds: 70)]),
             Seeders.workout(number: 2, endedAt: day(1), [Seeders.ExerciseLog(bench, [.init(60, 10, .warmup)])]),
-            Seeders.workout(number: 3, endedAt: lastWeek.lowerBound.addingTimeInterval(1), []),
-            Seeders.workout(number: 4, endedAt: lastWeek.lowerBound, [.straight(row, sets: 1, reps: 8, pounds: 70)]),
-            Seeders.workout(number: 5, endedAt: lastWeek.lowerBound.addingTimeInterval(-1), [])
+            Seeders.workout(number: 3, endedAt: starting(lastWeek.lowerBound.addingTimeInterval(1)), []),
+            Seeders.workout(number: 4, endedAt: starting(lastWeek.lowerBound), rowOnce),
+            Seeders.workout(number: 5, endedAt: starting(lastWeek.lowerBound.addingTimeInterval(-1)), []),
+            Seeders.workout(number: 6, endedAt: starting(late, minutes: 70), minutes: 70, rowOnce)
         ]
         for workout in workouts {
             try await stores.materialize(workout)
@@ -117,9 +151,9 @@ extension StatsQueriesContract {
         let line = LastPerformance(date: thisWeek.lowerBound, sets: 4, reps: 3, load: .pounds(190))
         return try await ContractCheck.first(
             ContractCheck.expect(stats.sessionsCompleted(in: thisWeek), 3, "sessions this week"),
-            ContractCheck.expect(stats.sessionsCompleted(in: lastWeek), 2, "sessions last week, one with no sets"),
+            ContractCheck.expect(stats.sessionsCompleted(in: lastWeek), 3, "sessions last week, the late one included"),
             ContractCheck.expect(stats.sessionCount(exerciseID: bench.id), 2, "bench sessions: done sets only"),
-            ContractCheck.expect(stats.sessionCount(exerciseID: row.id), 2, "row sessions"),
+            ContractCheck.expect(stats.sessionCount(exerciseID: row.id), 3, "row sessions"),
             ContractCheck.expect(stats.lastPerformance(exerciseID: bench.id), line, "the Last line of two rows")
         )
     }
@@ -226,7 +260,7 @@ extension StatsQueriesContract {
         return try await ContractCheck.first(
             ContractCheck.expect(
                 line,
-                LastPerformance(date: now, sets: 2, reps: 2, load: .pounds(200)),
+                LastPerformance(date: now.addingTimeInterval(-3600), sets: 2, reps: 2, load: .pounds(200)),
                 "lastPerformance after updateSets"
             ),
             ContractCheck.expect(estimate, e1RM(200, 2), "bestE1RM after updateSets"),

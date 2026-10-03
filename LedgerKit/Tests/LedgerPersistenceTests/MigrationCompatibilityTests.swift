@@ -33,9 +33,9 @@ struct MigrationCompatibilityTests {
 
     /// A migration no released version has: additive, as every migration must be (ADR-002). It adds a
     /// column to a synced table, a table with a foreign key to one, and an index.
-    static var migratorWithV002: DatabaseMigrator {
+    static var migratorWithV003: DatabaseMigrator {
         var migrator = LedgerDatabase.migrator
-        migrator.registerMigration("v002_testOnly") { database in
+        migrator.registerMigration("v003_testOnly") { database in
             try database.execute(sql: """
             ALTER TABLE workout ADD COLUMN notes TEXT;
             CREATE TABLE workout_photo (
@@ -98,19 +98,20 @@ struct MigrationCompatibilityTests {
     }
 
     @Test("Criterion 12: migrating the v001 fixture to a later schema keeps every row, and it reads back")
-    func v002_keepsTheData() async throws {
+    func v003_keepsTheData() async throws {
         let directory = TemporaryDirectory()
         defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
         let queue = try DatabaseQueue(path: Self.fixtureCopy(in: directory).path(percentEncoded: false))
-        try Self.migratorWithV002.migrate(queue)
+        try Self.migratorWithV003.migrate(queue)
         let (applied, orphans, notes) = try await queue.read { database in
             try (
-                Self.migratorWithV002.appliedIdentifiers(database),
+                Self.migratorWithV003.appliedIdentifiers(database),
                 Row.fetchAll(database, sql: "PRAGMA foreign_key_check").count,
                 String.fetchAll(database, sql: "SELECT quote(notes) FROM workout")
             )
         }
-        #expect(applied == ["v001_createSchema", "v002_testOnly"])
+        // Through the real v002 (product decision #26's index), then the test-only v003.
+        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex", "v003_testOnly"])
         #expect(orphans == 0)
         #expect(notes == ["NULL", "NULL", "NULL"])
         #expect(try await Self.rowCounts(in: queue) == Self.rowCounts)
@@ -190,8 +191,9 @@ extension MigrationCompatibilityTests {
 
         let stats = GRDBStatsQueries(queue, now: now)
         #expect(try await stats.bestE1RM(exerciseID: bench) == Weight(grams: 94404))
+        // The Last line's date is the workout's start, an hour before its end (product decision #26).
         #expect(try await stats.lastPerformance(exerciseID: bench) == LastPerformance(
-            date: ended,
+            date: ended.addingTimeInterval(-3600),
             sets: 5,
             reps: 5,
             load: .pounds(185)

@@ -1397,3 +1397,139 @@ an empty parent. The fix is the tester's, applied by the orchestrator: `WorkoutR
 blob id (logged and left out, or thrown by the strict read). The same residue as S3-3 stays: until a write
 repairs it, `sessionsCompleted` counts such a workout row and it takes a place of `recent`'s limit. The
 tester's two tests (`HistoryCloseoutAdversarialTests.lowercase…`) pass unedited. Code lines: 687 → 691.
+
+### S3 fix round 3 (Pete's decisions #25–#27)
+
+Inputs: product decisions #25 to #27 (Pete, 2026-10-02) at `cd5d368`. The first pass did #25 and #27 and stopped
+on #26, because #26 breaks tester tests beyond the one sanctioned "(documents)" test. The orchestrator then
+sanctioned those edits within stated limits (2026-10-02), and the round was finished. HEAD and the branch never
+moved: `git branch --show-current` printed `feat/F05-s3` at the start and the end of both passes.
+
+**#25: working and added sets count toward bests. No code change; docs aligned.**
+- F05 criterion 5 (`tasks/features/F05-persistence.md`) now says "done working and added sets", citing #25.
+- F12's set-kinds line (`tasks/features/F12-library-history.md`) says working and added sets feed e1RM and best,
+  and warm-ups and drop sets never count toward a best.
+- Doc comments cite #25 instead of "open question 6": `StatsQueries` (`Repositories.swift`), `GRDBStatsQueries`
+  and its `SQL.recordKinds`, and `StatsQueriesContract`.
+- **Sanctioned tester edit:** `StatsQueriesAdversarialTests.kinds_countAsDocumented`. The title drops
+  "(documents)" and cites #25, and the doc comment is reworded. Every assertion is unchanged.
+
+**#27: records after an edit. Docs only; the build is the F05 follow-up.** The `updateSets` docs
+(`GRDBWorkoutRepository` and `WorkoutRepository`) say the F05 follow-up re-checks the records inside the edit's
+write, per #27. F13's "Inputs from F05" already hands this to the F05 follow-up.
+
+**#26: a workout belongs to the day and week it started.**
+- **Queries changed** (`ended_at` → `started_at`):
+  - `recent(limit:)`: newest start first, then id (`WorkoutRows.Selection.recent`, and `Query.workouts`' order);
+  - `workouts(in:)` (`Selection.started(in:)`, renamed from `ended(in:)`);
+  - the "Last" line: which workout it reads, and its date;
+  - `e1RMByWeek`: each workout's week and key;
+  - `weeklyVolume` and `sessionsCompleted`: the range;
+  - `recentlyLogged`: an exercise's latest workout.
+- **`ended_at` still means the end** in `notFinished`, in elapsed time (`WorkoutState.elapsed`), and in the
+  filter below. `personalRecords` orders by `achievedAt`, the record's own time, so it is unchanged.
+- **A finished row with no end** (orchestrator decision, 2026-10-02) is foreign damage: `materialize` refuses a
+  workout without one. The lists (`Selection.recent`, `.started(in:)`) and the stats (`SQL.doneSets`,
+  `sessionsCompleted`, `personalRecords`) require `phase = 'finished' AND ended_at IS NOT NULL`. So such a row is
+  listed nowhere and counted nowhere, and the "Last" line skips it.
+- **Migration `v002_workoutStartedIndex`** creates `idx_workout_started ON workout(started_at DESC, id)`.
+  - **Deviation from the brief's `(started_at)`, on purpose.** With `(started_at)` alone, `recent`'s selection
+    (`ORDER BY started_at DESC, id LIMIT ?`) still scans `workout` and sorts it, as the old `ended_at` version did.
+    `(started_at DESC, id)` is that order, so `recent` reads straight from the index and stops at its limit.
+    Ranges still search it.
+  - `idx_workout_ended` (v001) stays, frozen. No query uses it now (`QueryPlanTests` pins that).
+  - `Fixtures/schema-v002.sql` is new: v001's file plus the one index line.
+  - `SchemaTests` now checks each migration's schema against its fixture
+    (`migrator.migrate(_:upTo:)`), a new database against the latest, and the migration list (v001, v002).
+  - The test-only migration in `MigrationCompatibilityTests` is now `v003_testOnly`, so the v001 fixture migrates
+    through the real v002, then v003.
+- **Query plans** (`QueryPlanTests`, all 7 changed queries; no `ANALYZE`, as in the app). Each statement the call
+  runs is traced and passed to `EXPLAIN QUERY PLAN`. Each must reach the workouts through its index, scan no
+  history table bare, and never touch `idx_workout_ended`:
+
+  | Query | Entry |
+  |---|---|
+  | `recent` | `SCAN workout USING INDEX idx_workout_started` (the index order, stopped at the limit) |
+  | `workouts(in:)`, `weeklyVolume`, `sessionsCompleted` | `SEARCH workout USING INDEX idx_workout_started (started_at>? AND started_at<?)` |
+  | `lastPerformance`, `e1RMByWeek` | `SEARCH workout_exercise USING INDEX idx_wex_exercise_workout (exercise_id=?)` |
+  | `recentlyLogged` | `SCAN workout_exercise USING INDEX idx_wex_exercise_workout` (every exercise row, by design) |
+
+  The children follow by `idx_wex_workout`, `idx_logged_set_wex` and the primary key. With `(started_at)` alone
+  the `recent` pin fails (mutant I1).
+- **Late-workout pins** (`WorkoutDateTests`):
+  - Tuesday 23:30 → Wednesday 00:40 is Tuesday's: its day range, `sessionsCompleted`, `weeklyVolume`, the "Last"
+    line's date, and the list order beside a workout begun after it and ended before it.
+  - Sunday 23:30 → Monday 00:40 with weeks from Monday, and Saturday 23:30 → Sunday 00:40 with weeks from Sunday,
+    are last week's: `workouts(in:)`, `sessionsCompleted`, `weeklyVolume` and `e1RMByWeek`.
+  - `StatsQueriesTests.finishedRowWithNoEnd_countsNowhere`.
+- **Contracts, so a fake that dates by the end fails.**
+  - `newestFirst`: a long workout started before the newest but ended after it.
+  - `lastPerformance`: a long workout started earlier and ended later.
+  - `e1RMByWeek`: last week's best began at 23:30 on Sunday, with its bench sets ticked after midnight. It also
+    keeps catching dating by tick.
+  - `weeklyVolume` and `sessions`: a Sunday-night workout that ends on Monday is last week's.
+  - Every clause's fixtures now place a workout's **start** on the edge it tests (`WorkoutRepositoryContract.ending(startedAt:minutes:)`).
+  - The tester's model now has a `.datedByEnd` fault, which the `newestFirst` clause catches. All 25 faults are
+    caught, and the honest model keeps all 21 clauses.
+- **Sanctioned tester edits for #26** (orchestrator, 2026-10-02). Each changes only what #26 or the real v002
+  changes, and every other assertion is kept:
+  - `HistoryReadAdversarialTests.rangesAndLimits_atTheirEdges`: workout *i* now **starts** at day *i* (it ends 45
+    minutes later), so `:41`, `:43` and `:53` test the same edges by the start. No assertion changed.
+  - `HistoryReadAdversarialTests.foreignPhase_isListedButNotCounted`, second half: a finished row with no end is
+    now listed nowhere, counted nowhere, and the "Last" line skips it. `recent == []` replaces the listed `[nil]`,
+    `lastPerformance == nil` replaces the `malformedColumn` throw, and `sessionsCompleted` and `weeklyVolume` are
+    checked too. The title and doc comment say so.
+  - `StatsWeeksAdversarialTests`:
+    - `session(_:at:minutes:)` now takes the start (the end is `minutes` later), so every case puts its start on
+      the edge it tests: the clock-change offsets (`:51`, 6 zones), the week before (`:107`) and the week-start
+      grid. In `everyWeekStart_groupsByItsOwnWeeks`, `inWeek` filters on `startedAt`.
+    - `midnightCrossing_countsForTheWeekItEndedIn` is now `midnightCrossing_countsForTheWeekItStartedIn`, titled
+      with #26. A workout from Sunday 23:30 to Monday 00:40, one set ticked on Monday, is last week's whole:
+      volume, sessions, `workouts(in:)` and the e1RM key (2026-W37).
+  - `StatsQueriesAdversarialTests.lastPerformance_tieOfWorkouts`: the expected line's date is the start (45 minutes
+    before the end); "ended together" is now "started together" in the title.
+  - `WorkoutValuesAdversarialTests.extremeDates_roundTripAndTrapNoQuery`: the extreme date is now the **start**,
+    and its mirror the end, so both columns still hold every extreme. The bit-for-bit check reads `startedAt`.
+  - The oracle. `HistoryModel.date(_:)` dates by the start, and `.datedByStart` becomes `.datedByEnd`.
+    `HistoryModel+Stats` reads the "Last" line's date and each workout's week through `date(_:)`.
+    `HistoryCloseoutAdversarialTests.catchingClause` takes the renamed key, mapped to the same clause.
+  - `HistoryScript` (the model test's fixture). `endDate()` is now `startDate()`, and the chosen instant is the
+    start (the end is `minutes` later), so the model test's week-edge instants still fall on the edges.
+    Without it, the nightly `The model test bites` stopped catching `.closedRanges`. Only the fixture changed; no
+    assertion.
+  - Real v002:
+    - `SchemaAdversarialTests.migrateAgain_changesNothing` and
+      `FileDatabaseAdversarialTests.unusualPath_opensAndReopens` expect the applied list (v001, v002) instead of
+      one row.
+    - `MigrationFixtureAdversarialTests.fixtureSchema_equalsAFreshDatabase` migrates the v001 fixture before
+      comparing it with a new database.
+    - `migratingTheFixture_changesNoRow` expects v001 alone before, and every migration completed after
+      `migrate` and after `open`.
+  - **No tester assertion changed beyond these limits.**
+- **Mutants** (host, one at a time, file restored after each; script and results in scratchpad
+  `f05s3/fix3-mut/`). All 16 were killed:
+  - each of the nine queries dated by the end again (`recent`'s selection, the read order, `workouts(in:)`, the
+    Last line's choice and its date, `e1RMByWeek`, `weeklyVolume`, `sessionsCompleted`, `recentlyLogged`);
+  - each of the five no-end filters removed;
+  - v002 back to `(started_at)` alone.
+
+  The `personalRecords` no-end filter survived the first run and got
+  `StatsQueriesTests.finishedRowWithNoEnd_countsNowhere`.
+- **Criterion 9, under the lock** (`Nightly` and `Nightly-Watch`, `StatsQueriesPerformanceTests`; log
+  `scratchpad/f05s3/round3/perf.log`): both pass. The worst p95 is `recentlyLogged` at 6.9 ms on the iPhone and
+  6.7 ms on the watch, as before the change.
+  - The tester's worst-case timing (`StatsWorstCaseAdversarialTests`, nightly lane, host) failed twice while the
+    Mac's load average was about 20 (other worktrees' gates), and passed three times alone.
+  - Its tight query is `weeklyVolume` over 20,000 distinct weights (33 to 35 ms of 50 in round 1, S3-N4). The
+    cost there is the `Decimal` product per weight, which #26 does not touch.
+- **Code lines** (same method; vs `a38ed78`): **701**, up 5 from 696 at `cd5d368` (+25, −20).
+- **Gate** (2026-10-02, Xcode 27.0, iPhone 17 and Apple Watch Series 12 (46mm) on 27.0):
+  - `scripts/check.sh --fast` OK on the host: `LedgerPersistenceTests` 349, `LedgerDomainTests` 762.
+  - **Full gate, through the lock: green, exit 0** (384 s; log `scratchpad/f05s3/check-fix3.log`). 17/17 PR
+    targets on iOS (1,372 passed, 10 skipped by design) and 8/8 PR-Watch targets on watchOS (1,263 passed, 10
+    skipped).
+  - No new warning: only S1's adversarial `PayloadVersionAdversarialTests.swift:29` "will never be executed",
+    with xcbeautify's "exit code 0" lines beside its compile batch, as in earlier gates.
+  - **Coverage:** LedgerPersistence **99.84 %** (1955/1958), LedgerDomain 99.05 %, LedgerDesign 97.20 %, overall
+    98.68 %.
+  - These notes were finished after the gate; docs only.

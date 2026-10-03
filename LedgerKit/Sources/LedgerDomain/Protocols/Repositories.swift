@@ -39,7 +39,8 @@ public protocol ProgramRepository: Sendable {
 /// Finished workouts (rule 31 materialisation; decision #11 history list and edits). `WorkoutRepositoryContract`
 /// in LedgerTestSupport pins what follows, for every implementation.
 ///
-/// A workout's date, for ordering and for ranges, is when it ended (`endedAt`; F05 notes, open question 7).
+/// A workout's date, for ordering and for ranges, is when it started (`startedAt`; product decision #26), so a
+/// session begun at 11:30 pm and finished after midnight is the earlier day's, and that week's.
 public protocol WorkoutRepository: Sendable {
     /// Rule 31: stores the finished workout with its exercises and sets, `prs` as its personal records, and
     /// the misses of `slotUpdates` (rule 13), in one transaction: all of it or nothing.
@@ -60,13 +61,14 @@ public protocol WorkoutRepository: Sendable {
     /// The stored workout, or `nil`. A history read resets the live-only fields: no `cursor`, no `rest`, no
     /// `programUpdates`, no exercise's `lastPerformance`, and `autoRest` true.
     func workout(id: WorkoutID) async throws -> WorkoutState?
-    /// The `limit` workouts that ended last, newest first (of two that ended together, the smaller id first);
+    /// The `limit` workouts that started last, newest first (of two that started together, the smaller id first);
     /// none when `limit` is below 1.
     func recent(limit: Int) async throws -> [WorkoutState]
-    /// The workouts that ended in `range` (its upper bound excluded), newest first, as `recent`.
+    /// The workouts that started in `range` (its upper bound excluded), newest first, as `recent`.
     func workouts(in range: Range<Date>) async throws -> [WorkoutState]
     /// Replaces the sets of one exercise of a stored workout. Everything computed from sets follows; the
-    /// workout's personal records are left as they are, and can be stale afterwards. An exercise of no stored
+    /// workout's personal records are left as they are, and can be stale afterwards, until the F05 follow-up re-checks
+    /// them in this write (product decision #27). An exercise of no stored
     /// workout throws `missingRow`; a set id used twice, or held by another workout, `duplicateIdentifier`.
     func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws
     /// Removes the workout, with its records, from every read and every stats query; materialising it again
@@ -86,15 +88,15 @@ public protocol SettingsRepository: Sendable {
 /// History aggregates (spec §6.1 "History", §7.7; decisions #3, #4, #15), over the workouts a
 /// `WorkoutRepository` stores. `StatsQueriesContract` in LedgerTestSupport pins what follows.
 ///
-/// Every query counts done sets of stored workouts only, and a workout's date is when it ended (F05 notes,
-/// open question 7). Which kinds of set count differs by query (F05 notes, open question 6):
+/// Every query counts done sets of stored workouts only, and a workout's date is when it started (product
+/// decision #26). Which kinds of set count differs by query (product decision #25):
 /// - the "Last" line counts `.working` sets;
 /// - the bests (`bestSet`, `bestE1RM`, `e1RMByWeek`) count `.working` and `.added` sets, those that can set a
-///   personal record (decision #3);
+///   personal record (decision #25; warm-ups and drop sets never count);
 /// - volume, `sessionCount` and `recentlyLogged` count every kind.
 public protocol StatsQueries: Sendable {
-    /// Spec §6.3 "Last" line: the most recent workout with a done working set of the exercise (of two that
-    /// ended together, the smaller id), as its end date, the number of such sets, and the load and reps of the
+    /// Spec §6.3 "Last" line: the most recent workout (by start) with a done working set of the exercise (of two
+    /// that started together, the smaller id), as its start date, the number of such sets, and the load and reps of the
     /// heaviest of them (of two as heavy, the one with more reps). Rows of one workout that perform the
     /// exercise count together. `nil` when there is none.
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance?
@@ -106,9 +108,9 @@ public protocol StatsQueries: Sendable {
     /// included, keyed by `WeekCalendar.isoWeekKey(for:)`. A week with no estimate has no key; `lastWeeks`
     /// below 1 gives none.
     func e1RMByWeek(exerciseID: ExerciseID, lastWeeks: Int, calendar: WeekCalendar) async throws -> [WeekKey: Weight]
-    /// Rule 34 / decision #15: Σ weight × reps over the done sets of the workouts that ended in `range`.
+    /// Rule 34 / decision #15: Σ weight × reps over the done sets of the workouts that started in `range`.
     func weeklyVolume(in range: Range<Date>) async throws -> Volume
-    /// Rule 35 / decision #15: how many workouts ended in `range`, with or without a done set.
+    /// Rule 35 / decision #15: how many workouts started in `range`, with or without a done set.
     func sessionsCompleted(in range: Range<Date>) async throws -> Int
     /// How many workouts hold a done set of the exercise; one that performs it in two rows counts once.
     func sessionCount(exerciseID: ExerciseID) async throws -> Int

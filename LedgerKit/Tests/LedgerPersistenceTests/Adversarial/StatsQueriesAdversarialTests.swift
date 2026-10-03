@@ -10,10 +10,11 @@ import Testing
 struct StatsQueriesAdversarialTests {
     static let always = Date.distantPast ..< Date.distantFuture
 
-    /// (documents) Notes, question 6: criterion 5 says "done sets", F12's brief `.working` only, and the slice
-    /// follows decision #3. One heavy done set of `kind` beside a light working set shows who counts it.
+    /// Product decision #25 (Pete, 2026-10-02; round 1 documented the slice's reading as notes question 6): the
+    /// bests count working and added sets, never warm-ups or drops. One heavy done set of `kind` beside a light
+    /// working set shows who counts it.
     @Test(
-        "(documents) Which kinds count: the Last line working only, the bests working and added, volume all",
+        "Decision #25: the Last line counts working sets, the bests working and added, volume every kind",
         arguments: SetKind.allCases
     )
     func kinds_countAsDocumented(kind: SetKind) async throws {
@@ -39,7 +40,7 @@ struct StatsQueriesAdversarialTests {
     }
 
     @Test(
-        "Of two workouts that ended together, the Last line reads the smaller id's, whichever was stored first",
+        "Of two workouts that started together, the Last line reads the smaller id's, whichever was stored first",
         arguments: [
             [1, 2], [2, 1]
         ]
@@ -50,7 +51,8 @@ struct StatsQueriesAdversarialTests {
             let sets = [S3Kit.set(Decimal(100 * number), 5), S3Kit.set(Decimal(100 * number), 7), S3Kit.set(50, 20)]
             try await stack.materialize(S3Kit.workout(number, [S3Kit.RowSpec(S3Kit.bench, sets)]))
         }
-        let line = LastPerformance(date: S3Kit.now, sets: 3, reps: 7, load: .pounds(100))
+        // The Last line's date is the workout's start, 45 minutes before its end (product decision #26).
+        let line = LastPerformance(date: S3Kit.now.addingTimeInterval(-45 * 60), sets: 3, reps: 7, load: .pounds(100))
         #expect(try await stack.stats().lastPerformance(exerciseID: S3Kit.bench) == line)
     }
 

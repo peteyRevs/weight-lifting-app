@@ -37,13 +37,13 @@ extension HistoryModel: StatsQueries {
             let all = sets(of: exerciseID, in: workout)
             let counted = all.filter { $0.isDone && ($0.kind == .working || has(.lastCountsEveryKind)) }
             let shown = has(.lastIsFirstSet) ? counted.first : counted.min(by: isHeavier)
-            guard let shown, let endedAt = workout.endedAt else {
+            guard let shown else {
                 if has(.lastOfAnyWorkout), !all.isEmpty {
                     return nil
                 }
                 continue
             }
-            return LastPerformance(date: endedAt, sets: counted.count, reps: shown.reps.value, load: shown.weight)
+            return LastPerformance(date: date(workout), sets: counted.count, reps: shown.reps.value, load: shown.weight)
         }
         return nil
     }
@@ -74,14 +74,14 @@ extension HistoryModel: StatsQueries {
             let sets = recordSets(of: exerciseID, in: workout)
             let top = sets.compactMap { set in estimate(set).map { (estimate: $0, set: set) } }
                 .max { $0.estimate < $1.estimate }
-            guard let top, let endedAt = workout.endedAt else {
+            guard let top else {
                 continue
             }
-            let date = has(.weeksByTickTime) ? top.set.doneAt ?? endedAt : endedAt
-            guard isInLastWeeks(date, lastWeeks, calendar) else {
+            let dated = has(.weeksByTickTime) ? top.set.doneAt ?? date(workout) : date(workout)
+            guard isInLastWeeks(dated, lastWeeks, calendar) else {
                 continue
             }
-            let key = calendar.isoWeekKey(for: date)
+            let key = calendar.isoWeekKey(for: dated)
             best[key] = max(best[key] ?? top.estimate, top.estimate)
         }
         return best

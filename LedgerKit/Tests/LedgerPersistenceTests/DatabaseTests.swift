@@ -33,7 +33,7 @@ struct DatabaseTests {
         }
         #expect(journal == "wal")
         #expect(foreignKeys == true)
-        #expect(applied == ["v001_createSchema"])
+        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex"])
     }
 
     @Test("Reopening a file keeps its rows and applies no migration twice")
@@ -45,7 +45,7 @@ struct DatabaseTests {
         let reopened = try LedgerDatabase.open(at: url)
         #expect(try await GRDBSettingsRepository(reopened).load() == .default)
         let migrations = try await reopened.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM grdb_migrations") }
-        #expect(migrations == 1)
+        #expect(migrations == 2)
     }
 
     /// Close-out finding 5: the test must pass while the Mac or the device is locked. It first opens with the

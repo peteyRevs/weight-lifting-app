@@ -68,11 +68,15 @@ public enum WorkoutRepositoryContract {
 
     /// Criterion 3's workout, finished at `endedAt`: five exercises with a drop set, an added set, a set left
     /// undone, a set above 12 reps (no e1RM) and a kilogram load. Its first exercise came from a program slot.
-    public static func workout(number: Int = 0, endedAt: Date = EventBuilders.start) -> WorkoutState {
+    public static func workout(
+        number: Int = 0,
+        endedAt: Date = EventBuilders.start,
+        minutes: Int = 60
+    ) -> WorkoutState {
         var kilograms = Seeders.SetSpec(0, 15)
         kilograms.weight = .kilograms(12.5)
         let slot = SlotID(EventBuilders.uuid(0x5107))
-        return Seeders.workout(number: number, endedAt: endedAt, [
+        return Seeders.workout(number: number, endedAt: endedAt, minutes: minutes, [
             Seeders.ExerciseLog(exercises[0], slotID: slot, Array(repeating: .init(185, 5), count: 5)),
             Seeders.ExerciseLog(exercises[1], [.init(55, 10), .init(55, 10), .init(55, 9), .init(45, 10, .drop)]),
             Seeders.ExerciseLog(exercises[2], [.init(70, 8), .init(70, 8), .init(70, 8), .init(70, 8, done: false)]),
@@ -109,6 +113,12 @@ public enum WorkoutRepositoryContract {
         )
         edited.name = "Workout, revised"
         return edited
+    }
+
+    /// When a workout that starts at `start` and lasts `minutes` ends: what `Seeders.workout` takes. A workout's
+    /// date is its start (product decision #26), so the clauses place starts on the edges they test.
+    public static func ending(startedAt start: Date, minutes: Int = 60) -> Date {
+        start.addingTimeInterval(60 * Double(minutes))
     }
 
     static func key(_ table: String, _ id: some TypedIdentifier) -> String {
@@ -180,28 +190,38 @@ public enum WorkoutRepositoryContract {
         }
         return try await ContractCheck.expect(stores.workouts.recent(limit: 10), [], "recent after the refused calls")
     }
+}
 
+/// The list order.
+extension WorkoutRepositoryContract {
+    /// Lists are newest first by **start** (product decision #26), then by id. Each workout starts at its day and
+    /// lasts an hour; a long one started an hour before the newest but ended after it, so it lists third.
     static func newestFirst(_ stores: HistoryStores) async throws -> String? {
         let start = EventBuilders.start
         let days = [0.0, 1, 2].map { start.addingTimeInterval(86400 * $0) }
         // The oldest has no exercises, and the middle one an exercise with no sets: both read back as stored.
-        var all = days.enumerated().map { workout(number: $0, endedAt: $1) }
+        var all = days.enumerated().map { workout(number: $0, endedAt: ending(startedAt: $1)) }
         all[0].exercises = []
         all[1].exercises[3].sets = []
-        // Two end at the same instant: they list by id, whichever was stored first.
-        let twin = workout(number: 3, endedAt: days[2])
-        for workout in [twin, all[1], all[2], all[0]] {
+        // Two start at the same instant: they list by id, whichever was stored first.
+        let twin = workout(number: 3, endedAt: ending(startedAt: days[2]))
+        let long = workout(
+            number: 4,
+            endedAt: ending(startedAt: days[2].addingTimeInterval(-3600), minutes: 180),
+            minutes: 180
+        )
+        for workout in [twin, long, all[1], all[2], all[0]] {
             try await stores.materialize(workout)
         }
         let workouts = stores.workouts
         let wide = try await workouts.workouts(in: days[0] ..< days[2].addingTimeInterval(1))
         return try await ContractCheck.first(
             ContractCheck.expect(workouts.recent(limit: 2), [all[2], twin], "recent(limit: 2), a tie by id"),
-            ContractCheck.expect(workouts.recent(limit: 3), [all[2], twin, all[1]], "recent(limit: 3)"),
+            ContractCheck.expect(workouts.recent(limit: 3), [all[2], twin, long], "recent(limit: 3), by start"),
             ContractCheck.expect(workouts.recent(limit: 0), [], "recent(limit: 0)"),
             ContractCheck.expect(workouts.recent(limit: -1), [], "recent(limit: -1)"),
-            ContractCheck.expect(workouts.workouts(in: days[1] ..< days[2]), [all[1]], "a half-open range"),
-            ContractCheck.expect(wide, [all[2], twin, all[1], all[0]], "a range holding all four")
+            ContractCheck.expect(workouts.workouts(in: days[1] ..< days[2]), [long, all[1]], "a half-open range"),
+            ContractCheck.expect(wide, [all[2], twin, long, all[1], all[0]], "a range holding all five")
         )
     }
 }

@@ -32,7 +32,8 @@ struct HistoryReadAdversarialTests {
     @Test("A range holds its lower bound and not its upper; an empty or infinite range, and any limit, are safe")
     func rangesAndLimits_atTheirEdges() async throws {
         let stack = try await S3Kit.stack()
-        let workouts = (0 ..< 4).map { S3Kit.mixed($0 + 1, endedAt: S3Kit.day(Double($0))) }
+        // Workout i starts at day i (product decision #26: a range selects by start); each lasts 45 minutes.
+        let workouts = (0 ..< 4).map { S3Kit.mixed($0 + 1, endedAt: S3Kit.day(Double($0)).addingTimeInterval(45 * 60)) }
         for workout in workouts {
             try await stack.materialize(workout)
         }
@@ -70,8 +71,9 @@ struct HistoryReadAdversarialTests {
     /// Finding S3-N2. Only `materialize` writes `workout`, and only finished workouts. A row in another phase
     /// can come from a foreign writer alone. Round 1 documented that the lists showed it while the stats
     /// skipped it; since S3 fix round 1 (orchestrator decision, 2026-10-01) the lists skip it too. A finished
-    /// row with no end is still listed by `recent`, last (documents).
-    @Test("A stored row that is not finished is listed nowhere and counts for no stats; one with no end is listed last")
+    /// row with no end is foreign damage too (`materialize` refuses a workout without one): since S3 fix round 3
+    /// (orchestrator decision, 2026-10-02) it is listed nowhere and counted nowhere, and the "Last" line skips it.
+    @Test("A stored row that is not finished, or has no end, is listed nowhere and counts for no stats")
     func foreignPhase_isListedButNotCounted() async throws {
         let stack = try await S3Kit.stack()
         let workout = S3Kit.mixed(1)
@@ -83,11 +85,11 @@ struct HistoryReadAdversarialTests {
         #expect(try await stack.stats().sessionsCompleted(in: always) == 0)
         #expect(try await stack.stats().weeklyVolume(in: always) == .zero)
         try await stack.execute("UPDATE workout SET phase = 'finished', ended_at = NULL")
-        #expect(try await stack.workouts.recent(limit: 5).map(\.endedAt) == [nil])
+        #expect(try await stack.workouts.recent(limit: 5) == [])
         #expect(try await stack.workouts.workouts(in: always) == [])
-        await #expect(throws: LedgerPersistenceError.malformedColumn("workout.ended_at")) {
-            _ = try await stack.stats().lastPerformance(exerciseID: S3Kit.bench)
-        }
+        #expect(try await stack.stats().sessionsCompleted(in: always) == 0)
+        #expect(try await stack.stats().weeklyVolume(in: always) == .zero)
+        #expect(try await stack.stats().lastPerformance(exerciseID: S3Kit.bench) == nil)
     }
 
     @Test("The observation emits for a change in its list only: not for records, misses, or a workout outside it")

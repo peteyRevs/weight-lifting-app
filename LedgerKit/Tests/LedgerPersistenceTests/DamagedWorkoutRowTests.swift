@@ -191,11 +191,12 @@ extension DamagedWorkoutRowTests {
         await #expect(throws: weight) { try await stats.weeklyVolume(in: everything) }
 
         try await repositories.history.materialize(Self.workout) // repairs the set
-        try await repositories.execute("UPDATE workout SET ended_at = 'x'")
-        await #expect(throws: LedgerPersistenceError.malformedColumn("workout.ended_at")) {
+        // The workout's date is its start (product decision #26), so that is the column the queries read.
+        try await repositories.execute("UPDATE workout SET started_at = 'x'")
+        await #expect(throws: LedgerPersistenceError.malformedColumn("workout.started_at")) {
             try await stats.lastPerformance(exerciseID: bench.exerciseID)
         }
-        await #expect(throws: LedgerPersistenceError.malformedColumn("workout.ended_at")) {
+        await #expect(throws: LedgerPersistenceError.malformedColumn("workout.started_at")) {
             try await stats.e1RMByWeek(exerciseID: bench.exerciseID, lastWeeks: 8, calendar: calendar)
         }
     }

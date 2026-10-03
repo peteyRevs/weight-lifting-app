@@ -6,7 +6,7 @@ import os
 /// `WorkoutRepository` over `workout`, `workout_exercise`, `logged_set` and `personal_record` (`WorkoutRows`):
 /// the finished workouts. Deleted rows (`deleted_at`) are never read.
 ///
-/// A workout's date, for ordering and for ranges, is when it ended (`ended_at`).
+/// A workout's date, for ordering and for ranges, is when it started (`started_at`; product decision #26).
 public struct GRDBWorkoutRepository: WorkoutRepository {
     private let queue: DatabaseQueue
     private let now: @Sendable () -> Date
@@ -64,16 +64,16 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
         try await queue.read { database in try WorkoutRows.fetch(.one(id), in: database, strict: true).first }
     }
 
-    /// The `limit` workouts that ended last, newest first; none when `limit` is not positive. A workout this
+    /// The `limit` workouts that started last, newest first; none when `limit` is not positive. A workout this
     /// app cannot read is logged and left out, and stays stored.
     public func recent(limit: Int) async throws -> [WorkoutState] {
         try await queue.read { database in try Self.fetchRecent(limit, in: database) }
     }
 
-    /// The workouts that ended in `range`, newest first. A workout this app cannot read is logged and left
+    /// The workouts that started in `range`, newest first. A workout this app cannot read is logged and left
     /// out, and stays stored.
     public func workouts(in range: Range<Date>) async throws -> [WorkoutState] {
-        try await queue.read { database in try WorkoutRows.fetch(.ended(in: range), in: database, strict: false) }
+        try await queue.read { database in try WorkoutRows.fetch(.started(in: range), in: database, strict: false) }
     }
 
     /// Makes `sets` the sets of the stored exercise `workoutExerciseID`, in one write transaction: its other
@@ -82,8 +82,8 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     ///
     /// The workout's personal records and its record count are left as they are, so after an edit they can be
     /// stale: a record may remain that no stored set supports, and an edit that deserves one creates none.
-    /// Nothing detects records again yet, here or in a caller (no query gives the bests as they stood before
-    /// a workout); see F13's "Inputs from F05".
+    /// Product decision #27 has an edit re-check the records inside this write, against the bests as they
+    /// stood before the workout; that is the F05 follow-up before F07, not yet built.
     ///
     /// Throws `missingRow` when no live workout has the exercise; `duplicateIdentifier` for a set id used
     /// twice in the workout, or held by another workout (live or deleted); and what reading the workout throws

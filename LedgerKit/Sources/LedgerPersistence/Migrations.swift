@@ -8,6 +8,14 @@ enum Migrations {
         migrations.registerMigration("v001_createSchema") { database in
             try database.execute(sql: schemaV001)
         }
+        // Product decision #26: a workout's date is when it started, so the lists and the stats select and
+        // order by `started_at`. The index is `(started_at DESC, id)`, the order of every list (newest start
+        // first, then id), so `recent(limit:)` reads its rows straight from it and stops at the limit; ranges
+        // search it too. `idx_workout_ended` (v001) stays: no query uses it now, and dropping it would be a
+        // change for nothing.
+        migrations.registerMigration("v002_workoutStartedIndex") { database in
+            try database.execute(sql: "CREATE INDEX idx_workout_started ON workout(started_at DESC, id)")
+        }
         return migrations
     }
 }

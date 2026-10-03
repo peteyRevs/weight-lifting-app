@@ -93,7 +93,8 @@ struct WorkoutRows {
         }
     }
 
-    /// The live workouts `selection` picks, newest first (by `ended_at`, then id), each with its live exercises
+    /// The live workouts `selection` picks, newest first (by `started_at`, then id; product decision #26), each with
+    /// its live exercises
     /// and sets in their stored order.
     ///
     /// A workout is one aggregate: a damaged row anywhere in it, or a case a later version added, makes the
@@ -158,24 +159,25 @@ extension WorkoutRows {
             Selection(sql: "SELECT id FROM workout WHERE id = ?", arguments: [ColumnCodec.text(id)])
         }
 
-        /// The `limit` workouts that ended last; none when `limit` is not positive (SQLite reads a negative
-        /// `LIMIT` as no limit at all).
+        /// The `limit` workouts that started last (product decision #26); none when `limit` is not positive
+        /// (SQLite reads a negative `LIMIT` as no limit at all).
         static func recent(limit: Int) -> Selection {
             Selection(
                 sql: """
-                SELECT id FROM workout WHERE deleted_at IS NULL AND phase = 'finished'
-                ORDER BY ended_at DESC, id LIMIT ?
+                SELECT id FROM workout WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at IS NOT NULL
+                ORDER BY started_at DESC, id LIMIT ?
                 """,
                 arguments: [max(0, limit)]
             )
         }
 
-        /// The workouts that ended in `range`.
-        static func ended(in range: Range<Date>) -> Selection {
+        /// The workouts that started in `range` (product decision #26).
+        static func started(in range: Range<Date>) -> Selection {
             Selection(
                 sql: """
                 SELECT id FROM workout
-                WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at >= ? AND ended_at < ?
+                WHERE deleted_at IS NULL AND phase = 'finished' AND ended_at IS NOT NULL
+                    AND started_at >= ? AND started_at < ?
                 """,
                 arguments: [
                     range.lowerBound.timeIntervalSinceReferenceDate,
@@ -194,7 +196,7 @@ extension WorkoutRows {
     /// id, so the order is total), and the owner checks of `refuseOtherWorkoutsIDs`.
     private enum Query {
         static func workouts(_ selection: String) -> String {
-            "SELECT * FROM workout WHERE id IN (\(selection)) ORDER BY ended_at DESC, id"
+            "SELECT * FROM workout WHERE id IN (\(selection)) ORDER BY started_at DESC, id"
         }
 
         static func exercises(_ selection: String) -> String {
