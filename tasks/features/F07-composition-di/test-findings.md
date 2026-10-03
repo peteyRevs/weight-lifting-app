@@ -279,3 +279,179 @@ there).
   `LedgerDependencies` with no fake symbol; only `LedgerTestSupport` fails (F7-5). (Seen in passing, not part of
   S1: the Release app binaries carry `__profc`/`__profd` coverage counters, presumably from the test plans'
   coverage setting; worth a look before the first archive.)
+
+---
+
+# Slice S1 — close-out round
+
+Close-out of fix round 1 (`git diff 260eb0c..6b63c0f`, notes "### S1 fix round 1"), at `6b63c0f`. Scoped to the
+fixes: findings F7-1 to F7-9 and the review's S1-SF1 to SF4, the sanctioned edits to tests, regressions the fixes
+could cause, and mutants on the changed lines. No product code edited, nothing committed; mutants ran in a
+scratchpad copy (`f07s1-g2/mut2/`), since deleted.
+
+## What I wrote
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `LedgerPersistenceTests/Adversarial/FakesFaultOrderAdversarialTests` | 3 (property, 100 seeds each) | one to four random faults per value, on GRDB and the linked fakes: workouts (⅛ lb weight/target/step, ±∞ start/end/done, U+0000 in name/tag/exercise, repeated set and exercise ids, ids another workout holds, a volume beyond the column); programs (⅛ lb load/step, two unknown exercises, U+0000 in name/day/tag, a repeated slot, a slot id another program holds); exercises (⅛ lb, NaN kg, U+0000 in either text; save or seed). Same error or none, same state |
+| `…/FakesCloseoutAdversarialTests` | 5 | GRDB's `unknownExercise`: a soft-deleted and a custom exercise still count as stored; refused before any row is written, naming the first in slot order; the edit `failedEdit_leavesTheSavedVersion` lost (a day removed, schedules cleared) made to fail midway again with a ⅛ lb last slot, rolling back whole; a volume beyond the column with every set fitting; an e1RM beyond the column with weight and volume fitting (kills N6) |
+| `LedgerDependenciesTests/Adversarial/StoresCloseoutAdversarialTests` | 3 | a program seeded without the catalog saved back unchanged (F7-10); stats of `inMemoryStores` queried after the operation (F7-11); inside the operation the stats follow the date, set before or after binding |
+
+Plus my own one-line fix: the unnecessary `try` at `FakeObservationAdversarialTests.swift:213` (the warning the
+fix round reported) is gone.
+
+## Results
+
+- **Host, whole package** (`swift test`, exit 1): the round-1 documenting tests all pass now (F7-1 to F7-4, F7-6,
+  both F7-7). The failures are F7-10 and F7-11 (mine, expected) and `LedgerDesignTests`' Archivo font suites (52
+  issues, host-only, as on `main`). The other runs (415, 770, 19 and 1 tests) all pass. No warning from my files.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **Full gate**: not run, by the rule (F7-10 and F7-11 fail by design). The orchestrator's gate on `6b63c0f` was green.
+- **Byte-identical since round 1** (`git diff 260eb0c..6b63c0f`): `FakesBoundaryAdversarialTests`,
+  `FakesCatalogDifferentialAdversarialTests`, `FakesStoreDifferentialAdversarialTests`,
+  `FixturesDatabaseAdversarialTests`, `FakeLinkBusAdversarialTests`, and in `FakeObservationAdversarialTests` the
+  `TestDependenciesAdversarialTests` suite (F7-6's test unedited). Edited: the sanctioned hunks audited below,
+  nothing else.
+
+## Close-out of round 1
+
+| Finding | Status | Evidence |
+|---|---|---|
+| F7-1 (+ none in review) | **closed** | `exactness_fakeAnswersAsGRDB` 10/10 pass, unedited; the fault-combination differential (300 values) and the volume and e1RM probes agree with GRDB, error payloads included |
+| F7-2 | **closed** | `encoding_fakeAnswersAsGRDB` 3/3, unedited; random settings and event differentials still pass |
+| F7-3 / S1-SF3 | **closed** (option a) | `foreignKeys_fakeAnswersAsGRDB` passes, unedited; `unknownExercise` names the first unknown in slot order on both, before any write on GRDB. See F7-10 for the seeded-state edge |
+| F7-4 | **closed** | `precedence_fakeAnswersAsGRDB` 2/2, unedited; random combinations of up to four faults agree on 300 values |
+| F7-5 / S1-SF1 | **closed** | `WithTestDependencies.swift` is wrapped in `#if DEBUG`; the orchestrator's `swift build -c release` exits 0 (ADR consequence added). I didn't rebuild the apps in Release this round: their graph is unchanged since round 1, where both built clean |
+| F7-6 | **closed**, with a regression: F7-11 | `statsDate_isTheDateWhenBound` passes, unedited; `statsDate_followsTheOperationsDate` |
+| F7-7 | **closed** | both F7-7 tests pass, unedited; foreign sends dropped in either role (N11), delay range trapped at `init`/`setLink`, draw clamped |
+| F7-8 | **closed** | default `version` is `ExerciseCatalog.version` (`FakeStoreTests`) |
+| F7-9 | **closed** (simulator-only) | `SnapshotMatrixTests.noCellHere_failsTheTest`, run by the orchestrator's gate |
+| S1-SF2 | **closed** | `.bufferingNewest(1)`, as GRDB's bridge (`ValueObservation+AsyncStream.swift:14`); `FakeStoreTests.slowConsumer_seesTheNewestOnly` kills N13 |
+| S1-SF4 | **closed** | standards §4 carries the `Mutex` exception |
+
+## Audit of the sanctioned edits
+
+- **`FakesHistoryDifferentialAdversarialTests.firstLinkedMismatch`** (fake saves `S2Kit.slotExercises`):
+  faithful. The GRDB stack holds exactly these exercises, so both sides start from the same database; nothing is
+  asserted differently.
+- **`FakeObservationAdversarialTests`, eight tests** for newest-only buffering:
+  - `firstValue_isTheStateWhenObserved`, `cancelledConsumer_endsOnlyItsStream`, `slotUpdates_emitTheActiveProgram`,
+    `refusedWrite_emitsNothing`, `manySubscribers_seeEveryChange`: faithful. Each still proves its claim. The
+    first value is read before any write, and "nothing emitted" is proven by the next real change being the very
+    next value.
+  - `consumerWritingBack_doesNotDeadlock`: faithful. The handshake only removes a race the old code allowed under
+    newest-only buffering (120 overwritten before the consumer started); the write-back from inside the loop,
+    the point of the test, is unchanged.
+  - `unchangedWrites_emitNothing`: **weakened, unavoidably.** With newest-only buffering, a spurious repeat that
+    a later change overwrites before the consumer reads is invisible to any consumer. The `removeDuplicates`
+    property is now held by the contracts' observe clauses and `FakeStoreTests`. Acceptable; the implementer's
+    note says the same.
+  - `racingWriters_loseNothing` → `racingWriters_endOnTheFinalState_inOrder`: **weakened, unavoidably.** It now
+    proves "no lost update, monotone order", not "every state seen", which GRDB doesn't promise either. Its
+    lost-update half (the final state is 500) is intact.
+- **`ProgramRepositoryTests.failedSave_changesNothing`** (F05): faithful. A ⅛ lb last-slot load is encoded at the
+  slot's write, after the program, weeks, days and other slots (`SlotRecord.encode`). So the fault still fires
+  midway and the test still needs the transaction. That agrees with the implementer's statement trace.
+- **`ProgramEditAdversarialTests.failedEdit_leavesTheSavedVersion`** (F05 tester): **weakened.** Its fault now
+  fires before any row is written, so "every row as it was" no longer proves a rollback of that edit's shape
+  (a day removed and schedules cleared in one save). Covered again by my
+  `FakesCloseoutAdversarialTests.failedEditMidway_rollsBackWhole` (a ⅛ lb last slot in the same edit), which
+  passes: the rollback holds. No finding; recommend the next round of F05 tests keep both.
+- Nothing else in my files was edited.
+
+## Attacks on the fixes
+
+- **`StorageBoundary` moved out of `ColumnCodec`:** the bodies moved verbatim (`ColumnCodec.e7g/grams/seconds`
+  now delegate); `inexactWeight` keeps the grams given, `nonFiniteDate` unchanged. Every F05 persistence suite
+  passes (415 tests, the storage, damage, payload and record suites included), as do all my round-1
+  differentials.
+- **Codecs in LedgerDomain:** `EnvelopeCodec` and `SettingsCodec` moved with the same bodies (the diff shows only
+  `public`, the import, and `LedgerPersistenceError` → `RepositoryError`, the same type). `PayloadV1FixtureTests`
+  (committed v1 payloads decode and re-encode equal) pass.
+- **`unknownExercise` on GRDB:** raised inside the transaction after other programs' ids and before any write;
+  first unknown in slot order (N3 killed); a soft-deleted exercise counts as stored, as the foreign key sees it
+  (N2 killed only by my test); a custom exercise counts. Precedence against U+0000, repeats and inexact loads
+  agrees with the fake in every random combination.
+- **Linked vs unlinked program store:** `InMemoryStores` links (N8 killed); the bare `InMemoryProgramRepository()`
+  and seeded programs are unchecked, by design. That gives F7-10.
+- **Check order in the fakes:** 300 random multi-fault values agree with GRDB (N5, N7 killed).
+- **`FakeLinkBus`:** drop rules hold for a foreign sender or recipient, and time never moves back. The delay trap
+  is untested (a trap ends the process).
+- **`.bufferingNewest(1)`:** the same policy as GRDB's bridge; both remove duplicates against the last fetched
+  value. GRDB's first value is asynchronous, the fake's synchronous (documented, ADR-008 decision 4).
+- **Stats reading `@Dependency(\.date)` per query:** right inside the operation, wrong outside it: F7-11.
+- **`materialize` writing misses under the history lock:** the lock order is always history → programs; no path
+  takes them the other way, so no deadlock. The round-1 nit about a reader seeing the workout before its misses is
+  gone.
+
+## Mutants of the changed lines
+
+14 mutants (`f07s1-g2/mut2/out/results.txt`), one at a time. Every non-equivalent one is killed.
+
+| Mutant | Killed by |
+|---|---|
+| N1 GRDB lets the foreign key fail | implementer (storage clause, `failedEdit`), mine (fault combinations, close-out) |
+| N2 GRDB counts only live exercises | **mine only** (`deletedAndCustomExercises_areStored`) |
+| N3 GRDB names the last unknown | both |
+| N4 dates: only NaN refused | both |
+| N5 fake skips the volume | both |
+| N6 fake skips the e1RM | **mine only**, after adding `estimateBeyondTheColumn_isRefusedAlike`. It needs a negative set beside it: otherwise the volume, which is never smaller than the e1RM, overflows first |
+| N7 fake exercise checks kg before lb | **mine only** (exercise fault combinations) |
+| N8 `InMemoryStores` unlinked | both |
+| N9 settings encoded, not decoded back | both |
+| N10 events kept as given, not as decoded | survives, **equivalent** (the v1 codec round-trips every envelope exactly; GRDB compares decoded with given the same way) |
+| N11 bus checks only the sender | mine |
+| N12 bus time moves back | mine |
+| N13 streams buffer everything | implementer only (`FakeStoreTests.slowConsumer_seesTheNewestOnly`) |
+| N14 stats date at bind | mine |
+
+## F7-10. spec question — A program seeded without the catalog can't be saved back
+
+`InMemoryStores(seed: Seed(programs: [Fixtures.seedProgram()]))` stores the program unchecked (decision 4: a seed
+is stored state). But saving that same program back unchanged then throws `unknownExercise`, because the linked
+exercise store is empty. No database can hold that state: the slots' foreign key means a stored program's
+exercises are stored. So the fake refuses its own program. The implementer's
+`DependencyKeysTests.inMemoryStores_linksEveryStore` uses exactly this seed shape; it never re-saves. A
+feature test (F09/F11 editing the active program) that does will fail on the fake for a reason the app can't
+meet.
+
+**Repro** (fails): `StoresCloseoutAdversarialTests.seededProgram_savesBackUnchanged`.
+
+**Options:** (a) `InMemoryStores.init` adds to the exercise store any exercise its seeded programs name that the
+catalog lacks (a minimal stand-in, or an issue reported); (b) report an issue when a `Seed`'s programs name
+exercises its `catalog` lacks, so the fixture is fixed at its source; (c) document it in `Seed`'s doc. I recommend
+(b): it keeps the fake honest and points at the test's own seed.
+
+## F7-11. minor bug — Stats of stores bound in `configure` fail the test when queried after the operation
+
+Fix decision 6 makes the stats read `@Dependency(\.date.now)` on every query. Inside the operation that is right.
+Outside it, a store a test kept from `configure` reads the library's test value: the library records
+"@Dependency(\.date) has no test implementation" and falls back to the wall clock, which standards §9 forbids in
+tests. Before the fix this pattern was deterministic:
+```swift
+var bound: InMemoryStores?
+try await withTestDependencies { bound = $0.inMemoryStores() } operation: { /* materialise */ }
+try await bound!.stats.e1RMByWeek(…)   // issue recorded, then answers for today's date: [:]
+```
+**Repro** (fails, 2 issues): `StoresCloseoutAdversarialTests.statsAfterTheOperation_needNoDependency`.
+
+**Reach:** any store test that asserts on stats after its `withTestDependencies` block, or that hands
+`stores.stats` to a context without the dependencies (a `Task.detached`, which the standards forbid, or a
+long-lived object outside the scope).
+
+**Fix options:** read the dependency when one is bound and fall back to the date bound at `inMemoryStores` time
+otherwise (e.g. `withEscapedDependencies` at bind, or `now: { DependencyValues._current … }` with a captured
+default); or keep per-query reading and say in `inMemoryStores`' doc, with a test, that its stats answer only
+inside the operation.
+
+| Class | Count | Findings |
+|---|---|---|
+| minor bug | 1 | F7-11 |
+| spec question | 1 | F7-10 |
+
+**Verdict:** G2 does not close yet, though it is close. All nine round-1 findings and the review's SF1–SF4 are
+closed with evidence, and the fixes hold under random multi-fault differentials and 14 mutants. The sanctioned
+edits are faithful, two of them unavoidably weaker, and none hides a regression. Two new items come from the fix
+round itself. F7-11 is a small regression of the F7-6 fix (non-deterministic stats outside the operation). F7-10
+is a seed-shape edge of the F7-3 fix, for the orchestrator. If the orchestrator accepts F7-10 as documented and
+F7-11 is fixed, or documented with its test turned into a "(documents)" one, G2 closes.

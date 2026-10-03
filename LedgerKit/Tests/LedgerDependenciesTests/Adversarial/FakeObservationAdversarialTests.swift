@@ -210,7 +210,7 @@ extension FakeObservationAdversarialTests {
             }
             try await group.waitForAll()
         }
-        #expect(try await Set(store.envelopes(for: EventBuilders.workoutID)) == Set(envelopes))
+        #expect(await Set(store.envelopes(for: EventBuilders.workoutID)) == Set(envelopes))
         let highest = await store.highestSeq(for: EventBuilders.workoutID, device: EventBuilders.phone)
         #expect(highest == 100)
     }
