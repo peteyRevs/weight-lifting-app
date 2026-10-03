@@ -1711,3 +1711,170 @@ The worst case in the notes ("the worst case within budget") should name the mul
 
 Once R-1 is decided and `worseShape_underBudget` passes against the chosen budget, G2 closes; a re-run of the
 nightly timing suites on both simulators is enough.
+
+---
+
+# Follow-up: records — close-out round
+
+A scoped close-out of records fix round 1 (`97672f8`, over my round 1 and the review at `5f9823e`). I read the
+diff and the notes' "### Records fix round 1". No product code was edited, and HEAD never moved:
+`git branch --show-current` printed `feat/F05-records` at the start and the end. Mutants and the proposed fix ran
+in scratchpad copies (`f05s3-g2/rec/`).
+
+## What I wrote
+
+6 tests in 2 files under `Adversarial/`.
+- `RecordFixCloseoutAdversarialTests` (4 tests, 12 cases):
+  - the damaged-lift path dependence, through a write and through `bests(before:for:)` (R-2);
+  - nine kinds of tampering with a record row that keeps its id;
+  - a write that changes both a workout and the record counts stamps once.
+- `RecordDamageAdversarialTests` (property; 60 seeds in the PR lane, all seeds nightly): R-Q1's decision against
+  `RecordOracle`, over random one-lift histories with damage injected.
+  - After every step, an edit that changes nothing, of the earliest readable workout, replays the lift.
+  - Then the readable workouts must hold the oracle's records, counts and `bests(before:)`.
+  - A damaged workout must keep the records it held when it was damaged, until a rebuild repairs it or it is
+    deleted.
+
+## Results
+
+- **Host** (`swift test --filter 'LedgerDomainTests|LedgerPersistenceTests'`): exit 1, as expected.
+  `LedgerPersistenceTests` 375 tests: **373 pass, 2 fail**, both mine and both R-2. `LedgerDomainTests` 765 pass.
+- **Nightly lane, host:** the damage property, the oracle property and the `detect` property pass at **3,000
+  seeds**.
+- **Timing, both simulators, under the lock, on a quiet Mac** (load average about 4; the `Nightly` and
+  `Nightly-Watch` plans, these two suites only): **exit 0 on both**. Every shape is within its budget.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **The full gate was not run**, because R-2's two tests fail by design.
+- **Mutants of the changed lines** (20, one at a time, host): 18 killed, 2 survive, both equivalent.
+  - **Survivors:**
+    - C09: the walk goes on adding rows to a workout that has already failed. It is skipped anyway.
+    - C13: `achievedAt + 0`. It is the same value, except −0.
+  - **Killed by the implementer's tests only:** C06 (a recount stamps again), C07 and C08 (the walked bests
+    count the workout itself), C16 (the aggregate without `workout.id IS NOT ?`).
+  - **Killed by both suites:**
+    - skipped workouts losing their stored records;
+    - every record counted as stored, or stored when its id is;
+    - all stored rows replaced;
+    - each recount path dropped;
+    - a failed workout judged;
+    - deloads not raising the bests;
+    - skipped not recorded;
+    - the content compared without its last column, or without the previous best;
+    - no fallback, or an empty one;
+    - a deload judged;
+    - the forward walk excluding the workout written.
+
+## Close-out of round 1
+
+| Finding | Status | Evidence |
+|---|---|---|
+| R-1 (performance) | **Closed** under the new `historyWrite` budget | `worseShape_underBudget` passes on both simulators. Worst p95 is the five-lift rebuild, at 213.8 ms on the iPhone and 222.1 ms on the watch, of 250 ms. The rest: late workout 103.5 / 104.0 ms, delete-first 64.6 / 64.3 ms (it was 110 ms: the diff shortcut works), one lift with both records 57.8 / 58.7 ms. The implementer's suite: `updateSets` 45.9 / 46.8 ms, a new workout at the end 18.3 / 18.8 ms (budget 50), `bests(before:)` 9.2 / 9.4 ms. |
+| R-Q1 (decided: skip and log) | **Closed for one lift; reopened as R-2 across lifts** | With one lift, the damage property agrees with the oracle over 3,000 seeds, and a rebuild repairs the workout. With two lifts the skip is per workout but the read is per scope, so the answers depend on the write (R-2). |
+| R-Q2 = review R-SF2 (an unstamped recount) | **Closed** | A materialise that changes its workout and four counts stamps that workout once, and no other. C06 is killed. |
+| Review R-SF1 (`bests` excludes the workout's own copy) | **Closed** | C07, C08 and C16 are killed (by the implementer's tests and the contract clause). The forced edit to my model matches it. |
+
+## Audit of the edits to my files
+
+`git diff 5f9823e..97672f8 -- LedgerKit/Tests/LedgerPersistenceTests/Adversarial/` touches the three named files
+and nothing else.
+
+| Edit | Faithful? | Weakened? |
+|---|---|---|
+| `worseShape_underBudget` asserts `historyWrite`; the title and doc follow | Yes (sanctioned). The shapes are unchanged. | Only the budget changed, as decided. |
+| `damagedHistory_failsWritesOfItsLift` → `damagedHistory_isLeftOutOfWritesOfItsLift` | Yes (sanctioned). It asserts the writes go through and the readable-history judgement (110 over 105; workout 4 as the first readable). It keeps the list, `workout(id:)` throwing, and the delete by id. | The byte-for-byte "nothing changed" check went, because the decision reverses it. Nothing else was lost. |
+| `HistoryModel+Stats.bests` excludes its own copy; `.bestsBeforeIncludeIt` counts it at or before its place | Yes (forced by R-SF1). | No: every fault is still caught by its own clause. |
+
+## R-2. minor bug — Under damage, a lift's records and bests depend on which other lifts the last write read
+
+The walk leaves out a whole workout when any row it reads fails, but it reads only the write's lifts. The bests
+fallback does the same over the lifts it is asked for. So a workout W whose bench is damaged and whose squat is
+readable:
+- counts for squat in a squat-only write (`updateSets` of a squat row), but not in a write that also covers bench
+  (a `materialize` holding both lifts);
+- counts for squat in `bests(before:for: [squat])`, but not in `bests(before:for: [squat, bench])`.
+
+Observed: one history (A squat 100, then W bench 150 and squat 200 with its bench damaged, then B squat 150, then
+C squat 210) holds different squat records depending on whether the last write covered bench:
+- read with W, C's 210 beats W's 200;
+- read without W, B's 150 beats A's 100, and C's 210 beats 150.
+
+Records stop being a function of history, the property #27 rests on. And F10's live "PR!" (`bests(before:for:)`
+with the workout's lifts) can disagree with what is stored.
+
+**Reach:** damage or a foreign writer only, the same reach as R-Q1.
+
+**Repro** (fail): `RecordFixCloseoutAdversarialTests.damagedOtherLift_doesNotChangeTheRecords` and
+`bestsOfALift_doNotDependOnTheOthersAsked`.
+
+**Fix** (verified in the scratchpad, `f05s3-g2/rec/close/proposed-fix-R-2.diff`, about 45 lines in
+`RecordReplay+Walk.swift` and one in `RecordReplay.swift`):
+- skip per lift, not per workout: a lift of a workout whose rows fail is left out; a workout whose own columns
+  fail leaves out every lift;
+- key `skipped` by (workout, exercise), and filter the stored records on both.
+
+With it, both R-2 tests and every other test pass, except one assertion of the implementer's
+`RecordReplayTests.damagedWorkout_isLeftOutOfTheReplay`: "the whole workout is left out, its squat records too,
+kept as they are". That assertion pins R-2's behaviour, so it must change with the fix. That is the orchestrator's
+call.
+
+## Nits
+
+- **R-N4. Damage the replay does not read is invisible to it.**
+  - A damaged warm-up or drop set (not a record set) makes the lists leave the workout out, while the replay
+    counts the workout in full.
+  - A damaged weight that is not its group's `MAX` (for example a `REAL` beside a heavier integer at the same
+    reps) is hidden by the aggregate.
+  - Both are damage-only. They are consistent across the walk and the bests, but they differ from "left out as
+    the lists leave it out". The damage property accounts for the first one.
+- **R-N5. A damaged workout's stale records are listed.** A skipped workout keeps its record rows, and
+  `personalRecords` lists them, although every list leaves the workout itself out. This is the decided behaviour
+  ("kept until a write repairs it"); noted for F13's PR list.
+
+## Timing: is 250 ms sound for the nightly test?
+
+The five-lift rebuild has 11 to 15 % headroom (214 and 222 ms of 250) on a quiet Mac. In round 1, at a load
+average of 15, the same shapes ran about 1.5 to 2 times slower. So under the load that other worktrees' gates
+create, this shape will flake.
+
+It is also the least realistic shape: every workout sets both records in all five lifts, and 3,990 records flip.
+
+**Recommendation:**
+- keep `historyWrite` at 250 ms;
+- in my test, make the rebuild flip one lift's records instead of five (a typo in one lift: about 800 flips);
+- keep the five-lift walk in the delete and late-workout shapes, which have 2.4 to 3.9 times headroom;
+- run the nightly timing suites on a quiet machine, as for every timing test.
+
+That is an edit to my own test's shape. I did not make it, because the round sanctioned the budget only. Say the
+word and I will.
+
+## Attacked and held
+
+- **The diff shortcut.** A record row tampered in any of nine ways, with its id kept, is rewritten by the next
+  write that replays it, and the rows end byte-equal to the untampered ones. The ways: weight, previous weight,
+  previous kind, previous reps, reps, kind, `achieved_at` moved 1 ms, `achieved_at` stored as text, and a lowercase
+  exercise id. A stale row cannot survive the shortcut.
+- **Skip and log, one lift.** Over 3,000 seeds:
+  - damage in a workout before or inside the walk;
+  - writes on both sides of it;
+  - edits, deletes and deloads;
+  - the repair by a rebuild.
+
+  Every readable workout's records, every count, and the bests before every readable workout agree with the
+  oracle over the readable history. A damaged workout keeps exactly the records it held.
+- **Unstamped recount.** A materialise that changes its workout and the counts of the workouts after it stamps
+  that workout once, and no other; the counts are right.
+- **The invariant without damage.** The round-1 oracle property still passes at 3,000 seeds.
+
+## Verdict
+
+**G2 does not close yet: one damage-only finding, R-2, is open.**
+- R-1, R-Q2 and R-SF1 are closed. R-Q1 holds for one lift.
+- R-2 is minor: damage only, and a fix of about 45 lines is verified in the scratchpad. It needs one assertion of
+  the implementer's test to change with it, and that is the orchestrator's call.
+- The three edits to my files are the sanctioned and forced ones, each faithful.
+- 18 of 20 mutants of the changed lines are killed; the 2 survivors are equivalent.
+- On timing, the 250 ms budget is sound, but my five-lift rebuild shape will flake under load. I recommend
+  narrowing that shape.
+
+Once R-2's two tests pass, a re-run of `RecordFixCloseoutAdversarialTests` and the full gate is enough to close
+G2.
