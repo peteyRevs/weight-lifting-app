@@ -174,3 +174,59 @@ these contradict the brief above, they win.
    A damaged workout elsewhere in the history never fails a `materialize` (orchestrator decision on R-Q1, F05
    records fix round 1): the replay leaves out a workout it cannot read, logs it, and keeps its stored records
    until a write repairs it.
+
+## Plan amendments (orchestrator, 2026-10-04)
+
+The body above was written before M0 existed. Where it disagrees with this section, this section wins (as do the
+two "Inputs" sections). The slice plan and its evidence are in `F10-active-workout/implementation-notes.md`.
+
+**Delivery.** Nine slices: S1 the session seam, S2 the host and the start use case, S3 the persistence follow-up,
+S4 the cover and header, S5 solo logging, S6 rest and effects, S7 finish and receipt, S8 swap, S9 supersets.
+
+**Slice S1 — session seam** (what F09 and, later, the watch code against; it replaces the draft under "Domain
+changes")
+```swift
+public struct WorkoutSessionUpdate: Hashable, Sendable {
+    public let state: WorkoutState?          // live; finished or discarded in the one update that ends it; nil = no workout
+    public let effects: [Effect]             // feedback to play, in order; empty in a stream's first element
+    public var live: WorkoutState? { get }   // `state` when its phase is `.live`
+    public static func feedback(from effects: [Effect]) -> [Effect]   // the one forwarding rule: `.haptic` only
+}
+public enum WorkoutSessionError: Error, Equatable, Sendable {
+    case workoutInProgress(WorkoutID), notStartable(WorkoutID), noLiveWorkout, incompleteLog(WorkoutID)
+}
+public protocol WorkoutSessionClient: Sendable {
+    func updates() async -> AsyncStream<WorkoutSessionUpdate>   // current state first (no effects), then every change; a new stream per call
+    func current() async throws -> WorkoutState?
+    func start(_ initial: WorkoutState) async throws
+    @discardableResult func apply(_ event: WorkoutEvent) async throws -> WorkoutState
+    func finish(endedAt: Date) async throws -> WorkoutState
+    func discard(endedAt: Date) async throws
+}
+```
+1. Given a subscriber, when it calls `updates()`, then the first element is the workout as it stands with no
+   effects, and every later change arrives in order; two subscribers each get every update.
+2. Given no live workout, `start` with a live snapshot makes it current; a second `start` throws
+   `workoutInProgress`; a snapshot that is not live throws `notStartable`; `apply`, `finish` and `discard` with
+   nothing live throw `noLiveWorkout`.
+3. Given a live workout, `apply` returns the state after the event, equal to the next update's state, and that
+   update's effects are exactly `feedback(from:)` of the engine's effects for it.
+4. Given a live workout, `finish(endedAt:)` returns the finished state, publishes it in one update, and afterwards
+   `current()` is nil and a new stream starts with a nil state; `discard(endedAt:)` likewise.
+5. `resumeFromStore()` is not on the protocol: it is the host's launch step (S2), and every protocol method waits
+   for recovery.
+6. The dependency key is `workoutSession`; its unimplemented stub's `updates()` ends at once and its other methods
+   throw; its preview value is a fake with no workout.
+7. The fake, `FakeWorkoutSessionClient`, is in `LedgerFakes` (ADR-008), runs the real engine, records what it was
+   asked (`applied`), and passes the shared `WorkoutSessionClientContract` in `LedgerTestSupport` that S2's host
+   must pass too. It is absent from Release builds, as all of `LedgerFakes` is.
+8. `ClockText.minutesSeconds(_:)` in `LedgerDomain` is the one elapsed-time formatter for Today, the workout header
+   and the receipt: m:ss under an hour ("0:00", "24:22"), h:mm:ss from sixty minutes ("1:01:05"); a negative
+   duration reads "0:00". (The format past an hour is put to Pete; the prototype prints "61:05".)
+
+**Later slices (corrections known today)**
+- The host runs the rest-notification effects; a screen plays only the haptics an update forwards.
+- Files live in `LedgerDomain/Protocols`, `UseCases`, `Engine`; fakes and fixtures in `LedgerFakes`; the app's
+  wiring in `LedgerAppKit` (`AppComposition`, `MainRoot`), not under `Apps/Ledger/Sources/`.
+- The check's label on a logged row is "Undo set 2".
+- Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above.
