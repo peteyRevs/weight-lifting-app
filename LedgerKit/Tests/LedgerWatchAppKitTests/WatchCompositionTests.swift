@@ -140,4 +140,11 @@ struct WatchCompositionTests {
         #expect(first.databaseURL != second.databaseURL)
         #expect(first.databaseURL.lastPathComponent == "ledger.sqlite")
     }
+
+    @Test("Boots in the app and in a UI-tested app (-LEDGER_UITEST), never in a process hosting unit tests (S2-N1)")
+    func boots_unlessHostingUnitTests() {
+        #expect(WatchComposition.boots(arguments: ["LedgerWatch"], isTesting: false))
+        #expect(!WatchComposition.boots(arguments: ["LedgerWatch"], isTesting: true))
+        #expect(WatchComposition.boots(arguments: ["LedgerWatch", "-LEDGER_UITEST", "1"], isTesting: true))
+    }
 }

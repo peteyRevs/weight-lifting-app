@@ -1,5 +1,6 @@
 import Foundation
 @testable import LedgerAppKit
+import LedgerPersistence
 import Testing
 
 /// The iPhone launch's order (F07 criterion 6, ADR-005). `boot()` is synchronous, so the compiler already rules

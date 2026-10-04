@@ -99,9 +99,12 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 - `@unchecked Sendable` is forbidden without a comment explaining the invariant
   and a link to the ADR or issue that allows it.
 - Shared mutable state lives in an `actor`. Persistence, HealthKit, and Sync
-  each expose an actor-backed service. Exception: `LedgerFakes`' in-memory stores
+  each expose an actor-backed service. Exceptions: `LedgerFakes`' in-memory stores
   keep their state behind a `Synchronization.Mutex` so that `observe…()` registers
-  synchronously (ADR-008 decision 4); product stores use actors.
+  synchronously (ADR-008 decision 4); and state that a system framework callback
+  writes synchronously on the framework's own queue, where an actor could be
+  reached only after the callback returned, may sit behind a `Mutex`
+  (`MirroringStartRegistrar`; Pete, 2026-10-04). Product stores use actors.
 - No `DispatchQueue`, no `NSLock`, no semaphores in product code.
 - No `Task.detached`. No fire-and-forget `Task { }` in stores; structured
   concurrency via `.task`, `TaskGroup`, `async let`.

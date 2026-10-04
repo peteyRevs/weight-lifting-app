@@ -6,58 +6,100 @@ import LedgerPersistence
 #if canImport(WatchConnectivity)
     import LedgerSync
 #endif
-import Observation
+import SwiftUI
 
 /// The watch app's composition root (architecture §4, §13): its own database, the one place live values are bound
 /// to the dependency keys. `App.init` calls `launch()`, which opens the database synchronously; the root view
-/// then calls `resume(in:)` for the rest (`Launch.swift`) and renders `state`. `WatchAppDelegate` receives the
-/// workout launches.
+/// calls `resume(in:)` for the rest and renders `state`. The database half of the launch is `DatabaseLaunch`, which
+/// the iPhone shares; the watch is the primary workout session (ADR-005), so it assigns no mirroring handler.
+/// `WatchAppDelegate` receives the workout launches.
 @MainActor
-@Observable
 public final class WatchComposition {
-    public enum State: Equatable, Sendable {
-        /// Nothing booted: the process is hosting tests, which must not write into the simulator's container.
-        case idle
-        /// The database is open and the keys are bound.
-        case ready
-        /// The database could not be opened (product decision #29).
-        case databaseUnavailable
-    }
+    public typealias State = DatabaseLaunch.State
 
-    public internal(set) var state = State.idle
-    /// The lifter's settings; `Settings.default` until they load, or when the stored row cannot be read, and
-    /// then only in memory: it is never saved over that row (F05 input).
-    public internal(set) var settings = Settings.default
-    /// False until the catalog is seeded (product decision #28).
-    public internal(set) var isCatalogSeeded = false
-
-    @ObservationIgnored var stores: LedgerStores?
-    @ObservationIgnored var hasResumed = false
-    @ObservationIgnored var hasLoadedSettings = false
-    @ObservationIgnored var isCompanionActive = false
-    @ObservationIgnored let environment: Environment
+    let environment: Environment
+    let database: DatabaseLaunch
+    private var isCompanionActive = false
 
     init(_ environment: Environment) {
         self.environment = environment
+        let preparesDependencies = environment.preparesDependencies
+        database = DatabaseLaunch(
+            at: environment.databaseURL,
+            kind: .watch,
+            now: environment.now,
+            newID: environment.newID,
+            logger: environment.logger.log,
+            record: environment.record,
+            onOpen: { stores in
+                if preparesDependencies {
+                    prepareDependencies { Self.bind(stores, into: &$0) }
+                }
+            }
+        )
     }
 
-    /// The app's composition, booted (`boot()`): call it once, from `App.init`. A process hosting tests boots
-    /// nothing (`isTesting`). The launch argument `-LEDGER_UITEST` opens a fresh database file in a new temporary
-    /// directory.
-    public static func launch() -> WatchComposition {
-        let composition = WatchComposition(.live(arguments: ProcessInfo.processInfo.arguments))
-        if !isTesting {
+    public var state: State {
+        database.state
+    }
+
+    /// The lifter's settings, or `Settings.default` in memory only (`DatabaseLaunch.settings`).
+    public var settings: LedgerDomain.Settings {
+        database.settings
+    }
+
+    /// False until the catalog is seeded (product decision #28).
+    public var isCatalogSeeded: Bool {
+        database.isCatalogSeeded
+    }
+
+    var stores: LedgerStores? {
+        database.stores
+    }
+
+    /// The app's composition, booted (`boot()`): call it once, from `App.init`. A process hosting unit tests boots
+    /// nothing (`isTesting`), unless it is the app a UI test launched with `-LEDGER_UITEST`, which boots on a
+    /// fresh database file in a new temporary directory.
+    public static func launch(arguments: [String] = ProcessInfo.processInfo.arguments) -> WatchComposition {
+        let composition = WatchComposition(.live(arguments: arguments))
+        if boots(arguments: arguments, isTesting: isTesting) {
             composition.boot()
         }
         return composition
     }
 
+    static func boots(arguments: [String], isTesting: Bool) -> Bool {
+        !isTesting || arguments.contains("-LEDGER_UITEST")
+    }
+
+    /// The launch's synchronous part, from `App.init`: the database is open before the first frame.
+    func boot() {
+        database.open()
+    }
+
+    /// The launch's asynchronous part, from the root view's `.task(id: scenePhase)`: the database half
+    /// (`DatabaseLaunch.resume(isForeground:)`), then WatchConnectivity, activated once.
+    public func resume(in phase: ScenePhase) async {
+        guard state != .idle else {
+            return
+        }
+        await database.resume(isForeground: phase == .active)
+        if !isCompanionActive {
+            environment.record(.began(.activateCompanionSession))
+            isCompanionActive = true
+            environment.activateCompanionSession()
+        }
+    }
+
     /// Binds the six stores and this device's id; binds nothing until the database is open. The logger and the
     /// device keys keep their live values (the device ones are stubs until F16–F23).
     public func bind(_ values: inout DependencyValues) {
-        guard let stores else {
-            return
+        if let stores {
+            Self.bind(stores, into: &values)
         }
+    }
+
+    static func bind(_ stores: LedgerStores, into values: inout DependencyValues) {
         values.exerciseRepository = stores.exercises
         values.programRepository = stores.programs
         values.workoutRepository = stores.workouts

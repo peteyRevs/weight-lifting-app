@@ -12,7 +12,7 @@ import Synchronization
 ///
 /// HealthKit calls the handler on an arbitrary background queue, and the handler cannot wait, so the sessions
 /// sit behind a `Mutex` (not an actor, which the handler could only reach through an unstructured `Task`, after
-/// it had returned).
+/// it had returned): engineering-standards §4's exception for state a framework callback writes synchronously.
 public final class MirroringStartRegistrar<Session: AnyObject & Sendable>: Sendable {
     /// Installs the handler where the sessions come from (`HKHealthStore`'s property, in the app).
     private let install: @Sendable (@escaping @Sendable (Session) -> Void) -> Void

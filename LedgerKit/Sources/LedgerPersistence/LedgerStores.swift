@@ -28,8 +28,15 @@ public struct LedgerStores: Sendable {
     }
 
     /// Opens and migrates the database at `url` (`LedgerDatabase.open(at:protection:)`, synchronous), then reads
-    /// or inserts this device's row (`LocalDevice`). Throws whatever either throws; a file that cannot be opened
-    /// is left exactly as it was (product decision #29).
+    /// or inserts this device's row (`LocalDevice`), and throws whatever either throws (product decision #29):
+    /// - a missing or empty file becomes a new database;
+    /// - a file of Ledger's whose migrations this build knows migrates (when some are pending) and opens;
+    /// - any other file is refused before a byte of it is written: one SQLite cannot read (not a database, no
+    ///   permission), one that is not Ledger's (`OpenError.notLedgerDatabase`), and one a later version migrated
+    ///   (`OpenError.laterSchema`). It is never deleted, moved or replaced either.
+    ///
+    /// A failure after the preflight (a migration that fails on the data, a damaged `device` row) can leave the
+    /// migrations that succeeded before it applied, each in its own transaction, as GRDB's migrator commits them.
     public static func open(
         at url: URL,
         kind: LocalDevice.Kind,
