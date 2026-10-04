@@ -238,6 +238,7 @@ Pure services in `LedgerDomain` (all unit-tested to ~100 %):
 - `TimeEstimate.minutes(day:)` — one formula (decision #14).
 - `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days.
 - `MissTracking.update(slot:workout:)` — decision #5.
+- `ProgramTemplates.program(_:catalog:id:newID:)` — onboarding's first block (F08): a 3-, 4-, 5- or 6-day split for one of four goals, 8 weeks with a deload last; `both` on four days is spec §6.4. Exercises are matched by catalog name and start loads copied from the catalog (decisions #21, #24); `startDate(containing:weekStart:calendar:)` gives decision #18's date and `preview(days:)` the days onboarding lists.
 
 The seed exercise catalog ships as `Resources/exercises.json` inside
 `LedgerDomain` with a decoding test that validates every entry (unique IDs,

@@ -526,3 +526,283 @@ feature. F09 S1 lands the localization scaffolding and writes rules 1 and 3 into
    table-driven test before the tester starts (F06's lesson).
 6. **Test names** follow `docs/testing-strategy.md` §6 (`subject_condition_expectation`, a sentence as the display
    name), not the briefs' `test_…` names.
+
+## Slice S1 — template generator (G1 implementer, 2026-10-04)
+
+Branch `feat/F08-s1-templates`, on top of `8d5a991`. Not committed, no PR (the orchestrator commits). Built to the
+product defaults in force: Lower B keeps three exercises; the 3-, 5- and 6-day templates and the role table are the
+brief's; a block is dated from the first day of the current week.
+
+### What landed
+
+Product (`LedgerKit/Sources/`):
+
+- `LedgerDomain/Templates/DaysPerWeek.swift`: `enum DaysPerWeek: Int` (`three = 3` … `six`).
+- `LedgerDomain/Templates/ProgramTemplates.swift`: `ProgramTemplateError`, and `ProgramTemplates` with `weekCount`,
+  `Request`, `DayPreview`, `Preview`, `preview(days:)`, `startDate(containing:weekStart:calendar:)`,
+  `program(_:catalog:id:newID:)`, and the builder (one private function for a day, one for the weeks).
+- `LedgerDomain/Templates/ProgramTemplates+Splits.swift`: the internal `Role`, `Lift`, `Day`, `Split`, and the four
+  splits (`upperLower`, `fullBody`, `pushPullLegs`, `bodyPart`).
+- `LedgerDomain/Templates/ProgramTemplates+Prescriptions.swift`: the internal `Scheme` and `RoleSchemes`, the role
+  table (`schemes(for:)`), spec §6.4's rows (`specSeed`), and `Split.scheme(for:goal:)`, which picks between them.
+- `LedgerFakes/Fixtures/Fixtures+Templates.swift`: `Fixtures.defaultProgramID`, `Fixtures.defaultProgram(startDate:)`.
+
+Tests (`LedgerKit/Tests/`): `LedgerDomainTests/Templates/` (`ProgramTemplatesTests`, `…SeedTests`, `…SplitsTests`,
+`…CatalogTests`, `…StartDateTests`, `…PerformanceTests`, `DaysPerWeekTests`, and the helpers `TemplateTesting`,
+`TemplateOracle`, `TemplateOracle+Splits`); `LedgerDependenciesTests/FixturesTemplatesTests.swift`;
+`LedgerPersistenceTests/TemplateProgramRoundTripTests.swift`. 49 tests, 409 parameterized cases.
+
+Docs: one bullet in `docs/architecture.md` §5. No existing Swift file is edited; `project.pbxproj`, `Package.swift`,
+the test plans and the thresholds are untouched.
+
+The API as built:
+
+```swift
+public enum DaysPerWeek: Int, Codable, Sendable, CaseIterable { case three = 3, four, five, six }
+public enum ProgramTemplateError: Error, Equatable, Sendable { case unknownExercise(String) }
+
+public enum ProgramTemplates {
+    public static let weekCount = 8
+    public struct Request: Hashable, Sendable {          // var goal, days, units, startDate; public init
+        public init(goal: TrainingGoal, days: DaysPerWeek, units: Units, startDate: CivilDate)
+    }
+    public struct DayPreview: Hashable, Sendable { public let name, tag, exercises: String }
+    public struct Preview: Hashable, Sendable { public let programName: String; public let days: [DayPreview] }
+
+    public static func preview(days: DaysPerWeek) -> Preview
+    public static func startDate(containing now: Date, weekStart: Weekday, calendar: Calendar) -> CivilDate?
+    public static func program(_ request: Request, catalog: [Exercise], id: ProgramID, newID: () -> UUID) throws -> Program
+}
+```
+
+**Id order** (pinned by `program_drawsIDs_weeksThenEachDayAndItsSlots`): `newID` is called once per week, weeks 0…7
+in order, then for each day in order: once for the day, then once per slot in order. For the 4-day split that is 28
+calls: weeks 1–8, Upper A 9 and its slots 10–14, Lower A 15 and 16–19, Upper B 20 and 21–24, Lower B 25 and 26–28.
+The program's own id is the `id` argument.
+
+### Decisions and deviations
+
+1. **`program` takes a `Request`; the ruling's seven-parameter signature is not implemented as written.** SwiftLint's
+   `function_parameter_count` is a default rule (`.swiftlint.yml` does not configure it; it warns from six
+   parameters, and the gate runs `--strict`). The one function on `main` that exceeds it carries an inline
+   suppression (`LedgerDomain/Rules/SessionBuilder.swift:16`), and this slice may add none. So the four plain values
+   (goal, days, units, start date) are `ProgramTemplates.Request` (`Templates/ProgramTemplates.swift:25`;
+   initializers are exempt from the rule), and what the store supplies stays as parameters: `program(_:catalog:id:
+   newID:)` (`:93`). Inputs, output and id order are the ruling's. To go back to the flat signature: one
+   `// swiftlint:disable:this function_parameter_count` and delete `Request` (about 12 lines).
+2. **`startDate(containing:weekStart:calendar:)` anchors its throwaway `WeekCalendar` on the Unix epoch, not on
+   today** (`ProgramTemplates.swift:71-74`). `firstDayOfWeek` reads the week start and the zone only
+   (`Rules/WeekCalendar.swift:77-79`, `:106-109`); anchoring on today would mean unwrapping `CivilDate(now, in:)`
+   first, a second `nil` path for nothing. The one `nil` left is a week whose first day is outside the years 1…9999.
+3. **The §6.4 exception is data on the split, not a `days == .four` test.** `Split.seed` holds spec §6.4's rows by
+   exercise name; `Split.scheme(for:goal:)` takes the seed row under `both` where the split has one, and the role
+   table otherwise (`ProgramTemplates+Prescriptions.swift:46-51`). Only `upperLower` has a seed. Both branches are
+   reachable; `specSeed_namesTheFourDaySplitsExercises` pins that the seed's keys are exactly that split's 16
+   exercises, so a misspelt key cannot fall through to the role table unseen.
+4. **The role table is a struct per goal, not one switch over (goal, role).** Twelve cases in one switch fail
+   `cyclomatic_complexity` (10). `schemes(for:)` returns a `RoleSchemes`, read by role.
+5. **Week 8's schedule** is `Split.deloadRestDays`: `[.saturday]` on the 4-day split, for every goal, and empty on
+   the others (ruling O17) (`ProgramTemplates+Splits.swift:55`, `:84`; `ProgramTemplates.swift:150-157`).
+   `daysPerWeek` stays 4 in that week: it records the pick.
+6. **Catalog matching**: exact name among exercises with `isCustom == false`; of two such exercises with one name
+   the first in the list given is used (`ProgramTemplates.swift:100`). The bundled catalog has no duplicate name
+   (`CatalogError.duplicateName`); the rule only keeps the function total and deterministic on any list a store
+   returns. Tests: `program_customExerciseWithATemplatesName_isIgnored`, `program_twoCatalogExercisesWithOneName_
+   usesTheFirst`.
+7. **When `unknownExercise` is thrown, some ids have been drawn** (the eight weeks' and the failing day's), because
+   the documented order starts with the weeks. Harmless, and said in the doc comment. With an incrementing test
+   generator, a retry after a failed attempt therefore starts at a later id.
+8. **Preview lines.** Lower B is "Deadlift, front squat, leg curl" (decision 1, default A). Upper B keeps spec
+   §6.7's "Weighted pull-up, OHP, row, curls". `preview_linesCountTheDaysLifts` checks that every line names one
+   thing per slot, so no line promises what its day lacks. `DayPreview.name` keeps " — "; the " · " form is S2's.
+9. **The fixture tests are a new file**, `LedgerDependenciesTests/FixturesTemplatesTests.swift` (5 tests), not two
+   more tests in `FixturesTests`: that suite's body is 93 code lines and these add about 80, past
+   `type_body_length` (150). `FixturesTests.swift` is unchanged.
+10. **`Fixtures.defaultProgram` has an id of its own**, `Fixtures.defaultProgramID` (`uuid(9004)`), and child ids
+    `uuid(1001)`…`uuid(1028)` in the generator's order, so a store never takes it and `seedProgram` for one
+    program. Its default start comes from `ProgramTemplates.startDate` at `Fixtures.now` with the default week
+    start: 2026-09-14. It is pounds only (the plan's signature).
+11. **Plan test names.** `program_unknownExercise_throws` became three tests (`program_emptyCatalog_
+    throwsUnknownExercise`, `program_missingExercise_throwsUnknownExercise`, `program_customExerciseWithATemplates
+    Name_isIgnored`). Everything else in the plan's S1 list exists under its planned name. Added beyond the plan:
+    the id-order test, the deload-schedule test, the weekday test, the duplicate-name test, the Weighted Pull-Up
+    test, `preview_everySplit_isTheBriefs`, `preview_linesCountTheDaysLifts`, the start-date property test over
+    all seven week starts, `DaysPerWeekTests`, and two more GRDB tests (stored catalog equals bundled catalog;
+    unseeded catalog).
+12. **The tests' oracle is a second copy of the brief** (`TemplateOracle`, `TemplateOracle+Splits`): the role table,
+    the 16 rows of §6.4, and the "Templates" list with full catalog names. It reads nothing from `ProgramTemplates`,
+    so changing a template means changing it in two places, on purpose.
+13. **No unreachable branch in `ProgramTemplates*`**: the three files are at 100 % of lines, and on the host at
+    100 % of regions. `Fixtures+Templates.swift` has one line no test reaches (`:27`, the `throw` for a start date
+    that cannot be computed), as `seedProgram` has (`Fixtures+Program.swift:153`); see "Gate and coverage".
+14. **Not done, on purpose:** no public initializer on `DayPreview` / `Preview` (the plan's signatures have none;
+    S2 gets them from `preview(days:)`); no `units:` parameter on the fixture; no change to `WeekCalendar`,
+    `Fixtures.seedProgram()` or any other existing file.
+
+### Criteria → tests
+
+Suites are in `LedgerDomainTests/Templates/` unless named. Case counts are parameterized arguments.
+
+| Criterion (as amended) | Tests |
+|---|---|
+| 6: `both` × `four` equals spec §6.4 in every column but load and step | `ProgramTemplatesSeedTests.program_bothFourDay_matchesSpec64_exceptLoad` (16 rows, each in lb and kg: exercise, sets, reps, repsHi, RPE, rest, progression, superset, drop set, no misses; load equals the catalog's; step nil), `program_bothFourDay_hasTheTablesDaysAndRowCount`, `program_bothFourDay_benchStartsAtTheEmptyBar`; `ProgramTemplatesCatalogTests.specSeed_namesTheFourDaySplitsExercises` |
+| 6: schedule equals the §6.4 seed, week 8's three days included | `ProgramTemplatesSeedTests.program_fourDay_scheduleMatchesSeed_includingWeek8` (4 goals) |
+| 7: every slot value inside spec §7.1 | `ProgramTemplatesTests.program_everyGoalAndSplit_staysInsideSpec71` (16 pairs × lb, kg) |
+| 7: every exercise name resolves in the catalog; "Weighted Pull-Up", not "Pull-Up" | `ProgramTemplatesCatalogTests.templates_everyExerciseName_isInTheBundledCatalog` (4 splits), `program_fourDay_pullUpIsTheWeightedOne` (lb, kg); `ProgramTemplatesSplitsTests.program_everyGoalAndSplit_isTheBriefsTemplate` (16) |
+| 7: exactly `days` training days in weeks 1–7 | `ProgramTemplatesTests.program_weeks1to7_scheduleExactlyDaysPerWeek` (16), `ProgramTemplatesSplitsTests.program_schedule_isOnTheBriefsWeekdays` (4) |
+| Week 8 a deload and the only one; its schedule (amendment 5) | `ProgramTemplatesTests.program_onlyWeek8IsADeload` (16), `program_deloadWeek_keepsItsDays_exceptTheFourDaySaturday` (16) |
+| 9: determinism from the id sequence | `ProgramTemplatesTests.program_sameInputsAndIDs_isEqual` (32), `program_drawsIDs_weeksThenEachDayAndItsSlots`, `program_idsAreAllDistinct` (16) |
+| 3, data half: the preview's days, names and lines | `ProgramTemplatesSplitsTests.preview_fourDay_matchesSpec67`, `preview_everySplit_isTheBriefs` (4), `preview_matchesTheGeneratedDays` (16), `preview_linesCountTheDaysLifts` |
+| 8, data half: kg start loads are the catalog's, multiples of the kg step | `ProgramTemplatesCatalogTests.program_kilograms_startLoadsAreMultiplesOfTheStep` (16), `program_startLoads_areTheCatalogs` (32) |
+| 11, data half (and 4's start date): Wednesday 2026-09-16 → start 2026-09-14, week index 0 | `ProgramTemplatesStartDateTests.startDate_criterion11_wednesdayIsInWeek1`, `startDate_isTheFirstDayOfTheWeek` (18 rows: Monday, Sunday, Saturday, Wednesday and Thursday starts; a week's first and last minute; a year boundary; Sunday evening in Los Angeles; Havana and Cairo, where DST skips midnight on the week's first day), `startDate_isOnTheWeekStart_atMostSixDaysBack` (7 week starts × 14 days), `startDate_ignoresTheCalendarsFirstWeekday`, `startDate_outOfRange_isNil` |
+| Amendment 1: types | `DaysPerWeekTests` (2); `ProgramTemplatesTests.program_recordsGoalDaysAndIsActive` (32) |
+| Amendment 4: `unknownExercise`; exact names among non-custom exercises | `ProgramTemplatesCatalogTests.program_emptyCatalog_throwsUnknownExercise` (4), `program_missingExercise_throwsUnknownExercise` (2), `program_customExerciseWithATemplatesName_isIgnored`, `program_twoCatalogExercisesWithOneName_usesTheFirst`; `LedgerPersistenceTests/TemplateProgramRoundTripTests.templateProgram_unseededCatalog_throwsUnknownExercise` |
+| Role table; the 4-day split under other goals | `ProgramTemplatesSplitsTests.program_everySlot_takesItsRolesScheme_exceptTheSeed` (16), `program_supersetsAndDropSets_areTheFourDaySplitsOnly` (16); `ProgramTemplatesSeedTests.program_strengthFourDay_takesTheRoleTable`, `program_fourDay_everyGoal_keepsExercisesSupersetsAndDropSet` (4) |
+| A generated day builds a session | `ProgramTemplatesTests.program_everyDay_buildsASession` (32: every day, weeks 1 and 8; set counts, drop set, week-1 load, every weight a whole number of steps) |
+| GRDB round trip | `LedgerPersistenceTests/TemplateProgramRoundTripTests.templateProgram_savedToGRDB_roundTripsEqual` (32, over the catalog as stored; row counts and the `program` row), `templateProgram_storedCatalog_givesTheBundledCatalogsProgram` |
+| Amendment 6: the fixture | `LedgerDependenciesTests/FixturesTemplatesTests`: `defaultProgram_isTheGenerators`, `defaultProgram_startDate_isTheOneGiven`, `defaultProgram_differsFromSeedProgram_onlyInLoadsIdsAndStart`, `defaultProgram_savesAndReadsBack`, `defaultProgram_inASeed_missesNoExercise` |
+| Budget: `program` under 5 ms | `ProgramTemplatesPerformanceTests.program_sixDays_under5ms`, nightly lane only, as the catalog's. By hand on the host (Debug): median 0.13 ms |
+| DoD: `ProgramTemplates` at 100 % of lines | "Gate and coverage" below |
+
+**Do the tests bite?** Spot check, not a mutation campaign (that is the tester's). Seventeen source mutations in two
+host runs, sources restored and compared byte for byte afterwards; each made at least one named test fail: a §6.4
+rest value; a role-table rep range; the `isCustom` filter removed; `deloadRestDays` emptied; the Lower B line set
+back to "hamstring, abs"; loads always in pounds; the week start ignored; ids drawn days-first; last duplicate wins;
+"Pull-Up" for "Weighted Pull-Up"; the drop set removed; `isActive` false; a wrong `daysPerWeek`; the deload on
+week 7; the seed used for every goal; the superset flag dropped; Friday moved to Thursday on the 5-day split.
+
+### Code lines
+
+Non-blank lines that are not whole-line comments. Every Swift file is new, so each is counted whole; apart from
+them `git diff -U0 8d5a991` shows one added line in `docs/architecture.md` and this section.
+
+| File | Product lines |
+|---|--:|
+| `LedgerDomain/Templates/DaysPerWeek.swift` | 4 |
+| `LedgerDomain/Templates/ProgramTemplates.swift` | 98 |
+| `LedgerDomain/Templates/ProgramTemplates+Splits.swift` | 190 |
+| `LedgerDomain/Templates/ProgramTemplates+Prescriptions.swift` | 96 |
+| **LedgerDomain** | **388** (plan ≈ 360, +8 %) |
+| `LedgerFakes/Fixtures/Fixtures+Templates.swift` | **25** (plan ≈ 25) |
+
+Tests: 1,049 lines in 12 files (3 of them helpers). Largest product file: `+Splits`, 233 lines with comments
+(lint limit 300). No split proposed: the slice is under the 500-line target.
+
+### Gate and coverage
+
+- **Full gate:** `/usr/bin/python3 <scratchpad>/sim-lock.py scripts/check.sh` from the worktree root, started
+  2026-10-04 17:50:34. **Exit status 0** (`GATE_EXIT=0`, read from the log, with `check.sh OK`), **671 s**, lock
+  acquired after 0 s. Steps: tools 1 s, format 0 s, lint 69 s, iOS build 100 s, iOS tests 213 s, watchOS build 36 s,
+  watchOS tests 248 s, coverage 2 s. "17 test targets ran and passed (PR)", "8 test targets ran and passed
+  (PR-Watch)". Result bundles: iOS 1,672 tests, 0 failed (1,653 passed, 13 skipped, 6 expected failures); watchOS
+  1,498, 0 failed (1,482 passed, 13 skipped, 3 expected failures). Every suite of this slice is in the iOS bundle;
+  the Domain and GRDB ones are in the watchOS bundle too.
+- **What the gate ran on:** the tree as it is now, minus this notes section, which was appended afterwards.
+  `scripts/check.sh --lint-only` was run again on the final tree: see the last line of this section.
+- **Warnings in the gate log:** three, all on `main` already (`LedgerDesignTests/PreviewTests.swift:90`,
+  `PayloadVersionAdversarialTests.swift:29`, a `@Test` macro expansion in `SettingsDecodingAdversarialTests`).
+  None in this slice's files.
+
+| Module | Lines | Coverage | Threshold | `main` (F07 S3) |
+|---|--:|--:|--:|--:|
+| LedgerDomain | 2162 / 2180 | 99.17 % | 95 % | 2009 / 2027, 99.11 % |
+| LedgerFakes | 1349 / 1365 | 98.82 % | 90 % | 1327 / 1342, 98.88 % |
+| Overall | 8385 / 8512 | 98.50 % | 80 % | 8210 / 8336, 98.48 % |
+
+File coverage, from `xcrun xccov view --report --json` on both result bundles (identical on iOS and watchOS for the
+Domain files):
+
+| File | Lines |
+|---|--:|
+| `ProgramTemplates.swift` | 100 / 100 |
+| `ProgramTemplates+Splits.swift` | 22 / 22 |
+| `ProgramTemplates+Prescriptions.swift` | 31 / 31 |
+| `DaysPerWeek.swift` | no executable line |
+| `Fixtures+Templates.swift` (iOS) | 22 / 23 |
+
+LedgerDomain's 153 new lines are all covered. **LedgerFakes is 0.06 points lower than on `main`**: its one new
+uncovered line is the fixture's `throw` (decision 13). Host `llvm-cov` over the Domain suites alone agrees on the
+lines and adds regions: 24 / 24, 11 / 11, 19 / 19.
+
+- **Release build:** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+  **exit 0** (100 s, no warning). `nm .build/out/Products/Release/LedgerFakes.o` lists 1 symbol and none of the
+  fixtures' (Debug: 3,557, `defaultProgram` among them), so `LedgerFakes` is still empty in Release.
+- **Host:** `scripts/check.sh --fast` exit 0 (Domain 811 tests, Persistence 452). `LedgerDependenciesTests` on the
+  host: 56 tests pass.
+- **Not verified:** the nightly lane (the performance test was run by hand on the host only, never on a simulator);
+  CI (nothing was pushed); a device.
+- **Final tree:** `scripts/check.sh --lint-only` after this section was written: exit 0.
+
+### How to verify by hand
+
+```sh
+# The slice's suites on the host (about a minute after the first build):
+swift test --package-path LedgerKit --only-use-versions-from-resolved-file \
+  --filter 'ProgramTemplates|DaysPerWeekTests|FixturesTemplatesTests|TemplateProgramRoundTripTests'
+# The nightly timing test:
+LEDGER_TEST_LANE=nightly swift test --package-path LedgerKit --only-use-versions-from-resolved-file \
+  --filter ProgramTemplatesPerformanceTests
+# LedgerFakes out of Release:
+(cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file)
+# File coverage after a gate (prints "name covered/executable"):
+xcrun xccov view --report --json .derivedData/Results/PR-iOS.xcresult \
+  | jq -r '.targets[].files[] | select(.name | test("^ProgramTemplates[+.]|^Fixtures.Templates"))
+           | "\(.name) \(.coveredLines)/\(.executableLines)"' | sort -u
+```
+
+Reading check: `ProgramTemplates+Splits.swift` beside the brief's "Templates" list, and
+`ProgramTemplates+Prescriptions.swift` beside the role table and spec §6.4. The tests' own copy is
+`LedgerDomainTests/Templates/TemplateOracle*.swift`.
+
+### Open questions
+
+1. **`Request` or the flat signature?** (decision 1). *Recommendation:* keep `Request`; it costs S2 one line and
+   keeps the repo at one parameter-count suppression.
+2. **LedgerFakes' coverage is 0.06 points lower** because of one defensive `throw` (decision 13). *Recommendation:*
+   accept; the alternative is a silent fallback date in a fixture, which is worse.
+3. **Week 8 on the 4-day split has three sessions while `daysPerWeek` is 4.** F09's "n of 4 sessions" must count
+   the week's schedule, not `daysPerWeek`, or the deload week reads "3 of 4" at best. *Recommendation:* F09 uses
+   `week.schedule.count`; noted here because F08 generates the data.
+4. **`Fixtures.history(weeks:)` and `seedSession()` are built from `seedProgram`.** They name its days, slots and
+   loads and do not fit `defaultProgram`. *Recommendation:* F09 and F10 keep `seedProgram` wherever a test needs
+   history, and use `defaultProgram` where it needs "what onboarding saved"; a `history(of:)` variant belongs to
+   whichever slice first needs one.
+5. **Templates name exercises, so a future catalog rename needs both edited together.** A Domain test fails the PR
+   if they drift. On a device, onboarding reads the stored catalog, which a launch refreshes before the gate shows
+   onboarding (S3, O12); if that refresh failed, a renamed exercise is `unknownExercise` until the retry seeds.
+   *Recommendation:* nothing now (decision #28 covers it); matching by id (O5's alternative) would remove the case
+   if it ever matters.
+6. **Pete's decisions 1, 3 and 4 are still open.** This slice is the defaults. Each is a data-only change here:
+   an abs slot is one `Lift` line, one preview line and one oracle line; a changed 3-, 5- or 6-day list likewise;
+   decision 4 would change `startDate` only. The S1 PR waits for decision 3 (rulings).
+7. **The fixture is pounds only.** *Recommendation:* add `units:` when a second caller needs kilograms; until then
+   a kg program is four lines with `ProgramTemplates.program`.
+
+### Inputs for S2
+
+- **The call.**
+  ```swift
+  let request = ProgramTemplates.Request(goal: goal, days: days, units: settings.units, startDate: start)
+  let program = try ProgramTemplates.program(request, catalog: exercises, id: ProgramID(uuid()), newID: { uuid() })
+  ```
+  `exercises` is `exerciseRepository.all()`. `start` is `ProgramTemplates.startDate(containing: date.now, weekStart:
+  settings.weekStart, calendar: calendar)`, an optional: `nil` only for a date outside the years 1…9999, which the
+  store should treat as a failed save (the retry state), not unwrap.
+- **Failures.** With an unseeded catalog the generator throws `ProgramTemplateError.unknownExercise(name)` before
+  anything is saved; `RepositoryError.unknownExercise` from `save` is then a second line of defence. `program` is
+  plain `throws`. A failed attempt has already drawn ids (decision 7): a test with `uuid = .incrementing` should not
+  expect a retry to reuse them.
+- **Step 3.** `ProgramTemplates.preview(days:)` gives `programName` and one `DayPreview` per day (`name`, `tag`,
+  `exercises`). Names keep " — "; criterion 3's " · " is the presentation's replacement. There is no public
+  initializer: build models from `preview(days:)`. Longest strings for layout: "Full Body C — Deadlift focus",
+  "Row, pull-up, pulldown, chest-supported row"; six rows for six days. The preview needs no catalog, so step 3
+  can draw before the catalog is read.
+- **Skip setup** is `Request(goal: .both, days: .four, …)`; `ProgramTemplates` has no "default" of its own.
+- **Tests.** `Fixtures.defaultProgram()` is what a skip saves at `Fixtures.now` in pounds, except for ids: the
+  store's come from the `uuid` dependency (the program's id first, then the generator's order), the fixture's are
+  `defaultProgramID` and `uuid(1001…)`. Either generate the expectation with the same sequence, or compare
+  `seedProgram`-style field by field as `FixturesTemplatesTests.defaultProgram_differsFromSeedProgram_
+  onlyInLoadsIdsAndStart` does. A store seeded for a save: `InMemoryStores.Seed(catalog: ExerciseCatalog.seed(),
+  settings: Fixtures.settingsKg)`; kg loads are the catalog's (Bench 20 kg).
+- **Rows written by a save** (for S3's Diagnostics assertions): `program` 1, `program_week` 8, `day_template` 4,
+  `slot` 16, `slot_miss` 0 for the default; 3 / 15, 5 / 24 and 6 / 24 days / slots for the other splits.
