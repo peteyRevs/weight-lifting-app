@@ -57,7 +57,7 @@ Launch sequence (iOS, in `AppComposition.boot()` called from `LedgerApp.init`): 
 2. Given the watch app launched, then the same holds with its own database (`LedgerWatchUITests`).
 3. Given a store test using `withTestDependencies`, when it touches a key not configured, then the test fails with a message naming the key (`test_unimplementedDependencyFailsLoudly`).
 4. Given `RepositoryContractTests`, when run against GRDB in-memory and the `InMemory*` implementations, then all pass for both.
-5. Given `FakeLiveWorkoutTransport` with two endpoints and loss = 0.3, when 100 envelopes are sent, then the receiver gets ≥ 70 and never a duplicate unless configured.
+5. Given `FakeLinkBus` with two endpoints and loss = 0.3 on a fixed seed, when 100 envelopes are sent, then the receiver gets about 70 (over many seeds the loss rate is 0.3 ± 0.015) and never a duplicate unless duplication is configured. _(Reworded 2026-10-03: at loss 0.3, "≥ 70" holds for only about half of all seeds; the transport protocol is F17's, so the fake is protocol-free.)_
 6. Given the iOS launch, when inspected with a breakpoint/log, then `workoutSessionMirroringStartHandler` is assigned before any `await` (asserted by a unit test on `Launch.order` recording).
 7. Given the debug menu (Debug builds only, shake or long-press on the title), then `DesignGallery` and a Diagnostics screen (DB path, row counts, device id, health auth state) open.
 8. Given `previewValue`s, when every `#Preview` in the package renders (a `PreviewSmokeTests` suite instantiating each preview provider), then none crash.

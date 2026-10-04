@@ -45,7 +45,7 @@ struct HostPolicy: Sendable {
 struct SimHost {
     let device: DeviceID
     let policy: HostPolicy
-    let store = InMemoryEventStore()
+    let store = InMemoryWorkoutEventStore()
     /// The device clock minus real time, in seconds (skew; a step back lowers it).
     var offset: Double
     private(set) var clock = HybridClock()

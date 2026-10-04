@@ -198,7 +198,7 @@ struct Replica {
 /// 2026-09-29): it appends every envelope to its store first, whatever it holds, and when `append`
 /// stored anything new it rebuilds once with `replay` and runs `WorkoutEngine.effects(from:to:)`.
 struct StoringHost {
-    let store: any WorkoutEventStore = InMemoryEventStore()
+    let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
     private(set) var state: WorkoutState?
 
     /// Receives `envelopes` and returns the effects of the rebuild, if there was one.

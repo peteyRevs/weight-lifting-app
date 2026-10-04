@@ -98,6 +98,12 @@ struct WorkoutRepositoryTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test("The GRDB repository keeps the storage clause", arguments: WorkoutRepositoryContract.storageClauses)
+    func storageClause_holds(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories.withProgramExercises().history)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("Criterion 3: five exercises materialise as workout, exercise, set, record and miss rows, in one transaction")
     func materialize_writesEveryTable_inOneTransaction() async throws {
         let scenario = try await Scenario()

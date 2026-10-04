@@ -15,7 +15,7 @@ struct EventStoreAdversarialTests {
 
     @Test("A partial batch returns only its new envelopes, once each, in the order given (not sorted)")
     func append_partialBatch_returnsNewInGivenOrder() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let skips = (1 ... 5).map { Probe.skip(UInt64($0)) }
         #expect(try await store.append([skips[1]]) == [skips[1]])
         #expect(try await store.append([skips[4], skips[1], skips[0], skips[4], skips[2]]) == [
@@ -30,7 +30,7 @@ struct EventStoreAdversarialTests {
 
     @Test("Two different envelopes with one new key in the same batch reject the whole batch; a retry succeeds")
     func append_conflictWithinOneBatch_rejectsAll() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let (first, second, rival) = (Probe.skip(1), Probe.skip(2), Probe.extend(2))
         await #expect(throws: EngineError.conflictingEnvelope(rival.key)) {
             try await store.append([first, second, rival])
@@ -42,7 +42,7 @@ struct EventStoreAdversarialTests {
 
     @Test("Same key and event but another stamp is a different envelope: a conflict, not a duplicate")
     func append_sameEventOtherStamp_isConflict() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let stored = Probe.skip(1)
         let restamped = Probe.skip(1, at: 1.5)
         _ = try await store.append([stored])
@@ -54,7 +54,7 @@ struct EventStoreAdversarialTests {
 
     @Test("One batch may carry the same key for two workouts: both are new")
     func append_sameKeyTwoWorkouts_oneBatch() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let mine = Probe.skip(1)
         let theirs = Probe.skip(1, in: Probe.other)
         #expect(try await store.append([mine, theirs, mine]) == [mine, theirs])
@@ -124,7 +124,7 @@ extension EventStoreAdversarialTests {
 
     @Test("Lifecycle, finished path: early envelope, started, finished, compacted; listed until compacted")
     func lifecycle_finished() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let early = Adv.env(Adv.logged(0, 0, doneAt: -5), Adv.watch, seq: 1, at: -5)
         _ = try await store.append([early])
         #expect(try await Self.snapshot(store) == Snapshot(listed: true, replayed: nil))
@@ -139,7 +139,7 @@ extension EventStoreAdversarialTests {
 
     @Test("Lifecycle, discarded path, and two racing terminals: listed; the first terminal decides")
     func lifecycle_discarded() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         _ = try await store.append([Adv.start()])
         _ = try await store.append([Adv.env(.discarded(endedAt: engineTime(100)), seq: 2, at: 100)])
         #expect(try await Self.snapshot(store) == Snapshot(listed: true, replayed: .discarded))
@@ -160,7 +160,7 @@ extension EventStoreAdversarialTests {
     func unusableStarted_isListed_andKeptForResend() async throws {
         var ended = EventBuilders.seedSession()
         ended.phase = .finished
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         _ = try await store.append([Adv.start(ended), Adv.env(Adv.logged(0, 0, doneAt: 5), seq: 2, at: 5)])
         #expect(try await Self.snapshot(store) == Snapshot(listed: true, replayed: nil))
         #expect(try await LaunchStep.run(store) == [Self.workout: .keptForResend])
@@ -174,7 +174,7 @@ extension EventStoreAdversarialTests {
         """
     )
     func compactedThenPeerResend_isListed_andKeptUntilHealed() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let watchLog = Adv.env(Adv.logged(0, 0, doneAt: 50), Adv.watch, seq: 1, at: 50)
         let watchFinish = Adv.env(.finished(endedAt: engineTime(100)), Adv.watch, seq: 2, at: 100)
         _ = try await store.append([Adv.start(), watchLog, watchFinish])
@@ -199,7 +199,7 @@ extension EventStoreAdversarialTests {
         """
     )
     func holeBeforeTerminal_isKept_untilTheResendHeals() async throws {
-        let store: any WorkoutEventStore = InMemoryEventStore()
+        let store: any WorkoutEventStore = InMemoryWorkoutEventStore()
         let watchStart = Adv.start(EventBuilders.seedSession(), Adv.watch, seq: 1, at: 0)
         let watchLog = Adv.env(Adv.logged(0, 0, doneAt: 50), Adv.watch, seq: 2, at: 50)
         let watchFinish = Adv.env(.finished(endedAt: engineTime(100)), Adv.watch, seq: 3, at: 100)

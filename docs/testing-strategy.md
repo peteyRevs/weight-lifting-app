@@ -102,7 +102,8 @@ Concrete test names (file = suite = source type; see §6):
 - **Repository contract tests**: one generic suite per protocol
   (`WorkoutRepositoryContract`, `ProgramRepositoryContract`, …) executed
   against the GRDB implementation *and* against the in-memory fake in
-  `LedgerTestSupport`, so fakes cannot drift from the real semantics.
+  `LedgerFakes` (re-exported by `LedgerTestSupport`; ADR-008), so fakes cannot
+  drift from the real semantics.
   Examples: `save_thenFetchByID_roundTrips`, `softDelete_hidesFromListsKeepsRow`,
   `observeWorkouts_emitsOnInsertAndUpdate`, `eventStore_gapSince_returnsOnlyHigherSeq`,
   `eventStore_compactsAfterFinishCommit`.
@@ -292,7 +293,7 @@ and attach screenshots for failures. A run with any failure blocks the tag.
    Tests about other zones pass them explicitly.
 5. Randomness is seeded (`SeededGenerator(seed:)`); a failing seed is printed
    and added as a fixed regression case.
-6. Builders in `LedgerTestSupport` (`Fixtures.exercise(.benchPress)`,
+6. Builders in `LedgerTestSupport` and `LedgerFakes` (`Fixtures.benchPress`, `Fixtures.seedProgram()`,
    `.program(weeks:daysPerWeek:)`, `.slot(...)`, `.workoutState(...)`,
    `EnvelopeBuilder(device:)` with auto-incrementing `seq`,
    `Seed.largeHistory(sets:seed:)`) are the only way to construct fixtures.
@@ -312,6 +313,7 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   (Pete, 2026-09-30). Only a required module listed in `watchOnly` may then be
   unmeasured; without the flag, `watchOnly` changes nothing.
 - Thresholds (line coverage): `LedgerDomain 95`, `LedgerPersistence 90`,
+  `LedgerDependencies 90`, `LedgerFakes 90` (F07),
   `LedgerSync 90`, `LedgerHealth 80`, `LedgerActivityKit 70`, every
   `Feature*`/`WatchFeatureWorkout` 70, `LedgerDesign 60`, overall 80 (sum of
   covered / executable lines across included targets). Thresholds are only

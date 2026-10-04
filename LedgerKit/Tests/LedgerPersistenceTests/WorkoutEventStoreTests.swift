@@ -24,6 +24,12 @@ struct WorkoutEventStoreTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test("The GRDB store keeps the storage clause", arguments: WorkoutEventStoreContract.storageClauses)
+    func storageClause_holds(_ clause: WorkoutEventStoreContract.Clause) async throws {
+        let issue = try await clause.check(Self.store().0)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("Criterion 7: a live log appended twice keeps each key once, and highestSeq is right per device")
     func appendTwice_keepsEachKeyOnce_highestSeqPerDevice() async throws {
         let (store, queue) = try Self.store()

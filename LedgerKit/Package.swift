@@ -16,13 +16,15 @@ let coreSettings: [SwiftSetting] = [.defaultIsolation(nil)]
 let dependenciesProduct: Target.Dependency = .product(name: "Dependencies", package: "swift-dependencies")
 let grdbProduct: Target.Dependency = .product(name: "GRDB", package: "GRDB.swift")
 let snapshotProduct: Target.Dependency = .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
+let issueReportingProduct: Target.Dependency = .product(name: "IssueReporting", package: "swift-issue-reporting")
 
-/// Every feature module depends on the same spine (F00 target table).
+/// Every feature module depends on the same spine (F00 target table; ADR-008 swapped LedgerTestSupport for
+/// LedgerFakes, so a feature's previews reach fixtures without linking Persistence, Health or Sync).
 let featureSpine: [Target.Dependency] = [
     "LedgerDomain",
     "LedgerDesign",
     "LedgerDependencies",
-    "LedgerTestSupport",
+    "LedgerFakes",
     dependenciesProduct
 ]
 
@@ -35,7 +37,8 @@ let iOSFeatures = [
     "FeatureSettings"
 ]
 
-/// One test target per source target, except the two test-only helpers.
+/// One test target per source target, except the test and preview helpers (LedgerFakes, LedgerTestSupport,
+/// LedgerSnapshotTesting), whose suites run in the targets that use them.
 let testedTargets: [(name: String, settings: [SwiftSetting])] =
     [
         ("LedgerDomain", coreSettings),
@@ -53,6 +56,11 @@ let testedTargets: [(name: String, settings: [SwiftSetting])] =
         ("LedgerAppKit", uiSettings),
         ("LedgerWatchAppKit", uiSettings)
     ]
+
+/// Test targets that link LedgerFakes directly, not only through LedgerTestSupport: Xcode measures the coverage
+/// of a test target's direct dependencies only, and LedgerFakes is gated (ADR-008). These are the suites that run
+/// the fakes: the contracts (Persistence), the fixtures and keys (Dependencies), the link bus (Sync).
+let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistence", "LedgerSync"]
 
 /// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
 /// PNGs as sources. Add a target here with its first snapshot suite.
@@ -77,6 +85,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", .upToNextMinor(from: "7.11.1")),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", .upToNextMinor(from: "1.17.0")),
+        // IssueReporting (already resolved through swift-dependencies) lets LedgerFakes fail the test that seeds a
+        // state no database could hold (ADR-008, F07 S1 fix round 2).
+        .package(url: "https://github.com/pointfreeco/swift-issue-reporting", .upToNextMinor(from: "2.1.1")),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", .upToNextMinor(from: "1.19.5"))
     ],
     targets: [
@@ -89,7 +100,7 @@ let package = Package(
         ),
         .target(
             name: "LedgerDependencies",
-            dependencies: ["LedgerDomain", dependenciesProduct],
+            dependencies: ["LedgerDomain", "LedgerFakes", dependenciesProduct],
             swiftSettings: coreSettings
         ),
         .target(
@@ -124,12 +135,22 @@ let package = Package(
         ),
         .target(name: "WatchFeatureWorkout", dependencies: featureSpine, swiftSettings: uiSettings),
 
+        // ---- previews' and tests' fakes (ADR-008) ----------------------------
+        // In-memory stores, fixtures and device fakes over LedgerDomain alone, every source inside `#if DEBUG`:
+        // linked by the apps through LedgerDependencies' `previewValue`s, empty in a Release build.
+        .target(
+            name: "LedgerFakes",
+            dependencies: ["LedgerDomain", issueReportingProduct],
+            swiftSettings: coreSettings
+        ),
+
         // ---- test-only helpers (never linked by an app target) ---------------
         .target(
             name: "LedgerTestSupport",
             dependencies: [
                 "LedgerDomain",
                 "LedgerDependencies",
+                "LedgerFakes",
                 "LedgerPersistence",
                 "LedgerHealth",
                 "LedgerSync",
@@ -177,11 +198,8 @@ let package = Package(
     ] + testedTargets.map { target in
         .testTarget(
             name: "\(target.name)Tests",
-            dependencies: [
-                .target(name: target.name),
-                "LedgerTestSupport",
-                "LedgerSnapshotTesting"
-            ],
+            dependencies: [.target(name: target.name), "LedgerTestSupport", "LedgerSnapshotTesting"]
+                + (fakesCoverageTargets.contains(target.name) ? ["LedgerFakes"] : []),
             exclude: snapshotTestTargets.contains(target.name) ? ["__Snapshots__"] : [],
             resources: testResources[target.name],
             swiftSettings: target.settings
