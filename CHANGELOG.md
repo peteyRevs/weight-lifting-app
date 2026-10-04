@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.3.0...v0.4.0) (2026-10-03)
+
+
+### Features
+
+* **persistence:** personal records always follow history (F05 follow-up, decision [#27](https://github.com/peteyRevs/weight-lifting-app/issues/27)) ([#21](https://github.com/peteyRevs/weight-lifting-app/issues/21)) ([a8080ff](https://github.com/peteyRevs/weight-lifting-app/commit/a8080ffe5f79241bfae8f8cf618fe7db8dfc0501))
+* **persistence:** workout history and stats queries (F05 S3) ([#19](https://github.com/peteyRevs/weight-lifting-app/issues/19)) ([efe0691](https://github.com/peteyRevs/weight-lifting-app/commit/efe0691e4d7ebdd01fa4026c96b0ab252ab220a5))
+
 ## [0.3.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.2.0...v0.3.0) (2026-10-02)
 
 
