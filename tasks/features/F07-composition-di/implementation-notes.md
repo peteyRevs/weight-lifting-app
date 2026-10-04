@@ -995,3 +995,65 @@ after install (dyld's first load, the new database file). None of these is the d
 6. **Watch Diagnostics' long path** fills the first screen on the watch (the screenshot). Recommend leaving it (Debug
    only, scrolls); F18 can trim the watch page if it grows.
 7. **Size** 560 product lines, over the 500 target (PR description says so; ≈ 155 of them are preview registries).
+
+### S3 fix round 1 (G1 implementer, 2026-10-04)
+
+From `test-findings.md` "# Slice S3 — adversarial round 1" (F7-S3-1, F7-S3-2, V10) and `review.md` "# Slice S3 review"
+(S3-SF1, N1–N4, open question 2), with the orchestrator's binding decisions 1–8. Branch at `326bb04`; no tester test
+edited (`git diff 326bb04 -- '*Adversarial*'` is empty).
+
+| # | Finding | Change | Proving test(s) |
+|---|---|---|---|
+| 1 | F7-S3-1 | `PreviewScan.previews(in:)` splits on `\.isNewline` (`\n`, `\r\n`, `\r`; `PreviewScan.swift:35`) and drops leading attributes before looking for `#Preview` (`droppingAttributes`, `:54`: `@name` with an optional balanced `(…)`, then spaces, repeated) | the tester's `attributedPreview_isFound`, `crlfFile_everyPreviewFound`, `attributeOnPreviousLine_andTabs_areFound`, unedited; `PreviewTests.scan_parsesDeclarations` gains `@available(iOS 18, *) @MainActor  #Preview("Attributed")`, an attributed non-preview, and a CRLF source |
+| 2 | S3-SF1 | `renderPreview(size:_:)` (`PreviewRendering.swift:15`) now takes a `@ViewBuilder` closure and builds and draws it inside `withDependencies { $0.context = .preview }` (`:17`), as Xcode runs a `#Preview`; the three `PreviewTests` call it so. testing-strategy §2.6 has the line: previews draw a state, loading goes in a loader view, registry + `renderPreview` + `PreviewScan` | `PreviewTests.preview_readingAStoreKey_getsItsPreviewValue` (`LedgerDesignTests`): a view reading `@Dependency(\.programRepository)` renders with no issue and sees `InMemoryProgramRepository` |
+| 3 | F7-S3-2, S3-N1 | `LedgerPersistence/DatabaseDiagnostics.swift` and all of `LedgerDesign/Components/Components+Previews.swift` (the `DesignPreview` registry and F06's `#Preview`s) are inside `#if DEBUG`; so are their tests (`DatabaseDiagnosticsTests`, LedgerDesign's `PreviewTests`) | Release symbol check below |
+| 4 | S3-N4 | The watch's #29 screen paints `LedgerColor.watchGround` (`WatchRoot.swift:50`). No snapshot: a new reference costs a record run of both plans; the `Database unavailable` preview renders in `WatchPreview`'s smoke test | `WatchAppKit` `PreviewTests.preview_renders(.databaseUnavailable)` |
+| 5 | S3-N2 | Noted only: the scan checks names, and a `#Preview` body that does not show its own case is a code-review matter (every body is one `Registry.case.content` line) | — |
+| 6 | S3-N3 | Screenshots left as committed | — |
+| 7 | Q2 | testing-strategy §2.7: `LaunchPerformance.test_launchToFirstFrame` (reports, never gates, #30) for `Launch.coldLaunchUnder600ms`; the watch's `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder); identifiers are strings because the UI test targets link no package product (replacing the "link the umbrellas, share the enums, verify in F01" sentence) | — |
+| 8 | V10 | `ProcessStartTests.processStart_keepsMicroseconds`: a reference `sysctl` read of the same `p_starttime` field in the test, kept whole; the start's whole seconds equal `tv_sec` and its fraction equals `tv_usec` within 1 µs. Deterministic: both read the same kernel record of this process | itself (mutants M5, M6) |
+
+**Mutants** (one at a time, scratchpad copy `f07s3/mut/`, since deleted; host `swift test`):
+
+| Mutant | Killed by |
+|---|---|
+| M1 the scan splits on `"\n"` again | tester's `crlfFile_everyPreviewFound`; `scan_parsesDeclarations` |
+| M2 no attribute skipping | tester's `attributedPreview_isFound`; `scan_parsesDeclarations` |
+| M3 attribute arguments not balanced (only `)` counted) | tester's `attributedPreview_isFound`; `scan_parsesDeclarations` |
+| M4 `renderPreview` in the `test` context | `preview_readingAStoreKey_getsItsPreviewValue` |
+| M5 the start time without microseconds (V10) | `processStart_keepsMicroseconds` |
+| M6 the start time rounded to milliseconds | `processStart_keepsMicroseconds` |
+
+The `#if DEBUG` wraps (decision 3) and the watch's ground (decision 4) have no package mutant: the first is proved by
+the Release binaries, the second is a colour the watch already shows.
+
+**Release symbol check** (under the lock: `xcodebuild build -configuration Release`, `generic/platform=iOS Simulator`
+and `watchOS Simulator`, `CODE_SIGNING_ALLOWED=NO`, scratch derived data since deleted; both exit 0). `nm -m` of
+`Ledger.app/Ledger` (63,339 symbols) and `LedgerWatch.app/LedgerWatch` (62,819), demangled:
+`DatabaseDiagnostics` 0, `LedgerStores.diagnostics` 0, `DesignPreview` 0, `DiagnosticsPage` 0, `DiagnosticsLoader` 0,
+`DesignGallery` 0, `PreviewScan` 0, `LedgerFakes` 0, `debug.menu`/`debug.diagnostics` strings 0. What remains is by
+design: `ProcessStart` (9) and `rootAppeared` (6), the #30 measurement and its Release log line; and 2 `DebugMenu`
+matches, which are `AppRoot._isDebugMenuShown`'s `@State` (the review's "considered and not raised"). The tester's
+round counted 81 `DatabaseDiagnostics` symbols in each binary before this change.
+
+**Release build (package):** `swift build -c release`: exit 0.
+
+**Code lines** (F05's method): this round vs `326bb04`, product +144 / −147, almost all the re-indentation of the two
+files wrapped in `#if DEBUG`; the logic is ~+3 (the watch's ground, the `#if`s) and in test support +18 / −2
+(`PreviewScan`), +10 / −1 (`renderPreview`). Whole slice vs `2ca2317`: product **+592 / −71** (the re-indented
+`Components+Previews.swift` now counts its F06 lines as removed and added again). Tests this round +135 / −90.
+
+**Gate.** Full `scripts/check.sh` under the lock: **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch), the tester's round-1 suites among them. Summary: tools 1 s, format 0 s, lint 60 s, iOS build 38 s, iOS
+tests 212 s, watchOS build 30 s, watchOS tests 185 s, coverage 1 s, total 527 s. **No warnings** in the gate log.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 204 / 213 | 95.77 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8210 / 8336 | 98.48 % | 80 % | ✓ |

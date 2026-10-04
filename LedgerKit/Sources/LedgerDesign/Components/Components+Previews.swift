@@ -1,62 +1,58 @@
-import SwiftUI
+#if DEBUG
+    import SwiftUI
 
-// Every component's preview. They live apart from the components so line coverage leaves them out
-// (docs/testing-strategy.md §4: `*+Previews.swift`); each gallery is the one the snapshot tests render.
+    // Every component's preview. They live apart from the components so line coverage leaves them out
+    // (docs/testing-strategy.md §4: `*+Previews.swift`); each gallery is the one the snapshot tests render.
 
-/// Every preview in LedgerDesign, one case each (F07 criterion 8): each `#Preview` below shows its case's content,
-/// its tests (`PreviewTests`) render every case and fail on a `#Preview` that is not a case here.
-enum DesignPreview: String, CaseIterable {
-    case eyebrow = "Eyebrow"
-    case hairlineList = "HairlineList"
-    case iconPillButton = "IconPillButton"
-    case ledgerIcon = "LedgerIcon"
-    case pillButton = "PillButton"
-    case primaryButton = "PrimaryButton"
-    case restRing = "RestRing"
-    case setRow = "SetRow"
-    case setRowSteppers = "SetRowSteppers"
-    case weekStrip = "WeekStrip"
-    case statTile = "StatTile"
-    case progressSegments = "ProgressSegments"
-    case sheetChrome = "SheetChrome"
-    case emptyState = "EmptyState"
-    case watchPrimaryButton = "WatchPrimaryButton"
-    case watchRestRing = "WatchRestRing"
-    case watchStatBlock = "WatchStatBlock"
-    #if DEBUG
+    /// Every preview in LedgerDesign, one case each (F07 criterion 8): each `#Preview` below shows its case's content,
+    /// its tests (`PreviewTests`) render every case and fail on a `#Preview` that is not a case here.
+    enum DesignPreview: String, CaseIterable {
+        case eyebrow = "Eyebrow"
+        case hairlineList = "HairlineList"
+        case iconPillButton = "IconPillButton"
+        case ledgerIcon = "LedgerIcon"
+        case pillButton = "PillButton"
+        case primaryButton = "PrimaryButton"
+        case restRing = "RestRing"
+        case setRow = "SetRow"
+        case setRowSteppers = "SetRowSteppers"
+        case weekStrip = "WeekStrip"
+        case statTile = "StatTile"
+        case progressSegments = "ProgressSegments"
+        case sheetChrome = "SheetChrome"
+        case emptyState = "EmptyState"
+        case watchPrimaryButton = "WatchPrimaryButton"
+        case watchRestRing = "WatchRestRing"
+        case watchStatBlock = "WatchStatBlock"
         case designGallery = "DesignGallery"
         case debugMenu = "DebugMenu"
         case diagnosticsPage = "DiagnosticsPage"
-    #endif
 
-    @ViewBuilder var content: some View {
-        switch self {
-        case .eyebrow: EyebrowGallery().ledgerGalleryPage()
-        case .hairlineList: HairlineListGallery().ledgerGalleryPage()
-        case .iconPillButton: IconPillButtonGallery().ledgerGalleryPage()
-        case .ledgerIcon: Self.iconsPage
-        case .pillButton: PillButtonGallery().ledgerGalleryPage()
-        case .primaryButton: PrimaryButtonGallery().ledgerGalleryPage()
-        case .restRing: RestRingGallery().ledgerGalleryPage()
-        case .setRow: SetRowGallery().ledgerGalleryPage()
-        case .setRowSteppers: Self.setRowSteppersPage
-        case .weekStrip: WeekStripGallery().ledgerGalleryPage()
-        case .statTile: StatTileGallery().ledgerGalleryPage()
-        case .progressSegments: ProgressSegmentsGallery().ledgerGalleryPage()
-        case .sheetChrome: SheetChromeGallery().ledgerGalleryPage()
-        case .emptyState: EmptyStateGallery().ledgerGalleryPage()
-        case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
-        case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
-        case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
-        #if DEBUG
+        @ViewBuilder var content: some View {
+            switch self {
+            case .eyebrow: EyebrowGallery().ledgerGalleryPage()
+            case .hairlineList: HairlineListGallery().ledgerGalleryPage()
+            case .iconPillButton: IconPillButtonGallery().ledgerGalleryPage()
+            case .ledgerIcon: Self.iconsPage
+            case .pillButton: PillButtonGallery().ledgerGalleryPage()
+            case .primaryButton: PrimaryButtonGallery().ledgerGalleryPage()
+            case .restRing: RestRingGallery().ledgerGalleryPage()
+            case .setRow: SetRowGallery().ledgerGalleryPage()
+            case .setRowSteppers: Self.setRowSteppersPage
+            case .weekStrip: WeekStripGallery().ledgerGalleryPage()
+            case .statTile: StatTileGallery().ledgerGalleryPage()
+            case .progressSegments: ProgressSegmentsGallery().ledgerGalleryPage()
+            case .sheetChrome: SheetChromeGallery().ledgerGalleryPage()
+            case .emptyState: EmptyStateGallery().ledgerGalleryPage()
+            case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
+            case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
+            case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
             case .designGallery: DesignGallery()
             case .debugMenu: DebugMenu { Self.diagnostics }
             case .diagnosticsPage: NavigationStack { DiagnosticsPage(sections: Self.diagnostics) }
-        #endif
+            }
         }
-    }
 
-    #if DEBUG
         /// What a first launch on the simulator reads.
         private static let diagnostics = [
             DiagnosticsSection("App", lines: [
@@ -72,99 +68,97 @@ enum DesignPreview: String, CaseIterable {
                 DiagnosticsLine("workout", "0", key: "rows.workout")
             ])
         ]
-    #endif
 
-    private static var iconsPage: some View {
-        HStack(spacing: LedgerSpacing.l) {
-            ForEach(LedgerIcon.allCases, id: \.self) { LedgerIconView($0, sizedAs: .heading) }
+        private static var iconsPage: some View {
+            HStack(spacing: LedgerSpacing.l) {
+                ForEach(LedgerIcon.allCases, id: \.self) { LedgerIconView($0, sizedAs: .heading) }
+            }
+            .foregroundStyle(LedgerColor.ink)
+            .padding(LedgerSpacing.screen)
+            .background(LedgerColor.ground)
         }
-        .foregroundStyle(LedgerColor.ink)
-        .padding(LedgerSpacing.screen)
-        .background(LedgerColor.ground)
+
+        private static var setRowSteppersPage: some View {
+            SetRowSteppers(
+                weightStep: "5 lb",
+                repStep: "1 rep",
+                weight: "185 pounds",
+                reps: "5 reps",
+                onWeight: { _ in },
+                onReps: { _ in }
+            )
+            .ledgerGalleryPage()
+        }
     }
 
-    private static var setRowSteppersPage: some View {
-        SetRowSteppers(
-            weightStep: "5 lb",
-            repStep: "1 rep",
-            weight: "185 pounds",
-            reps: "5 reps",
-            onWeight: { _ in },
-            onReps: { _ in }
-        )
-        .ledgerGalleryPage()
+    #Preview("Eyebrow") {
+        DesignPreview.eyebrow.content
     }
-}
 
-#Preview("Eyebrow") {
-    DesignPreview.eyebrow.content
-}
+    #Preview("HairlineList") {
+        DesignPreview.hairlineList.content
+    }
 
-#Preview("HairlineList") {
-    DesignPreview.hairlineList.content
-}
+    #Preview("IconPillButton") {
+        DesignPreview.iconPillButton.content
+    }
 
-#Preview("IconPillButton") {
-    DesignPreview.iconPillButton.content
-}
+    #Preview("LedgerIcon") {
+        DesignPreview.ledgerIcon.content
+    }
 
-#Preview("LedgerIcon") {
-    DesignPreview.ledgerIcon.content
-}
+    #Preview("PillButton") {
+        DesignPreview.pillButton.content
+    }
 
-#Preview("PillButton") {
-    DesignPreview.pillButton.content
-}
+    #Preview("PrimaryButton") {
+        DesignPreview.primaryButton.content
+    }
 
-#Preview("PrimaryButton") {
-    DesignPreview.primaryButton.content
-}
+    #Preview("RestRing") {
+        DesignPreview.restRing.content
+    }
 
-#Preview("RestRing") {
-    DesignPreview.restRing.content
-}
+    #Preview("SetRow") {
+        DesignPreview.setRow.content
+    }
 
-#Preview("SetRow") {
-    DesignPreview.setRow.content
-}
+    #Preview("SetRowSteppers") {
+        DesignPreview.setRowSteppers.content
+    }
 
-#Preview("SetRowSteppers") {
-    DesignPreview.setRowSteppers.content
-}
+    #Preview("WeekStrip") {
+        DesignPreview.weekStrip.content
+    }
 
-#Preview("WeekStrip") {
-    DesignPreview.weekStrip.content
-}
+    #Preview("StatTile") {
+        DesignPreview.statTile.content
+    }
 
-#Preview("StatTile") {
-    DesignPreview.statTile.content
-}
+    #Preview("ProgressSegments") {
+        DesignPreview.progressSegments.content
+    }
 
-#Preview("ProgressSegments") {
-    DesignPreview.progressSegments.content
-}
+    #Preview("SheetChrome") {
+        DesignPreview.sheetChrome.content
+    }
 
-#Preview("SheetChrome") {
-    DesignPreview.sheetChrome.content
-}
+    #Preview("EmptyState") {
+        DesignPreview.emptyState.content
+    }
 
-#Preview("EmptyState") {
-    DesignPreview.emptyState.content
-}
+    #Preview("WatchPrimaryButton") {
+        DesignPreview.watchPrimaryButton.content
+    }
 
-#Preview("WatchPrimaryButton") {
-    DesignPreview.watchPrimaryButton.content
-}
+    #Preview("WatchRestRing") {
+        DesignPreview.watchRestRing.content
+    }
 
-#Preview("WatchRestRing") {
-    DesignPreview.watchRestRing.content
-}
+    #Preview("WatchStatBlock") {
+        DesignPreview.watchStatBlock.content
+    }
 
-#Preview("WatchStatBlock") {
-    DesignPreview.watchStatBlock.content
-}
-
-#if DEBUG
     #Preview("DesignGallery") {
         DesignPreview.designGallery.content
     }

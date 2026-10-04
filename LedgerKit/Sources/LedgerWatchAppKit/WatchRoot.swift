@@ -47,5 +47,6 @@ struct DatabaseUnavailableView: View {
                 body: "Your workouts are still on this watch. Ledger tries again when you come back to it."
             )
         }
+        .background(LedgerColor.watchGround)
     }
 }

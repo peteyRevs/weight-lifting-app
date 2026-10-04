@@ -27,11 +27,13 @@ public enum PreviewScan {
         return try Set(modules.filter { try !previews(inModule: $0).isEmpty })
     }
 
-    /// The `#Preview` declarations in `source`: a line that starts with `#Preview`, so a comment or a string that
-    /// mentions one is not counted. The name is the first argument when it is a string literal.
+    /// The `#Preview` declarations in `source`: a line (`\n`, `\r\n` or `\r`) that starts with `#Preview`, after any
+    /// attributes such as `@available(iOS 18, *)`, so a comment or a string that mentions one is not counted. The name
+    /// is
+    /// the first argument when it is a string literal.
     public static func previews(in source: String) -> [String?] {
-        source.split(separator: "\n").compactMap { line -> String?? in
-            let code = line.drop(while: \.isWhitespace)
+        source.split(whereSeparator: \.isNewline).compactMap { line -> String?? in
+            let code = droppingAttributes(line.drop(while: \.isWhitespace))
             guard code.hasPrefix("#Preview") else {
                 return nil
             }
@@ -46,6 +48,24 @@ public enum PreviewScan {
             }
             return .some(String(first.dropFirst()[..<end]))
         }
+    }
+
+    /// `code` without its leading attributes (`@name`, each with an optional balanced `(…)`) and the space after them.
+    static func droppingAttributes(_ code: Substring) -> Substring {
+        var rest = code
+        while rest.first == "@" {
+            rest = rest.dropFirst().drop { $0.isLetter || $0.isNumber || $0 == "_" }
+            if rest.first == "(" {
+                var depth = 0
+                let close = rest.firstIndex { character in
+                    depth += character == "(" ? 1 : character == ")" ? -1 : 0
+                    return depth == 0
+                }
+                rest = close.map { rest[rest.index(after: $0)...] } ?? ""
+            }
+            rest = rest.drop(while: \.isWhitespace)
+        }
+        return rest
     }
 
     private static func swiftFiles(in directory: URL) throws -> [URL] {

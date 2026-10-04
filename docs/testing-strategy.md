@@ -227,6 +227,12 @@ Concrete test names (file = suite = source type; see §6):
   {solo, superset, rest, swapSheet}, Receipt, Builder, Day editor, Library,
   Exercise history, Workout list/detail, Settings, Onboarding ×3, Watch
   {idle, ready, rest, list, end, summary}. Same matrix as §2.5.
+- Previews draw a state; loading goes in a separate loader view (F07's
+  `DiagnosticsPage` / `DiagnosticsLoader`). Each module's `#Preview`s are cases
+  of a registry enum, which `PreviewTests` render in swift-dependencies'
+  `preview` context (`renderPreview`) and check against a source scan
+  (`PreviewScan`); an appearance action inside a scroll view traps
+  `ImageRenderer` on release, so it belongs in the loader, not the preview.
 
 ### 2.7 UI (`LedgerUITests`, `LedgerWatchUITests`)
 
@@ -235,8 +241,9 @@ Concrete test names (file = suite = source type; see §6):
   `Workout.minimizeAndResume`, `Builder.addDayAddExerciseChangeProgression`,
   `Library.searchOpensHistoryChart`, `History.editThenDeleteWorkout`,
   `Settings.switchUnitsToKg`, `Settings.exportCSV`, `Onboarding.dynamicTypeXL`,
-  `Accessibility.auditEveryTabRoot`, `Launch.coldLaunchUnder600ms`
-  (`XCTApplicationLaunchMetric`, nightly). watchOS: `Smoke.launchesToIdle`,
+  `Accessibility.auditEveryTabRoot`, `LaunchPerformance.test_launchToFirstFrame`
+  (`XCTApplicationLaunchMetric`, nightly; reports, never gates: decision #30). watchOS:
+  `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder),
   `Watch.startFromIdleToSetReady`, `Watch.doneSetRestSkipReady`,
   `Watch.listEndSaveSummaryDone`, `Watch.accessibilityAuditEveryMode`.
 - `performAccessibilityAudit(for: .all)` (iOS 17+ / watchOS 10+, R3 §2) runs
@@ -244,10 +251,9 @@ Concrete test names (file = suite = source type; see §6):
   the issue handler with a comment naming the element and the radar/issue.
 - Identifiers: `.accessibilityIdentifier` uses `<feature>.<screen>.<element>[.<index>]`
   in lowerCamelCase, e.g. `today.upNext.startButton`, `workout.active.setRow.2`,
-  `watch.ready.doneSetButton`. Each feature exposes `public enum <Feature>ID:
-  String`; the UI test targets link `LedgerAppKit` / `LedgerWatchAppKit` and use
-  the same enums, so a rename breaks compilation, not a run (**verify in F01**
-  that XCUITest bundles link the umbrella products cleanly).
+  `watch.ready.doneSetButton`. The UI test targets link no package product, so
+  they spell identifiers as strings (F07: `today.title`, `debug.menu.*`,
+  `debug.diagnostics.*`); a renamed identifier fails a UI run, not the build.
 - UI tests launch with `-LEDGER_UITEST 1`, so the app opens a fresh database
   file in a new temporary directory (a file, not in-memory, so the launch runs
   as on a device; F07 S2), seeded with the catalog as every launch is.

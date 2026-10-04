@@ -18,7 +18,7 @@
 
         @Test("Every preview renders", arguments: WatchPreview.allCases)
         func preview_renders(_ preview: WatchPreview) {
-            #expect(renderPreview(preview.content, size: WatchSize.mm46.size))
+            #expect(renderPreview(size: WatchSize.mm46.size) { preview.content })
         }
     }
 #endif

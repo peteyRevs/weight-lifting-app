@@ -18,7 +18,7 @@
 
         @Test("Every preview renders", arguments: AppPreview.allCases)
         func preview_renders(_ preview: AppPreview) {
-            #expect(renderPreview(preview.content, size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)))
+            #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
         }
     }
 #endif
