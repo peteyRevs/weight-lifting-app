@@ -564,3 +564,120 @@ doc comments included in the exclusion):
 - I recommend doing open question 1 in this PR before SF1, so the fix and its test land once and the launch logic
   comes under the coverage gate. If the orchestrator defers it, SF1 must land on both platforms, each with its test.
 - G5: SF2 widens a standard and question 5 is Pete's copy, so the orchestrator stops for Pete before merging.
+
+## S2 fix rounds re-review
+
+A scoped pass over `git diff 6571cca..bce0150` (fix rounds 1 and 2). `9400fea` is a tree-identical merge of
+main. I ran no simulator and changed no code or test.
+
+### What I ran
+
+- **Host tests** on a `git archive HEAD` copy (`384ca41`, which carries G2's close-out tests), filter
+  `DatabaseLaunch|Preflight|LaunchOrder|Composition|LocalDevice|Closeout`. **All pass**: 105 tests in 24 suites,
+  1 known issue from an F07 S1 close-out suite.
+  - The suites that pass include `DatabaseLaunch`, `DatabaseLaunch · cancelled and overlapping calls`,
+    `LedgerDatabase · preflight`, the tester's open-preflight and launch close-out suites on both platforms, and
+    `AppComposition`, `WatchComposition` and `Launch order`.
+  - The open-preflight suite takes 5.2 s: its held-lock case waits out the busy timeout.
+- **My S2-SF1 probe** (an already-cancelled first `resume`, then `.active`) is covered, on both platforms, by
+  `cancelledFirstResume_logsNoFailure` and the F7-S2-3 repro, which now assert the stored settings.
+- **Size** by F05's method, `f991d69..bce0150`: product **632 added / 18 removed**, confirmed.
+  - Per module: Persistence +230, Health +37 / −3, Sync +49 / −3, AppKit +152 / −5, WatchAppKit +159 / −5,
+    Apps +5 / −2.
+  - It is over the 500 target and under ~1,000, so it complies with §10 provided the PR description says so.
+  - My earlier "about 470 if shared" was wrong. `DatabaseLaunch` (123 lines) is larger than the `Launch.swift` it
+    replaced (87), the preflight adds 34, and the compositions kept about 115–132 lines each.
+
+### Prior findings
+
+| Finding | Status |
+|---|---|
+| S2-SF1 (a cancelled pass leaves the settings unloaded, and logs false faults) | **Fixed, by design.** Each step runs in a task the launch owns, so cancelling a caller cancels no step. A step begins once and always reaches an outcome, and no `CancellationError` can reach `fail`. Pinned on both platforms. |
+| S2-SF2 (standards §4) | **Fixed.** `engineering-standards.md:101-107` narrows the exception to state a framework callback writes synchronously on its own queue (Pete, 2026-10-04), and the registrar's doc cites it. |
+| Open question 1 (share the launch) | **Done** as `LedgerPersistence/DatabaseLaunch.swift`, with no new edge. #28, #29 and the settings fallback are now under `LedgerPersistence`'s 90 % gate. |
+| N1 (`-LEDGER_UITEST` vs `isTesting`) | **Fixed:** `AppComposition.swift:76-78` and the watch twin. See N-c. |
+| N2, N3, N4 | **Handed off** in the notes: to S3, F16 and F17. |
+| N5 (architecture §4) | **Fixed:** `docs/architecture.md:154-164`. |
+
+### Judgement
+
+**`DatabaseLaunch`: correct and about as simple as the requirement allows.**
+- **Ownership.**
+  - `task(for:retrying:)` (`DatabaseLaunch.swift:125-143`) checks and starts a step in one main-actor turn, so two
+    calls cannot start a step twice. A caller that finds a step running awaits that same task.
+  - `running` holds a task only while it runs, and `ended` makes "run once, retry only the seed, only in the
+    foreground" a plain set test.
+  - The tasks are plain `Task {}` on the main actor, not `Task.detached`. They are owned and awaited, not
+    fire-and-forget, which is the only kind standards §4 forbids.
+- **Lifetime.** Each step's closure holds `self` strongly, and `running` holds the task. The cycle lasts only
+  until the step ends, when `running[step] = nil` releases the task and its closure. So no leak persists. A
+  composition dropped mid-step lives until the step ends: one GRDB call, bounded by the seed's duration plus the
+  5 s busy timeout.
+- **Teardown.** A process killed mid-seed loses only an uncommitted transaction, which the WAL rolls back, and
+  the seed's version stays unapplied for the next launch (#28).
+- **State machine.**
+  - The open is retried only when a call is not the first, is in the foreground, and finds the database
+    unavailable (`:107-109`).
+  - The seed is retried only in the foreground and only while unseeded (`:114`).
+  - The settings load runs once (`:118`), as decided.
+  - A database that opens only on a later retry seeds and loads on that same call (`openFailure_retriedOnForeground`).
+
+**The preflight's acceptance rule is right** (`Database.swift:57-84`).
+- A missing or empty file is a new database.
+- A file is accepted only if it holds `grdb_migrations` with identifiers this build knows, or no schema object
+  at all.
+- It refuses, with no write: anything SQLite cannot read, a foreign SQLite file (`notLedgerDatabase`), and a later
+  schema (`laterSchema`, a TestFlight downgrade).
+- It reads through SQLite, so WAL frames count.
+- What it lets through and later fails (a damaged Ledger file whose `device` table is missing) still writes
+  nothing.
+- `LedgerStores.open`'s doc correctly states the one residue: migrations committed before a later one fails stay
+  applied, which is GRDB's per-migration commit.
+
+**The busy timeout on the main actor is acceptable now.**
+- Today no other connection exists at launch: the preflight's reader closes (`defer`) before the main queue
+  opens.
+- The 5 s worst case appears only when another process holds the lock, which F21's widget extension will
+  introduce. The notes hand that to F21 (short extension writes) and F20 (time a contended launch on a device).
+- The 5 s stays far below the launch watchdog. A shorter timeout for the launch open alone would only turn a wait
+  into decision #29's screen.
+
+**The compositions (about 115–132 lines each) could shrink, but only a little** (N-b).
+
+### Blocking
+
+None.
+
+### Should fix
+
+None.
+
+### Nit
+
+**S2-N-a. A downgrade shows a #29 screen that never recovers** (`Database.swift:79-82`, `OpenError.laterSchema`).
+"Ledger tries again when you come back to it" is false until the app is updated, and only a TestFlight tester can
+reach this. *Fix (optional):* when S3 or the localisation brief adds the string catalog, give `laterSchema` its own
+line ("Update Ledger to open your data"). That is (c) Pete's copy.
+
+**S2-N-b. Cheap trims in the compositions (about 15–20 lines each).**
+- Make `database` public and read `composition.database.state` in the root views. That drops the four forwarders
+  (`AppComposition.swift:47-63` and the watch twin).
+- Move `boots(arguments:isTesting:)` and the `-LEDGER_UITEST` URL choice (`:76-78`, `:148-150`) into
+  `LedgerPersistence`, for example `LedgerStores.launchURL(arguments:)`.
+- `bind` has to stay in each umbrella: `LedgerPersistence` cannot see `DependencyValues` without a new edge.
+- Optional, and not worth a gate run alone.
+
+**S2-N-c. If `isTesting` were ever true in a UI-tested app, booting is not the whole story.** swift-dependencies
+would also run in its `.test` context. Every key not prepared (the device keys) would then report an issue and
+fall back to its preview fake. The premise is still unverified, and S3's `launchesToToday` settles it. If it holds,
+prepare `$0.context = .live` along with the stores.
+
+**S2-N-d. Say why the step tasks are unstructured** (`DatabaseLaunch.swift:100-102`, `:136`). The doc explains the
+behaviour. One clause naming F7-S2-3 ("a step must outlive a cancelled `.task`") would stop a later reviewer from
+"fixing" it back into the caller's task.
+
+### Verdict
+
+**Still approved for G3: 0 Blocking, 0 Should fix, 4 Nits.** Both prior Should-fix findings are fixed, the shared
+launch is correct and under the coverage gate, and the preflight's rule is sound. The G5 stop for Pete stands only
+for the #29 copy (open question 5, and N-a if he wants it); his §4 decision is already recorded.

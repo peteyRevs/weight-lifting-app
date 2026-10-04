@@ -99,7 +99,8 @@ public final class DatabaseLaunch {
     ///
     /// The launch owns each step's task, and a call that finds a step running waits for that same task, so a call
     /// returns once every step it reached has an outcome. Cancelling a call (`.task(id: scenePhase)` cancels on a
-    /// phase change) cancels no step: each step always reaches an outcome, and is never begun twice.
+    /// phase change) cancels no step: each step always reaches an outcome, and is never begun twice. Keep the steps
+    /// out of the caller's task: a seed run there was cancelled beneath an overlapping call and not rerun (F7-S2-3).
     public func resume(isForeground: Bool) async {
         guard state != .idle else {
             return
