@@ -751,3 +751,52 @@ false` after a further `.background` call.
 **Verdict:** G2 does not close for S2 yet. F7-S2-1 and F7-S2-2 are closed and their fixes hold under every
 attack and mutant. One residual case of the cancellation fix remains (F7-S2-3); it is small and has a
 deterministic repro.
+
+## Fix round 2 verification
+
+Scoped verification of `git diff 2d41d18..bce0150` (notes "### S2 fix round 2"; the branch is at `9400fea`, whose
+tree equals `bce0150` plus main's S1 squash): `DatabaseLaunch` owns one task per step; a `resume` call starts a
+step or awaits the running one; cancelling a caller never cancels a step.
+
+**F7-S2-3 closed.** `seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its watch twin pass, unedited. All
+my other S2 tests pass on both platforms, the random-phase model included: round 1, the close-out, preflight and
+`LocalDevice`. `git diff 2d41d18 -- '*Adversarial*'` shows only the sanctioned edit, plus my new files below.
+
+**Audit of the sanctioned edit** (`cancelledPass_thenBackground_runsIt` and its watch twin): **faithful, not
+weakened.**
+- The setup is unchanged.
+- "Not seeded right after the cancelled call" had to go: the step now outlives its caller, so the seed may already
+  be done.
+- "`began loadSettings` ×2" encoded round 1's restart mechanism. Each step beginning exactly once is the stronger
+  claim under the new design, and it also proves the step was not restarted.
+- The no-failure and seeded-after assertions are kept. The added assertion (`settings` equal the stored ones)
+  proves the settings step ran to its outcome after the cancellation.
+
+**Regression check of the new design.** New files `LedgerAppKitTests/Adversarial/LaunchStepTaskAdversarialTests`
+and `LedgerWatchAppKitTests/Adversarial/WatchLaunchStepTaskAdversarialTests`, 2 tests each, all passing. Both hold
+the database writer so the cancellations land while a step waits.
+- A caller cancelled while a failing seed waits: the failure is recorded once; a background call afterwards
+  starts nothing (a failed step isn't retried in the background); the next foreground retries it and seeds;
+  settings begin once.
+- Three callers (`.inactive`, `.active`, `.background`) racing for the same steps share one task per step:
+  seed, settings and WatchConnectivity each begin once, and all three callers return with the catalog seeded.
+
+**Mutants of the changed lines** (7, scratchpad copy, since deleted). **All killed**, each by both the
+implementer's tests and mine:
+- U1 the seed never retried;
+- U2 the seed retried in the background;
+- U3 a running step started again;
+- U4 an ended step not remembered;
+- U5 settings retried;
+- U6 reopening in any phase;
+- U7 a finished task kept as running.
+
+**Runs.**
+- My S2 suites on the host: all pass (41 tests).
+- `scripts/check.sh --lint-only`: exit 0.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`): **exit 0, `check.sh OK`**. 17 test targets passed (PR)
+  and 8 (PR-Watch); coverage thresholds met (overall 98.55 %); 479 s.
+
+**Verdict: G2 closes for S2.** F7-S2-1 (with S2-SF1), F7-S2-2 and F7-S2-3 are closed with passing tests. The
+one-task-per-step design holds under cancellation, overlap and failure on both platforms. The sanctioned edit is
+faithful.
