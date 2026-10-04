@@ -455,3 +455,60 @@ edits are faithful, two of them unavoidably weaker, and none hides a regression.
 round itself. F7-11 is a small regression of the F7-6 fix (non-deterministic stats outside the operation). F7-10
 is a seed-shape edge of the F7-3 fix, for the orchestrator. If the orchestrator accepts F7-10 as documented and
 F7-11 is fixed, or documented with its test turned into a "(documents)" one, G2 closes.
+
+## Fix round 2 verification
+
+Scoped verification of `git diff 7362bd9..ab5c11d` (notes "### S1 fix round 2"), at `ab5c11d`: no re-attack.
+
+**Closed.**
+- **F7-10:** `InMemoryStores.init` reports an issue naming every exercise a seed's programs name that its catalog
+  lacks (`Seed.missingExercises`, sorted, once each). `seededProgram_savesBackUnchanged` passes (with one known
+  issue, as sanctioned). A legal seed (the preview seed, or the program with exactly its exercises) reports
+  nothing.
+- **F7-11:** `statsAfterTheOperation_needNoDependency`, `statsDate_isTheDateWhenBound` and
+  `statsDate_followsTheOperationsDate` pass, all three unedited.
+
+**Audit of the sanctioned edits.** These are the only changes to my files:
+- `slotUpdates_emitTheActiveProgram`: the seed gains `ExerciseCatalog.seed()`. Setup only, and faithful: the
+  assertions are unchanged.
+- `seededProgram_savesBackUnchanged`: faithful to the decision. The illegal seed now fails at its source (a known
+  issue matching bench press's id, which the program names first). The original claim, that a stored program
+  saves back unchanged, is asserted on the legal seed, the only state a database can hold.
+- Nothing else in my files changed.
+
+**Regression check of the two changes**, in a new file
+`LedgerDependenciesTests/Adversarial/StatsClockRegressionAdversarialTests` (6 tests, all pass):
+- two stores bound in one `configure` both keep the date `configure` ended with;
+- nested `withTestDependencies`: inside the inner operation the outer stores read the current (inner) date, then
+  the outer one again, and after both operations the outer configured date;
+- stores bound by a plain `withDependencies` keep the date at binding and need no dependency;
+- the synchronous overload binds kept stores too;
+- the preview seed and an exact seed report nothing;
+- an illegal seed names each missing exercise once.
+
+A seed with a deleted exercise doesn't apply: a `Seed`'s catalog is a list of exercises, and the in-memory
+exercise store has no deletion.
+
+**Mutants of the changed lines** (8, scratchpad copy, since deleted). All killed:
+
+| Mutant | Killed by |
+|---|---|
+| Q1 `missingExercises` always empty | implementer's `seeds_holdOnlyWhatADatabaseCould`; mine (2) |
+| Q2 the illegal seed not reported | the same |
+| Q3 the clock always reads the dependency | implementer's `keptStores_answerWithTheConfiguredDate`; mine (4) |
+| Q4 the clock never reads the dependency | mine only (`statsDate_followsTheOperationsDate`, the nested case) |
+| Q5 the sync overload never binds the configured date | **mine only**, after adding `synchronousOverload_keepsTheConfiguredDate` (no test used the sync overload with kept stores) |
+| Q6 the async overload never binds it | implementer; mine (2) |
+| Q7 clocks not registered | implementer; mine (2) |
+| Q8 bound before `configure` runs | implementer; mine (2) |
+
+**Runs.**
+- Targeted host suites (`StatsClockRegression`, `StoresCloseout`, `TestDependencies`, `FakeObservation`): 22 tests
+  pass, 2 of them with their known issue.
+- `scripts/check.sh --lint-only`: exit 0.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`): **exit 0, `check.sh OK`**. 17 test targets passed (PR)
+  and 8 (PR-Watch); coverage thresholds met (LedgerFakes 98.88 %, LedgerDependencies 95.56 %); 492 s.
+
+**Verdict: G2 closes for S1.** Every finding from the three rounds (F7-1 to F7-11) and the review's SF1 to SF4 is
+closed with a passing test. The sanctioned edits are faithful, and the fix round's changes hold under the
+regression shapes and mutants above.
