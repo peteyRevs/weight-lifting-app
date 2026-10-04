@@ -54,19 +54,22 @@ struct LaunchCloseoutAdversarialTests {
     }
 
     @Test("A cancelled pass followed by a background call seeds and loads the settings")
-    func cancelledPass_thenBackground_runsIt() async {
+    func cancelledPass_thenBackground_runsIt() async throws {
         let harness = Harness()
         defer { harness.remove() }
         let composition = harness.booted()
         let first = Task { await composition.resume(in: .active) }
         first.cancel()
         await first.value
-        #expect(!composition.isCatalogSeeded)
         await composition.resume(in: .background)
         #expect(composition.isCatalogSeeded)
         let spelled = LaunchAdversarialTests.spelled(harness.log)
-        #expect(spelled.filter { $0 == "began loadSettings" }.count == 2)
+        // Sanctioned edit (F07 S2 fix round 2): each step begins exactly once (was: settings twice, the abandoned-
+        // then-restarted mechanism that round removed); "not seeded right after the cancelled call" dropped.
+        #expect(spelled.filter { $0 == "began seedCatalog" }.count == 1)
+        #expect(spelled.filter { $0 == "began loadSettings" }.count == 1)
         #expect(!spelled.contains { $0.hasPrefix("failed") })
+        #expect(try await #require(composition.stores).settings.load() == composition.settings)
     }
 
     @Test("Boots in the app, and under test only with -LEDGER_UITEST", arguments: [

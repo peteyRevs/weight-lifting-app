@@ -702,3 +702,88 @@ show the "Ledger" placeholder, and `-LEDGER_UITEST 1` creates `tmp/LedgerUITest-
    and fails, or partly writes, in a later migration, as the new `LedgerStores.open` doc says. Recommend
    GRDB's `hasSchemaChanges`-style check only if F28's repair tooling needs it.
 
+
+### S2 fix round 2 (G1 implementer, 2026-10-04)
+
+From `test-findings.md` "# Slice S2 — close-out round" (F7-S2-3), with the orchestrator's binding decision: the launch
+owns its steps; scene-phase calls only wait for them. Branch at `2d41d18`.
+
+**What changed** (`LedgerPersistence/DatabaseLaunch.swift`)
+- `running: [LaunchStep: Task<Void, Never>]` and `ended: Set<LaunchStep>` (`:52`–`:56`) replace round 1's bookkeeping.
+  `task(for:retrying:_:)` (`:125`) returns the step's running task. If none is running, it starts a new plain `Task`,
+  which the launch owns, when the step has not run, or has run and `retrying`; otherwise it returns nil. The check
+  and the start happen with no suspension between them on the main actor, so two calls never start a step twice.
+- `resume(isForeground:)` (`:103`):
+  - reopens on a foreground call after the first (#29);
+  - gets the seed's task, which may be retried only on a foreground call while unseeded (`:114`, #28), and
+    awaits it;
+  - then gets and awaits the settings' task (never retried).
+
+  A call that finds a step running awaits that same task, so it returns only once every step it reached has an
+  outcome. Cancelling a call cancels no step: the step's task is not the caller's, so GRDB never sees the
+  cancellation.
+- `seedCatalog(_:)` and `loadSettings(_:)` are plain methods: record `.began`, run, record `.failed` on an error.
+
+**Removed:**
+- the `Outcome` enum (`attempted`/`cancelled`/`elsewhere`);
+- the `CancellationError` catch;
+- the `running` set;
+- `hasFinishedFirstPass`;
+- `hasLoadedSettings` (a settings step that ended is never rerun).
+
+I also dropped the two `Task.isCancelled` guards I had planned (a cancelled caller starting no further step). A
+caller's `await task.value` is not interrupted, so a cancelled caller waits like any other and then goes on to the
+next step, which it may start; the step runs once either way. Mutant N5 (removing the middle guard) survived
+because the guard changed nothing observable. So, per the decision ("remove what's no longer needed"), a call
+starts or joins every step, and cancelling it changes nothing for the steps. The wait does not end early on
+cancellation: SwiftUI does not await a cancelled `.task`, and a step is bounded by the 5 s busy timeout.
+
+**Sanctioned edit** (approved 2026-10-04; the tester audits it): `LaunchCloseoutAdversarialTests.cancelledPass_thenBackground_runsIt`
+and its `Watch…` twin keep their setup. They drop "not seeded right after the cancelled call", which is now a race,
+because the seed is no longer cancelled. "began loadSettings" twice becomes **each step begins exactly once** (seed
+and settings): the old count of 2 encoded the abandoned-then-restarted mechanism this round removes. They keep "no
+`failed…`" and "seeded after the background call", and add "`composition.settings` equals the stored settings".
+No other tester test changed (`git diff 2d41d18 -- '*Adversarial*'`: these two files only).
+
+**Proving tests**
+- The tester's F7-S2-3 repro `seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its `Watch…` twin pass
+  unedited. So do every round-1 and close-out tester test and the random-phase model, on the host and on both
+  simulators.
+- `DatabaseLaunchConcurrencyTests` (new suite, my tests):
+  - `cancelledCaller_neverCancelsTheStep`: the seed waits for a held writer, the caller is cancelled, and the seed
+    still seeds, with no failure;
+  - `cancelledBeforeStarting_runsEveryStepOnce` (replaces round 1's `cancelledPass_isNotAttempted_andRunsAgain`);
+  - `overlappingCall_waitsForTheRunningStep`: a call that finds the seed running begins the settings only after
+    the seed's outcome;
+  - `overlappingCalls_startEachStepOnce`.
+
+**Mutants** (one at a time, scratchpad copy `f07s2/mut2/`, since deleted):
+
+| Mutant | Result |
+|---|---|
+| N1 the step owned by the caller (its cancellation cancels the step) | killed: `cancelledCaller_neverCancelsTheStep`, `cancelledBeforeStarting_…`; tester's F7-S2-3, `cancelledPass_thenBackground_runsIt`, `cancelledFirstResume_logsNoFailure` |
+| N2 an overlapping caller does not wait for the running step | killed: `overlappingCall_waitsForTheRunningStep` |
+| N3 a failed seed retried in the background | killed: `seedFailure_carriesOn_thenRetriesInTheForeground`; tester's `randomPhases_matchTheModel` |
+| N6 the seed not awaited before the settings | killed: 8 tests (e.g. `open_thenFirstPass`, `overlappingCall_…`, the model) |
+| N4/N5 the cancelled-caller guards removed | the guards were removed from the product (above), so these mutants no longer exist |
+
+**Gate.** Full `scripts/check.sh` under the lock: **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch). Summary: tools 1 s, format 0 s, lint 59 s, iOS build 20 s, iOS tests 211 s, watchOS build 17 s, watchOS
+tests 179 s, coverage 1 s, total 489 s. **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29`.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 195 / 203 | 96.05 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 37 / 37 | 100.00 % | 80 % | ✓ |
+| LedgerPersistence | 2441 / 2458 | 99.30 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 7986 / 8103 | 98.55 % | 80 % | ✓ |
+
+**Release build:** `swift build -c release`: exit 0 (39 s). **Host:** the whole package passes except
+`LedgerDesignTests`' Archivo font suites (host only, as on `main`).
+
+**Code lines** (F05's method): this round +45 / −41 product, +101 / −31 tests. Whole slice vs `f991d69`: **product
+632 added, 18 removed**.

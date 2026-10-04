@@ -49,9 +49,11 @@ public final class DatabaseLaunch {
     @ObservationIgnored private let logger: Logger
     @ObservationIgnored private let record: (LaunchEvent) -> Void
     @ObservationIgnored private let onOpen: (LedgerStores) -> Void
-    @ObservationIgnored private var hasFinishedFirstPass = false
-    @ObservationIgnored private var hasLoadedSettings = false
-    @ObservationIgnored private var running: Set<LaunchStep> = []
+    @ObservationIgnored private var hasResumed = false
+    /// The task of each step that is running; the launch owns it, so cancelling a caller never cancels it.
+    @ObservationIgnored private var running: [LaunchStep: Task<Void, Never>] = [:]
+    /// The steps that have run to an outcome: done, or failed (logged and recorded).
+    @ObservationIgnored private var ended: Set<LaunchStep> = []
 
     /// - Parameters:
     ///   - record: receives each `LaunchEvent` as it happens.
@@ -90,69 +92,73 @@ public final class DatabaseLaunch {
         }
     }
 
-    /// The asynchronous part. Until a first pass has run to its end, each call runs it, whatever the phase (a
-    /// workout can launch the watch app in the background): the seed, then the settings. After that a call
-    /// retries only in the foreground: opening again if unavailable (#29), then seeding if unseeded (#28). A
-    /// settings row that cannot be read is not retried: it reads the same until the lifter saves.
+    /// The asynchronous part: the seed, then the settings. A step that has not started starts, whatever the phase
+    /// (a workout can launch the watch app in the background). A failed open (#29) and a failed seed (#28) retry
+    /// only in the foreground. A settings row that cannot be read is not retried: it reads the same until the lifter
+    /// saves.
     ///
-    /// A step a cancellation interrupts (`.task(id: scenePhase)` cancels on a phase change) was not attempted: it
-    /// logs nothing, and the next call runs it again. A step an overlapping call is already running is not
-    /// started twice.
+    /// The launch owns each step's task, and a call that finds a step running waits for that same task, so a call
+    /// returns once every step it reached has an outcome. Cancelling a call (`.task(id: scenePhase)` cancels on a
+    /// phase change) cancels no step: each step always reaches an outcome, and is never begun twice.
     public func resume(isForeground: Bool) async {
         guard state != .idle else {
             return
         }
-        if hasFinishedFirstPass {
-            guard isForeground else {
-                return
-            }
-            if state == .databaseUnavailable {
-                open()
-            }
+        if hasResumed, isForeground, state == .databaseUnavailable {
+            open()
         }
-        var finished = true
-        if let stores {
-            if !isCatalogSeeded {
-                let outcome = await run(.seedCatalog) {
-                    try await stores.seedCatalog()
-                    self.isCatalogSeeded = true
-                }
-                finished = finished && outcome != .cancelled
-            }
-            if !hasLoadedSettings {
-                let outcome = await run(.loadSettings) {
-                    self.settings = try await stores.settings.load()
-                }
-                hasLoadedSettings = hasLoadedSettings || outcome == .attempted
-                finished = finished && outcome != .cancelled
-            }
+        hasResumed = true
+        guard let stores else {
+            return
         }
-        hasFinishedFirstPass = hasFinishedFirstPass || finished
+        let seedCanRetry = isForeground && !isCatalogSeeded
+        if let seed = task(for: .seedCatalog, retrying: seedCanRetry, { await self.seedCatalog(stores) }) {
+            await seed.value
+        }
+        if let load = task(for: .loadSettings, retrying: false, { await self.loadSettings(stores) }) {
+            await load.value
+        }
     }
 
-    private enum Outcome {
-        /// The step ran to an end: done, or failed (logged and recorded).
-        case attempted
-        /// A cancellation interrupted it: not attempted.
-        case cancelled
-        /// An overlapping call is running it.
-        case elsewhere
+    /// The step's running task; else a new one when the step has not run, or has run and `retrying`; else nil. The
+    /// main actor makes the check and the start one step, so two calls never start a step twice.
+    private func task(
+        for step: LaunchStep,
+        retrying: Bool,
+        _ body: @escaping @MainActor () async -> Void
+    ) -> Task<Void, Never>? {
+        if let task = running[step] {
+            return task
+        }
+        guard retrying || !ended.contains(step) else {
+            return nil
+        }
+        let task = Task {
+            await body()
+            running[step] = nil
+            ended.insert(step)
+        }
+        running[step] = task
+        return task
     }
 
-    private func run(_ step: LaunchStep, _ body: () async throws -> Void) async -> Outcome {
-        guard running.insert(step).inserted else {
-            return .elsewhere
-        }
-        defer { running.remove(step) }
-        record(.began(step))
+    private func seedCatalog(_ stores: LedgerStores) async {
+        record(.began(.seedCatalog))
         do {
-            try await body()
-        } catch is CancellationError { // GRDB's async reads and writes in a cancelled task
-            return .cancelled
+            try await stores.seedCatalog()
+            isCatalogSeeded = true
         } catch {
-            fail(step, error)
+            fail(.seedCatalog, error)
         }
-        return .attempted
+    }
+
+    private func loadSettings(_ stores: LedgerStores) async {
+        record(.began(.loadSettings))
+        do {
+            settings = try await stores.settings.load()
+        } catch {
+            fail(.loadSettings, error)
+        }
     }
 
     private func fail(_ step: LaunchStep, _ error: any Error) {

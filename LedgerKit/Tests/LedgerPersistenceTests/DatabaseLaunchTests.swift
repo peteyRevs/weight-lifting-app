@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import GRDB
 import LedgerDomain
@@ -6,21 +7,12 @@ import os
 import Testing
 
 /// `DatabaseLaunch`, the database half both apps' launches share: decision #29 (open), #28 (seed), the settings
-/// fallback, the retries on return to the foreground, and cancelled or overlapping passes (F7-S2-1).
+/// fallback and the retries on return to the foreground.
 @MainActor
 @Suite("DatabaseLaunch", .tags(.persistence), .timeLimit(.minutes(1)))
 struct DatabaseLaunchTests {
     nonisolated static let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
     nonisolated static let deviceUUID = UUID(uuidString: "00000000-0000-4000-8000-0000000000D3") ?? UUID()
-
-    static var kilograms: Settings {
-        var settings = Settings.default
-        settings.units = .kg
-        return settings
-    }
-
-    nonisolated static let refuseExercises =
-        "CREATE TRIGGER refuse BEFORE INSERT ON exercise BEGIN SELECT RAISE(ABORT, 'full'); END"
 
     @Test("Opening binds through onOpen, then the first pass seeds and loads the saved settings, in that order")
     func open_thenFirstPass() async throws {
@@ -117,28 +109,83 @@ struct DatabaseLaunchTests {
         #expect(version == 999)
     }
 
-    @Test("F7-S2-1: a cancelled pass records no failure, and the next call, in any phase, runs its steps again")
-    func cancelledPass_isNotAttempted_andRunsAgain() async throws {
-        let subject = Subject()
+    @Test("The steps are in launch order")
+    func steps_inOrder() {
+        #expect(LaunchStep.allCases == [
+            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .activateCompanionSession
+        ])
+    }
+}
+
+/// `DatabaseLaunch` under cancelled and overlapping calls (F7-S2-1, F7-S2-3): the launch owns each step's task, so
+/// cancelling a call never cancels a step, and a call that finds a step running waits for it.
+@MainActor
+@Suite("DatabaseLaunch · cancelled and overlapping calls", .tags(.persistence), .timeLimit(.minutes(1)))
+struct DatabaseLaunchConcurrencyTests {
+    @Test("Cancelling a caller never cancels a running step: the seed waiting for the writer still seeds")
+    func cancelledCaller_neverCancelsTheStep() async throws {
+        let subject = DatabaseLaunchTests.Subject()
+        defer { subject.remove() }
+        subject.launch.open()
+        let hold = try WriterHold(#require(subject.launch.stores).queue)
+        var first: Task<Void, Never>?
+        await withCheckedContinuation { seedBegan in // the first call starts the seed, which waits for the writer
+            subject.whenSeedBegins = { seedBegan.resume() }
+            first = Task { await subject.launch.resume(isForeground: true) }
+        }
+        let caller = try #require(first)
+        caller.cancel()
+        hold.free()
+        await caller.value
+        await subject.launch.resume(isForeground: false) // waits for the same seed, then loads the settings
+        #expect(subject.launch.isCatalogSeeded)
+        #expect(subject.events == [.began(.openDatabase), .began(.seedCatalog), .began(.loadSettings)])
+    }
+
+    @Test("A call cancelled before it starts still runs every step once, to its outcome")
+    func cancelledBeforeStarting_runsEveryStepOnce() async throws {
+        let subject = DatabaseLaunchTests.Subject()
         defer { subject.remove() }
         let queue = try LedgerDatabase.open(at: subject.url)
-        try await GRDBSettingsRepository(queue).save(Self.kilograms)
+        try await GRDBSettingsRepository(queue).save(DatabaseLaunchTests.kilograms)
         try queue.close()
         subject.launch.open()
         let first = Task { await subject.launch.resume(isForeground: true) }
         first.cancel()
         await first.value
-        #expect(!subject.events.contains(.failed(.seedCatalog)))
-        #expect(!subject.events.contains(.failed(.loadSettings)))
-        #expect(subject.launch.settings == .default)
-        await subject.launch.resume(isForeground: false) // the launch has not finished its first pass
+        await subject.launch.resume(isForeground: false)
+        #expect(subject.events == [.began(.openDatabase), .began(.seedCatalog), .began(.loadSettings)])
         #expect(subject.launch.isCatalogSeeded)
-        #expect(subject.launch.settings == Self.kilograms)
+        #expect(subject.launch.settings == DatabaseLaunchTests.kilograms)
     }
 
-    @Test("F7-S2-1: overlapping calls start each step once")
+    @Test("A call that finds the seed running waits for its outcome before it begins the settings")
+    func overlappingCall_waitsForTheRunningStep() async throws {
+        let subject = DatabaseLaunchTests.Subject()
+        defer { subject.remove() }
+        try subject.arrange { try $0.execute(sql: DatabaseLaunchTests.refuseExercises) }
+        subject.launch.open()
+        let hold = try WriterHold(#require(subject.launch.stores).queue)
+        var first: Task<Void, Never>?
+        await withCheckedContinuation { seedBegan in
+            subject.whenSeedBegins = { seedBegan.resume() }
+            first = Task { await subject.launch.resume(isForeground: false) }
+        }
+        let second = Task { await subject.launch.resume(isForeground: true) }
+        for _ in 0 ..< 10 {
+            await Task.yield() // room for the second call to run while the seed waits for the writer
+        }
+        hold.free()
+        await second.value
+        await first?.value
+        #expect(subject.events == [
+            .began(.openDatabase), .began(.seedCatalog), .failed(.seedCatalog), .began(.loadSettings)
+        ])
+    }
+
+    @Test("Overlapping calls start each step once and both wait for it")
     func overlappingCalls_startEachStepOnce() async {
-        let subject = Subject()
+        let subject = DatabaseLaunchTests.Subject()
         defer { subject.remove() }
         subject.launch.open()
         async let first: Void = subject.launch.resume(isForeground: false)
@@ -148,29 +195,39 @@ struct DatabaseLaunchTests {
         #expect(subject.events.filter { $0 == .began(.loadSettings) }.count == 1)
         #expect(subject.launch.isCatalogSeeded)
     }
-
-    @Test("The steps are in launch order")
-    func steps_inOrder() {
-        #expect(LaunchStep.allCases == [
-            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .activateCompanionSession
-        ])
-    }
 }
 
 extension DatabaseLaunchTests {
+    static var kilograms: Settings {
+        var settings = Settings.default
+        settings.units = .kg
+        return settings
+    }
+
+    nonisolated static let refuseExercises =
+        "CREATE TRIGGER refuse BEFORE INSERT ON exercise BEGIN SELECT RAISE(ABORT, 'full'); END"
+
     /// A launch over a file in its own temporary directory, recording its events and what `onOpen` was given.
     @MainActor
     final class Subject {
         let directory: TemporaryDirectory
         private(set) var events: [LaunchEvent] = []
         private(set) var opened: [DeviceID] = []
+        /// Called once, when the seed step begins.
+        var whenSeedBegins: (() -> Void)?
         private(set) lazy var launch = DatabaseLaunch(
             at: url,
             kind: .phone,
             now: { DatabaseLaunchTests.now },
             newID: { DatabaseLaunchTests.deviceUUID },
             logger: Logger(.disabled),
-            record: { [weak self] in self?.events.append($0) },
+            record: { [weak self] event in
+                self?.events.append(event)
+                if event == .began(.seedCatalog) {
+                    self?.whenSeedBegins?()
+                    self?.whenSeedBegins = nil
+                }
+            },
             onOpen: { [weak self] in self?.opened.append($0.deviceID) }
         )
 
@@ -196,5 +253,25 @@ extension DatabaseLaunchTests {
         func remove() {
             try? directory.remove() // cleanup only: a leftover temporary file fails nothing
         }
+    }
+}
+
+/// Holds a database's writer until `free()`: what a step then waits for.
+final class WriterHold: Sendable {
+    private let held = DispatchSemaphore(value: 0)
+    private let release = DispatchSemaphore(value: 0)
+
+    init(_ queue: DatabaseQueue) {
+        DispatchQueue.global().async { [held, release] in
+            queue.inDatabase { _ in
+                held.signal()
+                release.wait()
+            }
+        }
+        held.wait()
+    }
+
+    func free() {
+        release.signal()
     }
 }
