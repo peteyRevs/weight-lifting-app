@@ -403,3 +403,200 @@ watchOS tests 183 s, coverage 2 s, total 522 s.
 | LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
 | LedgerPersistence | 2257 / 2271 | 99.38 % | 90 % | ✓ |
 | Overall | 7733 / 7845 | 98.57 % | 80 % | ✓ |
+
+## Slice S2 — both apps boot on a real database (G1 implementer, 2026-10-04)
+
+Branch `feat/F07-s2-boot`, cut from `feat/F07-s1-keys-fakes` at `f991d69` (S1 is PR #22, unmerged). No commits.
+
+### What landed
+
+- **LedgerPersistence**
+  - `LocalDevice.swift`: `LocalDevice.id(in:kind:now:newID:)` reads this platform's `device` row (`kind` phone or
+    watch) or inserts one with `newID()`, in one write (decision B4). Of two rows of one kind the oldest (then
+    the lowest id) wins; a stored id that is not a UUID throws `malformedIdentifier` and the row is kept.
+  - `LedgerStores.swift`: the queue, this device's id and the six GRDB stores, each given `now`;
+    `LedgerStores.open(at:kind:now:newID:)` (open + migrate, then `LocalDevice`), `defaultURL`
+    (`Application Support/Database/ledger.sqlite`), `seedCatalog()` (`seedIfNeeded(ExerciseCatalog.seed(),
+    version: ExerciseCatalog.version)`).
+- **LedgerHealth** `MirroringStartRegistrar.swift`: `MirroringStartRegistrar<Session>` keeps every session the
+  handler is handed behind a `Mutex` and logs at notice level; `register()` installs the handler (capturing the
+  registrar weakly). On iOS, `MirroringStartRegistrar<HKWorkoutSession>(healthStore:)` installs it as
+  `workoutSessionMirroringStartHandler`. `Sendable` without `@unchecked`. Placeholder deleted.
+- **LedgerSync** `CompanionSessionActivator.swift` (`#if canImport(WatchConnectivity)`): a nonisolated
+  `NSObject, WCSessionDelegate, Sendable` with no mutable state; `activate()` sets itself as the default
+  session's delegate and activates it (logs and stops where WC is unsupported); the callbacks log, and
+  `sessionDidDeactivate` activates again (watch switch). A small internal `CompanionSession` protocol (which
+  `WCSession` adopts) lets the tests hand it a stand-in. Placeholder deleted.
+- **LedgerAppKit** (placeholder deleted)
+  - `AppComposition.swift`: `@MainActor @Observable`; `state` (`idle` / `ready` / `databaseUnavailable`),
+    `settings`, `isCatalogSeeded`; `launch()` (the live environment, then `boot()` unless `isTesting`);
+    `bind(_:)` (six stores + `deviceID`); an internal `Environment` (database URL, `now`, `newID`, logger,
+    recorder, the handler and WC actions, whether to `prepareDependencies`), whose `live(arguments:)` picks
+    `-LEDGER_UITEST` → `tmp/LedgerUITest-<uuid>/ledger.sqlite`, else `LedgerStores.defaultURL`.
+  - `Launch.swift`: `LaunchStep` (`assignMirroringHandler, openDatabase, seedCatalog, loadSettings,
+    activateCompanionSession`), `LaunchEvent` (`began`/`failed`), and the sequence: `boot()` (synchronous:
+    handler, then open + `prepareDependencies { bind(&$0) }`), `resume(in: ScenePhase) async` (first call:
+    seed, settings, WC, in any phase; later calls, on `.active` only: reopen if unavailable (#29), reseed if
+    unseeded (#28)). A failed step logs at fault level and records `.failed(step)`.
+  - `AppRootView.swift`: takes the composition, shows "Ledger" or decision #29's static screen
+    (`EmptyState("Can't open your data right now", …)`), and runs `.task(id: scenePhase) { await
+    composition.resume(in: scenePhase) }`.
+- **LedgerWatchAppKit** (placeholder deleted): `WatchComposition.swift` and `Launch.swift`, the same shape without
+  the mirroring step (kind `.watch`); `WatchAppDelegate.swift` (`#if os(watchOS)`, `WKApplicationDelegate`:
+  `handle(_ workoutConfiguration:)` and `handleActiveWorkoutRecovery()` read `healthStore` and log; F16 adds the
+  calls); `WatchRootView.swift` as the iOS root.
+- **Apps**: `LedgerApp` holds `@State var composition = AppComposition.launch()` and renders
+  `AppRootView(composition:)`; `LedgerWatchApp` adds `@WKApplicationDelegateAdaptor WatchAppDelegate`.
+  `Apps/*Tests/SmokeTests.swift`: the deleted `…Module.name` checks became "`launch()` boots nothing under test".
+- **Coverage thresholds**: `LedgerHealth` and `LedgerSync` now have measured lines, so the gate requires them
+  (`required`, at their existing 80 % and 90 %).
+- **Docs**: testing-strategy §2.7 (UI tests open a fresh temporary file, not "the in-memory database seeded by
+  `LedgerTestSupport.Seed.uiTest`", per A-decision); architecture §4 watch bullet (the database opens in
+  `App.init`, not `applicationDidFinishLaunching`).
+- **Package graph: unchanged.** Every module the compositions import was already an edge of both umbrellas;
+  `scripts/check-package-graph.sh` passes with no re-record.
+
+### Decisions and deviations
+
+1. **`deviceID` lives in `LedgerStores`** (beside the queue and six stores of the plan): one throwing call opens
+   the file and reads the device, so a composition has one value to keep and bind.
+2. **`logger` is not rebound.** Its `liveValue` is already the real `LedgerLogger(category: "app")` (S1); `bind`
+   sets the six stores and `deviceID`. The device keys keep their `Unimplemented*` live values until F16–F23.
+3. **Binding is process-wide once, and testable without it.** `boot()` calls `prepareDependencies { bind(&$0) }`
+   only in the app (`Environment.preparesDependencies`); tests bind with `withDependencies { composition.bind(&$0)
+   }`, since `prepareDependencies` would change the values for every test in the process. A database that opens
+   only on a foreground retry binds then (nothing reads a key while #29's screen shows).
+4. **`isTesting` lives in `launch()`, not in the `App`**: the app targets link only the umbrellas, and
+   `launch()` is the one call the `App` makes. Under test it returns an `idle` composition: no handler, no file;
+   `resume` does nothing. The package suites and both hosted smoke tests check it.
+5. **The async part runs from `.task(id: scenePhase)`**, first in whatever phase (a workout can launch the watch
+   app in the background), then retries only when the phase becomes `.active` (#28, #29). An unreadable settings
+   row is not retried (it reads the same until the lifter saves; F14 resubscribes).
+6. **The database opens on the main actor in `App.init`** (A-decision; F05 measured 4.6 ms on the watch
+   simulator), although F05's input suggested off the main actor; the plan chose the synchronous open so the
+   first frame already knows ready vs unavailable.
+7. **Watch: the database opens in `App.init` (`WatchComposition.launch()`), not in
+   `applicationDidFinishLaunching`** as the brief's text has it, per the A-decision; the delegate keeps the
+   workout entry points only.
+8. **The registrar is generic over its session type.** The first gate run crashed all four registrar tests on the
+   iOS simulator: the package's test host has no HealthKit entitlement, and touching `HKHealthStore`'s handler
+   property there traps (testing-strategy §3 also rules out real HealthKit in tests). So the tests give the
+   registrar a stand-in handler slot and session class; the app's `HKHealthStore` binding is a two-line
+   convenience init, exercised by the simulator launch, not by a test.
+9. **Registrar uses `Synchronization.Mutex`, not an actor.** HealthKit calls the handler on an arbitrary queue and
+   the handler cannot await, so an actor would be reached only through an unstructured `Task` after the handler
+   returned. Standards §4 says shared mutable state lives in an actor, with one written exception (LedgerFakes);
+   see open question 2.
+10. **UI-test argument `-LEDGER_UITEST`** (testing-strategy's name), a new temporary directory per launch.
+11. **The two compositions are parallel, not shared** (see open question 1): ~150 lines of the watch side repeat
+    the iOS side's state machine, because the plan puts Launch in `LedgerAppKit` and the watch umbrella cannot
+    import it.
+
+### Criteria → tests
+
+| Criterion / input | Test |
+|---|---|
+| 6 — handler assigned before any `await` | `boot()` is synchronous (compiler-enforced); `LaunchOrderTests.boot_assignsTheHandlerFirst` (log after `boot()` = began(assign), handler, began(open), nothing async), `launch_runsTheStepsInOrder` (all five steps in the brief's order), `boot_handlerFirst_evenWhenOpeningFails`, `resume_again_runsNothingTwice` |
+| 1 (data half) — file in Application Support, ≥ 200 rows | `AppCompositionTests.boot_opensTheFile_andBindsTheStores` (file at `Database/ledger.sqlite`, the bound `exerciseRepository` holds all of `ExerciseCatalog.seed()`, 224), `liveEnvironment_databaseURL`; `LocalDeviceTests.defaultURL_isItsOwnDirectory` |
+| 2 (data half) — the watch's own database | `WatchCompositionTests` (same, kind `watch`, and the watch order `launch_runsTheStepsInOrder`) |
+| a second boot seeds nothing | `secondBoot_seedsNothing` (both): every `exercise` row identical after a boot a day later; same device |
+| settings fallback, row untouched | `unreadableSettings_fallBack_rowUntouched` (payload_version 999 row byte-for-byte unchanged, `settings == .default`, `.failed(.loadSettings)`); `savedSettings_areLoaded` |
+| #28 seeding fails → log, carry on, retry | `…RecoveryTests.seedingFailure_carriesOn_thenRetries` (a trigger refuses exercise inserts: `.failed(.seedCatalog)`, settings and WC still run, state ready; no retry in background; on `.active` after the trigger is dropped, seeded) |
+| #29 open fails → unavailable, file untouched, retry | `openFailure_isUnavailable_andTheFileIsUntouched` (4 KB of non-database bytes: state unavailable, bytes and directory listing unchanged after a retry, nothing bound), `openFailure_retriedOnForeground` (a directory in the file's place; once removed, `.active` opens, seeds, loads) |
+| S1 input — `deviceID` bound, not nil | `deviceID_isTheDeviceRow` (both): bound value = the `device` row of this kind, ≠ nil UUID |
+| `LocalDevice` | `LocalDeviceTests` (insert once and read back per kind, the other kind is never this device, oldest of two, malformed id kept, `LedgerStores.open` keeps the device across opens, `seedCatalog` once) |
+| `isTesting` guard | `launch_whileTesting_bootsNothing` (both); `Apps/*Tests/SmokeTests.umbrellaProduct_links_andLaunchBootsNothing` (hosted) |
+| registrar | `MirroringStartRegistrarTests` (stand-in slot and sessions): installs the handler, keeps sessions in order, 50 concurrent calls all kept, does not retain the registrar |
+| activator | `CompanionSessionActivatorTests`: delegate then one activation on a stand-in, unsupported does nothing, callbacks log, deactivation activates again (iOS) |
+
+Deterministic: fixed dates and ids, no sleeps or timing assertions; every file under the temporary directory.
+
+### Code lines (non-blank, non-comment; doc comments counted)
+
+| Module | Lines |
+|---|---|
+| LedgerPersistence (`LocalDevice` 34, `LedgerStores` 39) | +73 |
+| LedgerHealth (registrar) | +37 / −3 |
+| LedgerSync (activator) | +49 / −3 |
+| LedgerAppKit (`AppComposition` 93, `Launch` 87, `AppRootView` 25) | +205 / −11 |
+| LedgerWatchAppKit (`WatchComposition` 80, `Launch` 85, delegate 23, `WatchRootView` 26) | +214 / −11 |
+| Apps (`LedgerApp`, `LedgerWatchApp`) | +23 / −20 |
+| **Product total** | **601 added, ≈ 48 removed** (over the 500 target, under ~700; about 150 of it the watch's parallel state machine) |
+| Tests (new files) | 824 |
+
+### Gate and coverage
+
+Full `scripts/check.sh` under the simulator lock, run 3: **exit 0, `check.sh OK`**; 17 test targets ran and passed
+(PR), 8 (PR-Watch). Summary: tools 1 s, format 0 s, lint 60 s, iOS build 15 s, iOS tests 196 s, watchOS build 12 s,
+watchOS tests 176 s, coverage 2 s, total 464 s. New suites seen in the result bundles: iOS — LocalDevice 7,
+Mirroring start registrar 4, Companion session activator 4, AppComposition 7, AppComposition · failed launch
+steps 3, Launch order 4, Smoke 2 + 1; watchOS — LocalDevice 7, Companion session activator 3, WatchComposition 8,
+WatchComposition · failed launch steps 3, Smoke 2 + 1.
+- Run 1 failed at the iOS build: `self.` before `store` inside the watch delegate's log interpolation, which
+  swiftformat had removed (`redundantSelf`); fixed with a local.
+- Run 2 failed the four registrar tests (deviation 8).
+- **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29` "will never be executed" (and its `@Test`
+  macro expansion line). None from this slice.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 195 / 203 | 96.05 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 37 / 37 | 100.00 % | 80 % | ✓ |
+| LedgerPersistence | 2310 / 2324 | 99.39 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 7855 / 7969 | 98.56 % | 80 % | ✓ |
+
+(LedgerAppKit and LedgerWatchAppKit stay excluded from the gate, as before.)
+
+**Release build:** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+exit 0 (39 s).
+
+**Host:** `swift test` on the whole package: everything passes except `LedgerDesignTests`' Archivo font suites
+(Mac host only, as on `main`).
+
+**Simulator launch** (`f07s2/launch-check.sh` under the lock, iPhone 17 and Apple Watch Series 12 (46mm), iOS /
+watchOS 27.0; the gate's builds): each app uninstalled (fresh container), installed, launched, and after 6 s
+- still running (`launchctl list` shows its pid), no crash report;
+- `Library/Application Support/Database/` holds `ledger.sqlite` plus `-wal` and `-shm`;
+- read-only `sqlite3`: 224 `exercise` rows (`ExerciseCatalog.seed().count`) and one `device` row, `phone` /
+  `iPhone` on the phone, `watch` / `Apple Watch` on the watch;
+- screenshots show the "Ledger" placeholder on both;
+- relaunched with `-LEDGER_UITEST 1`: a new `tmp/LedgerUITest-<uuid>/ledger.sqlite` in the app's container.
+
+### How to verify by hand
+
+- `cd LedgerKit && env -u SDKROOT swift test --only-use-versions-from-resolved-file --filter
+  'LocalDevice|LaunchOrder|Composition|CompanionSession|MirroringStart'` (host; the activator suite is iOS/watch only).
+- Launch either app in the simulator, then `sqlite3 "$(xcrun simctl get_app_container booted <bundle id>
+  data)/Library/Application Support/Database/ledger.sqlite" 'SELECT COUNT(*) FROM exercise; SELECT * FROM device'`.
+- #29 by hand: replace that file with a few bytes of text, relaunch: "Can't open your data right now"; the file is
+  unchanged afterwards. Restore it and bring the app back to the foreground: the placeholder returns.
+- Criterion 6: `LaunchOrderTests`; `boot()` has no `async`, so an `await` before the handler does not compile.
+
+### Open questions (with recommendations)
+
+1. **Share the launch between the platforms?** About 150 lines of `LedgerWatchAppKit` (`Launch.swift`, most of
+   `WatchComposition.swift`) mirror the iOS ones, because the plan puts `Launch` in `LedgerAppKit` and the watch
+   umbrella cannot import it. A shared home without a new edge would be `LedgerDependencies` (a `LiveValues` +
+   launch state machine over the Domain protocols; the umbrellas pass the GRDB opener), at the cost of putting
+   launch code in the module every feature imports. Recommend keeping two until F16/F17 add the platform steps,
+   then deciding with the real differences in view; if shared, a small `LedgerComposition` target (an ADR and a
+   graph edge) is cleaner than growing `LedgerDependencies`.
+2. **Standards §4 and the registrar's `Mutex`.** §4 allows a `Mutex` only in LedgerFakes. A synchronous framework
+   callback that must not await is a second legitimate case. Recommend adding it to §4's exception sentence ("…and
+   state a framework callback writes synchronously, such as `MirroringStartRegistrar`").
+3. **Is `isTesting` false in a UI-tested app?** IssueReporting's `isTesting` reads XCTest environment keys; if
+   `XCUIApplication` passed one to the app, UI tests would see an unbooted app. The gate's UI `Smoke` only looks
+   for "Ledger", which shows either way. Recommend S3's `launchesToToday` / Diagnostics ≥ 200 rows test settle
+   it (it fails if the app does not boot under UI test).
+4. **An unreadable settings row and the fault level.** A later payload version reaching an older app is expected
+   in a mixed-version phone/watch pair; it is logged at fault level here like any failed step. Recommend F14
+   lowers it to `error` when it adds the resubscription.
+5. **Copy.** "Can't open your data right now" (decision #29) with "Your workouts are still on this iPhone/watch.
+   Ledger tries again when you come back to it.", as plain strings: no string catalog exists yet. Recommend Pete
+   confirm the body line; S3 or the localisation brief moves both into the catalog.
+6. **Size.** 601 product lines, over the 500 target (PR description says so); the split considered was iOS vs
+   watch, not taken because each half alone would leave criterion 2 or 6 half-done.

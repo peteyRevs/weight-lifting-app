@@ -248,8 +248,9 @@ Concrete test names (file = suite = source type; see §6):
   String`; the UI test targets link `LedgerAppKit` / `LedgerWatchAppKit` and use
   the same enums, so a rename breaks compilation, not a run (**verify in F01**
   that XCUITest bundles link the umbrella products cleanly).
-- UI tests launch with `-LEDGER_UITEST 1` and a fixed seed so the app opens
-  the in-memory database seeded by `LedgerTestSupport.Seed.uiTest`.
+- UI tests launch with `-LEDGER_UITEST 1`, so the app opens a fresh database
+  file in a new temporary directory (a file, not in-memory, so the launch runs
+  as on a device; F07 S2), seeded with the catalog as every launch is.
 
 ### 2.8 Device protocol (manual, scripted) — `tasks/features/F20-device-protocol/`
 

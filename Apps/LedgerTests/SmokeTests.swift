@@ -11,8 +11,10 @@ struct SmokeTests {
         #expect(UIFont.familyNames.contains("Archivo"))
     }
 
-    @Test("The app links the LedgerAppKit umbrella product")
-    func umbrellaProduct_links() {
-        #expect(LedgerAppKitModule.name == "LedgerAppKit")
+    /// The app hosting this test launched through `AppComposition.launch()`, which boots nothing while tests run, so
+    /// hosted tests neither open the app's database nor assign its handlers.
+    @Test("The app links the LedgerAppKit umbrella product, whose launch boots nothing under test")
+    func umbrellaProduct_links_andLaunchBootsNothing() {
+        #expect(AppComposition.launch().state == .idle)
     }
 }

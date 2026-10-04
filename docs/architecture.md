@@ -164,9 +164,11 @@ targets only.
   handler (10 s budget) and updated sparsely (R1 §4.1).
 
 ### Watch app (`LedgerWatch`)
-- `WKApplicationDelegate` handles `handle(_ workoutConfiguration:)`
-  (phone-initiated start), `handleActiveWorkoutRecovery()`, and
-  `applicationDidFinishLaunching` wiring.
+- `LedgerWatchApp` opens the database synchronously in `App.init`
+  (`WatchComposition`, F07); seeding, settings and WatchConnectivity follow
+  the first frame. `WKApplicationDelegate` (`WatchAppDelegate`) handles
+  `handle(_ workoutConfiguration:)` (phone-initiated start) and
+  `handleActiveWorkoutRecovery()`.
 - Single `NavigationStack`; screens map 1:1 to the prototype's watch modes
   (idle, ready, rest, list, end, summary) driven by `WorkoutState`.
 - The watch is the **primary** HealthKit session and the **authoritative**
