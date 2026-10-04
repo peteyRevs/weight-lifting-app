@@ -39,15 +39,14 @@ Feature briefs: `tasks/features/F##-*.md` — all 33 written 2026-09-17; M0's ap
 | F06 | Design system (tokens, Archivo width axis, components, snapshots) | F00 | C |
 | F07 | DI keys, composition roots, `LedgerTestSupport` | F05, F06 | A |
 
-- [x] F00 (#1, #3) · [x] F01 (#5) · [x] F02 (#2 → #3) · [x] F03 (#14) · [x] F04 (#8) · [~] F05 (S1 #13; S2 in review; S3 open) · [x] F06 (#6, #11, #15) · [ ] F07
+- [x] F00 (#1, #3) · [x] F01 (#5) · [x] F02 (#2 → #3) · [x] F03 (#14) · [x] F04 (#8) · [x] F05 (#13, #17, #19, #21) · [x] F06 (#6, #11, #15) · [x] F07 (#22, #24, #25)
 
-### Status — 2026-10-01
+### Status — 2026-10-04: M0 complete
 
-- **On `main`:** F00–F04, F05 slice 1 (schema, exact columns, event store), F06 (all three slices) and F32 (Xcode 27.0 / Swift 6.4, pulled forward from M5 on 2026-09-29 after the App Store replaced Xcode 26.6). Released: v0.2.0. Release PR #12 (0.3.0) is open and is Pete's to merge.
-- **F05** ships in three slices: S1 merged (#13); S2 (exercise and program repositories, catalog seeding and upgrades) is through its fix rounds and next to open as a PR; S3 (history and stats queries) follows. F07 starts when F05 is whole.
-- **CI:** PR CI runs iOS only on the `xcode-27` preview runner (risk R4); watchOS is tested by the full local gate before every merge. Actions is paid since 2026-09-30 with a $60 monthly limit, so a PR is pushed once, after a green local gate. A CI efficiency change (static checks on Linux, Xcode's compilation cache, a longer deadline) is in progress.
-- **Process:** the PR size rule is a 500-line code target with a split above ~1,000 (standards §10, Pete, 2026-09-29). Merging is delegated to the orchestrator unless a PR carries a product or architecture decision (workflow G5).
-- **Open for Pete:** the iCloud container (before F28); Xcode Cloud workflows (before F30); in Xcode, delete the dangling `Fonts` synchronized group if it is still there.
+- **On `main`:** F00–F07 and F32. Both apps launch to Today on a real database: the catalog is seeded (224 exercises), this device has its row, the HealthKit mirroring handler is assigned first, and a Debug-only menu opens the design gallery and Diagnostics (screenshots in `tasks/features/F07-composition-di/screenshots/`). Releases: v0.2.0–v0.4.0; release PR #23 (0.5.0) is open and is Pete's to merge.
+- **CI:** PR CI runs static checks on Linux, then iOS only on the `xcode-27` preview runner (risk R4); watchOS is tested by the full local gate before every merge. Actions is paid since 2026-09-30 with a $60 monthly limit, so a PR is pushed once, after a green local gate. A code PR's `Check` takes 20–29 minutes; the compilation cache restores but has not yet shortened the build (diagnosis queued).
+- **Process:** PR size is a 500-line code target with a split above ~1,000 (standards §10). Merging is delegated to the orchestrator unless a PR carries a product or architecture decision (workflow G5).
+- **Open for Pete:** the iCloud container (before F28); Xcode Cloud workflows (before F30); confirm HealthKit is ticked on both App IDs (before F16); in Xcode, delete the dangling `Fonts` synchronized group if it is still there.
 
 ### F00 delivery — merged 2026-09-27 (#1; the gate's result check landed via #3)
 
@@ -82,7 +81,7 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 - [x] Should-fix round done (`eb2a30d`); rebased on F00 tip; full `check.sh` green (PR-iOS 431/431, PR-watchOS 422/422, all planned targets ran); host 419 tests; coverage 98.78 %.
 - [x] PR opened: https://github.com/peteyRevs/weight-lifting-app/pull/2 (stacked on #1). After #1's squash merge: rebase onto `main`, retarget #2, re-run the gate.
 
-- [ ] M0 exit: both apps build and launch to an empty Today screen; `check.sh` and CI green; domain coverage ≥ 95 %; Archivo width axis verified on watch simulator.
+- [x] M0 exit (2026-10-04): both apps build and launch to Today (F07 #25, UI tests and screenshots); `check.sh` and CI green; LedgerDomain coverage 99.11 %; Archivo width axis verified on the watch simulator (F06 slice 1, risk R2 closed).
 
 ## M1 — iPhone core loop (target: 3 weeks; up to 3 lanes in parallel)
 
@@ -161,3 +160,17 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 
 ## Review log
 _Appended after each milestone: what shipped, what was cut, lessons, rule changes._
+
+### M0 — Foundation (2026-09-24 → 2026-10-04; target was 1.5 weeks)
+
+**Shipped:** F00 skeleton and local gate; F01 CI (PR, nightly, release-please) and its efficiency pass (#18); F02 domain core with exact weights (ADR-007); F03 catalog (224 exercises); F04 event-sourced engine; F05 persistence in three slices plus the records follow-up; F06 design system in three slices; F07 composition in three slices (ADR-008, the `LedgerFakes` module); F32 Xcode 27 pulled forward from M5.
+
+**Product decisions made during M0:** #21–#30 (catalog loads and upgrades, kettlebell step, search, set kinds, a workout's day, records after an edit, seeding and database failures, launch time).
+
+**Cut or deferred:** Xcode Cloud workflows and the iCloud container (Pete, before F30/F28); launch time gated only on a real device (#30, F20/F26); watchOS in PR CI (local gate and nightly instead).
+
+**Lessons and rule changes:**
+- Adversarial testing paid for itself: almost every slice took two strikes, mostly on damage, cancellation and boundary cases that review alone did not catch. When a third bug comes from the same root (F07 S2's launch steps), change the design rather than patch the case.
+- Test doubles must obey the database's rules (F07 S1): the fakes now share LedgerDomain's storage checks and are run against GRDB with seeded random scripts.
+- Process rules added: no stacked PRs (build the next slice on a local branch, open its PR after the base merges); the orchestrator re-runs every gate before committing; agents never move HEAD; check the network before diagnosing a red gate; clean agent scratch copies after each round.
+- CI is a budget: one push per PR after a green local gate; a docs-only PR starts no Mac.
