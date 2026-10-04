@@ -512,3 +512,291 @@ exercise store has no deletion.
 **Verdict: G2 closes for S1.** Every finding from the three rounds (F7-1 to F7-11) and the review's SF1 to SF4 is
 closed with a passing test. The sanctioned edits are faithful, and the fix round's changes hold under the
 regression shapes and mutants above.
+
+---
+
+# Slice S2 — adversarial round 1
+
+Independent adversarial pass (G2) over `feat/F07-s2-boot` at `6306b8d` (`git diff f991d69..6306b8d`). Sources: the
+brief's launch sequence and criteria 1, 2 and 6; decisions #28, #29 and B4; the notes' "## Slice S2"; then the code.
+No product code edited, nothing committed. Mutants ran one at a time in a scratchpad copy (`f07s2-g2/`), since
+deleted.
+
+## What I wrote
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `LedgerAppKitTests/Adversarial/LaunchAdversarialTests` | 4 (one property, 60 seeds) | a first `resume` cancelled by a phase change (what `.task(id: scenePhase)` does); two overlapping resumes; a model of the notes' state machine (first resume in any phase, retries only on `.active`, reopen then reseed, settings and WatchConnectivity once) against random phase sequences with an open or a seed failing until a random step |
+| `LedgerWatchAppKitTests/Adversarial/WatchLaunchAdversarialTests` | 4 (the same, 60 seeds) | the same model on the watch, so the two parallel state machines are held to one spec |
+| `LedgerAppKitTests/Adversarial/LaunchStorageAdversarialTests` | 7 (10 cases) | #29: a file mode 000, a directory mode 555 (no file may appear), a valid SQLite file that is not Ledger's; #28: programs refused (`unknownExercise`) while unseeded; four unreadable settings rows (later version, non-UTF-8 payload, invalid JSON value, version as text) unchanged across three boots and retries; every store key and `deviceID` bound to the GRDB stores; `-LEDGER_UITEST` gives a new temporary file per launch |
+| `LedgerWatchAppKitTests/Adversarial/WatchLaunchStorageAdversarialTests` | 7 (10 cases) | the same on the watch |
+| `LedgerPersistenceTests/Adversarial/LocalDeviceAdversarialTests` | 3 (12 cases) | two connections opening one new file at once (10 rounds); rows of the other kind, older and many; a lowercase stored id |
+
+## Results
+
+- **Host, whole package** (`swift test`, exit 1): the failures are my 8 documenting tests (4 per platform: F7-S2-1 ×3,
+  F7-S2-2) and `LedgerDesignTests`' Archivo font suites (host-only, as on `main`). Everything else passes,
+  the implementer's S2 suites included; the only warning is F05's `PayloadVersionAdversarialTests.swift:29`.
+- **The model property test passes on both platforms** (60 seeds each): apart from F7-S2-1, the iOS and watch
+  launches follow the notes' sequence, and each other.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **Full gate**: not run, by the rule (my bug tests fail by design).
+- **Mutants** (12, `f07s2-g2/out/results.txt`, since deleted): **all killed.** Killed by both the implementer's tests and mine:
+  - retries in any phase (iOS R1, watch R6), never reopening (R2, R7), a failed seed marked seeded (R3, R8);
+  - WatchConnectivity activated on every resume (R4), settings reloaded on every foreground (R5);
+  - the UI-test database being the real one (R10), a device row of any kind chosen (R11).
+
+  Killed by one side only:
+  - **R9** (the stats key not bound) by mine only (`everyStoreKey_isBound`);
+  - **R12** (the newest device row wins) by the implementer's only (`oldest of two`).
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | F7-S2-1 |
+| minor bug | 1 | F7-S2-2 |
+
+**Verdict:** G2 cannot close for S2 yet. Criterion 6, #28's and #29's main paths, B4, the bindings and the UI-test
+database hold, and the two platforms agree. But F7-S2-1 is a real bug in the state machine: a phase change during
+the first resume, which `.task(id: scenePhase)` turns into a cancellation, leaves the lifter's settings unloaded
+until the next launch, logged as a fault.
+
+---
+
+## F7-S2-1. bug — A resume cancelled by a phase change leaves the settings unloaded until the next launch
+
+`.task(id: scenePhase)` cancels the running `resume` whenever the phase changes. That happens on any launch whose
+phase moves while the first resume awaits: a workout launches the app in the background and the lifter opens it,
+or a launch passes through `.inactive` to `.active`. GRDB's async `read`/`write` then throw `CancellationError`.
+In `Launch.swift` (both platforms):
+- `loadSettings` sets `hasLoadedSettings = true` **before** its `await`. The cancelled load leaves `settings` at
+  `Settings.default`, and no later resume retries it. A lifter who chose kilograms sees pounds until the next cold
+  launch. And any feature that writes `composition.settings` back (F14) would save the defaults over the row.
+- `seedCatalog` and `loadSettings` log the cancellation at **fault** level as `.failed(...)`, though nothing failed.
+- `hasResumed = true` before the awaits, and `isCatalogSeeded = true` only after: an overlapping resume (the phase
+  changes while the first awaits, before the cancellation lands) starts a second seed (`began seedCatalog` twice).
+  It's harmless to the data, since the seed is idempotent, but it does twice the work.
+
+**Reach:** every user whose first launch phase changes during the settings read; with background workout
+launches (watch, F17/F20), routinely. Settings drive units, rest, plate math and week start.
+
+**Repro** (fail, iOS and watch):
+- `LaunchAdversarialTests.cancelledFirstResume_settingsStillLoad`: kg settings saved, a first resume cancelled,
+  then `.active` → `settings == .default`;
+- `cancelledFirstResume_logsNoFailure` (`.failed(.seedCatalog)` and `.failed(.loadSettings)` recorded);
+- `overlappingResumes_runEachStepOnce` (`began seedCatalog` ×2);
+- the `Watch…` twins of all three.
+
+**Fix:** set each "done" flag only after its step succeeded (`hasLoadedSettings` after the load returns, or when
+it fails with a real error, keeping #29's "not retried" for an unreadable row). Treat `CancellationError` as "not
+attempted": don't log a fault, and leave the step for the next resume. Make the steps idempotent across overlap,
+for example with an in-flight flag per step or by serialising `resume` (a stored `Task` that later calls await).
+Apply the fix to both copies (open question 1).
+
+## F7-S2-2. minor bug — A failed open writes to the file it could not open
+
+`LedgerStores.open` and decision #29 promise the file is "left exactly as it was" when it cannot be opened. That
+holds for bytes that aren't a database (the implementer's case), a directory, an unreadable file and an
+unwritable directory (all held here). It doesn't hold for a **valid SQLite file that isn't Ledger's**, or one
+whose migration fails partway:
+- `DatabaseQueue` switches it to WAL on open;
+- the migrator commits `grdb_migrations` (and any migration that succeeds before the failing one) in separate
+  transactions.
+
+The file grows from 8,192 to 16,384 bytes, and `-wal` and `-shm` appear, before the launch shows #29's screen.
+
+**Reach:** a file at the app's path that isn't Ledger's arrives only through a botched restore or a foreign
+writer. But the same path writes partial migrations whenever a future migration fails on real data. That is the
+case #29's "never touch the file" exists for: the next version, or support, would find the file changed.
+
+**Repro** (fails, iOS and watch): `LaunchStorageAdversarialTests.foreignDatabase_isUnavailable_andUntouched` and its
+`Watch…` twin (`["ledger.sqlite": 8192] → ["ledger.sqlite": 16384, "-wal": 0, "-shm": 32768]`).
+
+**Fix options:**
+- before migrating, check the file read-only: empty, or `grdb_migrations` holding only known ids, with its tables
+  as the migrator expects (`hasSchemaChanges` / `hasBeenSuperseded`); throw without writing otherwise;
+- or run every pending migration in one transaction (GRDB's migrator can't by default), so a failure rolls all of
+  them back;
+- or correct the doc and #29's wording to "never deleted, moved or replaced".
+
+The first is the honest one; the WAL switch would still need opening without `journalMode = .wal` until the check
+passes.
+
+## Attacked and held
+
+- **Criterion 6:** the handler is assigned first and synchronously on iOS; the watch has no handler. Both state
+  machines match the model over 60 random phase sequences with open or seed faults healed at random steps:
+  - the first resume runs in any phase;
+  - later ones run only on `.active`, reopening then reseeding;
+  - settings and WatchConnectivity run once.
+- **#29:** bytes that aren't a database, a directory at the path, a file of mode 000 and a directory of mode 555
+  all give `databaseUnavailable`, with the listing and every byte unchanged (no file created in the unwritable
+  directory); each recovers on the next `.active` once the cause is gone; nothing is bound meanwhile.
+- **#28:** a failed seed carries on; no retry in the background; the next `.active` seeds. Meanwhile a program
+  naming catalog exercises is refused by name (`unknownExercise`), never half-saved.
+- **Settings fallback:** a later payload version, a non-UTF-8 payload, an invalid JSON value and a version stored
+  as text each leave `Settings.default` in memory and the row byte for byte the same after three boots with
+  retries.
+- **LocalDevice (B4):**
+  - two connections opening one new file at once agree on one row, in 10 rounds;
+  - five older rows of the other kind are never chosen;
+  - a lowercase stored id reads as the same device, with no new row;
+  - the oldest row of a kind wins (implementer).
+- **Binding:** after boot every store key is the GRDB store and `deviceID` is the device row, so none is left on
+  a stub or fake. `prepareDependencies` runs only when `preparesDependencies` (the app); tests use
+  `withDependencies`.
+- **`-LEDGER_UITEST`:** a new temporary file per launch; without it, `Application Support/Database/ledger.sqlite`.
+- **Registrar and activator** (by reading; the implementer's suites cover them):
+  - sessions behind a `Mutex`, 50 concurrent calls all kept (implementer);
+  - the live registrar and activator are held strongly by the composition's environment closures, so the weak
+    captures never drop a session;
+  - activation runs once per composition (`isCompanionActive`).
+
+---
+
+# Slice S2 — close-out round
+
+Close-out of fix round 1 (`git diff 6571cca..4af30e7`, notes "### S2 fix round 1"), at `4af30e7`. No product code
+edited, nothing committed; mutants ran in a scratchpad copy, since deleted.
+
+## Close-out of round 1
+
+`git diff 6571cca -- '*Adversarial*'` is empty: my round-1 tests are byte-identical.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| F7-S2-1 / S2-SF1 | **closed**, with a residual case (F7-S2-3) | `cancelledFirstResume_settingsStillLoad`, `cancelledFirstResume_logsNoFailure` and `overlappingResumes_runEachStepOnce` pass on both platforms, unedited; the random-phase model passes on both against the shared `DatabaseLaunch` |
+| F7-S2-2 | **closed** | `foreignDatabase_isUnavailable_andUntouched` passes on both, unedited; the preflight attacks below hold |
+
+## What I wrote
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `LedgerAppKitTests/Adversarial/LaunchCloseoutAdversarialTests` and the watch twin | 3 each (7 cases) | a seed cancelled while it waits for the writer, beneath an overlapping foreground call (F7-S2-3); a cancelled pass followed by a `.background` call; `boots(arguments:isTesting:)` over the five combinations of app/test and argument |
+| `LedgerPersistenceTests/Adversarial/PreflightAdversarialTests` | 6 | a foreign WAL file with a hot `-wal` and its `-shm`; Ledger's own file after a crash (hot WAL), with and without its `-shm`; `grdb_migrations` with a known and an unknown id; a symlink to a foreign file; a write lock held past the 5 s busy timeout |
+
+## Results
+
+- **Host, whole package** (`swift test`, exit 1): the failures are F7-S2-3 (iOS and watch, mine, expected) and
+  `LedgerDesignTests`' Archivo font suites (host-only, as on `main`). Every other suite passes, all my round-1
+  tests included.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **Full gate**: not run, by the rule (F7-S2-3 fails by design).
+- **Mutants** (10, on the changed lines): every non-equivalent one is killed.
+
+  | Mutant | Killed by |
+  |---|---|
+  | T1 cancellation counted as failure | implementer and mine |
+  | T2 settings marked loaded on any outcome | implementer and mine |
+  | T3 a cancelled pass counts as finished | implementer and mine |
+  | T4 overlapping calls start steps twice | implementer and mine |
+  | T5 one foreign table tolerated | implementer and mine |
+  | T6 unknown migrations accepted | implementer and mine |
+  | T8 no preflight | implementer and mine |
+  | T10 `-LEDGER_UITEST` ignored under test | implementer and mine |
+  | **T9 no busy timeout** | **mine only** (`LocalDeviceAdversarialTests.twoOpensAtOnce_oneRow`) |
+  | T7 the preflight reads an empty file | survives, **equivalent** (an empty file has no tables, so it returns as before) |
+
+## Attacks on the fixes
+
+- **Shared `DatabaseLaunch`:** the round-1 model of the notes' state machine passes on both platforms over 60
+  random phase sequences with faults.
+  - A cancellation before any step (a pre-cancelled task) leaves seed and settings to the next call, in any
+    phase, including `.background`, with no failure recorded.
+  - Overlapping calls start each step once.
+  - WatchConnectivity is not awaited, so it has no cancellation point.
+- **Preflight:**
+  - A foreign WAL file with a hot `-wal` is refused (`notLedgerDatabase`), and the database file **and its `-wal`
+    stay byte for byte**: the implementer's caveat holds (only `-shm` may change).
+  - Ledger's own file after a crash opens with the rows only the WAL held, even with its `-shm` gone.
+  - `grdb_migrations` holding a known and an unknown id gives `laterSchema(["v999-from-the-future"])`, untouched.
+  - A symlink at the path to a foreign file is refused, and its target is untouched.
+  - An empty file and a table-less file are new databases (implementer's tests).
+- **Busy timeout:** a write lock held by another connection makes `LedgerStores.open` wait about 5 s (the test
+  takes 5.2 s), then fail cleanly with no device row written, so the composition shows #29's screen and retries
+  on the foreground.
+  - Observation, not a finding: the open runs on the main actor in `App.init`, so a lock held at launch (only
+    possible once an extension shares the file) freezes the first frame for up to 5 s.
+- **`-LEDGER_UITEST`:** boots in the app with or without the argument, and under test only with it (both
+  platforms); a new temporary file each launch (round 1).
+
+## F7-S2-3. bug — A seed cancelled beneath an overlapping foreground call waits for the next foreground
+
+The fix marks the first pass finished when no step of *this* call was cancelled. A step another call is running
+counts as finished here (`.elsewhere`). On a first launch that goes from `.inactive` to `.active`:
+1. The first call starts the seed, which waits for (or runs on) the writer.
+2. SwiftUI starts the second call (`.active`) and cancels the first.
+3. The second call finds the seed `.elsewhere`, loads the settings, and marks the first pass finished.
+4. The first call's seed then throws `CancellationError` (GRDB checks before running and interrupts a running
+   statement): not attempted.
+
+Nothing reruns it. Every later call except a foreground one returns early, and the second call *was* the
+foreground. So the catalog stays unseeded until the lifter next leaves and returns to the app. On a first launch
+that means F08's onboarding can't save the seed program (`unknownExercise`) and shows #28's retry for no
+failure.
+
+**Repro** (fails, iOS and watch, deterministic: the writer is held so the cancellation lands while the seed
+waits): `LaunchCloseoutAdversarialTests.seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its
+`Watch…` twin. Log: `began openDatabase, began seedCatalog, began loadSettings, …`, then `isCatalogSeeded ==
+false` after a further `.background` call.
+
+**Fix:** a step another call is running must not count toward "finished". Either:
+- wait for it: keep the in-flight `Task` per step, and have the overlapping call await its result; or
+- mark the pass finished only once every step has an outcome (`isCatalogSeeded` or a recorded failure, and
+  `hasLoadedSettings`), not when this call skipped one.
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | F7-S2-3 |
+
+**Verdict:** G2 does not close for S2 yet. F7-S2-1 and F7-S2-2 are closed and their fixes hold under every
+attack and mutant. One residual case of the cancellation fix remains (F7-S2-3); it is small and has a
+deterministic repro.
+
+## Fix round 2 verification
+
+Scoped verification of `git diff 2d41d18..bce0150` (notes "### S2 fix round 2"; the branch is at `9400fea`, whose
+tree equals `bce0150` plus main's S1 squash): `DatabaseLaunch` owns one task per step; a `resume` call starts a
+step or awaits the running one; cancelling a caller never cancels a step.
+
+**F7-S2-3 closed.** `seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its watch twin pass, unedited. All
+my other S2 tests pass on both platforms, the random-phase model included: round 1, the close-out, preflight and
+`LocalDevice`. `git diff 2d41d18 -- '*Adversarial*'` shows only the sanctioned edit, plus my new files below.
+
+**Audit of the sanctioned edit** (`cancelledPass_thenBackground_runsIt` and its watch twin): **faithful, not
+weakened.**
+- The setup is unchanged.
+- "Not seeded right after the cancelled call" had to go: the step now outlives its caller, so the seed may already
+  be done.
+- "`began loadSettings` ×2" encoded round 1's restart mechanism. Each step beginning exactly once is the stronger
+  claim under the new design, and it also proves the step was not restarted.
+- The no-failure and seeded-after assertions are kept. The added assertion (`settings` equal the stored ones)
+  proves the settings step ran to its outcome after the cancellation.
+
+**Regression check of the new design.** New files `LedgerAppKitTests/Adversarial/LaunchStepTaskAdversarialTests`
+and `LedgerWatchAppKitTests/Adversarial/WatchLaunchStepTaskAdversarialTests`, 2 tests each, all passing. Both hold
+the database writer so the cancellations land while a step waits.
+- A caller cancelled while a failing seed waits: the failure is recorded once; a background call afterwards
+  starts nothing (a failed step isn't retried in the background); the next foreground retries it and seeds;
+  settings begin once.
+- Three callers (`.inactive`, `.active`, `.background`) racing for the same steps share one task per step:
+  seed, settings and WatchConnectivity each begin once, and all three callers return with the catalog seeded.
+
+**Mutants of the changed lines** (7, scratchpad copy, since deleted). **All killed**, each by both the
+implementer's tests and mine:
+- U1 the seed never retried;
+- U2 the seed retried in the background;
+- U3 a running step started again;
+- U4 an ended step not remembered;
+- U5 settings retried;
+- U6 reopening in any phase;
+- U7 a finished task kept as running.
+
+**Runs.**
+- My S2 suites on the host: all pass (41 tests).
+- `scripts/check.sh --lint-only`: exit 0.
+- **Full gate** (`scripts/check.sh` through `sim-lock.py`): **exit 0, `check.sh OK`**. 17 test targets passed (PR)
+  and 8 (PR-Watch); coverage thresholds met (overall 98.55 %); 479 s.
+
+**Verdict: G2 closes for S2.** F7-S2-1 (with S2-SF1), F7-S2-2 and F7-S2-3 are closed with passing tests. The
+one-task-per-step design holds under cancellation, overlap and failure on both platforms. The sanctioned edit is
+faithful.

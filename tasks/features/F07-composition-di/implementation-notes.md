@@ -403,3 +403,387 @@ watchOS tests 183 s, coverage 2 s, total 522 s.
 | LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
 | LedgerPersistence | 2257 / 2271 | 99.38 % | 90 % | ✓ |
 | Overall | 7733 / 7845 | 98.57 % | 80 % | ✓ |
+
+## Slice S2 — both apps boot on a real database (G1 implementer, 2026-10-04)
+
+Branch `feat/F07-s2-boot`, cut from `feat/F07-s1-keys-fakes` at `f991d69` (S1 is PR #22, unmerged). No commits.
+
+### What landed
+
+- **LedgerPersistence**
+  - `LocalDevice.swift`: `LocalDevice.id(in:kind:now:newID:)` reads this platform's `device` row (`kind` phone or
+    watch) or inserts one with `newID()`, in one write (decision B4). Of two rows of one kind the oldest (then
+    the lowest id) wins; a stored id that is not a UUID throws `malformedIdentifier` and the row is kept.
+  - `LedgerStores.swift`: the queue, this device's id and the six GRDB stores, each given `now`;
+    `LedgerStores.open(at:kind:now:newID:)` (open + migrate, then `LocalDevice`), `defaultURL`
+    (`Application Support/Database/ledger.sqlite`), `seedCatalog()` (`seedIfNeeded(ExerciseCatalog.seed(),
+    version: ExerciseCatalog.version)`).
+- **LedgerHealth** `MirroringStartRegistrar.swift`: `MirroringStartRegistrar<Session>` keeps every session the
+  handler is handed behind a `Mutex` and logs at notice level; `register()` installs the handler (capturing the
+  registrar weakly). On iOS, `MirroringStartRegistrar<HKWorkoutSession>(healthStore:)` installs it as
+  `workoutSessionMirroringStartHandler`. `Sendable` without `@unchecked`. Placeholder deleted.
+- **LedgerSync** `CompanionSessionActivator.swift` (`#if canImport(WatchConnectivity)`): a nonisolated
+  `NSObject, WCSessionDelegate, Sendable` with no mutable state; `activate()` sets itself as the default
+  session's delegate and activates it (logs and stops where WC is unsupported); the callbacks log, and
+  `sessionDidDeactivate` activates again (watch switch). A small internal `CompanionSession` protocol (which
+  `WCSession` adopts) lets the tests hand it a stand-in. Placeholder deleted.
+- **LedgerAppKit** (placeholder deleted)
+  - `AppComposition.swift`: `@MainActor @Observable`; `state` (`idle` / `ready` / `databaseUnavailable`),
+    `settings`, `isCatalogSeeded`; `launch()` (the live environment, then `boot()` unless `isTesting`);
+    `bind(_:)` (six stores + `deviceID`); an internal `Environment` (database URL, `now`, `newID`, logger,
+    recorder, the handler and WC actions, whether to `prepareDependencies`), whose `live(arguments:)` picks
+    `-LEDGER_UITEST` → `tmp/LedgerUITest-<uuid>/ledger.sqlite`, else `LedgerStores.defaultURL`.
+  - `Launch.swift`: `LaunchStep` (`assignMirroringHandler, openDatabase, seedCatalog, loadSettings,
+    activateCompanionSession`), `LaunchEvent` (`began`/`failed`), and the sequence: `boot()` (synchronous:
+    handler, then open + `prepareDependencies { bind(&$0) }`), `resume(in: ScenePhase) async` (first call:
+    seed, settings, WC, in any phase; later calls, on `.active` only: reopen if unavailable (#29), reseed if
+    unseeded (#28)). A failed step logs at fault level and records `.failed(step)`.
+  - `AppRootView.swift`: takes the composition, shows "Ledger" or decision #29's static screen
+    (`EmptyState("Can't open your data right now", …)`), and runs `.task(id: scenePhase) { await
+    composition.resume(in: scenePhase) }`.
+- **LedgerWatchAppKit** (placeholder deleted): `WatchComposition.swift` and `Launch.swift`, the same shape without
+  the mirroring step (kind `.watch`); `WatchAppDelegate.swift` (`#if os(watchOS)`, `WKApplicationDelegate`:
+  `handle(_ workoutConfiguration:)` and `handleActiveWorkoutRecovery()` read `healthStore` and log; F16 adds the
+  calls); `WatchRootView.swift` as the iOS root.
+- **Apps**: `LedgerApp` holds `@State var composition = AppComposition.launch()` and renders
+  `AppRootView(composition:)`; `LedgerWatchApp` adds `@WKApplicationDelegateAdaptor WatchAppDelegate`.
+  `Apps/*Tests/SmokeTests.swift`: the deleted `…Module.name` checks became "`launch()` boots nothing under test".
+- **Coverage thresholds**: `LedgerHealth` and `LedgerSync` now have measured lines, so the gate requires them
+  (`required`, at their existing 80 % and 90 %).
+- **Docs**: testing-strategy §2.7 (UI tests open a fresh temporary file, not "the in-memory database seeded by
+  `LedgerTestSupport.Seed.uiTest`", per A-decision); architecture §4 watch bullet (the database opens in
+  `App.init`, not `applicationDidFinishLaunching`).
+- **Package graph: unchanged.** Every module the compositions import was already an edge of both umbrellas;
+  `scripts/check-package-graph.sh` passes with no re-record.
+
+### Decisions and deviations
+
+1. **`deviceID` lives in `LedgerStores`** (beside the queue and six stores of the plan): one throwing call opens
+   the file and reads the device, so a composition has one value to keep and bind.
+2. **`logger` is not rebound.** Its `liveValue` is already the real `LedgerLogger(category: "app")` (S1); `bind`
+   sets the six stores and `deviceID`. The device keys keep their `Unimplemented*` live values until F16–F23.
+3. **Binding is process-wide once, and testable without it.** `boot()` calls `prepareDependencies { bind(&$0) }`
+   only in the app (`Environment.preparesDependencies`); tests bind with `withDependencies { composition.bind(&$0)
+   }`, since `prepareDependencies` would change the values for every test in the process. A database that opens
+   only on a foreground retry binds then (nothing reads a key while #29's screen shows).
+4. **`isTesting` lives in `launch()`, not in the `App`**: the app targets link only the umbrellas, and
+   `launch()` is the one call the `App` makes. Under test it returns an `idle` composition: no handler, no file;
+   `resume` does nothing. The package suites and both hosted smoke tests check it.
+5. **The async part runs from `.task(id: scenePhase)`**, first in whatever phase (a workout can launch the watch
+   app in the background), then retries only when the phase becomes `.active` (#28, #29). An unreadable settings
+   row is not retried (it reads the same until the lifter saves; F14 resubscribes).
+6. **The database opens on the main actor in `App.init`** (A-decision; F05 measured 4.6 ms on the watch
+   simulator), although F05's input suggested off the main actor; the plan chose the synchronous open so the
+   first frame already knows ready vs unavailable.
+7. **Watch: the database opens in `App.init` (`WatchComposition.launch()`), not in
+   `applicationDidFinishLaunching`** as the brief's text has it, per the A-decision; the delegate keeps the
+   workout entry points only.
+8. **The registrar is generic over its session type.** The first gate run crashed all four registrar tests on the
+   iOS simulator: the package's test host has no HealthKit entitlement, and touching `HKHealthStore`'s handler
+   property there traps (testing-strategy §3 also rules out real HealthKit in tests). So the tests give the
+   registrar a stand-in handler slot and session class; the app's `HKHealthStore` binding is a two-line
+   convenience init, exercised by the simulator launch, not by a test.
+9. **Registrar uses `Synchronization.Mutex`, not an actor.** HealthKit calls the handler on an arbitrary queue and
+   the handler cannot await, so an actor would be reached only through an unstructured `Task` after the handler
+   returned. Standards §4 says shared mutable state lives in an actor, with one written exception (LedgerFakes);
+   see open question 2.
+10. **UI-test argument `-LEDGER_UITEST`** (testing-strategy's name), a new temporary directory per launch.
+11. **The two compositions are parallel, not shared** (see open question 1): ~150 lines of the watch side repeat
+    the iOS side's state machine, because the plan puts Launch in `LedgerAppKit` and the watch umbrella cannot
+    import it.
+
+### Criteria → tests
+
+| Criterion / input | Test |
+|---|---|
+| 6 — handler assigned before any `await` | `boot()` is synchronous (compiler-enforced); `LaunchOrderTests.boot_assignsTheHandlerFirst` (log after `boot()` = began(assign), handler, began(open), nothing async), `launch_runsTheStepsInOrder` (all five steps in the brief's order), `boot_handlerFirst_evenWhenOpeningFails`, `resume_again_runsNothingTwice` |
+| 1 (data half) — file in Application Support, ≥ 200 rows | `AppCompositionTests.boot_opensTheFile_andBindsTheStores` (file at `Database/ledger.sqlite`, the bound `exerciseRepository` holds all of `ExerciseCatalog.seed()`, 224), `liveEnvironment_databaseURL`; `LocalDeviceTests.defaultURL_isItsOwnDirectory` |
+| 2 (data half) — the watch's own database | `WatchCompositionTests` (same, kind `watch`, and the watch order `launch_runsTheStepsInOrder`) |
+| a second boot seeds nothing | `secondBoot_seedsNothing` (both): every `exercise` row identical after a boot a day later; same device |
+| settings fallback, row untouched | `unreadableSettings_fallBack_rowUntouched` (payload_version 999 row byte-for-byte unchanged, `settings == .default`, `.failed(.loadSettings)`); `savedSettings_areLoaded` |
+| #28 seeding fails → log, carry on, retry | `…RecoveryTests.seedingFailure_carriesOn_thenRetries` (a trigger refuses exercise inserts: `.failed(.seedCatalog)`, settings and WC still run, state ready; no retry in background; on `.active` after the trigger is dropped, seeded) |
+| #29 open fails → unavailable, file untouched, retry | `openFailure_isUnavailable_andTheFileIsUntouched` (4 KB of non-database bytes: state unavailable, bytes and directory listing unchanged after a retry, nothing bound), `openFailure_retriedOnForeground` (a directory in the file's place; once removed, `.active` opens, seeds, loads) |
+| S1 input — `deviceID` bound, not nil | `deviceID_isTheDeviceRow` (both): bound value = the `device` row of this kind, ≠ nil UUID |
+| `LocalDevice` | `LocalDeviceTests` (insert once and read back per kind, the other kind is never this device, oldest of two, malformed id kept, `LedgerStores.open` keeps the device across opens, `seedCatalog` once) |
+| `isTesting` guard | `launch_whileTesting_bootsNothing` (both); `Apps/*Tests/SmokeTests.umbrellaProduct_links_andLaunchBootsNothing` (hosted) |
+| registrar | `MirroringStartRegistrarTests` (stand-in slot and sessions): installs the handler, keeps sessions in order, 50 concurrent calls all kept, does not retain the registrar |
+| activator | `CompanionSessionActivatorTests`: delegate then one activation on a stand-in, unsupported does nothing, callbacks log, deactivation activates again (iOS) |
+
+Deterministic: fixed dates and ids, no sleeps or timing assertions; every file under the temporary directory.
+
+### Code lines (F05's method: added lines of `git diff -U0`, blank lines and whole-line comments, doc comments included, excluded)
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerPersistence` (`LocalDevice`, `LedgerStores`) | 73 | 0 |
+| `LedgerHealth` (registrar) | 37 | 3 |
+| `LedgerSync` (activator) | 49 | 3 |
+| `LedgerAppKit` | 200 | 5 |
+| `LedgerWatchAppKit` | 209 | 5 |
+| `Apps/Ledger`, `Apps/LedgerWatch` | 5 | 2 |
+| **Product** | **573** | **18** |
+| Tests | 830 | 42 |
+
+(Corrected in fix round 1 to F05's method, as the review counted; the first table's "601 / ≈ 48" counted doc comments
+and the hosted smoke tests.)
+
+### Gate and coverage
+
+Full `scripts/check.sh` under the simulator lock, run 3: **exit 0, `check.sh OK`**; 17 test targets ran and passed
+(PR), 8 (PR-Watch). Summary: tools 1 s, format 0 s, lint 60 s, iOS build 15 s, iOS tests 196 s, watchOS build 12 s,
+watchOS tests 176 s, coverage 2 s, total 464 s. New suites seen in the result bundles: iOS — LocalDevice 7,
+Mirroring start registrar 4, Companion session activator 4, AppComposition 7, AppComposition · failed launch
+steps 3, Launch order 4, Smoke 2 + 1; watchOS — LocalDevice 7, Companion session activator 3, WatchComposition 8,
+WatchComposition · failed launch steps 3, Smoke 2 + 1.
+- Run 1 failed at the iOS build: `self.` before `store` inside the watch delegate's log interpolation, which
+  swiftformat had removed (`redundantSelf`); fixed with a local.
+- Run 2 failed the four registrar tests (deviation 8).
+- **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29` "will never be executed" (and its `@Test`
+  macro expansion line). None from this slice.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 195 / 203 | 96.05 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 37 / 37 | 100.00 % | 80 % | ✓ |
+| LedgerPersistence | 2310 / 2324 | 99.39 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 7855 / 7969 | 98.56 % | 80 % | ✓ |
+
+(LedgerAppKit and LedgerWatchAppKit stay excluded from the gate, as before.)
+
+**Release build:** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+exit 0 (39 s).
+
+**Host:** `swift test` on the whole package: everything passes except `LedgerDesignTests`' Archivo font suites
+(Mac host only, as on `main`).
+
+**Simulator launch** (`f07s2/launch-check.sh` under the lock, iPhone 17 and Apple Watch Series 12 (46mm), iOS /
+watchOS 27.0; the gate's builds): each app uninstalled (fresh container), installed, launched, and after 6 s
+- still running (`launchctl list` shows its pid), no crash report;
+- `Library/Application Support/Database/` holds `ledger.sqlite` plus `-wal` and `-shm`;
+- read-only `sqlite3`: 224 `exercise` rows (`ExerciseCatalog.seed().count`) and one `device` row, `phone` /
+  `iPhone` on the phone, `watch` / `Apple Watch` on the watch;
+- screenshots show the "Ledger" placeholder on both;
+- relaunched with `-LEDGER_UITEST 1`: a new `tmp/LedgerUITest-<uuid>/ledger.sqlite` in the app's container.
+
+### How to verify by hand
+
+- `cd LedgerKit && env -u SDKROOT swift test --only-use-versions-from-resolved-file --filter
+  'LocalDevice|LaunchOrder|Composition|CompanionSession|MirroringStart'` (host; the activator suite is iOS/watch only).
+- Launch either app in the simulator, then `sqlite3 "$(xcrun simctl get_app_container booted <bundle id>
+  data)/Library/Application Support/Database/ledger.sqlite" 'SELECT COUNT(*) FROM exercise; SELECT * FROM device'`.
+- #29 by hand: replace that file with a few bytes of text, relaunch: "Can't open your data right now"; the file is
+  unchanged afterwards. Restore it and bring the app back to the foreground: the placeholder returns.
+- Criterion 6: `LaunchOrderTests`; `boot()` has no `async`, so an `await` before the handler does not compile.
+
+### Open questions (with recommendations)
+
+1. **Share the launch between the platforms?** About 150 lines of `LedgerWatchAppKit` (`Launch.swift`, most of
+   `WatchComposition.swift`) mirror the iOS ones, because the plan puts `Launch` in `LedgerAppKit` and the watch
+   umbrella cannot import it. A shared home without a new edge would be `LedgerDependencies` (a `LiveValues` +
+   launch state machine over the Domain protocols; the umbrellas pass the GRDB opener), at the cost of putting
+   launch code in the module every feature imports. Recommend keeping two until F16/F17 add the platform steps,
+   then deciding with the real differences in view; if shared, a small `LedgerComposition` target (an ADR and a
+   graph edge) is cleaner than growing `LedgerDependencies`.
+2. **Standards §4 and the registrar's `Mutex`.** §4 allows a `Mutex` only in LedgerFakes. A synchronous framework
+   callback that must not await is a second legitimate case. Recommend adding it to §4's exception sentence ("…and
+   state a framework callback writes synchronously, such as `MirroringStartRegistrar`").
+3. **Is `isTesting` false in a UI-tested app?** IssueReporting's `isTesting` reads XCTest environment keys; if
+   `XCUIApplication` passed one to the app, UI tests would see an unbooted app. The gate's UI `Smoke` only looks
+   for "Ledger", which shows either way. Recommend S3's `launchesToToday` / Diagnostics ≥ 200 rows test settle
+   it (it fails if the app does not boot under UI test).
+4. **An unreadable settings row and the fault level.** A later payload version reaching an older app is expected
+   in a mixed-version phone/watch pair; it is logged at fault level here like any failed step. Recommend F14
+   lowers it to `error` when it adds the resubscription.
+5. **Copy.** "Can't open your data right now" (decision #29) with "Your workouts are still on this iPhone/watch.
+   Ledger tries again when you come back to it.", as plain strings: no string catalog exists yet. Recommend Pete
+   confirm the body line; S3 or the localisation brief moves both into the catalog.
+6. **Size.** 601 product lines, over the 500 target (PR description says so); the split considered was iOS vs
+   watch, not taken because each half alone would leave criterion 2 or 6 half-done.
+
+### S2 fix round 1 (G1 implementer, 2026-10-04)
+
+From `test-findings.md` "# Slice S2 — adversarial round 1" (F7-S2-1, F7-S2-2) and `review.md` "# Slice S2 review"
+(S2-SF1, SF2, N1–N5, open question 1), with the orchestrator's binding decisions 1–6. Branch at `6571cca`; no
+tester test edited (`git diff 6571cca -- '*Adversarial*'` is empty).
+
+**Per decision, what changed and what proves it**
+
+| # | Finding | Change | Proving test(s) |
+|---|---|---|---|
+| 1 | review Q1 | New `LedgerPersistence/DatabaseLaunch.swift`: `@MainActor @Observable public final class DatabaseLaunch` (`:27`) holding `state`, `settings`, `isCatalogSeeded`, `stores`; synchronous `open()` (`:80`, #29); `resume(isForeground:) async` (`:101`, #28, the settings load, the retries); `onOpen` and `record` closures. `LaunchStep`/`LaunchEvent` (`:9`) moved here; both umbrellas' `Launch.swift` deleted. `AppComposition`/`WatchComposition` keep `launch()` with the `isTesting` guard, `boot()` (the iPhone's handler first), `resume(in: ScenePhase)` (forwards `phase == .active`, then WatchConnectivity once), `bind`, `Environment.live`, and forward `state`/`settings`/`isCatalogSeeded`/`stores` (the tester's tests read them). They are no longer `@Observable`: what the roots read is `DatabaseLaunch`'s, which SwiftUI tracks through the forwarding. Architecture §4 has the line. The umbrellas' own recovery suites moved to `LedgerPersistenceTests/DatabaseLaunchTests` (under the coverage gate) | `DatabaseLaunchTests` (8); every composition, order and tester suite unchanged and green on both platforms |
+| 2 | F7-S2-1 = S2-SF1 | In `DatabaseLaunch.run(_:_:)` (`:143`): a step an overlapping call is running is not started (`running` set); `CancellationError` returns "not attempted" (`:150`) with no fault log and no `.failed`; `hasLoadedSettings` is set only when the load ran to an end (`:126`); the first pass counts as finished only if no step was cancelled (`:130`), so the next call, in any phase, runs the interrupted steps again | the tester's six, unedited: `LaunchAdversarialTests.cancelledFirstResume_settingsStillLoad`, `cancelledFirstResume_logsNoFailure`, `overlappingResumes_runEachStepOnce` and the `WatchLaunchAdversarialTests` twins; `DatabaseLaunchTests.cancelledPass_isNotAttempted_andRunsAgain` (next call in the background), `overlappingCalls_startEachStepOnce` |
+| 3 | F7-S2-2 | `LedgerDatabase.open` runs `preflight` first (`Database.swift:28`, `:57`): an existing non-empty file is read through a read-only connection and accepted only if it has `grdb_migrations` whose ids this build knows, or no table at all; otherwise `OpenError.notLedgerDatabase` or `.laterSchema([ids])` (`:8`) before the WAL switch or a migration. Unreadable files throw SQLite's own error as before. `LedgerStores.open`'s doc (`:40`) says exactly that, including that a migration failing on the data after the preflight can leave earlier migrations applied | the tester's `foreignDatabase_isUnavailable_andUntouched` (+ watch twin), unedited; `DatabasePreflightTests`: foreign refused untouched, later schema refused untouched, a pending known migration migrates, an empty and a tableless file are new |
+| 3+ | (gate, approved 2026-10-04) | **A change to F05's connection configuration:** `LedgerDatabase.baseConfiguration` sets `busyMode = .timeout(5)` (`Database.swift:92`), so every connection, the preflight's read-only one included, waits up to 5 s for another's lock instead of failing at once on `SQLITE_BUSY` (GRDB's default). Two first opens of one WAL file race its `-shm` recovery. The tester's `twoOpensAtOnce_oneRow` (an app and its extension) passed on the host by timing, but failed all 10 rounds on the iOS simulator in the first gate of this round, once the preflight added a connection. F21's widget extension will open the same file the same way | the tester's `LocalDeviceAdversarialTests.twoOpensAtOnce_oneRow`, unedited: passes on the host and on both simulators (10 rounds each). Without the timeout (gate run `fix1-gate.log`) it fails 10/10 on the iOS simulator |
+| 4 | S2-SF2 | `docs/engineering-standards.md` §4 (`:102`): one clause for state a system framework callback writes synchronously on its own queue; the registrar's doc cites it | — |
+| 5 | #29 copy | Kept. The watch's line already names the watch ("Your workouts are still on this watch. …", `WatchRootView.swift:21`); the iPhone's names the iPhone | — |
+| 6 | S2-N1 | `launch(arguments:)` boots when `!isTesting || arguments.contains("-LEDGER_UITEST")` (`AppComposition.swift:76`, `WatchComposition.swift:71`) | `AppCompositionTests`/`WatchCompositionTests.boots_unlessHostingUnitTests` |
+| 6 | S2-N5 | Architecture §4's iPhone bullet: WatchConnectivity follows the first frame; the G1 size table above uses F05's method | — |
+| 6 | S2-N2, N3, N4 | Inputs below | — |
+
+**The `-shm` file and "not a single byte".** A read-only connection to a WAL-mode database still updates its
+`-shm`, SQLite's shared-memory index of the `-wal` (it holds no data, and SQLite rebuilds it). So on a Ledger file
+from a later version the preflight leaves the database file and its `-wal` byte for byte as they were and the
+listing unchanged, but the `-shm`'s read marks can change; `DatabasePreflightTests` compares everything but the
+`-shm`'s bytes. A foreign rollback-journal database (the tester's case) gets no `-shm` at all.
+
+**Inputs**
+- **S3 (S2-N2, review Q7):** no view, store or Diagnostics may read a store key or `deviceID` before the composition
+  is `.ready`. A late `prepareDependencies` (#29 recovered on a foreground) cannot rebind a key already read: DEBUG
+  reports an issue, and Release silently keeps the stub.
+- **F16 (S2-N3):** the real `HKHealthStore.workoutSessionMirroringStartHandler` assignment has no automated test (a
+  package test host traps without the HealthKit entitlement); F16 owns a hosted or device check.
+- **F17 (S2-N4):** the registrar keeps every mirrored session for the process's life; F17 hands each to the live
+  transport and drops it when it ends.
+- **F21 (busy timeout):** the widget extension opens the same file through `LedgerDatabase`, and so waits up to 5 s
+  for a lock the app holds, instead of failing. The app's open runs on the main actor in `App.init`, so a lock
+  that another process holds can delay the first frame by up to 5 s, where before it would have failed straight
+  to decision #29's screen. F21 should keep its extension's writes short, and F20 should time a contended launch
+  on a device.
+
+**Mutants** (one at a time, scratchpad copy `f07s2/mut/`, results `mut/results.txt`). All killed:
+
+| Mutant | Killed by |
+|---|---|
+| M1 settings marked loaded before the load (the old bug) | tester's `cancelledFirstResume_settingsStillLoad`; `cancelledPass_isNotAttempted_andRunsAgain` |
+| M2 a cancellation logged and recorded as a failure | tester's `cancelledFirstResume_logsNoFailure`, `…settingsStillLoad`; `cancelledPass_…` |
+| M3 no in-flight guard | tester's `overlappingResumes_runEachStepOnce`; `overlappingCalls_startEachStepOnce` |
+| M4 a cancelled first pass counts as finished | `cancelledPass_isNotAttempted_andRunsAgain` |
+| M5 no preflight | tester's `foreignDatabase_isUnavailable_andUntouched`; `foreignDatabase_isRefused_untouched`; `laterSchema_isRefused_untouched` (also the tester's `LocalDeviceAdversarialTests.twoOpensAtOnce_oneRow` that run; on the real code it passed 8 runs × 10 rounds) |
+| M6 later migrations accepted | `laterSchema_isRefused_untouched` |
+| M7 pending known migrations refused | `pendingKnownMigration_migrates`; F05's `MigrationCompatibilityTests` |
+| M8 a foreign file with tables accepted | tester's `foreignDatabase_…`; `foreignDatabase_isRefused_untouched` |
+| M9 `-LEDGER_UITEST` ignored under test | `boots_unlessHostingUnitTests` |
+| M10 retries in the background | `seedFailure_carriesOn_thenRetriesInTheForeground`, `openFailure_untouched_retriedInTheForeground`; tester's `randomPhases_matchTheModel` |
+| M11 `onOpen` never called | `open_thenFirstPass`, `openFailure_…` |
+
+**Code lines** (F05's method, vs `f991d69`, the whole slice): LedgerPersistence +226 (`DatabaseLaunch` 119, the
+preflight and busy timeout 34, `LocalDevice` + `LedgerStores` 73), LedgerHealth +37 / −3, LedgerSync +49 / −3, LedgerAppKit +152 / −5,
+LedgerWatchAppKit +159 / −5, Apps +5 / −2: **product 628 added, 18 removed**. This round (vs `6571cca`): +268 / −213 (+153 in
+LedgerPersistence, −98 net in the umbrellas). Tests this round: +273 / −188. Sharing removed the duplicated state machine, but the total did not
+fall to the review's estimate of ~470, for two reasons. The fix adds the preflight (33 lines) and the cancellation
+and overlap handling (about 20). And each umbrella keeps about 115–130 lines: the forwarding properties the tests
+read, `bind`, and `Environment.live`. That is still over the 500 target and under ~1,000, so the PR description says so.
+
+**Gate.** Full `scripts/check.sh` under the lock, run 2 of the round: **exit 0, `check.sh OK`**; 17 test targets
+ran and passed (PR), 8 (PR-Watch). Summary: tools 0 s, format 0 s, lint 60 s, iOS build 14 s, iOS tests 198 s,
+watchOS build 29 s, watchOS tests 179 s, coverage 2 s, total 482 s. The result bundles show, on both simulators,
+`DatabaseLaunch`, `LedgerDatabase · preflight`, the tester's six F7-S2-1 tests and their #29 foreign-file test,
+`twoOpensAtOnce_oneRow` (10 arguments) and `boots_unlessHostingUnitTests`, all passed. Run 1 failed only
+`twoOpensAtOnce_oneRow` (the busy timeout above). **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29`
+"will never be executed" and its `@Test` macro-expansion line.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 195 / 203 | 96.05 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 37 / 37 | 100.00 % | 80 % | ✓ |
+| LedgerPersistence | 2438 / 2455 | 99.30 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 7983 / 8100 | 98.55 % | 80 % | ✓ |
+
+**Release build:** `swift build -c release`: exit 0 (39 s). **Host:** the whole package passes except
+`LedgerDesignTests`' Archivo font suites (host only, as on `main`).
+
+**Simulator launch** (`f07s2/launch-check.sh` under the lock, the gate's builds, the apps uninstalled first): both
+apps are still running after 6 s with no crash report. Each has `Application Support/Database/ledger.sqlite` (+
+`-wal`, `-shm`) holding 224 `exercise` rows and one `device` row (`phone|iPhone`, `watch|Apple Watch`). Screenshots
+show the "Ledger" placeholder, and `-LEDGER_UITEST 1` creates `tmp/LedgerUITest-<uuid>/ledger.sqlite`.
+
+**Open questions**
+1. The preflight costs one extra read-only open on every launch (a single statement pair; not timed). Recommend
+   F20 include it in the device launch timing; no change now.
+2. A file with Ledger's migrations but a damaged schema (a known id whose tables were altered) passes the preflight
+   and fails, or partly writes, in a later migration, as the new `LedgerStores.open` doc says. Recommend
+   GRDB's `hasSchemaChanges`-style check only if F28's repair tooling needs it.
+
+
+### S2 fix round 2 (G1 implementer, 2026-10-04)
+
+From `test-findings.md` "# Slice S2 — close-out round" (F7-S2-3), with the orchestrator's binding decision: the launch
+owns its steps; scene-phase calls only wait for them. Branch at `2d41d18`.
+
+**What changed** (`LedgerPersistence/DatabaseLaunch.swift`)
+- `running: [LaunchStep: Task<Void, Never>]` and `ended: Set<LaunchStep>` (`:52`–`:56`) replace round 1's bookkeeping.
+  `task(for:retrying:_:)` (`:125`) returns the step's running task. If none is running, it starts a new plain `Task`,
+  which the launch owns, when the step has not run, or has run and `retrying`; otherwise it returns nil. The check
+  and the start happen with no suspension between them on the main actor, so two calls never start a step twice.
+- `resume(isForeground:)` (`:103`):
+  - reopens on a foreground call after the first (#29);
+  - gets the seed's task, which may be retried only on a foreground call while unseeded (`:114`, #28), and
+    awaits it;
+  - then gets and awaits the settings' task (never retried).
+
+  A call that finds a step running awaits that same task, so it returns only once every step it reached has an
+  outcome. Cancelling a call cancels no step: the step's task is not the caller's, so GRDB never sees the
+  cancellation.
+- `seedCatalog(_:)` and `loadSettings(_:)` are plain methods: record `.began`, run, record `.failed` on an error.
+
+**Removed:**
+- the `Outcome` enum (`attempted`/`cancelled`/`elsewhere`);
+- the `CancellationError` catch;
+- the `running` set;
+- `hasFinishedFirstPass`;
+- `hasLoadedSettings` (a settings step that ended is never rerun).
+
+I also dropped the two `Task.isCancelled` guards I had planned (a cancelled caller starting no further step). A
+caller's `await task.value` is not interrupted, so a cancelled caller waits like any other and then goes on to the
+next step, which it may start; the step runs once either way. Mutant N5 (removing the middle guard) survived
+because the guard changed nothing observable. So, per the decision ("remove what's no longer needed"), a call
+starts or joins every step, and cancelling it changes nothing for the steps. The wait does not end early on
+cancellation: SwiftUI does not await a cancelled `.task`, and a step is bounded by the 5 s busy timeout.
+
+**Sanctioned edit** (approved 2026-10-04; the tester audits it): `LaunchCloseoutAdversarialTests.cancelledPass_thenBackground_runsIt`
+and its `Watch…` twin keep their setup. They drop "not seeded right after the cancelled call", which is now a race,
+because the seed is no longer cancelled. "began loadSettings" twice becomes **each step begins exactly once** (seed
+and settings): the old count of 2 encoded the abandoned-then-restarted mechanism this round removes. They keep "no
+`failed…`" and "seeded after the background call", and add "`composition.settings` equals the stored settings".
+No other tester test changed (`git diff 2d41d18 -- '*Adversarial*'`: these two files only).
+
+**Proving tests**
+- The tester's F7-S2-3 repro `seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its `Watch…` twin pass
+  unedited. So do every round-1 and close-out tester test and the random-phase model, on the host and on both
+  simulators.
+- `DatabaseLaunchConcurrencyTests` (new suite, my tests):
+  - `cancelledCaller_neverCancelsTheStep`: the seed waits for a held writer, the caller is cancelled, and the seed
+    still seeds, with no failure;
+  - `cancelledBeforeStarting_runsEveryStepOnce` (replaces round 1's `cancelledPass_isNotAttempted_andRunsAgain`);
+  - `overlappingCall_waitsForTheRunningStep`: a call that finds the seed running begins the settings only after
+    the seed's outcome;
+  - `overlappingCalls_startEachStepOnce`.
+
+**Mutants** (one at a time, scratchpad copy `f07s2/mut2/`, since deleted):
+
+| Mutant | Result |
+|---|---|
+| N1 the step owned by the caller (its cancellation cancels the step) | killed: `cancelledCaller_neverCancelsTheStep`, `cancelledBeforeStarting_…`; tester's F7-S2-3, `cancelledPass_thenBackground_runsIt`, `cancelledFirstResume_logsNoFailure` |
+| N2 an overlapping caller does not wait for the running step | killed: `overlappingCall_waitsForTheRunningStep` |
+| N3 a failed seed retried in the background | killed: `seedFailure_carriesOn_thenRetriesInTheForeground`; tester's `randomPhases_matchTheModel` |
+| N6 the seed not awaited before the settings | killed: 8 tests (e.g. `open_thenFirstPass`, `overlappingCall_…`, the model) |
+| N4/N5 the cancelled-caller guards removed | the guards were removed from the product (above), so these mutants no longer exist |
+
+**Gate.** Full `scripts/check.sh` under the lock: **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch). Summary: tools 1 s, format 0 s, lint 59 s, iOS build 20 s, iOS tests 211 s, watchOS build 17 s, watchOS
+tests 179 s, coverage 1 s, total 489 s. **Warnings:** only F05's `PayloadVersionAdversarialTests.swift:29`.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 195 / 203 | 96.05 % | 90 % | ✓ |
+| LedgerDesign | 1946 / 2002 | 97.20 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 37 / 37 | 100.00 % | 80 % | ✓ |
+| LedgerPersistence | 2441 / 2458 | 99.30 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 7986 / 8103 | 98.55 % | 80 % | ✓ |
+
+**Release build:** `swift build -c release`: exit 0 (39 s). **Host:** the whole package passes except
+`LedgerDesignTests`' Archivo font suites (host only, as on `main`).
+
+**Code lines** (F05's method): this round +45 / −41 product, +101 / −31 tests. Whole slice vs `f991d69`: **product
+632 added, 18 removed**.

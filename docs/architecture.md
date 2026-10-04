@@ -152,10 +152,16 @@ targets only.
 ## 4. Runtime topology
 
 ### iPhone app (`Ledger`)
-- `LedgerApp` (`@main`) builds the dependency graph once, opens the database,
-  runs migrations, assigns `HKHealthStore.workoutSessionMirroringStartHandler`
-  **synchronously at the top of launch** (R1 §2.5 gotcha 4), and registers the
-  WatchConnectivity session delegate.
+- `LedgerApp` (`@main`) builds the dependency graph once in `App.init`
+  (`AppComposition`, F07): it assigns
+  `HKHealthStore.workoutSessionMirroringStartHandler` **synchronously at the
+  top of launch** (R1 §2.5 gotcha 4), then opens and migrates the database.
+  Seeding, settings and the WatchConnectivity session delegate follow the
+  first frame.
+- Both apps share the database half of their launch: `DatabaseLaunch`
+  (`LedgerPersistence`, a `@MainActor` observable type) opens the file (product
+  decision #29), seeds the catalog (#28), loads the settings and retries on
+  return to the foreground; each composition root keeps its platform steps.
 - Root view: `TabView` with four tabs (Today · Program · Library · History),
   each owning a `NavigationStack` keyed by that feature's `Route` enum.
 - Active workout is presented as a full-screen cover over the tab root;
@@ -164,9 +170,11 @@ targets only.
   handler (10 s budget) and updated sparsely (R1 §4.1).
 
 ### Watch app (`LedgerWatch`)
-- `WKApplicationDelegate` handles `handle(_ workoutConfiguration:)`
-  (phone-initiated start), `handleActiveWorkoutRecovery()`, and
-  `applicationDidFinishLaunching` wiring.
+- `LedgerWatchApp` opens the database synchronously in `App.init`
+  (`WatchComposition`, F07); seeding, settings and WatchConnectivity follow
+  the first frame. `WKApplicationDelegate` (`WatchAppDelegate`) handles
+  `handle(_ workoutConfiguration:)` (phone-initiated start) and
+  `handleActiveWorkoutRecovery()`.
 - Single `NavigationStack`; screens map 1:1 to the prototype's watch modes
   (idle, ready, rest, list, end, summary) driven by `WorkoutState`.
 - The watch is the **primary** HealthKit session and the **authoritative**
