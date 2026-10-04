@@ -125,7 +125,7 @@
         func window(frame: CGRect) -> UIWindow
     }
 
-    private struct SceneLessWindow: WindowFactory {
+    struct SceneLessWindow: WindowFactory {
         static func make(frame: CGRect) -> UIWindow {
             let factory: any WindowFactory = SceneLessWindow()
             return factory.window(frame: frame)

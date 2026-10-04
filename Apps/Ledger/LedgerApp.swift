@@ -9,7 +9,7 @@ struct LedgerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppRootView(composition: composition)
+            AppRoot(composition: composition)
         }
     }
 }

@@ -681,3 +681,211 @@ behaviour. One clause naming F7-S2-3 ("a step must outlive a cancelled `.task`")
 **Still approved for G3: 0 Blocking, 0 Should fix, 4 Nits.** Both prior Should-fix findings are fixed, the shared
 launch is correct and under the coverage gate, and the preflight's rule is sound. The G5 stop for Pete stands only
 for the #29 copy (open question 5, and N-a if he wants it); his §4 decision is already recorded.
+
+# Slice S3 review
+
+Reviewer pass (G3) on `feat/F07-s3-roots` at `c9b978a`, diff `git diff 2ca2317..c9b978a` (50 files). Scope: the
+roots and Today placeholders, `DebugMenu`, `DiagnosticsPage` and the loader, the umbrellas' diagnostics,
+`DatabaseDiagnostics`, `HealthAuthorization`, `ProcessStart` and launch-to-first-frame, the preview registries,
+`PreviewScan` and `renderPreview`, the UI tests, the snapshots, the M0 screenshots and the doc edit. I changed no
+code or test, and I ignored the tester's untracked files.
+
+### What I ran
+
+- **Host tests** on a `git archive c9b978a` copy, filter
+  `PreviewTests|DiagnosticsTests|TodaySnapshot|DatabaseDiagnostics|HealthAuthorization|ProcessStart|AppComposition|WatchComposition|LaunchOrder`.
+  All of the slice's suites pass: both apps' Diagnostics, Previews and Today snapshot suites (the snapshot suites
+  draw no cell on the host), Database diagnostics, Health authorization, Process start, and the composition and
+  launch-order suites.
+- **One probe, in the copy only.** `renderPreview` of a view that reads `@Dependency(\.programRepository)` records
+  "`@Dependency(\.programRepository)` has no test implementation". See SF1.
+- **The M0 screenshots,** looked at: `watch-today.png` is "Today" on the watch ground. `iphone-diagnostics.png`
+  shows the UI test's temporary file, a device UUID, "Not determined", 2280 ms, "live", and 224 `exercise` and 2
+  `grdb_migrations` rows.
+- **The test plans:** `PR` and `PR-Watch` select `Smoke` only in the UI targets, and the Nightly plans run every UI
+  test.
+- **Size** by F05's method; see "Size".
+- **Not run:** `xcodebuild`, the simulators and the UI tests. The orchestrator's gate is green, its Release build
+  exits 0, and the notes' Nightly UI runs pass.
+
+### Blocking
+
+None.
+
+### Should fix
+
+**S3-SF1. `renderPreview` draws in the test context, so the first preview that reads a dependency fails the smoke
+test instead of using its preview value.**
+`LedgerKit/Sources/LedgerSnapshotTesting/PreviewRendering.swift:11-28`, called by every
+`PreviewTests.preview_renders`.
+- Xcode runs a `#Preview` in swift-dependencies' `.preview` context, where S1's keys give their seeded fakes.
+- The smoke test runs in `.test`, where every key's default `testValue` reports an issue. The probe shows it on
+  `programRepository`.
+- S3's previews read no key, so nothing fails yet. But F08–F15's store-driven previews (the reason S1 built the
+  `previewValue`s) would fail criterion 8's test for a reason unrelated to the preview. The obvious workaround,
+  binding keys by hand in each test, defeats "renders as the preview does".
+
+*Fix* (about 3 lines plus a test):
+1. Build and draw the view inside `withDependencies { $0.context = .preview } operation: { … }`.
+2. Add one `renderPreview` test whose view reads a store key and expects no issue.
+3. Optionally, one line in testing-strategy's preview section.
+
+### Nit
+
+**S3-N1. `DesignPreview` ships in Release** (`LedgerDesign/Components/Components+Previews.swift:6-97`).
+`AppPreview` and `WatchPreview` are inside `#if DEBUG`, but LedgerDesign's registry, and the galleries it names, are
+not. F06's `#Preview`s were ungated before, so this is consistency rather than a regression. *Fix (optional):* wrap
+the file's registry in `#if DEBUG`, as the umbrellas do.
+
+**S3-N2. The scan checks names, not bodies** (`LedgerTestSupport/Previews/PreviewScan.swift:32-49`). A
+`#Preview("Today") { SomethingElse() }` passes `registry_listsEveryPreview`, while the smoke test renders the
+registry's `TodayPlaceholder`. *Fix (optional):* the scan also requires the declaration's body to contain
+`.<case>.content`. Or leave it to code review, since the pattern is visible at every `#Preview`.
+
+**S3-N3. The committed Diagnostics screenshots carry the Mac's absolute simulator path**
+(`screenshots/iphone-diagnostics.png`: `/Users/…/CoreSimulator/…`). Harmless in a private repo. If the repository is
+ever public, retake them with a plain launch, whose path is the container's.
+
+**S3-N4. The watch's #29 screen sits in a bare `ScrollView`** (`LedgerWatchAppKit/WatchRoot.swift:44-49`), and the
+iPhone's has `.background(LedgerColor.ground)`. The watch's ground is black by default, so nothing is visible, but
+the iPhone version paints its ground explicitly and the watch's doesn't. Add `.background(LedgerColor.watchGround)`
+for symmetry.
+
+### Questions 1 and 2
+
+**1. The debug menu and Diagnostics page in `LedgerDesign/Gallery` (deviation 2): accept.**
+- `LedgerDesign` is the only UI module both umbrellas import. A feature module can't host it, because
+  `LedgerWatchAppKit` sees none of the iOS features.
+- What moved there knows no Persistence, Health or Dependencies type. `DiagnosticsPage` is a list of label/value
+  strings (a component), and `DebugMenu` is two rows into `DesignGallery`, which was already Debug-only in that
+  module.
+- The domain knowledge stays in each umbrella (`AppComposition+Diagnostics.swift`, about 34 lines each), which is
+  where the brief's `LedgerAppKit/DebugMenu.swift` wanted it.
+- Everything is under `#if DEBUG`, and Release builds.
+- The alternatives without new targets are per-umbrella copies of the page and menu: about 120 duplicated lines,
+  as the notes measured (649 against 560).
+- A rename to make the generality explicit (`DiagnosticsPage` → a generic "label/value page") is not worth it now.
+
+**2. Criterion 8's mechanism (registry, scan, `renderPreview`): proportionate and robust; keep it.**
+- **Why a registry.** Swift gives tests no way to enumerate `#Preview`s. The alternatives are a runtime scan of the
+  macro-generated `PreviewRegistry` conformances, which is heavier and tied to an Xcode-private shape, or
+  re-rendering only what the snapshot suites cover, which misses previews.
+- **Cost per new preview.** One enum case plus `.content` in the `#Preview` body: 2–3 lines, about 155 product
+  lines across the three modules so far.
+- **Robustness.**
+  - The scan fails loudly in three cases: an unregistered preview, an unnamed one, and a module with previews but
+    no registry (`everyModuleWithPreviews_isRegistered`).
+  - Its line rule (a declaration starts a line, with an optional literal name) is pinned by `scan_parsesDeclarations`.
+  - `renderPreview`'s iOS window path avoids the `ImageRenderer` release trap, which is a SwiftUI quirk, not a design
+    flaw.
+- **Maintainability for F08–F15** needs SF1, and N2 is optional.
+- **A lighter design that still meets "every `#Preview` renders"** would be one registry per module without the
+  scan. It saves about 60 lines of test support, but loses the guard that makes the registry complete, so it is
+  not worth it.
+
+### Correctness
+
+- **State → view** (`AppRoot.swift:24-38`, `WatchRoot.swift`): `.ready` → Today (with the sheet in Debug),
+  `.databaseUnavailable` → #29's screen, `.idle` (only a process hosting unit tests) → the ground. Today, and so the
+  debug menu, exists only once the database is open.
+- **No early key reads (S2-N2): holds.**
+  - Today reads nothing.
+  - Diagnostics reads `composition.stores`, never a store key. `diagnostics_readTheCompositionsStores` runs with no
+    key bound, so a key read would fail it by name.
+  - The only dependency read is `@Dependency(\.context)`, which `prepareDependencies` never sets, and it happens
+    after `.ready`.
+- **Launch-to-first-frame (#30) is recorded once.** `rootAppeared()` is guarded by `launchToFirstFrame == nil`
+  (`AppComposition.swift:109-117`), so a later appearance (state change, scene reconnect) does not overwrite it, and
+  `rootAppeared_measuresOnce` pins that. It runs in Release too and logs at notice level, as #30 wants. It starts at
+  the kernel's process start, so dyld, `App.init` and the synchronous open count.
+- **The Health probe never asks.** `HealthAuthorization.workouts()` reads `isHealthDataAvailable()` and
+  `authorizationStatus(for:)` only. It is evaluated only when Diagnostics opens, in the app.
+- **Debug-only code is absent from Release.** `DebugMenu`, `DiagnosticsPage`, the loader, the umbrellas'
+  `diagnostics()`, the `.sheet` and `.onLongPressGesture` are all under `#if DEBUG`, and the orchestrator's Release
+  build exits 0. The exception is `DesignPreview` (N1).
+
+### UI tests
+
+- **The PR/Nightly split is right for the CI budget.**
+  - PR `Smoke.test_launchesToToday` (about 6 s per platform) fails on any regression that keeps the app from
+    reaching `.ready`: an open failure shows #29's screen, which has no `today.title`.
+  - A seeding or settings regression still reaches Today, but the package suites catch it on every PR
+    (`AppCompositionTests`, `DatabaseLaunchTests`, `DiagnosticsTests`).
+  - The Nightly `DebugMenu` tests add the on-screen proof: ≥ 200 rows, `live`, a non-nil device id, and the path.
+- **The identifiers** (`today.title`, `debug.menu.*`, `debug.diagnostics.*`) follow §2.7's dotted form. They are
+  strings because the UI targets link no package product (open question 2).
+- **`LaunchPerformance`** uses a new temporary database on each of its five launches, so it measures first-launch
+  work (migrations) every time. That is pessimistic and consistent, and it reports only (#30).
+- **What none of them check:** criterion 1's "in Application Support". The UI tests use the temporary file. It is
+  covered by the package's `liveEnvironment_databaseURL` and the notes' plain `simctl` launches (the
+  `iphone-today` and `watch-today` screenshots).
+
+### Deviations
+
+| Deviation (notes) | Verdict |
+|---|---|
+| 1. `isTesting` false under XCUITest (S2-N-c settled, the context pinned by the UI tests) | Accepted |
+| 2. Debug UI in `LedgerDesign/Gallery` | Accepted (question 1) |
+| 3. Diagnostics reads the composition's stores | Accepted: the strongest form of S2-N2 |
+| 4. First frame ends at the root's first `onAppear` | Accepted |
+| 5. `health` a defaulted parameter | Accepted: the package host has no entitlement (S2 deviation 8) |
+| 6. The page draws, a loader reads; iOS renders in a window | Accepted: it is SwiftUI's trap, and the split matches F09's store-driven screens |
+| 7. One page in watch type | Accepted |
+| 8. `DebugMenu` UI tests Nightly only | Accepted (open question 5) |
+| 9. `.idle` renders the ground | Accepted |
+
+### Open questions
+
+Category: **(a)** settle now, in this slice or its PR; **(b)** hand off to a later brief; **(c)** Pete decides.
+
+| # | Question | Recommendation | Category |
+|---|---|---|---|
+| 1 | The XCUITest launch figure (about 2.5 s) against the lifter's launch | Agree: report only. F20 times a plain cold launch on a device, and F26 gates it. | (b) F20 / F26 |
+| 2 | Testing-strategy §2.7 drift | One line each: `Launch.coldLaunchUnder600ms` → `LaunchPerformance.test_launchToFirstFrame` (reports, #30); the watch's `Smoke.launchesToIdle` → `launchesToToday` until F18; identifiers are strings because the UI targets link no product (replacing the "link the umbrellas, share enums, verify in F01" sentence). | (a) orchestrator, docs |
+| 3 | Previews with an appearance action | Agree: previews draw a state, and the root loads it. Add that line to testing-strategy beside SF1's. | (a) docs, with SF1 |
+| 4 | Debug menu in `LedgerDesign` | Accept (question 1). | (a) |
+| 5 | `DebugMenu` UI tests in PR? | No: Nightly only, as now. | (a) |
+| 6 | The watch Diagnostics' long path | Leave it: Debug only, and it scrolls. A middle-truncated path would be the cheap fix if it bothers. | (a) leave |
+| 7 | Size 560 over the 500 target | It complies with §10 (see "Size"). The PR description says so and names the split it considered. | (a) |
+
+### Considered and not raised
+
+- **The roots and the diagnostics builders are near-twins across the umbrellas** (about 100 lines). The graph
+  forces it: no module both umbrellas import can see the compositions, SwiftUI, LedgerHealth and LedgerDesign
+  together. Sharing would need a new target, which is not worth it for placeholders that F09 and F18 replace.
+- **The `isDebugMenuShown` state and the `TodayPlaceholder` closure exist in Release** and do nothing there, since
+  the gesture is compiled out. That costs one `@State` and keeps the call sites free of `#if`.
+- **`ProcessStart` reads `sysctl(KERN_PROC_PID)` for its own process,** which is permitted. It returns nil rather
+  than guess, and Diagnostics then says "Not measured".
+- **`DatabaseDiagnostics` counts every table** in one read with quoted identifiers. Debug-only, on demand.
+- **`.onAppear` on a conditional root** may fire again when the state changes, but the guard makes that harmless.
+
+### Size
+
+By F05's method (`git diff -U0 2ca2317..c9b978a`, excluding blank lines and whole-line comments):
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerAppKit` | 127 | 26 |
+| `LedgerWatchAppKit` | 126 | 27 |
+| `LedgerDesign` | 228 | 31 |
+| `LedgerPersistence` / `LedgerHealth` / `LedgerDependencies` | 37 / 26 / 13 | 0 |
+| `Apps/*`, `Package.swift` | 3 | 3 |
+| **Product** | **560** | **87** |
+| of which `*+Previews.swift` | 147 | |
+| `LedgerTestSupport` / `LedgerSnapshotTesting` | 41 / 25 | 0 / 1 |
+
+- **560 added is confirmed.** The notes' 36 removed treats `AppRootView` → `AppRoot` and `WatchRootView` →
+  `WatchRoot` as renames. `git diff` without rename detection counts the old files' 51 lines as removed. Either way
+  the net is under 525.
+- **It complies with §10:** over the 500 target, under ~1,000, the split considered is named, and about 147 lines
+  are preview registries. No split is warranted.
+
+### Verdict
+
+**Approved for G3: 0 Blocking, 1 Should fix, 4 Nits.**
+- Each part of criteria 1, 2, 7 and 8 (and the DoD screenshots) has a test or a screenshot. S2-N2 holds by
+  construction, #30 is measured once and logged in Release, the Health probe never prompts, and every Debug-only
+  surface is compiled out of Release.
+- SF1 is a 3-line fix that keeps criterion 8's mechanism usable for F08–F15, and should land in this PR.
+- G5: this slice carries no new ADR or product decision. Open question 2 is a docs edit for the orchestrator.

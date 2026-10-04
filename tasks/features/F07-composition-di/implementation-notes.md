@@ -787,3 +787,273 @@ tests 179 s, coverage 1 s, total 489 s. **Warnings:** only F05's `PayloadVersion
 
 **Code lines** (F05's method): this round +45 / −41 product, +101 / −31 tests. Whole slice vs `f991d69`: **product
 632 added, 18 removed**.
+
+## Slice S3 — roots, Today, debug menu, UI tests (G1 implementer, 2026-10-04)
+
+Branch `feat/F07-s3-roots`, cut from `feat/F07-s2-boot` at `2ca2317` (S2 is PR #24). No commits.
+
+### What landed
+
+- **Roots.** `AppRootView` → `AppRoot` (`LedgerAppKit/AppRoot.swift`), `WatchRootView` → `WatchRoot` (`git mv`); the
+  apps call them. Each renders the composition's state: `.ready` → the Today placeholder, `.databaseUnavailable` →
+  decision #29's screen (now `DatabaseUnavailableView`, unchanged copy), `.idle` (a process hosting unit tests) →
+  the ground colour. The async launch stays `.task(id: scenePhase)`; `.onAppear` calls `composition.rootAppeared()`.
+- **Today placeholders** (`LedgerAppKit/TodayPlaceholder.swift`, `LedgerWatchAppKit/TodayPlaceholder.swift`): the
+  title "Today" alone (`.display` on the phone, `.watchTitle` on the watch, ink on ground; identifier `today.title`).
+  In Debug a long press on the title opens the debug menu (`.onLongPressGesture` under `#if DEBUG`). F09/F18 replace
+  them.
+- **Debug menu and Diagnostics** (`#if DEBUG`), shared by both apps in `LedgerDesign/Gallery/` beside `DesignGallery`:
+  - `DebugMenu` (a sheet from `AppRoot`/`WatchRoot`): a `NavigationStack` of two `HairlineRow`s, "Design gallery" →
+    `DesignGallery`, "Diagnostics" → `DiagnosticsPage`. Identifiers `debug.menu.designGallery`,
+    `debug.menu.diagnostics`.
+  - `DiagnosticsPage`, `DiagnosticsSection`, `DiagnosticsLine`: sections of label/value lines in the phone's or the
+    watch's type roles; each value carries `debug.diagnostics.<key>`. The page only draws; `DiagnosticsLoader` (the
+    menu's destination) reads the sections in `.task` when it appears.
+  - Each umbrella builds the sections (`AppComposition+Diagnostics.swift`, `WatchComposition+Diagnostics.swift`):
+    "App" = database path, device id, Health, launch to first frame, swift-dependencies' context; "Rows" = every
+    table's row count. It reads `composition.stores` (the `LedgerStores` value), **never a dependency key**, so S2-N2
+    holds by construction: the menu is reachable only from Today (`.ready`), and even then reads no key.
+- **LedgerPersistence** `DatabaseDiagnostics.swift`: `LedgerStores.diagnostics()` — path, device id, and
+  `SELECT COUNT(*)` per table from `sqlite_master` (SQLite's own `sqlite_*` tables left out, names quoted), one read.
+- **LedgerHealth** `HealthAuthorization.swift`: `HealthAuthorization` (`unavailable`, `notDetermined`, `denied`,
+  `authorized`), `init(HKAuthorizationStatus)`, and `workouts(isAvailable:status:)`, whose defaults read
+  `HKHealthStore.isHealthDataAvailable()` and `authorizationStatus(for: .workoutType())` — the sharing status, as
+  HealthKit reports no read status. It never requests authorization.
+- **Launch to first frame (decision #30).** `LedgerDependencies/ProcessStart.swift`: the kernel's start time of the
+  process (`sysctl KERN_PROC_PID`). Each composition's `Environment` gains `processStart` (memberwise default nil;
+  live = `ProcessStart.date()`); `rootAppeared()` records `launchToFirstFrame = now − processStart` once and logs
+  "First frame N ms after the process started" at notice level (category `launch`), so it is readable in Release too.
+- **Preview registry (criterion 8).** Each module with previews has a registry enum, one case per `#Preview`, whose
+  `content` the `#Preview` body shows: `DesignPreview` (LedgerDesign, F06's 18 + `DebugMenu`, `DiagnosticsPage`; the
+  file's previews now read `DesignPreview.x.content`), `AppPreview` and `WatchPreview` (Today, Database unavailable).
+  `LedgerTestSupport/Previews/PreviewScan.swift` reads `LedgerKit/Sources` (as `ModuleBoundaryTests` reads its
+  module): each `#Preview` at the start of a line, its string-literal name or nil; `registeredModules` lists the
+  modules whose tests check a registry. `LedgerSnapshotTesting/PreviewRendering.swift`: `renderPreview(_:size:)`.
+- **UI tests** (string identifiers; the UI test targets link no package product):
+  - `LedgerUITests/Smoke.test_launchesToToday` and `LedgerWatchUITests/Smoke.test_launchesToToday` replace the
+    "Ledger" placeholder test (PR plans, as before).
+  - `LedgerUITests/DebugMenu` and `LedgerWatchUITests/DebugMenu` `.test_diagnostics_showsTheSeededCatalog`: long press
+    on the title, open Diagnostics, `rows.exercise` ≥ 200, path ends `/ledger.sqlite`, context `live`, launch "N ms",
+    device id a non-nil UUID; attaches "Today" and "Diagnostics" screenshots (kept). Nightly only.
+  - `LedgerUITests/LaunchPerformance.test_launchToFirstFrame`: `XCTApplicationLaunchMetric(waitUntilResponsive:
+    true)` over 5 launches, then attaches the in-app figure from Diagnostics. No baseline, so it reports and never
+    gates (#30). Nightly only.
+  - Every UI test launches with `-LEDGER_UITEST 1`. Test plans unchanged: the PR plans select `Smoke`, the Nightly
+    plans run every UI test.
+- **Snapshots**: `TodaySnapshotTests` in `LedgerAppKitTests` (phone, light and dark, `.large`: 2 references) and
+  `LedgerWatchAppKitTests` (46 mm at its default size: 1 reference), through `assertLedgerSnapshot`.
+  `snapshotTestTargets` gains `LedgerAppKit`, `LedgerWatchAppKit` (an `exclude`, not a graph edge; the graph checker
+  passes unchanged). Recorded with `check.sh --record-snapshots` under the lock: only the 3 new PNGs appeared; every
+  existing reference re-recorded byte-identical.
+- **Docs**: architecture §14's Diagnostics line (it said "in Settings"; A-decision drift, now the debug menu and what
+  the page shows).
+- **Screenshots (M0 exit)**: `tasks/features/F07-composition-di/screenshots/` — `iphone-today.png`,
+  `watch-today.png` (plain `simctl` launches on the real Application Support database: 224 `exercise` rows, one
+  `device` row each), `iphone-diagnostics.png`, `watch-diagnostics.png` (the nightly `DebugMenu` UI tests'
+  attachments, so the path is the UI test's temporary file).
+
+### Decisions and deviations
+
+1. **N-c settled: `isTesting` is false in an XCUITest-launched app.** The `DebugMenu` UI tests read
+   swift-dependencies' context from Diagnostics and it is `live` on both simulators. No `$0.context = .live` was
+   needed; the UI tests now pin it (they fail if a later Xcode makes it `test`). S2-N1's `-LEDGER_UITEST` override in
+   `launch()` stays as a belt.
+2. **DebugMenu and the Diagnostics page live in `LedgerDesign/Gallery`, not `LedgerAppKit/DebugMenu.swift`** (the
+   brief's Touches). Both apps need the same menu and page; `LedgerDesign` is the one UI module both umbrellas share,
+   and it already holds the Debug-only `DesignGallery` the menu opens. The page only knows labelled strings; what
+   goes in it (Persistence, Health, Dependencies types) is assembled in each umbrella, ~34 lines each. A first cut
+   with per-umbrella views measured 649 product lines with ~200 duplicated; this one is 560.
+3. **Diagnostics reads the composition's `LedgerStores`, not the store keys** (S2-N2): the strongest form of "no read
+   before ready". `DiagnosticsTests.diagnostics_readTheCompositionsStores` runs it with no key bound, so any key read
+   would fail the test naming the key.
+4. **Launch-to-first-frame ends at the root's first `onAppear`** (the same run-loop turn the first frame commits in),
+   and begins at the kernel's process start, so it includes dyld, `App.init` and the synchronous database open.
+5. **`health` is a defaulted parameter of `diagnostics(health:)`**: the package test host has no HealthKit
+   entitlement (S2 deviation 8), so the tests pass the value; the app reads HealthKit.
+6. **The page draws; a separate loader reads.** Two gate runs crashed the xctest process in `ImageRenderer.deinit`
+   (an `AppearanceEffect.willRemove` assertion) on the `DiagnosticsPage` preview, first on iOS, then on watchOS: an
+   `ImageRenderer` that drew a scroll view holding an appearance action (`.task`) traps when it is released. So the
+   page has no `.task`; `DiagnosticsLoader` holds it, and only the menu's destination makes one. Also, on iOS,
+   `renderPreview` hosts the preview in a `UIHostingController` in a window and draws the hierarchy, as a preview
+   shows it and as `accessibilityElements` hosts views (its `SceneLessWindow` is now internal, not private); watchOS
+   and the Mac host draw with `RenderedImage`. The trap is SwiftUI's; a preview with a `.task` in a scroll view would
+   need the iOS path or the same split (open question 3).
+7. **Watch Diagnostics is the same page in watch type, not a cut-down list**: one shared page is less code than a
+   second, smaller one, and the watch UI test reads the same identifiers.
+8. **The `DebugMenu` UI tests are Nightly only** (≈ 10 s each); the PR plans keep `Smoke` (≈ 6 s). The PR gate still
+   proves the data half through `AppCompositionTests`/`WatchCompositionTests` and the new `DiagnosticsTests`.
+9. **`.idle` renders the ground colour**, not Today: only a process hosting unit tests is idle, and Today there would
+   offer a debug menu with no database.
+
+### Criteria → tests
+
+| Criterion | Test |
+|---|---|
+| 1 — iOS launches to Today; file in Application Support; ≥ 200 rows; launch time measured (nightly) | `LedgerUITests/Smoke.test_launchesToToday` (PR); `LedgerUITests/DebugMenu.test_diagnostics_showsTheSeededCatalog` (on screen: 224 ≥ 200, `/ledger.sqlite`, context `live`); `LedgerUITests/LaunchPerformance.test_launchToFirstFrame` (nightly, reports); package: `AppCompositionTests.boot_opensTheFile_andBindsTheStores` (S2), `DiagnosticsTests.diagnostics_readTheCompositionsStores`, `rootAppeared_measuresOnce`, `noStartTime_measuresNothing`; `DatabaseDiagnosticsTests` (2); `ProcessStartTests` |
+| 2 — the watch, its own database | `LedgerWatchUITests/Smoke.test_launchesToToday` (PR-Watch); `LedgerWatchUITests/DebugMenu.test_diagnostics_showsTheSeededCatalog` (nightly); `LedgerWatchAppKitTests` `Watch diagnostics` (5, the iPhone's twins, kind `watch`) |
+| 7 — debug menu (Debug only, long press on the title) → DesignGallery and Diagnostics (path, row counts, device id, health) | both `DebugMenu` UI tests (long press, both rows present, Diagnostics values); `DiagnosticsTests` (both umbrellas: lines, labels, "Not open" before the database opens, the error when the database cannot be read); `HealthAuthorizationTests` (3); `PreviewTests.diagnosticsLine_formats`; Release builds without any of it (`swift build -c release`) |
+| 8 — every `#Preview` renders | `PreviewTests` in `LedgerDesignTests` (20 cases), `LedgerAppKitTests` (2), `LedgerWatchAppKitTests` (2): `registry_listsEveryPreview` (scan == registry, no unnamed, no duplicate) and `preview_renders` (every case); `LedgerDesignTests` `everyModuleWithPreviews_isRegistered` (package-wide: a module with a `#Preview` and no registry fails) and `scan_parsesDeclarations` |
+| Snapshot — Today placeholder light/dark | `TodaySnapshotTests` (phone light + dark; watch 46 mm) |
+
+### Code lines (F05's method: added lines of `git diff -U0 2ca2317`, new files whole, blank and whole-line comment lines excluded)
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerAppKit` (root, Today, diagnostics sections, previews, launch timing) | 127 | 1 |
+| `LedgerWatchAppKit` (the same) | 126 | 1 |
+| `LedgerDesign` (`DebugMenu` 39, `DiagnosticsPage` and loader 80, the preview registry rewrite of `Components+Previews.swift`) | 228 | 31 |
+| `LedgerPersistence` (`DatabaseDiagnostics`) | 37 | 0 |
+| `LedgerHealth` (`HealthAuthorization`) | 26 | 0 |
+| `LedgerDependencies` (`ProcessStart`) | 13 | 0 |
+| `Apps/Ledger`, `Apps/LedgerWatch`; `Package.swift` | 3 | 3 |
+| **Product** | **560** | **36** |
+| of which `*+Previews.swift` (registries and `#Preview`s) | ≈ 155 | |
+| `LedgerTestSupport` (`PreviewScan`) / `LedgerSnapshotTesting` (`renderPreview`) | 41 / 25 | 0 / 1 |
+| Tests (package and UI) | 479 | 8 |
+
+Over the 500 target by 60, under ~700: the PR description says so. Without the preview files it is about 406. The
+split considered was "previews and registry (criterion 8)" as its own slice; not taken, because the registry has to
+list S3's own new previews, so it would land after S3 and edit the same files again.
+
+### Gate and coverage
+
+Full `scripts/check.sh` under the simulator lock, run 4: **exit 0, `check.sh OK`**; 17 test targets ran and passed
+(PR), 8 (PR-Watch). Summary: tools 0 s, format 0 s, lint 63 s, iOS build 21 s, iOS tests 205 s, watchOS build 13 s,
+watchOS tests 183 s, coverage 1 s, total 487 s. **No new warnings** (the gate log has none; the scratch builds show
+only F05's `PayloadVersionAdversarialTests.swift:29` "will never be executed").
+- Run 1 was stopped by me before it finished (a redesign, decision 2). Runs 2 and 3 failed only
+  `PreviewTests.preview_renders(.diagnosticsPage)` (the `ImageRenderer` trap, decision 6), on iOS and then on watchOS.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 204 / 213 | 95.77 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8210 / 8336 | 98.48 % | 80 % | ✓ |
+
+(LedgerAppKit and LedgerWatchAppKit stay excluded from the gate, as before.)
+
+**Release build:** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+exit 0 (30 s). **Host:** every new and touched suite passes on the Mac (`PreviewTests`, `DiagnosticsTests`,
+`TodaySnapshotTests` (no cell drawn on the host), `DatabaseDiagnosticsTests`, `HealthAuthorizationTests`,
+`ProcessStartTests`, the composition suites).
+
+**Nightly UI suites** (run once under the lock on the final code, `-only-testing` each UI target with the Nightly
+plans): iOS `Smoke` 6.5 s, `DebugMenu` 10.8 s, `LaunchPerformance` 36.7 s; watch `Smoke` 5.3 s, `DebugMenu` 9.7 s. All
+passed.
+
+**Launch to first frame** (decision #30: reported, not gated; iPhone 17 and Apple Watch Series 12 (46mm) simulators,
+27.0, Debug):
+
+| How launched | iPhone | Watch |
+|---|---|---|
+| `XCTApplicationLaunchMetric` (first frame, responsive), 5 launches | 2.435, 2.457, 2.586, 2.471, 2.472 s (mean 2.484 s, RSD 2.1 %) | — (iOS only, as the brief) |
+| In-app, under XCUITest (Diagnostics, the log line) | 2308 ms (and 2.25–2.59 s over the metric's launches) | 1754, 1316 ms |
+| In-app, plain `simctl launch` (the log line), first launch after install | 1291 ms | 431 ms |
+| In-app, plain `simctl launch`, warm | 353, 335 ms | 363, 340 ms |
+
+The UI-test launches are 1.3–2.6 s because XCUITest launches the app under its own instrumentation; a plain launch of
+the same build is 0.34–0.36 s warm, inside the 600 ms budget, and 1.29 s (iPhone) / 0.43 s (watch) on the first launch
+after install (dyld's first load, the new database file). None of these is the device's number (#30, F20/F26).
+
+### How to verify by hand
+
+- Launch either app in the simulator and long-press "Today": the Debug sheet lists "Design gallery" and "Diagnostics".
+  Diagnostics shows the file under `Application Support/Database/ledger.sqlite`, this device's id (the `device` row:
+  `sqlite3 … 'SELECT id, kind FROM device'`), Health "Not determined" on a fresh simulator, the launch in ms,
+  "Dependencies live", and 224 `exercise` rows.
+- `xcrun simctl spawn booted log show --last 5m --predicate 'subsystem == "com.petearevalo.Ledger" AND eventMessage
+  CONTAINS "First frame"'` prints each launch's first-frame time.
+- Criterion 8: add `#Preview("X") { Text("x") }` to any `LedgerAppKit` file and run `swift test --filter PreviewTests`:
+  `registry_listsEveryPreview` fails; add one to a feature module and `everyModuleWithPreviews_isRegistered` fails.
+- In Release (`swift build -c release`) `DebugMenu`, `DiagnosticsPage` and the long-press gesture do not exist.
+- Screenshots: `tasks/features/F07-composition-di/screenshots/`.
+
+### Open questions (with recommendations)
+
+1. **Launch-time UI number vs the in-app number.** The nightly's `XCTApplicationLaunchMetric` (~2.5 s) and the in-app
+   figure under XCUITest (~2.3 s) measure XCUITest's launch, not a lifter's. Recommend F20 times a plain cold launch on
+   a device and F26 gates that, and the nightly keep reporting only (as #30 says); no change now.
+2. **Testing-strategy §2.7 drift**, left for the orchestrator (docs are not this slice's call): it names
+   `Launch.coldLaunchUnder600ms` (built as `LaunchPerformance.test_launchToFirstFrame`, per the brief),
+   `Smoke.launchesToIdle` on the watch (built as `launchesToToday`, per the brief; F18 renames it when the watch's idle
+   screen lands), and says the UI test targets link the umbrellas and share identifier enums (they link no product,
+   so identifiers are strings, `today.title`, `debug.menu.*`, `debug.diagnostics.*`). Recommend one line each in §2.7.
+3. **Previews with an appearance action.** On watchOS (and with `RenderedImage` anywhere) a preview whose content puts
+   a `.task`/`.onAppear` inside a scroll view traps the smoke test's `ImageRenderer` on release. Recommend features keep
+   the same split as `DiagnosticsPage`/`DiagnosticsLoader` (stores load in the root, previews draw a state), which
+   F09's store-driven screens do anyway; the testing-strategy line on previews could say so.
+4. **Debug menu placement in LedgerDesign** (deviation 2) versus the brief's `LedgerAppKit/DebugMenu.swift`. Recommend
+   accepting: one menu and page for both apps, Debug only, beside the gallery; architecture §14 now names them.
+5. **Should the `DebugMenu` UI tests join the PR plans?** About 10 s per platform per PR run (≈ 20 s of macOS minutes
+   on the full gate, 10 s on CI's `--ios-only`). Recommend Nightly only, as now, given the CI budget; the PR gate keeps
+   the package-level data checks.
+6. **Watch Diagnostics' long path** fills the first screen on the watch (the screenshot). Recommend leaving it (Debug
+   only, scrolls); F18 can trim the watch page if it grows.
+7. **Size** 560 product lines, over the 500 target (PR description says so; ≈ 155 of them are preview registries).
+
+### S3 fix round 1 (G1 implementer, 2026-10-04)
+
+From `test-findings.md` "# Slice S3 — adversarial round 1" (F7-S3-1, F7-S3-2, V10) and `review.md` "# Slice S3 review"
+(S3-SF1, N1–N4, open question 2), with the orchestrator's binding decisions 1–8. Branch at `326bb04`; no tester test
+edited (`git diff 326bb04 -- '*Adversarial*'` is empty).
+
+| # | Finding | Change | Proving test(s) |
+|---|---|---|---|
+| 1 | F7-S3-1 | `PreviewScan.previews(in:)` splits on `\.isNewline` (`\n`, `\r\n`, `\r`; `PreviewScan.swift:35`) and drops leading attributes before looking for `#Preview` (`droppingAttributes`, `:54`: `@name` with an optional balanced `(…)`, then spaces, repeated) | the tester's `attributedPreview_isFound`, `crlfFile_everyPreviewFound`, `attributeOnPreviousLine_andTabs_areFound`, unedited; `PreviewTests.scan_parsesDeclarations` gains `@available(iOS 18, *) @MainActor  #Preview("Attributed")`, an attributed non-preview, and a CRLF source |
+| 2 | S3-SF1 | `renderPreview(size:_:)` (`PreviewRendering.swift:15`) now takes a `@ViewBuilder` closure and builds and draws it inside `withDependencies { $0.context = .preview }` (`:17`), as Xcode runs a `#Preview`; the three `PreviewTests` call it so. testing-strategy §2.6 has the line: previews draw a state, loading goes in a loader view, registry + `renderPreview` + `PreviewScan` | `PreviewTests.preview_readingAStoreKey_getsItsPreviewValue` (`LedgerDesignTests`): a view reading `@Dependency(\.programRepository)` renders with no issue and sees `InMemoryProgramRepository` |
+| 3 | F7-S3-2, S3-N1 | `LedgerPersistence/DatabaseDiagnostics.swift` and all of `LedgerDesign/Components/Components+Previews.swift` (the `DesignPreview` registry and F06's `#Preview`s) are inside `#if DEBUG`; so are their tests (`DatabaseDiagnosticsTests`, LedgerDesign's `PreviewTests`) | Release symbol check below |
+| 4 | S3-N4 | The watch's #29 screen paints `LedgerColor.watchGround` (`WatchRoot.swift:50`). No snapshot: a new reference costs a record run of both plans; the `Database unavailable` preview renders in `WatchPreview`'s smoke test | `WatchAppKit` `PreviewTests.preview_renders(.databaseUnavailable)` |
+| 5 | S3-N2 | Noted only: the scan checks names, and a `#Preview` body that does not show its own case is a code-review matter (every body is one `Registry.case.content` line) | — |
+| 6 | S3-N3 | Screenshots left as committed | — |
+| 7 | Q2 | testing-strategy §2.7: `LaunchPerformance.test_launchToFirstFrame` (reports, never gates, #30) for `Launch.coldLaunchUnder600ms`; the watch's `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder); identifiers are strings because the UI test targets link no package product (replacing the "link the umbrellas, share the enums, verify in F01" sentence) | — |
+| 8 | V10 | `ProcessStartTests.processStart_keepsMicroseconds`: a reference `sysctl` read of the same `p_starttime` field in the test, kept whole; the start's whole seconds equal `tv_sec` and its fraction equals `tv_usec` within 1 µs. Deterministic: both read the same kernel record of this process | itself (mutants M5, M6) |
+
+**Mutants** (one at a time, scratchpad copy `f07s3/mut/`, since deleted; host `swift test`):
+
+| Mutant | Killed by |
+|---|---|
+| M1 the scan splits on `"\n"` again | tester's `crlfFile_everyPreviewFound`; `scan_parsesDeclarations` |
+| M2 no attribute skipping | tester's `attributedPreview_isFound`; `scan_parsesDeclarations` |
+| M3 attribute arguments not balanced (only `)` counted) | tester's `attributedPreview_isFound`; `scan_parsesDeclarations` |
+| M4 `renderPreview` in the `test` context | `preview_readingAStoreKey_getsItsPreviewValue` |
+| M5 the start time without microseconds (V10) | `processStart_keepsMicroseconds` |
+| M6 the start time rounded to milliseconds | `processStart_keepsMicroseconds` |
+
+The `#if DEBUG` wraps (decision 3) and the watch's ground (decision 4) have no package mutant: the first is proved by
+the Release binaries, the second is a colour the watch already shows.
+
+**Release symbol check** (under the lock: `xcodebuild build -configuration Release`, `generic/platform=iOS Simulator`
+and `watchOS Simulator`, `CODE_SIGNING_ALLOWED=NO`, scratch derived data since deleted; both exit 0). `nm -m` of
+`Ledger.app/Ledger` (63,339 symbols) and `LedgerWatch.app/LedgerWatch` (62,819), demangled:
+`DatabaseDiagnostics` 0, `LedgerStores.diagnostics` 0, `DesignPreview` 0, `DiagnosticsPage` 0, `DiagnosticsLoader` 0,
+`DesignGallery` 0, `PreviewScan` 0, `LedgerFakes` 0, `debug.menu`/`debug.diagnostics` strings 0. What remains is by
+design: `ProcessStart` (9) and `rootAppeared` (6), the #30 measurement and its Release log line; and 2 `DebugMenu`
+matches, which are `AppRoot._isDebugMenuShown`'s `@State` (the review's "considered and not raised"). The tester's
+round counted 81 `DatabaseDiagnostics` symbols in each binary before this change.
+
+**Release build (package):** `swift build -c release`: exit 0.
+
+**Code lines** (F05's method): this round vs `326bb04`, product +144 / −147, almost all the re-indentation of the two
+files wrapped in `#if DEBUG`; the logic is ~+3 (the watch's ground, the `#if`s) and in test support +18 / −2
+(`PreviewScan`), +10 / −1 (`renderPreview`). Whole slice vs `2ca2317`: product **+592 / −71** (the re-indented
+`Components+Previews.swift` now counts its F06 lines as removed and added again). Tests this round +135 / −90.
+
+**Gate.** Full `scripts/check.sh` under the lock: **exit 0, `check.sh OK`**; 17 test targets passed (PR), 8
+(PR-Watch), the tester's round-1 suites among them. Summary: tools 1 s, format 0 s, lint 60 s, iOS build 38 s, iOS
+tests 212 s, watchOS build 30 s, watchOS tests 185 s, coverage 1 s, total 527 s. **No warnings** in the gate log.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 204 / 213 | 95.77 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8210 / 8336 | 98.48 % | 80 % | ✓ |

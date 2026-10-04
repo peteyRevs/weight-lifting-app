@@ -10,7 +10,7 @@ struct LedgerWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WatchRootView(composition: composition)
+            WatchRoot(composition: composition)
         }
     }
 }

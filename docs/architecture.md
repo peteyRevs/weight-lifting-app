@@ -468,8 +468,11 @@ dependencies.
   DB aggregates and sync round-trips.
 - MetricKit for launch/hang/crash diagnostics at launch; no third-party crash
   SDK initially (keeps the privacy manifest trivial).
-- A debug-only "Diagnostics" screen in Settings: sync state, event log size,
-  HealthKit auth state.
+- A debug-only "Diagnostics" page, opened from the debug menu (a long press on
+  Today's title, F07; `LedgerDesign`'s `DebugMenu` and `DiagnosticsPage`): the
+  database file, row counts per table, this device's id, HealthKit's
+  authorization state and launch-to-first-frame (decision #30). Sync state and
+  event log size join it with F17.
 
 ## 15. Performance budgets
 
