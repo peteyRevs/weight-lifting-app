@@ -650,3 +650,104 @@ passes.
   - the live registrar and activator are held strongly by the composition's environment closures, so the weak
     captures never drop a session;
   - activation runs once per composition (`isCompanionActive`).
+
+---
+
+# Slice S2 — close-out round
+
+Close-out of fix round 1 (`git diff 6571cca..4af30e7`, notes "### S2 fix round 1"), at `4af30e7`. No product code
+edited, nothing committed; mutants ran in a scratchpad copy, since deleted.
+
+## Close-out of round 1
+
+`git diff 6571cca -- '*Adversarial*'` is empty: my round-1 tests are byte-identical.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| F7-S2-1 / S2-SF1 | **closed**, with a residual case (F7-S2-3) | `cancelledFirstResume_settingsStillLoad`, `cancelledFirstResume_logsNoFailure` and `overlappingResumes_runEachStepOnce` pass on both platforms, unedited; the random-phase model passes on both against the shared `DatabaseLaunch` |
+| F7-S2-2 | **closed** | `foreignDatabase_isUnavailable_andUntouched` passes on both, unedited; the preflight attacks below hold |
+
+## What I wrote
+
+| File | Tests | What it attacks |
+|---|---|---|
+| `LedgerAppKitTests/Adversarial/LaunchCloseoutAdversarialTests` and the watch twin | 3 each (7 cases) | a seed cancelled while it waits for the writer, beneath an overlapping foreground call (F7-S2-3); a cancelled pass followed by a `.background` call; `boots(arguments:isTesting:)` over the five combinations of app/test and argument |
+| `LedgerPersistenceTests/Adversarial/PreflightAdversarialTests` | 6 | a foreign WAL file with a hot `-wal` and its `-shm`; Ledger's own file after a crash (hot WAL), with and without its `-shm`; `grdb_migrations` with a known and an unknown id; a symlink to a foreign file; a write lock held past the 5 s busy timeout |
+
+## Results
+
+- **Host, whole package** (`swift test`, exit 1): the failures are F7-S2-3 (iOS and watch, mine, expected) and
+  `LedgerDesignTests`' Archivo font suites (host-only, as on `main`). Every other suite passes, all my round-1
+  tests included.
+- **Lint** (`scripts/check.sh --lint-only`): exit 0.
+- **Full gate**: not run, by the rule (F7-S2-3 fails by design).
+- **Mutants** (10, on the changed lines): every non-equivalent one is killed.
+
+  | Mutant | Killed by |
+  |---|---|
+  | T1 cancellation counted as failure | implementer and mine |
+  | T2 settings marked loaded on any outcome | implementer and mine |
+  | T3 a cancelled pass counts as finished | implementer and mine |
+  | T4 overlapping calls start steps twice | implementer and mine |
+  | T5 one foreign table tolerated | implementer and mine |
+  | T6 unknown migrations accepted | implementer and mine |
+  | T8 no preflight | implementer and mine |
+  | T10 `-LEDGER_UITEST` ignored under test | implementer and mine |
+  | **T9 no busy timeout** | **mine only** (`LocalDeviceAdversarialTests.twoOpensAtOnce_oneRow`) |
+  | T7 the preflight reads an empty file | survives, **equivalent** (an empty file has no tables, so it returns as before) |
+
+## Attacks on the fixes
+
+- **Shared `DatabaseLaunch`:** the round-1 model of the notes' state machine passes on both platforms over 60
+  random phase sequences with faults.
+  - A cancellation before any step (a pre-cancelled task) leaves seed and settings to the next call, in any
+    phase, including `.background`, with no failure recorded.
+  - Overlapping calls start each step once.
+  - WatchConnectivity is not awaited, so it has no cancellation point.
+- **Preflight:**
+  - A foreign WAL file with a hot `-wal` is refused (`notLedgerDatabase`), and the database file **and its `-wal`
+    stay byte for byte**: the implementer's caveat holds (only `-shm` may change).
+  - Ledger's own file after a crash opens with the rows only the WAL held, even with its `-shm` gone.
+  - `grdb_migrations` holding a known and an unknown id gives `laterSchema(["v999-from-the-future"])`, untouched.
+  - A symlink at the path to a foreign file is refused, and its target is untouched.
+  - An empty file and a table-less file are new databases (implementer's tests).
+- **Busy timeout:** a write lock held by another connection makes `LedgerStores.open` wait about 5 s (the test
+  takes 5.2 s), then fail cleanly with no device row written, so the composition shows #29's screen and retries
+  on the foreground.
+  - Observation, not a finding: the open runs on the main actor in `App.init`, so a lock held at launch (only
+    possible once an extension shares the file) freezes the first frame for up to 5 s.
+- **`-LEDGER_UITEST`:** boots in the app with or without the argument, and under test only with it (both
+  platforms); a new temporary file each launch (round 1).
+
+## F7-S2-3. bug — A seed cancelled beneath an overlapping foreground call waits for the next foreground
+
+The fix marks the first pass finished when no step of *this* call was cancelled. A step another call is running
+counts as finished here (`.elsewhere`). On a first launch that goes from `.inactive` to `.active`:
+1. The first call starts the seed, which waits for (or runs on) the writer.
+2. SwiftUI starts the second call (`.active`) and cancels the first.
+3. The second call finds the seed `.elsewhere`, loads the settings, and marks the first pass finished.
+4. The first call's seed then throws `CancellationError` (GRDB checks before running and interrupts a running
+   statement): not attempted.
+
+Nothing reruns it. Every later call except a foreground one returns early, and the second call *was* the
+foreground. So the catalog stays unseeded until the lifter next leaves and returns to the app. On a first launch
+that means F08's onboarding can't save the seed program (`unknownExercise`) and shows #28's retry for no
+failure.
+
+**Repro** (fails, iOS and watch, deterministic: the writer is held so the cancellation lands while the seed
+waits): `LaunchCloseoutAdversarialTests.seedCancelledBeneathAForegroundCall_runsOnTheNextCall` and its
+`Watch…` twin. Log: `began openDatabase, began seedCatalog, began loadSettings, …`, then `isCatalogSeeded ==
+false` after a further `.background` call.
+
+**Fix:** a step another call is running must not count toward "finished". Either:
+- wait for it: keep the in-flight `Task` per step, and have the overlapping call await its result; or
+- mark the pass finished only once every step has an outcome (`isCatalogSeeded` or a recorded failure, and
+  `hasLoadedSettings`), not when this call skipped one.
+
+| Class | Count | Findings |
+|---|---|---|
+| bug | 1 | F7-S2-3 |
+
+**Verdict:** G2 does not close for S2 yet. F7-S2-1 and F7-S2-2 are closed and their fixes hold under every
+attack and mutant. One residual case of the cancellation fix remains (F7-S2-3); it is small and has a
+deterministic repro.
