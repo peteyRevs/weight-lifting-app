@@ -35,8 +35,9 @@ final class Harness {
         databaseURL.path(percentEncoded: false)
     }
 
-    /// A composition over `databaseURL`, not yet booted. Its new device ids are `deviceUUID`.
-    func composition(now: Date = Harness.now) -> WatchComposition {
+    /// A composition over `databaseURL`, not yet booted. Its new device ids are `deviceUUID`; its process started at
+    /// `processStart`.
+    func composition(now: Date = Harness.now, processStart: Date? = nil) -> WatchComposition {
         WatchComposition(
             WatchComposition.Environment(
                 databaseURL: databaseURL,
@@ -45,7 +46,8 @@ final class Harness {
                 logger: .disabled,
                 record: { [weak self] in self?.log.append(.event($0)) },
                 activateCompanionSession: { [weak self] in self?.log.append(.companionActivated) },
-                preparesDependencies: false
+                preparesDependencies: false,
+                processStart: processStart
             )
         )
     }

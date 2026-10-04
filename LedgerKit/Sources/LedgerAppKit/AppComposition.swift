@@ -62,6 +62,10 @@ public final class AppComposition {
         database.stores
     }
 
+    /// Launch-to-first-frame (product decision #30): from the process's start to the root's first appearance. Nil
+    /// until the root appears, or when the kernel gave no start time.
+    private(set) var launchToFirstFrame: Duration?
+
     /// The app's composition, booted (`boot()`): call it once, from `App.init`. A process hosting unit tests boots
     /// nothing (`isTesting`), unless it is the app a UI test launched with `-LEDGER_UITEST`, which boots on a
     /// fresh database file in a new temporary directory.
@@ -101,6 +105,17 @@ public final class AppComposition {
         }
     }
 
+    /// The root view calls this when it first appears: measures launch-to-first-frame once and logs it.
+    func rootAppeared() {
+        guard launchToFirstFrame == nil, let start = environment.processStart else {
+            return
+        }
+        let elapsed = Duration.seconds(environment.now().timeIntervalSince(start))
+        launchToFirstFrame = elapsed
+        let milliseconds = Int((elapsed / .milliseconds(1)).rounded())
+        environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
+    }
+
     /// Binds the six stores and this device's id; binds nothing until the database is open. The app binds once,
     /// process-wide, through `prepareDependencies`; the logger and the device keys keep their live values (the
     /// device ones are stubs until F16–F23).
@@ -135,6 +150,8 @@ extension AppComposition {
         /// Whether opening the database binds the keys process-wide (`prepareDependencies`): the app only. A
         /// test binds with `withDependencies { composition.bind(&$0) }`.
         var preparesDependencies: Bool
+        /// When this process started (`ProcessStart`), where launch-to-first-frame begins.
+        var processStart: Date?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -162,7 +179,8 @@ extension AppComposition {
                         activator.activate()
                     #endif
                 },
-                preparesDependencies: true
+                preparesDependencies: true,
+                processStart: ProcessStart.date()
             )
         }
     }
