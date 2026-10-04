@@ -134,3 +134,37 @@ _Filled in by agents during delivery:_
   failed seed is logged and retried), the seed program's save fails this way: catch this case to offer the
   retry, and test it on `InMemoryStores` whose exercise store lacks the catalog (`.inMemoryStores(seed: .empty)`).
 - Programs given to `InMemoryStores` through its `Seed` are stored state and are not checked; only `save` is.
+
+## Plan amendments (orchestrator, 2026-10-04)
+
+The body above was written before M0 existed. Where it disagrees with this section, this section wins. The slice
+plan and its evidence are in `F08-onboarding/implementation-notes.md`.
+
+**Delivery.** Three slices: S1 the template generator (Domain), S2 the onboarding screen (not yet in the app), S3
+the root gate and the UI tests.
+
+**Slice S1 — template generator**
+1. Types. `TrainingGoal` is the type on `main`, with its cases: the body's `stronger`, `muscle`, `both`,
+   `consistent` are `.strength`, `.hypertrophy`, `.both`, `.consistency`. `Program.daysPerWeek` stays `Int?` and
+   stores `days.rawValue`; `DaysPerWeek` types the generator's input only. `Program.startDate` is a `CivilDate`
+   (ADR-007), so the generator takes `startDate: CivilDate`, and `ProgramTemplates.startDate(containing:weekStart:
+   calendar:)` gives decision #18's date. The code lives in `LedgerDomain/Templates/`. `preview(days:)` takes no
+   goal (no goal changes a name or a line).
+2. Criterion 6 reads: given `both` × `four`, every slot equals spec §6.4 in every column **except load and step**,
+   and the schedule equals the §6.4 seed including week 8's three days. A slot's start load is the catalog's
+   `startLoad(in: units)` for its exercise, copied into the slot, and `step` is nil (product decisions #21 and #24
+   are later than this brief: Bench starts at 45 lb, not 180).
+3. Criterion 8 reads: with units kg, every start load is the catalog's kilogram load, a multiple of the kg step.
+4. Exercise names are the catalog's full names, matched exactly among non-custom exercises. The 4-day role line's
+   shorthand means: Bench → Barbell Bench Press, Incline DB → Incline DB Press, CS Row → Chest-Supported Row,
+   Pulldown → Lat Pulldown, Lateral → Cable Lateral Raise, Squat → Back Squat, RDL → Romanian Deadlift, Calf →
+   Standing Calf Raise, Pull-Up → **Weighted Pull-Up**, OHP → Overhead Press, Row → Barbell Row, Curl → Barbell
+   Curl, Leg Curl → Seated Leg Curl. A template exercise missing from the catalog given throws
+   `ProgramTemplateError.unknownExercise`.
+5. Week 8 of the 3, 5 and 6-day splits keeps the full schedule (a deload changes loads, not days); the 4-day drops
+   Saturday in week 8 for every goal, as §6.4 does.
+6. The fixture is `Fixtures.defaultProgram(startDate:)` in `LedgerFakes` (ADR-008), built by the generator;
+   `Fixtures.seedProgram()` is unchanged.
+7. Program names, day names, tags and preview lines are English data in the Domain, not String Catalog entries.
+8. Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above. "100 % line coverage" of
+   `ProgramTemplates` is checked by the reviewer from the file's coverage; the gate is per module.
