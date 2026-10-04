@@ -301,3 +301,266 @@ By F05's method (added lines of `git diff -U0 a8080ff..87812d2`, excluding blank
 - SF4 is one sentence in the standards.
 - G5: this PR carries an ADR (ADR-008) and product decisions #28–#30, so the orchestrator stops for Pete before
   merging, as the gate table requires.
+
+# Slice S2 review
+
+Reviewer pass (G3) on `feat/F07-s2-boot` at `6306b8d`, diff `git diff f991d69..6306b8d` (37 files). Scope:
+`LocalDevice`, `LedgerStores`, `MirroringStartRegistrar`, `CompanionSessionActivator`, both compositions, their
+`Launch.swift` and root views, `WatchAppDelegate`, the two `App` files, the hosted smoke tests, the doc and
+threshold edits and the new tests. I did not review the tester's untracked `LedgerAppKitTests/Adversarial/`, and I
+changed no code or test.
+
+### What I ran
+
+- **Host tests** on a `git archive 6306b8d` copy in my scratchpad (`f07s2-g3/copy`), filter
+  `LaunchOrder|AppComposition|WatchComposition|LocalDevice|MirroringStart|CompanionSession`. All of the slice's
+  suites pass on the host: Launch order, AppComposition, AppComposition · failed launch steps, WatchComposition,
+  WatchComposition · failed launch steps, LocalDevice 7 and Mirroring start registrar 4. The activator suite is
+  iOS and watchOS only.
+- **One probe, added to the copy only (`ReviewProbeTests`).** The first `resume` runs in a task that is already
+  cancelled, standing in for a phase change during the first `.task(id: scenePhase)`; then `resume(in: .active)`
+  runs, over a database whose settings row holds `units = .kg`.
+  - The cancelled pass records `failed(seedCatalog)` and `failed(loadSettings)`, both logged at fault level,
+    because GRDB's async read and write throw `CancellationError` in a cancelled task (`DatabaseReader.swift:216`,
+    `DatabaseWriter.swift:131`).
+  - The `.active` pass re-seeds but **never reloads the settings**: `settings.units == .lb`, and the expectation
+    fails. See SF1.
+- **`swift-dependencies` 1.17.1 `prepareDependencies`** (`WithDependencies.swift:102-121`,
+  `DependencyValues.swift:296-366`): a key already read or cached cannot be prepared afterwards. DEBUG reports an
+  issue, and Release silently keeps the old value. See N2.
+- **IssueReporting `isTesting`** (`IsTesting.swift`): it reads `XCTestBundlePath`, `XCTestBundleInjectPath`,
+  `XCTestConfigurationFilePath`, `XCTestSessionIdentifier` and the test-runner arguments. See open question 3.
+- **The two platforms side by side:** `diff` of the iOS and watch `Launch.swift` and composition files with the
+  type names normalised. They differ only in the mirroring step, `kind: .phone`/`.watch`, the HealthKit imports
+  and doc comments.
+- **Size** by F05's method; see "Size".
+- **Not run:** `xcodebuild`, the simulators and `check.sh` (the orchestrator's gate on `6306b8d` is green, and its
+  Release build exits 0). I did not see either app launch, and I could not check `isTesting` inside an
+  XCUITest-launched app.
+
+### Blocking
+
+None.
+
+### Should fix
+
+**S2-SF1. A phase change during the first launch pass leaves the stored settings unloaded for the rest of the
+session, and logs two false faults.**
+`LedgerAppKit/Launch.swift:95-103` and `LedgerWatchAppKit/Launch.swift` (the same lines), driven by
+`AppRootView.swift:26-28` and `WatchRootView.swift:28-30`.
+- `.task(id: scenePhase)` cancels the running pass whenever the phase changes. GRDB's async calls then throw
+  `CancellationError`.
+- `loadSettings` sets `hasLoadedSettings = true` **before** its `await`, so the cancelled load counts as done, and
+  no later `.active` reloads it. `composition.settings` then stays `Settings.default` (pounds, Monday) for a lifter
+  who saved kilograms. The probe shows it.
+- An overlapping pass has the same effect. If the old pass is suspended in `load()` when the new `.active` pass
+  arrives, the new pass sees `hasLoadedSettings == true` and skips the load, and the old pass's load is then
+  cancelled.
+- The seed recovers, since `isCatalogSeeded` is set only on success. But both steps log a cancellation as a
+  fault-level failure and record `.failed`, which also misleads decision #30's diagnostics.
+- When it happens: a quick background on the iPhone's first launch, and on the watch the first launch the phone
+  starts (`handle(_:)`). That launch begins in `.background` and comes to the front while the first seed (224
+  rows, far slower on a watch than the simulator's 9 ms) is still running.
+- Not Blocking only because nothing reads `composition.settings` before S3. It must not merge as is, because S3
+  and F09 build on it.
+
+*Fix:*
+1. Set `hasLoadedSettings` only once the load has an outcome other than cancellation.
+2. In `seedCatalog` and `loadSettings`, catch `CancellationError` and return without logging or recording a
+   failure, leaving the step for the next pass.
+3. Add the probe as a test on each platform: an already-cancelled first `resume`, then `.active`, expects the
+   stored settings and no `.failed` event.
+
+This is about 6 lines per platform, which is the cost of open question 1's duplication.
+
+**S2-SF2. Standards §4 does not yet allow the registrar's `Mutex`.**
+`LedgerHealth/MirroringStartRegistrar.swift:13-19`; `docs/engineering-standards.md:101-104`, whose exception names
+LedgerFakes only.
+- The design is right. HealthKit calls the handler synchronously on its own queue, and an actor could be reached
+  only through an unstructured `Task` after the handler had returned.
+- But this is product code, and the standard forbids it as written (open question 2).
+
+*Fix:* widen the exception by one clause, in this PR: "…and product state that a framework callback writes
+synchronously on its own queue, where an actor could only be reached after the callback returns
+(`MirroringStartRegistrar`)." It widens a standard, so it goes to Pete at the G5 stop, which this PR needs anyway.
+
+### Nit
+
+**S2-N1. `-LEDGER_UITEST` is dead if `isTesting` is true in an XCUITest-launched app**
+(`AppComposition.swift:50-56`, `WatchComposition.swift`). `launch()` returns an idle composition before it reads
+the arguments. Point-Free's guidance suggests a UI-tested app does not see the XCTest variables, and the notes'
+simulator check launched with the argument through `simctl`, not XCUITest. Nobody has observed the case. *Fix
+(optional, one condition):* boot when `-LEDGER_UITEST` is present, whatever `isTesting` says. Hosted unit tests
+never pass it. Otherwise S3's `launchesToToday` settles it (open question 3).
+
+**S2-N2. A late `prepareDependencies` (#29 recovered on a foreground) is refused for any key read before it.**
+`Launch.swift:72-74`. While #29's screen shows, nothing reads a store key today. But if S3's root, Diagnostics or a
+store reads one before `state == .ready`, the recovery leaves that key on its stub silently in Release: the app
+says ready, and every store call throws `unimplemented`. *Fix:* hand off to S3, so that no view or store reads a
+store key unless the composition is `.ready`. Optionally add a DEBUG test that boots unavailable, reads nothing,
+recovers, and checks that `prepareDependencies` reported no issue.
+
+**S2-N3. The app's HealthKit hookup is verified only by a manual simulator launch** (deviation 8;
+`MirroringStartRegistrar.swift:48-56`). The hosted `Apps/LedgerTests` bundle runs inside the app, with its
+entitlement. *Fix (optional):* a hosted test that registers a registrar over its own `HKHealthStore` and expects
+`workoutSessionMirroringStartHandler != nil`.
+
+**S2-N4. The registrar keeps every mirrored session for the process's life** (`MirroringStartRegistrar.swift:19,
+39-45`). That is harmless for now. *Fix:* an F17 input line: hand each session over and drop it when it ends.
+
+**S2-N5. Doc drift.** Architecture §4's iPhone bullet (`docs/architecture.md:155-157`) still lists WatchConnectivity
+registration among the launch-time steps. It now follows the first frame, as the watch bullet already says. The
+notes' size table (601 / ≈ 48) does not match F05's method (see "Size").
+
+### Deviations
+
+| Deviation (notes) | Verdict | Reason |
+|---|---|---|
+| 1. `deviceID` in `LedgerStores` | **Accepted** | One throwing call opens the file and reads the device. `deviceID_isTheDeviceRow` (both platforms) closes S1-N1. |
+| 2. `logger` not rebound | **Accepted** | Its live value is already the real logger. |
+| 3. `prepareDependencies` in the app only; tests use `withDependencies` | **Accepted** | `preparesDependencies` is `true` only in `Environment.live`, and the harnesses pass `false`. See N2 for the late-recovery case. |
+| 4. `isTesting` in `launch()` | **Accepted** | The apps link only the umbrellas. The package suites (`launch_whileTesting_bootsNothing`) and both hosted smoke tests check it. See N1. |
+| 5. `.task(id: scenePhase)`: first pass in any phase, then retries only on `.active` | **Accepted in shape, with SF1** | It matches #28 (no background retry) and #29 (retry on the foreground). Its cancellation handling is SF1. |
+| 6. Opening on the main actor in `App.init` | **Accepted** | A-decision; the first frame then knows ready or unavailable. F20 times it on a device. |
+| 7. Watch opens in `App.init`, not `applicationDidFinishLaunching` | **Accepted** | `App.init` runs earlier, the delegate keeps the workout entry points, and architecture §4 is updated. |
+| 8. Generic registrar | **Accepted with N3** | Real HealthKit stays out of package tests (testing-strategy §3). The convenience init is two lines. |
+| 9. `Mutex` in the registrar | **Accepted with SF2** | |
+| 10. `-LEDGER_UITEST`, a new temporary directory per launch | **Accepted with N1** | |
+| 11. Two parallel compositions | **Not accepted as the end state; see open question 1** | |
+
+### Open questions
+
+Category: **(a)** settle now, in this slice or its PR; **(b)** hand off to a later brief or slice; **(c)** Pete
+decides.
+
+| # | Question | Recommendation | Category |
+|---|---|---|---|
+| 1 | Share the launch between the platforms? | **Share the database half now, in `LedgerPersistence`.** No new edge or ADR is needed: both umbrellas already depend on it, and it already owns `LedgerStores`, `LocalDevice`, the settings fallback and the catalog seed (see the sketch below). | (a) |
+| 2 | Extend standards §4's `Mutex` exception | Yes, narrowly (SF2). | (c) Pete, at the G5 stop; the orchestrator drafts the clause |
+| 3 | Is `isTesting` false in a UI-tested app? | Probably, but unverified. S3's `launchesToToday` and its Diagnostics ≥ 200 rows test fail if it is not; N1 removes the question for one condition. | (b) F07 S3, or (a) with N1 |
+| 4 | Fault level for an unreadable settings row | Agree: a later payload version is expected in a mixed-version pair. F14 lowers it to `error` with the resubscription. | (b) F14 |
+| 5 | #29 copy: "Can't open your data right now" / "Your workouts are still on this iPhone. Ledger tries again when you come back to it." | The title is decision #29's own. The body is accurate: the file is never touched, and the retry happens on return to the foreground, and it names the device. If Pete wants it plainer: "Ledger will try again when you return to the app." Both stay plain strings until a string catalog exists. | (c) Pete; (b) the localisation brief for the catalog |
+| 6 | Size 601 over the 500 target | It complies with §10: over the target, under ~1,000, and the PR names the split it considered. By F05's method it is 573. Sharing (question 1) brings it to about 470. | (a) PR description |
+| 7 | (new) Nothing may read a store key before `.ready` | N2. | (b) F07 S3 |
+
+**Question 1 in detail.** The shared part would be a `@MainActor @Observable public final class DatabaseLaunch`
+in `LedgerPersistence`.
+- It holds `state` (idle, ready or unavailable), `settings`, `isCatalogSeeded` and `stores`.
+- `open()` is synchronous and implements #29.
+- `resume(isForeground:) async` runs the seed (#28), the settings load and the retries, with SF1's fix.
+- `onOpen: (LedgerStores) -> Void` lets the umbrella bind through `prepareDependencies`, and a `record` closure
+  reports each event.
+- `LaunchStep` and `LaunchEvent` move with it.
+
+Each umbrella keeps only what differs, about 30 lines each: `launch()` with the `isTesting` guard, `boot()` (the
+mirroring handler first on iOS, then `open()`), `resume(in: ScenePhase)` (forwards `phase == .active`, then
+activates WatchConnectivity once), `bind`, and `Environment.live`.
+
+Why this home:
+1. **SF1 lands once, with one test.** Otherwise it lands twice now, and every later fix lands twice too.
+2. **#28 and #29 come under a coverage gate.** `LedgerAppKit` and `LedgerWatchAppKit` are excluded from coverage
+   (`coverage-thresholds.json`), so today the launch logic behind #28 and #29 has no coverage gate. In
+   `LedgerPersistence` it is gated at 90 %, and the recovery tests run once, on the host and both simulators.
+3. **No new edge or ADR.** `LedgerDependencies` cannot see `LedgerStores` without one, and every feature imports
+   it. A new `LedgerComposition` target needs an ADR for about 100 lines.
+4. **Product falls under 500 lines.**
+
+What does not fit the module (WatchConnectivity, HealthKit, SwiftUI's `ScenePhase`, the binding) stays in the
+umbrellas. Waiting for F16/F17 does not help: their platform steps belong in the umbrellas either way, and the
+database half stays identical. The cost is one `import Observation` and an explicit `@MainActor` type in a
+nonisolated module. Record it in architecture §4 with one line.
+
+### Considered and not raised
+
+- **Criterion 6 holds by construction.** `boot()` is synchronous and called from `App.init` (via `@State`'s
+  initial value). The handler is first, and it is assigned even when opening fails
+  (`boot_handlerFirst_evenWhenOpeningFails`). The registrar is retained by the composition's environment closure,
+  which `@State` keeps for the app's life, and so is the WC activator that `WCSession` holds weakly.
+- **#29 never touches the file.** `LedgerDatabase.open` creates only the directory. A non-database file refuses
+  every write, and the test checks the bytes and the directory listing after a retry. Nothing is bound while the
+  database is unavailable (`openFailure_isUnavailable…`, whose `bind` leaves `deviceID` unchanged).
+- **A damaged `device` row makes the whole database "unavailable"** (`LocalDevice.id` throws
+  `malformedIdentifier` inside `LedgerStores.open`), and the retry never succeeds. It is damage-only, the file is
+  still never touched, and F28's repair tooling can own it.
+- **#28: no retry in the background, retry on `.active` and on the next launch.** Pinned by
+  `seedingFailure_carriesOn_thenRetries`, including `resume(in: .background)` doing nothing.
+- **The settings fallback never saves.** The composition calls no `save`, and `unreadableSettings_fallBack_rowUntouched`
+  compares the row byte for byte.
+- **Binding completeness.** The six stores and `deviceID` are bound. `date`, `uuid`, `calendar`, `locale`,
+  `continuousClock` and `logger` keep their real live values. The six device keys keep their logging stubs by
+  design until F16–F23. No key is left on a value that is wrong in production.
+- **WatchConnectivity activates after the seed and the settings,** not in `App.init`. That is the brief's order,
+  it costs milliseconds, and the first pass runs in any phase, so a background launch activates it too.
+- **`CompanionSessionActivator` is a `Sendable` `NSObject` without `@unchecked`.** It is final, and its only
+  stored property is an `os.Logger`. `sessionDidDeactivate` reactivates, as Apple's watch-switch guidance asks.
+- **`HKHealthStore()` and the activator are constructed even under test** (`Environment.live` runs before the
+  `isTesting` check). Neither assigns or activates anything until `boot`.
+- **`LocalDevice` opens a write transaction on every launch** to read one row. It is one statement, and it makes
+  the read-or-insert atomic.
+
+### The review points
+
+1. **Module boundaries.** Clean. Every import was already a graph edge: the package graph is unchanged, and
+   HealthKit and WatchConnectivity sit behind `#if os(iOS)` / `#if canImport`.
+2. **Concurrency.**
+   - The compositions are `@MainActor`, and the registrar and activator are `Sendable` without `@unchecked`.
+   - There are no unstructured tasks: async work runs from `.task`.
+   - Time and new ids are injected (`Environment.now`, `newID`).
+   - SF1 is the cancellation gap, and SF2 the standards gap.
+3. **Error handling.** Every failed step is logged at fault level and recorded, nothing is swallowed, and #29 is
+   mapped to a user-facing screen. SF1: a cancellation is reported as a failure.
+4. **Design fidelity.** #29's screen uses `EmptyState` and `LedgerSpacing.screen` (tokens only), and the watch
+   version scrolls. S3 owns the real screens.
+5. **Accessibility.** `EmptyState` is F06's component, and the strings are plain text that Dynamic Type sizes.
+6. **Test quality.**
+   - The tests are behavioural, on real files in temporary directories, with no sleeps.
+   - The recovery tests use real causes: a trigger, non-database bytes, a directory in the file's place.
+   - Gaps: cancellation (SF1), and the real HealthKit assignment (N3).
+7. **Brief compliance.** Table below.
+
+### Criteria → evidence
+
+| Criterion | Evidence | Verdict |
+|---|---|---|
+| 6. The handler is assigned before any `await` | `boot()` is synchronous, so the compiler enforces it. `LaunchOrderTests.boot_assignsTheHandlerFirst`, `launch_runsTheStepsInOrder` (the brief's five steps), `boot_handlerFirst_evenWhenOpeningFails`, `resume_again_runsNothingTwice` | Met (the real `HKHealthStore` hookup: N3) |
+| 1 (data half). The file is in Application Support and the catalog is seeded (≥ 200) | `AppCompositionTests.boot_opensTheFile_andBindsTheStores` (the file at `Database/ledger.sqlite`; the bound repository holds every catalog entry), `liveEnvironment_databaseURL`, `LocalDeviceTests.defaultURL_isItsOwnDirectory`; the notes' simulator check (224 rows, one `device` row) | Met; the UI half (`launchesToToday`) and launch time are S3 |
+| 2 (data half). The watch has its own database | `WatchCompositionTests` (kind `watch`, its own order); the notes' watch simulator check | Met |
+| #28 | `seedingFailure_carriesOn_thenRetries` (both platforms) | Met |
+| #29 | `openFailure_isUnavailable_andTheFileIsUntouched`, `openFailure_retriedOnForeground` (both platforms) | Met |
+| F05 inputs (seed once; settings fallback without saving) | `secondBoot_seedsNothing`, `unreadableSettings_fallBack_rowUntouched`, `savedSettings_areLoaded` | Met, except SF1's cancelled pass |
+| B4 / S1-N1 (`deviceID` bound, not nil) | `deviceID_isTheDeviceRow` (both), `LocalDeviceTests` (per kind, the oldest of two, a malformed id kept, kept across opens) | Met |
+
+### Size
+
+By F05's method (added lines of `git diff -U0 f991d69..6306b8d`, excluding blank lines and whole-line comments,
+doc comments included in the exclusion):
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerPersistence` (`LocalDevice`, `LedgerStores`) | 73 | 0 |
+| `LedgerHealth` (registrar) | 37 | 3 |
+| `LedgerSync` (activator) | 49 | 3 |
+| `LedgerAppKit` | 200 | 5 |
+| `LedgerWatchAppKit` | 209 | 5 |
+| `Apps/Ledger`, `Apps/LedgerWatch` | 5 | 2 |
+| **Product** | **573** | **18** |
+| Tests (package 824 / 36, hosted smoke 6 / 6) | 830 | 42 |
+
+- **The notes' "601 added, ≈ 48 removed" is not reproduced.** Their per-module figures for Persistence, Health and
+  Sync match mine exactly. The umbrellas differ by 5 lines each, and "Apps +23 / −20" probably counts the hosted
+  smoke tests or whole files.
+- **Either figure complies with §10:** over the 500 target, so the PR description says so and names the split
+  considered (iOS then watch), and well under ~1,000. No split is warranted.
+- **Sharing the database half** (open question 1) removes about 100 lines and puts the PR under the target.
+
+### Verdict
+
+**Approved for G3: 0 Blocking, 2 Should fix, 5 Nits.**
+- Criterion 6 holds by construction and by test. #28 and #29 behave as decided, including the file left untouched
+  and nothing bound while the database is unavailable. `deviceID` is the device row, and the package graph is
+  unchanged.
+- SF1 is a real launch bug (reproduced on the host) with a few-line fix and a test, and should land in this PR.
+- SF2 is one clause in the standards, for Pete.
+- I recommend doing open question 1 in this PR before SF1, so the fix and its test land once and the launch logic
+  comes under the coverage gate. If the orchestrator defers it, SF1 must land on both platforms, each with its test.
+- G5: SF2 widens a standard and question 5 is Pete's copy, so the orchestrator stops for Pete before merging.
