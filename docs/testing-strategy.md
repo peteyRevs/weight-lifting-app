@@ -233,6 +233,11 @@ Concrete test names (file = suite = source type; see §6):
   `preview` context (`renderPreview`) and check against a source scan
   (`PreviewScan`); an appearance action inside a scroll view traps
   `ImageRenderer` on release, so it belongs in the loader, not the preview.
+  The scan reads lines, not Swift: it finds a `#Preview` at the start of a
+  line, after any balanced single-line attributes. Declare previews that way;
+  a string with a parenthesis inside an attribute, a block comment before
+  `#Preview`, or an attribute wrapped over two lines escapes it (F7-S3-3,
+  accepted 2026-10-04).
 
 ### 2.7 UI (`LedgerUITests`, `LedgerWatchUITests`)
 

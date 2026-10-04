@@ -922,3 +922,88 @@ built by the gate.
   the background by HealthKit mirroring (ADR-005) would include all the time until the lifter opens it. It's only
   a figure in Diagnostics and the log, so F20/F26, which time cold launches, may want to measure only foreground
   launches.
+
+## Fix round 1 verification
+
+Scoped verification of `git diff 326bb04..355a047` (notes "### S3 fix round 1"), at `355a047`.
+
+**Closed.**
+- **F7-S3-1:** `attributedPreview_isFound` and `crlfFile_everyPreviewFound` pass, unedited (the scan splits on
+  `\.isNewline` and skips leading `@attribute(…)`s).
+- **F7-S3-2:** `DatabaseDiagnostics` and the `DesignPreview` registry are `#if DEBUG`. The Release rebuild below
+  has none of their symbols.
+- `git diff 326bb04 -- '*Adversarial*'` is empty: my round-1 tests are byte-identical.
+
+**What I wrote** (`LedgerDesignTests/Adversarial/`):
+- `PreviewScanCloseoutAdversarialTests` (4). Each source compiles (`swiftc -typecheck`).
+  - Held: two attributes on one line, a lone CR as a newline, `@MainActor func` (not a preview), and an attribute
+    followed by a comment or a string mentioning `#Preview`.
+  - F7-S3-3 (three cases): a string argument holding `(`, a block comment before `#Preview`, an attribute split
+    over two lines.
+- `PreviewContextAdversarialTests` (2), both pass:
+  - a preview reading `deviceID` and `date`, with a nested `withDependencies` override, renders with the
+    preview values;
+  - after `renderPreview` returns, the test is in the test context again (an unconfigured `deviceID` read is the
+    library's known issue).
+
+**Release, rebuilt under the lock** (`xcodebuild -configuration Release build`, generic iOS and watchOS simulators,
+both exit 0, no compiler warning):
+- `DatabaseDiagnostics` 0 symbols (was 81), `DesignPreview` 0;
+- `DebugMenu`, `DiagnosticsPage`, `DiagnosticsLoader`, `DesignGallery` 0;
+- the `debug.menu`/`debug.diagnostics` identifiers absent;
+- on both apps.
+
+**Mutants of the changed lines** (4):
+
+| Mutant | Killed by |
+|---|---|
+| W1 split on LF only | implementer and mine |
+| W2 attributes not skipped | implementer and mine |
+| W4 previews drawn in the test context | implementer (store key) and mine (`deviceID`) |
+| W3 an attribute ends at its first `)` | survives, **equivalent** for real attributes (no `@available` argument nests parentheses) |
+
+**Runs.**
+- Host `swift test`, whole package: exit 1. The failures are my 3 F7-S3-3 tests and the host-only Archivo font
+  suites; everything else passes.
+- `scripts/check.sh --lint-only`: exit 0.
+- **Full gate not run**, by the rule (F7-S3-3 fails by design). The orchestrator's gate on `355a047` is green, and
+  my new suites are host-only.
+
+## F7-S3-3. nit — Three rarer legal preview forms still escape the scan
+
+The skipper counts parentheses without knowing strings or comments, and works line by line. Swift compiles each of
+these, and the scan finds none of them:
+- `@available(*, deprecated, message: "use Y (new") #Preview("Paren") {}`: the `(` in the string never closes;
+- `/* the old one */ #Preview("Commented") {}`: the line starts with a comment;
+- `@available(iOS 18,` and then, on the next line, `*) #Preview("Split") {}`: an attribute wrapped over two lines.
+  swiftformat's argument wrapping could produce this for a long attribute.
+
+**Reach:** small. Each needs an unusual way of writing a preview, and a missed preview only skips its smoke render
+and registry check.
+
+**Repro** (fail): `PreviewScanCloseoutAdversarialTests.parenthesisInAttributeString_found`,
+`blockCommentBeforePreview_found`, `attributeOverTwoLines_found`.
+
+**Fix options:**
+- skip string literals and `/* … */` while scanning a line's prefix, and carry an open attribute's depth across
+  lines;
+- or accept the limit: state the forms the scan reads in `PreviewScan`'s doc and `testing-strategy.md` §2.6, and turn
+  these three into "(documents)" tests.
+
+Either is a few lines; the second needs only the orchestrator's word.
+
+**Verdict:** F7-S3-1, F7-S3-2 and S3-SF1 are closed, and the fixes hold; Release carries none of the debug code. **G2
+closes for S3 once the orchestrator rules on the nit F7-S3-3** (fix, or accept the limit and mark the three tests
+"(documents)"). Nothing else is open.
+
+**Ruling and gate (2026-10-04).** The orchestrator accepted F7-S3-3: a line scanner can't chase every form Swift
+accepts without becoming a parser, and testing-strategy §2.6 now says to declare a preview at the start of a line,
+after any balanced single-line attributes. The three `PreviewScanCloseoutAdversarialTests` cases are now
+"(documents)" tests, pinning that the scan does not find those forms, and they cite the ruling. Every test of mine
+passes.
+
+Full `scripts/check.sh` through `sim-lock.py`: **exit 0, `check.sh OK`**. 17 test targets passed (PR) and 8
+(PR-Watch); coverage thresholds met (overall 98.48 %); 500 s. The "failed with exit code 0" lines in the log are
+`xcbeautify`'s usual noise, as in earlier gates.
+
+**Verdict: G2 closes for S3.**
