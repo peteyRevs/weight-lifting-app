@@ -2309,3 +2309,33 @@ survive the gate changing its answer, wrap `content` in a container in `body` fi
   three steps want the same (`performAccessibilityAudit`), at the default size and at an accessibility size;
   the bars' faint track may be flagged (the plan's risk).
 - `Onboarding`'s stops are compared in English, as the plans fix the language.
+
+### S3 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 4 Should fix, 5 nits; it found no ordering that draws the wrong screen. G2 round 1: 49
+tests; one bug, one question, three test-quality items; one test red in the PR lane and two in the nightly lane.
+`main` (F10 S1 and S2, #27 and #29) is merged into this branch before the touch-up, because S2 added workout
+recovery to the launch call that Retry and the gate use (review SF2).
+
+For the touch-up:
+- **F8-S3-1 accepted:** the tabs a lifter reaches after onboarding always open on Today with empty stacks, the
+  second time as the first. When the root leaves the tabs for onboarding, the shell's selection and stacks are
+  reset (which also covers a "Delete all data" reached from a pushed Settings screen, F14).
+- **F8-S3-2, the system's accessibility audit on the onboarding steps:**
+  - "Contrast failed" on an unpicked option's second line at the largest text size is a real AA failure: that line
+    uses a token that meets 4.5:1 on the ground in both themes, picked or not.
+  - "Text clipped" on each step's title: find what the audit objects to (Today's title in the same role passes) and
+    remove the cause; if it turns out to be the audit's guess about a view that does grow, the tester excludes it
+    with that reason.
+  - "Contrast nearly passed" on the primary button (white on the accent, 3.1:1) is the design system's decision for
+    large bold text (F06) and is on every screen: the tester excludes that one issue for that one control with its
+    reason, as testing-strategy §2.7 allows, and Pete is told.
+- **Review SF1 and F8-S3-3:** show that the tester's `retry_runsTheSeedStep_thenSaves` fails when the `prepareRetry`
+  argument is dropped (a mutant in the working copy, restored afterwards); if it does not, add the test that does.
+  `root_ready_draws` (F09's tester's, edited under sanction) must fail if the root drew the ground: strengthen the
+  sanctioned edit so it does.
+- **Review SF2:** with `main` merged, Retry and the gate are verified again with workout recovery in the same call;
+  Retry is narrowed to the seed step if the wider call can run anything a retry should not.
+- **Review SF3, SF4 and the nits** as the review writes them.
+- **F8-S3-4** is the tester's own to settle in its close-out. **F8-S3-5** (large values compared directly in F09's
+  and F07's tests) joins the chore list.
