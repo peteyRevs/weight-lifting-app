@@ -2073,3 +2073,22 @@ alone, which could not see either before); the NaN guard removed; NaN rounding t
   workout can produce): `Weight.formatted` prints "NaN" for a weight too small to show, and digits wrap for a value
   beyond `Int`.
 - S2 is ready for its PR, which opens after #28 (S1) is on `main`: merge `main`, gate, push once.
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S3's specification is the brief's last section, "Plan amendments — slice S3". The branch
+`feat/F09-s3-presentation` is cut from S2's tip `2d434aa`.
+
+- Pete has not yet answered the two product questions this slice meets, so their defaults are built: a live
+  workout takes over the card with Resume (criterion 4); a session done on another day does not make today's
+  "Logged" (criterion 5). Keep each rule in one named function with its own tests, so the other answer is a small
+  change.
+- From S2's review: `nextScheduledDay` returning nil means "no later session in the block", which is not always
+  "the last week of the block" (later weeks may be empty). The rest-day and Logged copy follow the function, not
+  the week index.
+- The localization rule is standards §7 as F09 S1 rewrote it: a catalog and `TodayCopy.swift`, nothing else to add;
+  the gate's string-catalog step and `ModuleCopyTests` find the module by themselves.
+- The session's workout arrives as a plain `WorkoutState?` (live, or finished in the one update that ends it); the
+  store that subscribes is S5 and S6. Today plays no haptics.
+- One PR: the plan estimates about 570 product lines. Stop and propose the split named in the plan ("strip, stats,
+  recent" / "cards") only above about 750.
