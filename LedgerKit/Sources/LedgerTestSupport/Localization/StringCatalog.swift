@@ -4,7 +4,7 @@ import Foundation
 /// rules standards §7 sets for one: English is the source language; every key carries its English text, marked
 /// translated (the build leaves out a key with no text and a text still marked `new`); a plain key's text is the
 /// key itself; a counted key has the forms `one` and `other`, counts one value, and its `other` form is the key;
-/// no text names the product.
+/// a key's values are whole numbers and texts (`%lld`, `%@`); no text names the product.
 ///
 /// `CopyAudit` reports these rules' violations with the rest, and `ModuleCopyTests` asks `unresolvedKeys(in:)` of
 /// the bundle the build made. What a decoded catalog cannot show (its layout, the order of its keys, a key
@@ -75,6 +75,7 @@ public struct StringCatalog: Sendable {
         switch strings[key] {
         case let .text(value, state):
             var found = Self.namesTheProduct([key, value]) ? ["names the product, which shipped copy never does"] : []
+            found += Self.valueProblems(in: [key, value])
             if !CopyAuditRules.isSameText(value, key) {
                 found.append("has the English text \"\(value)\": a key is its English text")
             }
@@ -92,6 +93,7 @@ public struct StringCatalog: Sendable {
     private func pluralProblems(of key: String, _ forms: [String: Form]) -> [String] {
         let names = Self.namesTheProduct([key] + forms.values.map(\.value))
         var found = names ? ["names the product, which shipped copy never does"] : []
+        found += Self.valueProblems(in: [key] + forms.sorted { $0.key < $1.key }.map(\.value.value))
         if Set(forms.keys) != ["one", "other"] {
             found.append("needs exactly the forms \"one\" and \"other\"")
         }
@@ -111,6 +113,22 @@ public struct StringCatalog: Sendable {
             }
         }
         return found
+    }
+
+    /// A key's values are whole numbers and texts (standards §7): one problem when a key or a text holds a
+    /// specifier other than `%lld` and `%@`.
+    private static func valueProblems(in texts: [String]) -> [String] {
+        var others: [String] = []
+        for specifier in texts.flatMap(otherSpecifiers(in:)) where !others.contains(specifier) {
+            others.append(specifier)
+        }
+        guard !others.isEmpty else {
+            return []
+        }
+        return [
+            "holds \(others.joined(separator: ", ")): a key's values are whole numbers (%lld) and texts (%@), "
+                + "so format anything else first and pass it as a String"
+        ]
     }
 
     private static func namesTheProduct(_ texts: [String]) -> Bool {
@@ -146,6 +164,16 @@ public struct StringCatalog: Sendable {
         format.matches(of: /%(?:%|(?:\d+\$)?(lld|ld|d|llu|lu|u|lf|f|@))/).compactMap { match in
             match.output.1.map { "%\($0)" }
         }
+    }
+
+    /// The format specifiers of a key or a text that are neither `%lld` nor `%@`, in order, as written but for a
+    /// position: `%lf`, `%d`, `%.1f`, `%s`. An escaped percent sign (`%%`) is text, and so is one that formats
+    /// nothing ("100% done").
+    public static func otherSpecifiers(in format: String) -> [String] {
+        let specifier = /%(?:%|(?:\d+\$)?([-+#0]*\d*(?:\.\d+)?(?:hh|h|ll|l|q|L|z|t|j)?[diouxXeEfFgGaAcCsSpn@]))/
+        return format.matches(of: specifier)
+            .compactMap { match in match.output.1.map { "%\($0)" } }
+            .filter { $0 != "%lld" && $0 != "%@" }
     }
 }
 

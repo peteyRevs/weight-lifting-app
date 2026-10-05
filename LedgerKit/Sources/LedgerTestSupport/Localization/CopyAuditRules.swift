@@ -67,7 +67,8 @@ public enum CopyAuditRules {
         }
     }
 
-    /// What a copy file holds besides the two lookup forms of standards §7.
+    /// What a copy file holds besides the two lookup forms of standards §7. A `Text` there is the timer form or
+    /// a finding: one made from a `String`, from `verbatim:` or from another `Text` is a line joined from parts.
     public static func copyFileProblems(_ source: SwiftSource) -> [Problem] {
         var problems = Set(otherLookups(in: source))
         for literal in source.literals {
@@ -86,6 +87,9 @@ public enum CopyAuditRules {
             if let message {
                 problems.insert(Problem(line: literal.line, message: message))
             }
+        }
+        for call in source.calls(of: "Text") where !call.opensWithALiteral {
+            problems.insert(Problem(line: call.line, message: joined))
         }
         return problems.sorted { ($0.line, $0.message) < ($1.line, $1.message) }
     }
@@ -120,6 +124,8 @@ public enum CopyAuditRules {
 
 private extension CopyAuditRules {
     static let nested = "a lookup inside another literal's interpolation: write the join as two statements"
+    static let joined = "a Text made from parts: the one Text a copy member returns is "
+        + "`Text(\"… \\(timerInterval: …)\", bundle: .module)`, and a line is never joined from Text + Text"
 
     /// A literal handed straight to `Text(…)`, which SwiftUI looks up as a key whatever it holds.
     static func isTextArgument(_ literal: SwiftStringLiteral) -> Bool {

@@ -95,6 +95,53 @@ extension CopyAuditTests {
         ])
     }
 
+    @Test(
+        "A Text in a copy file is the timer form: one made from a String, from parts or verbatim is a finding",
+        arguments: [
+            #"Text(String(localized: "Today", bundle: .module)) + Text(verbatim: " · ") + elapsed"#,
+            "Text(title) + elapsed",
+            "SwiftUI.Text(title)",
+            "Text(\n            title\n        )",
+            "Text(verbatim: \"\u{2014}\")",
+            "return Text(title, bundle: .module)"
+        ]
+    )
+    func textThatIsNotTheTimerForm_isAFinding(code: String) throws {
+        let timer = #"Text("Resume · \(timerInterval: start ... .distantFuture)", bundle: .module)"#
+        #expect(try Self.findings(copy: Self.copyFile.replacing(timer, with: code)) == [
+            "DemoCopy.swift:11: a Text made from parts: the one Text a copy member returns is "
+                + "`Text(\"… \\(timerInterval: …)\", bundle: .module)`, and a line is never joined from Text + Text"
+        ])
+    }
+
+    @Test("A name that only ends in Text, and the type where nothing is made, are no Text made from parts")
+    func nameThatEndsInText_isNoFinding() throws {
+        let helper = """
+        extension DemoCopy {
+            static func rich(_ title: String, _ elapsed: Text) -> Text { elapsed }
+            static func plain(_ title: String) -> String { attributedText(title).plainText() }
+            static let kind = Text.self
+        }
+        """
+        #expect(try Self.findings(extra: ["DemoCopy+Rich.swift": helper]) == [])
+    }
+
+    @Test("A Double formatted into a key passes the sources; the catalog that agrees with the compiler is refused")
+    func doubleInAKey_isRefusedThroughTheCatalog() throws {
+        let member = #"""
+        extension DemoCopy {
+            static func moved(_ value: Double, locale: Locale) -> String {
+                String(localized: "\(value) lb moved", bundle: .module, locale: locale)
+            }
+        }
+        """#
+        #expect(try Self.findings(extra: ["DemoCopy+Moved.swift": member]) == [])
+        #expect(try Self
+            .findings(extra: ["DemoCopy+Moved.swift": member], catalog: TestCatalog.plain("%lf lb moved")) == [
+                "Localizable.xcstrings: \"%lf lb moved\" holds %lf: \(BrokenRule.wholeNumbersAndTexts)"
+            ])
+    }
+
     @Test("A `comment:` is skipped only on a lookup: the same label on another call is a literal like any other")
     func commentOnAnotherCall_isAFinding() throws {
         #expect(try Self.findings(title: #"Wrapper(comment: "Start workout").text"#) == [

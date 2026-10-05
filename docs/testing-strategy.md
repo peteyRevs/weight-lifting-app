@@ -443,19 +443,30 @@ full gate, `--ios-only`, `--skip-lint`, `--skip-static` and
 `--record-snapshots`), never on the watch build, and has its own line in the
 timing table. It only reads the catalog.
 
-A failure names each key the code looks up that the catalog lacks, with the
-file and line of the lookup, and each catalog key that no code looks up. The
-author adds the key to the catalog or deletes it, or corrects the lookup.
+A lookup that is not in a copy file (`<Name>Copy.swift`,
+`<Name>Copy+<Area>.swift`) fails first, with its file and line, whether or not
+the catalog has its key: a bare `Text("…")` in a view or a preview, a
+`Button("\(done)/\(total)")`. The author moves the lookup into the copy file
+and hands the view a `String`, or in Debug-only code writes `Text(verbatim:)`;
+the catalog gets no key for it. Among the copy files' lookups, a failure names
+each key the code looks up that the catalog lacks, with the file and line of
+the lookup, and each catalog key that no code looks up. The author adds the
+key to the catalog or deletes it, or corrects the lookup.
 When the keys agree but the file differs, the failure shows a diff against
 what the tool writes, and the author edits the catalog to match. A catalog
 with no `.stringsdata` to compare with fails too, and so does a repository in
-which no catalog is found: the step never passes on nothing. A record run
-stops at a failing catalog before any reference is recorded.
+which no catalog is found: the step never passes on nothing. That is also what
+a catalog in a watch module meets, because the iOS build does not compile it:
+`LedgerWatchAppKit` and `WatchFeatureWorkout` get their catalogs with F18.
+Any other `*.xcstrings` under `LedgerKit/Sources` fails the step: a module has
+one catalog, in one place. A record run stops at a failing catalog before any
+reference is recorded.
 
-The cases are in `scripts/tests/adversarial/string-catalogs.adv.sh`. They
-compile small Swift sources with the real compiler, so they also pin how it
-keys a lookup: `%lld` for an `Int`, `%@` for a `String`, `%lf` for a
-`Double`, and `%` doubled only in a text that has a value.
+The cases are in `scripts/tests/adversarial/string-catalogs.adv.sh` and, the
+tester's, `string-catalogs-tester.adv.sh`. They compile small Swift sources
+with the real compiler, so they also pin how it keys a lookup: `%lld` for an
+`Int`, `%@` for a `String`, and `%` doubled only in a text that has a value.
+Those two are the only specifiers a key may hold (standards §7).
 
 ---
 

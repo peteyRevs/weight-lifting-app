@@ -38,7 +38,7 @@ authoritative; the plan differs:
     a red static check skips `Check`, costs no macOS minutes, and the run is red. `Check` runs the
     adversarial suites whose header says `# needs macOS:` (one of their cases needs xcodebuild, xcrun,
     Apple's `/usr/bin` shims or BSD sed): catalog-version-attack, ci-post-clone, coverage-gate,
-    string-catalogs and xcode27.
+    string-catalogs, string-catalogs-tester and xcode27.
     `adversarial/run.sh` picks the half from `LEDGER_ADV_SUITES` (`portable`, `macos`; unset runs all).
     SwiftLint's Linux build loads SourceKit from the image's Swift toolchain, where the job points
     `LINUX_SOURCEKIT_LIB_PATH`; without the library SwiftLint 0.65.1 stops with a fatal error, and the
@@ -83,10 +83,11 @@ authoritative; the plan differs:
   writes the keys it extracted from each source file (`.stringsdata`, under `.derivedData`). The script
   compares each `LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` with its module's keys: the
   catalog must hold exactly those keys, byte for byte, and read as `xcrun xcstringstool sync` would write
-  it. A red step names each key the code looks up that the catalog lacks and each catalog key no code
-  looks up, or shows a diff against the tool's output. The author corrects the catalog, or the lookup,
-  and pushes again. A catalog with no `.stringsdata` to compare with fails as well, so a build folder
-  laid out differently cannot pass unnoticed. A record run (`--record-snapshots`) stops at a failing
+  it. A red step names each lookup that is not in a copy file, each key the copy files look up that the
+  catalog lacks and each catalog key no code looks up, or shows a diff against the tool's output. The
+  author corrects the catalog, or the lookup, and pushes again. A catalog with no `.stringsdata` to compare with fails as well, so a build folder
+  laid out differently cannot pass unnoticed; a catalog in a watch module fails the same way, since `Check`
+  builds no watch target (they get catalogs with F18). A record run (`--record-snapshots`) stops at a failing
   catalog before it records. A build served from the compilation cache writes the files too: a cache hit
   replays a compile's `.stringsdata` with its other outputs (`Using CAS output localization-strings` in
   the build log). Measured on a developer Mac on 2026-10-04 with `COMPILATION_CACHE_ENABLE_CACHING=YES`:

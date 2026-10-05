@@ -172,7 +172,9 @@ M1 convention (2026-10-04), built in F09 S1 and revised in its fix round 1.
 `LedgerAppKit` is the model: `AppCopy.swift` and
 `Resources/Localizable.xcstrings`. A feature adds a catalog and a copy file,
 and nothing else: no test of its own and no entry in a list. Three checks find
-both without being told ("Who checks what").
+both without being told ("Who checks what"). This holds for the modules the
+iOS build compiles; a watch module gets its catalog with F18 ("Not yet
+converted" below).
 
 - **Catalog.** A module with copy has one hand-written
   `Sources/<Module>/Resources/Localizable.xcstrings`, and its target declares
@@ -195,8 +197,9 @@ both without being told ("Who checks what").
     other number in it is formatted first and passed as a `String`, so it is
     `%@` in the key (`"%@ of %lld sets"`). Two counts are two keys, joined with
     " · ".
-  - A translator's comment is written in code (`comment:`), and the catalog's
-    `"comment"` is the same sentence, word for word.
+  - A translator's comment may stand in the catalog alone. When the code
+    gives one (`comment:`), the catalog's `"comment"` must equal it, word for
+    word.
   - No key and no text holds the product's name
     (`docs/product-decisions.md`, Naming).
   - A catalog is edited as text, as Xcode's tool writes it: two-space indent,
@@ -210,18 +213,23 @@ both without being told ("Who checks what").
   members return `String`. It holds lookups and nothing else, in two forms:
   1. `String(localized: "…", bundle: .module)`, with `locale:` straight after
      the bundle whenever the key carries a value, and `comment:` where a
-     translator needs one. The caller passes the injected
-     `@Dependency(\.locale)`. The locale picks more than the digits and their
-     grouping: it also picks the plural rule, over the English words (`fr_FR`
-     gives "0 fixture set", pinned by
+     translator needs one. The locale is a parameter of the copy member: the
+     caller passes the injected `@Dependency(\.locale)`, and the member never
+     writes one itself (`locale: .current`). The locale picks more than the
+     digits and their grouping: it also picks the plural rule, over the English
+     words (`fr_FR` gives "0 fixture set", pinned by
      `CatalogBuildAdversarialTests.pluralForm_followsTheLocalesLanguage`), so a
      lookup without it takes both from the device and a test cannot fix them.
   2. `Text("… \(timerInterval: start ... end)", bundle: .module)`, only for a
      line that embeds a live timer; the member returns `Text` and the key holds
-     `%@` where the timer stands. A line is never joined from `Text + Text`.
+     `%@` where the timer stands. The timer form carries the timer and no
+     other value: it can take no `locale:`. A line is never joined from
+     `Text + Text`, and a copy file makes no other `Text`.
 
   A value interpolated into a key is a parameter of the member, an `Int` or a
-  `String`; anything else is formatted first and passed as a `String`. The key
+  `String`; anything else is formatted first and passed as a `String`. So a
+  key holds only `%lld` and `%@` (with their positional forms, `%1$@`, and
+  `%%`), and a catalog key with any other specifier is refused. The key
   is a one-line literal: a key built at run time (an enum's raw value) cannot
   be compared with the catalog, so each case gets its own lookup. A lookup is
   never written inside another literal's interpolation: a join is two
@@ -250,15 +258,19 @@ hand.
    the iOS build, in every mode that builds iOS, and so in CI. For every
    `LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` it takes the
    keys the compiler extracted from that module's sources (the build's
-   `.stringsdata` files) and fails on a key the code looks up that the catalog
-   lacks and on a catalog key no code looks up, naming each. Then it runs
-   Xcode's own `xcrun xcstringstool sync` on a temporary copy and fails when the
-   tool would write the file differently: a comment that is not the code's,
-   keys out of order, a key twice, another layout. A composed and a decomposed
-   spelling of a key are two keys. It reads the committed catalog and never
-   writes it. Because it reads what the compiler extracted, it also sees what
-   no source check can: a bare `Text("…")` in any file of the module, a preview
-   included, is a key the catalog lacks.
+   `.stringsdata` files). First it fails every lookup that is not in a copy
+   file, with its file and line, whether or not the catalog has its key. The
+   compiler sees what no source check can: a bare `Text("…")` in a preview is
+   such a lookup, and so is `Button("\(done)/\(total)")`, which has no letter.
+   The cure is in the message: move the lookup into the copy file and hand the
+   view a `String`; in Debug-only code that needs no translation write
+   `Text(verbatim:)`; never give the catalog a key for it. Then it fails on a
+   key the copy files look up that the catalog lacks and on a catalog key no
+   code looks up, naming each. Then it runs Xcode's own
+   `xcrun xcstringstool sync` on a temporary copy and fails when the tool would
+   write the file differently: a comment that is not the code's, keys out of
+   order, a key twice, another layout. A composed and a decomposed spelling of
+   a key are two keys. It reads the committed catalog and never writes it.
 2. **Copy stands only in the copy files: `CopyAudit`
    (`LedgerTestSupport/Localization/`), on the sources.** It derives no key.
    - Outside a copy file, a localized lookup is a finding, however it is spelled
@@ -277,11 +289,13 @@ hand.
    - In a copy file, anything but the two forms above is a finding: a literal
      that is not a lookup's key, a lookup without `bundle: .module`, a key with
      a value and no `locale:`, another lookup API, a key that is not a one-line
-     literal, a lookup inside an interpolation. A `comment:` is not read. A copy
-     file in a module without a catalog is a finding.
+     literal, a lookup inside an interpolation, and a `Text` that is not the
+     timer form (one made from a `String`, from `verbatim:`, or joined from
+     parts). A `comment:` is not read. A copy file in a module without a
+     catalog is a finding.
    - The catalog's own rules above (source language, English text, state,
-     plural forms, the product's name) are findings. Texts are compared
-     exactly, scalar by scalar.
+     plural forms, a specifier other than `%lld` and `%@`, the product's name)
+     are findings. Texts are compared exactly, scalar by scalar.
    - **Exemptions name literals, not files.** A module's entry in
      `ModuleCopyTests.exemptions` lists, per file, the literals no lifter sees
      (a launch argument, a file name), with the reason. Any other literal of
@@ -290,7 +304,9 @@ hand.
      `*+Previews.swift` go unread only when they are wholly inside `#if DEBUG`
      (imports may stand before it), which the audit verifies. The G3 reviewer
      confirms each exemption. A file that declares a view, a store or a
-     presentation builder is never exempt.
+     presentation builder is never exempt. The table is one every feature lane
+     edits (a shared file, as `Package.swift`'s `snapshotTestTargets` is): add
+     only your own module's entry.
    - A module folder that cannot be read fails the audit.
 3. **The built bundle resolves every key: `StringCatalog.unresolvedKeys(in:)`**
    on the bundle the build made (`StringCatalog.resourceBundle(ofModule:)`).
@@ -308,47 +324,71 @@ modules it does not audit:
   are data, SQL, keys and log lines.
 - **Not yet converted**: `LedgerDesign` (VoiceOver words looked up in
   components, the Debug gallery) and `LedgerWatchAppKit` (its placeholder and
-  can't-open screen). This table only shrinks: a chore after F09 S1 converts
-  both, and a module that passes the audit while still listed fails the suite.
+  can't-open screen). This table only shrinks, and a module that passes the
+  audit while still listed fails the suite. The chore after F09 S1 converts
+  `LedgerDesign` only. `LedgerWatchAppKit` converts with F18, and
+  `WatchFeatureWorkout` gets its catalog then too: the iOS build compiles
+  neither, so check 1 has nothing to compare a catalog there with and fails
+  it, and the iOS tests do not embed the watch bundles, so check 3 cannot ask
+  them. F18 teaches the step to read the watch build and gives a watch test
+  target check 3.
 
 A module with a counted string also tests it through its copy file, with one
 and with several.
 
-**Known limits.** The audit reads text, not types; it does not find these, and
-review has to. Each is kept as a `limit` test (`CopyAuditLimitTests`, and the
-two marked "Limit" in the tester's `CopyAuditAdversarialTests` and
-`CopyAuditAllowedAdversarialTests`), which fails if the audit starts to find
-it, so this list stays true.
+To run the checks yourself: `swift test --package-path LedgerKit
+--only-use-versions-from-resolved-file --filter ModuleCopyTests` for 2 and 3
+(on the Mac, a few seconds after the build), and the gate, `scripts/check.sh`,
+for 1.
 
-- A literal without a letter that is not handed straight to `Text(…)`:
-  `Label("—", …)`, `.navigationTitle("\(count)")`, a `"\(done)/\(total)"`
-  held in a constant.
+**Known limits.** The audit reads text, not types; it does not find these, and
+review has to. Each is kept as a `limit` test (`CopyAuditLimitTests`, and those
+marked "Limit" in the tester's `CopyAuditAdversarialTests`,
+`CopyAuditAllowedAdversarialTests` and `CopyAuditCloseOutAdversarialTests`),
+which fails if the audit starts to find it, so this list stays true.
+
+- A literal without a letter that is not handed straight to `Text(…)`, where
+  check 1 does not see it either: one that is no lookup (a
+  `"\(done)/\(total)"` held in a `String` constant), and any in a module that
+  has no catalog yet (`Label("—", …)`, `.navigationTitle("\(count)")`). In a
+  module with a catalog, check 1 fails those two as lookups outside the copy
+  file.
 - A text made from a name instead of a literal:
   `Text(day.rawValue.capitalized)`.
 - A call that only reads like an allowed one: any argument labelled
   `identifier:`, `…Identifier:`, `systemImage:`, `systemName:` or `category:`
   (`Chip(category: "Push day")`), and a level call on anything named like a
   logger (`toastLogger.error("…")`).
-- A `Text` joined from parts in a copy file
-  (`Text(String(localized: …)) + Text(verbatim: " · ") + elapsed`): forbidden
-  above, not found.
 - What a key's value is. The audit does not read an interpolation's type or
-  expression: `"Week \(week + 1)"`, a `Double` (keyed `%lf`) and an optional
-  (keyed `%@`, and shown as `Optional(3)`) all pass it. Check 1 then holds the
-  catalog to whatever key the compiler gives. The compiler warns of the
-  optional, and a warning does not fail a package target's build.
+  expression: `"Week \(week + 1)"` and an optional (keyed `%@`, and shown as
+  `Optional(3)`) pass it. The compiler warns of the optional, and a warning
+  does not fail a package target's build. A `Double` or another type is
+  caught one step later, by its specifier: check 1 holds the catalog to the
+  compiler's key (`%lf`), and the catalog's rules refuse that key.
+- A locale written into a copy member (`locale: .current`, `Locale.current`,
+  `.autoupdatingCurrent`): the audit reads as far as `locale:`.
 - Code in a copy file that holds no literal (`.uppercased()`, a join of two
   members): the audit does not check that a member is a lookup and no more.
 - An exemption is a text: it covers every literal of its file that reads so,
   wherever it stands (never one handed to `Text(…)`).
 - A regex literal that holds a quote or `/*` is read as the start of a string
   or a comment, which hides the code after it.
+- Parentheses that do not balance in the text leave every later literal
+  inside that argument, unread when its label is an allowed one: a call
+  opened in both branches of an `#if` and closed once after `#endif`, or a
+  regex literal that holds `(` (`/\(identifier: /`).
 
 Outside the audit's reach altogether, and so for review: the app targets under
 `Apps/` (thin by rule, §2), files that are not Swift, and the modules in the
-first table. Check 1 has its own reach: it reads the iOS build, so a lookup
-compiled only for watchOS is seen as a key no code looks up until a watch
-module has a catalog and the step reads the watch build as well.
+first table. Check 1 has its own reach: it reads the iOS build. A module that
+only the watch build compiles has nothing there to be compared with (above),
+and a lookup compiled only for watchOS in a module both builds compile is
+seen as a key no code looks up. Check 1 also fails any other `*.xcstrings`
+under `LedgerKit/Sources`: a module has one catalog, in one place. And it
+compares a source by the `.stringsdata` its last build wrote, so a source
+edited since that build is compared as it was built: `check.sh` always builds
+first, and a run by hand needs a build (a known limit of the step, kept by
+case ST09 of `string-catalogs-tester.adv.sh`).
 
 **Considered and not taken: generated string symbols** (Xcode's
 `GeneratedStringSymbols`, a typed accessor per catalog key). They would give
@@ -365,7 +405,7 @@ files become a burden.
   it should. Check 1 needs the iOS build and runs only in the gate.
   `scripts/check.sh --fast` runs only the Domain and Persistence tests, so a
   module's copy is proven by the full gate. watchOS is unproven until a watch
-  module has a catalog.
+  module has a catalog (F18).
 
 ### Design lint (`ledger_raw_*`): a tripwire, not a proof
 

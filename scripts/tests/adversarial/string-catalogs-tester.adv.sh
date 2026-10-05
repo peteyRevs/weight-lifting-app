@@ -39,11 +39,11 @@ enum CommentCopy {
     static var history: String { String(localized: "History", bundle: .module) }
 }
 SWIFT
-cat >"$SRC/FirstComment.swift" <<'SWIFT'
+cat >"$SRC/FirstCommentCopy.swift" <<'SWIFT'
 import Foundation
 enum FirstComment { static var today: String { String(localized: "Today", bundle: .module, comment: "The tab") } }
 SWIFT
-cat >"$SRC/SecondComment.swift" <<'SWIFT'
+cat >"$SRC/SecondCommentCopy.swift" <<'SWIFT'
 import Foundation
 enum SecondComment { static var today: String { String(localized: "Today", bundle: .module, comment: "The screen") } }
 SWIFT
@@ -158,7 +158,7 @@ passes "ST02 ... and passes once the catalog has that sentence"
 # alone: until that is ruled this pins what happens (test-findings.md, F9-S1-13).
 module comment-only-catalog Tabs TabsCopy && catalog "$(entry 'History')" "$(entry 'Today' 'Only the catalog says this')"
 passes "ST03 Spec question: a comment only the catalog gives passes, though §7 has a translator's comment written in code"
-module comment-twice Tabs FirstComment SecondComment && catalog "$(entry 'Today' 'The tab')" && run
+module comment-twice Tabs FirstCommentCopy SecondCommentCopy && catalog "$(entry 'Today' 'The tab')" && run
 first="$code"
 catalog "$(entry 'Today' 'The screen')" && run
 second="$code"

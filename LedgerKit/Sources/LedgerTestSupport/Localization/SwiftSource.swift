@@ -112,4 +112,37 @@ public struct SwiftSource: Sendable {
             .filter { compact[$0 ..< $0 + wanted.count].elementsEqual(wanted) }
             .map { compactLines[$0] }
     }
+
+    /// Each call of `name` in the file's own code (`Text(`, `SwiftUI.Text(`; not `richText(`), with the line it
+    /// stands on and whether a string literal is its first argument, unlabelled. Read from `code`, where a name's
+    /// own spaces still stand: without them `return Text(` would read as one name.
+    public func calls(of name: String) -> [(line: Int, opensWithALiteral: Bool)] {
+        let text = Array(code.joined(separator: "\n"))
+        let wanted = Array(name)
+        var calls: [(line: Int, opensWithALiteral: Bool)] = []
+        var line = 1
+        for start in text.indices {
+            if text[start].isNewline {
+                line += 1
+            }
+            let isAName = start == 0 || !Self.isNameCharacter(text[start - 1])
+            guard isAName, text[start...].starts(with: wanted) else {
+                continue
+            }
+            var index = start + wanted.count
+            guard index < text.count, text[index] == "(" else {
+                continue
+            }
+            index += 1
+            while index < text.count, text[index].isWhitespace {
+                index += 1
+            }
+            calls.append((line, text[index...].starts(with: "\"\"")))
+        }
+        return calls
+    }
+
+    private static func isNameCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber || character == "_"
+    }
 }

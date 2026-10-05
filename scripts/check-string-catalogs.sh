@@ -5,9 +5,12 @@
 # The keys come from the compiler, not from reading Swift: every Xcode build of the iOS scheme writes the
 # keys it extracted from each source file to <Source>.stringsdata, beside the object files. For every
 # LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings this script
-#   1. compares the catalog's keys with those files' keys, byte for byte, and names each key the code looks
-#      up that the catalog lacks and each catalog key no code looks up;
-#   2. when the keys agree, runs `xcrun xcstringstool sync` (what Xcode runs to update a catalog) on a copy
+#   1. fails every lookup that is not in a copy file (<Name>Copy.swift, <Name>Copy+<Area>.swift), with its
+#      file and line, whether or not the catalog has its key: a bare Text("...") in a view or a preview is
+#      one, and so is Button("\(a)/\(b)"), which has no letter for the source audit to see;
+#   2. compares the catalog's keys with the keys the copy files look up, byte for byte, and names each key
+#      the code looks up that the catalog lacks and each catalog key no code looks up;
+#   3. when 1 and 2 find nothing, runs `xcrun xcstringstool sync` (what Xcode runs to update a catalog) on a copy
 #      in a temporary folder, and shows a diff when the tool would write the file differently: a comment
 #      that differs from the code's, keys out of order, a key written twice, another layout.
 # The final newline is set aside: the tool ends the file without one, a hand-written catalog with one.
@@ -17,7 +20,16 @@
 # (GeneratedStringSymbols_Localizable, resource_bundle_accessor, ExtractedAppShortcutsMetadata) are left
 # out: they come from the catalog and the package, not from a lookup an author wrote.
 #
-# The committed catalog is only read. Nothing here builds: run it after an iOS build (check.sh step 3).
+# A module has one catalog, at that path. Any other .xcstrings under LedgerKit/Sources fails this step: the
+# build would compile it into the module's bundle, and nothing would check it.
+#
+# Only the iOS build is read. A module that only the watch build compiles (LedgerWatchAppKit,
+# WatchFeatureWorkout) gets its catalog with F18, when this step learns to read the watch build
+# (docs/engineering-standards.md §7); until then a catalog there fails with "nothing to be compared with".
+#
+# The committed catalog is only read, and may be read-only. Nothing here builds: run it after an iOS build
+# (check.sh step 3). A known limit: a source edited since that build is compared by the .stringsdata the
+# build wrote, so a run by hand needs a build first; check.sh always builds before this step.
 #
 #   scripts/check-string-catalogs.sh [<repository root> [<derived data>]]
 #
@@ -25,8 +37,8 @@
 # (check.sh's -derivedDataPath).
 #
 # Exit 0: every catalog matches. 1: a catalog does not match or has no build output to compare with (the
-# others are still checked), or there is no catalog at all: the app has copy, so finding none means the
-# catalogs moved, and this step must not pass on nothing. 2: wrong arguments.
+# others are still checked), a catalog stands somewhere else, or there is no catalog at all: the app has
+# copy, so finding none means the catalogs moved, and this step must not pass on nothing. 2: wrong arguments.
 set -euo pipefail
 
 if [[ $# -gt 2 ]]; then
@@ -64,8 +76,10 @@ cat >"$WORK/extra.stringsdata" <<JSON
 }
 JSON
 
-# One line per key that only one side has; nothing when the keys agree. A key is shown as JSON text, and
-# again with each non-ASCII character as a Swift escape when it has one: two keys can look the same.
+# One line per finding, tagged and a tab before it; nothing when the module is sound. "O": a lookup outside
+# the copy files. "K": a key that only one side has, the code's side being the copy files' lookups. A key
+# is shown as JSON text, and again with each non-ASCII character as a Swift escape when it has one: two
+# keys can look the same. A copy file is named as CopyAudit.isCopyFile names one.
 # shellcheck disable=SC2016 # a jq program, not shell
 KEY_FINDINGS='
 def hex: def digit: "0123456789ABCDEF"[.:. + 1]; if . < 16 then digit else (. / 16 | floor | hex) + (. % 16 | digit) end;
@@ -77,23 +91,29 @@ def shown:
 [inputs
     | (input_filename | sub(".*/"; "") | sub("\\.stringsdata$"; ".swift")) as $file
     | .tables.Localizable[]?
-    | {key, at: "\($file):\(.location.startingLine // "?")"}] as $lookups
+    | {key, at: "\($file):\(.location.startingLine // "?")", copy: ($file | test("^\\w+Copy(\\+\\w+)?\\.swift$"))}] as $all
+| ($all | map(select(.copy))) as $lookups
 | ($lookups | map(.key) | unique) as $used
+| ($all | map(.key) | unique) as $anywhere
 | ($catalog[0].strings | keys_unsorted) as $catalogued
-| (($used - $catalogued)[] as $key
-    | "  the code looks up \($key | shown) (\([$lookups[] | select(.key == $key) | .at] | unique | join(", "))), which is not a key of the catalog"),
-  (($catalogued - $used)[] | "  the catalog has the key \(shown), which no code looks up")
+| (($all | map(select(.copy | not)) | unique_by([.at, .key]))[] | "O\t  \(.at) looks up \(.key | shown)"),
+  (($used - $catalogued)[] as $key
+    | "K\t  the code looks up \($key | shown) (\([$lookups[] | select(.key == $key) | .at] | unique | join(", "))), which is not a key of the catalog"),
+  (($catalogued - $anywhere)[] | "K\t  the catalog has the key \(shown), which no code looks up")
 '
 
-# with_final_newline <file> <copy>: the file, ending in a newline whether or not it did.
+# with_final_newline <file> <copy>: the file, ending in a newline whether or not it did. The copy is a new
+# file, written with cat: cp would give it the mode of a read-only catalog, and the newline could not be added.
 with_final_newline() {
-    cp "$1" "$2"
+    cat "$1" >"$2"
     if [[ -n "$(tail -c 1 "$1")" ]]; then printf '\n' >>"$2"; fi
 }
 
+TAB="$(printf '\t')"
+
 # check_catalog <catalog>: 0 when it matches its module's code; otherwise says why on stderr and returns 1.
 check_catalog() {
-    local catalog="$1" module objects work source data findings copy tool_says
+    local catalog="$1" module objects work source data findings outside keys copy tool_says
     local files=() flags=() unbuilt=()
     module="$(basename "$(dirname "$(dirname "$catalog")")")"
     objects="$INTERMEDIATES/$module-t.build/Objects-normal/arm64"
@@ -115,8 +135,11 @@ check_catalog() {
 error: $catalog has nothing to be compared with: the iOS build left no
        .stringsdata for $module's Swift files in
        $objects
-       Either iOS has not been built (scripts/check.sh builds it, then runs this step), or Xcode's build
-       folder is laid out differently now and this script must follow it.
+       One of three things. iOS has not been built: scripts/check.sh builds it, then runs this step.
+       Or $module is a watch module, which the iOS build does not compile: this step reads the iOS
+       build only, and LedgerWatchAppKit and WatchFeatureWorkout get their catalogs with F18
+       (docs/engineering-standards.md §7), so take this catalog out until then. Or Xcode's build folder
+       is laid out differently now, and this script must follow it.
 MSG
         return 1
     fi
@@ -133,18 +156,31 @@ MSG
         printf '%s\n' "$findings" | sed 's/^/       /' >&2
         return 1
     fi
-    if [[ -n "$findings" ]]; then
+    outside="$(sed -n "s/^O$TAB//p" <<<"$findings")"
+    keys="$(sed -n "s/^K$TAB//p" <<<"$findings")"
+    if [[ -n "$outside" ]]; then
+        cat >&2 <<MSG
+error: $module looks up copy outside its copy files:
+$outside
+       Every lookup of a module is in <Name>Copy.swift or <Name>Copy+<Area>.swift (standards §7), and
+       these files are neither. Do not give the catalog a key for such a lookup, and delete one it holds
+       only for it. Move the lookup into the copy file and hand the view a String. In Debug-only code
+       that needs no translation (a preview, a Debug page), write Text(verbatim: "..."). A literal
+       handed to a view is a lookup, with letters or without: Text("..."), Button("\(done)/\(total)").
+MSG
+    fi
+    if [[ -n "$keys" ]]; then
         cat >&2 <<MSG
 error: $catalog and $module's code disagree on the keys:
-$findings
+$keys
        Give the catalog a key for each lookup it lacks, spelled exactly as shown, with its English text
        and a comment. Delete a key no code looks up, or look it up in the module's copy file. A key is
-       the text in the code, with each value written as its specifier (%lld for an Int, %@ for a String,
-       %lf for a Double) and, only in a text that has a value, each % doubled. A literal handed to a
-       view, as in Text("..."), is a lookup too.
+       the text in the code, with each value written as its specifier (%lld for an Int, %@ for a String;
+       a value of any other type is formatted first and passed as a String) and, only in a text that
+       has a value, each % doubled.
 MSG
-        return 1
     fi
+    [[ -z "$findings" ]] || return 1
 
     copy="$work/Localizable.xcstrings" # this name: the tool reads the table's name from the file's
     cp "$catalog" "$copy"
@@ -178,9 +214,23 @@ for catalog in LedgerKit/Sources/*/Resources/Localizable.xcstrings; do
     check_catalog "$catalog" || failed=$((failed + 1))
 done
 
+# A catalog anywhere else under the sources is one the loop above did not see.
+elsewhere=0
+while IFS= read -r -d '' other; do
+    if [[ ! "$other" =~ ^LedgerKit/Sources/[^/]+/Resources/Localizable\.xcstrings$ ]]; then
+        elsewhere=$((elsewhere + 1))
+        echo "error: $other is a String Catalog that nothing checks. A module has one catalog," >&2
+        echo "       LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings: move its keys there, or delete it." >&2
+    fi
+done < <(find LedgerKit/Sources -name '*.xcstrings' -print0 2>/dev/null | LC_ALL=C sort -z)
+
 if [[ $checked -eq 0 ]]; then
     echo "error: no String Catalog at LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings under $PWD." >&2
     echo "       The app has user-facing copy, so the catalogs moved or the root is wrong: nothing was checked." >&2
+    exit 1
+fi
+if [[ $elsewhere -gt 0 ]]; then
+    echo "error: string catalogs: $elsewhere stand where nothing checks them (above); $failed of $checked failed this check." >&2
     exit 1
 fi
 if [[ $failed -gt 0 ]]; then

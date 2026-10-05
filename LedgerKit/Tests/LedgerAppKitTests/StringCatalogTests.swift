@@ -37,6 +37,21 @@ struct StringCatalogTests {
         #expect(StringCatalog.specifiers(in: "No specifier, 50 % off") == [])
     }
 
+    @Test(
+        "The specifiers a key may not hold are every one but %lld and %@; a percent sign that formats nothing is text"
+    )
+    func otherSpecifiers_areEveryOneButWholeNumbersAndTexts() {
+        #expect(StringCatalog.otherSpecifiers(in: "Week %lld of %lld · %@ · %1$@ of %2$lld · %lld%% · 100% done") == [])
+        #expect(StringCatalog.otherSpecifiers(in: "%lf, %d, %ld, %llu, %f, %s, %i") == [
+            "%lf", "%d", "%ld", "%llu", "%f", "%s", "%i"
+        ])
+        #expect(StringCatalog.otherSpecifiers(in: "%.1f kg · %05.2f · %2$d · %-8s") == ["%.1f", "%05.2f", "%d", "%-8s"])
+        #expect(
+            StringCatalog.otherSpecifiers(in: "%%lf · %%%lf · %lldx") == ["%lf"],
+            "an escaped sign, then a real one"
+        )
+    }
+
     @Test("A file that is not a catalog throws")
     func notACatalog_throws() {
         #expect(throws: (any Error).self) {
@@ -59,6 +74,9 @@ nonisolated struct BrokenRule: Sendable, CustomTestStringConvertible {
     let key: String
     let entry: TestCatalog.Entry
     let problems: [String]
+
+    static let wholeNumbersAndTexts = "a key's values are whole numbers (%lld) and texts (%@), "
+        + "so format anything else first and pass it as a String"
 
     static let all: [BrokenRule] = [
         BrokenRule(
@@ -139,8 +157,29 @@ nonisolated struct BrokenRule: Sendable, CustomTestStringConvertible {
         BrokenRule(
             testDescription: "a form whose specifier is not the key's",
             key: "%lld exercises",
-            entry: .counted(["one": "%d exercise", "other": "%lld exercises"]),
+            entry: .counted(["one": "%@ exercise", "other": "%lld exercises"]),
             problems: ["\"%lld exercises\" has a \"one\" form whose format specifiers are not the key's"]
+        ),
+        BrokenRule(
+            testDescription: "a key that formats a Double",
+            key: "%lf lb moved",
+            entry: .text("%lf lb moved"),
+            problems: ["\"%lf lb moved\" holds %lf: \(BrokenRule.wholeNumbersAndTexts)"]
+        ),
+        BrokenRule(
+            testDescription: "a key with a precision, a 32-bit number and a C string, one of them by position",
+            key: "%.1f kg · %2$d sets · %s",
+            entry: .text("%.1f kg · %2$d sets · %s"),
+            problems: ["\"%.1f kg · %2$d sets · %s\" holds %.1f, %d, %s: \(BrokenRule.wholeNumbersAndTexts)"]
+        ),
+        BrokenRule(
+            testDescription: "a counted form with another specifier, which the key does not have",
+            key: "%lld exercises",
+            entry: .counted(["one": "%lld exercise of %d", "other": "%lld exercises"]),
+            problems: [
+                "\"%lld exercises\" holds %d: \(BrokenRule.wholeNumbersAndTexts)",
+                "\"%lld exercises\" has a \"one\" form whose format specifiers are not the key's"
+            ]
         ),
         BrokenRule(
             testDescription: "a form that drops the count",

@@ -28,12 +28,20 @@ nonisolated struct ModuleCopyTests {
     /// Modules that draw text and do not follow standards §7 yet. This table only shrinks: a module leaves it in
     /// the change that gives it a copy file and a catalog, and `notYetConverted_stillFailsTheAudit` fails for a
     /// module that could leave it and has not.
+    ///
+    /// The watch waits for F18. The gate's catalog step reads the iOS build, which compiles neither watch module,
+    /// and this test bundle does not embed their resource bundles, so a catalog there would fail both. F18 gives
+    /// `LedgerWatchAppKit` and `WatchFeatureWorkout` their catalogs (the second holds no copy yet, so it is
+    /// audited today and not listed here).
     static let notYetConverted = [
-        "LedgerDesign": "seven VoiceOver words looked up in WeekStrip and SetRow, and the Debug gallery's samples",
-        "LedgerWatchAppKit": "the placeholder's title and the can't-open screen, as literals"
+        "LedgerDesign": "14 lookups in six files (VoiceOver words in WeekStrip and SetRow, the Debug menu, the "
+            + "gallery's samples); the chore after F09 S1 converts it",
+        "LedgerWatchAppKit": "the placeholder's title and the can't-open screen, as literals; converts with F18, "
+            + "when the catalog step reads the watch build and a watch test target asks the watch bundles"
     ]
 
     /// What each audited module sets aside (`CopyAudit.Exemptions`; standards §7: the reviewer confirms each).
+    /// A shared file in the sense of M1 convention 4: a feature lane adds only its own module's entry.
     static let exemptions: [String: CopyAudit.Exemptions] = [
         "LedgerAppKit": CopyAudit.Exemptions(
             // The UI-test launch argument (twice) and the temporary database's path: read by the launch, never drawn.
