@@ -198,6 +198,47 @@ extension OnboardingFailureAdversarialTests {
         try await scene.expectOneProgram(goal: .both, days: .four, offered: 2)
     }
 
+    @Test(
+        "While the failure is shown no pick and no step change lands; nor after a retry that was cancelled",
+        arguments: 0 ... 2
+    )
+    func failed_picksAndSteps_areLocked(advances: Int) async throws {
+        let scene = try AdversarialScene(.seeded())
+        scene.programs.script.next(.fail("write"))
+        scene.store.send(.pickGoal(.hypertrophy))
+        for _ in 0 ..< advances {
+            scene.store.send(.advance)
+        }
+        scene.store.send(.pickDays(.five))
+        await scene.tap(advances == 2 ? .startTraining : .skipSetup)
+        try await Self.expectFailureShown(scene)
+        let locked = scene.store.state
+        let edits: [OnboardingAction] = [
+            .back, .advance, .pickGoal(.strength), .pickGoal(.both), .pickDays(.three), .pickDays(.six),
+            .startTraining
+        ]
+        for action in edits {
+            scene.store.send(action)
+            #expect(scene.store.state == locked, "\(action)")
+        }
+        #expect(!scene.store.model.canEdit)
+        // A retry whose task is cancelled in its retry step is a failure still waiting: still locked.
+        let stuck = Checkpoint()
+        scene.onPrepare = { await stuck.pass() }
+        scene.store.send(.retry)
+        let task = Task { await scene.runSave() }
+        await stuck.arrivals()
+        task.cancel()
+        stuck.open()
+        await task.value
+        #expect(scene.store.state == locked)
+        for action in edits {
+            scene.store.send(action)
+            #expect(scene.store.state == locked, "after a cancelled retry: \(action)")
+        }
+        #expect(scene.programs.saved.isEmpty)
+    }
+
     @Test("Skip setup after a failed Start training saves the default program, once")
     func skipSetup_afterAFailedStart_savesTheDefault() async throws {
         let scene = try AdversarialScene(.seeded())

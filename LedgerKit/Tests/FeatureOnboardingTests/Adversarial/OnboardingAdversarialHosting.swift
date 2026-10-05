@@ -27,6 +27,8 @@
         static let mini = PhoneFrame(name: "mini 375x812", width: 375, height: 812, safeTop: 50, safeBottom: 34)
         /// The phone the snapshot references are drawn for.
         static let seventeen = PhoneFrame(name: "17 402x874", width: 402, height: 874, safeTop: 62, safeBottom: 34)
+        /// The widest phone iOS 26 runs on: iPhone 16 Pro Max and 17 Pro Max.
+        static let widest = PhoneFrame(name: "Pro Max 440x956", width: 440, height: 956, safeTop: 62, safeBottom: 34)
 
         /// The same phone with room for any text: what each element measures when nothing presses on it.
         var tall: PhoneFrame {

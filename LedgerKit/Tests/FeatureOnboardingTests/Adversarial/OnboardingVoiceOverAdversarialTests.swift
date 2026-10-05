@@ -8,10 +8,15 @@
     import Testing
     import UIKit
 
-    /// F08 S2 adversarial round 1, criteria 2, 3 and 8: what a hosted screen hands VoiceOver in each step and state.
+    /// F08 S2 adversarial round 1, criteria 2, 3 and 8: what the screen hands VoiceOver in each step and state.
     /// The expected reading is written from the brief: the screen's parts top to bottom ("Back", the bars as one
     /// element "Step n of 3", the title, its line, the picks as one button each "{label}, {sub}" or the days as
     /// text, the failure line, the primary button, "Skip setup").
+    ///
+    /// Close-out (round 2): the screen is now its pinned part under `ScrollView { OnboardingPage }`, and the
+    /// hosted reader cannot see inside a scroll view, so every tree here is read from the page followed by the
+    /// pinned part (`AdversarialParts`), as testing-strategy §2.6 says. The expectations are round 1's, with
+    /// one made stricter by ruling: while the failure is shown, "Back" and the picks are locked.
     @Suite("Adversarial F08 S2 · what VoiceOver gets")
     struct OnboardingVoiceOverAdversarialTests {
         typealias Element = AccessibilityElementSnapshot
@@ -40,11 +45,12 @@
             ]
         }
 
+        /// The page of `state` followed by its pinned part: what the reader can read of the screen.
         static func screen(
             _ state: OnboardingState,
             send: @escaping (OnboardingAction) -> Void = { _ in }
-        ) -> OnboardingScreen {
-            OnboardingScreen(model: OnboardingPresentation.make(state, locale: Fixtures.locale), send: send)
+        ) -> AdversarialParts {
+            AdversarialParts(state, send: send)
         }
 
         static func said(_ element: Element) -> String {
@@ -159,22 +165,37 @@
                 (Shown.all[0], BriefCopy.goals.map { .pickGoal($0.goal) } + [.advance, .skipSetup]),
                 (Shown.all[2], [.back] + BriefCopy.days.map { .pickDays($0.days) } + [.advance, .skipSetup]),
                 (Shown.all[4], [.back, .startTraining, .skipSetup]),
-                (Shown.all[8], [.retry, .skipSetup])
+                (Shown.all[8], [.retry, .skipSetup]),
+                (Shown.all[9], [.retry, .skipSetup])
             ]
             for (shown, actions) in expected {
                 var sent: [OnboardingAction] = []
                 Self.screen(shown.state) { sent.append($0) }.withAccessibilityElements { elements in
-                    let enabled = elements.filter {
-                        $0.accessibilityTraits.contains(.button) && !$0.accessibilityTraits.contains(.notEnabled)
-                    }
-                    for element in enabled {
+                    // Every button is activated, dimmed or not: a locked control must send nothing.
+                    for element in elements where element.accessibilityTraits.contains(.button) {
                         _ = element.accessibilityActivate()
                     }
                 }
-                // After a failure the brief names Retry and Skip setup; whether Back answers there is a question
-                // for the product, so only those two are required of that state.
-                let relevant = shown.state.phase == .failed ? sent.filter { $0 != .back } : sent
-                #expect(relevant == actions, "\(shown)")
+                // Criterion 7 as revised: while the failure is shown the picks and "Back" are locked, so only
+                // "Retry" and "Skip setup" send anything there.
+                #expect(sent == actions, "\(shown)")
+            }
+        }
+
+        @Test("While the failure is shown, Back and every pick are dimmed for VoiceOver; Retry and Skip setup are not")
+        func failed_picksAndBack_areLocked() {
+            for state in [
+                OnboardingState(step: .program, phase: .failed), OnboardingState(step: .days, phase: .failed),
+                OnboardingState(phase: .failed)
+            ] {
+                let buttons = Self.screen(state).accessibilityElements().filter { $0.traits.contains(.button) }
+                let open = buttons.filter { !$0.traits.contains(.notEnabled) }.map(\.label)
+                #expect(open == [BriefCopy.retry, BriefCopy.skipSetup], "\(state.step)")
+                let locked = buttons.filter { $0.traits.contains(.notEnabled) }.map(\.label)
+                let picks = Self.picks(state).map(\.said)
+                #expect(locked == (state.step == .goal ? [] : [BriefCopy.back]) + picks, "\(state.step)")
+                // The pick stays ticked while it is locked.
+                #expect(buttons.count { $0.traits.contains(.selected) } == (picks.isEmpty ? 0 : 1))
             }
         }
 
@@ -201,47 +222,13 @@
 
         @Test("Every control is at least 44 pt each way at every text size of the matrix", arguments: Shown.all)
         func hitTargets_everyState_areAtLeast44(_ shown: Shown) {
-            for appearance in SnapshotAppearance.phoneMatrix {
+            let ends = [SnapshotAppearance(.light, .xSmall), SnapshotAppearance(.dark, .accessibility5)]
+            for appearance in SnapshotAppearance.phoneMatrix + ends {
                 let buttons = Self.screen(shown.state).accessibilityElements(appearance)
                     .filter { $0.traits.contains(.button) }
                 let small = buttons.filter { $0.frame.width < 44 || $0.frame.height < 44 }
                 #expect(small.isEmpty, "\(appearance): \(small)")
                 #expect(buttons.count >= 2)
-            }
-        }
-
-        @Test("The root reads as its screen does, and taps on it reach its store: picks, steps, one attempt")
-        func root_hosted_readsAndAnswersAsItsScreen() throws {
-            let scene = try AdversarialScene(.seeded())
-            let root = OnboardingRoot(store: scene.store, prepareRetry: {})
-            func parts(_ elements: [Element]) -> [String] {
-                elements.map { "\($0.label) | \($0.value) | \($0.traits.rawValue)" }
-            }
-            #expect(parts(root.accessibilityElements()) ==
-                parts(Self.screen(OnboardingState()).accessibilityElements()))
-            root.withLiveAccessibilityElements { read in
-                @MainActor
-                func tap(_ label: String) {
-                    _ = read().first { $0.accessibilityLabel == label }?.accessibilityActivate()
-                }
-                tap("Get stronger, Low reps, linear load increases")
-                tap(BriefCopy.continueTitle)
-                tap("6 days, Body-part split")
-                tap(BriefCopy.back)
-                #expect(scene.store.state == OnboardingState(step: .goal, goal: .strength, days: .six))
-                tap(BriefCopy.continueTitle)
-                tap(BriefCopy.continueTitle)
-                let said = read().map { $0.accessibilityLabel ?? "" }
-                #expect(said.contains("Body-Part Split, 8 weeks, pounds. Editable any time."), "\(said)")
-                tap(BriefCopy.startTraining)
-                let attempt = scene.store.attempt
-                tap(BriefCopy.startTraining)
-                tap(BriefCopy.skipSetup)
-                tap(BriefCopy.back)
-                #expect(scene.store.attempt == attempt)
-                #expect(attempt?.goal == .strength)
-                #expect(attempt?.days == .six)
-                #expect(scene.store.state.step == .program)
             }
         }
     }

@@ -705,3 +705,231 @@ tested.
 - **An app-hosted reader** as a way to see inside a scroll view.
 - **The implementer's 13 mutations,** and the tester's files and `test-findings.md`.
 - **Every catalog comment against the code:** ten by eye, the rest by the gate's step.
+
+## Slice S2 — re-review of fix round 1 (G3 reviewer, 2026-10-05)
+
+Scoped re-review of `git diff 1efaf08..19b20eb` (70 files) against my findings above and the orchestrator's
+rulings after G2 and G3; not a fresh review. I read every source, test and doc change of the diff, the fix
+round's notes with "Addition: the reader's opt-in", the brief's revised criteria 7, 8 and 10, and looked at the
+three new screenshots, two re-recorded references and two of the six new ones. I did not read the tester's
+uncommitted files and changed no code or test.
+
+### Verdict
+
+**Approve.** Blocking 0 · Should fix 4 (two in this slice, two for the chore before the next lane) · Nit 3.
+
+B1 and all five Should-fix items are closed. The approval is of the diff: `19b20eb` by itself is red in the PR
+lane on twelve of the tester's tests, by ruling, until its close-out is committed.
+
+### What I ran
+
+- **Simulator, the three targets, on a clean tree at `19b20eb`** (`git status --short` empty before and after;
+  the implementer's `sim-test.sh` through the lock, `-only-testing:FeatureOnboardingTests
+  -only-testing:LedgerDesignTests -only-testing:LedgerAppKitTests`): 644 tests, 624 passed, 12 failed, 4 skipped,
+  4 expected failures: the implementer's numbers. The 12 are the tester's (eight of
+  `OnboardingVoiceOverAdversarialTests`, four of `OnboardingLayoutAdversarialTests`) and nothing else.
+  `LedgerDesignTests` 296 passed, with F06's `sheetChrome_scrollingContent_titleAtTheTopAndWhole` and every
+  existing snapshot suite among them; `LedgerAppKitTests` 208 passed.
+- **The hosted suites ten times over** (`OnboardingScrollTests`, `OnboardingRootTests`, `-test-iterations 10`):
+  every repetition passed. The tester's in-progress edits were in the tree by then and built.
+- **The nightly logging test:** on the simulator (`TEST_RUNNER_LEDGER_TEST_LANE=nightly`) it runs and passes in
+  4 s, which the notes list as not yet run; on the Mac host it passes in 6.65 s while `OnboardingStoreTests`
+  beside it take 0.02 s, so the main actor is no longer held.
+- **One scratch probe** (my own package, as before): a scene-less window on this simulator gives a hosted view
+  the safe area 62 / 34 pt at 402 × 874 pt and 62 / 0 pt at 375 × 667 pt (`f08s2-g3/axprobe-safearea.txt`).
+
+### Status of the first review's findings
+
+| Item | Status | Note |
+|---|---|---|
+| **S2-B1** offset kept across steps | **Closed** | Below. |
+| **S2-SF1** scrolling layout untested | **Closed** | One layout; trees and references from the page and the pinned part; four hosted tests on the real screen and root. What remains (the stops' order inside the real scroll view) is S3's UI test, by the convention. |
+| **S2-SF2** cancellation and failure | **Closed in the code** | `loadUnits` returns on `CancellationError`; `save` logs every other error, also on a cancelled task. Pinned in the nightly lane only (RR-SF3). One corner left (RR-N1). |
+| **S2-SF3** log category | **Closed** | The store logs under "onboarding"; the audit's rule is one alternation in the shared helper with two allowed cases and two lookalikes that stay findings; standards §7 and §8 say so. RR-N2. |
+| **S2-SF4** log-reading test | **Closed as ruled** | Nightly, tagged `.slow`, read off the main actor (measured above). The cost and the cheap way back: RR-SF3. |
+| **S2-SF5** "Back" | **Closed** | Below. |
+| **F8-S2-1** (tester) | **Closed** | The pinned part takes the height its text needs; `pinnedPart_onTheNarrowestPhone_isNotSqueezed` (three states, 375 × 667 pt, accessibility5) and the picture, where the sentence stands on three whole lines. It holds for the English sentence: `fixedSize` has no upper bound, so a translation twice as long would leave the page no room there. Nothing to do now. |
+| S2-N1, N2, N3, N4, N5, N6 | **Closed** | N5 has both branches under test: the two window sizes give 34 pt and 0 pt of bottom safe area (probe). N3 tags the implementer's fourteen suites. |
+| S2-N7 | **Deferred**, acceptable for this PR | RR-SF4. |
+| S2-N8 | No change, by ruling F8-S2-3 | Criterion 7 now states the lock. |
+
+**B1, in the three parts asked.**
+
+- *Reproduced on the real screen:* `OnboardingScrollTests.stepChange_startsTheStepAtItsTop` hosts `OnboardingRoot`
+  at 402 × 874 pt and `.accessibility3`, scrolls the one `UIScrollView` to its end and changes the step through
+  the store. The notes give its failures on the committed screen and on the new screen with the fix taken out
+  (209.67 and 168.33 pt down, in both directions). I did not repeat those two runs, which need the product
+  file edited; the numbers behave as my replica did.
+- *Fixed:* `OnboardingScreen.swift:16`, `:24`, `:31-33`, a `ScrollPosition` sent to the top edge when
+  `model.step` changes. Right at every size: there is one layout, and where the page fits the call does
+  nothing. Right in both directions: the test goes to step 2, to 3, back to 2, back to 1. Within a step nothing
+  moves: a pick does not change `model.step`, and `pick_keepsThePagesPlace` pins it. The failure sentence
+  appearing does not change the step either, so the page stays where it is while the pinned part grows.
+- *VoiceOver:* the focus move is the page's own `onChange` of the same value (`OnboardingPage.swift:24-26`), and
+  both send the lifter to the top, so I see no conflict by reading. By ear it is unverified, as before.
+- One thing the hosted test cannot show: it moves the scroll view through UIKit, not with a finger. A drag is
+  what updates the binding in the app. S3's UI test should swipe down, tap "Continue" and find the title on
+  screen.
+
+**SF5, in the parts asked.** Tokens only (`inkFaint`, `inkMuted`, `hairline`, `hairlineStrong`). Disabled, the
+ghost word goes from 51 % ink to 32 % on dark and from 62 % to 32 % on paper, the outline's word from full ink
+to 32 % and its rule from 14 % to 8 %, and the filled pill takes `PrimaryButton`'s disabled pair: different in
+every style and theme (`disabledPill_looksDisabled`, and plain in the two references I opened). 32 % is below
+AA, which WCAG does not ask of a disabled control, and Increase Contrast lifts it to 60 %. `flush` stands the
+word at the target's edge and the 44 pt target grows inward; `HorizontalEdge` keeps it right-to-left safe. Six
+tests, four tree rows, six references. **No existing reference changed:** the diff holds no other PNG, the
+defaults reproduce the old layout, and `PillButtonSnapshots`, the sheets and `LedgerAppKit`'s suites pass
+against what is committed.
+
+**The F06 test.** Four reader calls gain the opt-in or the parameter that carries it; no expectation moved
+(`:133`, `:138` are as they were). The helper's other callers (`:80`, `:151`) and the `ideal` read (`:137`) keep
+the default and still fail loudly on a scroll view.
+
+**References.** Twelve re-recorded, all of them states that draw "Back" (days 2, program 6, six days 2, failed
+2), at the heights they had; the six `goal` references are untouched, which shows that the page and the pinned
+part draw what the old screen drew. Six new for `PillButtonStatesGallery`, 96 KB. Nothing else.
+
+### The convention as built
+
+`OnboardingScreen` is 35 lines: the pinned part under one `ScrollView` around `OnboardingPage`, bounce by size,
+no second layout. Trees, targets, activation and the 18 references are taken from `OnboardingParts` (the page,
+then the pinned part, on the ground) in the test target. The hosted tests of the real screen and root pin one
+scroll view, where a step lands, that a pick moves nothing, the pinned part's height and its gap to the edge.
+This is the split I recommended, and it is the model I would hand the next lanes.
+
+**The loud reader.** The walk fails the test when a scroll view yields nothing, for all three readers, and
+`AccessibilityReaderTests` pin both the failure and the opt-in. Those two expected failures are also the
+canary: if a later iOS represents a scroll view differently, they fail first.
+
+**Can the opt-in be misused?** Yes, by one argument: `screen.accessibilityElements(outsideScrollViews: true)`
+returns the pinned part alone with no failure, and a table written from it pins half a screen. The name, the
+comment and the doc say not to. That is as much as an argument can do; the rest is review. Two small
+additions would help: RR-N3, and a line in the convention that the reviewer confirms each use, as for the
+audit's exemptions. Today `grep -rn outsideScrollViews LedgerKit` finds the reader, its tests and F06's one
+test.
+
+### New findings
+
+**Should fix, in this slice**
+
+**RR-SF1. The convention's text is onboarding's case, and three cases the next lanes meet are open or read
+the wrong way.** `docs/testing-strategy.md:234-255`.
+- *Pinned parts above the page.* "Taken from the page followed by the pinned parts" is onboarding's order. A
+  workout screen with a bar pinned above and a button pinned below reads bar, page, button.
+- *A sheet whose rows scroll.* The opt-in's one example is "a sheet's title over its scrolling rows" (`:254`).
+  F10's swap sheet has exactly that shape, and its implementer could read the sheet with the opt-in and never
+  pin the rows. F06's test is about `SheetChrome`, which does not own the rows; a feature's sheet does.
+- *A scroll view inside a page* (a row of filters that scrolls sideways; a `List`, which is a scroll view).
+  "Never a scroll view" forbids it, the loud reader then fails the page's tree, and the opt-in is "never the
+  way to read a page". The text gives no way through.
+- *The model is not named.* Rule 7 in F08's notes names `OnboardingScreen`, `OnboardingPage`, `OnboardingFooter`
+  and `OnboardingParts`; the doc, which is the source for the other lanes, names only `DesignGallery`.
+
+*Fix:* four sentences in §2.6. "…are taken from the pinned parts and the page, stacked in the screen's
+reading order, in a `<Screen>Parts` view in the test target (onboarding: `Support/OnboardingParts.swift`)." "A
+feature's sheet whose content scrolls is a screen that scrolls and is split the same way; the opt-in is for a
+test of the frame alone." "Not settled: a scroll view inside a page, a `List` included. The first slice that
+needs one raises it with the orchestrator before writing it." "The reviewer confirms each
+`outsideScrollViews: true`."
+
+**RR-SF2. Nothing in the implementer's suites now activates a control through the real root or reads what
+the root opens on.** `LedgerKit/Tests/FeatureOnboardingTests/OnboardingRootTests.swift` (the two tests removed
+at `1efaf08:56-96`); `tasks/features/F08-onboarding/implementation-notes.md:1235-1236`.
+- `root_opensOnStepOne` and `root_taps_pickAndStep` were the tests of the three pass-throughs (`store.send` to
+  the screen, the screen's `send` to the page and to the pinned part). They went because they read the root
+  with the reader. Every remaining root and scroll test sends actions to the store directly. Until S3's UI
+  test exists, a screen that handed its pinned part a dead closure would pass the PR lane.
+- The pinned part stands outside the scroll view, so this half can stay in the PR lane, and it is the opt-in's
+  proper use: host the root, read with `withLiveAccessibilityElements(outsideScrollViews: true)`, activate
+  "Continue" twice, expect the store on step 3 and the button reading "Start training"; activate "Skip setup",
+  expect one attempt. About fifteen lines.
+- The notes' "Criteria → tests" table still names the two removed tests for criteria 1 and 2.
+
+*Fix:* that one test, and the table's two rows. If the tester's close-out already taps the root's pinned part,
+this is closed by it and only the table remains.
+
+**Should fix, for the chore, before the next lane's first store and first root test (not this PR)**
+
+**RR-SF3. The PR lane cannot see a log line, so SF2's two fixes are pinned at night only.**
+`LedgerKit/Sources/FeatureOnboarding/OnboardingStore.swift:104-105`, `:137-140`;
+`LedgerKit/Tests/FeatureOnboardingTests/OnboardingStoreTests.swift:77`, `:86`;
+`LedgerKit/Sources/LedgerDependencies/LedgerLogger.swift`.
+- By reading: take out `catch is CancellationError` and `loadUnits_cancelled_keepsTheDefault` still passes (it
+  asserts the same state as the failure case, and the test logger discards); take out the new log line and
+  `save_failingOnACancelledTask_isNotShown` still passes. The implementer says as much.
+- Is that acceptable? For this slice, yes: a log line is diagnostics, the nightly test proves it on both
+  platforms, and a regression is caught within a day. As the standing answer for every store of M1, no.
+- The cheap way: the implementer is right that nothing can receive an `OSLogMessage`. But both of the store's
+  lines are a fixed sentence and `String(describing: error)`, all public. A method of `LedgerLogger`'s own for
+  that shape, `failure(_ what: String, _ error: any Error)`, which writes the same line and also hands
+  `(category, text)` to an optional sink that `category(_:)` carries along, with `LedgerLogger.recording { … }`
+  for tests, is about twenty lines of `LedgerDependencies`. Stores call it; the PR lane then asserts "once,
+  under the module's category, never for a cancellation" in microseconds, and the log read stays nightly as
+  the end-to-end check. Lines that need other privacy keep `logger.log`.
+
+**RR-SF4. The convention asks every scrolling screen for a hosted test, and its kit is one feature's test
+support behind `@testable import`.** `LedgerKit/Tests/FeatureOnboardingTests/Support/Hosted.swift:2`, `:12-55`.
+- N7's deferral was reasonable when the helper served one suite. Since this round, `Hosted.view`,
+  `scrollViews(in:)`, `settle(_:)` and `until(_:)` are what "a hosted test of the screen or its root" is written
+  with (`docs/testing-strategy.md:243-246`), and the doc names no helper.
+- Acceptable for this PR. Not acceptable later than F09's or F10's first hosted test: that lane would copy 56
+  lines and a second `@testable import`.
+
+*Fix:* move the four functions into `LedgerSnapshotTesting` as public API, in the chore; this target then
+drops the file. One sentence in §2.6 names them.
+
+**Nit**
+
+**RR-N1. A `CancellationError` on a task that was not cancelled is shown and not logged.**
+`OnboardingStore.swift:136-146`. The two tests (the error's type for the log, the task's flag for the screen)
+leave that corner: the phase becomes `failed` and nothing is written. No store here throws it that way, so it
+is a corner on paper. *Fix:* log when the error is not a cancellation or the task is not cancelled.
+
+**RR-N2. The new known limit has no limit case.** `docs/engineering-standards.md:362-366` adds
+`toastLogger.category("…")` to the list whose every entry "is kept as a `limit` test";
+`LedgerKit/Tests/LedgerAppKitTests/CopyAuditLimitTests.swift:26` has the level call only. *Fix:* one line
+beside it.
+
+**RR-N3. The reader's failure message ends on the opt-in without its condition.**
+`LedgerKit/Sources/LedgerSnapshotTesting/AccessibilityElements.swift:115-123`. The message is otherwise what an
+implementer needs: it names the class, says what to host and cites the section. Its last sentence is the first
+thing a hurried reader will try. *Fix:* end it "…with `outsideScrollViews: true`, which is never the way to
+read a page: what scrolls is then missing from the result."
+
+### What the Today and workout implementers must be told
+
+1. **Copy the four files, not the old screen:** `OnboardingScreen` (layout only), `OnboardingPage` (everything
+   that scrolls, no scroll view), the pinned part, and in the test target a `<Screen>Parts` that stacks them
+   in the screen's reading order on the ground. Previews keep drawing the real screen.
+2. **Trees, targets, activation and every reference come from `<Screen>Parts`.** Never hand the screen or the
+   root to the reader; it will fail the test and say so.
+3. **One hosted suite per scrolling screen on the real screen or root:** exactly one scroll view; where each
+   change of content lands (a new page at its top, a change within the page nowhere); the pinned parts at
+   their full height on a 375 × 667 pt window at accessibility5. Use `Hosted` once it is in
+   `LedgerSnapshotTesting` (RR-SF4); do not copy it.
+4. **Where a change lands is a `ScrollPosition` and an `onChange` of a value in the model,** as
+   `OnboardingScreen.swift:16-33` does it, with `.scrollBounceBehavior(.basedOnSize)` for a page that can fit.
+   No `ViewThatFits`, no second layout.
+5. **A hosted window has the simulator's safe area, not its size's:** 62 pt at the top in both sizes, 34 pt at
+   the bottom only when the window reaches it (measured). Read `view.safeAreaInsets`, as onboarding's tests do;
+   a 375 × 667 pt window is 42 pt shorter of room than a real iPhone SE, which errs on the strict side.
+6. **`outsideScrollViews: true` is for the pinned parts of a real screen** (RR-SF2's test) or a frame that does
+   not own its rows (F06's). Never for a page, and a feature's sheet is a screen (RR-SF1).
+7. **A scroll view inside a page, a `List` included, is not settled:** ask before writing one (RR-SF1).
+8. **The nightly UI test is part of the screen's slice or the one that wires it:** the stops in the table's
+   order at an accessibility size, and one real swipe before a change of content.
+9. **A store logs under `logger.category("<module>")`, never logs a cancellation, and proves it at night until
+   RR-SF3 lands.** A `catch` around a read that a `.task` can cancel starts with `catch is CancellationError`.
+
+### What I did not check
+
+- **The scroll test failing without the fix.** I may not edit product code; the two failing runs are the
+  implementer's.
+- **VoiceOver by ear,** a finger's drag, and the stops' order inside the real scroll view: S3's.
+- **The gate, coverage, watchOS, CI.** Not run. The simulator runs above are the three targets only.
+- **The tester's uncommitted close-out,** including whether it restores a tap through the root (RR-SF2) and
+  whether its moved tests pass. My repetition and logging runs compiled its in-progress files; I did not read
+  them.
+- **Bold Text and Increase Contrast on the new pill states,** and right-to-left for `flush`.
+- **The new references beyond the four I opened,** other than by their suites passing.
+- **F09's and F10's notes:** rule 7 says the same text is in them; this commit touches F08's only.

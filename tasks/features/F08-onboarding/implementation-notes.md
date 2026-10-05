@@ -1754,3 +1754,22 @@ above).
 - `scripts/check.sh --lint-only`: exit 0 (77 s). No file changed between the run's start and this section.
 - Not run: the full gate, coverage, watchOS, the Mac host's suites for this addition (the reader and its tests
   are iOS only).
+
+### S2 — orchestrator rulings after the close-out (2026-10-05)
+
+G3 approved the fix round (0 Blocking; RR-SF1 to RR-SF4, three nits). G2's close-out says G2 can close: its twelve
+tests are moved onto the page and pass, the sanctioned edit to F06's test is sound, and two low items are new.
+
+For a last touch-up of this slice:
+- **RR-SF1 accepted:** the convention's text settles the three open cases (parts pinned above the page; a feature's
+  scrolling sheet; a scroll view inside a page) and names the model files to copy.
+- **RR-SF2 accepted:** an implementer test drives the real root (what it opens on; a tap through the pinned
+  buttons), and the notes' criteria table cites tests that exist.
+- **F8-S2-7 accepted:** whether a failure is logged depends on whether the task was cancelled, not on the error's
+  type; a store that throws `CancellationError` on a task nobody cancelled is a failure and is logged.
+- **F8-S2-8:** documented as a limit in the convention (the loud reader treats a multi-line text field as a scroll
+  view); it is fixed when the first screen with such a field needs it.
+- **F8-S2-5** stays owed by S3's UI test, as the convention says.
+
+For the chore before the next screen slice starts (not this slice): **RR-SF3**, a recording seam in `LedgerLogger`
+so the PR lane proves logging again; **RR-SF4**, the `Hosted` test helper moves into `LedgerSnapshotTesting`.

@@ -10,6 +10,9 @@ import Synchronization
 /// `swift test` run a representative part of the tester's larger matrices and seed ranges, the nightly lane all.
 nonisolated enum AdversarialLane {
     static let isNightly = ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly"
+    /// The nightly lane, or a run by hand that asks for the whole of a matrix (`LEDGER_ADVERSARIAL_FULL=1`; for
+    /// `xcodebuild`, `TEST_RUNNER_LEDGER_ADVERSARIAL_FULL=1`): a test plan sets its own lane.
+    static let runsEverything = isNightly || ProcessInfo.processInfo.environment["LEDGER_ADVERSARIAL_FULL"] == "1"
 }
 
 /// One wait of a test: it ends when it is woken, or when its task is cancelled, so a wait for something that

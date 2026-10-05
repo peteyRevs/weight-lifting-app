@@ -430,3 +430,202 @@ For the record:
 - The simulator has not run the nightly lane's larger ranges or my two logging tests: those ran on the host only.
 - `tasks/features/F08-onboarding/review.md` was changed in the worktree during this pass. It is not mine; I did
   not read or change it.
+
+## Slice S2 — round 2, close-out (G2 tester, 2026-10-05)
+
+Scoped close-out over the fix round `19b20eb` (my round 1 is `1efaf08`). I read the brief's revised criteria 7, 8
+and 10 and the new convention for a screen that scrolls (`docs/testing-strategy.md` §2.5 and §2.6, standards §7
+and §8), then the changed product code and the reader, and of the notes only "Addition: the reader's opt-in". I
+edited no product code, not the reader, not the catalog, none of the implementer's tests, no reference image;
+nothing was committed.
+
+**G2 can close.** My twelve tests are moved and pass, and nothing of mine fails in the PR lane: on the simulator
+the whole `FeatureOnboardingTests` target (148 tests: 80 mine, 68 the implementer's) and the whole
+`LedgerDesignTests` target (306, 5 of them mine) pass. Two things stay open, neither a reason to hold the slice:
+
+- one new low finding, F8-S2-7, whose test fails in the nightly lane only;
+- F8-S2-5's last part, which this slice cannot do: nobody has yet read the VoiceOver tree inside the real scroll
+  view. The convention gives that to S3's UI test, so it is an entry condition of S3, not a closed item.
+
+### Status of round 1's findings
+
+| | Round 1 | Now |
+|---|---|---|
+| F8-S2-1 | the failure sentence cut at accessibility5 on a 375 × 667 phone | **Fixed.** The pinned part takes the height its text needs. Whole in all 21 cases at accessibility5 (7 states × 3 phones) and in the 504 of the full matrix; I looked at the picture that showed the ellipsis in round 1, and it now shows three whole lines. |
+| F8-S2-2 | logged under the injected logger's category | **Fixed.** All seven failure lines are under `onboarding`, with another category injected. |
+| F8-S2-3 | picks and "Back" frozen after a failure | **Decided as built** (criterion 7, revised). Now tested as a requirement: see "What held". |
+| F8-S2-4 | a `prepareRetry` that never returns | **Decided:** it must return, and `OnboardingRoot`'s comment says so. Whether S3 passes a bounded step is S3's to show. |
+| F8-S2-5 | nothing drew or read the scrolling branch | **Answered by the convention**, as far as this slice can: one layout, trees and references from the page, a hosted test for what scrolling adds, a loud reader. The real scroll view's tree is S3's UI test (above). |
+| F8-S2-6 | the logging test took 4 s in the PR lane | **Fixed.** It is tagged `.slow` and runs in the nightly lane; the PR-lane run skips it. |
+
+### How the twelve tests were moved
+
+The screen is now its pinned part under `ScrollView { OnboardingPage }`, so a tree is read from
+`AdversarialParts`: the page followed by the pinned part, stacked as the screen stacks them, without the scroll
+view (`OnboardingAdversarialParts.swift`, my own; I did not use the implementer's `OnboardingParts`).
+
+| Round 1 test | Now | Expectations |
+|---|---|---|
+| `tree_everyState_readsAsTheBrief` | read from the page and pinned part | all kept |
+| `progress_everyState_isOneElement` | the same | all kept |
+| `picks_everyState_areButtonsWithOneSelected` | the same | all kept |
+| `stepThree_days_areReadNotTapped` | the same | all kept |
+| `controls_activated_sendTheirAction` | the same | kept, and stricter by ruling: in the failure state every button is activated, dimmed or not, and only "Retry" and "Skip setup" may send (round 1 let "Back" pass either way); a failure on step 1 is added |
+| `controls_whileSavingAndAfter_doNotAnswer` | the same | all kept |
+| `hitTargets_everyState_areAtLeast44` | the same | kept, and the smallest and the largest text size added to the matrix's six |
+| `root_hosted_readsAndAnswersAsItsScreen` | split in two: `partsOnAStore_taps_reachTheStore` and `root_pinnedButtons_reachItsStore` | **one could not be kept on the root:** see below |
+| `elements_atThePhonesWidth_areWholeAndApart` | measured on the page and pinned part at the phone's width and unlimited height | all kept |
+| `pinnedControls_onThePhone_areInReachAndWhole` | the real screen in a window of the phone's size and safe area | all kept; this is where F8-S2-1's demand lives |
+| `page_onThePhone_fitsOrScrollsWhole` | `page_onThePhone_scrollsWhole` | the "it fits" half is gone by ruling; kept and added: exactly one scroll view, ending where the pinned part begins, as wide as the phone, holding the page's full unpressed height, opening at its top, with at least 44 pt to be seen in |
+| `everything_beyondTheMatrix_isStillWhole` | `everything_atTheLargestTextSize_isWhole`, in every lane | all kept: 21 cases at accessibility5. A control (`harness_seesASqueezedSentence`) shows the measurement does see a sentence that lost a line, so the test would fail if the truncation came back |
+
+**Expectations I could not keep where they were:**
+
+- **The root's own tree, and taps on the root's picks and "Back".** The root holds the scroll view, and no reader
+  in a test process gets inside it. The same taps and the same expectations (a pick, "Continue", a pick, "Back",
+  the sentence, one attempt for three taps) now run on the page and pinned part wired to a live store as the root
+  wires its screen (`store.model`, `store.send`). On the root itself only the two pinned buttons are read and
+  tapped, through the reader's opt-in, and the default read of the root is shown to fail loudly. So that a tap
+  on a pick inside the real scroll view reaches the store is not shown by any test of this slice.
+- **"A page that fits is not in a scroll view"** (the old control of the layout suite): dropped, by ruling.
+
+The matrix is also wider than round 1's, because criterion 10 now says "any Dynamic Type size": every one of the
+twelve sizes, on four phones (375 × 667, 375 × 812, 402 × 874 and the widest, 440 × 956). The PR lane lays out 24
+of the 504 cases and the 21 at accessibility5; the nightly lane, or `LEDGER_ADVERSARIAL_FULL=1`, all of them.
+
+### Audit of the sanctioned edit to F06's sheet test
+
+`git diff 1efaf08 19b20eb -- LedgerKit/Tests/LedgerDesignTests/Adversarial` shows four changed places in
+`Slice3CloseoutSheetAdversarialTests.swift` and nothing else, as the notes list them: a parameter
+`outsideScrollViews: Bool = false` on the helper `titleOffset`, passed on to its reader call; `true` at the one
+call from `sheetChrome_scrollingContent_titleAtTheTopAndWhole`; and `true` at that test's own reader call.
+
+- **The expectations are intact.** Both `#expect`s (the title at the sheet's top; its height equal to the height
+  it needs) and both `#require`s are unchanged, and what they compare is what it was: the marker and the title,
+  which stand outside the scroll view and were all the reader ever returned there. The test passes in its three
+  sizes.
+- **The other two callers are still loud.** They pass nothing, so the helper's default reaches the loud reader.
+  Shown by behaviour too: `ReaderCloseOutAdversarialTests.titleOffset_onAScrollingSheet_isLoudByDefault` calls
+  the helper as they do, on a sheet whose content scrolls, and the read fails with the reader's advice; with the
+  opt-in the same call fails nothing and measures the same offset.
+
+**Audit result: sound.**
+
+### New findings
+
+7. **F8-S2-7 — bug, low. A failure the screen shows is not logged when the store's error is `CancellationError`
+   and nobody cancelled the task.**
+   - *Line violated:* criterion 7 as revised: "the screen shows … 'Retry', nothing is saved, and the failure is
+     logged … A cancelled task is not a failure and is not logged as one." Here the task is not cancelled.
+   - *Repro:* `OnboardingLoggingAdversarialTests.shownFailure_ofAnUncancelledTask_isLogged` (nightly lane, as
+     every test that reads the log). A program store whose `save` throws `CancellationError()`; "Skip setup".
+   - *Expected:* the sentence, and one error line under `onboarding`.
+   - *Actual:* the sentence and "Retry" are shown, and the log has nothing. The store decides what to show by
+     `Task.isCancelled` and what to log by the error's type; the two disagree in this corner. `loadUnits` has the
+     same shape: such an error there is dropped without a line (nothing is shown either).
+   - *Why low:* no store of today throws `CancellationError` on a live task (GRDB throws it for a cancelled one).
+     The PR lane does not run this test, so the gate is not red for it.
+
+8. **F8-S2-8 — test-quality, low. To the loud reader a multi-line text field is a scroll view.**
+   - A `TextEditor`, or a `TextField` with a vertical axis, is a `UITextView`, which is a scroll view and yields
+     no element in a test process. A page that holds one, with no scroll view around it, fails the default read,
+     and the advice (host the page without its scroll view) does not fit. With `outsideScrollViews: true` the
+     rest is read and the field is left out, which is what the convention says the opt-in is never for.
+   - No screen has such a field today; the first that does (a note on a workout, a custom exercise) will meet
+     it. The reader is honest here (it cannot read the field), so this is a gap in the convention's wording and
+     in the message, not a wrong result. Kept as a limit test,
+     `ReaderCloseOutAdversarialTests.limit_textEditorOnAPage_isLoud`, which passes while the limit stands.
+
+Notes that are not findings:
+
+- **A scroll made in the same turn of the main queue as a step change is undone at the next turn.** SwiftUI
+  applies the step change's "to the top" once more there, with no change of state at all (measured). A finger
+  cannot do that, so my scroll suite lets the main queue turn after every tap. My first version did not and
+  reported two jumps to the top that were its own doing. The implementer's `OnboardingScrollTests` scroll in the
+  turn of the tap before; that is harmless there, because each of its scrolls is followed by a step change.
+- **A test process cannot touch the screen.** A drag is stood in for by the scroll view's own delegate calls
+  around a set offset, which SwiftUI takes for the lifter's (`isPositionedByUser` turns true; measured). Every
+  scroll test runs that way and with the offset only set, as an assistive "scroll down" does. Both hold.
+- **UIKit's "Observation tracking feedback loop detected" for the screen's scroll view** is in the logs of the
+  two runs in which my layout suite also wrote pictures (36 and 39 lines), and in none of the four runs and
+  four probes without. It is my drawing of a layer tree that does it, not the screen.
+- **`List` and `Form` are read by the reader** (their rows are in the tree); every other scrolling container I
+  tried is loud.
+
+### What held
+
+- **A new step starts at its top (criterion 10), 5 tests.** The hosted root on 375 × 667 and 440 × 956 at
+  accessibility1, 3 and 5, the page moved as a drag and as a set offset: twelve settings, six step changes each
+  (1→2, 2→3, 3→2, 2→1, 1→2, 2→1), every one begun at the end of the page before it where that page is longer
+  than the screen (all six on the narrow phone above accessibility1). The same from the middle of each page, and
+  with two taps in one turn. The screen opens at its top.
+- **What changes no step moves no page.** A pick on steps 1 and 2, "Back" on step 1, "Continue"'s action on step
+  3, a save held inside its write and then done, the failure sentence appearing, the locked taps, the sentence
+  going away on a retry that saves, and the stored unit arriving while step 3 is read: the page stays within a
+  point of where it was put, however it was moved.
+- **The layout at every text size (criterion 10).** The full matrix once on the simulator: 7 states × 4 phones ×
+  18 appearances (the twelve sizes, light and dark by turns, and the matrix's six), 504 cases, each checked
+  three ways, and the 21 at accessibility5. Every element read, between the edges, apart, each control 44 pt;
+  the primary button and "Skip setup" whole, inside the safe area and at their unpressed size; the page whole in
+  its one scroll view. I looked at four pictures: the failure on step 3 on the narrowest phone at accessibility5
+  (at the top and scrolled to the end), the failure on step 1 on the widest phone at accessibility5, and step 1
+  on the narrowest at the smallest size.
+- **The loud reader, 5 tests in `LedgerDesignTests`.** A text inside a scroll view, alone and beside each of
+  ten other things (a toggle, a text field, a secure field, a slider, a stepper, a segmented picker, a date
+  picker, a text editor, a horizontal row, an inner scroll view), and a scroll view that is identified,
+  contained, labelled, or inside a navigation stack: 15 readings, every one loud. `List` and `Form`: read, with
+  the text inside. No reading was silent and without what scrolls. With the opt-in, seven of them give
+  "Above", "Below" and nothing else, and fail nothing. The hosted root, read as a page would be, is loud.
+- **The failure's lock (criterion 7).** VoiceOver: on each step "Back" and every pick are dimmed and "Retry" and
+  "Skip setup" are not, the pick stays ticked, and activating everything sends only those two. The store: after
+  a failed save on each step, seven edits change nothing, and they still change nothing after a retry cancelled
+  in its retry step.
+- **Cancellation (criterion 7).** The unit read cancelled mid-load, and a save cancelled while it reads the
+  settings, reads the catalog and writes: nothing saved, no failure shown, no line logged. Round 1's
+  cancellation tests, the 100 interleavings among them (1,500 in the nightly lane), pass unchanged, and so do
+  the two that take the hosted root away mid-save and idle and wait for the store to be deallocated.
+- **The log (criterion 7).** Seven failures leave seven lines (five saves, a retry that fails again, and the
+  unit read when the screen opens), each at error level, each under `onboarding`, none naming the product.
+- **The pills, 4 tests.** "Back"'s word starts within 2 px of where the bars start and 4 px of the title,
+  enabled, locked by a failure and locked by a save, in light and dark, at the default size and accessibility3.
+  A locked "Back" and a locked "Skip setup" are fainter than the open ones by more than 15 of 255, still drawn,
+  and move nothing. While the failure is shown "Back" is fainter and "Skip setup" is as it was. On step 1 the
+  hidden "Back" leaves no ink. The dimmed trait is in the VoiceOver tests above.
+
+### Not attacked
+
+- **The tree, the focus and the taps inside the real scroll view:** S3's UI test (above).
+- **A real finger, and the scroll's animation:** the drag is a stand-in (above).
+- **`PillButton` away from onboarding:** its own suite and references are the implementer's; I ran them (they
+  pass) and did not read them closely.
+- **The simulator in the nightly lane:** my three logging tests and the larger seed ranges ran on the host only.
+- As in round 1: real stores, the app's root, a device, other accessibility settings.
+
+### Commands and exit statuses
+
+From the worktree root; logs in the scratch folder `f08s2-g2/` (`r2-…`). Simulator runs through the lock with
+`sim-run.sh`, as in round 1. **I did not run the full gate; that is the orchestrator's.**
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'FeatureOnboardingTests\.Onboarding\w*Adversarial'` (PR lane; 51 host tests in 10 suites; `r2-host-2.log`) | 0 |
+| the same with `LEDGER_TEST_LANE=nightly` (`r2-host-nightly-1.log`) | 1: F8-S2-7 alone |
+| `swift test … --filter 'FeatureOnboardingTests\|ModuleCopyTests'` (108 tests in 21 suites; `r2-host-3.log`) | 0 |
+| `scripts/check.sh --lint-only`, on the final state (`r2-lint-2.log`) | 0 |
+| simulator, the layout suite with `LEDGER_ADVERSARIAL_FULL=1`, 504 cases (`r2-sim-6.log`) | 65: the layout suite passed (5 tests); the status is an exploration of mine in the reader suite that recorded its findings as an issue, since replaced by the limit test |
+| simulator, `-only-testing:FeatureOnboardingTests -only-testing:LedgerDesignTests`, the final state (`r2-sim-8.log`, `r2-sim-8.xcresult`) | 0 |
+
+The last bundle (`xcrun xcresulttool get test-results summary`): 454 tests, 442 passed, none failed, 5 skipped,
+7 expected failures. The five skipped are nightly-lane tests (my three and the implementer's one for the log, and
+one of F06's). The seven "expected failures" are tests that pass by catching the reader's loud failure with
+`withKnownIssue`: three of mine, two of the implementer's reader tests, and two older ones.
+
+For the record:
+
+- Runs that failed for reasons of my own, since fixed: `r2-sim-1` and `r2-sim-7` did not compile (an isolation
+  error and an unqualified name in my reader suite); `r2-sim-2` and `r2-sim-3` had two or three failures in my
+  new scroll suite, all from scrolling in the turn of a tap (the first note above). Four probe runs found that
+  out; the probes are deleted.
+- After the last simulator run I changed no Swift file.
+- `tasks/features/F08-onboarding/review.md` is changed in the worktree again. It is not mine; I did not read or
+  change it.
