@@ -221,3 +221,38 @@ into the app**: the app still opens on the tabs, and S3 adds the root's branch.
 
 Defaults in force until Pete answers (asked 2026-10-04): step 3 is the read-only list above; first-launch units and
 week start are whatever the stored settings say (pounds and Monday today).
+
+## Plan amendments — slice S3, the root gate and the UI tests (orchestrator, 2026-10-05)
+
+S1 (the generator) and S2 (the screen) are done and wait for `main`; S3 is built locally on S2's tip, which also
+holds F09 S1's tab shell. This section is S3's specification; where it and anything above disagree, this section
+wins. Line references and hand-offs are in `F08-onboarding/implementation-notes.md` ("Inputs the implementer needs ›
+S3", "Inputs for S3" from S2 and its review, the rulings O11–O13).
+
+S3 puts onboarding into the app: the root shows it when there is no active program, and the tabs otherwise.
+
+1. **Fresh install.** With no active program, once the database is open and the launch's first pass has returned,
+   the root shows the onboarding screen on step 1, full-screen, with no tab bar. Until then it shows the ground
+   colour only: neither the tabs nor onboarding flash by.
+2. **A lifter with a program** opens on the tabs with Today selected, and never sees onboarding flash by.
+3. **Finishing onboarding.** "Start training" or "Skip setup" saves the program and the root switches to the tabs
+   with Today selected. The feature makes no navigation call: the root follows the active program as the store
+   reports it (`ProgramRepository.observeActive()`).
+4. **The root keeps following.** If the active program goes away (Settings' "Delete all data", F14), the root shows
+   onboarding again; if one appears by another route (iCloud, F28), it shows the tabs.
+5. **Retry.** In onboarding's failure state, "Retry" first runs the launch's seed step again (the root passes it
+   as `prepareRetry`, and it always returns), then saves.
+6. **The week.** A program saved through onboarding on Wednesday 2026-09-16 with weeks starting Monday has
+   `startDate` 2026-09-14, and that day is in week index 0 (the words "Week 1 of 8" on Today are F09's).
+7. **The Debug menu** still opens from a long press on Today's title once onboarding is done, and the
+   can't-open-your-data state of the root is unchanged. The watch app is unchanged.
+8. **UI tests.** Every existing UI test reaches Today through one helper that taps "Skip setup" (`Smoke`,
+   `DebugMenu`, `LaunchPerformance`, `Tabs`, and F09's `TabsAdversarial`: a mechanical change of how each gets to
+   Today, nothing else). A new `Onboarding` UI test, in the nightly plan, walks the real screen: the three steps
+   with their picks; the VoiceOver order of each step inside the real scroll view at an accessibility text size;
+   a step opening at its top; "Start training" landing on Today; and a relaunch opening on Today. This is the test
+   the scrolling-screens convention asks of every scrolling screen.
+9. **Launch cost.** Deciding which root to show adds one read of the active program; nothing reads a store before
+   the database is ready.
+10. **Screenshots** of a fresh install's first screen and of Today after "Start training", light and dark, for the
+    pull request.

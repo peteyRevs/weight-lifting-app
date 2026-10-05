@@ -1860,3 +1860,17 @@ simulator (the new limit case ran on the host only); VoiceOver by ear; the page 
   `main`, gate, push once. It then waits for nothing of Pete's beyond what S1 and #28 carry, unless he answers the
   open questions on step 3 or first-launch units differently from the defaults built here.
 - Owed by S3: the UI test that reads the tree inside the real scroll view at an accessibility size (F8-S2-5).
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S3's specification is the brief's last section, "Plan amendments — slice S3". The branch `feat/F08-s3-root-gate` is
+cut from S2's tip `24b610b` and stays local until S1, S2 and #28 are on `main`.
+
+- The root's branch goes where F09 S1 made room for it: `MainRoot`'s `content` (architecture §4 names the resolver;
+  `MainRoot.body` is F10's). Not `AppRoot`'s switch, as the plan above says: F09 S1 changed the shape.
+- O11–O13 stand: the UI tests tap "Skip setup"; the gate shows the ground colour until the launch's first pass has
+  returned; "Retry" re-runs the launch's seed step.
+- The convention for screens that scroll (`docs/testing-strategy.md`) asks for S3's `Onboarding` UI test: it is the
+  one place the tree inside the real scroll view is checked (S2's finding F8-S2-5).
+- The UI tests of F09's tester (`Apps/LedgerUITests/TabsAdversarial.swift`) reach Today by launching; with
+  onboarding first they need the helper. That edit is sanctioned as mechanical; list each changed line.
