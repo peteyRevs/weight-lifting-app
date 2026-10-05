@@ -7,7 +7,7 @@ import Testing
 /// F08 S2, criterion 4's last sentence: exactly one program, whatever is tapped and whenever. A second tap, a tap
 /// while the save runs, a tap after it succeeded, a second run of the same attempt, and a save cancelled because
 /// its view went away. No test sleeps: a `Gate` holds a double until the test has acted.
-@Suite("OnboardingStore: one program", .timeLimit(.minutes(1)))
+@Suite("OnboardingStore: one program", .tags(.feature), .timeLimit(.minutes(1)))
 struct OnboardingStoreSaveOnceTests {
     /// Every action the screen can send.
     nonisolated static let everyAction: [OnboardingAction] = [

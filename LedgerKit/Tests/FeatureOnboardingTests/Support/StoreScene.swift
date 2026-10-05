@@ -13,16 +13,48 @@ nonisolated enum SceneChange {
     case calendar(Calendar)
     /// Reading the settings throws.
     case settingsCannotBeRead
+    /// Reading the settings throws `CancellationError`, as a store does whose task was cancelled mid-read.
+    case settingsReadIsCancelled
     /// Reading the catalog throws.
     case catalogCannotBeRead
     /// Reading the catalog waits at the gate, then answers.
     case catalogWaits(Gate)
+    /// Reading the catalog waits at the gate, then throws: a real failure that can arrive on a cancelled task.
+    case catalogWaitsThenFails(Gate)
     /// Saving a program throws and writes nothing.
     case programCannotBeSaved
     /// Saving a program writes it, then waits at the gate before returning.
     case saveWaitsAfterWriting(Gate)
     /// The injected logger: one a test can read back, where the default discards.
     case logger(LedgerLogger)
+    /// The word every failing double of the scene carries in what it throws, wherever it stands in the list.
+    case failureWord(String)
+}
+
+nonisolated extension SceneChange {
+    /// The plain values a change sets: the date, the calendar, the logger.
+    func setValues(_ values: inout DependencyValues) {
+        switch self {
+        case let .date(date): values.date = .constant(date)
+        case let .calendar(calendar): values.calendar = calendar
+        case let .logger(logger): values.logger = logger
+        default: break
+        }
+    }
+
+    /// The doubles a change puts in place of the stores a save reads.
+    func setReads(_ values: inout DependencyValues, over memory: InMemoryStores, failure: StoreFailure) {
+        switch self {
+        case .settingsCannotBeRead: values.settingsRepository = FailingSettings(error: failure)
+        case .settingsReadIsCancelled: values.settingsRepository = FailingSettings(error: CancellationError())
+        case .catalogCannotBeRead: values.exerciseRepository = StubbedExercises(failure: failure)
+        case let .catalogWaits(gate):
+            values.exerciseRepository = StubbedExercises(inner: memory.exercises, gate: gate)
+        case let .catalogWaitsThenFails(gate):
+            values.exerciseRepository = StubbedExercises(gate: gate, failure: failure)
+        default: break
+        }
+    }
 }
 
 /// A store under test with what it reads and writes: in-memory stores built from a seed, and a recorder on the
@@ -50,21 +82,21 @@ final class StoreScene {
         body: (StoreScene) async throws -> Result
     ) async throws -> Result {
         var bound: (memory: InMemoryStores, recorder: RecordingPrograms)?
+        var failure = StoreFailure()
+        for case let .failureWord(word) in changes {
+            failure.word = word
+        }
         return try await withTestDependencies {
             let memory = $0.inMemoryStores(seed: seed)
             var written: any ProgramRepository = memory.programs
             var afterWrite: Gate?
             for change in changes {
+                change.setValues(&$0)
+                change.setReads(&$0, over: memory, failure: failure)
                 switch change {
-                case let .date(date): $0.date = .constant(date)
-                case let .calendar(calendar): $0.calendar = calendar
-                case .settingsCannotBeRead: $0.settingsRepository = FailingSettings()
-                case .catalogCannotBeRead: $0.exerciseRepository = StubbedExercises()
-                case let .catalogWaits(gate):
-                    $0.exerciseRepository = StubbedExercises(inner: memory.exercises, gate: gate)
-                case .programCannotBeSaved: written = FailingPrograms()
+                case .programCannotBeSaved: written = FailingPrograms(failure: failure)
                 case let .saveWaitsAfterWriting(gate): afterWrite = gate
-                case let .logger(logger): $0.logger = logger
+                default: break
                 }
             }
             let recorder = RecordingPrograms(written, afterWrite: afterWrite)

@@ -24,6 +24,9 @@ public nonisolated struct ProgressSegment: Equatable, Sendable {
 /// "Exercise 2 of 5"); both are required. Show the same progress in words on screen too: the track
 /// is as faint as the prototype's, below WCAG 1.4.11's 3:1, as the rest ring's is, so the words carry
 /// the count. The done and current segments reach 3:1 on the ground.
+///
+/// A caller whose label already says it all passes an empty value, and VoiceOver then speaks the
+/// label alone (onboarding's bars: "Step 1 of 3").
 public struct ProgressSegments: View {
     /// The prototype's 2 px bar and 3 px gaps.
     nonisolated static let height: CGFloat = 2

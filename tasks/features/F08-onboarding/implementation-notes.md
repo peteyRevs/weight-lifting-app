@@ -528,6 +528,22 @@ feature. F09 S1 lands the localization scaffolding and writes rules 1 and 3 into
    table-driven test before the tester starts (F06's lesson).
 6. **Test names** follow `docs/testing-strategy.md` §6 (`subject_condition_expectation`, a sentence as the display
    name), not the briefs' `test_…` names.
+7. **A screen that scrolls** (added in F08 S2 fix round 1, by the orchestrator's ruling after G2 and G3; the source
+   is `docs/testing-strategy.md` §2.6, with one line in `docs/engineering-standards.md` §7). `XScreen` is its pinned
+   parts plus `ScrollView { XPage(model:) }`: `XPage` holds everything that scrolls and never a scroll view, and
+   the screen has one layout at every text size (no "scrolls only when it does not fit" switch).
+   - The VoiceOver tree (the table in the notes and its table-driven test) and the snapshot references are taken
+     from `XPage` followed by the pinned parts, hosted without the scroll view. The hosted reader cannot see inside
+     a scroll view, and a scroll view has no height of its own.
+   - A hosted test of the screen or its root pins what exists only because the page scrolls: one scroll view, and
+     where a change of content lands (the `UIScrollView` is found under the hosting view).
+   - One UI test per scrolling screen, in the nightly lane, checks the stops in the table's order inside the real
+     scroll view at an accessibility text size (onboarding's is S3's).
+   - The hosted reader (`LedgerSnapshotTesting`'s `accessibilityElements` and its two siblings) fails the test
+     when its walk meets a scroll view, and says to host the page. Onboarding's `OnboardingScreen`,
+     `OnboardingPage`, `OnboardingFooter` and the tests' `OnboardingParts` are the model to copy. Its one way
+     out is `outsideScrollViews: true`, for a caller that knowingly reads the pinned parts around a scroll view;
+     never to read a page.
 
 ## Slice S1 — template generator (G1 implementer, 2026-10-04)
 
@@ -1434,6 +1450,20 @@ largest text size the page scrolls under the pinned buttons; "Back" does not loo
 - **Full screen.** The screen fills what it is given and paints `LedgerColor.ground` under the safe areas; it
   draws no navigation bar and expects none.
 - **The manual list** is under "How to verify by hand".
+- **From the review (G3, "For S3"), copied in fix round 1:**
+  - *Keep `OnboardingRoot`'s place in the tree while the gate reloads.* The store is the root's `@State`. If the
+    gate passes through `.loading` on a scene-phase change and takes the root out for a frame, the lifter comes
+    back to step 1 with the defaults.
+  - *After `saved` the screen is inert.* Every control is disabled and nothing here leaves. If the gate does not
+    flip, the lifter is stuck; `savingAProgram_flipsToMain` is the test that matters.
+  - *The nightly UI test should run the three steps at an accessibility text size as well.* By the convention for
+    a screen that scrolls (rule 7 of "M1 shared conventions") it is onboarding's one reader of the real scroll
+    view: the stops in the tables' order with their selected and enabled states, a step change landing at the
+    top, and taps on the page's controls reaching the store, which no hosted test of S2 can show any more.
+- **Also for S3, from fix round 1:** `prepareRetry` must return (`OnboardingRoot`'s documentation): the launch's
+  step is bounded, and nothing else may be passed. The store now logs under the category "onboarding". A picture
+  on a phone with a home button and one at the largest text size belong in S3's manual pass (the page scrolls
+  under the status bar with nothing behind the clock: the review's unverified note).
 
 ### For the orchestrator: what the localization rule made awkward, and one finding in the test helpers
 
@@ -1509,3 +1539,218 @@ PR lane. The brief's S2 criteria 7, 8 and 10 are revised. For fix round 1:
   passes the launch's step, which is bounded.
 - **Nits:** taken as the review writes them unless one costs more than a few lines; any not taken is listed with
   its reason. "For S3" items are copied into the inputs for S3.
+
+### S2 fix round 1 (G1 implementer, 2026-10-05)
+
+On top of `1efaf08`, uncommitted. Every item of the orchestrator's list is done but for nit N7. **Thirteen tests
+of the testers now fail because this round's rulings changed what is right; I edited none of them**: twelve of
+F08 S2's tester (its F8-S2-1 test among them, which now fails for a different reason than F8-S2-1) and one of
+F06's tester. They are listed under "Tester tests that now contradict a ruling", and the full gate will be red
+on them until they are edited. Every other test of the three targets passes.
+
+**What changed, per item** (paths under `LedgerKit/`)
+
+| Item | Change | Where |
+|---|---|---|
+| 1. The scrolling convention, B1 | The screen is its pinned part under one scroll view around the page, at every text size: `ViewThatFits` is gone. `OnboardingScreen` (35 lines) holds the layout; the page is the new `OnboardingPage` (bars, "Back", title, line, picks or days; it moves VoiceOver to the title on a step change), the pinned part the new `OnboardingFooter` (failure sentence, primary button, "Skip setup"; it posts the announcement). The model carries the step's index. Going to another step starts it at its top: a `ScrollPosition` set to the top edge when the step changes | `Sources/FeatureOnboarding/Views/OnboardingScreen.swift:16`, `:19-29`, `:31-33`; `Views/OnboardingPage.swift` (new, `:24-26`); `Views/OnboardingFooter.swift` (new); `OnboardingPresentation.swift:41`, `:71` |
+| 1. Tests | The trees and the references are taken from the page followed by the pinned part: `Support/OnboardingParts.swift` (new). `OnboardingAccessibilityTests` and `OnboardingSnapshotTests` draw that. New `OnboardingScrollTests` (4 tests, 7 cases) hosts the real root and screen and reaches the `UIScrollView`. `OnboardingRootTests` keeps its two task tests and loses its two tree-reading tests (`root_opensOnStepOne`, `root_taps_pickAndStep`): they read the root through the reader, which the convention forbids; what they showed is S3's nightly UI test's by the convention | `Tests/FeatureOnboardingTests/OnboardingScrollTests.swift:44`, `:82`, `:102`, `:116`; `Support/OnboardingParts.swift`, `Support/Hosted.swift` |
+| 2. The reader is loud | The walk records an issue when a scroll view yields no element, naming its class and saying to host the page. The three readers share the walk. Four tests: a scroll view beside a pinned button fails each of the three readers; a scroll view alone fails; the page and the pinned part without it are read whole; an empty tree without a scroll view is no failure | `Sources/LedgerSnapshotTesting/AccessibilityElements.swift:24-26`, `:81-119`; `Tests/LedgerDesignTests/AccessibilityReaderTests.swift` (new) |
+| 3. The convention | `docs/testing-strategy.md` §2.6 ("A screen that scrolls", `:234-252`) and §2.5's reader paragraph (`:205-208`); one bullet in `docs/engineering-standards.md` §7 (`:152-154`); rule 7 of "M1 shared conventions" in these notes | as named |
+| 4. SF2 | `loadUnits` returns without logging on `CancellationError`. `save` logs every error that is not a `CancellationError`, also on a cancelled task, and keeps its phase rule. Tests: `loadUnits_cancelled_keepsTheDefault`, `save_failingOnACancelledTask_isNotShown` (PR lane: what is shown and saved); the lines themselves in the nightly logging test, scenes 4 and 5 | `Sources/FeatureOnboarding/OnboardingStore.swift:104-105`, `:137-140`; `Tests/FeatureOnboardingTests/OnboardingStoreTests.swift:77`, `:86` |
+| 5. SF3, F8-S2-2 | The audit treats the first argument of a call ending in `logger.category` or `Logger.category` as unseen (one line and its comment), with two allowed cases and two lookalikes that stay findings (`filters.category("Push day")`, a second argument). The store logs through `injectedLogger.category("onboarding")`. Standards §7 (what the audit allows, and its limit) and §8 (a store logs under its module's category) say so | `Sources/LedgerTestSupport/Localization/CopyAuditRules.swift:26-40`; `Tests/LedgerAppKitTests/CopyAuditTests.swift:114-115`, `:131-132`; `OnboardingStore.swift:40-45`; `docs/engineering-standards.md:285-289`, `:362-366`, `:484-487` |
+| 6. SF4, F8-S2-6 | **Moved to the nightly lane**, in `LedgerDesignTests`' pattern: `.enabled(if: TestLane.runsSlowTests)`, tagged `.slow`. Its read of the log is `@concurrent`, off the main actor. One test, five scenes, each failure carrying a word of its own, so its lines are told from the tester's, which are now under the same category | `Tests/FeatureOnboardingTests/OnboardingStoreLoggingTests.swift:31-38`, `:94-98`; `Support/Tags.swift` (new) |
+| 7. SF5 | `PillButton` reads `isEnabled`: disabled, the ink is `inkFaint`, the outline `hairline`, and a filled pill takes `PrimaryButton`'s disabled fill and label (`hairline`, `inkMuted`). `PillButton(_:style:flush:action:)`: `flush: .leading` or `.trailing` stands the pill at that edge of its 44 pt target, which grows the other way; `ledgerHitTarget(alignment:)` carries it. `PillButtonStatesGallery` and its preview. Onboarding's "Back" is `flush: .leading`. Tokens only | `Sources/LedgerDesign/Components/PillButton.swift:9-15`, `:23-36`, `:48`, `:54-92`, `:108-135`; `ControlStyle.swift:7-11`; `Components+Previews.swift`; `Views/OnboardingPage.swift:33` |
+| 7. Tests | `PillButtonStateTests` (6 tests: disabled looks different in every style and theme, keeps its size, does nothing and says dimmed; a flush word starts or ends at the target's edge and a centred one does not; a flush pill keeps its 44 pt target; a pill wider than its target does not move); four rows in `AccessibilityTreeTests`' table; `PillButtonStatesSnapshotTests` (6 references) | `Tests/LedgerDesignTests/PillButtonStateTests.swift` (new); `AccessibilityTreeTests.swift:171-182` |
+| 8. F8-S2-1 | The pinned part always takes the height its text needs (`fixedSize` on the vertical axis); the page gives way. Test `pinnedPart_onTheNarrowestPhone_isNotSqueezed` (three states at 375 × 667 pt and accessibility5: the pinned part's share of the screen is at least what it measures with nothing pressing on it). Picture `step3-save-failed-dark-ax5-se.png`: the sentence on three whole lines | `Views/OnboardingFooter.swift:33`; `OnboardingScrollTests.swift:82` |
+| 9. F8-S2-3, F8-S2-4 | No change of behaviour. `OnboardingRoot`'s documentation says that `prepareRetry` must return, why, and that it runs once for each retry. The lock is as criterion 7 states it (`failed_locksThePicksAndTheStep` is unchanged) | `Sources/FeatureOnboarding/OnboardingRoot.swift:13-15` |
+| N1 | `ProgressSegments`' comment says what an empty value does | `Sources/LedgerDesign/Components/ProgressSegments.swift:28-29` |
+| N2 | A comment where passed steps are made `.current` | `OnboardingPresentation.swift:72-73` |
+| N3 | `Support/Tags.swift` (`.feature`, `.snapshot`, `.slow`, `TestLane`); each of the implementer's 14 suites carries `.feature` | `Tests/FeatureOnboardingTests/` |
+| N4 | The surface test matches the access word anywhere in a line of code and calls itself a tripwire | `Tests/FeatureOnboardingTests/OnboardingSurfaceTests.swift:5-8`, `:15-22` |
+| N5 | The pinned part keeps `LedgerSpacing.m` to the screen's bottom edge where the bottom safe area is smaller than that (a phone with a home button). Test `pinnedPart_keepsAGapToTheEdge` (both branches); picture `step2-days-light-se.png` | `Views/OnboardingScreen.swift:19`, `:27`; `OnboardingScrollTests.swift:102` |
+| N6 | A seventh preview, "Step 1, Skip setup failed" (the options disabled); picture `step1-skip-failed-dark.png` | `Sources/FeatureOnboarding/Onboarding+Previews.swift:17`, `:28`, `:61-63` |
+
+**Nits not taken.** **N7** (a public `hosting(_:_:)` and `until(_:)` in `LedgerSnapshotTesting`): the review gives
+it to the chore, and it is some 25 lines of shared test support, not a few. What I did instead: the two helpers
+moved out of `OnboardingRootTests` into `Tests/FeatureOnboardingTests/Support/Hosted.swift`, which is now the
+target's one file that imports `LedgerSnapshotTesting` `@testable`. **N8** asks for no change.
+
+**B1: how it was reproduced, and how the test pins it.** The reviewer measured a replica; this is the screen.
+`OnboardingScrollTests.stepChange_startsTheStepAtItsTop` hosts `OnboardingRoot` over a store the test keeps, at
+402 × 874 pt and `.accessibility3` (every step is longer than the screen there; the test asserts it), finds the
+one `UIScrollView` under the hosting view, sets its offset to its end, sends `.advance` or `.back` to the store
+as the pinned button does, lays the view out, and expects the new step's offset to be 0, four times: to step 2,
+to step 3, back to 2, back to 1.
+
+- **On the screen as committed** (`1efaf08`'s sources, only the test and its helper added; simulator, through
+  the lock, 09:21): it fails. "`.days` opens 209.67 pt down", "`.program` opens 168.33 pt down" (that step's
+  whole range), back on step 2 168.33, back on step 1 209.67. Same scroll view throughout.
+- **On the new screen with the fix taken out** (`position.scrollTo(edge: .top)` and its `onChange` removed; 09:35):
+  it fails with the same four numbers. The file was restored and compared (SHA-256) by the same command.
+- **On the final tree:** it passes. `pick_keepsThePagesPlace` is its control the other way: a pick on the same
+  step leaves the page where it was scrolled.
+
+**The convention as written** (`docs/testing-strategy.md` §2.6; rule 7 above is the same in short):
+
+> **A screen that scrolls** is its pinned parts plus `ScrollView { <Screen>Page(model:) }`. The page view holds
+> everything that scrolls and never a scroll view; the screen has one layout, whatever the text size (no
+> "scrolls only when it does not fit" switch). What is pinned where: the VoiceOver tree and the snapshot
+> references are taken from the page followed by the pinned parts, hosted without the scroll view; a hosted test
+> of the screen or its root pins what exists only because the page scrolls and needs no accessibility tree (one
+> scroll view, where a change of content lands); one UI test per scrolling screen, in the nightly lane, is the
+> backstop for the stops' order inside the real scroll view at an accessibility text size; the reader is loud.
+
+The intended trees in "The intended VoiceOver trees" above are unchanged, stop for stop; they are now read from
+`OnboardingParts`, and the tables' file is untouched.
+
+**SF4: which way, and why.** The test moved to the nightly lane; it does not assert through a recording logger.
+`LedgerLogger` hands out an `os.Logger` (`LedgerLogger.log`), and a call site writes
+`logger.log.error("… \(reason, privacy: .public)")`: the message is an `OSLogMessage` that the compiler builds
+for `os.Logger` alone, so nothing injected can receive it. A recording logger would mean a logging method of
+`LedgerLogger`'s own that every module calls instead, which changes product behaviour (privacy annotations, the
+signposts' API) and is `LedgerDependencies`' to decide. **The PR lane therefore has no proof that a failure is
+logged, or under which category**: it proves what is shown and saved. Measured in the nightly lane on the Mac:
+my test 8.5 s, the tester's two 10.0 s, all three pass, the tester's
+`failures_areLoggedUnderTheModulesCategory` (F8-S2-2) among them. The simulator has not run them.
+
+**Snapshot references.**
+
+- **Changed, 12 of onboarding's 18** (759,657 bytes before, 759,534 after): every reference that draws "Back",
+  which now starts at the content's edge (9 pt to the left) and, in the two failure pictures, is drawn disabled:
+  `days` light and dark; `program` in all six cells; `programSixDays` in its two; `failed` light and dark.
+- **Unchanged, byte for byte:** the six `goal` references. They were recorded from the screen when it drew the
+  page outside a scroll view; the page and the pinned part draw the same pixels.
+- **New, 6** (96,025 bytes): `Tests/LedgerDesignTests/__Snapshots__/PillButtonStateTests/`, the states gallery in
+  the phone matrix. **No existing `LedgerDesign` or `LedgerAppKit` reference changed**: `PillButtonGallery` and
+  the sheets that hold it are as they were, and their suites pass against the committed references.
+- **How:** one targeted record run of the two suites (`OnboardingSnapshotTests`,
+  `PillButtonStatesSnapshotTests`) with `TEST_RUNNER_SNAPSHOT_TESTING_RECORD=all` on the PR plan's iPhone 17
+  (iOS 27.0), through the lock; then normal runs of the three targets, which compare.
+- **Screenshots** (`tasks/features/F08-onboarding/screenshots/s2/`, 14 pictures, 2,218,579 bytes): the nine that
+  draw "Back" or scroll were shot again, the two of step 1 at the default size came out byte for byte the same,
+  and three are new: `step1-skip-failed-dark` (N6), `step2-days-light-se` (N5: an iPhone SE's 375 × 667 pt, no
+  bottom safe area) and `step3-save-failed-dark-ax5-se` (F8-S2-1). Made by the scratch test of decision 24, in
+  the tree for one run and removed by the same command.
+
+**Tester tests that now contradict a ruling.** Not edited; each fails only for the reason given (read from the
+result bundle of the final run).
+
+| Test | Fails on | The ruling it contradicts |
+|---|---|---|
+| `OnboardingVoiceOverAdversarialTests`, all 8 tests (`tree_everyState_readsAsTheBrief`, `progress_everyState_isOneElement`, `picks_everyState_areButtonsWithOneSelected`, `stepThree_days_areReadNotTapped`, `controls_activated_sendTheirAction`, `controls_whileSavingAndAfter_doNotAnswer`, `hitTargets_everyState_areAtLeast44`, `root_hosted_readsAndAnswersAsItsScreen`) | Each hands `OnboardingScreen` or `OnboardingRoot` to the hosted reader: the reader's issue ("cannot see inside a scroll view … Host the page"), and then the page's stops missing from the reading | The convention (the trees are taken from the page and the pinned parts; the reader fails loudly), and B1 (the page always scrolls). Hosting `OnboardingPage` and `OnboardingFooter` in place of the screen (the implementer's `OnboardingParts` does) is the whole change they need |
+| `OnboardingLayoutAdversarialTests.elements_atThePhonesWidth_areWholeAndApart` | `free.map(\.text) == expected`: it reads the page's elements from the screen in a 6,000 pt window, where the old screen did not scroll | B1: one layout, the page always in the scroll view |
+| `OnboardingLayoutAdversarialTests.page_onThePhone_fitsOrScrollsWhole` | `scroll.content.height > room` ("the page fits … and still scrolls"), in the four cases where the page fits | B1: a page that fits is in the scroll view too |
+| `OnboardingLayoutAdversarialTests.harness_measuresBothWaysOfShowingThePage` | It expects no scroll view and seven page elements on an iPhone 17 at the default size | B1 |
+| `OnboardingLayoutAdversarialTests.everything_beyondTheMatrix_isStillWhole` (**F8-S2-1's test**) | Only its first part, the reading of the page from the screen (four cases). **Its F8-S2-1 part passes**: the pinned part loses no height on the SE at accessibility5, and `pinnedControls_onThePhone_areInReachAndWhole`, which is that check as a test of its own, passes | B1. The orchestrator asked that this test pass without an edit; it cannot, because it also reads the page from the screen |
+| F06's `Slice3CloseoutSheetAdversarialTests.sheetChrome_scrollingContent_titleAtTheTopAndWhole` (3 cases) | The reader's issue: it hands the reader a `SheetChrome` whose content is a `ScrollView`, to find the title above it | "The hosted accessibility reader fails loudly when it meets a scroll view." It is the one existing caller of the reader in the repository that no longer passes. What it wants (the stops beside a scroll view, knowingly) the loud reader has no way to give |
+
+For the F06 test I see two ways out, both the orchestrator's to choose: a sanctioned edit that measures the title
+with the rows outside a scroll view at the same height; or a named opt-out on the reader for a caller that only
+wants what stands beside a scroll view, passed by that test. I added neither.
+
+**Targeted runs** (through the lock; `<scratch>/sim-test.sh` is `xcodebuild test` of the `Ledger` scheme's PR plan
+on the iPhone 17, iOS 27.0, with `-only-testing`).
+
+- **Final tree, the three targets** (`-only-testing:FeatureOnboardingTests -only-testing:LedgerDesignTests
+  -only-testing:LedgerAppKitTests`), 09:39:13, 94 s, lock acquired at once: **exit 65**, 641 tests, 620 passed,
+  **13 failed, all of them the table above**, 4 skipped, 4 expected failures.
+  - `LedgerAppKitTests`: 208 passed.
+  - `LedgerDesignTests`: 292 passed, 1 failed (F06's sheet test), 4 expected failures (two are the new reader
+    tests, which expect the reader's issue), 1 skipped.
+  - `FeatureOnboardingTests`: 120 passed, 12 failed, 3 skipped. The implementer's: 67 passed, none failed, 1
+    skipped (the nightly logging test). The tester's: 53 passed, 12 failed, 2 skipped (its nightly logging tests).
+  - No file changed while it ran (SHA-256 of every Swift, catalog and reference file before and after).
+- `scripts/check.sh --lint-only` on the final tree: **exit 0** (79 s).
+- Mac host, `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'FeatureOnboardingTests|LedgerAppKitTests|LedgerDesignTests'`: `FeatureOnboardingTests` 106 tests in 21 suites
+  pass in 2.6 s (9 to 10 s before: the log read is out of the lane); `LedgerAppKitTests` 196 in 30 pass.
+  `LedgerDesignTests` fails there in four of F06's adversarial font suites, 52 issues: they look for the font
+  file at `LedgerKit_LedgerDesign.bundle/Archivo[wdth,wght].ttf`, which is the simulator's bundle layout, not the
+  Mac's (`…/Contents/Resources/`). None is a file of this round, and all pass on the simulator.
+- Nightly lane on the Mac, the logging suites only (`LEDGER_TEST_LANE=nightly … --filter
+  'OnboardingStoreLoggingTests|OnboardingLoggingAdversarialTests'`): exit 0, 3 tests.
+- **The full gate was not run**, as instructed.
+
+**Product lines now** (non-blank, not whole-line comments).
+
+| File | Now | At `9cc5d54` |
+|---|--:|--:|
+| `OnboardingStore.swift` | 116 | 108 |
+| `OnboardingState.swift` | 41 | 41 |
+| `OnboardingPresentation.swift` | 121 | 119 |
+| `OnboardingCopy.swift`, `OnboardingCopy+Options.swift` | 85, 84 | 85, 84 |
+| `OnboardingRoot.swift` | 21 | 21 |
+| `Views/OnboardingScreen.swift` | 24 | 97 |
+| `Views/OnboardingPage.swift` | 62 | new |
+| `Views/OnboardingFooter.swift` | 31 | new |
+| `Views/OnboardingOptionRow.swift` | 33 | 33 |
+| `Onboarding+Previews.swift` | 49 | 44 |
+| **FeatureOnboarding** | **667** | 632 |
+
+Beside the module: `LedgerDesign` +68 −8 (`PillButton.swift` +61 −6, of which the states gallery is 26;
+`ControlStyle.swift` +2 −2; `Components+Previews.swift` +5); test support `LedgerSnapshotTesting` +18 −4 and
+`LedgerTestSupport` +1. Tests: the implementer's part of `FeatureOnboardingTests` is 1,645 lines in 20 files
+(1,446 in 16 before; the tester's `Adversarial/` not counted), and `LedgerDesignTests` has two new files, 151
+lines.
+
+**Not verified.** The full gate, coverage and watchOS (not run, by instruction). The nightly logging tests on the
+simulator. VoiceOver by ear, as before: the focus move, the announcement, and the stops' order inside the real
+scroll view, which is S3's nightly UI test's. Bold Text and Increase Contrast on the new `PillButton` states
+(`inkFaint` under Increase Contrast is the token's own 60 %). A device. Whether `ScrollPosition` lands the
+title under VoiceOver's focus move in the same update: the hosted test sees the offset, not the focus.
+
+#### Addition: the reader's opt-in (orchestrator's addition to fix round 1, 2026-10-05)
+
+The loud reader has one way out, for a caller that knowingly reads the pinned parts around a scroll view. It
+supersedes the last row of "Tester tests that now contradict a ruling" and the paragraph under that table: F06's
+sheet test passes again. The twelve of F08 S2's tester are as they were, by ruling.
+
+**What changed** (paths under `LedgerKit/`)
+
+- **The opt-in:** `outsideScrollViews: Bool = false` on the three readers, `accessibilityElements(_:
+  outsideScrollViews:)`, `withAccessibilityElements` and `withLiveAccessibilityElements`
+  (`Sources/LedgerSnapshotTesting/AccessibilityElements.swift:35`, `:55`, `:72`). With it the walk leaves every
+  scroll view out, content and all, records nothing and returns the elements outside them (`:109-111`). Without
+  it nothing changed: a scroll view that yields no element fails the test (`:113-124`), and the message now names
+  the opt-in. The function's comment says both, and when each is right (`:25-32`).
+- **Tests** (`Tests/LedgerDesignTests/AccessibilityReaderTests.swift:65`, `:83`, `:94`): with the opt-in each of
+  the three readers returns the title above and the button below a scroll view and fails nothing; a view that
+  holds no scroll view is read exactly as without it; a scroll view alone is an empty tree and no failure. The
+  loud default keeps its two tests (`:28`, `:48`).
+- **The convention:** one sentence in `docs/testing-strategy.md` §2.6 (`:253-255`) and in rule 7 above: the
+  opt-in is for the pinned parts around a scroll view, never for reading a page.
+
+**Sanctioned test edits** (the orchestrator's, in two messages: the opt-in at the test's own reader call; then a
+parameter on the file's helper, passed by this test alone). `git diff 1efaf08 --
+LedgerKit/Tests/LedgerDesignTests/Adversarial` shows these lines in
+`Slice3CloseoutSheetAdversarialTests.swift` and nothing else; no expectation among them. The helper's other two
+callers keep the default and so still fail loudly if they are ever given a scroll view.
+
+| Line at `1efaf08` | Was | Is |
+|--:|---|---|
+| 94 (the helper `titleOffset`'s last parameter) | `_ appearance: SnapshotAppearance` | `_ appearance: SnapshotAppearance,` and a new line `outsideScrollViews: Bool = false` |
+| 100 (the helper's reader call) | `let elements = page.accessibilityElements(appearance)` | `let elements = page.accessibilityElements(appearance, outsideScrollViews: outsideScrollViews)` |
+| 129 (the test's call of the helper) | `let offset = try Self.titleOffset(sheet, title: title, height: Self.mediumDetent, appearance)` | the same call over three lines, with `outsideScrollViews: true` as its last argument: `let offset = try Self.titleOffset(` / `sheet, title: title, height: Self.mediumDetent, appearance, outsideScrollViews: true` / `)` |
+| 131–132 (the test's own reader call) | `let inSheet = try #require(sheet.frame(height: Self.mediumDetent).accessibilityElements(appearance)` / `.first { $0.label == title })` | `let inSheet = try #require(sheet.frame(height: Self.mediumDetent)` / `.accessibilityElements(appearance, outsideScrollViews: true).first { $0.label == title })` |
+
+Two of the edits are more than a word because of the lint, not by choice: with the argument added, line 131 is
+142 columns (limit 120), and wrapping each call one argument to a line took the suite's body to 154 lines
+(limit 150). So the calls are wrapped as shortly as the formatter accepts: three lines more than before.
+
+**Every other caller of the reader** is unaffected: the parameter has a default, and no other call in the
+repository passes it (`grep -rn outsideScrollViews LedgerKit` finds the reader, its tests and the four lines
+above).
+
+**Targeted runs** (through the lock, the same script as above).
+
+- `-only-testing:FeatureOnboardingTests -only-testing:LedgerDesignTests -only-testing:LedgerAppKitTests`,
+  09:48:19, 89 s: exit 65; 644 tests, 624 passed, **12 failed: the twelve of F08 S2's tester, by ruling, and
+  nothing else**, 4 skipped, 4 expected failures.
+  - `LedgerDesignTests`: 296 passed, none failed (F06's `sheetChrome_scrollingContent_titleAtTheTopAndWhole`
+    passes in its three cases), 4 expected failures, 1 skipped.
+  - `LedgerAppKitTests`: 208 passed (it was run too, because `AppTabsTests` and two adversarial suites call the
+    reader).
+  - `FeatureOnboardingTests`: 120 passed, 12 failed, 3 skipped; the implementer's 67 pass.
+- `scripts/check.sh --lint-only`: exit 0 (77 s). No file changed between the run's start and this section.
+- Not run: the full gate, coverage, watchOS, the Mac host's suites for this addition (the reader and its tests
+  are iOS only).

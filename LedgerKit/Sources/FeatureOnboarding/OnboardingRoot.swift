@@ -9,6 +9,10 @@ import SwiftUI
 /// `prepareRetry` is awaited before a save is tried again after a failure. The app passes the launch's seed
 /// step: until the catalog is seeded a first save cannot succeed (product decision #28), and seeding is
 /// otherwise retried only on the next return to the foreground.
+///
+/// **`prepareRetry` must return.** While it runs every control is disabled, nothing is saved, and the screen
+/// offers no way to give up: only the view going away ends the wait. Pass a step that is bounded and that is
+/// safe to run again (it runs once for each retry), as the launch's is; never one that can wait for ever.
 public struct OnboardingRoot: View {
     @State private var store: OnboardingStore
     private let prepareRetry: @MainActor () async -> Void

@@ -8,7 +8,7 @@ import Testing
 /// the catalog and in no other file is not this module's to test: `ModuleCopyTests` audits every module's sources
 /// and asks each built bundle for its catalog's keys, and the gate compares each catalog with the compiler's
 /// keys. This suite reads each line through the copy file, as standards §7 asks of a counted string.
-@Suite("OnboardingCopy")
+@Suite("OnboardingCopy", .tags(.feature))
 nonisolated struct OnboardingCopyTests {
     @Test("Step 3's sentence counts its weeks: one week, several weeks")
     func programBody_countsItsWeeks() {

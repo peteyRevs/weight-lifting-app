@@ -202,6 +202,10 @@ Concrete test names (file = suite = source type; see §6):
   helper turns on UIKit's accessibility automation (`_AXSSetAutomationEnabled`, private,
   test-only, as KIF and AccessibilitySnapshot do) while it reads. A button's accessibility frame
   is its tappable area, which is how `ComponentAccessibilityTests` checks the 44 pt target.
+  The reader cannot see inside a scroll view: a hosted SwiftUI `ScrollView` hands UIKit no
+  accessibility children in a package test process (measured on iOS 27.0, F08 S2). It fails the
+  test when its walk meets one, with a message that says to host the page ("A screen that
+  scrolls", §2.6), so a tree is never pinned from a reading that silently lacks what scrolls.
 - Review policy: a PR that changes any PNG lists them under "Screenshots" in
   the PR template with the reason; the reviewer inspects GitHub's image diff
   against the prototype screen label (workflow review point 4); more than 20
@@ -227,6 +231,28 @@ Concrete test names (file = suite = source type; see §6):
   {solo, superset, rest, swapSheet}, Receipt, Builder, Day editor, Library,
   Exercise history, Workout list/detail, Settings, Onboarding ×3, Watch
   {idle, ready, rest, list, end, summary}. Same matrix as §2.5.
+- **A screen that scrolls** (M1 convention, F08 S2) is its pinned parts plus
+  `ScrollView { <Screen>Page(model:) }`. The page view holds everything that scrolls and never
+  a scroll view; the screen has one layout, whatever the text size (no "scrolls only when it
+  does not fit" switch). `DesignGallery` and `DesignGalleryContent` are the same split. What
+  is pinned where:
+  - **The VoiceOver tree and the snapshot references are taken from the page followed by the
+    pinned parts,** hosted without the scroll view: the table in the notes, the table-driven
+    tree test and `assertLedgerSnapshot` all draw that. The hosted reader cannot see inside a
+    scroll view (§2.5), and a scroll view has no height of its own for "at its own height".
+  - **A hosted test of the screen or its root pins what exists only because the page
+    scrolls** and needs no accessibility tree: that there is one scroll view, and where a
+    change of content lands (onboarding: a new step starts at its top). The `UIScrollView`
+    is found under the hosting view and moved there.
+  - **One UI test per scrolling screen, in the nightly lane,** is the backstop for what the
+    split cannot show: the stops in the table's order inside the real scroll view at an
+    accessibility text size, with their selected and enabled states. XCUITest is the only
+    reader here that is a real accessibility client; it is too slow to be the tree a slice
+    pins before its tester starts.
+  - **The reader is loud:** handed a scroll view it fails the test and says to host the page.
+    A caller that knowingly reads only the pinned parts around a scroll view (a sheet's title
+    over its scrolling rows) says so with `outsideScrollViews: true`, which leaves every scroll
+    view out without failing; it is never the way to read a page.
 - Previews draw a state; loading goes in a separate loader view (F07's
   `DiagnosticsPage` / `DiagnosticsLoader`). Each module's `#Preview`s are cases
   of a registry enum, which `PreviewTests` render in swift-dependencies'

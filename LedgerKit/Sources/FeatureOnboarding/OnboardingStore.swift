@@ -37,7 +37,12 @@ final class OnboardingStore {
     @ObservationIgnored @Dependency(\.uuid) private var uuid
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.locale) private var locale
-    @ObservationIgnored @Dependency(\.logger) private var logger
+    @ObservationIgnored @Dependency(\.logger) private var injectedLogger
+
+    /// The injected logger under the module's own category (standards §8); a disabled logger stays disabled.
+    private var logger: LedgerLogger {
+        injectedLogger.category("onboarding")
+    }
 
     /// What the screen draws.
     var model: OnboardingStepModel {
@@ -91,10 +96,13 @@ final class OnboardingStore {
     // MARK: Work the root's tasks run
 
     /// Reads the stored unit, for step 3's sentence. If the settings cannot be read the default's unit stays and
-    /// the failure is logged; the save reads them again and fails where the lifter can see it.
+    /// the failure is logged; the save reads them again and fails where the lifter can see it. A read that was
+    /// cancelled, because the view went away, is no failure and logs nothing.
     func loadUnits() async {
         do {
             state.units = try await settings.load().units
+        } catch is CancellationError {
+            return
         } catch {
             logger.log.error("Onboarding could not read the settings: \(String(describing: error), privacy: .public)")
         }
@@ -106,9 +114,10 @@ final class OnboardingStore {
     ///
     /// Any failure (the settings, the catalog, the generator, the save) is logged and leaves `.failed`, with
     /// nothing saved. A save cancelled before its write, because the view went away, writes nothing and leaves
-    /// the phase as it was before the tap, so the same tap works again if the view returns; cancellation is not
-    /// a failure and is not shown as one. Once the repository has saved, the phase is `.saved` whether or not the
-    /// task was cancelled meanwhile.
+    /// the phase as it was before the tap, so the same tap works again if the view returns. A cancellation is
+    /// not a failure: it is neither shown nor logged as one. A real failure that arrives on a cancelled task is
+    /// still logged, though the view that would show it is gone. Once the repository has saved, the phase is
+    /// `.saved` whether or not the task was cancelled meanwhile.
     func save(prepareRetry: @MainActor () async -> Void) async {
         guard let attempt, state.phase.isSaving, !isSaveRunning else {
             return
@@ -125,11 +134,14 @@ final class OnboardingStore {
             try await programs.save(program)
             state.phase = .saved
         } catch {
+            if !(error is CancellationError) {
+                let reason = String(describing: error)
+                logger.log.error("Onboarding could not save the program: \(reason, privacy: .public)")
+            }
             guard !Task.isCancelled else {
                 state.phase = isRetry ? .failed : .editing
                 return
             }
-            logger.log.error("Onboarding could not save the program: \(String(describing: error), privacy: .public)")
             state.phase = .failed
         }
     }

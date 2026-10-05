@@ -5,8 +5,8 @@
 
     /// Every preview in FeatureOnboarding, one case each: the states of the screen, drawn from the model the
     /// presentation makes of a state. `PreviewTests` render every case and fail on a `#Preview` that is not a
-    /// case here; `OnboardingSnapshotTests` and `OnboardingAccessibilityTests` draw the same cases. None runs a
-    /// task: the screen only draws, and `OnboardingRoot`, which loads and saves, has no preview.
+    /// case here; `OnboardingSnapshotTests` draw the same states' page and pinned part. None runs a task: the
+    /// screen only draws, and `OnboardingRoot`, which loads and saves, has no preview.
     enum OnboardingPreview: String, CaseIterable {
         case goal = "Step 1, goal"
         case days = "Step 2, days"
@@ -14,6 +14,7 @@
         case programSixDays = "Step 3, six days"
         case saving = "Step 3, saving"
         case failed = "Step 3, save failed"
+        case skipFailed = "Step 1, Skip setup failed"
 
         /// The state the case shows.
         var state: OnboardingState {
@@ -24,6 +25,7 @@
             case .programSixDays: OnboardingState(step: .program, days: .six)
             case .saving: OnboardingState(step: .program, phase: .saving)
             case .failed: OnboardingState(step: .program, phase: .failed)
+            case .skipFailed: OnboardingState(phase: .failed)
             }
         }
 
@@ -54,6 +56,10 @@
 
     #Preview("Step 3, save failed") {
         OnboardingPreview.failed.content
+    }
+
+    #Preview("Step 1, Skip setup failed") {
+        OnboardingPreview.skipFailed.content
     }
 
 #endif

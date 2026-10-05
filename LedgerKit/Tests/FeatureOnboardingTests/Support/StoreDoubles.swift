@@ -2,8 +2,11 @@ import Foundation
 import LedgerDomain
 import Synchronization
 
-/// What a failing double throws: "a repository may throw" (brief, criterion 7).
-nonisolated struct StoreFailure: Error, Equatable {}
+/// What a failing double throws: "a repository may throw" (brief, criterion 7). A test that reads the log back
+/// gives it a word of its own, by which its line is found.
+nonisolated struct StoreFailure: Error, Equatable {
+    var word = ""
+}
 
 /// A program store that forwards to another and keeps every program a `save` wrote, in order: how a test counts
 /// saves. The protocol itself can only say which program is active.
@@ -48,8 +51,10 @@ final nonisolated class RecordingPrograms: ProgramRepository {
 
 /// A program store whose `save` always throws and writes nothing.
 nonisolated struct FailingPrograms: ProgramRepository {
+    var failure = StoreFailure()
+
     func save(_: Program) async throws {
-        throw StoreFailure()
+        throw failure
     }
 
     func active() async throws -> Program? {
@@ -65,10 +70,13 @@ nonisolated struct FailingPrograms: ProgramRepository {
     }
 }
 
-/// A settings store that cannot be read.
+/// A settings store that cannot be read: it throws `error`, a failure of its own unless a test gives it the
+/// `CancellationError` a store that honours cancellation throws when its task is cancelled.
 nonisolated struct FailingSettings: SettingsRepository {
+    var error: any Error = StoreFailure()
+
     func load() async throws -> Settings {
-        throw StoreFailure()
+        throw error
     }
 
     func save(_: Settings) async throws {}
@@ -82,11 +90,12 @@ nonisolated struct FailingSettings: SettingsRepository {
 nonisolated struct StubbedExercises: ExerciseRepository {
     var inner: (any ExerciseRepository)?
     var gate: Gate?
+    var failure = StoreFailure()
 
     func all() async throws -> [Exercise] {
         await gate?.pass()
         guard let inner else {
-            throw StoreFailure()
+            throw failure
         }
         return try await inner.all()
     }

@@ -7,7 +7,7 @@
 
     /// Every `#Preview` in FeatureOnboarding is a case of `OnboardingPreview`, and every case renders (the
     /// convention F07's criterion 8 set for each module with previews).
-    @Suite("Previews (FeatureOnboarding)", .serialized)
+    @Suite("Previews (FeatureOnboarding)", .serialized, .tags(.feature))
     struct PreviewTests {
         @Test("Every #Preview in FeatureOnboarding is an OnboardingPreview case, by name, and every case has one")
         func registry_listsEveryPreview() throws {

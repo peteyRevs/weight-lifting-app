@@ -7,7 +7,7 @@ import Testing
 /// F08 S2, criteria 4, 5 and 6: the one program a save writes. It is the generator's, from the picks or, for
 /// "Skip setup", the default; in the stored settings' unit; starting on the first day, per the settings' week
 /// start, of the week that holds the injected date; over the stored catalog; with ids from the injected source.
-@Suite("OnboardingStore: the program a save writes", .timeLimit(.minutes(1)))
+@Suite("OnboardingStore: the program a save writes", .tags(.feature), .timeLimit(.minutes(1)))
 struct OnboardingStoreSaveTests {
     @Test(
         "Start training saves one active program: the generator's, from the picks",

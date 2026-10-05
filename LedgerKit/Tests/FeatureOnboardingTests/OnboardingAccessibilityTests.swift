@@ -58,16 +58,16 @@
     /// implementation notes write them, pinned exactly: the stops, their order, labels, values and traits. Read
     /// through UIKit's accessibility tree, as VoiceOver reads it, at the default text size and at the largest of
     /// the snapshot matrix.
-    @Suite("Onboarding accessibility", .serialized)
+    ///
+    /// The trees are read from the page followed by the pinned part (`OnboardingParts`), not from the screen:
+    /// the screen puts the page in a scroll view, which the hosted reader cannot see inside (testing-strategy
+    /// §2.6). The same stops in the same order inside the real scroll view are S3's nightly UI test.
+    @Suite("Onboarding accessibility", .serialized, .tags(.feature))
     struct OnboardingAccessibilityTests {
         nonisolated static let appearances = [
             SnapshotAppearance(.light, .large),
             SnapshotAppearance(.dark, .accessibility3)
         ]
-
-        static func screen(_ state: OnboardingState) -> OnboardingScreen {
-            OnboardingScreen(model: OnboardingPresentation.make(state, locale: Fixtures.locale)) { _ in }
-        }
 
         @Test(
             "Every state has exactly its intended VoiceOver tree, at the default and the largest text size",
@@ -75,7 +75,7 @@
         )
         func tree_isExactlyTheTable(_ tree: OnboardingTree) {
             for appearance in Self.appearances {
-                let found = Self.screen(tree.state).accessibilityElements(appearance).map {
+                let found = OnboardingParts(tree.state).accessibilityElements(appearance).map {
                     Stop($0.label, value: $0.value, $0.traits)
                 }
                 #expect(
@@ -91,7 +91,7 @@
         )
         func buttons_haveA44PointTarget(_ tree: OnboardingTree) {
             for appearance in Self.appearances {
-                let buttons = Self.screen(tree.state).accessibilityElements(appearance)
+                let buttons = OnboardingParts(tree.state).accessibilityElements(appearance)
                     .filter { $0.traits.contains(.button) }
                 #expect(buttons.count >= 2)
                 for button in buttons {
@@ -107,8 +107,7 @@
         @Test("A tap on an option sends its pick, and each button sends its model's action")
         func activating_sendsTheModelsAction() {
             var sent: [OnboardingAction] = []
-            let model = OnboardingPresentation.make(OnboardingState(step: .days), locale: Fixtures.locale)
-            OnboardingScreen(model: model) { sent.append($0) }.withAccessibilityElements { elements in
+            OnboardingParts(OnboardingState(step: .days)) { sent.append($0) }.withAccessibilityElements { elements in
                 for element in elements where element.accessibilityTraits.contains(.button) {
                     #expect(element.accessibilityActivate(), "\(element.accessibilityLabel ?? "")")
                 }
@@ -121,8 +120,7 @@
         @Test("Step 3's days are not buttons: activating one sends nothing")
         func days_areNotTappable() {
             var sent: [OnboardingAction] = []
-            let model = OnboardingPresentation.make(OnboardingState(step: .program), locale: Fixtures.locale)
-            OnboardingScreen(model: model) { sent.append($0) }.withAccessibilityElements { elements in
+            OnboardingParts(OnboardingState(step: .program)) { sent.append($0) }.withAccessibilityElements { elements in
                 for element in elements where !element.accessibilityTraits.contains(.button) {
                     _ = element.accessibilityActivate()
                 }
@@ -134,8 +132,7 @@
         func lockedControls_sendNothing(_ phase: OnboardingState.Phase) {
             var sent: [OnboardingAction] = []
             let state = OnboardingState(step: .days, phase: phase)
-            let model = OnboardingPresentation.make(state, locale: Fixtures.locale)
-            OnboardingScreen(model: model) { sent.append($0) }.withAccessibilityElements { elements in
+            OnboardingParts(state) { sent.append($0) }.withAccessibilityElements { elements in
                 for element in elements {
                     _ = element.accessibilityActivate()
                 }

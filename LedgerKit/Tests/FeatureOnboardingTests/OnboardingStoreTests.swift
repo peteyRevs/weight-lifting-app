@@ -7,7 +7,7 @@ import Testing
 /// F08 S2, criteria 1 and 2: what the store opens on, the picks and the steps. The program a save writes is in
 /// `OnboardingStoreSaveTests`, failures and retries in `OnboardingStoreFailureTests`, taps and cancellation around
 /// a running save in `OnboardingStoreSaveOnceTests`.
-@Suite("OnboardingStore", .timeLimit(.minutes(1)))
+@Suite("OnboardingStore", .tags(.feature), .timeLimit(.minutes(1)))
 struct OnboardingStoreTests {
     @Test("The bundled catalog is read: the seeds of these suites are not empty")
     func bundledCatalog_isRead() throws {
@@ -68,6 +68,31 @@ struct OnboardingStoreTests {
     func loadUnits_failure_keepsTheDefault() async throws {
         try await StoreScene.run(changes: [.settingsCannotBeRead]) { scene in
             await scene.store.loadUnits()
+            #expect(scene.store.state == OnboardingState())
+            #expect(scene.store.model.error == nil)
+        }
+    }
+
+    @Test("A unit read cancelled with its task changes nothing and shows nothing")
+    func loadUnits_cancelled_keepsTheDefault() async throws {
+        try await StoreScene.run(changes: [.settingsReadIsCancelled]) { scene in
+            await scene.store.loadUnits()
+            #expect(scene.store.state == OnboardingState())
+            #expect(scene.store.model.error == nil)
+        }
+    }
+
+    @Test("A real failure on a cancelled task saves nothing and is not shown: the view that would show it is gone")
+    func save_failingOnACancelledTask_isNotShown() async throws {
+        let gate = Gate()
+        try await StoreScene.run(changes: [.catalogWaitsThenFails(gate)]) { scene in
+            scene.store.send(.skipSetup)
+            let running = Task { await scene.save() }
+            await gate.entered()
+            running.cancel()
+            await running.value
+
+            #expect(scene.programs.saved.isEmpty)
             #expect(scene.store.state == OnboardingState())
             #expect(scene.store.model.error == nil)
         }

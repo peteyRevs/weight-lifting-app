@@ -6,7 +6,7 @@ import Testing
 
 /// F08 S2, criteria 7 and 9, in the display model: what each phase of the save shows and lets the lifter do, and
 /// the two rules every string keeps (none names the product; numbers follow the locale given).
-@Suite("OnboardingPresentation: phases and copy rules")
+@Suite("OnboardingPresentation: phases and copy rules", .tags(.feature))
 nonisolated struct OnboardingPresentationPhaseTests {
     typealias Tests = OnboardingPresentationTests
     typealias Step = OnboardingState.Step

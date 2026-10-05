@@ -3,7 +3,8 @@ import LedgerDesign
 import LedgerDomain
 
 /// One step of onboarding as the screen draws it: every string resolved, every control with the action it sends.
-/// `OnboardingScreen` draws nothing else, so a preview, a snapshot and the VoiceOver test need only this.
+/// `OnboardingPage` and `OnboardingFooter` draw nothing else, so a preview, a snapshot and the VoiceOver test
+/// need only this.
 nonisolated struct OnboardingStepModel: Equatable, Sendable {
     /// A button: its title and what it sends.
     nonisolated struct Control: Equatable, Sendable {
@@ -35,6 +36,9 @@ nonisolated struct OnboardingStepModel: Equatable, Sendable {
         case days([Day])
     }
 
+    /// Which step this is, from 0: a change of it is a new page (the screen starts it at its top, and VoiceOver
+    /// moves to its title).
+    let step: Int
     /// The three bars: orange up to this step.
     let progress: [ProgressSegment]
     /// What VoiceOver reads for the bars: "Step 1 of 3".
@@ -64,6 +68,9 @@ nonisolated enum OnboardingPresentation {
         let steps = OnboardingState.Step.allCases
         let isFailed = state.phase == .failed
         return OnboardingStepModel(
+            step: state.step.rawValue,
+            // The prototype draws every bar up to this step in the accent, and `.current` is the one state
+            // `ProgressSegments` draws so (`.done` is grey): a passed step is not "current" in any other sense.
             progress: steps.map { step in
                 ProgressSegment(length: 1, state: step.rawValue <= state.step.rawValue ? .current : .upcoming)
             },

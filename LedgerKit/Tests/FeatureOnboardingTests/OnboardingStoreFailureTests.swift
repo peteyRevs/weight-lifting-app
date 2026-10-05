@@ -30,7 +30,7 @@ nonisolated enum FailingStep: String, CaseIterable, CustomTestStringConvertible 
 
 /// F08 S2, criterion 7: a save that cannot finish shows the brief's sentence with "Retry", saves nothing, and
 /// "Retry" awaits the root's preparation and then writes the program the failed attempt asked for.
-@Suite("OnboardingStore: failure and retry", .timeLimit(.minutes(1)))
+@Suite("OnboardingStore: failure and retry", .tags(.feature), .timeLimit(.minutes(1)))
 struct OnboardingStoreFailureTests {
     @Test(
         "Whichever step fails, the screen shows the sentence with Retry and nothing is saved",

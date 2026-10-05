@@ -8,7 +8,7 @@ import Testing
 /// F08 S2, criteria 1, 2, 3, 6 and 9, in the display model: each step's copy against product spec §6.7 (with the
 /// brief's wording of step 1's body), the pick that is selected, step 3's read-only days, and what each phase
 /// lets the lifter do. The presentation is a pure function, so every case is a state and its model.
-@Suite("OnboardingPresentation")
+@Suite("OnboardingPresentation", .tags(.feature))
 nonisolated struct OnboardingPresentationTests {
     typealias Step = OnboardingState.Step
     typealias Phase = OnboardingState.Phase
