@@ -198,18 +198,24 @@ into the app**: the app still opens on the tabs, and S3 adds the root's branch.
    catalog's kilogram loads.
 7. **Failure.** If reading the settings or the catalog, generating, or saving fails (an unseeded catalog makes the
    generator throw `unknownExercise`; a repository may throw), the screen shows "Couldn't save your program. Try
-   again." with "Retry", nothing is saved, and the failure is logged. "Retry" first awaits the `prepareRetry`
-   closure the root was given (S3 passes the launch's seed step), then tries again with the same picks.
+   again." with "Retry", nothing is saved, and the failure is logged under the module's own log category. "Retry"
+   first awaits the `prepareRetry` closure the root was given (S3 passes the launch's seed step, which always
+   returns), then tries again with the same picks. (Revised after G2 round 1:) while the failure is shown the picks
+   and "Back" are locked: the lifter retries or skips. A cancelled task is not a failure and is not logged as one.
 8. **VoiceOver.** Each option is one button whose label is "{label}, {sub}", with the selected trait when picked and
    no value. The progress bars are one element, "Step 1 of 3". The tree of each step is written in the notes and
-   pinned by a test.
+   pinned by a test on the page view (the hosted reader cannot see inside a scroll view, and now fails loudly if it
+   is handed one); S3's UI test checks the same order inside the real scroll view at an accessibility size.
 9. **Copy.** Every string is in `FeatureOnboarding`'s String Catalog and resolved in `OnboardingCopy.swift`, as
    `docs/engineering-standards.md` §7 requires; the texts are the body's "Copy (exact)" (with "This sets how your
    loads progress week to week."), plus "Back". No string names the product. Program and day names and preview
    lines are the Domain's data, shown as given.
-10. **Type sizes and themes.** Option rows wrap and nothing truncates up to the largest accessibility size the
-    snapshot matrix has; light and dark. Snapshot references: step 1, step 2, step 3 for four days and for six days,
-    and the failure state (18 images, as the plan's matrix says).
+10. **Type sizes and themes.** (Revised after G2 and G3 round 1.) Option rows wrap and nothing truncates or is cut
+    off at any Dynamic Type size, the largest accessibility size included, on the narrowest phone the app supports;
+    light and dark. The page always scrolls inside the screen: the screen is its pinned parts plus a scroll view
+    around one page view, and going to another step starts that step at its top. Snapshot references: step 1, step
+    2, step 3 for four days and for six days, and the failure state (18 images, as the plan's matrix says), drawn
+    from the page.
 11. **Surface.** `OnboardingRoot(prepareRetry:)` is the module's only public type. The store follows the M1
     conventions (no task that outlives the view; pure presentation; tokens only).
 

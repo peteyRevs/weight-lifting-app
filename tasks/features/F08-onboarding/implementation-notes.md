@@ -1479,3 +1479,33 @@ largest text size the page scrolls under the pinned buttons; "Back" does not loo
   the model; `prepareRetry` passed to `save`; the page scrolls only when it does not fit; the log category; two
   extra files; one `@testable import LedgerSnapshotTesting`; the log-reading test) go to the reviewer to judge.
 - The orchestrator's full gate on the tree exited 0 before this entry was written.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 asked for changes: 1 Blocking, 5 Should fix, 8 nits. G2 round 1: 67 tests, six findings, one test failing in the
+PR lane. The brief's S2 criteria 7, 8 and 10 are revised. For fix round 1:
+
+- **A new M1 convention, from the review's recommendation (it joins "M1 shared conventions" as rule 7 and is written
+  into `docs/testing-strategy.md` in this slice):** a screen that scrolls is its pinned parts plus
+  `ScrollView { XPage(model:) }`; `XPage` holds everything that scrolls and never a scroll view. The VoiceOver
+  tree and the snapshots are taken from `XPage` and the pinned parts. One nightly UI test per scrolling screen
+  checks the order inside the real scroll view at an accessibility size (onboarding's is S3's). The hosted
+  accessibility reader fails loudly when it meets a scroll view.
+- **B1 accepted:** the page always scrolls (one layout: the "scrolls only when it does not fit" switch goes), and a
+  step change starts the new step at its top. Shown on the real screen, not a replica.
+- **SF1 and F8-S2-5** are closed by the convention above.
+- **SF2 accepted:** a cancellation is not logged as an error; a real failure is logged even when the task was
+  cancelled.
+- **SF3 and F8-S2-2 accepted:** the copy audit stops flagging a logger's category (one line in the shared helper,
+  with its test), and the store logs under the module's own category.
+- **SF4 and F8-S2-6 accepted:** the log-reading test must not cost seconds in the PR lane or hold the main actor:
+  assert through an injected recording logger if the logger type allows one, otherwise move it to the nightly lane.
+- **SF5 accepted, in `LedgerDesign`:** a disabled pill looks disabled, and the ghost pill can sit flush with the
+  content's edge; with the component's own tests and gallery references.
+- **F8-S2-1 accepted:** the failure sentence wraps and nothing is cut off on the narrowest phone at the largest
+  accessibility size (criterion 10 as revised).
+- **F8-S2-3 decided:** while the failure is shown, the picks and "Back" stay locked (criterion 7 as revised).
+- **F8-S2-4 accepted as documented:** `prepareRetry` must return; `OnboardingRoot`'s documentation says so, and S3
+  passes the launch's step, which is bounded.
+- **Nits:** taken as the review writes them unless one costs more than a few lines; any not taken is listed with
+  its reason. "For S3" items are copied into the inputs for S3.
