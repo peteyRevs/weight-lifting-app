@@ -8,8 +8,8 @@ import LedgerDomain
 /// Each clause gets a fresh client with no workout and no subscriber, and returns `nil` when the client keeps
 /// it, or what it did instead. The clauses use the protocol alone. They do not observe, and so do not
 /// constrain:
-/// - an envelope's stamp (device, `seq`, wall clock): the fake counts from 1 and reads the clock it was given,
-///   the host uses a hybrid logical clock, and an update carries none of the three;
+/// - an envelope's stamp (device, `seq`, wall clock): the fake counts from 1 and stamps a fixed device and
+///   time, the host uses a hybrid logical clock, and an update carries none of the three;
 /// - what a client stores, and every effect it runs itself (the log, the stored workout, the rest
 ///   notification, the Live Activity);
 /// - recovery at launch, and a store that fails. Those are the host's own tests'.
@@ -17,13 +17,20 @@ import LedgerDomain
 /// Nothing waits on a clock. A clause ends by making one last change it can recognise (`markEnd(of:)`) and
 /// reads each stream up to it, so a client that publishes too few or too many updates gets a line saying so.
 /// Only a client that never publishes that change, or whose streams have no first element, keeps a clause
-/// waiting, until the suite's time limit fails it.
+/// waiting, until the suite's time limit fails it. When a client's run of the clauses times out, run one
+/// script first (`scriptViolation(seed:on:)`): it reads its streams up to a mark as well, and names a
+/// missing first element at once.
+///
+/// The last five clauses (`overlapClauses`) send their calls from several tasks at once. Which call wins is
+/// the scheduler's choice, so they judge the outcome as a set, and a correct client passes whatever the
+/// scheduler chooses. A client with a suspension between a check and its commit fails them only in a run
+/// where two calls did overlap: one green run is weaker evidence there than in the other clauses.
 public enum WorkoutSessionClientContract {
     public typealias Client = any WorkoutSessionClient
     public typealias Clause = ContractClause<Client>
     typealias Update = WorkoutSessionUpdate
 
-    public static let clauses: [Clause] = lifecycleClauses + updateClauses
+    public static let clauses: [Clause] = lifecycleClauses + updateClauses + overlapClauses
 
     /// Every clause's complaint about a client from `make`, which is called once per clause.
     public static func violations(of make: @Sendable () async throws -> Client) async -> [String] {
@@ -83,12 +90,12 @@ public enum WorkoutSessionClientContract {
     // MARK: The engine's answer
 
     /// What the engine makes of `event` on `state`: the update a client must publish for it, which is the
-    /// state after it with `feedback(from:)` of the engine's effects, or `nil` when the engine ignores the
+    /// state after it with `haptics(from:)` of the engine's effects, or `nil` when the engine ignores the
     /// event. The stamp is this function's own: neither the state nor the haptics depend on it.
     static func engineUpdate(_ state: WorkoutState?, _ event: WorkoutEvent, in workout: WorkoutID) -> Update? {
         let envelope = EventBuilders.envelope(event, seq: 1, at: EventBuilders.start, workoutID: workout)
         let (next, effects) = WorkoutEngine.reduce(state, envelope)
-        return effects.isEmpty ? nil : Update(state: next, effects: Update.feedback(from: effects))
+        return effects.isEmpty ? nil : Update(state: next, haptics: Update.haptics(from: effects))
     }
 
     /// The updates the engine gives for `events` applied in turn to `state`: one for each it accepts.
@@ -112,6 +119,11 @@ public enum WorkoutSessionClientContract {
 
         init(_ client: Client) async {
             iterator = await client.updates().makeAsyncIterator()
+        }
+
+        /// A stream another task opened.
+        init(_ stream: AsyncStream<Update>) {
+            iterator = stream.makeAsyncIterator()
         }
 
         /// Every update before the one that carries `mark`; the stream is left just after it. When the
@@ -161,10 +173,10 @@ public enum WorkoutSessionClientContract {
             return "no update"
         }
         guard let state = update.state else {
-            return "no workout, effects \(update.effects)"
+            return "no workout, haptics \(update.haptics)"
         }
         let rest = state.rest.map { ", rest until \($0.endsAt.timeIntervalSince(EventBuilders.start)) s" } ?? ""
         return "\(state.phase) workout \(state.id.rawValue.uuidString.suffix(4)), "
-            + "\(state.doneSets) of \(state.totalSets) sets done\(rest), effects \(update.effects)"
+            + "\(state.doneSets) of \(state.totalSets) sets done\(rest), haptics \(update.haptics)"
     }
 }

@@ -61,5 +61,8 @@ struct WorkoutSessionClientTests {
         #expect(WorkoutSessionError.incompleteLog(one) == .incompleteLog(one))
         #expect(WorkoutSessionError.noLiveWorkout == .noLiveWorkout)
         #expect(WorkoutSessionError.noLiveWorkout != .incompleteLog(one))
+        // The refusal of an end the engine ignored names no workout and no date: the caller knows both.
+        #expect(WorkoutSessionError.invalidEndDate == .invalidEndDate)
+        #expect(WorkoutSessionError.invalidEndDate != .noLiveWorkout)
     }
 }

@@ -14,8 +14,16 @@ struct WorkoutSessionClientContractTests {
     /// seed is named in the failure and added as a fixed case (testing-strategy §3 rule 5).
     static let seeds: [UInt64] = {
         let configured = ProcessInfo.processInfo.environment["LEDGER_PROPERTY_SEED_COUNT"].flatMap(Int.init)
-        return (0 ..< max(1, configured ?? 200)).map { UInt64($0) &* 7919 &+ 17 }
+        return (0 ..< max(1, configured ?? 200)).map(seed)
     }()
+
+    /// Twenty seeds whatever the lane sets: the tests that ask what a handful of scripts reach, or notice,
+    /// must not depend on how many seeds a run was given.
+    static let fixedSeeds: [UInt64] = (0 ..< 20).map(seed)
+
+    static func seed(_ number: Int) -> UInt64 {
+        UInt64(number) &* 7919 &+ 17
+    }
 
     @Test("FakeWorkoutSessionClient keeps the contract clause", arguments: Contract.clauses)
     func fake_keepsTheClause(_ clause: Contract.Clause) async throws {
@@ -71,11 +79,14 @@ struct WorkoutSessionClientContractTests {
     func scripts_reachEveryCallAndRefusal() async {
         var kinds: Set<String> = []
         var events: Set<String> = []
-        for seed in Self.seeds.prefix(20) {
+        for seed in Self.fixedSeeds {
             await kinds.formUnion(Self.outcomes(seed: seed))
             events.formUnion(Contract.script(seed: seed).map(\.description).filter { $0.hasPrefix("apply") })
         }
-        #expect(kinds == ["start", "apply", "finish", "discard", "workoutInProgress", "notStartable", "noLiveWorkout"])
+        #expect(kinds == [
+            "start", "apply", "finish", "discard",
+            "workoutInProgress", "notStartable", "noLiveWorkout", "invalidEndDate"
+        ])
         #expect(events == [
             "apply(.started)", "apply(.exerciseSelected)", "apply(.setLogged)", "apply(.setUnlogged)",
             "apply(.setTargetChanged)", "apply(.setAdded)", "apply(.allSetsRepeated)", "apply(.exerciseSwapped)",

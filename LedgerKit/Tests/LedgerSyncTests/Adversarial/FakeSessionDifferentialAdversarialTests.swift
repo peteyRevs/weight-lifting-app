@@ -90,7 +90,7 @@ struct FakeSessionDifferentialAdversarialTests {
             "start ok", "start notStartable", "start notStartable while live", "start workoutInProgress",
             "apply noLiveWorkout", "finish noLiveWorkout", "discard noLiveWorkout", "apply ignored",
             "apply accepted unchanged", "apply changed", "apply haptic", "apply ended",
-            "finish ended", "finish ignored", "discard ended", "discard ignored"
+            "finish ended", "finish invalidEndDate", "discard ended", "discard invalidEndDate"
         ]
         #expect(wanted.subtracting(seen).isEmpty, "never reached: \(wanted.subtracting(seen).sorted())")
         #expect(published > 1000)
@@ -123,7 +123,7 @@ struct FakeSessionDifferentialAdversarialTests {
         if name == "start" {
             return "start ok"
         }
-        guard update.effects.isEmpty else {
+        guard update.haptics.isEmpty else {
             return "apply haptic"
         }
         return update.state == before ? "apply accepted unchanged" : "apply changed"

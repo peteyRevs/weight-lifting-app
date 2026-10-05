@@ -55,12 +55,12 @@ enum Seam {
     }
 
     /// The forwarding rule, written here from criterion 3: the haptics, in the engine's order.
-    static func haptics(_ effects: [Effect]) -> [Effect] {
-        effects.filter { effect in
-            if case .haptic = effect {
-                return true
+    static func haptics(_ effects: [Effect]) -> [Haptic] {
+        effects.compactMap { effect -> Haptic? in
+            if case let .haptic(haptic) = effect {
+                return haptic
             }
-            return false
+            return nil
         }
     }
 
@@ -83,7 +83,7 @@ enum Seam {
     /// The update criterion 3 asks for when `event` is applied to `state`; nil when the engine ignores it.
     static func update(after event: WorkoutEvent, on state: WorkoutState) -> Update? {
         let (next, effects) = engine(state, event, in: state.id)
-        return effects.isEmpty ? nil : Update(state: next, effects: haptics(effects))
+        return effects.isEmpty ? nil : Update(state: next, haptics: haptics(effects))
     }
 
     /// A change no test makes itself, so a reader can stop at it: a seven-second rest ending far after the
@@ -144,12 +144,12 @@ enum Seam {
 
     static func brief(_ update: Update) -> String {
         guard let state = update.state else {
-            return "(no workout, effects \(update.effects))"
+            return "(no workout, effects \(update.haptics))"
         }
         let rest = state.rest.map { "\($0.endsAt.timeIntervalSince(EventBuilders.start))/\($0.total)" } ?? "none"
         return "(\(state.phase) \(state.id.rawValue.uuidString.suffix(6)), \(state.doneSets)/\(state.totalSets) done, "
             + "cursor \(state.cursor.map { "\($0.exerciseIndex).\($0.setIndex)" } ?? "nil"), rest \(rest), "
-            + "effects \(update.effects))"
+            + "effects \(update.haptics))"
     }
 }
 

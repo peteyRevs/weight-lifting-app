@@ -40,25 +40,25 @@ struct ClockTextTests {
     }
 
     @Test("m:ss under an hour, h:mm:ss from sixty minutes, 0:00 for a negative duration", arguments: Row.all)
-    func minutesSeconds_table(_ row: Row) {
-        #expect(ClockText.minutesSeconds(row.duration) == row.text)
+    func elapsed_table(_ row: Row) {
+        #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("No duration traps: the longest, the shortest and elapsed time's saturated 2^63 s all print")
-    func minutesSeconds_extremes_doNotTrap() {
-        #expect(ClockText.minutesSeconds(Duration(attoseconds: .max)) == "47261439850130342:08:51")
-        #expect(ClockText.minutesSeconds(Duration(attoseconds: .min)) == "0:00")
+    func elapsed_extremes_doNotTrap() {
+        #expect(ClockText.elapsed(Duration(attoseconds: .max)) == "47261439850130342:08:51")
+        #expect(ClockText.elapsed(Duration(attoseconds: .min)) == "0:00")
         // What `WorkoutState.elapsed(at:)` saturates at: 2^63 s = 2,562,047,788,015,215 h 30 min 8 s.
-        #expect(ClockText.minutesSeconds(.seconds(Double(Int64.max))) == "2562047788015215:30:08")
+        #expect(ClockText.elapsed(.seconds(Double(Int64.max))) == "2562047788015215:30:08")
     }
 
     @Test("A live workout's elapsed time reads as the header shows it")
-    func minutesSeconds_ofElapsedTime() {
+    func elapsed_ofElapsedTime() {
         let session = EventBuilders.seedSession()
         let now = EventBuilders.start.addingTimeInterval(24 * 60 + 22.4)
-        #expect(ClockText.minutesSeconds(session.elapsed(at: now)) == "24:22")
-        #expect(ClockText.minutesSeconds(session.elapsed(at: EventBuilders.start)) == "0:00")
+        #expect(ClockText.elapsed(session.elapsed(at: now)) == "24:22")
+        #expect(ClockText.elapsed(session.elapsed(at: EventBuilders.start)) == "0:00")
         // A clock that stepped back behind the start: elapsed time is never negative, and neither is the text.
-        #expect(ClockText.minutesSeconds(session.elapsed(at: EventBuilders.start.addingTimeInterval(-90))) == "0:00")
+        #expect(ClockText.elapsed(session.elapsed(at: EventBuilders.start.addingTimeInterval(-90))) == "0:00")
     }
 }

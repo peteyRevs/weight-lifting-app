@@ -1,15 +1,50 @@
 import Foundation
 import LedgerDomain
 
-/// The contract's rules as a model, which the seeded scripts run beside a client (`scriptViolation`).
+/// The contract's rules as a model: what each call returns or throws and the update it publishes. The seeded
+/// scripts run it beside a client (`scriptViolation`), and the clauses whose calls race ask it what the call
+/// that won must have done.
+public extension WorkoutSessionClientContract {
+    /// One call on a client.
+    enum Step: Sendable, CustomStringConvertible {
+        case start(WorkoutState)
+        case apply(WorkoutEvent)
+        case finish(endedAt: Date)
+        case discard(endedAt: Date)
+
+        /// The call and, for an event, its case: a snapshot's or an event's payload would fill the page.
+        public var description: String {
+            switch self {
+            case let .start(snapshot):
+                return "start(\(snapshot.phase) workout \(snapshot.id.rawValue.uuidString.suffix(4)))"
+            case let .apply(event):
+                let name = String(describing: event).prefix { $0 != "(" }
+                return "apply(.\(name))"
+            case .finish:
+                return "finish"
+            case .discard:
+                return "discard"
+            }
+        }
+    }
+}
+
 extension WorkoutSessionClientContract {
     /// How a call ended.
-    enum Outcome: Equatable, CustomStringConvertible {
+    enum Outcome: Equatable, Sendable, CustomStringConvertible {
         /// `start` or `discard` returned.
         case done
         /// `apply` or `finish` returned this state.
         case state(WorkoutState)
         case threw(String)
+
+        /// The state `apply` or `finish` returned, if it returned one.
+        var state: WorkoutState? {
+            if case let .state(state) = self {
+                return state
+            }
+            return nil
+        }
 
         var description: String {
             switch self {
@@ -43,9 +78,9 @@ extension WorkoutSessionClientContract {
             case let .apply(event):
                 return apply(event) { .state($0) }
             case let .finish(endedAt):
-                return apply(.finished(endedAt: endedAt)) { .state($0) }
+                return end(.finished(endedAt: endedAt)) { .state($0) }
             case let .discard(endedAt):
-                return apply(.discarded(endedAt: endedAt)) { _ in .done }
+                return end(.discarded(endedAt: endedAt)) { _ in .done }
             }
         }
 
@@ -63,6 +98,17 @@ extension WorkoutSessionClientContract {
             }
             live = update.live
             return (outcome(next), update)
+        }
+
+        /// `finish` and `discard`: the terminal event, and a refusal when the workout is still live after
+        /// it, because the engine ignored the end.
+        private mutating func end(
+            _ event: WorkoutEvent,
+            returning outcome: (WorkoutState) -> Outcome
+        ) -> (outcome: Outcome, published: Update?) {
+            let wasLive = live != nil
+            let result = apply(event, returning: outcome)
+            return wasLive && live != nil ? (.refused(.invalidEndDate), nil) : result
         }
     }
 

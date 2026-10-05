@@ -82,14 +82,14 @@ struct SessionContractBiteAdversarialTests {
         #expect(!complaints.isEmpty, "in ten runs, every clause accepted a client that \(fault)")
     }
 
-    /// F10-S1-1, documented: the contract holds a client to the behaviour the finding questions. A client
-    /// that throws for a finish or a discard whose date the engine ignores, instead of returning the workout
-    /// still live, breaks the "ignored" clause. This passes today and fails once the contract allows a throw.
-    @Test("(documents F10-S1-1) the contract rejects a client that throws for an end date the engine ignores")
-    func clientThatThrowsForANonFiniteEnd_isRejectedByTheContract() async {
-        let clauses = await Contract.violations { WrongSessionClient(.nonFiniteEndThrows) }
+    /// F10-S1-1, as ruled after round 1: the contract now holds a client to `invalidEndDate`. A client that
+    /// returns from a finish or a discard whose date the engine ignores, the workout still live (what the
+    /// protocol documented before the ruling), breaks the clause written for it, and only that one.
+    @Test("F10-S1-1: the contract rejects a client that returns for an end date the engine ignores")
+    func clientThatReturnsForANonFiniteEnd_isRejectedByTheContract() async {
+        let clauses = await Contract.violations { WrongSessionClient(.nonFiniteEndReturns) }
         #expect(clauses.count == 1)
-        #expect(clauses.first?.hasPrefix("an event the engine ignores returns the workout unchanged") == true)
+        #expect(clauses.first?.hasPrefix("finish and discard at a date the engine ignores throw") == true)
     }
 
     /// What this suite's own overlap checks say of a client with `fault`: the first complaint of the

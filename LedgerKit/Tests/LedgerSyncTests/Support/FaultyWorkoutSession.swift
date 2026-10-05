@@ -3,72 +3,37 @@ import LedgerDomain
 import LedgerTestSupport
 
 /// A `WorkoutSessionClient` that keeps `WorkoutSessionClientContract` except for one `Fault`: what
-/// `WorkoutSessionClientContractFaultTests` runs the contract on, to show that each clause can fail. It is
-/// written from the protocol's documentation, not copied from `FakeWorkoutSessionClient`, so with no fault it
-/// is also a second implementation the clauses accept.
+/// `WorkoutSessionClientContractFaultTests` runs the contract on, to show that each clause can fail. It is a
+/// stand-in with switches, built like the fake (an actor over `WorkoutEngine.reduce` with no store), so that it
+/// keeps the contract without a fault says little about other implementations: the host is the real second
+/// one (S2).
 actor FaultyWorkoutSession: WorkoutSessionClient {
-    /// One way a host could plausibly get the seam wrong.
-    enum Fault: String, CaseIterable, Sendable, CustomStringConvertible {
-        /// A new stream's first element repeats the last update's effects.
-        case firstElementCarriesEffects
-        /// An update carries every effect of the engine, not `feedback(from:)` of them.
-        case forwardsEveryEffect
-        /// An event the engine ignores is published as one more, unchanged update.
-        case publishesIgnoredEvents
-        /// An accepted event that leaves the state as it was is not published.
-        case skipsUnchangedStates
-        /// `apply` returns the state before the event.
-        case returnsTheStateBefore
-        /// After a finish, `current()` still answers with the finished workout.
-        case keepsTheEndedWorkoutCurrent
-        /// After the update that ends a workout comes one more, with a nil state.
-        case publishesNilAfterTheEnd
-        /// The live workout is checked before the snapshot, so `workoutInProgress` hides `notStartable`.
-        case judgesTheSessionFirst
-        /// `apply(.started)` with nothing live starts a workout.
-        case startsThroughApply
-        /// A stream keeps only its newest update, as the repositories' observations do.
-        case keepsOnlyTheNewestUpdate
-        /// A discard ends the workout without an update.
-        case discardsSilently
-
-        var description: String {
-            rawValue
-        }
-
-        /// How the name of a clause this fault must break begins.
-        var brokenClause: String {
-            switch self {
-            case .firstElementCarriesEffects: "a stream opened on a live workout starts with it"
-            case .forwardsEveryEffect, .returnsTheStateBefore: "apply returns the state after the event"
-            case .publishesIgnoredEvents: "an event the engine ignores"
-            case .skipsUnchangedStates: "an event the engine accepts is published once"
-            case .keepsTheEndedWorkoutCurrent, .publishesNilAfterTheEnd: "finish returns the finished state"
-            case .judgesTheSessionFirst: "a snapshot the engine would not start"
-            case .startsThroughApply: "apply, finish and discard with nothing live"
-            case .keepsOnlyTheNewestUpdate: "updates under rapid apply calls"
-            case .discardsSilently: "discard publishes the discarded state once"
-            }
-        }
-    }
-
     private let fault: Fault?
     private var live: WorkoutState?
     private var ended: WorkoutState?
-    private var lastEffects: [Effect] = []
-    private var continuations: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
+    private var lastHaptics: [Haptic] = []
+    private var listeners: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
 
     init(_ fault: Fault?) {
         self.fault = fault
     }
 
-    func updates() -> AsyncStream<WorkoutSessionUpdate> {
+    func updates() async -> AsyncStream<WorkoutSessionUpdate> {
         let (stream, continuation) = AsyncStream<WorkoutSessionUpdate>.makeStream(
             bufferingPolicy: fault == .keepsOnlyTheNewestUpdate ? .bufferingNewest(1) : .unbounded
         )
-        let effects = fault == .firstElementCarriesEffects ? lastEffects : []
-        continuation.yield(WorkoutSessionUpdate(state: live, effects: effects))
-        continuations.append(continuation)
+        let haptics = fault == .firstElementCarriesHaptics ? lastHaptics : []
+        continuation.yield(WorkoutSessionUpdate(state: live, haptics: haptics))
+        if fault == .duplicatesTheFirstElement {
+            continuation.yield(WorkoutSessionUpdate(state: live, haptics: haptics))
+        }
+        if fault == .registersAfterASuspension {
+            await letOthersIn()
+        }
+        listeners.append(continuation)
+        if fault == .servesOneSubscriber, listeners.count > 1 {
+            continuation.finish()
+        }
         return stream
     }
 
@@ -76,77 +41,151 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
         live ?? (fault == .keepsTheEndedWorkoutCurrent ? ended : nil)
     }
 
-    func start(_ initial: WorkoutState) throws {
+    func start(_ initial: WorkoutState) async throws {
+        let (snapshot, effects) = try startable(initial)
+        if fault == .startsTwiceAtOnce {
+            await letOthersIn()
+        }
+        live = snapshot
+        publish(snapshot, WorkoutSessionUpdate.haptics(from: effects) + (fault == .startBuzzes ? [.setLogged] : []))
+    }
+
+    func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
+        try await perform(event, through: .apply)
+    }
+
+    func finish(endedAt: Date) async throws -> WorkoutState {
+        let finished = try await perform(.finished(endedAt: endedAt), through: .finish)
+        guard finished.phase != .live || fault == .returnsFromAnIgnoredEnd else {
+            throw WorkoutSessionError.invalidEndDate
+        }
+        return finished
+    }
+
+    func discard(endedAt: Date) async throws {
+        let discarded = try await perform(.discarded(endedAt: endedAt), through: .discard)
+        guard discarded.phase != .live || fault == .returnsFromAnIgnoredEnd else {
+            throw WorkoutSessionError.invalidEndDate
+        }
+    }
+}
+
+/// The call an event came through.
+private enum Route { case apply, finish, discard }
+
+/// Starting, applying and ending, with each fault where a host would have it.
+private extension FaultyWorkoutSession {
+    /// `initial` as the engine starts it, with the engine's effects, when it may start now; else the refusal.
+    func startable(_ initial: WorkoutState) throws -> (WorkoutState, [Effect]) {
         if fault == .judgesTheSessionFirst, let live {
             throw WorkoutSessionError.workoutInProgress(live.id)
         }
         let (started, effects) = WorkoutEngine.reduce(nil, Self.envelope(.started(initial), in: initial.id))
-        guard let started else {
+        let judgedByPhase = fault == .judgesSnapshotsByPhaseAlone && initial.phase == .live
+        guard let snapshot = started ?? (judgedByPhase ? initial : nil) else {
             throw WorkoutSessionError.notStartable(initial.id)
         }
-        if let live {
+        if let live, fault != .secondStartReplaces {
             throw WorkoutSessionError.workoutInProgress(live.id)
         }
-        live = started
-        publish(started, effects)
+        if let ended, fault == .refusesAStartAfterAnEnd {
+            throw WorkoutSessionError.workoutInProgress(ended.id)
+        }
+        return (snapshot, effects)
     }
 
-    func apply(_ event: WorkoutEvent) throws -> WorkoutState {
+    func perform(_ event: WorkoutEvent, through route: Route) async throws -> WorkoutState {
         guard let workout = live else {
-            return try applyWithNothingLive(event)
+            return try await withNothingLive(event)
         }
-        let (reduced, effects) = WorkoutEngine.reduce(workout, Self.envelope(event, in: workout.id))
-        guard let next = reduced, !effects.isEmpty else {
+        if fault == .losesAnEditBetweenCallers {
+            await letOthersIn()
+        }
+        let (reduced, effects) = WorkoutEngine.reduce(workout, Self.envelope(moved(event, route), in: workout.id))
+        guard let next = reduced, !effects.isEmpty, !staysLive(next, route) else {
             if fault == .publishesIgnoredEvents {
                 publish(workout, [])
             }
             return workout
         }
-        live = next.phase == .live ? next : nil
-        ended = live == nil ? next : nil
-        if !isSilent(next, after: workout) {
-            publish(next, effects)
-        }
-        if fault == .publishesNilAfterTheEnd, live == nil {
-            publish(nil, [])
+        let haptics = WorkoutSessionUpdate.haptics(from: effects)
+        if next.phase != .live {
+            await end(next, haptics)
+        } else {
+            live = next
+            if fault != .skipsUnchangedStates || next != workout {
+                publish(next, haptics)
+            }
         }
         return fault == .returnsTheStateBefore ? workout : next
     }
 
-    func finish(endedAt: Date) throws -> WorkoutState {
-        try apply(.finished(endedAt: endedAt))
-    }
-
-    func discard(endedAt: Date) throws {
-        _ = try apply(.discarded(endedAt: endedAt))
-    }
-
-    private func applyWithNothingLive(_ event: WorkoutEvent) throws -> WorkoutState {
+    func withNothingLive(_ event: WorkoutEvent) async throws -> WorkoutState {
         guard fault == .startsThroughApply, case let .started(snapshot) = event else {
             throw WorkoutSessionError.noLiveWorkout
         }
-        try start(snapshot)
+        try await start(snapshot)
         return snapshot
     }
 
-    /// Whether a fault keeps the change from `before` to `next` out of the streams.
-    private func isSilent(_ next: WorkoutState, after before: WorkoutState) -> Bool {
-        switch fault {
-        case .skipsUnchangedStates: next == before
-        case .discardsSilently: next.phase == .discarded
-        default: false
+    /// The end of the workout: published once, then nothing is live.
+    func end(_ next: WorkoutState, _ haptics: [Haptic]) async {
+        if fault == .endsTwiceAtOnce {
+            await letOthersIn()
+        }
+        if fault != .discardsSilently || next.phase != .discarded {
+            publish(next, haptics)
+        }
+        if fault == .appliesAfterTheEnd {
+            await letOthersIn()
+        }
+        (live, ended) = (nil, next)
+        if fault == .publishesNilAfterTheEnd {
+            publish(nil, [])
         }
     }
 
-    private func publish(_ state: WorkoutState?, _ effects: [Effect]) {
-        lastEffects = fault == .forwardsEveryEffect ? effects : WorkoutSessionUpdate.feedback(from: effects)
-        for continuation in continuations {
-            continuation.yield(WorkoutSessionUpdate(state: state, effects: lastEffects))
+    /// `terminalThroughApplyStaysLive`: a terminal event that came through `apply` is not taken.
+    func staysLive(_ next: WorkoutState, _ route: Route) -> Bool {
+        fault == .terminalThroughApplyStaysLive && route == .apply && next.phase != .live
+    }
+
+    /// `movesTheEndThroughApply`: a terminal event through `apply`, a second later than it says.
+    func moved(_ event: WorkoutEvent, _ route: Route) -> WorkoutEvent {
+        guard fault == .movesTheEndThroughApply, route == .apply else {
+            return event
+        }
+        switch event {
+        case let .finished(endedAt): return .finished(endedAt: endedAt.addingTimeInterval(1))
+        case let .discarded(endedAt): return .discarded(endedAt: endedAt.addingTimeInterval(1))
+        default: return event
+        }
+    }
+
+    func publish(_ state: WorkoutState?, _ haptics: [Haptic]) {
+        lastHaptics = fault == .dropsTheHaptics ? [] : haptics
+        let update = WorkoutSessionUpdate(state: state, haptics: lastHaptics)
+        var someoneStopped = false
+        for listener in listeners {
+            if case .terminated = listener.yield(update) {
+                someoneStopped = true
+            }
+        }
+        if someoneStopped, fault == .cancellationEndsEveryStream {
+            listeners.forEach { $0.finish() }
+        }
+    }
+
+    /// Suspends long enough for every caller already on its way to enter the actor: what an await on a
+    /// store or on recovery does to a host.
+    func letOthersIn() async {
+        for _ in 0 ..< 100 {
+            await Task.yield()
         }
     }
 
     /// Any stamp will do: the engine's state and haptics do not depend on it, and nothing here keeps a log.
-    private static func envelope(_ event: WorkoutEvent, in workout: WorkoutID) -> EventEnvelope {
+    static func envelope(_ event: WorkoutEvent, in workout: WorkoutID) -> EventEnvelope {
         EventBuilders.envelope(event, device: EventBuilders.watch, seq: 1, at: EventBuilders.start, workoutID: workout)
     }
 }

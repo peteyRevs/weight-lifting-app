@@ -6,7 +6,7 @@ public enum ClockText {
     ///
     /// No duration traps: the seconds are counted in 128 bits, so the 2^63 s that
     /// `WorkoutState.elapsed(at:)` saturates at prints like any other value.
-    public static func minutesSeconds(_ duration: Duration) -> String {
+    public static func elapsed(_ duration: Duration) -> String {
         let attosecondsPerSecond: Int128 = 1_000_000_000_000_000_000
         let seconds = max(0, duration.attoseconds / attosecondsPerSecond)
         let (minutes, second) = seconds.quotientAndRemainder(dividingBy: 60)

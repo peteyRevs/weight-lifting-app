@@ -43,7 +43,7 @@ struct FakeSessionUpdatesAdversarialTests {
         #expect(await fake.current() == expected)
         #expect(try await Seam.heard(&reader, on: fake) == [
             Seam.Update(state: live),
-            Seam.Update(state: expected, effects: accepted.haptics)
+            Seam.Update(state: expected, haptics: accepted.haptics)
         ])
         return expected
     }
@@ -80,7 +80,7 @@ struct FakeSessionUpdatesAdversarialTests {
             expected.append(update)
             #expect(try await fake.apply(event) == state)
         }
-        #expect(expected.map(\.effects.count) == [0, 1, 1, 0, 1])
+        #expect(expected.map(\.haptics.count) == [0, 1, 1, 0, 1])
         #expect(try await Seam.heard(&reader, on: fake) == expected)
     }
 
@@ -96,8 +96,8 @@ struct FakeSessionUpdatesAdversarialTests {
         #expect(afterB.cursor == Cursor(exerciseIndex: 0, setIndex: 1))
         #expect(try await Seam.heard(&reader, on: fake) == [
             Seam.Update(state: live),
-            Seam.Update(state: afterA, effects: [.haptic(.setLogged)]),
-            Seam.Update(state: afterB, effects: [.haptic(.setLogged)])
+            Seam.Update(state: afterA, haptics: [.setLogged]),
+            Seam.Update(state: afterB, haptics: [.setLogged])
         ])
     }
 }

@@ -15,7 +15,7 @@ actor WrongSessionClient: WorkoutSessionClient {
     private var ended: WorkoutState?
     /// An ended workout `current()` still answers with (the three `…LeavesCurrent` faults).
     private var leftCurrent: WorkoutState?
-    private var lastEffects: [Effect] = []
+    private var lastEffects: [Haptic] = []
     private var listeners: [AsyncStream<Update>.Continuation] = []
     /// A set edit kept back from the second subscriber (`swapsForSecondSubscriber`).
     private var held: Update?
@@ -35,7 +35,7 @@ actor WrongSessionClient: WorkoutSessionClient {
         continuation.onTermination = { [stopped] _ in _ = stopped.next() }
         switch fault {
         case .noFirstElement: break
-        case .firstElementRepeatsEffects: continuation.yield(Update(state: live, effects: lastEffects))
+        case .firstElementRepeatsEffects: continuation.yield(Update(state: live, haptics: lastEffects))
         case .firstElementIsStale: continuation.yield(Update(state: live == nil ? nil : before))
         case .endedShownToNewStreams: continuation.yield(Update(state: live ?? ended))
         default: continuation.yield(Update(state: live))
@@ -78,7 +78,7 @@ actor WrongSessionClient: WorkoutSessionClient {
         if fault == .startUnpublished {
             listeners.forEach { $0.finish() }
         } else {
-            publish(Update(state: initial, effects: forwarded(effects)))
+            publish(Update(state: initial, haptics: forwarded(effects)))
         }
     }
 
@@ -114,7 +114,7 @@ actor WrongSessionClient: WorkoutSessionClient {
         guard let next = reduced, !effects.isEmpty else {
             return try ignored(current, route)
         }
-        let update = Update(state: next, effects: forwarded(effects))
+        let update = Update(state: next, haptics: forwarded(effects))
         if next.phase != .live, fault == .racyDoubleEnd || fault == .racyApplyAfterEnd {
             return await endedAcrossASuspension(update, next)
         }
@@ -153,7 +153,8 @@ actor WrongSessionClient: WorkoutSessionClient {
         throw WorkoutSessionError.noLiveWorkout
     }
 
-    /// An event the engine ignores: the workout as it stands, and nothing published.
+    /// An event the engine ignores: the workout as it stands, and nothing published. Through `finish` and
+    /// `discard` it is refused with `invalidEndDate` (criterion 4, as revised after round 1).
     private func ignored(_ current: WorkoutState, _ route: SeamRoute) throws -> WorkoutState {
         if fault == .publishesIgnored {
             publish(Update(state: current))
@@ -161,8 +162,8 @@ actor WrongSessionClient: WorkoutSessionClient {
         if fault == .nonFiniteEndEnds, route != .apply {
             live = nil
         }
-        if fault == .nonFiniteEndThrows, route != .apply {
-            throw SeamRefusal()
+        if fault != .nonFiniteEndReturns, route != .apply {
+            throw WorkoutSessionError.invalidEndDate
         }
         return current
     }
@@ -191,16 +192,15 @@ private extension WrongSessionClient {
         }
     }
 
-    func forwarded(_ effects: [Effect]) -> [Effect] {
+    func forwarded(_ effects: [Effect]) -> [Haptic] {
         switch fault {
-        case .forwardsEveryEffect: effects
         case .dropsHaptics: []
         default: Seam.haptics(effects)
         }
     }
 
     func publish(_ update: Update, holdable: Bool = false) {
-        lastEffects = update.effects
+        lastEffects = update.haptics
         if fault == .cancelEndsEveryone, stopped.value > 0 {
             listeners.forEach { $0.finish() }
         }
@@ -232,9 +232,6 @@ private extension WrongSessionClient {
 
 /// The call an event came through.
 private enum SeamRoute { case apply, finish, discard }
-
-/// What `nonFiniteEndThrows` throws: the protocol has no case for it yet.
-struct SeamRefusal: Error, Equatable {}
 
 /// The faults that need two calls inside the client at once.
 private extension WrongSessionClient {

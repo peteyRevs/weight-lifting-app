@@ -26,7 +26,6 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     case judgesSnapshotsByPhaseAndStart = "starts any live snapshot with a finite start, whatever else it holds"
     // Criterion 3: apply.
     case returnsStateBefore = "returns from apply the state before the event"
-    case forwardsEveryEffect = "forwards every engine effect, not only the haptics"
     case dropsHaptics = "forwards no effect at all"
     case publishesIgnored = "publishes an update for an event the engine ignores"
     case skipsUnchanged = "publishes nothing for an accepted event that leaves the workout as it was"
@@ -40,9 +39,9 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     case endPublishesNil = "publishes a second update, with no workout, after the one that ends it"
     case nonFiniteEndEnds = "drops the workout on a finish or discard whose date the engine ignores"
     case terminalApplyMovesTheEnd = "ends a workout through apply a second later than the event says"
-    /// F10-S1-1: what the finding proposes in place of the documented behaviour (returning the workout
-    /// still live). Not a fault under criterion 4; a fault under the protocol's documentation.
-    case nonFiniteEndThrows = "throws for a finish or discard whose date the engine ignores"
+    /// F10-S1-1, as ruled: what the protocol documented before round 1's ruling (returning the workout
+    /// still live) is now the fault; criterion 4 has `finish` and `discard` throw `invalidEndDate`.
+    case nonFiniteEndReturns = "returns from a finish or discard whose date the engine ignores"
     /// The contract's documentation says a client whose streams have no first element keeps a clause
     /// waiting until the suite's time limit fails it, so no test here runs it.
     case noFirstElement = "gives a stream no first element"
@@ -73,7 +72,7 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     ]
     /// Faults that show on calls made one after another, and leave no reader waiting for an update that
     /// never comes.
-    static let sequential = allCases.filter { !(racy + [.noFirstElement, .nonFiniteEndThrows]).contains($0) }
+    static let sequential = allCases.filter { !(racy + [.noFirstElement, .nonFiniteEndReturns]).contains($0) }
 }
 
 extension WorkoutEvent {

@@ -2,7 +2,7 @@ import Foundation
 import LedgerDomain
 import Testing
 
-/// F10 S1 adversarial round 1, criterion 8: `ClockText.minutesSeconds(_:)`, the one elapsed-time formatter
+/// F10 S1 adversarial round 1, criterion 8: `ClockText.elapsed(_:)`, the one elapsed-time formatter
 /// for Today's Resume button, the workout header and the receipt. Expected texts are written out by hand
 /// from the criterion (m:ss under an hour, h:mm:ss from sixty minutes, whole seconds rounded down, a negative
 /// duration "0:00"); the property test's come from integer arithmetic done here.
@@ -94,22 +94,22 @@ struct ClockTextAdversarialTests {
 
     @Test("Criterion 8: m:ss under an hour, h:mm:ss from sixty minutes", arguments: boundaries)
     func minutesSeconds_atEachBoundary(_ row: Row) {
-        #expect(ClockText.minutesSeconds(row.duration) == row.text)
+        #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Criterion 8: whole seconds, rounded down, on both sides of a second", arguments: fractions)
     func minutesSeconds_roundsDownToWholeSeconds(_ row: Row) {
-        #expect(ClockText.minutesSeconds(row.duration) == row.text)
+        #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Criterion 8: a negative duration reads 0:00, however small or large", arguments: negatives)
     func minutesSeconds_negative_readsZero(_ row: Row) {
-        #expect(ClockText.minutesSeconds(row.duration) == row.text)
+        #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("No duration traps: the extremes print like any other value", arguments: extremes)
     func minutesSeconds_extremes_printWithoutTrapping(_ row: Row) {
-        #expect(ClockText.minutesSeconds(row.duration) == row.text)
+        #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Every whole second up to 30 hours formats as integer arithmetic says, in ASCII digits and colons")
@@ -119,7 +119,7 @@ struct ClockTextAdversarialTests {
             let (hours, minutes, rest) = (seconds / 3600, seconds / 60 % 60, seconds % 60)
             let pad = { (value: Int) in value < 10 ? "0\(value)" : "\(value)" }
             let expected = hours == 0 ? "\(minutes):\(pad(rest))" : "\(hours):\(pad(minutes)):\(pad(rest))"
-            let text = ClockText.minutesSeconds(.seconds(seconds) + .milliseconds(seconds % 1000))
+            let text = ClockText.elapsed(.seconds(seconds) + .milliseconds(seconds % 1000))
             if text != expected || !text.unicodeScalars.allSatisfy(Self.digitsAndColon.contains) {
                 wrong.append("\(seconds) s: \(text), expected \(expected)")
             }
@@ -135,7 +135,7 @@ struct ClockTextAdversarialTests {
         var generator = seed.generator
         let seconds = Int64.random(in: 0 ... .max, using: &generator) >> Int64.random(in: 0 ..< 63, using: &generator)
         let attoseconds = Int64.random(in: 0 ..< 1_000_000_000_000_000_000, using: &generator)
-        let text = ClockText.minutesSeconds(Duration(secondsComponent: seconds, attosecondsComponent: attoseconds))
+        let text = ClockText.elapsed(Duration(secondsComponent: seconds, attosecondsComponent: attoseconds))
         let fields: [Substring] = text.split(separator: ":", omittingEmptySubsequences: false)
         let parts = try fields.map { try #require(Int64($0)) }
         #expect(parts.count == (seconds < 3600 ? 2 : 3), "\(seed): \(text)")

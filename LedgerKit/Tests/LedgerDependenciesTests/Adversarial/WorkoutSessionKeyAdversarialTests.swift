@@ -84,7 +84,7 @@ struct WorkoutSessionKeyAdversarialTests {
         #expect(await updates.next() == WorkoutSessionUpdate(state: Self.workout))
         let finished = try await preview.finish(endedAt: EventBuilders.start.addingTimeInterval(60))
         #expect(finished.phase == .finished)
-        #expect(await updates.next() == WorkoutSessionUpdate(state: finished, effects: [.haptic(.workoutFinished)]))
+        #expect(await updates.next() == WorkoutSessionUpdate(state: finished, haptics: [.workoutFinished]))
         #expect(try await preview.current() == nil)
     }
 

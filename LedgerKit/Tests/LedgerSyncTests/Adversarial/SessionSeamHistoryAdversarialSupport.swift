@@ -15,7 +15,7 @@ struct SeamHistory {
     ///   - updates: a stream from its first element on.
     ///   - adds: the add event of every set the tasks added, by set.
     init(_ updates: [WorkoutSessionUpdate], adds: [SetID: WorkoutEvent]) {
-        guard var state = updates.first?.state, updates.first?.effects == [] else {
+        guard var state = updates.first?.state, updates.first?.haptics == [] else {
             fault = "no first element, or one with effects"
             return
         }

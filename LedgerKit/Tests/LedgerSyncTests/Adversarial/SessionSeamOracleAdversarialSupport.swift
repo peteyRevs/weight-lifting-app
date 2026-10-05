@@ -80,14 +80,24 @@ struct SeamOracle {
         case let .apply(event):
             return apply(event)
         case let .finish(endedAt):
-            return apply(.finished(endedAt: endedAt))
+            return end(.finished(endedAt: endedAt))
         case let .discard(endedAt):
-            let (outcome, published) = apply(.discarded(endedAt: endedAt))
+            let (outcome, published) = end(.discarded(endedAt: endedAt))
             if case .state = outcome {
                 return (.returned, published)
             }
             return (outcome, published)
         }
+    }
+
+    /// Criterion 4, as revised after round 1: an end the engine ignores (nothing published, the workout
+    /// still live) is refused with `invalidEndDate` by `finish` and `discard`.
+    private mutating func end(_ event: WorkoutEvent) -> (SeamOutcome, WorkoutSessionUpdate?) {
+        let (outcome, published) = apply(event)
+        if case .state = outcome, published == nil {
+            return (.refused(.invalidEndDate), nil)
+        }
+        return (outcome, published)
     }
 
     /// Criterion 2: a snapshot the engine would not start is `notStartable`, live workout or not; then a
@@ -102,7 +112,7 @@ struct SeamOracle {
             return (.refused(.workoutInProgress(live.id)), nil)
         }
         live = started
-        return (.returned, WorkoutSessionUpdate(state: started, effects: Seam.haptics(effects)))
+        return (.returned, WorkoutSessionUpdate(state: started, haptics: Seam.haptics(effects)))
     }
 
     /// Criteria 2 to 4: refused with nothing live; unchanged and unpublished when the engine ignores the
@@ -117,7 +127,7 @@ struct SeamOracle {
             return (.state(current), nil)
         }
         live = next.phase == .live ? next : nil
-        return (.state(next), WorkoutSessionUpdate(state: next, effects: Seam.haptics(effects)))
+        return (.state(next), WorkoutSessionUpdate(state: next, haptics: Seam.haptics(effects)))
     }
 }
 

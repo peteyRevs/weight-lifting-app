@@ -130,7 +130,7 @@ extension Seam {
         for stream in streams {
             let heard = await buffered(stream)
             let joinedAt = history.firstIndex { $0.state == heard.first?.state } ?? history.count
-            guard heard.first?.effects == [], Array(heard.dropFirst()) == Array(history.dropFirst(joinedAt + 1)) else {
+            guard heard.first?.haptics == [], Array(heard.dropFirst()) == Array(history.dropFirst(joinedAt + 1)) else {
                 return "a stream that joined at update \(joinedAt) of 400 then held \(heard.count - 1) more"
             }
         }

@@ -3,8 +3,8 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// F10 S1 adversarial round 1: the value types of the session seam. `WorkoutSessionUpdate.feedback(from:)`
-/// is "the one forwarding rule: `.haptic` only" (criterion 3), `live` is the state while its phase is
+/// F10 S1 adversarial round 1: the value types of the session seam. `WorkoutSessionUpdate.haptics(from:)`
+/// is "the one forwarding rule: the engine's haptics, in order" (criterion 3), `live` is the state while its phase is
 /// `.live`, and `WorkoutSessionError`'s cases are told apart by the workout they name.
 @Suite("Adversarial F10 S1 · WorkoutSessionUpdate", .tags(.domain))
 struct WorkoutSessionUpdateAdversarialTests {
@@ -26,33 +26,33 @@ struct WorkoutSessionUpdateAdversarialTests {
     static let haptics = Haptic.allCases.map(Effect.haptic)
 
     /// The rule as criterion 3 states it, written here: the haptics, in order.
-    static func onlyHaptics(_ effects: [Effect]) -> [Effect] {
-        effects.filter { effect in
-            if case .haptic = effect {
-                return true
+    static func onlyHaptics(_ effects: [Effect]) -> [Haptic] {
+        effects.compactMap { effect -> Haptic? in
+            if case let .haptic(haptic) = effect {
+                return haptic
             }
-            return false
+            return nil
         }
     }
 
-    @Test("feedback(from:) keeps every haptic there is, including the two the engine never emits")
+    @Test("haptics(from:) keeps every haptic there is, including the two the engine never emits")
     func feedback_keepsEveryHaptic() {
         #expect(Self.haptics.count == 4)
-        #expect(WorkoutSessionUpdate.feedback(from: Self.haptics) == Self.haptics)
-        #expect(WorkoutSessionUpdate.feedback(from: Self.haptics.reversed()) == Self.haptics.reversed())
+        #expect(WorkoutSessionUpdate.haptics(from: Self.haptics) == Haptic.allCases)
+        #expect(WorkoutSessionUpdate.haptics(from: Self.haptics.reversed()) == Haptic.allCases.reversed())
     }
 
-    @Test("feedback(from:) drops every other effect, whatever it carries, and an empty list stays empty")
+    @Test("haptics(from:) drops every other effect, whatever it carries, and an empty list stays empty")
     func feedback_dropsEverythingElse() {
-        #expect(WorkoutSessionUpdate.feedback(from: Self.others) == [])
-        #expect(WorkoutSessionUpdate.feedback(from: []) == [])
+        #expect(WorkoutSessionUpdate.haptics(from: Self.others) == [])
+        #expect(WorkoutSessionUpdate.haptics(from: []) == [])
         for other in Self.others {
-            #expect(WorkoutSessionUpdate.feedback(from: [other]) == [], "\(other)")
+            #expect(WorkoutSessionUpdate.haptics(from: [other]) == [], "\(other)")
         }
     }
 
     @Test(
-        "feedback(from:) keeps order and repeats: seeded shuffles of haptics among the rest",
+        "haptics(from:) keeps order and repeats: seeded shuffles of haptics among the rest",
         arguments: PropertySeed.all
     )
     func feedback_keepsOrderAndRepeats(seed: PropertySeed) {
@@ -61,10 +61,10 @@ struct WorkoutSessionUpdateAdversarialTests {
         let effects = (0 ..< Int.random(in: 0 ... 24, using: &generator)).map { _ in
             pool[Int.random(in: 0 ..< pool.count, using: &generator)]
         }
-        #expect(WorkoutSessionUpdate.feedback(from: effects) == Self.onlyHaptics(effects), "\(seed)")
+        #expect(WorkoutSessionUpdate.haptics(from: effects) == Self.onlyHaptics(effects), "\(seed)")
     }
 
-    @Test("feedback(from:) of the engine's own effects: a log buzzes, a finish buzzes, nothing else does")
+    @Test("haptics(from:) of the engine's own effects: a log buzzes, a finish buzzes, nothing else does")
     func feedback_ofTheEnginesEffects() {
         let log = WorkoutEvent.setLogged(
             exerciseIndex: 0,
@@ -73,9 +73,9 @@ struct WorkoutSessionUpdateAdversarialTests {
             reps: .one,
             doneAt: EventBuilders.start
         )
-        let cases: [(WorkoutEvent, [Effect])] = [
-            (log, [.haptic(.setLogged)]),
-            (.finished(endedAt: EventBuilders.start), [.haptic(.workoutFinished)]),
+        let cases: [(WorkoutEvent, [Haptic])] = [
+            (log, [.setLogged]),
+            (.finished(endedAt: EventBuilders.start), [.workoutFinished]),
             (.discarded(endedAt: EventBuilders.start), []),
             (.restStarted(endsAt: EventBuilders.start, total: .seconds(90)), []),
             (.restSkipped, []),
@@ -87,13 +87,13 @@ struct WorkoutSessionUpdateAdversarialTests {
                 EventBuilders.envelope(event, seq: 1, at: EventBuilders.start)
             ).1
             #expect(effects.count >= 2, "the engine ignored \(event)")
-            #expect(WorkoutSessionUpdate.feedback(from: effects) == expected, "\(event)")
+            #expect(WorkoutSessionUpdate.haptics(from: effects) == expected, "\(event)")
         }
         let started = WorkoutEngine.reduce(
             nil,
             EventBuilders.envelope(.started(Self.session), seq: 1, at: EventBuilders.start)
         ).1
-        #expect(started.count >= 2 && WorkoutSessionUpdate.feedback(from: started) == [])
+        #expect(started.count >= 2 && WorkoutSessionUpdate.haptics(from: started) == [])
     }
 
     @Test("live is the state only while its phase is live", arguments: WorkoutPhase.allCases)
@@ -101,7 +101,7 @@ struct WorkoutSessionUpdateAdversarialTests {
         var state = Self.session
         state.phase = phase
         state.endedAt = phase == .live ? nil : EventBuilders.start
-        let update = WorkoutSessionUpdate(state: state, effects: [.haptic(.workoutFinished)])
+        let update = WorkoutSessionUpdate(state: state, haptics: [.workoutFinished])
         #expect(update.live == (phase == .live ? state : nil))
         #expect(update.state == state)
     }
@@ -109,22 +109,22 @@ struct WorkoutSessionUpdateAdversarialTests {
     @Test("An update with no workout has no live workout; effects default to none")
     func update_withoutAWorkout() {
         let update = WorkoutSessionUpdate(state: nil)
-        #expect(update.state == nil && update.live == nil && update.effects == [])
-        #expect(update == WorkoutSessionUpdate(state: nil, effects: []))
-        #expect(update != WorkoutSessionUpdate(state: nil, effects: [.haptic(.setLogged)]))
+        #expect(update.state == nil && update.live == nil && update.haptics == [])
+        #expect(update == WorkoutSessionUpdate(state: nil, haptics: []))
+        #expect(update != WorkoutSessionUpdate(state: nil, haptics: [.setLogged]))
         #expect(update != WorkoutSessionUpdate(state: Self.session))
     }
 
     @Test("Updates are equal, and hash alike, exactly when state and effects are; effects compare in order")
     func update_equalityAndHashing() {
-        let buzz = WorkoutSessionUpdate(state: Self.session, effects: [.haptic(.setLogged), .haptic(.personalRecord)])
+        let buzz = WorkoutSessionUpdate(state: Self.session, haptics: [.setLogged, .personalRecord])
         let same = WorkoutSessionUpdate(
             state: EventBuilders.seedSession(),
-            effects: [.haptic(.setLogged), .haptic(.personalRecord)]
+            haptics: [.setLogged, .personalRecord]
         )
         let reordered = WorkoutSessionUpdate(
             state: Self.session,
-            effects: [.haptic(.personalRecord), .haptic(.setLogged)]
+            haptics: [.personalRecord, .setLogged]
         )
         #expect(buzz == same && buzz.hashValue == same.hashValue)
         #expect(buzz != reordered)

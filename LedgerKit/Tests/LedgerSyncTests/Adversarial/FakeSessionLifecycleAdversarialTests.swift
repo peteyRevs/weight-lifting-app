@@ -98,7 +98,7 @@ struct FakeSessionLifecycleAdversarialTests {
         #expect(Seam.update(after: Seam.logged(0, 0, in: 3), on: live)?.state == logged)
         #expect(try await Seam.heard(&reader, on: fake) == [
             Seam.Update(state: live),
-            Seam.Update(state: logged, effects: [.haptic(.setLogged)])
+            Seam.Update(state: logged, haptics: [.setLogged])
         ])
     }
 

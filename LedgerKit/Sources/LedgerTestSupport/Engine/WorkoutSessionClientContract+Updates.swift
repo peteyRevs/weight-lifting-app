@@ -5,10 +5,9 @@ import LedgerDomain
 extension WorkoutSessionClientContract {
     static let updateClauses: [Clause] = [
         Clause("apply returns the state after the event; the next update carries it and the engine's haptics", applies),
-        Clause("a stream opened on a live workout starts with it, without the last event's effects", joinsLive),
+        Clause("a stream opened on a live workout starts with it, without the last event's haptics", joinsLive),
         Clause("two subscribers, one from before the start, each get every update in order", twoSubscribers),
         Clause("updates under rapid apply calls arrive in order, none dropped or merged", rapidApplies),
-        Clause("callers at once: every event is applied once, in one order every subscriber sees", callersAtOnce),
         Clause("an event the engine accepts is published once even when it changes nothing here", unchanged),
         Clause("an event the engine ignores returns the workout unchanged and publishes nothing", ignored),
         Clause("a subscriber whose task is cancelled stops; the others keep getting every update", cancelled)
@@ -56,7 +55,7 @@ extension WorkoutSessionClientContract {
 
     static func joinsLive(_ client: Client) async throws -> String? {
         try await client.start(session)
-        // The stream is opened right after a haptic: its first element still carries no effects.
+        // The stream is opened right after a haptic: its first element still carries none.
         let live = try await client.apply(logged(0, 0))
         var subscriber = await Subscriber(client)
         let next = try await client.apply(retargeted(0, 1, pounds: 190))
@@ -106,40 +105,6 @@ extension WorkoutSessionClientContract {
         )
     }
 
-    /// One edit per row of the session, all applied at once. The edits commute, so whatever order the client
-    /// takes them in, the workout ends the same; a client that lets two calls start from one state loses an
-    /// edit.
-    static func callersAtOnce(_ client: Client) async throws -> String? {
-        try await client.start(session)
-        var one = await Subscriber(client)
-        var two = await Subscriber(client)
-        let rows = session.exercises.enumerated().flatMap { index, exercise in
-            exercise.sets.indices.map { (exercise: index, set: $0) }
-        }
-        let edits = rows.enumerated().map { number, row in
-            retargeted(row.exercise, row.set, pounds: Decimal(200 + number))
-        }
-        let returned = try await withThrowingTaskGroup(of: WorkoutState.self) { group in
-            for edit in edits {
-                group.addTask { try await client.apply(edit) }
-            }
-            return try await group.reduce(into: Set<WorkoutState>()) { $0.insert($1) }
-        }
-        let current = try await client.current()
-        let mark = try await markEnd(of: client)
-        let seen = await one.updates(before: mark)
-        let published = Set(seen.dropFirst().compactMap(\.state))
-        let final = engineUpdates(from: session, edits).last?.state
-        return await ContractCheck.first(
-            ContractCheck.expect(current, final, "current() once every caller has returned"),
-            ContractCheck.expect(seen.count, edits.count + 1, "the number of updates"),
-            ContractCheck.expect(seen.first, Update(state: session), "the first update"),
-            ContractCheck.expect(seen.last?.state, final, "the last update's state"),
-            ContractCheck.expect(published == returned, true, "the published states are the returned ones"),
-            expectUpdates(two.updates(before: mark), seen, "the second subscriber's updates against the first's")
-        )
-    }
-
     static func unchanged(_ client: Client) async throws -> String? {
         try await client.start(session)
         let done = try await client.apply(logged(0, 0))
@@ -147,7 +112,7 @@ extension WorkoutSessionClientContract {
         // No row 99 to select (rule 11), and a done set logged again with the same values: neither changes the
         // state, yet the engine accepts both. Each belongs in the log, and the second one buzzes.
         let pointless: [WorkoutEvent] = [.exerciseSelected(exerciseIndex: 99, setIndex: 0), logged(0, 0)]
-        let expected = [Update(state: done), Update(state: done, effects: [.haptic(.setLogged)])]
+        let expected = [Update(state: done), Update(state: done, haptics: [.setLogged])]
         guard engineUpdates(from: done, pointless) == expected else {
             return "the engine no longer accepts these events without changing the state"
         }
@@ -163,7 +128,9 @@ extension WorkoutSessionClientContract {
     }
 
     /// What ADR-004 has the engine ignore on a live workout: a second `started`, a date that is not finite, a
-    /// rest longer than `WorkoutEngine.longestRest`.
+    /// rest longer than `WorkoutEngine.longestRest`. A terminal event at such a date is one of them when it
+    /// comes through `apply`; through `finish` and `discard` it is refused (the clause "finish and discard at
+    /// a date the engine ignores…").
     static let ignoredEvents: [WorkoutEvent] = [
         .started(other),
         logged(0, 0, at: .infinity),
@@ -182,17 +149,15 @@ extension WorkoutSessionClientContract {
         for event in ignoredEvents {
             try await returned.append(Update(state: client.apply(event)))
         }
-        try await returned.append(Update(state: client.finish(endedAt: never)))
-        try await client.discard(endedAt: never)
         let current = try await client.current()
         let mark = try await markEnd(of: client)
         return await ContractCheck.first(
             expectUpdates(
                 returned,
-                Array(repeating: Update(state: session), count: ignoredEvents.count + 1),
-                "the states apply and finish returned"
+                Array(repeating: Update(state: session), count: ignoredEvents.count),
+                "the states apply returned"
             ),
-            ContractCheck.expect(current, session, "current() after the ignored calls"),
+            ContractCheck.expect(current, session, "current() after the ignored events"),
             expectUpdates(subscriber.updates(before: mark), [Update(state: session)])
         )
     }
@@ -203,6 +168,9 @@ extension WorkoutSessionClientContract {
         let (listening, signal) = AsyncStream<Void>.makeStream()
         let heard = await withTaskGroup(of: [Update].self) { group in
             group.addTask {
+                // Whenever the loop ends, the parent stops waiting: a stream that ends at once is then a
+                // complaint about what it held, not a wait.
+                defer { signal.finish() }
                 var heard: [Update] = []
                 for await update in stream {
                     heard.append(update)

@@ -7,9 +7,9 @@ import LedgerTestSupport
 struct SeamEventCase: Sendable, CustomStringConvertible {
     let description: String
     let event: WorkoutEvent
-    let haptics: [Effect]
+    let haptics: [Haptic]
 
-    init(_ description: String, _ event: WorkoutEvent, haptics: [Effect] = []) {
+    init(_ description: String, _ event: WorkoutEvent, haptics: [Haptic] = []) {
         self.description = description
         self.event = event
         self.haptics = haptics
@@ -25,8 +25,8 @@ enum SeamEvents {
 
     /// Events the engine applies: each changes the workout.
     static let changing: [SeamEventCase] = [
-        SeamEventCase("a first log", Seam.logged(0, 0, in: 1), haptics: [.haptic(.setLogged)]),
-        SeamEventCase("a log off the cursor", Seam.logged(3, 2, in: 1), haptics: [.haptic(.setLogged)]),
+        SeamEventCase("a first log", Seam.logged(0, 0, in: 1), haptics: [.setLogged]),
+        SeamEventCase("a log off the cursor", Seam.logged(3, 2, in: 1), haptics: [.setLogged]),
         SeamEventCase(
             "a stepper edit",
             .setTargetChanged(exerciseIndex: 1, setID: Seam.setID(1, 1, in: 1), weight: .pounds(60), reps: nil)

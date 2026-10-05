@@ -25,10 +25,10 @@ struct FakeSessionStreamsAdversarialTests {
         var afterEnd = await SeamReader(fake)
         #expect(await afterEnd.next() == Seam.Update(state: nil))
         #expect(await before.next() == Seam.Update(state: Seam.session(1)))
-        #expect(await before.next() == Seam.Update(state: logged, effects: [.haptic(.setLogged)]))
-        #expect(await before.next() == Seam.Update(state: finished, effects: [.haptic(.workoutFinished)]))
-        #expect(await atStart.next() == Seam.Update(state: logged, effects: [.haptic(.setLogged)]))
-        #expect(await afterLog.next() == Seam.Update(state: finished, effects: [.haptic(.workoutFinished)]))
+        #expect(await before.next() == Seam.Update(state: logged, haptics: [.setLogged]))
+        #expect(await before.next() == Seam.Update(state: finished, haptics: [.workoutFinished]))
+        #expect(await atStart.next() == Seam.Update(state: logged, haptics: [.setLogged]))
+        #expect(await afterLog.next() == Seam.Update(state: finished, haptics: [.workoutFinished]))
     }
 
     @Test("Criterion 1: fifty subscribers, joining one per change, each get every later update in order")
@@ -62,7 +62,7 @@ struct FakeSessionStreamsAdversarialTests {
         }
         let finished = try await fake.finish(endedAt: Seam.at(9000))
         let expected = [Seam.Update(state: live)] + updates
-            + [Seam.Update(state: finished, effects: [.haptic(.workoutFinished)])]
+            + [Seam.Update(state: finished, haptics: [.workoutFinished])]
         let heard = try await Seam.heard(&slow, on: fake)
         #expect(Seam.difference(heard, expected, "the slow subscriber") == nil)
     }
