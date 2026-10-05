@@ -1710,3 +1710,17 @@ measurement on a simulator.
   asks for exactly one complaining clause). Accepted.
 - The overlap clauses keep their ten tries. Accepted.
 - The orchestrator's full gate on the touch-up's tree exited 0. The tester's files are unchanged since `92eb79c`.
+
+## Slice S2 — orchestrator's brief (2026-10-05)
+
+S1 merged as #27 (`95b0837`). S2's specification is the brief's last section, "Plan amendments — slice S2". What it
+adds to the plan's S2 row, from S1's rounds:
+
+- The host prunes ended subscribers when a `yield` reports `.terminated`, as the fake does.
+- Recovery is started by the first protocol call if the launch step has not run.
+- The ending update is published after the save; the host's own stamp is never the caller's fault.
+- The contract's pair-by-pair overlap clauses are joined by a seeded script of calls made at once, checked as one
+  history (criterion 11), and the host is run against the contract over stores that suspend, several times over.
+- `update.haptics` is `[Haptic]`; exactly one subscriber plays them, on the workout side (decided in S6).
+- The fake has no scriptable failures yet: S2 tests a failing store through the real stores (a SQLite trigger) or
+  a store wrapper of its own in test support.
