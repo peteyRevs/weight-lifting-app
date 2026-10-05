@@ -33,6 +33,24 @@ struct PreviewValueTests {
         }
     }
 
+    @Test("In a preview the workout session is a fake with no workout (F10 S1 criterion 6)", .timeLimit(.minutes(1)))
+    func previewSession_isAFakeWithNoWorkout() async throws {
+        try await withDependencies {
+            $0.context = .preview
+        } operation: {
+            @Dependency(\.workoutSession) var session
+            #expect(session is FakeWorkoutSessionClient)
+            #expect(try await session.current() == nil)
+            var updates = await session.updates().makeAsyncIterator()
+            #expect(await updates.next() == WorkoutSessionUpdate(state: nil))
+            // It is a working session: a preview can start a workout in it and watch it.
+            let workout = try Fixtures.seedSession()
+            try await session.start(workout)
+            #expect(await updates.next() == WorkoutSessionUpdate(state: workout))
+            #expect(try await session.current() == workout)
+        }
+    }
+
     @Test("In a preview the device keys are fakes and the device id is the fixtures'")
     func previewDevices_areFakes() {
         withDependencies {

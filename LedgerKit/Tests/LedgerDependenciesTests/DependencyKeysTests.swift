@@ -33,7 +33,8 @@ struct DependencyKeysTests {
         Read(key: "haptics") { @Dependency(\.haptics) var value; _ = value },
         Read(key: "notifications") { @Dependency(\.notifications) var value; _ = value },
         Read(key: "liveActivities") { @Dependency(\.liveActivities) var value; _ = value },
-        Read(key: "deviceID") { @Dependency(\.deviceID) var value; _ = value }
+        Read(key: "deviceID") { @Dependency(\.deviceID) var value; _ = value },
+        Read(key: "workoutSession") { @Dependency(\.workoutSession) var value; _ = value }
     ]
 
     @Test("Criterion 3: a key the test did not configure fails it, naming the key", arguments: unconfigured)
@@ -83,6 +84,20 @@ struct DependencyKeysTests {
         } operation: {
             @Dependency(\.date.now) var now
             #expect(now == later)
+        }
+    }
+
+    @Test("A test binds the workout session to a fake, and what reads the key gets that fake", .timeLimit(.minutes(1)))
+    func workoutSession_boundToAFake_isTheOneRead() async throws {
+        let workout = try Fixtures.seedSession()
+        let fake = FakeWorkoutSessionClient(live: workout)
+        try await withTestDependencies {
+            $0.workoutSession = fake
+        } operation: {
+            @Dependency(\.workoutSession) var session
+            let current = try await session.current()
+            #expect(session as? FakeWorkoutSessionClient === fake)
+            #expect(current == workout)
         }
     }
 

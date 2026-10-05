@@ -174,3 +174,69 @@ these contradict the brief above, they win.
    A damaged workout elsewhere in the history never fails a `materialize` (orchestrator decision on R-Q1, F05
    records fix round 1): the replay leaves out a workout it cannot read, logs it, and keeps its stored records
    until a write repairs it.
+
+## Plan amendments (orchestrator, 2026-10-04)
+
+The body above was written before M0 existed. Where it disagrees with this section, this section wins (as do the
+two "Inputs" sections). The slice plan and its evidence are in `F10-active-workout/implementation-notes.md`.
+
+**Delivery.** Nine slices: S1 the session seam, S2 the host and the start use case, S3 the persistence follow-up,
+S4 the cover and header, S5 solo logging, S6 rest and effects, S7 finish and receipt, S8 swap, S9 supersets.
+
+**Slice S1 — session seam** (what F09 and, later, the watch code against; it replaces the draft under "Domain
+changes")
+```swift
+public struct WorkoutSessionUpdate: Hashable, Sendable {
+    public let state: WorkoutState?          // live; finished or discarded in the one update that ends it; nil = no workout
+    public let haptics: [Haptic]             // feedback to play, in order; empty in a stream's first element
+    public var live: WorkoutState? { get }   // `state` when its phase is `.live`
+    public static func haptics(from effects: [Effect]) -> [Haptic]    // the one forwarding rule: the engine's haptics, in order
+}
+public enum WorkoutSessionError: Error, Equatable, Sendable {
+    case workoutInProgress(WorkoutID), notStartable(WorkoutID), noLiveWorkout, incompleteLog(WorkoutID), invalidEndDate
+}
+public protocol WorkoutSessionClient: Sendable {
+    func updates() async -> AsyncStream<WorkoutSessionUpdate>   // current state first (no haptics), then every change; a new stream per call
+    func current() async throws -> WorkoutState?
+    func start(_ initial: WorkoutState) async throws
+    @discardableResult func apply(_ event: WorkoutEvent) async throws -> WorkoutState
+    func finish(endedAt: Date) async throws -> WorkoutState
+    func discard(endedAt: Date) async throws
+}
+```
+(Revised 2026-10-04 after G2 and G3 round 1: `haptics: [Haptic]` replaced `effects: [Effect]`, `invalidEndDate` was
+added, and criteria 1, 3, 4 and 8 below were tightened.)
+1. Given a subscriber, when it calls `updates()`, then the first element is the workout as it stands with no
+   haptics, and every later change arrives in the order it was applied; two subscribers each get every update. This
+   holds when calls overlap: a stream opened while other calls are in flight starts with a state the client
+   published and misses no later update, and each update follows from the one before it.
+2. Given no live workout, `start` with a live snapshot makes it current; a second `start` throws
+   `workoutInProgress`; a snapshot that is not live throws `notStartable`; `apply`, `finish` and `discard` with
+   nothing live throw `noLiveWorkout`.
+   Of several `start` calls made at once exactly one succeeds and the others throw `workoutInProgress`.
+3. Given a live workout, `apply` returns the state after the event, equal to the next update's state, and that
+   update's haptics are exactly `haptics(from:)` of the engine's effects for it. An event the engine ignores (ADR-004,
+   "Malformed envelopes") changes nothing: `apply` returns the workout as it stands and nothing is published.
+4. Given a live workout, `finish(endedAt:)` returns the finished state, publishes it in one update, and afterwards
+   `current()` is nil and a new stream starts with a nil state; `discard(endedAt:)` likewise. The ending update is
+   published once the workout is stored (or its log dropped), so a subscriber may read history when it arrives. Of
+   several overlapping `finish` / `discard` calls exactly one ends the workout, and an `apply` that loses to it
+   throws `noLiveWorkout`. If the workout is still live after the call (the engine ignored the end, as it does for a
+   date that is not finite), `finish` and `discard` throw `invalidEndDate`, end nothing and publish nothing.
+5. `resumeFromStore()` is not on the protocol: it is the host's launch step (S2), and every protocol method waits
+   for recovery.
+6. The dependency key is `workoutSession`; its unimplemented stub's `updates()` ends at once and its other methods
+   throw; its preview value is a fake with no workout.
+7. The fake, `FakeWorkoutSessionClient`, is in `LedgerFakes` (ADR-008), runs the real engine, records what it was
+   asked (`applied`), and passes the shared `WorkoutSessionClientContract` in `LedgerTestSupport` that S2's host
+   must pass too. It is absent from Release builds, as all of `LedgerFakes` is.
+8. `ClockText.elapsed(_:)` in `LedgerDomain` is the one elapsed-time formatter for Today, the workout header
+   and the receipt: m:ss under an hour ("0:00", "24:22"), h:mm:ss from sixty minutes ("1:01:05"); a negative
+   duration reads "0:00". (The format past an hour is put to Pete; the prototype prints "61:05".)
+
+**Later slices (corrections known today)**
+- The host runs the rest-notification effects; a screen plays only the haptics an update forwards.
+- Files live in `LedgerDomain/Protocols`, `UseCases`, `Engine`; fakes and fixtures in `LedgerFakes`; the app's
+  wiring in `LedgerAppKit` (`AppComposition`, `MainRoot`), not under `Apps/Ledger/Sources/`.
+- The check's label on a logged row is "Undo set 2".
+- Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above.
