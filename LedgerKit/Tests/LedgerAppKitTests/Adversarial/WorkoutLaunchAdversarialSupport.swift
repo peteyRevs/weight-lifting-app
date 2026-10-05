@@ -37,6 +37,13 @@ struct AppRun {
     func logs() async throws -> [WorkoutID] {
         try await stores.events.uncompactedWorkoutIDs()
     }
+
+    /// How many rows each of `tables` holds.
+    func rows(in tables: [String]) async throws -> [Int] {
+        try await stores.queue.read { database in
+            try tables.map { try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM \($0)") ?? -1 }
+        }
+    }
 }
 
 /// The workout these suites kill the app in, and what the engine makes of it.
@@ -48,6 +55,14 @@ enum WorkoutLaunch {
     nonisolated static let refuseSave = refusal(of: "INSERT ON workout")
     nonisolated static let refuseDrop = refusal(of: "DELETE ON workout_event")
     nonisolated static let allow = "DROP TRIGGER siege"
+
+    /// The statements of a save's transaction for the seed session, after the workout's own row: its
+    /// exercises, its sets, and the end of its log (F10 S3). A first workout sets no record, so the records'
+    /// statement is `LinkedSaveFaultAdversarialTests`', where history holds an earlier workout.
+    nonisolated static let saveStatements = [
+        "INSERT ON workout_exercise", "INSERT ON logged_set", "DELETE ON workout_event"
+    ]
+    nonisolated static let historyTables = ["workout", "workout_exercise", "logged_set", "personal_record"]
 
     nonisolated static func refusal(of statement: String) -> String {
         "CREATE TRIGGER siege BEFORE \(statement) BEGIN SELECT RAISE(ABORT, 'no'); END"

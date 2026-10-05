@@ -15,6 +15,10 @@ struct HostContractBiteAdversarialTests {
     /// The twenty seeds the gate runs, and sixty more.
     static let gateSeeds: [UInt64] = (0 ..< 20).map { UInt64($0) &* 7919 &+ 17 }
     static let moreSeeds: [UInt64] = (20 ..< 80).map { UInt64($0) &* 7919 &+ 17 }
+    /// What a racy host is run on (F10 S3 criterion 9): the gate's twenty and the sixty more in the nightly
+    /// lane; the gate's first ten elsewhere, where a fault strikes in nearly every run.
+    static let racyGate = SessionLane.cut(gateSeeds, to: 10)
+    static let racyMore = SessionLane.cut(moreSeeds, to: 0)
 
     /// What `seeds` make of a racy host: in how many runs its fault struck, in how many of those the script
     /// reported something, and in how many it reported something although the fault had not struck.
@@ -60,7 +64,7 @@ struct HostContractBiteAdversarialTests {
 
     @Test("A wrapper with no fault passes the script: what it reports of a racy host is the fault")
     func honestWrapper_passesTheScript() async throws {
-        let tally = try await Self.tally(nil, on: .all, seeds: Self.gateSeeds + Self.moreSeeds)
+        let tally = try await Self.tally(nil, on: .all, seeds: Self.racyGate + Self.racyMore)
         #expect(tally.falseAlarms.isEmpty)
         #expect(tally.struck == 0)
     }
@@ -71,11 +75,12 @@ struct HostContractBiteAdversarialTests {
     @Test("Whenever a racy host's fault struck, the script of that seed reports it", arguments: RacyFault.allCases)
     func racyHost_wheneverItStruck_isReported(fault: RacyFault) async throws {
         let streams = RacyHost.Streams.allBut(Self.actingStream)
-        let gate = try await Self.tally(fault, on: streams, seeds: Self.gateSeeds)
-        #expect(gate.reported > 0, "\(fault), the gate's twenty seeds: \(gate)")
-        let more = try await Self.tally(fault, on: streams, seeds: Self.moreSeeds)
+        let gate = try await Self.tally(fault, on: streams, seeds: Self.racyGate)
+        #expect(gate.reported > 0, "\(fault), the gate's seeds: \(gate)")
+        let more = try await Self.tally(fault, on: streams, seeds: Self.racyMore)
         #expect(gate.falseAlarms.isEmpty && more.falseAlarms.isEmpty)
-        #expect(gate.missed + more.missed == [], "\(fault): \(gate.struck + more.struck) strikes in 80 runs")
+        let runs = gate.runs + more.runs
+        #expect(gate.missed + more.missed == [], "\(fault): \(gate.struck + more.struck) strikes in \(runs) runs")
     }
 
     /// Rule 5 reads the acting subscriber's stream "up to the first that showed a workout" and no further,
@@ -83,7 +88,7 @@ struct HostContractBiteAdversarialTests {
     /// acts on an update is the workout screen; its stream is the one that plays the haptics.
     @Test("A fault on the stream of the subscriber that acts is reported too", arguments: RacyFault.onAStream)
     func racyHost_faultOnTheActingStream_isReported(fault: RacyFault) async throws {
-        let tally = try await Self.tally(fault, on: .only(Self.actingStream), seeds: Self.gateSeeds)
+        let tally = try await Self.tally(fault, on: .only(Self.actingStream), seeds: Self.racyGate)
         #expect(tally.struck > 0, "\(fault) never struck")
         #expect(tally.reported == tally.struck, "\(fault): \(tally)")
     }
@@ -91,7 +96,7 @@ struct HostContractBiteAdversarialTests {
     @Test("This suite's storm reports a racy host whenever its fault struck", arguments: RacyFault.allCases)
     func storm_wheneverARacyHostStruck_reportsIt(fault: RacyFault) async throws {
         var struck = 0, reported = 0
-        for seed in SeamSeed.all.prefix(40) {
+        for seed in SessionLane.cut(SeamSeed.all.prefix(40), to: 10) {
             let racy = SiegeBox<RacyHost>()
             let issue = try await SiegeStorm.violation(seed: seed.value, backing: .memory) { host in
                 let wrapped = RacyHost(host, fault)

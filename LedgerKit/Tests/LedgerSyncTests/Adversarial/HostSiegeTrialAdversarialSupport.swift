@@ -34,8 +34,8 @@ struct SiegeTrial {
     var waiting: WorkoutState?
     private(set) var trace: [String] = []
 
-    init(seed: UInt64, backing: SiegeRig.Backing, sabotage: SiegeSabotage? = nil) async throws {
-        rig = try await SiegeRig.make(backing, yields: Int(seed % 3), sabotage: sabotage)
+    init(seed: UInt64, backing: SiegeRig.Backing, sabotage: SiegeSabotage? = nil, linked: Bool = false) async throws {
+        rig = try await SiegeRig.make(backing, yields: Int(seed % 3), sabotage: sabotage, linked: linked)
         writer = SiegeScriptWriter(seed: seed)
         host = await rig.host()
         stream = await host.updates()
@@ -43,8 +43,13 @@ struct SiegeTrial {
 
     /// `nil` when the host kept every rule through the script of `seed`, else the first it broke, with the
     /// steps that led there.
-    static func violation(seed: UInt64, backing: SiegeRig.Backing, steps: Int = 70) async throws -> String? {
-        try await run(seed: seed, backing: backing, steps: steps).issue
+    static func violation(
+        seed: UInt64,
+        backing: SiegeRig.Backing,
+        steps: Int = 70,
+        linked: Bool = false
+    ) async throws -> String? {
+        try await run(seed: seed, backing: backing, steps: steps, linked: linked).issue
     }
 
     /// What a siege found, and what it put the host through.
@@ -60,9 +65,10 @@ struct SiegeTrial {
         seed: UInt64,
         backing: SiegeRig.Backing,
         steps: Int = 70,
-        sabotage: SiegeSabotage? = nil
+        sabotage: SiegeSabotage? = nil,
+        linked: Bool = false
     ) async throws -> Report {
-        var trial = try await SiegeTrial(seed: seed, backing: backing, sabotage: sabotage)
+        var trial = try await SiegeTrial(seed: seed, backing: backing, sabotage: sabotage, linked: linked)
         var issue: String?
         for index in 0 ..< steps where issue == nil {
             issue = try await trial.step(index)

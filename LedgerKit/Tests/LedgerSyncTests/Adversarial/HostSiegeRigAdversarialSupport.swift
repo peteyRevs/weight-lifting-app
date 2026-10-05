@@ -37,6 +37,8 @@ struct SiegeRig: Sendable {
     let queue: DatabaseQueue?
     /// All six in-memory stores, for a test that needs the others (`StartWorkoutUseCase`).
     let memory: InMemoryStores?
+    /// Whether a host of this rig saves a workout and drops its log in one call to its stores (F10 S3).
+    var isLinked = false
     let device = EventBuilders.phone
     let yields: Int
 
@@ -47,7 +49,20 @@ struct SiegeRig: Sendable {
         seed: InMemoryStores.Seed = .empty,
         yields: Int = 0,
         clock: SiegeClock = SiegeClock(),
-        sabotage: SiegeSabotage? = nil
+        sabotage: SiegeSabotage? = nil,
+        linked: Bool = false
+    ) async throws -> SiegeRig {
+        var rig = try await unlinked(backing, seed: seed, yields: yields, clock: clock, sabotage: sabotage)
+        rig.isLinked = linked
+        return rig
+    }
+
+    private static func unlinked(
+        _ backing: Backing,
+        seed: InMemoryStores.Seed,
+        yields: Int,
+        clock: SiegeClock,
+        sabotage: SiegeSabotage?
     ) async throws -> SiegeRig {
         switch backing {
         case .memory:
@@ -84,7 +99,7 @@ struct SiegeRig: Sendable {
         let gate = await SiegeGate(siege: siege, generation: siege.nextGeneration(), yields: yields)
         return LocalWorkoutSessionActor(
             events: SiegeEventStore(base: events, gate: gate),
-            workouts: SiegeWorkoutRepository(base: workouts, gate: gate),
+            workouts: SiegeWorkoutRepository(base: workouts, gate: gate, isLinked: isLinked),
             programs: SiegeProgramRepository(base: programs, gate: gate),
             device: device,
             now: { [clock] in clock.now }

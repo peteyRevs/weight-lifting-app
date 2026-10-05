@@ -3024,3 +3024,32 @@ once as it is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`f10s3/fina
   review, before F17 is planned.
 - This commit has not had the orchestrator's full gate: one test fails by ruling until the tester moves it. The gate
   runs on the tree after the tester's round.
+
+### S3 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 6 nits; the save is one transaction in the right order, and it found no way
+to lose, duplicate or half-save a workout or to write another program's rows. G2 round 1: the save held; one latent
+bug in how the host uses it (two tests failing on purpose); its failing S2 test is replaced; the session suites
+now cost 14.6 s in the PR lane against 58.1 s before the slice (criterion 9 is met).
+
+For fix round 1:
+- **F10-S3-1 accepted:** the host does not take the repository's word alone. After a save that answered that the
+  log was dropped, the host checks its own event store, and compacts there when the log is still present. A host
+  whose repository and event store are not one database then ends with the log gone, as the rule "an end is
+  complete when its log is gone" asks. The tester's two tests pass unedited.
+- **S3-SF1 accepted, now:** `materialize(_:slotUpdates:droppingLog:) -> Bool` is the one requirement, with no
+  default and not discardable; the two-argument call is an extension that passes `droppingLog: false`. Every
+  conforming type states what it holds. The mechanical change to the testers' conforming types is sanctioned
+  (implement the three-argument form: save and answer `false`, or forward where the type wraps a linked store);
+  each changed line is listed, and the tester audits it.
+- **S3-SF2:** the protocol says now that a later materialisation sets a slot back to the swap's exercise if the
+  lifter changed it in between, as it already says of misses. Making the swap compare-and-set belongs to S8 with
+  O10; the rule for a peer's and a rebuilt workout goes into the ADR-004 amendment (Pete), before F17 is planned.
+- **S3-SF3:** not in this slice. ADR-008's and standards §4's description of the event-store fake is corrected in
+  the same amendment PR as ADR-004's; the PR body of this slice says so.
+- **S3-SF4 and S3-SF5 accepted** (a probe that fails instead of waiting for ever; programs compared to a `Bool`
+  with a printed difference, never whole inside `#expect`).
+- **Nits** as the review writes them unless one costs more than a few lines; S3-N5 (recovery deals with ended logs
+  in a stated order) is taken.
+- **F10-S3-2** (two overlap cases of S1's tester fail on one thread; the cut keeps them in the nightly lane only)
+  joins the chore list.

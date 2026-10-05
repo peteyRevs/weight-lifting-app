@@ -11,13 +11,19 @@ import Testing
 struct HostReentrancyAdversarialTests {
     typealias Backing = SiegeRig.Backing
 
-    @Test("A storm of calls over the in-memory stores leaves one history", arguments: SeamSeed.all.prefix(120))
+    @Test(
+        "A storm of calls over the in-memory stores leaves one history",
+        arguments: SessionLane.cut(SeamSeed.all.prefix(120), to: 30)
+    )
     func storm_inMemoryStores_isOneHistory(seed: SeamSeed) async throws {
         let violation = try await SiegeStorm.violation(seed: seed.value, backing: .memory)
         #expect(violation == nil, "\(seed)")
     }
 
-    @Test("A storm of calls over the GRDB stores leaves one history", arguments: SeamSeed.all.prefix(60))
+    @Test(
+        "A storm of calls over the GRDB stores leaves one history",
+        arguments: SessionLane.cut(SeamSeed.all.prefix(60), to: 10)
+    )
     func storm_database_isOneHistory(seed: SeamSeed) async throws {
         let violation = try await SiegeStorm.violation(seed: seed.value, backing: .database)
         #expect(violation == nil, "\(seed)")
