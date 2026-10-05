@@ -168,3 +168,50 @@ the root gate and the UI tests.
 7. Program names, day names, tags and preview lines are English data in the Domain, not String Catalog entries.
 8. Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above. "100 % line coverage" of
    `ProgramTemplates` is checked by the reviewer from the file's coverage; the gate is per module.
+
+## Plan amendments — slice S2, the onboarding screen (orchestrator, 2026-10-05)
+
+S1 (the template generator) is ready and waits for Pete; the localization rule and helper are F09 S1's (#28, in
+review). S2 is built locally on both and its PR opens after both are on `main`. This section is S2's
+specification; where it and the body above disagree, this section wins. Signatures and line references are in
+`F08-onboarding/implementation-notes.md` ("Inputs the implementer needs › S2", "Test plan changes", the rulings).
+
+S2 builds the three-step onboarding screen in `FeatureOnboarding`, drawn and tested on its own. It is **not wired
+into the app**: the app still opens on the tabs, and S3 adds the root's branch.
+
+1. **Start.** `OnboardingRoot` opens on step 1 of 3 with "Both, honestly" picked, and the progress bars read "Step 1
+   of 3".
+2. **Picking and moving.** Tapping an option picks it and unpicks the others; the picked one shows the orange check
+   (a checkmark glyph, not colour alone). "Continue" goes to step 2, where "4 days" is picked by default, and again
+   to step 3. Steps 2 and 3 have a "Back" pill; the picks survive going back and forth.
+3. **Step 3 is a read-only list** (no ticks; it is not tappable): every day of the split the lifter picked, in order,
+   each as the day's name with " — " replaced by " · " and its preview line (for example "Upper A · Push focus" /
+   "Bench, incline, row, pulldown, laterals"), from `ProgramTemplates.preview(days:)`. The body reads "{program
+   name}, 8 weeks, {pounds|kilograms}. Editable any time.", the unit being the stored setting's.
+4. **"Start training"** saves exactly one program: the one `ProgramTemplates` generates from the picks, with the
+   stored settings' units, the start date `ProgramTemplates.startDate(containing:weekStart:calendar:)` gives for the
+   injected date, calendar and the settings' week start, the stored catalog, and ids from the injected generator. It
+   is active. The screen makes no navigation call: the root (S3) follows the active program. A second tap while a
+   save is in flight, or after it succeeded, saves nothing more.
+5. **"Skip setup"**, on any step, saves the `both` × four-day program in the same way, whatever was picked.
+6. **Kilograms.** With stored units kg, step 3's body says "kilograms" and the saved program's start loads are the
+   catalog's kilogram loads.
+7. **Failure.** If reading the settings or the catalog, generating, or saving fails (an unseeded catalog makes the
+   generator throw `unknownExercise`; a repository may throw), the screen shows "Couldn't save your program. Try
+   again." with "Retry", nothing is saved, and the failure is logged. "Retry" first awaits the `prepareRetry`
+   closure the root was given (S3 passes the launch's seed step), then tries again with the same picks.
+8. **VoiceOver.** Each option is one button whose label is "{label}, {sub}", with the selected trait when picked and
+   no value. The progress bars are one element, "Step 1 of 3". The tree of each step is written in the notes and
+   pinned by a test.
+9. **Copy.** Every string is in `FeatureOnboarding`'s String Catalog and resolved in `OnboardingCopy.swift`, as
+   `docs/engineering-standards.md` §7 requires; the texts are the body's "Copy (exact)" (with "This sets how your
+   loads progress week to week."), plus "Back". No string names the product. Program and day names and preview
+   lines are the Domain's data, shown as given.
+10. **Type sizes and themes.** Option rows wrap and nothing truncates up to the largest accessibility size the
+    snapshot matrix has; light and dark. Snapshot references: step 1, step 2, step 3 for four days and for six days,
+    and the failure state (18 images, as the plan's matrix says).
+11. **Surface.** `OnboardingRoot(prepareRetry:)` is the module's only public type. The store follows the M1
+    conventions (no task that outlives the view; pure presentation; tokens only).
+
+Defaults in force until Pete answers (asked 2026-10-04): step 3 is the read-only list above; first-launch units and
+week start are whatever the stored settings say (pounds and Monday today).

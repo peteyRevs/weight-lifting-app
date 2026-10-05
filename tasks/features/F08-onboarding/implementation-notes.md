@@ -917,3 +917,17 @@ this section; no file under `LedgerKit`, `Apps`, `scripts` or `docs` changed aft
 **Not verified:** a byte-for-byte comparison of old and new output (above); the nightly lane, which now runs the
 tester's determinism suite at 2,000 seeds under the new one-minute limit (the limit is per test case, and a case is
 one seed) and the timing test; CI; a device.
+
+## Slice S2 — orchestrator's brief (2026-10-05)
+
+S2's specification is the brief's last section, "Plan amendments — slice S2". This branch,
+`feat/F08-s2-onboarding-ui`, is S1's tip (`c685d65`, with `main` merged) plus F09 S1's tip merged in (`844a583`),
+because S2 needs the localization rule and helper; it stays local until both are on `main`.
+
+- The localization pattern is now `docs/engineering-standards.md` §7 as F09 S1 rewrote it: a catalog and
+  `OnboardingCopy.swift`, nothing else to add; the gate's string-catalog step, `ModuleCopyTests` and the bundle
+  check find the module by themselves. "L0" in the plan above no longer exists as a separate piece.
+- `ProgramTemplates.program(_ request: Request, catalog:id:newID:)` and `DayPreview.line` are the API (S1's fix
+  round); see "Inputs for S2" in S1's section.
+- `ModuleCopyTests.exemptions`, `PreviewScan.registeredModules`, `Package.swift`'s `snapshotTestTargets` and
+  `scripts/coverage-thresholds.json`'s `required` are the shared one-line files: add only `FeatureOnboarding`.
