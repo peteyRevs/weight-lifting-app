@@ -56,6 +56,17 @@ extension FaultyWorkoutSession {
         case appliesAfterTheEnd
         /// `updates()` suspends between reading the workout and registering the stream.
         case registersAfterASuspension
+        /// Once an end has been refused with `invalidEndDate`, every later `finish` and `discard` is.
+        case refusesEveryEndAfterOne
+        /// `finish` and `discard` decide `invalidEndDate` after a suspension, by whether a workout is live
+        /// then: when another end has won meanwhile, an end the engine ignored returns.
+        case judgesAnIgnoredEndLater
+        /// An update loses its haptics when another `apply` is inside the client.
+        case dropsHapticsUnderOverlap
+        /// `start` commits, suspends, then publishes: an `apply` made meanwhile is published before the start.
+        case publishesTheStartLate
+        /// `start` publishes, suspends, then commits: a subscriber told of the workout finds none.
+        case commitsTheStartLate
 
         var description: String {
             rawValue
@@ -80,7 +91,8 @@ extension FaultyWorkoutSession {
 
         static let overlapping: Set<Fault> = [
             .losesAnEditBetweenCallers, .startsTwiceAtOnce, .endsTwiceAtOnce, .appliesAfterTheEnd,
-            .registersAfterASuspension
+            .registersAfterASuspension, .judgesAnIgnoredEndLater, .dropsHapticsUnderOverlap,
+            .publishesTheStartLate, .commitsTheStartLate
         ]
 
         static let brokenClauses: [Fault: String] = [
@@ -109,7 +121,12 @@ extension FaultyWorkoutSession {
             .startsTwiceAtOnce: "starts at once",
             .endsTwiceAtOnce: "ends at once",
             .appliesAfterTheEnd: "an apply against an end",
-            .registersAfterASuspension: "a stream opened while calls are in flight"
+            .registersAfterASuspension: "a stream opened while calls are in flight",
+            .refusesEveryEndAfterOne: "finish and discard at a date the engine ignores",
+            .judgesAnIgnoredEndLater: "finish and discard at a date the engine ignores",
+            .dropsHapticsUnderOverlap: "callers at once",
+            .publishesTheStartLate: "a start against applies",
+            .commitsTheStartLate: "a subscriber acting on the start's update"
         ]
     }
 }

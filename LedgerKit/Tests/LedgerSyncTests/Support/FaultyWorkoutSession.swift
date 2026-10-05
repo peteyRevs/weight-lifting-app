@@ -13,6 +13,10 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
     private var ended: WorkoutState?
     private var lastHaptics: [Haptic] = []
     private var listeners: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
+    /// Applies that have published and not yet returned (`dropsHapticsUnderOverlap`).
+    private var applying = 0
+    /// Whether an end has been refused with `invalidEndDate` (`refusesEveryEndAfterOne`).
+    private var refusedAnEnd = false
 
     init(_ fault: Fault?) {
         self.fault = fault
@@ -43,11 +47,21 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
 
     func start(_ initial: WorkoutState) async throws {
         let (snapshot, effects) = try startable(initial)
+        let haptics = WorkoutSessionUpdate.haptics(from: effects) + (fault == .startBuzzes ? [.setLogged] : [])
         if fault == .startsTwiceAtOnce {
             await letOthersIn()
         }
+        if fault == .commitsTheStartLate {
+            publish(snapshot, haptics)
+            await letOthersIn()
+        }
         live = snapshot
-        publish(snapshot, WorkoutSessionUpdate.haptics(from: effects) + (fault == .startBuzzes ? [.setLogged] : []))
+        if fault == .publishesTheStartLate {
+            await letOthersIn()
+        }
+        if fault != .commitsTheStartLate {
+            publish(snapshot, haptics)
+        }
     }
 
     func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
@@ -55,18 +69,11 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
     }
 
     func finish(endedAt: Date) async throws -> WorkoutState {
-        let finished = try await perform(.finished(endedAt: endedAt), through: .finish)
-        guard finished.phase != .live || fault == .returnsFromAnIgnoredEnd else {
-            throw WorkoutSessionError.invalidEndDate
-        }
-        return finished
+        try await ended(by: .finished(endedAt: endedAt), through: .finish)
     }
 
     func discard(endedAt: Date) async throws {
-        let discarded = try await perform(.discarded(endedAt: endedAt), through: .discard)
-        guard discarded.phase != .live || fault == .returnsFromAnIgnoredEnd else {
-            throw WorkoutSessionError.invalidEndDate
-        }
+        _ = try await ended(by: .discarded(endedAt: endedAt), through: .discard)
     }
 }
 
@@ -113,11 +120,41 @@ private extension FaultyWorkoutSession {
             await end(next, haptics)
         } else {
             live = next
-            if fault != .skipsUnchangedStates || next != workout {
+            if fault == .dropsHapticsUnderOverlap {
+                await publishUnderOverlap(next, haptics)
+            } else if fault != .skipsUnchangedStates || next != workout {
                 publish(next, haptics)
             }
         }
         return fault == .returnsTheStateBefore ? workout : next
+    }
+
+    /// `dropsHapticsUnderOverlap`: an update keeps its haptics only when no other apply is inside the client.
+    func publishUnderOverlap(_ next: WorkoutState, _ haptics: [Haptic]) async {
+        publish(next, applying > 0 ? [] : haptics)
+        applying += 1
+        await letOthersIn()
+        applying -= 1
+    }
+
+    /// `finish` and `discard`: the terminal event, and the refusal when the workout is still live after it.
+    func ended(by event: WorkoutEvent, through route: Route) async throws -> WorkoutState {
+        if fault == .refusesEveryEndAfterOne, refusedAnEnd {
+            throw WorkoutSessionError.invalidEndDate
+        }
+        let after = try await perform(event, through: route)
+        guard after.phase == .live, fault != .returnsFromAnIgnoredEnd else {
+            return after
+        }
+        refusedAnEnd = true
+        if fault == .judgesAnIgnoredEndLater {
+            // Looks again after a suspension: when another end has won meanwhile, it returns as if its own had.
+            await letOthersIn()
+            if live == nil {
+                return after
+            }
+        }
+        throw WorkoutSessionError.invalidEndDate
     }
 
     func withNothingLive(_ event: WorkoutEvent) async throws -> WorkoutState {

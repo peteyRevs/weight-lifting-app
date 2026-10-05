@@ -63,13 +63,14 @@ public protocol WorkoutSessionClient: Sendable {
     func discard(endedAt: Date) async throws
 }
 
-/// One element of `WorkoutSessionClient.updates()`: the workout after a change, and what the screen should
-/// play for it.
+/// One element of `WorkoutSessionClient.updates()`: the workout after a change, and the haptics that go with
+/// it.
 public struct WorkoutSessionUpdate: Hashable, Sendable {
     /// The workout: live; finished or discarded in the one update that ends it; nil when there is no
     /// workout, which only a stream's first element can say.
     public let state: WorkoutState?
-    /// The haptics for the screen to play, in order (`haptics(from:)`). Empty in a stream's first element.
+    /// The haptics of the change, in order (`haptics(from:)`). Empty in a stream's first element. Every
+    /// subscriber receives them; exactly one, on the workout side, plays them. Today reads `state` only.
     public let haptics: [Haptic]
 
     public init(state: WorkoutState?, haptics: [Haptic] = []) {

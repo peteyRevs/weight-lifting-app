@@ -196,7 +196,7 @@ public enum WorkoutSessionError: Error, Equatable, Sendable {
     case workoutInProgress(WorkoutID), notStartable(WorkoutID), noLiveWorkout, incompleteLog(WorkoutID), invalidEndDate
 }
 public protocol WorkoutSessionClient: Sendable {
-    func updates() async -> AsyncStream<WorkoutSessionUpdate>   // current state first (no effects), then every change; a new stream per call
+    func updates() async -> AsyncStream<WorkoutSessionUpdate>   // current state first (no haptics), then every change; a new stream per call
     func current() async throws -> WorkoutState?
     func start(_ initial: WorkoutState) async throws
     @discardableResult func apply(_ event: WorkoutEvent) async throws -> WorkoutState

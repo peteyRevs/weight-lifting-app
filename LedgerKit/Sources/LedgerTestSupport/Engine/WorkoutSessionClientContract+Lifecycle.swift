@@ -176,9 +176,17 @@ extension WorkoutSessionClientContract {
     /// `finish` and `discard` promise an ended workout, so an end the engine ignores is refused: the caller
     /// of `discard`, which returns nothing, could not tell otherwise. The same event through `apply` stays an
     /// ignored event (the clause "an event the engine ignores…").
+    ///
+    /// A refused end leaves the workout as it was, so one the engine takes still ends it afterwards. That
+    /// finish is made at once with eight more ends the engine ignores, listed before it so that they are
+    /// inside the client when it wins: each of them may only throw, `invalidEndDate` when it came first and
+    /// `noLiveWorkout` when it came after. A client that looks again after a suspension, finds the workout
+    /// gone and returns as if its own end had been taken fails here.
     static func invalidEnd(_ client: Client) async throws -> String? {
-        guard engineUpdates(from: session, [.finished(endedAt: never), .discarded(endedAt: never)]).isEmpty else {
-            return "the engine no longer ignores an end at a date that is not finite"
+        guard engineUpdates(from: session, [.finished(endedAt: never), .discarded(endedAt: never)]).isEmpty,
+              let finishing = engineUpdate(session, .finished(endedAt: at(600)), in: session.id)
+        else {
+            return "the engine no longer ignores an end at a date that is not finite, or ignored one that is"
         }
         try await client.start(session)
         var subscriber = await Subscriber(client)
@@ -186,12 +194,22 @@ extension WorkoutSessionClientContract {
         let finish = await ContractCheck.expectError(refused) { _ = try await client.finish(endedAt: never) }
         let discard = await ContractCheck.expectError(refused) { try await client.discard(endedAt: never) }
         let current = try await client.current()
+        let ignoredEnds: [Step] = (0 ..< 8).map { number in
+            number.isMultiple(of: 2) ? .finish(endedAt: never) : .discard(endedAt: never)
+        }
+        let outcomes = await outcomesAtOnce(of: ignoredEnds + [.finish(endedAt: at(600))], on: client)
+        let allowed: [Outcome] = [.refused(.invalidEndDate), .refused(.noLiveWorkout)]
+        let stray = outcomes.dropLast().first { !allowed.contains($0) }
+        let afterwards = try await client.current()
         let mark = try await markEnd(of: client)
         return await ContractCheck.first(
             finish,
             discard,
             ContractCheck.expect(current, session, "current() after the refused ends"),
-            expectUpdates(subscriber.updates(before: mark), [Update(state: session)])
+            stray.map { "an end at a date the engine ignores \($0), beside a finish the engine takes" },
+            ContractCheck.expect(outcomes.last, finishing.state.map { .state($0) }, "the finish the engine takes"),
+            ContractCheck.expect(afterwards, nil, "current() once that finish has returned"),
+            expectUpdates(subscriber.updates(before: mark), [Update(state: session), finishing])
         )
     }
 

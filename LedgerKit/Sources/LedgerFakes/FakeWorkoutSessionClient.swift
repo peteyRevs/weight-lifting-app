@@ -110,13 +110,14 @@
         /// publication, with no lock and no task of the fake's own.
         private func publish(_ state: WorkoutState, _ effects: [Effect]) {
             let update = WorkoutSessionUpdate(state: state, haptics: WorkoutSessionUpdate.haptics(from: effects))
-            subscribers.removeAll { subscriber in
+            var open: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
+            for subscriber in subscribers {
                 if case .terminated = subscriber.yield(update) {
-                    true
-                } else {
-                    false
+                    continue
                 }
+                open.append(subscriber)
             }
+            subscribers = open
         }
     }
 #endif

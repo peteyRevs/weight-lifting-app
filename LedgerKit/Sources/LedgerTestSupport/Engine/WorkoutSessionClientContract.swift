@@ -21,10 +21,11 @@ import LedgerDomain
 /// script first (`scriptViolation(seed:on:)`): it reads its streams up to a mark as well, and names a
 /// missing first element at once.
 ///
-/// The last five clauses (`overlapClauses`) send their calls from several tasks at once. Which call wins is
-/// the scheduler's choice, so they judge the outcome as a set, and a correct client passes whatever the
-/// scheduler chooses. A client with a suspension between a check and its commit fails them only in a run
-/// where two calls did overlap: one green run is weaker evidence there than in the other clauses.
+/// The last seven clauses (`overlapClauses`), and the second half of the clause for an end the engine
+/// ignores, send their calls from several tasks at once. Which call wins is the scheduler's choice, so they
+/// judge the outcome as a set, and a correct client passes whatever the scheduler chooses. A client with a
+/// suspension between a check and its commit fails them only in a run where two calls did overlap: one green
+/// run is weaker evidence there than in the other clauses.
 public enum WorkoutSessionClientContract {
     public typealias Client = any WorkoutSessionClient
     public typealias Clause = ContractClause<Client>

@@ -5,6 +5,10 @@ import LedgerDomain
 /// it at once; the fake never suspends, so these clauses are the ones that hold a host to "one call at a
 /// time". Each sends its calls from a task group and judges what came of them as a set, because which call
 /// wins is the scheduler's choice.
+///
+/// The overlap must not depend on a second thread happening to run: a task that makes several calls in a row
+/// never gives way between them on an uncontended client, because a hop to an idle actor does not suspend.
+/// So either every call is a task of its own, or the task gives way after each call (`Task.yield()`).
 extension WorkoutSessionClientContract {
     static let overlapClauses: [Clause] = [
         Clause(
@@ -23,6 +27,14 @@ extension WorkoutSessionClientContract {
         Clause(
             "a stream opened while calls are in flight starts with a published state and misses no later update",
             joinsInFlight
+        ),
+        Clause(
+            "a start against applies: the start is published first, then the applies that landed, as one history",
+            startAgainstApplies
+        ),
+        Clause(
+            "a subscriber acting on the start's update finds the workout current and its apply accepted",
+            reactsToTheStart
         )
     ]
 
@@ -62,9 +74,11 @@ extension WorkoutSessionClientContract {
         return nil
     }
 
-    /// One edit per row of the session, all applied at once. The edits commute, so whatever order the client
-    /// takes them in, the workout ends the same. A client that lets two calls start from one state loses an
-    /// edit; one that publishes in another order than it applied shows a state the workout never had.
+    /// One event per row of the session, all applied at once: the five rows of the first exercise are logged,
+    /// which buzzes, and the others get a stepper edit. Whatever order the client takes them in, its updates
+    /// must be one history of the engine, haptics included. A client that lets two calls start from one state
+    /// loses an event; one that publishes in another order than it applied shows a state the workout never
+    /// had; one that drops a haptic when calls overlap publishes an update the engine never made.
     static func callersAtOnce(_ client: Client) async throws -> String? {
         try await client.start(session)
         var one = await Subscriber(client)
@@ -72,12 +86,12 @@ extension WorkoutSessionClientContract {
         let rows = session.exercises.enumerated().flatMap { index, exercise in
             exercise.sets.indices.map { (exercise: index, set: $0) }
         }
-        let edits = rows.enumerated().map { number, row in
-            retargeted(row.exercise, row.set, pounds: Decimal(200 + number))
+        let events = rows.enumerated().map { number, row in
+            row.exercise == 0 ? logged(0, row.set) : retargeted(row.exercise, row.set, pounds: Decimal(200 + number))
         }
         let returned = try await withThrowingTaskGroup(of: WorkoutState.self) { group in
-            for edit in edits {
-                group.addTask { try await client.apply(edit) }
+            for event in events {
+                group.addTask { try await client.apply(event) }
             }
             return try await group.reduce(into: Set<WorkoutState>()) { $0.insert($1) }
         }
@@ -85,11 +99,12 @@ extension WorkoutSessionClientContract {
         let mark = try await markEnd(of: client)
         let seen = await one.updates(before: mark)
         let published = Set(seen.dropFirst().compactMap(\.state))
-        let final = engineUpdates(from: session, edits).last?.state
+        // The logs move the cursor and restart the rest, so the last state depends on the order the client
+        // took: the walk says that every event is in it once, and `current()` must be where the walk ends.
         return await ContractCheck.first(
-            ContractCheck.expect(current, final, "current() once every caller has returned"),
-            ContractCheck.expect(seen.count, edits.count + 1, "the number of updates"),
-            historyIssue(seen, from: session, events: edits),
+            ContractCheck.expect(seen.count, events.count + 1, "the number of updates"),
+            historyIssue(seen, from: session, events: events),
+            expectUpdates([Update(state: current)], [Update(state: seen.last?.state)], "current() after the calls"),
             ContractCheck.expect(published == returned, true, "the published states are the returned ones"),
             expectUpdates(two.updates(before: mark), seen, "the second subscriber's updates against the first's")
         )
@@ -155,35 +170,57 @@ extension WorkoutSessionClientContract {
         }
     }
 
+    /// How `edits` and `step` ended when they raced on `client`: the edits are applied by tasks of `each`
+    /// that make their calls one after another and give way after each one, and `step` is one more call,
+    /// the first task of the group when `leading` and the last otherwise.
+    static func outcomes(
+        ofApplying edits: [WorkoutEvent],
+        inTasksOf each: Int,
+        beside step: Step,
+        leading: Bool,
+        on client: Client
+    ) async -> (applies: [[Outcome]], step: Outcome?) {
+        await withTaskGroup(of: (applies: [Outcome], step: Outcome?).self) { group in
+            if leading {
+                group.addTask { await ([], outcome(of: step, on: client)) }
+            }
+            for first in stride(from: 0, to: edits.count, by: each) {
+                group.addTask {
+                    var mine: [Outcome] = []
+                    for edit in edits[first ..< min(first + each, edits.count)] {
+                        await mine.append(outcome(of: .apply(edit), on: client))
+                        await Task.yield()
+                    }
+                    return (mine, nil)
+                }
+            }
+            if !leading {
+                group.addTask { await ([], outcome(of: step, on: client)) }
+            }
+            return await group.reduce(into: (applies: [[Outcome]](), step: Outcome?.none)) { all, one in
+                if let ended = one.step {
+                    all.step = ended
+                } else {
+                    all.applies.append(one.applies)
+                }
+            }
+        }
+    }
+
     /// Six tasks of twelve adds each race one finish. Every add lands before the end or is refused after it:
     /// a client that publishes the end before it lets go of the workout lets an add land after it.
     static func applyAgainstAnEnd(_ client: Client) async throws -> String? {
         try await client.start(session)
         var subscriber = await Subscriber(client)
-        let (tasks, each) = (6, 12)
-        let edits = adds(tasks * each)
+        let edits = adds(72)
         let finish = Step.finish(endedAt: at(600))
-        let outcomes = await withTaskGroup(of: [Outcome].self) { group in
-            for task in 0 ..< tasks {
-                group.addTask {
-                    var mine: [Outcome] = []
-                    for edit in edits[task * each ..< (task + 1) * each] {
-                        await mine.append(outcome(of: .apply(edit), on: client))
-                    }
-                    return mine
-                }
-            }
-            group.addTask { await [outcome(of: finish, on: client)] }
-            return await group.reduce(into: [[Outcome]]()) { $0.append($1) }
-        }
+        let raced = await outcomes(ofApplying: edits, inTasksOf: 12, beside: finish, leading: false, on: client)
         let current = try await client.current()
         let mark = try await markEnd(of: client)
         let seen = await subscriber.updates(before: mark)
-        // The finish's task returned one outcome, each task of adds twelve.
-        let (applies, finished) = (outcomes.filter { $0.count == each }, outcomes.first { $0.count == 1 })
         return ContractCheck.first(
             ContractCheck.expect(current, nil, "current() once every call has returned"),
-            endIssue(seen, edits, applies: applies, finish: finished)
+            endIssue(seen, edits, applies: raced.applies, finish: raced.step)
         )
     }
 
@@ -195,7 +232,7 @@ extension WorkoutSessionClientContract {
         _ seen: [Update],
         _ edits: [WorkoutEvent],
         applies: [[Outcome]],
-        finish: [Outcome]?
+        finish: Outcome?
     ) -> String? {
         let live = Array(seen.dropLast())
         let ending = live.last?.state.flatMap { engineUpdate($0, .finished(endedAt: at(600)), in: $0.id) }
@@ -209,7 +246,7 @@ extension WorkoutSessionClientContract {
         return ContractCheck.first(
             historyIssue(live, from: session, events: edits, "the updates before the last"),
             expectUpdates(Array(seen.suffix(1)), [ending].compactMap(\.self), "the last update, which must be the end"),
-            ContractCheck.expect(finish, ending?.state.map { [.state($0)] }, "what finish returned"),
+            ContractCheck.expect(finish, ending?.state.map { .state($0) }, "what finish returned"),
             ContractCheck.expect(strays, 0, "adds that neither landed nor threw noLiveWorkout"),
             ContractCheck.expect(landed == published, true, "the adds that returned a state are the ones published"),
             ContractCheck.expect(landedAfterARefusal, false, "an add of a task landed after an earlier one was refused")
@@ -227,6 +264,7 @@ extension WorkoutSessionClientContract {
             group.addTask {
                 for edit in edits {
                     try await client.apply(edit)
+                    await Task.yield()
                 }
                 return nil
             }
