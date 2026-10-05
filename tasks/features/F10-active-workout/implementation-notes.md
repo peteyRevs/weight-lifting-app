@@ -2214,3 +2214,33 @@ From the worktree root:
   `stamp(now:)` optional; `needsRecovery`; the lazy database; `exercise(id:)`; straight-line effects) go to the
   reviewer and the tester to judge.
 - The orchestrator's full gate on the tree exited 0 before this entry was written.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 10 nits; it found no way to lose, duplicate or corrupt a workout over the
+GRDB stores, and judged that the actor-owned task queue fits standards §4 as written (F07 S2's precedent). G2 round
+1: 128 tests, no way found to lose or double a workout; four findings, five tests failing on purpose.
+
+For fix round 1:
+- **SF1 accepted:** the protocol's and architecture §6's wording is corrected as the review writes it.
+- **SF2, documented now, decided before S7.** Between a failed save and its completion the workout is shown as it
+  stood, and three consequences are written on `finish`'s documentation and in the inputs for S4, S7 and F09 S6:
+  a `discard` then completes the save; `StartWorkoutUseCase` resumes or reports a conflict on it; and a save that
+  can never succeed leaves no exit in this process. The behaviour does not change in S2 (nothing is lost, and no
+  path through M1's screens produces a workout the store refuses). Two questions stay open and are recorded as
+  inputs for S7: whether a lifter may abandon a workout that cannot be saved (Pete), and how a reader is told that
+  an end is waiting (the orchestrator, with an ADR-004 paragraph before F17 is planned; an ADR change is Pete's to
+  review, so it is not made in this slice). The tester's two pinning tests for F10-S2-1 stay as they are.
+- **SF3 accepted** (no polling loop in the wiring test).
+- **SF4 and F10-S2-3 accepted:** the concurrent script's judge accepts `noLiveWorkout` only where the history allows
+  it, and the acting subscriber's stream is read to the end.
+- **SF5 goes to S3:** the log is dropped inside `materialize`'s transaction, so "saved but not compacted" cannot
+  exist; S3's inputs say so.
+- **F10-S2-2 accepted:** with `replacingLive`, a live workout that has ended by the time of the discard is not an
+  error; the new workout is started.
+- **F10-S2-4 accepted:** `start` reads the store's highest `seq` for the workout and device, so memory follows the
+  store when a log of that id is kept.
+- **Nits:** taken as the review writes them unless one costs more than a few lines; any not taken is listed with
+  its reason.
+- For S4: the Debug "Start sample workout" row makes a new workout id for every start. For S7: when the fake gains a
+  scriptable save failure, the rules of a waiting end become contract clauses.
