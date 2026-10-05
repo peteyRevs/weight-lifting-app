@@ -125,6 +125,17 @@ public final class AppComposition {
         }
     }
 
+    /// What onboarding's "Retry" awaits before it saves again (F08, ruling O13): the database half of the launch
+    /// once more, as in the foreground. While the catalog is unseeded it starts the seed step again (product
+    /// decision #28), or waits for the one that is running; a step that has succeeded is not run again.
+    ///
+    /// It is not `resume(in:)`, and must stay this narrow. Every control of onboarding is disabled while it
+    /// runs, so it has to return: here that is one local transaction that commits or throws. The workout's
+    /// recovery and the device steps are the launch's to run and to retry, not a lifter's tap on "Retry".
+    func retrySeed() async {
+        await database.resume(isForeground: true)
+    }
+
     /// The root view calls this when it first appears: measures launch-to-first-frame once and logs it.
     func rootAppeared() {
         guard launchToFirstFrame == nil, let start = environment.processStart else {

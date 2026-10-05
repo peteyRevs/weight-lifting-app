@@ -68,6 +68,20 @@ struct AppRouterTests {
         #expect(router.selectedTab == .program)
     }
 
+    @Test("Reset selects Today and empties every stack, whatever was selected and pushed (F08 S3, F8-S3-1)")
+    func reset_selectsToday_andEmptiesEveryStack() {
+        let router = AppRouter()
+        router.open(.settings, in: .today)
+        router.open(.settings, in: .library)
+        router.open(.settings, in: .library)
+        router.selectedTab = .history
+        router.reset()
+        #expect(router.selectedTab == .today)
+        #expect(AppTab.allCases.allSatisfy { router[path: $0].isEmpty })
+        router.open(.settings, in: .program)
+        #expect(router[path: .program] == [.settings], "a reset router still pushes")
+    }
+
     private static func others(than tab: AppTab) -> [AppTab] {
         AppTab.allCases.filter { $0 != tab }
     }

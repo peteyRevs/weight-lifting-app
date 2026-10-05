@@ -24,15 +24,17 @@ final class RootGate {
 
     /// Awaits `launch`, then follows the active program of the store it returns until the task is cancelled.
     ///
-    /// - `launch` runs the launch's asynchronous pass (the seed, then the settings) and returns the store of
-    ///   programs, or nil while the database is not open. Nothing is read and nothing is decided before it
-    ///   returns: a lifter who taps through onboarding at once must find the catalog seeded, or its seed
-    ///   failed and ready to be retried (ruling O12).
+    /// - `launch` runs the launch's asynchronous pass (the seed, the settings, then the live workout's
+    ///   recovery) and returns the store of programs, or nil while the database is not open. Nothing is read
+    ///   and nothing is decided before it returns: a lifter who taps through onboarding at once must find the
+    ///   catalog seeded, or its seed failed and ready to be retried (ruling O12), and the first screen is drawn
+    ///   once, with the workout it resumes already known.
     /// - Each value of `ProgramRepository.observeActive()` decides, the current one first: one read, then one
     ///   for each change.
     /// - A stream that ends on a task nobody cancelled is an active program that cannot be read. The root then
     ///   shows the tabs, never onboarding, which would save a second program beside the one that is there.
-    /// - A cancelled call changes nothing. The root starts the call again when the scene's phase changes, and
+    /// - A cancelled call changes nothing, not even with a value the store gave before the cancellation and the
+    ///   loop had not yet taken. The root starts the call again when the scene's phase changes, and
     ///   `destination` stays what it was until the new call's first value: the screen shown keeps its place in
     ///   the tree, and with it onboarding's step and picks.
     func follow(after launch: @MainActor () async -> (any ProgramRepository)?) async {
@@ -40,6 +42,9 @@ final class RootGate {
             return
         }
         for await program in programs.observeActive() {
+            guard !Task.isCancelled else {
+                break
+            }
             destination = program == nil ? .onboarding : .main
         }
         if !Task.isCancelled {

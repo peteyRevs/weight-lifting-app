@@ -81,6 +81,10 @@ struct AppRootAdversarialTests {
         let (composition, gate) = try await harness.bootedWithAProgram()
         #expect(composition.state == .ready)
         #expect(renderPreview(size: Self.size) { AppRoot(composition: composition, gate: gate) })
+        let drewTheShell = HostedDrawing.isMoreThanOneColour(
+            AppRoot(composition: composition, gate: gate), size: Self.size
+        )
+        #expect(drewTheShell, "the root drew the ground colour alone, not the shell")
     }
 
     #if os(iOS)

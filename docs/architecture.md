@@ -166,7 +166,11 @@ targets only.
   the database is open it draws `MainRoot`: onboarding while there is no active
   program, else the tab shell (F08). `RootGate` says which: `AppRoot`'s launch
   task awaits the launch's pass, then follows `ProgramRepository.observeActive()`,
-  and until the gate's first answer the root is the ground colour alone. The tab
+  and until the gate's first answer the root is the ground colour alone. When
+  the active program cannot be read the root shows the tabs, never onboarding,
+  and reads again at the next change of the scene's phase. Each time onboarding
+  appears the router starts over (`AppRouter.reset()`), so the tabs that follow
+  open on Today with empty stacks. The tab
   shell is a `TabView` with four
   tabs (Today · Program · Library · History; `AppTab`), each owning a
   `NavigationStack`. Every stack is keyed by the one `AppDestination` enum
@@ -533,7 +537,11 @@ dependencies.
 - A debug-only "Diagnostics" page, opened from the debug menu (a long press on
   Today's title, F07; `LedgerDesign`'s `DebugMenu` and `DiagnosticsPage`): the
   database file, row counts per table, this device's id, HealthKit's
-  authorization state and launch-to-first-frame (decision #30). Sync state and
+  authorization state and launch-to-first-frame (decision #30). That figure
+  ends at the root's first appearance, which since F08 is the ground colour: it
+  does not include the launch's pass, the gate's read of the active program or
+  the building of the first screen, and the time to that screen (§15's "cold
+  launch to Today") is not measured yet (F26). Sync state and
   event log size join it with F17.
 
 ## 15. Performance budgets

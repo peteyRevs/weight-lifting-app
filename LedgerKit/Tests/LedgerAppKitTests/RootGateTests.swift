@@ -137,6 +137,20 @@ struct RootGateTests {
         #expect(programs.observations == 2, "each follow reads once")
     }
 
+    @Test("A value the store gave just before the follow was cancelled is not applied (review S3-N1)")
+    func valueGivenBeforeACancel_isNotApplied() async throws {
+        let programs = ScriptedPrograms()
+        let gate = RootGate()
+        let follow = Task { await gate.follow { programs } }
+        #expect(await gate.answer() == .onboarding)
+        // No suspension between the two: the value is handed to the follow's task, which is then cancelled
+        // before it runs again.
+        try programs.set(Fixtures.defaultProgram())
+        follow.cancel()
+        await follow.value
+        #expect(gate.destination == .onboarding, "a cancelled call changes nothing")
+    }
+
     @Test("A read that failed is tried again by the next follow, which then shows what the store holds")
     func afterAFailedRead_theNextFollowReadsAgain() async {
         let programs = ScriptedPrograms()

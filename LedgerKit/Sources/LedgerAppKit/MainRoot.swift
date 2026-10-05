@@ -12,15 +12,17 @@ import SwiftUI
 struct MainRoot: View {
     /// `@State` keeps the first router and drops the one each later `init` builds, which costs a small class
     /// with no work in its initializer. A presenter beside it follows the same rule: nothing in its `init`.
-    @State private var router = AppRouter()
+    @State private var router: AppRouter
     @State private var isDebugMenuShown = false
     private let composition: AppComposition
     /// Which screen `content` shows. `AppRoot` owns it and keeps it following the active program.
     private let gate: RootGate
 
-    init(composition: AppComposition, gate: RootGate) {
+    /// `router` is for the tests, which push a screen through the one they hand over; the app's is new.
+    init(composition: AppComposition, gate: RootGate, router: AppRouter = AppRouter()) {
         self.composition = composition
         self.gate = gate
+        _router = State(initialValue: router)
     }
 
     /// What is presented over everything `content` shows: F10 adds the workout's cover modifier here.
@@ -30,18 +32,21 @@ struct MainRoot: View {
 
     /// Which screen the root shows (F08): the ground colour until the gate has its answer, then onboarding
     /// while there is no active program and the tabs while there is one. `MainRoot` stays in the tree
-    /// throughout and keeps the router: after a first run the tabs appear with Today selected.
+    /// throughout and keeps the router.
     ///
-    /// Onboarding's "Retry" first runs the launch's pass again, in the foreground, which is where a failed seed
-    /// is retried (product decision #28; `DatabaseLaunch.resume`). The call always returns: every step it
-    /// reaches is one task of the launch's own that ends in an outcome, a local transaction that commits or
-    /// throws, and nothing in it waits for the lifter or for a network.
+    /// When onboarding appears the shell starts over, out of sight: the tabs a lifter reaches after onboarding
+    /// open on Today with every stack empty, the second time as the first. A program can go away under any
+    /// tab and any pushed screen (Settings' "Delete all data", F14).
+    ///
+    /// Onboarding's "Retry" first runs the launch's seed step again (`AppComposition.retrySeed()`, ruling O13),
+    /// which always returns.
     @ViewBuilder private var content: some View {
         switch gate.destination {
         case .loading:
             LedgerColor.ground.ignoresSafeArea()
         case .onboarding:
-            OnboardingRoot { await composition.resume(in: .active) }
+            OnboardingRoot { await composition.retrySeed() }
+                .onAppear { router.reset() }
         case .main:
             tabs
         }

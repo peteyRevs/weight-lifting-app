@@ -34,4 +34,12 @@ final class AppRouter {
         selectedTab = tab
         paths[tab, default: []].append(destination)
     }
+
+    /// Back to how the shell opens: Today selected and every stack empty. The root calls it each time onboarding
+    /// appears (F08): the tabs are out of sight then, and the ones a lifter reaches after onboarding open the
+    /// second time as the first.
+    func reset() {
+        selectedTab = .today
+        paths = [:]
+    }
 }

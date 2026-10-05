@@ -2291,9 +2291,15 @@ survive the gate changing its answer, wrap `content` in a container in `body` fi
   queue: it takes `composition.stores?.programs` when a follow starts, and a follow starts only when the
   scene's phase changes. F14 would have to restart the root's task (an id that changes with the stores) and
   rebind the keys onboarding's store reads when it is made. Deleting rows in the open database avoids both.
-- The catalog must be seeded again before the lifter can finish onboarding; if it is not, onboarding's "Retry"
-  runs the seed step (decision 4).
-- The router: open question 2.
+- (Corrected in the S3 touch-up, review S3-SF4: this bullet said that onboarding's "Retry" would seed a deleted
+  catalog again. It does not.) "Delete all data" must keep the catalog's rows, or seed them again itself and own
+  the launch's flag: the launch retries the seed only while `isCatalogSeeded` is false, and nothing sets it back
+  to false, so after one seed that succeeded in a process "Retry" runs no seed
+  (`DatabaseLaunch.swift`, `resume(isForeground:)` and `task(for:retrying:_:)`). With the catalog's rows gone,
+  "Start training" would fail with `unknownExercise` and every "Retry" the same way, until the app is relaunched.
+  "Retry" covers only a seed that has never succeeded in this process.
+- The router (corrected in the S3 touch-up): it now starts over each time onboarding appears (F8-S3-1), so
+  F14 has nothing to reset.
 
 **F15 (the UI tests' launch modes).**
 - *A UI test that relaunches on the same database* (criterion 8's relaunch, moved to a package test here): its
@@ -2339,3 +2345,341 @@ For the touch-up:
 - **Review SF3, SF4 and the nits** as the review writes them.
 - **F8-S3-4** is the tester's own to settle in its close-out. **F8-S3-5** (large values compared directly in F09's
   and F07's tests) joins the chore list.
+
+### S3 touch-up (G1 implementer, 2026-10-05)
+
+On top of `5ff87ff` (the merge of `main`), uncommitted. Items 1, 2, 3, 5 and 6 of the orchestrator's list are
+done. Item 4 changed no product code, by the orchestrator's ruling during the touch-up: both audit reports are
+the audit's own misreadings, and the evidence is below. No tester file of this slice was edited. The full gate
+was not run, by instruction.
+
+**One thing stands between this tree and a green gate, and it is not this round's.** The tester's finding
+F8-S3-4 (its hosted roots make an onboarding store outside the test's dependency scope) records 8 warnings
+"without an associated test". `xcodebuild` exits 0 on them, but the result bundle marks `LedgerAppKitTests`
+as failed, and the gate reads the bundle: `scripts/check-test-results.sh` on this tree's PR-lane bundle prints
+"not passed: LedgerAppKitTests Failed". Every test of the target passes (297 of 297). It was the same at
+`a466084`, hidden behind F8-S3-1's red test. Details under "For the tester".
+
+#### 1. What the merge broke
+
+Nothing in this slice's code or tests. Run on `5ff87ff` before any edit:
+
+- Host, `swift test … --filter 'LedgerAppKitTests|FeatureOnboardingTests'`: 258 tests in 40 suites and 109 in
+  21 suites, all passed.
+- Simulator, PR plan, the two package targets and `Smoke`: 444 tests; the one red test was the tester's
+  `secondOnboarding_landsOnToday` (F8-S3-1), plus the warnings' entry (F8-S3-4). Exit 65.
+- Simulator, nightly plan, `LedgerUITests`: 23 tests, 21 passed; the two red ones were the tester's audit tests
+  (F8-S3-2). Exit 65.
+
+What the merge changed under the slice is what `AppComposition.resume(in:)` runs: the live workout's recovery
+is now in it (item 2). `Support/GateSupport.swift` compiled unchanged against the merged `Harness`.
+
+#### 2. What changed, per item
+
+Paths under `LedgerKit/Sources/LedgerAppKit/` and `LedgerKit/Tests/LedgerAppKitTests/` unless a path says more.
+
+| Item | Change | Where |
+|---|---|---|
+| 2. Review SF2: "Retry" | Narrowed to the seed step. New `AppComposition.retrySeed()`: the database half of the launch once more, as in the foreground (`database.resume(isForeground: true)`). `MainRoot` passes it to onboarding | `AppComposition.swift:128-137`; `MainRoot.swift:48` |
+| 2. Tests | `failedSeed_isRetriedByTheCallRetryMakes` calls `retrySeed()` and also expects no second recovery and no second settings read. New `retrySeed_leavesTheWorkoutsRecoveryToTheLaunch` and `liveWorkout_isRecoveredBeforeTheGateAnswers` | `RootGateLaunchTests.swift:139`, `:206`, `:180` |
+| 3. F8-S3-1: the shell starts over | `AppRouter.reset()` selects Today and empties every stack. `MainRoot` calls it when onboarding appears. `MainRoot.init` takes a router (default: a new one), for the test that pushes a screen | `Routes.swift:38-44`; `MainRoot.swift:49`, `:21-26`, `:37-39` |
+| 3. Tests | The tester's `secondOnboarding_landsOnToday` passes, unedited. Mine: `AppRouterTests.reset_selectsToday_andEmptiesEveryStack`; `AppRootTests.pushedScreen_isGoneAfterASecondOnboarding` | `AppRouterTests.swift:72`; `AppRootTests.swift:117` |
+| 4. F8-S3-2 | No product change: (a) the option's second line meets AA already and a stronger ink leaves the audit's report as it was; (b) the audit's "Text clipped" is its guess about a title that does grow. Evidence in section 3 | — |
+| 5. Review SF1, F8-S3-3 | The tester's `retry_runsTheSeedStep_thenSaves` fails when the argument is dropped (mutant T1, section 4): no new test was needed. F09's `root_ready_draws` now fails when the root draws the ground: new test helper `HostedDrawing.isMoreThanOneColour` | `Adversarial/AppRootAdversarialTests.swift:84-87`; `Support/HostedDrawing.swift` (new) |
+| 6. Review SF3 | Architecture §14 says where the launch figure ends: the root's first appearance, since F08 the ground colour; the time to the first screen is not measured (F26) | `docs/architecture.md:540-544` |
+| 6. Review SF4 | The sentence for F14 in the G1 section is corrected in place, with a note that it was: "Retry" does not seed a catalog again that was seeded once in the process. The router's bullet beside it is corrected too (it now starts over) | this file, `:2294-2302` |
+| 6. S3-N1 | `follow` leaves its loop before it writes when its task is cancelled, so a value already handed to the task is not applied. The comment says so. New test `valueGivenBeforeACancel_isNotApplied` | `RootGate.swift:44-47`, `:36-39`; `RootGateTests.swift:141` |
+| 6. S3-N2 | The UI helper says which wait ran out. `skipSetup()` throws a `SkipSetupFailure` ("onboarding.skip did not appear within 10 s (today.title shown: …)", "today.title did not appear within 10 s of Skip setup (onboarding.error shown: …)"). `skipSetupToToday()` keeps its `Bool`, and records that sentence as the test's failure at the caller's line. `LaunchPerformance` attaches it where it returned in silence | `Apps/LedgerUITests/Support/LaunchedApp.swift:6-21`, `:41-63`; `Apps/LedgerUITests/LaunchPerformance.swift:16-43` |
+| 6. S3-N3 | Not mine to change (`TabsAdversarial.launch` is F09's tester's, and builds its own arguments). Told to F15 and the tester below | — |
+| 6. S3-N4 | §2.7 lists the two `Onboarding` tests as built in place of `Onboarding.dynamicTypeXL` | `docs/testing-strategy.md:310-312` |
+| 6. S3-N5 | Architecture §4 says what the root shows when the active program cannot be read (the tabs, never onboarding; it reads again at the next change of the scene's phase), and that the router starts over when onboarding appears | `docs/architecture.md:169-173` |
+
+**Item 2, the choice and why.** "Retry" calls the narrow `retrySeed()`, not `resume(in: .active)`.
+
+- *The wider call can run what a retry should not.* With the recovery in it, `resume(in: .active)` runs the
+  recovery again whenever the host has work left: a recovery that failed, or a finished workout whose save
+  failed. `retrySeed_leavesTheWorkoutsRecoveryToTheLaunch` arranges that (a finished workout whose save a
+  trigger refuses) and shows both: after `retrySeed()` the recovery's events are still "began, failed"; after
+  the wider call, as a control, they are "began, failed, began, failed".
+- *The contract stays one sentence.* Onboarding disables every control while `prepareRetry` runs, so it must
+  return. Passing the whole pass made every step a later feature adds to `resume` part of that promise without
+  anyone deciding it (F10's now, the device steps of F16–F23 next). `retrySeed()`'s comment says it must stay
+  narrow, and why.
+- *What it runs:* `DatabaseLaunch.resume(isForeground: true)`. With the catalog unseeded it starts the seed step
+  again or joins the one running; a step that has succeeded does not run again. One local transaction that
+  commits or throws, behind SQLite's 5 s busy timeout. No recovery, no WatchConnectivity.
+- This replaces decision 4 of the G1 section ("`prepareRetry` is bounded"), whose call was the wider one. Item 3
+  closes that section's open question 2 (the router was not reset).
+
+**Item 2, the gate's ordering with the recovery in the pass.** Unchanged in kind: `AppRoot`'s one task awaits
+`composition.resume(in:)` and then follows, so the ground holds until the whole pass has returned, the
+recovery included. Kept on purpose: the first screen is then drawn once, with the workout it resumes already
+known, and F10's cover and Today's "Resume" do not arrive a frame later.
+
+- `liveWorkout_isRecoveredBeforeTheGateAnswers` relaunches on a database with a live workout and a program,
+  and records what the gate said as each step of the pass began: `.loading` when the recovery began, `.loading`
+  when the step after it began (so the recovery had ended), then the first answer `.main`, with the workout
+  live again in the host.
+- **How much longer the pass is.** A scratch test, in the tree for one run each and removed: 7 relaunches a
+  case on a harness database, the whole `resume(in: .active)` and the recovery step inside it, medians.
+
+| What the database holds at the relaunch | Pass, simulator | of which recovery | Pass, Mac host | of which recovery |
+|---|--:|--:|--:|--:|
+| A program, no workout | 3.8 ms | 0.1 ms | 4.2 ms | 0.1 ms |
+| A live workout, its first exercise logged (6 events) | 4.5 ms | 0.7 ms | 4.8 ms | 0.8 ms |
+| A live workout, every set logged (19 events) | 5.0 ms | 1.1 ms | 5.2 ms | 1.2 ms |
+| A finished workout whose save was pending (20 events): the launch saves it | 7.9 ms | 4.2 ms | 8.7 ms | 4.6 ms |
+
+  So a live workout to recover holds the ground about 1 ms longer, and a finished one the launch must save
+  about 4 ms, on a database with no history. The save's cost grows with history (architecture §15 budgets
+  recording a workout at 50 ms on 20,000 sets); that case was not measured. Simulator and Mac, Debug: not a
+  device's numbers.
+
+**Item 3, why the reset is where it is.**
+
+- *When onboarding appears, not when the tabs leave.* At that moment the tabs are out of sight, so nothing is
+  seen to jump, and a root that opens on onboarding (a first run) resets a router that is new anyway. It is one
+  line on the onboarding branch (`MainRoot.swift:49`); a reset is safe to repeat.
+- *A method on the router, not a new router.* `AppRouter.reset()` keeps the object, so whatever holds it stays
+  valid (F10's presenters will), and it is a plain function with a plain test.
+- *The router can be handed in* (`MainRoot.init(composition:gate:router:)`), because the only way to push a
+  screen today is the router and `MainRoot` owns it. `pushedScreen_isGoneAfterASecondOnboarding` pushes
+  Settings on two tabs, shows the pushed screen is drawn (control), deletes the program, shows the root on
+  onboarding, expects Today selected and every stack empty, saves a program and reads "Today". It hosts
+  `MainRoot`, not `AppRoot`, for that reason alone; the path from `AppRoot` is the other tests', and the
+  tester's `secondOnboarding_landsOnToday` runs the same rule through `AppRoot` in one live tree.
+- The Debug menu's sheet flag is not reset: it is Debug only, and nothing can delete a program from under it.
+
+**Item 5, `root_ready_draws`.** `renderPreview` cannot tell the shell from the ground on iOS, or from nothing: it
+draws with `drawHierarchy`, which in a window without a scene draws no pixel at all. Measured on the iOS 27.0
+simulator with a scratch probe: the ground, the tab shell and the can't-open screen each came out as 402 × 874
+transparent pixels; rendering the hosting view's layer instead gave the ground one flat colour, the shell 8,393
+pixels unlike it and the can't-open screen 6,298. So the strengthened edit asks a new helper,
+`HostedDrawing.isMoreThanOneColour` (`Support/HostedDrawing.swift`): the view hosted in a window, its layer
+rendered (iOS) or its display cached (the Mac host), and the pixels compared inside the helper to one `Bool`.
+On the Mac host it says: ground false, shell true, can't-open screen true, the root on the tabs true, a root
+with a new gate false. The helper imports `LedgerSnapshotTesting` `@testable` for its scene-less window, as
+`FeatureOnboardingTests`' `Hosted` does.
+
+#### 3. F8-S3-2: what the audit reports, and why (no product change)
+
+**(a) "Contrast failed" on an option's second line at the largest text size.** The line meets AA; the audit is
+measuring something else.
+
+| `LedgerColor.inkMuted` on `ground` (`OnboardingOptionRow.swift:26`) | Light | Dark |
+|---|--:|--:|
+| By WCAG's formula, from the tokens (ink `#16150F` at 62 % on `#EFEDE6`; text `#F4F2ED` at 51 % on `#0B0B0D`) | 4.83 : 1 | 5.04 : 1 |
+| As drawn, read from the app's screenshots (the line's ink against the ground) | 4.83 : 1 (105, 103, 97 on 239, 237, 230) | 5.05 : 1 (130, 129, 127 on 11, 11, 13) |
+| The same line in `inkSecondary` (experiment, working copy only, restored) | 6.80 : 1 as drawn (82, 81, 75) | 9.21 : 1 by formula |
+
+- *The stronger ink changed nothing.* With `inkSecondary` the audit at the largest size reported exactly the
+  same "Contrast failed" on the same element. The token is the same picked or not; only the first line's ink
+  follows the pick.
+- *What it measures instead.* At the largest size on step 1 the reported line's frame is y 661 to 748. The
+  scroll view ends at y 703 and the pinned button stands at y 715 to 785. The line's second half is hidden
+  behind the pinned part, and the audit measures the screen where that half would be: the button and the
+  ground. Audited again without the page having moved, the same screen reported the next option's second line
+  instead, at y 837 to 924: wholly behind the pinned part, where the screen shows "Skip setup" and the ground.
+- At the default size, where all four options are in view, the audit reports no contrast issue on any of them.
+- So no token was changed and no reference re-recorded (orchestrator's ruling during the touch-up).
+
+**(b) "Text clipped" on each step's title** ("Text … may be clipped at larger Dynamic Type sizes"). The audit's
+guess, and wrong: the title wraps and grows, and nothing is cut at any size (the largest-size screenshots show
+it whole on three lines; S2's layout tests hold the same on the narrowest phone).
+
+Found with two probe pages (the page's content replaced by a column of texts with identifiers, 15 on the first
+and 14 on the second; working copy only, restored; one audit of each at the default size):
+
+| What was varied | Reported "Text clipped" | Not reported |
+|---|---|---|
+| The role, same words ("Your program") | `.display` (38 pt, line height 1.06) | `.title` (32 pt, 1.0), `.heading` (27 pt, 1.08), `.subheading`, `.body`, the system's large title |
+| The display role's line height, same words and size | 1.06 and 1.0 | 1.2, and none set (Archivo's own, 1.096: 41.67 pt for 38 pt) |
+| The words, in the display role | "Your program" (216 pt wide) | "Today" (99 pt), "Your pro" (133), "Your prog" (154), "Your progr" (166) |
+| Longer words in the roles that passed | `.title` "Your program today" (263 pt), `.heading` "Your program is ready now" (300 pt) | the system's large title with the same words (285 pt) |
+| Elsewhere | the same display text pinned outside the scroll view | — |
+| The header trait, the VoiceOver focus binding, `fixedSize`, a full-width frame | no difference: reported with each | — |
+| Tracking, in the display role at 1.06 | reported with it and without it | — |
+
+Four probes of the first page had a font of a fixed size; the audit reported those for that ("Dynamic Type font
+sizes are unsupported") and they say nothing about clipping. In the first row `.title` and `.heading` passed
+only because the two words are narrower in them: the fourth row shows them reported with longer words.
+
+- **The rule it follows, inferred from those 29 probes.** A text is reported when both hold: its line height is
+  below the font's natural one, so its frame is shorter than the font's own line; and its width, scaled to the
+  largest text size, would pass the screen's edge. The factor that fits every case is about 1.76, the large
+  title style's growth from the default size to the largest (34 to 60 pt): 216 pt from x 26 would end at 407
+  of the screen's 402 pt, and is reported; 166 pt from x 51 would end at 344, and is not. The audit takes such
+  a text for one that cannot grow, and predicts that it will be cut.
+- **Why Today's title passes in the same role:** "Today" is short. It is not the scroll view, the header trait
+  or the focus binding.
+- **Whose it is.** `LedgerDesign`'s type roles, not onboarding's: `.display` 1.06, `.title` 1.0 and `.heading`
+  1.08 are the prototype's line heights (`LedgerFont.swift:81-83`), all below Archivo's 1.096. Any text of
+  some length in those roles will be reported on any screen. There is no cause to remove in this slice.
+
+**(c)** "Contrast nearly passed" on the primary button was left alone, as ruled.
+
+**What the audit still reports** (final tree, the tester's two tests, nightly plan, light, iPhone 17):
+
+- Default text size, 6 issues: on each of the three steps, "Contrast nearly passed" on the primary button
+  ("Continue", "Continue", "Start training") and "Text clipped" on the title ("What are you training for?",
+  "How many days a week?", "Your program").
+- Largest text size, 5 issues: "Contrast failed" on "Low reps, linear load increases" (step 1) and "Full body
+  each session" (step 2); "Text clipped" on each of the three titles.
+- Nothing else. All eleven are for the tester to exclude, each with its reason ("For the tester").
+
+**Snapshot references re-recorded:** none. No product file of `FeatureOnboarding` or `LedgerDesign` is changed.
+
+#### 4. Mutants
+
+Each applied to the working copy by a script, run, and restored from the copy taken before, byte for byte
+(checked by SHA-256 after each session; `git status` shows no product file but the four this round changed).
+
+| Mutant | Run | Result |
+|---|---|---|
+| **T1** (review SF1): `MainRoot` passes onboarding no `prepareRetry` (`OnboardingRoot()`) | simulator, PR plan, the tester's `AppRootOnboardingAdversarialTests` (6 tests) | 2 failed. **`retry_runsTheSeedStep_thenSaves`** at `:138`: "Retry did not run the launch's seed step". `retry_seedFailsAgain_thenSucceeds` at `:165-166` and then its time limit. The other four passed, `retry_whileTheLaunchIsSeeding` among them (there the launch's own foreground retry seeds) |
+| **T3** (F8-S3-1): no reset when onboarding appears | simulator, the tester's `AppRootFollowingAdversarialTests` and `AppRootTests` | 2 failed: the tester's `secondOnboarding_landsOnToday` (`:143`) and mine, `pushedScreen_isGoneAfterASecondOnboarding` (3 expectations) |
+| **T2**: the tabs' branch draws the ground colour | simulator and host, F09's `AppRootAdversarialTests` | `root_ready_draws` failed at the new expectation (`:87`, `drewTheShell`); on the simulator its neighbour `root_idleAndReady_readToVoiceOver` failed too |
+| **T4** (S3-N1): the loop's cancellation guard removed | host, the `RootGate` suites | 1 failed: `valueGivenBeforeACancel_isNotApplied` |
+| **T5** (review SF2): `retrySeed()` makes the wider call | host, the `RootGate` suites | 1 failed: `retrySeed_leavesTheWorkoutsRecoveryToTheLaunch` |
+| **T6** (S3-N2): the branch inverted | simulator, nightly plan, `Smoke`, `DebugMenu`, `LaunchPerformance`, one test each of `Tabs` and `TabsAdversarial` | `DebugMenu`, `Tabs` and `TabsAdversarial` failed at their helper line with "onboarding.skip did not appear within 10 s (today.title shown: true)". `Smoke` failed at its own first wait. `LaunchPerformance` passed and attached "No in-app figure: onboarding.skip did not appear within 10 s (today.title shown: true)" |
+
+#### 5. Sanctioned test edits
+
+`LedgerKit/Tests/LedgerAppKitTests/Adversarial/AppRootAdversarialTests.swift` (F09's tester's), `root_ready_draws`
+only. One expectation added; the lines of the first sanctioned edit and every older expectation are unchanged.
+`git diff a466084` on the file shows these four lines and nothing else.
+
+| After line (at `a466084`) | Was | Is |
+|--:|---|---|
+| 83 | (nothing) | `let drewTheShell = HostedDrawing.isMoreThanOneColour(` / `AppRoot(composition: composition, gate: gate), size: Self.size` / `)` / `#expect(drewTheShell, "the root drew the ground colour alone, not the shell")` |
+
+No other tester's file is touched. F09's `TabsAdversarial.swift` is as it was: its line 19 still reads
+`XCTAssertTrue(app.skipSetupToToday())`, and now fails with the helper's sentence when the helper fails (T6).
+
+#### 6. Targeted runs on the final tree
+
+No file changed between the start of the final session and this section (SHA-256 of every changed file).
+Simulator runs went through the lock on the gate's iPhone 17 (iOS 27.0), with the commands of the G1 section's
+"Targeted runs". Result bundles were read and deleted.
+
+| Run | Result | `xcodebuild` exit |
+|---|---|--:|
+| PR plan: `-only-testing:LedgerAppKitTests -only-testing:FeatureOnboardingTests -only-testing:LedgerUITests` | 449 entries. `LedgerAppKitTests`: 297 tests passed, 0 failed; the bundle is marked failed by the warnings' entry (F8-S3-4). `FeatureOnboardingTests`: 145 passed, 4 skipped, 1 expected failure. `LedgerUITests`: `Smoke` passed. **The tester's PR-lane test `secondOnboarding_landsOnToday` passes** | 0 |
+| Nightly plan: `-only-testing:LedgerUITests` | 23 tests, 21 passed. Failed: the tester's two audit tests, with the eleven issues listed in section 3 and no other. `Smoke` 1, `DebugMenu` 1, `LaunchPerformance` 1, `Tabs` 2, `TabsAdversarial` 7, `Onboarding` 3, `OnboardingAdversarial` 6 of 8 | 65 |
+| Nightly plan: the two package targets | `LedgerAppKitTests` 297 passed and the warnings' entry; `FeatureOnboardingTests` 149 passed, 1 expected failure | 0 |
+| PR plan, `-test-iterations 30 -only-testing:LedgerAppKitTests/AppRootTests` | 210 repetitions passed (4 tests, 7 cases) | 0 |
+| Host: `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'LedgerAppKitTests\|FeatureOnboardingTests'` | 262 tests in 40 suites and 109 in 21, all passed | 0 |
+| `scripts/check.sh --lint-only` | OK | 0 |
+| `scripts/check-test-results.sh <the PR-lane bundle> TestPlans/PR.xctestplan` (the gate's own check, by hand) | "not passed: LedgerAppKitTests Failed" (and "did not run" for the targets this run left out) | 1 |
+
+In-app launch to first frame in the nightly run's `LaunchPerformance`: 2260 ms (under XCUITest, as before).
+
+**Not run:** the full gate, coverage, the string-catalog step, watchOS, CI.
+
+#### 7. For the tester
+
+**The two exclusions for the audit tests** (F8-S3-2), one sentence each:
+
+1. *Issue type "Contrast failed" (`.contrast`), on a static text inside an `onboarding.option.<n>` button
+   whose frame reaches below the scroll view's bottom edge:* the audit measures the screen inside the frame of
+   a line that the pinned part hides in part or whole, so it measures the pinned button and the ground, not the
+   line, whose ink is 4.83 : 1 on the ground in light and 5.04 : 1 in dark. (Seen on "Low reps, linear load
+   increases" and "Full body each session"; on another run of the same screen, "Moderate reps, volume
+   tracking". Exclude by the condition, not by the label: which line it picks is not stable.)
+2. *Issue type "Text clipped" (`.textClipped`), on the element `onboarding.title`, at both sizes, on each
+   step:* the audit predicts clipping for a text whose line height is below its font's natural one and whose
+   width at the largest size would pass the screen's edge, and the title is such a text that wraps and grows,
+   with nothing cut at any size.
+
+The third, already ruled: "Contrast nearly passed" on `onboarding.cta` (white on the accent, 3.1 : 1, large bold
+text; F06's decision).
+
+**F8-S3-4 now fails the gate by itself.** With F8-S3-1 fixed, `LedgerAppKitTests` has no failing test, but the
+8 warnings your hosted roots record outside any test (the `locale` and `settingsRepository` keys, from the
+onboarding store SwiftUI makes when a program is deleted under a live root) are an entry "Issues recorded
+without an associated test or suite" that the result bundle counts as failed, and `check-test-results.sh`
+fails the target on it. My runs confirm where they come from: every run that included
+`AppRootFollowingAdversarialTests` recorded them; runs of `AppRootOnboardingAdversarialTests` alone, of F09's
+`AppRootAdversarialTests` alone and of my `AppRootTests` alone (30 times over) recorded none. How my hosted
+tests avoid it, for what it is worth: no root stays up across a suspension. Each read hosts a new root inside
+the dependency scope, and what must survive between reads (the gate, and now the router) is handed in.
+
+**One of your tests names a call that has changed.** `RootGateStoreAdversarialTests.retrysCall_alwaysReturns`
+(`:186-213`) says `MainRoot` hands onboarding `composition.resume(in: .active)` and calls that; "Retry" now
+calls `composition.retrySeed()`. The test passes and still shows that the launch's pass returns, but it no
+longer tests the call "Retry" makes.
+
+**S3-N3** is yours or F15's: `TabsAdversarial.launch` (`Apps/LedgerUITests/TabsAdversarial.swift:16-17`, F09's
+tester's) builds its own launch arguments, not `XCUIApplication.fresh(_:)`.
+
+#### 8. For F10, F14 and F15
+
+**F15 (the system audit on other screens).** The audit will report the same two things elsewhere:
+
+- *On any scrolling page with a pinned part:* "Contrast failed" for a line the pinned part hides in part or
+  whole, at whatever text size puts a line across that edge.
+- *On any long text in the display, title or heading roles:* "Text clipped", whenever the words scaled to the
+  largest size would pass the screen's edge. This is a property of `LedgerDesign`'s type roles (their line
+  heights, 1.06, 1.0 and 1.08, are below Archivo's natural 1.096), not of a screen. Whether those line heights
+  should change is a design question for the product owner; until it is answered, F15's audit needs the
+  exclusion once, in a helper every audit shares, and not screen by screen.
+- Also for F15, unchanged from the G1 section and the review: the helper to replace is now `skipSetup()`
+  (`skipSetupToToday()` wraps it); `TabsAdversarial.launch` builds its own arguments (S3-N3); a mode whose
+  first seed fails gives the UI test of "Retry"; a mode that keeps the database gives the relaunch test.
+
+**F10 (the cover and the launch).**
+
+- The gate's first answer waits for the workout's recovery, by design (item 2): the first screen is drawn once
+  the launch knows the workout. Anything added to `AppComposition.resume(in:)` holds the first screen back.
+- Onboarding's "Retry" no longer runs the recovery: it calls `retrySeed()`. Do not widen it.
+- `MainRoot.init` takes a router now (default: a new one). The router starts over each time onboarding
+  appears; a presenter kept beside it is not reset by that, which is F10's to decide (a workout live while
+  the program is deleted).
+
+**F14 ("Delete all data").** The router needs no reset from F14 any more: reached from a pushed Settings
+screen, the delete ends on onboarding, and the tabs after it open on Today with nothing pushed. The catalog's
+bullet in the G1 section is corrected (review S3-SF4): "Retry" does not seed a deleted catalog again.
+
+#### 9. Product lines
+
+Added lines of `git diff -U0 5ff87ff`, blank and whole-line comment lines excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `LedgerAppKit/MainRoot.swift` | 5 | 3 |
+| `LedgerAppKit/Routes.swift` | 4 | 0 |
+| `LedgerAppKit/AppComposition.swift` | 3 | 0 |
+| `LedgerAppKit/RootGate.swift` | 3 | 0 |
+| **Touch-up, product** | **15** | 3 |
+| **Slice S3, product** (49 at `aff5855`, plus the touch-up) | **64** | 8 |
+| Tests: `Support/HostedDrawing` 51 (new), `RootGateLaunchTests` 54, `AppRootTests` 29, `AppRouterTests` 13, `RootGateTests` 11, F09's `AppRootAdversarialTests` 4; UI: `Support/LaunchedApp` 27, `LaunchPerformance` 14 | 203 | 10 |
+
+`AppComposition.swift` is edited for the first time in this slice (three lines, the narrow retry), on the
+review's recommendation. `FeatureOnboarding` and `LedgerDesign` are untouched.
+
+#### 10. Not verified
+
+- The full gate, coverage, the string-catalog step, watchOS and CI.
+- The recovery's cost at launch on a large history, and any timing on a device.
+- The audit in dark, and on any other phone: the tester's audit tests run in light on the iPhone 17. The
+  contrast figures for dark are the formula's and one screenshot at the default size.
+- Why the audit, run twice on one unmoved screen, picked a different hidden line the second time. Both lines
+  were behind the pinned part; the rule in section 3(b) is inferred from 30 probes, not read from Apple's
+  documentation.
+- `onAppear` as the moment of the reset on a device and under F10's cover: on the simulator it ran in the
+  same layout that showed onboarding, 30 times of 30.
+- VoiceOver by ear.
+
+### S3 — orchestrator rulings after the touch-up (2026-10-05)
+
+- **F8-S3-2, corrected.** My ruling called the contrast report a real AA failure; the implementer's measurements
+  show it is not (`inkMuted` on the ground is 4.83:1 light and about 5.04:1 dark, and a stronger ink left the
+  report unchanged: the audit measures a line hidden by the pinned part against the pinned part). No token changes.
+  "Text clipped" is the audit's guess about type roles whose line height is below the font's natural one; nothing
+  is cut at any size. The tester excludes both with their reasons, and "contrast nearly passed" on the primary
+  button with F06's. For F15 and for Pete: the audit will say the same on other screens, and whether the design
+  system's line heights should change is a design question.
+- **Review SF2:** "Retry" calls the new `AppComposition.retrySeed()` (the seed step alone). Accepted: it is the one
+  change to `AppComposition` in the slice, and narrower than what it replaces.
+- **The gate is red on the tester's own F8-S3-4** (warnings recorded outside any test mark the bundle failed). The
+  tester fixes that in its close-out; the orchestrator's full gate runs after it.

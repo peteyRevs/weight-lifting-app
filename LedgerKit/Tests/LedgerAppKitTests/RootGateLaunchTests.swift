@@ -5,6 +5,7 @@ import GRDB
 @testable import LedgerAppKit
 import LedgerDomain
 import LedgerPersistence
+import LedgerSync
 import LedgerTestSupport
 import Testing
 
@@ -150,18 +151,80 @@ struct RootGateLaunchTests {
         #expect(!composition.isCatalogSeeded)
         #expect(Self.events(of: .seedCatalog, in: harness.log) == ["began", "failed"])
 
-        // What `MainRoot` passes to onboarding as `prepareRetry`: the launch's pass again, in the foreground.
-        await composition.resume(in: .active)
+        // What `MainRoot` passes to onboarding as `prepareRetry`: the launch's seed step again.
+        await composition.retrySeed()
         #expect(!composition.isCatalogSeeded, "it returned although the seed failed again")
         #expect(Self.events(of: .seedCatalog, in: harness.log) == ["began", "failed", "began", "failed"])
         #expect(gate.destination == .onboarding)
 
         try await #require(composition.stores).queue.write { try $0.execute(sql: "DROP TRIGGER refuse") }
-        await composition.resume(in: .active)
+        await composition.retrySeed()
         #expect(composition.isCatalogSeeded, "Retry's call ran the seed step again")
         #expect(Self.events(of: .loadSettings, in: harness.log) == ["began"], "and nothing that had succeeded")
+        #expect(Self.events(of: .resumeWorkout, in: harness.log) == ["began"], "nor the workout's recovery")
+        await composition.retrySeed()
+        #expect(
+            Self.events(of: .seedCatalog, in: harness.log) == ["began", "failed", "began", "failed", "began"],
+            "seeded: a further call runs nothing"
+        )
 
         try await #require(composition.stores).programs.save(Fixtures.defaultProgram())
         #expect(await gate.change(from: .onboarding) == .main)
+    }
+}
+
+/// The launch's pass with the live workout's recovery in it (F10 S2; review S3-SF2): the gate still answers
+/// only when the whole pass has returned, and onboarding's "Retry" runs none of the recovery.
+extension RootGateLaunchTests {
+    @Test("Review SF2: with a workout to resume, the ground holds through its recovery, and the gate then answers")
+    func liveWorkout_isRecoveredBeforeTheGateAnswers() async throws {
+        let harness = Harness()
+        defer { harness.remove() }
+        let first = try await WorkoutRelaunchTests.Launch(harness)
+        let live = try await first.logTheFirstExercise(of: first.startUpperA())
+
+        let relaunched = harness.booted()
+        harness.clearLog()
+        let gate = RootGate()
+        // What the gate said as each step of the pass began: the recovery, then the step that follows it.
+        var saidMeanwhile: [LaunchStep: RootGate.Destination] = [:]
+        harness.onEvent = { event in
+            if case let .began(step) = event {
+                saidMeanwhile[step] = gate.destination
+            }
+        }
+        let follow = Task { await gate.follow(relaunched, in: .active) }
+        defer { follow.cancel() }
+        #expect(await gate.answer() == .main)
+        #expect(saidMeanwhile[.resumeWorkout] == .loading, "the recovery began under the ground colour")
+        #expect(saidMeanwhile[.activateCompanionSession] == .loading, "and had ended before the gate answered")
+        #expect(Self.events(of: .resumeWorkout, in: harness.log) == ["began"])
+        #expect(try await relaunched.session?.current() == live, "the workout is live again")
+    }
+
+    @Test("Review SF2: Retry's call leaves the workout's recovery alone, which the launch's own pass runs again")
+    func retrySeed_leavesTheWorkoutsRecoveryToTheLaunch() async throws {
+        let harness = Harness()
+        defer { harness.remove() }
+        // A finished workout whose save a trigger refuses: its recovery has work left, launch after launch.
+        let first = try await WorkoutRelaunchTests.Launch(harness)
+        _ = try await first.logTheFirstExercise(of: first.startUpperA())
+        try await first.refuse(WorkoutRelaunchTests.refuseSave)
+        await #expect(throws: DatabaseError.self) {
+            _ = try await first.session.finish(endedAt: Harness.now.addingTimeInterval(3600))
+        }
+
+        let relaunched = harness.booted()
+        harness.clearLog()
+        await relaunched.resume(in: .active)
+        #expect(Self.events(of: .resumeWorkout, in: harness.log) == ["began", "failed"])
+
+        await relaunched.retrySeed()
+        #expect(Self.events(of: .resumeWorkout, in: harness.log) == ["began", "failed"], "Retry ran no recovery")
+        #expect(Self.events(of: .seedCatalog, in: harness.log) == ["began"], "and no seed: the catalog is seeded")
+
+        // Control: the wider call, which Retry made before, runs the failed recovery again.
+        await relaunched.resume(in: .active)
+        #expect(Self.events(of: .resumeWorkout, in: harness.log) == ["began", "failed", "began", "failed"])
     }
 }

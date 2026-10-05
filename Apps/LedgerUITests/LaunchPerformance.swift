@@ -14,20 +14,31 @@ final class LaunchPerformance: XCTestCase {
     }
 
     /// Reads the app's own measurement from Diagnostics (decision #30) and attaches it; reports, never fails.
-    /// Diagnostics is behind onboarding on a fresh database, so it skips setup first (F08 S3).
+    /// Diagnostics is behind onboarding on a fresh database, so it skips setup first (F08 S3). When it cannot
+    /// get there, what it attaches is why, so a run without the figure says so.
     @MainActor
     private func reportInAppMeasurement(_ app: XCUIApplication) {
-        guard app.skipSetupToToday() else {
+        do {
+            try app.skipSetup()
+        } catch {
+            attach("No in-app figure: \(error.description)")
             return
         }
         app.staticTexts["today.title"].press(forDuration: 1)
         app.buttons["debug.menu.diagnostics"].tap()
         let launch = app.staticTexts["debug.diagnostics.launch"]
         if launch.waitForExistence(timeout: 10) {
-            let attachment = XCTAttachment(string: "In-app launch to first frame: \(launch.label)")
-            attachment.name = "launchToFirstFrame"
-            attachment.lifetime = .keepAlways
-            add(attachment)
+            attach("In-app launch to first frame: \(launch.label)")
+        } else {
+            attach("No in-app figure: debug.diagnostics.launch did not appear within 10 s")
         }
+    }
+
+    @MainActor
+    private func attach(_ report: String) {
+        let attachment = XCTAttachment(string: report)
+        attachment.name = "launchToFirstFrame"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

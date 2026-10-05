@@ -100,5 +100,42 @@
             #expect(await gate.change(from: .onboarding) == .main)
             #expect(Self.labels(of: composition, gate) == ["Today"])
         }
+
+        /// The labels VoiceOver finds in `MainRoot` handed `gate` and `router`, read as `labels(of:_:)` reads.
+        static func labels(of composition: AppComposition, _ gate: RootGate, _ router: AppRouter) -> [String] {
+            withTestDependencies { composition.bind(&$0) } operation: {
+                MainRoot(composition: composition, gate: gate, router: router)
+                    .accessibilityElements(outsideScrollViews: true)
+                    .map(\.label)
+            }
+        }
+
+        /// The router is the only way to push a screen until a feature's route does (F09 S5), and `MainRoot`
+        /// owns it. So this root is hosted from `MainRoot`, handed the router the test pushes through; the
+        /// path from `AppRoot` to it is the other tests'.
+        @Test("F8-S3-1: a screen pushed when the program goes away is gone after a second onboarding: Today, alone")
+        func pushedScreen_isGoneAfterASecondOnboarding() async throws {
+            let harness = Harness()
+            defer { harness.remove() }
+            let (composition, gate) = try await harness.bootedWithAProgram()
+            let programs = try #require(composition.stores).programs
+            let router = AppRouter()
+            router.open(.settings, in: .today)
+            router.open(.settings, in: .library)
+            #expect(Self.labels(of: composition, gate, router) == ["Settings"], "control: a pushed screen is shown")
+
+            let follow = Task { await gate.follow(composition, in: .active) }
+            defer { follow.cancel() }
+            try await programs.delete(Fixtures.defaultProgramID)
+            #expect(await gate.change(from: .main) == .onboarding)
+            #expect(router[path: .library] == [.settings], "control: nothing starts over before onboarding is shown")
+            #expect(Self.labels(of: composition, gate, router) == Self.onboarding)
+            #expect(router.selectedTab == .today)
+            #expect(AppTab.allCases.allSatisfy { router[path: $0].isEmpty }, "nothing is left pushed on any tab")
+
+            try await programs.save(Fixtures.defaultProgram())
+            #expect(await gate.change(from: .onboarding) == .main)
+            #expect(Self.labels(of: composition, gate, router) == ["Today"])
+        }
     }
 #endif

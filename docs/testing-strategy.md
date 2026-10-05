@@ -307,7 +307,9 @@ Concrete test names (file = suite = source type; see §6):
   `Workout.startLogThreeSetsRestFinishReceipt`, `Workout.swapExercise`,
   `Workout.minimizeAndResume`, `Builder.addDayAddExerciseChangeProgression`,
   `Library.searchOpensHistoryChart`, `History.editThenDeleteWorkout`,
-  `Settings.switchUnitsToKg`, `Settings.exportCSV`, `Onboarding.dynamicTypeXL`,
+  `Settings.switchUnitsToKg`, `Settings.exportCSV`,
+  `Onboarding.voiceOverReadsEachStepInOrder_insideTheScrollView_atAnAccessibilitySize`,
+  `Onboarding.eachStepOpensAtItsTop_atAnAccessibilitySize`,
   `Accessibility.auditEveryTabRoot`, `LaunchPerformance.test_launchToFirstFrame`
   (`XCTApplicationLaunchMetric`, nightly; reports, never gates: decision #30). watchOS:
   `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder),
