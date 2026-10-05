@@ -118,7 +118,8 @@
                 nothing of what scrolls. Host the page the scroll view holds, without the scroll view, \
                 and read that; the screen is its pinned parts plus `ScrollView { Page }` \
                 (docs/testing-strategy.md §2.6, "A screen that scrolls"). A test that reads only the \
-                parts around a scroll view says so with `outsideScrollViews: true`.
+                parts around a scroll view says so with `outsideScrollViews: true`, which is never the \
+                way to read a page: what scrolls is then missing from the result.
                 """
             )
         }

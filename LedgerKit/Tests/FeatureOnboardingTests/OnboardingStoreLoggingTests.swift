@@ -53,6 +53,11 @@ struct OnboardingStoreLoggingTests {
     }
 
     /// Three failures and two cancellations, each in a scene of its own.
+    ///
+    /// One failure is not planted here: a store that throws `CancellationError` on a task nobody cancelled
+    /// (F8-S2-7). Its line can carry no word of this suite's, and the tester's suite, which runs in this
+    /// process at the same time, counts every line that says "CancellationError". That line is read by
+    /// `OnboardingLoggingAdversarialTests.shownFailure_ofAnUncancelledTask_isLogged` alone.
     private static func runEveryScene() async throws {
         // 1. A save whose write fails: one line.
         try await scene(failing: "s2impl-write", [.programCannotBeSaved]) { scene in
@@ -76,8 +81,12 @@ struct OnboardingStoreLoggingTests {
             await scene.store.loadUnits()
         }
         // 4. The unit read is cancelled with its task: no line.
-        try await scene(failing: "s2impl-none", [.settingsReadIsCancelled]) { scene in
-            await scene.store.loadUnits()
+        let reading = Gate()
+        try await scene(failing: "s2impl-none", [.settingsWaitsThenThrowsCancellation(reading)]) { scene in
+            let running = Task { await scene.store.loadUnits() }
+            await reading.entered()
+            running.cancel()
+            await running.value
         }
         // 5. A real failure that arrives on a cancelled task: one line, though nothing is shown.
         let failing = Gate()

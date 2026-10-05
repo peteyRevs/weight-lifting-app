@@ -49,12 +49,13 @@ final nonisolated class RecordingPrograms: ProgramRepository {
     }
 }
 
-/// A program store whose `save` always throws and writes nothing.
+/// A program store whose `save` always throws `error` and writes nothing: a failure of its own unless a test
+/// gives it another, such as the `CancellationError` of a store that throws it on a task nobody cancelled.
 nonisolated struct FailingPrograms: ProgramRepository {
-    var failure = StoreFailure()
+    var error: any Error = StoreFailure()
 
     func save(_: Program) async throws {
-        throw failure
+        throw error
     }
 
     func active() async throws -> Program? {
@@ -70,12 +71,15 @@ nonisolated struct FailingPrograms: ProgramRepository {
     }
 }
 
-/// A settings store that cannot be read: it throws `error`, a failure of its own unless a test gives it the
-/// `CancellationError` a store that honours cancellation throws when its task is cancelled.
+/// A settings store that cannot be read: it throws `error`, a failure of its own unless a test gives it a
+/// `CancellationError`. Given a gate, the read waits there first, so that a test can cancel the task before
+/// the error arrives, as a store that honours cancellation throws it when its task is cancelled.
 nonisolated struct FailingSettings: SettingsRepository {
     var error: any Error = StoreFailure()
+    var gate: Gate?
 
     func load() async throws -> Settings {
+        await gate?.pass()
         throw error
     }
 

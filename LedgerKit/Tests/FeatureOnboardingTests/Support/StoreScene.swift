@@ -13,8 +13,9 @@ nonisolated enum SceneChange {
     case calendar(Calendar)
     /// Reading the settings throws.
     case settingsCannotBeRead
-    /// Reading the settings throws `CancellationError`, as a store does whose task was cancelled mid-read.
-    case settingsReadIsCancelled
+    /// Reading the settings waits at the gate, then throws `CancellationError`: the test cancels the task while
+    /// it waits, as a view that goes away cancels its read.
+    case settingsWaitsThenThrowsCancellation(Gate)
     /// Reading the catalog throws.
     case catalogCannotBeRead
     /// Reading the catalog waits at the gate, then answers.
@@ -23,6 +24,8 @@ nonisolated enum SceneChange {
     case catalogWaitsThenFails(Gate)
     /// Saving a program throws and writes nothing.
     case programCannotBeSaved
+    /// Saving a program throws `CancellationError` and writes nothing, on a task nobody cancelled.
+    case saveThrowsCancellation
     /// Saving a program writes it, then waits at the gate before returning.
     case saveWaitsAfterWriting(Gate)
     /// The injected logger: one a test can read back, where the default discards.
@@ -46,7 +49,8 @@ nonisolated extension SceneChange {
     func setReads(_ values: inout DependencyValues, over memory: InMemoryStores, failure: StoreFailure) {
         switch self {
         case .settingsCannotBeRead: values.settingsRepository = FailingSettings(error: failure)
-        case .settingsReadIsCancelled: values.settingsRepository = FailingSettings(error: CancellationError())
+        case let .settingsWaitsThenThrowsCancellation(gate):
+            values.settingsRepository = FailingSettings(error: CancellationError(), gate: gate)
         case .catalogCannotBeRead: values.exerciseRepository = StubbedExercises(failure: failure)
         case let .catalogWaits(gate):
             values.exerciseRepository = StubbedExercises(inner: memory.exercises, gate: gate)
@@ -94,7 +98,8 @@ final class StoreScene {
                 change.setValues(&$0)
                 change.setReads(&$0, over: memory, failure: failure)
                 switch change {
-                case .programCannotBeSaved: written = FailingPrograms(failure: failure)
+                case .programCannotBeSaved: written = FailingPrograms(error: failure)
+                case .saveThrowsCancellation: written = FailingPrograms(error: CancellationError())
                 case let .saveWaitsAfterWriting(gate): afterWrite = gate
                 default: break
                 }

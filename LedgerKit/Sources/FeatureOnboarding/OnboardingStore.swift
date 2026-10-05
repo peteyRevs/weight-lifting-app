@@ -95,15 +95,24 @@ final class OnboardingStore {
 
     // MARK: Work the root's tasks run
 
+    /// Whether `error` is the cancellation of the task that is running: a `CancellationError` on a task that was
+    /// cancelled, because the view went away. That is no failure. Whether the task was cancelled decides it,
+    /// not the error's type alone: the same error from a store on a task nobody cancelled is a failure like any
+    /// other, and so is any other error on a cancelled task.
+    private func isCancellation(_ error: any Error) -> Bool {
+        error is CancellationError && Task.isCancelled
+    }
+
     /// Reads the stored unit, for step 3's sentence. If the settings cannot be read the default's unit stays and
     /// the failure is logged; the save reads them again and fails where the lifter can see it. A read that was
     /// cancelled, because the view went away, is no failure and logs nothing.
     func loadUnits() async {
         do {
             state.units = try await settings.load().units
-        } catch is CancellationError {
-            return
         } catch {
+            guard !isCancellation(error) else {
+                return
+            }
             logger.log.error("Onboarding could not read the settings: \(String(describing: error), privacy: .public)")
         }
     }
@@ -116,8 +125,9 @@ final class OnboardingStore {
     /// nothing saved. A save cancelled before its write, because the view went away, writes nothing and leaves
     /// the phase as it was before the tap, so the same tap works again if the view returns. A cancellation is
     /// not a failure: it is neither shown nor logged as one. A real failure that arrives on a cancelled task is
-    /// still logged, though the view that would show it is gone. Once the repository has saved, the phase is
-    /// `.saved` whether or not the task was cancelled meanwhile.
+    /// still logged, though the view that would show it is gone. A `CancellationError` from a store on a task
+    /// nobody cancelled is a failure too, shown and logged. Once the repository has saved, the phase is `.saved`
+    /// whether or not the task was cancelled meanwhile.
     func save(prepareRetry: @MainActor () async -> Void) async {
         guard let attempt, state.phase.isSaving, !isSaveRunning else {
             return
@@ -134,7 +144,7 @@ final class OnboardingStore {
             try await programs.save(program)
             state.phase = .saved
         } catch {
-            if !(error is CancellationError) {
+            if !isCancellation(error) {
                 let reason = String(describing: error)
                 logger.log.error("Onboarding could not save the program: \(reason, privacy: .public)")
             }

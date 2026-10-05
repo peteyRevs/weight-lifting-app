@@ -75,8 +75,13 @@ struct OnboardingStoreTests {
 
     @Test("A unit read cancelled with its task changes nothing and shows nothing")
     func loadUnits_cancelled_keepsTheDefault() async throws {
-        try await StoreScene.run(changes: [.settingsReadIsCancelled]) { scene in
-            await scene.store.loadUnits()
+        let gate = Gate()
+        try await StoreScene.run(changes: [.settingsWaitsThenThrowsCancellation(gate)]) { scene in
+            let reading = Task { await scene.store.loadUnits() }
+            await gate.entered()
+            reading.cancel()
+            await reading.value
+
             #expect(scene.store.state == OnboardingState())
             #expect(scene.store.model.error == nil)
         }
@@ -95,6 +100,20 @@ struct OnboardingStoreTests {
             #expect(scene.programs.saved.isEmpty)
             #expect(scene.store.state == OnboardingState())
             #expect(scene.store.model.error == nil)
+        }
+    }
+
+    @Test("A store that throws CancellationError on a task nobody cancelled has failed: the screen shows it")
+    func save_cancellationErrorOnALiveTask_isShownAsAFailure() async throws {
+        // Whether the task was cancelled decides, not the error's type (F8-S2-7). That the failure is logged
+        // too is read from the log, at night: `OnboardingLoggingAdversarialTests`.
+        try await StoreScene.run(changes: [.saveThrowsCancellation]) { scene in
+            scene.store.send(.skipSetup)
+            await scene.save()
+
+            #expect(scene.programs.saved.isEmpty)
+            #expect(scene.store.state.phase == .failed)
+            #expect(scene.store.model.error == "Couldn't save your program. Try again.")
         }
     }
 

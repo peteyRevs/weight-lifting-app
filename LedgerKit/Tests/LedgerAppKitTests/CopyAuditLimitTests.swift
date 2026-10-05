@@ -24,6 +24,7 @@ struct CopyAuditLimitTests {
 
     @Test("Limit: the audit reads names, not types: any call that reads like an allowed one is allowed", arguments: [
         #"toastLogger.error("Can't save your workout")"#,
+        #"let log = toastLogger.category("Can't save your workout")"#,
         #"let chip = Chip(category: "Push day")"#,
         #"let banner = Banner(identifier: "Start workout")"#,
         #"let row = Row(subtitleIdentifier: "Last time")"#

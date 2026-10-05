@@ -1228,22 +1228,23 @@ sits about 9 pt inside the leading edge, and does not look disabled when it is.
 
 Suites are in `LedgerKit/Tests/FeatureOnboardingTests/`. "a" and "b" say which half of the split holds the test.
 The hosted suites (`OnboardingAccessibilityTests`, `OnboardingRootTests`, the snapshots) run on the iOS simulator
-only; the others also run on the Mac host.
+only; the others also run on the Mac host. (Rows 1, 2, 7 and the last were corrected in the S2 touch-up: they
+cited two root tests that fix round 1 removed and a logging test it renamed, and two counts had grown.)
 
 | Criterion (brief, "Plan amendments — slice S2") | Tests |
 |---|---|
-| 1. Opens on step 1 of 3, "Both, honestly" picked, bars read "Step 1 of 3" | a: `OnboardingStoreTests.defaults_areBothAndFourDays`; `OnboardingPresentationTests.step1_isTheSpecsCopy_withBothPicked`. b: `OnboardingRootTests.root_opensOnStepOne` (the public `OnboardingRoot()`, hosted, read as VoiceOver reads it); snapshot `goal` |
-| 2. A tap picks one option and unpicks the others; the check is a glyph; "Continue" to step 2 ("4 days") and step 3; "Back" on steps 2 and 3; picks survive | a: `OnboardingStoreTests.picksAndSteps_changeOnlyWhatWasAskedFor`, `picks_surviveGoingBackAndForth`; `OnboardingPresentationTests.step1_selectsOnlyThePick` (4), `step2_isTheSpecsCopy_withFourDaysPicked`, `step2_selectsOnlyThePick` (4). b: `OnboardingRootTests.root_taps_pickAndStep` (real taps through the hosted root: pick, Continue, pick, Continue, Back, Back); `OnboardingAccessibilityTests.activating_sendsTheModelsAction`; the tree table (selected trait; no "Back" on step 1); snapshots `goal`, `days` (the check drawn) |
+| 1. Opens on step 1 of 3, "Both, honestly" picked, bars read "Step 1 of 3" | a: `OnboardingStoreTests.defaults_areBothAndFourDays`; `OnboardingPresentationTests.step1_isTheSpecsCopy_withBothPicked`. b: `OnboardingRootTests.root_opensOnStepOne_andItsPinnedButtonsAnswer` (the hosted root, the public `OnboardingRoot()` and one with a store: its pinned part reads "Continue", "Skip setup", the store is on the defaults with no attempt); `OnboardingAccessibilityTests.tree_isExactlyTheTable` (step 1's rows: what the page reads as); snapshot `goal` |
+| 2. A tap picks one option and unpicks the others; the check is a glyph; "Continue" to step 2 ("4 days") and step 3; "Back" on steps 2 and 3; picks survive | a: `OnboardingStoreTests.picksAndSteps_changeOnlyWhatWasAskedFor`, `picks_surviveGoingBackAndForth`; `OnboardingPresentationTests.step1_selectsOnlyThePick` (4), `step2_isTheSpecsCopy_withFourDaysPicked`, `step2_selectsOnlyThePick` (4). b: `OnboardingRootTests.root_opensOnStepOne_andItsPinnedButtonsAnswer` (the hosted root's pinned buttons activated: Continue, Continue, Skip setup; a tap on a pick or on "Back" inside the root's scroll view is S3's UI test); `OnboardingAccessibilityTests.activating_sendsTheModelsAction`; the tree table (selected trait; no "Back" on step 1); snapshots `goal`, `days` (the check drawn) |
 | 3. Step 3 is a read-only list of the split's days, " — " drawn as " · ", with the sentence | a: `OnboardingPresentationTests.step3_fourDays_listsTheProgram`, `step3_listsEveryDayOfTheSplit` (4 splits), `step3_sentence_namesProgramWeeksAndUnit` (4), `step3_isTheSameForEveryGoal` (4). b: tree table (rows are static text, not buttons), `OnboardingAccessibilityTests.days_areNotTappable`; snapshots `program`, `programSixDays` |
 | 4. "Start training" saves exactly one program: the generator's from the picks, stored units, start date from the injected date, calendar and the settings' week start, the stored catalog, injected ids; active; no navigation call; a second tap during or after saves nothing | a: `OnboardingStoreSaveTests.startTraining_savesOneActiveProgram_fromThePicks` (4 pairs: equal to the generator's output for the same id sequence; active; 8 weeks; deload last; Monday 2026-09-14), `save_usesTheSettingsWeekStart`, `save_usesTheInjectedDateAndCalendar`; `OnboardingStoreSaveOnceTests` (7 tests: before any tap, double tap, after success, taps during a save, cancelled before the write, a cancelled retry, cancelled after the write). b: `OnboardingRootTests.root_runsTheSaveItsStoreAsksFor` (the hosted root's task saves once); `OnboardingSurfaceTests` (no route type exists) |
 | 5. "Skip setup" on any step saves `both` × four days, whatever is picked | a: `OnboardingStoreSaveTests.skipSetup_savesTheDefault_whateverThePicks` (3 steps; also equal to `Fixtures.defaultProgram()` but for ids) |
 | 6. Kilograms: the sentence says "kilograms", the saved loads are the catalog's kilogram loads | a: `OnboardingStoreSaveTests.kilograms_areShownAndSaved` (every slot's load is its exercise's kilogram load; Bench 20 kg), `save_readsTheUnitItSavesIn`; `OnboardingPresentationTests.step3_sentence_namesProgramWeeksAndUnit`. b: `OnboardingRootTests.root_loadsTheUnit_andPreparesARetry` (the root's first task reads the unit) |
-| 7. Any of the four steps failing shows the sentence with "Retry", saves nothing, is logged; "Retry" awaits `prepareRetry`, then the same picks | a: `OnboardingStoreFailureTests.save_failure_showsRetry_andSavesNothing` (settings, catalog, generator, write), `save_unseededCatalog_showsRetry_andSavesNothing`, `save_startDateOutOfRange_showsRetry`, `retry_onceTheCatalogIsSeeded_savesTheSamePicks` (the retry can only succeed if the preparation ran before the catalog was read), `retry_failingAgain_staysFailed`, `retry_afterAFailedSkip_savesTheDefault`, `skipSetup_afterAFailure_preparesFirst`, `failed_locksThePicksAndTheStep`, `retry_whileEditing_doesNothing`; `OnboardingStoreLoggingTests.failures_areLoggedOnce_andNothingElseIs` (reads the process log back); `OnboardingPresentationPhaseTests` (3 tests); `OnboardingStoreTests.loadUnits_failure_keepsTheDefault`. b: `OnboardingRootTests.root_loadsTheUnit_andPreparesARetry` (the root hands its closure to the retry, and not to a first attempt); snapshot `failed`; tree table (failed on step 3 and on step 1) |
+| 7. Any of the four steps failing shows the sentence with "Retry", saves nothing, is logged; "Retry" awaits `prepareRetry`, then the same picks | a: `OnboardingStoreFailureTests.save_failure_showsRetry_andSavesNothing` (settings, catalog, generator, write), `save_unseededCatalog_showsRetry_andSavesNothing`, `save_startDateOutOfRange_showsRetry`, `retry_onceTheCatalogIsSeeded_savesTheSamePicks` (the retry can only succeed if the preparation ran before the catalog was read), `retry_failingAgain_staysFailed`, `retry_afterAFailedSkip_savesTheDefault`, `skipSetup_afterAFailure_preparesFirst`, `failed_locksThePicksAndTheStep`, `retry_whileEditing_doesNothing`; `OnboardingStoreLoggingTests.failures_areLoggedOnce_underTheModulesCategory` (reads the process log back; nightly lane); `OnboardingPresentationPhaseTests` (5 tests); `OnboardingStoreTests.loadUnits_failure_keepsTheDefault`, `loadUnits_cancelled_keepsTheDefault`, `save_failingOnACancelledTask_isNotShown`, `save_cancellationErrorOnALiveTask_isShownAsAFailure`. b: `OnboardingRootTests.root_loadsTheUnit_andPreparesARetry` (the root hands its closure to the retry, and not to a first attempt); snapshot `failed`; tree table (failed on step 3 and on step 1) |
 | 8. VoiceOver: one button per option, "{label}, {sub}", selected when picked, no value; the bars one element "Step 1 of 3"; the trees written and pinned | b: `OnboardingAccessibilityTests.tree_isExactlyTheTable` (8 states × 2 text sizes), `buttons_haveA44PointTarget` (8 × 2), `lockedControls_sendNothing` (3); "The intended VoiceOver trees" above |
 | 9. Every string in the catalog, resolved in the copy files; the brief's texts plus "Back"; no product name | a: the gate's catalog step ("string catalog matches the code: … FeatureOnboarding … (keys: 31)"); `ModuleCopyTests.auditedModule_followsTheStandard` and `builtBundle_resolvesEveryKey` for `FeatureOnboarding`, with no exemption; `OnboardingCopyTests` (5 tests; the counted sentence with 1, 8 and 0 weeks and in `fr_FR`); `OnboardingPresentationTests` (every text of every step); `OnboardingPresentationPhaseTests.noString_namesTheProduct`, `numbers_followTheLocale` |
 | 10. Rows wrap, nothing truncates up to the matrix's largest size; light and dark; 18 references | b: `OnboardingSnapshotTests` (5 tests, 18 images); the AX5 screenshots in `screenshots/s2/` (by hand) |
 | 11. `OnboardingRoot(prepareRetry:)` is the only public type; M1 store conventions | b: `OnboardingSurfaceTests.onlyTheRootIsPublic`. By reading: no `Task {` in the module (`grep -rn "Task {" LedgerKit/Sources/FeatureOnboarding` finds none); the presentation is a `nonisolated` pure function; tokens only (the gate's design lint) |
-| Previews (standards §7) | b: `PreviewTests` (registry and render, 6 cases); `LedgerDesignTests` `everyModuleWithPreviews_isRegistered` |
+| Previews (standards §7) | b: `PreviewTests` (registry and render, 7 cases); `LedgerDesignTests` `everyModuleWithPreviews_isRegistered` |
 
 ### Code lines
 
@@ -1773,3 +1774,89 @@ For a last touch-up of this slice:
 
 For the chore before the next screen slice starts (not this slice): **RR-SF3**, a recording seam in `LedgerLogger`
 so the PR lane proves logging again; **RR-SF4**, the `Hosted` test helper moves into `LedgerSnapshotTesting`.
+
+### S2 touch-up (G1 implementer, 2026-10-05)
+
+On top of `831b020`, uncommitted. The four items are done and no nit is left. No tester file was edited and no
+tester test fails. The orchestrator's full gate has not been run on this tree.
+
+| Item | What changed | Where |
+|---|---|---|
+| 1. RR-SF1, F8-S2-8 | §2.6's convention names the model files to copy (onboarding's screen, page, pinned part, `OnboardingParts` and the four suites). The parts are stacked "in the screen's reading order", with the bar-above example. The opt-in has two named uses (the pinned parts of a real screen or root; a frame that does not own what scrolls) and "the reviewer confirms each". A feature's scrolling sheet is a screen that scrolls. A scroll view inside a page is not settled: ask before writing one. F8-S2-8 is a known limit, kept by the tester's limit test. | `docs/testing-strategy.md:238-244`, `:248-254`, `:264-271`, `:272-275`, `:276-282`, `:283-291` |
+| 2. RR-SF2 | `OnboardingRootTests.root_opensOnStepOne_andItsPinnedButtonsAnswer`: the public `OnboardingRoot()` and a root on a scene's store, hosted and read with `outsideScrollViews: true`. It opens with "Continue" and "Skip setup", the store on the defaults and no attempt; "Continue" twice reaches step 3 and the button reads "Start training"; "Skip setup" makes attempt 1 (both × four days); "Start training" during that save makes no second one. | `LedgerKit/Tests/FeatureOnboardingTests/OnboardingRootTests.swift:19-22`, `:25-58` |
+| 2. The table | "Criteria → tests" (first S2 section): rows 1 and 2 cite the new root test in place of the two removed in fix round 1, row 7 the logging test under its present name plus the three cancellation tests, and two counts are corrected (`OnboardingPresentationPhaseTests` 5, previews 7). Edited in place, as the ruling asks, with a line under the table's heading that says so. Every `Suite.test` the table names now exists (checked by script). | this file, `:1229-1247` |
+| 3. F8-S2-7 | One predicate, `isCancellation(_:)`: a `CancellationError` on a task that was cancelled. `loadUnits` returns without a line only for that; `save` logs everything else. What is shown was already decided by the task's flag and is unchanged. | `LedgerKit/Sources/FeatureOnboarding/OnboardingStore.swift:98-104`, `:112-117`, `:147` (doc `:126-130`) |
+| 4. RR-N1 | Closed by item 3. | |
+| 4. RR-N2 | The limit case `toastLogger.category("…")` beside the level call. | `LedgerKit/Tests/LedgerAppKitTests/CopyAuditLimitTests.swift:27` |
+| 4. RR-N3 | The reader's message ends "…with `outsideScrollViews: true`, which is never the way to read a page: what scrolls is then missing from the result." Every test that matches the message matches its first clause, and passes. | `LedgerKit/Sources/LedgerSnapshotTesting/AccessibilityElements.swift:120-122` |
+
+**F8-S2-7, the rule as built.** I read the ruling together with SF2's ("a real failure is logged even when the
+task was cancelled"), which it does not withdraw and which the review's RR-N1 states the same way. The four
+corners:
+
+| The error | The task | Shown | Logged |
+|---|---|---|---|
+| `CancellationError` | cancelled | no | no |
+| `CancellationError` | not cancelled | yes | **yes** (was no) |
+| any other | cancelled | no | yes |
+| any other | not cancelled | yes | yes |
+
+- **Tests.** `OnboardingStoreTests.save_cancellationErrorOnALiveTask_isShownAsAFailure` (`:106`, PR lane): shown,
+  nothing saved. It passes without the fix too; the line is the nightly lane's to read.
+  `loadUnits_cancelled_keepsTheDefault` (`:76`) and scene 4 of `OnboardingStoreLoggingTests` (`:83-90`) now
+  cancel the task while the read waits at a gate. Before, their double threw `CancellationError` on a task
+  nobody cancelled, which is now a failure.
+- **Test support.** `SceneChange.settingsWaitsThenThrowsCancellation(Gate)` replaces `.settingsReadIsCancelled`,
+  and `.saveThrowsCancellation` is new (`Support/StoreScene.swift:16-18`, `:27-28`, `:52-53`, `:102`);
+  `FailingPrograms` throws any error and `FailingSettings` can wait at a gate (`Support/StoreDoubles.swift:52-59`,
+  `:73-84`).
+- **Not pinned by an implementer test: the line itself in the new corner.** My log suite cannot plant it. The
+  line can carry no word of the suite's (the error is `CancellationError()`), and the tester's suite, which runs
+  in the same process at the same time, counts every line that says "CancellationError"
+  (`OnboardingStoreLoggingTests.swift:57-60`). So the tester's `shownFailure_ofAnUncancelledTask_isLogged` is the
+  one test of it, for `save`. For `loadUnits` the same corner is pinned by no test; it shares the predicate.
+  RR-SF3's recording seam is where both get a PR-lane test.
+- **Mutation, on the host in the nightly lane, the two log suites** (product file restored after each, compared
+  byte for byte): the predicate as `error is CancellationError` (the old rule) fails the tester's test
+  (`lines.count == 1`); as `Task.isCancelled` alone it fails mine (the line of `s2impl-cancelled-task` is
+  missing). Logs `t3-mutant-2.log`, `t3-mutant-1.log`.
+
+**RR-SF1, what I settled and what I did not.** Pinned parts above the page and a feature's sheet are settled in
+the text. A scroll view inside a page is settled as "ask first", which is the review's fix as written: the
+technique is not mine to choose. The text adds what the tester measured (a sideways row and an inner scroll
+view are loud; the reader read a `List` and a `Form`, which no test requires). Rule 7 of "M1 shared conventions"
+in the features' notes is unchanged; the doc is the source.
+
+**Files outside the slice's list, and why:** `docs/testing-strategy.md` (item 1),
+`LedgerKit/Sources/LedgerSnapshotTesting/AccessibilityElements.swift` (RR-N3) and
+`LedgerKit/Tests/LedgerAppKitTests/CopyAuditLimitTests.swift` (RR-N2).
+
+**Runs.** From the worktree root; logs in the scratch folder `f08s2/` (`t3-…`). Simulator runs through the lock
+with `sim-test-lane.sh <plan> …`, a copy of `sim-test.sh` that takes the test plan.
+
+| Run | Result | Exit |
+|---|---|---|
+| Simulator, PR lane: `-testPlan PR -only-testing:FeatureOnboardingTests -only-testing:LedgerDesignTests` (`t3-pr-1`) | 456 tests: 444 passed, 0 failed, 5 skipped (the nightly-lane tests), 7 expected failures | 0 |
+| Simulator, nightly lane: `-testPlan Nightly -only-testing:FeatureOnboardingTests` (`t3-nightly-1`) | 150 tests: 149 passed, 0 failed, 0 skipped, 1 expected failure. The four log tests ran and passed, `shownFailure_ofAnUncancelledTask_isLogged` among them | 0 |
+| Host, PR lane: `swift test … --filter 'FeatureOnboardingTests\|CopyAudit'` (`t3-host-1`) | 109 tests in 21 suites and 59 in 5 suites, all passed | 0 |
+| Host, nightly lane: `LEDGER_TEST_LANE=nightly swift test … --filter 'FeatureOnboardingTests'` (`t3-host-nightly-1`) | 109 tests in 21 suites, all passed, none skipped | 0 |
+| `scripts/check.sh --lint-only`, on the final state (`t3-lint-2`) | OK | 0 |
+
+"Expected failures" are tests that pass by catching the reader's loud failure with `withKnownIssue`.
+`LedgerDesignTests` is in the PR-lane run because the reader's message changed.
+
+**Product lines:** `FeatureOnboarding` 671 (was 667); `OnboardingStore.swift` 120 (was 116).
+
+**Not verified:** the full gate, coverage, watchOS and CI (the orchestrator's); `LedgerAppKitTests` on the
+simulator (the new limit case ran on the host only); VoiceOver by ear; the page inside the real scroll view
+(S3's UI test).
+
+### S2 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the touch-up's tree exited 0 (the first full gate since the fix round), with the
+  tester's suites passing and the tester's files unchanged since `831b020`. **G2 is closed; G3 approved.**
+- 671 product lines: one PR, the overage declared in its body.
+- S2 is ready for its PR, which opens after #28 (the localization rule and helper) and F08 S1 are on `main`: merge
+  `main`, gate, push once. It then waits for nothing of Pete's beyond what S1 and #28 carry, unless he answers the
+  open questions on step 3 or first-launch units differently from the defaults built here.
+- Owed by S3: the UI test that reads the tree inside the real scroll view at an accessibility size (F8-S2-5).
