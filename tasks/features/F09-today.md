@@ -90,3 +90,43 @@ _Filled in by agents during delivery:_
 - `F09-today/implementation-notes.md`
 - `F09-today/test-findings.md`
 - `F09-today/review.md`
+
+## Plan amendments (orchestrator, 2026-10-04)
+
+The body above was written before M0 existed. Where it disagrees with this section, this section wins. The slice
+plan and its evidence are in `F09-today/implementation-notes.md`.
+
+**Delivery.** Six slices: S1 the tab shell, route mapping and the first String Catalog; S2 Domain additions; S3
+the pure presentation; S4 the views; S5 the store and wiring; S6 the live session (after F10's first slice).
+
+**Slice S1 — tab shell (product decision #1; nothing built it in M0)**
+1. Given the database is open, the root shows four tabs in this order: Today, Program, Library, History. Today is
+   selected on launch. Each tab has its own navigation stack, and a tab keeps its stack when the lifter switches
+   away and back.
+2. The Today tab shows the existing Today placeholder unchanged until S5: its title keeps the identifier
+   `today.title`, and a long press on it still opens the Debug menu in Debug builds. The other three tabs show a
+   placeholder that names the tab.
+3. Routes are mapped in `LedgerAppKit/Routes.swift` (`AppTab`, `AppDestination`, `AppRouter`), not in
+   `Apps/Ledger/Sources/Navigation/`. Every tab's stack is keyed by the one `AppDestination`. `AppRouter.open(_:in:)`
+   selects the tab and pushes the destination on that tab's stack.
+4. Every string the shell shows comes from `LedgerAppKit`'s String Catalog, including the two strings of the
+   can't-open-your-data screen (product decision #29). (Revised after G2 round 1:) its second sentence drops the
+   product's name, as the Naming rule requires of all shipped copy, and reads "Your workouts are still on this
+   iPhone. The app tries again when you come back to it."; nothing else in its wording changes. The catalog and the
+   code agree in both directions: the gate compares each catalog with the keys the compiler extracted from the
+   code, and a source audit fails a user-facing literal or a lookup outside a module's copy file.
+5. The selected tab's icon and label use the accent colour that meets AA contrast in both themes
+   (`LedgerColor.accentText`; revised after G3: the plain accent measured 2.70:1 on the light theme's selection
+   capsule), and the tint does not reach the tabs' content. VoiceOver reads each tab as its title with the system's
+   tab traits. Tab icons are Apple's stock symbols (put to Pete; custom icons can replace them later).
+6. The database-unavailable and idle states of the root are unchanged, apart from criterion 4's sentence.
+
+**Later slices (corrections known today)**
+- Criterion 1: Lower A has four exercises, so the Up-next card shows **four** preview rows (Upper A has five).
+- `WeekCalendar` is `LedgerDomain/Rules/WeekCalendar.swift`; S2 adds one date-based `nextScheduledDay(after:in:)`
+  in place of the two weekday-based helpers.
+- The stats and repository names in "Domain changes" were guesses; the calls on `main` are listed in the notes'
+  "Brief vs main".
+- Week strip cells speak as F06's `WeekStrip` does (its pinned VoiceOver tree), not the phrase in "Non-functional".
+- There is no resume-timer pulse to disable. `TodayRoute` gains `.openProgram`; `onRoute` is synchronous.
+- Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above.
