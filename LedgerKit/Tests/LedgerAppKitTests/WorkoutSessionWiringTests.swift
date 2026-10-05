@@ -157,10 +157,12 @@ struct WorkoutSessionWiringTests {
         let stores = try #require(composition.stores)
         try await stores.queue.write { try $0.execute(sql: "DROP TRIGGER refuse") }
         // The retry's first read waits for the database; its caller is cancelled while it waits there.
+        let (began, tell) = AsyncStream<LaunchEvent>.makeStream()
+        harness.onEvent = { tell.yield($0) }
         let hold = Hold(stores.queue)
         let caller = Task { await composition.resume(in: .active) }
-        for _ in 0 ..< 1000 where Self.began(harness) < 2 {
-            await Task.yield()
+        for await event in began where event == .began(.resumeWorkout) {
+            break
         }
         #expect(Self.began(harness) == 2)
         caller.cancel()

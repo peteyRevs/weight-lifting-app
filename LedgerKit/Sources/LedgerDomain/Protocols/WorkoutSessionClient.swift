@@ -10,10 +10,12 @@ import Foundation
 /// this protocol, so a call can never race it. The rules hold when calls overlap: a client takes them one at
 /// a time, so every caller and every subscriber is told the same one story.
 ///
-/// A call that throws changes nothing a reader can see: no update is published, and `current()` and every
-/// stream go on showing the workout as it stood. That holds for a host whose store fails, too. A workout
-/// whose end is stored but could not be completed (`finish(endedAt:)`) is still the workout readers see,
-/// and still the one workout there may be, until the host has completed its end.
+/// A call that throws publishes nothing of its own, and has stored nothing, except an end that reached the
+/// log before its save or its drop failed (`finish(endedAt:)`). Two things can still reach readers while a
+/// call runs, whether or not it then throws: an end that was waiting, which the call completes first, and,
+/// after a write that failed, the state the host finds in its store. A workout whose end is stored but
+/// could not be completed is still the workout readers see and, in this process, the one workout there may
+/// be, until the host has completed its end.
 public protocol WorkoutSessionClient: Sendable {
     /// The workout as it stands (the first element, with no haptics), then one update for each call whose
     /// event the engine accepts, in the order the events were applied. A host may publish further updates for
@@ -26,7 +28,7 @@ public protocol WorkoutSessionClient: Sendable {
     /// dropped.
     func updates() async -> AsyncStream<WorkoutSessionUpdate>
 
-    /// The live workout, or nil when there is none: the state of the last update. Throws only what kept a
+    /// The live workout, or nil when there is none: the `live` of the last update. Throws only what kept a
     /// host from reading its store.
     func current() async throws -> WorkoutState?
 
@@ -35,6 +37,8 @@ public protocol WorkoutSessionClient: Sendable {
     /// Throws `notStartable` for a snapshot the engine would not start, whether or not a workout is live, and
     /// `workoutInProgress` while one is. A refused start changes nothing and publishes nothing. Of several
     /// starts made at once exactly one succeeds, and the others throw `workoutInProgress` naming its workout.
+    /// So does a start made again after a write whose answer was lost, when the host has since found that
+    /// workout in its store: it names the caller's own workout, which is live.
     func start(_ initial: WorkoutState) async throws
 
     /// Applies `event` to the live workout and returns the state after it, which the next update also carries.
@@ -64,11 +68,25 @@ public protocol WorkoutSessionClient: Sendable {
     ///
     /// **When the save fails** a host throws what its store threw, and nothing is lost: the end stays in the
     /// workout's log. No update is published, and `current()` and every stream go on showing the workout as
-    /// it stood before the call, so a screen keeps what it shows and no second workout can be started over
-    /// one that is not yet in history. The host saves it again when `finish` is called again, which returns
-    /// the finished state, ended when the first call said; before any `apply` or `discard`, which then throw
-    /// `noLiveWorkout`; and when the app next launches or returns to the foreground. The first save that
-    /// succeeds publishes the one ending update.
+    /// it stood before the call, with a phase of `.live`: nothing tells a reader that its end is stored and
+    /// waiting. The host saves it again when `finish` is called again, which returns the finished state,
+    /// ended when the first call said; before any `apply` or `discard`; and when the app next launches or
+    /// returns to the foreground. The first save that succeeds publishes the one ending update. A `finish`
+    /// called after that throws `noLiveWorkout`: a retry can find the end completed in between, by the launch
+    /// step or, after a write whose answer was lost, by the host reading its store.
+    ///
+    /// That holds in this process. After a relaunch the unsaved workout is no longer shown, another can be
+    /// started, and the launch step saves the first when it can.
+    ///
+    /// Three things follow for a caller while an end waits:
+    /// - **`discard` saves the workout.** It completes the waiting finish and then throws `noLiveWorkout`;
+    ///   so does `apply`. A lifter who answers a failed save with "Discard" gets the workout in history.
+    /// - **`StartWorkoutUseCase` sees an ordinary live workout.** For the same day it answers `.resumed`,
+    ///   with a workout that accepts no change; for another day `.conflict`, and replacing it saves it and
+    ///   starts the new one, or throws what the store throws and starts nothing.
+    /// - **A save that can never succeed leaves no exit in this process.** `finish`, `apply` and `discard`
+    ///   throw the store's error each time, `start` answers `workoutInProgress`, and every return to the
+    ///   foreground tries the save again. Only a relaunch frees the workout's place.
     func finish(endedAt: Date) async throws -> WorkoutState
 
     /// Ends the live workout at `endedAt` and drops it; one last update carries the discarded state, and is

@@ -14,9 +14,11 @@ import os
 ///
 /// **Memory follows the store.** State, clock and `seq` change only after the store has taken the envelope,
 /// and `live` changes only in the actor turn that publishes the change. So `current()` and a new stream,
-/// which do not queue, always agree with the last update, and a call that throws leaves all of them as
-/// they were. When the store throws on an append, the host no longer knows what it holds: the next call
-/// reads the store again before it acts (`ready()`).
+/// which do not queue, always agree with the last update. A call whose append the store refuses leaves all
+/// of them as they were. A finish or a discard whose end is stored and then cannot be completed has moved the
+/// clock and `seq` on, and leaves `live` and the streams as they were (`ending`). When the store throws on
+/// an append, the host no longer knows what it holds: the next call reads the store again before it acts
+/// (`ready()`).
 public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     /// An end that is stored in the log of `live` and not yet complete (`complete(_:)`), with the haptics
     /// its update will carry.
@@ -47,6 +49,8 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     private var subscribers: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
     /// Waits for the operation queued last.
     private var queued: @Sendable () async -> Void = {}
+    /// True in the task of a running operation: `inTurn` reads it to catch an operation that would queue.
+    @TaskLocal private static var isInTurn = false
 
     /// - Parameters:
     ///   - device: this install's device, which every envelope the host creates names.
@@ -111,13 +115,15 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     /// - The place in the queue is taken before this suspends, so operations run in the order their calls
     ///   reached the actor, and updates leave in that order.
     /// - An operation waits only for the one before it, and awaits nothing but the stores, so there is no
-    ///   cycle to deadlock on and none can be overtaken. No operation may call a method that queues.
+    ///   cycle to deadlock on and none can be overtaken. No operation may call a method that queues: it
+    ///   would wait for an operation queued behind itself, and stop the host for good. A Debug build traps.
     /// - The task is the actor's, not the caller's: cancelling the caller cancels nothing here.
     func inTurn<Value: Sendable>(_ operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        assert(!Self.isInTurn, "An operation of the session host called a method that queues")
         let earlier = queued
         let task = Task {
             await earlier()
-            return try await operation()
+            return try await Self.$isInTurn.withValue(true) { try await operation() }
         }
         queued = { _ = await task.result }
         return try await task.value
@@ -158,11 +164,15 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
 // MARK: - Own actions (ADR-004, "The host loop")
 
 private extension LocalWorkoutSessionActor {
-    /// `start`: the snapshot is judged first, by the engine, then the session.
+    /// `start`: the snapshot is judged first, by the engine, then the session. The envelope takes this
+    /// device's next `seq` in the store's log of that id: 1, unless the store kept envelopes of this device
+    /// under it (a log that replays to nothing is kept). Then the workout is what that whole log replays
+    /// to, not the bare snapshot, and the host reads it from the store as recovery does.
     func begin(_ initial: WorkoutState) async throws {
         try await ready()
+        let kept = try await events.highestSeq(for: initial.id, device: device)
         var advanced = clock
-        let envelope = try stamp(.started(initial), of: initial.id, seq: 1, with: &advanced)
+        let envelope = try stamp(.started(initial), of: initial.id, seq: (kept ?? 0) + 1, with: &advanced)
         let (started, effects) = WorkoutEngine.reduce(nil, envelope)
         guard let started else {
             throw WorkoutSessionError.notStartable(initial.id)
@@ -171,7 +181,12 @@ private extension LocalWorkoutSessionActor {
             throw WorkoutSessionError.workoutInProgress(workout.id)
         }
         try await persist(envelope)
-        (clock, seq, live) = (advanced, envelope.seq, started)
+        clock = advanced
+        guard kept == nil else {
+            isRecovered = false
+            return try await ready()
+        }
+        (seq, live) = (envelope.seq, started)
         publish(started, WorkoutSessionUpdate.haptics(from: effects))
     }
 
@@ -243,10 +258,14 @@ private extension LocalWorkoutSessionActor {
     }
 
     /// `.persist`: the envelope enters this device's log. When the store throws, what it holds is no longer
-    /// known (it may have stored the envelope and failed to say so), so the next call recovers first.
+    /// known (it may have stored the envelope and failed to say so), so the next call recovers first. The
+    /// same when the store answers that it already held the envelope: an own envelope is new, unless memory
+    /// is behind the store.
     func persist(_ envelope: EventEnvelope) async throws {
         do {
-            _ = try await events.append([envelope])
+            guard try await events.append([envelope]) == [envelope] else {
+                throw LedgerSyncError.alreadyStored(envelope.key)
+            }
         } catch {
             isRecovered = false
             throw error

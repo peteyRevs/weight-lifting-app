@@ -137,6 +137,28 @@ struct StartWorkoutUseCaseTests {
 
 /// What starts nothing.
 extension StartWorkoutUseCaseTests {
+    @Test(
+        "With replacingLive, a live workout that ended between the look and the discard is no error: the new one starts"
+    )
+    func start_replacingLive_liveEndedSinceTheLook_startsTheNewOne() async throws {
+        let stores = try InMemoryStores(seed: .preview())
+        let session = try EndsAfterTheLook(inner: FakeWorkoutSessionClient(live: Seed.seedSession()))
+        let useCase = StartWorkoutUseCase(
+            session: session, programs: stores.programs, exercises: stores.exercises, stats: stores.stats,
+            settings: stores.settings, device: Seed.deviceID, now: { Seed.now }, newID: { Self.newID }
+        )
+        let outcome = try await useCase.start(Self.source(day: 1), replacingLive: true)
+        guard case let .started(workout) = outcome else {
+            Issue.record("\(outcome)")
+            return
+        }
+        #expect(await session.inner.current() == workout)
+        // It was finished by the other caller, not discarded by this one: the refused discard changed nothing.
+        #expect(await session.inner.applied == [
+            .finished(endedAt: Seed.now), .discarded(endedAt: Seed.now), .started(workout)
+        ])
+    }
+
     @Test("A program that is not the active one throws programNotActive and starts nothing")
     func start_programNoLongerActive_throws() async throws {
         let subject = try Subject(.preview(), live: nil)
@@ -189,5 +211,43 @@ extension StartWorkoutUseCaseTests {
         )
         await #expect(throws: SessionBuilderError.self) { _ = try await useCase.start(Self.source(day: 0)) }
         #expect(await session.applied.isEmpty)
+    }
+}
+
+/// A session whose live workout another caller finishes right after `current()` has answered: what a use case
+/// that looks first and acts afterwards can meet.
+actor EndsAfterTheLook: WorkoutSessionClient {
+    let inner: FakeWorkoutSessionClient
+
+    init(inner: FakeWorkoutSessionClient) {
+        self.inner = inner
+    }
+
+    func updates() async -> AsyncStream<WorkoutSessionUpdate> {
+        await inner.updates()
+    }
+
+    func current() async throws -> WorkoutState? {
+        let live = await inner.current()
+        if live != nil {
+            _ = try await inner.finish(endedAt: LedgerFakes.Fixtures.now)
+        }
+        return live
+    }
+
+    func start(_ initial: WorkoutState) async throws {
+        try await inner.start(initial)
+    }
+
+    func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
+        try await inner.apply(event)
+    }
+
+    func finish(endedAt: Date) async throws -> WorkoutState {
+        try await inner.finish(endedAt: endedAt)
+    }
+
+    func discard(endedAt: Date) async throws {
+        try await inner.discard(endedAt: endedAt)
     }
 }

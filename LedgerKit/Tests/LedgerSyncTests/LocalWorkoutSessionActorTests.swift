@@ -165,3 +165,50 @@ struct LocalWorkoutSessionActorTests {
         #expect(await late.updates(before: mark) == [Update(state: expected.last?.state)])
     }
 }
+
+/// When the store holds more than the host's memory: an envelope it already took, a log kept under a new
+/// workout's id.
+extension LocalWorkoutSessionActorTests {
+    @Test("An own envelope the store says it already held: memory was behind the store, and the next call reads it")
+    func apply_envelopeAlreadyStored_readsTheStore() async throws {
+        let subject = Subject()
+        try await subject.host.start(Sample.session)
+        // Behind the host's back the store takes the very envelope the host will make: its next seq and stamp.
+        let twin = EventEnvelope(
+            event: Sample.logged(0, 0),
+            workoutID: Sample.session.id,
+            device: Subject.device,
+            seq: 2,
+            wallClock: EventBuilders.start.addingTimeInterval(HybridLogicalClock.tick)
+        )
+        _ = try await subject.stores.events.append([twin])
+        await #expect(throws: LedgerSyncError.alreadyStored(twin.key)) {
+            try await subject.host.apply(Sample.logged(0, 0))
+        }
+        #expect(await subject.host.needsRecovery)
+        let stored = try #require(await WorkoutEngine.replay(subject.log()))
+        #expect(stored.doneSets == 1)
+        #expect(try await subject.host.current() == stored)
+        try await subject.host.apply(.restSkipped)
+        #expect(await subject.log().map(\.seq) == [1, 2, 3])
+    }
+
+    @Test("A start under an id whose log the store kept takes the next seq, and the workout is what the log replays to")
+    func start_overAKeptLog_followsTheStore() async throws {
+        // A log without its `started` replays to nothing, and is kept (criterion 6).
+        let kept = Array(Sample.log([Sample.logged(0, 0), Sample.retargeted(0, 1, pounds: 190)]).dropFirst())
+        let subject = Subject(seed: InMemoryStores.Seed(envelopes: kept))
+        var listener = await Listener(subject.host)
+        try await subject.host.start(Sample.session)
+        let log = await subject.log()
+        #expect(log.map(\.seq).sorted() == [2, 3, 4])
+        #expect(log.last?.event == .started(Sample.session), "the start is stamped after what was kept")
+        let replayed = try #require(WorkoutEngine.replay(log))
+        #expect(replayed.doneSets == 1 && replayed.exercises[0].sets[1].weight == .pounds(190))
+        #expect(try await subject.host.current() == replayed)
+        try await subject.host.apply(.restSkipped)
+        #expect(await subject.log().map(\.seq).sorted() == [2, 3, 4, 5])
+        let mark = try await mark(subject.host)
+        #expect(await listener.updates(before: mark).prefix(2) == [Update(state: nil), Update(state: replayed)])
+    }
+}

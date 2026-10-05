@@ -125,7 +125,8 @@ public final class DatabaseLaunch {
     /// Runs a step the composition root supplies, as the launch runs its own: the step is recorded as it begins,
     /// and as failed, after a fault-level log, when `body` throws. The launch owns the step's task, so cancelling
     /// a caller never cancels it, and a call that finds it running waits for it. A step that has run runs again
-    /// only when `retrying`.
+    /// only when `retrying`. Give it a step the launch does not run itself (`resumeWorkout`): the launch's own
+    /// steps share this bookkeeping, so `body` would wait for theirs, or never run.
     public func run(_ step: LaunchStep, retrying: Bool, _ body: @escaping @MainActor () async throws -> Void) async {
         let owned = task(for: step, retrying: retrying) {
             self.record(.began(step))

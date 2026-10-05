@@ -42,6 +42,17 @@ struct WorkoutSessionConcurrentScriptTests {
         #expect(Contract.concurrentScript(seed: 8).opening?.description.hasPrefix("start(live") == true)
     }
 
+    @Test("Every script holds a start, an end the engine ignores and one it takes, a place apart in three tasks")
+    func script_holdsAnIgnoredEndBesideARealOne() {
+        for seed in Seeds.fixedSeeds {
+            let tasks = Contract.concurrentScript(seed: seed).tasks
+            let place = Contract.endsTogether(seed: seed)
+            #expect((1 ... 4).contains(place))
+            #expect(tasks[0][place - 1].description.hasPrefix("start(live"), "seed \(seed)")
+            #expect(tasks[1][place].description == "finish" && tasks[2][place + 1].description == "finish")
+        }
+    }
+
     @Test("Twenty concurrent scripts hold every kind of action")
     func scripts_holdEveryKindOfAction() {
         let actions = Seeds.fixedSeeds.flatMap { Contract.concurrentScript(seed: $0).tasks.joined() }
@@ -59,10 +70,13 @@ struct WorkoutSessionConcurrentScriptTests {
         }
     }
 
-    /// Which call wins is the scheduler's choice, so a fault that needs two calls inside the client at once
-    /// is given every fixed seed, and must be reported by one.
+    /// How many of the twenty fixed seeds must report a fault that needs two calls inside the client at once.
+    /// Which call wins is the scheduler's choice, so not every seed can; but a script is written so that most do
+    /// (an ignored end beside a real one in every script), and one seed in twenty would rest on the scheduler.
+    static let margin = 4
+
     @Test(
-        "A fault that shows only when calls overlap breaks a concurrent script within twenty seeds",
+        "A fault that shows only when calls overlap breaks the concurrent script in several of twenty seeds",
         arguments: Fault.allCases.filter(\.needsOverlap)
     )
     func overlapFault_breaksAScript(_ fault: Fault) async throws {
@@ -71,6 +85,18 @@ struct WorkoutSessionConcurrentScriptTests {
             let issue = try await Contract.concurrentScriptViolation(seed: seed, on: FaultyWorkoutSession(fault))
             reports += issue == nil ? 0 : 1
         }
-        #expect(reports > 0, "\(fault) was reported by none of \(Seeds.fixedSeeds.count) concurrent scripts")
+        #expect(reports >= Self.margin, "\(fault) was reported by \(reports) of \(Seeds.fixedSeeds.count) scripts")
+    }
+
+    /// The subscriber that acts on what it is told is the workout screen, and its stream is the second one a
+    /// script opens. A client that gets that stream alone wrong, after the subscriber has acted, is seen only
+    /// because the stream is read to its end (finding F10-S2-3).
+    @Test("A fault on the acting subscriber's stream alone, after it has acted, breaks every script")
+    func faultOnTheActingStream_breaksEveryScript() async throws {
+        for seed in Seeds.fixedSeeds {
+            let faulty = FaultyWorkoutSession(.repeatsAnUpdateOnTheSecondStream)
+            let issue = try await Contract.concurrentScriptViolation(seed: seed, on: faulty)
+            #expect(issue?.hasPrefix("the acting subscriber's stream") == true, "seed \(seed): \(issue ?? "no issue")")
+        }
     }
 }

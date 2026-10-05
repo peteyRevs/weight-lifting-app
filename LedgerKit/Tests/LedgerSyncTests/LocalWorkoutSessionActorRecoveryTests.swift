@@ -164,6 +164,19 @@ extension LocalWorkoutSessionActorRecoveryTests {
         #expect(await listener.updates(before: mark) == [Update(state: resumed)])
     }
 
+    @Test(
+        "(documents) A workout the host shows whose log is gone from its store: the pass resumes nothing and it stays"
+    )
+    func logGone_theShownWorkoutStays() async throws {
+        let subject = Subject()
+        try await subject.host.start(Sample.session)
+        // Only damage does this. The pass logs a fault; what the host should do then is F17's to decide.
+        await subject.stores.events.compact(workout: Sample.session.id)
+        #expect(try await subject.host.resumeFromStore() == Sample.session)
+        #expect(try await subject.host.current() == Sample.session)
+        #expect(await !subject.host.needsRecovery)
+    }
+
     @Test("Two live logs, which start refuses to make: the one that started last is resumed, the other kept")
     func twoLiveLogs_resumeTheLater() async throws {
         let later = EventBuilders.session(EventBuilders.seedExercises, startedAt: Sample.at(100))

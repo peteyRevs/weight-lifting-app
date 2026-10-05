@@ -87,6 +87,10 @@ extension LocalWorkoutSessionActor {
             (one.startedAt, one.id.rawValue.uuidString) < (other.startedAt, other.id.rawValue.uuidString)
         }
         guard let resumed = latest else {
+            if let shown = live, ending == nil {
+                // Only damage does this (the log's `started` cannot be read, or the log is gone).
+                logger.fault("No stored log replays to \(shown.id.rawValue, privacy: .public), which the host shows")
+            }
             return
         }
         if resumable.count > 1 {

@@ -16,7 +16,8 @@ public enum StartWorkoutError: Error, Equatable, Sendable {
 ///
 /// It decides and reads; the one workout at a time is the session client's to guard. When another caller
 /// starts a workout between this use case's look and its start, `start` throws the client's
-/// `workoutInProgress`, and asking again reports the conflict.
+/// `workoutInProgress`, and asking again reports the conflict. A live workout that has ended by the time it
+/// is to be replaced is no error: the new one starts.
 public struct StartWorkoutUseCase: Sendable {
     public enum Outcome: Hashable, Sendable {
         /// A new workout, built and now live.
@@ -65,7 +66,10 @@ public struct StartWorkoutUseCase: Sendable {
     ///
     /// - A live workout with the same source is resumed, whatever `replacingLive` says (rule 17).
     /// - A live workout with another source is a conflict; with `replacingLive` it is discarded, at the time
-    ///   the new one starts, once the new one is built: a build that fails leaves it live.
+    ///   the new one starts, once the new one is built: a build that fails leaves it live. The discard names
+    ///   no workout (the client's protocol), so it ends whatever is live then; when nothing is, because the
+    ///   workout ended in between (another caller finished it, or its save, which had failed, went through),
+    ///   the new one is started all the same.
     ///
     /// Throws `StartWorkoutError`, before it looks at the session; `SessionBuilderError` (`weekOutOfRange`
     /// once the block has ended, `unknownExercise` for a slot whose exercise is not stored); and whatever
@@ -91,7 +95,11 @@ public struct StartWorkoutUseCase: Sendable {
         }
         let workout = try await build(program, weekIndex: source.weekIndex, day: day)
         if live != nil {
-            try await session.discard(endedAt: workout.startedAt)
+            do {
+                try await session.discard(endedAt: workout.startedAt)
+            } catch WorkoutSessionError.noLiveWorkout {
+                // The workout the lifter chose to replace has ended since the look: nothing is in the way.
+            }
         }
         try await session.start(workout)
         return .started(workout)

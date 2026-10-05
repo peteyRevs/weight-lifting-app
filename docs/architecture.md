@@ -287,9 +287,10 @@ rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed e
 - On `finished`, the host stores the envelope, saves the workout (`WorkoutRepository.materialize`, which writes
   the rows and detects the records, with the slots' misses from `MissTracking` on the program as stored then,
   when it is the active one), compacts the log, and only then publishes the ending update. A save that fails
-  leaves the end in the log and the workout in front of every reader, so nothing can be started over it; the
-  next `finish`, any later change to the workout, the next return to the foreground and the next launch each
-  try again.
+  leaves the end in the log and, in this process, the workout in front of every reader as it stood, where
+  nothing can be started over it; the next `finish`, any later change to the workout, the next return to the
+  foreground and the next launch each try again. After a relaunch the unsaved workout is no longer shown and
+  another can be started; the launch step saves the first when it can.
 - Recovery is `LocalWorkoutSessionActor.resumeFromStore()`: the launch step `LaunchStep.resumeWorkout`
   (after `loadSettings`; the launch owns its task), or the first protocol call when the launch has not run it,
   and every call waits for it. The clock continues from `WorkoutEventStore.newestWallClock()`, and each log in
@@ -502,6 +503,7 @@ dependencies.
 | Set logged → other device reflects (reachable) | < 1 s |
 | Any stats query (20 k sets) | < 50 ms |
 | Recording a new workout at the end of history, its record replay included (20 k sets) | < 50 ms |
+| An `apply` on the session host, its append to the store included (F10) | < 30 ms |
 | A History write that re-detects records: edit, delete, late or moved workout (20 k sets, 400 workouts, 5 lifts; p95, simulator, Debug) | < 250 ms |
 | Watch set-ready screen update on crown detent | next frame |
 | App size (iOS) | < 15 MB |

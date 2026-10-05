@@ -12,11 +12,13 @@
     ///    rules (`Model`) publish for that call on that state, haptics included, and the call returned what
     ///    the rules say;
     /// 2. every call that succeeded is published once, and nothing else is published;
-    /// 3. every other call was refused or ignored as the rules allow at some point of the history;
-    /// 4. a stream opened in flight is a suffix of the history: it starts with a state that was published,
-    ///    without haptics, and then misses no update and repeats none;
+    /// 3. every other call was refused or ignored as the rules allow at a point of the history where the
+    ///    call can have been made: a task makes its calls one after another, so each of them stands between
+    ///    the task's call before it and the one after;
+    /// 4. a stream opened in flight is a suffix of the history, from such a point: it starts with a state
+    ///    that was published, without haptics, and then misses no update and repeats none;
     /// 5. the subscriber that acts on the update telling it of a workout finds, from that update on, what
-    ///    the history says.
+    ///    the history says, and its own stream is the whole history, read to the end.
     ///
     /// The seed fixes the calls; the scheduler fixes their order. Every call that changes a workout changes
     /// it in a way no other call does (a set, a weight, a date of its own), so an update names its call.
@@ -52,6 +54,12 @@
         /// The concurrent script of `seed`, which the seed alone decides (testing-strategy §3 rule 5): six
         /// tasks of six actions. When nothing opens it, the first task starts with a start, so a workout is
         /// live at some point of every script.
+        ///
+        /// Every script also holds, in three of its tasks, a start, an end the engine ignores and an end it
+        /// takes, each one place after the one before (`endsTogether(seed:)`). So the ignored end is made on
+        /// a live workout, and the real one arrives while it is inside the client: a client that decides the
+        /// first by what is live once the second has won is met by most scripts, not by the few that drew
+        /// such a pair.
         static func concurrentScript(seed: UInt64) -> ConcurrentScript {
             var writer = ConcurrentWriter(random: SplitMix64(seed: seed))
             let opening: Step? = seed.isMultiple(of: 2) ? .start(writer.snapshot()) : nil
@@ -59,7 +67,17 @@
             if opening == nil {
                 tasks[0][0] = .call(.start(writer.snapshot()))
             }
+            let place = endsTogether(seed: seed)
+            tasks[0][place - 1] = .call(.start(writer.snapshot()))
+            tasks[1][place] = .call(.finish(endedAt: never))
+            tasks[2][place + 1] = .call(writer.finish())
             return ConcurrentScript(opening: opening, tasks: tasks)
+        }
+
+        /// Where the script of `seed` has its second task end the workout at a date the engine ignores: its
+        /// first task makes a start one place before, and its third a finish one place after.
+        static func endsTogether(seed: UInt64) -> Int {
+            1 + Int(seed % 4)
         }
 
         /// Runs `concurrentScript(seed:)` on `client`, a fresh one, and judges it as one history. `nil` when
@@ -71,29 +89,40 @@
             let script = concurrentScript(seed: seed)
             var early = await Subscriber(client)
             let acting = await client.updates()
-            var calls: [Call] = []
-            if let opening = script.opening {
-                await calls.append(Call(step: opening, outcome: outcome(of: opening, on: client)))
+            var opening: Call?
+            if let step = script.opening {
+                opening = await Call(step: step, outcome: outcome(of: step, on: client))
             }
             let (runs, reaction) = await withTaskGroup(of: Reaction.self) { group in
                 group.addTask { await react(to: acting, on: client) }
                 let runs = await run(script.tasks, on: client)
                 return await (runs, group.next() ?? Reaction())
             }
-            calls += runs.flatMap(\.calls) + [reaction.call].compactMap(\.self)
             let current = try await client.current()
             let mark = try await markEnd(of: client)
             let history = await early.updates(before: mark)
-            var streams: [[Update]] = []
-            for stream in runs.flatMap(\.streams) {
-                var late = Subscriber(stream)
-                await streams.append(late.updates(before: mark))
+            // The acting subscriber's stream, read on from its reaction to the end: it was opened before the
+            // first call, so it must be the whole history.
+            var rest = Subscriber(acting)
+            let heard = await reaction.heard + rest.updates(before: mark)
+            var tasks: [[Deed]] = []
+            for run in runs {
+                var deeds: [Deed] = []
+                for did in run {
+                    switch did {
+                    case let .call(call):
+                        deeds.append(.call(call))
+                    case let .opened(stream):
+                        var late = Subscriber(stream)
+                        await deeds.append(.stream(late.updates(before: mark)))
+                    }
+                }
+                tasks.append(deeds)
             }
             return ContractCheck.first(
-                concurrentHistoryIssue(history, calls: calls),
-                expectUpdates([Update(state: current)], [Update(state: history.last?.live)], "current() at the end"),
-                streams.lazy.compactMap { lateStreamIssue($0, in: history) }.first,
-                reactionIssue(reaction, in: history)
+                expectUpdates(heard, history, "the acting subscriber's stream against the stream opened first"),
+                concurrentHistoryIssue(history, opening: opening, tasks: tasks, acting: reaction),
+                expectUpdates([Update(state: current)], [Update(state: history.last?.live)], "current() at the end")
             ).map { "\($0); the script: \(script)" }
         }
     }
@@ -105,51 +134,54 @@
             let outcome: Outcome
         }
 
-        /// What one task of a script did: its calls in order, and the streams it opened.
-        struct Run: Sendable {
-            var calls: [Call] = []
-            var streams: [AsyncStream<Update>] = []
+        /// What a task of a script did, in the order it did it: a call, or a stream it opened.
+        enum Did: Sendable {
+            case call(Call)
+            case opened(AsyncStream<Update>)
         }
 
         /// The subscriber that acts on what it is told, on a stream opened before the first call: the
         /// updates it read up to the first that showed a workout, what `current()` answered then, and the
-        /// set it logged in that workout.
+        /// two sets it logged in that workout, one after the other.
         struct Reaction: Sendable {
             var heard: [Update] = []
             /// `current()` as an outcome: the workout, or `.done` for none.
             var current: Outcome?
-            var call: Call?
+            var calls: [Call] = []
         }
 
         /// Runs the tasks at once: each makes its actions in order and gives way after each one.
-        static func run(_ tasks: [[Action]], on client: Client) async -> [Run] {
-            await withTaskGroup(of: Run.self) { group in
-                for actions in tasks {
+        static func run(_ tasks: [[Action]], on client: Client) async -> [[Did]] {
+            await withTaskGroup(of: (Int, [Did]).self) { group in
+                for (number, actions) in tasks.enumerated() {
                     group.addTask {
-                        var run = Run()
+                        var done: [Did] = []
                         for action in actions {
                             switch action {
                             case let .call(step):
-                                await run.calls.append(Call(step: step, outcome: outcome(of: step, on: client)))
+                                await done.append(.call(Call(step: step, outcome: outcome(of: step, on: client))))
                             case .open:
-                                await run.streams.append(client.updates())
+                                await done.append(.opened(client.updates()))
                             }
                             await Task.yield()
                         }
-                        return run
+                        return (number, done)
                     }
                 }
-                return await group.reduce(into: []) { $0.append($1) }
+                let ended = await group.reduce(into: [Int: [Did]]()) { $0[$1.0] = $1.1 }
+                return tasks.indices.compactMap { ended[$0] }
             }
         }
 
         /// Reads `stream` until an update shows a live workout, then does what a screen does: it reads
-        /// `current()` and logs the workout's first set, while the script's tasks are still calling.
+        /// `current()` and logs the first two sets of the workout it was shown, while the script's tasks are
+        /// still calling. A logged set buzzes, so these are the script's updates with a haptic besides a
+        /// finish's. The rest of the stream is left for the caller to read.
         static func react(to stream: AsyncStream<Update>, on client: Client) async -> Reaction {
             var reaction = Reaction()
             for await update in stream {
                 reaction.heard.append(update)
-                guard let first = update.live?.exercises.first?.sets.first else {
+                guard let shown = update.live?.exercises.first else {
                     continue
                 }
                 do {
@@ -157,14 +189,16 @@
                 } catch {
                     reaction.current = .threw("\(error)")
                 }
-                let log = Step.apply(.setLogged(
-                    exerciseIndex: 0,
-                    setID: first.id,
-                    weight: .pounds(135),
-                    reps: Reps(clamping: 5),
-                    doneAt: at(30)
-                ))
-                reaction.call = await Call(step: log, outcome: outcome(of: log, on: client))
+                for (number, set) in shown.sets.prefix(2).enumerated() {
+                    let log = Step.apply(.setLogged(
+                        exerciseIndex: 0,
+                        setID: set.id,
+                        weight: .pounds(Decimal(135 + 5 * number)),
+                        reps: Reps(clamping: 5),
+                        doneAt: at(Double(30 + number))
+                    ))
+                    await reaction.calls.append(Call(step: log, outcome: outcome(of: log, on: client)))
+                }
                 break
             }
             return reaction
@@ -216,6 +250,12 @@
             default:
                 return .call(refused())
             }
+        }
+
+        /// A finish at a date of its own.
+        mutating func finish() -> Contract.Step {
+            unique += 1
+            return .finish(endedAt: Contract.at(Double(600 + unique)))
         }
 
         /// A call that must be refused or ignored whatever is live: a snapshot the engine would not start,
