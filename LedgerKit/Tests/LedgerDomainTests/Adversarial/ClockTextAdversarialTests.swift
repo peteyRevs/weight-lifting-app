@@ -93,27 +93,27 @@ struct ClockTextAdversarialTests {
     ]
 
     @Test("Criterion 8: m:ss under an hour, h:mm:ss from sixty minutes", arguments: boundaries)
-    func minutesSeconds_atEachBoundary(_ row: Row) {
+    func elapsed_atEachBoundary(_ row: Row) {
         #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Criterion 8: whole seconds, rounded down, on both sides of a second", arguments: fractions)
-    func minutesSeconds_roundsDownToWholeSeconds(_ row: Row) {
+    func elapsed_roundsDownToWholeSeconds(_ row: Row) {
         #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Criterion 8: a negative duration reads 0:00, however small or large", arguments: negatives)
-    func minutesSeconds_negative_readsZero(_ row: Row) {
+    func elapsed_negative_readsZero(_ row: Row) {
         #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("No duration traps: the extremes print like any other value", arguments: extremes)
-    func minutesSeconds_extremes_printWithoutTrapping(_ row: Row) {
+    func elapsed_extremes_printWithoutTrapping(_ row: Row) {
         #expect(ClockText.elapsed(row.duration) == row.text)
     }
 
     @Test("Every whole second up to 30 hours formats as integer arithmetic says, in ASCII digits and colons")
-    func minutesSeconds_everySecondOfThirtyHours_matchesIntegerArithmetic() {
+    func elapsed_everySecondOfThirtyHours_matchesIntegerArithmetic() {
         var wrong: [String] = []
         for seconds in 0 ..< 30 * 3600 {
             let (hours, minutes, rest) = (seconds / 3600, seconds / 60 % 60, seconds % 60)
@@ -131,7 +131,7 @@ struct ClockTextAdversarialTests {
         "Seeded durations anywhere in Int64 seconds: the text reads back to the whole seconds",
         arguments: PropertySeed.all
     )
-    func minutesSeconds_readsBackToTheWholeSeconds(seed: PropertySeed) throws {
+    func elapsed_readsBackToTheWholeSeconds(seed: PropertySeed) throws {
         var generator = seed.generator
         let seconds = Int64.random(in: 0 ... .max, using: &generator) >> Int64.random(in: 0 ..< 63, using: &generator)
         let attoseconds = Int64.random(in: 0 ..< 1_000_000_000_000_000_000, using: &generator)

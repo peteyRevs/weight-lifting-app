@@ -144,12 +144,12 @@ enum Seam {
 
     static func brief(_ update: Update) -> String {
         guard let state = update.state else {
-            return "(no workout, effects \(update.haptics))"
+            return "(no workout, haptics \(update.haptics))"
         }
         let rest = state.rest.map { "\($0.endsAt.timeIntervalSince(EventBuilders.start))/\($0.total)" } ?? "none"
         return "(\(state.phase) \(state.id.rawValue.uuidString.suffix(6)), \(state.doneSets)/\(state.totalSets) done, "
             + "cursor \(state.cursor.map { "\($0.exerciseIndex).\($0.setIndex)" } ?? "nil"), rest \(rest), "
-            + "effects \(update.haptics))"
+            + "haptics \(update.haptics))"
     }
 }
 

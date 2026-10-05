@@ -36,14 +36,14 @@ struct WorkoutSessionUpdateAdversarialTests {
     }
 
     @Test("haptics(from:) keeps every haptic there is, including the two the engine never emits")
-    func feedback_keepsEveryHaptic() {
+    func haptics_keepsEveryHaptic() {
         #expect(Self.haptics.count == 4)
         #expect(WorkoutSessionUpdate.haptics(from: Self.haptics) == Haptic.allCases)
         #expect(WorkoutSessionUpdate.haptics(from: Self.haptics.reversed()) == Haptic.allCases.reversed())
     }
 
     @Test("haptics(from:) drops every other effect, whatever it carries, and an empty list stays empty")
-    func feedback_dropsEverythingElse() {
+    func haptics_dropsEverythingElse() {
         #expect(WorkoutSessionUpdate.haptics(from: Self.others) == [])
         #expect(WorkoutSessionUpdate.haptics(from: []) == [])
         for other in Self.others {
@@ -55,7 +55,7 @@ struct WorkoutSessionUpdateAdversarialTests {
         "haptics(from:) keeps order and repeats: seeded shuffles of haptics among the rest",
         arguments: PropertySeed.all
     )
-    func feedback_keepsOrderAndRepeats(seed: PropertySeed) {
+    func haptics_keepsOrderAndRepeats(seed: PropertySeed) {
         var generator = seed.generator
         let pool = Self.haptics + Self.haptics + Self.others
         let effects = (0 ..< Int.random(in: 0 ... 24, using: &generator)).map { _ in
@@ -65,7 +65,7 @@ struct WorkoutSessionUpdateAdversarialTests {
     }
 
     @Test("haptics(from:) of the engine's own effects: a log buzzes, a finish buzzes, nothing else does")
-    func feedback_ofTheEnginesEffects() {
+    func haptics_ofTheEnginesEffects() {
         let log = WorkoutEvent.setLogged(
             exerciseIndex: 0,
             setID: EventBuilders.setID(0, 0),
@@ -131,15 +131,29 @@ struct WorkoutSessionUpdateAdversarialTests {
         #expect(Set([buzz, same, reordered, WorkoutSessionUpdate(state: nil)]).count == 3)
     }
 
-    @Test("WorkoutSessionError: four cases, told apart by case and by the workout they name")
+    @Test("WorkoutSessionError: five cases, told apart by case and by the workout they name")
     func error_casesAreDistinct() {
         let (one, two) = (EventBuilders.workoutID, WorkoutID(EventBuilders.uuid(0xF101)))
         let errors: [WorkoutSessionError] = [
             .workoutInProgress(one), .workoutInProgress(two), .notStartable(one), .notStartable(two),
-            .noLiveWorkout, .incompleteLog(one), .incompleteLog(two)
+            .noLiveWorkout, .incompleteLog(one), .incompleteLog(two), .invalidEndDate
         ]
         for (index, error) in errors.enumerated() {
             #expect(errors.firstIndex(of: error) == index, "\(error) equals an earlier case")
+        }
+    }
+
+    @Test("haptics(from:) keeps the order it is given: all 24 orders of the four haptics, among other effects")
+    func haptics_everyOrderOfTheFour_isKept() {
+        var orders: [[Haptic]] = [[]]
+        for _ in Haptic.allCases {
+            orders = orders.flatMap { order in Haptic.allCases.filter { !order.contains($0) }.map { order + [$0] } }
+        }
+        #expect(Set(orders).count == 24)
+        for order in orders {
+            let effects = order
+                .flatMap { [Effect.updateLiveActivity, .haptic($0), .cancelRestNotification, .haptic($0)] }
+            #expect(WorkoutSessionUpdate.haptics(from: effects) == order.flatMap { [$0, $0] }, "\(order)")
         }
     }
 }

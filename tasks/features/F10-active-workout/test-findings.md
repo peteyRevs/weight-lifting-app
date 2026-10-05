@@ -263,3 +263,124 @@ Run from the worktree root unless noted. Logs are in the session scratchpad, `f1
 
 The gate is red only because of my three failing tests, which document F10-S1-2 to F10-S1-5. With those four
 findings fixed (or the tests re-ruled), nothing else in either plan fails.
+
+## Slice S1 — round 2, close-out (G2 tester, 2026-10-04)
+
+Scoped close-out of `9ad8fc6` (the fix round for F10-S1-1 to -6 and the review) against the brief's revised
+"Plan amendments". I audited every edit the implementer made to my files (`git diff 0950170..9ad8fc6` over the
+three `Adversarial/` folders, 17 files, read line by line against the notes' "Sanctioned test edits"), then
+re-attacked only what changed. No product code or contract was edited; nothing was committed.
+
+**Verdict.** F10-S1-1 to -6 are closed and the fake held again. One new contract gap, F10-S1-7, is open with one
+failing test (4 cases), so **G2 cannot close green as it stands**. No further open-ended round is needed: the fix
+is four small additions to the contract for which the checks already exist (below), after which my failing test
+passes unchanged; or a ruling that those four cases belong to the S2 host's own tests.
+
+### Status of round 1's findings
+
+| # | Status | What shows it |
+|---|---|---|
+| F10-S1-1 | **closed** (ruled: `invalidEndDate`) | `finish_`/`discard_nonFiniteDate_throwsInvalidEndDate_leavingTheWorkoutLive` (6 cases); the new `FakeSessionInvalidEndAdversarialTests` (7 tests, 22 cases); `clientThatReturnsForANonFiniteEnd_isRejectedByTheContract`; the differential reaches "finish invalidEndDate" and "discard invalidEndDate" |
+| F10-S1-2 | **closed** (the `device:` and `now:` parameters are gone; the fake stamps with `Fixtures.now`) | its failing test was deleted with its subject, which I accept |
+| F10-S1-3 | **closed** | `racyClient_isRejectedByAClause(.racyScrambled)` now passes (the walk in "callers at once"); two new shapes, `.publishesWhatIsLiveLater` and `.oneSubscriberReversed`, are rejected in 30 of 30 runs |
+| F10-S1-4 | **closed for the four pairs it named**; a start against an apply remains (F10-S1-7 a) | the four round 1 clients are rejected; two new shapes, `.losingEndRepublishes` and `.registersBeforeItsFirstElement`, in 30 of 30 runs |
+| F10-S1-5 | **closed** | `.judgesSnapshotsByPhaseAndStart` is rejected, and each added snapshot bites alone: `.judgesAllButRestLength` and `.judgesAllButSetDates` each break the clause |
+| F10-S1-6 | **closed** | the clauses alone reject all 33 of my one-fault clients with no exception list (`.terminalApplyMovesTheEnd` included), and the implementer's `everyClause_hasAFault` holds a fault to each of the 22 clauses |
+
+Left over from F10-S1-5, as a note: the clause still offers no snapshot with a negative rest, a rest ending at a date
+that is not finite, a last performance at such a date or such an end date. A host that asks the engine cannot have
+that fault, and the fix I named in round 1 (a rest that is too long and one inner date) is what was done.
+
+### Audit of the edits to my files
+
+- **Mechanical, as claimed** (ten files whole, and the lines so marked in six more): `effects:` → `haptics:` with
+  `[.haptic(x)]` → `[x]`, `feedback(from:)` → `haptics(from:)`, `minutesSeconds(` → `elapsed(`. I found no edit among
+  them that changes what a test demands.
+- **The oracle's `end(_:)`** (`SessionSeamOracleAdversarialSupport`): right. It refuses with `invalidEndDate` only when
+  a workout is live and the engine ignored the end; with nothing live `noLiveWorkout` still wins, as criterion 2 has it.
+- **`nonFiniteEndThrows` → `nonFiniteEndReturns`**: right, and forced by the ruling. It had been left outside
+  `SeamFault.sequential`; I moved it in, so the clauses-or-scripts, clauses-alone and oracle tests ask about it too.
+- **`forwardsEveryEffect` deleted**: forced by the type, but nothing then demanded "no haptic the engine did not ask
+  for". **Restored** as `.inventsHaptics` (a `.setLogged` added to every update): rejected by a clause, the scripts
+  and my oracle.
+- **`WrongSessionClient.ignored`**: right. `.nonFiniteEndEnds` now drops the workout and throws; still rejected.
+- **Deleted, `FakeSessionForgettingAdversarialTests`** (2 tests): accepted, their subject (`subscriberCount`) is gone.
+  **Replaced** by `FakeSessionEndedStreamsAdversarialTests` (3 tests, 42 cases) on what a caller can see. One change
+  of behaviour to know: an ended stream is now forgotten only when a publication finds it terminated, so streams
+  dropped while nothing is published are kept until the next publication (round 1's fake dropped them at the next
+  subscription). Nothing observable depends on it.
+- **Deleted, the two stamp tests** (23 cases): accepted, the parameters are gone.
+- **Stale names and comments, fixed by me**: `elapsed_…` (6 functions), `haptics_…` (4), "five cases" with
+  `invalidEndDate` in `error_casesAreDistinct`, the bite suite's comments, `notForTheClauses` (removed: no exception is
+  needed now), `.firstElementRepeatsHaptics`, and "haptics" in `Seam.brief`.
+
+### F10-S1-7. contract gap — four pairs of calls the overlap clauses still do not run
+
+- **Rule.** `WorkoutSessionClient`: "The rules hold when calls overlap: a client takes them one at a time, so every
+  caller and every subscriber is told the same one story." Criterion 1 (order under overlap), criterion 3 (an
+  update's haptics), criterion 4 (`finish` "returns the finished state"; `invalidEndDate`).
+- **Repro.** `racyClient_isRejectedByAClause` in `SessionContractRoundTwoAdversarialTests`, four of its eight cases.
+  `LateWrongSessionClient` is a second client written from the revised documentation; with no fault it keeps all 22
+  clauses, 12 scripts, my oracle and my eight overlap checks. Each of these four has one suspension in the wrong place:
+
+  | | Client | What it does when calls overlap | Never run by the contract |
+  |---|---|---|---|
+  | a | `.startPublishesLate` | commits a start, suspends, then publishes it: an apply that overlaps is published before the start | a start against an apply |
+  | b | `.startCommitsLate` | publishes a start, suspends, then commits it: a subscriber told of the workout finds `current()` nil and its `apply` refused | a subscriber acting on the update it was just given |
+  | c | `.dropsHapticsUnderOverlap` | publishes a logged set without its haptic when another apply is inside the client | overlapping events that buzz (the clauses overlap stepper edits and adds only) |
+  | d | `.judgesAnEndByWhatIsLiveLater` | decides `invalidEndDate` by whether a workout is live after a suspension: when another end has won meanwhile, a `finish` at a date that is not finite returns a live workout | an end the engine ignores against one it takes |
+
+- **Expected.** Some clause complains. **Actual.** None does: 0 of 30 exploration runs each, 0 of 10 in the committed
+  test. My checks reject all four in 30 of 30 runs and pass on the fake.
+- **How serious.** The fake is right; this is about what S2's host will be held to. (a) is the rest of F10-S1-4 and
+  (d) is the new rule's own overlap, a host that reads "still live after the call" literally and looks after an
+  await. (c) costs one line. (b) is the least likely host fault of the four.
+- **Fix.** (a) a clause from `Seam.startVersusApplyFault`; (b) one from `Seam.reactionFault`; (c) let some of
+  "callers at once"'s events be logs, as `Seam.overlapFault` does with an add and then a log per set; (d) two ends at
+  a date that is not finite among "ends at once"'s twelve, which may only throw `invalidEndDate` or `noLiveWorkout`
+  (`Seam.invalidEndRaceFault`). All are in `SessionSeamLateRacesAdversarialSupport.swift` and
+  `SessionSeamOverlapAdversarialSupport.swift`.
+
+A note, not a finding: `.invalidEndSticks` (a client that refuses every later end once it has refused one) passes
+all 22 clauses, because the clause for an ignored end never tries an end the engine takes afterwards. The scripts
+do, and reject it in 150 of the 200 PR seeds, so the contract as a whole catches it (`leftToTheScripts`).
+
+### Re-attacked and held
+
+- **`invalidEndDate` on the fake.** `finish` and `discard` at +∞, −∞ and NaN: refused fifty times over, the workout
+  and its running rest unchanged, nothing published, each call listed in `applied`, a stream opened afterwards
+  starting at the live workout, and then a valid end of the other kind returning and publishing the engine's state
+  once. The same six through `apply`: the workout returned, nothing thrown. With nothing live, before a workout
+  and after one: `noLiveWorkout`. Twelve such ends racing one valid finish: only that one returns. Twelve racing
+  sixty adds: all refused, the history whole.
+- **The rule on other clients.** Six one-fault clients for its edges (the wrong error, a throw through `apply`, the
+  date judged before the workout, a discard that returns, a refusal that publishes, a refusal that sticks): five
+  are each rejected by exactly one clause, the sixth by the scripts.
+- **The overlap clauses and the walk.** Of eight new racy shapes, four are rejected in 30 of 30 runs (above).
+- **A start against applies, and a subscriber that acts on the start**: hold on the fake.
+- **Ended streams, observably.** 5,000 streams dropped with nothing published, then a whole workout on a kept reader;
+  40 seeds of 60 rounds in which streams are dropped unread, read by a cancelled task or opened, around one
+  publication per round (every stream still held has exactly its first element and every update since); 30 readers
+  stopping at different points while 300 sets are added.
+- **`haptics(from:)`.** All 24 orders of the four haptics among other effects, with repeats; and the differential,
+  which compares the fake's haptics with a filter of my own over 200 seeds of 120 calls.
+- **`ClockText.elapsed`.** My round 1 tests, unchanged but for the name, pass (246 cases).
+- **Round 1's suites** on the new API: all pass.
+
+### Not attacked in this round
+
+The host; a full fault-by-clause table for the 22 clauses; anything not named above as changed. The racy clients
+remain scheduler-dependent, as in round 1: each such test allows ten runs and needs one complaint.
+
+### Commands (round 2)
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'FakeSession.*AdversarialTests\|SessionContract.*AdversarialTests\|WorkoutSessionUpdateAdversarialTests\|ClockTextAdversarialTests\|WorkoutSessionKeyAdversarialTests'` | 1 | 78 tests (about 1,030 cases): 77 pass, 1 fails (F10-S1-7, 4 cases); 13 known issues, all expected |
+| `scripts/check.sh --lint-only` | 0 | format, `swiftlint --strict`, package graph, script tests |
+| `/usr/bin/python3 <sim-lock> scripts/check.sh` (full gate, at the end) | **65 (red)** | Steps 0 to 2 and the iOS build pass. Step 3, the iOS PR plan: 1,729 tests, 1,707 pass, 12 skipped, 9 expected failures, **1 fails, mine**: `racyClient_isRejectedByAClause` of `SessionContractRoundTwoAdversarialTests`, the four cases of F10-S1-7. `check.sh` stops there |
+| `/usr/bin/python3 <sim-lock> f10s1-g2/watch-step.sh` (step 4's own commands, as in round 1) | build 0, tests 65 | watchOS PR-Watch plan: 1,548 tests, 1,530 pass, 12 skipped, 5 expected failures, **1 fails, the same test** |
+| `scripts/coverage-gate.sh` on the two bundles (step 5's command) | 0 | LedgerDomain 99.12 %, LedgerFakes 98.95 %, LedgerDependencies 96.20 %, LedgerSync 91.17 %, overall 98.51 % |
+
+The gate is red only because of the one test that documents F10-S1-7. The orchestrator's gate on `9ad8fc6` was
+green; the difference is this round's new clients, not a regression in the fix round.

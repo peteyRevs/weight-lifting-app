@@ -5,7 +5,7 @@ import LedgerDomain
 /// criteria 1 to 4) or of the protocol's documentation that it breaks.
 enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     // Criterion 1: the stream.
-    case firstElementRepeatsEffects = "gives a new stream the last update's effects in its first element"
+    case firstElementRepeatsHaptics = "gives a new stream the last update's haptics in its first element"
     case firstElementIsStale = "gives a new stream the workout before the last change as its first element"
     case endedShownToNewStreams = "starts a new stream with the ended workout, not with nil"
     case onlyFirstSubscriber = "publishes to its first subscriber only: a later stream ends after its first element"
@@ -26,7 +26,10 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     case judgesSnapshotsByPhaseAndStart = "starts any live snapshot with a finite start, whatever else it holds"
     // Criterion 3: apply.
     case returnsStateBefore = "returns from apply the state before the event"
-    case dropsHaptics = "forwards no effect at all"
+    case dropsHaptics = "forwards no haptic at all"
+    /// Round 2: what `forwardsEveryEffect` asked before an update's feedback became `[Haptic]`. A client
+    /// can no longer forward another kind of effect, but it can still buzz when the engine did not.
+    case inventsHaptics = "adds a haptic the engine did not ask for to every update"
     case publishesIgnored = "publishes an update for an event the engine ignores"
     case skipsUnchanged = "publishes nothing for an accepted event that leaves the workout as it was"
     case currentLags = "answers current() with the workout before the last change"
@@ -40,8 +43,8 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     case nonFiniteEndEnds = "drops the workout on a finish or discard whose date the engine ignores"
     case terminalApplyMovesTheEnd = "ends a workout through apply a second later than the event says"
     /// F10-S1-1, as ruled: what the protocol documented before round 1's ruling (returning the workout
-    /// still live) is now the fault; criterion 4 has `finish` and `discard` throw `invalidEndDate`.
-    case nonFiniteEndReturns = "returns from a finish or discard whose date the engine ignores"
+    /// still live) is the fault; criterion 4 has `finish` and `discard` throw `invalidEndDate`.
+    case nonFiniteEndReturns = "returns from a finish or discard whose date the engine ignores, the workout still live"
     /// The contract's documentation says a client whose streams have no first element keeps a clause
     /// waiting until the suite's time limit fails it, so no test here runs it.
     case noFirstElement = "gives a stream no first element"
@@ -72,7 +75,7 @@ enum SeamFault: String, Sendable, CaseIterable, CustomStringConvertible {
     ]
     /// Faults that show on calls made one after another, and leave no reader waiting for an update that
     /// never comes.
-    static let sequential = allCases.filter { !(racy + [.noFirstElement, .nonFiniteEndReturns]).contains($0) }
+    static let sequential = allCases.filter { !(racy + [.noFirstElement]).contains($0) }
 }
 
 extension WorkoutEvent {

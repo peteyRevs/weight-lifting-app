@@ -46,23 +46,18 @@ struct SessionContractBiteAdversarialTests {
         #expect(divergence == nil, "\(seed)")
     }
 
-    /// Fails for one fault, F10-S1-5: the contract's unstartable snapshots are two ended ones and one with a
-    /// start date that is not finite, so a client that judges a snapshot by its phase and start alone passes.
+    /// Round 1 failed here for one fault (F10-S1-5: a client that judges a snapshot by its phase and start
+    /// alone); the contract's unstartable snapshots now include a rest that is too long and a set done at a
+    /// date that is not finite.
     @Test("The contract rejects a client with one fault", arguments: SeamFault.sequential)
     func faultyClient_isRejectedByAClauseOrAScript(_ fault: SeamFault) async throws {
         let (clauses, script) = try await Self.complaints(about: fault)
         #expect(!clauses.isEmpty || script != nil, "the contract accepts a client that \(fault)")
     }
 
-    /// Faults no clause is asked about here: the first is seen by the scripts alone (the clause for a
-    /// terminal event through `apply` compares what the client published with what the client returned,
-    /// F10-S1-6), and the second is the one the test above fails for.
-    static let notForTheClauses: Set<SeamFault> = [.terminalApplyMovesTheEnd, .judgesSnapshotsByPhaseAndStart]
-
-    @Test(
-        "The named clauses alone reject a client with one fault",
-        arguments: SeamFault.sequential.filter { !notForTheClauses.contains($0) }
-    )
+    /// Every fault, with no exception: round 1 left two to the scripts (F10-S1-5 and F10-S1-6), and the
+    /// clauses now take their expected ended states from the engine.
+    @Test("The named clauses alone reject a client with one fault", arguments: SeamFault.sequential)
     func faultyClient_isRejectedByAClause(_ fault: SeamFault) async {
         let clauses = await Contract.violations { WrongSessionClient(fault) }
         #expect(!clauses.isEmpty, "every clause accepts a client that \(fault)")
@@ -70,9 +65,8 @@ struct SessionContractBiteAdversarialTests {
 
     /// Whether a fault shows depends on the scheduler: two calls must be inside the client at once. A run
     /// where none overlap proves nothing, so the clauses get ten runs and one complaint is enough; a
-    /// contract that cannot see the fault complains in none. It fails for five faults: F10-S1-3 (the one
-    /// concurrent clause does not check that each update follows from the one before: `racyScrambled`) and
-    /// F10-S1-4 (no clause overlaps a start, an end or a subscription with another call: the last four).
+    /// contract that cannot see the fault complains in none. Round 1 failed here for five faults (F10-S1-3
+    /// and F10-S1-4); the ordering walk and the four overlap clauses of the fix round are what catch them.
     @Test("The clauses reject a client whose fault shows only when calls overlap", arguments: SeamFault.racy)
     func racyClient_isRejectedByAClause(_ fault: SeamFault) async {
         var complaints: [String] = []

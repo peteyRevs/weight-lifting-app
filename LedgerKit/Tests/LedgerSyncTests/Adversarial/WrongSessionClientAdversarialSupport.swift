@@ -15,7 +15,7 @@ actor WrongSessionClient: WorkoutSessionClient {
     private var ended: WorkoutState?
     /// An ended workout `current()` still answers with (the three `…LeavesCurrent` faults).
     private var leftCurrent: WorkoutState?
-    private var lastEffects: [Haptic] = []
+    private var lastHaptics: [Haptic] = []
     private var listeners: [AsyncStream<Update>.Continuation] = []
     /// A set edit kept back from the second subscriber (`swapsForSecondSubscriber`).
     private var held: Update?
@@ -35,7 +35,7 @@ actor WrongSessionClient: WorkoutSessionClient {
         continuation.onTermination = { [stopped] _ in _ = stopped.next() }
         switch fault {
         case .noFirstElement: break
-        case .firstElementRepeatsEffects: continuation.yield(Update(state: live, haptics: lastEffects))
+        case .firstElementRepeatsHaptics: continuation.yield(Update(state: live, haptics: lastHaptics))
         case .firstElementIsStale: continuation.yield(Update(state: live == nil ? nil : before))
         case .endedShownToNewStreams: continuation.yield(Update(state: live ?? ended))
         default: continuation.yield(Update(state: live))
@@ -195,12 +195,13 @@ private extension WrongSessionClient {
     func forwarded(_ effects: [Effect]) -> [Haptic] {
         switch fault {
         case .dropsHaptics: []
+        case .inventsHaptics: Seam.haptics(effects) + [.setLogged]
         default: Seam.haptics(effects)
         }
     }
 
     func publish(_ update: Update, holdable: Bool = false) {
-        lastEffects = update.haptics
+        lastHaptics = update.haptics
         if fault == .cancelEndsEveryone, stopped.value > 0 {
             listeners.forEach { $0.finish() }
         }

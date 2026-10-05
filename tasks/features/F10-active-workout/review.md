@@ -307,3 +307,149 @@ pattern).
 
 A test helper from the implementer's mutant run is still alive: pid 5917, `swiftpm-testing-helper … LedgerDependenciesTests`,
 started 17:54:27, parent 1, idle. It predates the gate and looks like mutant M6's hung run. I left it alone.
+
+## Slice S1 — re-review of fix round 1 (G3 reviewer, 2026-10-04)
+
+Scoped: `git diff 0950170..9ad8fc6` against my findings above, the tester's round 1 and the orchestrator's three sets
+of rulings. Not a fresh full review. Files were read as committed (`git show 9ad8fc6:…`); the tester's uncommitted
+work was not read.
+
+### Verdict
+
+**Approve: 0 Blocking, 2 Should fix, 3 Nits.** B1, SF1 to SF4 and N1 to N7 are all closed. The two Should-fix items
+are new and small: one makes two of the new overlap clauses bite by construction instead of by the scheduler's
+choice, the other writes a ruling where the next lane will read it. Neither changes the API, so both can ride with
+S2's first commit if the orchestrator prefers.
+
+### Status of the first review's findings
+
+| Item | Status | Evidence |
+|---|---|---|
+| B1 | **Closed** | `WorkoutSessionError.invalidEndDate`, no payload (`Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift:110-112`). The fake's guard tests the outcome (`FakeWorkoutSessionClient.swift:82-95`, `finished.phase != .live`), as does the model (`…Contract+Model.swift:105-112`). Clause 8 is the split clause (`+Lifecycle.swift:179-196`); clause 16 keeps both terminal events at a date that is not finite as ignored events through `apply` (`+Updates.swift:134-140`); clause 5 pins `noLiveWorkout` first when nothing is live (`+Lifecycle.swift:114-116`). Docs on `apply`, `finish`, `discard` and the case agree. "Inputs for S2" says to test the outcome (notes `:1113-1116`) |
+| SF1, F10-S1-3, F10-S1-4 | **Closed**, see R1 | The history walk and four clauses (`+Overlap.swift`). No over-constraint and no hang found (below) |
+| SF2 | **Closed** | 26 faults, at least one per clause, the re-entrancy one among them (`FaultyWorkoutSession.swift:101-103`, `:181-185`) |
+| SF3 | **Closed** | `WorkoutSessionClient.swift:47-48`, `:57-58`; the host test is in "Inputs for S2" (notes `:1117-1122`); F09's input reloads history and reads `state?.phase` (`:1150-1168`) |
+| SF4 | **Closed** | `init(live:)` only (`FakeWorkoutSessionClient.swift:27`); the stamp is fixed (`:97-105`); the clock-read test is gone |
+| N1 | Closed | `WorkoutSessionClient.swift:13-15` |
+| N2 | Closed | `fixedSeeds`; I ran the suites with `LEDGER_PROPERTY_SEED_COUNT=1`: 14 tests pass |
+| N3 | Closed | `+Updates.swift:171-173`. A client with no first element still waits for the time limit, as documented |
+| N4 | Closed | `ClockText.elapsed(_:)` |
+| N5 | Closed, as a type | `haptics: [Haptic]` reaches the protocol, the fake, the contract, the model, every test and the brief. One stale comment (N-c) |
+| N6 | Closed, cost accepted | One generator; see N-b for its home |
+| N7 | Closed | No lock, no `onTermination`, no `@testable import LedgerFakes`. The one remaining test is behavioural (`FakeWorkoutSessionClientTests.swift:120-150`) |
+
+### The six checks
+
+1. **B1: closed.** Nothing about the case is wrong. For the consumers: S7's finish flow gets a throw and a workout
+   that is still live and unpublished, which is exactly what the cover shows. The watch is the same. For "Discard
+   and start new", `invalidEndDate` now stops before `start`, which is right. One thing for S2 to write, not a
+   finding here: when `discard` throws `noLiveWorkout` because the workout ended in between (the watch finished it),
+   `StartWorkoutUseCase(replacingLive:)` should go on to `start`, not fail. The cause-named case with an
+   outcome-tested guard is safe only because the host checks its own stamp before `reduce`, which "Inputs for S2"
+   already says (notes `:1128-1130`).
+2. **Overlap clauses: closed, with R1.**
+   - *Can a correct host fail them?* No. Each judges the outcome as a set (one winner, the rest refused; a history
+     in which every update follows from the one before by an event not yet seen), every fixture event is distinct
+     and changes the state, and nothing depends on which call wins. The fake passed 30 of 30 runs here at a load
+     average of 14, and 12 of 12 on a one-thread pool.
+   - *Can any hang?* Not for the faults listed: every stream is registered before the mark is made. A host that
+     registers a stream after returning it can miss the mark and wait for the time limit, as before.
+   - *Can a racy host pass most of the time?* For clauses 18, 19 and 20, no: each call is its own task, all are
+     queued before the first one's suspension ends, and their faults showed even on a one-thread pool. For clauses
+     21 and 22, yes under the wrong conditions: R1.
+   - *Is 80 of 80 good enough?* For this slice, yes: the gate is green and the contract says plainly that one green
+     run is weak evidence. It is a statement about a ten-core host, though, and R1 is the cheap way to stop
+     depending on it.
+3. **SF2: closed.** `everyClause_hasAFault` is a real check of the table: every clause name is claimed by a fault,
+   and every fault's prefix matches exactly one clause, so a new clause without a fault, or a renamed one, fails
+   it. It does not show that a fault bites; `fault_breaksItsClause` does, for each of the 26. Together they prove
+   what SF2 asked for.
+4. **SF3, SF4, N1 to N7: as ruled** (table above). N6 is acceptable; a cleaner home is N-b.
+5. **New code.**
+   - The fake: 90 lines, no suspension, so no re-entrancy; ended streams are held until the next publication and
+     no longer, which is the measured 234 bytes each. Nothing a host could not do, apart from accepting a start
+     under an ended workout's id (open question 4, S2's). One nit on `publish` (N-a).
+   - `+Overlap.swift` and `FaultyWorkoutSession+Fault.swift`: sound; R1 on two loops.
+   - Standards: no unstructured task, no sleep, no lock; every async suite has its time limit; names follow §6.
+     `Task.yield()` appears once, inside the faulty stand-in, which is where it belongs.
+6. **Stale or broken:** R2 and N-c. Architecture §13 needed no change. "The one update that ends it"
+   (`WorkoutSessionClient.swift:69-70`, the brief `:190`) was left as it was; `updates()` now says a host may
+   publish further updates, which is room enough, and F17 rewrites the sentence when it has a case. The tester's own
+   stale names (`minutesSeconds_…`, "four cases") are the tester's close-out.
+
+### New findings
+
+**Should fix**
+
+**R1. Clauses 21 and 22 overlap their calls only when a second thread happens to run.**
+- Where: `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+Overlap.swift:170-172` (six tasks, each
+  making twelve `apply` calls in a row, beside one `finish`) and `:228-230` (one task making sixty `apply` calls in
+  a row, beside eight `updates()` calls); the test that allows ten tries,
+  `Tests/LedgerSyncTests/WorkoutSessionClientContractFaultTests.swift:35-44`.
+- What is wrong: a task that makes its calls in a row never gives way between them, because an uncontended hop to
+  an actor does not suspend. Whether the other tasks get in is then up to real parallelism. In clauses 18 to 20
+  every call is a task of its own, so they do not have this shape.
+- Evidence:
+  - Default pool: the three suites passed 30 of 30 runs.
+  - Cooperative pool narrowed to one thread (`LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`): 12 of 12 runs failed, each
+    time on exactly `appliesAfterTheEnd` and `registersAfterASuspension`, so neither showed in 120 tries. The other
+    three overlap faults and every test on a correct client passed.
+  - A standalone model of the two shapes (`f10s1-g3/overlap/main.swift` in the scratch folder, 200 runs each): as
+    written, the faults showed in 76 and 23 runs on the default pool and in 0 and 0 on one thread. With
+    `await Task.yield()` after each of the clause's own calls: 200 and 200, on both pools. The model's calls are
+    cheaper than the engine's, so its default-pool rates are lower than the real clauses' 80 of 80.
+- Why it matters: nobody runs the gate on one thread, but a starved CI runner is the same thing for a millisecond,
+  and these two clauses are the ones that hold S2's `updates()` and its end path to "one call at a time".
+  Standards §9 also says retries are not a fix, and the ten tries are one.
+- Fix:
+  1. `await Task.yield()` after each call in the two loops (two lines). A correct client still passes whatever the
+     scheduler does; I did not run this in the real contract, because I may not edit it.
+  2. In "Inputs for S2": run the contract on the host over stores whose every method yields first (a ten-line
+     wrapper in test support). A host's own suspension is an actor hop, which lets nobody in when the store is
+     idle; the wrapper makes each `await` on a store a real one, for all five overlap clauses.
+  3. Once 1 is in, try `fault_breaksItsClause` with one try for the overlap faults and keep the ten only if a fault
+     needs them.
+
+**R2. The ruling "exactly one subscriber plays haptics, on the workout side" is not written where F09 and F18 will
+read it.**
+- Where: `tasks/features/F10-active-workout/implementation-notes.md:1169-1172` ("Inputs for F09 S6" still says
+  "Feedback: play `update.haptics`, as given and in order", with two cautions); the ruling is 290 lines below
+  (`:1459-1461`). `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift:66-67` and `:72-73` say "what the
+  screen should play".
+- Why it matters: every subscriber gets every update, Today stays subscribed under the cover, and the bullet
+  tells Today to play. `HapticsClient` has no `play` until F10 S6, so nothing buzzes twice today.
+- Fix: replace the bullet with "Today reads `state` only and never plays `update.haptics` (ruling after fix
+  round 1)", and add to the `haptics` doc: "Every subscriber receives them; exactly one, on the workout side, plays
+  them."
+
+**Nits**
+
+- **N-a.** `Sources/LedgerFakes/FakeWorkoutSessionClient.swift:113-119`: the publishing is done by the predicate of
+  `removeAll`. It is correct today (the standard library calls the predicate once per element, in order), but that
+  is not promised, and "Inputs for S2" tells the host to forget streams "as the fake does" (notes `:1124-1125`).
+  Write the loop: yield to each, keep the ones that did not answer `.terminated`.
+- **N-b.** `Sources/LedgerFakes/FakeLinkBus.swift:186-203`: `SplitMix64` is now the shared generator but lives in the
+  link bus's file. Move it to `LedgerFakes/Support/SplitMix64.swift`. Keeping it in `LedgerFakes` is right: it is
+  the only module both users can reach, and the `#if DEBUG` around the scripts is the price.
+- **N-c.** Stale text. `tasks/features/F10-active-workout.md:199` still says "current state first (no effects)".
+  The plan's "What F09 gets from S1" (notes `:75-126`) still shows `effects`, `feedback(from:)`,
+  `ClockText.minutesSeconds` and the fake's `device:` and `now:`; add one line at its top pointing to the brief's
+  revised amendments and "Inputs for F09 S6".
+
+### What I ran
+
+- `swift test --filter 'WorkoutSessionClientContract|FakeWorkoutSessionClientTests'` on the host: 14 tests in 3
+  suites pass (22 clauses, 200 seeds, 26 faults). Then the same 30 times with `--skip-build`: 30 green.
+- The same 12 times with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`: 12 red, as under R1.
+- The same with `LEDGER_PROPERTY_SEED_COUNT=1`: green.
+- The standalone model under R1. No helper process is left running, and pid 5917 from the first review is gone.
+
+### What I did not check
+
+- The Release build, the simulators, the full gate (the orchestrator's on `9ad8fc6`: exit 0) and the round's mutants.
+- R1's fix in the real contract: modelled, not run.
+- The tester's files. I skimmed the three committed edits the notes call more than mechanical and left the audit to
+  the tester. The tester was editing six of its files while I worked, so the binary I ran may hold its uncommitted
+  edits; the three suites I ran are the implementer's. I did not run the tester's racy tests on one thread; they
+  lean on the same two clauses.
+- The host against the new clauses, recovery, storage, and a save that fails: S2's.
