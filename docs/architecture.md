@@ -485,14 +485,16 @@ onboarding has none. `MainRoot` resolves the routes (§4).
 `deviceID`, `exerciseRepository`, `programRepository`, `workoutRepository`,
 `workoutEventStore`, `settingsRepository`, `statsQueries`, `healthStore`,
 `liveWorkoutTransport`, `companionTransport`, `haptics`, `notifications`,
-`liveActivities`, `logger` (a `LedgerLogger` over `os.Logger`), all in the
+`liveActivities`, `workoutSession` (the live workout's `WorkoutSessionClient`, F10),
+`logger` (a `LedgerLogger` over `os.Logger`), all in the
 nonisolated `LedgerDependencies` (F07). Each `liveValue` is an
 `Unimplemented*` stub until the composition root binds the real one: a store
 stub logs at fault level and throws `LedgerDependencyError.unimplemented(key:)`
-(its `observe…()` logs and ends at once); the device stubs have no methods yet;
+(its `observe…()` logs and ends at once), as does the session stub (its `updates()` logs and
+ends at once); the device stubs have no methods yet;
 `deviceID`'s logs and gives the nil UUID; each `testValue` is the library's default, which fails the test
 naming the key (the logger's discards); each `previewValue` is a `LedgerFakes`
-fake, the stores seeded with fixtures. Store tests start from the test values
+fake, the stores seeded with fixtures and the session with no workout. Store tests start from the test values
 with `withTestDependencies` (`LedgerTestSupport`). Stores never construct their
 dependencies.
 

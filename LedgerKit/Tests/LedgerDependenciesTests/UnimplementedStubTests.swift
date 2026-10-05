@@ -114,6 +114,24 @@ struct UnimplementedStubTests {
         ])
     }
 
+    @Test(
+        "The workout session's stub throws from every method; updates ends at once (F10 S1 criterion 6)",
+        .timeLimit(.minutes(1))
+    )
+    func workoutSession() async throws {
+        let stub = WorkoutSessionKey.liveValue
+        let session = try Fixtures.seedSession()
+        #expect(stub is UnimplementedWorkoutSession)
+        await Self.expectUnimplemented("workoutSession", [
+            { _ = try await stub.current() },
+            { try await stub.start(session) },
+            { try await stub.apply(.restSkipped) },
+            { _ = try await stub.finish(endedAt: Fixtures.now) },
+            { try await stub.discard(endedAt: Fixtures.now) }
+        ])
+        #expect(await Self.isEmpty(stub.updates()))
+    }
+
     @Test("Until the composition root binds it, the live device id is the nil UUID, which no device row holds")
     func deviceID_liveValue_isTheNilUUID() {
         #expect(DeviceIDKey.liveValue.rawValue == UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
