@@ -142,6 +142,33 @@ struct RootGateAdversarialTests {
             session.checkWhole("cancelled from \(before)")
         }
     }
+}
+
+extension RootGateAdversarialTests {
+    @Test("A value the store gave to a call that is cancelled before it takes it changes nothing, from any screen")
+    func valueGivenThenCancelled_changesNothing() async throws {
+        for before in [RootGate.Destination.loading, .onboarding, .main] {
+            let session = try GateSession(.changing)
+            await session.start()
+            await session.returnCurrentLaunch()
+            if before == .onboarding {
+                await session.report(nil)
+            }
+            if before == .main {
+                await session.reportProgram()
+            }
+            // The value that would change the screen: a program for a lifter on onboarding, none on the tabs.
+            let program = before == .main ? nil : try Fixtures.seedProgram()
+            await session.reportThenCancel(program)
+            #expect(session.gate.destination == before, "from \(before)")
+            await session.start() // the next call reads what the store holds
+            await session.returnCurrentLaunch()
+            await session.report(program)
+            #expect(session.gate.destination == (program == nil ? .onboarding : .main))
+            await session.finish()
+            session.checkWhole("given then cancelled from \(before)")
+        }
+    }
 
     @Test("A database that is not open decides nothing; the call after it opens is followed")
     func databaseNotOpen_decidesNothing_thenFollows() async throws {

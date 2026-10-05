@@ -13,8 +13,7 @@ final class TabsAdversarial: XCTestCase {
 
     @MainActor
     private func launch(_ arguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"] + arguments
+        let app = XCUIApplication.fresh(arguments)
         app.launch()
         XCTAssertTrue(app.skipSetupToToday())
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))

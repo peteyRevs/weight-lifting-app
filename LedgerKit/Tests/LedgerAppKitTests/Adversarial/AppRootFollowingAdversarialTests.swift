@@ -8,8 +8,9 @@
     import Testing
 
     /// F08 S3 adversarial round 1 (G2), criteria 3, 4 and 8 (revised): the hosted root keeps its screen through
-    /// the scene leaving and returning, mid-onboarding and mid-save; it returns to onboarding when the program
-    /// goes away; two roots follow one store; and a second boot on the same file opens on the tabs.
+    /// the scene leaving and returning, mid-onboarding and mid-save; a program that arrives switches it to the
+    /// tabs; two roots follow one store; and a second boot on the same file opens on the tabs. The return to
+    /// onboarding when the program goes away is `AppRootResetAdversarialTests`' (round 2).
     @Suite("Adversarial F08 S3 · the real root keeps following", .serialized, .timeLimit(.minutes(1)))
     struct AppRootFollowingAdversarialTests {
         typealias Onboarding = AppRootOnboardingAdversarialTests
@@ -21,24 +22,6 @@
             await scene.app.journal.until { entries in
                 entries.count { $0.hasPrefix("sql ") && $0.contains("FROM program WHERE is_active = 1") } > reads
             }
-        }
-
-        /// Deletes the active program, which is what the gate sees of Settings' "Delete all data" (F14), and
-        /// returns once the root has switched to onboarding.
-        ///
-        /// A limit of this harness. The onboarding store the root makes now is usually made by SwiftUI's own
-        /// update, before the test lays the root out, and so outside the test's dependency scope
-        /// (`withGateDependencies`): in 12 of 16 runs measured on 2026-10-05, with a wait that gave up its turn
-        /// in a loop and was meant to prevent it, and did not. Such a store draws with the default locale, and
-        /// its read of the unit fails on the unimplemented settings store, which swift-dependencies reports
-        /// once a process, as a warning that belongs to no test. Nothing these tests expect after a delete
-        /// needs that store's dependencies, except a save, and each test that saves there checks that the
-        /// program reached the real database. A save's task is made in the layout the test runs in the same
-        /// turn as the tap, inside the scope.
-        static func delete(_ program: Program, in scene: GateRootScene) async throws {
-            try await scene.stores.programs.delete(program.id)
-            await gateObserved { scene.gate.destination == .onboarding }
-            scene.host.settle()
         }
 
         @Test("The scene leaves and returns mid-onboarding: the step stays, the root never bounces, and it still saves")
@@ -93,54 +76,25 @@
                 try await Onboarding.expectTheDefault(scene.theOneProgram(), in: scene)
             }
         }
-
-        @Test("The program goes away: onboarding again, on step 1 with its defaults, and it saves a second program")
-        func programDeleted_showsOnboardingOnStepOne_andSavesAgain() async throws {
-            let app = GateApp()
-            defer { app.remove() }
-            try await GateRootScene.run(app) { scene in
-                scene.tap("Continue")
-                scene.tap("Continue")
-                scene.tap("Start training")
-                await app.journal.until("programs.save done")
-                await gateObserved { scene.gate.destination == .main }
-                #expect(scene.host.shown.isTabs)
-                let first = try await scene.theOneProgram()
-                try await Self.delete(first, in: scene)
-                let shown = scene.host.shown
-                #expect(shown.isOnboarding, "\(shown)")
-                #expect(shown.labels == ["Continue", "Skip setup"], "a return to onboarding starts on step 1")
-                scene.tap("Skip setup")
-                await app.journal.until("programs.save done", count: 2)
-                await gateObserved { scene.gate.destination == .main }
-                #expect(scene.host.shown.isTabs)
-                #expect(scene.recorder.seen == [.onboarding, .main, .onboarding, .main], "\(scene.recorder.seen)")
-                let second = try await scene.theOneProgram()
-                #expect(second.id != first.id)
-            }
-        }
     }
 
     extension AppRootFollowingAdversarialTests {
-        @Test("A second run of onboarding lands on Today too, whatever tab was selected when the program went away")
-        func secondOnboarding_landsOnToday() async throws {
+        @Test("The scene leaves and returns on the tabs: the selected tab stays, and the root never leaves the tabs")
+        func phaseChanges_onTheTabs_keepTheSelection() async throws {
             let app = GateApp()
             defer { app.remove() }
+            try await app.arrange { try await GatePrograms.store([GatePrograms.make()], in: $0) }
             try await GateRootScene.run(app) { scene in
-                scene.tap("Skip setup")
-                await app.journal.until("programs.save done")
-                await gateObserved { scene.gate.destination == .main }
-                #expect(scene.host.shown.labels == ["Today"])
-                #expect(scene.host.tapTab(at: 1))
-                #expect(scene.host.shown.labels == ["Program"], "control: the lifter is on the Program tab")
-                try await Self.delete(scene.theOneProgram(), in: scene)
-                #expect(scene.host.shown.isOnboarding)
-                scene.tap("Skip setup")
-                await app.journal.until("programs.save done", count: 2)
-                await gateObserved { scene.gate.destination == .main }
-                let shown = scene.host.shown
-                #expect(shown.tabBars == 1)
-                #expect(shown.labels == ["Today"], "criterion 3: the tabs with Today selected; the root shows \(shown)")
+                #expect(scene.host.shown.isTabs)
+                #expect(scene.host.tapTab(at: 2))
+                #expect(scene.host.shown.labels == ["Library"], "control: the lifter is on Library")
+                for phase in [ScenePhase.inactive, .background, .inactive, .active] {
+                    await Self.move(scene, to: phase)
+                    let shown = scene.host.shown
+                    #expect(shown.labels == ["Library"], "after \(phase): \(shown)")
+                    #expect(shown.tabBars == 1)
+                }
+                #expect(scene.recorder.seen == [.main], "\(scene.recorder.seen)")
             }
         }
 

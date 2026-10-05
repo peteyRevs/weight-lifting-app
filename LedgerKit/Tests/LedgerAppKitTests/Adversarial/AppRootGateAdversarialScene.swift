@@ -8,34 +8,19 @@
     import SwiftUI
     import Testing
 
-    /// Gates that already have their answer, for a root that must draw its screen on its first layout.
-    enum GateAnswers {
-        /// A gate that followed `composition` in `phase` until it had its answer, as the root's task leaves it
-        /// when the phase next changes.
-        static func followed(_ composition: AppComposition, in phase: ScenePhase = .active) async -> RootGate {
-            let gate = RootGate()
-            let call = Task { await gate.follow(composition, in: phase) }
-            await gateObserved { gate.destination != .loading }
-            call.cancel()
-            await call.value
-            return gate
-        }
-
-        /// A gate that was told `program` is the active one, by a store that is not the composition's.
-        static func told(_ program: Program?) async -> RootGate {
-            let gate = RootGate()
-            let store = InMemoryProgramRepository(programs: program.map { [$0] } ?? [])
-            let call = Task { await gate.follow { store } }
-            await gateObserved { gate.destination != .loading }
-            call.cancel()
-            await call.value
-            return gate
-        }
-    }
-
     /// A booted app with its real root hosted in a window: the composition over a database file, the gate the
     /// root draws, every destination the gate held, and the probes' journal. Onboarding's store, which the root
     /// makes, reads the composition's real stores through the probes.
+    ///
+    /// **The rule of these hosted suites (round 2, finding F8-S3-4): no root is alive while its gate can move
+    /// to onboarding.** Onboarding's store keeps the dependencies of the task that makes it. A root whose gate
+    /// moves to onboarding while the test is suspended draws onboarding in SwiftUI's own update, in no task:
+    /// the store is then made outside the test's scope, and swift-dependencies records a warning that belongs
+    /// to no test, which fails the bundle. Neither a wait that gives up its turn nor taking the root out of
+    /// its window prevents it (both measured). So a root is hosted over a gate that has already answered
+    /// onboarding, where its first layout is the test's, or over a store that holds a program, where the
+    /// root's own task can only move it to the tabs. A return to onboarding is a new root over a new gate
+    /// (`GateShell`).
     final class GateRootScene {
         let app: GateApp
         let composition: AppComposition
@@ -91,6 +76,14 @@
         func tap(_ label: String, sourceLocation: SourceLocation = #_sourceLocation) {
             let before = host.shown
             #expect(host.activate(label), "no enabled \"\(label)\" in \(before)", sourceLocation: sourceLocation)
+        }
+
+        /// Expects onboarding's stores to have read the settings through the probe `count` times: once when
+        /// each onboarding screen appeared and once for each save. A read that ran outside the test's
+        /// dependency scope never reaches the probe.
+        func expectSettingsReads(_ count: Int, sourceLocation: SourceLocation = #_sourceLocation) {
+            let reads = app.journal.count(of: "settings.load begins")
+            #expect(reads == count, "settings reads through the probe", sourceLocation: sourceLocation)
         }
 
         /// Changes the scene's phase, as the system does, and lets SwiftUI apply it.

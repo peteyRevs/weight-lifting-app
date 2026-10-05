@@ -23,6 +23,9 @@ final class GateApp {
 
     let directory: URL
     let journal = GateJournal()
+    /// Called with each of the launch's events as it happens, in the launch's own turn of the main actor: a
+    /// test reads there what a gate or a root shows at that very step.
+    var onEvent: ((LaunchEvent) -> Void)?
 
     init(_ name: String = #function) {
         let safe = name.filter { $0.isLetter || $0.isNumber }
@@ -44,11 +47,9 @@ final class GateApp {
                 now: { Self.wednesday },
                 newID: { Self.deviceUUID },
                 logger: .disabled,
-                record: { event in
-                    switch event {
-                    case let .began(step): notes.note("launch began \(step.rawValue)")
-                    case let .failed(step): notes.note("launch failed \(step.rawValue)")
-                    }
+                record: { [weak self] event in
+                    notes.note("launch \(Self.name(event))")
+                    self?.onEvent?(event)
                 },
                 assignMirroringHandler: { notes.note("handler") },
                 activateCompanionSession: { notes.note("companion") },
@@ -56,6 +57,14 @@ final class GateApp {
                 processStart: nil
             )
         )
+    }
+
+    /// An event as the journal spells it: "began seedCatalog", "failed resumeWorkout".
+    nonisolated static func name(_ event: LaunchEvent) -> String {
+        switch event {
+        case let .began(step): "began \(step.rawValue)"
+        case let .failed(step): "failed \(step.rawValue)"
+        }
     }
 
     /// A composition booted as `App.init` boots it, with every statement its connection runs noted as

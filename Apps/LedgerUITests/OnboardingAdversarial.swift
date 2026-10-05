@@ -5,7 +5,8 @@ import XCTest
 /// size (the one reader of that tree: F8-S2-5); a step opening at its top after the one before was scrolled; the
 /// picks through "Back" and through leaving the app; "Skip setup" from each step and "Start training", each
 /// landing on Today with the program stored that the picks ask for; and the system's accessibility audit of each
-/// step. Nightly only, as every UI test but `Smoke` is. It launches by itself, not through the suite's helper.
+/// step, in light and dark (`OnboardingAdversarial+Audit.swift`). Nightly only, as every UI test but `Smoke` is.
+/// It launches through the suite's `XCUIApplication.fresh(_:)` (review S3-N3) and walks onboarding itself.
 final class OnboardingAdversarial: XCTestCase {
     static let largestText = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
     static let headings = ["What are you training for?", "How many days a week?", "Your program"]
@@ -150,22 +151,23 @@ final class OnboardingAdversarial: XCTestCase {
         XCTAssertEqual(selectedOptions(app), ["Build muscle, Moderate reps, volume tracking"])
     }
 
+    /// Light and dark. Three kinds of issue are excused, each on its own elements and for its own reason
+    /// (`auditExclusions`); anything else the system reports fails the test.
     @MainActor
     func test_eachStep_passesTheSystemsAccessibilityAudit() throws {
-        try auditEachStep(launch(), size: "the default text size")
+        try auditEachStep(arguments: [], size: "the default text size")
     }
 
     @MainActor
     func test_eachStep_passesTheSystemsAccessibilityAudit_atTheLargestTextSize() throws {
-        try auditEachStep(launch(Self.largestText), size: "the largest text size")
+        try auditEachStep(arguments: Self.largestText, size: "the largest text size")
     }
 }
 
-private extension OnboardingAdversarial {
+extension OnboardingAdversarial {
     @MainActor
     func launch(_ arguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"] + arguments
+        let app = XCUIApplication.fresh(arguments)
         app.launch()
         return app
     }
@@ -241,31 +243,6 @@ private extension OnboardingAdversarial {
             rows[table] = try XCTUnwrap(Int(app.staticTexts["debug.diagnostics.rows.\(table)"].label), table)
         }
         return rows
-    }
-
-    /// Runs the system's audit on each step. Every issue fails the test; what the system says about each is
-    /// attached, for whoever decides whether it is a fault or a false positive (testing-strategy §2.7).
-    @MainActor
-    func auditEachStep(_ app: XCUIApplication, size: String) throws {
-        XCTAssertTrue(app.staticTexts[Self.headings[0]].waitForExistence(timeout: 15))
-        var issues: [String] = []
-        var details: [String] = []
-        for (index, heading) in Self.headings.enumerated() {
-            if index > 0 {
-                continueTo(heading, in: app)
-            }
-            try app.performAccessibilityAudit { issue in
-                let element = issue.element.map { "\($0.elementType.rawValue) \"\($0.label)\"" } ?? "no element"
-                issues.append("step \(index + 1): \(issue.compactDescription) [\(element)]")
-                details.append("step \(index + 1), \(element): \(issue.detailedDescription)")
-                return true
-            }
-        }
-        let attachment = XCTAttachment(string: details.joined(separator: "\n"))
-        attachment.name = "Audit issues at \(size)"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        XCTAssertEqual(issues, [], "at \(size)")
     }
 
     @MainActor

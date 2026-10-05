@@ -2683,3 +2683,15 @@ review's recommendation. `FeatureOnboarding` and `LedgerDesign` are untouched.
   change to `AppComposition` in the slice, and narrower than what it replaces.
 - **The gate is red on the tester's own F8-S3-4** (warnings recorded outside any test mark the bundle failed). The
   tester fixes that in its close-out; the orchestrator's full gate runs after it.
+
+### S3 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the tree after the tester's close-out exited 0, with `main` (F10 S1 and S2)
+  merged in. The tester's close-out found nothing new, fixed its own F8-S3-4 (no warning is recorded outside a test
+  any more) and wrote three audit exclusions, each with its reason. **G2 is closed; G3 approved.**
+- F08 is now three slices built and waiting, in a stack: S1 `feat/F08-s1-templates`, S2 `feat/F08-s2-onboarding-ui`,
+  S3 `feat/F08-s3-root-gate`. S1 waits for Pete's answer on the program tables; S2 and S3 also need #28 (F09 S1)
+  on `main`. When they open, each merges the then-current `main`, is gated again and is pushed once, lowest first.
+- Owed elsewhere: F15 gets a UI-test launch mode that keeps its database (a relaunch as a UI test) and the two
+  things the system audit says of every screen; F14 must reset nothing itself: the root resets the shell when the
+  program goes away.

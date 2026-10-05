@@ -19,7 +19,7 @@ final class GateSession {
     }
 
     enum Event: String {
-        case start, cancel, passReturnsOpen, passReturnsClosed, report, streamEnds
+        case start, cancel, passReturnsOpen, passReturnsClosed, report, reportThenCancel, streamEnds
     }
 
     let gate = RootGate()
@@ -65,7 +65,7 @@ final class GateSession {
             events.append(.cancel)
         }
         if liveFeed != nil {
-            events += [.report, .report, .report]
+            events += [.report, .report, .report, .reportThenCancel]
             if lifter != .withoutProgram {
                 events.append(.streamEnds)
             }
@@ -90,6 +90,7 @@ final class GateSession {
             case .changing: await report(Bool.random(using: &random) ? program : nil)
             }
         case .streamEnds: await endStream()
+        case .reportThenCancel: await reportThenCancel(lifter == .withoutProgram ? nil : program)
         }
     }
 
@@ -144,6 +145,19 @@ final class GateSession {
 
     func reportProgram() async {
         await report(program)
+    }
+
+    /// The store reports, and the call is cancelled before its task has run again (the root's task, when the
+    /// scene's phase changes in that instant). Round 2: a cancelled call changes nothing, "not even with a
+    /// value the store gave before the cancellation and the loop had not yet taken" (`RootGate.follow`).
+    func reportThenCancel(_ program: Program?) async {
+        guard let feed = liveFeed, let current else {
+            return
+        }
+        feed.yield(program)
+        current.cancel()
+        await current.finished()
+        current.phase = .ended
     }
 
     /// The stream ends though nobody cancelled its consumer: the active program could not be read.

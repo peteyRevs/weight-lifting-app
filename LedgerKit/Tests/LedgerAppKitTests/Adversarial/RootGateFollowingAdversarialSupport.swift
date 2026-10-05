@@ -3,6 +3,7 @@ import GRDB
 @testable import LedgerAppKit
 import LedgerDomain
 import LedgerPersistence
+import LedgerTestSupport
 import SwiftUI
 import Testing
 
@@ -138,5 +139,36 @@ final class GateFollowing {
             try await deleteActive()
         }
         await startCall()
+    }
+}
+
+/// Gates that already have their answer, for a root that must draw its screen on its first layout.
+enum GateAnswers {
+    /// A gate that followed `composition` in `phase` until it had its answer, as the root's task leaves it
+    /// when the phase next changes.
+    static func followed(_ composition: AppComposition, in phase: ScenePhase = .active) async -> RootGate {
+        let gate = RootGate()
+        await answer(gate, from: composition, in: phase)
+        return gate
+    }
+
+    /// Follows `gate` over `composition` by the call the root's task makes, until it has its answer, then
+    /// ends the call. For a gate no root is drawing.
+    static func answer(_ gate: RootGate, from composition: AppComposition, in phase: ScenePhase = .active) async {
+        let call = Task { await gate.follow(composition, in: phase) }
+        await gateObserved { gate.destination != .loading }
+        call.cancel()
+        await call.value
+    }
+
+    /// A gate that was told `program` is the active one, by a store that is not the composition's.
+    static func told(_ program: Program?) async -> RootGate {
+        let gate = RootGate()
+        let store = InMemoryProgramRepository(programs: program.map { [$0] } ?? [])
+        let call = Task { await gate.follow { store } }
+        await gateObserved { gate.destination != .loading }
+        call.cancel()
+        await call.value
+        return gate
     }
 }

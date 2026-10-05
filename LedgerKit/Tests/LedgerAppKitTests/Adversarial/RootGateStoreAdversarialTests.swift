@@ -183,9 +183,10 @@ extension RootGateStoreAdversarialTests {
         case idle, unavailable, seedFails, ready
     }
 
-    /// `MainRoot` hands onboarding `composition.resume(in: .active)` as `prepareRetry`, which must return: while
-    /// it runs, onboarding offers no way out. A call that never returned would end this test at the suite's
-    /// time limit.
+    /// `MainRoot` hands onboarding `composition.retrySeed()` as `prepareRetry` (the touch-up; round 1 it was
+    /// `resume(in: .active)`), which must return: while it runs, onboarding offers no way out. A call that
+    /// never returned would end this test at the suite's time limit. What the call runs is
+    /// `RootGateRetryAdversarialTests`'.
     @Test(
         "Criterion 5: the call Retry is wired to returns in every state of the launch, also to a cancelled caller",
         arguments: Launch.allCases
@@ -204,19 +205,40 @@ extension RootGateStoreAdversarialTests {
             composition.boot()
         }
         for _ in 0 ..< 3 {
-            await composition.resume(in: .active)
+            await composition.retrySeed()
         }
-        let cancelled = Task { await composition.resume(in: .active) }
+        let cancelled = Task { await composition.retrySeed() }
         cancelled.cancel()
         await cancelled.value
-        async let first: Void = composition.resume(in: .active)
-        async let second: Void = composition.resume(in: .active)
+        async let first: Void = composition.retrySeed()
+        async let second: Void = composition.retrySeed()
         _ = await (first, second)
         let expected: [Launch: AppComposition.State] = [
             .idle: .idle, .unavailable: .databaseUnavailable, .seedFails: .ready, .ready: .ready
         ]
         #expect(composition.state == expected[launch])
         #expect(composition.isCatalogSeeded == (launch == .ready))
+        if launch == .idle {
+            #expect(app.journal.entries.isEmpty, "an app that never booted was asked to do something")
+        }
+        let other = app.journal.entries.filter { $0.contains("resumeWorkout") || $0 == "companion" }
+        #expect(other.isEmpty, "Retry's call ran a step of the launch that is not the database's: \(other)")
+    }
+
+    @Test("Audit of the touch-up's sanctioned edit: the picture it reads tells a drawn screen from the ground")
+    func sanctionedPicture_tellsADrawnScreenFromTheGround() async throws {
+        let harness = Harness()
+        defer { harness.remove() }
+        let size = AppRootAdversarialTests.size
+        let isIdleDrawn = HostedDrawing.isMoreThanOneColour(AppRoot(composition: harness.composition()), size: size)
+        #expect(!isIdleDrawn, "a root that never booted is the ground alone")
+        let (composition, gate) = try await harness.bootedWithAProgram()
+        // What `root_ready_draws` must fail on: the same composition under a gate with no answer.
+        let unanswered = AppRoot(composition: composition, gate: RootGate())
+        let isGroundDrawn = HostedDrawing.isMoreThanOneColour(unanswered, size: size)
+        #expect(!isGroundDrawn, "the ground reads as a drawn screen: the edited test could not fail on it")
+        let isShellDrawn = HostedDrawing.isMoreThanOneColour(AppRoot(composition: composition, gate: gate), size: size)
+        #expect(isShellDrawn, "the shell reads as the ground")
     }
 
     @Test("Two roots over one composition each decide, and the launch's steps still run once")
