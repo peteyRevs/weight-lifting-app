@@ -319,3 +319,185 @@ The 10 failing tests, all mine, all in `LedgerAppKitTests/Adversarial/`:
 | `CopyAuditAdversarialTests.lookupOutsideTheCopyFile_isAFinding` (2 of 14) | F9-S1-7 |
 | `CopyFileAdversarialTests.composedAndDecomposedKeys_areNotTheSameKey` | F9-S1-8 |
 | `StringCatalogAdversarialTests.keysOutOfOrder_areAProblem` | F9-S1-9 |
+
+## Slice S1 — round 2, close-out (G2 tester, 2026-10-05)
+
+Branch `feat/F09-s1-tab-shell` at `6555960` (fix round 1). Specification: standards §7 as rewritten, the brief's
+S1 criteria 4 to 6 as revised, and the two rulings of 2026-10-05.
+
+**Result.** Nine of the eleven round-1 findings are closed and two are closed but for a named remainder
+(F9-S1-3, F9-S1-10). The edits to my files are sound: no case lost its input, and the one test whose expectation was
+lost is restored as far as the rulings keep it. The new gate step held against 36 of 37 fresh cases. Three new
+findings, all low: one bug in the step and two questions for a ruling.
+
+**G2 can close** once (1) the two rulings are built, which turns my three failing Swift tests green, and (2)
+F9-S1-12 is fixed (one line) or accepted. F9-S1-13 and F9-S1-14 need a sentence each from the orchestrator and no
+code unless ruled otherwise; they are pinned by passing tests. Nothing else is open on my side.
+
+### Status of round 1's findings
+
+| Finding | Status | Shown by |
+|---|---|---|
+| F9-S1-1 `%` in a key without a value | closed | the gate step compares with the compiler's keys: `string-catalogs.adv.sh` SC03–SC06, SC35, SC36 |
+| F9-S1-2 lookup inside an interpolation | closed | `nestedLookupNotWrittenAsTheRule_isAFinding` (3, and the right form nested is now a finding); `CopyAuditCloseOutAdversarialTests.nestedLookup_isAFinding` (4 fresh: two deep, inside a call, in a multi-line literal, inside the timer form) |
+| F9-S1-3 a value without `locale:` | closed as ruled (any value); remainder is F9-S1-14 | `lookupThatFormatsANumber_withoutALocale_isAFinding` (2); `valueWithoutALocale_isAFinding` (3 fresh: a text, with a comment, wrapped) |
+| F9-S1-4 the product's name | closed | the sentence reads "The app tries again when you come back to it."; `catalog_neverNamesTheProduct` and `productNameInTheCatalog_isAFinding` pass; `productName_isAProblemInEveryEnglishText` (lower and upper case, a plural's `one` form; a comment and "Knowledge" are not problems) |
+| F9-S1-5 identifier or symbol by a condition | closed | `identifierOrSymbolChosenByCondition_isNoFinding` (4); `literalUnderAnAllowedLabel_isNoFinding` (8 fresh) |
+| F9-S1-6 a name that reads like a label | closed | `literalAfterALookalikeLabel_isAFinding` (3); `literalAfterALookalike_isAFinding` (11 fresh) |
+| F9-S1-7 two lookup spellings | closed | `lookupOutsideTheCopyFile_isAFinding` (14 of 14); `lookupOutsideTheCopyFiles_isAFinding` (9 fresh, a letterless `Text("\(count)")` among them) |
+| F9-S1-8 composed and decomposed keys | closed | SC13, SC14; catalog texts are compared scalar by scalar |
+| F9-S1-9 the catalog's layout | closed | SC10–SC12, SC28, SC29; my ST10–ST15 (CRLF, indent, a tab, the colon, a byte-order mark, a trailing space) |
+| F9-S1-10 limits not listed | closed; two edits to the list are due | §7 "Known limits", each pinned (`CopyAuditLimitTests`, my two "Limit" tests). a: exemptions name literals (`exemption_namesLiterals_aTitleInTheFileIsStillAFinding`, `exemption_neverCoversALiteralHandedToText`). d: an unread file must be wholly inside `#if DEBUG` (`previewsFile_isNotRead_othersAre`, `debugOnlyFileThatShips_isAFinding`, 8 fresh). e: SC10. Due: the list loses "a `Text` joined from parts" when ruling (a) is built, and gains F9-S1-14 unless it is found |
+| F9-S1-11 test-quality | closed | `ShellSnapshotTests`: 12 references (two screens, light and dark, three sizes), two looked at, all pass in the gate. The Tabs preview has none, and the suite says why |
+
+### Audit of the edits to my files (`git diff f45f5e9..6555960`)
+
+- **Moved to `string-catalogs.adv.sh`: every case kept its input and its expectation.** Checked one by one:
+  `auditKey_isFoundationsKey`'s twelve lookups (SC32–SC43; the keys are now proven by the real compiler, not by
+  `LocalizedStringResource`), `parameterType_decidesTheSpecifier`'s four (SC44–SC47), `lookupInAComment_isNotALookup`
+  (SC48), the composed and decomposed key (SC13, SC14), the seven near-misses (SC49–SC55), the two one-sided modules
+  (SC56, SC57), keys out of order (SC11, SC12).
+- **The deleted test, `interpolationNotABareParameter_isAFinding`.** Its eleven inputs are all there (SC58–SC66,
+  SC69, SC70), each with the compiler's key as the new expectation. What was lost is the audit's refusal of a value
+  that is not a bare `Int` or `String` parameter. Of that, the rulings keep two things. A `Double` or another type
+  formatted into a key is refused through its specifier: restored as `doubleFormattedIntoAKey_isAFinding` and
+  `keyWithAnotherSpecifier_isAProblem`, both failing until ruling (b) is built. An optional (keyed `%@`, shown as
+  `Optional(3)`) stays a known limit: pinned by `CopyAuditLimitTests.limit_valueOfAKey` and SC63, SC67. The rest
+  (an expression, a property, an `Int64`, a `Substring`, a formatted value) is harmless once the catalog is held
+  to the compiler's key.
+- **The edits flagged as beyond the sanctioned kinds: each follows a ruling and none weakens a test.** The exemption
+  limit became a finding on a named line. `Text("\(Card.today)")` left the limit and is asserted as a finding. A
+  bare previews file is asserted as a finding. The nested lookup's control is the join in two statements, and the
+  nested right form is asserted as a finding. Two right lookups pass `locale:` for a text value. The sentence and
+  `AppCopy.settingsTitle` follow criterion 4 and N8. The UI test's light bounds are the deep accent's (`#B2390E`;
+  `#A73107` as displayed), with both thresholds as I set them.
+- **What I changed this round.** `textMember_builtFromLookupsAndAView_hasNoFinding` is now
+  `textJoinedFromParts_isAFinding` (ruling a; 3 cases, with the timer form as its control). New:
+  `keyWithAnotherSpecifier_isAProblem` (ruling b; `%lf`, `%d`, `%f`, `%s`, `%i`) with its control
+  `keyWithWholeNumbersAndTexts_isNoProblem` (`%lld`, `%@`, positional forms, `%%`, and "100% done"),
+  `doubleFormattedIntoAKey_isAFinding`, the suite `CopyAuditCloseOutAdversarialTests` (9 tests), and one assertion
+  in `TabsAdversarial`: on the light theme no tab wears the plain accent. One line outside my files:
+  `check-wiring.adv.sh` W68 now lists six suites that need macOS, so that it accepts
+  `string-catalogs-tester.adv.sh`.
+
+### New findings
+
+#### F9-S1-12 — bug (low): the gate step fails a matching catalog that is read-only
+
+- **Rule.** §7: the step "reads the committed catalog and never writes it". A step that only reads works on a
+  tree it cannot write.
+- **Repro.** `string-catalogs-tester.adv.sh` ST23: a repository whose catalog matches, after `chmod -R a-w`.
+- **Expected.** Exit 0. **Actual.** Exit 1, "is not written as Xcode's tool writes it", with a diff whose only
+  difference is `\ No newline at end of file`, after `line 91: …/synced: Permission denied`.
+- **Cause.** `with_final_newline` copies with `cp`, which keeps the file's mode, then appends a newline to the
+  copy. The append fails on the read-only copy and the comparison runs without it. `cat "$1" >"$2"` would do.
+- A catalog in a normal checkout is writable, so the gate is not affected today. This case fails `check.sh` at
+  step 2 until it is fixed.
+
+#### F9-S1-13 — spec question (low): a comment that only the catalog gives passes the step
+
+- **Rule.** §7: "A translator's comment is written in code (`comment:`), and the catalog's `"comment"` is the same
+  sentence, word for word."
+- **What happens.** ST03 (passes, as a pin): the code gives no comment, the catalog's entry has one, exit 0. The
+  tool keeps a comment the code does not give. The implementer's SC15 builds its sound module with one ("A comment
+  only the catalog gives"). The other direction holds: a comment the code gives and the catalog lacks fails (ST01),
+  a differing one fails (SC16), and one key looked up with two comments needs both in the catalog, in order, on
+  two lines (ST04).
+- **To rule.** Either the step refuses a catalog comment no lookup gives, or §7 says a comment may stand in the
+  catalog alone.
+
+#### F9-S1-14 — spec question (low): a locale written into a copy member passes the audit
+
+- **Rule.** §7: "The caller passes the injected `@Dependency(\.locale)`", because a lookup that takes its locale
+  from the device is one "a test cannot fix".
+- **What happens.** `CopyAuditCloseOutAdversarialTests.limit_localeWrittenIntoTheMember` (passes, as a pin):
+  `String(localized: "\(count) sets", bundle: .module, locale: .current)`, and the same with `Locale.current` and
+  `.autoupdatingCurrent`, have no finding. The audit reads as far as `locale:`.
+- **To rule.** Find it, or add it to "Known limits".
+
+### What held
+
+**The audit, re-checked** (`CopyAuditCloseOutAdversarialTests`, 9 tests, all pass, host and simulator): the rows
+above, and the limit pins of round 1 (`regexLiteralHoldingAQuote_hidesTheLiteralAfterIt`,
+`textMadeFromAName_hasNoLiteralToFind`).
+
+**The gate step** (`string-catalogs-tester.adv.sh`, 37 cases, 36 pass; the implementer's 71 pass; three broken
+variants of the script fail 11, 11 and 32 of my cases):
+
+- Comments: ST01, ST02, ST04 as above.
+- Modules beside each other: a module whose name starts with another's keeps its lookups (ST05); the same lookups
+  in two modules with one catalog short of a key fail that module alone, by name (ST06); a catalog in a module with
+  no Swift file fails (ST07).
+- Layout: ST10–ST15. A second language beside English passes (ST16), and an unused key with a translation still
+  fails (ST17).
+- Paths with spaces: the repository, the build folder and the temporary folder (ST19–ST22); the temporary folder
+  is left empty.
+- A repository that cannot be written: a key failure and a layout failure are reported the same (ST24, ST25); a
+  temporary folder that cannot be written fails the step (ST26).
+- Keys with `$`, backticks, `*`, `$(…)` and a leading dash are compared as written (ST27, ST28). Five more
+  near-misses fail both ways: a typographic apostrophe, a zero-width space, a tab, a trailing line feed, a
+  fullwidth letter (ST29–ST33).
+- A failing `xcstringstool` fails the step with what the tool said (ST34). An empty `.stringsdata` does not pass
+  a catalog that lacks its key (ST37; the message is the layout diff with the script's own extra key in it, which
+  is confusing but red).
+- Reach, pinned so that a change shows: lookups in a module without a catalog are `CopyAudit`'s (ST08); a counted
+  key's forms are `StringCatalog.problems`' (ST18); an x86_64 build's output is not read, with the clear failure
+  (ST36); a source edited since the build is compared as it was built (ST09: `check.sh` builds first, a run by
+  hand must too).
+
+**Where the step runs in `check.sh`.** After the iOS build and before the iOS tests in the full gate,
+`--ios-only`, `--skip-lint`, `--skip-static` and `--record-snapshots` (W02, W09, W49, W54, W62, W70–W74, all
+pass; in my `--skip-lint` run it printed its line and checked one catalog of seven keys). `--fast`, `--lint-only`
+and `--static-only` build no iOS and do not run it (W75). Those three runs do not say so: nothing in their output
+mentions catalogs. §7 "Tiers" says the full gate proves copy; a line in the output would be one `echo`.
+
+**Never writes into the repository.** SC21–SC23 hash every file before and after; ST23–ST25 run it on a tree
+without write permission.
+
+**The tint.** `TabsAdversarial.test_selectedTab_isDrawnInTheAccent_andNoOtherIs_lightAndDark` passes: the selected
+tab alone wears the tint in both themes, and on the light theme no tab wears the plain accent. That the tint ends
+at each stack is the implementer's `AppTabsTests.tabContentTint_setsTheTintBack` (passes) and one line of
+`AppTabs.stack`; nothing a tab draws wears a tint yet, so the running app cannot show it (ruled: F09 S5).
+
+**`MainRoot`'s three members.** `body`, `content`, `tabs`: the Debug menu still opens from Today's title after a
+tour of the tabs and from no other title, and a ready root shows the shell on Today (`TabsAdversarial`,
+`AppRootAdversarialTests`).
+
+**Snapshots and the unchanged states.** `ShellSnapshotTests` pass; my pixel comparison of the can't-open screen
+with `main`'s code, now with criterion 4's sentence, passes at seven appearances.
+
+### Not verified
+
+- CI itself: the runner with a compilation cache another run saved (the implementer measured a cache hit on a Mac;
+  `docs/ci-cd.md` says the runner is not yet seen).
+- Texts of other languages: the catalog rules read English only (state, specifiers, the product's name).
+- A lookup compiled only for Release or only for watchOS: the step reads the iOS Debug build (§7 says so for
+  watchOS).
+- Housekeeping I did not do, because the files are not mine: `docs/ci-cd.md:40` and §7's "Known limits" name the
+  suites and limit tests; `string-catalogs-tester.adv.sh` and `limit_localeWrittenIntoTheMember` are not named.
+
+### UI tests (run by me, through the lock, iPhone 17, iOS 27.0, Nightly plan)
+
+Light: `Smoke` 1 of 1, `DebugMenu` 1 of 1, `LaunchPerformance` 1 of 1 (mean 2.617 s; reports, never gates), `Tabs`
+2 of 2, `TabsAdversarial` 7 of 7. Dark: `Smoke` 1 of 1, `DebugMenu` 1 of 1, `Tabs` 2 of 2. No failure.
+
+### Commands and exit statuses
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerAppKitTests` (host) | 1 | 191 tests, 3 fail, all mine (below) |
+| `scripts/tests/adversarial/run.sh` | 1 | 12 suites; 559 cases pass, 1 fails (ST23) |
+| UI tests, light, five classes | 0 | 12 of 12 |
+| UI tests, simulator set to dark, three classes | 0 | 4 of 4 |
+| `scripts/check.sh` (full gate, last) | 1 | **red at step 2**, on ST23 alone |
+| `scripts/check.sh --skip-lint` (what the red step hides) | 65 | the string catalog step passes; **red at step 3**: 1788 tests, 1767 pass, 3 fail, 12 skipped, 6 expected failures; `LedgerAppKitTests` is the one bundle that failed |
+| watchOS step and coverage gate, as `check.sh` runs them | 0, 0 | PR-Watch: 1454 tests, none failed, 8 targets passed; coverage 98.48 % overall |
+
+Failing, all mine:
+
+| Test | Why |
+|---|---|
+| `string-catalogs-tester.adv.sh` ST23 | F9-S1-12 |
+| `CopyFileAdversarialTests.textJoinedFromParts_isAFinding` (3 of 3) | ruling (a): expected until the audit refuses `Text + Text` |
+| `StringCatalogAdversarialTests.keyWithAnotherSpecifier_isAProblem` (5 of 5) | ruling (b): expected until the catalog check refuses other specifiers |
+| `CopyFileAdversarialTests.doubleFormattedIntoAKey_isAFinding` | ruling (b), through the audit: green with the same change |

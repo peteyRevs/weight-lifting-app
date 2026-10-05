@@ -116,7 +116,7 @@ the pure presentation; S4 the views; S5 the store and wiring; S6 the live sessio
    code agree in both directions: the gate compares each catalog with the keys the compiler extracted from the
    code, and a source audit fails a user-facing literal or a lookup outside a module's copy file.
 5. The selected tab's icon and label use the accent colour that meets AA contrast in both themes
-   (`LedgerColor.accentText`; revised after G3: the plain accent measured 2.44:1 on the light theme's selection
+   (`LedgerColor.accentText`; revised after G3: the plain accent measured 2.70:1 on the light theme's selection
    capsule), and the tint does not reach the tabs' content. VoiceOver reads each tab as its title with the system's
    tab traits. Tab icons are Apple's stock symbols (put to Pete; custom icons can replace them later).
 6. The database-unavailable and idle states of the root are unchanged, apart from criterion 4's sentence.

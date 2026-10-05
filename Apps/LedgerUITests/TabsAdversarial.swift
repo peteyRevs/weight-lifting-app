@@ -86,6 +86,12 @@ final class TabsAdversarial: XCTestCase {
                     } else {
                         XCTAssertLessThan(share, 0.001, "\(tab) selected: \(other) is in the accent too")
                     }
+                    if appearance == .light {
+                        // Criterion 5 as revised: on the light theme the tint is the deep accent. The plain
+                        // accent (dark's bounds) measured 2.44:1 on the selection capsule and must be gone.
+                        let plain = try accentShare(of: app.tabBars.buttons[other], in: .dark)
+                        XCTAssertLessThan(plain, 0.001, "\(tab) selected, light: \(other) wears the plain accent")
+                    }
                 }
             }
             app.terminate()

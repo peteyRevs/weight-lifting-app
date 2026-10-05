@@ -46,15 +46,35 @@ nonisolated struct CopyFileAdversarialTests {
         #expect(findings.contains { $0.contains("FixtureCopy.swift") }, "no finding for: \(input.text)")
     }
 
-    @Test("The rule lets a member return a Text built from looked-up Strings and a live view: that has no finding")
-    func textMember_builtFromLookupsAndAView_hasNoFinding() throws {
-        let joined = """
-        static func resume(_ elapsed: Text) -> Text {
-            Text(String(localized: "Resume", bundle: .module)) + Text(verbatim: " · ") + elapsed
-        }
-        """
-        let findings = try AdversarialModule.findings(copy: joined, catalog: [Catalog.plain("Resume")])
-        #expect(findings.isEmpty, "\(findings)")
+    /// Ruling after fix round 1 (2026-10-05): standards §7 says "A line is never joined from `Text + Text`", so
+    /// the audit refuses it. Round 1's test of this input pinned the earlier rule, under which it passed.
+    @Test(
+        "A Text joined from parts in a copy file is a finding; the timer form is the one Text a member returns",
+        arguments: joinedTexts
+    )
+    func textJoinedFromParts_isAFinding(_ input: AdversarialInput) throws {
+        let timer = Self.member(
+            "_ start: Date",
+            #"Text("Resume · \(timerInterval: start ... .distantFuture)", bundle: .module)"#,
+            returning: "Text"
+        )
+        #expect(
+            try AdversarialModule.findings(copy: timer, catalog: [Catalog.plain("Resume · %@")]).isEmpty,
+            "control: a line that embeds a live timer"
+        )
+        let findings = try AdversarialModule.findings(copy: input.text, catalog: [Catalog.plain("Resume")])
+        #expect(findings.contains { $0.contains("FixtureCopy.swift") }, "no finding for: \(input.text)")
+    }
+
+    /// The half of round 1's `interpolationNotABareParameter_isAFinding` that a ruling keeps (2026-10-05, "A key's
+    /// values are whole numbers and texts"): the audit no longer reads a value's type, so a `Double` in a lookup
+    /// passes it, and the catalog that agrees with the compiler holds `%lf` (`string-catalogs.adv.sh`, SC60). That
+    /// key is what is refused.
+    @Test("A Double formatted into a key is refused: the catalog that agrees with the code holds %lf")
+    func doubleFormattedIntoAKey_isAFinding() throws {
+        let member = Self.counted("_ value: Double", #""\(value) lb moved""#)
+        let findings = try AdversarialModule.findings(copy: member, catalog: [Catalog.plain("%lf lb moved")])
+        #expect(!findings.isEmpty, "a Double reaches the lifter as 185.000000: \(member)")
     }
 
     @Test("A second copy file is read as one; a file whose name only ends in Copy must hold lookups alone")
@@ -151,6 +171,35 @@ nonisolated extension CopyFileAdversarialTests {
         AdversarialInput(
             "a multi-line key",
             member("", "String(localized: \"\"\"\n        Start workout\n        \"\"\", bundle: .module)")
+        )
+    ]
+
+    /// A line joined from `Text`s: round 1's input, the same in two statements, and a `Text` joined to a view.
+    static let joinedTexts: [AdversarialInput] = [
+        AdversarialInput(
+            "Text + Text + a view",
+            member(
+                "_ elapsed: Text",
+                #"Text(String(localized: "Resume", bundle: .module)) + Text(verbatim: " · ") + elapsed"#,
+                returning: "Text"
+            )
+        ),
+        AdversarialInput(
+            "a looked-up String, then Text + Text",
+            member(
+                "_ elapsed: Text",
+                "let resume = String(localized: \"Resume\", bundle: .module)\n"
+                    + "    return Text(resume) + Text(verbatim: \" · \") + elapsed",
+                returning: "Text"
+            )
+        ),
+        AdversarialInput(
+            "a Text and a view handed in",
+            member(
+                "_ elapsed: Text",
+                "let resume = String(localized: \"Resume\", bundle: .module)\n    return Text(resume) + elapsed",
+                returning: "Text"
+            )
         )
     ]
 

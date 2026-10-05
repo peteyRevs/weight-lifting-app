@@ -465,8 +465,9 @@ check "W66 run.sh: portable skips the suites marked \"# needs macOS:\", macos ru
 check "W67 run.sh: a failing macOS suite fails the macos half; a typo in the half exits 2; no suite matched exits 1" \
     is "$(MAC_FAILS=1 suites macos)|$(suites portabel)|$(suites macos portable)" "1 ran-macos |2 |1 "
 marked="$(grep -l '^# needs macOS: ' "$ROOT"/scripts/tests/adversarial/*.adv.sh | xargs -n1 basename | tr '\n' ' ')"
-check "W68 the suites that need macOS, which run only on the Mac in PR CI, are exactly these five (each says why)" \
-    is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh string-catalogs.adv.sh xcode27.adv.sh "
+check "W68 the suites that need macOS, which run only on the Mac in PR CI, are exactly these six (each says why)" \
+    is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh string-catalogs-tester.adv.sh \
+string-catalogs.adv.sh xcode27.adv.sh "
 
 # ---- F09: every String Catalog is checked against the keys the iOS build extracted ------------------
 # W02 (the full gate), W09 (--skip-lint), W49 (--ios-only), W54 and W62 (--skip-static) pin its place:

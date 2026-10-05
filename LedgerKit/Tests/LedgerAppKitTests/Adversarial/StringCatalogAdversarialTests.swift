@@ -49,6 +49,25 @@ nonisolated struct StringCatalogAdversarialTests {
         #expect(try !Catalog.problems([bad, good]).isEmpty)
     }
 
+    /// Ruling after fix round 1 (2026-10-05): "A key's values are whole numbers and texts. The catalog check
+    /// refuses a key with any specifier other than `%lld` and `%@` (with their positional forms and `%%`)".
+    @Test(
+        "A key's values are whole numbers and texts: a key with another specifier is a problem",
+        arguments: ["%lf lb moved", "%d sets", "%f kg", "%s day", "%i reps"]
+    )
+    func keyWithAnotherSpecifier_isAProblem(key: String) throws {
+        #expect(try !Catalog.problems([Catalog.plain(key)]).isEmpty, "no problem for the key \"\(key)\"")
+    }
+
+    @Test(
+        "... and %lld, %@, their positional forms, %% and a percent sign that formats nothing are not",
+        arguments: ["Week %lld of %lld", "Next: %@ · %@", "%1$@ of %2$lld", "%lld%% of the block", "100% done"]
+    )
+    func keyWithWholeNumbersAndTexts_isNoProblem(key: String) throws {
+        let problems = try Catalog.problems([Catalog.plain(key)])
+        #expect(problems.isEmpty, "\(problems)")
+    }
+
     @Test("Two keys that differ in case, or in a space, are two keys")
     func keysDifferingInCaseOrSpace_areTwoKeys() throws {
         let entries = ["Today", "today", "Today ", " Today"].map { Catalog.plain($0) }

@@ -365,3 +365,194 @@ Open questions: 2 (LedgerDesign's words) is S7; 5 and 6 (the last byte, Xcode) a
 - The tester's files and `test-findings.md` were not read.
 - The F08 and F10 notes' copies of the conventions (other worktrees); watchOS catalogs; the generated-symbols
   alternative end to end; `accentText` as the tint (it needs a new screenshot).
+
+## Slice S1 — re-review of fix round 1 (G3 reviewer, 2026-10-05)
+
+Reviewed: `git diff f45f5e9..6555960`, against my findings above and the three sets of rulings in the notes. A
+scoped re-review, except for `scripts/check-string-catalogs.sh`, its suite and its wiring, which I read in full
+as new infrastructure.
+
+**Verdict: approve. 0 Blocking, 3 Should fix, 8 Nits.** B1 is closed at the root, and every Should-fix item of
+the first review is closed or ruled. The three new Should-fix items can ride with the touch-up already ruled.
+
+### A correction to my first review
+
+S6 said the light theme's selected tab measured 2.44:1 and the dark 6.9:1. Both were mis-measured: my tool
+converted the screenshots' colours where it should have read them as they are (the files are tagged sRGB, and read
+that way their ground is the token exactly, `#EFEDE6` and `#0B0B0D`). Read from the files' own bytes the first
+round's figures were **2.70:1** (`#F25219` on `#E4E2DB`) and 6.37:1. The finding stood either way (2.70 is under
+both 4.5 and 3), but `tasks/features/F09-today.md:119` now quotes 2.44; it should say 2.70 (R3).
+
+### What I ran
+
+- `bash scripts/tests/adversarial/string-catalogs.adv.sh`: 71 passed, 0 failed, 7 s.
+- `scripts/check-string-catalogs.sh` on this tree's build, from the root and from another directory: 1 catalog,
+  7 keys, exit 0, tree untouched. `shellcheck` on the script and the suite: clean.
+- The script on two scratch repositories whose `.stringsdata` the real compiler wrote: a path with a space, a
+  source in a sub-folder with `+` in its name, a comment only the catalog gives, a used key marked stale, a
+  source edited after the build, catalogs in other places, and R1's case.
+- A scratch package built twice with `COMPILATION_CACHE_ENABLE_CACHING=YES`, the whole `Build` folder deleted in
+  between and only the cache kept (what the runner has): 5 cache hits, 0 misses, every `.stringsdata` written again.
+- Host, on the clean tree at `6555960`: `swift test … --filter LedgerAppKitTests`, 179 tests in 29 suites passed.
+- The six rewritten helper files, copied into a scratch package, against about 75 source lines.
+- The four re-shot screenshots and the first round's, read from their bytes.
+
+### Status of the first review's items
+
+| Item | Status |
+|---|---|
+| B1 `%` in a plain key | **Closed.** The audit derives no key; the gate holds the catalog to the compiler's keys (SC03–SC06, run). §7 states the rule; the notes' sentence is corrected (`implementation-notes.md:1093-1095`). |
+| S1 the timer `Text` | **Closed.** Two lookup forms in §7 and in `copyFileProblems`; `Text("\(word) · \(timer)")` in a copy file is now a finding (run). `Text + Text` is ruled for the next touch-up. |
+| S2 misses; the compiler's keys | **Closed**, with one edge left (R1). `Text("\(done)/\(total)")` is a finding; a key with a value needs `locale:`; the shadowing case cannot arise. |
+| S3 exemptions | **Closed.** Per literal, stale entries are findings, Debug-only files are verified. As §7 asks of the reviewer, I confirm `LedgerAppKit`'s: `"-LEDGER_UITEST"` and the temporary database path in `AppComposition.swift`, and `AppComposition+Diagnostics.swift` as Debug-only. |
+| S4 the bundle check can fail | **Closed** (`ModuleCopyTests.swift:116-122`). |
+| S5 `MainRoot`; the resolver | **Closed.** Three members; §4 names `MainRoot` as the resolver and the `…Root` naming. The notes' hand-off text was not updated (R3). |
+| S6 tint | **Closed.** `accentText`, reset on each stack, said in §4. The notes' table is right: 5.25:1 light (`#A73107` on `#E4E2DB`), 6.37:1 dark, by my corrected reading too. The reset is tested on the modifier, not on `AppTabs` (ruled). |
+| S7 §7 | **Closed for iOS modules.** True of `LedgerAppKit`; the two unconverted modules are named and held in a table that only shrinks; points 1–4 are settled and 5 is left open on purpose, with who decides. The watch half is R2. |
+| N1, N2, N8, N10, N11 | Closed. |
+| N3 specifiers | Ruled for the next touch-up. |
+| N4 member parameters | Gone with the derivation. |
+| N5 previews | Closed in the audit (`#if DEBUG` is verified). The gate reads a preview's keys; see R1 for what it then accepts. |
+| N6 unreadable folder | Closed in the audit. `PreviewScan` is as it was (not this slice's). |
+| N7 a route pushed twice | Open by ruling (S5). |
+| N9 the placeholder's twin | Open until S5 deletes it. |
+| N12 key order; the fixture's table | Order stated (UTF-8 bytes, which I had called code-unit order). The fixture's own table is ruled for the next touch-up. |
+| U1 | Closed: fifty iterations, the implementer's run. |
+| U2 | Answered: a deprecation in a package target is a warning, not an error; a queued chore. |
+| U3 | Closed: 26 previews on the host (implementer); I re-ran LedgerAppKit's four. |
+
+### The gate step
+
+`scripts/check-string-catalogs.sh` (190 lines), `string-catalogs.adv.sh` (71 cases), `check.sh:200-204`.
+
+- **Correctness.** Keys are compared as bytes by `jq`, both ways, with the file and line of each lookup; then the
+  tool's own `sync` on a temporary copy, forced to write by adding and dropping one key, and a diff. Verified by
+  the suite and by my runs. A used key that the catalog marks stale fails with the diff (run).
+- **It cannot pass on nothing.** No catalog: exit 1 (SC26). No `.stringsdata` for the module: exit 1 (SC17, SC18).
+  A source without one: exit 1, naming the file (SC20). A catalog that is not JSON, or `jq` or the tool failing:
+  exit 1. `check_catalog` runs with `errexit` off (it is called before `||`); I traced each unchecked command and
+  each fails closed.
+- **Stale output.** A deleted or renamed source's file is ignored (SC19). A source edited since the build is not
+  noticed (n1); inside `check.sh` the build has just run, so it cannot happen there.
+- **Modes.** After the iOS build in the full gate, `--skip-lint`, `--ios-only`, `--ios-only --skip-static` and
+  `--record-snapshots`; not in `--lint-only`, `--static-only`, `--fast` (W70–W75). `test_platform` is a plain
+  statement, so a failure stops the gate.
+- **The runner with a restored cache.** The `.stringsdata` files being absent there is unlikely: a cache hit
+  replays every output of the compile, this one included (the implementer's measurement on the real module, and
+  mine on a scratch package with the whole build folder gone). If they were absent, the step exits 1 with "has
+  nothing to be compared with" or names the files: red on every PR, never a pass. The message would then send the
+  author to rebuild, which would not help; it could name the cache.
+- **Shell.** Bash 3.2 safe (no empty-array expansion under `set -u`), every path quoted (a root with a space
+  passes), `/bin/bash` forced in the suite, nothing written outside `mktemp` (SC21–SC23, and `git status` after
+  my runs).
+- **The suite.** Real compiler, real tool, no timing, no network, in the house style. It also pins how the
+  compiler keys a lookup. It has no case for a path with a space or a source in a sub-folder; both pass by hand.
+
+### The rewritten audit
+
+Sound on what I threw at it: multi-line and raw literals, nested interpolations with parentheses, escapes, block
+comments holding quotes and parentheses, wrapped lookups. No force unwrap, no `try?`, files 106 to 210 lines,
+unreadable folders throw. The argument model fixes the false alarms that pushed towards exempting files (a symbol
+or an identifier chosen by a ternary, a log line with a default, a logger's category: all pass now, run). The
+listed limits are the real ones, with one missing (n3). The one that matters for F08–F14 is "a text made from a
+name" (`Text(goal.rawValue.capitalized)`), which only review finds.
+
+### `ModuleCopyTests`
+
+- A new module is audited by default; a renamed one or a typo in a table fails `everyModule_isAuditedOrNamed`. A
+  catalog in the wrong place, or one that does not read, makes the module's copy file a finding.
+- The reasons hold: in this build the eight "no copy by design" modules have no extracted key at all;
+  `LedgerDesign` has 14, in six files (`SetRow`, `WeekStrip`, `HairlineList`, `SheetChrome`, `DebugMenu`,
+  `DiagnosticsPage`), which is the size of its conversion.
+- The bundle check asks the module's own bundle, found inside the test bundle, which embeds the bundles of
+  `LedgerAppKit`'s dependencies: every iOS feature, and no watch module (R2).
+
+### Should fix
+
+**R1. A lookup outside the copy file passes every check once its key is in the catalog, and the step's message
+tells the author to add it.** `scripts/check-string-catalogs.sh:77-85`, `:137-145`.
+
+- Run, on a scratch module: `Text("Sample row")` in a `+Previews.swift` inside `#if DEBUG`, and
+  `Button("\(done)/\(total)") {}` in a view, with `Sample row` and `%lld/%lld` added to the catalog. The step
+  exits 0, the audit has no findings (it does not read the preview, and the button's literal has no letter), and
+  the bundle would resolve both.
+- Why it matters: §7 says every lookup is in the copy file. The button's lookup goes to the main bundle, so its
+  catalog entry is dead; the preview's key ships in the catalog. `LedgerDesign`'s conversion meets this at once
+  (its Debug gallery samples and Debug menu account for seven of the 14 keys: bare `Text("…")` and
+  `.navigationTitle("…")` in Debug-only code), and the message's first sentence is "Give the catalog a key for
+  each lookup it lacks".
+- Fix: the script already knows each lookup's file. Make a lookup whose file is not `<Name>Copy.swift` or
+  `<Name>Copy+<Area>.swift` a failure of its own ("looked up in DemoView.swift:4, which is not a copy file: hand
+  the view a `String`; in Debug code use `Text(verbatim:)`"), with two cases in the suite. That also closes the
+  audit's first limit for every module with a catalog.
+
+**R2. A watch module cannot pass checks 1 and 3, and §7 promises it only needs a catalog and a copy file.**
+`scripts/check-string-catalogs.sh:46`, `:113-122`; `LedgerAppKitTests/ModuleCopyTests.swift:103-109`;
+`docs/engineering-standards.md:173-175`, `:309-312`, `:349-351`.
+
+- The iOS build compiles neither `LedgerWatchAppKit` nor `WatchFeatureWorkout` (their folders exist only under
+  `Debug-watchsimulator`), so a catalog in either fails check 1 with "has nothing to be compared with … iOS has
+  not been built" (SC18 pins it). `LedgerAppKitTests` does not embed their bundles, so check 3's `#require` fails.
+  PR CI builds no watch target at all.
+- Why it matters: the ruled chore converts `LedgerWatchAppKit` next. §7's sentence on reach describes a milder
+  failure (a key seen as unused) than the one the chore will meet.
+- Fix: decide the scope now and write it in §7 and in the table's reason. Either the chore converts `LedgerDesign`
+  only and `LedgerWatchAppKit` waits for F18, or the step first learns to read the watch build (the full gate
+  only) and a watch test target runs check 3. Either way, make the step's message name the case.
+
+**R3. The hand-off text for F08 and F10 is stale, and the brief quotes my wrong figure.**
+`implementation-notes.md:1068-1080`; `tasks/features/F09-today.md:119`.
+
+- "Inputs for F08's and F10's slices" still tells F08 to branch around `AppTabs(…)` in `body`, F10 to add its
+  modifier after the Debug sheet, both to write `extension AppRouter { func handle(_:) }` and pass
+  `router.handle`, and a new destination to add its title to `AppCopy.title(of:)`. The round replaced all four
+  (`MainRoot`'s `content` and `body`, §4's resolver, one `…Title` member per placeholder). The note at `:1082`
+  covers only the catalog half.
+- Fix: rewrite those four bullets, or replace them with a pointer to architecture §4 and `MainRoot.swift`. Change
+  2.44:1 to 2.70:1 in the brief.
+
+### Nits
+
+- n1. `check-string-catalogs.sh:103-111`: a source edited after the build is compared by its old `.stringsdata`
+  (run: the step passed on a key the code no longer has). Only outside the gate. Fail when a source is newer than
+  its `.stringsdata`.
+- n2. `docs/engineering-standards.md:198-199`: "a translator's comment is written in code". A comment only the
+  catalog gives passes the step (run; SC15 uses one). Say it is accepted, or fail it.
+- n3. `SwiftLexer.swift:159-170`: parentheses that do not balance in the text leave later literals inside that
+  argument. Run: `foo(identifier:` in both branches of an `#if`, closed after `#endif`, and
+  `let r = /\(identifier: /`, each hide a later `let s = "Start workout"`. Add the case to "Known limits", beside
+  the regex line.
+- n4. `check-string-catalogs.sh:175`: a catalog anywhere else (`Sources/X/Localizable.xcstrings`,
+  `Resources/Other.xcstrings`) is not seen (run). Harmless today; fail on any other `*.xcstrings` under
+  `LedgerKit/Sources`.
+- n5. `CopyAuditRules.swift:154-165`: form 2 passes with another value in it
+  (`Text("Set \(n) · \(timerInterval: …)", bundle: .module)`), which can take no `locale:`; and `locale: .current`
+  satisfies form 1. Say in §7 that form 2 carries the timer and no other value.
+- n6. `ModuleCopyTests.swift:37-44` is one more file every lane edits (an exemption); add it to convention 4's
+  list. "Localization, for a feature author" (`implementation-notes.md:1258-1267`) should give the two commands:
+  `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter ModuleCopyTests` for
+  checks 2 and 3, and the gate for check 1.
+- n7. When the ruled specifier rule lands, the step's hint (`check-string-catalogs.sh:142-143`) and
+  `docs/testing-strategy.md:457-458` still offer `%lf` for a `Double`.
+- n8. `implementation-notes.md:907-908`, `:1016-1017`: the first round's "Criteria → tests" rows 4 and 5 and "How
+  to verify by hand" name tests that no longer exist (`copy_followsTheStandard`). Mark them superseded.
+
+### What a feature author could still get wrong
+
+- Adding a key because the gate asks for it, when the lookup should not exist (R1).
+- Giving a watch module a catalog (R2).
+- A text made from a name: `Text(goal.rawValue.capitalized)` for F08's `TrainingGoal`. Each case needs its own
+  lookup; nothing mechanical says so.
+- Until the ruled touch-up: joining `Text + Text` in a copy file, and an optional or a `Double` in a key.
+- Running only their own module's tests: the audit lives in `LedgerAppKitTests`, and check 1 only in the gate.
+- Expecting the accent inside a tab: a system control there is the system's blue until the screen tints it; the
+  cover and onboarding sit outside the tabs and get neither.
+
+### What I did not check
+
+- Nothing on a simulator: the gate on `6555960`, `AppTabsTests`' fifty iterations and the UI tests are the
+  implementer's and the orchestrator's runs.
+- GitHub's runner itself; the cache behaviour is measured on this Mac only.
+- `--record-snapshots` for real; the Xcode app; host previews of `LedgerDesign` and `LedgerWatchAppKit`.
+- The tester's files, including the implementer's edits to them (`TabsAdversarial.swift` and the adversarial
+  suites), and the close-out in progress.
