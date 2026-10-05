@@ -1,0 +1,359 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@, %lld weeks, %@. Editable any time." : {
+      "comment" : "Setup, step 3 of 3, under the title: the program's name, its weeks, the unit of its loads",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@, %lld week, %@. Editable any time."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@, %lld weeks, %@. Editable any time."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "3 days" : {
+      "comment" : "Setup, step 2: training days a week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3 days"
+          }
+        }
+      }
+    },
+    "4 days" : {
+      "comment" : "Setup, step 2: training days a week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "4 days"
+          }
+        }
+      }
+    },
+    "5 days" : {
+      "comment" : "Setup, step 2: training days a week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 days"
+          }
+        }
+      }
+    },
+    "6 days" : {
+      "comment" : "Setup, step 2: training days a week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "6 days"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "comment" : "Setup, steps 2 and 3: returns to the step before",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        }
+      }
+    },
+    "Barbell strength + accessory volume" : {
+      "comment" : "Setup, step 1: the line under Both, honestly",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barbell strength + accessory volume"
+          }
+        }
+      }
+    },
+    "Body-part split" : {
+      "comment" : "Setup, step 2: the program 6 days a week gets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Body-part split"
+          }
+        }
+      }
+    },
+    "Both, honestly" : {
+      "comment" : "Setup, step 1: a training goal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Both, honestly"
+          }
+        }
+      }
+    },
+    "Build muscle" : {
+      "comment" : "Setup, step 1: a training goal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build muscle"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "comment" : "Setup, steps 1 and 2: goes to the next step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        }
+      }
+    },
+    "Couldn't save your program. Try again." : {
+      "comment" : "Setup: shown above the Retry button when the program could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your program. Try again."
+          }
+        }
+      }
+    },
+    "Full body each session" : {
+      "comment" : "Setup, step 2: the program 3 days a week gets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Full body each session"
+          }
+        }
+      }
+    },
+    "Get stronger" : {
+      "comment" : "Setup, step 1: a training goal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get stronger"
+          }
+        }
+      }
+    },
+    "Habit first, numbers second" : {
+      "comment" : "Setup, step 1: the line under Stay consistent",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Habit first, numbers second"
+          }
+        }
+      }
+    },
+    "How many days a week?" : {
+      "comment" : "Setup, step 2 of 3: the title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How many days a week?"
+          }
+        }
+      }
+    },
+    "Low reps, linear load increases" : {
+      "comment" : "Setup, step 1: the line under Get stronger",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low reps, linear load increases"
+          }
+        }
+      }
+    },
+    "Moderate reps, volume tracking" : {
+      "comment" : "Setup, step 1: the line under Build muscle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderate reps, volume tracking"
+          }
+        }
+      }
+    },
+    "Pick the number you will actually hit, not the one you want to hit." : {
+      "comment" : "Setup, step 2 of 3: the line under the title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick the number you will actually hit, not the one you want to hit."
+          }
+        }
+      }
+    },
+    "Push, pull, legs + accessories" : {
+      "comment" : "Setup, step 2: the program 5 days a week gets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push, pull, legs + accessories"
+          }
+        }
+      }
+    },
+    "Retry" : {
+      "comment" : "Setup: tries to save the program again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        }
+      }
+    },
+    "Skip setup" : {
+      "comment" : "Setup, every step: saves the default program without asking anything more",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip setup"
+          }
+        }
+      }
+    },
+    "Start training" : {
+      "comment" : "Setup, step 3: saves the program shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start training"
+          }
+        }
+      }
+    },
+    "Stay consistent" : {
+      "comment" : "Setup, step 1: a training goal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stay consistent"
+          }
+        }
+      }
+    },
+    "Step %lld of %lld" : {
+      "comment" : "Setup: what VoiceOver reads for the progress bars at the top",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Step %lld of %lld"
+          }
+        }
+      }
+    },
+    "This sets how your loads progress week to week." : {
+      "comment" : "Setup, step 1 of 3: the line under the title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This sets how your loads progress week to week."
+          }
+        }
+      }
+    },
+    "Upper / lower split" : {
+      "comment" : "Setup, step 2: the program 4 days a week gets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upper / lower split"
+          }
+        }
+      }
+    },
+    "What are you training for?" : {
+      "comment" : "Setup, step 1 of 3: the title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What are you training for?"
+          }
+        }
+      }
+    },
+    "Your program" : {
+      "comment" : "Setup, step 3 of 3: the title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your program"
+          }
+        }
+      }
+    },
+    "kilograms" : {
+      "comment" : "The unit of a program's loads, inside the sentence of setup's step 3",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kilograms"
+          }
+        }
+      }
+    },
+    "pounds" : {
+      "comment" : "The unit of a program's loads, inside the sentence of setup's step 3",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pounds"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

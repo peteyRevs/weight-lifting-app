@@ -6,7 +6,9 @@ import Foundation
 public enum PreviewScan {
     /// The modules whose test targets check a preview registry. A module that gains its first `#Preview` adds a
     /// registry, those two suites, and its name here.
-    public static let registeredModules: Set<String> = ["LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit"]
+    public static let registeredModules: Set<String> = [
+        "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit", "FeatureOnboarding"
+    ]
 
     /// `LedgerKit/Sources`, found from this file's place in the repository.
     public static let sourcesDirectory = URL(filePath: #filePath)
