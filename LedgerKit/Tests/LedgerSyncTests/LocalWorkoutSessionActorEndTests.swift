@@ -49,7 +49,7 @@ struct LocalWorkoutSessionActorEndTests {
         var early = await Listener(subject.host)
         await subject.probe.hold(call)
         async let finishing = subject.host.finish(endedAt: Sample.at(600))
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         #expect(try await subject.host.current() == state)
         var joining = await Listener(subject.host)
         await subject.probe.release()

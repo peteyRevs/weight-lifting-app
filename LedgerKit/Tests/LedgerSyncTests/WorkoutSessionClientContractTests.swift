@@ -25,8 +25,9 @@ struct WorkoutSessionClientContractTests {
     /// and a host's script costs twenty times a fake's, so the PR lane and `swift test` run the twenty fixed
     /// seeds on every set-up: the scripts that are shown to reach every call, every refusal and every kind of
     /// action (`scripts_reachEveryCallAndRefusal`, `scripts_holdEveryKindOfAction`), and that every overlap
-    /// fault is judged on. The nightly lane runs every seed of the lane on every set-up.
-    static let hostSeeds: [UInt64] = TestLane.isNightly ? seeds : fixedSeeds
+    /// fault is judged on. The nightly lane runs every seed of the lane on every set-up, and never fewer than
+    /// those twenty: both lists are the start of one sequence, so the longer holds the other.
+    static let hostSeeds: [UInt64] = TestLane.isNightly && seeds.count > fixedSeeds.count ? seeds : fixedSeeds
 
     static func seed(_ number: Int) -> UInt64 {
         UInt64(number) &* 7919 &+ 17

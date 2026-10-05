@@ -61,11 +61,12 @@ public protocol WorkoutSessionClient: Sendable {
     /// Afterwards there is no live workout: `current()` is nil and a new stream starts with a nil state. Of
     /// several overlapping `finish` and `discard` calls exactly one ends the workout.
     ///
-    /// A host stores the end in the workout's log, and then saves in one transaction of its database: the
-    /// workout, its personal records, the misses it leaves on its program's slots, the program changes its
-    /// swaps asked for ("Also update program"), and the end of its log. So the workout is in history and no
-    /// longer live, or neither: `finish` never throws for a workout that is in history, and the host leaves
-    /// none both saved and unfinished. A workout that is discarded changes no program.
+    /// A host stores the end in the workout's log, and then saves. A host whose stores are one database
+    /// saves in one transaction: the workout, its personal records, the misses it leaves on its program's
+    /// slots, the program changes its swaps asked for ("Also update program"), and the end of its log. So the
+    /// workout is in history and no longer live, or neither: the call that saves it does not throw once it is
+    /// in history, and the host leaves none both saved and unfinished. A workout that is discarded changes no
+    /// program.
     ///
     /// Throws `noLiveWorkout` when there is none; `invalidEndDate` when the workout is still live after the
     /// call because the engine ignored the end, as it does for a date that is not finite (nothing ends and
@@ -85,13 +86,17 @@ public protocol WorkoutSessionClient: Sendable {
     /// That holds in this process. After a relaunch the unsaved workout is no longer shown, another can be
     /// started, and the launch step saves the first when it can.
     ///
-    /// Only a host whose stores are not one database saves the workout and drops its log in two steps. When
-    /// the second fails it throws although the workout is in history, the end waits as above, and the retry
-    /// saves again, which changes nothing, and drops the log.
+    /// An end is complete when its log is gone from the host's own event store, and the host does not take
+    /// its workout repository's word for that: after the save it looks there. Where the log is still listed
+    /// (the host's stores are not one database), or the look failed, it drops the log itself, in a second
+    /// step. Only when that step fails does the call throw although the workout is in history: the end waits
+    /// as above, and the retry saves again, which changes nothing unless the program was edited meanwhile,
+    /// and drops the log.
     ///
     /// Three things follow for a caller while an end waits:
-    /// - **`discard` saves the workout.** It completes the waiting finish and then throws `noLiveWorkout`;
-    ///   so does `apply`. A lifter who answers a failed save with "Discard" gets the workout in history.
+    /// - **`discard` saves the workout, with its program changes.** It completes the waiting finish and then
+    ///   throws `noLiveWorkout`; so does `apply`. A lifter who answers a failed save with "Discard" gets the
+    ///   workout in history, and its swaps in the program.
     /// - **`StartWorkoutUseCase` sees an ordinary live workout.** For the same day it answers `.resumed`,
     ///   with a workout that accepts no change; for another day `.conflict`, and replacing it saves it and
     ///   starts the new one, or throws what the store throws and starts nothing.

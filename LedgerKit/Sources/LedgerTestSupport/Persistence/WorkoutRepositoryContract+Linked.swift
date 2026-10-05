@@ -19,7 +19,14 @@ public extension WorkoutRepositoryContract {
                 + "exercise, is skipped; the workout and the other updates are stored",
             skipsWhatCannotBeApplied
         ),
-        Clause("materialising the workout again changes nothing, the program included", programUpdatesTwice),
+        Clause(
+            "materialising the workout again changes nothing, the program included while it was not edited between",
+            programUpdatesTwice
+        ),
+        Clause(
+            "every materialisation applies its entries: one made after the slot was changed sets it back",
+            laterSaveSetsTheSlotBack
+        ),
         Clause(
             "observeActive emits the program as a save left it, and nothing for a save that changes no program",
             observersHearTheSave
@@ -168,6 +175,32 @@ extension WorkoutRepositoryContract {
             once,
             expectProgram(expected, "the program after three saves", in: stores),
             ContractCheck.expect(stores.workouts.recent(limit: 10) == [stored(workout)], true, "it is stored once")
+        )
+    }
+
+    /// The protocol's warning, pinned so that both stores keep it alike until a swap is compare-and-set (review
+    /// S3-SF2; F10 S8 with O10): an older workout stored again with its `programUpdates` overwrites the
+    /// lifter's later choice for that slot. Stored again without them, it leaves the program alone.
+    static func laterSaveSetsTheSlotBack(_ stores: HistoryStores) async throws -> String? {
+        let program = try ProgramRepositoryContract.program()
+        try await stores.programs.save(program)
+        var workout = workout(of: program)
+        let slot = program.days[0].slots[0]
+        let swapped = replacement(for: slot)
+        workout.programUpdates = [slot.id: swapped]
+        try await stores.materialize(workout)
+        var edited = program // the lifter's later choice: a third exercise
+        let chosen = exercises.map(\.id).first { $0 != swapped && $0 != slot.exerciseID } ?? swapped
+        edited.days[0].slots[0].exerciseID = chosen
+        try await stores.programs.save(edited)
+        try await stores.materialize(stored(workout)) // as history returns it: no entries
+        let withoutEntries = try await expectProgram(edited, "after storing it again without its entries", in: stores)
+        try await stores.materialize(workout)
+        var setBack = edited
+        setBack.days[0].slots[0].exerciseID = swapped
+        return try await ContractCheck.first(
+            withoutEntries,
+            expectProgram(setBack, "after storing it again with its entries", in: stores)
         )
     }
 

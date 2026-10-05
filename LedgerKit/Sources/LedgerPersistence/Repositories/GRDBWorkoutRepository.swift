@@ -19,8 +19,11 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     private let queue: DatabaseQueue
     private let now: @Sendable () -> Date
 
-    /// - Parameter now: the clock for `created_at` and `updated_at`; the composition root passes the injected
-    ///   date.
+    /// - Parameters:
+    ///   - queue: the database. A save that drops a log drops it from this queue's `workout_event` and answers
+    ///     for no other: the event store a host is given beside this repository must be over the same queue,
+    ///     as `LedgerStores` builds them. A host looks in its own event store all the same.
+    ///   - now: the clock for `created_at` and `updated_at`; the composition root passes the injected date.
     public init(_ queue: DatabaseQueue, now: @escaping @Sendable () -> Date = Date.init) {
         self.queue = queue
         self.now = now
@@ -28,8 +31,8 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
 
     /// Stores the finished `workout` in one write transaction (rule 31): its row, its exercises and their sets
     /// (each done set of at most 12 reps with its Brzycki e1RM), its personal records, the misses of
-    /// `slotUpdates` (rule 13) and the program changes of `workout.programUpdates` (decision #13). Any failure
-    /// leaves the database as it was.
+    /// `slotUpdates` (rule 13), the program changes of `workout.programUpdates` (decision #13) and, when
+    /// `droppingLog`, the end of its log. Any failure leaves the database as it was.
     ///
     /// It is an upsert keyed by the workout's id, so materialising again is safe (ADR-004: a rebuild emits
     /// `.materialize` again when a late envelope changes a finished log). Rows that did not change are left
@@ -45,27 +48,24 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     ///   since. A slot that is not stored, or is deleted (the program was edited or deleted during the
     ///   workout), is logged and skipped: the workout is still stored.
     /// - Each entry of `workout.programUpdates` sets one slot's exercise (`writeProgramUpdates`), or is logged
-    ///   and skipped.
+    ///   and skipped. Like the misses it is written by every materialisation: an older workout stored again
+    ///   with its entries sets a slot back that was changed since.
+    /// - With `droppingLog`, every row of the workout's log in `workout_event` is deleted, last
+    ///   (`GRDBWorkoutEventStore.deleteLog(of:in:)`, the statement `compact(workout:)` runs).
+    ///
+    /// The writes run in that order, and every refusal below is thrown before the misses are written, by the
+    /// workout's place in history, its rows or its records: what follows them never refuses, it skips. So a
+    /// refused workout has changed no slot and dropped no log even before the rollback, and whatever fails
+    /// later (a full disk) rolls all of it back.
+    ///
+    /// Returns `droppingLog`: this repository holds the log, in the `workout_event` table of its own queue, and
+    /// has dropped it there when asked. It cannot tell whether the caller's event store is over that queue.
     ///
     /// Throws `notFinished` unless `workout` is `.finished` with an `endedAt`; `duplicateIdentifier` for two
     /// exercises or two sets sharing an id, or an exercise or set id that another stored workout holds (live or
     /// deleted); `nulInText` for a name or tag holding U+0000; `inexactWeight` for a weight that is not a
     /// whole number of 10⁻⁷ g; and `nonFiniteDate` for a date that is not finite. A workout the record replay
     /// cannot read is left out of it and logged; it never fails the write.
-    public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
-        try await materialize(workout, slotUpdates: slotUpdates, droppingLog: false)
-    }
-
-    /// `materialize(_:slotUpdates:)` and, when `droppingLog`, every row of the workout's log in `workout_event`,
-    /// deleted last in the same transaction (`GRDBWorkoutEventStore.deleteLog(of:in:)`, the statement
-    /// `compact(workout:)` runs): the history rows, the records, the misses, the program changes and the log
-    /// commit together or not at all. Both stores are tables of one database, so the answer is `droppingLog`.
-    ///
-    /// The writes run in that order, and every refusal above is thrown before the misses are written, by the
-    /// workout's place in history, its rows or its records: what follows them never refuses, it skips. So a
-    /// refused workout has changed no slot and dropped no log even before the rollback, and whatever fails
-    /// later (a full disk) rolls all of it back.
-    @discardableResult
     public func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(ColumnCodec.text(workout.id))")
@@ -198,16 +198,22 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     ///
     /// An entry is applied only to a live slot, under a live day, of the workout's own live program, so a
     /// workout of one program never rewrites another's (the takeover class of F05 review B1), and only when
-    /// its exercise has a row, as the slot's foreign key and a program save require. Any other entry is logged
-    /// and skipped: the program was edited or deleted during the workout, and the workout is still stored. A
-    /// slot that already holds the exercise is left alone, so a second materialisation runs no statement that
-    /// writes.
+    /// its exercise has a row, as the slot's foreign key and a program save require
+    /// (`ProgramRows.holdsExercise(_:in:)`, the one rule for both). Any other entry is logged and skipped: the
+    /// program was edited or deleted during the workout, and the workout is still stored. A slot that already
+    /// holds the exercise is left alone, so a second materialisation runs no statement that writes.
     private static func writeProgramUpdates(
         of workout: WorkoutState,
         in database: Database,
         at timestamp: String
     ) throws {
-        let program = workout.source.map { ColumnCodec.text($0.programID) }
+        guard !workout.programUpdates.isEmpty else {
+            return
+        }
+        guard let program = workout.source.map({ ColumnCodec.text($0.programID) }) else {
+            Logger.persistence.notice("Program updates of an ad-hoc workout skipped: it has no program")
+            return
+        }
         let updates = workout.programUpdates
             .map { (slot: ColumnCodec.text($0.key), exercise: ColumnCodec.text($0.value)) }
             .sorted { $0.slot < $1.slot }
@@ -220,9 +226,7 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
             WHERE slot.id = ? AND program.id = ?
                 AND slot.deleted_at IS NULL AND day_template.deleted_at IS NULL AND program.deleted_at IS NULL
             """
-            guard let program,
-                  let isHeld = try Bool.fetchOne(database, sql: ownSlot, arguments: [exercise, slot, program])
-            else {
+            guard let isHeld = try Bool.fetchOne(database, sql: ownSlot, arguments: [exercise, slot, program]) else {
                 Logger.persistence.notice(
                     "Program update of slot \(slot, privacy: .public) skipped: the workout's program has no such slot"
                 )
@@ -231,8 +235,7 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
             guard !isHeld else {
                 continue
             }
-            guard try Int.fetchOne(database, sql: "SELECT 1 FROM exercise WHERE id = ?", arguments: [exercise]) != nil
-            else {
+            guard try ProgramRows.holdsExercise(exercise, in: database) else {
                 Logger.persistence.notice(
                     "Program update of slot \(slot, privacy: .public) skipped: its exercise is not stored"
                 )

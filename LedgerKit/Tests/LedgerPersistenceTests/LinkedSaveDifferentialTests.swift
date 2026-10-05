@@ -17,9 +17,15 @@ import Testing
 struct LinkedSaveDifferentialTests {
     typealias Contract = WorkoutRepositoryContract
 
-    /// Thirty scripts in the PR lane and on the host; every seed of `LEDGER_PROPERTY_SEED_COUNT` in the
-    /// nightly one.
-    static let seeds = TestLane.runsSlowTests ? PropertySeed.all : Array(PropertySeed.all.prefix(30))
+    /// Thirty seeds whatever the lane sets: the scripts `scripts_holdEveryKindOfStep` vouches for, which must
+    /// not depend on how many seeds a run was given. The first thirty of `PropertySeed.all`'s sequence.
+    static let fixedSeeds = (0 ..< 30).map { PropertySeed(value: UInt64($0) &* 7919 &+ 17) }
+
+    /// The thirty fixed scripts in the PR lane and on the host; every seed of `LEDGER_PROPERTY_SEED_COUNT` in
+    /// the nightly one, and never fewer than the thirty.
+    static let seeds = TestLane.runsSlowTests && PropertySeed.all.count > fixedSeeds.count
+        ? PropertySeed.all
+        : fixedSeeds
 
     /// How many random steps a script holds, between the two saves that open it and the two reads that end it.
     static let length = 18
@@ -55,7 +61,7 @@ struct LinkedSaveDifferentialTests {
 
     @Test("Thirty scripts hold every kind of step: saves that drop a log and that keep it, of every kind of workout")
     func scripts_holdEveryKindOfStep() throws {
-        let labels = try PropertySeed.all.prefix(30).flatMap { try Self.script($0).map(\.label) }
+        let labels = try Self.fixedSeeds.flatMap { try Self.script($0).map(\.label) }
         let kinds = Set(labels.map { String($0.prefix { $0 != " " }) })
         #expect(kinds == ["materialize", "append", "save", "delete", "setActive", "compact"])
         #expect(labels.contains { $0.hasSuffix("dropping true") } && labels.contains { $0.hasSuffix("dropping false") })

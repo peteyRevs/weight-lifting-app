@@ -59,7 +59,7 @@ struct UnimplementedProgramRepository: ProgramRepository {
 struct UnimplementedWorkoutRepository: WorkoutRepository {
     let stub = Unimplemented(key: "workoutRepository")
 
-    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {
+    func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
         throw stub.failure()
     }
 

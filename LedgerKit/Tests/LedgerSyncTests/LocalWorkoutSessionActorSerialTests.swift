@@ -19,7 +19,7 @@ struct LocalWorkoutSessionActorSerialTests {
         var listener = await Listener(subject.host)
         await subject.probe.hold(.append)
         async let first = subject.host.apply(Sample.logged(0, 0))
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         // Which of these two reaches the host first is the scheduler's choice; both come after the held one.
         async let second = subject.host.apply(Sample.retargeted(0, 1, pounds: 190))
         async let third = subject.host.apply(Sample.retargeted(0, 2, pounds: 195))
@@ -54,7 +54,7 @@ struct LocalWorkoutSessionActorSerialTests {
         var listener = await Listener(subject.host)
         await subject.probe.hold(.append)
         let caller = Task { try await subject.host.apply(Sample.logged(0, 0)) }
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         caller.cancel()
         await subject.probe.release()
         let applied = try await caller.value
@@ -97,7 +97,7 @@ struct LocalWorkoutSessionActorSerialTests {
         try await subject.host.start(Sample.session)
         await subject.probe.hold(.append)
         async let first = subject.host.apply(Sample.logged(0, 0))
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         let caller = Task { try await subject.host.apply(Sample.retargeted(0, 1, pounds: 190)) }
         for _ in 0 ..< 50 {
             await Task.yield()
@@ -115,7 +115,7 @@ struct LocalWorkoutSessionActorSerialTests {
         let resumed = try #require(WorkoutEngine.replay(LocalWorkoutSessionActorRecoveryTests.live))
         await subject.probe.hold(.uncompactedWorkoutIDs)
         async let launch = subject.host.resumeFromStore()
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         async let current = subject.host.current()
         async let stream = subject.host.updates()
         // A start that did not wait would find nothing live and leave a second live log behind.

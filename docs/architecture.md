@@ -294,16 +294,19 @@ rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed e
   in this process, the workout in front of every reader as it stood, where nothing can be started over it; the
   next `finish`, any later change to the workout, the next return to the foreground and the next launch each
   try again. After a relaunch the unsaved workout is no longer shown and another can be started; the launch
-  step saves the first when it can. A workout repository that does not hold the log (none of the app's)
-  answers that it is still there, and the host then compacts it in a second step, which can fail by itself and
-  is retried the same way.
+  step saves the first when it can. An end is complete when its log is gone from the host's own event store,
+  and the host does not take the repository's word for it: after the save it looks there (one read), and where
+  the log is still listed, because the repository holds no log or holds another store's (no composition of the
+  app), it compacts in a second step, which can fail by itself and is retried the same way.
 - Recovery is `LocalWorkoutSessionActor.resumeFromStore()`: the launch step `LaunchStep.resumeWorkout`
   (after `loadSettings`; the launch owns its task), or the first protocol call when the launch has not run it,
   and every call waits for it. The clock continues from `WorkoutEventStore.newestWallClock()`, and each log in
   `uncompactedWorkoutIDs()` is replayed: live → resume (no haptic, no effect), finished → materialise with
   the log dropped in the same transaction (a workout found already saved is saved again, which changes
-  nothing), discarded → compact; a log that replays to nothing, or an ended one with rows this version cannot
-  read, is kept. Both apps also hook HealthKit recovery (`handleActiveWorkoutRecovery` /
+  nothing unless its program was edited since), discarded → compact; a log that replays to nothing, or an
+  ended one with rows this version cannot read, is kept. Every log is read first, and the ended ones are then
+  completed in the order their workouts started, so a later workout's misses and swaps are written last. Both
+  apps also hook HealthKit recovery (`handleActiveWorkoutRecovery` /
   `shouldHandleActiveWorkoutRecovery`).
 - `StartWorkoutUseCase` (`LedgerDomain/UseCases`) is "Start workout": it resumes the day's live workout
   (rule 17), reports a conflict with another day's, or builds the session with `SessionBuilder` from what is

@@ -35,12 +35,8 @@
             self.events = events
         }
 
-        public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
-            try await materialize(workout, slotUpdates: slotUpdates, droppingLog: false)
-        }
-
-        /// Returns whether the log went with the save: only when asked, and only when an event store is linked.
-        @discardableResult
+        /// Returns whether the log went with the save: only when asked, and only when an event store is linked,
+        /// whose log it then is. Without one this repository holds no log, and answers `false`.
         public func materialize(
             _ workout: WorkoutState,
             slotUpdates: [Slot],

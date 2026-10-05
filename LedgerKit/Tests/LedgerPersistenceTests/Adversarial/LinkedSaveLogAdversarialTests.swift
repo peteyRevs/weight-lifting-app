@@ -125,8 +125,9 @@ struct LinkedSaveLogAdversarialTests {
     struct OldWrapper: WorkoutRepository {
         let base: any WorkoutRepository
 
-        func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+        func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {
             try await base.materialize(workout, slotUpdates: slotUpdates)
+            return false
         }
 
         func workout(id: WorkoutID) async throws -> WorkoutState? {

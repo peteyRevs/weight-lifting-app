@@ -92,14 +92,14 @@ struct Subject: Sendable {
 }
 
 /// A workout repository that is not one database with the event log (F10 S3 criterion 5): every call goes to
-/// `base` but the save that drops the log, which it does not implement. So the host gets the protocol's
-/// default, which saves and answers that the log is still there, as from any store that cannot do both in one
-/// transaction.
+/// `base`, and a save never drops a log, whatever it is asked. It holds none, and answers so, as any store
+/// that cannot save and drop in one transaction.
 struct SeparateWorkoutRepository: WorkoutRepository {
     let base: any WorkoutRepository
 
-    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {
         try await base.materialize(workout, slotUpdates: slotUpdates)
+        return false
     }
 
     func workout(id: WorkoutID) async throws -> WorkoutState? {

@@ -61,7 +61,9 @@ struct SabotagedEventStore: WorkoutEventStore {
 struct SabotagedWorkoutRepository: WorkoutRepository {
     let base: any WorkoutRepository
 
-    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}
+    func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
+        false
+    }
 
     func workout(id: WorkoutID) async throws -> WorkoutState? {
         try await base.workout(id: id)
