@@ -2,11 +2,14 @@ import Foundation
 
 /// A module's hand-written String Catalog, read from the source tree (as `PreviewScan` reads sources), with the
 /// rules standards §7 sets for one: English is the source language; every key carries its English text, marked
-/// translated (a unit in any other state is left out of the build); a plain key's text is the key itself; a
-/// counted key has the forms `one` and `other`, counts one value, and its `other` form is the key.
+/// translated (the build leaves out a key with no text and a text still marked `new`); a plain key's text is the
+/// key itself; a counted key has the forms `one` and `other`, counts one value, and its `other` form is the key;
+/// no text names the product.
 ///
-/// Each module with copy has one test that reads its catalog through `CopyAudit`, which reports these rules'
-/// violations with the rest, and one that asks `unresolvedKeys(in:)` of the bundle the build made.
+/// `CopyAudit` reports these rules' violations with the rest, and `ModuleCopyTests` asks `unresolvedKeys(in:)` of
+/// the bundle the build made. What a decoded catalog cannot show (its layout, the order of its keys, a key
+/// written twice) is the gate's to check: `scripts/check-string-catalogs.sh` compares the file with what Xcode's
+/// own tool would write.
 public struct StringCatalog: Sendable {
     /// A key's English localization.
     public enum English: Hashable, Sendable {
@@ -22,6 +25,9 @@ public struct StringCatalog: Sendable {
         public let value: String
         public let state: String?
     }
+
+    /// The product's codename, which shipped copy never contains (`docs/product-decisions.md`, Naming).
+    public static let productName = "Ledger"
 
     public let sourceLanguage: String
     public let strings: [String: English]
@@ -68,12 +74,12 @@ public struct StringCatalog: Sendable {
     private func problems(of key: String) -> [String] {
         switch strings[key] {
         case let .text(value, state):
-            var found: [String] = []
-            if value != key {
+            var found = Self.namesTheProduct([key, value]) ? ["names the product, which shipped copy never does"] : []
+            if !CopyAuditRules.isSameText(value, key) {
                 found.append("has the English text \"\(value)\": a key is its English text")
             }
             if state != "translated" {
-                found.append("is not marked translated, so the build leaves it out")
+                found.append("is not marked translated: a hand-written catalog marks its English text so")
             }
             return found
         case let .plural(forms):
@@ -84,7 +90,8 @@ public struct StringCatalog: Sendable {
     }
 
     private func pluralProblems(of key: String, _ forms: [String: Form]) -> [String] {
-        var found: [String] = []
+        let names = Self.namesTheProduct([key] + forms.values.map(\.value))
+        var found = names ? ["names the product, which shipped copy never does"] : []
         if Set(forms.keys) != ["one", "other"] {
             found.append("needs exactly the forms \"one\" and \"other\"")
         }
@@ -92,7 +99,7 @@ public struct StringCatalog: Sendable {
         if counted != 1 {
             found.append("counts \(counted) values: a counted key holds exactly one %lld")
         }
-        if let other = forms["other"], other.value != key {
+        if let other = forms["other"], !CopyAuditRules.isSameText(other.value, key) {
             found.append("has the \"other\" form \"\(other.value)\": a counted key is its \"other\" form")
         }
         for (category, form) in forms.sorted(by: { $0.key < $1.key }) {
@@ -104,6 +111,10 @@ public struct StringCatalog: Sendable {
             }
         }
         return found
+    }
+
+    private static func namesTheProduct(_ texts: [String]) -> Bool {
+        texts.contains { $0.range(of: productName, options: .caseInsensitive) != nil }
     }
 
     /// The keys `bundle` cannot resolve: its compiled tables lack them. All of them when the build copied the

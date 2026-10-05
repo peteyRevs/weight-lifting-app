@@ -170,19 +170,35 @@ targets only.
   tab can show any screen, and a route can open a screen in another tab.
   `AppRouter` (`@MainActor @Observable`) holds the selected tab and one path per
   tab; `open(_:in:)` selects a tab and pushes there, and a tab keeps its stack
-  while another is selected. The tab bar is the system's, tinted with the accent.
+  while another is selected. The tab bar is the system's. Its tint is
+  `LedgerColor.accentText`, the accent as text and icons may wear it (AA in both
+  themes: the accent on dark, `#B2390E` on light), and the tint ends at the tab
+  bar: `AppTabs` sets it back to the system's on each tab's stack
+  (`tabContentTint()`), so nothing a tab draws is tinted unless the screen
+  tints it (product decision #17).
 - Routing (M1 convention, 2026-10-04): a feature exposes
   `public nonisolated enum <Feature>Route: Hashable, Sendable` and
   `<Feature>Root(onRoute: @escaping @MainActor (<Feature>Route) -> Void)`.
-  `onRoute` is synchronous: a route is an intent, never a navigation call. The
-  app resolves it in `LedgerAppKit/Routes+<Feature>.swift` into calls on the
-  router, and adds the screens it pushes as cases of `AppDestination`; until a
-  screen's feature lands, its case draws a placeholder that names it. A feature
-  never presents another feature and never sees the router. A feature with no
-  exit the app must resolve (onboarding) has no route. A feature that presents
-  itself over the tabs (the workout) exports its presenter and modifier, which
-  `MainRoot` applies; its start and resume entry points are synchronous intents
-  as well, drained by its own `.task`.
+  `onRoute` is synchronous: a route is an intent, never a navigation call.
+  Every public entry view of a feature is named `…Root`, whether it is a tab's
+  root or a screen a stack pushes (Library's exercise history, say): it owns
+  its store and takes `onRoute`.
+- The resolver is `MainRoot`. It owns the router and the presenters of the
+  features that present themselves over the tabs, builds each feature's
+  `onRoute` from them, and hands it to `AppTabs`, which passes it to the
+  feature's root. What a route does is written once per feature, in
+  `LedgerAppKit/Routes+<Feature>.swift`, as calls on the router and the
+  presenters; the screens it pushes are cases of `AppDestination`, and until a
+  screen's feature lands its case draws a placeholder that names it
+  (`AppTabs.screen(for:)`). `MainRoot` has three members so that the features'
+  changes to it do not meet: `body` (what is presented over everything: the
+  workout's cover), `content` (which screen the root shows: the "no active
+  program" branch) and `tabs`.
+- A feature never presents another feature and never sees the router. A
+  feature with no exit the app must resolve (onboarding) has no route. A
+  feature that presents itself over the tabs (the workout) exports its
+  presenter and modifier, which `MainRoot` applies; its start and resume entry
+  points are synchronous intents as well, drained by its own `.task`.
 - Active workout is presented as a full-screen cover over the tab root
   (`MainRoot`); "Minimize" dismisses the cover and Today shows "Resume · m:ss".
 - Live Activity (rest + elapsed) is started inside the mirroring start
@@ -457,8 +473,9 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 | FeatureSettings | Settings | units, rest, plate inventory, toggles, export CSV, Health status |
 | WatchFeatureWorkout | Watch — before workout / set ready / rest timer / session list / end workout / summary | watch UI over the same `WorkoutSessionActor` |
 
-Each feature exposes `public struct <Feature>Root: View` and `public enum
-<Feature>Route`. The app shell maps routes across features (§4).
+Each feature exposes its entry views as `public struct <Name>Root: View`, and
+a `public enum <Feature>Route` when it has an exit the app must resolve;
+onboarding has none. `MainRoot` resolves the routes (§4).
 
 ---
 

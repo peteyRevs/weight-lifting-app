@@ -409,6 +409,9 @@ xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
   -resultBundlePath .derivedData/Results/PR-iOS.xcresult \
   -parallel-testing-enabled YES -test-timeouts-enabled YES \
   -default-test-execution-time-allowance 60 -quiet | mise x -- xcbeautify
+#   check.sh builds first, then compares every String Catalog with the keys
+#   that build extracted, then runs the tests ("String catalogs" below)  <1 s
+scripts/check-string-catalogs.sh
 # 4 watchOS build + PR-Watch plan                                     ~3–4 min warm
 rm -rf .derivedData/Results/PR-watchOS.xcresult
 xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
@@ -425,6 +428,34 @@ Expected runtime on an M-series Mac: ~9–12 min warm, ~15 min cold;
 `--fast` ~5 min. CI runs the identical commands (`docs/ci-cd.md` §2) with
 `--renderer github-actions` on xcbeautify. `.derivedData/` is git-ignored and
 shared between local and CI so cache keys match.
+
+**String catalogs (F09).** Step 3 runs `scripts/check-string-catalogs.sh`
+right after the iOS build and before the iOS tests. During that build the
+Swift compiler writes the keys it extracted from each source file
+(`<Source>.stringsdata`, under `.derivedData`). The script compares every
+`LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` with the keys of
+the Swift files its module has today. The catalog must hold exactly those
+keys, byte for byte, and must read as `xcrun xcstringstool sync` (the tool
+Xcode updates a catalog with) would write it: keys in order, each written
+once, a comment given in code (`comment:`) kept as the code gives it. The
+final newline is set aside. The check runs in every mode that builds iOS (the
+full gate, `--ios-only`, `--skip-lint`, `--skip-static` and
+`--record-snapshots`), never on the watch build, and has its own line in the
+timing table. It only reads the catalog.
+
+A failure names each key the code looks up that the catalog lacks, with the
+file and line of the lookup, and each catalog key that no code looks up. The
+author adds the key to the catalog or deletes it, or corrects the lookup.
+When the keys agree but the file differs, the failure shows a diff against
+what the tool writes, and the author edits the catalog to match. A catalog
+with no `.stringsdata` to compare with fails too, and so does a repository in
+which no catalog is found: the step never passes on nothing. A record run
+stops at a failing catalog before any reference is recorded.
+
+The cases are in `scripts/tests/adversarial/string-catalogs.adv.sh`. They
+compile small Swift sources with the real compiler, so they also pin how it
+keys a lookup: `%lld` for an `Int`, `%@` for a `String`, `%lf` for a
+`Double`, and `%` doubled only in a text that has a value.
 
 ---
 

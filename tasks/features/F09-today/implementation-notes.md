@@ -1079,7 +1079,8 @@ it ran, so it tested a tree in between. The gate above ran after that change, on
 - A new pushed screen: a case in `AppDestination` (`Routes.swift`), its line in `AppTabs.screen(for:)`, and, while
   it is a placeholder, its title in `AppCopy.title(of:)` and the catalog.
 
-**Your own catalog** (the four steps under "The localization pattern as built"):
+**Your own catalog** (the four steps under "The localization pattern as built"; where "S1 fix round 1" below
+differs, on the tests a module needs and on exemptions, it replaces this):
 - `Package.swift`: add `resources: [.process("Resources")]` to your target's line
   (`.target(name: "FeatureOnboarding", dependencies: featureSpine, resources: […], swiftSettings: uiSettings)`).
   Do not touch `defaultLocalization`.
@@ -1089,7 +1090,9 @@ it ran, so it tested a tree in between. The gate above ran after that change, on
 - Counts and names go into a key as `Int` and `String` parameters of the member:
   `static func exercises(_ count: Int, locale: Locale) -> String { String(localized: "\(count) exercises",
   bundle: .module, locale: locale) }` looks up `%lld exercises`. A `Double`, a `Weight`, a formatted date: format
-  it first and pass the `String`. A literal `%` in copy is `%%` in the catalog key.
+  it first and pass the `String`. A literal `%` in copy is `%%` in the catalog key only when the key carries a
+  value (`"\(week)% of the block"` is keyed `%lld%% of the block`); in a key without one it stays single
+  (`100% done`). (Corrected in fix round 1: this sentence said `%%` always, which is review B1.)
 - Expect the audit to flag, in files that are not copy files: a `Text("…")`, a string passed to a `LedgerDesign`
   component, a constant holding copy, an enum's display string. It does not flag
   `.accessibilityIdentifier("…")`, `identifier:` arguments, `systemImage:` / `systemName:`, log lines on a logger,
@@ -1099,3 +1102,340 @@ it ran, so it tested a tree in between. The gate above ran after that change, on
   `StringCatalog.resourceBundle(ofModule:)`, not `Bundle.module`, for the built bundle.
 - Previews that include the shell or any `NavigationStack` inside a `Tab` render in `PreviewTests` on the
   simulator and on the host (deviation 2).
+
+### S1 — orchestrator rulings after G3 (2026-10-04)
+
+G3 did not approve: 1 Blocking, 7 Should fix, 12 nits (`review.md`). The review shows that the audit's weak point is
+that it derives a lookup's key from source text (B1, the shadowing case in S2, N4), while every build already writes
+the compiler's own keys. Fix round 1 therefore changes who checks what, rather than patching the derivation.
+
+**Who checks what (replaces "two tests copied into each module").**
+1. **Keys, both ways, by the compiler.** A new gate step (a script under `scripts/`, with script tests, run by
+   `scripts/check.sh` after the iOS build and so by CI) takes each module's `Resources/Localizable.xcstrings`, runs
+   `xcrun xcstringstool sync` on a temporary copy with that target's `.stringsdata`, and fails when the result
+   differs from the committed catalog (final newline aside), saying in plain words which key the code looks up that
+   the catalog lacks, and which catalog key no code looks up. It needs no list of modules: it finds the catalogs.
+   This also proves on every gate that Xcode's own sync would not rewrite a catalog.
+2. **No copy outside the copy files, by the source audit.** `CopyAudit` keeps its literal and lookup rules and
+   loses its key derivation (`key(of:)`, the parameter-type inference): B1, S2's shadowing and N4 go with it. It
+   gains: outside a copy file every `Text("…")`-style literal is a finding, interpolated or not; in a copy file a
+   lookup whose key has an interpolation must pass `locale:`.
+3. **The built bundle resolves every catalog key** (`unresolvedKeys`), with a committed test that shows it failing
+   (S4).
+4. **One suite audits every module** (in `LedgerAppKitTests`, parameterised over the package's source modules):
+   UI modules are audited by default; a module with no user-facing copy by design (Domain, Persistence,
+   Dependencies, Sync, Health, Fakes, TestSupport, SnapshotTesting) is named in one table with its reason; a module
+   not yet converted (`LedgerDesign`, `LedgerWatchAppKit`) is named in a second table that only shrinks. A feature
+   adds a catalog and a copy file and nothing else; there is no per-module test to forget (S7's registry).
+
+**The review's items.**
+- **B1** closed by 1 and 2 above; standards §7 states the `%` rule as the compiler has it, and the wrong sentence in
+  these notes is corrected.
+- **S1 accepted:** a copy file may hold two lookup forms: `String(localized: "…", bundle: .module[, locale:])`, and
+  `Text("… \(timerInterval: …)", bundle: .module)` for a string that embeds a live timer (key `… %@`). No `Text + Text`.
+- **S2 accepted** as in 1 and 2.
+- **S3 accepted:** exemptions name literals, not files (a new literal in the file is a finding); the logger's
+  `category:` joins the allowed leads; a Debug-only exemption is verified (the file is inside `#if DEBUG`); §7 says
+  the reviewer confirms each exemption and that a file declaring a view, a store or a presentation builder is never
+  exempt.
+- **S4 accepted.**
+- **S5 accepted:** `MainRoot` has three members: `body` (where F10 adds its cover modifier), `content` (where F08
+  adds its branch) and `tabs`. Architecture §4 names the resolver: `MainRoot` builds each feature's `onRoute` from
+  the router and the presenters it owns and hands it to `AppTabs`. Every public entry view of a feature, a tab root
+  or a pushed screen, is named `…Root`, owns its store and takes `onRoute`.
+- **S6 decided under the accessibility rule already applied in F06** (text and icons meet AA): the tab bar's tint is
+  `LedgerColor.accentText` (the accent in dark, `#B2390E` on light), re-measured and re-shot; Pete is told. The
+  tint must not reach tab content: reset it where `AppTabs` builds each stack's root, and say so in §4.
+- **S7 accepted:** §7 names the two modules not yet converted (a chore PR after this slice converts them), and
+  settles: (1) a counted key has one `%lld`, the number that picks the plural; any other number in it is passed
+  already formatted, as `%@` ("%@ of %lld sets"); (2) a translator's comment is written in code (`comment:`) and
+  the catalog's copy of it must match (the sync check enforces it); (3) `locale:` also picks the plural form and
+  the digits, with one pinned case; (4) spoken text (VoiceOver labels, values, hints) is copy and lives in the copy
+  file; (5) display names of Domain enums shared by several features are not settled: the first slice that needs
+  one in a second module raises it with the orchestrator.
+- **Nits:** N1, N2, N5 (previews are covered by check 1; say so), N6 (an unreadable folder fails the audit), N8,
+  N10, N11, N12 accepted; N3 and N7 noted in §7 and for S5; N4 and N9 go away.
+- **Could not settle:** U1 run `AppTabsTests` fifty times under the lock and report; U2 report whether a
+  deprecation warning in a package target fails the gate (a known gap in `check.sh`: do not fix it here); U3
+  re-run every module's previews on the host after the change.
+- **Not taken:** generated string symbols (the review's alternative). They would give the same key agreement from
+  the compiler, but rest on newer tooling that nobody has built against in this package or on the CI image; the
+  sync check gives it with tools the build already runs. Revisit if hand-written copy files become a burden.
+
+**G2 round 1 (strike 1)** found no fault in the shell (criteria 1–3, 5, 6) and eleven things in the copy audit
+(`test-findings.md`; ten tests fail on purpose). Rulings, for the same fix round:
+
+- **F9-S1-1** is review B1: closed by moving key agreement to the compiler's keys. The tester's key tests whose
+  subject was the audit's own derivation move to the new gate step's script tests (the same cases: a `%` with and
+  without a value, positional and counted keys).
+- **F9-S1-2 accepted:** a lookup is never written inside another literal's interpolation; in a copy file that is a
+  finding. A join is two statements. Every lookup in a copy file carries `bundle: .module`, wherever it stands.
+- **F9-S1-3 accepted:** a lookup whose key carries a value passes `locale:`; §7 says the locale also picks the plural
+  form and the digits.
+- **F9-S1-4 decided by the Naming rule** (`docs/product-decisions.md`: "Shipped copy never contains the product
+  name"): the audit refuses a catalog entry that holds the product's name, and the can't-open screen's second
+  sentence becomes "Your workouts are still on this iPhone. The app tries again when you come back to it."
+  Criterion 4 is amended. Pete approved the old wording on 2026-10-04 and is told of the change; the watch's copy
+  of the sentence changes in the chore that converts `LedgerWatchAppKit`.
+- **F9-S1-5 and F9-S1-6 accepted together:** an allowed label is an argument label (it follows `(` or `,`), and it
+  allows every literal inside that argument's expression (a ternary, an interpolation); a name that only reads
+  like a label (a ternary arm, a `case`) allows nothing.
+- **F9-S1-7 accepted:** lookups are matched across line breaks; `localizedAttributedString(forKey:` joins the list.
+- **F9-S1-8 and F9-S1-9** are closed by the sync check (it compares the catalog as the tool would write it, byte for
+  byte, so layout, order, duplicate keys and Unicode spelling are all covered); where the audit still compares
+  strings in Swift it compares them exactly, not by canonical equivalence.
+- **F9-S1-10 accepted:** §7 lists the audit's known limits, each pinned by a `limit` test as the design lint's are:
+  a regex literal; a text made from a name. Exemptions per literal (S3) and the Debug check on `*+Previews.swift`
+  close (a) and (d); the sync check closes (e).
+- **F9-S1-11 accepted:** snapshot references for `PlaceholderScreen` and the can't-open screen (light and dark, the
+  matrix of testing-strategy §2.6); the "Tabs" preview keeps no pixel reference (the system bar's material is not a
+  stable reference) and the notes say what pins it instead.
+
+### S1 fix round 1 (G1 implementer, 2026-10-04)
+
+The round was cut in two by a usage limit. The helper agent I had started for the gate step did not report
+back; I read its script and its suite, ran both, ran eight mutants of the script against the suite (all killed),
+and added the two of the tester's inputs it had left out. Everything below was run after the restart unless a
+time says otherwise.
+
+**1. What changed, by ruling.**
+
+- **Who checks what, 1: keys by the compiler** (B1, S2, N4, F9-S1-1, -8, -9). New
+  `scripts/check-string-catalogs.sh`; called at `scripts/check.sh:200-204`, between the iOS build and the wait
+  for the simulator, in every mode that builds iOS. Its cases: `scripts/tests/adversarial/string-catalogs.adv.sh`
+  (71, marked `# needs macOS:`); its place in `check.sh`: `check-wiring.adv.sh` (the `FULL` order, W10, W68,
+  W70–W75). Listed in `docs/testing-strategy.md:412-414, 432-458` and `docs/ci-cd.md:40-41, 80-95`.
+- **2: the source audit** (S3, N5, N6, F9-S1-2, -3, -5, -6, -7, -10). `CopyAudit` derives no key any more
+  (`key(of:)` and the parameter inference are gone). The rules are in the new
+  `LedgerTestSupport/Localization/CopyAuditRules.swift`: allowed labels with `category:` (`:18`), the lookup
+  spellings with `localizedAttributedString(forKey` (`:21`), what no lifter sees (`isUnseen`, `:29`), literals and
+  lookups outside a copy file (`strayProblems`, `:42`), the two forms inside one (`copyFileProblems`, `:71`;
+  `stringLookupProblem`, `:139`: nested, one line, `bundle: .module`, `locale:` with a value;
+  `textLookupProblem`, `:154`), Debug-only files (`debugOnlyProblems`, `:95`), exact comparison (`isSameText`,
+  `:116`). The lexer now knows the call argument a literal stands in, the literal that holds it and the code
+  after it: `SwiftLexer.swift` (`argument`, `:147`; `noteInArgument`, `:179`), `SwiftLexer+Literals.swift`
+  (`readInterpolation`, `:62`), `SwiftSource.swift` (`trail`, `:25`; `holder`, `:28`; `SwiftCallArgument`,
+  `:55`; `lines(ofCode:)`, `:106`, which reads across line breaks). `CopyAudit.swift`: `Exemptions` (`:20`,
+  literals per file and `debugOnly`), `init(module:)` (`:42`), `init(moduleWithoutCatalog:)` (`:51`),
+  `sources(ofModule:)` (`:91`, throws on a folder it cannot read).
+- **3 and 4: one suite, every module** (S4, S7's registry). New `LedgerAppKitTests/ModuleCopyTests.swift`:
+  the two tables (`:17`, `:31`), the exemptions (`:37`), every module audited or named (`:77`), the audit
+  (`:87`), a listed module must still fail (`:92`), the built bundle (`:103`), and `unresolvedKeys` shown failing
+  (`:116`). `AppCopyTests` keeps only the wording. `LedgerActivityKit` and the eight placeholder feature modules
+  are audited, not listed: each holds one file with its own name in a literal, which `placeholderName(of:)`
+  (`:63`) finds and sets aside, so that the feature that replaces the file edits nothing here.
+- **F9-S1-4, N2.** `StringCatalog.swift:30` (`productName`), `:77` and `:93` (a key or text that names the
+  product), `:82` (the sentence about `translated`). `AppCopy.swift:37-43` and the catalog hold criterion 4's
+  new sentence; the tester's product-name tests pass through that change, with no exemption.
+- **S1.** The two forms are in standards §7 and in `copyFileProblems`. `Text + Text` is forbidden in §7 and is
+  a known limit of the audit (4 below).
+- **S5.** `MainRoot.swift:22` (`body`), `:27` (`content`), `:32` (`tabs`). `docs/architecture.md:179-201`
+  names the resolver and the `…Root` naming.
+- **S6.** `AppTabs.swift:32` (`.tint(LedgerColor.accentText)`), `:45` and `:69` (`tabContentTint()`, which is
+  `tint(nil)`). The API: `tint<S: ShapeStyle>(_ tint: S?)`. Apple's page does not say what nil does, so
+  `AppTabsTests.swift:72` measures it: a shape filled with `.tint`, inside `tabContentTint()` and a tint around
+  that, is drawn pixel for pixel as with no tint at all. `docs/architecture.md:173-178`. Screenshots and contrast
+  in 9 below.
+- **S7.** `docs/engineering-standards.md:169-368`, rewritten (and its bullet at `:162-165`): the counted key with a second number as `%@`,
+  comments in code, what `locale:` picks, spoken text, the undecided shared names, the two modules not yet
+  converted, the generated-symbols alternative.
+- **Nits.** N1 `AppTabs.swift:61`. N8 `AppCopy.swift:23` (`settingsTitle`) and `AppTabs.swift:51`. N10
+  `docs/architecture.md:476-478`. N11 `MainRoot.swift:11-13`. N12: §7 says code-unit order
+  (`engineering-standards.md:203-207`), and which units: I measured `xcstringstool`, and it orders keys by
+  their UTF-8 bytes, so by Unicode scalar, not by UTF-16 unit. The fixture's own table is not done (10 below).
+  N2, N5, N6 above.
+- **F9-S1-11.** New `LedgerAppKitTests/ShellSnapshotTests.swift` and twelve references under
+  `__Snapshots__/ShellSnapshotTests/` (a placeholder screen and the can't-open screen, light and dark at
+  large, xLarge and accessibility3; recorded on the iPhone 17, iOS 27.0, at 20:51, and matched in every run
+  since). The "Tabs" preview has no reference. It is pinned by `AppTabsTests` (the hosted tree), `PreviewTests`
+  (it renders, on the simulator and the host) and the `Tabs` and `TabsAdversarial` UI tests (the running app, the
+  selected tab's colour included).
+- **Criterion 4's sentence.** `AppCopy.swift:37-43`, `Resources/Localizable.xcstrings`, `AppCopyTests`, the
+  tester's two suites (5 below), and the six new references of the can't-open screen. No earlier reference
+  showed that screen.
+- **These notes.** The sentence about `%` under "Your own catalog" above is corrected in place.
+
+**2. Localization, for a feature author.** Add two things to your module: `Resources/Localizable.xcstrings`
+(and `resources: [.process("Resources")]` on the target) and `<Feature>Copy.swift`. Write every lookup there as
+`String(localized: "…", bundle: .module)`, with `locale:` straight after the bundle when the key carries a
+value, and `comment:` where a translator needs one; a line with a live timer is
+`Text("… \(timerInterval: …)", bundle: .module)`. Every other file takes `String`s. Give each key its English
+text in the catalog, marked `translated`, with the comment the code gives. You add no test and no list entry.
+Three checks find the module: the gate compares the catalog with the keys the compiler extracted and spells any
+key you got wrong; `ModuleCopyTests` audits the sources and asks the built bundle for every key. If the audit
+flags a literal no lifter sees, add it, by its text, to `ModuleCopyTests.exemptions` with the reason; the G3
+reviewer confirms it. Standards §7 has the rest.
+
+**3. The gate step: proof.** Each case runs the real script and the real `xcstringstool` on a throwaway
+repository whose `.stringsdata` the real compiler wrote (`string-catalogs.adv.sh`, 71 of 71, 6 s).
+
+| Asked | Case | What the step does |
+|---|---|---|
+| a key used and missing | SC01 | fails, naming the key and `StartCopy.swift:2` |
+| a key unused | SC02, SC68 | fails, naming the key; also when the catalog marks it `stale` or `manual` |
+| a plain key with `%` | SC03, SC04 | `100% done` passes; `100%% done` fails both ways |
+| a key with a value and `%%` | SC05, SC06 | `%lld%% of the block` passes; `%lld% of the block` fails both ways |
+| a counted key | SC07, SC08 | passes with an `Int`; fails when the code's value is a `String` |
+| a bare `Text("…")` in a view | SC09 | fails, naming the key and `StartView.swift:3` |
+| a duplicate key | SC10 | fails with the tool's diff |
+| keys out of order | SC11, SC12 | fails with the diff; in order, passes |
+| composed against decomposed | SC13, SC14 | fails both ways, each key spelled with its escapes |
+| a comment that is not the code's | SC15, SC16 | fails with the diff |
+| nothing to compare with | SC17–SC20, SC26 | fails: no build, a watch build only, a file added since the build, no catalog at all; a deleted file's old output is ignored |
+| never writes to the repository | SC21–SC23 | every file has the same hash after a passing and a failing run |
+| the tester's moved cases | SC32–SC57 | section 5 |
+
+Beyond the suite: the script passes on this tree's real build (7 keys, under a second, the tree untouched);
+eight mutants (no key comparison, no layout comparison, stale output read, an unbuilt file accepted, exit 0 on a
+failure, the catalog written, keys compared without case, no catalog accepted) each fail the suite.
+
+Modes. `check-wiring.adv.sh` pins the call, with fake tools, in the full gate, `--skip-lint`, `--ios-only`,
+`--ios-only --skip-static`, `--record-snapshots` (a failing catalog stops the record run before any test) and
+its absence from `--lint-only`, `--static-only` and `--fast`. Run for real, through the lock: the full gate, and
+`CI=true LEDGER_COMPILATION_CACHE=YES scripts/check.sh --ios-only --skip-static` (exit 0, 266 s; the step
+passed). The compilation cache: I built with `COMPILATION_CACHE_ENABLE_CACHING=YES`, moved LedgerAppKit's object
+folder (its `.stringsdata` with it) out of the build folder, and built again. All eleven of its compiles were
+`Replay cache hit`, each with `Using CAS output localization-strings`, the 13 files were back, and the step
+passed on them. So a cache hit writes the files.
+
+Not checked: GitHub's runner, with a cache another run saved; `GITHUB_ACTIONS` set (it only changes
+xcbeautify's renderer); `--record-snapshots` for real (fake tools only); a lookup compiled only for watchOS,
+which the step would report as unused because it reads the iOS build (§7 says so).
+
+**4. Known limits of the audit** (standards §7, each kept by a `limit` test: `CopyAuditLimitTests`, and the
+tester's two for the last two lines).
+
+- A literal without a letter that is not handed straight to `Text(…)`.
+- A call that only reads like an allowed one (`Chip(category: "Push day")`, `toastLogger.error("…")`).
+- `Text + Text` in a copy file. Ruling S1 forbids it, and the tester's
+  `textMember_builtFromLookupsAndAView_hasNoFinding` requires no finding for it; I left the audit silent and
+  wrote the rule in §7. Say if the audit should refuse it: that test then changes.
+- What a key's value is: an expression, a `Double`, an optional. The tester's
+  `interpolationNotABareParameter_isAFinding` held the audit to this through the derivation that is gone. The
+  compiler warns of an optional, and a warning does not fail a package build (U2).
+- Code in a copy file that holds no literal.
+- An exemption is a text: it covers every literal of its file that reads so.
+- A text made from a name (`Text(day.rawValue.capitalized)`).
+- A regex literal that holds a quote or `/*`.
+
+**5. Sanctioned test edits.** Line numbers are the current file's. "Moved" cases have the same inputs and the
+same expectation in `string-catalogs.adv.sh`.
+
+*Moved to the gate step's suite, the Swift test deleted:*
+- `CatalogBuildAdversarialTests.auditKey_isFoundationsKey`, with `Lookup`, `week`, `total`, `name`, `tag` and
+  the twelve `lookups`: SC32–SC43.
+- `CopyFileAdversarialTests.parameterType_decidesTheSpecifier`: SC44–SC47.
+- `CopyFileAdversarialTests.lookupInAComment_isNotALookup`: SC48.
+- `CopyFileAdversarialTests.composedAndDecomposedKeys_areNotTheSameKey`: SC13, SC14.
+- `CopyAuditAllowedAdversarialTests.catalogAndCopyFile_disagree_isAFinding` and its seven `disagreements`:
+  SC49–SC55.
+- `CopyAuditAllowedAdversarialTests.oneSideMissing_isAFindingPerKey`: SC56, SC57.
+- `StringCatalogAdversarialTests.keysOutOfOrder_areAProblem`: SC11, SC12.
+
+*Deleted, its rule gone with the derivation; not the same expectation:*
+- `CopyFileAdversarialTests.interpolationNotABareParameter_isAFinding` and its eleven `wrongValues`. It
+  expected a finding from the audit for each. The eleven inputs are kept as SC58–SC66, SC69 and SC70, where the
+  expectation is the key the compiler gives each. The finding for one of them, a lookup inside the key, stays in
+  Swift (`nestedLookupNotWrittenAsTheRule_isAFinding`). Limit 4 above is what was lost.
+
+*Adapted to the new exemption shape (path to literals), nothing else:*
+- `CopyAuditAdversarialSupport.swift:50` (`exempting:` is a `CopyAudit.Exemptions`).
+- `CopyAuditAllowedAdversarialTests.swift:36` (`exemption_coversItsFileOnly`), `:46-56`
+  (`staleExemption_isAFinding`), `:68-71` (`exemptFile_lookupIsStillAFinding`).
+
+*Changed because a ruling changed what is right; none of these three kinds was sanctioned, so please audit them
+first:*
+- `CopyAuditAllowedAdversarialTests.swift:75-86`: the limit `exemptFile_hidesALifterFacingLiteral` ("an
+  exemption covers the whole file") is now `exemption_namesLiterals_aTitleInTheFileIsStillAFinding`, one
+  finding on line 4 (S3 closes the limit).
+- `:96-103` (`textMadeFromAName_hasNoLiteralToFind`): `Text("\(Card.today)")` left the limit's screen and is
+  asserted to be a finding (ruling 2: every literal handed to `Text`).
+- `:115-123` (`previewsFile_isNotRead_othersAre`): the preview is inside `#if DEBUG`, and a bare one is asserted
+  to be a finding (F9-S1-10d, N5).
+- `CopyFileAdversarialTests.swift:31-44` (`nestedLookupNotWrittenAsTheRule_isAFinding`): its control was the
+  nested right form, which F9-S1-2 makes a finding. The control is now the join in two statements, and the
+  nested right form is asserted to be a finding.
+- `CopyFileAdversarialTests.swift:189, :206` (two `rightLookups`): `counted(` for `lookup(`, so that a key
+  with a `String` value passes `locale:` (F9-S1-3 as ruled: any value).
+- `AppCopyAdversarialTests.swift:7-9, :12-13, :15, :29-30` and `AppRootAdversarialTests.swift:9-11, :20, :92`:
+  criterion 4's new sentence, and the test's name. `AppCopyAdversarialTests.swift:26`: `AppCopy.settingsTitle`
+  (N8 removed `title(of: AppDestination)`).
+- `CatalogBuildAdversarialTests.swift:8-9`: the suite's comment.
+- `Apps/LedgerUITests/TabsAdversarial.swift:83, :142-146, :171-174`: `accentShare` takes the appearance. Dark
+  keeps the tester's bounds; light counts the deep accent (red 140–200, green 25–85, blue under 45). The two
+  thresholds are unchanged (S6).
+
+Every other tester test passes unedited; none is disabled or in `withKnownIssue`.
+
+**6. Size.** Product lines of the slice (LedgerAppKit and `Package.swift`, without blank lines and comments):
+170 added, 16 removed, against 153 after G1. The round added 17: comments on the lookups, `settingsTitle`,
+`MainRoot`'s members, the tint. Test support: `CopyAudit.swift` 106 lines (was 246), with
+`CopyAuditRules.swift` 207, `SwiftLexer.swift` 210 and `SwiftLexer+Literals.swift` 110 new, and
+`SwiftSource.swift` 115 (was 255); the script 190 and its suite 407.
+
+**7. The gate.** `/usr/bin/python3 …/sim-lock.py scripts/check.sh`, from the worktree root, at 23:46:
+`GATE_EXIT=0`, `check.sh OK`, 600 s (lint and script tests 73, iOS build 83, string catalogs under 1, iOS tests
+230, watchOS build 24, watchOS tests 187, coverage 1; no wait for the lock). Coverage 98.48 % overall, every
+module over its threshold. After it I changed only documents: three lines in the step list of
+`docs/testing-strategy.md`, the sentence on key order in standards §7, and this section. No gate script reads
+them. `scripts/check.sh --lint-only` ran again on that tree at 00:00: `LINT_ONLY_EXIT=0`, 77 s, 650 script cases, none
+failed.
+
+Other runs, all through the lock: `LedgerAppKitTests` on the simulator, 191 tests in 31 suites, exit 0 (179 in
+29 on the Mac host); the CI-mode gate above.
+
+**8. UI tests** (Nightly plan, iPhone 17, iOS 27.0, one locked session at 23:26, on the code the gate ran):
+Smoke 1 of 1; DebugMenu 1 of 1; LaunchPerformance 1 of 1 (first frame 2.568 s average, 0.67 % deviation);
+Tabs 2 of 2 in light and 2 of 2 in dark; TabsAdversarial 7 of 7, the accent test and the system's
+accessibility audit among them. Each run's exit status was 0.
+
+**9. Contrast** (`tasks/features/F09-today/screenshots/s1/`, the four replaced; measured after matching the
+screenshots to sRGB). The system draws the tint a little off the token.
+
+| Theme | Selected tab's icon and label | Behind it | Contrast |
+|---|---|---|---|
+| Light | `#A73107` (token `#B2390E`) | `#E4E2DB` | 5.25:1 |
+| Dark | `#FF682F` (token `#FF5B22`) | `#141416` | 6.37:1 |
+
+Both pass AA for text (4.5:1) and for icons (3:1). Unselected tabs: 17.84:1 light, 13.89:1 dark.
+
+**10. Could not settle, could not do, could not verify.**
+
+- **U1.** `AppTabsTests` fifty times (`-test-iterations 50`): exit 0, no issue. The three plain tests started 50
+  times each, the two with arguments 200 cases each.
+- **U2.** No: a deprecation warning in a package target does not fail the gate. The build log shows
+  `-warnings-as-errors` on the app targets' compiles (`LedgerWatch`, `LedgerWatchTests`) and on none of the
+  package targets'; and this gate passed with compiler warnings in two package test targets
+  (`PayloadVersionAdversarialTests.swift:29`, `LedgerDesignTests/PreviewTests.swift:90`). `Package.swift:10-12`
+  says the opposite. Not fixed, as told. I did not compile a deprecated call under the gate to watch it pass.
+- **U3.** Every module's previews render on the host after the `PreviewRendering` change: LedgerDesign 20,
+  LedgerAppKit 4, LedgerWatchAppKit 2.
+- **N12, first half, not done.** A table of its own for the test fixture needs edits the tester-file rule does
+  not sanction: six lookups, two `unresolvedKeys` calls and the fixture's path in
+  `CatalogBuildAdversarialTests`, and a `table:` parameter on `unresolvedKeys`. It is mechanical; say the word.
+- **`Text + Text`** (limit 3) and **what a key's value is** (limit 4) are open between a ruling and the
+  tester's tests, as described there.
+- **The tint in a tab's content** is tested on the modifier, not on `AppTabs` itself: nothing a tab draws today
+  wears the tint, and `ImageRenderer` cannot draw a `NavigationStack`. That `AppTabs.stack` applies the modifier
+  is one line to read (`AppTabs.swift:45`).
+- **The imports before `#if DEBUG`.** The Debug-only check lets `import` lines stand before `#if DEBUG`: the
+  tester's helper puts `import SwiftUI` first in every file it builds. Our four Debug-only files open with
+  `#if DEBUG`.
+- **`PreviewScan`** still skips a folder it cannot read (N6 named it in passing); the audit's own reader throws.
+- The runner and the record mode, as in 3.
+
+### S1 — orchestrator rulings after fix round 1 (2026-10-05)
+
+- **`Text + Text` in a copy file is a finding.** Standards §7 forbids it, so the audit refuses it; the tester's
+  `textMember_builtFromLookupsAndAView_hasNoFinding` pinned the earlier rule and the tester changes it in the
+  close-out.
+- **A key's values are whole numbers and texts.** The catalog check refuses a key with any specifier other than
+  `%lld` and `%@` (with their positional forms and `%%`), which catches a `Double` or another type formatted into a
+  key. An optional interpolated into a key stays a known limit until package targets treat warnings as errors
+  (a queued chore: `check.sh` does not pass `-warnings-as-errors` to them, though `Package.swift` says so).
+- **N12 is taken:** the test target's fixture catalog gets a table of its own, so that building the tests in Xcode
+  never rewrites it. The mechanical edits this needs in the tester's files are sanctioned.
+- The edits to the tester's files that go beyond the three sanctioned kinds each follow from a ruling; the tester
+  audits them first in the close-out.
+- Not taken: testing the tint reset on `AppTabs` itself (nothing a tab draws wears the tint yet; F09 S5 pins it
+  when Today has a control that would).

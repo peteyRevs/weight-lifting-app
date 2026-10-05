@@ -4,13 +4,15 @@ import LedgerTestSupport
 import Testing
 
 /// F09 S1 adversarial round 1, criterion 4: every string the shell shows comes from `LedgerAppKit`'s catalog, the
-/// two strings of the can't-open-your-data screen word for word as `main` (a526874) shows them, and the bundle the
-/// build made resolves every key, on the Mac host and on the simulator.
+/// two strings of the can't-open-your-data screen word for word as criterion 4 gives them (`main`'s, a526874, but
+/// for the second sentence, which no longer names the product), and the bundle the build made resolves every key,
+/// on the Mac host and on the simulator.
 @Suite("Adversarial F09 S1 · the shell's copy")
 nonisolated struct AppCopyAdversarialTests {
-    /// `git show a526874:LedgerKit/Sources/LedgerAppKit/AppRoot.swift`, `DatabaseUnavailableView`.
+    /// `git show a526874:LedgerKit/Sources/LedgerAppKit/AppRoot.swift`, `DatabaseUnavailableView`; the body's second
+    /// sentence as criterion 4 was revised after round 1 ("The app tries again", where `main` names the product).
     static let databaseTitle = "Can't open your data right now"
-    static let databaseBody = "Your workouts are still on this iPhone. Ledger tries again when you come back to it."
+    static let databaseBody = "Your workouts are still on this iPhone. The app tries again when you come back to it."
     /// The prototype's tab labels (`design/prototype/LedgerTabs.dc.html`), the pushed placeholder, and the two above.
     static let shellStrings = ["Today", "Program", "Library", "History", "Settings", databaseTitle, databaseBody]
 
@@ -21,11 +23,11 @@ nonisolated struct AppCopyAdversarialTests {
 
     @Test("The pushed Settings placeholder is titled Settings")
     func settingsTitle_isSettings() {
-        #expect(AppCopy.title(of: AppDestination.settings) == "Settings")
+        #expect(AppCopy.settingsTitle == "Settings")
     }
 
-    @Test("The can't-open-your-data screen says, word for word, what main says (product decision #29)")
-    func databaseUnavailable_isWordForWordMains() {
+    @Test("The can't-open-your-data screen says, word for word, what criterion 4 says (product decision #29)")
+    func databaseUnavailable_isWordForWordTheCriterions() {
         #expect(AppCopy.databaseUnavailableTitle == Self.databaseTitle)
         #expect(AppCopy.databaseUnavailableBody == Self.databaseBody)
     }

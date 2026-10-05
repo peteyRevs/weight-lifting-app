@@ -47,7 +47,7 @@ nonisolated enum AdversarialModule {
     static func findings(
         screen declarations: String,
         at path: String = screenPath,
-        exempting exemptions: [String: String] = [:]
+        exempting exemptions: CopyAudit.Exemptions = [:]
     ) throws -> [String] {
         let catalog = try AdversarialCatalog.catalog([AdversarialCatalog.plain("Start workout")])
         let sources = [copyPath: copy, path: screen(declarations)]

@@ -75,6 +75,7 @@ SH
 stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-graph'
 stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins'
 stub "$SB/scripts/check-catalog-version.sh" 'log catalog-version; fail_if catalog-version'
+stub "$SB/scripts/check-string-catalogs.sh" 'log "string-catalogs $*"; fail_if string-catalogs'
 stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
 stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-a'
@@ -98,7 +99,7 @@ I=46F7C9EA-B38C-445A-BAD9-8A70A603E9E1 W=2416B270-8634-4D4A-9084-2B04B4498921 # 
 
 FULL="xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
 package-pins catalog-version script-test-a script-test-b \
-simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify \
+simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR \
 simctl-boot xcodebuild-build-for-testing-LedgerWatch xcbeautify \
 simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-test-results-PR-Watch coverage-gate"
@@ -155,7 +156,7 @@ if [[ $code -eq 0 && "$calls" == "$want" ]]; then pass "W09 --skip-lint runs too
     fail "W09 --skip-lint runs tools, iOS, watchOS, coverage" "exit $code
 want: $want
 got:  $calls"; fi
-for id in xcodebuild-build-for-testing-Ledger xcodebuild-test-without-building-Ledger check-test-results-PR \
+for id in xcodebuild-build-for-testing-Ledger string-catalogs xcodebuild-test-without-building-Ledger check-test-results-PR \
     xcodebuild-build-for-testing-LedgerWatch xcodebuild-test-without-building-LedgerWatch check-test-results-PR-Watch coverage-gate; do
     FAIL_AT="$id" run --skip-lint
     expect_exit "W10 --skip-lint: failure at $id fails" nonzero "$code"
@@ -464,8 +465,44 @@ check "W66 run.sh: portable skips the suites marked \"# needs macOS:\", macos ru
 check "W67 run.sh: a failing macOS suite fails the macos half; a typo in the half exits 2; no suite matched exits 1" \
     is "$(MAC_FAILS=1 suites macos)|$(suites portabel)|$(suites macos portable)" "1 ran-macos |2 |1 "
 marked="$(grep -l '^# needs macOS: ' "$ROOT"/scripts/tests/adversarial/*.adv.sh | xargs -n1 basename | tr '\n' ' ')"
-check "W68 the suites that need macOS, which run only on the Mac in PR CI, are exactly these four (each says why)" \
-    is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh xcode27.adv.sh "
+check "W68 the suites that need macOS, which run only on the Mac in PR CI, are exactly these five (each says why)" \
+    is "$marked" "catalog-version-attack.adv.sh ci-post-clone.adv.sh coverage-gate.adv.sh string-catalogs.adv.sh xcode27.adv.sh "
+
+# ---- F09: every String Catalog is checked against the keys the iOS build extracted ------------------
+# W02 (the full gate), W09 (--skip-lint), W49 (--ios-only), W54 and W62 (--skip-static) pin its place:
+# after the iOS build, before the wait for the simulator and the iOS tests. W04, W10 and W53 stop on it.
+run
+check "W70 the string catalog check runs once, on check.sh's own repository and derived data (no argument), never after the watch build" \
+    is "$code $(grep -c '^string-catalogs' "$LOG") $(grep -c '^string-catalogs $' "$LOG") \
+$(sed -n '/^xcodebuild-build-for-testing-LedgerWatch /,$p' "$LOG" | grep -c '^string-catalogs')" "0 1 1 0"
+check "W71 ... as part of step 3, with its own line in the timing summary" \
+    is "$(grep -c '==> 3 · string catalogs (each against the keys the iOS build extracted)' <<<"$out") \
+$(grep -cE '^ +[0-9]+s  string catalogs$' <<<"$out")" "1 1"
+# A record run's calls are the full gate's, but each bundle is read where its results would be checked,
+# and the changed references are listed where the coverage gate would run.
+RECORD_CALLS="${FULL//check-test-results-PR-Watch/xcresulttool}"
+RECORD_CALLS="${RECORD_CALLS//check-test-results-PR/xcresulttool}"
+RECORD_CALLS="${RECORD_CALLS%coverage-gate }git "
+run --record-snapshots
+check "W72 --record-snapshots checks the catalogs too, between the iOS build and the iOS tests that record" \
+    is "$code $calls" "1 $RECORD_CALLS"
+FAIL_AT=string-catalogs run --record-snapshots
+check "W73 ... and a catalog that does not match stops the record run there: no test runs, so nothing is recorded" \
+    is "$code $(record_log) $(grep -c 'references recorded' <<<"$out")" "1 boot $I;build-for-testing $I; 0"
+FAIL_AT=string-catalogs run --ios-only --record-snapshots
+check "W73 ... (--ios-only --record-snapshots the same)" \
+    is "$code $(record_log) $(grep -c 'references recorded' <<<"$out")" "1 boot $I;build-for-testing $I; 0"
+stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial' # as W62
+FAIL_AT=string-catalogs run --ios-only --skip-static
+check "W74 --ios-only --skip-static (PR CI's Check): a catalog that does not match stops it after the iOS build, before any test" \
+    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos \
+simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs "
+rm "$SB/scripts/tests/adversarial.test.sh"
+run --lint-only; lint_calls="$calls"
+run --static-only; static_calls="$calls"
+run --fast
+check "W75 --lint-only, --static-only and --fast build nothing for iOS, so they do not run it" \
+    is "$(grep -c string-catalogs <<<"$lint_calls$static_calls$calls")" "0"
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be

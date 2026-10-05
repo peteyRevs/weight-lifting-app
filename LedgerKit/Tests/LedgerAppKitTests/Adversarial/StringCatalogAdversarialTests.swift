@@ -49,12 +49,6 @@ nonisolated struct StringCatalogAdversarialTests {
         #expect(try !Catalog.problems([bad, good]).isEmpty)
     }
 
-    @Test("The layout is Xcode's: keys out of order are a problem")
-    func keysOutOfOrder_areAProblem() throws {
-        let text = Catalog.json([Catalog.plain("Today"), Catalog.plain("History")])
-        #expect(try !StringCatalog(data: Data(text.utf8)).problems.isEmpty, "Today before History read as sound")
-    }
-
     @Test("Two keys that differ in case, or in a space, are two keys")
     func keysDifferingInCaseOrSpace_areTwoKeys() throws {
         let entries = ["Today", "today", "Today ", " Today"].map { Catalog.plain($0) }

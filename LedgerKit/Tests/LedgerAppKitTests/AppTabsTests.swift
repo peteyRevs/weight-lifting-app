@@ -1,5 +1,6 @@
 #if os(iOS)
     @testable import LedgerAppKit
+    import LedgerDesign
     import LedgerSnapshotTesting
     import SwiftUI
     import Testing
@@ -66,6 +67,26 @@
             router.open(.settings, in: tab)
             #expect(AppTabs(router: router).accessibilityElements().map(\.label) == ["Settings"])
             #expect(router[path: tab] == [.settings])
+        }
+
+        @Test("The tab bar's tint ends at each stack: what a tab fills with the tint is drawn as with none around it")
+        func tabContentTint_setsTheTintBack() throws {
+            // A shape filled with the tint is drawn by SwiftUI itself, so `ImageRenderer` shows its colour (a
+            // system control is drawn by UIKit, and comes out as a placeholder whatever its tint).
+            let probe = Rectangle().fill(.tint).frame(width: 40, height: 40)
+            let plain = try #require(Self.centre(of: probe))
+            let tinted = try #require(Self.centre(of: probe.tint(LedgerColor.accentText)))
+            let reset = try #require(Self.centre(of: probe.tabContentTint().tint(LedgerColor.accentText)))
+            #expect(!tinted.differs(from: Pixel(hex: 0xFF5B22), by: 2), "control: the probe wears the tint around it")
+            #expect(plain.differs(from: tinted, by: 40), "control: the system's tint is another colour")
+            #expect(reset == plain)
+        }
+
+        /// The middle pixel of `view`, drawn in the dark theme, where `accentText` is the accent itself.
+        private static func centre(of view: some View) -> Pixel? {
+            RenderedImage.render(view, width: 40, height: 40, colorScheme: .dark)
+                .flatMap(PixelBuffer.init)
+                .map { $0.pixel(column: 20, row: 20) }
         }
 
         private static func labels(_ elements: [NSObject]) -> [String] {

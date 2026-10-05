@@ -18,16 +18,6 @@ nonisolated struct CopyFileAdversarialTests {
         #expect(findings.contains { $0.contains("FixtureCopy.swift") }, "no finding for: \(input.text)")
     }
 
-    @Test(
-        "An interpolation that is not a bare Int or String parameter of its member is a finding",
-        arguments: wrongValues
-    )
-    func interpolationNotABareParameter_isAFinding(_ input: AdversarialInput) throws {
-        let keys = ["Week %lld", "%lld weeks", "%lf lb moved", "%lld sets", "%@ sets", "%@ now", "Week %@"]
-        let findings = try AdversarialModule.findings(copy: input.text, catalog: keys.map { Catalog.plain($0) })
-        #expect(findings.contains { $0.contains("FixtureCopy.swift") }, "no finding for: \(input.text)")
-    }
-
     @Test("A lookup written as the rule writes it has no finding", arguments: rightLookups)
     func lookupWrittenAsTheRule_hasNoFinding(_ input: AdversarialInput) throws {
         let keys = ["Start workout", "Week %lld of %lld", "Next: %@ · %@", "%lld reps", "%@ sets", "Rest day"]
@@ -38,22 +28,22 @@ nonisolated struct CopyFileAdversarialTests {
 
     @Test("A lookup inside another literal's interpolation is held to the same form", arguments: nestedWrongLookups)
     func nestedLookupNotWrittenAsTheRule_isAFinding(_ input: AdversarialInput) throws {
-        let right = Self.row(#"String(localized: "Start workout", bundle: .module)"#)
-        #expect(try AdversarialModule.findings(copy: right, catalog: [Self.start]).isEmpty, "control: the right form")
+        let right = Self.member(
+            "_ reps: String",
+            "let start = String(localized: \"Start workout\", bundle: .module)\n    return \"\\(start) · \\(reps)\""
+        )
+        #expect(
+            try AdversarialModule.findings(copy: right, catalog: [Self.start]).isEmpty,
+            "control: the join as two statements"
+        )
+        let nested = Self.row(#"String(localized: "Start workout", bundle: .module)"#)
+        #expect(
+            try AdversarialModule.findings(copy: nested, catalog: [Self.start])
+                .contains { $0.contains("FixtureCopy.swift") },
+            "a lookup inside an interpolation is a finding even in the right form"
+        )
         let findings = try AdversarialModule.findings(copy: input.text, catalog: [Self.start])
         #expect(findings.contains { $0.contains("FixtureCopy.swift") }, "no finding for: \(input.text)")
-    }
-
-    @Test("A parameter's type decides the specifier: an Int against a %@ key, or a String against %lld, is a finding")
-    func parameterType_decidesTheSpecifier() throws {
-        let asInt = Self.counted("_ count: Int", #""\(count) sets""#)
-        let asString = Self.lookup("_ count: String", #""\(count) sets""#)
-        let text = [Catalog.plain("%@ sets")]
-        let number = [Catalog.plain("%lld sets")]
-        #expect(try AdversarialModule.findings(copy: asInt, catalog: text).count == 2)
-        #expect(try AdversarialModule.findings(copy: asString, catalog: number).count == 2)
-        #expect(try AdversarialModule.findings(copy: asInt, catalog: number).isEmpty)
-        #expect(try AdversarialModule.findings(copy: asString, catalog: text).isEmpty)
     }
 
     @Test("The rule lets a member return a Text built from looked-up Strings and a live view: that has no finding")
@@ -65,14 +55,6 @@ nonisolated struct CopyFileAdversarialTests {
         """
         let findings = try AdversarialModule.findings(copy: joined, catalog: [Catalog.plain("Resume")])
         #expect(findings.isEmpty, "\(findings)")
-    }
-
-    @Test("A lookup in a comment is not a lookup: its key stays a key no copy file looks up")
-    func lookupInAComment_isNotALookup() throws {
-        let commented = "// String(localized: \"Start workout\", bundle: .module)\nstatic let count = 1"
-        let findings = try AdversarialModule.findings(copy: commented, catalog: [Self.start])
-        #expect(findings.count == 1, "\(findings)")
-        #expect(findings.first?.hasPrefix("Localizable.xcstrings") == true, "\(findings)")
     }
 
     @Test("A second copy file is read as one; a file whose name only ends in Copy must hold lookups alone")
@@ -97,16 +79,6 @@ nonisolated struct CopyFileAdversarialTests {
             catalog: [Catalog.plain(key)]
         )
         #expect(!findings.isEmpty, "the audit passed copy that names the product")
-    }
-
-    @Test("A key the source spells with a composed letter and the catalog with a combining mark is not the same key")
-    func composedAndDecomposedKeys_areNotTheSameKey() throws {
-        let composed = "Caf\u{E9} stop"
-        let decomposed = "Cafe\u{301} stop"
-        #expect(!(composed as NSString).isEqual(to: decomposed), "control: a strings table tells the two apart")
-        let member = Self.lookup("", "\"\(composed)\"")
-        let findings = try AdversarialModule.findings(copy: member, catalog: [Catalog.plain(decomposed)])
-        #expect(!findings.isEmpty, "the lookup misses its entry at run time, and the audit says they agree")
     }
 }
 
@@ -193,33 +165,6 @@ nonisolated extension CopyFileAdversarialTests {
         )
     ]
 
-    static let wrongValues: [AdversarialInput] = [
-        AdversarialInput("an expression", lookup("_ week: Int", #""Week \(week + 1)""#)),
-        AdversarialInput(
-            "a property, not a parameter",
-            "static let total = 8\n" + lookup("", #""\(total) weeks""#)
-        ),
-        AdversarialInput(
-            "another member's parameter",
-            "static func week(_ week: Int) -> String {\n    String(localized: \"Week \\(week)\", bundle: .module)\n}\n"
-                + "static var weeks: String {\n    String(localized: \"\\(week) weeks\", bundle: .module)\n}"
-        ),
-        AdversarialInput("a Double", lookup("_ value: Double", #""\(value) lb moved""#)),
-        AdversarialInput("an optional Int", lookup("_ count: Int?", #""\(count) sets""#)),
-        AdversarialInput("an Int64", lookup("_ count: Int64", #""\(count) sets""#)),
-        AdversarialInput("a Substring", lookup("_ count: Substring", #""\(count) sets""#)),
-        AdversarialInput("a formatted value", lookup("_ count: Int", #""\(count, format: .number) sets""#)),
-        AdversarialInput("a method call", lookup("_ count: String", #""\(count.uppercased()) sets""#)),
-        AdversarialInput(
-            "a lookup inside the key",
-            lookup("", #""\(String(localized: "Start workout", bundle: .module)) now""#)
-        ),
-        AdversarialInput(
-            "a parameter of a type the check does not know",
-            lookup("_ week: some BinaryInteger", #""Week \(week)""#)
-        )
-    ]
-
     static let rightLookups: [AdversarialInput] = [
         AdversarialInput(
             "on one line",
@@ -241,7 +186,7 @@ nonisolated extension CopyFileAdversarialTests {
         ),
         AdversarialInput(
             "two String parameters, one with a default",
-            lookup(#"_ weekday: String, tag: String = """#, #""Next: \(weekday) · \(tag)""#)
+            counted(#"_ weekday: String, tag: String = """#, #""Next: \(weekday) · \(tag)""#)
         ),
         AdversarialInput(
             "parameters wrapped over lines",
@@ -258,7 +203,7 @@ nonisolated extension CopyFileAdversarialTests {
         AdversarialInput(
             "one name, two types, two members",
             counted("_ count: Int", #""\(count) reps""#) + "\n\n"
-                + lookup("_ count: String", #""\(count) sets""#).replacingOccurrences(of: "line(", with: "sets(")
+                + counted("_ count: String", #""\(count) sets""#).replacingOccurrences(of: "line(", with: "sets(")
         ),
         AdversarialInput(
             "a doc comment that quotes a lookup",

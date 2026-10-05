@@ -84,7 +84,31 @@ nonisolated struct BrokenRule: Sendable, CustomTestStringConvertible {
             testDescription: "a text still marked new, which the build leaves out",
             key: "Today",
             entry: .text("Today", state: "new"),
-            problems: ["\"Today\" is not marked translated, so the build leaves it out"]
+            problems: ["\"Today\" is not marked translated: a hand-written catalog marks its English text so"]
+        ),
+        BrokenRule(
+            testDescription: "a text marked needs_review, which the build compiles but the rule does not accept",
+            key: "Today",
+            entry: .text("Today", state: "needs_review"),
+            problems: ["\"Today\" is not marked translated: a hand-written catalog marks its English text so"]
+        ),
+        BrokenRule(
+            testDescription: "a text that names the product",
+            key: "Ledger tries again",
+            entry: .text("Ledger tries again"),
+            problems: ["\"Ledger tries again\" names the product, which shipped copy never does"]
+        ),
+        BrokenRule(
+            testDescription: "a counted form that names the product, in any case",
+            key: "%lld sets",
+            entry: .counted(["one": "%lld set in your ledger", "other": "%lld sets"]),
+            problems: ["\"%lld sets\" names the product, which shipped copy never does"]
+        ),
+        BrokenRule(
+            testDescription: "a text that spells the key's letter with a combining mark",
+            key: "Caf\u{E9} stop",
+            entry: .text("Cafe\u{301} stop"),
+            problems: ["\"Caf\u{E9} stop\" has the English text \"Cafe\u{301} stop\": a key is its English text"]
         ),
         BrokenRule(
             testDescription: "a counted key without its one form",

@@ -13,7 +13,7 @@
       }
     },
     "History" : {
-      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "comment" : "Tab title, and the title of the History screen",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -24,7 +24,7 @@
       }
     },
     "Library" : {
-      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "comment" : "Tab title, and the title of the Library screen",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -35,7 +35,7 @@
       }
     },
     "Program" : {
-      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "comment" : "Tab title, and the title of the Program screen",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -46,7 +46,7 @@
       }
     },
     "Settings" : {
-      "comment" : "Title of the Settings screen's placeholder",
+      "comment" : "Title of the Settings screen",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -67,13 +67,13 @@
         }
       }
     },
-    "Your workouts are still on this iPhone. Ledger tries again when you come back to it." : {
+    "Your workouts are still on this iPhone. The app tries again when you come back to it." : {
       "comment" : "Body of the screen shown when the database cannot be opened",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your workouts are still on this iPhone. Ledger tries again when you come back to it."
+            "value" : "Your workouts are still on this iPhone. The app tries again when you come back to it."
           }
         }
       }

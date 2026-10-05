@@ -2,8 +2,10 @@ import LedgerDesign
 import SwiftUI
 
 /// The tab shell (product decision #1): Today, Program, Library and History, each with its own navigation stack
-/// over the router's path for that tab, the selected tab in the accent colour. The tab bar is the system's
-/// (architecture §11), with Apple's stock symbols until custom icons replace them.
+/// over the router's path for that tab. The tab bar is the system's (architecture §11), with Apple's stock symbols
+/// until custom icons replace them; its selected tab is tinted `LedgerColor.accentText`, the accent that meets AA
+/// contrast in both themes, and each stack sets the tint back to the system's, so that nothing a tab draws is
+/// tinted unless the screen tints it (product decision #17: the accent once per screen).
 ///
 /// Today hosts its placeholder until F09 S5 draws `FeatureToday`'s screen; the other three show a
 /// `PlaceholderScreen` until F11–F13 replace them, one line each.
@@ -27,7 +29,7 @@ struct AppTabs: View {
                 stack(.history) { PlaceholderScreen(AppCopy.title(of: .history), identifier: "history.title") }
             }
         }
-        .tint(LedgerColor.accent)
+        .tint(LedgerColor.accentText)
     }
 
     /// `tab`'s navigation stack: `root` under the router's path for the tab, with the one registration of
@@ -40,24 +42,31 @@ struct AppTabs: View {
                     screen(for: destination)
                 }
         }
+        .tabContentTint()
     }
 
     @ViewBuilder
     private func screen(for destination: AppDestination) -> some View {
         switch destination {
-        case .settings: PlaceholderScreen(AppCopy.title(of: destination), identifier: "settings.title")
+        case .settings: PlaceholderScreen(AppCopy.settingsTitle, identifier: "settings.title")
         }
     }
 }
 
-private extension View {
+extension View {
     /// A tab's root draws its own title, so the stack's navigation bar is hidden there; a pushed screen keeps
     /// the bar and its back button.
-    func tabRootChrome() -> some View {
+    fileprivate func tabRootChrome() -> some View {
         #if os(iOS)
-            toolbar(.hidden, for: .navigationBar)
+            toolbarVisibility(.hidden, for: .navigationBar)
         #else
             self
         #endif
+    }
+
+    /// Ends the tab bar's tint here: what this view holds has the system's tint again, as if no tab view were
+    /// around it. `AppTabs` applies it to each tab's stack.
+    func tabContentTint() -> some View {
+        tint(AnyShapeStyle?.none)
     }
 }

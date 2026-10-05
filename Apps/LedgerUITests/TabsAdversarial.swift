@@ -80,7 +80,7 @@ final class TabsAdversarial: XCTestCase {
                 XCTAssertTrue(app.tabBars.buttons[tab].isSelected)
                 attach(app.tabBars.firstMatch.screenshot(), named: "\(tab)-\(appearance == .dark ? "dark" : "light")")
                 for other in Self.tabs {
-                    let share = try accentShare(of: app.tabBars.buttons[other])
+                    let share = try accentShare(of: app.tabBars.buttons[other], in: appearance)
                     if other == tab {
                         XCTAssertGreaterThan(share, 0.01, "\(tab) selected: \(other) is not in the accent")
                     } else {
@@ -139,9 +139,11 @@ final class TabsAdversarial: XCTestCase {
 }
 
 private extension TabsAdversarial {
-    /// The share of the element's pixels that are the accent, `#FF5B22`, give or take the display's rendering.
+    /// The share of the element's pixels that are the tab bar's tint, `LedgerColor.accentText` (F09 S1 fix round 1,
+    /// review S6): the accent, `#FF5B22`, in dark and the deep accent, `#B2390E`, in light, give or take the
+    /// display's rendering (measured on the iPhone 17 simulator: `#FF682F` and `#A73107`).
     @MainActor
-    func accentShare(of element: XCUIElement) throws -> Double {
+    func accentShare(of element: XCUIElement, in appearance: XCUIDevice.Appearance) throws -> Double {
         let image = try XCTUnwrap(element.screenshot().image.cgImage)
         let width = image.width
         let height = image.height
@@ -166,7 +168,10 @@ private extension TabsAdversarial {
             let red = Int(bytes[pixel])
             let green = Int(bytes[pixel + 1])
             let blue = Int(bytes[pixel + 2])
-            if red > 215, (60 ... 125).contains(green), blue < 80 {
+            let isAccent = appearance == .dark
+                ? red > 215 && (60 ... 125).contains(green) && blue < 80
+                : (140 ... 200).contains(red) && (25 ... 85).contains(green) && blue < 45
+            if isAccent {
                 accent += 1
             }
         }

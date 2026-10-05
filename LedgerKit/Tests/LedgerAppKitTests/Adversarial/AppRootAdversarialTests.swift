@@ -6,8 +6,9 @@ import SwiftUI
 import Testing
 
 /// F09 S1 adversarial round 1, criterion 6: the database-unavailable and idle states of the root are what they were
-/// on `main` (a526874). The screen `main` drew is rebuilt here from `git show a526874:…/AppRoot.swift`, its two
-/// strings as literals, and compared pixel for pixel with what the root draws now.
+/// on `main` (a526874), apart from criterion 4's sentence. The screen `main` drew is rebuilt here from
+/// `git show a526874:…/AppRoot.swift`, its two strings as literals (the second sentence as criterion 4 was revised
+/// after round 1), and compared pixel for pixel with what the root draws now.
 @Suite("Adversarial F09 S1 · the root's other states", .timeLimit(.minutes(1)))
 struct AppRootAdversarialTests {
     static let size = CGSize(width: SnapshotConfig.phoneWidth, height: 874)
@@ -16,7 +17,7 @@ struct AppRootAdversarialTests {
     static var unavailableOnMain: some View {
         EmptyState(
             "Can't open your data right now",
-            body: "Your workouts are still on this iPhone. Ledger tries again when you come back to it."
+            body: "Your workouts are still on this iPhone. The app tries again when you come back to it."
         )
         .padding(.horizontal, LedgerSpacing.screen)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,7 +89,7 @@ struct AppRootAdversarialTests {
         func databaseUnavailable_readsAsMainsDoes() {
             let elements = DatabaseUnavailableView().accessibilityElements()
             let title = "Can't open your data right now"
-            let body = "Your workouts are still on this iPhone. Ledger tries again when you come back to it."
+            let body = "Your workouts are still on this iPhone. The app tries again when you come back to it."
             #expect(elements.map(\.label) == [title, body])
             #expect(elements.first?.traits.contains(.header) == true)
             #expect(elements == Self.unavailableOnMain.accessibilityElements())

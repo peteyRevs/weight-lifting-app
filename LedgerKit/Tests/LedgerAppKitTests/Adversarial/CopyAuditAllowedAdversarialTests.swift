@@ -33,7 +33,7 @@ nonisolated struct CopyAuditAllowedAdversarialTests {
     @Test("An exemption covers its file's literals, by the file's path in the module, and nothing else")
     func exemption_coversItsFileOnly() throws {
         let launch = #"let isUITest = arguments.contains("-LEDGER_UITEST")"#
-        let reason = ["Views/Screen.swift": "launch arguments"]
+        let reason: CopyAudit.Exemptions = ["Views/Screen.swift": ["-LEDGER_UITEST"]]
         #expect(try AdversarialModule.findings(screen: launch, exempting: reason).isEmpty)
         let elsewhere = try AdversarialModule.findings(screen: launch, at: "Sheets/Screen.swift", exempting: reason)
         #expect(elsewhere.contains { $0.contains("Sheets/Screen.swift") }, "the other Screen.swift is not exempt")
@@ -43,11 +43,17 @@ nonisolated struct CopyAuditAllowedAdversarialTests {
     @Test("An exemption that exempts nothing is a finding: a missing file, a file with no literal, a copy file")
     func staleExemption_isAFinding() throws {
         let clean = "let count = 1"
-        let missing = try AdversarialModule.findings(screen: clean, exempting: ["Gone.swift": "was a debug page"])
+        let missing = try AdversarialModule.findings(screen: clean, exempting: ["Gone.swift": ["-LEDGER_UITEST"]])
         #expect(missing.count == 1, "\(missing)")
-        let nothing = try AdversarialModule.findings(screen: clean, exempting: ["Views/Screen.swift": "no literal"])
+        let nothing = try AdversarialModule.findings(
+            screen: clean,
+            exempting: ["Views/Screen.swift": ["-LEDGER_UITEST"]]
+        )
         #expect(nothing.count == 1, "\(nothing)")
-        let copyFile = try AdversarialModule.findings(screen: clean, exempting: ["FixtureCopy.swift": "copy"])
+        let copyFile = try AdversarialModule.findings(
+            screen: clean,
+            exempting: ["FixtureCopy.swift": ["Start workout"]]
+        )
         #expect(!copyFile.isEmpty, "\(copyFile)")
     }
 
@@ -59,18 +65,25 @@ nonisolated struct CopyAuditAllowedAdversarialTests {
             String(localized: key, bundle: .module)
         }
         """
-        let findings = try AdversarialModule.findings(screen: screen, exempting: ["Views/Screen.swift": "arguments"])
+        let findings = try AdversarialModule.findings(
+            screen: screen,
+            exempting: ["Views/Screen.swift": ["-LEDGER_UITEST"]]
+        )
         #expect(findings.contains { $0.contains("Screen.swift") }, "\(findings)")
     }
 
-    @Test("Limit of the rule as written: an exemption covers the whole file, a title a lifter reads included")
-    func exemptFile_hidesALifterFacingLiteral() throws {
+    @Test("An exemption names literals: a title a lifter reads, in the same file, is still a finding")
+    func exemption_namesLiterals_aTitleInTheFileIsStillAFinding() throws {
         let screen = """
         let isUITest = arguments.contains("-LEDGER_UITEST")
         let view = Text("Start workout")
         """
-        let findings = try AdversarialModule.findings(screen: screen, exempting: ["Views/Screen.swift": "arguments"])
-        #expect(findings.isEmpty, "the limit no longer holds: update the notes")
+        let findings = try AdversarialModule.findings(
+            screen: screen,
+            exempting: ["Views/Screen.swift": ["-LEDGER_UITEST"]]
+        )
+        #expect(findings.count == 1, "\(findings)")
+        #expect(findings.first?.hasPrefix("Views/Screen.swift:4:") == true, "\(findings)")
     }
 
     @Test("Limit of a check that reads literals: a title made from a name has no literal to find")
@@ -81,9 +94,13 @@ nonisolated struct CopyAuditAllowedAdversarialTests {
         }
 
         let titles = Card.allCases.map { Text($0.rawValue.capitalized) }
-        let other = Text("\\(Card.today)")
         """
         #expect(try AdversarialModule.findings(screen: screen).isEmpty, "the limit no longer holds: update the notes")
+        let interpolated = #"let other = Text("\(Card.today)")"#
+        #expect(
+            try !AdversarialModule.findings(screen: interpolated).isEmpty,
+            "a literal handed to Text is a finding, with letters or without"
+        )
     }
 
     @Test("A module that is not there, or has no catalog, throws: the audit never passes on nothing")
@@ -95,29 +112,15 @@ nonisolated struct CopyAuditAllowedAdversarialTests {
 
     @Test("A `+Previews.swift` file is not read, and a file that only ends in Previews is")
     func previewsFile_isNotRead_othersAre() throws {
-        let preview = #"#Preview("Up next") { Text("Start workout") }"#
+        let bare = #"#Preview("Up next") { Text("Start workout") }"#
+        let preview = "#if DEBUG\n\(bare)\n#endif"
         #expect(try AdversarialModule.findings(screen: preview, at: "Today+Previews.swift").isEmpty)
         #expect(try AdversarialModule.findings(screen: preview, at: "Views/Today+Previews.swift").isEmpty)
         #expect(try !AdversarialModule.findings(screen: preview, at: "TodayPreviews.swift").isEmpty)
-    }
-
-    @Test("The catalog and the copy file agree in both directions, to the letter", arguments: disagreements)
-    func catalogAndCopyFile_disagree_isAFinding(_ input: AdversarialInput) throws {
-        let catalog = try AdversarialCatalog.catalog([AdversarialCatalog.plain(input.text)])
-        let audit = CopyAudit(sources: [AdversarialModule.copyPath: AdversarialModule.copy], catalog: catalog)
-        #expect(audit.findings.count == 2, "a key the catalog lacks and a key no one looks up: \(audit.findings)")
-    }
-
-    @Test("A module with a catalog and no copy file: every key is a finding; with lookups and no keys, every lookup")
-    func oneSideMissing_isAFindingPerKey() throws {
-        let catalog = try AdversarialCatalog.catalog([
-            AdversarialCatalog.plain("Today"),
-            AdversarialCatalog.plain("History")
-        ])
-        #expect(CopyAudit(sources: ["Views/Screen.swift": "let count = 1"], catalog: catalog).findings.count == 2)
-        let empty = try AdversarialCatalog.catalog([])
-        let audit = CopyAudit(sources: [AdversarialModule.copyPath: AdversarialModule.copy], catalog: empty)
-        #expect(audit.findings.count == 1, "\(audit.findings)")
+        #expect(
+            try !AdversarialModule.findings(screen: bare, at: "Today+Previews.swift").isEmpty,
+            "a previews file that is not inside #if DEBUG ships, so it is not left unread"
+        )
     }
 }
 
@@ -231,16 +234,5 @@ nonisolated extension CopyAuditAllowedAdversarialTests {
         AdversarialInput("a toast's notice", #"func saved() { toast.notice("Saved") }"#),
         AdversarialInput("a free function named error", #"let view = error("Couldn't save your set")"#),
         AdversarialInput("print", #"func note() { print("Start workout") }"#)
-    ]
-
-    /// Each differs from the copy file's "Start workout" in a way a strings table tells apart.
-    static let disagreements: [AdversarialInput] = [
-        AdversarialInput("case", "Start Workout"),
-        AdversarialInput("a trailing space", "Start workout "),
-        AdversarialInput("a leading space", " Start workout"),
-        AdversarialInput("two spaces", "Start  workout"),
-        AdversarialInput("a no-break space", "Start\u{A0}workout"),
-        AdversarialInput("a full stop", "Start workout."),
-        AdversarialInput("a curly apostrophe's cousin, the en dash", "Start\u{2013}workout")
     ]
 }

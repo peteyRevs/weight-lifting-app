@@ -5,7 +5,8 @@ import Testing
 /// F09 S1 adversarial round 1: the catalog as the build compiles it. The test target's fixture catalog
 /// (`Fixtures/Localizable.xcstrings`, in `Bundle.module`) must resolve a plain, a formatted and a counted string on
 /// the Mac host and on the simulator, with the digits of the locale the caller passes (standards §7, "Copy file"
-/// and "Tiers"); and `CopyAudit` must read a lookup's key as Foundation asks the table for it.
+/// and "Tiers"). That a catalog is keyed as the compiler keys the code is the gate's check
+/// (`scripts/check-string-catalogs.sh`), where the cases that asked it of `CopyAudit` now are.
 @Suite("Adversarial F09 S1 · the catalog the build makes")
 nonisolated struct CatalogBuildAdversarialTests {
     static let american = Locale(identifier: "en_US")
@@ -85,16 +86,6 @@ nonisolated struct CatalogBuildAdversarialTests {
         #expect(StringCatalog.resourceBundle(ofModule: "") == nil)
     }
 
-    @Test("The audit reads a lookup's key as Foundation asks the table for it", arguments: lookups)
-    func auditKey_isFoundationsKey(_ lookup: Lookup) throws {
-        // A key that formats a number takes the caller's locale (standards §7).
-        let counts = lookup.parameters.contains("Int")
-        let member = "static func line(\(lookup.parameters)\(counts ? ", locale: Locale" : "")) -> String {\n"
-            + "    String(localized: \(lookup.literal), bundle: .module\(counts ? ", locale: locale" : ""))\n}"
-        let findings = try AdversarialModule.findings(copy: member, catalog: [AdversarialCatalog.plain(lookup.key)])
-        #expect(findings.isEmpty, "Foundation's key is \"\(lookup.key)\": \(findings)")
-    }
-
     @Test("Foundation's key for a lookup is what the fixture catalog is keyed by")
     func foundationsKey_isTheCatalogsKey() {
         #expect(LocalizedStringResource("fixture.week \(3) of \(8)").key == "fixture.week %lld of %lld")
@@ -109,49 +100,4 @@ nonisolated extension CatalogBuildAdversarialTests {
         .deletingLastPathComponent() // Adversarial
         .deletingLastPathComponent() // LedgerAppKitTests
         .appending(path: "Fixtures/Localizable.xcstrings")
-
-    /// A lookup as a copy file writes it, and the key Foundation derives from the same literal.
-    struct Lookup: Sendable, CustomTestStringConvertible {
-        let literal: String
-        let parameters: String
-        let key: String
-
-        init(_ literal: String, _ parameters: String, _ resource: LocalizedStringResource) {
-            self.literal = literal
-            self.parameters = parameters
-            key = resource.key
-        }
-
-        var testDescription: String {
-            literal
-        }
-    }
-
-    static let week = 3
-    static let total = 8
-    static let name = "Lower A"
-    static let tag = "UB"
-
-    static let lookups: [Lookup] = [
-        Lookup(#""Week \(week) of \(total)""#, "_ week: Int, of total: Int", "Week \(week) of \(total)"),
-        Lookup(#""Next: \(name) · \(tag)""#, "_ name: String, tag: String", "Next: \(name) · \(tag)"),
-        Lookup(
-            #""\(week) of \(total) sets · \(name) lb moved""#,
-            "week: Int, total: Int, name: String",
-            "\(week) of \(total) sets · \(name) lb moved"
-        ),
-        Lookup(#""100% done""#, "", "100% done"),
-        Lookup(#""\(week)% of the block""#, "_ week: Int", "\(week)% of the block"),
-        Lookup(#""Can't open \"\(name)\"""#, "_ name: String", "Can't open \"\(name)\""),
-        Lookup(#""Rest\tday""#, "", "Rest\tday"),
-        Lookup(#""Line one\nLine two""#, "", "Line one\nLine two"),
-        Lookup(#""Up next \u{2014} \(name)""#, "_ name: String", "Up next \u{2014} \(name)"),
-        Lookup(##"#"Back\slash \#(name)"#"##, "_ name: String", #"Back\slash \#(name)"#),
-        Lookup(#""\(name)""#, "_ name: String", "\(name)"),
-        Lookup(
-            #""\(week) × \(total) @ \(name)""#,
-            "week: Int, total: Int, name: String",
-            "\(week) × \(total) @ \(name)"
-        )
-    ]
 }
