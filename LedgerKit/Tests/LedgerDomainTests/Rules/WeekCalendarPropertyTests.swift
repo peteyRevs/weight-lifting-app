@@ -5,7 +5,7 @@ import Testing
 /// Seeded checks of `WeekCalendar.nextScheduledDay(after:in:)` against a slow search that walks the
 /// calendar one day at a time and asks `scheduledDay(on:in:)` about each day (F09 S2, criterion 1).
 @Suite("WeekCalendar next scheduled day properties", .tags(.domain, .property))
-struct NextScheduledDayPropertyTests {
+struct WeekCalendarPropertyTests {
     /// Zones far from UTC on both sides, zones whose DST skips or repeats the hour at midnight, a
     /// half-hour DST and zones without DST.
     static let zones = [
@@ -136,7 +136,7 @@ struct NextScheduledDayPropertyTests {
     }
 }
 
-extension NextScheduledDayPropertyTests {
+extension WeekCalendarPropertyTests {
     @Test(
         "The next scheduled day is the one a day-by-day search finds, in any zone and for any week start.",
         arguments: PropertySeed.all

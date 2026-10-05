@@ -1898,8 +1898,11 @@ host); the nightly lane runs 2,000.
   - `weekIndex: Int`, the program week of that day, 0-based. Compare it with `weekIndex(for: now)`:
     equal is "later this week" in program weeks; `weekIndex + 1` is the "Next: week %lld" number.
   - `dayTemplateID`, to find the day's `tag` in `program.days`.
-  - `nil` means the block has no session after today: the Logged card's "Next:" line is omitted and the rest card
-    says the last-week sentence. Today itself is never returned, logged or not.
+  - `nil` means no later session in the block. That is not always the block's last week: in week 3 of 8 it is
+    `nil` when the later weeks are empty. The Logged card's "Next:" line is omitted. The rest card says "This is
+    the last week of the block" only when `weekIndex(for: now) == program.weeks.count - 1`; what an earlier week
+    with nothing left says is S3's to decide, and the brief has no copy for it. Today itself is never returned,
+    logged or not. (Corrected in fix round 1, review nit n6.)
   - The brief's rest-card copy says "next %@" for "first day of next week". Program weeks and stats weeks differ
     when the block began midweek or the week start changed; whichever S3 means, `date` and `weekIndex` give both
     (`week(containing:)` for the stats week).
@@ -1932,3 +1935,141 @@ tester's own full gate was not run (free disk under the floor); the orchestrator
   one function for their digits instead of `dropLast`; `#require` for the day-length check; `Loadable<T>` stands (the
   brief now says `T`, as §5 does); and, for S3, `nil` from `nextScheduledDay` means "no later session in the block",
   which is not always "the last week of the block" (later weeks may be empty): the "Inputs for S3" line is corrected.
+
+### S2 fix round 1 (G1 implementer, 2026-10-05)
+
+On `feat/F09-s2-domain` at `09f2619`. No commits. Host only, as ruled: no simulator ran and no full gate.
+"Before" below is `09f2619`.
+
+**F9-S2-1: the cause.** `Decimal.roundedToInt(_:)` (`Units/NumberText.swift:19-21` before) handed whatever it had
+to `NSDecimalNumber.intValue`. For a NaN that conversion is undefined. Measured on the host:
+`NSDecimalNumber(decimal: .nan).intValue` was 4377898889 in one launch and 4309954441 in the next, and the
+tester's table shows other numbers at other call sites in one launch.
+
+The NaN is Foundation's: `Decimal` division gives NaN, not zero, for a quotient it takes to be too small.
+`compact(in:)` divided twice, by the unit (`Units/Volume.swift:59` before, `value(in:)`) and by 100 (`:28`
+before). Measured on a scratch copy of the arithmetic, for 1, 5 and 9 times each power of ten:
+- the second division is NaN for every volume from 10⁻¹²⁷ g up to 10⁻⁸⁶ g, in both units;
+- the first is already NaN up to 10⁻⁹⁶ g in pounds and up to 10⁻⁸⁸ g in kilograms;
+- 10⁻⁸⁰ g is a number and read "0.0" before too.
+
+That is well short of the smallest `Decimal`: 10⁻⁸⁷ g is 10⁻⁹⁰ kg, a number, and a hundredth of it is NaN
+although `Decimal` can hold 10⁻⁹². I did not read Foundation's source for why.
+
+**The fix** is one line, `Units/NumberText.swift:24`: the conversion is now
+`isNaN ? 0 : NSDecimalNumber(…).intValue`. A value that is not a number rounds to 0, and the comment above it
+says why. For the
+formatters 0 is the right number and not only a convention: dividing a number by 453.59237, by 1,000 or by 100
+can only make it too small, never too large, so a NaN there is a value nearer zero than `Decimal` can say (or
+the weight or volume was NaN to begin with).
+
+`compact(in:)` and `thousands(in:)` now take their digits from one private function,
+`Volume.compactDigits(in:)` (`Units/Volume.swift:62-65`): `compact` appends "k", `thousands` returns it as it is,
+or "0" for the zero volume. Nothing is cut from a string any more (review n2).
+
+**What changed in existing behaviour, and for which inputs.** Only a value that is not a number, at the helper.
+Every text for a value that is a number is the same as before: the existing tests pass untouched, and
+`NumberTextTests.roundedToInt_numbers_roundByTheRule` pins the rounding.
+
+| Caller of `roundedToInt` | Input that reached it as NaN | Before (one host run) | Now |
+|---|---|---|---|
+| `Volume.compact(in:)`, `Volume.thousands(in:)` (`Units/Volume.swift:63`) | a volume of 10⁻⁸⁶ g or less, either sign; a NaN volume | arbitrary ("431,784,903.3k" in the tester's run) | "0.0k", "0.0" |
+| `Volume.formatted(in:)` (`:23`) | a volume of 10⁻⁹⁶ g (lb) or 10⁻⁸⁸ g (kg) or less; a NaN volume | arbitrary ("527,145,074,697" for 10⁻¹²⁷ g) | "0" |
+| `Weight.wholeValue(in:)` (`Units/Weight.swift:114`) | the same sizes, as a weight; a NaN weight | arbitrary (4339062169 for 10⁻¹²⁷ g) | 0 |
+| `PlateMath.perSide(load:inventory:)` (`Rules/PlateMath.swift:52`) | a plate too heavy for its count to be held: 10⁻³⁰ g per side against a 10¹⁰⁰ g plate | the plate loaded 4,339,062,169 times, a remainder of −4.3 × 10¹⁰⁹ g | the plate is left off |
+| `RPE.init?` (`Units/RPE.swift:16`) | none: the guard above admits only whole values from 10 to 20, and a NaN fails it | unchanged | unchanged |
+| `Volume.percentChange(from:)` (`Units/Volume.swift:57`) | none: `isFinite` is checked first | unchanged | unchanged |
+
+Those six are every caller (`grep roundedToInt LedgerKit/Sources`). The four affected ones are fixed by the same
+line. No stored weight or volume is near these sizes (ADR-007 stores whole 10⁻⁷ g), and no plate is 10¹³⁰ times
+the load.
+
+**Found beside it, reported and not fixed** (none is the same line):
+1. **`Weight.formatted(in:)` prints "NaN"** for the same sizes (`Units/Weight.swift:101-109`; it does not use the
+   helper). Run through the module: 10⁻¹²⁷ g reads "NaN" in both units; 10⁻⁸⁸ g reads "0" in pounds and "NaN" in
+   kilograms; a NaN weight reads "NaN". It is the same text on every call, so it is not F9-S2-1's fault, but it
+   is not a number. A fix would be in that function or in `Weight.value(in:)`. Recommend a line in the next slice
+   that touches `Weight`, with the orchestrator's leave.
+2. **Beyond `Int` the digits wrap** (F02; the tester's "other end"; my open question 4). `roundedToInt` wraps
+   when the rounded value does not fit an `Int`. Run through the module: 10²⁵ g reads
+   "-89,866,669,963,703,866.9k" through `compact`, "2,367,050,404,843,891,177" through `formatted` and
+   2367050404843891177 through `wholeValue`; the greatest `Decimal` reads "0.0k". The cause is another one (the
+   size of `Int`, not NaN) and the cure is a clamp in the same helper, a second change of existing behaviour that
+   this round does not sanction. `thousands` and `compact` still agree there (one function now).
+3. `LedgerPersistence` converts an RPE with `NSDecimalNumber(decimal:).intValue` directly
+   (`Records/SlotRecords.swift:53`, `Records/WorkoutRecords.swift:140`). An `RPE` is always 5 to 10, so no NaN
+   reaches it. No change wanted.
+
+**What changed, item by item.**
+1. **F9-S2-1.** The helper's line and comment (`Units/NumberText.swift:18-25`); `compactDigits(in:)`, with
+   `compact`'s and `thousands`' bodies and `thousands`' comment (`Units/Volume.swift:26-37, 60-65`). Tests:
+   - The tester's `thousands_smallestDecimalVolume_readsZeroPointZero` passes, with no edit to any tester file.
+   - `VolumeTests.thousands_volumeTooSmallToShow_readsZeroPointZero`: 484 volumes of both signs from 10⁻¹²⁷ g
+     to 10⁻⁷ g, in both units, read "0.0".
+   - `VolumeTests.compact_volumeTooSmallToShow_readsZeroPointZeroK` (the test for `compact`): the same volumes
+     read "0.0k" through `compact` and "0" through `formatted`.
+   - `NumberTextTests` (new file, 4 tests): NaN rounds to 0 under every rule; numbers round as before;
+     `Weight.wholeValue` for a weight too small to show; `PlateMath.perSide` with the plate too heavy to count.
+   - Run before the fix, these and the tester's test recorded 986 issues, 4 of them the tester's; after it,
+     none.
+2. **F9-S2-2.** `percentChange`'s comment (`Units/Volume.swift:39-48`) names the three conditions for `nil`
+   without a bound: `previous` is zero; either volume is not a number; `Decimal`'s arithmetic gives no number
+   for the difference, the quotient or the percent. It also says that for a negative `previous` the sign is the
+   formula's, with the example 100 after −100 is −200 (review n1). No behaviour changed. The line in my
+   decision 2 above that gives "about 3.4 × 10¹⁶⁵" as where `nil` begins is wrong, as the tester showed (10¹²⁶
+   after 1 is already `nil`); I have left that paragraph as written and correct it here.
+3. **F9-S2-3.** `nextScheduledDay`'s comment (`Rules/WeekCalendar.swift:170-181`) says days are calendar dates
+   and that a date a zone once skipped can be the answer, with Pacific/Apia's 2011-12-30 (checked on the host:
+   Thursday 23:59:59 is followed by Saturday 00:00:00). No behaviour changed.
+4. **F9-S2-4.**
+   - `VolumeTests.thousands_extremes_neverTrap` is replaced by three tests with exact texts: the two above and
+     `thousands_notANumberAndBeyondInt_agreeWithCompact` (a NaN volume reads "0.0" and "0.0k"; beyond `Int` the
+     two still agree).
+   - `Fixtures.everyDayProgram` gives each weekday of each week a template of its own
+     (`Fixtures.everyDayTemplate(week:on:)`). The midnight rows and the year-9999 test now assert the template of
+     the expected week and weekday, the weekday taken from Foundation's calendar.
+   - `LoadableTests.sendable_whenItsValueIs` asserts "and only then": `Loadable<Draft>` and `Loadable<[Draft]>`
+     are not `Sendable`, by two overloads that the compiler chooses between.
+5. **Nits.** n3: the day-length check is `try #require` (`Rules/WeekCalendarTests+NextScheduledDay.swift:60`).
+   n4: the seeded suite is `WeekCalendarPropertyTests`, in `Rules/WeekCalendarPropertyTests.swift`; lint allows
+   it. The file was renamed with `mv`, not `git mv`, so `git status` shows a deletion and a new file until they
+   are staged. n5: `Loadable<T>` stands. n6: the "Inputs for S3" line above is corrected in place and marked.
+
+**Mutants** (seven, each against the final tests, sources checked by SHA-256 afterwards): `Loadable` always
+`Sendable`; the next weekday's schedule entry and the next week's schedule (run against the midnight table
+alone, which could not see either before); the NaN guard removed; NaN rounding to 1; `thousands` keeping the
+"k"; `compact` losing it. All seven failed.
+
+**Host results, final tree.**
+- `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'LedgerDomainTests|LedgerPersistenceTests'`: exit 0. `LedgerDomainTests`: 890 tests in 145 suites, all pass
+  (884 in 144 before: 4 in `NumberTextTests`, and three `VolumeTests` in place of one). The tester's 61 are
+  among them and all pass. `LedgerPersistenceTests`: 449 tests in 103 suites pass, with its 1 known issue.
+- `git status --short` lists no file under `LedgerDomainTests/Adversarial/`.
+- Host coverage (`--enable-code-coverage`, `LedgerDomainTests`): `Volume.swift` 49 / 49 lines and 22 / 22
+  regions; `NumberText.swift` 105 / 106, the changed line covered in both branches (the regions it lacks are
+  F02's, at lines 40 and 140); `WeekCalendar.swift` 105 / 107 as before.
+- `scripts/check.sh --lint-only`: exit 0 (format, lint, package graph and pins, script suites), run after the
+  last edit of this section.
+
+**Product lines** (blank and whole-line comment lines excluded). This round: 7 added and 4 removed
+(`Volume.swift` 6 and 3, `NumberText.swift` 1 and 1; `WeekCalendar.swift` comments only). The slice against
+`985a8fb`: 59 added, 2 removed (`WeekCalendar.swift` 34, `Volume.swift` 17 and 1, `Loadable.swift` 7,
+`NumberText.swift` 1 and 1).
+
+**Not verified.**
+- Nothing ran on a simulator, and no full gate: the orchestrator runs it. The coverage figures above are the
+  host's.
+- Only `LedgerDomainTests` and `LedgerPersistenceTests` ran. The other test targets link `LedgerDomain` and were
+  not run on the host.
+- An `Int` of 32 bits.
+
+### S2 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0, with the tester's 61 tests passing and the tester's
+  files unchanged since `09f2619`. The one failing test was F9-S2-1's; its cause was fixed at the root
+  (`Decimal.roundedToInt` no longer hands a NaN to `NSDecimalNumber.intValue`). **G2 is closed; G3 approved.**
+- Reported by the fix round and queued as follow-ups, not part of this slice (older formatting code, inputs no
+  workout can produce): `Weight.formatted` prints "NaN" for a weight too small to show, and digits wrap for a value
+  beyond `Int`.
+- S2 is ready for its PR, which opens after #28 (S1) is on `main`: merge `main`, gate, push once.

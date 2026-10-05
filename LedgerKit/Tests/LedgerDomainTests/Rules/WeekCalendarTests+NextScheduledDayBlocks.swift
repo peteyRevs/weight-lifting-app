@@ -101,10 +101,11 @@ extension WeekCalendarTests {
     func nextScheduledDay_blockPastYear9999_endsAtTheLastCivilDate() throws {
         let program = try Fixtures.everyDayProgram(startDate: Fixtures.civil(9999, 12, 20), weekCount: 4)
         let weeks = Self.weeks(for: program)
+        // 9999-12-31 is a Friday, in the block's second week.
         #expect(weeks.nextScheduledDay(after: Fixtures.date(9999, 12, 30, hour: 12), in: program) == ScheduledDay(
             date: Fixtures.civil(9999, 12, 31),
             weekIndex: 1,
-            dayTemplateID: Fixtures.upperADay
+            dayTemplateID: Fixtures.everyDayTemplate(week: 1, on: .friday)
         ))
         #expect(weeks.nextScheduledDay(after: Fixtures.date(9999, 12, 31, hour: 12), in: program) == nil)
     }

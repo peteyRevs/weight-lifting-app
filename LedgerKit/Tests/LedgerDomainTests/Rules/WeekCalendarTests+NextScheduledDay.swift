@@ -57,15 +57,25 @@ extension WeekCalendarTests {
         let program = try Fixtures.everyDayProgram(startDate: Fixtures.civil(2026, 1, 5), weekCount: 52)
         let start = Self.firstInstant(row.month, row.day, in: zone)
         let end = Self.firstInstant(row.month, row.day + 1, in: zone)
-        #expect(end.timeIntervalSince(start) == Double(row.hours) * 3600, "the length of the fixture's day")
+        try #require(end.timeIntervalSince(start) == Double(row.hours) * 3600, "the length of the fixture's day")
         let expected = Fixtures.civil(2026, row.next[0], row.next[1])
+        let weekIndex = expected.days(since: program.startDate) / 7
+        let weekday = try Self.weekday(row.next[0], row.next[1])
         let next = Self.weeks(for: program, in: zone)
             .nextScheduledDay(after: start.addingTimeInterval(row.offset), in: program)
+        // Every weekday of every week has a template of its own, so this also says whose schedule was read.
         #expect(next == ScheduledDay(
             date: expected,
-            weekIndex: expected.days(since: program.startDate) / 7,
-            dayTemplateID: Fixtures.upperADay
+            weekIndex: weekIndex,
+            dayTemplateID: Fixtures.everyDayTemplate(week: weekIndex, on: weekday)
         ))
+        #expect(next?.weekday == weekday)
+    }
+
+    /// The weekday of a 2026 date, from Foundation's calendar.
+    static func weekday(_ month: Int, _ day: Int) throws -> Weekday {
+        let noon = Fixtures.date(2026, month, day, hour: 12)
+        return try #require(Weekday(calendarWeekday: Fixtures.calendar.component(.weekday, from: noon)))
     }
 
     /// The first instant of a 2026 day in `zone`, from Foundation alone (01:00 where midnight is skipped).

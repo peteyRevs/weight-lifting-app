@@ -196,13 +196,46 @@ extension VolumeTests {
         }
     }
 
-    @Test("Volumes no lifter moves print without trapping, and never with a k")
-    func thousands_extremes_neverTrap() {
-        let extremes: [Decimal] = [.greatestFiniteMagnitude, -.greatestFiniteMagnitude, .leastNonzeroMagnitude, .nan]
-        for gramReps in extremes {
+    /// Volumes of both signs from the smallest a `Decimal` holds, 10⁻¹²⁷ g, up to the smallest a
+    /// database stores, 10⁻⁷ g. Under about 10⁻⁸⁶ g, thousands of a unit is a quotient too small for
+    /// `Decimal`, which gives NaN for it.
+    static let tooSmallToShow: [Decimal] = (-127 ... -7).flatMap { exponent -> [Decimal] in
+        let one = Decimal(sign: .plus, exponent: exponent, significand: 1)
+        return [one, -one, one * 9, one * -9]
+    }
+
+    @Test("A volume too small to show reads 0.0, never an arbitrary number (F9-S2-1)")
+    func thousands_volumeTooSmallToShow_readsZeroPointZero() throws {
+        try #require((Decimal.leastNonzeroMagnitude / Units.lb.gramsPerUnit).isNaN)
+        for gramReps in Self.tooSmallToShow {
             for units in Units.allCases {
-                let text = Volume(gramReps: gramReps).thousands(in: units)
-                #expect(!text.isEmpty && !text.hasSuffix("k"), "\(gramReps) in \(units)")
+                #expect(Volume(gramReps: gramReps).thousands(in: units) == "0.0", "\(gramReps) g in \(units)")
+            }
+        }
+    }
+
+    @Test("A volume too small to show reads 0.0k through compact and 0 through formatted (F9-S2-1)")
+    func compact_volumeTooSmallToShow_readsZeroPointZeroK() {
+        for gramReps in Self.tooSmallToShow {
+            for units in Units.allCases {
+                let volume = Volume(gramReps: gramReps)
+                #expect(volume.compact(in: units) == "0.0k", "\(gramReps) g in \(units)")
+                #expect(volume.formatted(in: units) == "0", "\(gramReps) g in \(units)")
+            }
+        }
+    }
+
+    @Test("A volume that is not a number reads 0.0, and one beyond Int still reads as compact does")
+    func thousands_notANumberAndBeyondInt_agreeWithCompact() {
+        let beyondInt: [Decimal] = [
+            .greatestFiniteMagnitude, -.greatestFiniteMagnitude, Decimal(sign: .plus, exponent: 25, significand: 1)
+        ]
+        for units in Units.allCases {
+            #expect(Volume(gramReps: .nan).thousands(in: units) == "0.0")
+            #expect(Volume(gramReps: .nan).compact(in: units) == "0.0k")
+            for gramReps in beyondInt {
+                let volume = Volume(gramReps: gramReps)
+                #expect(volume.thousands(in: units) + "k" == volume.compact(in: units), "\(gramReps) g in \(units)")
             }
         }
     }

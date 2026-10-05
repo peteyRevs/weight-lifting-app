@@ -35,17 +35,25 @@ extension Fixtures {
         )
     }
 
-    /// A block that trains Upper A on every day of every week, so the day after any day in it is a
-    /// scheduled one.
+    /// A block that trains every day, each weekday of each week on a template of its own. The day after
+    /// any day in it is a scheduled one, and its template tells which week and which weekday were read.
     static func everyDayProgram(startDate: CivilDate, weekCount: Int) throws -> Program {
-        let everyDay = Dictionary(uniqueKeysWithValues: Weekday.allCases.map { ($0, upperADay) })
-        let weeks = (0 ..< weekCount).map { week($0, schedule: everyDay) }
-        return try Program(
-            id: programID,
-            name: "Every day",
-            startDate: startDate,
-            weeks: weeks,
-            days: scheduleDays
-        )
+        var weeks: [Week] = []
+        var days: [DayTemplate] = []
+        for index in 0 ..< weekCount {
+            var schedule: [Weekday: DayTemplateID] = [:]
+            for weekday in Weekday.allCases {
+                let template = everyDayTemplate(week: index, on: weekday)
+                schedule[weekday] = template
+                days.append(DayTemplate(id: template, name: "Week \(index + 1), \(weekday)", tag: "D\(days.count + 1)"))
+            }
+            weeks.append(week(index, schedule: schedule))
+        }
+        return try Program(id: programID, name: "Every day", startDate: startDate, weeks: weeks, days: days)
+    }
+
+    /// The template `everyDayProgram` trains on `weekday` of the week with `index`.
+    static func everyDayTemplate(week index: Int, on weekday: Weekday) -> DayTemplateID {
+        DayTemplateID(uuid(40000 + 7 * index + weekday.rawValue))
     }
 }

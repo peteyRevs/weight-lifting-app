@@ -28,6 +28,16 @@ struct LoadableTests {
         value
     }
 
+    /// Whether a type is `Sendable`: the compiler takes this overload when the type conforms,
+    private static func isSendable(_: (some Sendable).Type) -> Bool {
+        true
+    }
+
+    /// and this one when it does not.
+    private static func isSendable(_: (some Any).Type) -> Bool {
+        false
+    }
+
     @Test("A load state is idle, loading, loaded with its value or failed with its error (standards §5)")
     func cases_carryTheirPayloads() {
         #expect(Self.summary(of: .idle) == "idle")
@@ -41,8 +51,15 @@ struct LoadableTests {
         #expect(error as? LoadFailure == LoadFailure(code: 7))
     }
 
-    @Test("A load state is Sendable when its value is, and holds a value that is not")
+    @Test("A load state is Sendable when its value is and only then, and holds a value that is not")
     func sendable_whenItsValueIs() {
+        // The two overloads tell a Sendable type from one that is not.
+        #expect(Self.isSendable(Int.self))
+        #expect(!Self.isSendable(Draft.self))
+        #expect(Self.isSendable(Loadable<Int>.self))
+        #expect(Self.isSendable(Loadable<[String]>.self))
+        #expect(!Self.isSendable(Loadable<Draft>.self))
+        #expect(!Self.isSendable(Loadable<[Draft]>.self))
         #expect(Self.summary(of: Self.handedOver(.loaded(3))) == "loaded 3")
         #expect(Self.summary(of: Self.handedOver(.failed(LoadFailure(code: 1)))) == "failed LoadFailure(code: 1)")
         guard case let .loaded(draft) = Loadable.loaded(Draft()) else {

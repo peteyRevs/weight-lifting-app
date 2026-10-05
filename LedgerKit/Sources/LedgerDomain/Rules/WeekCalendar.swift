@@ -172,11 +172,13 @@ public extension WeekCalendar {
     /// block gives the block's first session.
     ///
     /// "After" is decided by calendar days in this calendar's time zone, never by adding seconds, so
-    /// a 23- or 25-hour day is neither skipped nor counted twice. Each candidate day is judged by its
-    /// own program week, the one `scheduledDay(on:in:)` reads for it, so neither `weekStart` nor the
-    /// weekday the block began on matters. The search stops at the last day of the block's last week
-    /// (`weeks.count` weeks from `startDate`, as `isBlockComplete` counts them) and at 9999-12-31,
-    /// the last day a `CivilDate` holds, so it ends for every program.
+    /// a 23- or 25-hour day is neither skipped nor counted twice. Days are calendar dates (ADR-007),
+    /// not instants: a date the time zone once skipped (Pacific/Apia had no 2011-12-30) is still a
+    /// day of the block and can be the answer. Each candidate day is judged by its own program week,
+    /// the one `scheduledDay(on:in:)` reads for it, so neither `weekStart` nor the weekday the block
+    /// began on matters. The search stops at the last day of the block's last week (`weeks.count`
+    /// weeks from `startDate`, as `isBlockComplete` counts them) and at 9999-12-31, the last day a
+    /// `CivilDate` holds, so it ends for every program.
     func nextScheduledDay(after date: Date, in program: Program) -> ScheduledDay? {
         let blockStart = startDate.daysSinceEpoch
         let blockEnd = blockStart + 7 * program.weeks.count
