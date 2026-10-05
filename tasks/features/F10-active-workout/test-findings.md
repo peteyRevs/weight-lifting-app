@@ -384,3 +384,248 @@ remain scheduler-dependent, as in round 1: each such test allows ten runs and ne
 
 The gate is red only because of the one test that documents F10-S1-7. The orchestrator's gate on `9ad8fc6` was
 green; the difference is this round's new clients, not a regression in the fix round.
+
+## Slice S2 — round 1 (G2 tester, 2026-10-05)
+
+Independent adversarial pass over `feat/F10-s2-session-host` at `3c960e8`: `LocalWorkoutSessionActor`,
+`HybridLogicalClock`, `StartWorkoutUseCase`, `LaunchStep.resumeWorkout` and the iPhone composition's wiring.
+
+**Verdict.** I found no way to lose or double a workout. Against stores that refuse, lose their answers or die
+at any store call, against relaunches, an unsteady clock, many callers at once and cancelled callers, the host
+always ended where `WorkoutEngine.replay` of its stored log says. Four findings remain, none of them data loss:
+one spec question and three minor ones. Five tests (9 cases, 13 issues) fail and stay failing.
+
+**How I worked.** Expected values come from the brief's criteria, from `WorkoutEngine.reduce` / `replay` run in
+my support files, from `SessionBuilder` and `MissTracking` called by me, and from a fresh store of the same kind
+(`SiegeRig.asStored`). The stores are reached through wrappers of my own (`Siege`), which share nothing with
+`StoreProbe`. No product code, contract, implementer test or earlier tester's file was edited; nothing was
+committed. I have not read `implementation-notes.md`.
+
+**Independence, exactly.** Before any test of mine existed I had read: the brief, ADR-004, the architecture and
+standards sections named in my instructions, the protocol file whole, and the declarations and doc comments of the
+new code from the grep in my instructions (it also shows a few `var` lines and log strings inside bodies). I also
+listed the type names the implementer's test files declare, to avoid collisions, and a grep for how existing tests
+make a store fail showed me two trigger statements of the implementer's AppKit tests. Everything in "Attacked and
+held" except the items marked † was written and run before I read any function body or implementer test.
+Afterwards I read `WorkoutSessionConcurrentScriptTests`, the stand-in's fault list and seeds, the concurrent
+script's source, the host's two source files, the use case's `start` and the composition's diff. **F10-S2-4 was
+found by reading the host's code** (`begin` passes `seq: 1`), not by a black-box test; the domain-level repro of
+F10-S2-2 was written after reading the use case. F10-S2-1, F10-S2-2 (on the host) and F10-S2-3 were found
+black-box. I read the names of every implementer test and the bodies of three files; I did not audit each
+assertion.
+
+**Convention** (as in S1): a bug or a contract gap has a failing test that stays failing until the fix. A spec
+question is pinned by a passing test marked "(documents …)".
+
+### Summary
+
+| # | Severity | Finding | Failing test |
+|---|---|---|---|
+| F10-S2-1 | spec question | A workout the store can never save wedges the session until relaunch, and afterwards fails the launch step on every foreground | none (2 documenting tests pass) |
+| F10-S2-2 | bug (minor) | "Discard and start new" throws `noLiveWorkout` and starts nothing when the live workout has ended by the time of the discard | `start_replacingLive_overAWaitingSave_startsTheNewWorkout`, `start_replacingLive_liveEndedInBetween_startsTheNewOne` |
+| F10-S2-3 | contract gap (minor) | The concurrent script never reads the acting subscriber's stream past the update it reacts to | `racyHost_faultOnTheActingStream_isReported` (3 cases) |
+| F10-S2-4 | bug (minor; not reachable through `StartWorkoutUseCase`) | `start` under an id whose log is kept uses `seq` 1 without reading the store: memory and store part | `start_overAKeptLog_memoryFollowsTheStore`, `apply_afterAStartOverAKeptLog_isStored` (2 cases each) |
+
+### F10-S2-1. spec question — a workout the store can never save
+
+- **Rule.** Criterion 4: "If the save fails, `finish` throws, the log is kept, nothing is lost, and no ending
+  update is published until a save succeeds: a second `finish` retries it". The brief speaks of a save that fails
+  and is retried. It does not say what becomes of a workout no retry can save. F05 input 8 lists the refusals:
+  `nulInText`, `inexactWeight`, `nonFiniteDate`; `duplicateIdentifier` is a fourth.
+- **Repro.** `HostUnsavableAdversarialTests` (both backings). Start `Seam.session(1)`, log two sets, log a set at
+  an eighth of a pound (the engine accepts it, the event store keeps it), `finish`.
+- **Actual, in the process.** `finish`, `discard` and `apply` each throw `inexactWeight`; `start` throws
+  `workoutInProgress`; `current()` and every stream go on showing the workout. The end is in the log, so nothing
+  is lost, and nothing the lifter can do gets rid of the workout: Discard does not discard it.
+- **Actual, after a relaunch.** No workout is live and another can be started. `resumeFromStore()` throws
+  `inexactWeight` on every call, `needsRecovery` stays true, so the composition runs the step, fails it and logs
+  a fault on every return to the foreground for as long as the log exists. The workout never reaches history.
+- **Reach.** Low today. Steppers move in whole steps, exercise names are refused with U+0000 when saved, ids are
+  fresh UUIDs. I know no path through the app that produces such a workout. It is a hole behind the defences,
+  not in front of them.
+- **Question for Pete.** What should happen to a finished workout the store refuses for good? Options: refuse
+  the finish before the end is stored when the workout would not save (it stays live and can be corrected or
+  discarded); let a discard drop a log whose save keeps failing; or keep today's behaviour and have the step
+  stop reporting work left for a refusal that is not transient.
+- **Pinned by** `finish_neverSavable_wedgesTheSessionUntilRelaunch` and
+  `recovery_neverSavable_failsOnEveryForeground`, which pass today and fail once any of the above is adopted.
+
+### F10-S2-2. bug (minor) — replacing a live workout that has ended by the time of the discard
+
+- **Rule.** Criterion 8: "with `replacingLive: true` the live workout is discarded and the new one started."
+- **Repro on the host.** `HostStartUseCaseAdversarialTests.start_replacingLive_overAWaitingSave_startsTheNewWorkout`:
+  Upper A live; `finish` fails at `materialize` once, so its end waits and every reader still sees the workout;
+  `start(lowerA)` answers `.conflict`; `start(lowerA, replacingLive: true)`.
+- **Repro on the fake.** `StartWorkoutRefusalAdversarialTests.start_replacingLive_liveEndedInBetween_startsTheNewOne`:
+  another caller finishes the live workout between the use case's look and its discard.
+- **Expected.** `.started(new)`: nothing stands in the new workout's way.
+- **Actual.** The use case throws `noLiveWorkout` and starts nothing. On the host the discard completes the
+  waiting save first (the protocol's documentation), so the old workout is saved, not discarded, and the lifter
+  gets an error for "Discard and start new". Asking again starts the workout.
+- **Cause.** `start` calls `session.discard` whenever its earlier look found a workout, and lets the client's
+  `noLiveWorkout` end the call. The use case documents the same race for `start` (`workoutInProgress`, "asking
+  again reports the conflict") and not for the discard.
+- **Reach.** Not before S7 wires Finish and its failure. Nothing is lost either way.
+
+### F10-S2-3. contract gap (minor) — the acting subscriber's stream is read only up to its reaction
+
+- **Rule.** Criterion 11: the script is "checked as one history: … every success is published once … a late
+  stream is a suffix of the history". Rule 5 of the script reads the acting subscriber's stream "up to the first
+  that showed a workout" (`react(to:on:)` breaks there) and never again.
+- **Repro.** `HostContractBiteAdversarialTests.racyHost_faultOnTheActingStream_isReported`. `RacyHost` is the
+  real host over stores that give way, with one stream fault (an update repeated, dropped, or two swapped) that
+  strikes once, on the second stream opened, while two calls are inside.
+- **Expected.** A run in which the fault struck is reported.
+- **Actual.** The fault struck in 20 of 20 runs and was reported in 0, for each of the three faults, in every
+  run on both thread pools.
+- **Why it matters a little.** A subscriber that acts on an update is the workout screen, and its stream is the
+  one that plays the haptics. A host bug confined to the stream of a subscriber that has made a call passes the
+  contract. A bug in publication that reaches every stream is caught on the other streams.
+- **Fix.** Read `acting` to the mark after the reaction and judge it as the early stream is judged.
+
+### F10-S2-4. bug (minor; not reachable through `StartWorkoutUseCase`) — a start under an id whose log is kept
+
+- **Rule.** Criterion 2: "An event is stamped with `seq` = the highest stored for this workout and device + 1".
+  The host's documentation: "Memory follows the store."
+- **Repro.** `HostStartOverALogAdversarialTests` (both backings). The store holds workout 1's second and third
+  envelopes without its `started` (a log that replays to nothing, which criterion 6 keeps). `start(session 1)`.
+- **Expected.** Either the start is refused, or afterwards `current()` is what the store replays.
+- **Actual.** `start` returns. `current()` is the bare snapshot (0 of 18 sets done); the store replays the
+  snapshot plus the kept envelopes (2 of 18 done, a rest running). The next `apply` throws
+  `conflictingEnvelope(seq 2)`; the call after that recovers and the workout jumps to the stored state.
+- **Cause.** `begin` stamps `.started` with `seq: 1` and never asks the store what it holds under that id.
+- **Reach.** `StartWorkoutUseCase` draws a new id for every workout, so only a caller that passes an id twice,
+  or a store damaged in that particular way, gets here. I found it by reading `begin`, not by a test.
+
+### Attacked and held
+
+128 test functions in 24 suites, 1,027 cases, in 37 new files. All pass except the five named above.
+
+- **Never lost, never doubled** (`HostNeverLostAdversarialTests`, `SiegeTrial`). A seeded script of 70 steps:
+  starts, applies, finishes, discards, ignored events, relaunches with and without the launch step, clock moves,
+  and store faults at a seeded store call (refused; done and answered as failed; the process dying before or
+  after the write, which covers `materialize` and `compact`). After every step `current()` is compared with
+  `replay` of the stored log; every call made while no store failed is compared with the brief's rules on that
+  log; at the end, after one clean launch, every `seq` is 1, 2, 3 … with rising stamps, nothing is stored twice
+  or unasked, every call that returned is in a log, every finished workout is in history once as replayed, no
+  discarded one is. 200 seeds over the in-memory stores (`SeamSeed.all`, value 6151 · n + 29) and the first 100
+  over GRDB: no violation. Over a store that forgets every fifth append, never saves, or never compacts, 20 of
+  20 sieges report it (†, added after the code was read).
+- **Re-entrancy** (`HostReentrancyAdversarialTests`, `SiegeStorm`). Six tasks of seven calls at once over stores
+  that give way 1 to 3 times a call, judged against what the store took: one workout at a time, each `seq` once
+  and in order, the first stream equal to the history `reduce` folds, late streams suffixes of it, each returned
+  state the one its own update carried. 120 seeds in memory, 60 over GRDB. Two starts at once; an apply, a
+  `current()` and a new stream arriving while a finish saves.
+- **Cancelled callers** (`HostCancellationAdversarialTests`). Start, apply, finish and discard cancelled before,
+  during and after the call, both backings: stored once, returned, published once. A launch step cancelled while
+  it reads; `current()` from a cancelled task before recovery; subscribers that leave (†).
+- **Failure at each step** (`HostFailureAdversarialTests`, `HostEndFailureAdversarialTests`,
+  `HostDiscardFailureAdversarialTests`). Append refused and append stored-but-failed, for start, apply and
+  finish; `materialize` failing once and three times; what `current()`, open streams, a new stream, `start`,
+  `apply`, `discard` and a second `finish` do meanwhile; the first finish's end date kept; exactly one ending
+  update; `compact` failing after a save and after a discard; a finish after a failed discard.
+- **The clock and `seq`** (`HostClockAdversarialTests`, `HostClockEdgeAdversarialTests`,
+  `HybridLogicalClockAdversarialTests`). Stamps equal to the formula over a clock that steps back, repeats,
+  creeps by half a millisecond and jumps a century; after a relaunch; across two workouts; no `seq` or stamp for
+  an ignored or refused event; a peer's envelopes; a clock that is ±∞ or NaN (`noFiniteStamp`, never
+  `notStartable`); stored stamps that are not finite or centuries ahead; 50 seeds of a wandering clock.
+- **Recovery** (`HostRecoveryAdversarialTests`, `HostRecoveryFaultAdversarialTests`,
+  `HostIncompleteLogAdversarialTests`). Every row of the table on both backings; all kinds of log at once; the
+  step twice and twice at once; a save that throws with other logs waiting; a store that cannot be read; two
+  live logs; the first call of each kind before the launch step; calls during recovery; on GRDB, an unreadable
+  row in the middle, at the start and at the end, and `finish` / `discard` on such a log.
+- **Kill and relaunch on a database file** (`WorkoutRelaunchAdversarialTests`). The five points through
+  `AppComposition` as the app boots it, and a workout carried across six relaunches with the clock stepping back.
+- **`StartWorkoutUseCase`** (`StartWorkoutUseCaseAdversarialTests`, `StartWorkoutRefusalAdversarialTests`).
+  The built workout against `SessionBuilder` called here for five week-and-day pairs in lb and kg; resumed;
+  conflict with another day, another week and an ad-hoc workout; replace; six refusals, each with and without a
+  live workout; a deleted exercise; a store that fails during the build; a day edited since.
+- **Misses** (`HostMissesAdversarialTests`, `HostMissesRetryAdversarialTests`). Each slot against
+  `MissTracking.update` run here; misses recorded since the start; another program active; the program deleted;
+  a slot no longer stored; a deload week; the launch step after a kill; a retry after a failed compaction; a
+  program that cannot be read.
+- **The wiring** (`WorkoutWiringAdversarialTests`, `WorkoutLaunchRetryAdversarialTests`). The key is the one
+  host; no host without a database; a database that opens on a foreground retry; the step once, after the
+  settings; a failed step retried on the foreground only; a failed finish completed there; a cancelled
+  scene-phase task. The watch composition's sources are untouched by `3c960e8` and its 35 tests pass.
+- **Criterion 1** (`HostContractRunAdversarialTests`, †). Every clause, and the sequential and concurrent
+  scripts for 80 seeds, on the host over my wrappers giving way twice a call, in memory and over GRDB.
+- **Criterion 11** (`HostContractBiteAdversarialTests`, †). See below.
+
+### What it takes to catch a racy host
+
+On the real host over stores that give way, a fault of `RacyHost` strikes in 68 to 80 of 80 runs (one run on
+each pool; seeds 7919 · n + 17, n < 80), and the script reports every strike except on the acting stream
+(F10-S2-3). So where calls do suspend, one seed is nearly enough.
+
+The gate's own stand-in is different: its two weakest faults (`judgesAnIgnoredEndLater`,
+`dropsHapticsUnderOverlap`) are reported by 6 to 10 of the twenty fixed seeds, over eleven runs on both pools.
+Which seeds report is mostly the script's doing: seeds n = 2, 3, 5, 7, 11, 12, 15 reported the first fault in
+all four runs I listed seeds for, and n = 4, 6, 10, 12, 18 the second; on a one-thread pool the two lists were
+identical run to run. The gate's "one of twenty" therefore has a wide margin, and naming three such seeds per
+fault would make it exact. `standInFaults_gateSeeds_areReportedWithAMargin` asks for four of twenty; I chose
+four after seeing a minimum of six.
+
+### How my own tests changed while I wrote them
+
+These numbers are here so the green ones above can be weighed.
+
+- **The siege's oracle was corrected three times before it went green**: 22, 5 and 5 violations, then none.
+  Every one was my rule, not the host. The protocol lets a host go on showing a workout whose end threw until a
+  later call completes it, even when the store did what was asked and only the answer was lost; my rule had not
+  allowed for that, nor for a retried discard returning.
+- **`RacyHost` was tightened three times.** Its first version missed 1 to 34 strikes per fault, because some
+  strikes were not visible wrongs: a stale answer to `apply(.started)`, which the engine ignores; a swallowed
+  ignored event; a first element replaced by "no workout" when there was none. Fifteen runs of the suite and
+  four of the census alone went into this. The misses that remained after each tightening were all on the
+  acting stream.
+- **`SiegeStorm` first checked that a returned state was some published state**, which let a stale answer
+  through (0 of 33 reported). It now checks the state its own update carried.
+- **Ten false failures** in the first run of the end-failure suites came from my scene reading a stream twice
+  (`Seam.buffered` ends it). Four more came from my arithmetic for expected stamps and from a stream I had
+  opened too early.
+
+### Notes for later slices
+
+- **S7.** After a failed "Save workout", `discard` saves the workout and throws `noLiveWorkout`
+  (`discard_afterAFailedSave_savesTheWorkout`, documenting): the screen must not offer Discard there. A retried
+  `finish` can also meet `noLiveWorkout`, when the foreground's launch step completed the save first.
+- **S7.** `replacingLive` whose `start` is then refused leaves no workout at all (two documenting tests).
+- **Criterion 3** says the host "reports an issue" for a clock that is not finite. It logs at fault level and
+  throws; LedgerSync has no IssueReporting, so no test can see the report.
+- **F17.** Past 2⁴⁴ s a stamp repeats (`stamp_pastTwoToTheFortyFour_repeats`, documenting); the drift bound must
+  exist before a peer's stamp can be stored. With two live logs and an end that waits, recovery resumes the
+  other log while the end still names the first; I did not test it, because only a peer can bring two.
+
+### Not attacked
+
+- **No simulator.** Everything ran on the Mac host with `swift test`. The full gate, on both simulators, is the
+  orchestrator's.
+- **A real kill.** A kill is modelled as abandoning the host or the composition and opening the same store or
+  file again. No process was signalled, and SQLite's durability under power loss was not tested.
+- **`prepareDependencies`.** The app's process-wide binding cannot run in a package test; every wiring test
+  binds with `withDependencies`.
+- **Criterion 12.** The implementer's timing test passed once by hand on the Mac host (221 applies, the whole
+  test in 0.031 s). Not measured on a phone or a simulator.
+- **Coverage** was not measured.
+- **A caller that retries after a lost answer.** The first envelope is stored, so a retried "+30s" would extend
+  twice. I did not test it; the host cannot tell a retry from a second tap.
+- **The implementer's tests, assertion by assertion**, and `implementation-notes.md`.
+
+### Commands
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift build --package-path LedgerKit --only-use-versions-from-resolved-file --build-tests` | 0 | warm-up |
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter '<the 24 suites>'`, 4 times | 1 | 128 tests; 13 issues, the five failing tests, the same set each time |
+| the same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`, 6 times | 1 | the same 13 issues each time |
+| the six concurrency suites alone, 10 times on each pool (before the † additions) | 1 | 3 issues each time, the acting stream's |
+| `swift test … --filter '^LedgerSyncTests\.'` | 1 | 239 tests in 43 suites; 11 issues of mine, 13 known issues from S1 |
+| `swift test … --filter '^LedgerDomainTests\.'` | 1 | 836 tests in 137 suites; 2 issues, F10-S2-2's |
+| `swift test … --filter '^LedgerAppKitTests\.'` | 0 | 63 tests in 15 suites |
+| `swift test … --filter LedgerWatchAppKitTests` | 0 | 35 tests in 9 suites |
+| `LEDGER_TEST_LANE=nightly swift test … --filter LocalWorkoutSessionActorPerformanceTests` | 0 | once, by hand |
+| `scripts/check.sh --lint-only`, twice | 0 | format, `swiftlint --strict`, package graph, script tests |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+No test helper process was left running.
