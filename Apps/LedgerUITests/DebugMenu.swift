@@ -10,11 +10,10 @@ final class DebugMenu: XCTestCase {
 
     @MainActor
     func test_diagnostics_showsTheSeededCatalog() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        let app = XCUIApplication.fresh()
         app.launch()
+        XCTAssertTrue(app.skipSetupToToday())
         let title = app.staticTexts["today.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 10))
 
         attachScreenshot(of: app, named: "Today")
         title.press(forDuration: 1)

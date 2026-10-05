@@ -53,9 +53,9 @@ final class Tabs: XCTestCase {
 
     @MainActor
     private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        let app = XCUIApplication.fresh()
         app.launch()
+        XCTAssertTrue(app.skipSetupToToday())
         return app
     }
 

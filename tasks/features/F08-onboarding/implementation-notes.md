@@ -1874,3 +1874,438 @@ cut from S2's tip `24b610b` and stays local until S1, S2 and #28 are on `main`.
   one place the tree inside the real scroll view is checked (S2's finding F8-S2-5).
 - The UI tests of F09's tester (`Apps/LedgerUITests/TabsAdversarial.swift`) reach Today by launching; with
   onboarding first they need the helper. That edit is sanctioned as mechanical; list each changed line.
+
+## Slice S3 — the root gate and the UI tests (G1 implementer, 2026-10-05)
+
+On top of `4a59443`, uncommitted. Onboarding is in the app: the root shows it while there is no active program
+and the tabs while there is one, and follows the store when that changes. 49 product lines (plan ≈ 70). Two
+things are not as the brief was first written, both by the orchestrator's ruling during the slice: the gate is
+`AppRoot`'s and follows from `AppRoot`'s task (so `AppRoot.swift` is edited), and "a relaunch opens on Today" is
+a package test, not a UI test (criterion 8 as revised). One line is executed by no test (the argument that hands
+onboarding its retry step; open question 1). The full gate was not run, by instruction.
+
+### What landed
+
+Product (`LedgerKit/Sources/LedgerAppKit/`):
+
+- `RootGate.swift` (new, 57 lines with comments). `RootGate`, `@MainActor @Observable`: `destination` is
+  `.loading`, `.onboarding` or `.main`. `follow(after:)` (`:38-48`) awaits a `launch` closure, which runs the
+  launch's pass and returns the store of programs, then sets `destination` from each value of
+  `ProgramRepository.observeActive()`. `follow(_:in:)` (`:51-56`) is that call for the app:
+  `composition.resume(in: phase)`, then `composition.stores?.programs`. The gate starts no task.
+- `AppRoot.swift`. The gate is the root's `@State` (`:10`); the root's existing `.task(id: scenePhase)` now runs
+  `gate.follow(composition, in: scenePhase)` (`:31-33`), which contains the `resume` it ran before; `.ready`
+  draws `MainRoot(composition:gate:)` (`:39`). An internal `init(composition:gate:)` (`:19-22`) is for the tests.
+- `MainRoot.swift`. `content` (`:39-48`) is the branch: `.loading` draws `LedgerColor.ground.ignoresSafeArea()`,
+  `.onboarding` draws `OnboardingRoot { await composition.resume(in: .active) }`, `.main` draws `tabs`. `body`
+  and `tabs` are as F09 left them. It imports `FeatureOnboarding` (an edge `Package.swift` already has).
+- Not edited: `AppComposition`, `FeatureOnboarding`, `LedgerPersistence`, the watch, `Package.swift`, the project
+  file and the test plans. No string was added (no catalog key, no copy member, no exemption) and no view type,
+  so no preview.
+
+Package tests (`LedgerKit/Tests/LedgerAppKitTests/`):
+
+- `RootGateTests.swift` (9 tests, 10 cases): the gate over in-memory stores and a scripted store, its states in
+  the order it says them. Runs on the simulator and on the Mac host.
+- `RootGateLaunchTests.swift` (6 tests): the gate over the real launch, on a database file, followed by the call
+  the root's task makes; onboarding's own store saves into it. Simulator and host.
+- `AppRootTests.swift` (3 tests, 6 cases; simulator only): what the hosted root draws and reads as for each
+  thing the gate says.
+- `Support/GateSupport.swift`: `until`, `RootGate.following`, `answer()`, `change(from:)`,
+  `Harness.gate(following:)`, `Harness.bootedWithAProgram()`, the doubles `ScriptedPrograms` and `Latch`.
+- `Adversarial/AppRootAdversarialTests.swift` (F09's tester): two tests edited, by sanction ("Sanctioned test
+  edits").
+
+UI tests (`Apps/LedgerUITests/`):
+
+- `Support/LaunchedApp.swift` (new): `XCUIApplication.fresh(_:)` (the arguments of a UI test) and
+  `skipSetupToToday() -> Bool` (taps `onboarding.skip`, waits for `today.title`). The one place that knows how a
+  test gets past onboarding.
+- `Smoke.swift`, `DebugMenu.swift`, `LaunchPerformance.swift`, `Tabs.swift`, `TabsAdversarial.swift`: moved onto
+  the helper.
+- `Onboarding.swift` (new, nightly; 3 tests): the walk to a saved program; VoiceOver's stops inside the real
+  scroll view at AX3; each step opening at its top at AX3.
+
+Docs: `docs/architecture.md` §4 (the root view's bullet says what `MainRoot` draws and who decides);
+`docs/testing-strategy.md` §2.7 (`Smoke`'s new name; a fresh database opens on onboarding, the helper, and that
+a relaunch is a fresh database too). Screenshots: `tasks/features/F08-onboarding/screenshots/s3/` (4 pictures).
+
+### Decisions and deviations
+
+**1. Where the gate lives and where it follows (`AppRoot.swift` is edited).** The brief's scope names
+`RootGate.swift` and `MainRoot.content`; the plan's S3 row names `AppRoot.swift`'s `.task`. Built: the branch
+is in `MainRoot.content` and the gate is `AppRoot`'s, followed from `AppRoot`'s launch task. Reasons:
+
+- *One task is ruling O12 as written.* The task awaits the launch's pass and then follows, in that order, in
+  one call. A second task in `MainRoot` would have had to call `composition.resume` itself to know when the
+  pass had returned: a second caller of the launch, correct only because `DatabaseLaunch` shares each step's
+  task between callers.
+- *The whole root can be hosted with an answer.* A new gate is `.loading` until an awaited read returns, so a
+  root that makes its own gate, read as soon as it is hosted, is the ground colour whatever the database holds.
+  The only thing a test can await without polling is the gate's own change, so the test must hold the gate.
+  With the gate `AppRoot`'s, F09's two tests still host `AppRoot` (the orchestrator's preference), handed a
+  gate that reached its answer by the root's own call (`Harness.gate(following:)` runs
+  `RootGate.follow(_:in:)`). With the gate `MainRoot`'s they would have had to host `MainRoot`.
+- Cost: `AppRoot.swift` +7 −2 product lines, and one internal initialiser that only tests call. The
+  orchestrator accepted the shape during the slice (message of 2026-10-05).
+
+**2. No flash: what is on screen at each moment, and what proves it.** `MainRoot` draws exactly what
+`gate.destination` says, and only `follow` changes it.
+
+| Launch | First frame | Until the launch's pass returns | Then | Proof |
+|---|---|---|---|---|
+| Fresh install | ground colour | ground colour (the pass seeds 224 exercises and reads the settings) | onboarding, step 1; the tabs are never built | `RootGateTests.noProgram_showsOnboarding`, `untilTheLaunchReturns_staysLoading(false)`; `RootGateLaunchTests.freshDatabase_showsOnboarding_afterTheLaunchsPass` (the catalog is seeded when the gate answers); `AppRootTests.firstFrame_isTheGroundAlone`, `noProgram_showsOnboarding_neverTheShell`; `Smoke` |
+| Relaunch with a program | ground colour | ground colour (the catalog's version check and the settings read) | the tabs, Today selected; onboarding is never built | `RootGateTests.activeProgram_showsMain`, `untilTheLaunchReturns_staysLoading(true)`; `RootGateLaunchTests.relaunch_withAProgram_answersMainFirst`; `AppRootTests.firstFrame_isTheGroundAlone(hasProgram: true)`, `program_showsTheTabs_andTheRootFollowsTheGate` |
+| A slow first pass | ground colour | ground colour, for as long as it takes; nothing is read | the answer | `untilTheLaunchReturns_staysLoading`: with the launch held at a latch the gate is `.loading` and the store has been asked for 0 observations; released, the first answer is the right one and it asked for 1 |
+| The seed fails | ground colour | ground colour until the failed step has its outcome | onboarding (no program); "Start training" fails, "Retry" seeds first | `RootGateLaunchTests.failedSeed_isRetriedByTheCallRetryMakes` |
+
+- "Never onboarding first for a lifter with a program" and "never the tabs first on a fresh install" hold by
+  construction: `destination` has no value between `.loading` and the first value the store gives, and the
+  gate tests read it at each step they drive (`answer()` returns the first destination that is not
+  `.loading`).
+- `AppRootTests.firstFrame_isTheGroundAlone` (4 cases: program or none, light and dark) reads a root that makes
+  its own gate before anything can have answered: no accessibility element, and the pixels of the ground
+  colour.
+- Looked at in the running app, a plain install on the simulator, recorded with `simctl io recordVideo`. The
+  fresh install (77 frames) and the first relaunch with a program (63 frames) were read frame by frame, by
+  eye. Fresh: the system's white launch screen fades into the ground colour and onboarding appears about
+  0.25 s after the fade begins, with no frame of the tabs. Relaunch: the first app frame the fade shows is
+  already Today with the tab bar, so the gate answers under the launch screen, and no frame shows onboarding.
+  The two other relaunches (76 and 78 frames) were checked by a script for onboarding's orange button, which
+  it finds in the fresh recording: none.
+- The UI tests cannot see a flash: with the mutant that draws the tabs while `.loading`, all three
+  `Onboarding` UI tests got past the launch (U2 below). The package tests are the proof; the UI tests show
+  where the lifter ends up.
+
+**3. Following the store without leaking or stalling.**
+
+- *Where it runs.* In `AppRoot`'s `.task(id: scenePhase)` (`AppRoot.swift:31-33`). SwiftUI owns the task and
+  cancels it with the view or when the phase changes; the gate holds no task and nothing outlives the view. A
+  cancelled `for await` ends its `AsyncStream`, whose termination cancels the database observation
+  (`ValueObservation+AsyncStream.swift:21-23`).
+- *The stream ends* (the active program cannot be read; the store logs why). On a task nobody cancelled the
+  gate says `.main`, never `.onboarding`: onboarding over a program that is there but unreadable would save a
+  second one beside it, and Today is where a broken program is the lifter's to see. Pinned by
+  `streamThatEnds_showsMain` (before any answer, and after one).
+- *A cancelled follow changes nothing* (`RootGate.swift:39`, `:45`): not `.main` (a cancelled stream is not a
+  failed read; mutant M3) and not `.loading`. So `OnboardingRoot` keeps its place in the tree, and with it its
+  step and picks, while the gate reads again (the review's "For S3" item).
+  `cancelled_keepsItsDestination_untilTheNextAnswer` holds the second launch open and reads `.onboarding`
+  meanwhile.
+- *The scene goes to the background and returns.* Each change of phase restarts the task: the launch retries
+  what failed (as before S3) and the gate observes anew, so its first value is the store's state at that
+  moment. That is also how a failed read is tried again: `afterAFailedRead_theNextFollowReadsAgain`. Cost: one
+  read of the active program for each phase change.
+- *A program deleted or added while the app is open* arrives as the observation's next value:
+  `savingAProgram_flipsToMain` (save, delete, save), `RootGateLaunchTests.deletedAndSavedAgain_isFollowed` on
+  the database, `AppRootTests.program_showsTheTabs_andTheRootFollowsTheGate` at the root. A return to
+  onboarding builds a new `OnboardingRoot`, which starts on step 1 (its pinned buttons read "Continue", "Skip
+  setup").
+- *The database opens late* (product decision #29, then a return to the foreground): the same call opens it
+  and follows it. `RootGateLaunchTests.databaseNotOpen_staysLoading_untilItOpens`.
+- *The task hangs on `AppRoot`'s own switch* over the composition's state, as before. Whether SwiftUI starts
+  it again when that branch changes does not matter: a follow started again joins the launch's running steps
+  and reads anew.
+
+**4. `prepareRetry` is bounded.** The call is `composition.resume(in: .active)` (`MainRoot.swift:44`), which is
+`AppComposition.resume(in:)` (`AppComposition.swift:96-106`) and so
+`DatabaseLaunch.resume(isForeground: true)` (`DatabaseLaunch.swift:104-122`). Why it always returns:
+
+- With the catalog unseeded it starts the seed step again, or joins the one that is running (`:115-118`). The
+  step is a `Task<Void, Never>` the launch owns (`:126-144`); its body is one `queue.write` transaction that
+  commits or throws, and a throw is caught, logged and recorded (`:146-154`). It waits for nothing but the
+  database: at most the writes queued before it and SQLite's 5 s busy timeout (`Database.swift:92`).
+- The settings step has run and is not started again (`:119`); WatchConnectivity's activation is synchronous
+  and happens once.
+- It is safe to repeat: with the catalog seeded it does nothing.
+- `RootGateLaunchTests.failedSeed_isRetriedByTheCallRetryMakes` makes the seed fail (a trigger that refuses
+  every insert), and awaits the call twice: it returns with the seed failed again, and, once the trigger is
+  gone, with the catalog seeded and nothing else run again.
+
+**5. A relaunch is not a UI test** (ruling (C), 2026-10-05; the brief's criterion 8 is revised). Every launch
+with `-LEDGER_UITEST` opens a new temporary directory (`AppComposition.swift:165-167`), so a relaunch in a UI
+test is a fresh install; without the flag the test would write the simulator's shared database.
+
+- *What the `Onboarding` UI test covers:* the three steps with their picks (a pick on each of steps 1 and 2,
+  back and forth), step 3's sentence and rows for the picked split, "Start training" landing on Today with the
+  tabs, the rows in the database (program 1, weeks 8, days 3, slots 15), VoiceOver's stops in order inside the
+  real scroll view at AX3 with their selected and enabled states, a tap on a control of the page at AX3, and
+  each of steps 2 and 3 opening at its top from a scrolled step.
+- *What it does not:* a relaunch; the failure state and "Retry" (no UI test can make the seed fail); going
+  back to a step at its top (S2's hosted test has that); VoiceOver's focus move and announcement (by ear).
+- *The relaunch instead:* `RootGateLaunchTests.relaunch_withAProgram_answersMainFirst` boots twice on one
+  database file and the second gate's first answer is `.main`;
+  `AppRootTests.firstFrame_isTheGroundAlone(hasProgram: true)` is what stands before that answer. By hand,
+  through the lock: a scratch UI test, in the tree for one run and removed by the same script, launched a
+  plain install (uninstalled first), walked to Today, terminated and launched again, in light and in dark;
+  both passed, and the relaunch's screenshot is byte for byte the Today one. The app was uninstalled after.
+
+**6. The UI tests' helper.** `skipSetupToToday()` returns a `Bool` and asserts nothing, because
+`LaunchPerformance` "reports, never fails"; every other caller wraps it in `XCTAssertTrue`.
+- `Smoke` is renamed `test_freshInstall_skipsSetupToToday`, as the plan's table has it (same class, so the PR
+  plan needs no edit), and also asserts the first screen: onboarding's title, no tab bar, no Today. It is the
+  PR lane's only sight of the running gate.
+- The plan's table gave `DebugMenu` three more assertions (the rows a save writes). Criterion 8 says a
+  mechanical change and nothing else, so `DebugMenu` only changes how it starts and the rows are asserted in
+  `Onboarding.test_threeStepsGenerateProgram`, for a program that is not the default.
+- Text size and appearance are set as the existing UI tests set them: the launch argument
+  `-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXL` (AX3, the size of S2's trees).
+
+**7. How the `Onboarding` test reads the tree.** One `app.snapshot()` walked depth first: every button and
+static text is a stop, and any other element with a label and nothing under it (the bars). A button is one
+stop whatever texts it holds; the scroll view's own scroll bar holds its thumb and is none. Each stop is its
+label, its kind, selected and enabled; the header trait is not something XCUITest exposes. The three tables in
+the test are S2's "intended VoiceOver trees", stop for stop, and matched on the first run. "Opens at its top"
+compares the title's and the bars' height on the new step with where the launch left step 1, after a swipe
+that the test first checks moved the title by more than 100 pt.
+
+**8. Hosted root tests.** `AppRootTests` reads the root with the reader's `outsideScrollViews: true` when the
+gate says onboarding: the pinned buttons of a real root, which is that opt-in's first named use
+(testing-strategy §2.6). The reviewer confirms it. The root is built inside `withTestDependencies {
+composition.bind(&$0) }`, because onboarding's store reads its keys when it is made.
+- `firstFrame_isTheGroundAlone` reads the tree before it draws. `ImageRenderer` traps on the tab shell and on
+  a scroll view, which is what a root that showed a screen too early would hand it; the reader fails the test
+  first (mutant U2: four clean failures, no trap).
+- **An incident, and a hazard in existing tests.** A first version of that test compared two `PixelBuffer`s
+  inside `#expect`. Its control failed, and Swift Testing wrote both 350,000-pixel values into the result
+  bundle for every case: 1.4 GB for one run and 4.6 GB for a 30-iteration run, which took free disk to about
+  0.3 GB for a few minutes before I killed my run and deleted the two bundles (reported to the orchestrator
+  at once). The test now compares outside `#expect`. F09's `AppRootAdversarialTests` compares pixel buffers
+  inside `#expect` in four places, so a red run of those writes gigabytes too (open question 5).
+- That control had hosted `AppTabs` in a scene-less window and drawn it with `drawHierarchy`, as
+  `renderPreview` does on iOS, and the picture was the ground colour, pixel for pixel, in all four cases. So
+  `renderPreview` shows that a view does not trap, not that it drew; F09's `root_ready_draws` claims no more.
+- Stability: the suite ran 30 times over on the simulator (`-test-iterations 30`): 180 repetitions, all passed.
+
+**9. Smaller things.**
+- `RootGateLaunchTests` imports `FeatureOnboarding` `@testable`, to save through onboarding's own store on the
+  real database. The test target reaches the module through `LedgerAppKit`, as it reaches `GRDB`.
+- The switch between onboarding and the tabs is not animated.
+- Onboarding's store reads its keys when it is made (S2's input). It is made only once the gate says
+  `.onboarding`, which is after the database is open and the keys are bound.
+- `MainRoot.content` is now a `@ViewBuilder` switch (see "For F10").
+- `LaunchPerformance`'s launch metric is unchanged in what it measures (the first frame, now the ground
+  colour); its report step skips setup to reach Diagnostics. "Launch to Today with a program" stays unmeasured
+  by a UI test until F15 (ruling O11's stated cost).
+
+### Criteria → tests
+
+Suites are in `LedgerKit/Tests/LedgerAppKitTests/` unless a path says otherwise; UI tests are `LedgerUITests`.
+
+| Criterion (brief, "Plan amendments — slice S3") | Tests, UI tests, screenshots |
+|---|---|
+| 1. Fresh install: onboarding on step 1, full screen, no tab bar; the ground colour until the database is open and the first pass has returned | `RootGateTests.noProgram_showsOnboarding`, `untilTheLaunchReturns_staysLoading` (no program); `RootGateLaunchTests.freshDatabase_showsOnboarding_afterTheLaunchsPass`; `AppRootTests.firstFrame_isTheGroundAlone` (4), `noProgram_showsOnboarding_neverTheShell`. UI: `Smoke.test_freshInstall_skipsSetupToToday` (PR lane: step 1's title, no tab bar, no Today). Pictures `fresh-install-first-screen-light.png`, `-dark.png` |
+| 2. A lifter with a program opens on the tabs, Today selected, with no onboarding first | `RootGateTests.activeProgram_showsMain`, `untilTheLaunchReturns_staysLoading` (a program); `RootGateLaunchTests.relaunch_withAProgram_answersMainFirst`; `AppRootTests.firstFrame_isTheGroundAlone` (a program), `program_showsTheTabs_andTheRootFollowsTheGate`; F09's `AppRootAdversarialTests.root_idleAndReady_readToVoiceOver`. By hand: the plain install's relaunch, light and dark |
+| 3. "Start training" or "Skip setup" saves and the root switches to the tabs; the feature makes no navigation call | `RootGateTests.savingAProgram_flipsToMain`; `RootGateLaunchTests.skipSetup_onTheRealDatabase_flipsToMain` (onboarding's store on the real database). UI: `Smoke` (Skip setup), `Onboarding.test_threeStepsGenerateProgram` (Start training; Today selected). S2's `OnboardingSurfaceTests` (no route type). Pictures `today-after-start-training-light.png`, `-dark.png` |
+| 4. The root keeps following: no program again shows onboarding, a program shows the tabs | `RootGateTests.savingAProgram_flipsToMain` (delete, save again), `cancelled_keepsItsDestination_untilTheNextAnswer`, `afterAFailedRead_theNextFollowReadsAgain`, `streamThatEnds_showsMain`; `RootGateLaunchTests.deletedAndSavedAgain_isFollowed`; `AppRootTests.program_showsTheTabs_andTheRootFollowsTheGate` |
+| 5. "Retry" first runs the launch's seed step, which always returns, then saves | `RootGateLaunchTests.failedSeed_isRetriedByTheCallRetryMakes` (the call `MainRoot` passes: seeds again, returns either way). S2's `OnboardingRootTests.root_loadsTheUnit_andPreparesARetry` and `OnboardingStoreFailureTests.retry_onceTheCatalogIsSeeded_savesTheSamePicks` (the retry awaits it first). **Not executed by a test:** the argument at `MainRoot.swift:44` (open question 1) |
+| 6. Saved on Wednesday 2026-09-16, weeks starting Monday: `startDate` 2026-09-14, week index 0 | `RootGateLaunchTests.skipSetup_onTheRealDatabase_flipsToMain` (the stored program read back from the database; `WeekCalendar.weekIndex` 0; rows 1, 8, 4, 16) |
+| 7. The Debug menu still opens once onboarding is done; the can't-open state is unchanged; the watch is unchanged | UI: `DebugMenu.test_diagnostics_showsTheSeededCatalog`, `TabsAdversarial.test_debugMenu_opensFromTodaysTitleAfterATourOfTheTabs_andFromNoOtherTitle`. F09's `AppRootAdversarialTests.databaseUnavailable_isDrawnAsMainDrawsIt` (7), `root_databaseUnavailable_drawsThatScreen`, `root_idle_drawsTheGroundAlone` (2), `databaseUnavailable_readsAsMainsDoes`, unedited and passing; `RootGateLaunchTests.databaseNotOpen_staysLoading_untilItOpens`. Watch: no file of `LedgerWatchAppKit`, `WatchFeatureWorkout` or `Apps/LedgerWatch*` is changed; its tests were not run (the full gate's) |
+| 8. Every existing UI test reaches Today through one helper; a new `Onboarding` UI test; (revised) the relaunch is a package test | `Support/LaunchedApp.swift`; the five moved classes (11 tests) pass and fail with the branch inverted ("How each UI test was shown to fail"); `Onboarding` (3 tests); `RootGateLaunchTests.relaunch_withAProgram_answersMainFirst` |
+| 9. One read of the active program decides; nothing reads a store before the database is ready | `RootGateTests.untilTheLaunchReturns_staysLoading` (0 observations before the launch returns, 1 after), `cancelledBeforeTheLaunchReturns_staysLoading` (0), `cancelled_keepsItsDestination_untilTheNextAnswer` (2 after two follows), `noStore_staysLoading`; `RootGateLaunchTests.databaseNotOpen_staysLoading_untilItOpens` |
+| 10. Screenshots, light and dark | `tasks/features/F08-onboarding/screenshots/s3/`: `fresh-install-first-screen-light.png`, `-dark.png`, `today-after-start-training-light.png`, `-dark.png` (a plain install on the iPhone 17 simulator, whole screen) |
+
+### How each UI test was shown to fail
+
+Three sets of mutations, each applied to the working copy by a script, built and run through the lock in one
+session, then restored from the copy taken before and compared byte for byte (`git status` and the SHA-256 of
+every changed file were the same before and after; `FeatureOnboarding` has no diff). Logs: `mut.log`,
+`host-mutants.log` in the scratch folder.
+
+| Mutation | Run | Result |
+|---|---|---|
+| **U1** `MainRoot.content`: the branch inverted (no program shows the tabs, a program shows onboarding) | all of `LedgerUITests`, nightly plan | 14 of 15 failed. `Smoke` at `Smoke.swift:16` (onboarding's title never came). `DebugMenu` (`:15`), both `Tabs` (`Tabs.swift:58`) and all seven `TabsAdversarial` (`TabsAdversarial.swift:19`) at the helper's line. The three `Onboarding` tests at their launch. **`LaunchPerformance` passed**, as it must (it reports and never fails): its `launchToFirstFrame` attachment was missing, where the green run has one |
+| U1, package | `AppRootTests`, F09's `AppRootAdversarialTests` | 3 failed: `noProgram_showsOnboarding_neverTheShell`, `program_showsTheTabs_andTheRootFollowsTheGate`, and F09's `root_idleAndReady_readToVoiceOver` |
+| **U2** three changes to `FeatureOnboarding` and one to `MainRoot`: no scroll to the top on a step change; the line read before the title; "Start training" saves the default; `.loading` draws the tabs | `LedgerUITests/Onboarding` | all 3 failed, each for its own reason. `test_eachStepOpensAtItsTop…`: "87.67 is not equal to 249.33 ± 1: How many days a week? opens at its top". `test_voiceOverReadsEachStepInOrder…`: the stops' order. `test_threeStepsGenerateProgram`: rows `["1", "8", "4", "16"]` against `["1", "8", "3", "15"]` |
+| U2, package | `AppRootTests` | `firstFrame_isTheGroundAlone` failed in its 4 cases (`stops.isEmpty`) |
+| **U3** `AppRoot`'s task runs the launch and never follows the gate | `LedgerUITests/Smoke`, PR plan | failed at `Smoke.swift:16`: the root stays on the ground colour. No package test sees this one; `Smoke` is what does, in the PR lane |
+
+On the Mac host, the gate's own mutants (one at a time, the `RootGate` suites as they stood before
+`databaseNotOpen_staysLoading_untilItOpens` was added): the answer inverted, 12 tests failed; the store read
+before the launch returned, 2; a cancelled stream taken for a failed read, 1; a cancelled follow that still
+reads, 1; a failed read showing onboarding, 2. A sixth, `.loading` drawing the tabs, trapped the host's test
+process inside SwiftUI (`ImageRenderer` on the tab shell) where it should have failed a test: that is why
+`firstFrame_isTheGroundAlone` is simulator-only and reads the tree before it draws, and U2 is that mutant
+there.
+
+Not killed by any test: `OnboardingRoot {}` in place of `MainRoot.swift:44` (open question 1).
+
+### Sanctioned test edits
+
+All are how a test gets to the root it is about; no expectation changed. Line numbers are at `4a59443`.
+
+`Apps/LedgerUITests/TabsAdversarial.swift` (F09's tester; sanctioned in the orchestrator's brief): one line
+added, in the file's `launch(_:)` helper, which all seven tests call.
+
+| Line | Was | Is |
+|--:|---|---|
+| after 18 | (nothing) | `XCTAssertTrue(app.skipSetupToToday())` |
+
+`LedgerKit/Tests/LedgerAppKitTests/Adversarial/AppRootAdversarialTests.swift` (F09's tester; sanctioned by
+message, 2026-10-05, after I asked: both tests are about a lifter who has a program, and with no program the
+root now shows the ground colour and then onboarding). The first test's idle half and both tests' expectations
+are as they were.
+
+| Line | Was | Is |
+|--:|---|---|
+| 78 | `func root_ready_draws() async {` | `func root_ready_draws() async throws {` |
+| 81–82 | `let composition = harness.booted()` / `await composition.resume(in: .active)` | `let (composition, gate) = try await harness.bootedWithAProgram()` |
+| 84 | `#expect(renderPreview(size: Self.size) { AppRoot(composition: composition) })` | `#expect(renderPreview(size: Self.size) { AppRoot(composition: composition, gate: gate) })` |
+| 99 | `func root_idleAndReady_readToVoiceOver() async {` | `func root_idleAndReady_readToVoiceOver() async throws {` |
+| 103–104 | `let composition = harness.booted()` / `await composition.resume(in: .active)` | `let (composition, gate) = try await harness.bootedWithAProgram()` |
+| 105 | `let elements = AppRoot(composition: composition).accessibilityElements()` | `let elements = AppRoot(composition: composition, gate: gate).accessibilityElements()` |
+
+- Both still host `AppRoot`, not `MainRoot`: the path from the root's `.ready` case to the tabs is still theirs.
+  The extra argument is the gate, for the reason in decision 1.
+- `Harness.bootedWithAProgram()` (`Support/GateSupport.swift`) boots, runs the launch's pass, saves
+  `Fixtures.defaultProgram()` through the composition's own store, and follows a gate by the root's call until
+  it has answered.
+- `root_ready_draws` hosts the shell again; what it can show is that the shell does not trap (decision 8).
+- Nothing else in F09's tester files is changed, and no other test of theirs failed.
+
+The implementers' own UI tests, moved onto the helper (F07's `Smoke`, `DebugMenu`, `LaunchPerformance`; F09's
+`Tabs`):
+
+| File, line | Was | Is |
+|---|---|---|
+| `DebugMenu.swift` 13–14 | `let app = XCUIApplication()` / `app.launchArguments = ["-LEDGER_UITEST", "1"]` | `let app = XCUIApplication.fresh()` |
+| `DebugMenu.swift` after 15 | (nothing) | `XCTAssertTrue(app.skipSetupToToday())` |
+| `DebugMenu.swift` 17 | `XCTAssertTrue(title.waitForExistence(timeout: 10))` | (removed: the helper has waited for the title) |
+| `LaunchPerformance.swift` 9–10 | the same two launch lines | `let app = XCUIApplication.fresh()` |
+| `LaunchPerformance.swift` 20–21, 24 | `let title = …` / `guard title.waitForExistence(timeout: 10) else {` … `title.press(forDuration: 1)` | `guard app.skipSetupToToday() else {` … `app.staticTexts["today.title"].press(forDuration: 1)`, and one line of comment |
+| `Tabs.swift` 56–58 (its `launch()`) | the two launch lines / `app.launch()` | `let app = XCUIApplication.fresh()` / `app.launch()` / `XCTAssertTrue(app.skipSetupToToday())` |
+| `Smoke.swift` | `test_launchesToToday`: launch, `today.title` exists and reads "Today" | `test_freshInstall_skipsSetupToToday`: decision 6 |
+
+### Code lines
+
+Added lines of `git diff -U0 4a59443`, new files whole; blank lines and whole-line comments excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `LedgerKit/Sources/LedgerAppKit/RootGate.swift` (new) | 29 | 0 |
+| `LedgerKit/Sources/LedgerAppKit/MainRoot.swift` | 13 | 3 |
+| `LedgerKit/Sources/LedgerAppKit/AppRoot.swift` | 7 | 2 |
+| **Product** | **49** (plan ≈ 70) | 5 |
+| Package tests: `RootGateTests` 131, `RootGateLaunchTests` 140, `AppRootTests` 77, `Support/GateSupport` 139, F09's `AppRootAdversarialTests` 6 | 493 | 8 |
+| UI tests: `Onboarding` 194, `Support/LaunchedApp` 18, `Smoke` 11, `LaunchPerformance` 3, `DebugMenu` 2, `Tabs` 2, `TabsAdversarial` 1 | 231 | 16 |
+
+### Targeted runs
+
+Final tree; no file changed between the start of the final session and this section (SHA-256 of every changed
+file). Simulator runs went through the lock, on the gate's iPhone 17 (iOS 27.0), as
+`xcodebuild build-for-testing -project Ledger.xcodeproj -scheme Ledger -testPlan <plan> -destination <that
+simulator, by id> -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
+-onlyUsePackageVersionsFromResolvedFile`, then `xcodebuild test-without-building` with the same arguments plus
+`-resultBundlePath <scratch> -collect-test-diagnostics never -parallel-testing-enabled NO
+-test-timeouts-enabled YES` and the `-only-testing:` arguments below (scratch `sim-run.sh`; log `final.log`).
+
+| Run | Result | Exit |
+|---|---|--:|
+| PR plan: `-only-testing:LedgerAppKitTests -only-testing:FeatureOnboardingTests -only-testing:LedgerUITests` | 377 tests: 372 passed, 0 failed, 4 skipped (the nightly-lane tests), 1 expected failure. `LedgerAppKitTests` 226 passed; `FeatureOnboardingTests` 145 passed, 4 skipped, 1 expected failure; `LedgerUITests` 1 passed (`Smoke`, the plan's selection) | 0 |
+| Nightly plan: `-only-testing:LedgerUITests` | 15 tests, 15 passed: `Smoke` 1, `DebugMenu` 1, `LaunchPerformance` 1, `Tabs` 2, `TabsAdversarial` 7, `Onboarding` 3 (300 s) | 0 |
+| Nightly plan: `-only-testing:LedgerAppKitTests -only-testing:FeatureOnboardingTests` | 376 tests: 375 passed, 0 failed, 0 skipped, 1 expected failure | 0 |
+| PR plan, `-test-iterations 30 -only-testing:LedgerAppKitTests/AppRootTests` (an earlier session, the same sources) | 180 repetitions passed | 0 |
+| Host: `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerAppKitTests` | 211 tests in 32 suites passed | 0 |
+| `scripts/check.sh --lint-only` | OK (87 s) | 0 |
+
+The expected failure is S2's (a test that passes by catching the reader's loud failure). `git status --short`
+shows the files under "What landed", these notes, and `tasks/features/F08-onboarding.md`, which the orchestrator
+amended during the slice (criterion 8).
+
+**Not run:** the full gate, coverage, the string-catalog step, watchOS, CI (the orchestrator's). `LedgerAppKit`
+is not in the coverage gate.
+
+### Launch figures
+
+Simulator, Debug, the iPhone 17 (iOS 27.0); none is a device's number (product decision #30).
+
+| What | Figure | Before S3 (F07's notes) |
+|---|---|---|
+| The app's own launch-to-first-frame, plain launch, with a program (3 launches) | 334, 311, 320 ms | 353, 335 ms |
+| The same, first launch after an install (fresh database, onboarding) | 1570 ms | 1291 ms |
+| `XCTApplicationLaunchMetric` (first frame, responsive), 5 launches, nightly `LaunchPerformance` | 2.537, 2.582, 2.467, 2.516, 2.699 s (mean 2.560 s) | mean 2.484 s |
+| The app's own figure under XCUITest (Diagnostics) | 2391 ms | 2308 ms |
+
+- Launch-to-first-frame ends at the root's first appearance, which is now the ground colour: it does not
+  include the gate's read. On the recorded relaunch that was read frame by frame, the first app frame the
+  system's fade shows is already Today, so the gate's answer cost no visible frame there; it is not timed to
+  the millisecond.
+- On the fresh install's recording onboarding appears about 0.25 s after the launch screen starts to fade; that
+  launch seeds the catalog.
+- One fresh-install launch was measured, so 1570 against 1291 ms is one sample each, on different days.
+
+### How to verify by hand
+
+- Delete the app from a simulator, build and run: the launch screen, the ground colour, then "What are you
+  training for?" with no tab bar. "Skip setup" or the three steps and "Start training" land on Today. Quit and
+  open again: Today, never onboarding.
+- Long-press "Today": the Debug menu; Diagnostics shows 1 `program`, 8 `program_week`, and the days and slots of
+  the split picked.
+- By ear, not done here: VoiceOver's focus when the root switches from onboarding to the tabs.
+
+### Open questions (each with a recommendation)
+
+1. **The line that hands onboarding its retry step is executed by no test** (`MainRoot.swift:44`). What it
+   passes is tested (`failedSeed_isRetriedByTheCallRetryMakes`), and that "Retry" awaits what it is passed is
+   S2's; that `MainRoot` passes it is by reading. A UI test cannot make the seed fail, and a hosted root test
+   cannot wait for onboarding's failure without sleeping: the store is private to `OnboardingRoot`, and the
+   log has no recording seam. *Recommendation:* with the chore's recording logger (RR-SF3) and shared hosted
+   helper (RR-SF4), add a hosted root test: a database whose seed a trigger refuses, "Skip setup", the failure
+   line recorded, the trigger dropped, "Retry", the gate at `.main`.
+2. **The router is not reset when the root returns to onboarding.** `MainRoot` keeps it, so after F14's "Delete
+   all data" (reached from Settings, pushed on Today's stack) and a second onboarding, the tabs come back with
+   Settings on top, not on Today's root as criterion 3 says. Unreachable until F14. *Recommendation:* F14
+   resets it (`router = AppRouter()` when the gate leaves `.main`, three lines in `MainRoot`) with the test
+   that makes the state reachable.
+3. **The ground colour holds for a lifter with a program until the launch's pass returns** (ruling O12). The
+   reason for the wait is onboarding's (the seed); the tabs need no seed. On the simulator the wait is hidden
+   under the launch screen. *Recommendation:* leave it; if F26's launch budget on a device needs it, the gate
+   can read at once and hold back only `.onboarding` until the pass has returned (about five lines and two
+   tests).
+4. **The launch screen is white in light mode** and the first frame is the ground colour, so a fresh launch
+   fades from white to cream (seen in the recordings; it predates this slice). *Recommendation:* give the
+   launch screen the ground colour (`UILaunchScreen`'s `UIColorName`, an asset and an Info.plist key), in F26
+   or the chore; it is a target change, so Pete's.
+5. **A pixel buffer inside `#expect` writes every pixel into the result bundle when it fails** (decision 8).
+   F09's `AppRootAdversarialTests` does it at `:46`, `:47`, `:61` and `:73`. *Recommendation:* in the chore,
+   give `PixelBuffer` a short test description in `LedgerSnapshotTesting` (its size, say, through
+   `CustomTestStringConvertible`): one extension cures every such test at once.
+6. **`renderPreview` on iOS does not show that anything was drawn** (decision 8). *Recommendation:* say so in
+   its comment, or have it draw with the snapshot strategy `assertLedgerSnapshot` uses; the chore's.
+7. **The gate re-reads the active program on every change of the scene's phase** (two or three reads on a
+   return to the foreground). *Recommendation:* accept: each is one indexed read, and it is what tries a failed
+   read again. Restarting only on `.active` saves the others at the cost of a second task id.
+
+### For F10, F14 and F15
+
+**F10 (the cover).** `MainRoot.body` is untouched and still returns `content`. `content` is now a conditional
+view (a `@ViewBuilder` switch): a modifier put on it in `body` is applied to whichever branch is shown, and its
+state does not survive a change of branch. The cover belongs to the tabs' branch in practice; if it must
+survive the gate changing its answer, wrap `content` in a container in `body` first.
+
+**F14 ("Delete all data").**
+- Deleting through the open database is followed as it is: the active program going away is the observation's
+  next value, the root shows onboarding, and a new `OnboardingRoot` starts on step 1
+  (`deletedAndSavedAgain_isFollowed`, `program_showsTheTabs_andTheRootFollowsTheGate`).
+- If F14 replaces the database file and the composition's `LedgerStores`, the gate keeps observing the old
+  queue: it takes `composition.stores?.programs` when a follow starts, and a follow starts only when the
+  scene's phase changes. F14 would have to restart the root's task (an id that changes with the stores) and
+  rebind the keys onboarding's store reads when it is made. Deleting rows in the open database avoids both.
+- The catalog must be seeded again before the lifter can finish onboarding; if it is not, onboarding's "Retry"
+  runs the seed step (decision 4).
+- The router: open question 2.
+
+**F15 (the UI tests' launch modes).**
+- *A UI test that relaunches on the same database* (criterion 8's relaunch, moved to a package test here): its
+  test mode needs a launch that keeps the database of the launch before, for example an argument that names
+  the temporary directory in place of a new UUID (`AppComposition.swift:165-167`). Then: onboard, terminate,
+  launch, Today with no onboarding.
+- *The seeded mode* replaces the body of `XCUIApplication.skipSetupToToday()`
+  (`Apps/LedgerUITests/Support/LaunchedApp.swift`); every test already goes through it. The gate needs nothing:
+  a database with an active program answers `.main`. The seed must be written before the launch's pass
+  returns (in `boot()`, or as a step of `resume`), or the gate answers `.onboarding` first and then flips,
+  which is a flash on screen and a race in a test.
+- *The accessibility audit* does not cover onboarding yet: `TabsAdversarial` audits the four tab roots. The
+  three steps want the same (`performAccessibilityAudit`), at the default size and at an accessibility size;
+  the bars' faint track may be flagged (the plan's risk).
+- `Onboarding`'s stops are compared in English, as the plans fix the language.

@@ -6,8 +6,7 @@ import XCTest
 final class LaunchPerformance: XCTestCase {
     @MainActor
     func test_launchToFirstFrame() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        let app = XCUIApplication.fresh()
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)]) {
             app.launch()
         }
@@ -15,13 +14,13 @@ final class LaunchPerformance: XCTestCase {
     }
 
     /// Reads the app's own measurement from Diagnostics (decision #30) and attaches it; reports, never fails.
+    /// Diagnostics is behind onboarding on a fresh database, so it skips setup first (F08 S3).
     @MainActor
     private func reportInAppMeasurement(_ app: XCUIApplication) {
-        let title = app.staticTexts["today.title"]
-        guard title.waitForExistence(timeout: 10) else {
+        guard app.skipSetupToToday() else {
             return
         }
-        title.press(forDuration: 1)
+        app.staticTexts["today.title"].press(forDuration: 1)
         app.buttons["debug.menu.diagnostics"].tap()
         let launch = app.staticTexts["debug.diagnostics.launch"]
         if launch.waitForExistence(timeout: 10) {

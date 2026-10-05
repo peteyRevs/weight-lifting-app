@@ -303,7 +303,7 @@ Concrete test names (file = suite = source type; see §6):
 
 ### 2.7 UI (`LedgerUITests`, `LedgerWatchUITests`)
 
-- Critical flows, iOS: `Smoke.launchesToToday`, `Onboarding.threeStepsGenerateProgram`,
+- Critical flows, iOS: `Smoke.freshInstall_skipsSetupToToday`, `Onboarding.threeStepsGenerateProgram`,
   `Workout.startLogThreeSetsRestFinishReceipt`, `Workout.swapExercise`,
   `Workout.minimizeAndResume`, `Builder.addDayAddExerciseChangeProgression`,
   `Library.searchOpensHistoryChart`, `History.editThenDeleteWorkout`,
@@ -323,7 +323,12 @@ Concrete test names (file = suite = source type; see §6):
   `debug.diagnostics.*`); a renamed identifier fails a UI run, not the build.
 - UI tests launch with `-LEDGER_UITEST 1`, so the app opens a fresh database
   file in a new temporary directory (a file, not in-memory, so the launch runs
-  as on a device; F07 S2), seeded with the catalog as every launch is.
+  as on a device; F07 S2), seeded with the catalog as every launch is. A fresh
+  database has no program, so the app opens on onboarding (F08 S3): a test of
+  anything behind it launches `XCUIApplication.fresh()` and calls
+  `skipSetupToToday()` (`Apps/LedgerUITests/Support/LaunchedApp.swift`), the one
+  place that knows the way. Every launch is a fresh database, a relaunch too, so
+  what needs the same database twice is not a UI test until F15's test mode.
 
 ### 2.8 Device protocol (manual, scripted) — `tasks/features/F20-device-protocol/`
 

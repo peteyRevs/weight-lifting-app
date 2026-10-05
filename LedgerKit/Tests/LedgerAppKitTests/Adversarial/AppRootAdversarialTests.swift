@@ -75,13 +75,12 @@ struct AppRootAdversarialTests {
     }
 
     @Test("The root of a composition whose database is open draws without trapping, here and on the simulator")
-    func root_ready_draws() async {
+    func root_ready_draws() async throws {
         let harness = Harness()
         defer { harness.remove() }
-        let composition = harness.booted()
-        await composition.resume(in: .active)
+        let (composition, gate) = try await harness.bootedWithAProgram()
         #expect(composition.state == .ready)
-        #expect(renderPreview(size: Self.size) { AppRoot(composition: composition) })
+        #expect(renderPreview(size: Self.size) { AppRoot(composition: composition, gate: gate) })
     }
 
     #if os(iOS)
@@ -96,13 +95,12 @@ struct AppRootAdversarialTests {
         }
 
         @Test("An idle root has nothing for VoiceOver, and a ready root shows the shell on Today")
-        func root_idleAndReady_readToVoiceOver() async {
+        func root_idleAndReady_readToVoiceOver() async throws {
             let harness = Harness()
             defer { harness.remove() }
             #expect(AppRoot(composition: harness.composition()).accessibilityElements().isEmpty)
-            let composition = harness.booted()
-            await composition.resume(in: .active)
-            let elements = AppRoot(composition: composition).accessibilityElements()
+            let (composition, gate) = try await harness.bootedWithAProgram()
+            let elements = AppRoot(composition: composition, gate: gate).accessibilityElements()
             #expect(elements.map(\.label) == ["Today"])
             #expect(elements.first?.traits.contains(.header) == true)
         }

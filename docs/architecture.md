@@ -163,7 +163,11 @@ targets only.
   decision #29), seeds the catalog (#28), loads the settings and retries on
   return to the foreground; each composition root keeps its platform steps.
 - Root view (`LedgerAppKit`, F09): `AppRoot` draws the composition's state. Once
-  the database is open it draws `MainRoot`, the tab shell: a `TabView` with four
+  the database is open it draws `MainRoot`: onboarding while there is no active
+  program, else the tab shell (F08). `RootGate` says which: `AppRoot`'s launch
+  task awaits the launch's pass, then follows `ProgramRepository.observeActive()`,
+  and until the gate's first answer the root is the ground colour alone. The tab
+  shell is a `TabView` with four
   tabs (Today · Program · Library · History; `AppTab`), each owning a
   `NavigationStack`. Every stack is keyed by the one `AppDestination` enum
   (`LedgerAppKit/Routes.swift`), which lists every screen a stack can push: any

@@ -250,8 +250,10 @@ S3 puts onboarding into the app: the root shows it when there is no active progr
    `DebugMenu`, `LaunchPerformance`, `Tabs`, and F09's `TabsAdversarial`: a mechanical change of how each gets to
    Today, nothing else). A new `Onboarding` UI test, in the nightly plan, walks the real screen: the three steps
    with their picks; the VoiceOver order of each step inside the real scroll view at an accessibility text size;
-   a step opening at its top; "Start training" landing on Today; and a relaunch opening on Today. This is the test
-   the scrolling-screens convention asks of every scrolling screen.
+   a step opening at its top; and "Start training" landing on Today. This is the test the scrolling-screens
+   convention asks of every scrolling screen. (Revised 2026-10-05:) a relaunch opening on Today is proven by a
+   package test that boots twice on one real database file, not by a UI test: every UI-test launch gets a fresh
+   database by design, and a launch mode that keeps one is F15's.
 9. **Launch cost.** Deciding which root to show adds one read of the active program; nothing reads a store before
    the database is ready.
 10. **Screenshots** of a fresh install's first screen and of Today after "Start training", light and dark, for the

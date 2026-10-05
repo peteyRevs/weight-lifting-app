@@ -16,6 +16,7 @@ final class TabsAdversarial: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1"] + arguments
         app.launch()
+        XCTAssertTrue(app.skipSetupToToday())
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
         return app
     }
