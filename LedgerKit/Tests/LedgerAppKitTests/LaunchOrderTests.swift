@@ -31,11 +31,13 @@ struct LaunchOrderTests {
             .event(.began(.openDatabase)),
             .event(.began(.seedCatalog)),
             .event(.began(.loadSettings)),
+            .event(.began(.resumeWorkout)),
             .event(.began(.activateCompanionSession)),
             .companionActivated
         ])
         #expect(LaunchStep.allCases == [
-            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .activateCompanionSession
+            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .resumeWorkout,
+            .activateCompanionSession
         ])
     }
 

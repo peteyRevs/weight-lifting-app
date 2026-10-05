@@ -9,8 +9,9 @@ import os
 public enum LaunchStep: String, Sendable, CaseIterable {
     /// In `App.init`, synchronously: no `await` can run before these.
     case assignMirroringHandler, openDatabase
-    /// After the first frame.
-    case seedCatalog, loadSettings, activateCompanionSession
+    /// After the first frame. `resumeWorkout` is the live workout's recovery (F10): the iPhone's composition
+    /// root runs it through `DatabaseLaunch.run(_:retrying:_:)`; the watch gets it with its host (F18).
+    case seedCatalog, loadSettings, resumeWorkout, activateCompanionSession
 }
 
 /// What a launch records: each step as it begins, and each step that fails (after logging it at fault level). A
@@ -119,6 +120,23 @@ public final class DatabaseLaunch {
         if let load = task(for: .loadSettings, retrying: false, { await self.loadSettings(stores) }) {
             await load.value
         }
+    }
+
+    /// Runs a step the composition root supplies, as the launch runs its own: the step is recorded as it begins,
+    /// and as failed, after a fault-level log, when `body` throws. The launch owns the step's task, so cancelling
+    /// a caller never cancels it, and a call that finds it running waits for it. A step that has run runs again
+    /// only when `retrying`. Give it a step the launch does not run itself (`resumeWorkout`): the launch's own
+    /// steps share this bookkeeping, so `body` would wait for theirs, or never run.
+    public func run(_ step: LaunchStep, retrying: Bool, _ body: @escaping @MainActor () async throws -> Void) async {
+        let owned = task(for: step, retrying: retrying) {
+            self.record(.began(step))
+            do {
+                try await body()
+            } catch {
+                self.fail(step, error)
+            }
+        }
+        await owned?.value
     }
 
     /// The step's running task; else a new one when the step has not run, or has run and `retrying`; else nil. The
