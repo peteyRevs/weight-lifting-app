@@ -53,7 +53,7 @@ workout-app/
 ├── LedgerKit/                      # ONE local Swift package, many targets
 │   ├── Package.swift
 │   ├── Sources/
-│   │   ├── LedgerAppKit/           # umbrella: iOS composition root (imports every iOS feature)
+│   │   ├── LedgerAppKit/           # umbrella: iOS composition root, tab shell, route mapping (imports every iOS feature)
 │   │   ├── LedgerWatchAppKit/      # umbrella: watch composition root
 │   │   ├── LedgerDomain/           # models, WorkoutEngine, progression, 1RM, plate math, protocols, seed catalog JSON
 │   │   ├── LedgerPersistence/      # GRDB schema, migrations, repositories, queries
@@ -75,7 +75,7 @@ workout-app/
 │   │   └── LedgerSnapshotTesting/  # snapshot helpers + device/theme/type matrix (test-only)
 │   └── Tests/                      # one test target per source target
 ├── Apps/
-│   ├── Ledger/                     # iOS app shell: composition root, tabs, routes, Info.plist, entitlements
+│   ├── Ledger/                     # iOS app target: `@main`, assets, Info.plist, entitlements (root, tabs and routes are in LedgerAppKit)
 │   ├── LedgerWatch/                # watchOS app shell: composition root, WKApplicationDelegate
 │   ├── LedgerWidgets/              # iOS widget + Live Activity extension
 │   └── LedgerWatchWidgets/         # watch complications / Smart Stack
@@ -162,10 +162,29 @@ targets only.
   (`LedgerPersistence`, a `@MainActor` observable type) opens the file (product
   decision #29), seeds the catalog (#28), loads the settings and retries on
   return to the foreground; each composition root keeps its platform steps.
-- Root view: `TabView` with four tabs (Today · Program · Library · History),
-  each owning a `NavigationStack` keyed by that feature's `Route` enum.
-- Active workout is presented as a full-screen cover over the tab root;
-  "Minimize" dismisses the cover and Today shows "Resume · m:ss".
+- Root view (`LedgerAppKit`, F09): `AppRoot` draws the composition's state. Once
+  the database is open it draws `MainRoot`, the tab shell: a `TabView` with four
+  tabs (Today · Program · Library · History; `AppTab`), each owning a
+  `NavigationStack`. Every stack is keyed by the one `AppDestination` enum
+  (`LedgerAppKit/Routes.swift`), which lists every screen a stack can push: any
+  tab can show any screen, and a route can open a screen in another tab.
+  `AppRouter` (`@MainActor @Observable`) holds the selected tab and one path per
+  tab; `open(_:in:)` selects a tab and pushes there, and a tab keeps its stack
+  while another is selected. The tab bar is the system's, tinted with the accent.
+- Routing (M1 convention, 2026-10-04): a feature exposes
+  `public nonisolated enum <Feature>Route: Hashable, Sendable` and
+  `<Feature>Root(onRoute: @escaping @MainActor (<Feature>Route) -> Void)`.
+  `onRoute` is synchronous: a route is an intent, never a navigation call. The
+  app resolves it in `LedgerAppKit/Routes+<Feature>.swift` into calls on the
+  router, and adds the screens it pushes as cases of `AppDestination`; until a
+  screen's feature lands, its case draws a placeholder that names it. A feature
+  never presents another feature and never sees the router. A feature with no
+  exit the app must resolve (onboarding) has no route. A feature that presents
+  itself over the tabs (the workout) exports its presenter and modifier, which
+  `MainRoot` applies; its start and resume entry points are synchronous intents
+  as well, drained by its own `.task`.
+- Active workout is presented as a full-screen cover over the tab root
+  (`MainRoot`); "Minimize" dismisses the cover and Today shows "Resume · m:ss".
 - Live Activity (rest + elapsed) is started inside the mirroring start
   handler (10 s budget) and updated sparsely (R1 §4.1).
 
@@ -439,7 +458,7 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 | WatchFeatureWorkout | Watch — before workout / set ready / rest timer / session list / end workout / summary | watch UI over the same `WorkoutSessionActor` |
 
 Each feature exposes `public struct <Feature>Root: View` and `public enum
-<Feature>Route`. The app shell maps routes across features.
+<Feature>Route`. The app shell maps routes across features (§4).
 
 ---
 

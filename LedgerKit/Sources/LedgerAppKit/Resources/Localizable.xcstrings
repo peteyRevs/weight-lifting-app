@@ -1,0 +1,83 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Can't open your data right now" : {
+      "comment" : "Title of the screen shown when the database cannot be opened",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't open your data right now"
+          }
+        }
+      }
+    },
+    "History" : {
+      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "History"
+          }
+        }
+      }
+    },
+    "Library" : {
+      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Library"
+          }
+        }
+      }
+    },
+    "Program" : {
+      "comment" : "Tab title, and the title of the tab's placeholder screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Program"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "comment" : "Title of the Settings screen's placeholder",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "comment" : "Tab title, and the title of the Today screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        }
+      }
+    },
+    "Your workouts are still on this iPhone. Ledger tries again when you come back to it." : {
+      "comment" : "Body of the screen shown when the database cannot be opened",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workouts are still on this iPhone. Ledger tries again when you come back to it."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

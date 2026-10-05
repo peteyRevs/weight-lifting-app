@@ -668,3 +668,434 @@ feature. F09 S1 lands the localization scaffolding and writes rules 1 and 3 into
    table-driven test before the tester starts (F06's lesson).
 6. **Test names** follow `docs/testing-strategy.md` §6 (`subject_condition_expectation`, a sentence as the display
    name), not the briefs' `test_…` names.
+
+## Slice S1 — tab shell (G1 implementer, 2026-10-04)
+
+Branch `feat/F09-s1-tab-shell` at `a24eb60` (the plan). No commits. Paths that start with a module name are under
+`LedgerKit/Sources/`; test paths are under `LedgerKit/Tests/`.
+
+Documentation looked up (sosumi): `Tab` and its initializers, `TabView(selection:)`, `NavigationStack(path:)`,
+"Localizing package resources", "Localizing and varying text with a string catalog". The iOS 27.0 SDK's interface was
+read for `Tab(_:systemImage:value:content:)`: a `String` value takes the `StringProtocol` overload and is shown as
+given; a literal would take the `LocalizedStringKey` overload and look in the main bundle.
+
+### What landed
+
+**LedgerAppKit (product)**
+- `Routes.swift` (new): `AppTab` (`today`, `program`, `library`, `history`, in the bar's order), `AppDestination` (one case, `.settings`; deviation 3), `AppRouter` (`@MainActor @Observable`:
+  `selectedTab`, `subscript(path:)` per tab, `open(_:in:)`). All internal: nothing outside the module uses them.
+- `AppTabs.swift` (new): `TabView(selection:)` of four `Tab(_:systemImage:value:)`, each a
+  `NavigationStack(path:)` over the router's path for that tab with the one
+  `navigationDestination(for: AppDestination.self)`; `.tint(LedgerColor.accent)`. Today hosts `TodayPlaceholder`;
+  Program, Library and History a `PlaceholderScreen`. A tab's root hides the navigation bar (it draws its own
+  title); a pushed screen keeps the bar and its back button.
+- `MainRoot.swift` (new): owns the router in `@State`, draws `AppTabs`, presents the Debug menu sheet (moved
+  from `AppRoot`).
+- `PlaceholderScreen.swift` (new): a title in `.display`, a heading, with the identifier its caller gives.
+- `AppCopy.swift` (new): the module's copy file. `title(of: AppTab)`, `title(of: AppDestination)`,
+  `databaseUnavailableTitle`, `databaseUnavailableBody`.
+- `Resources/Localizable.xcstrings` (new): seven keys (four tab titles, "Settings", decision #29's two strings,
+  wording unchanged).
+- `AppRoot.swift`: `.ready` draws `MainRoot`; `DatabaseUnavailableView` takes its strings from `AppCopy`. The
+  `.databaseUnavailable` and `.idle` branches are as they were.
+- `TodayPlaceholder.swift:11`: `Text("Today")` became `Text(AppCopy.title(of: .today))` (deviation 1).
+- `AppKit+Previews.swift`: cases "Tabs" and "Placeholder".
+- `Package.swift`: `defaultLocalization: "en"`; `resources: [.process("Resources")]` on `LedgerAppKit`;
+  `testResources["LedgerAppKit"] = [.process("Fixtures")]` (the catalog fixture). No dependency edge changed:
+  `package-graph.expected.txt` is untouched and `scripts/check-package-graph.sh` passes.
+
+**Test-only**
+- `LedgerTestSupport/Localization/StringCatalog.swift`: reads a catalog from the source tree; `problems` (the
+  catalog rules); `unresolvedKeys(in:)`; `resourceBundle(ofModule:)`; `specifiers(in:)`.
+- `LedgerTestSupport/Localization/SwiftSource.swift`: a small reader of Swift sources (code, comments, string
+  literals with their interpolations and the code before them).
+- `LedgerTestSupport/Localization/CopyAudit.swift`: the module check (`findings`).
+- `LedgerSnapshotTesting/PreviewRendering.swift`: the Mac host draws a preview in a window (deviation 2).
+- `LedgerAppKitTests`, 55 new tests in 7 suites: `AppRouterTests` (7), `AppTabsTests` (4, iOS only),
+  `AppCopyTests` (5), `CatalogFixtureTests` (5) with `Fixtures/Localizable.xcstrings`, `StringCatalogTests` (6),
+  `SwiftSourceTests` (8), `CopyAuditTests` in three files (20), and `Support/TestCatalog.swift`. The target now
+  has 93 tests in 17 suites on the simulator.
+- `Apps/LedgerUITests/Tabs.swift` (2 tests; nightly, as the Nightly plan runs every UI test and the PR plan
+  selects `Smoke`). No test plan and no project file changed.
+
+**Docs**: standards §7 gains "Localization: one catalog and one copy file per module" (M1 convention 1, as
+built); architecture §4 has the shell and the routing rule (convention 3), §2's `Apps/Ledger/` and `LedgerAppKit/`
+lines say where the root, tabs and routes are, §12 points to §4.
+
+### The localization pattern as built
+
+The rule is standards §7, "Localization: one catalog and one copy file per module"; `LedgerAppKit` is the model. In
+short, for a module `X` with copy:
+
+1. `Package.swift`: `resources: [.process("Resources")]` on `X`'s target (`defaultLocalization: "en"` is already
+   set).
+2. `Sources/X/Resources/Localizable.xcstrings`, written by hand in Xcode's layout. Every key spells out its
+   English text, `"state" : "translated"`: a plain key's text is the key; a counted key has `one` and `other`,
+   one `%lld`, and its `other` form is the key.
+3. `Sources/X/<Feature>Copy.swift`: a `nonisolated enum`; every lookup is
+   `String(localized: "…", bundle: .module)` (plus `locale:` for a number, `comment:` if needed), its key a
+   literal; a value in the key is a parameter of the member declared `Int` or `String`. Nothing but such
+   lookups in that file; no lookup and no user-facing literal in any other file.
+4. Two tests in `XTests`, copied from `LedgerAppKitTests/AppCopyTests.swift`:
+   `#expect(try CopyAudit(module: "X", exempting: […]).findings == [])` and
+   `#expect(try StringCatalog(module: "X").unresolvedKeys(in: #require(StringCatalog.resourceBundle(ofModule: "X"))) == [])`,
+   plus, for each counted string, the copy member called with 1 and with several.
+
+**Proof 1: a hand-written catalog in a package target compiles and resolves from `Bundle.module`.**
+- *iPhone simulator (`xcodebuild`, iOS 27.0), in the gate.* `CatalogFixtureTests` reads
+  `LedgerAppKitTests/Fixtures/Localizable.xcstrings` through the test target's own `Bundle.module`:
+  a plain string (`fixture.plain` → "Resolved from the catalog"), formatted strings with two numbers and with a
+  text (`fixture.week %lld of %lld` → "Week 3 of 8", `fixture.next %@` → "Next: Friday") and a plural
+  (`%lld fixture sets` → "0 fixture sets", "1 fixture set", "2 fixture sets", "21 fixture sets"). The fixture's
+  plain and formatted keys differ from their English text on purpose, so a lookup that missed the catalog would
+  return the key and fail the test. `countedString_groupsDigitsByTheLocale` pins what `locale:` does: "1,234 fixture
+  sets" for `en_US`, "1.234 fixture sets" for `de_DE` (the words stay English: the locale formats the number, the
+  bundle picks the language).
+- *The shipped catalog.* `AppCopyTests.builtBundle_resolvesEveryKey` asks the built
+  `LedgerKit_LedgerAppKit.bundle` for each of the seven keys. The bundle holds `en.lproj/Localizable.strings`
+  with exactly those keys (read with `plutil -p` from `.derivedData/Build/Products/Debug-iphonesimulator/`).
+- *Mac host (`swift test`).* The same suites pass. Swift 6.4's `swift test` builds with Swift Build by default
+  (`--build-system swiftbuild`), which compiles the catalog (`…xctest/Contents/Resources/LedgerKit_LedgerAppKit.bundle/
+  Contents/Resources/en.lproj/Localizable.strings`). With the deprecated `--build-system native` the catalog is
+  copied as it is (`Localizable.xcstrings` in the bundle): a plain lookup returns its key and "1 exercises" comes
+  out for a count of one (measured in a scratch package, both ways).
+- **Consequence for tiers.** Copy tests pass on the simulator and on the host with the pinned toolchain, so they
+  need no `#if os(iOS)`. `scripts/check.sh --fast` runs only `LedgerDomainTests` and `LedgerPersistenceTests`
+  (`check.sh:166-167`), so it builds the catalogs but runs no copy test: **a module's copy is proven by the full
+  gate (the iOS simulator)**, or by `swift test --filter <Module>Tests` on the host. A copy test must never be run
+  with `--build-system native`; it fails there by design.
+- Two facts found on the way, both now rules in standards §7 and checked by `StringCatalog.problems`:
+  `xcstringstool compile` emits **nothing** for a key with no localization (the form Xcode gives a key it
+  extracted), and nothing for a unit whose state is `new`. So every key spells out its English text, marked
+  `translated`; otherwise "the string comes from the catalog" would be true only of the source file.
+
+**Proof 2: the catalog ⇄ code check is mechanical and two-way.** `CopyAudit` reads the sources, not a list a
+person keeps. Each failure was shown once against the real module on the host tier (the check reads the source
+tree, so the tier does not matter), then everything restored (SHA-256 of the four files compared) and passing;
+the log is `…/scratchpad/f09s1/proof2-failures.log`:
+
+| Change | `AppCopyTests.copy_followsTheStandard` reported |
+|---|---|
+| `AppCopy.swift` gains a lookup of "Start workout" | `AppCopy.swift:25: looks up "Start workout", which the catalog does not hold` |
+| The catalog gains the key "Start workout" | `Localizable.xcstrings: "Start workout" is not looked up by a copy file` |
+| `TodayPlaceholder.swift:11` back to `main`'s `Text("Today")` | `TodayPlaceholder.swift:11: a string literal outside the copy files: "Today"` |
+| `PlaceholderScreen.swift` looks a string up itself | `PlaceholderScreen.swift:17: a localized lookup outside the copy files: localized:` (and the literal) |
+| `AppCopy.swift` gains `NSLocalizedString(muscle, bundle: .module, …)`, a key that is not a literal | `AppCopy.swift:25: a lookup that is not String(localized:): NSLocalizedString` |
+
+The same cases, and each catalog rule, are pinned on sources and catalogs built in memory (`CopyAuditTests`,
+`StringCatalogTests`, `SwiftSourceTests`: 34 tests). An independent cross-check: the compiler's own extraction
+(`AppCopy.stringsdata` in the build's intermediates) lists the same seven keys the audit derives, and every other
+file of the module "no localized string"; for the fixture it lists `fixture.week %lld of %lld`, `fixture.next %@`
+and `%lld fixture sets`, which is the `Int` → `%lld`, `String` → `%@` rule the audit applies.
+
+How strict "a user-facing literal" is: outside a copy file, **any** string literal with a letter in it is a
+finding, unless it is an accessibility identifier, an SF Symbol's name or a log line, or its file is exempt by
+name with a reason in the module's test. `LedgerAppKit` exempts two files: `AppComposition.swift` (launch
+arguments, the database's file name, the logger's category) and `AppComposition+Diagnostics.swift` (Debug only).
+In a copy file the audit also refuses what it could not compare with the catalog: a lookup whose key is not a
+literal (a key built from an enum's raw value), and any lookup API other than `String(localized:)`. I found that
+gap in my own review while the first full gate was running (a key looked up that way, and missing from the
+catalog, passed in silence), closed it with the table's last row and two tests, and ran the gate again; the gate
+cited below is the second one. The same change keeps an interpolation's code out of its line's code, so that the
+"written `bundle: .module`" rule also covers a lookup with a value in its key, which the first version skipped.
+Limits, for the reviewer: the audit reads text, not types. It does not see a string built without a literal
+(`String(describing:)`), a literal inside a regex literal, or copy in a file that is exempt; an exemption is
+per file, so an exempt file is not checked for literals at all (lookups there are still findings), and
+Debug-only code is exempted by file, not by `#if DEBUG` region.
+
+**Proof 3: Xcode is not required, and the build does not rewrite the catalog.**
+- Both catalogs were written in an editor and compiled by `xcodebuild` (the gate) and by `swift test`; the
+  project was never opened in Xcode, and `project.pbxproj` is untouched.
+- The full gate (below) built and tested both catalogs on the iOS simulator and left them byte-identical: their
+  SHA-256 sums taken before the gate were checked after it (`shasum -a 256 -c`: both OK), and `git status --short`
+  after the gate lists the same files as before it. The earlier simulator runs and the host runs left them
+  untouched as well.
+- What Xcode's own catalog sync would do was emulated on scratch copies with the tool the build uses,
+  `xcrun xcstringstool sync`, fed the compiler's `.stringsdata` of this build: both catalogs came back
+  byte-identical (`cmp`), because the code's keys and the catalog's agree. When the sync does have something to
+  write (a key added to the scratch `.stringsdata`), the only other difference is the last byte: Xcode writes no
+  newline at the end of the file, and the hand-written catalogs have one. Not verified: opening the project in
+  the Xcode app itself.
+
+### The shell's intended VoiceOver tree
+
+1. **The selected tab's screen.** In S1 that is one element: the screen's title, a heading. Today: "Today"
+   (`today.title`, the placeholder's, unchanged). Program, Library, History: the tab's title (`program.title`,
+   `library.title`, `history.title`).
+2. **A pushed screen**: the system's back button, then the screen's title, a heading (`settings.title`). Nothing
+   in S1's interface pushes one; the router does.
+3. **The tab bar**: four tab buttons in the order Today, Program, Library, History, each read by its title; the
+   selected one is marked selected. The role and the position ("Tab, 1 of 4") are the system's words.
+
+Pinned: (1) by `AppTabsTests.selectedTab_showsItsOwnScreen` (label; traits exactly heading and static text; no
+value), on the shell hosted in a window on the simulator; (2) the title by `AppTabsTests.destination_opensOnEveryTab`
+and `openedDestination_staysOnItsTabsStack`; (3) by `LedgerUITests/Tabs.test_fourTabs_todaySelected_inTheBarsOrder`
+(the buttons of the one tab bar, their labels, their left-to-right order, `isSelected`). Not pinned by a test: the
+system's words for a tab, and the back button (a hosted view's tree holds neither the tab bar nor the navigation
+bar; the one-off experiment below saw the back button, labelled "Back", and used it).
+
+### Decisions and deviations
+
+1. **`TodayPlaceholder.swift:11` changed by one line**, against "the Today tab hosts the existing
+   `TodayPlaceholder` unchanged" (plan, S1 row; criterion 2). `main` has `Text("Today")` there
+   (`git show a24eb60:LedgerKit/Sources/LedgerAppKit/TodayPlaceholder.swift`, line 11): a literal outside the copy
+   file, which SwiftUI looks up in the app's main bundle. Left alone, criterion 4 ("every string the shell shows
+   comes from LedgerAppKit's String Catalog") would be false for the one string Today shows, or the audit would
+   need an exemption for a real user-facing literal. It now reads `Text(AppCopy.title(of: .today))`. What the tab
+   shows is unchanged: `TodaySnapshotTests` passes against M0's two references, untouched; the identifier and the
+   long press are as they were.
+2. **`LedgerSnapshotTesting/PreviewRendering.swift` is outside the slice's file list.** On the Mac host
+   `renderPreview` drew with `ImageRenderer`, which traps on the shell: "SwiftUICore/Logging.swift:232: Fatal
+   error: no current update to enqueue action to" (host run 1, `PreviewTests.preview_renders(.tabs)`; the whole
+   test process died). Narrowed in a scratch package: a `TabView` alone, a `TabView(selection:)` and a
+   `NavigationStack(path:)` alone all render; a `NavigationStack(path:)` inside a `Tab` traps. The host now hosts
+   the preview in a window (`NSHostingView`), as iOS has since F07 S3 (its decision 6). The iOS and watchOS paths
+   are untouched, so nothing the gate runs changed. On the host all 26 previews of the three modules render
+   through the new path (20 `LedgerDesign`, 4 `LedgerAppKit`, 2 `LedgerWatchAppKit`). The alternative, leaving
+   the `.tabs` case out on the host, would have to be repeated by every preview that contains the shell (F08's
+   root branch, F10's cover).
+3. **`AppDestination` starts with one case, `.settings`**, not the plan's "placeholder cases". It is the one
+   destination already decided to be a pushed screen of that shape (decision #19; F14 names `Routes.swift`). The
+   plan's other placeholders ("Workout", "Set up program") become F10's cover, F13's `workout(WorkoutID)` and
+   F08's root branch, so adding them now would ship two more catalog strings that nothing reaches and that S5 would
+   reshape. S5 adds the cases its routes need with `Routes+Today.swift`. One case is enough to test the router,
+   the registration on every stack and the placeholder.
+4. **`AppTab`, `AppDestination` and `AppRouter` are internal**, not public: `MainRoot` is the only owner, inside
+   the module; tests use `@testable import`. A later feature's `Routes+<Feature>.swift` is in `LedgerAppKit` too.
+5. **Every catalog key spells out its English text** (`"state" : "translated"`), where the conventions said only
+   "the key is the English text". Reason: proof 1's two facts. A test enforces that the text equals the key.
+6. **The check audits sources; it does not compare against "a literal key list"** (the plan's decision 3, which
+   the conventions replaced with "every key the copy files use is in the catalog and the reverse"). To name a
+   lookup's key without the compiler, an interpolation must be a parameter declared `Int` or `String`
+   (standards §7); anything else is a finding, never a silent pass.
+7. **In a test target with resources, `Bundle.module` is the test target's bundle**, even under
+   `@testable import` of a module that has its own (measured; no ambiguity error). `LedgerAppKitTests` owns the
+   fixture, so its tests find the module's bundle with `StringCatalog.resourceBundle(ofModule:)`, which looks
+   beside the test bundle. On the host `Bundle.allBundles` does not list the test bundle, so the helper starts
+   from a class of its own (`Bundle(for:)`); verified on the simulator and the host.
+8. **A tab's root hides the navigation bar; a pushed screen keeps it.** With a bare `NavigationStack` the
+   placeholder's title would sit one empty bar lower than in M0. The screens that replace the placeholders draw
+   their own headers (v2), and each decides for itself: the modifier is applied where `AppTabs` builds a root,
+   not inside `PlaceholderScreen`.
+9. **Icons are SF Symbols passed as `systemImage:`** in `AppTabs.swift` (`chart.bar`, `calendar`, `dumbbell`,
+   `clock`). Checked as asked: no `ledger_raw_*` rule matches `systemImage:` (lint is green without a
+   suppression), and standards §7 limits features to `LedgerDesign` tokens for "color, type, spacing, radius";
+   icons are not in that list, and architecture §11 says the tab bar is the native `TabView`, tinted. So nothing
+   forbids it and no other route was needed. The names stand at the call (`systemImage: "…"`), which is where the
+   audit allows a literal.
+10. **Four `Tab`s written out, not a `ForEach` over `AppTab.allCases`**: F11–F13 each replace one tab's root, on
+    its own line, and each symbol's name stays at its `systemImage:`.
+11. **No pixel reference of the shell**, as the plan says (the system tab bar's material is not a stable
+    reference): the "Tabs" preview renders in `PreviewTests`, the hosted tree and the UI test pin what is shown,
+    and the screenshots show it.
+12. **`MainRoot` keeps the `composition`** only to read Diagnostics for the Debug menu, as `AppRoot` did.
+13. **Tab selection is not restored across launches**: criterion 1 says Today is selected on launch.
+14. **The shared helper is three files**, not the plan's one `StringCatalog.swift`: the catalog and its rules, a
+    reader of Swift sources, and the audit that joins them. The audit and the reader are what replaced the plan's
+    "literal key list".
+15. **Size**: 153 product lines against the plan's ~250 (the plan counted placeholder destinations and a larger
+    router). Test support is 537 lines and tests 815, which is where this slice's weight is: the pattern's check
+    is new code, and it is tested rule by rule.
+
+### Criteria → tests
+
+| S1 criterion | Proof |
+|---|---|
+| 1. Four tabs in order Today, Program, Library, History; Today selected on launch; a stack per tab; a tab keeps its stack | `AppRouterTests` (`tabs_areInTheBarsOrder`, `newRouter_selectsToday_withEmptyStacks`, `selectingAnotherTab_keepsEachStack`, `writingAPath_popsThatTabAlone`); in SwiftUI on the simulator, `AppTabsTests.openedDestination_staysOnItsTabsStack` (the pushed screen is shown, another tab selected, the tab selected again: the screen and the path are still there) and `selectingATab_swapsTheScreen`; in the running app, `LedgerUITests/Tabs.test_fourTabs_todaySelected_inTheBarsOrder` (one tab bar, four buttons, labels, left-to-right order, Today selected); screenshots `s1/` |
+| 2. Today shows its placeholder unchanged (`today.title`, the Debug long press); the other tabs a placeholder that names the tab | `LedgerUITests/Smoke.test_launchesToToday` (in the gate, untouched), `LedgerUITests/DebugMenu` (untouched: the long press on `today.title` inside the tab opens the menu), `TodaySnapshotTests` (M0's two references, untouched), `LedgerUITests/Tabs.test_eachTab_showsItsOwnScreen_andTodayKeepsItsTitle` (`program.title`, `library.title`, `history.title` read "Program", "Library", "History"; back on Today, `today.title` reads "Today"), `AppTabsTests.selectedTab_showsItsOwnScreen` |
+| 3. Routes are mapped in `LedgerAppKit/Routes.swift`; every stack is keyed by the one `AppDestination`; `open(_:in:)` selects the tab and pushes there | `AppRouterTests.open_inTheSelectedTab_pushesOnItsStack`, `open_inAnotherTab_selectsItAndPushesThere` (each tab), `open_twice_stacksInOrder`; `AppTabsTests.destination_opensOnEveryTab` (each tab's stack shows the destination: one registration per stack, in SwiftUI) |
+| 4. Every string the shell shows comes from the catalog, decision #29's two included, wording unchanged; catalog and code agree both ways, by a test | `AppCopyTests.copy_followsTheStandard` (both directions, and no copy outside `AppCopy.swift`), `builtBundle_resolvesEveryKey`, `databaseUnavailable_keepsItsWording`, `tabTitles_areTheSpecs`, `destinationTitles_nameTheScreen`; the pattern itself: `CatalogFixtureTests`, `StringCatalogTests`, `SwiftSourceTests`, `CopyAuditTests` |
+| 5. The selected tab's icon and label use the accent; VoiceOver reads each tab as its title with the system's tab traits; stock symbols | Screenshots `s1/` (accent on the selected tab, light and dark; the four symbols); `LedgerUITests/Tabs` (the tab bar's buttons, labelled by title, `isSelected` on the selected one only, after every tap). The accent is `.tint(LedgerColor.accent)` on the `TabView`; no test reads a pixel of the system bar |
+| 6. Database-unavailable and idle are unchanged | `AppRoot.swift`'s two branches are untouched lines (`git diff a24eb60`); the unavailable screen's wording is pinned (`databaseUnavailable_keepsItsWording`) and its preview renders (`PreviewTests`, "Database unavailable"); the launch suites (`AppCompositionTests`, `LaunchOrderTests`, the F07 adversarial suites) pass untouched |
+
+### Code lines (added lines of `git diff -U0 a24eb60`, new files whole, blank and whole-line comment lines excluded)
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerAppKit/AppTabs.swift` (new) | 47 | 0 |
+| `LedgerAppKit/AppCopy.swift` (new) | 25 | 0 |
+| `LedgerAppKit/Routes.swift` (new) | 21 | 0 |
+| `LedgerAppKit/PlaceholderScreen.swift` (new) | 20 | 0 |
+| `LedgerAppKit/MainRoot.swift` (new) | 18 | 0 |
+| `LedgerAppKit/AppKit+Previews.swift` | 10 | 0 |
+| `LedgerKit/Package.swift` | 6 | 1 |
+| `LedgerAppKit/AppRoot.swift` | 5 | 14 |
+| `LedgerAppKit/TodayPlaceholder.swift` | 1 | 1 |
+| **Product** | **153** | **16** |
+| `LedgerTestSupport/Localization/` (`SwiftSource` 208, `CopyAudit` 186, `StringCatalog` 127) | 521 | 0 |
+| `LedgerSnapshotTesting/PreviewRendering.swift` | 16 | 0 |
+| Tests (`LedgerAppKitTests` 758, `Apps/LedgerUITests/Tabs.swift` 57) | 815 | 0 |
+
+Under the plan's ~250 by about 40 %: see deviation 15. Not counted: the two catalogs (83 and 62 lines of JSON),
+docs, the four screenshots (93–102 KB each).
+
+### Gate and coverage
+
+**Full gate.** `/usr/bin/python3 <sim-lock> scripts/check.sh` from the worktree root, on the final tree (13 GB
+free before it): **exit 0, `check.sh OK`**, 584 s (tools 0 s, format 0 s, lint 74 s, iOS build 19 s, iOS boot
+0 s, iOS tests 264 s, watchOS build 18 s, watchOS boot 0 s, watchOS tests 208 s, coverage 1 s). Queued
+2026-10-04 18:30:16, it waited 734 s for the lock and ended 2026-10-04 18:52:14.
+
+17 test targets ran and passed (PR), 8 (PR-Watch); `Smoke` is in both. The gate log holds no warning. The iOS
+result bundle holds 1,678 tests: 1,660 passed, none failed, 12 skipped and 6 expected failures, all 18 in other
+targets' suites (Dependencies, Design, Domain, Persistence) and none added by this slice; `LedgerAppKitTests` ran
+93 tests in 17 suites.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 204 / 213 | 95.77 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2009 / 2027 | 99.11 % | 95 % | ✓ |
+| LedgerFakes | 1327 / 1342 | 98.88 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8210 / 8336 | 98.48 % | 80 % | ✓ |
+
+`LedgerAppKit`, `LedgerTestSupport` and `LedgerSnapshotTesting` are excluded from the coverage gate, as before.
+After the gate only Markdown changed: this section, one sentence of proof 3 and open question 11.
+`scripts/check.sh --lint-only` passed again afterwards (exit 0).
+
+**Nightly UI tests and the package tests on the simulator.** One session under the lock (Nightly plan,
+`-only-testing` each; iPhone 17, iOS 27.0), each result read from its own result bundle. It ran on the final
+product code; the only later change is the audit's (`LedgerTestSupport` and its tests), which neither the app nor
+a UI test links:
+
+| Run | Result | Time |
+|---|---|---|
+| `LedgerUITests/Tabs`, light appearance | 2 of 2 passed | 8.5 s and 27.7 s |
+| `LedgerUITests/Tabs`, dark appearance | 2 of 2 passed | 15.7 s and 24.0 s |
+| `LedgerUITests/DebugMenu.test_diagnostics_showsTheSeededCatalog` (untouched) | passed | 15.4 s |
+| `LedgerUITests/LaunchPerformance.test_launchToFirstFrame` (untouched) | passed | 50.6 s |
+| `LedgerUITests/Smoke.test_launchesToToday` (untouched; also in the gate) | passed | 5.9 s |
+| `LedgerAppKitTests` (before the audit's last change, which added two tests) | 91 tests in 17 suites passed | 4.1 s |
+
+The simulator's appearance was light before the session and was set back to light after it. The four
+screenshots in `screenshots/s1/` are that session's `Tabs` attachments (Today and Library, light and dark).
+
+**Launch time (decision #30: reported, never gated).**
+
+| How launched | F07 S3 (placeholder alone) | S1 (tab shell) |
+|---|---|---|
+| `XCTApplicationLaunchMetric`, 5 launches | 2.48 s mean, RSD 2.1 % | 3.98 s mean, RSD 23.9 % (4.17, 3.15, 5.40, 2.74, 4.45 s) |
+| In-app, under XCUITest (Diagnostics) | 2308 ms | 4058 ms |
+| In-app, plain `simctl launch`, first after install | 1291 ms | 1496 ms |
+| In-app, plain `simctl launch`, warm | 353, 335 ms | 448, 458, 421 ms |
+
+The XCUITest figures cannot be compared: two other agents were building on this Mac during the session, and the
+spread (RSD 24 % against 2 %) points to that load; I did not measure `main` under the same load. The plain warm
+launches are the usable number: about 100 ms more than the placeholder alone, on a busier machine, and inside the
+600 ms budget. None of these is a device's number.
+
+**One-off experiment in the running app (never committed).** To see "a tab keeps its stack" with real taps, which
+nothing in S1's interface can do, `MainRoot` was changed for one run to start with Settings pushed on Library's
+stack, and a temporary UI test tapped through the tabs: Library showed `settings.title` and not `library.title`;
+after visiting Today, Program and History in turn, Library still showed `settings.title` each time; the navigation
+bar's back button ("Back") popped to `library.title`; and after one more round trip the root was still there.
+Passed (36.4 s). Both temporary changes were undone inside the same locked session, before the final tree was built
+and tested: `MainRoot.swift`'s SHA-256 was compared with the one taken before the change, and the temporary test
+file is gone (`git status`).
+
+**Host (Mac, final tree).** `swift test --package-path LedgerKit --filter 'PreviewTests|LedgerAppKitTests'`: 89
+tests in 16 suites pass (the three modules' previews, and everything of `LedgerAppKitTests` but the iOS-only
+`AppTabsTests`). `swift build -c release --target LedgerAppKit`: exit 0, no warnings (the Debug menu compiles out).
+The three new `LedgerTestSupport` files also type-check against the watchOS simulator SDK.
+The whole package on the host (`swift test`, unfiltered): every test target passes except `LedgerDesignTests`'
+Archivo font suites, which fail on the Mac host only, as on `main` (52 issues, the number F07's notes record;
+their helper looks for the font in the simulators' flat bundle). None is in a file of this slice.
+
+**The first full gate is not cited.** It exited 0 (609 s; 17 and 8 test targets), but I changed the audit while
+it ran, so it tested a tree in between. The gate above ran after that change, on the tree as it is.
+
+### How to verify by hand
+
+- Launch the app on a simulator: four tabs, Today selected and orange, "Today" where it was in M0. Tap each tab:
+  its title, the tab's icon and label orange. Long-press "Today": the Debug menu, as before.
+- `swift test --package-path LedgerKit --filter LedgerAppKitTests` on the Mac (about 20 s after the first build)
+  runs every package test of this slice except `AppTabsTests`, which needs the iPhone simulator.
+- The check: add `Text("Hello")` to any file of `LedgerAppKit`, add a key to its catalog, or look up a key the
+  catalog lacks, and run `--filter AppCopyTests`: `copy_followsTheStandard` names the file and the line.
+- The compiled table: `plutil -p .derivedData/Build/Products/Debug-iphonesimulator/LedgerKit_LedgerAppKit.bundle/en.lproj/Localizable.strings`
+  after a gate run lists the seven keys.
+- The native build system's behaviour: `swift test --package-path LedgerKit --build-system native --filter
+  'AppCopyTests|CatalogFixtureTests'` fails `builtBundle_resolvesEveryKey` and the fixture's tests (not run in
+  this repository; measured in a scratch package).
+- Screenshots: `tasks/features/F09-today/screenshots/s1/`.
+
+### Open questions (each with a recommendation)
+
+1. **Decision #29's body names the product** ("Ledger tries again when you come back to it."), against the
+   naming rule, and now sits in the catalog unchanged, as ruled. Recommend "It tries again when you come back."
+   or "The app tries again when you come back to it."; it is a one-key change in `AppCopy.swift`, the catalog and
+   `AppCopyTests.databaseUnavailable_keepsItsWording`. A test that no catalog value contains the product name
+   (one line in `StringCatalog.problems`) should land with that change, not before: it would fail today.
+2. **`LedgerDesign` still looks its five VoiceOver words up outside a copy file and without a catalog**
+   (`WeekStrip.swift:108-114`, `SetRow.swift:146-154`: "English until the module has a string catalog"). It is
+   not audited, so nothing fails. Recommend a small follow-up in the slice that next touches `LedgerDesign`
+   (F09 S4): `DesignCopy.swift`, a five-key catalog, `resources` gaining `.process`, and the two tests. Until
+   then those five lookups fall back to their keys, which are the English words.
+3. **Stock symbols** (Pete's decision 4, default taken): bar chart, calendar, dumbbell, clock. The prototype's
+   History icon is a clock with a counter-clockwise arrow; `clock.arrow.circlepath` is the closer stock symbol.
+   Recommend Pete looks at the screenshots; swapping a name is one word in `AppTabs.swift`.
+4. **Which tier proves copy.** `check.sh --fast` runs no copy test (it filters to Domain and Persistence).
+   Recommend leaving it: the full gate runs them on the simulator, and a module's host run is one command.
+5. **The catalog's last byte.** Xcode writes a catalog without a final newline; the hand-written ones end with
+   one, as every other text file here. It only shows if Xcode ever rewrites a catalog for a real change (one
+   extra line in that diff). Recommend leaving the newline.
+6. **Xcode's IDE was not opened.** The sync was emulated with `xcstringstool sync` (proof 3). Recommend Pete
+   builds once in Xcode after the merge and checks `git status`; if Xcode does touch a catalog, the fix is to
+   commit what it writes, as the plan's risk note says.
+7. **`AppDestination` and `AppTabs.screen(for:)` are shared one-line files** for F10–F14 (a case, a title until
+   the screen lands, a line in the switch). Recommend treating them as convention 4's shared files: add only your
+   own case; the orchestrator resolves the conflicts.
+8. **watchOS is unproven** for catalogs (no watch module has one). Recommend F18 repeats `AppCopyTests`' pair
+   for `LedgerWatchAppKit` in its first slice and reports.
+9. **A real push through the interface.** Nothing in S1's interface pushes a screen, so "a tab keeps its stack"
+   is pinned on the router and on the hosted shell, and was seen once in the running app by the experiment
+   under "Gate and coverage". Recommend S5's UI test (the gear opens Settings) adds "switch away and back" to
+   its flow.
+10. **A copy member that returns `Text`** (the conventions allow one where a line embeds a live view, such as
+    S4's "Resume · m:ss"). The audit reads `String(localized:)` lookups only, so a `Text("Resume · \(timer)",
+    bundle: .module)` in a copy file would be a finding. Recommend S4 looks up the word ("Resume") as a `String`
+    and builds the `Text` from it, the " · " and `Text(timerInterval:)`, which the audit already accepts; extend
+    `CopyAudit.copyFile` only if a real format with an embedded view turns up. Standards §7 says it this way.
+11. **Tab identifiers.** A tab bar button's identifier is its symbol's name (`chart.bar`) and its label the
+    title; the `Tabs` UI test finds tabs by label. Recommend F15, which centralises identifiers, gives each
+    `Tab` one (`tab.today`) if it wants tests that survive a renamed tab.
+
+### Inputs for F08's and F10's slices
+
+**`MainRoot.swift`** (26 lines). Its body is `AppTabs(router:onTodayTitleLongPress:)` with the Debug sheet.
+- F08 (root gate): branch around `AppTabs(…)` inside `body`, so that `MainRoot` stays in the tree and keeps the
+  router (`@State`) while onboarding is shown; the tabs then appear with Today selected and empty stacks. Keep the
+  Debug sheet on the tabs: the UI tests open it from `today.title`.
+- F10 (cover): apply your exported modifier to `AppTabs(…)` here, after the Debug sheet. iOS-only API
+  (`fullScreenCover`) needs `#if os(iOS)`: the package also builds for the Mac host, and `PreviewTests` render the
+  shell there.
+- Both: `AppRouter` is `@MainActor @Observable`, internal. `router.selectedTab = .program` selects a tab;
+  `router.open(.settings, in: .today)` pushes. Map a feature's routes in `Routes+<Feature>.swift` as an
+  extension of `AppRouter` (`func handle(_ route: XRoute)`), and pass `router.handle` as the feature root's
+  synchronous `onRoute`.
+- A new pushed screen: a case in `AppDestination` (`Routes.swift`), its line in `AppTabs.screen(for:)`, and, while
+  it is a placeholder, its title in `AppCopy.title(of:)` and the catalog.
+
+**Your own catalog** (the four steps under "The localization pattern as built"):
+- `Package.swift`: add `resources: [.process("Resources")]` to your target's line
+  (`.target(name: "FeatureOnboarding", dependencies: featureSpine, resources: […], swiftSettings: uiSettings)`).
+  Do not touch `defaultLocalization`.
+- Copy `LedgerAppKit/Resources/Localizable.xcstrings` for the layout, and `LedgerAppKitTests/Fixtures/
+  Localizable.xcstrings` for a counted key's `variations`.
+- Your copy file must be named `<Something>Copy.swift` (or `…Copy+<Area>.swift`), anywhere in the module.
+- Counts and names go into a key as `Int` and `String` parameters of the member:
+  `static func exercises(_ count: Int, locale: Locale) -> String { String(localized: "\(count) exercises",
+  bundle: .module, locale: locale) }` looks up `%lld exercises`. A `Double`, a `Weight`, a formatted date: format
+  it first and pass the `String`. A literal `%` in copy is `%%` in the catalog key.
+- Expect the audit to flag, in files that are not copy files: a `Text("…")`, a string passed to a `LedgerDesign`
+  component, a constant holding copy, an enum's display string. It does not flag
+  `.accessibilityIdentifier("…")`, `identifier:` arguments, `systemImage:` / `systemName:`, log lines on a logger,
+  literals without a letter (" · "), comments, or `*+Previews.swift`. For a file of literals no lifter sees, add
+  it to your test's `exempting:` with the reason.
+- Your tests: `LedgerTestSupport` is already linked by every test target. Use
+  `StringCatalog.resourceBundle(ofModule:)`, not `Bundle.module`, for the built bundle.
+- Previews that include the shell or any `NavigationStack` inside a `Tab` render in `PreviewTests` on the
+  simulator and on the host (deviation 2).

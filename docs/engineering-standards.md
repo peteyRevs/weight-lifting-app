@@ -159,10 +159,83 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 - Every interactive control has an accessibility label; hit targets ≥ 44 pt
   (iOS) / follow watchOS defaults; Dynamic Type supported up to
   accessibility sizes; `.accessibilityIdentifier` on anything UI tests touch.
-- All user-visible strings go through the String Catalog
-  (`Localizable.xcstrings`). No string literals in `Text(...)` in features.
+- All user-visible strings come from the module's String Catalog
+  (`Localizable.xcstrings`), through its copy file. No string literal in
+  `Text(...)`, in a component's arguments or anywhere else a lifter could read
+  it: see "Localization" below.
 - Animations are explicit (`withAnimation(.snappy)`) and respect
   `accessibilityReduceMotion`.
+
+### Localization: one catalog and one copy file per module
+
+M1 convention (2026-10-04), built and proven in F09 S1 (`LedgerAppKit` is the
+model: `AppCopy.swift`, `Resources/Localizable.xcstrings`, `AppCopyTests`).
+
+- **Catalog.** A module with copy has one hand-written
+  `Sources/<Module>/Resources/Localizable.xcstrings`, and its target declares
+  `resources: [.process("Resources")]`; `defaultLocalization: "en"` is set once,
+  in `Package.swift`. English is the source language. The key is the English
+  text with its format specifiers (`"Week %lld of %lld"`), as the briefs'
+  "Copy (exact)" sections are written.
+  - Every key spells out its English text, marked `"state" : "translated"`. The
+    build compiles only what a catalog spells out: a key with no localization,
+    or one left `new`, is not in the bundle. A plain key's text is the key.
+  - A counted key has the plural forms `one` and `other`, counts exactly one
+    value (`%lld`), and its `other` form is the key. Two counts are two keys,
+    joined with " · ".
+  - A catalog is edited as text, in the layout Xcode writes (two-space indent,
+    `"key" : value`, keys in order). Xcode is not needed, and no build writes
+    to the file.
+- **Copy file.** Every lookup of the module is in `<Feature>Copy.swift` (and
+  `<Feature>Copy+<Area>.swift` when it grows): a `nonisolated enum` whose
+  members return `String`. Only where a line embeds a live view such as a
+  timer may a member return a `Text`, built from looked-up `String`s and that
+  view. A lookup is always written
+  `String(localized: "…", bundle: .module)`, with `locale:` when it formats a
+  number (the caller passes the injected `@Dependency(\.locale)`, so a test
+  fixes the digits and their grouping) and `comment:` where a translator needs
+  one. A value interpolated into the key is a parameter of the member, declared
+  `Int` (the key holds `%lld`) or `String` (`%@`); anything else is formatted
+  first and passed as a `String`. A copy file holds nothing but such lookups,
+  each with a literal key: a key built at run time (an enum's raw value) could
+  not be compared with the catalog, so each case gets its own lookup.
+- **Every other file receives `String`s.** Views, stores, presentation builders
+  and `LedgerDesign` components hold neither a user-facing literal nor a
+  localized lookup. A bare `Text("…")` in a package looks in the app's main
+  bundle, where the package's strings are not.
+- **Not copy.** Lines the Domain already formats (weights, volumes, receipt
+  rows, the last-performance line, rest labels, clock text) and data (program
+  and day names, catalog names) are shown as given and are not catalog entries.
+  Shipped copy never contains the product name
+  (`docs/product-decisions.md`, Naming).
+- **The check.** Each module with copy has two tests, over the helpers in
+  `LedgerTestSupport/Localization/`:
+  1. `CopyAudit(module:exempting:).findings` is empty. It reads the module's
+     sources and catalog: a key a copy file looks up that the catalog lacks, a
+     catalog key no copy file looks up, a catalog entry that breaks the rules
+     above, a lookup outside the copy files, and a string literal outside them
+     are each a finding. The last is strict by default: any literal with a
+     letter in it counts, unless it is an accessibility identifier
+     (`.accessibilityIdentifier("…")`, or an argument labelled `identifier:` /
+     `…Identifier:`), an SF Symbol's name (`systemImage:`, `systemName:`) or a
+     log line (a level call on a logger). A file whose literals no lifter sees
+     (launch arguments, a Debug-only page) is exempted by name in the module's
+     test, with the reason; an exemption that exempts nothing is a finding.
+     `*+Previews.swift` files are not read.
+  2. `StringCatalog(module:).unresolvedKeys(in:)` is empty for the bundle the
+     build made (`StringCatalog.resourceBundle(ofModule:)`): every key is in a
+     compiled table. In a test target with resources of its own, `Bundle.module`
+     is the test target's bundle, so tests do not use it for the module's.
+  A module with a counted string also tests it through its copy file, with one
+  and with several.
+- **Tiers.** With the pinned toolchain the catalog is compiled on the iOS
+  simulator (`xcodebuild`, the gate) and on the Mac host (`swift test`, whose
+  default build system is Swift Build), so the copy tests pass in both. SwiftPM's
+  deprecated `--build-system native` copies the catalog uncompiled; every lookup
+  then returns its key, no plural resolves, and test 2 fails, as it should.
+  `scripts/check.sh --fast` runs only the Domain and Persistence tests, so a
+  module's copy is proven by the full gate. watchOS is unproven until a watch
+  module has a catalog.
 
 ### Design lint (`ledger_raw_*`): a tripwire, not a proof
 
