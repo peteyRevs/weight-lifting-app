@@ -145,15 +145,19 @@ existing declaration changes, and nothing the app shows changes.
    program week's index, its `Weekday` and the `DayTemplateID`. It looks no further than the block's last week and
    returns `nil` when no session is left. A moment before the block begins gives the block's first session. Each
    candidate day is judged by its own program week, as `scheduledDay(on:in:)` judges it, so the answer does not
-   depend on which weekday the block began or on a stats week that straddles two program weeks.
+   depend on which weekday the block began or on a stats week that straddles two program weeks. Days are calendar
+   dates (ADR-007): a date a time zone once skipped is still a day of the block and may be the answer.
    With the 4-day program of spec §6.4 begun on Monday 2026-09-14: after Wednesday 09-16 it is Friday 09-18 (Upper
    B, week index 0); after Saturday 09-19 it is Monday 09-21 (Upper A, week index 1); week 8 schedules three
    sessions, so after its Friday it is `nil`.
 2. **`Volume.percentChange(from:)`** is the change from a previous volume in whole percent, rounded half away from
    zero, computed exactly (no `Double`): 24,180 lb against 22,400 lb is 8; 21,728 against 22,400 is −3; equal volumes
-   give 0. It is `nil` when the previous volume is zero. It never traps, whatever the two volumes.
+   give 0. It is `nil` when the previous volume is zero, and when the change cannot be computed as a number (a
+   volume that is not a number, or a result too large for `Decimal`); a change beyond `Int` is clamped. It never
+   traps, whatever the two volumes. (Revised after G2 round 1.)
 3. **`Volume.thousands(in:)`** is the number `compact(in:)` prints, without its "k": "24.2" for 24,180 lb, and the
-   same conversion to kilograms as `compact`. Zero reads "0"; every other volume keeps one decimal.
-4. **`Loadable<Value>`** is the type `docs/engineering-standards.md` §5 names for a screen's load state: `idle`,
-   `loading`, `loaded(Value)`, `failed(any Error)`, `Sendable` when its value is.
+   same conversion to kilograms as `compact`. Zero reads "0"; every other volume keeps one decimal, and a volume too
+   small to show reads "0.0" (and "0.0k" through `compact`), never an arbitrary number. (Revised after G2 round 1.)
+4. **`Loadable<T>`** is the type `docs/engineering-standards.md` §5 names for a screen's load state, written as §5
+   writes it: `idle`, `loading`, `loaded(T)`, `failed(any Error)`, `Sendable` when its value is.
 5. `LedgerDomain` still imports Foundation only; the new code is covered line for line; no existing test changes.

@@ -501,3 +501,221 @@ Failing, all mine:
 | `CopyFileAdversarialTests.textJoinedFromParts_isAFinding` (3 of 3) | ruling (a): expected until the audit refuses `Text + Text` |
 | `StringCatalogAdversarialTests.keyWithAnotherSpecifier_isAProblem` (5 of 5) | ruling (b): expected until the catalog check refuses other specifiers |
 | `CopyFileAdversarialTests.doubleFormattedIntoAKey_isAFinding` | ruling (b), through the audit: green with the same change |
+
+## Slice S2 — round 1 (G2 tester, 2026-10-05)
+
+Branch `feat/F09-s2-domain` at `a016f8b`. Specification: the brief's "Plan amendments — slice S2, Domain additions"
+(criteria 1 to 5), standards §5, ADR-007, spec §7.7 rules 34, 43 and 46.
+
+**Result.** `nextScheduledDay`, `percentChange` and `Loadable` held under every attack. `thousands(in:)` agrees with
+`compact(in:)` on every volume a lifter can store, and fails on one input the brief names, the smallest non-zero
+volume: it reads an arbitrary number that changes from call to call (F9-S2-1, a hole it inherits from F02's
+`compact`). One failing test, left failing on purpose. The other findings are two spec questions and one
+test-quality note, none with a failing test.
+
+61 tests written, in nine suites under `LedgerDomainTests/Adversarial/` (23 are parameterized: 1,816 cases in all).
+On the host 61 run: 60 pass, 1 fails. Three are exit tests and run on macOS only, so a simulator runs 58.
+No full gate was run (free disk under the floor; see the commands table), so nothing here ran on a simulator.
+
+**Independence.** I did not read `implementation-notes.md`. I read the implementer's tests after my own had run on
+the host. One slip: my first `grep` for the declarations printed four body lines of `nextScheduledDay`
+(`blockStart`, `blockEnd`, the week index and the schedule lookup) before I had written a test. It suggested the
+repeated-week-index attack, which found nothing. I read the bodies in full after my tests had run, and then added
+three things: the 39-digit rows of `percentChange_thirtyEightDigitTotals_roundOnTheExactValue`, and two tests the
+mutation run showed I lacked (`nextScheduledDay_weekIndexAtTheBlocksLength_isOutsideTheBlock`,
+`nextScheduledDay_repeatedWeekIndex_readsTheFirst`).
+
+### Findings
+
+Severity is one of: bug, spec question, test-quality.
+
+#### F9-S2-1 — bug (low; inherited from F02): the smallest volumes read an arbitrary number, not "0.0"
+
+- **Criterion.** 3: `thousands(in:)` "is the number `compact(in:)` prints, without its k"; "Zero reads "0"; every
+  other volume keeps one decimal". Rule 34: thousands of units to one decimal. The declaration adds: "It is cut from
+  `compact(in:)`, so the two cannot disagree."
+- **Minimal repro.** One input, the smallest non-zero `Decimal` (10⁻¹²⁷ g), through both functions:
+
+  ```swift
+  let volume = Volume(gramReps: .leastNonzeroMagnitude)
+  volume.thousands(in: .lb)   // S2's function
+  volume.compact(in: .lb)     // F02's function, which thousands(in:) is cut from
+  ```
+
+  Kept test: `VolumeThousandsAdversarialTests.thousands_smallestDecimalVolume_readsZeroPointZero` (4 expectations
+  on `thousands(in:)`: the volume and its negative, in lb and kg). It fails, and stays failing.
+- **Expected.** `thousands(in: .lb)` is "0.0" and `compact(in: .lb)` is "0.0k": the volume is not zero and is far
+  under 50 units.
+- **Actual.** Both misprint, so the fault is inherited from `compact(in:)`, and each call prints its own number.
+  A scratch executable linking `LedgerDomain`, first call of each, in this order (log `probe-f9s2-1.log`):
+
+  | Run | `thousands(in: .lb)` | `compact(in: .lb)` | `thousands(in: .kg)` | `compact(in: .kg)` |
+  |---|---|---|---|---|
+  | 1 | "431,782,111.3" | "431,784,903.3k" | "431,784,903.3" | "431,785,354.5k" |
+  | 2 | "433,954,629.7" | "433,957,421.7k" | "433,957,421.7" | "433,957,872.9k" |
+
+  So the two also disagree with each other on one volume, which criterion 3 and the declaration say cannot
+  happen. In the test bundle the same call read "435,194,010.5", "438,344,975.3" and "436,742,180.1" on three
+  host runs.
+- **Where.** At 10⁻⁸⁸ g and at every smaller size I tried, of either sign, in both units (10⁻⁸⁰ g reads "0.0"),
+  and for a volume that is not a number. No stored volume is near it: ADR-007 stores whole 10⁻⁷ g, which reads
+  "0.0" (tested).
+- **Cause.** `compact(in:)` divides twice; the second quotient underflows `Decimal`, which gives NaN.
+  `Decimal.roundedToInt()` then asks `NSDecimalNumber.intValue` for a NaN, and Foundation does not define that
+  value (it looks like stack contents). `percentChange` guards with `isFinite`; `thousands` and `compact` do not.
+  `formatted(in:)` has the same hole (10⁻¹²⁴ g reads "4,335,603,657").
+- **The other end, same root, not failing.** Above about 4 × 10²³ g the tenths no longer fit an `Int` and both
+  texts wrap: 10²⁵ g reads "-89,866,669,963,703,866.9" in pounds, and the largest `Decimal` reads "0.0". There
+  `thousands` and `compact` agree, so criterion 3 holds as written; the number is F02's.
+
+#### F9-S2-2 — spec question: `percentChange` is `nil` in more cases than criterion 2 names, and sooner than its declaration says
+
+- **Criterion.** 2: "It is `nil` when the previous volume is zero. It never traps". The declaration: `nil` too when
+  "a volume is NaN, or the arithmetic leaves `Decimal`'s own range, about 10¹⁶⁵"; "A change too large for `Int` is
+  clamped".
+- **Observed.** `Volume(gramReps: 10¹²⁶).percentChange(from: Volume(gramReps: 1))` is `nil`. The change, 10¹²⁸
+  percent, is a `Decimal` and too large for `Int`, so by the declaration it is `Int.max`; 10¹²⁵ after 1 is
+  `Int.max`. Foundation's `× 100` adds exponents and overflows at 127.
+- **Also.** Foundation divides −1 by 2¹²⁸ − 1 to NaN (and 1 by it to 0), so a volume one unit under a previous
+  volume of 2¹²⁸ − 1 gives `nil`, not 0. Totals of up to 38 digits rounded exactly in every case I tried.
+- **Ask.** Say in criterion 2 that NaN and overflow give `nil`, and correct "about 10¹⁶⁵" in the declaration. No
+  volume a lifter moves is within a hundred orders of magnitude of this. My rows accept `nil` or the clamp
+  (`percentChange_atTheLimitsOfDecimal_doesNotTrap`).
+
+#### F9-S2-3 — spec question: a day the zone never had can be the answer
+
+- **Criterion.** 1: "the first day after the given moment's calendar day, in the calendar's time zone, on which
+  the program schedules a session"; each day judged "as `scheduledDay(on:in:)` judges it".
+- **Observed.** Pacific/Apia went from Thursday 2011-12-29 23:59:59 to Saturday 2011-12-31 00:00. For a block that
+  trains every day, the answer after that Thursday is Friday 2011-12-30: a day no instant of the zone falls on,
+  and one `scheduledDay(on:in:)` can never return. The declaration promises that a 23- or 25-hour day is neither
+  skipped nor counted twice; it does not speak of a day with no hours.
+- **Reach.** Historic only as far as I know (Apia and Fakaofo 2011, Kiritimati 1994, Kwajalein 1993). It returns
+  only if a country crosses the date line again.
+- **Test.** `nextScheduledDay_acrossADayTheZoneSkipped_keepsToTheCalendar` pins what is not in question: the
+  answer is the Friday or the Saturday and is consistent with itself, and from Saturday 00:00 it is Sunday.
+
+#### F9-S2-4 — test-quality: three places where the implementer's tests assert less than they seem to
+
+The implementer's tests are strong (see "Mutation run" below). Three weak spots:
+
+- `VolumeTests.thousands_extremes_neverTrap` feeds `thousands` the two inputs of F9-S2-1
+  (`.leastNonzeroMagnitude`, `.nan`) and asserts only that the text is not empty and has no "k". It passes on the
+  arbitrary number.
+- `Fixtures.everyDayProgram` schedules one template on every day of every week, so the midnight rows cannot see an
+  answer that reads another weekday's or another week's schedule entry: the date and the week index are asserted,
+  the template is the same everywhere. (Other tests do catch that mutant.)
+- `LoadableTests.sendable_whenItsValueIs` proves a `Loadable` of a `Sendable` value crosses; it cannot see an
+  unconditional conformance. `LoadableAdversarialTests.loadable_sendable_followsItsValue` asserts "only then".
+
+### Attacked and held
+
+**`nextScheduledDay` (criterion 1).**
+
+- The brief's three examples at three times of day, and 25 hand-computed rows through the block (before it, its
+  first day, every kind of day in weeks 1, 7 and 8, the last session, after it), each in 10 zones and all 7 week
+  starts: 1,750 answers.
+- One instant at both ends of UTC (Thursday on Kiritimati, Tuesday at UTC−12), and one second and one millisecond
+  either side of midnight there.
+- Every weekday as the block's first day × every week start × two schedules (the seed's, and one that trains
+  every day with a template of its own for each week and weekday), at seven moments of every day from three days
+  before the block to three after: 42,532 answers against two references that must also agree with each other
+  (one walks noons with `scheduledDay(on:in:)`, one uses no `WeekCalendar` at all).
+- 15 zones (Cairo, Santiago, Havana, Beirut, the Azores, Nuuk, Lord Howe, Chatham, Kiritimati, UTC−12, Pago
+  Pago, New York, Berlin, Kathmandu, UTC), blocks that hold every 2026 clock change of each, the same seven
+  moments a day including start + 23 h and start + 24 h: 136,710 answers. 15 more by hand: skipped midnights
+  (Santiago, Havana), a second midnight (Havana), a 25-hour Thursday whose start + 24 h is still Thursday (Cairo),
+  a 23-hour Saturday (Nuuk). Each hand row first confirms the zone's rule with Foundation.
+- Seeded: 200 seeds (`17 + 7919·i`, i in 0..<200), each a random block (2 to 10 weeks, any start day in 2026 or
+  2027, empty weeks, deloads, weeks handed over shuffled, one calendar in four starting on another day than the
+  program says), a random zone of 18 and 40 moments. Four properties each: equal to the reference; strictly later
+  than the moment's day, inside the block, scheduled as it says and with no earlier session (the day-by-day
+  walk); chaining from each answer visits every session once, in order, and ends; a later moment never gets an
+  earlier answer. No seed failed.
+- Edited programs: no weeks; one week; empty weeks at the start, middle and end; only empty weeks; weeks out of
+  order; scattered and negative indices; a week whose index equals the block's length; two weeks with one index
+  (in process, and as an exit test); indices of `Int.max` and `Int.min`. All as `scheduledDay(on:in:)` and
+  `isBlockComplete` read them. A schedule that names a template the program no longer has is returned as
+  `scheduledDay(on:in:)` returns it: S3 must expect a `ScheduledDay` whose template it cannot find.
+- Edges of time: 10 moments back to 31 million years ago and `Date.distantPast` give the first session; 7 moments
+  forward to 31 million years and `Date.distantFuture` give `nil`; ±infinity, NaN and ±1e300 do not trap (exit
+  test). A block running past 9999-12-31 answers up to that day; a block from 0001-01-01 answers from it.
+- A block of 5,000 weeks whose only session is its last day: 8 calls and building the program took 0.04 s on the
+  host. No time is asserted.
+- A Buddhist, Hebrew, Islamic, Japanese, Persian or ISO 8601 calendar with another first weekday gives the same
+  answers: only the zone is read.
+
+**`percentChange` (criterion 2).**
+
+- The brief's examples in pounds, kilograms and raw gram-reps. 28 hand rows of exact halves and the hundredth
+  either side. Every half from −5.5 % to +5.5 % on 1,000 pound totals and 1,000 kilogram totals (24,000 answers).
+  Totals summed set by set in pounds (185,000 lb ± 925 lb is ±0.5 %, ± one hundredth of a pound).
+- Seeded, 200 seeds × 25 pairs each: weekly totals of up to 300 sets against an oracle that only multiplies
+  (`|100·Δ − p·previous| ≤ |previous| ÷ 2`, ties away from zero) and against the formula in another order of
+  operations; one stored unit (10⁻⁷ g) either side of an exact half on totals of up to 2 × 10¹² g; exact decimals
+  of any sign and scale.
+- 38-digit totals one unit either side of a half, and 39-digit ones 2.5 × 10⁻³⁹ percent either side.
+- Zero previous in four spellings × six currents; NaN; negative volumes (10 rows, the formula as written).
+- Tiny after huge (30 pairs, down to the smallest and up to the largest `Decimal`) is −100; huge after tiny
+  clamps; exact at `Int.max − 1`, `Int.max`, `Int.min + 1`, `Int.min` and clamped one past each, also from a half.
+
+**`thousands(in:)` (criterion 3).**
+
+- 32 boundary rows in both units (49, 49.99, 50, 949.99, 950, 999,949.99, 999,950 …), eight conversion rows
+  across units, a sweep of three values at each of the first 5,000 boundaries in both units (30,000 values) and
+  200 seeds × 10 random totals: all equal to `compact(in:)` without its "k" and to a formatter written from rule
+  34.
+- Zero in six spellings reads "0" in both units; 10⁻⁷ g, 10⁻³⁸ g, ±1 g and other volumes under 50 units read "0.0".
+- Negative and enormous volumes (to the largest `Decimal`) agree with `compact(in:)`.
+- Locale: a scratch executable linking `LedgerDomain` printed the same bytes under `-AppleLocale` en_US, de_DE,
+  fr_FR, ar_SA, hi_IN and fa_IR (each run printed its locale's separators to show the override took). Kept in the
+  branch: every output is ASCII in the shape `-?d{1,3}(,ddd)*.d`.
+
+**`Loadable` (criterion 4).** Exactly four cases (a switch with no `default`); `loaded` and `failed` carry what
+they were given, for an optional, `Void`, nested and reference value; `Sendable` when its value is, and not when
+it is not. §5 and the brief promise no equality and no accessors; there are none.
+
+**Criterion 5.** Every file of `LedgerDomain` imports Foundation and nothing else. `git show --numstat a016f8b`:
+the three source files and `VolumeTests.swift` have additions only, and the other test files are new. In a
+scratch copy, the slice's test files alone (with the two existing suites they extend) leave no line of
+`WeekCalendar.swift` or `Volume.swift` unexecuted; `Loadable.swift` is a declaration with no line to execute.
+
+**Mutation run** (scratch copy of `LedgerDomain`, 28 hand-written mutants: 13 of `nextScheduledDay`, 10 of
+`percentChange`, 5 of `thousands`). The implementer's tests killed 28 of 28. Mine killed 27 at first: "the block
+is one day longer" survived until I added `nextScheduledDay_weekIndexAtTheBlocksLength_isOutsideTheBlock`.
+
+### Not attacked
+
+- Speed beyond the 5,000-week block; nothing asserts a time.
+- An `Int` of 32 bits (a watch's arm64_32): simulators and the host have 64. My files hold no literal that needs
+  more than 32 bits, but rows past ±2³¹ assume 64.
+- Time zone data other than this machine's. The hand rows fail on their own first line if a rule changes.
+- The device's locale inside the test bundle: the six-locale run was a scratch executable, not a kept test.
+- How S3 uses a `ScheduledDay` ("Next: Friday · UB", "next Monday") and how a store uses `Loadable`.
+- More mutants than the 28, and any mutant of `Loadable` (its checks are the compiler's).
+
+### Commands and exit statuses
+
+All from the worktree root. Logs are in the session's scratch folder (`f09s2-g2/`).
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter "LoadableAdversarialTests\|NextScheduledDay.*AdversarialTests\|PercentChange.*AdversarialTests\|VolumeThousandsAdversarialTests"` (host) | 1 | 61 tests, 60 pass, 1 fails (F9-S2-1) |
+| `swift test … --filter LedgerDomainTests` (host) | 1 | 884 tests in 144 suites; the same 1 fails, nothing else |
+| `scripts/check.sh --lint-only` | 0 | format, lint, script tests |
+| scratch package: the slice's tests with coverage (`swift test --enable-code-coverage`, `llvm-cov show`) | 0 | 46 tests; no line with a zero count in `WeekCalendar.swift` or `Volume.swift` |
+| scratch package: 28 mutants × two test sets | 0 | see "Mutation run" |
+| scratch executable: `thousands(in:)` and `compact(in:)` on the inputs of F9-S2-1, two runs | 0 | F9-S2-1's table |
+| scratch executable: eight volumes through `thousands`, `compact`, `formatted` and `percentChange` under `-AppleLocale` en_US, de_DE, fr_FR, ar_SA, hi_IN, fa_IR | 0 | the same bytes six times |
+| `scripts/check.sh` (full gate, through the lock) | not run | Free disk was 6.4 GiB and falling, under the 8 GB floor, with two other worktrees' gates ahead of mine on the lock. I did not start it and deleted nothing. Ruled by the orchestrator (2026-10-05): its own full gate on this branch, after the fix round for F9-S2-1, replaces mine |
+
+Not verified, because the gate did not run: my 58 non-exit tests on the iOS and watchOS simulators (they build
+and run on the host only so far), the string-catalog step, and the coverage gate with my tests in the bundle.
+Expect the gate red at step 3 on `thousands_smallestDecimalVolume_readsZeroPointZero` until F9-S2-1 is fixed, if
+the simulator's Foundation reads the same arbitrary number.
+
+The failing test, mine:
+
+| Test | Finding |
+|---|---|
+| `VolumeThousandsAdversarialTests.thousands_smallestDecimalVolume_readsZeroPointZero` (4 expectations) | F9-S2-1 |

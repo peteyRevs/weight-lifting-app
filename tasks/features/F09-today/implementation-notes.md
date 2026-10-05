@@ -1913,3 +1913,22 @@ host); the nightly lane runs 2,000.
   `Sendable` when the model is.
 - **Fixtures.** `LedgerDomainTests`' `Fixtures.fourDayProgram()` is not visible to `FeatureTodayTests`; S3
   re-dates `LedgerFakes`' `Fixtures.seedProgram()` as its plan says.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 0 Should fix, 6 nits. G2 round 1: 61 tests, one failing on purpose; four findings. The
+tester's own full gate was not run (free disk under the floor); the orchestrator's gate after the fix round replaces it.
+
+- **F9-S2-1 accepted, fixed at the root.** A volume too small to show prints an arbitrary number that differs from
+  call to call, through `thousands(in:)` and through the existing `compact(in:)`. The fix goes where both get their
+  digits, so both read "0.0" / "0.0k"; this is the one sanctioned change to existing behaviour in the slice (no
+  real workout can produce the input). A test covers `compact` too.
+- **F9-S2-2:** no change of behaviour; the doc comment states the true conditions for `nil` (the brief's criterion 2
+  is revised), without a wrong bound.
+- **F9-S2-3 accepted as specified:** days are calendar dates (ADR-007); a date a zone skipped can be the answer. The
+  doc comment says so (criterion 1 revised).
+- **F9-S2-4 accepted:** the three weak assertions are strengthened.
+- **Review nits:** all six taken: the negative-baseline sign in `percentChange`'s doc; `thousands` and `compact` share
+  one function for their digits instead of `dropLast`; `#require` for the day-length check; `Loadable<T>` stands (the
+  brief now says `T`, as §5 does); and, for S3, `nil` from `nextScheduledDay` means "no later session in the block",
+  which is not always "the last week of the block" (later weeks may be empty): the "Inputs for S3" line is corrected.
