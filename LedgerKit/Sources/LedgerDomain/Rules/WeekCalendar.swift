@@ -141,3 +141,60 @@ public extension WeekCalendar {
         return (0 ..< max(0, end)).filter { !trainedWeeks.contains($0) }
     }
 }
+
+// MARK: - The next scheduled day (rule 46, decision #18)
+
+/// A calendar day on which a program schedules a session, as `WeekCalendar.nextScheduledDay(after:in:)`
+/// finds it.
+public struct ScheduledDay: Hashable, Sendable {
+    /// The calendar day of the session.
+    public let date: CivilDate
+    /// The index of the program week `date` falls in (0 is the block's first week).
+    public let weekIndex: Int
+    /// The day template that week schedules on `weekday`.
+    public let dayTemplateID: DayTemplateID
+
+    public init(date: CivilDate, weekIndex: Int, dayTemplateID: DayTemplateID) {
+        self.date = date
+        self.weekIndex = weekIndex
+        self.dayTemplateID = dayTemplateID
+    }
+
+    /// The weekday of `date`: the key the week's schedule holds the template under.
+    public var weekday: Weekday {
+        date.weekday
+    }
+}
+
+public extension WeekCalendar {
+    /// Rule 46's "Next:" line, by date: the first day after the calendar day of `date` on which
+    /// `program` schedules a session, or `nil` when the block has none left. A `date` before the
+    /// block gives the block's first session.
+    ///
+    /// "After" is decided by calendar days in this calendar's time zone, never by adding seconds, so
+    /// a 23- or 25-hour day is neither skipped nor counted twice. Each candidate day is judged by its
+    /// own program week, the one `scheduledDay(on:in:)` reads for it, so neither `weekStart` nor the
+    /// weekday the block began on matters. The search stops at the last day of the block's last week
+    /// (`weeks.count` weeks from `startDate`, as `isBlockComplete` counts them) and at 9999-12-31,
+    /// the last day a `CivilDate` holds, so it ends for every program.
+    func nextScheduledDay(after date: Date, in program: Program) -> ScheduledDay? {
+        let blockStart = startDate.daysSinceEpoch
+        let blockEnd = blockStart + 7 * program.weeks.count
+        let today = dayNumber(of: date)
+        guard today < blockEnd else {
+            return nil
+        }
+        // The week each index names, as `Program.week(at:)` resolves it: the first that carries it.
+        let weeks = Dictionary(program.weeks.map { ($0.index, $0) }, uniquingKeysWith: { first, _ in first })
+        for day in max(today + 1, blockStart) ..< blockEnd {
+            let weekIndex = (day - blockStart) / 7
+            guard let template = weeks[weekIndex]?.schedule[CivilDate.weekday(ofDayNumber: day)] else {
+                continue
+            }
+            return CivilDate(daysSinceEpoch: day).map {
+                ScheduledDay(date: $0, weekIndex: weekIndex, dayTemplateID: template)
+            }
+        }
+        return nil
+    }
+}

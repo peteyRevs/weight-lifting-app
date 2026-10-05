@@ -271,7 +271,7 @@ Pure services in `LedgerDomain` (all unit-tested to ~100 %):
 - `PersonalRecords.detect(finished:history:)`.
 - `PlateMath.perSide(load:bar:plates:)`.
 - `TimeEstimate.minutes(day:)` — one formula (decision #14).
-- `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days.
+- `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days, the next scheduled day (`nextScheduledDay(after:in:)` → `ScheduledDay`).
 - `MissTracking.update(slot:workout:)` — decision #5.
 
 The seed exercise catalog ships as `Resources/exercises.json` inside

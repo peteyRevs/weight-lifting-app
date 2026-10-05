@@ -29,6 +29,32 @@ public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
         return NumberText.fixed(tenthsOfThousands, fractionDigits: 1, trimZeros: false, grouped: true) + "k"
     }
 
+    /// Rule 34 (Today tile), for a caller that draws the "k" itself: the number `compact(in:)` prints,
+    /// without the "k": "24.2" for 24,180 lb. It is cut from `compact(in:)`, so the two cannot
+    /// disagree. Only the zero volume differs: it reads "0", where `compact(in:)` prints "0.0k". Every
+    /// other volume keeps the one decimal, so 40 lb reads "0.0".
+    public func thousands(in units: Units) -> String {
+        gramReps == 0 ? "0" : String(compact(in: units).dropLast())
+    }
+
+    /// Rule 43 ("lb moved · +8%"): the change from `previous` to this volume in whole percent,
+    /// `(self − previous) ÷ previous × 100`, rounded once, half away from zero: 24,180 lb after
+    /// 22,400 lb is 8, and −2.5 is −3. The arithmetic is `Decimal`'s, never `Double`'s (ADR-007).
+    ///
+    /// `nil` when there is no percentage to give: `previous` is zero, or the result is not a number
+    /// (a volume is NaN, or the arithmetic leaves `Decimal`'s own range, about 10¹⁶⁵). A change too
+    /// large for `Int` is clamped to `Int.min` or `Int.max`. It never traps.
+    public func percentChange(from previous: Volume) -> Int? {
+        guard previous.gramReps != 0 else {
+            return nil
+        }
+        let change = (gramReps - previous.gramReps) / previous.gramReps * 100
+        guard change.isFinite else {
+            return nil
+        }
+        return min(max(change, Decimal(Int.min)), Decimal(Int.max)).roundedToInt()
+    }
+
     private func value(in units: Units) -> Decimal {
         gramReps / units.gramsPerUnit
     }
