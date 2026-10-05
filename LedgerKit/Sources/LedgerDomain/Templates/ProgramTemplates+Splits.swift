@@ -33,30 +33,39 @@ extension ProgramTemplates {
         /// "Upper A — Push focus": the part before " — " is the day's short title (`DayTemplate.shortTitle`).
         let name: String
         let tag: String
-        /// The day's line in onboarding's preview (spec §6.7).
-        let exercises: String
+        /// The weekday the day is trained on, every week it is trained.
+        let weekday: Weekday
         let lifts: [Lift]
+        /// The day's line in onboarding's preview (spec §6.7): its lifts, as a lifter would say them.
+        let preview: String
 
-        init(_ name: String, tag: String, preview exercises: String, _ lifts: [Lift]) {
+        init(_ name: String, tag: String, on weekday: Weekday, lifts: [Lift], preview: String) {
             self.name = name
             self.tag = tag
-            self.exercises = exercises
+            self.weekday = weekday
             self.lifts = lifts
+            self.preview = preview
         }
     }
 
     /// The program one number of days a week gets.
     struct Split: Sendable {
         let name: String
-        /// The weekday each of `days` is trained on, in the same order.
-        let weekdays: [Weekday]
         /// The training weekdays the deload week rests on. A deload changes loads, not days, so only spec
         /// §6.4's own schedule names one.
-        var deloadRestDays: Set<Weekday> = []
+        let deloadRestDays: Set<Weekday>
+        /// The training days, in the program's order, each on a weekday of its own.
         let days: [Day]
         /// Spec §6.4's rows by exercise, for the split the prototype drew: what `both` prescribes there in
         /// place of the role table.
-        var seed: [String: Scheme] = [:]
+        let seed: [String: Scheme]
+
+        init(name: String, deloadRestDays: Set<Weekday> = [], days: [Day], seed: [String: Scheme] = [:]) {
+            self.name = name
+            self.deloadRestDays = deloadRestDays
+            self.days = days
+            self.seed = seed
+        }
     }
 
     static func split(for days: DaysPerWeek) -> Split {
@@ -80,33 +89,32 @@ extension ProgramTemplates {
     /// slot, and the copy follows the day (F08 notes, decision 1).
     static let upperLower = Split(
         name: "Upper / Lower",
-        weekdays: [.monday, .wednesday, .friday, .saturday],
         deloadRestDays: [.saturday],
         days: [
-            Day("Upper A — Push focus", tag: "UA", preview: "Bench, incline, row, pulldown, laterals", [
+            Day("Upper A — Push focus", tag: "UA", on: .monday, lifts: [
                 Lift("Barbell Bench Press", .primary),
                 Lift("Incline DB Press", .secondary),
                 Lift("Chest-Supported Row", .secondary),
                 Lift("Lat Pulldown", .accessory),
                 Lift("Cable Lateral Raise", .accessory, isSupersetWithPrevious: true)
-            ]),
-            Day("Lower A — Squat focus", tag: "LA", preview: "Squat, RDL, leg press, calves", [
+            ], preview: "Bench, incline, row, pulldown, laterals"),
+            Day("Lower A — Squat focus", tag: "LA", on: .wednesday, lifts: [
                 Lift("Back Squat", .primary),
                 Lift("Romanian Deadlift", .secondary),
                 Lift("Leg Press", .accessory),
                 Lift("Standing Calf Raise", .accessory, isSupersetWithPrevious: true)
-            ]),
-            Day("Upper B — Pull focus", tag: "UB", preview: "Weighted pull-up, OHP, row, curls", [
+            ], preview: "Squat, RDL, leg press, calves"),
+            Day("Upper B — Pull focus", tag: "UB", on: .friday, lifts: [
                 Lift("Weighted Pull-Up", .primary),
                 Lift("Overhead Press", .secondary),
                 Lift("Barbell Row", .secondary),
                 Lift("Barbell Curl", .accessory, dropSets: 1)
-            ]),
-            Day("Lower B — Hinge focus", tag: "LB", preview: "Deadlift, front squat, leg curl", [
+            ], preview: "Weighted pull-up, OHP, row, curls"),
+            Day("Lower B — Hinge focus", tag: "LB", on: .saturday, lifts: [
                 Lift("Deadlift", .primary),
                 Lift("Front Squat", .secondary),
                 Lift("Seated Leg Curl", .accessory)
-            ])
+            ], preview: "Deadlift, front squat, leg curl")
         ],
         seed: specSeed
     )
@@ -118,29 +126,28 @@ extension ProgramTemplates {
     /// 3 days, on Monday, Wednesday and Friday: the whole body each session, around one main lift.
     static let fullBody = Split(
         name: "Full Body",
-        weekdays: [.monday, .wednesday, .friday],
         days: [
-            Day("Full Body A — Squat focus", tag: "FA", preview: "Squat, bench, pulldown, laterals, curl", [
+            Day("Full Body A — Squat focus", tag: "FA", on: .monday, lifts: [
                 Lift("Back Squat", .primary),
                 Lift("Barbell Bench Press", .secondary),
                 Lift("Lat Pulldown", .accessory),
                 Lift("Cable Lateral Raise", .accessory),
                 Lift("Barbell Curl", .accessory)
-            ]),
-            Day("Full Body B — Bench focus", tag: "FB", preview: "Bench, RDL, row, leg press, pushdown", [
+            ], preview: "Squat, bench, pulldown, laterals, curl"),
+            Day("Full Body B — Bench focus", tag: "FB", on: .wednesday, lifts: [
                 Lift("Barbell Bench Press", .primary),
                 Lift("Romanian Deadlift", .secondary),
                 Lift("Chest-Supported Row", .secondary),
                 Lift("Leg Press", .accessory),
                 Lift("Cable Triceps Pushdown", .accessory)
-            ]),
-            Day("Full Body C — Deadlift focus", tag: "FC", preview: "Deadlift, OHP, pull-up, leg curl, rear delt", [
+            ], preview: "Bench, RDL, row, leg press, pushdown"),
+            Day("Full Body C — Deadlift focus", tag: "FC", on: .friday, lifts: [
                 Lift("Deadlift", .primary),
                 Lift("Overhead Press", .secondary),
                 Lift("Weighted Pull-Up", .secondary),
                 Lift("Seated Leg Curl", .accessory),
                 Lift("Rear Delt Fly", .accessory)
-            ])
+            ], preview: "Deadlift, OHP, pull-up, leg curl, rear delt")
         ]
     )
 
@@ -148,86 +155,84 @@ extension ProgramTemplates {
     /// and a lower day of second lifts and accessories.
     static let pushPullLegs = Split(
         name: "Push / Pull / Legs",
-        weekdays: [.monday, .tuesday, .wednesday, .friday, .saturday],
         days: [
-            Day("Push — Chest focus", tag: "PU", preview: "Bench, OHP, incline, laterals, pushdown", [
+            Day("Push — Chest focus", tag: "PU", on: .monday, lifts: [
                 Lift("Barbell Bench Press", .primary),
                 Lift("Overhead Press", .secondary),
                 Lift("Incline DB Press", .accessory),
                 Lift("Cable Lateral Raise", .accessory),
                 Lift("Cable Triceps Pushdown", .accessory)
-            ]),
-            Day("Pull — Back focus", tag: "PL", preview: "Pull-up, row, pulldown, rear delt, curl", [
+            ], preview: "Bench, OHP, incline, laterals, pushdown"),
+            Day("Pull — Back focus", tag: "PL", on: .tuesday, lifts: [
                 Lift("Weighted Pull-Up", .primary),
                 Lift("Barbell Row", .secondary),
                 Lift("Lat Pulldown", .accessory),
                 Lift("Rear Delt Fly", .accessory),
                 Lift("Incline DB Curl", .accessory)
-            ]),
-            Day("Legs — Squat focus", tag: "LG", preview: "Squat, RDL, leg press, leg curl, calves", [
+            ], preview: "Pull-up, row, pulldown, rear delt, curl"),
+            Day("Legs — Squat focus", tag: "LG", on: .wednesday, lifts: [
                 Lift("Back Squat", .primary),
                 Lift("Romanian Deadlift", .secondary),
                 Lift("Leg Press", .accessory),
                 Lift("Seated Leg Curl", .accessory),
                 Lift("Standing Calf Raise", .accessory)
-            ]),
-            Day("Upper — Accessories", tag: "UP", preview: "Dip, row, fly, extension, curl", [
+            ], preview: "Squat, RDL, leg press, leg curl, calves"),
+            Day("Upper — Accessories", tag: "UP", on: .friday, lifts: [
                 Lift("Weighted Dip", .secondary),
                 Lift("Chest-Supported Row", .secondary),
                 Lift("Low-to-High Cable Fly", .accessory),
                 Lift("Overhead Cable Extension", .accessory),
                 Lift("Barbell Curl", .accessory)
-            ]),
-            Day("Lower — Hinge focus", tag: "LW", preview: "Deadlift, front squat, leg curl, calves", [
+            ], preview: "Dip, row, fly, extension, curl"),
+            Day("Lower — Hinge focus", tag: "LW", on: .saturday, lifts: [
                 Lift("Deadlift", .primary),
                 Lift("Front Squat", .secondary),
                 Lift("Seated Leg Curl", .accessory),
                 Lift("Standing Calf Raise", .accessory)
-            ])
+            ], preview: "Deadlift, front squat, leg curl, calves")
         ]
     )
 
     /// 6 days, Monday to Saturday: one body part a day, the legs twice.
     static let bodyPart = Split(
         name: "Body-Part Split",
-        weekdays: [.monday, .tuesday, .wednesday, .thursday, .friday, .saturday],
         days: [
-            Day("Chest", tag: "CH", preview: "Bench, incline, dip, fly", [
+            Day("Chest", tag: "CH", on: .monday, lifts: [
                 Lift("Barbell Bench Press", .primary),
                 Lift("Incline DB Press", .secondary),
                 Lift("Weighted Dip", .accessory),
                 Lift("Low-to-High Cable Fly", .accessory)
-            ]),
-            Day("Back", tag: "BK", preview: "Row, pull-up, pulldown, chest-supported row", [
+            ], preview: "Bench, incline, dip, fly"),
+            Day("Back", tag: "BK", on: .tuesday, lifts: [
                 Lift("Barbell Row", .primary),
                 Lift("Weighted Pull-Up", .secondary),
                 Lift("Lat Pulldown", .accessory),
                 Lift("Chest-Supported Row", .accessory)
-            ]),
-            Day("Legs — Quad focus", tag: "LQ", preview: "Squat, front squat, leg press, calves", [
+            ], preview: "Row, pull-up, pulldown, chest-supported row"),
+            Day("Legs — Quad focus", tag: "LQ", on: .wednesday, lifts: [
                 Lift("Back Squat", .primary),
                 Lift("Front Squat", .secondary),
                 Lift("Leg Press", .accessory),
                 Lift("Standing Calf Raise", .accessory)
-            ]),
-            Day("Shoulders", tag: "SH", preview: "OHP, laterals, rear delt, extension", [
+            ], preview: "Squat, front squat, leg press, calves"),
+            Day("Shoulders", tag: "SH", on: .thursday, lifts: [
                 Lift("Overhead Press", .primary),
                 Lift("Cable Lateral Raise", .accessory),
                 Lift("Rear Delt Fly", .accessory),
                 Lift("Overhead Cable Extension", .accessory)
-            ]),
-            Day("Arms", tag: "AR", preview: "Curl, pushdown, DB curl, extension", [
+            ], preview: "OHP, laterals, rear delt, extension"),
+            Day("Arms", tag: "AR", on: .friday, lifts: [
                 Lift("Barbell Curl", .secondary),
                 Lift("Cable Triceps Pushdown", .secondary),
                 Lift("Incline DB Curl", .accessory),
                 Lift("Overhead Cable Extension", .accessory)
-            ]),
-            Day("Legs — Hinge focus", tag: "LH", preview: "Deadlift, RDL, leg curl, calves", [
+            ], preview: "Curl, pushdown, DB curl, extension"),
+            Day("Legs — Hinge focus", tag: "LH", on: .saturday, lifts: [
                 Lift("Deadlift", .primary),
                 Lift("Romanian Deadlift", .secondary),
                 Lift("Seated Leg Curl", .accessory),
                 Lift("Standing Calf Raise", .accessory)
-            ])
+            ], preview: "Deadlift, RDL, leg curl, calves")
         ]
     )
 }

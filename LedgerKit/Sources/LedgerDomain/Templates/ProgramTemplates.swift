@@ -44,8 +44,8 @@ public enum ProgramTemplates {
         public let name: String
         /// "UA".
         public let tag: String
-        /// "Bench, incline, row, pulldown, laterals".
-        public let exercises: String
+        /// "Bench, incline, row, pulldown, laterals": the day's lifts, as a lifter would say them.
+        public let line: String
     }
 
     /// Onboarding's last step: the program a number of days a week gets.
@@ -62,7 +62,7 @@ public enum ProgramTemplates {
         let split = split(for: days)
         return Preview(
             programName: split.name,
-            days: split.days.map { DayPreview(name: $0.name, tag: $0.tag, exercises: $0.exercises) }
+            days: split.days.map { DayPreview(name: $0.name, tag: $0.tag, line: $0.preview) }
         )
     }
 
@@ -87,9 +87,10 @@ public enum ProgramTemplates {
     /// called once per week, for weeks 0…7 in order, then for each day in order: once for the day, then once
     /// for each of its slots in order. That is 28 calls for the 4-day split.
     ///
-    /// - Throws: `ProgramTemplateError.unknownExercise`, naming the first template exercise `catalog` lacks
-    ///   (some ids are drawn by then). `SlotValidationError` and `ProgramValidationError` propagate from the
-    ///   model's initializers; no template causes one (`ProgramTemplatesTests`).
+    /// - Throws: `ProgramTemplateError.unknownExercise`, naming the first template exercise `catalog` lacks, in
+    ///   day and slot order. Every exercise is looked up before the first id is drawn, so a call that throws it
+    ///   has not called `newID`. `SlotValidationError` and `ProgramValidationError` propagate from the model's
+    ///   initializers; no template causes one (`ProgramTemplatesTests`).
     public static func program(
         _ request: Request,
         catalog: [Exercise],
@@ -98,15 +99,31 @@ public enum ProgramTemplates {
     ) throws -> Program {
         let split = split(for: request.days)
         let exercises = Dictionary(catalog.lazy.filter { !$0.isCustom }.map { ($0.name, $0) }) { first, _ in first }
+        // Every lift finds its exercise before the first id is drawn: a block that cannot be written draws none.
+        let resolved = try split.days.map { day in try (day: day, lifts: lifts(of: day, in: exercises)) }
         let weekIDs = (0 ..< weekCount).map { _ in WeekID(newID()) }
-        let days = try split.days.map { day in
-            try dayTemplate(day, of: split, request: request, exercises: exercises, newID: newID)
+        var days: [DayTemplate] = []
+        var training: [Weekday: DayTemplateID] = [:]
+        for (day, lifts) in resolved {
+            let dayID = DayTemplateID(newID())
+            let slots = try lifts.map { lift, exercise in
+                let scheme = split.scheme(for: lift, goal: request.goal)
+                return try slot(
+                    id: SlotID(newID()),
+                    lift: lift,
+                    exercise: exercise,
+                    scheme: scheme,
+                    units: request.units
+                )
+            }
+            days.append(DayTemplate(id: dayID, name: day.name, tag: day.tag, slots: slots))
+            training[day.weekday] = dayID
         }
         return try Program(
             id: id,
             name: split.name,
             startDate: request.startDate,
-            weeks: weeks(ids: weekIDs, split: split, days: days.map(\.id)),
+            weeks: weeks(ids: weekIDs, training: training, deloadRestDays: split.deloadRestDays),
             days: days,
             goal: request.goal,
             daysPerWeek: request.days.rawValue,
@@ -114,42 +131,53 @@ public enum ProgramTemplates {
         )
     }
 
-    /// `day` as a day template: one slot per lift, in order, each on the catalog exercise of the lift's name.
-    private static func dayTemplate(
-        _ day: Day,
-        of split: Split,
-        request: Request,
-        exercises: [String: Exercise],
-        newID: () -> UUID
-    ) throws -> DayTemplate {
-        let id = DayTemplateID(newID())
-        let slots = try day.lifts.map { lift in
+    /// `day`'s lifts in order, each with the catalog exercise of its name; throws for the first that has none.
+    private static func lifts(
+        of day: Day,
+        in exercises: [String: Exercise]
+    ) throws(ProgramTemplateError) -> [(lift: Lift, exercise: Exercise)] {
+        var found: [(lift: Lift, exercise: Exercise)] = []
+        for lift in day.lifts {
             guard let exercise = exercises[lift.exercise] else {
-                throw ProgramTemplateError.unknownExercise(lift.exercise)
+                throw .unknownExercise(lift.exercise)
             }
-            let scheme = split.scheme(for: lift, goal: request.goal)
-            return try Slot(
-                id: SlotID(newID()),
-                exerciseID: exercise.id,
-                sets: scheme.sets,
-                reps: scheme.reps.lowerBound,
-                repsHi: scheme.reps.upperBound,
-                rpe: scheme.rpe,
-                restSeconds: scheme.rest,
-                progression: scheme.progression,
-                startLoad: exercise.startLoad(in: request.units),
-                isSupersetWithPrevious: lift.isSupersetWithPrevious,
-                dropSets: lift.dropSets
-            )
+            found.append((lift, exercise))
         }
-        return DayTemplate(id: id, name: day.name, tag: day.tag, slots: slots)
+        return found
     }
 
-    /// One week per id, in order: each trains the split's days on their weekdays, and the last, the deload,
-    /// rests on the split's `deloadRestDays` as well.
-    private static func weeks(ids: [WeekID], split: Split, days: [DayTemplateID]) -> [Week] {
-        let training = zip(split.weekdays, days).reduce(into: [Weekday: DayTemplateID]()) { $0[$1.0] = $1.1 }
-        let deload = training.filter { !split.deloadRestDays.contains($0.key) }
+    /// The slot for `lift` on `exercise`: what `scheme` prescribes, the exercise's start load in `units` copied
+    /// in, and no step of its own.
+    private static func slot(
+        id: SlotID,
+        lift: Lift,
+        exercise: Exercise,
+        scheme: Scheme,
+        units: Units
+    ) throws(SlotValidationError) -> Slot {
+        try Slot(
+            id: id,
+            exerciseID: exercise.id,
+            sets: scheme.sets,
+            reps: scheme.reps.lowerBound,
+            repsHi: scheme.reps.upperBound,
+            rpe: scheme.rpe,
+            restSeconds: scheme.rest,
+            progression: scheme.progression,
+            startLoad: exercise.startLoad(in: units),
+            isSupersetWithPrevious: lift.isSupersetWithPrevious,
+            dropSets: lift.dropSets
+        )
+    }
+
+    /// One week per id, in order: each trains the days of `training` on their weekdays, and the last, the
+    /// deload, rests on `deloadRestDays` as well.
+    private static func weeks(
+        ids: [WeekID],
+        training: [Weekday: DayTemplateID],
+        deloadRestDays: Set<Weekday>
+    ) -> [Week] {
+        let deload = training.filter { !deloadRestDays.contains($0.key) }
         return ids.enumerated().map { index, id in
             let isDeload = index == ids.count - 1
             return Week(id: id, index: index, isDeload: isDeload, schedule: isDeload ? deload : training)

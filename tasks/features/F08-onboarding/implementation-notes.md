@@ -19,6 +19,8 @@ Total ≈ 935 product lines over three PRs.
 
 ### Corrected `ProgramTemplates` signatures (replaces the brief's "Domain changes" block)
 
+**Superseded by "The API as built" under "Slice S1 — template generator" (rulings after G2 and G3): code against that one.**
+
 ```swift
 // LedgerDomain/Templates/DaysPerWeek.swift — the generator's input only; Program.daysPerWeek stays Int?
 public enum DaysPerWeek: Int, Codable, Sendable, CaseIterable { case three = 3, four, five, six }
@@ -566,7 +568,7 @@ public enum ProgramTemplates {
     public struct Request: Hashable, Sendable {          // var goal, days, units, startDate; public init
         public init(goal: TrainingGoal, days: DaysPerWeek, units: Units, startDate: CivilDate)
     }
-    public struct DayPreview: Hashable, Sendable { public let name, tag, exercises: String }
+    public struct DayPreview: Hashable, Sendable { public let name, tag, line: String }  // `line` was `exercises` until fix round 1
     public struct Preview: Hashable, Sendable { public let programName: String; public let days: [DayPreview] }
 
     public static func preview(days: DaysPerWeek) -> Preview
@@ -611,7 +613,8 @@ The program's own id is the `id` argument.
    usesTheFirst`.
 7. **When `unknownExercise` is thrown, some ids have been drawn** (the eight weeks' and the failing day's), because
    the documented order starts with the weeks. Harmless, and said in the doc comment. With an incrementing test
-   generator, a retry after a failed attempt therefore starts at a later id.
+   generator, a retry after a failed attempt therefore starts at a later id. *No longer true after fix round 1
+   (S1-N1): every exercise is looked up before the first id is drawn.*
 8. **Preview lines.** Lower B is "Deadlift, front squat, leg curl" (decision 1, default A). Upper B keeps spec
    §6.7's "Weighted pull-up, OHP, row, curls". `preview_linesCountTheDaysLifts` checks that every line names one
    thing per slot, so no line promises what its day lacks. `DayPreview.name` keeps " — "; the " · " form is S2's.
@@ -790,10 +793,11 @@ Reading check: `ProgramTemplates+Splits.swift` beside the brief's "Templates" li
   store should treat as a failed save (the retry state), not unwrap.
 - **Failures.** With an unseeded catalog the generator throws `ProgramTemplateError.unknownExercise(name)` before
   anything is saved; `RepositoryError.unknownExercise` from `save` is then a second line of defence. `program` is
-  plain `throws`. A failed attempt has already drawn ids (decision 7): a test with `uuid = .incrementing` should not
-  expect a retry to reuse them.
+  plain `throws`. A call that throws `unknownExercise` has not called `newID` (fix round 1). In the call above the
+  program's own id is the store's `uuid()`, drawn before the generator runs, so each attempt still costs that one.
 - **Step 3.** `ProgramTemplates.preview(days:)` gives `programName` and one `DayPreview` per day (`name`, `tag`,
-  `exercises`). Names keep " — "; criterion 3's " · " is the presentation's replacement. There is no public
+  `line`; `line` was `exercises` until fix round 1). Names keep " — "; criterion 3's " · " is the presentation's
+  replacement. There is no public
   initializer: build models from `preview(days:)`. Longest strings for layout: "Full Body C — Deadlift focus",
   "Row, pull-up, pulldown, chest-supported row"; six rows for six days. The preview needs no catalog, so step 3
   can draw before the catalog is read.
@@ -806,3 +810,110 @@ Reading check: `ProgramTemplates+Splits.swift` beside the brief's "Templates" li
   settings: Fixtures.settingsKg)`; kg loads are the catalog's (Bench 20 kg).
 - **Rows written by a save** (for S3's Diagnostics assertions): `program` 1, `program_week` 8, `day_template` 4,
   `slot` 16, `slot_miss` 0 for the default; 3 / 15, 5 / 24 and 6 / 24 days / slots for the other splits.
+
+### S1 — orchestrator rulings after G2 and G3 (2026-10-04)
+
+- **G2 closed in round 1** (no bug; 79 tests of the tester's own, committed `1031136`). **G3 approved**: 0 Blocking,
+  1 Should fix, 4 nits (`review.md`).
+- **`ProgramTemplates.program(_ request: Request, catalog:id:newID:)` is the accepted signature** (the implementer's
+  decision 1; review S1-N4). The flat seven-parameter form in "Corrected `ProgramTemplates` signatures" above was the
+  plan's; it is superseded by "The API as built". S2 codes against `Request`.
+- Fix round 1 takes all five review items: S1-SF1 (the async fixture suite gets its time limit), S1-N1 (resolve every
+  lift before drawing an id, so a failed generation draws nothing), S1-N2 (a template day carries its weekday; the
+  schedule is built from the days), S1-N3 (`DayPreview.exercises` becomes `DayPreview.line`, the internal
+  `Day.exercises` becomes `Day.preview`), S1-N4 (this entry, and a pointer on the old signature block).
+- The tester's F8-S1-1 and the review's two role-table observations (linear accessories under `strength`; two days
+  that never change under `consistency`) are with Pete as part of his decision 3. They are data-only changes if he
+  wants them; the S1 PR waits for that answer.
+- The review's note on changing units after onboarding (a slot keeps its stored load, so 45 lb reads 20.41 kg) goes
+  to F14's brief as an input.
+
+### S1 fix round 1 (G1 implementer, 2026-10-04)
+
+On top of `1031136`, uncommitted. The five review items and the F14 input; no template's content, no role table
+entry and no expected value in any test changed. Paths are under `LedgerKit/`.
+
+**What changed, per item**
+
+| Item | Change | Where |
+|---|---|---|
+| S1-SF1 | `.timeLimit(.minutes(1))` on the fixture suite. I checked the 17 suites this slice added (9 mine, 8 the tester's) for async tests: five have them, this one included. `TemplateProgramRoundTripTests` and the tester's `FixturesTemplatesAdversarialTests` already had one minute; the tester's `TemplateProgramStoreAdversarialTests` has two minutes, left as the tester set it; the tester's `TemplatesDeterminismAdversarialTests` (one async test, `concurrentCalls_giveTheSameBlocks`) had none and now has one minute | `Tests/LedgerDependenciesTests/FixturesTemplatesTests.swift:9`; `Tests/LedgerDomainTests/Templates/Adversarial/TemplatesDeterminismAdversarialTests.swift:7` |
+| S1-N1 | Every lift of the split finds its catalog exercise before the first id is drawn (`resolved`, through the new private `lifts(of:in:)`); the ids are then drawn in the documented order, unchanged. A call that throws `unknownExercise` has not called `newID`; the doc comment says so and the caveat is gone. New test `program_unknownExercise_drawsNoID` (4 splits): each exercise of the split is removed from the catalog in turn, the error names it and no id is drawn; the same id source then writes the usual block. Notes: decision 7 marked, "Inputs for S2" corrected (the store's own `ProgramID(uuid())` is still drawn by the caller before the call) | `Sources/LedgerDomain/Templates/ProgramTemplates.swift:102-103`, `:134-147`, doc `:90-93`; `Tests/LedgerDomainTests/Templates/ProgramTemplatesCatalogTests.swift:84` |
+| S1-N2 | A template day carries its weekday (`Day.weekday`, `Day(_:tag:on:lifts:preview:)`), `Split.weekdays` is gone, and the schedule is filled in the loop that writes each day template (`training[day.weekday] = dayID`), with no `zip`. `Split` has an explicit `init(name:deloadRestDays:days:seed:)`, so `deloadRestDays` and `seed` are `let`. `weeks` now takes the schedule and the rest days | `Sources/LedgerDomain/Templates/ProgramTemplates+Splits.swift:37`, `:42`, `:56`, `:61`, `:63`, and the 18 `Day(…)` calls; `ProgramTemplates.swift:106-121`, `:175-185` |
+| S1-N3 | Public `DayPreview.exercises` is `DayPreview.line`; internal `Day.exercises` is `Day.preview`. My own tests follow; the tester's are under "Sanctioned test edits". "The API as built" and "Inputs for S2" above now say `line` | `ProgramTemplates.swift:48`, `:65`; `ProgramTemplates+Splits.swift:40`; `Tests/LedgerDomainTests/Templates/ProgramTemplatesSplitsTests.swift:68`, `:89`, `:106-107` |
+| S1-N4 | One line at the top of "Corrected `ProgramTemplates` signatures" pointing to "The API as built" | this file, line 22 |
+| F14 input | New last section `## Inputs from F08 (2026-10-04, S1)`, three lines | `tasks/features/F14-settings.md` |
+
+**Two things a reader should know about S1-N2.**
+- With a weekday in it, the one-line day header passes 120 columns for three days ("Full Body A / B / C"), so the
+  preview line moved behind the lifts it abbreviates: `Day("…", tag: "FC", on: .friday, lifts: […], preview: "…")`.
+  Same two lines of overhead per day as before; nothing else in the tables moved.
+- A day can no longer be written without a weekday. Two days on one weekday can still be written: the later one
+  takes the weekday and the earlier is never scheduled. `program_weeks1to7_scheduleExactlyDaysPerWeek` and the
+  tester's `program_schedule_matchesTheBrief` fail on that; nothing in the types prevents it.
+
+**Sanctioned test edits** (the tester's files; `git diff 1031136 -- LedgerKit/Tests/**/Adversarial` shows exactly
+these four lines, and no expected value among them):
+
+| File (`Tests/LedgerDomainTests/Templates/Adversarial/`) | Line | Edit |
+|---|--:|---|
+| `TemplatesDeterminismAdversarialTests.swift` | 7 | `@Suite(…, .tags(.domain, .property))` gains `, .timeLimit(.minutes(1))` (S1-SF1) |
+| `TemplatesTableAdversarialTests.swift` | 162 | `preview.days.map(\.exercises)` → `preview.days.map(\.line)` |
+| `TemplatesTableAdversarialTests.swift` | 168 | `$0.exercises` → `$0.line` |
+| `TemplatesTableAdversarialTests.swift` | 197 | `day.exercises` → `day.line`, three times on the line |
+
+**Are the generated programs the same as before?** By the tests, unedited: for all 32 (goal, days, units) the
+tester's `program_everySlot_matchesTheBrief`, `program_schedule_matchesTheBrief`, `program_header_recordsThePicks`
+and `sameInputs_giveEqualPrograms`, its `ids_areDrawnInTheDocumentedOrder` (the 16 in pounds), and my
+`program_startLoads_areTheCatalogs`, `program_sameInputsAndIDs_isEqual`, `program_drawsIDs_weeksThenEachDayAnd
+ItsSlots` and the GRDB round trip. Between them they pin every field of a `Program`. I did **not** dump the old and
+new output and compare them byte for byte: that needs the old sources built again.
+
+**Spot check of the new behaviour** (two mutations in one host run, sources restored and compared byte for byte):
+the lookup moved after the week ids makes `program_unknownExercise_drawsNoID` fail (82 issues over the 4 splits);
+"Legs — Hinge focus" moved to Sunday makes four tests fail, two of mine and two of the tester's.
+
+**Product lines now** (non-blank, not whole-line comments):
+
+| File | Now | At `fd8e747` |
+|---|--:|--:|
+| `DaysPerWeek.swift` | 4 | 4 |
+| `ProgramTemplates.swift` | 121 | 98 |
+| `ProgramTemplates+Splits.swift` | 193 | 190 |
+| `ProgramTemplates+Prescriptions.swift` | 96 | 96 |
+| **LedgerDomain** | **414** (plan ≈ 360, +15 %) | 388 |
+| `LedgerFakes/Fixtures/Fixtures+Templates.swift` | 25 | 25 |
+
+The 23 lines in `ProgramTemplates.swift` are the lookup function, the slot function split from the loop, and the
+wider `weeks` signature. `+Splits` is 238 lines with comments (lint limit 300).
+
+**Coverage.** `ProgramTemplates*`, from `xcrun xccov view --report --json` on both of the gate's result bundles
+(iOS and watchOS agree):
+
+| File | Lines |
+|---|--:|
+| `ProgramTemplates.swift` | 104 / 104 |
+| `ProgramTemplates+Splits.swift` | 27 / 27 |
+| `ProgramTemplates+Prescriptions.swift` | 31 / 31 |
+| `Fixtures+Templates.swift` | 22 / 23 (unchanged: the fixture's `throw`) |
+
+Host `llvm-cov` adds regions: 28 / 28, 10 / 10, 19 / 19. Modules: LedgerDomain 2171 / 2189 (99.17 %), LedgerFakes
+1349 / 1365 (98.82 %), overall 8394 / 8521 (98.50 %).
+
+**Gate.** `/usr/bin/python3 <scratchpad>/sim-lock.py scripts/check.sh` from the worktree root, started 2026-10-04
+19:25:00: **exit status 0** (`GATE_EXIT=0` read from the log, with `check.sh OK`), **552 s**, lock acquired after
+0 s. Lint 65 s, iOS build 24 s, iOS tests 234 s, watchOS build 20 s, watchOS tests 206 s, coverage 2 s. "17 test
+targets ran and passed (PR)", "8 test targets ran and passed (PR-Watch)"; iOS 1,752 tests, 0 failed (1,733 passed,
+13 skipped, 6 expected failures); watchOS 1,571, 0 failed (1,555 passed, 13 skipped, 3 expected failures). One
+warning in the log, on `main` already (`PayloadVersionAdversarialTests.swift:29`). The gate ran on this tree minus
+this section; no file under `LedgerKit`, `Apps`, `scripts` or `docs` changed after it started, and
+`scripts/check.sh --lint-only` was run again once this section was written: exit 0.
+
+**Release build.** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+**exit 0** (34 s, no warning). Release `LedgerFakes.o` still holds one symbol and none of the fixtures'.
+
+**Host.** Domain 876 tests, Persistence 460, Dependencies 63: all pass, the tester's 79 among them.
+
+**Not verified:** a byte-for-byte comparison of old and new output (above); the nightly lane, which now runs the
+tester's determinism suite at 2,000 seeds under the new one-minute limit (the limit is per test case, and a case is
+one seed) and the timing test; CI; a device.

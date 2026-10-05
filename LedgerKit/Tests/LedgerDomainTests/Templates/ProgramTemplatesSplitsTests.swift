@@ -65,7 +65,7 @@ struct ProgramTemplatesSplitsTests {
         let preview = ProgramTemplates.preview(days: .four)
         #expect(preview.programName == "Upper / Lower")
         // Spec §6.7 writes each option as "label — sub", the label being the day's name with " · " for " — ".
-        let options = preview.days.map { "\($0.name.replacing(" — ", with: " · ")) — \($0.exercises)" }
+        let options = preview.days.map { "\($0.name.replacing(" — ", with: " · ")) — \($0.line)" }
         #expect(options == [
             "Upper A · Push focus — Bench, incline, row, pulldown, laterals",
             "Lower A · Squat focus — Squat, RDL, leg press, calves",
@@ -86,7 +86,7 @@ struct ProgramTemplatesSplitsTests {
         #expect(preview.days.count == days.rawValue)
         #expect(preview.days.map(\.name) == expected.days.map(\.name))
         #expect(preview.days.map(\.tag) == expected.days.map(\.tag))
-        #expect(preview.days.map(\.exercises) == expected.days.map(\.preview))
+        #expect(preview.days.map(\.line) == expected.days.map(\.preview))
         #expect(Set(preview.days.map(\.tag)).count == days.rawValue)
     }
 
@@ -103,8 +103,8 @@ struct ProgramTemplatesSplitsTests {
     func preview_linesCountTheDaysLifts() throws {
         for days in DaysPerWeek.allCases {
             let program = try TemplateCase(goal: .both, days: days).program()
-            for (line, day) in zip(ProgramTemplates.preview(days: days).days, program.days) {
-                #expect(line.exercises.split(separator: ", ").count == day.slots.count, "\(day.tag): \(line.exercises)")
+            for (preview, day) in zip(ProgramTemplates.preview(days: days).days, program.days) {
+                #expect(preview.line.split(separator: ", ").count == day.slots.count, "\(day.tag): \(preview.line)")
             }
         }
     }

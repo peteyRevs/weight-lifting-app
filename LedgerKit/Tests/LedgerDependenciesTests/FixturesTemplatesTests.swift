@@ -6,7 +6,7 @@ import Testing
 /// `Fixtures.defaultProgram`: the program onboarding saves (F08), as the generator writes it, and how it
 /// stands beside `Fixtures.seedProgram`, so the two fixtures other features test against cannot drift apart
 /// unnoticed.
-@Suite("Fixtures · default program")
+@Suite("Fixtures · default program", .timeLimit(.minutes(1)))
 struct FixturesTemplatesTests {
     private func civil(_ year: Int, _ month: Int, _ day: Int) throws -> CivilDate {
         try #require(CivilDate(year: year, month: month, day: day))

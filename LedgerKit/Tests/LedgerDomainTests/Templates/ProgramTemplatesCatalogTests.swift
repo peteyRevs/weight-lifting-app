@@ -81,6 +81,35 @@ struct ProgramTemplatesCatalogTests {
         }
     }
 
+    @Test("A generation that fails has drawn no id, whichever exercise is missing", arguments: DaysPerWeek.allCases)
+    func program_unknownExercise_drawsNoID(days: DaysPerWeek) throws {
+        let bundled = try BundledCatalog.exercises()
+        let block = TemplateCase(goal: .both, days: days)
+        var drawn = 0
+        let newID = {
+            drawn += 1
+            return Fixtures.uuid(drawn)
+        }
+        let names = Set(TemplateOracle.split(for: days).days.flatMap(\.exercises))
+        #expect(names.count >= 3 * days.rawValue)
+        for missing in names {
+            let catalog = bundled.filter { $0.name != missing }
+            #expect(throws: ProgramTemplateError.unknownExercise(missing)) {
+                try ProgramTemplates.program(block.request, catalog: catalog, id: Fixtures.programID, newID: newID)
+            }
+            #expect(drawn == 0, "\(missing): \(drawn) ids drawn before the throw")
+        }
+        // So the id source is as it was: the next call, with the whole catalog, is the usual block.
+        let program = try ProgramTemplates.program(
+            block.request,
+            catalog: bundled,
+            id: Fixtures.programID,
+            newID: newID
+        )
+        #expect(try program == (block.program()))
+        #expect(drawn == 8 + program.days.count + program.days.flatMap(\.slots).count)
+    }
+
     @Test("A custom exercise with a template's name is not used: alone it leaves the name unknown")
     func program_customExerciseWithATemplatesName_isIgnored() throws {
         let bundled = try BundledCatalog.exercises()

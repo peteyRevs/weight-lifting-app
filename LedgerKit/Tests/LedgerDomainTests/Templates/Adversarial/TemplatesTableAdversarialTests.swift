@@ -159,13 +159,13 @@ extension TemplatesTableAdversarialTests {
         #expect(preview.programName == split.programName)
         #expect(preview.days.map(\.name) == split.days.map(\.name))
         #expect(preview.days.map(\.tag) == split.days.map(\.tag))
-        #expect(preview.days.map(\.exercises) == split.days.map(\.line))
+        #expect(preview.days.map(\.line) == split.days.map(\.line))
     }
 
     @Test("Spec §6.7's four lines, with Lower B as the brief corrects it")
     func preview_fourDay_isSpec67() {
         let preview = ProgramTemplates.preview(days: .four)
-        let rows = preview.days.map { $0.name.replacing(" — ", with: " · ") + " — " + $0.exercises }
+        let rows = preview.days.map { $0.name.replacing(" — ", with: " · ") + " — " + $0.line }
         #expect(rows == [
             "Upper A · Push focus — Bench, incline, row, pulldown, laterals",
             "Lower A · Squat focus — Squat, RDL, leg press, calves",
@@ -194,7 +194,7 @@ extension TemplatesTableAdversarialTests {
         for day in preview.days {
             #expect(day.tag.count == 2 && day.tag.allSatisfy { $0.isUppercase && $0.isASCII }, "\(day.tag)")
             #expect(day.name == day.name.trimmingCharacters(in: .whitespacesAndNewlines) && !day.name.isEmpty)
-            #expect(!day.exercises.isEmpty && day.exercises.first?.isUppercase == true, "\(day.exercises)")
+            #expect(!day.line.isEmpty && day.line.first?.isUppercase == true, "\(day.line)")
         }
     }
 }

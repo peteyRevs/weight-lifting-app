@@ -4,7 +4,7 @@ import Testing
 
 /// F08 S1, G2 round 1: criterion 9 and its limits. The same inputs and id sequence give an equal block; ids,
 /// the catalog's order and the start date change only what they name.
-@Suite("Adversarial F08 S1 · determinism of the generator", .tags(.domain, .property))
+@Suite("Adversarial F08 S1 · determinism of the generator", .tags(.domain, .property), .timeLimit(.minutes(1)))
 struct TemplatesDeterminismAdversarialTests {
     typealias Brief = BriefTemplates
 
