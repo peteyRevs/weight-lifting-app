@@ -769,3 +769,372 @@ feature. F09 S1 lands the localization scaffolding and writes rules 1 and 3 into
    table-driven test before the tester starts (F06's lesson).
 6. **Test names** follow `docs/testing-strategy.md` §6 (`subject_condition_expectation`, a sentence as the display
    name), not the briefs' `test_…` names.
+
+## Slice S1 — session seam (G1 implementer, 2026-10-04)
+
+Built on `92a63bd`, in the worktree `F10-s1`, on `feat/F10-s1-session-seam`. Nothing is committed and no PR is open.
+Paths are under `LedgerKit/` unless they start with `docs/` or `tasks/`.
+
+### What landed
+
+| File | Contents |
+|---|---|
+| `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` (new) | `WorkoutSessionClient` (the six calls, as the brief's amendments sign them), `WorkoutSessionUpdate` (`state`, `effects`, `live`, `feedback(from:)`), `WorkoutSessionError` |
+| `Sources/LedgerDomain/Units/ClockText.swift` (new) | `ClockText.minutesSeconds(_:)` |
+| `Sources/LedgerDependencies/Keys/SessionKeys.swift` (new) | `DependencyValues.workoutSession`; `WorkoutSessionKey`: live value the stub, preview value a fake with no workout (`#if DEBUG`), test value the library's default |
+| `Sources/LedgerDependencies/Unimplemented/UnimplementedSession.swift` (new) | `UnimplementedWorkoutSession`: `updates()` logs and ends at once, the other five log and throw |
+| `Sources/LedgerFakes/FakeWorkoutSessionClient.swift` (new) | the engine-backed fake, inside `#if DEBUG` |
+| `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract.swift`, `+Lifecycle`, `+Updates`, `+Model`, `+Scripts` (new) | the contract: 17 clauses, the rules as a model, seeded scripts. Five files because of the 300-line lint limit |
+| `Tests/LedgerSyncTests/WorkoutSessionClientContractTests.swift` (new) | the clauses and 200 seeded scripts on the fake; the script generator's own checks |
+| `Tests/LedgerSyncTests/WorkoutSessionClientContractFaultTests.swift`, `Support/FaultyWorkoutSession.swift` (new) | a second, independent client with eleven switchable faults: each must break a named clause and be noticed by a script |
+| `Tests/LedgerSyncTests/FakeWorkoutSessionClientTests.swift` (new) | what the fake adds to the contract: `applied`, `init(live:)`, the stamp, forgotten streams |
+| `Tests/LedgerSyncTests/Support/Tags.swift` (new) | `Tag.sync`, `Tag.property` (see deviation 14) |
+| `Tests/LedgerDomainTests/Units/ClockTextTests.swift`, `Protocols/WorkoutSessionUpdateTests.swift`, `Protocols/WorkoutSessionClientTests.swift` (new) | the formatter; `feedback(from:)` and `live`; the protocol's shape and errors |
+| `Tests/LedgerDependenciesTests/DependencyKeysTests.swift`, `UnimplementedStubTests.swift`, `PreviewValueTests.swift` | the key's row in each, and a test that binds the key to a fake |
+| `docs/architecture.md` §13 | the key, its stub and its preview value |
+
+Unchanged: `Package.swift`, `package-graph.expected.txt` (no new edge), `scripts/coverage-thresholds.json`, the test
+plans, `project.pbxproj`, `AppComposition`. Nothing of S2 to S9 is in the tree.
+
+### Decisions and deviations
+
+The design points the orchestrator asked to settle are 1 to 7.
+
+1. **An event the engine ignores: `apply` returns the workout as it stands and nothing is published. An event the
+   engine accepts is published once, also when it leaves the state as it was.** So an update is published exactly
+   when the event enters the log (`.persist`).
+   - Why, from ADR-004: an ignored envelope is "no state change and no effects" (`docs/adr/ADR-004…md:138-141`), so
+     there is nothing to store, run or announce; an accepted one "belongs in every log even when it changes nothing
+     here, because a peer may order it differently" (`Sources/LedgerDomain/Engine/WorkoutEngine.swift:39-40`), so it
+     happened, and the stream says so. The plan's S2 text already reads this way (this file, line 564).
+   - The alternative, "publish only when the state changed", was rejected: criterion 3 ("equal to the next update's
+     state") would not hold for an accepted event that changes nothing, and a done set logged again with the same
+     values changes nothing yet buzzes, so "changed" cannot be the rule anyway.
+   - What the engine ignores on a live workout: a second `started`, a date that is not finite, a rest outside
+     `0 ... longestRest` (`WorkoutEngine.swift:31-36`). What it accepts without a change: a row that does not exist,
+     a done row selected (rule 11), a done set logged again.
+   - Consequence: `finish(endedAt:)` and `discard(endedAt:)` with a date that is not finite end nothing. `finish`
+     then returns the workout still live, because `WorkoutSessionError` (final) has no case for it. Pinned by the
+     clause "an event the engine ignores…"; see open question 2.
+2. **`start` judges the snapshot before the session.** A snapshot the engine would not start throws `notStartable`
+   whether or not a workout is live; only then `workoutInProgress` (which names the live workout, not the new one).
+   `notStartable` also covers a live snapshot that is malformed (a date that is not finite), which the brief does
+   not mention: the engine ignores its `started`, and a start cannot succeed with no workout. Pinned, so that the
+   fake and the host refuse in the same order (ADR-008 decision 5's rule, applied here).
+3. **`apply` never starts a workout** (`apply(.started)` with nothing live throws `noLiveWorkout`), **and a terminal
+   event through `apply` ends the workout exactly as `finish` and `discard` do.** The fake has one path for all four
+   calls (`FakeWorkoutSessionClient.swift:99-122`); a host with a separate finish path would drift, so both are
+   clauses.
+4. **After the update that ends a workout there is no further update until the next start.** `state` is nil only in
+   a stream's first element. Existing subscribers learn of the end from the finished or discarded state
+   (`update.live == nil`); a stream opened afterwards starts with nil.
+5. **The contract uses the protocol only, and is parameterised by the client it is handed**
+   (`ContractClause<any WorkoutSessionClient>`, as the store contracts; `violations(of:)` takes a factory).
+   What it deliberately does not observe, and so does not constrain: an envelope's stamp (device, `seq`, wall
+   clock); what is stored; the effects a host runs itself (notification, Live Activity, materialise, compact);
+   recovery; a failing store. It reads streams without waiting on a clock: each clause ends with one recognisable
+   change (`markEnd(of:)`: a one-second rest ending a day after the start, or the start of a workout of its own) and
+   reads every stream up to it. A client that publishes too few or too many updates therefore gets a line naming
+   the first difference, not a hang. Only a client that never publishes that last change, or whose streams have no
+   first element, keeps a clause waiting until the suite's one-minute limit fails it.
+6. **A terminated subscriber is removed without a task.** A stream's `onTermination` runs synchronously on whatever
+   thread cancels or drops it, so it cannot touch actor state, and standards §4 forbid the unstructured `Task` that
+   could. It appends its id to a `Mutex<[Int]>` (`FakeWorkoutSessionClient.swift:27-30`, `:73-75`); every
+   `updates()` and every publication first drops those ids (`dropEnded`, `:141-149`). The fake therefore holds at
+   most the streams that ended since its last subscription or publication.
+   - Why not "prune when `yield` reports `.terminated`" alone: it prunes only at a publication. Today's screen
+     coming and going while no workout starts would add a continuation each time, without bound, until the next
+     start.
+   - `LedgerFakes` may use a `Mutex` (ADR-008 decision 4; `Support/ObservedState.swift:75-77` also removes an
+     observer from `onTermination`, under its lock). For the host see open question 1.
+   - Shown by `FakeWorkoutSessionClientTests.droppedStreams_areForgottenAtTheNextSubscription` (1,000 streams opened
+     and dropped with nothing published: one is held), `cancelledStream_isForgottenAtTheNextPublication`,
+     `openStreams_staySubscribed`. They read `subscriberCount`, which is internal (`@testable import LedgerFakes`).
+     Mutants M1 and M2 below fail them.
+7. **The fake's stamp is deterministic and unobservable.** Device: the `device` it was built with. `seq`: 1 for the
+   `started`, then one more per accepted event; an ignored event takes none. Wall clock: the injected `now()`, read
+   once per call, never `Date()` (`stamp_changesNothingObservable` counts the reads and shows that another device
+   and a moving clock change no update; mutant M11). The fake keeps no log and exposes no envelope, so nothing a
+   test can write against the fake depends on the stamp, and the host's hybrid logical clock cannot disagree with
+   it. `device:` and `now:` are kept as the plan's signature has them (this file, lines 116-120), though no caller
+   can see their effect.
+8. **`applied` lists every ask**, in call order, including a call the fake refused and an event the engine ignored
+   (criterion 7: "records what it was asked"). A screen test asserts what its store asked for, whatever came of it.
+9. **`FakeWorkoutSessionClient(live:)` runs the engine's `started` on the snapshot.** One the engine would not start
+   reports an issue, which fails the test that passed it, and leaves no workout: the same choice as
+   `InMemoryStores`' illegal seed (`Sources/LedgerFakes/InMemoryStores.swift:71-74`, finding F7-10).
+10. **The contract includes the rules as a model and seeded scripts** (the plan's risk "Seeded scripts", line 393).
+    `script(seed:)` writes 80 calls from a SplitMix64 generator: starts, set edits, rests, a swap, calls that must
+    be refused or ignored, and endings by all three routes; `scriptViolation(seed:on:)` runs them on a client beside
+    the model and compares every return, every throw, `current()` after every call, and two streams (one from the
+    start, one opened at a call the seed picks). S2's `sessionScripts_fakeAndActorPublishTheSame(seed:)` is then
+    one line per seed on the actor: both are held to the engine, so they agree with each other.
+11. **The clauses are shown to bite.** `FaultyWorkoutSession` (test target) is a second client written from the
+    protocol's documentation, with eleven faults a host could have. Each fault must break the clause named for it
+    and be noticed by a script within twenty seeds; with no fault it keeps the whole contract. This was not in the
+    plan; it is test code only.
+12. **`ClockText` counts seconds in `Int128`** (`Duration.attoseconds`), not through `Duration.components`, whose
+    `Int64` conversion would trap on the 2^63 s that `WorkoutState.elapsed(at:)` saturates at
+    (`Sources/LedgerDomain/Model/WorkoutState.swift:111-113`). It rounds down to whole seconds, and imports nothing.
+13. **The preview value is computed, not a `static let`**, as the stores' are (`Keys/StoreKeys.swift:98-111`): the
+    library caches a key's value per test, so each test's preview context gets its own fake.
+14. **Files outside the slice's list, and why.** `Tests/LedgerSyncTests/Support/Tags.swift`: testing-strategy §6
+    wants a layer tag on every suite and `LedgerSyncTests` had none; the new suites carry `.sync`, the existing ones
+    are untouched. `Tests/LedgerSyncTests/Support/FaultyWorkoutSession.swift` and
+    `WorkoutSessionClientContractFaultTests.swift`: decision 11. `Tests/LedgerDomainTests/Protocols/`: a new folder
+    beside `Engine/`, `Units/`, mirroring the source folder.
+15. **Not done, by design.** The protocol's `finish` doc does not yet say "calling it again retries a failed save"
+    (the plan's wording): the contract cannot make a save fail, so it is S2's sentence to add with its test.
+    Architecture §6 still says `WorkoutSessionActor` publishes `WorkoutState`: S2's edit, as planned.
+
+### Criteria → tests
+
+| # | Criterion (brief, "Plan amendments") | Tests |
+|---|---|---|
+| 1 | first element is the workout as it stands, no effects; later changes in order; two subscribers each get every update | clauses 1, 11, 12, 13, 14, 17; every script (two streams) |
+| 2 | `start` makes a live snapshot current; second `start` → `workoutInProgress`; not live → `notStartable`; nothing live → `noLiveWorkout` | clauses 2, 3, 4, 5 |
+| 3 | `apply` returns the state after the event = the next update's state; effects = `feedback(from:)` of the engine's | clauses 10, 15, 16; `WorkoutSessionUpdateTests` (the rule itself: `feedback_keepsTheHapticsInOrder`, `_forwardsEachHaptic`, `_dropsWhatTheHostRuns`, `_ofTheEnginesEffects`) |
+| 4 | `finish` returns the finished state, one update, then `current()` nil and a new stream starts nil; `discard` likewise | clauses 6, 7, 8, 9; `WorkoutSessionUpdateTests.live_followsThePhase` |
+| 5 | `resumeFromStore()` is not on the protocol; every method waits for recovery | `WorkoutSessionClientTests.protocol_isTheSixCalls` (a type with the six calls alone conforms). The waiting is the host's: **not verifiable in S1** |
+| 6 | key `workoutSession`; stub's `updates()` ends at once, the rest throw; preview value a fake with no workout | `DependencyKeysTests.test_unimplementedDependencyFailsLoudly` (row `workoutSession`), `workoutSession_boundToAFake_isTheOneRead`; `UnimplementedStubTests.workoutSession`; `PreviewValueTests.previewSession_isAFakeWithNoWorkout` |
+| 7 | the fake is in `LedgerFakes`, runs the real engine, records what it was asked, passes the shared contract, is absent from Release | `WorkoutSessionClientContractTests.fake_keepsTheClause` (17 cases), `fake_runsTheScriptByTheRules` (200 seeds), `violations_ofTheFake_areNone`; `FakeWorkoutSessionClientTests.applied_recordsEveryAsk_inCallOrder`, `initLive_holdsTheWorkout`, `initLive_unstartableSnapshot_reportsAnIssue`; the Release build and symbol check below |
+| 8 | `ClockText.minutesSeconds`: m:ss, h:mm:ss from sixty minutes, "0:00" when negative | `ClockTextTests.minutesSeconds_table` (17 rows), `_extremes_doNotTrap`, `_ofElapsedTime` |
+
+### The contract's clauses
+
+`WorkoutSessionClientContract.clauses`, in order. Each gets a fresh client with no workout.
+
+Lifecycle (`+Lifecycle.swift`):
+1. a new client has no workout: `current()` is nil and a stream starts with a nil state
+2. `start` makes a live snapshot current and publishes it, with no effects
+3. a second `start` throws `workoutInProgress`, changes nothing and publishes nothing (the same snapshot, and another)
+4. a snapshot the engine would not start throws `notStartable`, live workout or not (finished, discarded, malformed)
+5. `apply`, `finish` and `discard` with nothing live throw `noLiveWorkout` and publish nothing (`apply(.started)` too)
+6. `finish` returns the finished state, publishes it once (with `.haptic(.workoutFinished)`), then there is no
+   workout: `current()` nil, a new stream starts nil
+7. `discard` publishes the discarded state once (no effects), then there is no workout
+8. a terminal event through `apply` ends the workout as `finish` and `discard` do
+9. after a workout ends another can start, and earlier subscribers see it; a second `finish` or `discard` of the
+   ended one throws `noLiveWorkout`
+
+Updates (`+Updates.swift`):
+10. `apply` returns the state after the event; the next update carries it and the engine's haptics (one event of
+    each of ten kinds, each checked against `WorkoutEngine.reduce`)
+11. a stream opened on a live workout starts with it, without the last event's effects
+12. two subscribers, one from before the start, each get every update in order
+13. updates under rapid `apply` calls arrive in order, none dropped or merged (sixty edits, read afterwards)
+14. callers at once: every event is applied once, in one order every subscriber sees (eighteen commuting edits from
+    a task group; the final state holds all of them)
+15. an event the engine accepts is published once even when it changes nothing here
+16. an event the engine ignores returns the workout unchanged and publishes nothing (also `finish` and `discard` at
+    a date that is not finite)
+17. a subscriber whose task is cancelled stops; the others keep getting every update
+
+Scripts (`+Scripts.swift`, `+Model.swift`): `scriptViolation(seed:on:)`, decision 10.
+
+### Mutants
+
+Each was applied alone to the source, the host suites run, and the file restored (`f10s1/mutants.py`, log
+`f10s1/mutants1.log` in the scratch folder). All eighteen fail at least one test.
+
+| Mutant | Failing tests (first) |
+|---|---|
+| M1 `updates()` does not forget ended streams | `droppedStreams_areForgottenAtTheNextSubscription` |
+| M2 a publication does not forget ended streams | `cancelledStream_isForgottenAtTheNextPublication` |
+| M3 a stream keeps only its newest update | the contract (clause 13 and others), the scripts, `openStreams_staySubscribed` |
+| M4 an update carries every effect | the contract, the scripts, `initLive_holdsTheWorkout`, the preview test |
+| M5 a refused `apply` is not recorded | `applied_recordsEveryAsk_inCallOrder` |
+| M6 no first element | the contract, the scripts, five fake tests (the run hit its ten-minute cap: the preview test had no time limit then; it has one now) |
+| M7 an ended workout stays current | the contract, the scripts |
+| M8 an ignored event is published | the contract, the scripts |
+| M9 the session is judged before the snapshot | the contract, the scripts |
+| M10 an unstartable seed is silent | `initLive_unstartableSnapshot_reportsAnIssue` |
+| M11 the stamp reads `Date()` | `stamp_changesNothingObservable` |
+| M12 `feedback(from:)` keeps the rest notification | three `WorkoutSessionUpdateTests`, `initLive_holdsTheWorkout` (not the contract: its expected updates use the same function, which is the criterion) |
+| M13 `live` is the state in any phase | `live_followsThePhase`, the scripts |
+| M14 the clock text never shows hours; M15 a negative duration prints its magnitude | `ClockTextTests` |
+| M16 the stub's `updates()` yields; M17 its `current()` answers nil | `UnimplementedStubTests.workoutSession` |
+| M18 the preview value is the stub | `previewSession_isAFakeWithNoWorkout` |
+
+The eleven faults of `FaultyWorkoutSession` (first element carries effects, every effect forwarded, ignored events
+published, unchanged states skipped, the state before returned, the ended workout kept current, a nil update after
+the end, the session judged first, a start through `apply`, newest-only streams, a silent discard) each break their
+clause and are each noticed by a script: `WorkoutSessionClientContractFaultTests`.
+
+### Code lines
+
+Added lines of `git diff -U0 92a63bd`, new files whole, blank and whole-line comment lines excluded
+(`f10s1/count-lines.py`).
+
+| Group | File | Added |
+|---|---|--:|
+| Product | `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` | 36 |
+| | `Sources/LedgerDomain/Units/ClockText.swift` | 15 |
+| | `Sources/LedgerDependencies/Keys/SessionKeys.swift` | 19 |
+| | `Sources/LedgerDependencies/Unimplemented/UnimplementedSession.swift` | 23 |
+| | **Product total** (plan: about 115) | **93** |
+| LedgerFakes | `Sources/LedgerFakes/FakeWorkoutSessionClient.swift` (plan: about 110) | **111** |
+| LedgerTestSupport | the contract: `…Contract.swift` 110, `+Lifecycle` 199, `+Updates` 208, `+Model` 72, `+Scripts` 187 | 776 |
+| Tests | 3 changed files (+48, −1) and 8 new ones | 624 |
+
+Product is 19 % under the estimate and the fake 1 % over. No product line was removed.
+
+### Gate and coverage
+
+**Full gate.** `/usr/bin/python3 <sim-lock> scripts/check.sh` from the worktree root, on the tree above. Started
+18:12:35, waited 1,073 s for the lock (F08's gate, then F09's), then **exit 0, `check.sh OK`, 722 s**: tools 1 s,
+format 0 s, lint 87 s, iOS build 138 s, iOS tests 251 s, watchOS build 40 s, watchOS tests 202 s, coverage 2 s.
+17 test targets ran and passed (PR), 8 (PR-Watch). The build was cold (the worktree had no `.derivedData`). Log:
+`f10s1/gate1.log` in the scratch folder, with `GATE_EXIT=0` appended by the shell.
+
+After the gate, one mutant was applied to the fake and reverted, to copy the message in "How to verify by hand"
+(`cmp` against the saved original: identical), and this section was appended. No source differs from the gated tree.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 228 / 237 | 96.20 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2045 / 2063 | 99.12 % | 95 % | ✓ |
+| LedgerFakes | 1434 / 1449 | 98.96 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8377 / 8503 | 98.51 % | 80 % | ✓ |
+
+The five new source files are each at 100 % of their lines in the iOS bundle (`xccov`): `WorkoutSessionClient.swift`
+23 / 23, `ClockText.swift` 13 / 13, `SessionKeys.swift` 5 / 5, `UnimplementedSession.swift` 19 / 19,
+`FakeWorkoutSessionClient.swift` 107 / 107; the watchOS bundle measures the Domain two and the fake the same.
+
+**Warnings.** None in this slice's files. The build still prints the three it printed before
+(`PayloadVersionAdversarialTests.swift:29` and a `@Test` expansion in `SettingsDecodingAdversarialTests.swift`, "will
+never be executed"; `LedgerDesignTests/PreviewTests.swift:90`), with xcbeautify's "exit code 0 but produced no
+further output" lines beside them (F05 notes, line 1125).
+
+**Release build.** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+**exit 0** (59 s after an earlier Release build; 115 s the first time). No Release object names
+`FakeWorkoutSessionClient` (0 symbols; the Debug objects: 825), and the Release `FakeWorkoutSessionClient.o` is an
+empty file's (6 symbols against 358). The stub is in both.
+
+**Host.** Step 1 of "How to verify by hand" passes: 33 tests in `LedgerSyncTests`, 11 in the three Domain suites, 54
+in `LedgerDependenciesTests`. `scripts/check.sh --lint-only` exits 0 (71 s; the full gate runs it too).
+
+**Tree.** `git status --short` shows the files listed under "What landed" and nothing else:
+`M` `docs/architecture.md`, the three `LedgerDependenciesTests` files and this file; `??` the four product files, the
+fake, the five contract files, `Tests/LedgerDomainTests/Protocols/`, `Tests/LedgerDomainTests/Units/ClockTextTests.swift`,
+`Tests/LedgerSyncTests/Support/` and the three new `LedgerSyncTests` suites. `Package.swift` and
+`package-graph.expected.txt` are unchanged.
+
+**Not verified.**
+- Criterion 5's second half (every method waits for recovery): there is no recovery before S2.
+- The scripts against a real `WorkoutRepository`: whether `materialize` accepts every workout they finish is argued
+  under "Inputs for S2", not run.
+- The apps were not launched by hand. Nothing reads the new key yet, and the gate's UI smoke tests passed.
+- The size of a held continuation (open question 1, option B) was not measured.
+- `AsyncStream` calling `onTermination` when a stream is dropped unread is what decision 6 relies on. Apple documents
+  the cancellation case; the dropped case is shown by `droppedStreams_areForgottenAtTheNextSubscription` on the host
+  and on both simulators, not by documentation.
+
+### How to verify by hand
+
+From the worktree root:
+
+1. The seam on the host (no simulator, about 20 s after a build):
+   `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'LedgerSyncTests|LedgerDependenciesTests|ClockTextTests|WorkoutSessionUpdateTests|WorkoutSessionClientTests'`
+   Expect 33 + 11 + 54 tests, one known issue in the first run (the unstartable seed) and sixteen in the last.
+2. The contract biting: in `Sources/LedgerFakes/FakeWorkoutSessionClient.swift` change `.unbounded` to
+   `.bufferingNewest(1)` and run step 1. `fake_keepsTheClause` fails, among others, with "updates under rapid apply
+   calls arrive in order, none dropped or merged: updates: got 0, expected 61; at 0 got no update, expected live
+   workout F100, 0 of 18 sets done, effects []". Undo it.
+3. Release: `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`, then, in
+   `.build/out`,
+   `find Intermediates.noindex/LedgerKit.build/Release Products/Release -name '*.o' -print0 | xargs -0 nm 2>/dev/null | grep -v ':$' | grep -c FakeWorkoutSessionClient`
+   prints 0 (with `Debug` in both paths: 825).
+4. The gate: `/usr/bin/python3 <sim-lock> scripts/check.sh`.
+
+### Open questions
+
+1. **How does S2's host forget a terminated subscriber?** The host is a product actor, where standards §4 allow a
+   `Mutex` only for "state that a system framework callback writes synchronously … where an actor could be reached
+   only after the callback returned". `AsyncStream`'s `onTermination` is such a callback (the concurrency runtime
+   calls it on the cancelling thread), but it is not the case Pete ruled on (`MirroringStartRegistrar`).
+   - *A:* the fake's way, a `Mutex` of ended ids. Bounded however the screens come and go.
+   - *B:* prune only when `yield` reports `.terminated`. No lock; a continuation per subscription is kept until the
+     next publication, so they pile up while no workout is live (one small allocation each, not measured, freed
+     at the next start).
+   - Recommendation: **A**, with one line in standards §4 naming `onTermination`. It needs the orchestrator's ruling
+     before S2 starts. The contract accepts either (it cannot see the difference).
+2. **`finish(endedAt:)` at a date that is not finite returns a state that is still live.** It cannot happen with
+   `@Dependency(\.date)`. Recommendation: leave the error enum as it is; S7's store shows the receipt only when the
+   returned state's phase is `.finished`, and treats anything else as "not saved".
+3. **Does the fake need scriptable failures** (a store that refuses an `apply` or a `finish`) for S5's and S7's
+   "couldn't save" states? Recommendation: add them in the slice that first needs one, as a fake-only switch; the
+   contract stays about a healthy client.
+4. **A start with the id of a workout that already ended.** The fake accepts it (the fake's own test does it); a
+   host may meet a stored workout or an uncompacted log under that id. No clause does it, so S2 is free.
+   Recommendation: S2 decides and, if it refuses, the fake follows and a clause is added; `StartWorkoutUseCase`
+   always makes a fresh id, so no screen depends on the answer.
+5. **Updates for a peer's envelopes (F17).** The contract covers a device's own calls. A rebuild that changes
+   nothing has no effects (`WorkoutEngine.effects(from:to:)` returns none), so the natural rule there is "publish
+   when the rebuild changed the state". Recommendation: F17 adds that as a clause of its own.
+6. **Elapsed time past an hour** is already with Pete ("1:01:05" against the prototype's "61:05"); a change is the
+   one `guard` in `ClockText` and two rows of its table.
+
+### Inputs for S2: what the host must do to pass the contract
+
+Run it as the fake does: `@Test(arguments: WorkoutSessionClientContract.clauses)` with `clause.check(host)` on a
+fresh actor over empty in-memory stores, and `scriptViolation(seed:on:)` over the same seeds. Run the clauses on an
+actor whose recovery has not been started, too: the first protocol call must start it (the ruling on O3).
+
+- **`updates()`** registers the continuation and yields the current live workout (or nil) with no effects, in one
+  turn of the actor, with no suspension between reading the state and registering. Streams are `.unbounded`.
+- **One operation at a time.** Clause 14 sends eighteen `apply` calls at once and expects all eighteen edits in the
+  final state, one update each, and every returned state among the published ones. An actor that suspends on the
+  store between reading the state and committing it fails this (the plan's re-entrancy risk).
+- **An own action:** stamp, `reduce`. No effects: return the workout as it stands, store nothing, take no `seq`,
+  publish nothing. Otherwise store, commit, and publish `(state, feedback(from: effects))` exactly once, also when
+  the state did not change. Updates leave in the order the events were applied.
+- **`start`:** `reduce(nil, started)` first. No state: `notStartable(snapshot.id)`, before anything is stored and
+  whether or not a workout is live. Then `workoutInProgress(live.id)`. A refused start changes and publishes nothing.
+- **Nothing live:** `apply` (any event, `.started` included), `finish` and `discard` throw `noLiveWorkout`.
+- **The end:** one update carrying the finished or discarded state; then `current()` is nil and a new stream starts
+  with nil. No nil update goes to the streams already open. `apply(.finished)` and `apply(.discarded)` end the
+  workout through the same path as `finish` and `discard`.
+- **A date that is not finite** in `finish` or `discard`: nothing ends; `finish` returns the live workout.
+- **A cancelled subscriber** must not disturb the others or the next subscription (clause 17).
+- What the scripts send: ad-hoc workouts (no source) of `EventBuilders`' exercises, ids `0xF200 + n`, never the same
+  id twice; weights in whole 5 lb steps and finite dates, chosen so that `materialize` should accept every finished
+  one (**not run against a repository in S1**); swaps with "Also update program" on slots no program holds.
+- Not in the contract, so the host's own tests must cover them: the stamp (HLC, `seq` from `highestSeq`), what is
+  stored and in what order, the notification effects, recovery, a failing store, `incompleteLog`, a second `finish`
+  retrying a save. When a save can be retried, add the plan's sentence to `finish`'s doc.
+- `FaultyWorkoutSession` (`Tests/LedgerSyncTests/Support`) lists eleven ways to fail the contract; a new clause
+  should come with a fault that breaks it.
+
+### Inputs for F09 S6: Today on the session
+
+- Read the key in the store: `@ObservationIgnored @Dependency(\.workoutSession) var session`. Subscribe from
+  `TodayRoot`'s `.task`, never from a stored task:
+
+  ```swift
+  func watchWorkout() async {
+      for await update in await session.updates() {
+          liveWorkout = update.live          // nil hides Resume: no workout, or the update that ended it
+      }
+  }
+  ```
+
+  The first element arrives at once with the workout as it stands, so there is no separate "load" call and no
+  `current()`. Today ignores `update.effects` (they are the workout screen's haptics) and never calls `apply`.
+- The button's text is `ClockText.minutesSeconds(live.elapsed(at: now))`, with `now` from the view's timeline or
+  `@Dependency(\.date)`. It needs no catalog entry (a Domain-formatted line).
+- Until S2 binds the host, the app's `workoutSession` is the stub: `updates()` logs one fault and ends at once, the
+  loop falls through, and Resume never shows. Write the loop so that falling through is harmless.
+- In a test: `let fake = FakeWorkoutSessionClient(live: try Fixtures.seedSession())`, then
+  `withTestDependencies { $0.workoutSession = fake } operation: { … }`
+  (`DependencyKeysTests.workoutSession_boundToAFake_isTheOneRead` is the pattern). Run `watchWorkout()` as a child
+  of a task group, await the store's change with `Observations`, call `fake.finish(endedAt:)` or
+  `fake.discard(endedAt:)` to see Resume go, `fake.start(_:)` to see it come back, then cancel the group. No sleep
+  is needed: every call has published its update by the time it returns.
+- In a preview the key is a fake with no workout. A preview of the Resume state binds
+  `FakeWorkoutSessionClient(live:)` with `withDependencies`, or better draws `TodayScreen(model:)` from a model.
+- `StartWorkoutUseCase` is S2's. Today only emits its routes.
