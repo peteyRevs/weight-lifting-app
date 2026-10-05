@@ -4,16 +4,18 @@ import LedgerSync
 import LedgerTestSupport
 import Testing
 
-/// F10 S2 criteria 4 and 5: finish and discard on the host, step by step, and each step failing. A finish
-/// stores `.finished`, saves the workout, drops the log and only then publishes; until the end is complete
-/// every reader still sees the workout as it stood, and every later change completes the end first.
+/// F10 S2 criteria 4 and 5, as F10 S3 criterion 5 leaves them: finish and discard on the host, step by step,
+/// and each step failing. A finish stores `.finished`, then saves the workout and drops its log in one store
+/// call, and only then publishes; until the end is complete every reader still sees the workout as it stood,
+/// and every later change completes the end first. Only over stores that are not one database is the log
+/// dropped in a second call, which can fail by itself.
 @Suite("LocalWorkoutSessionActor · the end of a workout", .tags(.sync), .timeLimit(.minutes(1)))
 struct LocalWorkoutSessionActorEndTests {
     typealias Update = WorkoutSessionUpdate
 
     /// A host with `Sample.session` live and one set logged, the calls so far forgotten.
-    static func live() async throws -> (subject: Subject, state: WorkoutState) {
-        let subject = Subject()
+    static func live(oneDatabase: Bool = true) async throws -> (subject: Subject, state: WorkoutState) {
+        let subject = Subject(oneDatabase: oneDatabase)
         try await subject.host.start(Sample.session)
         let state = try await subject.host.apply(Sample.logged(0, 0))
         await subject.probe.clearCalls()
@@ -26,12 +28,12 @@ struct LocalWorkoutSessionActorEndTests {
         return try #require(WorkoutEngine.reduce(state, envelope).0)
     }
 
-    @Test("Finish stores the end, saves the workout, drops the log, and then there is no workout")
-    func finish_storesThenSavesThenDrops() async throws {
+    @Test("Finish stores the end, then saves the workout and drops its log in one step; then there is no workout")
+    func finish_storesThenSavesAndDropsInOneStep() async throws {
         let (subject, state) = try await Self.live()
         let finished = try await subject.host.finish(endedAt: Sample.at(600))
         #expect(try finished == (Self.ended(state, by: .finished(endedAt: Sample.at(600)))))
-        #expect(await subject.writes() == [.append, .materialize, .compact])
+        #expect(await subject.writes() == [.append, .materialize])
         #expect(try await subject.stores.workouts.workout(id: state.id)?.doneSets == 1)
         #expect(await subject.stores.events.uncompactedWorkoutIDs() == [])
         #expect(try await subject.host.current() == nil)
@@ -40,10 +42,10 @@ struct LocalWorkoutSessionActorEndTests {
 
     @Test(
         "The ending update follows the save: while the store still works on it, readers see the workout live",
-        arguments: [StoreProbe.Call.materialize, .compact]
+        arguments: [(StoreProbe.Call.materialize, true), (.materialize, false), (.compact, false)]
     )
-    func finish_publishesAfterTheSave(holding call: StoreProbe.Call) async throws {
-        let (subject, state) = try await Self.live()
+    func finish_publishesAfterTheSave(holding call: StoreProbe.Call, oneDatabase: Bool) async throws {
+        let (subject, state) = try await Self.live(oneDatabase: oneDatabase)
         var early = await Listener(subject.host)
         await subject.probe.hold(call)
         async let finishing = subject.host.finish(endedAt: Sample.at(600))
@@ -76,9 +78,12 @@ struct LocalWorkoutSessionActorEndTests {
         try await discarding
     }
 
-    @Test("A save that fails: finish throws, the log is kept, nothing is published, and a second finish retries it")
-    func finish_saveFails_secondFinishRetries() async throws {
-        let (subject, state) = try await Self.live()
+    @Test(
+        "A save that fails: finish throws, the log is kept, nothing is published, and a second finish retries it",
+        arguments: [true, false]
+    )
+    func finish_saveFails_secondFinishRetries(oneDatabase: Bool) async throws {
+        let (subject, state) = try await Self.live(oneDatabase: oneDatabase)
         var listener = await Listener(subject.host)
         await subject.probe.fail(.materialize)
         await #expect(throws: StoreProbe.Refusal(call: .materialize)) {
@@ -97,26 +102,6 @@ struct LocalWorkoutSessionActorEndTests {
         #expect(await subject.stores.events.uncompactedWorkoutIDs() == [])
         #expect(try await subject.host.current() == nil)
         #expect(await !subject.host.needsRecovery)
-        try await subject.host.start(Sample.other)
-        let ending = Update(state: finished, haptics: [.workoutFinished])
-        #expect(await listener.updates(before: Sample.other) == [Update(state: state), ending])
-    }
-
-    @Test("A log that cannot be dropped after the save: the end waits all the same, and the retry saves again")
-    func finish_compactFails_waitsAndRetries() async throws {
-        let (subject, state) = try await Self.live()
-        var listener = await Listener(subject.host)
-        await subject.probe.fail(.compact)
-        await #expect(throws: StoreProbe.Refusal(call: .compact)) {
-            _ = try await subject.host.finish(endedAt: Sample.at(600))
-        }
-        #expect(try await subject.stores.workouts.workout(id: state.id) != nil)
-        #expect(await subject.stores.events.uncompactedWorkoutIDs() == [state.id])
-        #expect(try await subject.host.current() == state)
-        await subject.probe.clearCalls()
-        let finished = try await subject.host.finish(endedAt: Sample.at(600))
-        #expect(await subject.writes() == [.materialize, .compact])
-        #expect(try await subject.stores.workouts.recent(limit: 5).map(\.id) == [state.id])
         try await subject.host.start(Sample.other)
         let ending = Update(state: finished, haptics: [.workoutFinished])
         #expect(await listener.updates(before: Sample.other) == [Update(state: state), ending])

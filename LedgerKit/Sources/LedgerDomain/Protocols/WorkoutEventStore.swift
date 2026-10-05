@@ -37,8 +37,10 @@ public protocol WorkoutEventStore: Sendable {
     ///
     /// On launch the host classifies each by `WorkoutEngine.replay` of its log:
     /// - live: it resumes the workout;
-    /// - finished or discarded: it materialises or drops it, then compacts it. This covers a kill
-    ///   after the terminal envelope is stored but before materialisation commits;
+    /// - finished: it materialises it, and the log goes with the save
+    ///   (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`) or, where the two stores are not one
+    ///   database, is compacted after it; discarded: it compacts it. This covers a kill after the
+    ///   terminal envelope is stored but before materialisation commits;
     /// - `nil` (no usable `started`, for example after a lost message or a resend that followed a
     ///   compaction): it never compacts the log. It keeps it and asks the peer to resend (F17).
     ///
@@ -49,7 +51,8 @@ public protocol WorkoutEventStore: Sendable {
     /// `nil` when there is none: the hybrid logical clock's `newest` on launch (ADR-004 amendment,
     /// "Recovery on launch"; F17, "Inputs from F05").
     func newestWallClock() async throws -> Date?
-    /// Deletes the workout's log once it is materialised (or discarded).
+    /// Deletes the workout's log: once it is discarded, or once it is materialised by a repository that could
+    /// not drop the log with the save (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`).
     func compact(workout: WorkoutID) async throws
 }
 

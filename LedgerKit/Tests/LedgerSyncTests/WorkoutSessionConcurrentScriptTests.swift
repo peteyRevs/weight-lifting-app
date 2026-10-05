@@ -8,6 +8,9 @@ import Testing
 /// (`WorkoutSessionClientContract.concurrentScriptViolation`). They pass on the fake and on the host, over
 /// stores that give way inside every call above all, and a client with a fault that shows only when calls
 /// overlap breaks them.
+///
+/// On the host the scripts run `Seeds.hostSeeds` on every set-up: twenty in the PR lane, every seed of the lane
+/// in the nightly one (F10 S3 criterion 9). The fake runs every seed of the lane, and every fault runs in both.
 @Suite("WorkoutSessionClient · calls made at once, as one history", .tags(.sync), .timeLimit(.minutes(1)))
 struct WorkoutSessionConcurrentScriptTests {
     typealias Contract = WorkoutSessionClientContract
@@ -23,7 +26,7 @@ struct WorkoutSessionConcurrentScriptTests {
     @Test(
         "Calls made at once on the host are one history, over every kind of store",
         .tags(.property),
-        arguments: Seeds.seeds,
+        arguments: Seeds.hostSeeds,
         HostSetup.allCases
     )
     func host_isOneHistory(seed: UInt64, _ setup: HostSetup) async throws {

@@ -6,18 +6,22 @@
     /// stores all or nothing, newest-first reads by start (product decision #26), soft deletion, and personal
     /// records that are a function of history (decision #27), replayed from scratch after every write.
     ///
-    /// `InMemoryStatsQueries` reads the same history, and `materialize`'s `slotUpdates` write their misses to
-    /// `programs` in the same step as the workout, so the three answer as one database would. Weights and dates
-    /// are refused as the database's columns refuse them (`StorageBoundary`, ADR-007).
+    /// `InMemoryStatsQueries` reads the same history, and a `materialize` writes the misses of its `slotUpdates`
+    /// and the exercises of its workout's `programUpdates` to `programs`, and drops the workout's log from
+    /// `events` when asked, in the same step as the workout, so the stores answer as one database would.
+    /// Weights and dates are refused as the database's columns refuse them (`StorageBoundary`, ADR-007).
     public final class InMemoryWorkoutRepository: WorkoutRepository {
         let history: ObservedState<InMemoryHistory, [WorkoutState]>
         private let programs: InMemoryProgramRepository
+        private let events: InMemoryWorkoutEventStore?
 
-        /// Holding `workouts`, each materialised in order (one that would fail is left out); slot updates go to
-        /// `programs`.
+        /// Holding `workouts`, each materialised in order (one that would fail is left out); slot and program
+        /// updates go to `programs`. With `events` (as `InMemoryStores` gives it), a save can drop the workout's
+        /// log in the same step; without, this repository holds no log, and says so.
         public init(
             programs: InMemoryProgramRepository = InMemoryProgramRepository(),
-            workouts: [WorkoutState] = []
+            workouts: [WorkoutState] = [],
+            events: InMemoryWorkoutEventStore? = nil
         ) {
             var initial = InMemoryHistory()
             for workout in workouts where workout.phase == .finished && workout.endedAt != nil {
@@ -28,20 +32,39 @@
             initial.detectRecords()
             history = ObservedState(initial)
             self.programs = programs
+            self.events = events
         }
 
         public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+            try await materialize(workout, slotUpdates: slotUpdates, droppingLog: false)
+        }
+
+        /// Returns whether the log went with the save: only when asked, and only when an event store is linked.
+        @discardableResult
+        public func materialize(
+            _ workout: WorkoutState,
+            slotUpdates: [Slot],
+            droppingLog: Bool
+        ) async throws -> Bool {
             guard workout.phase == .finished, workout.endedAt != nil else {
                 throw RepositoryError.notFinished("workout \(workout.id.rawValue.uuidString)")
             }
+            let log = droppingLog ? events : nil
             try history.write { current throws(RepositoryError) in
                 try current.store(workout)
                 current.detectRecords()
-                // Last, once nothing can throw, and under this write's lock: no reader sees the workout without
-                // its misses, as the database's one transaction (the program store's lock is only ever taken
-                // inside this one, never the other way round).
-                programs.writeMisses(of: slotUpdates)
+                // Last, once nothing can throw, in the database's order, and under this write's lock: no reader
+                // sees the workout without its misses or its program changes, or with its log, as the
+                // database's one transaction (the other stores' locks are only ever taken inside this one,
+                // never the other way round).
+                programs.writeSave(
+                    misses: slotUpdates,
+                    exercises: workout.programUpdates,
+                    inProgram: workout.source?.programID
+                )
+                log?.drop(workout.id)
             }
+            return log != nil
         }
 
         public func workout(id: WorkoutID) async throws -> WorkoutState? {

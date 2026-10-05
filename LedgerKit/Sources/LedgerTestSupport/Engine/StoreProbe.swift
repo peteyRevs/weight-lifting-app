@@ -186,7 +186,9 @@ public struct ProbedEventStore: WorkoutEventStore {
     }
 }
 
-/// Only `materialize`, the one call a session host makes, goes through the probe.
+/// Only `materialize`, the one call a session host makes, goes through the probe: in both its forms, so a
+/// host over probed stores of one database still saves a workout and drops its log in one transaction, and
+/// a fault on `.materialize` then fails both.
 public struct ProbedWorkoutRepository: WorkoutRepository {
     let base: any WorkoutRepository
     let probe: StoreProbe
@@ -195,6 +197,13 @@ public struct ProbedWorkoutRepository: WorkoutRepository {
     public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
         try await probed(.materialize, probe, yields) {
             try await base.materialize(workout, slotUpdates: slotUpdates)
+        }
+    }
+
+    @discardableResult
+    public func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool {
+        try await probed(.materialize, probe, yields) {
+            try await base.materialize(workout, slotUpdates: slotUpdates, droppingLog: droppingLog)
         }
     }
 

@@ -76,24 +76,49 @@
             state.observe(\.active)
         }
 
-        /// `WorkoutRepository.materialize`'s `slotUpdates` (rule 13): each live slot listed takes the listed
-        /// misses, whole; a slot that is not stored is skipped.
-        func writeMisses(of slots: [Slot]) {
-            guard !slots.isEmpty else {
+        /// What `WorkoutRepository.materialize` writes to the programs, in one step, so no reader of this store
+        /// sees half of a save: the misses of its `slotUpdates`, then its workout's program updates.
+        func writeSave(misses slots: [Slot], exercises updates: [SlotID: ExerciseID], inProgram program: ProgramID?) {
+            guard !slots.isEmpty || !updates.isEmpty else {
                 return
             }
-            let misses = Dictionary(slots.map { ($0.id, $0.misses) }) { _, last in last }
             state.write { current in
-                for (id, stored) in current.programs where !stored.isDeleted {
-                    var program = stored.program
-                    for day in program.days.indices {
-                        for index in program.days[day].slots.indices {
-                            if let written = misses[program.days[day].slots[index].id] {
-                                program.days[day].slots[index].misses = written
-                            }
+                Self.writeMisses(of: slots, in: &current)
+                if let program, var stored = current.programs[program], !stored.isDeleted {
+                    writeExercises(updates, in: &stored.program)
+                    current.programs[program] = stored
+                }
+            }
+        }
+
+        /// `slotUpdates` (rule 13): each live slot listed takes the listed misses, whole; a slot that is not
+        /// stored is skipped.
+        private static func writeMisses(of slots: [Slot], in state: inout State) {
+            let misses = Dictionary(slots.map { ($0.id, $0.misses) }) { _, last in last }
+            for (id, stored) in state.programs where !stored.isDeleted {
+                var program = stored.program
+                for day in program.days.indices {
+                    for index in program.days[day].slots.indices {
+                        if let written = misses[program.days[day].slots[index].id] {
+                            program.days[day].slots[index].misses = written
                         }
                     }
-                    current.programs[id]?.program = program
+                }
+                state.programs[id]?.program = program
+            }
+        }
+
+        /// Program updates (decision #13): each slot of `program` that `updates` names takes the listed
+        /// exercise, and nothing else of it changes. As in the database, only a live slot of the workout's own
+        /// program is touched (the caller passes none for an ad-hoc workout, or a program that is deleted or
+        /// not stored), and only by an exercise the exercise store holds, when there is one to ask; every other
+        /// entry is skipped.
+        private func writeExercises(_ updates: [SlotID: ExerciseID], in program: inout Program) {
+            for day in program.days.indices {
+                for index in program.days[day].slots.indices {
+                    if let exercise = updates[program.days[day].slots[index].id], exercises?.holds(exercise) ?? true {
+                        program.days[day].slots[index].exerciseID = exercise
+                    }
                 }
             }
         }

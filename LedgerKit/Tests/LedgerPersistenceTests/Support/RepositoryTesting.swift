@@ -32,6 +32,7 @@ struct Repositories {
     let programs: GRDBProgramRepository
     let workouts: GRDBWorkoutRepository
     let stats: GRDBStatsQueries
+    let events: GRDBWorkoutEventStore
 
     init() throws {
         queue = try LedgerDatabase.inMemory()
@@ -39,11 +40,12 @@ struct Repositories {
         programs = GRDBProgramRepository(queue, now: clock.now)
         workouts = GRDBWorkoutRepository(queue, now: clock.now)
         stats = GRDBStatsQueries(queue, now: { StatsQueriesContract.now })
+        events = GRDBWorkoutEventStore(queue, now: clock.now)
     }
 
     /// What a history contract clause runs against (`WorkoutRepositoryContract`, `StatsQueriesContract`).
     var history: HistoryStores {
-        HistoryStores(workouts: workouts, stats: stats, programs: programs)
+        HistoryStores(workouts: workouts, stats: stats, programs: programs, events: events)
     }
 
     /// With `ProgramRepositoryContract.exercises` seeded, which every contract program names.

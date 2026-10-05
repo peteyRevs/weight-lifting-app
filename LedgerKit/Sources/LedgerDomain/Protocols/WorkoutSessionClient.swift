@@ -61,22 +61,33 @@ public protocol WorkoutSessionClient: Sendable {
     /// Afterwards there is no live workout: `current()` is nil and a new stream starts with a nil state. Of
     /// several overlapping `finish` and `discard` calls exactly one ends the workout.
     ///
+    /// A host stores the end in the workout's log, and then saves in one transaction of its database: the
+    /// workout, its personal records, the misses it leaves on its program's slots, the program changes its
+    /// swaps asked for ("Also update program"), and the end of its log. So the workout is in history and no
+    /// longer live, or neither: `finish` never throws for a workout that is in history, and the host leaves
+    /// none both saved and unfinished. A workout that is discarded changes no program.
+    ///
     /// Throws `noLiveWorkout` when there is none; `invalidEndDate` when the workout is still live after the
     /// call because the engine ignored the end, as it does for a date that is not finite (nothing ends and
     /// nothing is published); and `incompleteLog` when the host cannot store the workout yet, in which case
     /// the workout stays live.
     ///
-    /// **When the save fails** a host throws what its store threw, and nothing is lost: the end stays in the
-    /// workout's log. No update is published, and `current()` and every stream go on showing the workout as
-    /// it stood before the call, with a phase of `.live`: nothing tells a reader that its end is stored and
-    /// waiting. The host saves it again when `finish` is called again, which returns the finished state,
-    /// ended when the first call said; before any `apply` or `discard`; and when the app next launches or
-    /// returns to the foreground. The first save that succeeds publishes the one ending update. A `finish`
-    /// called after that throws `noLiveWorkout`: a retry can find the end completed in between, by the launch
-    /// step or, after a write whose answer was lost, by the host reading its store.
+    /// **When the save fails** a host throws what its store threw, and nothing is lost and nothing half done:
+    /// the end stays in the workout's log, and no row of history and no slot of the program has changed. No
+    /// update is published, and `current()` and every stream go on showing the workout as it stood before the
+    /// call, with a phase of `.live`: nothing tells a reader that its end is stored and waiting. The host
+    /// saves it again when `finish` is called again, which returns the finished state, ended when the first
+    /// call said; before any `apply` or `discard`; and when the app next launches or returns to the
+    /// foreground. The first save that succeeds publishes the one ending update. A `finish` called after that
+    /// throws `noLiveWorkout`: a retry can find the end completed in between, by the launch step or, after a
+    /// write whose answer was lost, by the host reading its store.
     ///
     /// That holds in this process. After a relaunch the unsaved workout is no longer shown, another can be
     /// started, and the launch step saves the first when it can.
+    ///
+    /// Only a host whose stores are not one database saves the workout and drops its log in two steps. When
+    /// the second fails it throws although the workout is in history, the end waits as above, and the retry
+    /// saves again, which changes nothing, and drops the log.
     ///
     /// Three things follow for a caller while an end waits:
     /// - **`discard` saves the workout.** It completes the waiting finish and then throws `noLiveWorkout`;

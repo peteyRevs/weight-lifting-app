@@ -31,8 +31,12 @@ struct LocalWorkoutSessionActorRecoveryTests {
         )
     }
 
-    static func subject(holding envelopes: [EventEnvelope], history: [WorkoutState] = []) -> Subject {
-        Subject(seed: InMemoryStores.Seed(workouts: history, envelopes: envelopes))
+    static func subject(
+        holding envelopes: [EventEnvelope],
+        history: [WorkoutState] = [],
+        oneDatabase: Bool = true
+    ) -> Subject {
+        Subject(seed: InMemoryStores.Seed(workouts: history, envelopes: envelopes), oneDatabase: oneDatabase)
     }
 
     @Test("Nothing stored: nothing is done, and there is no workout")
@@ -59,26 +63,32 @@ struct LocalWorkoutSessionActorRecoveryTests {
         #expect(await subject.log(of: Sample.other.id).map(\.seq) == [1, 2, 3, 4, 5])
     }
 
-    @Test("Finished, not saved: the workout is saved and its log dropped; nothing is live")
-    func finishedLog_isSavedThenDropped() async throws {
-        let subject = Self.subject(holding: Self.finished)
+    @Test(
+        "Finished, not saved: the workout is saved and its log dropped, in one step over one database",
+        arguments: [true, false]
+    )
+    func finishedLog_isSavedAndDropped(oneDatabase: Bool) async throws {
+        let subject = Self.subject(holding: Self.finished, oneDatabase: oneDatabase)
         #expect(try await subject.host.resumeFromStore() == nil)
-        #expect(await subject.writes() == [.materialize, .compact])
+        #expect(await subject.writes() == (oneDatabase ? [.materialize] : [.materialize, .compact]))
         let stored = try #require(await subject.stores.workouts.workout(id: Sample.session.id))
         #expect(stored.phase == .finished && stored.endedAt == Sample.at(600) && stored.doneSets == 1)
         #expect(await subject.stores.events.uncompactedWorkoutIDs() == [])
         #expect(try await subject.host.current() == nil)
     }
 
-    @Test("Saved, not dropped: saving again changes nothing, and the log is dropped")
-    func savedLog_isSavedAgainAndDropped() async throws {
+    /// The host no longer leaves this over one database (F10 S3 criterion 5). A store that is not one database
+    /// still can, and a database may hold it from before: the row is handled the same way for both.
+    @Test("Saved, not dropped: saving again changes nothing, and the log is dropped", arguments: [true, false])
+    func savedLog_isSavedAgainAndDropped(oneDatabase: Bool) async throws {
         let workout = try #require(WorkoutEngine.replay(Self.finished))
-        let subject = Self.subject(holding: Self.finished, history: [workout])
+        let subject = Self.subject(holding: Self.finished, history: [workout], oneDatabase: oneDatabase)
         let before = try await subject.stores.workouts.recent(limit: 5)
         #expect(before.map(\.id) == [workout.id])
         #expect(try await subject.host.resumeFromStore() == nil)
         #expect(try await subject.stores.workouts.recent(limit: 5) == before)
         #expect(await subject.stores.events.uncompactedWorkoutIDs() == [])
+        #expect(await !subject.host.needsRecovery)
     }
 
     @Test("Discarded, not dropped: the log is dropped and nothing reaches history")

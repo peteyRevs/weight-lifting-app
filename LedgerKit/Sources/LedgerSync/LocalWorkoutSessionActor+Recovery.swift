@@ -7,7 +7,8 @@ import LedgerDomain
 public extension LocalWorkoutSessionActor {
     /// The launch step. For each log the store has not compacted, by what it replays to:
     /// - live: the workout is resumed, with no haptic and no effect run (of two, the one that started last);
-    /// - finished: it is saved to history, with its misses, then its log is dropped;
+    /// - finished: it is saved to history, with its misses and its program changes, and its log dropped with
+    ///   it (`complete(_:)`);
     /// - discarded: its log is dropped;
     /// - nothing: the log is kept, as is an ended log with rows this version cannot read.
     ///
@@ -133,8 +134,12 @@ extension LocalWorkoutSessionActor {
         conclude(ending.state, haptics: ending.haptics)
     }
 
-    /// What an ended log still needs: a finished workout is saved to history, an idempotent upsert, and then
-    /// its log is dropped; a discarded one's log is dropped. A throw leaves the log for the next attempt.
+    /// What an ended log still needs. A finished workout is saved to history, an idempotent upsert, with its
+    /// misses and its program changes, and its log is dropped in the same transaction
+    /// (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`): over a database the workout is in
+    /// history and its log gone, or neither. Only a repository that does not hold the log answers that it is
+    /// still there, and then this drops it in a second step, as it drops a discarded workout's. A throw leaves
+    /// the log for the next attempt.
     ///
     /// The host never materialises or compacts a log that holds rows this version cannot read
     /// (`WorkoutEventStore.unreadableCount(for:)`): a finished one throws `incompleteLog`, and a discarded
@@ -148,7 +153,10 @@ extension LocalWorkoutSessionActor {
             return
         }
         if ended.phase == .finished {
-            try await workouts.materialize(ended, slotUpdates: slotUpdates(for: ended))
+            let slots = try await slotUpdates(for: ended)
+            if try await workouts.materialize(ended, slotUpdates: slots, droppingLog: true) {
+                return
+            }
         }
         try await events.compact(workout: ended.id)
     }
