@@ -1,5 +1,6 @@
 import Foundation
 import LedgerDomain
+import Synchronization
 
 /// A session host's three stores seen from outside (F10 S2): every call the host makes is recorded, can be
 /// made to suspend, to wait or to throw, and is then passed on to the real store. A host awaits its store,
@@ -22,6 +23,21 @@ public actor StoreProbe {
         }
     }
 
+    /// What `waitUntilHeld()` throws when its task is cancelled, as a suite's time limit does, before the
+    /// held call was made: the host took a path on which that call never comes.
+    public struct NeverHeld: Error, Equatable, Sendable, CustomStringConvertible {
+        /// The call that was held, or nil when none was.
+        public let call: Call?
+
+        public init(call: Call?) {
+            self.call = call
+        }
+
+        public var description: String {
+            "the host never made the held store call (\(call?.rawValue ?? "none was held")): nothing to wait for"
+        }
+    }
+
     private struct Fault {
         var times: Int
         let afterStoring: Bool
@@ -34,7 +50,16 @@ public actor StoreProbe {
     private var faults: [Call: Fault] = [:]
     private var held: Call?
     private var parked: CheckedContinuation<Void, Never>?
-    private var arrivals: [CheckedContinuation<Void, Never>] = []
+    /// Those waiting in `waitUntilHeld()`, by the order they came. Behind a lock, not the actor, so that a
+    /// cancelled waiter is let go from its cancellation handler, which cannot wait for the actor.
+    private let arrivals = Mutex<[Int: Arrival]>([:])
+    private var nextArrival = 0
+
+    /// One caller of `waitUntilHeld()`: waiting, or cancelled before it could wait.
+    private enum Arrival {
+        case waiting(CheckedContinuation<Void, Never>)
+        case cancelled
+    }
 
     public init() {}
 
@@ -64,10 +89,36 @@ public actor StoreProbe {
         held = call
     }
 
-    /// Returns once a held call is waiting.
-    public func waitUntilHeld() async {
-        if parked == nil {
-            await withCheckedContinuation { arrivals.append($0) }
+    /// Returns once a held call is waiting. Throws `NeverHeld` when the waiting task is cancelled first, so a
+    /// test whose host never makes the held call fails at its time limit with that message, and does not
+    /// wait for ever.
+    public func waitUntilHeld() async throws {
+        guard parked == nil else {
+            return
+        }
+        let arrival = nextArrival
+        nextArrival += 1
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { waiting in
+                let wasCancelled = arrivals.withLock { arrivals in
+                    guard arrivals[arrival] == nil else {
+                        return true
+                    }
+                    arrivals[arrival] = .waiting(waiting)
+                    return false
+                }
+                if wasCancelled {
+                    waiting.resume()
+                }
+            }
+        } onCancel: {
+            let before = arrivals.withLock { $0.updateValue(.cancelled, forKey: arrival) }
+            if case let .waiting(waiting) = before {
+                waiting.resume()
+            }
+        }
+        guard parked != nil else {
+            throw NeverHeld(call: held)
         }
     }
 
@@ -88,8 +139,13 @@ public actor StoreProbe {
             held = nil
             await withCheckedContinuation { waiting in
                 parked = waiting
-                arrivals.forEach { $0.resume() }
-                arrivals = []
+                let arrived = arrivals.withLock { arrivals in
+                    defer { arrivals = [:] }
+                    return Array(arrivals.values)
+                }
+                for case let .waiting(waiter) in arrived {
+                    waiter.resume()
+                }
             }
         }
         try refuse(call, afterStoring: false)
@@ -106,146 +162,5 @@ public actor StoreProbe {
         }
         faults[call]?.times -= 1
         throw Refusal(call: call)
-    }
-}
-
-/// The three stores a session host is built over, each behind one `StoreProbe`.
-public struct ProbedStores: Sendable {
-    public let probe: StoreProbe
-    public let events: ProbedEventStore
-    public let workouts: ProbedWorkoutRepository
-    public let programs: ProbedProgramRepository
-
-    /// - Parameter yields: how often each call gives way (`Task.yield()`) before it reaches its store.
-    public init(
-        events: any WorkoutEventStore,
-        workouts: any WorkoutRepository,
-        programs: any ProgramRepository,
-        yields: Int = 0
-    ) {
-        let shared = StoreProbe()
-        probe = shared
-        self.events = ProbedEventStore(base: events, probe: shared, yields: yields)
-        self.workouts = ProbedWorkoutRepository(base: workouts, probe: shared, yields: yields)
-        self.programs = ProbedProgramRepository(base: programs, probe: shared, yields: yields)
-    }
-}
-
-/// Runs `body`, a store's call, between the probe's two halves, after giving way `yields` times.
-private func probed<Value: Sendable>(
-    _ call: StoreProbe.Call,
-    _ probe: StoreProbe,
-    _ yields: Int,
-    _ body: () async throws -> Value
-) async throws -> Value {
-    for _ in 0 ..< yields {
-        await Task.yield()
-    }
-    try await probe.enter(call)
-    let value = try await body()
-    try await probe.leave(call)
-    return value
-}
-
-public struct ProbedEventStore: WorkoutEventStore {
-    let base: any WorkoutEventStore
-    let probe: StoreProbe
-    let yields: Int
-
-    public func append(_ envelopes: [EventEnvelope]) async throws -> [EventEnvelope] {
-        try await probed(.append, probe, yields) { try await base.append(envelopes) }
-    }
-
-    public func envelopes(for workout: WorkoutID) async throws -> [EventEnvelope] {
-        try await probed(.envelopes, probe, yields) { try await base.envelopes(for: workout) }
-    }
-
-    public func unreadableCount(for workout: WorkoutID) async throws -> Int {
-        try await probed(.unreadableCount, probe, yields) {
-            if let pretended = await probe.unreadableOverride() {
-                return pretended
-            }
-            return try await base.unreadableCount(for: workout)
-        }
-    }
-
-    public func highestSeq(for workout: WorkoutID, device: DeviceID) async throws -> UInt64? {
-        try await probed(.highestSeq, probe, yields) { try await base.highestSeq(for: workout, device: device) }
-    }
-
-    public func uncompactedWorkoutIDs() async throws -> [WorkoutID] {
-        try await probed(.uncompactedWorkoutIDs, probe, yields) { try await base.uncompactedWorkoutIDs() }
-    }
-
-    public func newestWallClock() async throws -> Date? {
-        try await probed(.newestWallClock, probe, yields) { try await base.newestWallClock() }
-    }
-
-    public func compact(workout: WorkoutID) async throws {
-        try await probed(.compact, probe, yields) { try await base.compact(workout: workout) }
-    }
-}
-
-/// Only `materialize`, the one call a session host makes, goes through the probe.
-public struct ProbedWorkoutRepository: WorkoutRepository {
-    let base: any WorkoutRepository
-    let probe: StoreProbe
-    let yields: Int
-
-    public func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
-        try await probed(.materialize, probe, yields) {
-            try await base.materialize(workout, slotUpdates: slotUpdates)
-        }
-    }
-
-    public func workout(id: WorkoutID) async throws -> WorkoutState? {
-        try await base.workout(id: id)
-    }
-
-    public func recent(limit: Int) async throws -> [WorkoutState] {
-        try await base.recent(limit: limit)
-    }
-
-    public func workouts(in range: Range<Date>) async throws -> [WorkoutState] {
-        try await base.workouts(in: range)
-    }
-
-    public func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
-        try await base.updateSets(workoutExerciseID: workoutExerciseID, sets: sets)
-    }
-
-    public func delete(id: WorkoutID) async throws {
-        try await base.delete(id: id)
-    }
-
-    public func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
-        base.observeRecent(limit: limit)
-    }
-}
-
-/// Only `active()`, the one call a session host makes, goes through the probe.
-public struct ProbedProgramRepository: ProgramRepository {
-    let base: any ProgramRepository
-    let probe: StoreProbe
-    let yields: Int
-
-    public func active() async throws -> Program? {
-        try await probed(.activeProgram, probe, yields) { try await base.active() }
-    }
-
-    public func save(_ program: Program) async throws {
-        try await base.save(program)
-    }
-
-    public func setActive(_ id: ProgramID) async throws {
-        try await base.setActive(id)
-    }
-
-    public func delete(_ id: ProgramID) async throws {
-        try await base.delete(id)
-    }
-
-    public func observeActive() -> AsyncStream<Program?> {
-        base.observeActive()
     }
 }

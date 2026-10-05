@@ -66,11 +66,30 @@ struct SiegeEventStore: WorkoutEventStore {
 struct SiegeWorkoutRepository: WorkoutRepository {
     let base: any WorkoutRepository
     let gate: SiegeGate
+    /// Whether the save that drops the log is passed on to the store as one call (F10 S3): the stores are
+    /// then one database to the host, as the app's are. Otherwise this is a wrapper of before S3, the host
+    /// is told the log is still there, and it compacts it in a second call, which can fail by itself.
+    var isLinked = false
 
     func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
         try await gate.pass(.materialize) {
             try await base.materialize(workout, slotUpdates: slotUpdates)
             await gate.siege.wrote(workout, slotUpdates)
+        }
+    }
+
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool {
+        guard isLinked else {
+            try await materialize(workout, slotUpdates: slotUpdates)
+            return false
+        }
+        return try await gate.pass(.materialize) {
+            let dropped = try await base.materialize(workout, slotUpdates: slotUpdates, droppingLog: droppingLog)
+            await gate.siege.wrote(workout, slotUpdates)
+            if dropped {
+                await gate.siege.compacted(workout.id)
+            }
+            return dropped
         }
     }
 

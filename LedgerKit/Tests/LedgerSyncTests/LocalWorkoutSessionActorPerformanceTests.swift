@@ -12,7 +12,7 @@ import Testing
 @Suite(
     "LocalWorkoutSessionActor · apply timing",
     .tags(.sync, .performance, .slow),
-    .enabled(if: ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly", "nightly lane only"),
+    .enabled(if: TestLane.isNightly, "nightly lane only"),
     .timeLimit(.minutes(5))
 )
 struct LocalWorkoutSessionActorPerformanceTests {

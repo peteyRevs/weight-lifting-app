@@ -26,9 +26,10 @@ struct SiegeScene {
     static func make(
         _ backing: SiegeRig.Backing = .memory,
         seed: InMemoryStores.Seed = .empty,
-        session: WorkoutState = Seam.session(1)
+        session: WorkoutState = Seam.session(1),
+        linked: Bool = false
     ) async throws -> SiegeScene {
-        let stores = try await SiegeRig.make(backing, seed: seed)
+        let stores = try await SiegeRig.make(backing, seed: seed, linked: linked)
         let client = await stores.host()
         try await client.start(session)
         var standing = session

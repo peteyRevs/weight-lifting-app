@@ -49,7 +49,7 @@ struct SessionContractBiteAdversarialTests {
     /// Round 1 failed here for one fault (F10-S1-5: a client that judges a snapshot by its phase and start
     /// alone); the contract's unstartable snapshots now include a rest that is too long and a set done at a
     /// date that is not finite.
-    @Test("The contract rejects a client with one fault", arguments: SeamFault.sequential)
+    @Test("The contract rejects a client with one fault", arguments: SessionLane.cut(SeamFault.sequential, to: 4))
     func faultyClient_isRejectedByAClauseOrAScript(_ fault: SeamFault) async throws {
         let (clauses, script) = try await Self.complaints(about: fault)
         #expect(!clauses.isEmpty || script != nil, "the contract accepts a client that \(fault)")
@@ -101,7 +101,7 @@ struct SessionContractBiteAdversarialTests {
 
     @Test(
         "This suite's overlap checks reject a client whose fault shows only when calls overlap",
-        arguments: SeamFault.racy
+        arguments: SessionLane.cut(SeamFault.racy, to: 3)
     )
     func racyClient_isRejectedByThisSuitesOverlapChecks(_ fault: SeamFault) async throws {
         var found: String?

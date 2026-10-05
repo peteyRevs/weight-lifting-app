@@ -84,11 +84,18 @@ struct ProgramRows {
     private func refuseUnknownExercises(in database: Database) throws {
         var stored: Set<String> = []
         for exerciseID in slots.map({ ColumnCodec.text($0.slot.exerciseID) }) where !stored.contains(exerciseID) {
-            guard try Int.fetchOne(database, sql: Query.exercise, arguments: [exerciseID]) != nil else {
+            guard try Self.holdsExercise(exerciseID, in: database) else {
                 throw LedgerPersistenceError.unknownExercise("exercise \(exerciseID)")
             }
             stored.insert(exerciseID)
         }
+    }
+
+    /// Whether the exercise `id` (its `id` column's text) has a row, deleted or not: what a slot's foreign key
+    /// asks. The one rule for a program save and for a workout's program updates
+    /// (`GRDBWorkoutRepository.materialize`), so that the two cannot come to mean different things by "stored".
+    static func holdsExercise(_ id: String, in database: Database) throws -> Bool {
+        try Int.fetchOne(database, sql: Query.exercise, arguments: [id]) != nil
     }
 
     /// Throws `duplicateIdentifier("table id")` for the first of `ids` that `ownersSQL` finds under another

@@ -7,9 +7,14 @@ import LedgerDomain
 public extension LocalWorkoutSessionActor {
     /// The launch step. For each log the store has not compacted, by what it replays to:
     /// - live: the workout is resumed, with no haptic and no effect run (of two, the one that started last);
-    /// - finished: it is saved to history, with its misses, then its log is dropped;
+    /// - finished: it is saved to history, with its misses and its program changes, and its log dropped with
+    ///   it (`complete(_:)`);
     /// - discarded: its log is dropped;
     /// - nothing: the log is kept, as is an ended log with rows this version cannot read.
+    ///
+    /// Every log is read before any ended one is completed, and the ended ones are completed in the order
+    /// their workouts started, then by id, whatever order the store lists them in: of two finished workouts
+    /// the later one's misses and program changes are written last.
     ///
     /// The clock continues from the store's newest stamp. Running it again changes nothing. It is queued
     /// like every operation, and the first protocol call runs it when the launch has not.
@@ -55,7 +60,7 @@ extension LocalWorkoutSessionActor {
             clock.observe(newest)
         }
         var resumable: [WorkoutState] = []
-        var failures: [any Error] = []
+        var ended: [WorkoutState] = []
         for workout in try await events.uncompactedWorkoutIDs() {
             guard let state = try await WorkoutEngine.replay(events.envelopes(for: workout)) else {
                 logger.notice("Log \(workout.rawValue, privacy: .public) replays to no workout; kept")
@@ -66,12 +71,19 @@ extension LocalWorkoutSessionActor {
             } else if state.id == live?.id {
                 // The workout readers still see has ended in its log: that end is completed below.
                 ending = ending ?? Ending(state: state, haptics: [])
-            } else if let failure = await recoverEnded(state) {
-                failures.append(failure)
+            } else {
+                ended.append(state)
             }
         }
-        if let ending, let failure = await recoverEnded(ending.state) {
-            failures.append(failure)
+        if let ending {
+            ended.append(ending.state)
+        }
+        // In history's order, not the store's: a later workout's misses and program changes land last.
+        var failures: [any Error] = []
+        for state in ended.sorted(by: Self.startedBefore) {
+            if let failure = await recoverEnded(state) {
+                failures.append(failure)
+            }
         }
         try await resume(resumable)
         isRecovered = true
@@ -83,10 +95,7 @@ extension LocalWorkoutSessionActor {
     /// was told otherwise. `start` refuses a second live workout, so only a peer can bring two (F17, whose
     /// rule it will be): until then the one that started last is resumed and the other kept.
     private func resume(_ resumable: [WorkoutState]) async throws {
-        let latest = resumable.max { one, other in
-            (one.startedAt, one.id.rawValue.uuidString) < (other.startedAt, other.id.rawValue.uuidString)
-        }
-        guard let resumed = latest else {
+        guard let resumed = resumable.max(by: Self.startedBefore) else {
             if let shown = live, ending == nil {
                 // Only damage does this (the log's `started` cannot be read, or the log is gone).
                 logger.fault("No stored log replays to \(shown.id.rawValue, privacy: .public), which the host shows")
@@ -102,6 +111,11 @@ extension LocalWorkoutSessionActor {
             live = resumed
             publish(resumed, [])
         }
+    }
+
+    /// History's order of two workouts: by start, then by id (product decision #26).
+    private static func startedBefore(_ one: WorkoutState, _ other: WorkoutState) -> Bool {
+        (one.startedAt, one.id.rawValue.uuidString) < (other.startedAt, other.id.rawValue.uuidString)
     }
 
     /// An ended workout met by recovery: completes it, or returns why it could not. When it is the workout
@@ -133,8 +147,17 @@ extension LocalWorkoutSessionActor {
         conclude(ending.state, haptics: ending.haptics)
     }
 
-    /// What an ended log still needs: a finished workout is saved to history, an idempotent upsert, and then
-    /// its log is dropped; a discarded one's log is dropped. A throw leaves the log for the next attempt.
+    /// What an ended log still needs. A finished workout is saved to history, an idempotent upsert, with its
+    /// misses and its program changes, and its log is dropped in the same transaction
+    /// (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`): over a database the workout is in
+    /// history and its log gone, or neither. A throw leaves the log for the next attempt.
+    ///
+    /// **An end is complete when its log is gone from this host's event store**, and the host does not take
+    /// the repository's word for that. A repository that holds no log answers `false`, and one that does
+    /// answers for its own database, which need not be the one behind the event store the host was given. So
+    /// after a save that answered `true` the host looks in its event store (`holdsNoLog(of:)`), and it drops
+    /// the log there itself, in a second step, whenever the answer was `false`, the log is still listed, or
+    /// the look failed. That second step is the one that drops a discarded workout's log.
     ///
     /// The host never materialises or compacts a log that holds rows this version cannot read
     /// (`WorkoutEventStore.unreadableCount(for:)`): a finished one throws `incompleteLog`, and a discarded
@@ -148,9 +171,33 @@ extension LocalWorkoutSessionActor {
             return
         }
         if ended.phase == .finished {
-            try await workouts.materialize(ended, slotUpdates: slotUpdates(for: ended))
+            let slots = try await slotUpdates(for: ended)
+            let isDropped = try await workouts.materialize(ended, slotUpdates: slots, droppingLog: true)
+            if isDropped, await holdsNoLog(of: ended.id) {
+                return
+            }
         }
         try await events.compact(workout: ended.id)
+    }
+
+    /// Whether this host's event store lists no log of `workout`: one read, of the logs the store holds,
+    /// after a save that answered that the log went with it.
+    ///
+    /// A log that is still listed means the repository dropped another store's: the two are not one
+    /// database. The app never pairs them so, hence the fault in the log. A read that fails is answered
+    /// `false` too, and is not thrown: the workout is saved by then, and the caller's compaction, which does
+    /// nothing to a log that is gone, settles what the read could not.
+    private func holdsNoLog(of workout: WorkoutID) async -> Bool {
+        do {
+            guard try await events.uncompactedWorkoutIDs().contains(workout) else {
+                return true
+            }
+            logger.fault("Log \(workout.rawValue, privacy: .public) outlived its save: the stores are not one database")
+        } catch {
+            let reason = String(describing: error)
+            logger.error("Log \(workout.rawValue, privacy: .public) not checked after its save: \(reason)")
+        }
+        return false
     }
 
     /// Rule 13: the misses the workout leaves on its program's slots (`MissTracking`), on the program as it is

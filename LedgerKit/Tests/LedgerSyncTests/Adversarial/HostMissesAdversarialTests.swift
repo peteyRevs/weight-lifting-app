@@ -15,7 +15,7 @@ struct HostMissesAdversarialTests {
 
     /// A host with Upper A of week `weekIndex` live: the first exercise done as prescribed, the second one
     /// set short, the third done with a rep too few, the rest untouched.
-    static func scene(_ backing: Backing, weekIndex: Int = 4) async throws -> SiegeScene {
+    static func scene(_ backing: Backing, weekIndex: Int = 4, linked: Bool = false) async throws -> SiegeScene {
         let program = try Fixtures.seedProgram()
         let catalog = try ExerciseCatalog.seed()
         let seed = InMemoryStores.Seed(catalog: catalog, programs: [program])
@@ -25,7 +25,7 @@ struct HostMissesAdversarialTests {
             history: [:], settings: Fixtures.settingsLb, id: Seam.workout(1), device: EventBuilders.phone,
             now: EventBuilders.start
         )
-        let scene = try await SiegeScene.make(backing, seed: seed, session: session)
+        let scene = try await SiegeScene.make(backing, seed: seed, session: session, linked: linked)
         for (exerciseIndex, rows, short) in [(0, 2 ..< 5, 0), (1, 0 ..< 2, 0), (2, 0 ..< 4, 1)] {
             let sets = session.exercises[exerciseIndex].sets
             for set in sets[rows.clamped(to: sets.indices)] {

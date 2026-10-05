@@ -74,22 +74,9 @@ struct WorkoutRelaunchAdversarialTests {
         #expect(Launch.steps(harness, .resumeWorkout) == ["began resumeWorkout"])
     }
 
-    @Test("Killed after the save and before the compaction: the relaunch changes nothing and compacts")
-    func kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch() async throws {
-        let harness = Harness()
-        defer { harness.remove() }
-        let run = try await Self.running(harness, Launch.middle)
-        try await run.execute(Launch.refuseDrop)
-        await #expect(throws: (any Error).self) { try await run.session.finish(endedAt: Launch.end) }
-        let saved = try await run.history()
-        #expect(saved.count == 1, "the save went through before the app died")
-        #expect(try await run.logs() == [Launch.session.id])
-        try await run.execute(Launch.allow)
-        let relaunched = try await AppRun(harness)
-        #expect(try await relaunched.history() == saved)
-        #expect(try await relaunched.logs().isEmpty)
-        #expect(try await relaunched.session.current() == nil)
-    }
+    // "Killed after the save and before the compaction" was here in S2. F10 S3 made the save and the log's
+    // deletion one transaction, so over the database that state no longer exists: what holds instead is
+    // `WorkoutSaveKillAdversarialTests`'.
 
     @Test("Killed after discarded is stored and before the compaction: nothing reaches history")
     func kill_afterDiscardedBeforeTheCompaction_dropsOnRelaunch() async throws {

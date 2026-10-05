@@ -629,3 +629,245 @@ These numbers are here so the green ones above can be weighed.
 | `scripts/check.sh` (full gate) | not run | the orchestrator's |
 
 No test helper process was left running.
+
+## Slice S3 — round 1 (G2 tester, 2026-10-05)
+
+Independent adversarial pass over `feat/F10-s3-program-updates` at `f8c513d`: `materialize(_:slotUpdates:droppingLog:)`
+on the GRDB repository and on LedgerFakes' linked stores, the host's one-call save, and criterion 9's lane cut.
+
+**Verdict.** The save itself held against everything I threw at it: program changes land or are skipped as the
+criteria say, a failure at any statement of the transaction changes no row, a second and a third save change no
+row, and the database, the fakes and a model of my own agree on seeded scripts. One finding in how the host uses
+it (F10-S3-1, latent: the app's own composition cannot reach it), and one in another tester's suite that my cut
+touches (F10-S3-2). Two tests of mine (8 cases, 12 issues) fail and stay failing, for F10-S3-1.
+
+**Independence, exactly.** Before my S3 tests existed I had read the brief's S3 section, the declarations and doc
+comments of the new code from the grep in my instructions (it shows a few lines inside bodies), the workout
+repository's protocol whole, `Support/Tags.swift` and the lines that use it, and the notes' subsection "Criterion
+9: before and after", as sanctioned. That subsection also proposes cuts for my suites; mine differ in number but I
+had read them. I had also read the first sixty lines of `LedgerPersistenceTests/Support/RepositoryTesting.swift`
+while looking for a clock, and the F05 tester's kit (`S2Kit`, `S3Kit`), which I reuse. F10-S3-1 was predicted
+from a doc comment ("Both stores are tables of one database, so the answer is `droppingLog`") and then shown by a
+test; I read the host's `complete` only afterwards. After my tests had run I read the names of the implementer's
+S3 tests, about forty lines of two of them, and the timing test's diff. I did not audit them assertion by
+assertion.
+
+### The test that failed by ruling
+
+`WorkoutRelaunchAdversarialTests.kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch` pinned "saved, then
+killed before the compaction". Over one database that state no longer exists, so the test is gone, with a comment
+where it stood. What replaced it is a new suite, `WorkoutSaveKillAdversarialTests`, through the composition on a
+real file:
+
+- `kill_insideTheSaveTransaction_leavesNoRowAndTheWholeLog` (3 statements: the exercises' insert, the sets'
+  insert, the log's delete): no row in any history table, the log whole with its end in it; the relaunch saves and
+  drops.
+- `kill_atTheProgramStatement_leavesTheProgramAndSavesOnRelaunch`: the same where the transaction reaches the
+  program (`UPDATE ON slot` refused, a swap with "Also update program" pending).
+- `kill_afterTheSaveCommitted_leavesTheRowAndNoLog`: the row and no event; the relaunch changes no row count.
+
+The old state, which stores that are not one database still reach, stays pinned at the host by
+`HostRecoveryAdversarialTests.recovery_savedNotCompacted_changesNothing`,
+`HostEndFailureAdversarialTests.finish_compactionFails_savedOnceAndEndedOnce` and, new,
+`HostLinkedSaveAdversarialTests.kill_aroundTheSave_theRelaunchCompletesIt`.
+
+### Criterion 9: the PR-lane cut
+
+**Result.** The session suites cost 38.2 s before my cut and 14.6 s after it, 25 % of the 58.1 s they cost before
+S3; with this round's three new host suites, 16.3 s, 28 %. The target was a third, 19.4 s.
+
+**How it was measured.** As the implementer measured, one target: `f10s3-g2/measure.sh <label>` through the lock
+(`build-for-testing`, then `test-without-building -testPlan PR -only-testing:LedgerSyncTests` with `check.sh`'s
+flags, iPhone 17, iOS 27.0), and the per-suite sum of run durations from the result bundle. **One run each**; the
+same tree gave the implementer 36.9 s and me 38.2 s, so read a few percent as noise. Loads at the start: 4.0, 4.8,
+6.0. The last run also ran `LedgerPersistenceTests`.
+
+| Suite | Whose | Before | After the cut | With the S3 suites |
+|---|---|--:|--:|--:|
+| `Adversarial F10 S2 · never lost, never doubled` | mine, S2 | 12.7 s, 304 | 1.5 s, 30 | 1.5 s, 30 |
+| `Adversarial F10 S1 · does the session contract bite` | S1 tester | 4.7 s, 145 | 2.1 s, 109 | 2.2 s, 109 |
+| `Adversarial F10 S2 · does the concurrent script bite` | mine, S2 | 3.9 s, 17 | 1.2 s, 17 | 1.2 s, 17 |
+| `Adversarial F10 S1 · the contract after the fix round` | S1 tester | 3.3 s, 39 | 1.7 s, 34 | 1.8 s, 34 |
+| `Adversarial F10 S2 · the contract over this suite's stores` | mine, S2 | 3.9 s, 202 | 0.4 s, 22 | 0.4 s, 22 |
+| `LocalWorkoutSessionActor · the contract` | implementer | 2.1 s, 270 | 2.0 s, 270 | 2.1 s, 270 |
+| `WorkoutSessionClient · calls made at once, as one history` | implementer | 2.0 s, 335 | 2.0 s, 335 | 2.0 s, 335 |
+| `Adversarial F10 S2 · many callers at once` | mine, S2 | 1.6 s, 185 | 0.3 s, 45 | 0.3 s, 45 |
+| `WorkoutSessionClient · the contract notices a faulty client` | implementer | 1.0 s, 57 | 0.9 s, 57 | 0.9 s, 57 |
+| `WorkoutSessionClient · the contract on the fake` | implementer | 0.7 s, 227 | 0.7 s, 227 | 0.7 s, 227 |
+| `Adversarial F10 S1 · fake session vs the engine` | S1 tester | 0.9 s, 201 | 0.3 s, 41 | 0.3 s, 41 |
+| `Adversarial F10 S3 · the host saves and drops in one call` | mine, S3 | — | — | 0.8 s, 34 |
+| `Adversarial F10 S3 · a swap reaches the program with the save` | mine, S3 | — | — | 0.5 s, 28 |
+| 33 other session suites | all | 1.5 s, 411 | 1.4 s, 411 | 1.5 s, 423 |
+| **The S1 tester's** | | **9.3 s**, 556 runs | **4.7 s**, 355 | **4.8 s**, 355 |
+| **The implementer's** | | **5.9 s**, 975 | **5.8 s**, 975 | **5.9 s**, 975 |
+| **Mine, S2** | | **23.0 s**, 862 | **4.1 s**, 268 | **4.2 s**, 268 |
+| **Mine, S3** | | — | — | **1.4 s**, 74 |
+| **All session suites** | | **38.2 s**, 2,393 | **14.6 s**, 1,598 (25 %) | **16.3 s**, 1,672 (28 %) |
+
+**What was cut, in my suites.** `SessionLane.cut(_:to:)` (new, `SessionLaneAdversarialSupport.swift`) gives a
+matrix whole in the nightly lane and its first seeds elsewhere. The counts were chosen from the before-run's
+per-test costs to land under the target, not from any argument about how many seeds are enough:
+
+| Test | Nightly | PR lane and `swift test` |
+|---|--:|--:|
+| `HostNeverLostAdversarialTests`: sieges in memory, over GRDB | 200, 100 | 20, 6 |
+| `HostReentrancyAdversarialTests`: storms in memory, over GRDB | 120, 60 | 30, 10 |
+| `HostContractRunAdversarialTests`: scripts on each backing, the differential | 80, 40 | 5, 10 |
+| `HostContractBiteAdversarialTests`: seeds a racy host runs, storms a fault | 20 + 60, 40 | 10 + 0, 10 |
+
+Unchanged in every lane: the siege's coverage test (40 sieges), its sabotage test (20 sieges each), the storm's
+coverage test, the stand-in's margin test (its twenty seeds), every backing, every racy fault. No assertion
+changed. One failure message that said "in 80 runs" now prints the count.
+
+**Every line changed in the S1 tester's files** (four, in three files; each is an `arguments:` list):
+
+| File and line | Was | Is |
+|---|---|---|
+| `FakeSessionDifferentialAdversarialTests.swift:67` | `arguments: SeamSeed.all` | `arguments: SessionLane.cut(SeamSeed.all, to: 40)` |
+| `SessionContractBiteAdversarialTests.swift:52` | `arguments: SeamFault.sequential` | `arguments: SessionLane.cut(SeamFault.sequential, to: 4)` |
+| `SessionContractBiteAdversarialTests.swift:104` | `arguments: SeamFault.racy` | `arguments: SessionLane.cut(SeamFault.racy, to: 3)` |
+| `SessionContractRoundTwoAdversarialTests.swift:109` | `arguments: SeamLateFault.racy` | `arguments: SessionLane.cut(SeamLateFault.racy, to: 3)` |
+
+What that leaves out of the PR lane, plainly. Line 52: `faultyClient_isRejectedByAClauseOrAScript` runs 4 of its
+33 faults; all 33 still run in `faultyClient_isRejectedByAClause`, which asks strictly more of the contract. Lines
+104 and 109: the two `racyClient_isRejectedByThisSuitesOverlapChecks` tests run 3 of their 10 and 3 of their 8
+faults; every racy fault still runs in `racyClient_isRejectedByAClause`. Those two tests check the S1 suite's own
+overlap checks, not the contract, and were 4.6 s of the 9.3 s. The nightly lane runs all of it as before.
+
+### Summary of findings
+
+| # | Severity | Finding | Failing test |
+|---|---|---|---|
+| F10-S3-1 | bug (latent; not reachable through `AppComposition`) | A host whose workout repository and event store are not one database is told the log went with the save, and never drops it: the workout is saved again at every launch | `finish_eventStoreElsewhere_dropsItsLog`, `relaunch_afterAFinish_findsNoLogToSaveAgain` (4 cases each) |
+| F10-S3-2 | test-quality (not S3's code; the S1 tester's suite) | Two of S1's overlap-check cases fail on a one-thread pool; my cut takes exactly those cases out of the PR lane | none of mine |
+
+### F10-S3-1. bug (latent) — the repository's "the log went with the save" is believed by a host that holds another event store
+
+- **Rule.** Criterion 5: "recovery's row "saved, not compacted" remains only for stores that are not one
+  database." The protocol: "Only a host whose stores are not one database saves the workout and drops its log in
+  two steps." `materialize`'s documentation: it answers `false` "from a repository that does not share a database
+  with the event store, whose caller then compacts the log itself".
+- **Repro.** `HostMixedStoresAdversarialTests`, four pairings, each of two real stores: the database's repository
+  with an in-memory event store; with another database's event store; the fakes' linked repository with another
+  in-memory event store; with the database's. Start a workout, finish it.
+- **Expected.** The workout in history, and its log gone from the event store the host was given.
+- **Actual.** The workout is in history and its log is still in the host's event store, in all four. At the next
+  launch the log replays to a finished workout and is saved again; `relaunch_afterAFinish_findsNoLogToSaveAgain`
+  deletes the workout from history first, and the relaunch brings it back. The log is never dropped, so this
+  repeats at every launch. A discard is not affected: the host compacts that itself.
+- **Cause.** `complete(_:)` returns as soon as `materialize(…, droppingLog: true)` answers `true`. A repository
+  answers for the log in its own database (the GRDB one whenever it is asked; the fakes' when an event store is
+  linked to it), and cannot know which event store the host holds. Nothing in the host's initialiser ties the two.
+- **Why it matters.** Saving an old workout again is not harmless once the lifter has moved on: its misses and
+  its program changes are written again over later edits
+  (`LinkedSaveTwiceAdversarialTests.saveAgain_afterTheProgramWasEdited_appliesTheUpdateAgain` documents that for a
+  swap, as F05's input 6 warned for misses), and a workout deleted from history returns.
+- **Reach.** None in the app: `AppComposition` builds the host from one `LedgerStores`. It is reached by any test
+  or later composition that pairs stores from two places, and nothing says so when it happens. The implementer's
+  "not one database" set-up uses a repository that holds no log and answers `false`, so it does not meet this.
+- **Fix, for whoever owns it.** Either the host does not take the answer on trust (a `compact` after the save is
+  one idempotent statement), or the pairing becomes something a caller cannot get wrong.
+
+### F10-S3-2. test-quality — two of S1's overlap-check cases fail on a one-thread pool
+
+- **Where.** `SessionContractBiteAdversarialTests.racyClient_isRejectedByThisSuitesOverlapChecks` for
+  `.racyLateRegistration`, and the round-two test of the same name for `.registersBeforeItsFirstElement`.
+- **What.** With `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` and the nightly matrix both fail, 3 runs of 3 ("in ten
+  runs, the overlap checks accepted a client that …"); on the default pool both pass, 2 runs of 2. The nightly
+  lane runs the uncut lists, so this is as it was before my edit; S2's round did not run S1's suites on a
+  one-thread pool, which is how it went unseen.
+- **Why I report it.** My cut keeps the first three racy faults of each list in the PR lane, and neither of these
+  two is among them. So in the PR lane these two cases no longer run in that test at all, on any pool. The gate
+  uses the default pool, where they pass.
+
+### Attacked and held
+
+50 new test functions in 11 suites, 173 cases; 48 pass. All run on the database and on LedgerFakes' linked stores
+unless they are about rows.
+
+- **Criteria 1 and 2** (`LinkedSaveAdversarialTests`, 7 tests). An update of the workout's own slot, with misses
+  for another; misses and an update for the same slot, the passed slot's other fields stale; a slot of another
+  program, a slot that never was and an exercise that is not stored, beside one that applies; an ad-hoc workout
+  and another program's workout; the workout's own program when it is not the active one; a slot removed during
+  the workout; a program deleted, then saved again.
+- **Criterion 3** (`LinkedSaveTwiceAdversarialTests`, 6 tests). A second and a third save with the clock moved an
+  hour between them: every row of every table of the database identical, timestamps included, with the log
+  dropped and with it kept; a second save that only now drops the log changes `workout_event` alone; an update to
+  the exercise a slot already holds writes no program row.
+- **Criterion 4** (`LinkedSaveFaultAdversarialTests`, `LinkedSaveLogAdversarialTests`). A trigger refuses each of
+  21 statements (insert, update, delete on the seven tables a save writes), for a first save with records,
+  misses, a program change and a log, and for a save over an earlier one: whenever the save fails, no row of any
+  table differs, and the same save then succeeds. Five kinds of refused workout change nothing.
+- **What the `Bool` says** (`LinkedSaveLogAdversarialTests`). `true` when asked, also when no log was there;
+  `false` when not asked; `false` from a repository that holds no log and from a wrapper written before S3, which
+  still applies the program change. What it cannot say is F10-S3-1.
+- **Criterion 6** (`LinkedSaveDifferentialAdversarialTests`). Seeded scripts of 30 steps (saves of new and of
+  earlier workouts, logs, a program deleted, restored, losing a slot) on both kinds of store at once and on
+  `LinkedModel`: the same answers, the same programs, history and logs after every step. 6 seeds in the PR lane
+  (7919 · n + 17), every seed of the lane nightly; 200 passed once on the host. A model without the "exercise is
+  stored" rule fails 10 of 12 seeds, one with the log rule inverted 11 of 12. Sixteen workouts refused for one
+  reason or two are refused for the same reason by both.
+- **Observers** (`LinkedSaveObserverAdversarialTests`). A reader already waiting hears a save's misses and swap
+  as one value, hears nothing for a save that changes no program, and hears a workout once. Three readers racing
+  forty saves never see a workout in history with its log still there, a log gone without its workout, or a
+  slot's new exercise without its misses.
+- **Criterion 5** (`HostLinkedSaveAdversarialTests`, `HostProgramUpdateAdversarialTests`). My store wrappers now
+  have a linked mode that passes the one call on. Sieges in that mode, 12 seeds in memory and 6 over GRDB in the
+  PR lane (200 and 100 nightly); a finish is an append and one save, or, unlinked, save then compact; a save that
+  fails twice; a save whose answer is lost; four kill points, linked and not, each on both backings. A swap with
+  "Also update program" through finish, discard, a failed save and its retry, an exercise that is not stored, and
+  a relaunch after the program lost a slot: 7 tests on 4 set-ups.
+- **Criterion 7** (`LinkedSaveFixtureAdversarialTests`). A copy of `db-v001.sqlite`, migrated by what was there
+  before S3, takes the linked save and keeps its schema. `git diff 95ac9b8 f8c513d` shows no change to
+  `Migrations.swift` or to any file under `Fixtures/`.
+- **Criterion 8.** The implementer's timing test ran once by hand in the nightly lane on the Mac host and passed.
+  I did not read the milliseconds it measured.
+- **F10-S2-1 after S3.** Unchanged, for better or worse: a workout the store can never save still wedges the
+  session and still fails the launch step at every foreground; both S2 documenting tests pass as written. What
+  S3 removed is the half-saved state beside it: while an end waits, no history row and no slot has changed
+  (`finish_neverSavable_wedgesAsBeforeAndChangesNothing`, 4 set-ups).
+
+Documented, not findings: a save of an old workout sets its slot back over a later edit; the host writes misses
+only to the active program, and a save writes a swap to the workout's own program whether active or not.
+
+### How my own tests changed while I wrote them
+
+- The rewritten relaunch test first gave four disk I/O errors: its cases ran at once in one harness directory.
+- I listed `INSERT ON personal_record` among the statements to kill at; a first workout sets no record, so that
+  statement is now exercised only where history holds an earlier workout.
+- Fourteen false failures came from my program reader, which showed a program as active after reading it.
+- My list of the statements a first save runs was a guess and was two short (it also updates the workout's row
+  and retires old misses); the test now asks only that each statement I name fails the save.
+- Eight false failures came from comparing a stored workout with one that still carried `programUpdates`.
+- Every simulator figure is one run. The differential cost 2.3 s there at 12 seeds; I then halved it to 6 and did
+  not measure again.
+
+### Not attacked
+
+- **No full gate, no watchOS simulator, no nightly plan on a simulator.** The orchestrator's.
+- **Two saves at once** that change the same slot.
+- **A soft-deleted exercise or day**: no protocol call reaches one.
+- **What the engine puts in `programUpdates`** (a later swap of the same slot without the flag): not S3.
+- **A real kill**, and `prepareDependencies`, as in S2.
+- **My S2 tests still compare whole states inside `#expect`**; only this round's tests print a short difference.
+- **The implementer's S3 tests, assertion by assertion**, and the S3 notes beyond the one subsection.
+
+### Commands
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test … --filter '<my S2 suites>'`, as found | 1 | 1 test failing: the one that fails by ruling |
+| `swift test … --filter '<my S2 and S3 suites and S1's session suites>'`, 4 times | 1 | 231 tests in 46 suites; 12 issues each time, F10-S3-1's |
+| the same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`, 4 times | 1 | the same 12 issues each time |
+| the same with `LEDGER_TEST_LANE=nightly`, once | 1 | the same 12 issues |
+| the same, nightly and one-thread, once | 1 | 14 issues: the 12, and F10-S3-2's two |
+| S1's two bite suites, nightly: one-thread 3 times, default twice | 1, 0 | F10-S3-2 in 3 of 3, in 0 of 2 |
+| `LEDGER_TEST_LANE=nightly swift test … --filter LinkedSaveDifferentialAdversarialTests` | 0 | 200 seeds |
+| `LEDGER_TEST_LANE=nightly swift test … --filter RecordReplayPerformanceTests` | 0 | once, by hand |
+| `sim-lock.py f10s3-g2/measure.sh before` | 0 | `LedgerSyncTests` 38.5 s, 2,485 runs |
+| `sim-lock.py f10s3-g2/measure.sh aftercut` | 0 | `LedgerSyncTests` 14.9 s, 1,690 runs |
+| `sim-lock.py f10s3-g2/measure.sh final`, with `LedgerPersistenceTests` | 65 | 6,307 passed, 11 skipped, 14 expected failures, 8 failed: F10-S3-1's eight cases and no other. `LedgerSyncTests` 16.7 s, 1,764 runs; `LedgerPersistenceTests` 79.9 s, 4,576 runs, 3.7 s of it my seven new suites |
+| `scripts/check.sh --lint-only` | 0 | format, `swiftlint --strict`, package graph, script tests |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+The result bundles are deleted. No test helper process was left running.

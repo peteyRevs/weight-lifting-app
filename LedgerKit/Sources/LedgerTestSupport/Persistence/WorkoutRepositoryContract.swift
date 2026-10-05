@@ -6,16 +6,25 @@ import LedgerPersistence
 /// all over one fresh, empty store:
 /// - `programs` accepts slots naming `ProgramRepositoryContract.exercises` (a GRDB database must hold them
 ///   first: `slot.exercise_id` is a foreign key);
-/// - `stats` reads the current time as `StatsQueriesContract.now`.
+/// - `stats` reads the current time as `StatsQueriesContract.now`;
+/// - `events` is the event log the same store holds, which `linkedClauses` need; `nil` for a subject that
+///   models history alone.
 public struct HistoryStores: Sendable {
     public let workouts: any WorkoutRepository
     public let stats: any StatsQueries
     public let programs: any ProgramRepository
+    public let events: (any WorkoutEventStore)?
 
-    public init(workouts: any WorkoutRepository, stats: any StatsQueries, programs: any ProgramRepository) {
+    public init(
+        workouts: any WorkoutRepository,
+        stats: any StatsQueries,
+        programs: any ProgramRepository,
+        events: (any WorkoutEventStore)? = nil
+    ) {
         self.workouts = workouts
         self.stats = stats
         self.programs = programs
+        self.events = events
     }
 
     /// Materialises `workout`, with `slotUpdates` (none by default).

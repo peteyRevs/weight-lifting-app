@@ -13,7 +13,8 @@ import Testing
 /// the file must then show what criterion 6's table says.
 ///
 /// A step the process "dies in" is one a SQLite trigger refuses, so the call before it has committed and the
-/// call itself has not.
+/// call itself has not. Since F10 S3 the save and the end of the log are one such step: the point "after the
+/// save and before the log was dropped" is gone, and the two tests that stood there show what replaced it.
 @Suite("Workout · kill and relaunch", .timeLimit(.minutes(1)))
 struct WorkoutRelaunchTests {
     nonisolated static let workoutID = WorkoutID(EventBuilders.uuid(0xF500))
@@ -77,24 +78,56 @@ struct WorkoutRelaunchTests {
         #expect(!LaunchAdversarialTests.spelled(harness.log).contains("failed resumeWorkout"))
     }
 
-    @Test("Killed after the save and before the log was dropped: saving again changes nothing, and the log is dropped")
-    func killedBeforeTheDrop_isSavedAgainUnchanged() async throws {
+    /// F10 S3 criteria 4 and 5: the save and the end of the log are one transaction, so the app can no longer
+    /// die between them. A drop that fails takes the save with it.
+    @Test("A save whose log cannot be dropped saves nothing; the relaunch saves the workout, its misses and its swap")
+    func saveThatCannotDropTheLog_savesNothing() async throws {
         let harness = Harness()
         defer { harness.remove() }
         let first = try await Launch(harness)
-        _ = try await first.logTheFirstExercise(of: first.startUpperA())
+        let live = try await first.swapTheSecondExercise(of: first.logTheFirstExercise(of: first.startUpperA()))
         try await first.refuse(Self.refuseDrop)
         await #expect(throws: DatabaseError.self) {
             _ = try await first.session.finish(endedAt: Harness.now.addingTimeInterval(3600))
         }
-        var saved = try first.rows()
-        #expect(saved["workout"]?.count == 1 && saved["logged_set"]?.count == 18 && saved["slot_miss"]?.count == 4)
-        #expect(saved["workout_event"]?.count == 7)
+        let left = try first.rows()
+        #expect(left["workout"]?.isEmpty == true && left["logged_set"]?.isEmpty == true)
+        #expect(left["slot_miss"]?.isEmpty == true && left["workout_event"]?.count == 8)
+        #expect(try await first.exercises()[1] == Fixtures.CatalogID.inclineDBPress)
+        #expect(try await first.session.current() == live)
         try harness.arrange { try $0.execute(sql: "DROP TRIGGER die") }
         let relaunched = try await Launch(harness)
         #expect(try await relaunched.session.current() == nil)
-        saved["workout_event"] = []
-        #expect(try relaunched.rows() == saved)
+        let saved = try relaunched.rows()
+        #expect(saved["workout"]?.count == 1 && saved["logged_set"]?.count == 18 && saved["slot_miss"]?.count == 4)
+        #expect(saved["workout_event"]?.isEmpty == true)
+        #expect(try await relaunched.misses() == [[], [4], [4], [4], [4]])
+        #expect(try await relaunched.exercises()[1] == Fixtures.CatalogID.overheadPress)
+    }
+
+    /// The row "saved, not compacted" of recovery's table. The host no longer leaves it over the database; a
+    /// store that is not one database can, and so could a build from before the save dropped the log.
+    @Test("A log left behind a saved workout: the relaunch saves it again, changing no row, and drops the log")
+    func logLeftBehindASavedWorkout_isSavedAgainUnchanged() async throws {
+        let harness = Harness()
+        defer { harness.remove() }
+        let first = try await Launch(harness)
+        _ = try await first.swapTheSecondExercise(of: first.logTheFirstExercise(of: first.startUpperA()))
+        try await first.refuse(Self.refuseSave)
+        await #expect(throws: DatabaseError.self) {
+            _ = try await first.session.finish(endedAt: Harness.now.addingTimeInterval(3600))
+        }
+        let log = try await first.stores.events.envelopes(for: Self.workoutID)
+        try harness.arrange { try $0.execute(sql: "DROP TRIGGER die") }
+        let second = try await Launch(harness)
+        let saved = try second.rows()
+        #expect(saved["workout"]?.count == 1 && saved["workout_event"]?.isEmpty == true)
+        // The finished log is back beside the saved workout.
+        #expect(try await second.stores.events.append(log).count == 8)
+        let third = try await Launch(harness)
+        #expect(try await third.session.current() == nil)
+        #expect(try Launch.difference(third.rows(), from: saved) == nil)
+        #expect(!LaunchAdversarialTests.spelled(harness.log).contains("failed resumeWorkout"))
     }
 
     @Test("Killed after the discard was stored and before the log was dropped: the log is dropped, nothing in history")
@@ -164,11 +197,21 @@ extension WorkoutRelaunchTests {
             return state
         }
 
+        /// Swaps the second exercise, the incline dumbbell press, for the overhead press, in the program too.
+        func swapTheSecondExercise(of _: WorkoutState) async throws -> WorkoutState {
+            try await session.apply(.exerciseSwapped(
+                exerciseIndex: 1,
+                exerciseID: Fixtures.CatalogID.overheadPress,
+                name: "Overhead Press",
+                alsoUpdateProgram: true
+            ))
+        }
+
         func refuse(_ trigger: String) async throws {
             try await stores.queue.write { try $0.execute(sql: trigger) }
         }
 
-        /// Every stored row of the workout tables and the log, as text: what a second save may not change.
+        /// Every stored row of the workout tables, the slots and the log: what a second save may not change.
         func rows() throws -> [String: [Row]] {
             try stores.queue.read { database in
                 var rows: [String: [Row]] = [:]
@@ -178,12 +221,29 @@ extension WorkoutRelaunchTests {
                     "logged_set",
                     "personal_record",
                     "slot_miss",
+                    "slot",
                     "workout_event"
                 ] {
                     rows[table] = try Row.fetchAll(database, sql: "SELECT * FROM \(table) ORDER BY id")
                 }
                 return rows
             }
+        }
+
+        /// The tables whose rows differ between two readings, with their counts, or `nil`: a failure prints
+        /// this line, not every row of both.
+        static func difference(_ rows: [String: [Row]], from before: [String: [Row]]) -> String? {
+            let changed = rows.keys.sorted().filter { rows[$0] != before[$0] }
+            guard !changed.isEmpty else {
+                return nil
+            }
+            return changed.map { "\($0): \(rows[$0]?.count ?? 0) rows, were \(before[$0]?.count ?? 0)" }
+                .joined(separator: "; ")
+        }
+
+        /// The exercise of each of Upper A's five slots, in the stored program.
+        func exercises() async throws -> [ExerciseID] {
+            try #require(await stores.programs.active()).days[0].slots.map(\.exerciseID)
         }
 
         /// The weeks missed on each of Upper A's five slots.

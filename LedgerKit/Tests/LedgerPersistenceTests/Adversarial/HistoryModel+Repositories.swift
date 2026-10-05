@@ -4,7 +4,7 @@ import LedgerPersistence
 
 /// `HistoryModel` as the workout repository, and as the small program repository the misses need.
 extension HistoryModel: WorkoutRepository {
-    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {
         guard workout.phase == .finished, workout.endedAt != nil else {
             throw LedgerPersistenceError.notFinished("workout \(workout.id.rawValue.uuidString)")
         }
@@ -13,6 +13,7 @@ extension HistoryModel: WorkoutRepository {
             redetect(after: workout.id, in: &state)
             writeMisses(of: slotUpdates, in: &state)
         }
+        return false
     }
 
     func workout(id: WorkoutID) async throws -> WorkoutState? {

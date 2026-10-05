@@ -38,12 +38,24 @@ struct Subject: Sendable {
         probed.probe
     }
 
-    /// - Parameter yields: how often each store call gives way before it reaches its store.
-    init(seed: InMemoryStores.Seed = .empty, yields: Int = 0, clock: SettableClock = SettableClock()) {
+    /// - Parameters:
+    ///   - yields: how often each store call gives way before it reaches its store.
+    ///   - oneDatabase: whether a save can drop the workout's log in its own step, as the linked in-memory
+    ///     stores and the database do. When false the host meets a workout repository that holds no log
+    ///     (`SeparateWorkoutRepository`), and compacts after the save, in a second store call.
+    init(
+        seed: InMemoryStores.Seed = .empty,
+        yields: Int = 0,
+        clock: SettableClock = SettableClock(),
+        oneDatabase: Bool = true
+    ) {
         let memory = InMemoryStores(seed: seed)
+        let workouts: any WorkoutRepository = oneDatabase
+            ? memory.workouts
+            : SeparateWorkoutRepository(base: memory.workouts)
         let wrapped = ProbedStores(
             events: memory.events,
-            workouts: memory.workouts,
+            workouts: workouts,
             programs: memory.programs,
             yields: yields
         )
@@ -76,6 +88,42 @@ struct Subject: Sendable {
     /// The store calls made since the last `clearCalls()` that write.
     func writes() async -> [StoreProbe.Call] {
         await probe.calls.filter { [.append, .materialize, .compact].contains($0) }
+    }
+}
+
+/// A workout repository that is not one database with the event log (F10 S3 criterion 5): every call goes to
+/// `base`, and a save never drops a log, whatever it is asked. It holds none, and answers so, as any store
+/// that cannot save and drop in one transaction.
+struct SeparateWorkoutRepository: WorkoutRepository {
+    let base: any WorkoutRepository
+
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {
+        try await base.materialize(workout, slotUpdates: slotUpdates)
+        return false
+    }
+
+    func workout(id: WorkoutID) async throws -> WorkoutState? {
+        try await base.workout(id: id)
+    }
+
+    func recent(limit: Int) async throws -> [WorkoutState] {
+        try await base.recent(limit: limit)
+    }
+
+    func workouts(in range: Range<Date>) async throws -> [WorkoutState] {
+        try await base.workouts(in: range)
+    }
+
+    func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
+        try await base.updateSets(workoutExerciseID: workoutExerciseID, sets: sets)
+    }
+
+    func delete(id: WorkoutID) async throws {
+        try await base.delete(id: id)
+    }
+
+    func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
+        base.observeRecent(limit: limit)
     }
 }
 

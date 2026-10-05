@@ -27,7 +27,7 @@ struct HostContractRunAdversarialTests {
     @Test(
         "The sequential and the concurrent script hold over stores that give way inside every call",
         arguments: Backing.allCases,
-        HostContractBiteAdversarialTests.gateSeeds + HostContractBiteAdversarialTests.moreSeeds
+        SessionLane.cut(HostContractBiteAdversarialTests.gateSeeds + HostContractBiteAdversarialTests.moreSeeds, to: 5)
     )
     func scripts_overStoresThatGiveWay_hold(backing: Backing, seed: UInt64) async throws {
         #expect(try await Contract.scriptViolation(seed: seed, on: Self.host(backing)) == nil)
@@ -36,7 +36,7 @@ struct HostContractRunAdversarialTests {
 
     @Test(
         "The S1 differential script holds on the host, whose events the stores can keep or not",
-        arguments: SeamSeed.all.prefix(40)
+        arguments: SessionLane.cut(SeamSeed.all.prefix(40), to: 10)
     )
     func differential_onTheHost_answersAsTheEngineUntilAnEnd(seed: SeamSeed) async throws {
         // The S1 script logs weights no store can save (an eighth of a pound, a negative one), so the host

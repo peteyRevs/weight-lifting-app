@@ -11,6 +11,9 @@ import Testing
 /// The clauses whose calls overlap give a host with an `await` between a check and its commit the chance to
 /// fail, not the certainty; the stores that give way inside every call (`HostStores.suspending`) are where it
 /// would. The implementation notes hold the counts of repeated runs, on the default pool and on one thread.
+///
+/// Every clause runs on every set-up in every lane. The seeded scripts run `Seeds.hostSeeds` on every set-up:
+/// twenty in the PR lane, every seed of the lane in the nightly one (F10 S3 criterion 9).
 @Suite("LocalWorkoutSessionActor · the contract", .tags(.sync), .timeLimit(.minutes(1)))
 struct LocalWorkoutSessionActorContractTests {
     typealias Contract = WorkoutSessionClientContract
@@ -30,7 +33,7 @@ struct LocalWorkoutSessionActorContractTests {
     @Test(
         "A seeded script on the host returns, throws and publishes what the rules say, as on the fake",
         .tags(.property),
-        arguments: Seeds.seeds,
+        arguments: Seeds.hostSeeds,
         HostSetup.allCases
     )
     func sessionScripts_fakeAndActorPublishTheSame(seed: UInt64, _ setup: HostSetup) async throws {

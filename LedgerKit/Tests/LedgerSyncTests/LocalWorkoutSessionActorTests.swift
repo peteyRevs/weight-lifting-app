@@ -31,7 +31,7 @@ struct LocalWorkoutSessionActorTests {
         try await subject.host.start(Sample.session)
         await subject.probe.hold(.append)
         async let applied = subject.host.apply(Sample.logged(0, 0))
-        await subject.probe.waitUntilHeld()
+        try await subject.probe.waitUntilHeld()
         #expect(try await subject.host.current() == Sample.session)
         var joining = await Listener(subject.host)
         #expect(await joining.next() == Update(state: Sample.session))

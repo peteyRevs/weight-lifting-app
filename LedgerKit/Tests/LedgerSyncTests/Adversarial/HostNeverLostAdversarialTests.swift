@@ -9,13 +9,19 @@ import Testing
 /// `WorkoutEngine.replay` of what its stores hold. A failing case names its seed and the steps before it.
 @Suite("Adversarial F10 S2 · never lost, never doubled", .tags(.sync, .property), .timeLimit(.minutes(1)))
 struct HostNeverLostAdversarialTests {
-    @Test("A seeded siege over the in-memory stores: the host follows its store", arguments: SeamSeed.all)
+    @Test(
+        "A seeded siege over the in-memory stores: the host follows its store",
+        arguments: SessionLane.cut(SeamSeed.all, to: 20)
+    )
     func siege_inMemoryStores_hostFollowsItsStore(seed: SeamSeed) async throws {
         let violation = try await SiegeTrial.violation(seed: seed.value, backing: .memory)
         #expect(violation == nil, "\(seed)")
     }
 
-    @Test("A seeded siege over the GRDB stores: the host follows its store", arguments: SeamSeed.all.prefix(100))
+    @Test(
+        "A seeded siege over the GRDB stores: the host follows its store",
+        arguments: SessionLane.cut(SeamSeed.all.prefix(100), to: 6)
+    )
     func siege_database_hostFollowsItsStore(seed: SeamSeed) async throws {
         let violation = try await SiegeTrial.violation(seed: seed.value, backing: .database)
         #expect(violation == nil, "\(seed)")
