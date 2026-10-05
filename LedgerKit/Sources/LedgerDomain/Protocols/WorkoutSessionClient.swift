@@ -9,6 +9,11 @@ import Foundation
 /// Every method waits for the host's launch recovery, which is the composition root's step and not part of
 /// this protocol, so a call can never race it. The rules hold when calls overlap: a client takes them one at
 /// a time, so every caller and every subscriber is told the same one story.
+///
+/// A call that throws changes nothing a reader can see: no update is published, and `current()` and every
+/// stream go on showing the workout as it stood. That holds for a host whose store fails, too. A workout
+/// whose end is stored but could not be completed (`finish(endedAt:)`) is still the workout readers see,
+/// and still the one workout there may be, until the host has completed its end.
 public protocol WorkoutSessionClient: Sendable {
     /// The workout as it stands (the first element, with no haptics), then one update for each call whose
     /// event the engine accepts, in the order the events were applied. A host may publish further updates for
@@ -21,7 +26,8 @@ public protocol WorkoutSessionClient: Sendable {
     /// dropped.
     func updates() async -> AsyncStream<WorkoutSessionUpdate>
 
-    /// The live workout, or nil when there is none.
+    /// The live workout, or nil when there is none: the state of the last update. Throws only what kept a
+    /// host from reading its store.
     func current() async throws -> WorkoutState?
 
     /// Makes `initial` the live workout and publishes it.
@@ -41,6 +47,8 @@ public protocol WorkoutSessionClient: Sendable {
     ///   the engine ignores is an ignored event like any other.
     ///
     /// Throws `noLiveWorkout` when there is none, which includes an `apply` that loses to an overlapping end.
+    /// While an end waits to be completed (`finish(endedAt:)`), the host completes it first: `apply` then
+    /// throws `noLiveWorkout`, or what kept the end from being completed.
     @discardableResult
     func apply(_ event: WorkoutEvent) async throws -> WorkoutState
 
@@ -51,7 +59,16 @@ public protocol WorkoutSessionClient: Sendable {
     ///
     /// Throws `noLiveWorkout` when there is none; `invalidEndDate` when the workout is still live after the
     /// call because the engine ignored the end, as it does for a date that is not finite (nothing ends and
-    /// nothing is published); and `incompleteLog` when the host cannot store the workout yet.
+    /// nothing is published); and `incompleteLog` when the host cannot store the workout yet, in which case
+    /// the workout stays live.
+    ///
+    /// **When the save fails** a host throws what its store threw, and nothing is lost: the end stays in the
+    /// workout's log. No update is published, and `current()` and every stream go on showing the workout as
+    /// it stood before the call, so a screen keeps what it shows and no second workout can be started over
+    /// one that is not yet in history. The host saves it again when `finish` is called again, which returns
+    /// the finished state, ended when the first call said; before any `apply` or `discard`, which then throw
+    /// `noLiveWorkout`; and when the app next launches or returns to the foreground. The first save that
+    /// succeeds publishes the one ending update.
     func finish(endedAt: Date) async throws -> WorkoutState
 
     /// Ends the live workout at `endedAt` and drops it; one last update carries the discarded state, and is
@@ -59,7 +76,9 @@ public protocol WorkoutSessionClient: Sendable {
     /// `finish(endedAt:)`.
     ///
     /// Throws `noLiveWorkout` when there is none, and `invalidEndDate` when the workout is still live after
-    /// the call because the engine ignored the end (nothing ends and nothing is published).
+    /// the call because the engine ignored the end (nothing ends and nothing is published). When the log
+    /// cannot be dropped a host throws what its store threw, and the end waits as a failed save does
+    /// (`finish(endedAt:)`): calling `discard` again completes it.
     func discard(endedAt: Date) async throws
 }
 
@@ -106,7 +125,8 @@ public enum WorkoutSessionError: Error, Equatable, Sendable {
     /// `apply`, `finish` or `discard` with no live workout.
     case noLiveWorkout
     /// `finish` while the workout's log holds envelopes this app version cannot read
-    /// (`WorkoutEventStore.unreadableCount(for:)`): the host never stores or compacts such a log.
+    /// (`WorkoutEventStore.unreadableCount(for:)`): the host never stores or compacts such a log. The workout
+    /// stays live; it can be discarded, and its log is then kept for a version that reads it.
     case incompleteLog(WorkoutID)
     /// `finish` or `discard` after which the workout is still live: the engine ignored the end, as it does
     /// for a date that is not finite (`EventEnvelope.isWellFormed`). Nothing ended and nothing was published.

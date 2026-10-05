@@ -63,6 +63,11 @@ extension WorkoutSessionClientContract {
     struct Model {
         private(set) var live: WorkoutState?
 
+        /// The rules from a given point: `live` is the workout as it stands, or nil for none.
+        init(standing live: WorkoutState? = nil) {
+            self.live = live
+        }
+
         mutating func perform(_ step: Step) -> (outcome: Outcome, published: Update?) {
             switch step {
             case let .start(snapshot):

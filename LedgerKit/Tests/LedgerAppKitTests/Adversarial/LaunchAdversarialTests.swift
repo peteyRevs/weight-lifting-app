@@ -95,6 +95,8 @@ extension LaunchAdversarialTests {
         var isSeeded = false
         var hasResumed = false
         var hasLoadedSettings = false
+        /// Sanctioned edit (F10 S2, orchestrator 2026-10-05): the launch gained the step `resumeWorkout`.
+        var hasResumedWorkout = false
         var isCompanionActive = false
         var log: [String] = []
 
@@ -133,6 +135,14 @@ extension LaunchAdversarialTests {
                 if !hasLoadedSettings {
                     log.append("began loadSettings")
                     hasLoadedSettings = true
+                }
+                // After the settings, once the database is open, in whatever phase: the live workout's recovery
+                // begins. No fault this test injects reaches it (it only reads an empty event log), so it never
+                // fails here, and a step that succeeded is not run again. Its failure and its retry on the next
+                // foreground are `WorkoutSessionWiringTests`'.
+                if !hasResumedWorkout {
+                    log.append("began resumeWorkout")
+                    hasResumedWorkout = true
                 }
             }
             if !isCompanionActive {
