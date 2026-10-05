@@ -308,3 +308,44 @@ survives a relaunch.
     suspending stores and on the fake, and a fault shows it can fail.
 12. **Budget.** An `apply`, including its append to the GRDB store, takes under 30 ms (architecture §15), measured
     in the nightly tier.
+
+## Plan amendments — slice S3, the persistence follow-up (orchestrator, 2026-10-05)
+
+S1 (the seam, #27) and S2 (the host, #29) are on `main`. This section is S3's specification; where it and anything
+above disagree, this section wins. Evidence and line references are in `F10-active-workout/implementation-notes.md`
+("Inputs the implementer needs › S3", S2's "Inputs for S3", the review's SF5, the rulings).
+
+S3 finishes the save of a finished workout: the program change a swap asked for lands with the workout, and the
+workout's event log is dropped in the same transaction. No screen; nothing the lifter sees changes yet (the swap
+sheet is S8).
+
+1. **A program change lands with the workout.** Given a finished workout whose `programUpdates` name a stored slot
+   of the workout's own program and a stored exercise, `materialize` stores the workout and sets that slot's
+   exercise, in one transaction. Nothing else of the program changes, and the slots' misses are written as before.
+   (This is the default of the open product question on "Also update program": the program changes when the workout
+   is saved, so a discarded workout leaves it alone.)
+2. **What cannot be applied is skipped, not fatal.** An update that names a slot that is not stored, a slot of
+   another program, or an exercise that is not stored is logged and skipped; the workout and the other updates are
+   still stored.
+3. **Saving twice changes nothing.** Materialising the same finished workout again leaves every row of every table
+   as it was, the program's included.
+4. **The log goes with the save.** `materialize` can be asked to drop the workout's event log in the same
+   transaction. When it succeeds, no event of that workout remains; when it fails, nothing changed: no history row,
+   no program change, the log whole.
+5. **The host uses it.** A finish is: store `finished`, then one transaction (the workout, its records, the misses,
+   the program updates, the log dropped), then the ending update. Over the database a workout can no longer be in
+   history and still shown as live, `finish` no longer throws for a workout that is already in history, and
+   recovery's row "saved, not compacted" remains only for stores that are not one database. The protocol's
+   documentation, the failure table in the notes and architecture §6 say so.
+6. **The fakes follow** (ADR-008): the in-memory stores apply the same rules, refuse what the database refuses in
+   the same order, and are held to the database by the shared contract and the seeded differential scripts.
+7. **No migration.** The schema and the version-1 fixtures are unchanged.
+8. **Budgets hold** (architecture §15): storing a new workout at the end of history with its program updates and
+   the log dropped stays under 50 ms on the 20,000-set fixture, in the nightly lane.
+9. **The PR lane gets cheaper.** #29's host suites doubled the iOS test step on CI (998 s against 422 s before it).
+   The seeded matrices of the session suites are cut in the PR lane (fewer seeds or set-ups; every clause, every
+   kind of store and every fault still run at least once) so that the session suites cost at most a third of what
+   they do now, measured locally and reported; the nightly lane keeps the full matrix.
+
+Not in S3: the swap event's payload (O10 is decided when S8 starts), anything History edits or deletes (F13), any
+screen.

@@ -2499,3 +2499,19 @@ Under the stop line of about 550.
 - Known, not this slice's: on a one-thread pool two of S1's tester tests fail in every run (that tester's own
   overlap checks need a yield between calls, as the contract's got in S1's touch-up). Queued as a follow-up.
 - Nit N10 is not taken (it needs CI timings); N8 is a note for F17.
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S2 merged as #29 (`6c5939d`). S3's specification is the brief's last section, "Plan amendments — slice S3".
+
+- **O8 stands** (the program change is applied inside `materialize`; no `replaceSlotExercise`; no migration), with
+  one addition from F05 S2's lesson: an update may only touch a slot of the workout's own program.
+- **SF5 from S2's review is in scope:** the log is dropped in `materialize`'s transaction, and the host stops
+  compacting after a save.
+- **O10 is not in S3.** The swap event keeps its payload; S8 decides, and an ADR-004 change would go to Pete.
+- **CI cost (criterion 9).** #29's macOS job took 38 minutes: the iOS build 1,148 s on a cold cache (a new branch
+  restores nothing) and the iOS tests 998 s, against 570 s and 422 s for #27. The tests are the part this slice can
+  cut. The step's deadline in `check.sh` is 2,400 s, so there is little room left.
+- Some of S2's tests, the implementer's and the tester's, pin "the save succeeded and the compaction failed". Over
+  the database that state goes away. The implementer's own tests are its to change; a tester's test that
+  contradicts criteria 4 or 5 is not edited: it is listed with the criterion, and the tester moves it.
