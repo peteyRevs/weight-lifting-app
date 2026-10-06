@@ -871,3 +871,119 @@ only to the active program, and a save writes a swap to the workout's own progra
 | `scripts/check.sh` (full gate) | not run | the orchestrator's |
 
 The result bundles are deleted. No test helper process was left running.
+
+## Chore — the racy-host storm test made deterministic (2026-10-06)
+
+`HostContractBiteAdversarialTests.storm_wheneverARacyHostStruck_reportsIt(fault:)` failed twice in the full gate
+on trees that did not touch it, and passed on the re-run. Written by another agent than the S2 tester, on the
+orchestrator's order; the S2 tester's files are changed as little as the cause allows.
+
+### The cause (observed)
+
+Reproduced on the Mac host: 1 red run in 40 of the suite as it stood (`swift test … --filter
+HostContractBiteAdversarialTests`, default pool, nothing else running), case `fault → swapsTwoUpdates`, line 113:
+`reported == struck`.
+
+Instrumented (temporary code, removed), 12 storms at once in one process: 78 misses in 3,600 storms of seed 12331
+(the third of the PR lane's ten, 6151 · 2 + 29), none on the other nine seeds; every one the same:
+
+- Seed 12331's script holds `restExtended(amount: 30 s, extendsShownRest: true, tappedAt: +110 s)` and
+  `restExtended(amount: 30 s, extendsShownRest: false, tappedAt: +75 s)`. When the store takes them in that order,
+  the second changes nothing: "+30s" never shortens a running rest (`extendRest`). The engine still accepts it
+  (`.persist`, `.transmit`: "the envelope belongs in every log even when it changes nothing here"), so the host
+  stores it and publishes an update **equal to the one before it**. That is the product doing what ADR-004 says.
+- `RacyHost(.swapsTwoUpdates)` strikes at the first update after a live one that its forwarding task handles
+  while two calls are inside. Which update that is, is the scheduler's choice. When it was the first of that
+  equal pair, the host "swapped" two equal updates: the stream it gave was the right stream, element for
+  element. It still counted a strike, the storm rightly found nothing, and `reported == struck` failed.
+- So the assumption that failed is in the racy host, not in the storm: **"a strike is always a visible wrong"**.
+  The S2 tester tightened `RacyHost` three times for the same reason ("some strikes were not visible wrongs");
+  this is a fourth case, which needs a particular order of two calls and a particular lag of one task, hence
+  about 2 % of that seed's storms and 1 run in 40 of the suite.
+
+The same root gives two more holes, on a stream opened in flight, where `SiegeStorm.lateIssue` accepts any
+suffix of the history:
+
+- `dropsAnUpdate`, **observed** once forced (temporary test: `RacyHost(host, fault, on: .allBut(1))`, 40 seeds,
+  6 lanes of 100 rounds): 72 misses in 22,392 strikes, all seed 12331, stream 2. A stream whose first element is
+  the workout as it stands and which then misses an update equal to that is the stream of an honest host that
+  registered it one update later. With every stream wrapped, stream 1 takes the strike first, which is why the
+  gate never showed this one.
+- `repeatsAnUpdate`, **inferred, not observed** (0 misses in 22,756 forced strikes): such an update twice is the
+  stream of an honest host that registered it one update sooner, when the update before the stream's first
+  element is equal as well. It needs three equal updates in a row; no PR-lane seed has them.
+
+`opensAStreamOnNothing`, `answersWithAStaleState` and `swallowsAnApply` have no such case: 0 misses in 2,000
+strikes each before the fix, and each is conditioned on a visible wrong already.
+
+**The product is not at fault, and neither is the storm's checker.** No violation was missed: in every miss the
+streams, the answers and the store were those of a correct host. Nothing in `LedgerKit/Sources` was read as
+wrong or changed.
+
+### The fix
+
+`RacyHostAdversarialSupport.swift`, `updates()` and `passed(…)` only (+20 −8 lines). No test, no other support
+file and no product code changed; `HostContractBiteAdversarialTests.swift` is byte for byte as it was.
+
+- The forwarding task hands `passed` the update before (`after before:`) in place of `afterLive: Bool`.
+- `repeatsAnUpdate` and `dropsAnUpdate` strike only on an update whose live workout differs from the one before
+  it on that stream (`changesTheWorkout`). Then the stream is one more or one fewer than the history at a place
+  where the two neighbours differ, which is no suffix of it.
+- `swapsTwoUpdates` cannot know at the hold what comes next. When the next update is equal to the held one,
+  nothing went wrong: the strike is taken back (`strikes = 0`, `struckAt = "nowhere"`) and the fault waits for
+  its next moment. A held update that is never released stays a strike, as before.
+
+So "struck" now means "gave a reader something no honest host gives", for every scheduling, and "whenever it
+struck, it is reported" no longer depends on which update the scheduler handed the fault.
+
+**What still depends on the scheduler, and by how much.** `#expect(struck > 0)` is the test's proof that the race
+happened; whether two calls overlap in a storm is the scheduler's doing (six tasks on the global pool) and I did
+not replace the storm with a scripted hand-off: that would be another test. Measured after the fix, 24 lanes at
+once, 1,000 rounds of the ten seeds per fault: the fewest storms of ten in which a fault struck were 10
+(`repeatsAnUpdate`, `swapsTwoUpdates`, `dropsAnUpdate`, `swallowsAnApply`), 6 (`answersWithAStaleState`) and 5
+(`opensAStreamOnNothing`); on a one-thread pool, 400 rounds: 10, 10, 10, 10, 9 and 6, the same in every round.
+The count is the same in every one-thread round, so which seeds strike is mostly the script's doing, as the S2
+tester found for the gate's stand-in. I never saw fewer than five of ten; I did not prove that it cannot be none.
+
+### Proof it can still fail
+
+- **A blinded checker.** `SiegeStorm.violation` with its first-stream, late-stream and answer checks taken out
+  (the log and store checks left): the test is red for all six faults, `reported == struck` at line 113, exit 1.
+  `HostSiegeStormAdversarialSupport.swift` restored from a copy; `cmp` and `git status` show it unchanged.
+- **The old racy host.** As found: 1 red run in 40. Fixed: 0 misses in 10,000 storms per fault (24 lanes at
+  once) where the old rule gave 7 in 2,000 for `swapsTwoUpdates`.
+
+### Runs
+
+`<suite>` is `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --skip-build --filter
+HostContractBiteAdversarialTests`, one process a run, on the Mac host.
+
+| Command | Exit | Result |
+|---|---|---|
+| `<suite>`, as found, 40 times in a row | 1 once | 39 green, 1 red: `swapsTwoUpdates`, line 113 |
+| `<suite>`, fixed, 100 times in a row | 0 each | 100 green |
+| the same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`, 40 times | 0 each | 40 green |
+| six loops of 25 at once, as load (four plain, one `--parallel`, one `--no-parallel`) | 0 each | 150 green |
+| `<suite>` with the storm's checker blinded | 1 | red for all six faults; restored |
+| `swift test … --filter '^LedgerSyncTests\.'` | 0 | 276 tests in 48 suites, 13 known issues (as before, none mine) |
+| `sim-lock.py <scratch>/sim-watch.sh`: `xcodebuild build-for-testing` then `test-without-building` as `check.sh` runs `PR-Watch` on the Apple Watch Series 12 (46mm) simulator, with `-only-testing:LedgerSyncTests/HostContractBiteAdversarialTests -test-iterations 20` | 0, 0 | 340 repetitions passed: the suite's 17 cases, 20 times, in one runner process |
+| `scripts/check.sh --lint-only` | 0 | format, `swiftlint --strict`, package graph, script tests |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+290 green runs of the fixed suite in a row on the host, 190 of them on one thread or under load.
+
+### Not done
+
+- The iOS simulator: not run. The watch run and the host cover the two places it failed.
+- The nightly lane (40 storms a fault, 20 + 60 script seeds): not run. The forced late-stream test above ran the
+  nightly's 40 storm seeds, for two faults only.
+- The watch iterations shared one process; the gate starts one process a run.
+- `racyHost_wheneverItStruck_isReported` and `racyHost_faultOnTheActingStream_isReported` use the same racy host
+  against the contract's script. They stayed green in every run above; I did not go through the script's rules
+  for a strike it cannot see, as I did for the storm's.
+- For the F10 owner, not a defect: the host publishes an update equal to the one before it when an accepted event
+  changes nothing. A subscriber that redraws or plays haptics per update sees a second, identical one.
+
+The result bundles are deleted; the temporary tests and the instrumentation are gone (`git status`: this file and
+`RacyHostAdversarialSupport.swift`). No helper process was left running; the watch simulator is left booted, as
+`check.sh` leaves it. The worktree's `.derivedData` (the watch build) is kept.
