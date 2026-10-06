@@ -78,3 +78,79 @@ struct ExerciseSearchTests {
         #expect(!ExerciseSearch.isInNameOrder(exercises[0], exercises[0]))
     }
 }
+
+// MARK: - The exercise library's filter (F11 criterion 12)
+
+extension ExerciseSearchTests {
+    private typealias MuscleFilter = ExerciseSearch.MuscleFilter
+
+    static func exercise(_ number: UInt8, _ name: String, _ muscle: MuscleGroup, _ equipment: Equipment) -> Exercise {
+        var made = exercise(number, name, short: name.uppercased())
+        made.primaryMuscle = muscle
+        made.equipment = equipment
+        return made
+    }
+
+    private func names(_ query: String, _ muscle: MuscleFilter?, _ equipment: Equipment?) throws -> [String] {
+        try ExerciseSearch.filter(ExerciseCatalog.seed(), query: query, muscle: muscle, equipment: equipment)
+            .map(\.name)
+    }
+
+    @Test("On the seed catalog, \"row\" with Back and Machine is exactly Chest-Supported Row")
+    func filter_queryMuscleAndEquipmentCombine() throws {
+        #expect(try names("row", .back, .machine) == ["Chest-Supported Row"])
+        #expect(try names(" ＲＯＷ ", .back, .machine) == ["Chest-Supported Row"], "the query is folded and trimmed")
+        #expect(try names("row", .back, .cable) == ["Seated Cable Row", "Single-Arm Cable Row"])
+        #expect(try names("row", .shoulders, .cable) == ["Cable Upright Row"])
+        #expect(try names("row", .chest, nil).isEmpty)
+        #expect(try names("cs row", nil, nil) == ["Chest-Supported Row"], "a short name matches too")
+    }
+
+    @Test("\"All\" on both chips and a blank query give the whole catalog, in name order")
+    func filter_noChipsAndBlankQuery_givesEverythingInNameOrder() throws {
+        let catalog = try ExerciseCatalog.seed()
+        let all = ExerciseSearch.filter(catalog, query: "  ", muscle: nil, equipment: nil)
+        #expect(all.count == catalog.count)
+        let isInNameOrder = all.map(\.id) == ExerciseSearch.sorted(catalog).map(\.id)
+        #expect(isInNameOrder)
+        let ofNothing = ExerciseSearch.filter([], query: "row", muscle: .back, equipment: .machine)
+        #expect(ofNothing.isEmpty)
+    }
+
+    @Test("The five muscle chips stand for ten muscle groups, each once; the core has no chip")
+    func muscleFilter_groups() {
+        #expect(MuscleFilter.allCases == [.chest, .back, .shoulders, .legs, .arms])
+        #expect(MuscleFilter.chest.groups == [.chest])
+        #expect(MuscleFilter.back.groups == [.back])
+        #expect(MuscleFilter.shoulders.groups == [.shoulders])
+        #expect(MuscleFilter.legs.groups == [.quads, .hamstrings, .glutes, .calves])
+        #expect(MuscleFilter.arms.groups == [.biceps, .triceps, .forearms])
+        let covered = MuscleFilter.allCases.flatMap(\.groups)
+        #expect(covered.count == Set(covered).count, "no group is under two chips")
+        #expect(Set(MuscleGroup.allCases).subtracting(covered) == [.core])
+    }
+
+    @Test("A chip keeps an exercise by its primary muscle and its equipment, whatever else it trains")
+    func filter_usesThePrimaryMuscleAndTheEquipment() {
+        var curl = Self.exercise(1, "Hammer Curl", .biceps, .dumbbell)
+        curl.secondaryMuscles = [.forearms, .chest]
+        let exercises = [
+            curl,
+            Self.exercise(2, "Leg Press", .quads, .machine),
+            Self.exercise(3, "Calf Raise", .calves, .machine),
+            Self.exercise(4, "Plank", .core, .bodyweight),
+            Self.exercise(5, "Wrist Curl", .forearms, .barbell)
+        ]
+        func kept(_ muscle: MuscleFilter?, _ equipment: Equipment?, query: String = "") -> [String] {
+            ExerciseSearch.filter(exercises, query: query, muscle: muscle, equipment: equipment).map(\.name)
+        }
+        #expect(kept(.arms, nil) == ["Hammer Curl", "Wrist Curl"])
+        #expect(kept(.chest, nil).isEmpty, "a secondary muscle does not count")
+        #expect(kept(.legs, .machine) == ["Calf Raise", "Leg Press"])
+        #expect(kept(.legs, .barbell).isEmpty)
+        #expect(kept(nil, .bodyweight) == ["Plank"], "the core is found under All")
+        #expect(MuscleFilter.allCases.allSatisfy { !kept($0, nil).contains("Plank") })
+        #expect(kept(.arms, nil, query: "wrist") == ["Wrist Curl"])
+        #expect(kept(nil, nil, query: "curl") == ["Hammer Curl", "Wrist Curl"])
+    }
+}

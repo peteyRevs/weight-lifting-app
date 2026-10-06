@@ -20,6 +20,15 @@ public struct RPE: Hashable, Codable, Sendable, Comparable {
         self.halfPoints = halfPoints
     }
 
+    /// Rule 3: RPE moves in halves.
+    static let step = Decimal(1) / 2
+
+    /// Rule 3 stepper semantics: `value` held to 5…10, then rounded to the nearest half (a tie goes up:
+    /// 7.25 → 7.5). A NaN, which `Decimal` orders below every number, becomes 5.
+    public init(clamping value: Decimal) {
+        halfPoints = (min(max(value, 5), 10) * 2).roundedToInt()
+    }
+
     /// The RPE value, e.g. `8.5`.
     public var value: Decimal {
         Decimal(halfPoints) / 2

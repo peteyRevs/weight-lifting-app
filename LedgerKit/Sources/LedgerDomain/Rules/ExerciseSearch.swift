@@ -46,3 +46,43 @@ public enum ExerciseSearch {
         (key(exercise.name), exercise.id.rawValue.uuidString)
     }
 }
+
+// MARK: - The exercise library's filter (F11 criterion 12, F12)
+
+public extension ExerciseSearch {
+    /// A muscle chip of the exercise library. The chips are coarser than `MuscleGroup`: "Legs" and "Arms"
+    /// each stand for several groups, and no chip stands for the core (those exercises are found under "All"
+    /// and by name).
+    enum MuscleFilter: Hashable, Sendable, CaseIterable {
+        case chest, back, shoulders, legs, arms
+
+        /// The muscle groups the chip stands for.
+        public var groups: Set<MuscleGroup> {
+            switch self {
+            case .chest: [.chest]
+            case .back: [.back]
+            case .shoulders: [.shoulders]
+            case .legs: [.quads, .hamstrings, .glutes, .calves]
+            case .arms: [.biceps, .triceps, .forearms]
+            }
+        }
+    }
+
+    /// The library's rows: the exercises whose primary muscle is one of the chip's groups, whose equipment
+    /// is the one asked for, and whose name or short name contains `query` (decision #23), in name order.
+    /// `nil` for a chip is "All", and a blank query matches every exercise. The query is folded once.
+    static func filter(
+        _ exercises: [Exercise],
+        query: String,
+        muscle: MuscleFilter?,
+        equipment: Equipment?
+    ) -> [Exercise] {
+        let needle = key(query)
+        let groups = muscle?.groups
+        return sorted(exercises.filter { exercise in
+            groups?.contains(exercise.primaryMuscle) != false
+                && (equipment == nil || equipment == exercise.equipment)
+                && matches(name: exercise.name, shortName: exercise.shortName, needle: needle)
+        })
+    }
+}

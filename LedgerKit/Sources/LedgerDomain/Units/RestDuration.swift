@@ -18,6 +18,16 @@ public struct RestDuration: Hashable, Codable, Sendable, Comparable {
         seconds = validSeconds
     }
 
+    /// Rule 3: rest moves in steps of 15 s.
+    static let stepSeconds = 15
+
+    /// Rule 3 stepper semantics: `seconds` held to 30…300, then rounded to the nearest 15 (no whole number
+    /// of seconds is a tie: 37 → 30, 38 → 45).
+    public init(clampingSeconds seconds: Int) {
+        let held = min(max(seconds, 30), 300)
+        self.seconds = (held + Self.stepSeconds / 2) / Self.stepSeconds * Self.stepSeconds
+    }
+
     /// Rule 3: the default rest for new slots and for Settings (90 s).
     public static let defaultRest = RestDuration(validSeconds: 90)
 
