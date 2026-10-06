@@ -42,9 +42,10 @@ nonisolated struct ProgramCountsAdversarialTests {
         #expect(model.days.addDay.action == .addDay(name: "New day", weekIndex: 2))
         #expect(model.week.cells.map(\.label) == Array(repeating: "REST", count: 7))
         #expect(model.block.chips.map(\.subtitle) == ["0 DAYS", "DELOAD", "0 DAYS"])
-        let tap = AdvStore.apply(model.week.cells[0].action, to: input, fresh: 1)
-        let still = tap.input.program == program && ProgramPresentation.make(tap.input).notice == nil
-        #expect(still, "a tap with no day to assign changes nothing and says nothing")
+        #expect(model.week.cells.allSatisfy { $0.action == nil && $0.spokenHint == nil }, "criterion 13")
+        #expect(model.week.hint == nil, "nothing to assign, so no Tap to assign")
+        #expect(model.week.cells.map(\.spokenValue) == Array(repeating: "Rest", count: 7))
+        #expect(model.week.cells.first?.spokenLabel == "Monday")
     }
 
     @Test("Drop sets count as sets, and a superset's minutes are TimeEstimate's")
@@ -106,7 +107,7 @@ nonisolated struct ProgramCountsAdversarialTests {
         let model = ProgramPresentation.make(input)
         #expect(model.week.title == "WEEK \(nearest + 1)" + ([0, 4].contains(nearest) ? " · DELOAD" : ""))
         #expect(model.block.chips.map(\.isSelected) == (0 ..< 5).map { $0 == nearest })
-        #expect(model.week.deload.action == .edit(.toggleDeload(week: nearest)))
+        #expect(model.week.deload.action == .edit(.setDeload(![0, 4].contains(nearest), week: nearest)))
         #expect(model.week.copyPrevious.title == (nearest == 0 ? "First week" : "Copy week \(nearest)"))
         #expect((model.week.applyToLater == nil) == (nearest == 4))
         let same = model == ProgramPresentation.make(AdvProgram.input(

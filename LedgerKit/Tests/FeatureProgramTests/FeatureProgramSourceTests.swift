@@ -2,9 +2,10 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// F11 S5 criteria 9 and 10, read from the sources: the module takes its calendar and locale from the input
-/// and from nowhere else, and its presentations and stores hold no clamp of their own (the brief's Definition
-/// of Done: no clamping or coupling logic outside `ProgramEditing`).
+/// F11 S5 criteria 9, 10 and 16, read from the sources: the module takes its calendar and locale from the
+/// input and from nowhere else; nothing in it but the copy, the models and the route holds a clamp of its own
+/// (the brief's Definition of Done: no clamping or coupling logic outside `ProgramEditing`); and its
+/// presentations, copy and models never turn a weight into a `Double`.
 ///
 /// The check reads every Swift file of the module, the views and the stores when they come. It reads code,
 /// and the code inside a string interpolation; it does not read comments or a literal's own text. It reads
@@ -25,6 +26,9 @@ nonisolated struct FeatureProgramSourceTests {
     /// The spellings of a clamp or of the reps coupling: a least or a greatest of two values, and a write to
     /// the top of a rep range.
     static let clamps = ["min(", "max(", "repsHi=", "repsHi+=", "repsHi-="]
+
+    /// The spellings that name a binary floating-point number, or turn a decimal into one.
+    static let inexact = ["Double", "Float", "CGFloat", "TimeInterval", ".doubleValue", ".floatValue"]
 
     /// The lines of `source` on which `spelling` stands in code: the file's own, or a string interpolation's.
     /// A comparison (`repsHi ==`) is not the assignment it begins like.
@@ -50,9 +54,15 @@ nonisolated struct FeatureProgramSourceTests {
         }
     }
 
-    /// A presentation builder or a store, by its file's name.
-    static func isPresentationOrStore(_ path: String) -> Bool {
-        path.contains("Presentation") || path.contains("Store")
+    /// A file that could hold logic: every file but the copy, the models and the route, by its name. A store,
+    /// an edit session, a presentation builder and a view are all read.
+    static func canHoldLogic(_ path: String) -> Bool {
+        !path.contains("Copy") && !path.contains("Model") && !path.contains("Route")
+    }
+
+    /// A file that prints or carries what is drawn: a presentation builder, a copy file or a model.
+    static func printsWhatIsDrawn(_ path: String) -> Bool {
+        path.contains("Presentation") || path.contains("Copy") || path.contains("Model")
     }
 
     @Test(
@@ -64,9 +74,17 @@ nonisolated struct FeatureProgramSourceTests {
 
     @Test("No store and no presentation clamps a value or writes the top of a rep range: that is ProgramEditing's")
     func storesAndPresentations_neverClamp() throws {
-        #expect(try Self.uses(of: Self.clamps, inFiles: Self.isPresentationOrStore) == [])
-        let read = try CopyAudit.sources(ofModule: "FeatureProgram").keys.filter(Self.isPresentationOrStore)
-        #expect(read.count >= 3, "the presentation's files were not found: \(read.sorted())")
+        #expect(try Self.uses(of: Self.clamps, inFiles: Self.canHoldLogic) == [])
+        let read = try CopyAudit.sources(ofModule: "FeatureProgram").keys.filter(Self.canHoldLogic)
+        #expect(read.count >= 5, "the files that hold logic were not found: \(read.sorted())")
+        #expect(read.contains("ProgramBuilderAction.swift") && read.contains("ProgramPresentation+Weeks.swift"))
+    }
+
+    @Test("The presentations, the copy and the models never name Double: weights stay exact")
+    func presentationsCopyAndModels_neverNameDouble() throws {
+        #expect(try Self.uses(of: Self.inexact, inFiles: Self.printsWhatIsDrawn) == [])
+        let read = try CopyAudit.sources(ofModule: "FeatureProgram").keys.filter(Self.printsWhatIsDrawn)
+        #expect(read.count >= 6, "the presentation, copy and model files were not found: \(read.sorted())")
     }
 
     @Test("The check reads code and the code of an interpolation, not comments or text, and finds what is there")
@@ -81,6 +99,7 @@ nonisolated struct FeatureProgramSourceTests {
         slot.repsHi = slot.reps + 1
         let isWide = slot.repsHi == slot.reps + 2
         let nearest = weeks.indices.min(by: closer)
+        let kilograms = "\\(weight.doubleValue) kg"
         """)
         #expect(Self.lines(of: "Date()", in: source) == [2])
         #expect(Self.lines(of: "TimeZone.current", in: source) == [3])
@@ -89,8 +108,9 @@ nonisolated struct FeatureProgramSourceTests {
         #expect(Self.lines(of: "min(", in: source) == [6, 9])
         #expect(Self.lines(of: "max(", in: source) == [])
         #expect(Self.lines(of: "repsHi=", in: source) == [7])
-        // Every spelling of the two lists is found when it stands in code.
-        for spelling in Self.ambient + Self.clamps {
+        #expect(Self.lines(of: ".doubleValue", in: source) == [10])
+        // Every spelling of the three lists is found when it stands in code.
+        for spelling in Self.ambient + Self.clamps + Self.inexact {
             #expect(Self.lines(of: spelling, in: SwiftSource("let value = call(\(spelling)")) == [1], "\(spelling)")
         }
     }

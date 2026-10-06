@@ -10,7 +10,12 @@ nonisolated extension ProgramCopy {
 
     /// "58 sets a week": every day's sets together, after the number of days.
     static func setsAWeek(_ count: Int, locale: Locale) -> String {
-        String(localized: "\(count) sets a week", bundle: .module, locale: locale)
+        String(
+            localized: "\(count) sets a week",
+            bundle: .module,
+            locale: locale,
+            comment: "Every training day's sets together, after the number of training days"
+        )
     }
 
     static var sharedByEveryWeek: String {
@@ -21,11 +26,21 @@ nonisolated extension ProgramCopy {
     }
 
     static func exercises(_ count: Int, locale: Locale) -> String {
-        String(localized: "\(count) exercises", bundle: .module, locale: locale)
+        String(
+            localized: "\(count) exercises",
+            bundle: .module,
+            locale: locale,
+            comment: "On a day's card: the number of exercises the day has"
+        )
     }
 
     static func sets(_ count: Int, locale: Locale) -> String {
-        String(localized: "\(count) sets", bundle: .module, locale: locale)
+        String(
+            localized: "\(count) sets",
+            bundle: .module,
+            locale: locale,
+            comment: "On a day's card: the day's sets, its drop sets among them"
+        )
     }
 
     /// "~39 min": how long a day is expected to take.
@@ -67,7 +82,12 @@ nonisolated extension ProgramCopy {
 
     /// "Week 8 has logged sessions and can't be removed."
     static func weekHasLoggedSessions(_ number: Int, locale: Locale) -> String {
-        String(localized: "Week \(number) has logged sessions and can't be removed.", bundle: .module, locale: locale)
+        String(
+            localized: "Week \(number) has logged sessions and can't be removed.",
+            bundle: .module,
+            locale: locale,
+            comment: "Shown when the last week cannot be removed: the week's number, counted from 1"
+        )
     }
 
     static var dayHasNoExercises: String {

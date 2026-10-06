@@ -42,7 +42,7 @@ nor the shell is on `main` (`LedgerKit/Package.swift:72-80` has no `defaultLocal
 | **S2** day editing — `feat/F11-s2-day-editing` | New `LedgerDomain/Programs/DayEditing.swift` (~110): `SlotField`, new slot (rule 7), add and remove slots, progression, drop set, superset, the superset groups of a day. New `DayEditing+Fields.swift` (~110): set a field with its clamp and the reps coupling; the value one step away. New `DayEditing+Move.swift` (~60). `LedgerDomain/Model/Slot.swift` (+8: the three ranges as public constants), `Units/RPE.swift` and `Units/RestDuration.swift` (+8 each: a clamping initializer), `Rules/ProgressionRules.swift` (+12: a slot's prescription for every week), `Rules/ExerciseSearch.swift` (+55: the library's muscle chips and one combined filter). **~370 lines.** | `main`. Independent of S1 (it works on a `DayTemplate`, not on a `Program`). | `Tests/LedgerDomainTests/Programs/DayEditingTests.swift`, `DayEditingMoveTests.swift`, `DayEditingPropertyTests.swift` (seeded), additions to `Rules/ProgressionRulesTests.swift` and `Rules/ExerciseSearchTests.swift`. 100 % line coverage of the new files. | **Today.** |
 | **S3** atomic program update — `feat/F11-s3-program-update` | `LedgerDomain/Protocols/Repositories.swift` (+1): `ProgramRepository.update(_:_:)`. `LedgerPersistence/Repositories/GRDBProgramRepository.swift` (+20), `LedgerFakes/InMemoryProgramRepository.swift` (+16), `LedgerDependencies/Unimplemented/UnimplementedStores.swift` (+4). **~45 lines**, plus support and test code that is not counted: `LedgerTestSupport/Engine/ProbedStores.swift`, new contract clauses, four test doubles. | `main`. Independent of S1 and S2 (the change is a closure). | New clauses in `ProgramRepositoryContract` and `WorkoutRepositoryContract+Linked` (run against GRDB and the in-memory stores), a seeded interleaving test of `update` against `materialize` on both. | **Today.** Adds a protocol requirement: see Risks 2. |
 | **S4** form controls — `feat/F11-s4-form-controls` | `LedgerDesign/Components/`: new `StepperField.swift` (~75: a label, a value, "−" and "+"; one adjustable element to VoiceOver), `LedgerToggleStyle.swift` (~50), `WrapLayout.swift` (~50: children wrap onto further rows). Their cases in `Components+Previews.swift` and their gallery section (~45). **~220 lines.** | `main`. Pete's decision 1 (default stated there). No copy: the components take `String`s. | Snapshot references at the six cells of `docs/testing-strategy.md:163-166`, one pinned VoiceOver tree per component, 44 pt targets, the gallery and preview tests. | **Today.** |
-| **S5** builder presentation — `feat/F11-s5-builder-presentation` | `FeatureProgram/`: `ProgramRoute.swift` (~12), `ProgramBuilderModel.swift` (~90), `ProgramPresentation.swift` (~110), `ProgramPresentation+Weeks.swift` (~70), `ProgramPresentation+Days.swift` (~60), `ProgramCopy.swift` (~130, with the equipment names), `Resources/Localizable.xcstrings`. The placeholder `FeatureProgram/FeatureProgram.swift` and its test are deleted. `LedgerKit/Package.swift:127` gains `resources`; `scripts/coverage-thresholds.json:15` gains `"FeatureProgram"`. **~470 lines.** No view. | After #28. S1. | `ProgramPresentationTests` (criterion 1 word for word, criteria 2–6 as display models), a seeded property suite, the module's catalog checks (they run by themselves once the module has a catalog). | After #28. |
+| **S5** builder presentation — `feat/F11-s5-builder-presentation` | `FeatureProgram/`: `ProgramRoute.swift` (~12), `ProgramBuilderModel.swift` (~90), `ProgramPresentation.swift` (~110), `ProgramPresentation+Weeks.swift` (~70), `ProgramPresentation+Days.swift` (~60), `ProgramCopy.swift` (~130; the equipment names come with S6, the first slice that shows one: S5 review S-4), `Resources/Localizable.xcstrings`. The placeholder `FeatureProgram/FeatureProgram.swift` and its test are deleted. `LedgerKit/Package.swift:127` gains `resources`; `scripts/coverage-thresholds.json:15` gains `"FeatureProgram"`. **~470 lines.** No view. | After #28. S1. | `ProgramPresentationTests` (criterion 1 word for word, criteria 2–6 as display models), a seeded property suite, the module's catalog checks (they run by themselves once the module has a catalog). | After #28. |
 | **S6** day editor presentation — `feat/F11-s6-day-presentation` | `FeatureProgram/DayEditor/`: `DayEditorModel.swift` (~80), `DayEditorPresentation.swift` (~130: header, meta, superset headers, each slot's row and sub line, the delete confirmation), `ProgramCopy+DayEditor.swift` (~110). **~320 lines.** | After #28. S2, S5. | `DayEditorPresentationTests`. | After #28. |
 | **S7** slot editor presentation — `feat/F11-s7-slot-presentation` | `FeatureProgram/DayEditor/`: `SlotEditorModel.swift` (~80), `SlotEditorPresentation.swift` (~110: fields, progression chips and note, drop set, superset actions, move, remove), `SlotEditorPresentation+Preview.swift` (~60: the selected week's line and the strip of every week), `ProgramCopy+SlotEditor.swift` (~150). **~400 lines.** | After #28. S2, S5. | `SlotEditorPresentationTests` (criteria 7–11 as display models). | After #28. |
 | **S8** library presentation — `feat/F11-s8-picker-presentation` | `FeatureProgram/Picker/`: `ExercisePickerModel.swift` (~50), `ExercisePickerPresentation.swift` (~90), `ProgramCopy+Picker.swift` (~120, with the muscle names). **~260 lines.** | After #28. S2, S5. Pete's decision 3. | `ExercisePickerPresentationTests` (criterion 12 as a display model). | After #28. |
@@ -1851,11 +1851,11 @@ ProgramBuilderNotice?`, the notice the store is showing; `calendar` and `locale`
 
 | Part | Fields | What the view does with it |
 |---|---|---|
-| `header` | `eyebrow` "MY PROGRAM", `name` (the program's, as stored), `namePlaceholder` "Program name" | Draws the eyebrow and a one-line text field holding `name`; the placeholder is also the field's spoken label. A commit of the field is `ProgramBuilderAction.edit(.renameProgram(text))`. |
+| `header` | `eyebrow` "MY PROGRAM", `name` (the program's, as stored), `namePlaceholder` "Program name" | Draws the eyebrow and a one-line text field. The field is bound to a draft the store keeps, seeded from `name`, never to `name` itself (the stored name is cleaned: a field bound to it loses a trailing space and cannot be emptied); the placeholder is also the field's spoken label. The field sends `ProgramBuilderAction.rename(text)` (fix round 1, criterion 14). |
 | `block` | `title` "BLOCK · 8 WEEKS"; `spokenLabel` "Block length", `spokenValue` "8 weeks"; `removeWeek`, `addWeek` (the actions of "−" and "+"); `chips` | Draws the title, the two buttons as icons and one chip per week. To VoiceOver the two buttons are one adjustable element (label, value; down is `removeWeek`, up is `addWeek`). |
 | `block.chips[i]` | `title` "W1", `subtitle` "4 DAYS" or "DELOAD", `isDeload`, `isSelected`, `spokenLabel` "Week 1", `spokenValue` "4 days" or "Deload", `action` `.selectWeek(i)` | A button; `isDeload` picks the accent, `isSelected` the filled look and the selected trait. |
 | `week` | `title` "WEEK 3" or "WEEK 3 · DELOAD", `hint` "Tap to assign", `cells` (seven), `copyPrevious`, `applyToLater` (nil on the last week), `deload` | A heading, the hint, the strip, up to three buttons. |
-| `week.cells[i]` | `weekday` (identity), `letter` "T", `label` "UA" or "REST", `isRest`, `spokenLabel` "Tuesday", `spokenValue` "Rest" or the day's short title, `spokenHint`, `action` | A button. |
+| `week.cells[i]` | `weekday` (identity), `letter` "T", `label` "UA" or "REST", `isRest`, `spokenLabel` "Tuesday", `spokenValue` "Rest" or the day's short title, `spokenHint` (optional), `action` (optional) | A button; with no training day in the program both are nil and the cell is drawn but is no button and has no hint (fix round 1, criterion 13). |
 | `week.copyPrevious` | `title` "First week" or "Copy week 2", `action` (nil = disabled) | A button, disabled when `action` is nil. |
 | `week.deload` | `title` "Deload", `isOn`, `action` | A button with the selected trait when on. |
 | `days` | `title` "TRAINING DAYS", `summary` "4 days · 58 sets a week", `helper`, `cards`, `addDay` (title "+ Add training day", action) | A heading, two lines, the cards, one button. |
@@ -1882,14 +1882,14 @@ decide.
 | `.renameProgram(String)` | `renameProgram(_:to:)` | no |
 | `.addWeek(WeekID)` | `addWeek(_:id:)` | no (an id in use adds nothing) |
 | `.removeLastWeek(loggedWeeks: Set<Int>)` | `removeLastWeek(_:loggedWeeks:)`, the one that throws | **yes** |
-| `.toggleDeload(week: Int)` | `toggleDeload(_:week:)` | **yes** |
-| `.cycleSchedule(week: Int, weekday: Weekday)` | `cycleSchedule(_:week:weekday:)` | **yes** |
+| `.setDeload(Bool, week: Int)` | `setDeload(_:_:week:)` | no (fix round 1, criterion 12; was `.toggleDeload`) |
+| `.setSchedule(week: Int, weekday: Weekday, day: DayTemplateID?)` | `setSchedule(_:week:weekday:day:)` | no (fix round 1; was `.cycleSchedule`) |
 | `.copyPreviousWeek(week: Int)` | `copyPreviousWeek(_:week:)` | no |
 | `.applyToLaterWeeks(week: Int)` | `applyToLaterWeeks(_:week:)` | no |
 | `.addDay(DayTemplateID, name: String)` | `addDay(_:id:name:)` | no (an id in use adds nothing) |
 
-The brief's fourth relative edit, `move`, is the Day editor's (S7 and S14). A relative edit reaches the
-stored program exactly once (the brief's "For S13 and S14").
+Since fix round 1 only `removeLastWeek` is relative here; `move` is the Day editor's (S7 and S14). A relative
+edit reaches the stored program exactly once (the brief's "For S13 and S14").
 
 **The notices** (`ProgramBuilderNotice`): `.minimumTwoWeeks`, `.weekHasLoggedSessions(weekNumber:)`,
 `.dayHasNoExercises`; `init(_ error: ProgramEditError)` maps the Domain's two errors, for an `update` that
@@ -1948,9 +1948,11 @@ No view, no store, nothing of the Day editor or the library, no change to `Ledge
 3. **"−" is decided here, by asking the Domain** (`ProgramPresentation+Weeks.swift:22-30`).
    `ProgramEditing.removeLastWeek` is run on the program on screen with the input's logged weeks: the action
    is the edit when it returns and the notice when it throws. S1's "Inputs" had the store do this; moving it
-   here leaves the store nothing to choose. The edit carries the logged weeks, so the same call runs inside
-   `update`; if the stored program refuses it there (a workout was finished meanwhile), the store shows
-   `ProgramBuilderNotice(error)`.
+   here leaves the store nothing to choose. The edit carries the logged weeks the model was built from, so
+   the check is as fresh as `loggedWeeks` in the input and no fresher: `update` applies the same set to the
+   stored program and reads no workout, so a workout finished in the last week between the tap and the write
+   does not stop the removal (the plan accepts that window, "How a week is known to have logged sessions").
+   S13 reads the logged weeks again before it sends this edit. (Corrected in fix round 1, review S-2.)
 4. **The notice for an empty day rides on the cell's action** (`ProgramPresentation+Weeks.swift:106-112`).
    The Domain's cycle is run once per cell on the program on screen, only to see which day the tap assigns;
    the action is `.edit(.cycleSchedule(…), notice: .dayHasNoExercises)` when that day has no slot. The day is
@@ -2211,11 +2213,170 @@ The table under "The model and the actions" is the contract. Beyond it:
 - **Three of the edits are relative** (`removeLastWeek`, `toggleDeload`, `cycleSchedule`;
   `ProgramBuilderActionTests.relativeEdits_appliedTwice_differ` shows it): each queued edit reaches the
   stored program exactly once; after a failure the waiting edits are dropped, never sent again.
-- **An `update` that throws `ProgramEditError`** (the last week was logged meanwhile): nothing was stored;
-  drop the waiting edits, redraw from the stored program, set `notice = ProgramBuilderNotice(error)`.
+- **"−" is checked against `loggedWeeks` as the input had them**, not by the write: `update` cannot see a
+  workout finished meanwhile. S13 reads the logged weeks again when the screen appears, whenever the recent
+  workouts change, and before it sends `.removeLastWeek`. An `update` that throws `ProgramEditError` can only
+  mean the stored block has another length than the screen's; then nothing was stored: drop the waiting
+  edits, redraw from the stored program, set `notice = ProgramBuilderNotice(error)`. (Corrected in fix round
+  1, review S-2.)
 - **The notice** is replaced by every action that carries one and dropped by every other edit and by
   `.selectWeek` (behaviour 6). The cell's action already says whether the day it assigns is empty, judged on
   the program on screen.
 - **`.addDay`** emits its route after the edit is queued; whether the route waits for the save is S13's
   (`route_isEmittedOnce_afterTheSaveReturned` in the plan says it does).
 - **The save-failed line and the empty and failed states** have no text yet (open question 3).
+
+## Slice S5 — fix round 1 (G1 implementer, 2026-10-06)
+
+On f22bc30 (the slice f922c69, `main` merged, the tester's files and the review). Not committed. The brief's
+"Plan amendments — slice S5 after round 1" (criteria 12 to 16) is the specification of this round. The
+interface tables of the section above were brought up to date in place; each changed row says so.
+
+### What changed, per item
+
+Paths under `LedgerKit/` unless they begin with `docs/` or `tasks/`.
+
+| Item | Change |
+|---|---|
+| **Criterion 12** (review S-1): absolute edits, in the Domain | `Sources/LedgerDomain/Programs/ProgramEditing.swift` gains `setDeload(_:_:week:)`, `nextInCycle(after:in:)` (the cycle's order: rest, each day in the order of `days`, rest; an entry that names a missing day counts as rest; no days stays at rest) and `setSchedule(_:week:weekday:day:)` (nil is rest; a day the program lacks changes nothing). `toggleDeload` is `setDeload` with the other state; `cycleSchedule` is `setSchedule` with `nextInCycle` of the entry the week holds. Their existing tests are untouched and green. New tests: `Tests/LedgerDomainTests/Programs/ProgramEditingAbsoluteTests.swift` (10 tests: the order of the cycle; a missing day; no day and one day; set to a day, to rest, twice; an unknown day or week; `setSchedule` with `nextInCycle` equal to `cycleSchedule` on all 56 cells of the seed block; `setDeload` on, off, twice, equal to the toggle; weeks outside the block). Rows `setDeload` and `setSchedule` in `EditingTestSupport.programEdits` (`Tests/LedgerDomainTests/Programs/EditingTestSupport+Edits.swift`), so S1's criterion-12 property draws both and `EditingSourceTests.sources_everyEditIsInThePropertysTables` passes; `nextInCycle` returns no program and needs no row. |
+| **Criterion 12**, in the feature | `ProgramBuilderEdit.toggleDeload(week:)` and `.cycleSchedule(week:weekday:)` are replaced by `.setDeload(Bool, week:)` and `.setSchedule(week:weekday:day:)` (`Sources/FeatureProgram/ProgramBuilderAction.swift`). The deload button's action is `.setDeload(!isOn, week:)`. A cell asks `ProgramEditing.nextInCycle` for the value after the entry its week holds and hands out `.setSchedule` with it; the empty-day notice is judged on that same named day, so the notice and the edit cannot disagree (`ProgramPresentation+Weeks.swift`, `cycle`). The speculative `cycleSchedule` per cell is gone. Tests: `cells_eachNamesWhatItsWeekdayBecomes`, `cell_actionAppliedTwice_givesWhatOneGives`, `weekActions_deload_togglesTheWeek` (the drawn action applied twice), `ProgramBuilderActionTests.edits_appliedTwice_onlyRemoveLastWeekDiffers` (replaces `relativeEdits_appliedTwice_differ`), the property suite's `checkWeek` (the named day is rest or a day the program holds, never the one shown). |
+| **Criterion 13** (F11-S5-2): no day, nothing offered | `Cell.action` and `Cell.spokenHint` are optional and nil when the program has no training day; the spoken label and value stay ("Monday", "Rest"). Tests: `noDays_showsRestAndNoCard_andTheCellsOfferNothing`, `oneDay_everyCellOffersItsCycle`, the property suite. The strip's drawn hint "Tap to assign" is still in the model for such a program: the criterion names the cell; open question below. |
+| **Criterion 14** (S-3): the name is a draft | `ProgramBuilderAction.rename(_:)` (static, three lines); `Header.name`'s comment says it seeds the field and a view binds a draft the store keeps. Test: `rename_isTheRenameEditWithTheTypedText`; `header_rename_isOneEdit` goes through it. |
+| **Criterion 15** | Nothing changed. |
+| **Criterion 16, S-2** | The two sentences of the section above are corrected in place (deviation 3 and "Inputs for S13"): the check is as fresh as the input's `loggedWeeks`; S13 reads them again before it sends the edit. The case's doc comment says the set is the one the model was built from. |
+| **Criterion 16, S-4** | `docs/engineering-standards.md` §7: the bullet "Not settled: display names shared by several features" is replaced by the reviewer's "A Domain value's name is each module's own", word for word. The plan's S5 row no longer reads "with the equipment names". |
+| **Criterion 16, S-5** | No whole `Program` inside an expectation: `ProgramPresentationPropertyTests` (the notice case), `+Notices` (two weeks); the third place (`+Total`) went with criterion 13. |
+| **Criterion 16, S-6** | `FeatureProgramSourceTests` has the `inexact` list and `presentationsCopyAndModels_neverNameDouble` over files named Presentation, Copy or Model, with its line in the self-check. |
+
+**The nits.**
+
+| Nit | Done or declined |
+|---|---|
+| N-1 `.addWeek(selecting:)` from the drawn model | Declined here, as the reviewer says. For S13: select the last week of the program the edit was just applied to, or rebuild the model between intents. |
+| N-2 chips without identity | Done: the comment on `DayCard.chips` says they are identified by their place. |
+| N-3 the clamp tripwire's files | Done: it reads every file but those named Copy, Model or Route (`canHoldLogic`), so a session or a view is read too. |
+| N-4 four keys without a comment | Done, in the code and the catalog (below). |
+| N-5 "Deload" as one key for a button and a spoken state | Declined: the cure is a new English text ("Deload week"), which is Pete's to choose. Nothing breaks while English alone ships. Listed for him below. |
+| N-6 two test names | Done: `removeWeek_twoWeeks_showsTheNoticeAndChangesNothing`, `removeWeek_loggedLastWeek_namesTheWeek`. |
+| N-7 how VoiceOver says "~39 min" | Not changed: needs ears on a simulator, which is S9's VoiceOver pass. |
+| N-8 `BuilderScreen` beside the store | Not changed here; for S13: drive these scenarios through the store, or build `BuilderScreen` on its session. |
+| N-9 size | For the pull request's description: see the count below. |
+
+### Catalog texts
+
+No key added, removed or reworded: 33 keys. Four keys gained a translator's comment (N-4): "%lld sets a
+week" ("Every training day's sets together, after the number of training days"), "%lld exercises" ("On a
+day's card: the number of exercises the day has"), "%lld sets" ("On a day's card: the day's sets, its drop
+sets among them"), "Week %lld has logged sessions and can't be removed." ("Shown when the last week cannot
+be removed: the week's number, counted from 1").
+
+### Sanctioned edits to the tester's files
+
+The S5 tester's files under `Tests/FeatureProgramTests/Adversarial/`, each the smallest edit for the target
+to compile. A removed case is replaced by the new case with a placeholder payload (`true`, `day: nil`), not by
+what the new behaviour is: what a test expects was left to the tester. Nothing of the S1 tester's files was
+touched.
+
+| File:line | Edit |
+|---|---|
+| `ProgramAdversarialSupport.swift:179` | `case .toggleDeload(week)` calling `toggleDeload` → `case .setDeload(isDeload, week)` calling `setDeload` |
+| `ProgramAdversarialSupport.swift:180-181` | `case .cycleSchedule(week, weekday)` calling `cycleSchedule` → `case .setSchedule(week, weekday, day)` calling `setSchedule` |
+| `ProgramActionsAdversarialTests.swift:19` | `cells.map { (…, $0.action) }` → `cells.compactMap { cell in cell.action.map { (…, $0) } }` (the action is optional) |
+| `ProgramActionsAdversarialTests.swift:35` | the pattern's `.toggleDeload(week)`, `.cycleSchedule(week, _)` → `.setDeload(_, week)`, `.setSchedule(week, _, _)` |
+| `ProgramActionsAdversarialTests.swift:175` | `AdvStore.apply(cell.action, …)` → `try AdvStore.apply(#require(cell.action), …)` |
+| `ProgramCountsAdversarialTests.swift:45` | the same `try … #require(…)` around `cells[0].action` |
+| `ProgramCountsAdversarialTests.swift:109` | `.toggleDeload(week: nearest)` → `.setDeload(true, week: nearest)` |
+| `ProgramAdversarialScreen.swift:140` | `.toggleDeload(week: place)` → `.setDeload(true, week: place)` |
+| `ProgramAdversarialScreen.swift:154-156` | `.cycleSchedule(week: place, weekday: weekday)` → `.setSchedule(week: place, weekday: weekday, day: nil)`, wrapped over three lines to keep the file at 300 |
+| `ProgramWeekdaysAdversarialTests.swift:66` | `.cycleSchedule(week: 0, weekday: $0.weekday)` → `.setSchedule(week: 0, weekday: $0.weekday, day: nil)` |
+| `ProgramWeekdaysAdversarialTests.swift:165` | `hints.insert(cell.spokenHint)` → `hints.insert(cell.spokenHint ?? "")` |
+| `ProgramWordsAdversarialTests.swift:50-51` | the hint taken out of the array of texts and added through `compactMap` (it is optional) |
+| `ProgramWordsAdversarialTests.swift:104-108` | the same `try … #require(…)` around `cells[0].action`, wrapped by the formatter |
+| `ProgramSeedAdversarialTests.swift:80` | `.toggleDeload(week: 7)` → `.setDeload(true, week: 7)` |
+| `ProgramSeedAdversarialTests.swift:98` | `.cycleSchedule(week: 0, weekday: .tuesday)` → `.setSchedule(week: 0, weekday: .tuesday, day: nil)` |
+| `ProgramSeedAdversarialTests.swift:99`, `:199` | the same `try … #require(…)` around the cell's action |
+
+### The tester's pins that now fail, for the tester
+
+Nine tests, all in `Tests/FeatureProgramTests/Adversarial/`, all because they pin the relative edits or the
+cells of a program with no days. No other test of the two targets fails.
+
+| Test | It expects | Now |
+|---|---|---|
+| `ProgramSeedAdversarialTests.seed_everyWeek_matchesTheTestersScreen` (8 cases) | the tester's screen (`ProgramAdversarialScreen.swift:140`, `:154`): the deload's action is the toggle of the week, a cell's the cycle of its weekday | the deload's is `.setDeload(!isOn, week:)`; a cell's is `.setSchedule(week:weekday:day:)` with `ProgramEditing.nextInCycle` of the entry the week holds, and nil with no days |
+| `ProgramActionsAdversarialTests.walk_everyStep_matchesTheTestersScreen` (60 cases; both expectations, the second because the walk stops at the first difference) | the same screen | the same |
+| `ProgramActionsAdversarialTests.testersModel_isNotBlind` | the same screen | the same |
+| `ProgramCountsAdversarialTests.selectedWeek_outOfRange_isTheNearestWeek` (9 cases; `:109` and the screen) | `.toggleDeload(week: nearest)` | `.setDeload(!isOn, week: nearest)` |
+| `ProgramCountsAdversarialTests.blockLengths_readTheirWeeks` (3 cases) | the same screen | the same; every week there is a deload, so `.setDeload(false, week:)` |
+| `ProgramSeedAdversarialTests.seed_deloadWeek_readsAsTheBrief` (`:80`) | `.toggleDeload(week: 7)` | `.setDeload(false, week: 7)`: week 8 is a deload, the button turns it off |
+| `ProgramSeedAdversarialTests.seed_tuesdayTappedFiveTimes_cyclesAndCounts` (`:98`) | `.cycleSchedule(week: 0, weekday: .tuesday)` at every tap | `.setSchedule(week: 0, weekday: .tuesday, day:)` with UA, LA, UB, LB, then nil; what the taps draw is unchanged |
+| `ProgramWeekdaysAdversarialTests.sundayStart_seed_rotatesTheStripOnly` (`:66`) | each cell `.cycleSchedule(week: 0, weekday:)` | each cell `.setSchedule(week: 0, weekday:, day:)` with the next day of its own cycle |
+| `ProgramCountsAdversarialTests.noDays_readsZeroAndRests` (`:45`) | a cell of a program with no days carries an action whose tap changes nothing and says nothing | the cell has no action and no hint (criterion 13); `#require` at `:45` stops the test |
+
+### Product lines now
+
+| File | Round 0 | Now |
+|---|---|---|
+| `ProgramBuilderAction.swift` | 50 | 53 |
+| `ProgramCopy+Days.swift` | 53 | 73 (four comments, each lookup now over six lines) |
+| `ProgramPresentation+Weeks.swift` | 93 | 101 |
+| `ProgramPresentation.swift`, `ProgramBuilderModel.swift`, `ProgramCopy.swift`, `ProgramPresentation+Days.swift`, `ProgramBuilderInput.swift`, `ProgramRoute.swift` | 72, 80, 115, 54, 12, 5 | unchanged |
+| **`FeatureProgram`** | **534** | **565** |
+| `LedgerDomain/Programs/ProgramEditing.swift` | 71 | 92 (+21) |
+| `Package.swift` | +5 net | unchanged |
+
+591 in the pull request (565 + 21 + 5), against 470 planned and the 500-line target of standards §10; the
+description should say so and name the split considered and not taken (the action file with the Domain's
+three functions, about 75 lines, is not worth a cycle). Under the 650 at which S6 to S8 are estimated again.
+
+### Open, with a recommendation
+
+- **"Tap to assign" over a strip that offers nothing** (a program with no days): `week.hint` is still in the
+  model. Criterion 13 names the cell only. *Recommendation:* leave it; S9 may dim it, and a block with no
+  day is one tap on "+ Add training day" away from having one. If it should go, `SelectedWeek.hint` becomes
+  optional: two lines and one test.
+- **For Pete, with S9's VoiceOver table:** "Deload" spoken for a deload week's chip is the button's key
+  (N-5); "Double-tap to assign" names the gesture (round 0's open question 5).
+
+### Inputs for S13, changed by this round
+
+- Two edits changed shape (the table above); the cell and the deload are safe to draw or apply twice. Only
+  `.removeLastWeek` is relative in this screen: it reaches the stored program exactly once.
+- The name field: the store keeps the draft and sends `ProgramBuilderAction.rename(text)` as it is typed;
+  `model.header.name` seeds the draft and is not written back into the field while it has focus. A test:
+  "Upper Lower" typed letter by letter stores "Upper Lower" (review S-3).
+- "−": read the logged weeks again before sending `.removeLastWeek` (review S-2).
+- N-1 and N-8 above.
+
+### The runs
+
+- Host, `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'FeatureProgramTests|LedgerDomainTests'`: exit 1, by the nine pins alone. `LedgerDomainTests`: 1,212 tests
+  in 185 suites passed (the ten new ones, S1's own and the S1 tester's among them, none edited).
+  `FeatureProgramTests`: 109 tests in 11 suites, 100 passed, 9 failed with 156 issues: exactly the nine of
+  the table above. All 65 of the implementer's tests pass.
+- `scripts/check.sh --lint-only`: exit 0.
+- Simulator, once, through the lock (iPhone 17, iOS 27.0): `build-for-testing` exit 0;
+  `scripts/check-string-catalogs.sh` exit 0, "string catalog matches the code: …/FeatureProgram/Resources/Localizable.xcstrings
+  (keys: 33)"; `test-without-building` of `FeatureProgramTests` and `LedgerAppKitTests`: exit 65, 345 tests,
+  336 passed, 9 failed: `LedgerAppKitTests` 236 passed (`ModuleCopyTests` in it, no exemption);
+  `FeatureProgramTests` 109 with the same nine failing, by name. The result bundle was read and deleted. No
+  source was edited after that build.
+- Coverage, host, the raw profiles merged with `llvm-profdata` (the run exits 1, so SwiftPM merges nothing)
+  and read with `llvm-cov export -summary-only`: `ProgramPresentation.swift` 63/63 lines, 28/28 regions;
+  `+Weeks` 107/107, 36/36; `+Days` 56/56, 13/13; `ProgramBuilderAction.swift` 29/29, 17/17; the copy files
+  182/182; the module 439/439. `LedgerDomain/Programs/ProgramEditing.swift` 98/98 lines, 49/49 regions, the
+  three new functions in it.
+- **Not run:** the full gate, the watchOS build, `LedgerDomainTests` and the other targets on the simulator,
+  the coverage gate script, the nightly seeds, and on the host any target but the two. No source or test
+  outside `LedgerDomain/Programs`, `LedgerDomainTests` and `FeatureProgramTests` calls `cycleSchedule` or
+  `toggleDeload` (searched).
+
+### Fix round 1, addendum: the week's hint (orchestrator's ruling on criterion 13)
+
+With no training day the whole strip offers nothing: `SelectedWeek.hint` is optional and nil then
+(`ProgramPresentation+Weeks.swift`, `selectedWeek`); test `noDays_theWeeksHintIsAbsent`, and the property
+suite's `checkWeek`. The open point above is closed. Two more sanctioned edits to the tester's files, in
+their own idiom for an absent text: `Adversarial/ProgramWordsAdversarialTests.swift:41`
+(`model.week.hint` → `model.week.hint ?? "REST"`) and `Adversarial/ProgramAdversarialScreen.swift:229`
+(`.text(week.hint)` → `.text(week.hint ?? "absent")`): nineteen in all.

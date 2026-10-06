@@ -56,7 +56,7 @@ nonisolated extension ProgramPresentation {
             (isDeload ? [ProgramCopy.deloadMark] : [])
         return ProgramBuilderModel.SelectedWeek(
             title: title.joined(separator: separator),
-            hint: ProgramCopy.tapToAssign,
+            hint: context.program.days.isEmpty ? nil : ProgramCopy.tapToAssign,
             cells: context.weekdays.map { cell(of: $0, context) },
             copyPrevious: copyPrevious(context),
             applyToLater: weeks.indices.contains(place + 1)
@@ -68,7 +68,7 @@ nonisolated extension ProgramPresentation {
             deload: ProgramBuilderModel.Toggle(
                 title: ProgramCopy.deload,
                 isOn: isDeload,
-                action: .edit(.toggleDeload(week: place))
+                action: .edit(.setDeload(!isDeload, week: place))
             )
         )
     }
@@ -88,6 +88,7 @@ nonisolated extension ProgramPresentation {
 
     static func cell(of weekday: Weekday, _ context: Context) -> ProgramBuilderModel.Cell {
         let day = scheduledDay(in: context.program, week: context.selected, on: weekday)
+        let action = cycle(weekday, context)
         return ProgramBuilderModel.Cell(
             weekday: weekday,
             letter: context.letter(of: weekday),
@@ -95,19 +96,27 @@ nonisolated extension ProgramPresentation {
             isRest: day == nil,
             spokenLabel: context.name(of: weekday),
             spokenValue: day?.shortTitle ?? ProgramCopy.restSpoken,
-            spokenHint: ProgramCopy.assignHint,
-            action: cycle(weekday, context)
+            spokenHint: action.map { _ in ProgramCopy.assignHint },
+            action: action
         )
     }
 
-    /// A tap on a weekday: the cycle, which is `ProgramEditing`'s. It is run here once, on the program on
-    /// screen, only to see which day the tap assigns: a day with no exercise is assigned all the same, and the
-    /// action carries the notice that says so.
-    static func cycle(_ weekday: Weekday, _ context: Context) -> ProgramBuilderAction {
+    /// A tap on a weekday, as the edit that names what the weekday becomes. The order of the cycle is
+    /// `ProgramEditing`'s: it is asked for the value after the one the week holds. A day with no exercise is
+    /// assigned all the same, and the action carries the notice that says so. A program with no training day
+    /// has nothing to assign: no action.
+    static func cycle(_ weekday: Weekday, _ context: Context) -> ProgramBuilderAction? {
+        let program = context.program
         let place = context.selected
-        let cycled = ProgramEditing.cycleSchedule(context.program, week: place, weekday: weekday)
-        let assigned = scheduledDay(in: cycled, week: place, on: weekday)
-        let isEmpty = assigned.map(\.slots.isEmpty) ?? false
-        return .edit(.cycleSchedule(week: place, weekday: weekday), notice: isEmpty ? .dayHasNoExercises : nil)
+        guard !program.days.isEmpty else {
+            return nil
+        }
+        let current = program.weeks.indices.contains(place) ? program.weeks[place].schedule[weekday] : nil
+        let next = ProgramEditing.nextInCycle(after: current, in: program)
+        let isEmpty = program.days.first { $0.id == next }.map(\.slots.isEmpty) ?? false
+        return .edit(
+            .setSchedule(week: place, weekday: weekday, day: next),
+            notice: isEmpty ? .dayHasNoExercises : nil
+        )
     }
 }

@@ -14,8 +14,10 @@ nonisolated struct ProgramBuilderModel: Equatable, Sendable {
     struct Header: Equatable, Sendable {
         /// "MY PROGRAM".
         let eyebrow: String
-        /// The program's name as stored, in a field the lifter types in. A commit of the field is
-        /// `ProgramBuilderAction.edit(.renameProgram(text))`.
+        /// The program's name as stored. It seeds the name field and is not what the field shows while the
+        /// lifter types: a view binds the field to a draft the store keeps, and sends
+        /// `ProgramBuilderAction.rename(_:)` with the draft's text. The stored name is the cleaned one, so a
+        /// field bound to it would lose a trailing space and could not be emptied.
         let name: String
         /// "Program name": the field's placeholder and its spoken label.
         let namePlaceholder: String
@@ -68,8 +70,8 @@ nonisolated extension ProgramBuilderModel {
     struct SelectedWeek: Equatable, Sendable {
         /// "WEEK 3", or "WEEK 3 · DELOAD".
         let title: String
-        /// "Tap to assign".
-        let hint: String
+        /// "Tap to assign"; nil in a program with no training day, where the strip offers nothing.
+        let hint: String?
         /// The seven weekdays, from the settings' week start.
         let cells: [Cell]
         /// "Copy week 2"; "First week", disabled, on the first week.
@@ -92,10 +94,11 @@ nonisolated extension ProgramBuilderModel {
         let spokenLabel: String
         /// "Rest", or the scheduled day's short title, as in "Upper A".
         let spokenValue: String
-        /// What the tap does, for VoiceOver.
-        let spokenHint: String
-        /// The cycle of this weekday: the next day, or rest after the last.
-        let action: ProgramBuilderAction
+        /// What the tap does, for VoiceOver; nil when the cell offers nothing.
+        let spokenHint: String?
+        /// What the weekday becomes on a tap: the next day of its cycle, or rest after the last. Nil in a
+        /// program with no training day, where there is nothing to assign: the cell is drawn, not a button.
+        let action: ProgramBuilderAction?
     }
 
     /// A button that is on or off; VoiceOver reads it as selected when on.
@@ -130,7 +133,8 @@ nonisolated extension ProgramBuilderModel {
         let name: String
         /// "5 exercises · 18 sets · ~39 min", or "No exercises yet".
         let meta: String
-        /// The short names of the first four exercises, then "+2" for the rest. Not spoken.
+        /// The short names of the first four exercises, then "+2" for the rest. Not spoken. A chip is
+        /// identified by its place: two can read the same (an exercise twice, two that are not stored).
         let chips: [String]
         /// The name and the meta line again: what VoiceOver reads as the card's label and value.
         let spokenLabel: String

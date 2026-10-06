@@ -246,11 +246,13 @@ converted" below).
 - **Not copy.** Lines the Domain already formats (weights, volumes, receipt
   rows, the last-performance line, rest labels, clock text) and data (program
   and day names, catalog names) are shown as given and are not catalog entries.
-- **Not settled: display names shared by several features.** Where the name of
-  a Domain enum's case (a muscle group, a progression rule) is shown by more
-  than one module, each module would need the same key. The first slice that
-  needs such a name in a second module raises it with the orchestrator before
-  writing either.
+- **A Domain value's name is each module's own.** Where the name of a Domain
+  enum's case (a kind of equipment, a muscle group, a progression rule) is
+  shown, the module that shows it holds its own entry for it in its own
+  catalog and its own member in its own copy file, one lookup per case. The
+  key is the English text, so two modules cannot differ in English; no module
+  looks up another module's key, and nothing shared is built (orchestrator,
+  2026-10-05, on F11's proposal 2).
 
 **Who checks what.** None of it is per module, and none needs a list kept by
 hand.

@@ -176,8 +176,9 @@ nonisolated enum AdvStore {
         case let .renameProgram(name): ProgramEditing.renameProgram(program, to: name)
         case let .addWeek(id): ProgramEditing.addWeek(program, id: id)
         case let .removeLastWeek(logged): try ProgramEditing.removeLastWeek(program, loggedWeeks: logged)
-        case let .toggleDeload(week): ProgramEditing.toggleDeload(program, week: week)
-        case let .cycleSchedule(week, weekday): ProgramEditing.cycleSchedule(program, week: week, weekday: weekday)
+        case let .setDeload(isDeload, week): ProgramEditing.setDeload(program, isDeload, week: week)
+        case let .setSchedule(week, weekday, day):
+            ProgramEditing.setSchedule(program, week: week, weekday: weekday, day: day)
         case let .copyPreviousWeek(week): ProgramEditing.copyPreviousWeek(program, week: week)
         case let .applyToLaterWeeks(week): ProgramEditing.applyToLaterWeeks(program, week: week)
         case let .addDay(id, name): ProgramEditing.addDay(program, id: id, name: name)

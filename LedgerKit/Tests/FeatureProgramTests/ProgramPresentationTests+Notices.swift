@@ -8,18 +8,19 @@ import Testing
 /// the store shows from an action, from an error or from an edit's result.
 nonisolated extension ProgramPresentationTests {
     @Test("Minus on a block of two weeks changes nothing and says a block needs at least 2 weeks")
-    func message_twoWeeks() throws {
+    func removeWeek_twoWeeks_showsTheNoticeAndChangesNothing() throws {
         let program = try ProgramFixtures.program(weekCount: 2, days: [ProgramFixtures.day(1, slotCount: 2)])
         var screen = try BuilderScreen(ProgramFixtures.input(program))
         #expect(screen.model.block.removeWeek == .notice(.minimumTwoWeeks))
         try screen.tap(screen.model.block.removeWeek)
         #expect(screen.model.notice == "A block needs at least 2 weeks.")
         #expect(screen.model.block.title == "BLOCK · 2 WEEKS")
-        #expect(screen.input.program == program)
+        let isUnchanged = screen.input.program == program
+        #expect(isUnchanged, "the notice changed the program")
     }
 
     @Test("Minus on a last week with a finished workout changes nothing and names the week")
-    func message_loggedWeek() throws {
+    func removeWeek_loggedLastWeek_namesTheWeek() throws {
         var input = try ProgramFixtures.seedInput()
         input.loggedWeeks = [0, 7]
         var screen = BuilderScreen(input)
@@ -65,7 +66,10 @@ nonisolated extension ProgramPresentationTests {
             #expect(screen.model.notice == nil)
         }
         #expect(try #require(screen.model.week.cell(.tuesday)).action
-            == .edit(.cycleSchedule(week: 0, weekday: .tuesday), notice: .dayHasNoExercises))
+            == .edit(
+                .setSchedule(week: 0, weekday: .tuesday, day: screen.input.program.days[4].id),
+                notice: .dayHasNoExercises
+            ))
         try screen.tapCell(.tuesday)
         var model = screen.model
         #expect(model.notice == "Add at least one exercise before scheduling this day.")
@@ -96,9 +100,10 @@ nonisolated extension ProgramPresentationTests {
         try screen.tapCell(.monday)
         #expect(screen.model.notice == "Add at least one exercise before scheduling this day.")
         // The next tap goes back to rest, which needs no word.
-        #expect(try #require(screen.model.week.cell(.monday)).action == .edit(.cycleSchedule(
+        #expect(try #require(screen.model.week.cell(.monday)).action == .edit(.setSchedule(
             week: 0,
-            weekday: .monday
+            weekday: .monday,
+            day: nil
         )))
     }
 }

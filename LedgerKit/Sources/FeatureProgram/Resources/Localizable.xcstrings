@@ -48,6 +48,7 @@
       }
     },
     "%lld exercises" : {
+      "comment" : "On a day's card: the number of exercises the day has",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -70,6 +71,7 @@
       }
     },
     "%lld sets" : {
+      "comment" : "On a day's card: the day's sets, its drop sets among them",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -92,6 +94,7 @@
       }
     },
     "%lld sets a week" : {
+      "comment" : "Every training day's sets together, after the number of training days",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -407,6 +410,7 @@
       }
     },
     "Week %lld has logged sessions and can't be removed." : {
+      "comment" : "Shown when the last week cannot be removed: the week's number, counted from 1",
       "localizations" : {
         "en" : {
           "stringUnit" : {

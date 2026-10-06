@@ -6,7 +6,8 @@ import LedgerDomain
 ///
 /// It reads its input and nothing else. It holds no rule of the block: which day a tap assigns and whether
 /// the last week can go are asked of `ProgramEditing`, a day's minutes of `TimeEstimate`, and every action it
-/// hands out is an edit `ProgramEditing` applies. Every text comes from `ProgramCopy`, except the weekday
+/// hands out is an edit `ProgramEditing` applies. A weekday and a deload are edited by what they become. Every text
+/// comes from `ProgramCopy`, except the weekday
 /// letters and names, which are the injected calendar's in the injected locale.
 ///
 /// The block and the selected week are in `+Weeks`, the training days in `+Days`.

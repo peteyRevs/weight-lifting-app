@@ -612,3 +612,103 @@ a deload, an empty day, a day of more than four slots, a drop set, a superset, a
 | `swift test … --filter 'FeatureProgramTests'` | 0: 105 tests in 11 suites (61 the implementer's, 44 mine) |
 | `xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR -destination <iPhone 17, iOS 27.0, by UDID> -only-testing:FeatureProgramTests …` through the simulator lock, once | 0: 105 tests passed, 0 failed, 0 skipped; bundle read and deleted |
 | `scripts/check.sh --lint-only` | 0 |
+
+## Slice S5 — round 2 (G2 tester, 2026-10-06)
+
+Attacked the implementer's uncommitted fixes on f22bc30 against criteria 12 to 16. **No bug found.** 54 tests of
+mine now (44 of round 1, nine of them updated, and 10 new in `ProgramAbsoluteAdversarialTests.swift`), 559
+parameterised cases counted in the log, all passing on the host and on the simulator. One new question (F11-S5-5).
+
+### Round 1's findings
+
+| Finding | State |
+|---|---|
+| F11-S5-1, the strip's order | Closed by ruling 15: kept as built. Still pinned by `everyWeekStart_ordersTheCellsFromIt`. |
+| F11-S5-2, a cell of a program with no days | Closed by ruling 13 and fixed: no action, no hint, no "Tap to assign"; verified in every state (below). "Copy week n" and "Apply to later weeks" on equal schedules still offer an edit that changes nothing; the ruling does not ask otherwise. |
+| F11-S5-3, the locale's digits and plural forms | Closed by ruling 15: kept; the store hands in the app's locale (S13). |
+| F11-S5-4, the property suite's expected texts | Closed: no action was asked. |
+
+### New finding
+
+**F11-S5-5 — spec question (low) — criterion 14: "the model carries … a `rename` action".** The model carries
+no such value: `ProgramBuilderModel.Header` has `eyebrow`, `name` and `namePlaceholder` as before, and the
+action is the static function `ProgramBuilderAction.rename(_:)`, which a view calls with the draft's text ("the
+one action a view makes itself"). It behaves as the ruling wants (`rename_typedText_isCleanedOnce`: one
+`renameProgram` edit of the text as typed, no notice; blank and control-only text change nothing; sent twice
+it is one rename), and a function of the typed text cannot be an `Equatable` field without a closure. Asked:
+is the static function what the ruling means by "carries"? If so, nothing to fix; S9's view test should then
+show the field sends this function's value and no edit of its own spelling.
+
+### Audit of the nineteen sanctioned edits (`git diff f22bc30 -- LedgerKit/Tests/FeatureProgramTests/Adversarial/`)
+
+Nineteen change sites in seven files, all spelling at a call site; none adds, removes or weakens an
+expectation by itself. No finding.
+
+| File | Sites | What |
+|---|---|---|
+| `ProgramActionsAdversarialTests` | 3 | `offered` skips a cell with no action (`compactMap`); the `strays` pattern names `setDeload` and `setSchedule`; one `#require(cell.action)` |
+| `ProgramAdversarialScreen` | 3 | my expected deload action respelt `.setDeload(true, …)` and my expected cell action `.setSchedule(…, day: nil)`; `week.hint ?? "absent"` |
+| `ProgramAdversarialSupport` | 2 | the two cases of `AdvStore.edited` call `setDeload` and `setSchedule` |
+| `ProgramCountsAdversarialTests` | 2 | `#require(cells[0].action)`; `.setDeload(true, week: nearest)` |
+| `ProgramSeedAdversarialTests` | 4 | `.setDeload(true, week: 7)`; `.setSchedule(…, day: nil)`; two `#require(…action)` |
+| `ProgramWeekdaysAdversarialTests` | 2 | `.setSchedule(…, day: nil)`; `spokenHint ?? ""` |
+| `ProgramWordsAdversarialTests` | 3 | `week.hint ?? "REST"`; the hint listed when present; `#require(cells[0].action)` |
+
+The six respelt payloads (`true`, `day: nil`) are placeholders: the old cases had no such value, so a value
+had to be written and the right one was mine to derive. They are why the nine tests failed, and nothing else
+was. `week.hint ?? "REST"` follows the file's own idiom for an absent text.
+
+### My nine updates (each failed only on a placeholder payload or on criterion 13)
+
+| Test | Round 1 expected | Now expected (criterion) |
+|---|---|---|
+| `seed_deloadWeek_readsAsTheBrief` | toggle action `.toggleDeload(week: 7)` | `.setDeload(false, week: 7)`: the week is a deload, the switch turns it off (12) |
+| `seed_tuesdayTappedFiveTimes_cyclesAndCounts` | each tap `.cycleSchedule(week: 0, weekday: .tuesday)` | taps 1 to 4 name the seed's days in order, tap 5 names rest (12) |
+| `sundayStart_seed_rotatesTheStripOnly` | every cell `.cycleSchedule` of its weekday | every cell names my own next of its cycle; Saturday (LB, the last day) names rest (12) |
+| `selectedWeek_outOfRange_isTheNearestWeek` | `.toggleDeload(week: nearest)` | `.setDeload(` the other state `, week: nearest)` (12) |
+| `noDays_readsZeroAndRests` | a cell's tap changes nothing and says nothing | no cell has an action or a hint, the week has no hint, each speaks its weekday and "Rest" (13) |
+| `seed_everyWeek_matchesTheTestersScreen`, `walk_everyStep_matchesTheTestersScreen`, `blockLengths_readTheirWeeks`, `testersModel_isNotBlind` | through my model: `.toggleDeload`, `.cycleSchedule` | through my model, changed in one place: the deload action names `!isDeload`; a cell's action names `AdvScreen.next(…)?.id`, or is absent with both hints when the program has no day (12, 13). The model now also compares each cell's spoken hint |
+
+Two more changes to my own files, neither to satisfy the feature: `strays` now also refuses a cell action that
+names a day the program does not hold; my model's chip count now counts only entries of days the program holds
+(spec §3.2). The second was a fault of my model that round 1 never reached; the new no-days test with dangling
+entries found it, and the feature was right.
+
+### Attacked and held (new, `ProgramAbsoluteAdversarialTests`, seeds 201…260 through `AdvProgram.random`, one slot given misses; choices from `SplitMix64(seed × 104729)`)
+
+- **Applied twice** (60 seeds × 2): every cell action of every week, and the deload switch of every week,
+  give once and twice the program with exactly that entry (my own cycle) or that flag changed; the result is
+  one `Program.init` accepts; after the switch its action names the other state.
+- **A program that changed meanwhile** (1 test, 6 cases in it): a cell action whose day was deleted changes
+  nothing and leaves no dangling entry; after a day was added the weekday becomes the day the cell promised,
+  not the new day; after the week was removed nothing changes; the deload action on a removed week changes
+  nothing, and on a week switched off meanwhile leaves it off. Note for S13: a week is named by its place, so an
+  edit for week 8 sent after "−" and "+" lands on the new week 8.
+- **`nextInCycle`** (0 to 6 days): from rest, from every day, from an id not held; walked from rest it visits
+  every day once and returns to rest.
+- **`setSchedule`, `setDeload`** (60 seeds × 20 draws): weeks `Int.min`, −1, count, 1000, `Int.max` and a day not
+  held change nothing; one entry or one flag changes and nothing else; days (so misses and exercises) equal;
+  idempotent; valid. `cycleSchedule` and `toggleDeload` still give my cycle and the other state (60 seeds).
+- **No training day** (blocks of 2, 3, 9 weeks × selections −1…count × 7 week starts × a program with no
+  entries and one with entries left dangling, notices and logged weeks varied): seven cells, none with an
+  action or hint, no "Tap to assign", "REST" / weekday / "Rest", and the rest of the screen equal to my model;
+  after "+ Add training day" the seven actions name the new day with the empty-day notice and both hints return.
+- **`rename`** (10 texts + 1): blank, spaces, control-only, trimmed, inner control characters removed, NEL,
+  Japanese, emoji, format specifiers; 20,801 characters stored and drawn whole.
+
+### Not attacked
+
+As round 1, and: the store's use of the draft name (S13); criterion 16's housekeeping (the source test's
+`Double` spellings, the notes, standards §7), which is the reviewer's; the implementer's new and changed tests
+were run, not read.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'FeatureProgramTests.*Adversarial'` before my updates | 1: 44 tests, the nine named above failing |
+| the same, after updates and new tests | 0: 54 tests in 7 suites |
+| `swift test … --filter 'FeatureProgramTests'` | 0: 120 tests in 12 suites |
+| `swift test … --filter 'LedgerDomainTests'` | 0: 1212 tests in 185 suites |
+| `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests` (iPhone 17, iOS 27.0) through the lock, once | 0: 120 passed, 0 failed, 0 skipped; bundle deleted |
+| `scripts/check.sh --lint-only` | 0 |

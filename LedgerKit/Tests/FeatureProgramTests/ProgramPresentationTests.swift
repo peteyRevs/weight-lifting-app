@@ -59,9 +59,9 @@ nonisolated struct ProgramPresentationTests {
     @Test("A typed name is one edit, and the header then shows the cleaned name")
     func header_rename_isOneEdit() throws {
         var screen = try BuilderScreen(ProgramFixtures.seedInput())
-        try screen.tap(.edit(.renameProgram("  Winter block\n")))
+        try screen.tap(.rename("  Winter block\n"))
         #expect(screen.model.header.name == "Winter block")
-        try screen.tap(.edit(.renameProgram("   ")))
+        try screen.tap(.rename("   "))
         #expect(screen.model.header.name == "Winter block")
     }
 

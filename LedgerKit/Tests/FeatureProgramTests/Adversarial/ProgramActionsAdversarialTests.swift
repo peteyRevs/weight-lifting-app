@@ -16,7 +16,7 @@ nonisolated struct ProgramActionsAdversarialTests {
     static func offered(_ model: ProgramBuilderModel) -> [(control: String, action: ProgramBuilderAction)] {
         var all: [(String, ProgramBuilderAction)] = [("−", model.block.removeWeek), ("+", model.block.addWeek)]
         all += model.block.chips.map { ($0.title, $0.action) }
-        all += model.week.cells.map { ("cell \($0.weekday)", $0.action) }
+        all += model.week.cells.compactMap { cell in cell.action.map { ("cell \(cell.weekday)", $0) } }
         all += [model.week.copyPrevious, model.week.applyToLater, model.days.addDay].compactMap { control in
             control.flatMap { held in held.action.map { (held.title, $0) } }
         }
@@ -32,7 +32,11 @@ nonisolated struct ProgramActionsAdversarialTests {
         switch action {
         case let .selectWeek(place):
             return weeks.contains(place) ? [] : ["selects week \(place)"]
-        case let .edit(.toggleDeload(week), _), let .edit(.cycleSchedule(week, _), _),
+        case let .edit(.setSchedule(week, _, day), _):
+            let held = day == nil || input.program.days.contains { $0.id == day }
+            return (week == selected ? [] : ["edits week \(week), selected \(selected)"])
+                + (held ? [] : ["assigns a day not held"])
+        case let .edit(.setDeload(_, week), _),
              let .edit(.copyPreviousWeek(week), _), let .edit(.applyToLaterWeeks(week), _):
             return week == selected ? [] : ["edits week \(week), selected \(selected)"]
         case let .addWeek(selecting):
@@ -172,7 +176,7 @@ nonisolated extension ProgramActionsAdversarialTests {
             var read: [String] = []
             for tap in 0 ... dayCount {
                 let cell = try #require(ProgramPresentation.make(input).week.cells.first { $0.weekday == weekday })
-                input = AdvStore.apply(cell.action, to: input, fresh: tap).input
+                input = try AdvStore.apply(#require(cell.action), to: input, fresh: tap).input
                 let after = ProgramPresentation.make(input)
                 read.append(after.week.cells.first { $0.weekday == weekday }?.label ?? "gone")
                 let others = after.week.cells.filter { $0.weekday != weekday && !$0.isRest }.count

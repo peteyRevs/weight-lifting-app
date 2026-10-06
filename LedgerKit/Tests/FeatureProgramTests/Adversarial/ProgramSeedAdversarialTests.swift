@@ -77,7 +77,7 @@ nonisolated struct ProgramSeedAdversarialTests {
         let model = try ProgramPresentation.make(AdvProgram.seed(week: 7))
         #expect(model.week.title == "WEEK 8 · DELOAD")
         #expect(model.week.deload.isOn)
-        #expect(model.week.deload.action == .edit(.toggleDeload(week: 7)))
+        #expect(model.week.deload.action == .edit(.setDeload(false, week: 7)))
         #expect(model.week.copyPrevious.title == "Copy week 7")
         #expect(model.week.copyPrevious.action == .edit(.copyPreviousWeek(week: 7)))
         #expect(model.week.applyToLater == nil)
@@ -95,8 +95,9 @@ nonisolated extension ProgramSeedAdversarialTests {
         for tap in 1 ... 5 {
             let model = ProgramPresentation.make(input)
             let tuesday = try #require(model.week.cells.first { $0.weekday == .tuesday })
-            #expect(tuesday.action == .edit(.cycleSchedule(week: 0, weekday: .tuesday), notice: nil))
-            let step = AdvStore.apply(tuesday.action, to: input, fresh: tap)
+            let becomes = tap <= 4 ? input.program.days[tap - 1].id : nil
+            #expect(tuesday.action == .edit(.setSchedule(week: 0, weekday: .tuesday, day: becomes), notice: nil))
+            let step = try AdvStore.apply(#require(tuesday.action), to: input, fresh: tap)
             #expect(step.edits == 1)
             input = step.input
             let after = ProgramPresentation.make(input)
@@ -196,7 +197,7 @@ nonisolated extension ProgramSeedAdversarialTests {
         var labels: [String] = []
         for tap in 1 ... 6 {
             let action = ProgramPresentation.make(input).week.cells[1].action
-            input = AdvStore.apply(action, to: input, fresh: tap).input
+            input = try AdvStore.apply(#require(action), to: input, fresh: tap).input
             let after = ProgramPresentation.make(input)
             notices.append(after.notice)
             labels.append(after.week.cells[1].label)

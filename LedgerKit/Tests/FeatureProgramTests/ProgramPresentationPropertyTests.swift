@@ -51,7 +51,8 @@ nonisolated struct ProgramPresentationPropertyTests {
             let isValid = rebuilt == after
             #expect(isValid, "\(action) left a program the Domain rebuilds differently")
             if case .notice = action {
-                #expect(after == before, "a notice changed the program")
+                let isUnchanged = after == before
+                #expect(isUnchanged, "a notice changed the program")
                 #expect(screen.model.notice?.isEmpty == false)
             }
         }
@@ -65,6 +66,11 @@ nonisolated struct ProgramPresentationPropertyTests {
         var model = screen.model
         let start = try #require(model.week.cell(weekday)).label
         let days = screen.input.program.days
+        guard !days.isEmpty else {
+            // Nothing to cycle through: the cell offers nothing (criterion 13).
+            #expect(model.week.cell(weekday)?.action == nil)
+            return
+        }
         var seen: [String] = []
         for _ in 0 ... days.count {
             try screen.tap(#require(model.week.cell(weekday)).action)
@@ -143,14 +149,25 @@ nonisolated extension ProgramPresentationPropertyTests {
             #expect(cell.label == day?.tag ?? "REST")
             #expect(cell.isRest == (day == nil))
             #expect(cell.spokenValue == day?.shortTitle ?? "Rest")
-            guard case let .edit(.cycleSchedule(place, weekday), _) = cell.action else {
-                Issue.record("\(cell.weekday) does not cycle: \(cell.action)")
+            guard !input.program.days.isEmpty else {
+                // With no training day a cell offers nothing (criterion 13).
+                #expect(cell.action == nil && cell.spokenHint == nil)
+                #expect(model.week.hint == nil)
+                continue
+            }
+            #expect(cell.spokenHint == "Double-tap to assign")
+            #expect(model.week.hint == "Tap to assign")
+            guard case let .edit(.setSchedule(place, weekday, next), _) = cell.action else {
+                Issue.record("\(cell.weekday) names no schedule: \(String(describing: cell.action))")
                 continue
             }
             #expect(place == selected && weekday == cell.weekday)
+            // The day named is rest or one the program holds, and never the one the cell shows.
+            #expect(next == nil || input.program.days.contains { $0.id == next })
+            #expect(next != day?.id)
         }
         #expect(model.week.deload.isOn == week.isDeload)
-        #expect(model.week.deload.action == .edit(.toggleDeload(week: selected)))
+        #expect(model.week.deload.action == .edit(.setDeload(!week.isDeload, week: selected)))
         #expect(model.week.title.hasSuffix("DELOAD") == week.isDeload)
         #expect((model.week.copyPrevious.action == nil) == (selected == 0))
         if selected > 0 {
@@ -192,12 +209,13 @@ nonisolated extension ProgramPresentationPropertyTests {
     static func checkTexts(_ model: ProgramBuilderModel) {
         var texts = [
             model.header.eyebrow, model.header.name, model.header.namePlaceholder, model.block.title,
-            model.block.spokenLabel, model.block.spokenValue, model.week.title, model.week.hint,
+            model.block.spokenLabel, model.block.spokenValue, model.week.title,
             model.week.copyPrevious.title, model.week.deload.title, model.days.title, model.days.summary,
             model.days.helper, model.days.addDay.title
         ]
         texts += model.block.chips.flatMap { [$0.title, $0.subtitle, $0.spokenLabel, $0.spokenValue] }
-        texts += model.week.cells.flatMap { [$0.letter, $0.label, $0.spokenLabel, $0.spokenValue, $0.spokenHint] }
+        texts += model.week.cells.flatMap { [$0.letter, $0.label, $0.spokenLabel, $0.spokenValue] }
+        texts += model.week.cells.compactMap(\.spokenHint) + [model.week.hint].compactMap(\.self)
         texts += model.days.cards.flatMap { [$0.tag, $0.name, $0.meta, $0.spokenLabel, $0.spokenValue] + $0.chips }
         texts += [model.week.applyToLater?.title, model.notice].compactMap(\.self)
         #expect(!texts.contains(""))
@@ -208,7 +226,7 @@ nonisolated extension ProgramPresentationPropertyTests {
     static func actions(of model: ProgramBuilderModel) -> [ProgramBuilderAction] {
         [model.block.removeWeek, model.block.addWeek, model.week.deload.action]
             + model.block.chips.map(\.action)
-            + model.week.cells.map(\.action)
+            + model.week.cells.compactMap(\.action)
             + [model.week.copyPrevious.action, model.week.applyToLater?.action, model.days.addDay.action]
             .compactMap(\.self)
             + model.days.cards.map(\.action)

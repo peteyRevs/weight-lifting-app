@@ -16,21 +16,31 @@ nonisolated enum ProgramBuilderAction: Hashable, Sendable {
     case notice(ProgramBuilderNotice)
     /// Emit the route.
     case route(ProgramRoute)
+
+    /// The name field's text as the lifter typed it: the one action a view makes itself, and it names no edit.
+    static func rename(_ text: String) -> ProgramBuilderAction {
+        .edit(.renameProgram(text))
+    }
 }
 
 /// One edit of the block, complete with its ids: exactly one `ProgramEditing` call. The store queues these
 /// values and applies them to the stored program inside `ProgramRepository.update`.
 ///
-/// `removeLastWeek`, `toggleDeload` and `cycleSchedule` are relative: applied twice they do not give what one
-/// application gives, so each queued edit reaches the stored program exactly once. Every `week` is a place in
-/// the block, 0 for the first.
+/// A weekday and a deload are edited by what they become, so one of those drawn or applied twice gives what
+/// one application gives. `removeLastWeek` is relative, and `addWeek` and `addDay` are safe only through
+/// their ids: each queued edit reaches the stored program exactly once. Every `week` is a place in the block,
+/// 0 for the first.
 nonisolated enum ProgramBuilderEdit: Hashable, Sendable {
     /// The name as typed; a blank one changes nothing.
     case renameProgram(String)
     case addWeek(WeekID)
+    /// `loggedWeeks` is the set the model was built from: the check is as fresh as the input's, and the
+    /// write does not read the workouts again.
     case removeLastWeek(loggedWeeks: Set<Int>)
-    case toggleDeload(week: Int)
-    case cycleSchedule(week: Int, weekday: Weekday)
+    /// The week is a deload, or is not.
+    case setDeload(Bool, week: Int)
+    /// The weekday trains `day`, or rests for nil. A day the program does not hold changes nothing.
+    case setSchedule(week: Int, weekday: Weekday, day: DayTemplateID?)
     case copyPreviousWeek(week: Int)
     case applyToLaterWeeks(week: Int)
     case addDay(DayTemplateID, name: String)
@@ -45,10 +55,10 @@ nonisolated enum ProgramBuilderEdit: Hashable, Sendable {
             ProgramEditing.addWeek(program, id: id)
         case let .removeLastWeek(loggedWeeks):
             try ProgramEditing.removeLastWeek(program, loggedWeeks: loggedWeeks)
-        case let .toggleDeload(week):
-            ProgramEditing.toggleDeload(program, week: week)
-        case let .cycleSchedule(week, weekday):
-            ProgramEditing.cycleSchedule(program, week: week, weekday: weekday)
+        case let .setDeload(isDeload, week):
+            ProgramEditing.setDeload(program, isDeload, week: week)
+        case let .setSchedule(week, weekday, day):
+            ProgramEditing.setSchedule(program, week: week, weekday: weekday, day: day)
         case let .copyPreviousWeek(week):
             ProgramEditing.copyPreviousWeek(program, week: week)
         case let .applyToLaterWeeks(week):

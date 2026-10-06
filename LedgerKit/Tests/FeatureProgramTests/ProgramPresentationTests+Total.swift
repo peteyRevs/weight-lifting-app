@@ -8,19 +8,41 @@ import Testing
 /// week a deload, sixteen weeks by six days, a selection outside the block, a schedule that names a day the
 /// program does not hold.
 nonisolated extension ProgramPresentationTests {
-    @Test("A program with no days shows a week of rest, no card and the add button; a tap on a cell changes nothing")
-    func noDays_showsRestAndNoCard() throws {
+    @Test("A program with no days shows a week of rest, no card and the add button; its cells offer nothing")
+    func noDays_showsRestAndNoCard_andTheCellsOfferNothing() throws {
         let program = try ProgramFixtures.program(weekCount: 2, days: [])
-        var screen = try BuilderScreen(ProgramFixtures.input(program))
-        let model = screen.model
+        let model = try ProgramPresentation.make(ProgramFixtures.input(program))
         #expect(model.block.chipLine == "W1 0 DAYS · W2 0 DAYS")
         #expect(model.week.strip == "M REST · T REST · W REST · T REST · F REST · S REST · S REST")
         #expect(model.days.summary == "0 days · 0 sets a week")
         #expect(model.days.cards.isEmpty)
         #expect(model.days.addDay.action == .addDay(name: "New day", weekIndex: 0))
-        try screen.tapCell(.monday)
-        #expect(screen.input.program == program)
-        #expect(screen.model.notice == nil)
+        // Nothing to assign: no action, no hint, and VoiceOver hears the weekday and "Rest" alone.
+        #expect(model.week.cells.count { $0.action == nil } == 7)
+        #expect(model.week.cells.count { $0.spokenHint == nil } == 7)
+        #expect(model.week.spokenStrip.hasPrefix("Monday, Rest · Tuesday, Rest · "))
+    }
+
+    @Test("With no training day the strip offers nothing: the week's hint is absent, and back with the first day")
+    func noDays_theWeeksHintIsAbsent() throws {
+        var screen = try BuilderScreen(ProgramFixtures.input(ProgramFixtures.program(weekCount: 2, days: [])))
+        #expect(screen.model.week.hint == nil)
+        try screen.tap(screen.model.days.addDay.action)
+        #expect(screen.model.week.hint == "Tap to assign")
+        #expect(screen.model.week.cells.count { $0.action != nil } == 7)
+    }
+
+    @Test("Once the program has a day, even one with no exercise, every cell offers its cycle again")
+    func oneDay_everyCellOffersItsCycle() throws {
+        let day = try ProgramFixtures.day(1)
+        let model = try ProgramPresentation.make(ProgramFixtures.input(ProgramFixtures.program(
+            weekCount: 2,
+            days: [day]
+        )))
+        #expect(model.week.cells.map(\.action) == Weekday.allCases.map { weekday in
+            .edit(.setSchedule(week: 0, weekday: weekday, day: day.id), notice: .dayHasNoExercises)
+        })
+        #expect(Set(model.week.cells.map(\.spokenHint)) == ["Double-tap to assign"])
     }
 
     @Test("A block whose every week is a deload reads DELOAD on every chip and in the title")
@@ -66,8 +88,10 @@ nonisolated extension ProgramPresentationTests {
         let model = try ProgramPresentation.make(ProgramFixtures.seedInput(selectedWeek: selected))
         #expect(model.block.selectedPlaces == [nearest])
         #expect(model.week.title == (nearest == 7 ? "WEEK 8 · DELOAD" : "WEEK 1"))
-        #expect(model.week.deload.action == .edit(.toggleDeload(week: nearest)))
-        #expect(model.week.cells.first?.action == .edit(.cycleSchedule(week: nearest, weekday: .monday)))
+        #expect(model.week.deload.action == .edit(.setDeload(nearest != 7, week: nearest)))
+        // Monday trains Upper A in every week of the seed: the tap makes it Lower A.
+        let lowerA = DayTemplateID(Fixtures.uuid(310))
+        #expect(model.week.cells.first?.action == .edit(.setSchedule(week: nearest, weekday: .monday, day: lowerA)))
         #expect(model.days.addDay.action == .addDay(name: "New day", weekIndex: nearest))
         #expect(model.days.cards.first?.action == .route(.day(DayTemplateID(Fixtures.uuid(300)), weekIndex: nearest)))
     }

@@ -38,7 +38,7 @@ nonisolated struct ProgramWordsAdversarialTests {
             ("eyebrow", model.header.eyebrow), ("name", model.header.name),
             ("placeholder", model.header.namePlaceholder), ("block", model.block.title),
             ("block spoken", model.block.spokenLabel), ("block spoken", model.block.spokenValue),
-            ("week", model.week.title), ("hint", model.week.hint), ("copy", model.week.copyPrevious.title),
+            ("week", model.week.title), ("hint", model.week.hint ?? "REST"), ("copy", model.week.copyPrevious.title),
             ("apply", model.week.applyToLater?.title ?? "REST"), ("deload", model.week.deload.title),
             ("days", model.days.title), ("summary", model.days.summary), ("helper", model.days.helper),
             ("add day", model.days.addDay.title), ("notice", model.notice ?? "REST")
@@ -47,7 +47,8 @@ nonisolated struct ProgramWordsAdversarialTests {
             all += [chip.title, chip.subtitle, chip.spokenLabel, chip.spokenValue].map { ("chip", $0) }
         }
         for cell in model.week.cells {
-            all += [cell.letter, cell.label, cell.spokenLabel, cell.spokenValue, cell.spokenHint].map { ("cell", $0) }
+            all += [cell.letter, cell.label, cell.spokenLabel, cell.spokenValue].map { ("cell", $0) }
+            all += [cell.spokenHint].compactMap(\.self).map { ("cell", $0) }
         }
         for card in model.days.cards {
             all += ([card.tag, card.name, card.meta, card.spokenLabel, card.spokenValue] + card.chips)
@@ -100,7 +101,11 @@ nonisolated struct ProgramWordsAdversarialTests {
         #expect(model.week.cells.map(\.label) == ["REST", "REST", "LA", "REST", "UB", "LB", "REST"])
         #expect(model.block.chips.map(\.subtitle) == Array(repeating: "3 DAYS", count: 7) + ["DELOAD"])
         #expect(model.week.cells.first?.spokenValue == "Rest")
-        let after = ProgramPresentation.make(AdvStore.apply(model.week.cells[0].action, to: input, fresh: 1).input)
+        let after = try ProgramPresentation.make(AdvStore.apply(
+            #require(model.week.cells[0].action),
+            to: input,
+            fresh: 1
+        ).input)
         #expect(after.week.cells.first?.label == "LA")
     }
 }

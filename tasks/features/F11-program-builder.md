@@ -330,3 +330,5 @@ approved with six should-fix items. Rulings, which add to S5's eleven criteria:
     test checks the `Double` spellings as Today's does (S-6); the notes no longer claim that `update` refuses
     "−" when a workout finished meanwhile (S-2: the store reads the logged weeks again before it sends that
     edit, which is S13's to build); standards §7 gains the sentence of ruling 3 (S-4), as the reviewer words it.
+17. **Criterion 14, as built** (F11-S5-5, round 2): the rename is the action `ProgramBuilderAction.rename(_:)`,
+    which takes the typed text; it is not a field of the model, since the model cannot know the text.

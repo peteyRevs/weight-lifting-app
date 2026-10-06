@@ -16,10 +16,15 @@ nonisolated struct ProgramBuilderActionTests {
             (.renameProgram(" Winter "), ProgramEditing.renameProgram(program, to: " Winter ")),
             (.addWeek(week), ProgramEditing.addWeek(program, id: week)),
             (.removeLastWeek(loggedWeeks: [0]), ProgramEditing.removeLastWeek(program, loggedWeeks: [0])),
-            (.toggleDeload(week: 2), ProgramEditing.toggleDeload(program, week: 2)),
+            (.setDeload(true, week: 2), ProgramEditing.setDeload(program, true, week: 2)),
+            (.setDeload(false, week: 7), ProgramEditing.setDeload(program, false, week: 7)),
             (
-                .cycleSchedule(week: 1, weekday: .tuesday),
-                ProgramEditing.cycleSchedule(program, week: 1, weekday: .tuesday)
+                .setSchedule(week: 1, weekday: .tuesday, day: program.days[3].id),
+                ProgramEditing.setSchedule(program, week: 1, weekday: .tuesday, day: program.days[3].id)
+            ),
+            (
+                .setSchedule(week: 1, weekday: .monday, day: nil),
+                ProgramEditing.setSchedule(program, week: 1, weekday: .monday, day: nil)
             ),
             (.copyPreviousWeek(week: 7), ProgramEditing.copyPreviousWeek(program, week: 7)),
             (.applyToLaterWeeks(week: 7), ProgramEditing.applyToLaterWeeks(program, week: 7)),
@@ -31,7 +36,7 @@ nonisolated struct ProgramBuilderActionTests {
     func applied_isTheOneProgramEditingCall() throws {
         let program = try Fixtures.seedProgram()
         let pairs = try Self.pairs(on: program)
-        #expect(pairs.count == 8)
+        #expect(pairs.count == 10)
         var unchanged: [ProgramBuilderEdit] = []
         for (edit, expected) in pairs {
             let isSame = try edit.applied(to: program) == expected
@@ -60,9 +65,10 @@ nonisolated struct ProgramBuilderActionTests {
     func applied_unknownPlace_changesNothing() throws {
         let program = try Fixtures.seedProgram()
         let edits: [ProgramBuilderEdit] = [
-            .toggleDeload(week: 8), .cycleSchedule(week: -1, weekday: .monday), .copyPreviousWeek(week: 0),
-            .applyToLaterWeeks(week: 40), .addWeek(program.weeks[0].id), .addDay(program.days[0].id, name: "New day"),
-            .renameProgram("\n")
+            .setDeload(false, week: 8), .setSchedule(week: -1, weekday: .monday, day: program.days[0].id),
+            .setSchedule(week: 0, weekday: .tuesday, day: DayTemplateID(Fixtures.uuid(999))),
+            .copyPreviousWeek(week: 0), .applyToLaterWeeks(week: 40), .addWeek(program.weeks[0].id),
+            .addDay(program.days[0].id, name: "New day"), .renameProgram("\n")
         ]
         for edit in edits {
             let isSame = try edit.applied(to: program) == program
@@ -70,25 +76,33 @@ nonisolated struct ProgramBuilderActionTests {
         }
     }
 
-    @Test("The relative edits applied twice do not give what one application gives: they are sent once")
-    func relativeEdits_appliedTwice_differ() throws {
+    @Test("Every edit but the removal of the last week gives, applied twice, what one application gives")
+    func edits_appliedTwice_onlyRemoveLastWeekDiffers() throws {
         let program = try Fixtures.seedProgram()
-        let relative: [ProgramBuilderEdit] = [
-            .toggleDeload(week: 2), .cycleSchedule(week: 1, weekday: .tuesday), .removeLastWeek(loggedWeeks: [])
-        ]
-        for edit in relative {
-            let once = try edit.applied(to: program)
-            let twice = try edit.applied(to: once)
-            #expect(once != twice, "\(edit)")
-        }
+        // Removing the last week names "the last", so it is relative: it is sent once.
+        let removal = ProgramBuilderEdit.removeLastWeek(loggedWeeks: [])
+        let shorter = try removal.applied(to: program)
+        let isRelative = try removal.applied(to: shorter) != shorter
+        #expect(isRelative)
+        // A weekday and a deload are edited by what they become (criterion 12); the others hold an id or a place.
         let absolute: [ProgramBuilderEdit] = [
+            .setDeload(true, week: 2), .setDeload(false, week: 7),
+            .setSchedule(week: 1, weekday: .tuesday, day: program.days[1].id),
+            .setSchedule(week: 1, weekday: .monday, day: nil),
             .renameProgram("Winter"), .addWeek(WeekID(Fixtures.uuid(901))), .copyPreviousWeek(week: 7),
             .applyToLaterWeeks(week: 2), .addDay(DayTemplateID(Fixtures.uuid(902)), name: "New day")
         ]
         for edit in absolute {
             let once = try edit.applied(to: program)
+            let hasChanged = once != program
+            #expect(hasChanged, "\(edit) is seen to do something")
             let isSame = try edit.applied(to: once) == once
             #expect(isSame, "\(edit)")
         }
+    }
+
+    @Test("The name field's action is the rename edit with the text as typed")
+    func rename_isTheRenameEditWithTheTypedText() {
+        #expect(ProgramBuilderAction.rename("Upper ") == .edit(.renameProgram("Upper "), notice: nil))
     }
 }

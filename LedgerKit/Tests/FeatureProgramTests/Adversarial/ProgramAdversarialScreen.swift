@@ -2,10 +2,9 @@
 import Foundation
 import LedgerDomain
 
-/// F11 S5 adversarial round 1: the tester's own model of the Program builder, written from the brief's "Copy
-/// (exact)", criteria 1 to 6 and the slice's eleven criteria, for an English locale. It gives the screen as a
-/// flat list of named lines, and `AdvScreen.lines(of:)` gives the feature's model in the same form, so two
-/// screens are compared line by line and a difference is reported as a few short strings.
+/// F11 S5 adversarial rounds 1 and 2: the tester's own model of the Program builder in English, from the
+/// brief's "Copy (exact)" and the slice's criteria 1 to 16, as a flat list of named lines; `lines(of:)` gives
+/// the feature's model in the same form, so a difference is reported as a few short strings.
 nonisolated enum AdvScreen {
     enum Value: Equatable, CustomStringConvertible {
         case text(String)
@@ -34,7 +33,6 @@ nonisolated enum AdvScreen {
         "\(count) \(count == 1 ? one : other)"
     }
 
-    /// The seven weekdays from `start`, in the order the days come.
     static func order(from start: Weekday) -> [Weekday] {
         (0 ..< 7).compactMap { Weekday(rawValue: (start.rawValue - 1 + $0) % 7 + 1) }
     }
@@ -59,8 +57,7 @@ nonisolated enum AdvScreen {
         ].joined(separator: " · ")
     }
 
-    /// The day a tap on `weekday` assigns in the week at `place`: the one after the day now there, the first
-    /// from rest, rest (nil) after the last.
+    /// What a tap on `weekday` assigns: the day after the one there, the first from rest, rest after the last.
     static func next(_ program: Program, place: Int, weekday: Weekday) -> DayTemplate? {
         let now = program.weeks[place].schedule[weekday].flatMap { id in program.days.firstIndex { $0.id == id } }
         let following = now.map { $0 + 1 } ?? 0
@@ -108,7 +105,8 @@ nonisolated extension AdvScreen {
             ("block.chips.count", .text("\(weeks.count)"))
         ]
         for (index, week) in weeks.enumerated() {
-            let trained = Weekday.allCases.count { week.schedule[$0] != nil }
+            let held = Set(input.program.days.map(\.id))
+            let trained = Weekday.allCases.count { week.schedule[$0].map(held.contains) == true }
             let path = "chip\(index + 1)"
             lines += [
                 ("\(path).title", .text("W\(index + 1)")),
@@ -130,14 +128,14 @@ nonisolated extension AdvScreen {
         let isLast = place == program.weeks.count - 1
         var lines: [Line] = [
             ("week.title", .text("WEEK \(place + 1)" + (week.isDeload ? " · DELOAD" : ""))),
-            ("week.hint", .text("Tap to assign")),
+            ("week.hint", .text(program.days.isEmpty ? "absent" : "Tap to assign")),
             ("week.copyPrevious.title", .text(place == 0 ? "First week" : "Copy week \(place)")),
             ("week.copyPrevious.action", .action(place == 0 ? nil : .edit(.copyPreviousWeek(week: place)))),
             ("week.applyToLater.title", .text(isLast ? "absent" : "Apply to later weeks")),
             ("week.applyToLater.action", .action(isLast ? nil : .edit(.applyToLaterWeeks(week: place)))),
             ("week.deload.title", .text("Deload")),
             ("week.deload.isOn", .flag(week.isDeload)),
-            ("week.deload.action", .action(.edit(.toggleDeload(week: place)))),
+            ("week.deload.action", .action(.edit(.setDeload(!week.isDeload, week: place)))),
             ("week.cells.count", .text("7"))
         ]
         for (index, weekday) in order(from: input.settings.weekStart).enumerated() {
@@ -151,7 +149,10 @@ nonisolated extension AdvScreen {
                 ("\(path).isRest", .flag(day == nil)),
                 ("\(path).spokenLabel", .text(weekdayNames[weekday] ?? "")),
                 ("\(path).spokenValue", .text(day?.shortTitle ?? "Rest")),
-                ("\(path).action", .action(.edit(.cycleSchedule(week: place, weekday: weekday), notice: notice)))
+                ("\(path).spokenHint", .text(program.days.isEmpty ? "absent" : "Double-tap to assign")),
+                ("\(path).action", .action(program.days.isEmpty ? nil : .edit(
+                    .setSchedule(week: place, weekday: weekday, day: assigned?.id), notice: notice
+                )))
             ]
         }
         return lines
@@ -224,7 +225,7 @@ nonisolated extension AdvScreen {
     static func weekLines(_ week: ProgramBuilderModel.SelectedWeek) -> [Line] {
         var lines: [Line] = [
             ("week.title", .text(week.title)),
-            ("week.hint", .text(week.hint)),
+            ("week.hint", .text(week.hint ?? "absent")),
             ("week.copyPrevious.title", .text(week.copyPrevious.title)),
             ("week.copyPrevious.action", .action(week.copyPrevious.action)),
             ("week.applyToLater.title", .text(week.applyToLater?.title ?? "absent")),
@@ -242,6 +243,7 @@ nonisolated extension AdvScreen {
                 ("\(path).isRest", .flag(cell.isRest)),
                 ("\(path).spokenLabel", .text(cell.spokenLabel)),
                 ("\(path).spokenValue", .text(cell.spokenValue)),
+                ("\(path).spokenHint", .text(cell.spokenHint ?? "absent")),
                 ("\(path).action", .action(cell.action))
             ]
         }

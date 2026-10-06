@@ -68,22 +68,52 @@ public enum ProgramEditing {
         return edited
     }
 
+    /// "Deload", by the state it turns to: sets that week's flag. Applied twice it gives what one
+    /// application gives.
+    public static func setDeload(_ program: Program, _ isDeload: Bool, week: Int) -> Program {
+        editing(program, week: week) { $0[week].isDeload = isDeload }
+    }
+
     /// "Deload": flips that week's flag.
     public static func toggleDeload(_ program: Program, week: Int) -> Program {
-        editing(program, week: week) { $0[week].isDeload.toggle() }
+        guard program.weeks.indices.contains(week) else {
+            return program
+        }
+        return setDeload(program, !program.weeks[week].isDeload, week: week)
     }
 
     // MARK: - Schedule
 
-    /// A tap on a weekday of the schedule strip (rule 5): rest, then each of the program's days in the order
-    /// of `days`, then rest again. Rest is the absence of an entry. A program with no days stays at rest.
-    public static func cycleSchedule(_ program: Program, week: Int, weekday: Weekday) -> Program {
+    /// The order of a weekday's cycle (rule 5): what a tap makes of a weekday that holds `current`. Rest,
+    /// which is nil, then each of the program's days in the order of `days`, then rest again. An entry that
+    /// names a day the program does not hold counts as rest; a program with no days stays at rest.
+    public static func nextInCycle(after current: DayTemplateID?, in program: Program) -> DayTemplateID? {
         let days = program.days.map(\.id)
-        return editing(program, week: week) { weeks in
-            let place = weeks[week].schedule[weekday].flatMap(days.firstIndex(of:))
-            let next = place.map { $0 + 1 } ?? 0
-            weeks[week].schedule[weekday] = next < days.count ? days[next] : nil
+        let next = current.flatMap(days.firstIndex(of:)).map { $0 + 1 } ?? 0
+        return next < days.count ? days[next] : nil
+    }
+
+    /// A weekday of a week, by what it becomes: `day`, or rest for nil, which is the absence of an entry.
+    /// A day the program does not hold changes nothing. Applied twice it gives what one application gives.
+    public static func setSchedule(
+        _ program: Program,
+        week: Int,
+        weekday: Weekday,
+        day: DayTemplateID?
+    ) -> Program {
+        guard day == nil || program.days.contains(where: { $0.id == day }) else {
+            return program
         }
+        return editing(program, week: week) { $0[week].schedule[weekday] = day }
+    }
+
+    /// A tap on a weekday of the schedule strip (rule 5): the weekday takes the next value of its cycle.
+    public static func cycleSchedule(_ program: Program, week: Int, weekday: Weekday) -> Program {
+        guard program.weeks.indices.contains(week) else {
+            return program
+        }
+        let next = nextInCycle(after: program.weeks[week].schedule[weekday], in: program)
+        return setSchedule(program, week: week, weekday: weekday, day: next)
     }
 
     /// "Copy week n − 1": the week takes the schedule of the week before and keeps its own deload flag. The

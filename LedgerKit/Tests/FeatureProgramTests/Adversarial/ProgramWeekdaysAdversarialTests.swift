@@ -63,7 +63,11 @@ nonisolated struct ProgramWeekdaysAdversarialTests {
         #expect(strip == "S REST · M UA · T REST · W LA · T REST · F UB · S LB")
         #expect(week.cells.map(\.weekday) == [.sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday])
         let actions = week.cells.map(\.action)
-        #expect(actions == week.cells.map { .edit(.cycleSchedule(week: 0, weekday: $0.weekday), notice: nil) })
+        let becomes = week.cells.map { AdvScreen.next(input.program, place: 0, weekday: $0.weekday)?.id }
+        #expect(becomes.map { $0 == nil } == [false, false, false, false, false, false, true], "LB is the last day")
+        #expect(actions == zip(week.cells, becomes).map {
+            .edit(.setSchedule(week: 0, weekday: $0.weekday, day: $1), notice: nil)
+        })
         #expect(week.cells.map(\.spokenLabel).first == "Sunday")
     }
 
@@ -162,7 +166,7 @@ nonisolated struct ProgramWeekdaysAdversarialTests {
                 if cell.spokenValue != value || cell.isRest != (day == nil) || cell.label != (day?.tag ?? "REST") {
                     found.append("week \(week) \(cell.weekday): \(cell.spokenValue) for \(cell.label)")
                 }
-                hints.insert(cell.spokenHint)
+                hints.insert(cell.spokenHint ?? "")
             }
         }
         #expect(found.isEmpty, "\(found.prefix(4))")

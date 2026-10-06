@@ -25,11 +25,28 @@ nonisolated extension ProgramPresentationTests {
         #expect(screen.model.block.chips[1].subtitle == "4 DAYS")
     }
 
-    @Test("A cell's action is the cycle of its own weekday in the selected week")
-    func cells_eachCarriesTheCycleOfItsWeekday() throws {
-        let cells = try ProgramPresentation.make(ProgramFixtures.seedInput(selectedWeek: 2)).week.cells
+    @Test("A cell's action names what its own weekday becomes in the selected week: the next value of its cycle")
+    func cells_eachNamesWhatItsWeekdayBecomes() throws {
+        let input = try ProgramFixtures.seedInput(selectedWeek: 2)
+        let days = input.program.days.map(\.id)
+        let cells = ProgramPresentation.make(input).week.cells
         #expect(cells.map(\.weekday) == Weekday.allCases)
-        #expect(cells.map(\.action) == Weekday.allCases.map { .edit(.cycleSchedule(week: 2, weekday: $0)) })
+        // M UA, T rest, W LA, T rest, F UB, S LB, S rest become LA, UA, UB, UA, LB, rest, UA.
+        let next: [DayTemplateID?] = [days[1], days[0], days[2], days[0], days[3], nil, days[0]]
+        #expect(cells.map(\.action) == zip(Weekday.allCases, next).map { weekday, day in
+            .edit(.setSchedule(week: 2, weekday: weekday, day: day))
+        })
+    }
+
+    @Test("A cell's action drawn once and applied twice gives what one application gives")
+    func cell_actionAppliedTwice_givesWhatOneGives() throws {
+        var screen = try BuilderScreen(ProgramFixtures.seedInput())
+        let drawn = try #require(screen.model.week.cell(.tuesday)).action
+        try screen.tap(drawn)
+        #expect(try #require(screen.model.week.cell(.tuesday)).label == "UA")
+        try screen.tap(drawn)
+        #expect(try #require(screen.model.week.cell(.tuesday)).label == "UA")
+        #expect(screen.model.block.chips[0].subtitle == "5 DAYS")
     }
 
     @Test("A cell says whether it is rest, and VoiceOver hears the weekday, then rest or the day's short title")
@@ -52,7 +69,8 @@ nonisolated extension ProgramPresentationTests {
         #expect(week.strip == "S REST · M UA · T REST · W LA · T REST · F UB · S LB")
         #expect(week.cells.map(\.weekday) == [.sunday, .monday, .tuesday, .wednesday, .thursday, .friday, .saturday])
         #expect(week.cells.first?.spokenLabel == "Sunday")
-        #expect(week.cells.first?.action == .edit(.cycleSchedule(week: 0, weekday: .sunday)))
+        let upperA = input.program.days[ProgramFixtures.DayIndex.upperA].id
+        #expect(week.cells.first?.action == .edit(.setSchedule(week: 0, weekday: .sunday, day: upperA)))
     }
 
     @Test(
@@ -153,9 +171,12 @@ nonisolated extension ProgramPresentationTests {
         #expect(before == ProgramBuilderModel.Toggle(
             title: "Deload",
             isOn: false,
-            action: .edit(.toggleDeload(week: 2))
+            action: .edit(.setDeload(true, week: 2))
         ))
         try screen.tap(before.action)
+        // The action names the state: the one drawn before the tap, applied again, changes nothing.
+        try screen.tap(before.action)
+        #expect(screen.model.week.deload.action == .edit(.setDeload(false, week: 2)))
         var model = screen.model
         #expect(model.week.title == "WEEK 3 · DELOAD")
         #expect(model.week.deload.isOn)
