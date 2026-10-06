@@ -205,3 +205,56 @@ writes that pair a third time.
     does not see an instance or `mutating` method, a write through a key path or a whole-slot assignment, or
     code outside `LedgerDomain/Programs`. The property test over the listed functions remains the proof; a
     reviewer of any later change to these files checks criterion 12 by reading.
+## Plan amendments — slice S3, the atomic program update (orchestrator, 2026-10-06)
+
+Cut from `main`, independent of S1. One new requirement on `ProgramRepository`, so that a builder edit is
+applied to the program as it is stored at that moment and can never write back an older copy of what a
+workout's save put there (a slot's misses; a swap's exercise). The plan's "Saving and a live workout" gives
+the reasons and the code it stands on; "Inputs the implementer needs › S3" gives the signatures and files;
+Risks 1 and 2 apply. About 45 product lines; most of the slice is contract and tests. Accepted when:
+
+1. **The requirement.** `func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program`
+   on `ProgramRepository`, with no default body. It applies `change` to the program `id` as stored now and
+   saves the result, in one step that no other write can come between, and returns the program as stored
+   afterwards.
+2. **Nothing to update.** A program that is not stored, or is deleted, throws the repository's missing-row
+   error; `change` is not called and nothing is written.
+3. **A change that throws** is rethrown as it is; nothing is written and no observer is woken.
+4. **A result that `save` would refuse** (an id another program holds, a slot whose exercise has no row, text
+   the store refuses) is refused with the same error, and so is a result with another id; nothing is written.
+5. **A change that returns the program as it was** writes no row and wakes no observer.
+6. **Rows.** Only rows that changed are written, a row the result no longer has is soft-deleted, as `save`
+   does; which program is active does not change.
+7. **Nothing is lost between a builder and a workout's save.** The losing sequence is the slice's first test:
+   read a program, save a finished workout that records a miss and a swap on it, then write the builder's edit.
+   Through `save` the miss and the swap are gone (the test shows it); through `update` both are kept. For
+   seeded interleavings of `update` calls and workout saves, the stored program equals the calls applied one
+   at a time in the order they were taken, on the database and on the in-memory stores alike.
+8. **Cancellation.** A call whose task is cancelled stores all of its change or none of it. What GRDB does
+   with a write whose task is cancelled is established by a test and written down, since S13 relies on it.
+9. **The in-memory stores follow** (ADR-008 decision 5): the same clauses of the shared contract pass on both;
+   the in-memory repository works under the one lock a workout's save takes. The unimplemented stub reports as
+   its neighbours do, and the probe forwards `update` and can hold it (S13's store test holds the first write).
+10. **Every other conformer compiles**: the four test doubles on `main` gain the requirement by a mechanical
+    edit, each listed in the notes (two are testers' files; the edit is sanctioned and audited).
+11. **No migration, no schema change**; the version fixtures and every existing contract clause are untouched
+    and pass.
+
+## Plan amendments — slice S3 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (32 tests, 282 cases; one question, F11-S3-1) and the reviewer approved with two
+should-fix items. Atomicity holds by construction on both stores. Rulings, which add to S3's eleven criteria:
+
+12. **The in-memory store cancels as the database does** (F11-S3-1, review S1; ADR-008 decision 5). A call
+    whose task is cancelled before the change, inside the change, or while it waited for the lock throws
+    `CancellationError` and stores nothing; one cancelled after its write is stored whole and returns. The
+    contract's cancellation clauses are strict on both stores, so a store tested over the fakes sees the same
+    rollback path.
+13. **`save` says what it costs** (review S2): its documentation warns that saving an earlier copy of a stored
+    program writes back the misses and the exercise a workout's save put there, and points to `update`.
+14. **Criterion 6, as built:** `update` leaves which program is active as it was when the change does not touch
+    the flag; a change that sets the flag is saved as `save` saves it. A result under another id is refused
+    with the duplicate-identifier error.
+15. **One ending on both stores** (F11-S3-2, round 2): when a call is cancelled inside a change whose result
+    is also refused, both stores report what the database reports. The in-memory store makes the database's
+    checks in the database's order: the result's id and validity, then cancellation, then the write.

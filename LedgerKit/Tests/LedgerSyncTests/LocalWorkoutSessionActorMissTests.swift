@@ -147,6 +147,10 @@ struct AnotherProgramWithTheSameSlots: ProgramRepository {
         throw Unused()
     }
 
+    func update(_: ProgramID, _: @Sendable (Program) throws -> Program) async throws -> Program {
+        throw Unused()
+    }
+
     func setActive(_: ProgramID) async throws {
         throw Unused()
     }

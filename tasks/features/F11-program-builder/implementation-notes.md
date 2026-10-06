@@ -1374,4 +1374,458 @@ five new files (`ProgramEditing.swift` 84 lines, `ProgramEditing+Days.swift` 60,
 Not run: the seeded suites at 2,000 seeds this round; `scripts/check.sh` in full; the simulators; CI.
 `EditingSourceTests` reads source files by `#filePath`, as `ModuleBoundaryTests` does; it was run on the
 host only.
+## Slice S3 — the atomic program update (G1 implementer, 2026-10-06)
+
+`ProgramRepository.update(_:_:)`: one requirement, no default body, on the database and on the in-memory
+stores, with the contract clauses, seeded interleavings and cancellation tests that prove it. Not committed;
+no pull request. Paths below are under `LedgerKit/` unless they start with `tasks/` or `scripts/`.
+
+### What landed (files)
+
+Product (38 lines added, 3 removed; "Code lines per file" below):
+- `Sources/LedgerDomain/Protocols/Repositories.swift:33-57` — the requirement, its rules, and what a caller
+  must not do in `change`.
+- `Sources/LedgerPersistence/Repositories/GRDBProgramRepository.swift:51-84` — `update`: the read, the change
+  and the write in one `queue.write`. `:138-145` — `write(_:isActive:in:at:)`, the one path `save` (`:43-49`)
+  and `update` write through.
+- `Sources/LedgerFakes/InMemoryProgramRepository.swift:57-79` — `update` in one `state.write`, the lock
+  `writeSave` takes (`:105-116`).
+- `Sources/LedgerDependencies/Unimplemented/UnimplementedStores.swift:46-48` — the stub's `update`.
+- `Sources/LedgerDomain/Protocols/RepositoryError.swift:27-34`, `:38-40` — comments only: the two cases name
+  `update`.
+
+Test support (`Sources/LedgerTestSupport/`, not counted):
+- `Engine/StoreProbe.swift:11-16` — the call `.updateProgram`. `Engine/ProbedStores.swift:120-139` — `update`
+  goes through the probe.
+- `Persistence/ProgramRepositoryContract+Update.swift`, `+UpdateEffects.swift` (new) — eight clauses, added at
+  the end of `ProgramRepositoryContract.clauses` (`ProgramRepositoryContract.swift:28`).
+  `Persistence/ProgramRepositoryContract+Storage.swift:12-15`, `:57-81` — one storage clause.
+- `Persistence/WorkoutRepositoryContract+LinkedUpdate.swift` (new) — two linked clauses, added at the end of
+  `linkedClauses` (`WorkoutRepositoryContract+Linked.swift:42`).
+- `Persistence/TaskCancelSwitch.swift` (new) — a task that what it runs can cancel.
+
+Tests (`Tests/LedgerPersistenceTests/` unless said):
+- `ProgramUpdateInterleavingTests.swift`, `+Script.swift`, `+Edits.swift` (new) — the losing sequence, the
+  seeded scripts on both stores against a model, the concurrent test.
+- `ProgramUpdateTests.swift` (new) — the GRDB repository's rows, statements and emissions.
+- `ProgramUpdateCancellationTests.swift` (new) — what a cancelled write does.
+- `ProbedProgramRepositoryTests.swift` (new) — the probe holds, counts and fails an update, on both stores.
+- `Tests/LedgerDependenciesTests/UnimplementedStubTests.swift:50` — the stub's `update` in the list of calls.
+- The four test doubles: "The sanctioned edits" below.
+
+No migration, no schema change, no fixture, no feature code, nothing of S1.
+
+### The losing sequence, before `update` existed (Risks 1)
+
+Run on the tree before any product change, with the builder's edit written through `save` and the test
+expecting what a lifter expects (`swift test … --filter ProgramUpdateInterleavingTests`, exit 1, 4 issues, 2
+cases):
+
+```
+stores → inMemory: Expectation failed: stored.misses == [2]            (stored.misses → [])
+stores → inMemory: Expectation failed: stored.exerciseID == replacement (…0CA00000, expected …0CA00001)
+stores → database: Expectation failed: stored.misses == [2]            (stored.misses → [])
+stores → database: Expectation failed: stored.exerciseID == replacement (…0CA00000, expected …0CA00001)
+```
+
+Both stores lose the miss and the swap alike. The sequence is kept twice in the suite:
+`wholeSave_afterAWorkoutsSave_losesItsMissAndItsSwap` asserts the loss (why `update` exists), and
+`update_afterAWorkoutsSave_keepsItsMissAndItsSwap` sends the same edit through `update` and keeps both.
+
+### Decisions and deviations
+
+1. **A result under another id throws `duplicateIdentifier("program <the result's id>")`**, checked before any
+   other check, on both stores (`GRDBProgramRepository.swift:78-80`, `InMemoryProgramRepository.swift:73-75`).
+   The specification says "refused" and names no error, and `save` has none of its own for it: saved whole,
+   such a result is another program, or is refused for the week ids it shares. No case was added to
+   `RepositoryError`, a Domain enum outside this slice's files. Alternative: a case of its own (open
+   question 1).
+2. **`isActive` is saved as `save` saves it.** Criterion 6 says "which program is active does not change".
+   The plan asks for `save`'s activation to be copied (this file, "Inputs the implementer needs › S3": "the
+   transaction and the activation to copy"), and a store cannot keep both when a change sets the flag. Built:
+   `update` is `save` of the changed program, activation included (`GRDBProgramRepository.swift:81`,
+   `:140-145`). So an update whose change leaves the flag alone never changes which program is active and
+   writes no other program's row (`ProgramUpdateTests.update_leavesOtherProgramsAndTheActiveFlag`; clause
+   `updateKeepsActivity`), which is every builder edit: no editing function touches `isActive`. A change that
+   does set or clear it is stored as `save` stores it (same clause). Alternatives: ignore a changed flag
+   (silent), or refuse it (no error fits). Open question 2.
+3. **The in-memory `update` checks its task first** (`InMemoryProgramRepository.swift:67`,
+   `try Task.checkCancellation()`): one product line the specification does not name. Criterion 9 says the
+   in-memory stores follow, the cancellation tests show the database throws `CancellationError` and stores
+   nothing when cancelled before it starts or while it waits, and S13's store test runs on the in-memory
+   stores behind the probe. With the line, a held update whose task is cancelled stores nothing on both
+   (`ProbedProgramRepositoryTests.heldUpdate_cancelled_storesNothing`). The in-memory `save`, `setActive`,
+   `delete` and `materialize` do not check their task, as before (open question 3).
+4. **`update` returns the program read back**, in the same transaction or under the same lock
+   (`GRDBProgramRepository.swift:82`, `InMemoryProgramRepository.swift:77`), not the change's result:
+   `Program.init` sorts the weeks (`Sources/LedgerDomain/Model/Program.swift:34`), so a result can differ from
+   what is stored. Clause `updateApplies` pins it with a change that reverses the weeks. The `?? changed` on
+   those two lines cannot be reached (the row was just written); it stands where a force unwrap would.
+5. **No special case for an unchanged result.** It goes through `save`'s row diff, which writes nothing
+   (`Sources/LedgerPersistence/Records/SyncedRecord.swift:72-74`); the activation statement touches only rows
+   whose flag changes (`GRDBProgramRepository.swift:148-155`); the in-memory streams yield only a value that
+   differs (`Sources/LedgerFakes/Support/ObservedState.swift:53`). Pinned by
+   `ProgramUpdateTests.updateThatChangesNothing_writesNoRow` and `observation_emitsOncePerUpdateThatChanges`.
+6. **`save` and `update` share `write(_:isActive:in:at:)`** (`GRDBProgramRepository.swift:138-145`): `save`'s
+   three lines moved into it (`:47`). `save` behaves as before: it still validates before it asks for the
+   writer (`:44`), and every existing suite passes untouched.
+7. **A program whose rows cannot be read cannot be updated.** `update` throws what the read throws and never
+   calls `change`; a whole `save` repairs the row, as before. The specification does not name the case; it
+   follows from "applies `change` to the program as stored".
+   `ProgramUpdateTests.update_ofAProgramThatCannotBeRead_throwsWhatReadingThrows`.
+8. **Seeded interleavings are scripts of awaited calls; concurrency has a test of its own.** Criterion 7 says
+   "in the order they were taken". A workout's save gives a test no way to learn when the store took it, so
+   in the seeded scripts each call is awaited before the next and the order is the script's; both stores are
+   held to a model after every call. `concurrentUpdatesAndSaves_loseNothing` then makes 200 updates and 8
+   saves at once, where the order the store took the updates in is recorded from inside each change.
+9. **Files beyond the plan's list** (this file, "Files S3 creates or changes"): `StoreProbe.swift` (the probe
+   holds and counts by call, so `update` needs one); `RepositoryError.swift` (comments); the storage clause in
+   `ProgramRepositoryContract+Storage.swift`, where the two storage refusals live; the clause files split in
+   two, and the linked clauses in a file of their own, for lint's 300-line limit
+   (`WorkoutRepositoryContract+Linked.swift` is at 297); `TaskCancelSwitch.swift`; three more test files and
+   two extension files beside `ProgramUpdateInterleavingTests.swift`; one line of
+   `UnimplementedStubTests.swift` (criterion 9's stub).
+10. **What the observation clause cannot show.** A repository's stream keeps its newest value only, so clause
+    `updateObserved` shows that no update that changed nothing is ever seen as a change, not that nothing
+    was emitted. For the database `observation_emitsOncePerUpdateThatChanges` counts every emission on a
+    stream that drops none. For the in-memory store it holds by construction (`ObservedState.swift:53`).
+
+### Criteria → tests
+
+"Both" means the clause runs on the GRDB repository (`ProgramRepositoryTests`, `WorkoutRepositoryTests`) and
+on the in-memory stores (`InMemoryContractTests`), each on a fresh store. Suites are in
+`Tests/LedgerPersistenceTests/`.
+
+| Criterion | Tests |
+|---|---|
+| 1 The requirement | Every conformer compiles (`swift build … --build-tests`, exit 0). Clause `updateApplies` (both): the change meets the program as stored now, also after another update and after a whole save, and the answer is the program as stored. `ProgramUpdateTests.update_isOneTransaction_withItsChangeBetweenTheReadAndTheWrite`: one `BEGIN`, the read, the change, the rows, one `COMMIT`. `concurrentUpdatesAndSaves_loseNothing` (both stores). |
+| 2 Nothing to update | Clause `updateMissing` (both): unknown and deleted, `missingRow`, the change called 0 times, nothing left behind. The seeded scripts hold more than ten calls on a deleted program. |
+| 3 A change that throws | Clause `updateRethrows` (both). `ProgramUpdateTests.refusedUpdate_leavesEveryRow` (every row of the five tables as it was). No observer: clause `updateObserved` (both), `observation_emitsOncePerUpdateThatChanges`. |
+| 4 A result `save` would refuse | Clause `updateRefuses` (both): six results, each refused by `save` and by `update` with the very same error (a slot out of range, one week, a name holding U+0000, a slot twice, a slot and a day another program holds), then a result under a stored program's id and under an id no program holds. Storage clause `updateRefusesAtTheBoundary` (both): an inexact step, an unknown exercise. `refusedUpdate_leavesEveryRow`: a result refused after most of its rows were written. |
+| 5 An unchanged result | `ProgramUpdateTests.updateThatChangesNothing_writesNoRow` (the stored program returned as it is, and with its weeks reordered: no row written). `observation_emitsOncePerUpdateThatChanges`. Clause `updateObserved` (both). |
+| 6 Rows | `update_writesOnlyTheRowsThatChanged`: the counts `save` gives for the same edit, changed rows stamped, removed rows soft-deleted. `update_leavesOtherProgramsAndTheActiveFlag`: one row written, no flag changed. Clause `updateKeepsActivity` (both). Linked clause `updateLeavesHistory` (both): a slot, then a day, a stored workout came from is removed; the workout reads as before and can be stored again. |
+| 7 Nothing lost | `wholeSave_afterAWorkoutsSave_losesItsMissAndItsSwap` and `update_afterAWorkoutsSave_keepsItsMissAndItsSwap`, each on both stores. Linked clause `updateAndSaveInEitherOrder` (both). `interleavedCalls_matchTheCallsAppliedInOrder`: 30 fixed seeds on the host and in the PR lane, every seed of the lane nightly; 25 calls a script; a failure names its seed and the call. `scripts_holdEveryKindOfCall` vouches for the 30. `concurrentUpdatesAndSaves_loseNothing` (both stores). |
+| 8 Cancellation | `ProgramUpdateCancellationTests` (six tests, next section). Clauses `updateCancelledBefore` and `updateCancelledInside` (both). `ProbedProgramRepositoryTests.heldUpdate_cancelled_storesNothing` (both stores). |
+| 9 The in-memory stores follow | `InMemoryContractTests` runs the eight clauses, the storage clause and the two linked clauses. The stub: `UnimplementedStubTests.programRepository`. The probe: `ProbedProgramRepositoryTests`, four tests on both stores. |
+| 10 Every other conformer | The build; "The sanctioned edits" below. |
+| 11 No migration, no schema | `git status --short` shows no migration, fixture or lock file. The existing clauses are untouched: both lists gain entries at their end. `MigrationCompatibilityTests`, `SchemaTests` and every existing suite pass in the runs below. |
+
+What the tests catch, tried by breaking the code and restoring it (each a filtered host run, exit 1):
+
+| Broken on purpose | Caught by |
+|---|---|
+| GRDB `update` as three steps: read, change, `save` (the default body that was rejected) | `update_isOneTransaction…`, four of the six cancellation tests, and `concurrentUpdatesAndSaves_loseNothing` on the database (updates lost) |
+| The in-memory `update` reading under the lock, changing outside it, saving under it again, with no check of its task | Clause `updateCancelledBefore` and `heldUpdate_cancelled_storesNothing`, every run. `concurrentUpdatesAndSaves_loseNothing`: 8 runs of 8 |
+| GRDB returning the change's result, not what is stored | Clause `updateApplies`; `updateThatChangesNothing_writesNoRow` |
+| GRDB without the id check | Clause `updateRefuses`; the seeded scripts (13 seeds) |
+| The in-memory store applying the change to a copy that forgot one slot's misses | `update_afterAWorkoutsSave_keepsItsMissAndItsSwap`, linked clause `updateAndSaveInEitherOrder`, the concurrent test, the seeded scripts |
+
+*Corrected in fix round 1 (review, "Atomicity in memory"): the in-memory store is atomic by construction, as
+the database is; what follows is only how a test would notice if `change` were later moved outside the lock.*
+No test shows by construction that the in-memory store runs `change` under its lock; the concurrent test
+would notice by overlap. With 24 short updates it caught the broken store in 1 run of 3, with
+200 in 2 of 6; with some work inside each change (the test encodes the program) in 8 of 8, on this Mac. On
+one core it would pass over a broken store. The lock itself is one `state.write`
+(`InMemoryProgramRepository.swift:68`).
+
+### What was established about cancellation (criterion 8; ruling 5)
+
+By `Tests/LedgerPersistenceTests/ProgramUpdateCancellationTests.swift`, six tests on the GRDB repository,
+none of which waits on a clock: the task is cancelled from inside the write (by the change, by a statement
+trace, by a transaction observer), or while another access holds the writer.
+
+| The task is cancelled | What `GRDBProgramRepository.update` does | Test |
+|---|---|---|
+| before the call | `CancellationError`; `change` is never called; no row written | `cancelledBeforeItStarts_storesNothing` |
+| while the write waits for the writer | the same | `cancelledWhileItWaitsForTheWriter_storesNothing` |
+| inside `change` (after the read, before any row) | `CancellationError`; rolled back | `cancelledInsideItsChange_storesNothing` |
+| as any statement before the commit starts, rows written or not | `CancellationError`; rolled back; GRDB starts at most the statement it was in and the rollback | `cancelledAtAnyStatementBeforeTheCommit_storesNothing` |
+| as the commit itself starts | the commit fails and is rolled back: `CancellationError`, nothing stored | `cancelledAsTheCommitStarts_storesNothing` |
+| once the commit has succeeded, before the call returns | too late: the change is stored whole and the call returns it | `cancelledOnceCommitted_storesEverything` |
+
+So: **a cancelled `update` stores all of its change or none of it, and it throws `CancellationError` only when
+it stored none.** A caller that keeps what a cancelled call could not store, and sends it again, never sends
+a change twice.
+
+Why, in GRDB 7.11.1 (`LedgerKit/.build/checkouts/GRDB.swift`): an async access checks its task as it starts
+(`GRDB/Core/SerializedDatabase.swift:256-266`, `try Task.checkCancellation()` before the caller's block), which
+covers "before" and "while it waits" alike; a cancellation during the access marks the connection and
+interrupts SQLite (`GRDB/Core/Database.swift:1245-1268`), after which every statement but a rollback throws
+`CancellationError` before it runs (`:1391-1393`, `:1428`), the commit included, and `inTransaction` rolls back
+(`:1545-1553`). Nothing checks the task after the block returns, so a commit that succeeded is reported as
+a success.
+
+Two things I expected and the tests corrected:
+- I expected a cancellation that arrives as the commit starts to come too late (the statement trace fires
+  inside `sqlite3_step`). It does not: on the host's SQLite 3.54.0 the interrupt reaches the commit, which
+  fails, and GRDB rolls back. That row of the table is SQLite's doing, not GRDB's; the test says so, and should
+  a later SQLite finish that commit, it alone fails and the rule above still holds.
+- "While it waits": the test cancels once `update` has read its clock and before the held writer is freed.
+  Whether the cancellation lands just before or just after GRDB queued the access cannot be told from
+  outside; both go through the one check at `SerializedDatabase.swift:264`.
+
+The in-memory store (decision 3): an already cancelled task throws `CancellationError` before anything is
+read, as the database does before it starts and while it waits; nothing in it suspends, so a task cancelled
+later (from inside `change`) stores its change whole and returns. Two contract clauses hold both stores to
+what they share: `updateCancelledBefore` (cancelled before the call: `CancellationError`, no call of `change`,
+nothing written) and `updateCancelledInside` (all or none, and `CancellationError` only for none).
+
+### The sanctioned edits to other conformers (criterion 10)
+
+Each is the new method only, in the double's own style; `git diff --numstat` gives the sizes.
+
+| File | Double | Diff | What it does |
+|---|---|---|---|
+| `Tests/LedgerPersistenceTests/Adversarial/HistoryModel+Repositories.swift:92-101` | `HistoryModel`, F05's oracle (a tester's file) | +11 −0 | Under its lock, as its `save` and `setActive`: applies the change to its stored program, or throws `missingRow`. Nothing calls it. |
+| `Tests/LedgerSyncTests/Adversarial/HostSiegeStoresAdversarialSupport.swift:134-136` | `SiegeProgramRepository`, F10's siege (a tester's file) | +4 −0 | Passes the call to its base, past the gate, as its `save`. |
+| `Tests/LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift:34-36` | `BriefProgramRepository`, F02's shape check (a tester's file) | +4 −0 | Throws `missingRow`: it stores no program (`active()` is `nil`). |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActorMissTests.swift:150-152` | `AnotherProgramWithTheSameSlots` | +4 −0 | Throws `Unused()`, as its other writes. |
+
+Three of the four are under `Adversarial/`, not two as Risks 2 counts them. No test, assertion or other line
+of those files changed.
+
+### Code lines per file
+
+Non-blank, non-comment lines outside tests and `LedgerTestSupport`, counted from `git diff -U0`:
+
+| File | Added | Removed |
+|---|---|---|
+| `Sources/LedgerDomain/Protocols/Repositories.swift` | 1 | 0 |
+| `Sources/LedgerPersistence/Repositories/GRDBProgramRepository.swift` | 20 | 3 |
+| `Sources/LedgerFakes/InMemoryProgramRepository.swift` | 14 | 0 |
+| `Sources/LedgerDependencies/Unimplemented/UnimplementedStores.swift` | 3 | 0 |
+| `Sources/LedgerDomain/Protocols/RepositoryError.swift` | 0 | 0 (comments) |
+| **Total** | **38** | **3** |
+
+Planned: about 45.
+
+### The runs
+
+All on the final tree, from the worktree root, on 2026-10-06, and all run again after the session's last
+interruption, with the same counts.
+
+| Run | Command | Result |
+|---|---|---|
+| Host build, every conformer | `swift build --package-path LedgerKit --only-use-versions-from-resolved-file --build-tests` | exit 0; no new warning |
+| Host, `LedgerPersistenceTests` | `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter '^LedgerPersistenceTests\.'` | exit 0; 517 tests in 117 suites passed; 1 known issue (the F7-10 seed test's own `withKnownIssue`) |
+| Host, `LedgerSyncTests` | the same with `'^LedgerSyncTests\.'` | exit 0; 276 tests in 48 suites passed; 13 known issues (the fake session client's own) |
+| Host, `LedgerDomainTests` | the same with `'^LedgerDomainTests\.'` | exit 0; 838 tests in 138 suites passed |
+| Host, `LedgerDependenciesTests` (the stub) | the same with `'^LedgerDependenciesTests\.'` | exit 0; 63 tests in 11 suites passed; 17 known issues (its own) |
+| Lint tier | `scripts/check.sh --lint-only` | exit 0 ("check.sh (--lint-only) OK") |
+| iOS simulator, through the lock (run twice: the session was interrupted after the first, and the second, on the final tree, gave the same counts) | `/usr/bin/python3 …/scratchpad/sim-lock.py /bin/bash …/scratchpad/f11s3/sim-run.sh`: `scripts/sim-destination.sh`, `scripts/sim-boot.sh`, then `xcodebuild build-for-testing` and `xcodebuild test-without-building -project Ledger.xcodeproj -scheme Ledger -testPlan PR -destination 'platform=iOS Simulator,id=…'` (iPhone 17, iOS 27.0) `-derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages -onlyUsePackageVersionsFromResolvedFile -only-testing:LedgerPersistenceTests -only-testing:LedgerSyncTests -collect-test-diagnostics never -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -quiet` | exit 0. The result bundle, read with `xcresulttool`: Passed; 796 tests, 782 passed, 0 failed, 11 skipped, 3 expected failures; both bundles Passed; the four new suites ran, the commit test among them. Bundles deleted |
+
+The fakes' contract tests are `InMemoryContractTests`, in `LedgerPersistenceTests`: on the host and on the
+simulator the program contract ran 18 clauses on each kind of store (10 existing, 8 new), the storage
+contract 3 (2 and 1), the linked contract 9 (7 and 2).
+
+Not run by me: the full gate, the watchOS plan, CI, the nightly lane (every seed of the lane; the host and
+the PR lane run the 30 fixed scripts), any UI test. `git status --short` shows the files listed under "What
+landed" and nothing else.
+
+### Open questions, each with a recommendation
+
+1. **The error for a result under another id.** Built: `duplicateIdentifier("program <id>")`. A case of its
+   own would say it better and costs a line of a Domain enum and its doc. *Recommendation:* keep. The builder
+   cannot produce it (`Program.id` is a `let` and no editing function builds a program under another id); it
+   is a programmer's error, named in the protocol's doc and pinned by a clause.
+2. **`isActive` in a change** (decision 2). *Recommendation:* keep "as `save` saves it". If Pete wants
+   `update` never to change which program is active, it needs either an error case or a silently ignored
+   flag; `setActive` already exists for the purpose.
+3. **The in-memory stores' other writes do not check their task.** GRDB's `save`, `setActive`, `delete` and
+   `materialize` throw `CancellationError` when cancelled before they start; LedgerFakes' run to the end.
+   *Recommendation:* leave it until a store test needs it; then it is one line a method and one clause a
+   contract, as here. Not F11's.
+4. **The commit row of the cancellation table is SQLite's behaviour.** The test is strict about it on
+   purpose. I ran it on the host and on the iOS simulator; watchOS is the orchestrator's gate. *Recommendation:*
+   keep it strict; if it ever fails on a runtime, read `cancelledAsTheCommitStarts_storesNothing`'s comment
+   before changing anything: the rule S13 relies on is the other five tests'.
+5. *(Closed in fix round 1: the code is atomic by construction; this is about the test only.)* **The
+   concurrent test finds a non-atomic in-memory store by overlap, not by construction** ("Criteria →
+   tests", the limit). A check by construction needs a hook into `ObservedState`'s lock, which is product
+   code of LedgerFakes. *Recommendation:* accept.
+6. **The older program clauses print whole programs when they fail** (`ContractCheck.expect`,
+   `Sources/LedgerTestSupport/Persistence/ContractClause.swift:23-25`, used with programs throughout
+   `ProgramRepositoryContract.swift`). The new clauses use `same(_:_:_:)`, which prints a line. Left alone:
+   criterion 11 says the existing clauses are untouched. *Recommendation:* a follow-up that moves them to
+   `same`, since a red run of 8 × 4 × 5 programs is what filled the disk before.
+7. **Risks 2 counts two testers' files; three of the four doubles are under `Adversarial/`.** No action
+   needed; the audit list above has all four.
+
+### Inputs for S13 and S14
+
+**How a store calls it.**
+
+```swift
+@Dependency(\.programRepository) var programs
+
+// `waiting`: the edits not stored yet, as Sendable values; `stored`: the program the screen was built from.
+let edits = waiting
+let saved = try await programs.update(stored.id) { program in
+    try edits.reduce(program) { try $1.applied(to: $0) }
+}
+```
+
+- The answer is the program as stored after the write, with whatever a workout's save put there meanwhile
+  (misses, a swap). Build the screen from it. `observeActive` emits the same program once, for an update that
+  changed something; an update that changed nothing emits nothing, so never wait for an emission after one.
+- **What the closure may hold.** Sendable values only: the edits, ids, the lifter's units. It is
+  `@Sendable` and synchronous, and on the database it runs on GRDB's writer queue, inside the transaction.
+  It must not hold the store (`self`, which is `@MainActor`), call a repository, or wait. It is called at
+  most once, and not at all for a missing program or a cancelled task. It may throw: `ProgramEditError` from
+  `removeLastWeek` comes back as it is, and nothing is stored.
+- **Apply the edits to the argument, never to a copy the store holds.** That is the whole point: an edit
+  that writes a slot's misses or its exercise from the screen's copy would undo a workout's save. S1's
+  criterion 12 keeps the editing functions clear of both.
+- **Errors.** `missingRow` (the program was deleted meanwhile); whatever `save` throws for the result
+  (`nulInText`, `unknownExercise`, a validation error); `CancellationError`.
+- **Cancellation** (the table above). `CancellationError` means nothing was stored: keep the waiting edits
+  and send them again. A return means all of it was stored: drop them. There is no third case, which matters
+  because edits such as "add a week" are not idempotent.
+- **S14.** `DayEditorStore` goes the same way: `update(programID) { ProgramEditing.updateDay($0, …) }`. A day
+  that was deleted meanwhile is the editing function's "id the program does not hold": the program comes back
+  unchanged, nothing is written, and the store sees that the day is gone from the answer.
+
+**How a test holds a write with the probe** (`ProbedProgramRepositoryTests` is the worked example):
+
+```swift
+let memory = InMemoryStores(seed: seed)
+let probed = ProbedStores(events: memory.events, workouts: memory.workouts, programs: memory.programs)
+// give the store `probed.programs` as its `programRepository`
+await probed.probe.hold(.updateProgram)       // the next update parks before it reaches the store
+store.send(first)                             // the save loop calls update
+try await probed.probe.waitUntilHeld()        // nothing of it is stored yet
+store.send(second); store.send(third)
+await probed.probe.release()
+// … once the store is idle:
+#expect(await probed.probe.calls.count { $0 == .updateProgram } == 2)
+```
+
+- `hold` holds one call, the next (`Sources/LedgerTestSupport/Engine/StoreProbe.swift:139-140`).
+  `ProbedProgramRepository` has no public initialiser; `ProbedStores` builds it.
+- `fail(.updateProgram)` throws `StoreProbe.Refusal` before the store (nothing stored); with
+  `afterStoring: true` the change is stored and the call still throws (an answer lost).
+- A held update whose task is cancelled, then released, throws `CancellationError` and stores nothing, on the
+  in-memory stores and on the database.
+- To cancel a task from inside the store's write, at an exact point and without a clock: `TaskCancelSwitch`
+  (`run(_:)` starts the task, `fire()` cancels it from the change).
+
+### Inputs for the branches that still wait to merge
+
+When `main` with S3 is merged into them, every `ProgramRepository` conformer needs
+`func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program`.
+Read with `git grep` on the local branches on 2026-10-06: `feat/F08-s3-root-gate` holds seven doubles, at the
+places Risks 2 lists; `feat/F08-s2-onboarding-ui` holds the three under `FeatureOnboardingTests`; the F09
+branches and `feat/F11-s1-program-editing` hold none.
+
+| The double (on `feat/F08-s3-root-gate`, under `LedgerKit/Tests/`) | What to add |
+|---|---|
+| Wraps another repository: `ProbedPrograms` (`FeatureOnboardingTests/Adversarial/OnboardingAdversarialStores.swift:11`), `GateProbedPrograms` (`LedgerAppKitTests/Adversarial/AppRootGateAdversarialProbes.swift:19`), `GateRelayedPrograms` (`LedgerAppKitTests/Adversarial/RootGateStoreAdversarialSupport.swift:133`) | `try await base.update(id, change)` (or `inner`), with the double's own journal note or script step around it where its `save` has one. Pass `change` on as it came; never call it outside the wrapped store. |
+| Records or scripts, with no store behind it: `RecordingPrograms` and `FailingPrograms` (`FeatureOnboardingTests/Support/StoreDoubles.swift:13`, `:54`), `GateScriptedPrograms` (`LedgerAppKitTests/Adversarial/RootGateAdversarialScript.swift:116`), `ScriptedPrograms` (`LedgerAppKitTests/Support/GateSupport.swift:77`) | What its `save` does with a call nobody makes there: note it and throw, or throw its `error`. Onboarding and the root gate never call `update`. One that holds a program can do as `HistoryModel` does here: under its own lock, the stored program or `missingRow`, then `change`, then store. |
+
+None of them should implement `update` as `active()` and then `save`, awaited apart: that is the sequence this
+slice replaces. F08's onboarding saves a new program with `save`, which stays right: `update` is for a
+program that is already stored.
+
+## Slice S3 — fix round 1 (G1 implementer, 2026-10-06)
+
+After the tester's round 1 (F11-S3-1) and the review (S1, S2, nine nits), on top of d77550f. Not committed.
+Paths are under `LedgerKit/`. Rulings: the brief's criteria 12 to 14.
+
+### What changed
+
+- **Criterion 12** (F11-S3-1, review S1). `Sources/LedgerFakes/InMemoryProgramRepository.swift:69-86`: the
+  in-memory `update` checks its task twice, both under the lock: as the write begins (`:71`), which covers a
+  task cancelled before the call and one cancelled while it waited for the lock, and `change` is then not
+  called; and once `change` has returned (`:76`), before the id check and the store. Either throws
+  `CancellationError`, and `ObservedState.write` leaves the state as it was. The check before the lock is
+  gone: the first check under it does its work and the waiting case too. The database's "cancelled once
+  committed" has no counterpart: nothing follows the store but the return. The doc comment says so (`:57-68`).
+- **The clause is strict.** `Sources/LedgerTestSupport/Persistence/ProgramRepositoryContract+UpdateEffects.swift:100-120`:
+  `updateCancelledInside` now requires `CancellationError` and the program as saved, on both stores; its name
+  in the list reads "update on a task cancelled inside its change throws CancellationError and writes
+  nothing". `updateCancelledBefore` was strict already.
+- **Criterion 13** (review S2). `Sources/LedgerDomain/Protocols/Repositories.swift:33-35`: `save` says it is for
+  a new program or a whole replacement, and that an earlier copy saved there writes back the misses and the
+  exercises a workout's save stored since; it points to `update`.
+- **Criterion 14** needed no code: it is what was built (clauses `updateKeepsActivity`, `updateRefuses`).
+- **The notes.** "Criteria → tests" and open question 5 above said the in-memory store's atomicity is shown
+  "by overlap". Corrected in place: it holds by construction (one `state.write`, a `Mutex.withLock` around a
+  synchronous body, and `change` is synchronous, so nothing can come between the read, the change and the
+  store; a workout's save writes through the same lock). The overlap is only how a test would notice a
+  later regression.
+
+Not pinned by a contract clause: "cancelled while it waited for the lock". From outside a store, a test
+cannot tell that a call is waiting, on either store, without a hook; for the database it is
+`cancelledWhileItWaitsForTheWriter_storesNothing`, and for both stores the held probe
+(`ProbedProgramRepositoryTests.heldUpdate_cancelled_storesNothing`) and the tester's
+`cancelledWhileWaiting_storesAllOrNothing`. In the in-memory store it is the same line as "before the call"
+(`:71`), which the strict clause `updateCancelledBefore` pins.
+
+### The review's nits
+
+| Nit | Done or declined |
+|---|---|
+| N1 activate only when the flag turns on | **Declined, for F17.** It changes what `update` does when two programs are flagged active, a state no path produces today; `save` does the same through the shared `write`, and the ruling was "nothing that changes behaviour beyond the criteria". Whoever builds the sync that can leave two active should change both. |
+| N2 the clock is read before the wait for the writer | **Declined:** the module's convention in every write; flagged for F17, as the review says. |
+| N3 the unreachable `?? changed` | **Done.** Both stores throw `missingRow` there (`GRDBProgramRepository.swift:82-85`, `InMemoryProgramRepository.swift:81-84`). |
+| N4 "on a thread of the store's own" | **Done:** removed (`Repositories.swift:56`). |
+| N5 what the compiler already refuses | **Done:** the doc says `change` is synchronous, so only `observeActive()` compiles there, and that it deadlocks or traps (`Repositories.swift:56-60`). |
+| N6 three reads of five tables | **Declined:** no profile asks for it; the review's own remedy is noted for S13. |
+| N7 the fixture's shape as numbers | **Done:** `concurrentUpdatesAndSaves_loseNothing` derives them from `program.daysPerWeek` and the slots. |
+| N8 helpers written twice | **Declined:** each pair sits on two sides of `LedgerTestSupport`'s public boundary; merging them makes five test helpers public for a few lines saved. |
+| N9 `HistoryModel.update` | **No action:** a tester's file; the review accepts the mechanical edit. |
+
+### For the tester: your pins
+
+I expected some of your tests to pin the in-memory store's old answer (stores everything and returns). None
+does: every one asserts "all or nothing", which the new behaviour keeps, so **no test of yours fails** and
+none was touched. These now accept more than either store does, and could be made strict:
+
+| Test (`Adversarial/ProgramUpdateCancelAdversarialTests.swift`) | In memory, before | In memory, now (as the database) |
+|---|---|---|
+| `cancelledInsideTheChange_storesAllOrNothing` (both `afterComputing`) | returns, all stored | `CancellationError`, none |
+| `cancelledWhileWaiting_storesAllOrNothing` | returns, all stored (none only if the task had not entered the call) | `CancellationError`, none, unless the write finished before the cancellation |
+| `cancelledBeforeTheCall_storesAllOrNothing` | `CancellationError`, none | the same |
+
+The counts in F11-S3-1 (in memory: 83 calls with all, 5 with none) will have moved towards none.
+
+### Code lines
+
+This round: `InMemoryProgramRepository.swift` +7 −3, `GRDBProgramRepository.swift` +4 −1, against 57d12ab.
+The slice in all: 45 added, 3 removed against 312728c (planned: about 45).
+
+### The runs
+
+On the final tree of this round, from the worktree root:
+
+| Run | Result |
+|---|---|
+| `swift build --package-path LedgerKit --only-use-versions-from-resolved-file --build-tests` | exit 0 |
+| Host `LedgerPersistenceTests` (`swift test … --filter '^LedgerPersistenceTests\.'`), the tester's suites included | exit 0; 549 tests in 125 suites passed; 1 known issue (the F7-10 seed test's own). **Failing tests: none.** |
+| The fakes' contract tests, in that run (`InMemoryContractTests`) | program contract 18 clauses, storage 3, linked 9, all passed; the same counts on the GRDB repository |
+| Host `LedgerSyncTests` | exit 0; 276 tests in 48 suites passed; 13 known issues (the fake session client's own) |
+| `scripts/check.sh --lint-only` | exit 0 |
+| iOS simulator (iPhone 17, iOS 27.0), through the lock, `-only-testing:LedgerPersistenceTests`, otherwise the command of the first round | exit 0; bundle Passed: 548 tests, 537 passed, 0 failed, 10 skipped, 1 expected failure; bundle deleted |
+
+Not run: `LedgerDomainTests` and `LedgerDependenciesTests` (nothing of theirs changed but a doc comment in
+the Domain), `LedgerSyncTests` on the simulator, the full gate, watchOS, CI, the nightly seeds. No mutation
+check was repeated for the two new checks; the strict clause is what holds them.
+
+### Fix round 2 (F11-S3-2, 2026-10-06)
+
+A task cancelled inside a change whose result is refused before any statement threw the refusal on the
+database and `CancellationError` in memory. The database's order after `change` is: the id check
+(`Sources/LedgerPersistence/Repositories/GRDBProgramRepository.swift:78-80`), `ProgramRows.init`'s
+re-validation through `Slot.init` and `Program.init` (`:81`, `Records/ProgramRows.swift:17-32`), and only then
+its first statement (`ProgramRows.swift:56`), where GRDB throws `CancellationError`. The in-memory `update` now
+does the same: id check, `revalidated`, the cancellation check, then `store`
+(`Sources/LedgerFakes/InMemoryProgramRepository.swift:77-85`). Nothing in the database's order is beyond the
+fake: every later refusal (another program's ids, an unknown exercise, U+0000, an inexact weight) comes after
+a statement, so after the cancellation on both. `store` validates the result a second time; that is one
+redundant pass, kept so that `save`'s path is not touched. Product lines: +1 (46 in all).
+
+The tester's `ProgramUpdateCancelAlikeAdversarialTests.cancelledInsideTheChange_everyResult_sameEndingOnBothStores`
+passes unedited. Runs: host `LedgerPersistenceTests` exit 0, 552 tests in 126 suites passed (1 known issue, its own);
+host `LedgerSyncTests` exit 0, 276 tests in 48 suites passed; `scripts/check.sh --lint-only` exit 0. No
+simulator run this round (the orchestrator's gate follows).
 

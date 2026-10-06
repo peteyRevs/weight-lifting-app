@@ -8,10 +8,11 @@ import Synchronization
 /// host is run over stores that give way inside every call (`yields`), where an `await` between a check and
 /// its commit is a point another caller does reach.
 public actor StoreProbe {
-    /// A store call a session host makes.
+    /// A store call a session host makes, or the one a program builder makes (`updateProgram`, F11 S3).
     public enum Call: String, Sendable, CaseIterable {
         case append, envelopes, unreadableCount, highestSeq, uncompactedWorkoutIDs, newestWallClock, compact
         case materialize, activeProgram
+        case updateProgram
     }
 
     /// What a call made to fail throws.

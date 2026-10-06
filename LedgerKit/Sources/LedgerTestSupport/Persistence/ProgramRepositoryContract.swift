@@ -5,7 +5,7 @@ import LedgerPersistence
 /// `ProgramRepository`'s contract as named clauses (F05): criterion 2's round trip, saves that replace a
 /// program's weeks, days, slots and misses, re-validation through `Slot.init` and `Program.init` (F02 review
 /// N2), text holding U+0000 (refused, review N-a), the one active program, deletion, observation, and ids
-/// (review B1). Every clause gets a fresh, empty
+/// (review B1), and then `update`'s clauses (F11 S3, `updateClauses`). Every clause gets a fresh, empty
 /// repository that accepts slots naming `exercises` (a GRDB database must hold them first: `slot.exercise_id`
 /// is a foreign key).
 public enum ProgramRepositoryContract {
@@ -25,7 +25,7 @@ public enum ProgramRepositoryContract {
             "a week, day or slot id another program holds, even deleted or dropped, is refused; it is unchanged",
             otherProgramsIDs
         )
-    ]
+    ] + updateClauses
 
     /// The exercises the contract's programs name.
     public static let exercises = Seeders.catalog(count: 6, version: 1).exercises

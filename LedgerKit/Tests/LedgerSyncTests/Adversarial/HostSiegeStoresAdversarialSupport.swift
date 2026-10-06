@@ -131,6 +131,10 @@ struct SiegeProgramRepository: ProgramRepository {
         try await base.save(program)
     }
 
+    func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        try await base.update(id, change)
+    }
+
     func setActive(_ id: ProgramID) async throws {
         try await base.setActive(id)
     }

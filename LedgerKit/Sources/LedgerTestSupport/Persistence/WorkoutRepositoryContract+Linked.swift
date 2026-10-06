@@ -39,7 +39,7 @@ public extension WorkoutRepositoryContract {
             "a save that is refused changes nothing: no workout, no miss, no program change, and the log whole",
             refusedSaveChangesNothing
         )
-    ]
+    ] + linkedUpdateClauses
 }
 
 public extension Program {
