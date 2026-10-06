@@ -12,6 +12,7 @@
         case iconPillButton = "IconPillButton"
         case ledgerIcon = "LedgerIcon"
         case pillButton = "PillButton"
+        case pillButtonStates = "PillButton states"
         case primaryButton = "PrimaryButton"
         case restRing = "RestRing"
         case setRow = "SetRow"
@@ -35,6 +36,7 @@
             case .iconPillButton: IconPillButtonGallery().ledgerGalleryPage()
             case .ledgerIcon: Self.iconsPage
             case .pillButton: PillButtonGallery().ledgerGalleryPage()
+            case .pillButtonStates: PillButtonStatesGallery().ledgerGalleryPage()
             case .primaryButton: PrimaryButtonGallery().ledgerGalleryPage()
             case .restRing: RestRingGallery().ledgerGalleryPage()
             case .setRow: SetRowGallery().ledgerGalleryPage()
@@ -109,6 +111,10 @@
 
     #Preview("PillButton") {
         DesignPreview.pillButton.content
+    }
+
+    #Preview("PillButton states") {
+        DesignPreview.pillButtonStates.content
     }
 
     #Preview("PrimaryButton") {

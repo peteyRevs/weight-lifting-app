@@ -111,6 +111,8 @@ struct CopyAuditTests {
         #"Image(systemName: isDone ? "checkmark.circle" : "circle")"#,
         #"Label(title, systemImage: ["play.fill", "pause.fill"][state])"#,
         #"LedgerLogger(category: "today")"#,
+        #"logger.category("today").log.error("Today failed for \(workout?.name ?? "none")")"#,
+        "private var logger: LedgerLogger {\n    injectedLogger.category(\"onboarding\")\n}",
         #"logger.log.error("Today failed for \(workout?.name ?? "none")")"#,
         #"Logger.persistence.notice("Seeded the catalog")"#,
         "launchLogger.log.debug(\n    \"Launch: \\(String(describing: event), privacy: .public)\"\n)",
@@ -125,7 +127,9 @@ struct CopyAuditTests {
         #"let view = Text(isStock ? systemName : "Custom exercise")"#,
         "func label(_ field: Field) -> String {\n    switch field { case .identifier: \"Barcode\" }\n}",
         #"state = .error("Can't show today")"#,
-        #"let view = Row(title) { log("Tapped") }.accessibilityIdentifier(id)"#
+        #"let view = Row(title) { log("Tapped") }.accessibilityIdentifier(id)"#,
+        #"let chips = filters.category("Push day")"#,
+        #"let title = logger.category(named, "Push day")"#
     ])
     func lookalike_isAFinding(code: String) throws {
         let findings = try Self.findings(extra: ["Other.swift": code])

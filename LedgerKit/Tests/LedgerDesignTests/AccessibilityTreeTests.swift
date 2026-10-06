@@ -168,6 +168,18 @@
                 PillButton("Chest", style: .filled) {}.environment(\.ledgerDrawsPressed, true)
             },
             TreeCase("PillButton, ghost", [.button("Skip setup")]) { PillButton("Skip setup", style: .ghost) {} },
+            TreeCase("PillButton, ghost, flush with the leading edge", [.button("Back")]) {
+                PillButton("Back", style: .ghost, flush: .leading) {}
+            },
+            TreeCase("PillButton, outline, disabled", [.button("Finish", .notEnabled)]) {
+                PillButton("Finish") {}.disabled(true)
+            },
+            TreeCase("PillButton, filled, disabled", [.button("Chest", [.selected, .notEnabled])]) {
+                PillButton("Chest", style: .filled) {}.disabled(true)
+            },
+            TreeCase("PillButton, ghost, disabled", [.button("Back", .notEnabled)]) {
+                PillButton("Back", style: .ghost, flush: .leading) {}.disabled(true)
+            },
             TreeCase("IconPillButton", [.button("Swap exercise")]) {
                 IconPillButton("Swap exercise", icon: .swap) {}
             },

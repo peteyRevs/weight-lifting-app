@@ -151,6 +151,9 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
 ## 7. SwiftUI rules
 
 - One primary view per file, ≤ 150 lines. Extract subviews early.
+- A screen that scrolls is its pinned parts plus `ScrollView { <Screen>Page(model:) }`: the
+  page view holds everything that scrolls and never a scroll view, and the screen has one
+  layout (`docs/testing-strategy.md` §2.6 says which test pins what).
 - Every view has a `#Preview` for each meaningful state (empty, loading,
   populated, error). Previews use `LedgerFakes` fixtures and the keys' seeded `previewValue`s (ADR-008).
 - Only `LedgerDesign` tokens for color, type, spacing, radius. A raw
@@ -283,8 +286,9 @@ hand.
      `Text(…)`, interpolated or not.
    - A literal is not copy when no lifter sees its argument: an argument
      labelled `identifier:`, `…Identifier:`, `systemImage:`, `systemName:` or
-     `category:`, the argument of `.accessibilityIdentifier(…)`, and the
-     message of a level call on a logger. The label is the argument's own (it
+     `category:`, the argument of `.accessibilityIdentifier(…)`, the message
+     of a level call on a logger, and the category a logger is given
+     (`logger.category("onboarding")`). The label is the argument's own (it
      opens the argument), and it covers every literal in that argument's
      expression: both arms of a ternary, an interpolation. A name that only
      reads like a label (a ternary's arm, a `case`) covers nothing.
@@ -359,8 +363,9 @@ which fails if the audit starts to find it, so this list stays true.
   `Text(day.rawValue.capitalized)`.
 - A call that only reads like an allowed one: any argument labelled
   `identifier:`, `…Identifier:`, `systemImage:`, `systemName:` or `category:`
-  (`Chip(category: "Push day")`), and a level call on anything named like a
-  logger (`toastLogger.error("…")`).
+  (`Chip(category: "Push day")`), and a level call or `category(…)` on
+  anything named like a logger (`toastLogger.error("…")`,
+  `toastLogger.category("…")`).
 - What a key's value is. The audit does not read an interpolation's type or
   expression: `"Week \(week + 1)"` and an optional (keyed `%@`, and shown as
   `Optional(3)`) pass it. The compiler warns of the optional, and a warning
@@ -479,7 +484,9 @@ starts to flag it, so this list stays true.
 - Stores map errors to user-facing presentation state; they never surface raw
   error descriptions.
 - Logging via `os.Logger` with subsystem `com.petearevalo.Ledger` and a category per
-  module. No `print`. No logging of health data values.
+  module. No `print`. No logging of health data values. A store logs through the
+  injected logger under its module's category (`logger.category("onboarding")`), and
+  never logs a task's cancellation as an error.
 
 ---
 

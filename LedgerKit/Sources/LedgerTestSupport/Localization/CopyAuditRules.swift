@@ -24,8 +24,9 @@ public enum CopyAuditRules {
     ]
 
     /// Whether no lifter sees a literal that stands in `argument`: an allowed label, the argument of
-    /// `.accessibilityIdentifier(…)`, or the message of a level call on a logger (`logger.error(`,
-    /// `launchLogger.log.debug(`).
+    /// `.accessibilityIdentifier(…)`, the message of a level call on a logger (`logger.error(`,
+    /// `launchLogger.log.debug(`), or the category a logger is given (`logger.category("onboarding")`:
+    /// standards §8 asks a module to log under its own).
     public static func isUnseen(_ argument: SwiftCallArgument) -> Bool {
         if unseenLabels.contains(argument.label) || argument.label.hasSuffix("Identifier") {
             return true
@@ -35,6 +36,7 @@ public enum CopyAuditRules {
         }
         let levels = /(?:[Ll]ogger|\.log)(?:\.\w+)*\.(?:debug|info|notice|warning|error|fault|critical|trace)$/
         return argument.callee.hasSuffix("accessibilityIdentifier") || argument.callee.contains(levels)
+            || argument.callee.contains(/[Ll]ogger\.category$/)
     }
 
     /// What a file that is not a copy file holds and must not: lookups, literals a lifter could see, and entries

@@ -4,8 +4,10 @@ public extension View {
     /// Grows the view to at least 44 × 44 pt, the iOS minimum hit target (engineering-standards §7),
     /// and makes all of that area tappable, without changing what it draws. Components apply it
     /// inside their button's label, so the button (and its accessibility frame) is the full target.
-    func ledgerHitTarget() -> some View {
-        frame(minWidth: LedgerHitTarget.minimum, minHeight: LedgerHitTarget.minimum)
+    /// A view smaller than the target stands at `alignment` in it: in its middle unless it has to
+    /// line up with an edge.
+    func ledgerHitTarget(alignment: Alignment = .center) -> some View {
+        frame(minWidth: LedgerHitTarget.minimum, minHeight: LedgerHitTarget.minimum, alignment: alignment)
             .contentShape(Rectangle())
     }
 }
@@ -51,8 +53,8 @@ extension View {
     }
 }
 
-/// The components' button style: the label dims while pressed. `PrimaryButton` draws its own
-/// disabled look; the others have none (slice 2, decision 7).
+/// The components' button style: the label dims while pressed. `PrimaryButton` and `PillButton`
+/// draw their own disabled look; `IconPillButton` has none (slice 2, decision 7).
 struct LedgerPressStyle: ButtonStyle {
     /// The label's opacity while a finger is down.
     static let pressedOpacity = 0.6

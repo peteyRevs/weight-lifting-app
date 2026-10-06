@@ -91,13 +91,14 @@
                 _ sheet: some View,
                 title: String,
                 height: CGFloat,
-                _ appearance: SnapshotAppearance
+                _ appearance: SnapshotAppearance,
+                outsideScrollViews: Bool = false
             ) throws -> CGFloat {
                 let page = VStack(spacing: 0) {
                     Text(verbatim: "Sheet top")
                     sheet.frame(height: height)
                 }
-                let elements = page.accessibilityElements(appearance)
+                let elements = page.accessibilityElements(appearance, outsideScrollViews: outsideScrollViews)
                 let top = try #require(elements.first { $0.label == "Sheet top" }, "\(elements)")
                 let heading = try #require(elements.first { $0.label == title }, "\(elements)")
                 return heading.frame.minY - top.frame.maxY
@@ -126,10 +127,12 @@
                 let sheet = SheetChrome(title, cancel: "Cancel") {} content: {
                     ScrollView { VStack(alignment: .leading) { Self.rows(20) } }
                 }
-                let offset = try Self.titleOffset(sheet, title: title, height: Self.mediumDetent, appearance)
+                let offset = try Self.titleOffset(
+                    sheet, title: title, height: Self.mediumDetent, appearance, outsideScrollViews: true
+                )
                 #expect(Self.isAtTheTop(offset, size), "\(size): the title is \(offset) pt below the sheet's top")
-                let inSheet = try #require(sheet.frame(height: Self.mediumDetent).accessibilityElements(appearance)
-                    .first { $0.label == title })
+                let inSheet = try #require(sheet.frame(height: Self.mediumDetent)
+                    .accessibilityElements(appearance, outsideScrollViews: true).first { $0.label == title })
                 let ideal = SheetChrome(title, cancel: "Cancel") {} content: { EmptyView() }
                 let needed = try #require(ideal.accessibilityElements(appearance).first { $0.label == title })
                 #expect(abs(inSheet.frame.height - needed.frame.height) < 0.5, "\(size): \(inSheet), \(needed)")
