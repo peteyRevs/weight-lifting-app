@@ -37,7 +37,8 @@ authoritative; the plan differs:
     script suite that runs anywhere. It has no Xcode, so step 0 checks only the tools. `Check` `needs:` it:
     a red static check skips `Check`, costs no macOS minutes, and the run is red. `Check` runs the
     adversarial suites whose header says `# needs macOS:` (one of their cases needs xcodebuild, xcrun,
-    Apple's `/usr/bin` shims or BSD sed): catalog-version-attack, ci-post-clone, coverage-gate and xcode27.
+    Apple's `/usr/bin` shims or BSD sed): catalog-version-attack, ci-post-clone, coverage-gate,
+    string-catalogs, string-catalogs-tester and xcode27.
     `adversarial/run.sh` picks the half from `LEDGER_ADV_SUITES` (`portable`, `macos`; unset runs all).
     SwiftLint's Linux build loads SourceKit from the image's Swift toolchain, where the job points
     `LINUX_SOURCEKIT_LIB_PATH`; without the library SwiftLint 0.65.1 stops with a fatal error, and the
@@ -76,6 +77,23 @@ authoritative; the plan differs:
   module that only a watch bundle can measure is listed in `watchOnly` in
   `scripts/coverage-thresholds.json` (none today). Only `--ios-only` excuses it, and only while no
   bundle measures it.
+- **String catalogs (F09).** Step 3 of `check.sh` runs `scripts/check-string-catalogs.sh` right after the
+  iOS build and before the iOS tests, in every mode that builds iOS: `Check` (`--ios-only --skip-static`)
+  runs it, and so does the full local gate. The watch build is never read. During the build the compiler
+  writes the keys it extracted from each source file (`.stringsdata`, under `.derivedData`). The script
+  compares each `LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` with its module's keys: the
+  catalog must hold exactly those keys, byte for byte, and read as `xcrun xcstringstool sync` would write
+  it. A red step names each lookup that is not in a copy file, each key the copy files look up that the
+  catalog lacks and each catalog key no code looks up, or shows a diff against the tool's output. The
+  author corrects the catalog, or the lookup, and pushes again. A catalog with no `.stringsdata` to compare with fails as well, so a build folder
+  laid out differently cannot pass unnoticed; a catalog in a watch module fails the same way, since `Check`
+  builds no watch target (they get catalogs with F18). A record run (`--record-snapshots`) stops at a failing
+  catalog before it records. A build served from the compilation cache writes the files too: a cache hit
+  replays a compile's `.stringsdata` with its other outputs (`Using CAS output localization-strings` in
+  the build log). Measured on a developer Mac on 2026-10-04 with `COMPILATION_CACHE_ENABLE_CACHING=YES`:
+  one module's object folder was moved aside, the next build replayed every one of its compiles from the
+  cache, and the step passed on the files it wrote. Not yet seen: the runner itself, with a cache that
+  another run saved.
 - §5: scripts run from `ci_scripts/` (use `$CI_PRIMARY_REPOSITORY_PATH`); external TestFlight
   needs a clean build; App Review submission is manual. §6: `bootstrap-sha` skips pre-F01 history.
 
