@@ -144,15 +144,15 @@ actor RacyHost: WorkoutSessionClient {
         let forwarding = Task {
             var isFirst = true
             var held: WorkoutSessionUpdate?
-            var wasLive = false
+            var before: WorkoutSessionUpdate?
             for await update in inner {
                 let first = isFirst
                 isFirst = false
-                let passed = await self.passed(update, first: first, afterLive: wasLive, holding: &held, at: place)
+                let passed = await self.passed(update, first: first, after: before, holding: &held, at: place)
                 for forwarded in passed {
                     continuation.yield(forwarded)
                 }
-                wasLive = update.live != nil
+                before = update
             }
             continuation.finish()
         }
@@ -160,28 +160,40 @@ actor RacyHost: WorkoutSessionClient {
         return stream
     }
 
-    /// What a stream is given for `update`: the update; or, when a stream fault strikes, it twice, nothing,
-    /// or nothing until the next one has gone first.
+    /// What a stream is given for `update`, which follows `before` on it: the update; or, when a stream fault
+    /// strikes, it twice, nothing, or nothing until the next one has gone first.
+    ///
+    /// A strike is a wrong a reader can see. The engine accepts events that change nothing ("+30s" on a rest
+    /// that ends later), and the host publishes an update for each, equal to the one before it. Such an update
+    /// twice, or missing, on a stream opened in flight is the stream of an honest host that registered it one
+    /// update sooner or later; and two equal updates the wrong way round are the right stream.
     private func passed(
         _ update: WorkoutSessionUpdate,
         first: Bool,
-        afterLive: Bool,
+        after before: WorkoutSessionUpdate?,
         holding held: inout WorkoutSessionUpdate?,
         at place: String
     ) -> [WorkoutSessionUpdate] {
         if let waiting = held {
             held = nil
+            if waiting == update {
+                // Nothing went wrong, so nothing struck: the fault waits for its next moment.
+                strikes = 0
+                struckAt = "nowhere"
+            }
             return [update, waiting]
         }
         guard !first else {
             let onNothing = update.state != nil && strikes(.opensAStreamOnNothing, beside: 1, at: place)
             return [onNothing ? WorkoutSessionUpdate(state: nil) : update]
         }
-        if strikes(.repeatsAnUpdate, at: place) {
+        let afterLive = before?.live != nil
+        let changesTheWorkout = update.live != before?.live
+        if changesTheWorkout, strikes(.repeatsAnUpdate, at: place) {
             return [update, update]
         }
         // Only after a live update, so that a reader waiting to be told of a workout has been.
-        if afterLive, strikes(.dropsAnUpdate, at: place) {
+        if afterLive, changesTheWorkout, strikes(.dropsAnUpdate, at: place) {
             return []
         }
         if afterLive, strikes(.swapsTwoUpdates, at: place) {
