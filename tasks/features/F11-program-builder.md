@@ -175,3 +175,38 @@ their behaviour row by row and the worked examples are in the plan: "The editing
 13. **The Domain's rules.** Foundation only; exact decimals, no `Double`; public pure types `nonisolated` and
     `Sendable` as their neighbours are; the three ranges of `Slot` become public constants with no change in
     behaviour (the existing tests pass untouched); 100 % line coverage of the new files.
+
+## Plan amendments — slice S3, the atomic program update (orchestrator, 2026-10-06)
+
+Cut from `main`, independent of S1. One new requirement on `ProgramRepository`, so that a builder edit is
+applied to the program as it is stored at that moment and can never write back an older copy of what a
+workout's save put there (a slot's misses; a swap's exercise). The plan's "Saving and a live workout" gives
+the reasons and the code it stands on; "Inputs the implementer needs › S3" gives the signatures and files;
+Risks 1 and 2 apply. About 45 product lines; most of the slice is contract and tests. Accepted when:
+
+1. **The requirement.** `func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program`
+   on `ProgramRepository`, with no default body. It applies `change` to the program `id` as stored now and
+   saves the result, in one step that no other write can come between, and returns the program as stored
+   afterwards.
+2. **Nothing to update.** A program that is not stored, or is deleted, throws the repository's missing-row
+   error; `change` is not called and nothing is written.
+3. **A change that throws** is rethrown as it is; nothing is written and no observer is woken.
+4. **A result that `save` would refuse** (an id another program holds, a slot whose exercise has no row, text
+   the store refuses) is refused with the same error, and so is a result with another id; nothing is written.
+5. **A change that returns the program as it was** writes no row and wakes no observer.
+6. **Rows.** Only rows that changed are written, a row the result no longer has is soft-deleted, as `save`
+   does; which program is active does not change.
+7. **Nothing is lost between a builder and a workout's save.** The losing sequence is the slice's first test:
+   read a program, save a finished workout that records a miss and a swap on it, then write the builder's edit.
+   Through `save` the miss and the swap are gone (the test shows it); through `update` both are kept. For
+   seeded interleavings of `update` calls and workout saves, the stored program equals the calls applied one
+   at a time in the order they were taken, on the database and on the in-memory stores alike.
+8. **Cancellation.** A call whose task is cancelled stores all of its change or none of it. What GRDB does
+   with a write whose task is cancelled is established by a test and written down, since S13 relies on it.
+9. **The in-memory stores follow** (ADR-008 decision 5): the same clauses of the shared contract pass on both;
+   the in-memory repository works under the one lock a workout's save takes. The unimplemented stub reports as
+   its neighbours do, and the probe forwards `update` and can hold it (S13's store test holds the first write).
+10. **Every other conformer compiles**: the four test doubles on `main` gain the requirement by a mechanical
+    edit, each listed in the notes (two are testers' files; the edit is sanctioned and audited).
+11. **No migration, no schema change**; the version fixtures and every existing contract clause are untouched
+    and pass.
