@@ -556,3 +556,159 @@ tells the author to add it.** `scripts/check-string-catalogs.sh:77-85`, `:137-14
 - `--record-snapshots` for real; the Xcode app; host previews of `LedgerDesign` and `LedgerWatchAppKit`.
 - The tester's files, including the implementer's edits to them (`TabsAdversarial.swift` and the adversarial
   suites), and the close-out in progress.
+
+## Slice S2 — review (G3 reviewer, 2026-10-05)
+
+Reviewed: `git diff 985a8fb..a016f8b` on `feat/F09-s2-domain` (54 product lines, 908 test lines, one line of
+`docs/architecture.md`, the notes), against the brief's "Plan amendments — slice S2" (five criteria), standards,
+architecture §5, ADR-007, decisions #15, #18 and #26, and the notes' S2 sections.
+
+**Verdict: approved. 0 Blocking, 0 Should fix, 6 Nits.**
+
+The three additions do what the five criteria say, and I could not make any of them give a wrong answer or trap.
+The Nits are two doc or naming points, one line of test, one small refactor and one sentence of the notes that
+would mislead S3. None needs to hold the PR.
+
+### What I ran
+
+- `/code-review` at effort `high` on the range (forked skill; 7 findings, triaged below). It built and ran nothing.
+- A standalone copy of `percentChange`'s arithmetic and of `Decimal.roundedToInt()` against exact `Int128`
+  arithmetic: 252,000 cases placed on an exact tie and one unit either side of it, with mantissas of 6 to 24
+  digits, plain, times the pound factor and times 10⁻⁷. No mismatch. The same probe ran every `nil` and clamp path.
+- The 56 `LedgerDomain` sources as committed (no tracked file was modified), compiled with `swiftc` in Swift 6
+  mode beside a search of my own that walks civil days and asks `scheduledDay(on:in:)` and `weekIndex(for:)`:
+  36,000 moments at any second of the day, 13 zones, a random week start, blocks of 2 to 9 weeks, a third of
+  them with weeks shuffled or an index moved to between −2 and count + 2. No mismatch.
+- Timing in that harness, optimised: a block that trains only on its last day answers in 0.14 ms at 1,000 weeks,
+  1.3 ms at 10,000 and 17 ms at 100,000; when the answer is tomorrow, 0.04, 0.4 and 3.8 ms.
+
+Scratch folder: `/private/tmp/claude-501/-Users-peterarevalo-Dev-workout-app/1007ba2a-4cb4-4801-a9fe-bc3f1e348a39/scratchpad/f09s2-g3`
+(`pc.swift` the percent probe, `brute/` the search).
+
+### Blocking
+
+None.
+
+### Should fix
+
+None.
+
+### Nits
+
+- n1. `LedgerDomain/Units/Volume.swift:40-51`: for a negative `previous` the sign follows the formula, so a rise
+  from −100 to 100 is −200 (run; pinned by `percentChange_negativePrevious_followsTheFormula`). The comment gives
+  the formula and not this consequence, and neither `Volume` nor `Weight` refuses a negative value, so "no volume
+  is negative" is a habit of the callers and not a property of the type. Fix: one sentence in the comment ("for a
+  negative `previous` the sign is the formula's, not the direction of the change"). Dividing by the magnitude
+  instead would be a change to the brief's formula, which is the orchestrator's to make.
+- n2. `LedgerDomain/Units/Volume.swift:37`: `thousands(in:)` is made by cutting the last character off
+  `compact(in:)`. It is right today and three tests hold the two together, but it formats, appends "k" and strips
+  it again, and it depends on the suffix being one character. Fix: a private `compactDigits(in:)` that returns
+  the `NumberText.fixed` string, with `compact` returning it plus "k". That changes `compact`'s body and not its
+  declaration or its output, which the existing tests pin; the notes' reading of "no existing declaration
+  changes" (decision 4) is stricter than the criterion.
+- n3. `LedgerDomainTests/Rules/WeekCalendarTests+NextScheduledDay.swift:60`: the length of the fixture's day is
+  checked with `#expect`, so after a change of zone rules the test goes on and can also report a wrong session
+  (Santiago 04-04 at 24 h 10 min would). The notes' decision 11 says it fails "with that message and not with a
+  wrong session". Fix: `try #require(end.timeIntervalSince(start) == Double(row.hours) * 3600, …)`.
+- n4. `LedgerDomainTests/Rules/NextScheduledDayPropertyTests.swift:8`: the suite is named for a function, where
+  testing-strategy §6 names suites for the source type and `VolumePropertyTests` in the same slice does. Fix:
+  `WeekCalendarPropertyTests` (25 characters, inside the lint's limit; the name is free).
+- n5. `LedgerDomain/Model/Loadable.swift:4`: the parameter is `T`, as §5 writes it; every other generic in
+  `Sources` has a word, and the brief's criterion 4 writes `Value`. I agree with the implementer's open question
+  1: rename it and change §5's sketch in one small change before S5, F08 or F10 write an extension with a `where`
+  clause. Nothing a caller writes today changes.
+- n6. `tasks/features/F09-today/implementation-notes.md:1901-1902` ("Inputs for S3"): "`nil` means … the rest
+  card says the last-week sentence". `nil` means no session is left in the block, which is also true in week 3 of
+  8 when the later weeks are empty; "This is the last week of the block" would then be false. Fix the sentence:
+  S3 says the last-week sentence only when `weekIndex(for: now) == weeks.count - 1`, and decides what an earlier
+  week with nothing left says (the brief has no copy for it).
+
+### The points the task named
+
+- **`nextScheduledDay`.** The moment becomes a day number once, in the calendar's zone; everything after is
+  integer days, so there is no second arithmetic to go wrong. The range `max(today + 1, blockStart) ..< blockEnd`
+  cannot invert: the guard gives `today + 1 <= blockEnd`, and `blockStart <= blockEnd` because a count is not
+  negative. It runs at most `7 × weeks.count` steps and stops at the first scheduled day past 9999-12-31, so it
+  ends for every program. It agrees with `scheduledDay(on:in:)` on every day of the block (my search, above),
+  including first-wins for a repeated index. Outside the block it follows `isBlockComplete` and not
+  `scheduledDay(on:in:)`: a week whose index is negative or not below `weeks.count` is never read (notes,
+  decision 6; no validated program has one). Before the block it gives the first session; on or after the last
+  day, `nil`. The table of all weeks is built on every call; at eight weeks that is microseconds and at 100,000
+  it is 4 ms, so I would not change it.
+- **`ScheduledDay` for S3.** `date` and the computed `weekday` give "Friday"; `dayTemplateID` finds the tag in
+  `program.days`; `weekIndex` against `weekIndex(for: now)` separates "Next up is Friday" from "next Monday" and
+  gives "Next: week %lld". Rule 46's "current week" is the program week, which is what `weekIndex` is. Enough,
+  with n6's caution.
+- **`percentChange`.** Exact: the subtraction and the multiplication by 100 are exact, a tie is a terminating
+  decimal, and the one division put every case on the right side of its tie with operands of 6 to more than 24
+  digits (run). One rounding, `.plain`, which is half away from zero for negatives too (−0.5 gives −1, −0.4
+  gives 0, −2.5 gives −3; run). Paths: zero `previous` gives `nil`; NaN in either volume gives `nil`; arithmetic
+  past `Decimal`'s range gives `nil`; beyond `Int` it clamps. Each is in the comment. The `nil` range starts
+  lower than the comment's "about 10¹⁶⁵" reads: Foundation overflows on the exponent (past 127) whatever room
+  the mantissa has, so 1 against 10⁻¹²⁷ is `nil` (10¹²⁹ in truth), and the greatest `Decimal` is `Int.max`
+  against 100 and `nil` against 1 (run). No lifter reaches either, so I rank nothing here. Nothing traps:
+  `Decimal` arithmetic returns NaN, and `Decimal(Int.min)` and `Decimal(Int.max)` go back to those `Int`s (run).
+- **`thousands(in:)`.** One source of truth by construction, kilograms included. Zero is tested on `gramReps`,
+  so only the zero volume reads "0", as criterion 3 says word for word; a small negative volume reads "0.0"
+  without a sign.
+- **`Loadable`.** §5's four cases, `failed(any Error)` being `failed(Error)`. `Sendable` when `T` is, which
+  compiles because `Error` is `Sendable`. Nothing surplus (no `Equatable`, no accessor, no `map`). Nothing
+  missing for S5: a store holds `Loadable<TodayModel>`, a view switches over it, a test matches with `if case`.
+  It has no `Equatable` (an `any Error` has none), so a view cannot hand it to `onChange(of:)` or
+  `animation(_:value:)`; S5, F08 and F10 should know that before they reach for either.
+
+### `/code-review`'s seven findings
+
+| Finding | Result |
+|---|---|
+| Negative baseline gives the wrong sign | n1 |
+| "0" and "0.0" for volumes that both round to zero | Criterion 3 as written; the implementer's open question 3. Not a defect of the slice. See "The deviations" |
+| `thousands` by string surgery | n2 |
+| A table of every week on each call | Measured; no action |
+| The midnight table depends on the zone database | The dependence is F02's too and each row checks its day's length; the `#expect` is n3 |
+| `ScheduledDay` beside `scheduledDay(on:in:)`, which returns a bare ID | The criterion names the type, and S2 may not change the older function. No action |
+| `Volume.thousands` beside `NumberText.thousands` | The criterion's name; `NumberText` is internal. No action |
+
+### The seven points
+
+1. **Module boundaries**: pass. 54 of the module's 56 files import Foundation and two import nothing
+   (`Loadable.swift` is one). No `Package.swift` change.
+2. **Concurrency**: pass. `ScheduledDay` is `Hashable, Sendable`; `Loadable` is conditionally `Sendable`; the
+   moment is a parameter, and nothing reads a clock, a UUID or `Calendar.current`.
+3. **Error handling**: pass. Nothing throws and nothing is swallowed; every `nil` and the clamp are documented.
+   `Loadable`'s comment says a raw error is never shown (§8).
+4. **Design fidelity**: not applicable (no UI). "24.2" and "0" fit the brief's "%@k" and criterion 8's "0k".
+5. **Accessibility**: not applicable.
+6. **Test quality**: pass, with n3 and n4. The references are independent of the new code (a day-by-day search
+   through `scheduledDay(on:in:)` with Foundation's calendar; `Int64` arithmetic for the percent); expected days
+   are read off the calendar; seeds come from `PropertySeed.all`; the two calendar tables are `Sendable` structs
+   with a `description` (the tie table is tuples of text); names follow §6; no sleep, no `withKnownIssue`,
+   nothing disabled.
+7. **Brief compliance**: pass. Each of the five criteria has tests, the three dated examples and the three
+   percent examples among them. Sources are additions only (99 lines added, none removed); `VolumeTests.swift` is
+   149 lines appended after the suite's closing brace and no line removed; the architecture line names the
+   function and its type; nothing of S3 is in the range; no lint suppression, `try!`, `as!` or `@unchecked`.
+
+### The deviations
+
+- **`percentChange` is `nil` when the result is not a number, and clamps beyond `Int`**: right. `Decimal` has no
+  honest integer for NaN, a sign chosen for an overflow can be wrong (the greatest `Decimal` after its own
+  negative is −200 in truth), and `nil` already means "hide the delta". Keep it.
+- **`Loadable<T>`, unconstrained**: right against §5. A constraint would stop a store holding a model that is not
+  `Sendable` and buys nothing the conditional conformance does not give. The name is n5.
+- **`ScheduledDay.weekday` computed**: right. A stored weekday could disagree with the date.
+- **`thousands` cut from `compact`; only exact zero reads "0"**: the zero rule is the criterion's. The
+  consequence is the implementer's open question 3: a week whose only set is under 50 units reads "0.0k". Look at
+  it in S4's screenshots and put it to Pete if it reads badly; the other rule is one condition. The cut is n2.
+- **The seeded suite's name**: the reason given (41 characters) is true of the name tried; a shorter one that
+  follows §6 exists (n4).
+
+### What I did not check
+
+- The slice's own tests. I ran none of them, on the host or on a simulator: the tester's untracked files were in
+  the tree, and the gate on `a016f8b` is the orchestrator's. The pass counts, the coverage figures and the
+  twenty mutants are the implementer's.
+- A device, and a watch whose `Int` is 32 bits.
+- GitHub's runner and its zone database (the three 25-hour rows are new).
+- The tester's files.

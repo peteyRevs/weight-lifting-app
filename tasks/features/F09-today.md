@@ -130,3 +130,34 @@ the pure presentation; S4 the views; S5 the store and wiring; S6 the live sessio
 - Week strip cells speak as F06's `WeekStrip` does (its pinned VoiceOver tree), not the phrase in "Non-functional".
 - There is no resume-timer pulse to disable. `TodayRoute` gains `.openProgram`; `onRoute` is synchronous.
 - Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above.
+
+## Plan amendments — slice S2, Domain additions (orchestrator, 2026-10-05)
+
+S1 (the tab shell) is in review as #28; S2 is built on its tip and its PR opens after #28 merges. This section is
+S2's specification; where it and the body above disagree, this section wins. Signatures on `main` are in
+`F09-today/implementation-notes.md`, "Inputs the implementer needs › S2".
+
+S2 adds three small things to `LedgerDomain` that the Today presentation (S3) needs. Everything is additive: no
+existing declaration changes, and nothing the app shows changes.
+
+1. **`WeekCalendar.nextScheduledDay(after:in:)`** returns the first day after the given moment's calendar day, in
+   the calendar's time zone, on which the program schedules a session, as a `ScheduledDay`: its `CivilDate`, the
+   program week's index, its `Weekday` and the `DayTemplateID`. It looks no further than the block's last week and
+   returns `nil` when no session is left. A moment before the block begins gives the block's first session. Each
+   candidate day is judged by its own program week, as `scheduledDay(on:in:)` judges it, so the answer does not
+   depend on which weekday the block began or on a stats week that straddles two program weeks. Days are calendar
+   dates (ADR-007): a date a time zone once skipped is still a day of the block and may be the answer.
+   With the 4-day program of spec §6.4 begun on Monday 2026-09-14: after Wednesday 09-16 it is Friday 09-18 (Upper
+   B, week index 0); after Saturday 09-19 it is Monday 09-21 (Upper A, week index 1); week 8 schedules three
+   sessions, so after its Friday it is `nil`.
+2. **`Volume.percentChange(from:)`** is the change from a previous volume in whole percent, rounded half away from
+   zero, computed exactly (no `Double`): 24,180 lb against 22,400 lb is 8; 21,728 against 22,400 is −3; equal volumes
+   give 0. It is `nil` when the previous volume is zero, and when the change cannot be computed as a number (a
+   volume that is not a number, or a result too large for `Decimal`); a change beyond `Int` is clamped. It never
+   traps, whatever the two volumes. (Revised after G2 round 1.)
+3. **`Volume.thousands(in:)`** is the number `compact(in:)` prints, without its "k": "24.2" for 24,180 lb, and the
+   same conversion to kilograms as `compact`. Zero reads "0"; every other volume keeps one decimal, and a volume too
+   small to show reads "0.0" (and "0.0k" through `compact`), never an arbitrary number. (Revised after G2 round 1.)
+4. **`Loadable<T>`** is the type `docs/engineering-standards.md` §5 names for a screen's load state, written as §5
+   writes it: `idle`, `loading`, `loaded(T)`, `failed(any Error)`, `Sendable` when its value is.
+5. `LedgerDomain` still imports Foundation only; the new code is covered line for line; no existing test changes.

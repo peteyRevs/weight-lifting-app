@@ -1630,3 +1630,446 @@ support: `StringCatalog.swift` 209 lines (was 181), `SwiftSource.swift` 148 (115
 - §7's first known limit is narrowed rather than removed (it still holds for literals that are not lookups and for
   a module without a catalog). Accepted.
 - `main` (F10 S1, #27) is merged into the branch before the gate that precedes the push.
+
+## Slice S2 — Domain additions (G1 implementer, 2026-10-05)
+
+Branch `feat/F09-s2-domain` at `985a8fb` (the specification). No commits. Paths that start with a module name are
+under `LedgerKit/Sources/`; test paths are under `LedgerKit/Tests/LedgerDomainTests/`. The specification is the
+brief's last section ("Plan amendments — slice S2"); "the task" below is the orchestrator's message that started
+this slice.
+
+### What landed
+
+**LedgerDomain (product, 54 lines)**
+- `Rules/WeekCalendar.swift`, appended after the schedule helpers:
+  - `public struct ScheduledDay: Hashable, Sendable` with `date: CivilDate`, `weekIndex: Int`,
+    `dayTemplateID: DayTemplateID`, a public memberwise `init`, and `weekday: Weekday` computed from `date`.
+  - `WeekCalendar.nextScheduledDay(after date: Date, in program: Program) -> ScheduledDay?`.
+- `Units/Volume.swift`, after `compact(in:)`: `thousands(in units: Units) -> String` and
+  `percentChange(from previous: Volume) -> Int?`.
+- `Model/Loadable.swift` (new): `public enum Loadable<T> { case idle, loading, loaded(T), failed(any Error) }` and
+  `extension Loadable: Sendable where T: Sendable {}`.
+
+Nothing that existed changed: `git diff -U0 985a8fb -- LedgerKit/Sources` is two hunks of added lines (+57 in
+`WeekCalendar.swift`, +26 in `Volume.swift`) and the new file. Nothing uses the new code yet.
+
+**Tests (27 new, in `LedgerDomainTests`)**
+- `Support/Fixtures+Schedule.swift` (new): spec §6.4's four days and its 8-week schedule
+  (`Fixtures.fourDayProgram(startDate:)`), and a block that trains every day (`everyDayProgram`).
+- `Rules/WeekCalendarTests+NextScheduledDay.swift` (new; 3 tests of the `WeekCalendarTests` suite): a table of
+  16 moments in §6.4's block begun on 2026-09-14, the brief's three among them; one instant read in three zones;
+  a table of 23 moments around midnight in six zones.
+- `Rules/WeekCalendarTests+NextScheduledDayBlocks.swift` (new; 8 tests of the same suite): a block begun
+  midweek under every week start, empty weeks, nothing scheduled, no weeks, weeks edited after validation, a
+  block that runs past 9999-12-31, extreme moments, a 5,000-week block, and the `ScheduledDay` value.
+- `Rules/NextScheduledDayPropertyTests.swift` (new; 2 seeded tests, tag `.property`): random blocks, zones,
+  week starts and moments against a slow day-by-day reference written in the test.
+- `Units/VolumeTests.swift`: 10 tests appended in two extensions (`git diff 985a8fb` shows 149 insertions and no
+  deletion in it).
+- `Units/VolumePropertyTests.swift` (new; 2 seeded tests): the percent against integer arithmetic; `thousands`
+  against `compact`.
+- `Model/LoadableTests.swift` (new; 2 tests).
+
+**Docs**: `docs/architecture.md` §5, the `WeekCalendar` line, names the next scheduled day. Architecture lists
+neither `Volume`'s formatting nor `Loadable`, so it has no other line to change.
+
+### Decisions and deviations
+
+1. **`Loadable` is standards §5's, where §5, the brief and the plan differ.** §5
+   (`docs/engineering-standards.md:129-130`) writes `enum Loadable<T> { case idle, loading, loaded(T),
+   failed(Error) }`. The brief's criterion 4 (`tasks/features/F09-today.md:157-158`) names the parameter `Value`,
+   and the plan's shape (this file, "Inputs › S2") constrains it, `Loadable<Value: Sendable>`. As the task rules,
+   §5 wins on both: the parameter is `T` and it is unconstrained. Three things are not differences:
+   - `failed(any Error)` is §5's `failed(Error)`, the same type, spelled with `any` as the module spells every
+     existential (`any Decoder`, `any Encoder`).
+   - `public`, without which no feature could use it.
+   - `Sendable` when `T` is (criterion 4), as a conditional conformance. §5 does not forbid it and §4 asks it of
+     every type that crosses an isolation boundary. A value that is not `Sendable` can still be held
+     (`LoadableTests.sendable_whenItsValueIs`).
+
+   Nothing else is added: no `Equatable` (an `any Error` has none), no `value` accessor, no `map`. See open
+   question 1 on the parameter's name.
+2. **`percentChange` is `nil` in one more case than the task names.** The task says it "returns `nil` only for a
+   zero previous volume"; the specification says "`nil` when the previous volume is zero" and "never traps,
+   whatever the two volumes". Built:
+   - Zero previous: `nil`.
+   - A change beyond `Int`: clamped to `Int.min` or `Int.max`. This is the decision the task asks for.
+   - A result that is not a number: `nil`. That is a NaN volume (`Volume(gramReps: .nan)` can be built, though
+     never encoded or decoded), or arithmetic that leaves `Decimal`'s own range of about 3.4 × 10¹⁶⁵, where
+     `Decimal` gives NaN and does not trap (measured on the host: `Decimal.greatestFiniteMagnitude * 100`, the
+     same value divided by `leastNonzeroMagnitude`, and `x / 0` are all NaN).
+
+   Why not a number for the third case. No integer is honest there: `greatestFiniteMagnitude` after its own
+   negative is −200 % in truth, but the difference overflows, so a value chosen by sign would be a wrong number,
+   and 0 would read as "no change". `nil` hides the delta, which is what Today does when it has nothing to
+   compare. `WorkoutState.elapsed(at:)` maps NaN to zero (`Model/WorkoutState.swift:111`), but it has no optional
+   to return. A volume in the app cannot get there: weights are not negative and 10¹⁶⁵ gram·reps is out of reach.
+   Left unguarded, the result would have been garbage, not a trap: `NSDecimalNumber(decimal: .nan).intValue`
+   returned 4382196393 on the host, and NaN compares below every number, so a clamp alone would have given
+   `Int.min`. See open question 2.
+3. **`percentChange`'s arithmetic.** `(self − previous) ÷ previous × 100`, all in `Decimal`, then one rounding,
+   half away from zero (`Decimal.roundedToInt()`, `Units/NumberText.swift:19`; the clamp comes before it and
+   cannot move a value inside the range). It is the brief's rule as written ("delta = (this −
+   previousCompleteWeek) / previousCompleteWeek"), so:
+   - It is the same number in pounds and kilograms, and for a pound volume against a kilogram one.
+   - A negative previous volume keeps the formula's sign: −50 after −100 is −50 (pinned by
+     `percentChange_negativePrevious_followsTheFormula`). No volume in the app is negative.
+   - How exact: the subtraction and the multiplication are exact, and the one division carries 38 significant
+     digits. A tie is a terminating decimal and comes out exact (the tie rows, in pounds and in kilograms). The
+     rounding is right for any two volumes that differ by fewer than about 5 × 10³⁴ of their last decimal place
+     (for pounds to the hundredth, 5 × 10²⁷ gram·reps). Beyond that a result within one part in 10³⁷ of a tie
+     could round the other way; I did not build a remainder check for it. The seeded test compares against
+     integer arithmetic up to 10¹⁰ lb in hundredths.
+4. **`thousands(in:)` is cut from `compact(in:)`**: `String(compact(in: units).dropLast())`, with "0" for the
+   zero volume. The two therefore agree by construction, pounds and kilograms, grouping and sign included. The
+   other way to share the digits, a helper that both call, would change `compact`'s body, and the slice changes
+   no existing declaration.
+   - "Zero" is the zero volume (`gramReps == 0`), as the specification says ("Zero reads "0"; every other volume
+     keeps one decimal"). A volume that only rounds to zero keeps the decimal: 40 lb reads "0.0", and 50 lb reads
+     "0.1". See open question 3.
+   - For volumes beyond `Int` it prints what `compact` prints. That is F02's behaviour and not this slice's:
+     `Decimal.roundedToInt()` wraps there (it never traps), so the digits are meaningless from about 9 × 10¹⁸
+     units. `thousands_extremes_neverTrap` pins only that nothing traps. See open question 4.
+5. **`ScheduledDay.weekday` is computed from `date`**, not stored. The specification lists four things the value
+   gives ("its `CivilDate`, the program week's index, its `Weekday` and the `DayTemplateID`"); a stored weekday
+   could disagree with the date, and a computed one cannot. So the `init` takes three arguments.
+6. **What "the block" is, for a program edited after validation.** `Program.weeks` and `Week.index` are `var`
+   (`Model/Program.swift:18`, `Model/Week.swift:38`), so a caller can hold weeks out of order, an index twice, a
+   gap, or no weeks. `nextScheduledDay` follows the two functions that already answer for such a program:
+   - The block is `weeks.count` weeks from `startDate`, as `isBlockComplete` counts it
+     (`Rules/WeekCalendar.swift:132-134`).
+   - A day's week is the first week that carries its index, as `Program.week(at:)` finds it
+     (`Model/Program.swift:64-66`) and so as `scheduledDay(on:in:)` judges the day (`:127-129`).
+
+   The function does not call `week(at:)` per day. It builds the index-to-week table once, first week wins, so
+   the search is one pass over the weeks and at most seven days per week. With `week(at:)` (a linear scan) per
+   candidate, an empty block of n weeks would cost about 3.5 n² comparisons, and rule 4 sets no maximum length.
+   `nextScheduledDay_editedWeeks_resolveAsScheduledDayDoes` and the second seeded test hold the two readings
+   together.
+7. **Today is never the answer, and a moment before the block gives the block's first session**, wherever that
+   is: with an empty first week it is in the second (`nextScheduledDay_emptyWeeks_arePassedOver`).
+8. **A block that runs past 9999-12-31** stops there: a later day has no `CivilDate`, so there is nothing to
+   return (`nextScheduledDay_blockPastYear9999_endsAtTheLastCivilDate`).
+9. **No instant arithmetic.** The moment becomes a day number once (`CivilDate.dayNumber(of:in:)`, in the
+   calendar's zone); everything after is integer days. Foundation maps any `Date`, the infinities and NaN
+   included, to a day between 4713 BC and the year 506713 (measured on the host), so no moment overflows.
+10. **Tests of the existing suites are in new files**, as extensions (`WeekCalendarTests.swift` is 262 lines
+    and the lint stops a file at 300), except `VolumeTests.swift`, which only grew. The seeded suite is
+    `NextScheduledDayPropertyTests`: the name with a `WeekCalendar` prefix is 41 characters, one over the lint's
+    limit for a type name.
+11. **The midnight table depends on the zone database.** It uses the transitions the F02 suites already use
+    (Santiago 2026-09-06, Havana 2026-03-08, Cairo 2026-04-24, each a 23-hour day) and adds three 25-hour days
+    (Santiago 2026-04-04, Havana 2026-11-01, Cairo 2026-10-29). Each row first asserts how long its day is, so a
+    changed zone rule fails with that message and not with a wrong session.
+12. **The plan and the code agree**, with two small corrections to the plan's inputs: `Volume.value(in:)` is
+    `private`, not internal (`Units/Volume.swift:58`, line 32 before this slice), and neither new function needs
+    it; and the extension uses the private `dayNumber(of:)` (`Rules/WeekCalendar.swift:102`), not the private
+    `calendar`.
+13. **Size**: 54 product lines against the plan's ~80.
+
+### Criteria → tests
+
+| S2 criterion | Proof |
+|---|---|
+| 1. `nextScheduledDay(after:in:)`: the first later scheduled day, in the calendar's zone, as a `ScheduledDay`; bounded by the block; before the block gives the first session; each day judged by its own program week; the three dated examples | `WeekCalendarTests.nextScheduledDay_fourDayBlock_isTheFirstLaterSession` (16 rows; rows 1, 2 and 9 are the brief's: after Wed 09-16 it is Fri 09-18, Upper B, week index 0; after Sat 09-19 it is Mon 09-21, Upper A, week index 1; after week 8's Friday it is `nil`), `nextScheduledDay_sameInstant_followsEachZonesDay` (UTC+14, UTC−11 and UTC give three different sessions for one instant), `nextScheduledDay_aroundMidnight_followsTheCivilDay` (23 rows: one second before and at midnight in UTC, Kiritimati and Pago Pago; 23-hour days in Santiago, Havana and Cairo; 25-hour days in the same three), `nextScheduledDay_blockBegunMidweek_readsEachDaysOwnProgramWeek` (all seven week starts), `nextScheduledDay_emptyWeeks_arePassedOver`, `nextScheduledDay_nothingScheduled_isNil` (an empty schedule; no weeks), `nextScheduledDay_editedWeeks_resolveAsScheduledDayDoes`, `nextScheduledDay_blockPastYear9999_endsAtTheLastCivilDate`, `nextScheduledDay_extremeMoments_neverTrap`, `nextScheduledDay_longBlock_findsItsLastDay`, `scheduledDay_weekdayAndEquality`; seeded, 200 blocks each with 8 moments: `NextScheduledDayPropertyTests.nextScheduledDay_matchesTheDayByDaySearch` and `nextScheduledDay_editedWeeks_matchTheDayByDaySearch` |
+| 2. `percentChange(from:)`: whole percent, half away from zero, exact, `nil` for a zero previous volume, never traps | `VolumeTests.percentChange_isAWholePercent` (24,180 against 22,400 lb is 8; 21,728 is −3; equal is 0), `percentChange_ties_roundAwayFromZero` (16 rows, each in pounds and in kilograms: ±0.5, ±1.5, ±2.5, ±99.5 and their near misses), `percentChange_zeroPrevious_isNil`, `percentChange_negativePrevious_followsTheFormula`, `percentChange_beyondInt_isClamped` (the last value inside each bound, the bound, one past it, 10⁶⁰, the greatest `Decimal`), `percentChange_notANumber_isNil`; seeded: `VolumePropertyTests.percentChange_matchesIntegerArithmetic` (200 seeds of 50 pairs) |
+| 3. `thousands(in:)`: `compact`'s number without the "k"; the same kilogram conversion; zero reads "0"; one decimal otherwise | `VolumeTests.thousands_isCompactWithoutTheK` ("24.2" for 24,180 lb, "11.0" for it in kilograms, "1,234.5"), `thousands_zero_readsZero` (three zeros; 40 lb reads "0.0"; `compact` still prints "0.0k"), `thousands_plusK_isCompact` (10 amounts, both units, both ways), `thousands_extremes_neverTrap`; seeded: `VolumePropertyTests.thousands_matchesCompact` |
+| 4. `Loadable`: `idle`, `loading`, `loaded`, `failed(any Error)`; `Sendable` when its value is | `LoadableTests.cases_carryTheirPayloads` (a `switch` with no `default` over the four cases, so a fifth case or a missing one does not compile), `sendable_whenItsValueIs` (handed to a function that takes only `Sendable` values; a class that is not `Sendable` can still be loaded) |
+| 5. Foundation only; covered line for line; no existing test changes | `ModuleBoundaryTests.sources_importFoundationOnly` (untouched; `Loadable.swift` imports nothing); file coverage under "Gate and coverage"; `git diff 985a8fb --stat -- LedgerKit/Tests` shows insertions only, in one existing file |
+
+**The slow reference** (`NextScheduledDayPropertyTests.slowNextScheduledDay`). From noon of the moment's own day
+it steps one calendar day at a time with Foundation's `date(byAdding: .day, …)` and returns the first day for
+which `scheduledDay(on:in:)` gives a template. It skips days before the block and gives up once
+`isBlockComplete` is true. The moments and their days are built with Foundation alone: the first instant of a day,
+its last second, or a second of its first 23 hours, from 15 days before the block to 15 days after ten weeks, in
+13 zones. The same answer is also required under a second, random week start.
+
+**Mutants.** Twenty small changes to the new code, one statement each, were each run against the final tests on the host (a
+scratch script, not committed; the two sources' SHA-256 were checked against the ones taken before it). Each
+failed at least one test, one of them by trapping:
+- `nextScheduledDay`: the next day taken 86,400 seconds later (only the midnight table and the seeded test fail,
+  which is what they are for); today included; the block one week short, one week long, one day short; the last
+  week winning a repeated index; the stats week's index in place of the program week's; the block's first day left
+  out for a moment before it (a trap); the UTC day in place of the zone's; the wrong weekday.
+- `percentChange`: banker's rounding; truncation; half up for negatives; no clamp; no NaN guard; the absolute
+  previous volume as divisor; `Double` arithmetic.
+- `thousands`: zero keeping its decimal; "0" for every volume that rounds to zero; pounds whatever the unit.
+
+### Code lines (added lines of `git diff -U0 985a8fb`, new files whole, blank and whole-line comment lines excluded)
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `LedgerDomain/Rules/WeekCalendar.swift` | 34 | 0 |
+| `LedgerDomain/Units/Volume.swift` | 13 | 0 |
+| `LedgerDomain/Model/Loadable.swift` (new) | 7 | 0 |
+| **Product** | **54** | **0** |
+| Tests (`WeekCalendarTests+NextScheduledDay` 226, `…Blocks` 140, `NextScheduledDayPropertyTests` 134, `VolumeTests` 126, `VolumePropertyTests` 63, `LoadableTests` 44, `Fixtures+Schedule` 40) | 773 | 0 |
+
+Not counted: one line of `docs/architecture.md` and this section.
+
+### Gate and coverage
+
+**Full gate.** `/usr/bin/python3 <sim-lock> scripts/check.sh` from the worktree root, on the final tree (11 GB
+free before it): **exit 0 (`GATE_EXIT=0`), `check.sh OK`**, 789 s (tools 1 s, format 0 s, lint and script tests
+87 s, iOS build 71 s, string catalogs 0 s, iOS boot 1 s, iOS tests 316 s, watchOS build 51 s, watchOS boot 0 s,
+watchOS tests 259 s, coverage 2 s). Queued 2026-10-05 04:14:25, it did not wait for the lock and ended 04:27:34.
+I ran no other build during it. A hash of `git diff 985a8fb` and of the new files, taken before the gate, was the
+same after it. After the gate only Markdown changed: this subsection and one phrase under "Mutants";
+`scripts/check.sh --lint-only` passed again afterwards (exit 0).
+
+- **iOS (PR plan)**: 1,926 tests, 1,905 passed, none failed, 12 skipped, 9 expected failures.
+- **watchOS (PR-Watch plan)**: 1,575 tests, 1,558 passed, none failed, 12 skipped, 5 expected failures.
+- `LedgerDomainTests` on each simulator: 812 tests, 810 passed and 2 skipped. None of the skipped tests or
+  expected failures is this slice's: all 27 new tests passed on both simulators, with every row (four seeded
+  tests of 200 seeds, and tables of 16, 23, 16 and 10 rows). So the 23- and 25-hour days of the midnight table
+  hold in both simulators' zone data, as on the Mac.
+- The gate log holds 10 compiler warnings, in three test files this slice does not touch
+  (`LedgerPersistenceTests/Adversarial/PayloadVersionAdversarialTests.swift:29`,
+  `LedgerDesignTests/PreviewTests.swift:90`, a `@Test` expansion in
+  `LedgerPersistenceTests/Adversarial/SettingsDecodingAdversarialTests.swift:123`). They print when those files
+  compile, and this slice changes `LedgerDomain`, which every target depends on. None names a file of this
+  slice. I did not run a gate on `985a8fb` to compare.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 228 / 237 | 96.20 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2089 / 2107 | 99.14 % | 95 % | ✓ |
+| LedgerFakes | 1413 / 1428 | 98.94 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2479 / 2497 | 99.27 % | 90 % | ✓ |
+| LedgerSync | 31 / 34 | 91.17 % | 90 % | ✓ |
+| Overall | 8400 / 8526 | 98.52 % | 80 % | ✓ |
+
+**The new code's coverage**, read from both result bundles (`xcrun xccov view --report --json` and
+`--archive --file`), the same on iOS and watchOS:
+
+| File | Lines | New code |
+|---|--:|---|
+| `LedgerDomain/Units/Volume.swift` | 46 / 46, 100 % | `thousands(in:)` 3 / 3, `percentChange(from:)` 10 / 10 |
+| `LedgerDomain/Rules/WeekCalendar.swift` | 105 / 107, 98.13 % | `ScheduledDay.init` 5 / 5, `weekday` 3 / 3, `nextScheduledDay(after:in:)` 20 / 20 and its three closures 5 / 5 |
+| `LedgerDomain/Model/Loadable.swift` | no executable line | the cases are proven by the test's `switch` |
+
+Every executable line this slice added (28 in `WeekCalendar.swift:145-200`, 13 in `Volume.swift:32-56`) has a
+count above zero and no uncovered region. The two lines `WeekCalendar.swift` lacks are F02's: the two `?? 0`
+fallbacks of `isoWeekKey(for:)` at line 96, which Foundation never takes.
+
+**Host (Mac, final tree).** `scripts/check.sh --fast`: exit 0 (format, lint, the script suites, and
+`LedgerDomainTests` with 823 tests in 135 suites and `LedgerPersistenceTests` with 449 tests in 103 suites). The
+two seeded suites of this slice also pass at 5,000 seeds (`LEDGER_PROPERTY_SEED_COUNT=5000`, about 2 s each on the
+host); the nightly lane runs 2,000.
+
+**Not verified.**
+- No device build: on a watch whose `Int` is 32 bits the clamp is to that `Int`'s bounds by construction
+  (`Decimal(Int.min)`, `Decimal(Int.max)`), but no test ran there.
+- CI did not run: nothing is pushed.
+- The whole package on the host, unfiltered, was not run; the gate ran every test target on the simulators.
+
+### Open questions (each with a recommendation)
+
+1. **`Loadable`'s parameter is `T`; every other generic in `Sources` has a word for a name** (`Tally<Value>`,
+   `ObservedState<State, Value>`, `JSONArray<Element>`), and the brief writes `Loadable<Value>`. No caller writes
+   the parameter's name; only an extension with a `where` clause would. Recommend renaming it to `Value` and
+   changing §5's sketch in the same small change, before S5, F08 or F10 extend the type. Until §5 says so the
+   code follows §5.
+2. **`percentChange` returns `nil` for a result that is not a number** (decision 2), where the task says "only
+   for a zero previous volume". Recommend keeping it: the alternatives are a wrong number or an arbitrary one.
+   If the ruling is "never `nil` but for zero", the smallest change is to return 0 there, as `elapsed(at:)` does
+   for NaN: one line and one test.
+3. **A week's first light set reads "0.0k"**, not "0k": any volume under 50 lb that is not zero (decision 4).
+   Recommend keeping the specification's rule and looking at it in S4's screenshots; "0" for everything that
+   rounds to zero would be one condition in `thousands(in:)` and is one of the mutants the tests now refuse.
+4. **`Volume.formatted(in:)` and `compact(in:)` print wrapped digits beyond `Int`** (F02; `thousands` inherits
+   it). Not reachable by lifting. Recommend leaving it and not re-finding it as S2's; if it is ever wanted, the
+   fix is a clamp in `Decimal.roundedToInt()`, which S2 may not touch.
+5. **An empty week between today and the next session** (plan, "Behaviour the brief leaves open"): the rest
+   card's "next Monday" would be two weeks away. `ScheduledDay.weekIndex` and `date` let S3 tell; new copy would
+   be Pete's. Recommend S3 keeps the accepted wording.
+6. **Simulator zone data.** The 25-hour rows are new to the suite (decision 11). If a runner's zone database
+   differs from this Mac's, those rows fail on their day-length line. Recommend keeping them; the fix then is a
+   date, not the function.
+
+### Inputs for S3
+
+- **Next session.** `WeekCalendar(startDate: program.startDate, weekStart: settings.weekStart, calendar: calendar)
+  .nextScheduledDay(after: now, in: program)` returns `ScheduledDay?`:
+  - `date: CivilDate`, the day; `date.startOfDay(in: calendar)` is a `Date` for `Date.FormatStyle`'s weekday.
+  - `weekday: Weekday`, the same day's weekday.
+  - `weekIndex: Int`, the program week of that day, 0-based. Compare it with `weekIndex(for: now)`:
+    equal is "later this week" in program weeks; `weekIndex + 1` is the "Next: week %lld" number.
+  - `dayTemplateID`, to find the day's `tag` in `program.days`.
+  - `nil` means no later session in the block. That is not always the block's last week: in week 3 of 8 it is
+    `nil` when the later weeks are empty. The Logged card's "Next:" line is omitted. The rest card says "This is
+    the last week of the block" only when `weekIndex(for: now) == program.weeks.count - 1`; what an earlier week
+    with nothing left says is S3's to decide, and the brief has no copy for it. Today itself is never returned,
+    logged or not. (Corrected in fix round 1, review nit n6.)
+  - The brief's rest-card copy says "next %@" for "first day of next week". Program weeks and stats weeks differ
+    when the block began midweek or the week start changed; whichever S3 means, `date` and `weekIndex` give both
+    (`week(containing:)` for the stats week).
+- **Delta.** `thisWeek.percentChange(from: previousWeek)` is `Int?`. `nil` hides the delta (a zero previous week;
+  the absent previous week is S3's own `nil`). The sign is S3's to print ("+8%", "−3%" with U+2212); 0 comes back
+  for anything within half a percent, −0.4 % included, and the brief does not say how 0 reads.
+- **Tile.** `volume.thousands(in: settings.units)` is the value for the catalog's "%@k": "24.2", "1,234.5", and
+  "0" for the zero volume, which gives criterion 8's "0k". It is a Domain-formatted string (no locale), like
+  `formatted(in:)`.
+- **State.** `Loadable<TodayModel>` has no `Equatable`: tests match it with `if case` or `switch`. It is
+  `Sendable` when the model is.
+- **Fixtures.** `LedgerDomainTests`' `Fixtures.fourDayProgram()` is not visible to `FeatureTodayTests`; S3
+  re-dates `LedgerFakes`' `Fixtures.seedProgram()` as its plan says.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 0 Should fix, 6 nits. G2 round 1: 61 tests, one failing on purpose; four findings. The
+tester's own full gate was not run (free disk under the floor); the orchestrator's gate after the fix round replaces it.
+
+- **F9-S2-1 accepted, fixed at the root.** A volume too small to show prints an arbitrary number that differs from
+  call to call, through `thousands(in:)` and through the existing `compact(in:)`. The fix goes where both get their
+  digits, so both read "0.0" / "0.0k"; this is the one sanctioned change to existing behaviour in the slice (no
+  real workout can produce the input). A test covers `compact` too.
+- **F9-S2-2:** no change of behaviour; the doc comment states the true conditions for `nil` (the brief's criterion 2
+  is revised), without a wrong bound.
+- **F9-S2-3 accepted as specified:** days are calendar dates (ADR-007); a date a zone skipped can be the answer. The
+  doc comment says so (criterion 1 revised).
+- **F9-S2-4 accepted:** the three weak assertions are strengthened.
+- **Review nits:** all six taken: the negative-baseline sign in `percentChange`'s doc; `thousands` and `compact` share
+  one function for their digits instead of `dropLast`; `#require` for the day-length check; `Loadable<T>` stands (the
+  brief now says `T`, as §5 does); and, for S3, `nil` from `nextScheduledDay` means "no later session in the block",
+  which is not always "the last week of the block" (later weeks may be empty): the "Inputs for S3" line is corrected.
+
+### S2 fix round 1 (G1 implementer, 2026-10-05)
+
+On `feat/F09-s2-domain` at `09f2619`. No commits. Host only, as ruled: no simulator ran and no full gate.
+"Before" below is `09f2619`.
+
+**F9-S2-1: the cause.** `Decimal.roundedToInt(_:)` (`Units/NumberText.swift:19-21` before) handed whatever it had
+to `NSDecimalNumber.intValue`. For a NaN that conversion is undefined. Measured on the host:
+`NSDecimalNumber(decimal: .nan).intValue` was 4377898889 in one launch and 4309954441 in the next, and the
+tester's table shows other numbers at other call sites in one launch.
+
+The NaN is Foundation's: `Decimal` division gives NaN, not zero, for a quotient it takes to be too small.
+`compact(in:)` divided twice, by the unit (`Units/Volume.swift:59` before, `value(in:)`) and by 100 (`:28`
+before). Measured on a scratch copy of the arithmetic, for 1, 5 and 9 times each power of ten:
+- the second division is NaN for every volume from 10⁻¹²⁷ g up to 10⁻⁸⁶ g, in both units;
+- the first is already NaN up to 10⁻⁹⁶ g in pounds and up to 10⁻⁸⁸ g in kilograms;
+- 10⁻⁸⁰ g is a number and read "0.0" before too.
+
+That is well short of the smallest `Decimal`: 10⁻⁸⁷ g is 10⁻⁹⁰ kg, a number, and a hundredth of it is NaN
+although `Decimal` can hold 10⁻⁹². I did not read Foundation's source for why.
+
+**The fix** is one line, `Units/NumberText.swift:24`: the conversion is now
+`isNaN ? 0 : NSDecimalNumber(…).intValue`. A value that is not a number rounds to 0, and the comment above it
+says why. For the
+formatters 0 is the right number and not only a convention: dividing a number by 453.59237, by 1,000 or by 100
+can only make it too small, never too large, so a NaN there is a value nearer zero than `Decimal` can say (or
+the weight or volume was NaN to begin with).
+
+`compact(in:)` and `thousands(in:)` now take their digits from one private function,
+`Volume.compactDigits(in:)` (`Units/Volume.swift:62-65`): `compact` appends "k", `thousands` returns it as it is,
+or "0" for the zero volume. Nothing is cut from a string any more (review n2).
+
+**What changed in existing behaviour, and for which inputs.** Only a value that is not a number, at the helper.
+Every text for a value that is a number is the same as before: the existing tests pass untouched, and
+`NumberTextTests.roundedToInt_numbers_roundByTheRule` pins the rounding.
+
+| Caller of `roundedToInt` | Input that reached it as NaN | Before (one host run) | Now |
+|---|---|---|---|
+| `Volume.compact(in:)`, `Volume.thousands(in:)` (`Units/Volume.swift:63`) | a volume of 10⁻⁸⁶ g or less, either sign; a NaN volume | arbitrary ("431,784,903.3k" in the tester's run) | "0.0k", "0.0" |
+| `Volume.formatted(in:)` (`:23`) | a volume of 10⁻⁹⁶ g (lb) or 10⁻⁸⁸ g (kg) or less; a NaN volume | arbitrary ("527,145,074,697" for 10⁻¹²⁷ g) | "0" |
+| `Weight.wholeValue(in:)` (`Units/Weight.swift:114`) | the same sizes, as a weight; a NaN weight | arbitrary (4339062169 for 10⁻¹²⁷ g) | 0 |
+| `PlateMath.perSide(load:inventory:)` (`Rules/PlateMath.swift:52`) | a plate too heavy for its count to be held: 10⁻³⁰ g per side against a 10¹⁰⁰ g plate | the plate loaded 4,339,062,169 times, a remainder of −4.3 × 10¹⁰⁹ g | the plate is left off |
+| `RPE.init?` (`Units/RPE.swift:16`) | none: the guard above admits only whole values from 10 to 20, and a NaN fails it | unchanged | unchanged |
+| `Volume.percentChange(from:)` (`Units/Volume.swift:57`) | none: `isFinite` is checked first | unchanged | unchanged |
+
+Those six are every caller (`grep roundedToInt LedgerKit/Sources`). The four affected ones are fixed by the same
+line. No stored weight or volume is near these sizes (ADR-007 stores whole 10⁻⁷ g), and no plate is 10¹³⁰ times
+the load.
+
+**Found beside it, reported and not fixed** (none is the same line):
+1. **`Weight.formatted(in:)` prints "NaN"** for the same sizes (`Units/Weight.swift:101-109`; it does not use the
+   helper). Run through the module: 10⁻¹²⁷ g reads "NaN" in both units; 10⁻⁸⁸ g reads "0" in pounds and "NaN" in
+   kilograms; a NaN weight reads "NaN". It is the same text on every call, so it is not F9-S2-1's fault, but it
+   is not a number. A fix would be in that function or in `Weight.value(in:)`. Recommend a line in the next slice
+   that touches `Weight`, with the orchestrator's leave.
+2. **Beyond `Int` the digits wrap** (F02; the tester's "other end"; my open question 4). `roundedToInt` wraps
+   when the rounded value does not fit an `Int`. Run through the module: 10²⁵ g reads
+   "-89,866,669,963,703,866.9k" through `compact`, "2,367,050,404,843,891,177" through `formatted` and
+   2367050404843891177 through `wholeValue`; the greatest `Decimal` reads "0.0k". The cause is another one (the
+   size of `Int`, not NaN) and the cure is a clamp in the same helper, a second change of existing behaviour that
+   this round does not sanction. `thousands` and `compact` still agree there (one function now).
+3. `LedgerPersistence` converts an RPE with `NSDecimalNumber(decimal:).intValue` directly
+   (`Records/SlotRecords.swift:53`, `Records/WorkoutRecords.swift:140`). An `RPE` is always 5 to 10, so no NaN
+   reaches it. No change wanted.
+
+**What changed, item by item.**
+1. **F9-S2-1.** The helper's line and comment (`Units/NumberText.swift:18-25`); `compactDigits(in:)`, with
+   `compact`'s and `thousands`' bodies and `thousands`' comment (`Units/Volume.swift:26-37, 60-65`). Tests:
+   - The tester's `thousands_smallestDecimalVolume_readsZeroPointZero` passes, with no edit to any tester file.
+   - `VolumeTests.thousands_volumeTooSmallToShow_readsZeroPointZero`: 484 volumes of both signs from 10⁻¹²⁷ g
+     to 10⁻⁷ g, in both units, read "0.0".
+   - `VolumeTests.compact_volumeTooSmallToShow_readsZeroPointZeroK` (the test for `compact`): the same volumes
+     read "0.0k" through `compact` and "0" through `formatted`.
+   - `NumberTextTests` (new file, 4 tests): NaN rounds to 0 under every rule; numbers round as before;
+     `Weight.wholeValue` for a weight too small to show; `PlateMath.perSide` with the plate too heavy to count.
+   - Run before the fix, these and the tester's test recorded 986 issues, 4 of them the tester's; after it,
+     none.
+2. **F9-S2-2.** `percentChange`'s comment (`Units/Volume.swift:39-48`) names the three conditions for `nil`
+   without a bound: `previous` is zero; either volume is not a number; `Decimal`'s arithmetic gives no number
+   for the difference, the quotient or the percent. It also says that for a negative `previous` the sign is the
+   formula's, with the example 100 after −100 is −200 (review n1). No behaviour changed. The line in my
+   decision 2 above that gives "about 3.4 × 10¹⁶⁵" as where `nil` begins is wrong, as the tester showed (10¹²⁶
+   after 1 is already `nil`); I have left that paragraph as written and correct it here.
+3. **F9-S2-3.** `nextScheduledDay`'s comment (`Rules/WeekCalendar.swift:170-181`) says days are calendar dates
+   and that a date a zone once skipped can be the answer, with Pacific/Apia's 2011-12-30 (checked on the host:
+   Thursday 23:59:59 is followed by Saturday 00:00:00). No behaviour changed.
+4. **F9-S2-4.**
+   - `VolumeTests.thousands_extremes_neverTrap` is replaced by three tests with exact texts: the two above and
+     `thousands_notANumberAndBeyondInt_agreeWithCompact` (a NaN volume reads "0.0" and "0.0k"; beyond `Int` the
+     two still agree).
+   - `Fixtures.everyDayProgram` gives each weekday of each week a template of its own
+     (`Fixtures.everyDayTemplate(week:on:)`). The midnight rows and the year-9999 test now assert the template of
+     the expected week and weekday, the weekday taken from Foundation's calendar.
+   - `LoadableTests.sendable_whenItsValueIs` asserts "and only then": `Loadable<Draft>` and `Loadable<[Draft]>`
+     are not `Sendable`, by two overloads that the compiler chooses between.
+5. **Nits.** n3: the day-length check is `try #require` (`Rules/WeekCalendarTests+NextScheduledDay.swift:60`).
+   n4: the seeded suite is `WeekCalendarPropertyTests`, in `Rules/WeekCalendarPropertyTests.swift`; lint allows
+   it. The file was renamed with `mv`, not `git mv`, so `git status` shows a deletion and a new file until they
+   are staged. n5: `Loadable<T>` stands. n6: the "Inputs for S3" line above is corrected in place and marked.
+
+**Mutants** (seven, each against the final tests, sources checked by SHA-256 afterwards): `Loadable` always
+`Sendable`; the next weekday's schedule entry and the next week's schedule (run against the midnight table
+alone, which could not see either before); the NaN guard removed; NaN rounding to 1; `thousands` keeping the
+"k"; `compact` losing it. All seven failed.
+
+**Host results, final tree.**
+- `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'LedgerDomainTests|LedgerPersistenceTests'`: exit 0. `LedgerDomainTests`: 890 tests in 145 suites, all pass
+  (884 in 144 before: 4 in `NumberTextTests`, and three `VolumeTests` in place of one). The tester's 61 are
+  among them and all pass. `LedgerPersistenceTests`: 449 tests in 103 suites pass, with its 1 known issue.
+- `git status --short` lists no file under `LedgerDomainTests/Adversarial/`.
+- Host coverage (`--enable-code-coverage`, `LedgerDomainTests`): `Volume.swift` 49 / 49 lines and 22 / 22
+  regions; `NumberText.swift` 105 / 106, the changed line covered in both branches (the regions it lacks are
+  F02's, at lines 40 and 140); `WeekCalendar.swift` 105 / 107 as before.
+- `scripts/check.sh --lint-only`: exit 0 (format, lint, package graph and pins, script suites), run after the
+  last edit of this section.
+
+**Product lines** (blank and whole-line comment lines excluded). This round: 7 added and 4 removed
+(`Volume.swift` 6 and 3, `NumberText.swift` 1 and 1; `WeekCalendar.swift` comments only). The slice against
+`985a8fb`: 59 added, 2 removed (`WeekCalendar.swift` 34, `Volume.swift` 17 and 1, `Loadable.swift` 7,
+`NumberText.swift` 1 and 1).
+
+**Not verified.**
+- Nothing ran on a simulator, and no full gate: the orchestrator runs it. The coverage figures above are the
+  host's.
+- Only `LedgerDomainTests` and `LedgerPersistenceTests` ran. The other test targets link `LedgerDomain` and were
+  not run on the host.
+- An `Int` of 32 bits.
+
+### S2 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0, with the tester's 61 tests passing and the tester's
+  files unchanged since `09f2619`. The one failing test was F9-S2-1's; its cause was fixed at the root
+  (`Decimal.roundedToInt` no longer hands a NaN to `NSDecimalNumber.intValue`). **G2 is closed; G3 approved.**
+- Reported by the fix round and queued as follow-ups, not part of this slice (older formatting code, inputs no
+  workout can produce): `Weight.formatted` prints "NaN" for a weight too small to show, and digits wrap for a value
+  beyond `Int`.
+- S2 is ready for its PR, which opens after #28 (S1) is on `main`: merge `main`, gate, push once.
