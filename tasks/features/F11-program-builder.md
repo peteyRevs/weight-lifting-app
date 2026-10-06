@@ -305,3 +305,28 @@ slice is accepted when:
 11. **The module is wired as `FeatureToday` is:** the target's `resources`, `FeatureProgram` in the coverage
     thresholds, the placeholder file and its test gone; the gate's string-catalog step and `ModuleCopyTests`
     pass with no exemption.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (44 tests, 300 cases; findings F11-S5-1 to -4 are questions and notes) and the reviewer
+approved with six should-fix items. Rulings, which add to S5's eleven criteria:
+
+12. **The screen's edits of a cell and of a deload are absolute** (review S-1). A cell's action names what the
+    cell becomes (a day's id, or rest) and the deload switch names the state it turns to, so an edit drawn or
+    applied twice gives what one application gives. `LedgerDomain` gains `ProgramEditing.setSchedule(_:week:weekday:day:)`
+    (a day the program lacks changes nothing) and `setDeload(_:_:week:)`; the cycle's order (rest, first day, …,
+    last day, rest) is one pure function the presentation asks for the next value. `cycleSchedule` and
+    `toggleDeload` stay and are written in terms of them. Adding a week, removing the last week and moving
+    stay relative, and the note "For S13 and S14" still holds for them.
+13. **With no training day, a cell offers nothing** (F11-S5-2): no action, no hint, and its spoken text says
+    only the weekday and "rest".
+14. **The name is a draft in the store** (review S-3): the model carries the stored name and a `rename` action
+    that takes the typed text; the comment says a view binds a draft, not the model's name.
+15. **Kept as built:** the seven cells follow the settings' week start (criterion 3; F11-S5-1), with the
+    letters and spoken names from the injected calendar and locale. Digits and plural forms follow the injected
+    locale (F11-S5-3): as for Today, the store hands in the app's locale, which is English while the catalogs
+    hold English only.
+16. **Housekeeping from the review:** no whole `Program` is compared inside an expectation (S-5); the source
+    test checks the `Double` spellings as Today's does (S-6); the notes no longer claim that `update` refuses
+    "−" when a workout finished meanwhile (S-2: the store reads the logged weeks again before it sends that
+    edit, which is S13's to build); standards §7 gains the sentence of ruling 3 (S-4), as the reviewer words it.
