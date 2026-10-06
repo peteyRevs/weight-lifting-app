@@ -54,6 +54,30 @@
             try state.write { current in try Self.store(program, in: &current, exercises: exercises) }
         }
 
+        /// The read, the change and the save in one write, under the lock a workout's save takes
+        /// (`writeSave`), so neither can come between the other's steps. The result is stored as `save`
+        /// stores it, with its checks in its order, after the id check, and read back; when anything throws,
+        /// the state stays as it was and no stream yields. `change` runs under the lock: it must not call this
+        /// store, whose lock is not re-entrant.
+        ///
+        /// A task that is already cancelled throws `CancellationError` before anything is read, as the
+        /// database's write does before it starts and while it waits. Nothing here suspends, so a task
+        /// cancelled later stores its change whole, where the database rolls back.
+        public func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+            try Task.checkCancellation()
+            return try state.write { current in
+                guard let stored = current.programs[id], !stored.isDeleted else {
+                    throw RepositoryError.missingRow("program \(id.rawValue.uuidString)")
+                }
+                let changed = try change(stored.program)
+                guard changed.id == id else {
+                    throw RepositoryError.duplicateIdentifier("program \(changed.id.rawValue.uuidString)")
+                }
+                try Self.store(changed, in: &current, exercises: exercises)
+                return current.programs[id]?.program ?? changed
+            }
+        }
+
         public func setActive(_ id: ProgramID) async throws {
             try state.write { current throws(RepositoryError) in
                 guard let stored = current.programs[id], !stored.isDeleted else {

@@ -89,6 +89,17 @@ extension HistoryModel: ProgramRepository {
         }
     }
 
+    func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        try state.withLock { state in
+            guard let stored = state.programs[id] else {
+                throw LedgerPersistenceError.missingRow("program \(id.rawValue.uuidString)")
+            }
+            let changed = try change(stored)
+            state.programs[id] = changed
+            return changed
+        }
+    }
+
     func setActive(_ id: ProgramID) async throws {
         try state.withLock { state in
             guard state.programs[id] != nil else {

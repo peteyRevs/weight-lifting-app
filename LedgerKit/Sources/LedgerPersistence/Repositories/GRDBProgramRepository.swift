@@ -44,10 +44,42 @@ public struct GRDBProgramRepository: ProgramRepository {
         let rows = try ProgramRows(program)
         let timestamp = ColumnCodec.timestamp(now())
         try await queue.write { database in
-            try rows.write(database, at: timestamp)
-            if program.isActive {
-                try Self.activate(program.id, in: database, at: timestamp)
+            try Self.write(rows, isActive: program.isActive, in: database, at: timestamp)
+        }
+    }
+
+    /// Applies `change` to the stored program `id` and saves the result, in one write transaction: the read,
+    /// the change and the write, so no other write (a workout's save, which writes misses and a swap's
+    /// exercise into the program) can come between them. Returns the program read back in that transaction.
+    ///
+    /// The result is saved through `save`'s own path (`ProgramRows`), with its checks, its errors and its
+    /// row rules: only the rows that changed are written, and a result equal to the stored program writes
+    /// none, so observers hear nothing. A result under another id throws `duplicateIdentifier`, before any
+    /// other check. A program that is not stored, or is deleted, throws `missingRow`, and one whose rows
+    /// cannot be read throws what `active()` throws (`save` it whole to repair it); `change` is then not
+    /// called. Whatever is thrown, by `change` or by a check, rolls the transaction back.
+    ///
+    /// **`change` runs on the database's writer queue, inside the transaction.** It must not use this
+    /// repository, another repository of the same database or the database itself (GRDB traps on a
+    /// re-entrant access), and must not wait: every other read and write of the database waits for it.
+    ///
+    /// A task cancelled before the write starts, or while it waits for the writer, throws
+    /// `CancellationError` and `change` is not called. Cancelled while the transaction runs, GRDB starts no
+    /// later statement but the rollback, so it never commits: `CancellationError`, and nothing stored. Only
+    /// a cancellation that comes once the commit has succeeded comes too late: the change is stored whole,
+    /// and the call returns (`ProgramUpdateCancellationTests`).
+    public func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        let timestamp = ColumnCodec.timestamp(now())
+        return try await queue.write { database in
+            guard let stored = try ProgramRows.program(id, in: database) else {
+                throw LedgerPersistenceError.missingRow("program \(ColumnCodec.text(id))")
             }
+            let changed = try change(stored)
+            guard changed.id == id else {
+                throw LedgerPersistenceError.duplicateIdentifier("program \(ColumnCodec.text(changed.id))")
+            }
+            try Self.write(ProgramRows(changed), isActive: changed.isActive, in: database, at: timestamp)
+            return try ProgramRows.program(id, in: database) ?? changed
         }
     }
 
@@ -101,6 +133,15 @@ public struct GRDBProgramRepository: ProgramRepository {
             return nil
         }
         return try ProgramRows.program(ColumnCodec.identifier(id), in: database)
+    }
+
+    /// What `save` and `update` write, in the caller's transaction: `rows` over the stored ones and, for an
+    /// active program, the one active flag.
+    private static func write(_ rows: ProgramRows, isActive: Bool, in database: Database, at timestamp: String) throws {
+        try rows.write(database, at: timestamp)
+        if isActive {
+            try activate(rows.programID, in: database, at: timestamp)
+        }
     }
 
     /// Sets `is_active` on `id` and clears it everywhere else, touching only the rows whose flag changes.

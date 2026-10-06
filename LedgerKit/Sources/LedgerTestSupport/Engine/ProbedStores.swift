@@ -117,7 +117,10 @@ public struct ProbedWorkoutRepository: WorkoutRepository {
     }
 }
 
-/// Only `active()`, the one call a session host makes, goes through the probe.
+/// `active()`, the one call a session host makes, goes through the probe, and so does `update`, the write a
+/// program builder makes (F11 S3): a test holds it (`hold(.updateProgram)`), fails it or counts it. It is held
+/// before it reaches the store, so nothing of it is stored while it waits, and `change` is passed on as it
+/// came, to run inside the wrapped store's write.
 public struct ProbedProgramRepository: ProgramRepository {
     let base: any ProgramRepository
     let probe: StoreProbe
@@ -129,6 +132,10 @@ public struct ProbedProgramRepository: ProgramRepository {
 
     public func save(_ program: Program) async throws {
         try await base.save(program)
+    }
+
+    public func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        try await probed(.updateProgram, probe, yields) { try await base.update(id, change) }
     }
 
     public func setActive(_ id: ProgramID) async throws {

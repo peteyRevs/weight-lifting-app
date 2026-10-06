@@ -47,6 +47,7 @@ struct UnimplementedStubTests {
         await Self.expectUnimplemented("programRepository", [
             { _ = try await stub.active() },
             { try await stub.save(Fixtures.seedProgram()) },
+            { _ = try await stub.update(Fixtures.programID) { $0 } },
             { try await stub.setActive(Fixtures.programID) },
             { try await stub.delete(Fixtures.programID) }
         ])
