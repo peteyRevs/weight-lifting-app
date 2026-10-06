@@ -70,3 +70,11 @@ public enum CatalogError: Error, Equatable, Sendable {
     /// An alternative has a different movement pattern (criterion 3).
     case alternativePatternMismatch(ExerciseID, alternative: ExerciseID)
 }
+
+/// Why `ProgramEditing.removeLastWeek` refused to shorten the block (rule 4; F11 criterion 4).
+public enum ProgramEditError: Error, Equatable, Sendable {
+    /// Rule 4: a block has at least 2 weeks.
+    case minimumTwoWeeks
+    /// The block's last week holds a finished workout. `weekNumber` is one-based, as the message prints it.
+    case weekHasLoggedSessions(weekNumber: Int)
+}

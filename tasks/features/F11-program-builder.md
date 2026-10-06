@@ -176,6 +176,35 @@ their behaviour row by row and the worked examples are in the plan: "The editing
     `Sendable` as their neighbours are; the three ranges of `Slot` become public constants with no change in
     behaviour (the existing tests pass untouched); 100 % line coverage of the new files.
 
+## Plan amendments — slice S1 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (154 tests; findings F11-S1-1 to -3 are two questions and a note on test quality) and
+the reviewer approved with three should-fix items and nine nits. Rulings, which add to S1's thirteen criteria:
+
+14. **Choosing the progression a slot already has changes nothing** (review S-1). `setProgression` returns the
+    day as it was when the slot already has that progression, so a second tap on "Double" never widens a range
+    the lifter narrowed. Changing from linear to double still makes the top of the range at least reps + 2.
+15. **Criterion 12 cannot be escaped** (review S-2): a source test over `LedgerDomain/Programs` fails when a
+    function that returns a `Program` or a `DayTemplate` is missing from the property's tables, or when a line
+    outside `newSlot` assigns a slot's misses or exercise or builds a `Slot`.
+16. **The library's filter is `ExerciseSearch.filtered(_:query:muscle:equipment:)`** (review N-1), beside
+    `sorted(_:)`; nothing else about it changes.
+17. **Kept as built:** the direction cases `upward` and `downward` (F11-S1-2); a name of only invisible
+    characters is stored (F11-S1-1; a rule "a name has a visible character" is not in the specification);
+    `prescriptions` is for a stored program's weeks and a valid slot, as `prescribe` is, and says so.
+
+**For S13 and S14** (review S-3). `toggleDeload`, `cycleSchedule`, `move` and `removeLastWeek` are relative:
+applied twice they do not give what one application gives. Each queued edit therefore reaches the stored
+program exactly once. After an `update` that failed or was cancelled, the waiting edits are dropped and the
+screen is redrawn from the stored program; they are never sent again. **For S7** (review N-8): the start load
+and the step a slot resolves to (its own, or the exercise's and the equipment's default in the lifter's unit)
+become two small functions on `Slot`, used by `ProgressionRules` and `DayEditing`, before a presentation
+writes that pair a third time.
+18. **Recorded, not fixed** (F11-S1-4, round 2): the source test of criterion 15 is a tripwire for the likely
+    mistakes (a new `static func` left out of the tables; a line that assigns a slot's misses or exercise). It
+    does not see an instance or `mutating` method, a write through a key path or a whole-slot assignment, or
+    code outside `LedgerDomain/Programs`. The property test over the listed functions remains the proof; a
+    reviewer of any later change to these files checks criterion 12 by reading.
 ## Plan amendments — slice S3, the atomic program update (orchestrator, 2026-10-06)
 
 Cut from `main`, independent of S1. One new requirement on `ProgramRepository`, so that a builder edit is
