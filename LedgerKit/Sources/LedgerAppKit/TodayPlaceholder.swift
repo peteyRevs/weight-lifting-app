@@ -8,7 +8,7 @@ struct TodayPlaceholder: View {
     var onTitleLongPress: () -> Void = {}
 
     var body: some View {
-        Text("Today")
+        Text(AppCopy.title(of: .today))
             .ledgerFont(.display)
             .foregroundStyle(LedgerColor.ink)
             .accessibilityAddTraits(.isHeader)
