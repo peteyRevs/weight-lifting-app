@@ -2073,3 +2073,554 @@ alone, which could not see either before); the NaN guard removed; NaN rounding t
   workout can produce): `Weight.formatted` prints "NaN" for a weight too small to show, and digits wrap for a value
   beyond `Int`.
 - S2 is ready for its PR, which opens after #28 (S1) is on `main`: merge `main`, gate, push once.
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S3's specification is the brief's last section, "Plan amendments — slice S3". The branch
+`feat/F09-s3-presentation` is cut from S2's tip `2d434aa`.
+
+- Pete has not yet answered the two product questions this slice meets, so their defaults are built: a live
+  workout takes over the card with Resume (criterion 4); a session done on another day does not make today's
+  "Logged" (criterion 5). Keep each rule in one named function with its own tests, so the other answer is a small
+  change.
+- From S2's review: `nextScheduledDay` returning nil means "no later session in the block", which is not always
+  "the last week of the block" (later weeks may be empty). The rest-day and Logged copy follow the function, not
+  the week index.
+- The localization rule is standards §7 as F09 S1 rewrote it: a catalog and `TodayCopy.swift`, nothing else to add;
+  the gate's string-catalog step and `ModuleCopyTests` find the module by themselves.
+- The session's workout arrives as a plain `WorkoutState?` (live, or finished in the one update that ends it); the
+  store that subscribes is S5 and S6. Today plays no haptics.
+- One PR: the plan estimates about 570 product lines. Stop and propose the split named in the plan ("strip, stats,
+  recent" / "cards") only above about 750.
+
+## Slice S3 — the presentation (G1 implementer, 2026-10-05)
+
+Branch `feat/F09-s3-presentation` at `4abfb8f` (the specification). No commits. Paths that start with a module name
+are under `LedgerKit/Sources/`; test paths are under `LedgerKit/Tests/FeatureTodayTests/`. "The specification" is the
+brief's last section ("Plan amendments — slice S3"); "the task" is the orchestrator's message that started this
+slice.
+
+### The decision table for the card
+
+Written before the code. The first row that holds decides the card; the header's title is decided by rows 2–6
+alone, so a live workout changes the card and never the title.
+
+| # | Holds when | Card | Title | Decided in |
+|---|---|---|---|---|
+| 1 | The session's workout is live | Up next, showing that workout (its name, its exercises), "Resume · m:ss" carrying `.resumeWorkout` | as rows 2–6 | `workoutTakingOver(_:)` (Pete's decision 1, default A) |
+| 2 | There is no active program | No program, "Set up program" carrying `.setUpProgram` | "Today" | `day(_:)` |
+| 3 | The moment is in program week `weeks.count` or later | Block complete, "Open Program" carrying `.openProgram` | "Today" | `day(_:)`, by `WeekCalendar.isBlockComplete` |
+| 4 | The program schedules a session today, and a finished workout of the same program, week and day started today | Logged, "View session" carrying `.openWorkout(id)` | the day's name before " — " | `loggedWorkout(for:_:)` (Pete's decision 2, default A) |
+| 5 | The program schedules a session today | Up next, "Start workout" carrying `.startWorkout` | the day's name before " — " | `day(_:)`, by `WeekCalendar.scheduledDay(on:in:)` |
+| 6 | Otherwise: a rest day. A day before the block's first day is one, and speaks of the block's first week | Rest day, "Edit this week" carrying `.editWeek`, and the off-schedule list | "Rest day" | `day(_:)` |
+
+- **Why a live workout comes first, before "no program" and "block complete".** The specification's criterion 4
+  says the live workout takes over the card "whichever day it was started for, also on a rest day", and Pete's
+  decision 1 gives the reason: Today is the way back to a running workout. A workout started on the block's last
+  evening is still running after midnight, when the block is complete; a workout can outlive its program being
+  replaced. In both cases the other card would leave the workout with no way back from Today. The live card needs
+  nothing from the program (the workout carries its name and its exercises), so the order costs nothing.
+  Criterion 7's cards still appear whenever no workout is live.
+- **The two open product questions are one function each.** `workoutTakingOver(_:)` is Pete's decision 1: under the
+  other answer (the prototype's) it returns the workout only on a day whose scheduled session it is
+  (`SessionBuilder.resumable`), and nothing else changes. `loggedWorkout(for:_:)` is Pete's decision 2: under the
+  other answer it drops the condition "started today", and nothing else changes. Each has its own tests
+  (`live_*`, `logged_*`).
+- **"Finished" includes the session's own workout the moment it is finished** (criterion 5): it is merged once, by
+  id, into the week's workouts and into the recent ones (`withFinishedSession`), so the card, the strip, the tiles
+  and the recent list flip in the same update, whichever of the session and the history arrives first. A discarded
+  session's workout is neither live nor finished and changes nothing.
+
+### What landed
+
+**FeatureToday (product).** Everything but the route is internal: nothing outside the module builds an input or
+reads a model (the store and the views are S4's and S5's, in this module).
+- `TodayRoute.swift`: `public nonisolated enum TodayRoute`, the brief's six cases and `.openProgram`.
+- `TodayInput.swift`: the one value `make` takes: `program`, `exercises` (by id), `settings`, `weekWorkouts`,
+  `recentWorkouts`, `previousWeekVolume`, `session`, `now`, `calendar`, `locale`.
+- `TodayModel.swift`: `header` (date, title, the gear's action), `weekStrip` (`[WeekStrip.Day]`), `card`
+  (`upNext`, `logged`, `restDay`, `noProgram`, `blockComplete`), `stats` (two `Tile`s, shaped as `StatTile`
+  takes them) and `recent`. `Equatable` and `Sendable`. A control is an `Action` (title and route); the Up-next
+  card's button is `PrimaryAction`, `.start(Action)` or `.resume(Action, startedAt:)`.
+- `TodayPresentation.swift`: `make(_:)`, the header, `Context` (the input with today's date, the strip's days, the
+  program on the calendar and the finished workouts, resolved once), `Day` (what the program says about today)
+  and the date and number helpers.
+- `TodayPresentation+Card.swift`: `card(_:_:)`, the two rules, and the five cards.
+- `TodayPresentation+OffSchedule.swift`, `+WeekStrip.swift`, `+Stats.swift`, `+Recent.swift`.
+- `TodayCopy.swift` and `TodayCopy+Cards.swift`: 49 lookups, each `String(localized:bundle: .module)`, with
+  `locale:` where the key carries a value.
+- `Resources/Localizable.xcstrings`: 49 keys, six of them counted.
+- The placeholder `FeatureToday.swift` is deleted, and with it `FeatureTodayTests.swift`
+  (`module_name_matchesTarget`), as the plan's table of affected tests says.
+
+**Shared files.** `LedgerKit/Package.swift`: `resources: [.process("Resources")]` on `FeatureToday` (deviation 13).
+`scripts/coverage-thresholds.json`: `"FeatureToday"` joins `required`.
+
+**Tests (`FeatureTodayTests`).** `TodayPresentationTests` in eight files (the suite, `+UpNext`, `+Live`, `+Logged`,
+`+RestDay`, `+WeekStrip`, `+Stats`, `+Recent`), `TodayPresentationPropertyTests`, `TodayCopyTests`,
+`FeatureTodaySourceTests`, and `Support/TodayTesting.swift` (the tags, the seeded generator, `TodayFixtures`, and
+small views of a model for short failure messages).
+
+### Decisions and deviations
+
+1. **A live workout comes before "no program" and "block complete".** The task lists the table's rows as "no
+   program / block complete / live workout / …"; the specification's criterion 4 says the live workout takes the
+   card "whichever day it was started for". The reason is under the table. With the task's order, the two
+   corners (`live_blockCompleteOrNoProgram_takesOverTheCard`) would show the other card, and the change is two
+   lines of `card(_:_:)`.
+2. **Only `TodayRoute` is public.** The plan's shape names it alone as public. `TodayInput`, `TodayModel`,
+   `TodayPresentation` and `TodayCopy` are internal, as S1 left `AppTab` and `AppRouter` internal: `LedgerAppKit`
+   sees `TodayRoot` and the route.
+3. **Every extension is written `nonisolated extension`.** `FeatureToday` is main-actor isolated by default
+   (`Package.swift:13`), and an extension of a `nonisolated` type takes the module's default again, with the
+   types nested in it: without the keyword the build fails ("call to main actor-isolated static method … in a
+   synchronous nonisolated context"; first host build). S4 and S5 will meet the same.
+4. **The brief's keys that hold two counts, or a fragment the screen draws apart, are split** (standards §7: a
+   counted key holds one `%lld`; fragments are joined with " · "; M1 convention 1). The table under "The catalog's
+   keys" lists each. The join is one constant, `TodayPresentation.separator`: a copy file holds lookups only, and a
+   literal without a letter is no lookup.
+5. **The tiles' value and unit are apart**, because `StatTile` takes them apart (`StatTile.swift:24`; the gallery's
+   `value: "3", unit: "/4"` and `value: "41.2", unit: "k"`, `:120-121`). So the brief's `%lld/%lld` is the number
+   done and the key `/%lld`, and `%@k` is `Volume.thousands(in:)` and the key `k`. The caption is `lb moved` and
+   the change is the tile's `delta`: the component writes the " · " between them.
+6. **A number that is a key's second number is formatted with the injected locale**
+   (`Int.formatted(.number.locale(_:))`, in `Context.number(_:)`) and passed as text, as §7 says: the sets done,
+   the sessions done. The sessions tile's value is the same text.
+7. **The rest card and the "Next:" line follow `nextScheduledDay`, not the week's number** (the orchestrator's
+   brief). When it returns nil the Logged card has no "Next:" line and the rest card reads "This is the last week
+   of the block.", also in an earlier week whose later weeks are all empty; the brief has no other sentence
+   (open question 3). "Later this week" is the card's program week, the one the same sentence names ("in week
+   1"), so a block that began midweek reads "Next up is Friday" until its own week ends.
+8. **A day before the block speaks of the block's first week.** The specification says only that it is a rest
+   day whose next session is the block's first. The card's week is `max(0, weekIndex)`: the body reads "Nothing
+   scheduled for Sunday in week 1. Next up is Monday.", "Edit this week" carries `weekIndex: 0`, and the
+   off-schedule list is week 1's. So the sentence has no "next" however far the start is (open question 2).
+9. **The off-schedule list is every day of the program**, in the program's order, not only the days the card's
+   week schedules: the body's criterion 5 lists "all four days" on a week whose Saturday is cleared, and decision
+   #18's picker is for training a day the calendar does not offer. "{n} exercises" counts the slots whose exercise
+   is stored, which is the number of rows that day's card would show. "Logged" is a finished workout of that
+   program, week and day among the week's, whichever day it was done.
+10. **The header's title follows the calendar, also while a workout is live.** Criterion 1 defines the title by
+    the day; criterion 4 gives the live workout the card. On a rest day with a workout running the title is "Rest
+    day" and the card is the workout.
+11. **The live card keeps the Up-next card's shape.** Eyebrow "UP NEXT" (the brief has no other; open question
+    4); the meta line of the session the workout was built for, when that is a week and a day of the active
+    program, else none (`meta` is optional for this reason alone); the workout's own name and its own exercises
+    with their targets, so a swapped exercise shows as swapped. `isHeld` is false on its rows: a workout does not
+    record it.
+12. **A change that rounds to zero reads "0%".** The brief gives "+8%" and "−3%"; S2's notes left zero to S3. A
+    sign on zero would be wrong half the time (−0.4 % rounds to 0), and hiding it would read as "nothing to
+    compare with" (open question 5).
+13. **`Package.swift` gains a six-line target, not one line.** On one line it is 129 columns, over the
+    formatter's 120. `LedgerAppKit`'s target is written the same way.
+14. **A recent workout's minutes are rounded down** (`57:59` reads "57 min"), as `ClockText.elapsed` rounds
+    seconds down, so the same workout never reads longer here than on its receipt. The brief does not say
+    (open question 6).
+15. **The session's finished workout joins the recent list too**, placed by its start, not only the week's
+    workouts: otherwise the Logged card would name a session the list below it lacks for one update.
+16. **The model holds the static texts as well** (eyebrows, button titles, "Cancel"), so that a view draws and
+    looks nothing up. `PreviewRow` carries `isHeld` and `isDeload` for F24, as the plan asks; nothing draws them
+    yet.
+17. **Outside the years 1 to 9999 the strip has fewer than seven days.** A day there has no `CivilDate`, so it
+    has no cell; `make` still returns a model for any `Date`, the infinities and NaN included
+    (`make_momentOutsideTheCalendar_doesNotTrap`). No device clock is there.
+18. **The plan's two catalog tests are not written** (`TodayCopyTests.catalog_holdsEveryKey`,
+    `catalog_pluralRules`): since S1's fix round the gate's step and `ModuleCopyTests` do both for every module.
+    `TodayCopyTests` holds the wording, and each counted text with one and with several.
+19. **Not guarded: a week index no stored program can hold.** `Program` validates its weeks as 0 to n − 1, on
+    `init` and on decoding, so what the store hands in is sound. A program edited in memory to hold a week whose
+    index is near `Int.max`, with a live workout whose source names it, would overflow "week + 1" (and
+    `ProgressionRules.prescribe` would count that many weeks first). Programs with a week missing, a day missing
+    or a slot id twice are handled and tested.
+20. **The catalog was written by a scratch script, not typed** (not committed): it reads each lookup's key and
+    comment from the two copy files, takes the six singular forms from a table, and writes the file in the
+    tool's layout with the keys in UTF-8 order. The gate's step is what proves it: the keys are the compiler's,
+    and `xcstringstool sync` would write the same bytes.
+
+### Criteria → tests
+
+Suite `TodayPresentationTests` unless another is named. The worked examples use `Fixtures.seedProgram()` re-dated
+to Monday 2026-09-14 (`TodayFixtures.program()`), the catalog's exercises, and `Fixtures.now` (Wednesday
+2026-09-16 05:20 UTC); loads are also checked against `ProgressionRules` and minutes against `TimeEstimate`.
+
+| S3 criterion | Tests |
+|---|---|
+| 1. Header | `header_weekOneWednesday_readsTheDateAndLowerA` ("Wednesday, September 16", "Lower A", the gear), `header_otherLocaleAndZone_formatsWithThem` (de_DE; Los Angeles, where the same instant is Tuesday and a rest day), `card_byTheCalendar_followsTheDecisionTable` (six moments: the title beside the card), `noProgram_cardAndTitle`, `blockComplete_whenWeekIndexPastTheBlock` ("Today") |
+| 2. Week strip | `weekStrip_weekOneWednesday_isMondayToSunday` (body criterion 1: M14 to S20, the marks, the seven spoken dates), `weekStrip_marksDoneTodayPlannedAndRest`, `weekStrip_todayDone_saysTodayInItsLabel`, `weekStartSunday_stripRunsSundayToSaturday` (body criterion 11), `weekStrip_everyWeekStart_beginsOnItAndHoldsToday` (seven week starts), `misalignedWeekStart_stripLooksUpEachDate` (a block begun on Wednesday: one strip, two program weeks), `weekStrip_dayOf23Or25Hours_isOneDay` (Santiago, Cairo, Havana, Kiritimati, Pago Pago; every day of the week at 01:30, 12:30 and 23:30), `weekStrip_workoutAroundASkippedMidnight_marksItsStartDay`, `noProgram_stripHasNoPlannedMarks` |
+| 3. Up next | `upNext_weekOneWednesday_isLowerAWithFourRows` (body criterion 1: "Week 1 of 8 · ~38 min", four rows, `.startWorkout(program, 0, Lower A)`), `upNext_everyWeek_rowsAreTheWeeksPrescriptions` (weeks 1 to 8), `upNext_minutes_areTimeEstimateMinutes`, `upNext_deloadWeek_metaAndLoads` (body criterion 6: "Week 8 of 8 · Deload · ~28 min", the squat at 240), `upNext_kilograms_loadsAreInKilograms`, `upNext_missedLastWeek_rowIsHeld` |
+| 4. A live workout | `live_todaysSession_showsResumeWithItsStart` (body criterion 3: "Resume · 3:00", `.resumeWorkout`, the start), `live_elapsed_isClockText`, `live_otherDay_takesOverTheCard`, `live_onARestDay_takesOverTheCard`, `live_startedYesterday_takesOverTheCard`, `live_blockCompleteOrNoProgram_takesOverTheCard`, `live_notASessionOfTheProgram_hasNoMeta`, `live_swappedExercise_showsTheWorkoutsRows`, `live_anyDayOfTheBlock_neverOffersStart` (63 days around the block), `live_discarded_offersTheSessionAgain` |
+| 5. Logged | `logged_todaysSessionFinishedToday_showsItsNumbers` (body criterion 4: "LOGGED · WEEK 1", "24:22", "15 of 15 sets · 30,370 lb moved", `.openWorkout`, "Next: Friday · UB"), `logged_partlyDoneInKilograms_readsDoneOfTotalAndKilograms`, `logged_nextLine_laterThisWeekNextWeekOrNone`, `logged_emptyWeeksAhead_followTheNextSessionNotTheWeekNumber`, `logged_nextDayNotInTheProgram_hasNoNextLine`, `live_finishes_flipsToLoggedInOneUpdate` (the session's own workout, then history's: counted once), `logged_doneEarlierThisWeek_isOfferedAgain` (Pete's decision 2), `logged_otherSource_isNotTodaysSession` (another day, week or program, no source, not finished), `logged_twiceToday_showsTheNewest` |
+| 6. Rest day | `restDay_nextUp_nextWeek` (body criterion 5), `restDay_nextUp_laterThisWeek`, `restDay_lastWeekOfBlock`, `restDay_noSessionLeft_followsTheNextSessionNotTheWeekNumber`, `restDay_beforeBlockStart_speaksOfTheFirstWeek`, `offSchedule_listsEveryDayOfTheProgram` (four days, "5 exercises · ~39 min" …, a `.startWorkout` each), `offSchedule_deloadWeek_estimatesAreTheWeeks`, `offSchedule_dayDoneThisWeek_readsLogged`, `offSchedule_exerciseCount_isTheRowsCount`, `offSchedule_weekMissing_listsNoDays` |
+| 7. Block complete, no program | `blockComplete_whenWeekIndexPastTheBlock` (body criterion 7: the card, `.openProgram`, and the strip, tiles and list still filled), `noProgram_cardAndTitle`, `noProgram_stripHasNoPlannedMarks`, `noProgram_tilesReadZero` (body criterion 8: "0" "/0", "0" "k"), `make_emptyInput_isTheEmptyToday` |
+| 8. Tiles | `stats_twoOfFourSessions_readTheBriefsExample` (body criterion 9: "2" "/4", "24.2" "k" "lb moved" "+8%", both spoken texts), `stats_delta_positiveNegativeHidden` ("−3%" with U+2212; no previous week; a zero one), `stats_delta_withinHalfAPercent_readsZero`, `stats_delta_beyondInt_isClamped`, `stats_kilograms_convert`, `zeroVolume_readsZeroK`, `stats_offScheduleSessions_canReadFiveOfFour`, `stats_twoSessionsOnOneDay_countTwice`, `stats_oneSessionPlanned_isSingular`, `weekStartSunday_tilesCountSundayToSaturday` (body criterion 11), `stats_workoutOutsideTheStrip_isNotCounted`, `stats_volume_isSummedExactly` |
+| 9. Recent | `recent_fiveNewestFirst_todayLabel` (body criterion 10: seven workouts, five rows, "Today · 24:22 · 8,120 lb", "Mon · 58 min · 24,180 lb", an `.openWorkout` each), `recent_none_showsTheEmptyCopy`, `recent_minutes_areRoundedDown`, `recent_kilograms_convert`, `recent_todayLabel_followsTheZone`, `recent_olderThanAWeek_readsItsWeekday`, `recent_finishedSession_joinsTheListByItsStart` |
+| 10. Copy | `TodayCopyTests`: `plainTexts_areTheBriefs`, `textsWithValues_areTheBriefs`, `unitTexts_readPoundsAndKilograms`, `change_readsSignNumberAndPercent`, `countedTexts_haveOneAndSeveral`, `countedTexts_formFollowsTheCountedNumber`, `numbers_followTheGivenLocale`, `catalog_neverNamesTheProduct`. That the catalog and the code agree, and that no copy stands outside the copy files: the gate's string-catalog step and `ModuleCopyTests` (runs below) |
+| 11. Purity | `FeatureTodaySourceTests`: `sources_neverReadTheClockOrTheCurrentCalendar` (seventeen spellings, in every file of the module), `presentation_neverNamesDouble` (the presentation, the copy and the model name neither `Double`, `Float`, `CGFloat` nor `TimeInterval`), `check_findsASpellingInCodeOnly`; `make_sameInput_givesTheSameModel`. Coverage below |
+| 12. What the body leaves open | `upNext_missingExercise_rowIsOmitted`, `restDay_emptyWeekBetween_stillSaysNextWeekday`, `stats_offScheduleSessions_canReadFiveOfFour`, `logged_lateNightWorkout_belongsToItsStartDay` (decision #26: the card, the strip and the recent row) |
+| Every row of the decision table | row 1: the `live_*` tests; rows 2, 3, 5, 6 and "before the block": `card_byTheCalendar_followsTheDecisionTable`; row 4: the `logged_*` tests; an edited program: `card_programEditedAfterValidation_isARestDay`, `upNext_slotIDTwice_doesNotTrap`; any `Date`: `make_momentOutsideTheCalendar_doesNotTrap` |
+| The invariants, seeded | `TodayPresentationPropertyTests.make_randomInput_keepsTheInvariants`: 200 seeds of four inputs (ten zones, every week start, pounds and kilograms, a block begun on any day of 2026 with weeks emptied, a moment from two weeks before it to two weeks after, up to eight finished workouts, a session absent, live, finished or discarded). Against a reference written with Foundation's calendar alone: the card is the decision table's and resumes exactly when a workout is live; seven strip days from the week start, each spoken as its own date, today among them; the sessions tile, the done marks and the volume are those of the workouts that started in the seven days; every start or edit route names the active program and one of its weeks; at most five recent rows, and the empty copy exactly when there is none |
+
+### The catalog's keys
+
+`F09-today.md:48` is the body's "Copy (exact)" paragraph (one line of the file); `:73` is its Non-functional
+line. "Split" means the brief's key is cut where standards §7 requires it.
+
+| Key | From the brief | Note |
+|---|---|---|
+| `Today` | `:48` ("Today" for today), `:178-180` (the title with no program or a complete block) | one key for both |
+| `Rest day`, `Settings` | `:48` | |
+| `Today, %@` | not in the brief | written: see below |
+| `UP NEXT`, `Start workout`, `Resume · %@`, `%lld × %lld @ %@` | `:48` | |
+| `Week %lld of %lld`, `Deload`, `~%lld min` | `:48`, "Week %lld of %lld · ~%lld min" and its deload form | split; `~%lld min` is counted |
+| `LOGGED · WEEK %lld`, `View session`, `Next: %@ · %@`, `Next: week %lld` | `:48` | |
+| `%@ of %lld sets`, `%@ lb moved`, `%@ kg moved` | `:48`, "%lld of %lld sets · %@ lb moved" ("kg moved" for kg) | split; counted on the total, the sets done as text |
+| `SCHEDULED REST`, `No session today`, `Edit this week`, `Train off-schedule` | `:48` | |
+| `Nothing scheduled for %@ in week %lld. Next up is %@.`, `… Next up is next %@.`, `… This is the last week of the block.` | `:48` | |
+| `Pick a day from week %lld.`, `Logged`, `Cancel` | `:48` | |
+| `%lld exercises` | `:48`, "%lld exercises · ~%lld min" | split; counted; its second half is `~%lld min` |
+| `No program yet`, `Set up a program to see your next session here.`, `Set up program` | `:48` | |
+| `Block complete`, `%lld weeks done. Start the next block from Program.`, `Open Program` | `:48` | the sentence is counted |
+| `/%lld`, `sessions this week` | `:48`, "%lld/%lld" + "sessions this week" | split (deviation 5) |
+| `%@ of %lld sessions this week` | `:73`, "2 of 4 sessions this week" | counted on the sessions planned |
+| `k`, `lb moved`, `kg moved` | `:48`, "%@k" + "lb moved · %@" or "lb moved" ("kg moved") | split (deviation 5) |
+| `+%lld%%`, `−%lld%%` | `:48`, delta "+8%" / "−3%" | the minus is U+2212 |
+| `%lld%%` | not in the brief | written: "0%" |
+| `RECENT`, `No sessions yet. Your first workout lands here.` | `:48` | |
+| `%lld min`, `%@ lb`, `%@ kg` | `:48`, "%@ · %lld min · %@ lb" | split; `%lld min` is counted; kilograms by analogy |
+
+**Texts the brief did not give, which I wrote.**
+- `Today, %@`, the spoken label of today's cell once it is trained ("Today, Wednesday, September 16").
+  Orchestrator decision 11 says the feature's summary "says "Today" when today's mark is done" and gives no
+  wording. Untrained, the cell's label is the date alone and the component's own value says "Today".
+- `%lld%%`, "0%" for a change within half a percent (deviation 12).
+- The singular forms the catalog rule requires: "%@ of %lld set", "%lld exercise", "%lld week done. Start the next
+  block from Program.", "%@ of %lld session this week". "~%lld min" and "%lld min" read the same in both forms.
+- The volume tile's spoken text has no key of its own: it is `%@ lb moved` with the whole number, then ", " and
+  the change ("24,180 lb moved, +8%"). The brief gives a spoken text for the sessions tile only.
+- The kilogram forms `%@ kg` and `%@ kg moved`, by analogy with the brief's "kg moved".
+- The translators' comments.
+
+### Code lines (added lines of `git diff -U0 4abfb8f`, new files whole, blank and whole-line comment lines excluded)
+
+| Path | Added | Removed |
+|---|--:|--:|
+| `FeatureToday/TodayPresentation+Card.swift` (new) | 195 | 0 |
+| `FeatureToday/TodayPresentation.swift` (new) | 140 | 0 |
+| `FeatureToday/TodayCopy+Cards.swift` (new) | 117 | 0 |
+| `FeatureToday/TodayModel.swift` (new) | 104 | 0 |
+| `FeatureToday/TodayCopy.swift` (new) | 79 | 0 |
+| `FeatureToday/TodayPresentation+Stats.swift` (new) | 50 | 0 |
+| `FeatureToday/TodayPresentation+OffSchedule.swift` (new) | 36 | 0 |
+| `FeatureToday/TodayPresentation+Recent.swift` (new) | 34 | 0 |
+| `FeatureToday/TodayPresentation+WeekStrip.swift` (new) | 29 | 0 |
+| `FeatureToday/TodayInput.swift` (new) | 14 | 0 |
+| `FeatureToday/TodayRoute.swift` (new) | 10 | 0 |
+| `FeatureToday/FeatureToday.swift` (deleted) | 0 | 3 |
+| `LedgerKit/Package.swift` | 6 | 1 |
+| `scripts/coverage-thresholds.json` | 1 | 1 |
+| **Product** | **815** | **5** |
+| Tests (`TodayPresentationTests` in eight files 1,280, `TodayPresentationPropertyTests` 212, `Support/TodayTesting` 210, `TodayCopyTests` 118, `FeatureTodaySourceTests` 45; the placeholder's test, 9 lines, deleted) | 1,865 | 9 |
+
+Not counted: the catalog (592 lines of JSON) and this section.
+
+**The slice is 815 product lines, over the task's stop line of about 750** (planned: about 570). I counted only
+when the tree was built and tested, so this is reported at the end and not at the line; nothing was compressed
+to come under it. Where the plan's estimate fell short: the copy file is 196 lines (49 lookups of three to eight
+lines each; the plan counted the catalog out and the lookups too) and the model's declarations are 104. The
+logic, `TodayPresentation*`, is 484 lines.
+
+**The plan's split ("strip, stats, recent" / "cards"), as it would cut this tree.** Not done; the orchestrator
+decides (open question 1).
+- **First PR, the frame, about 408 lines**: `TodayRoute`, `TodayInput`, `TodayModel` without `card` and the card
+  types, `TodayPresentation.swift` (`make` without the card; the header; `Context`; `Day`, which the header's
+  title needs), `+WeekStrip`, `+Stats`, `+Recent`, `TodayCopy.swift` (20 keys), `Package.swift`, the thresholds.
+- **Second PR, the cards, about 407 lines**: `TodayModel`'s `card`, `Card` and the card types (its "The cards"
+  extension), `+Card`, `+OffSchedule`, `TodayCopy+Cards.swift` (29 keys), and one line of `make`.
+- The plan's objection ("a half model would need stubs") does not hold as the code fell out: the day's
+  resolution goes with the header, and the first model simply has no card. `Session.source`, which only the
+  cards read, would move to the second PR.
+- The tests cut less cleanly. `+WeekStrip`, `+Stats`, `+Recent`, the source tests and the support file are the
+  first PR's; `+UpNext`, `+Live`, `+Logged` and `+RestDay` the second's. About a dozen tests assert on both
+  sides of the seam and would be cut in two or wait for the second PR (`card_byTheCalendar_…`,
+  `blockComplete_…`, `live_finishes_…`, `logged_doneEarlierThisWeek_…`, `logged_lateNightWorkout_…`,
+  `misalignedWeekStart_…`, the seeded suite's card check), and `TodayCopyTests` splits by copy file.
+- Not verified: the first half was never built or tested by itself.
+
+### Runs (final tree; no product file changed after the first of them)
+
+| Run | Command | Result |
+|---|---|---|
+| Host, the slice's tests | `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'FeatureTodayTests\|ModuleCopyTests'` | exit 0. `FeatureTodayTests`: 89 tests in 4 suites passed (parameterised: 200 seeds, 8 weeks, 7 week starts, 6 moments twice, 5 zone weeks). `ModuleCopyTests`: 6 tests passed, with `FeatureToday` among the 10 audited modules and one of the 2 whose built bundle resolves every key |
+| Host, static | `scripts/check.sh --lint-only` | exit 0, `check.sh (--lint-only) OK`, 72 s (format, lint `--strict`, package graph and pins, every script suite); run again after this section was written |
+| Simulator, one locked session | `/usr/bin/python3 <sim-lock> <scratch>/sim-run.sh`: `check.sh`'s step 3 with the same arguments (`build-for-testing`, then `scripts/check-string-catalogs.sh`, then `test-without-building` of the PR plan with `-only-testing:FeatureTodayTests -only-testing:LedgerAppKitTests`), iPhone 17, iOS 27.0 | exit 0; the lock was free; 19 GB free before, 17 GB after. Build: status 0. Catalog step: status 0, "string catalog matches the code: LedgerKit/Sources/FeatureToday/Resources/Localizable.xcstrings (keys: 49)", and LedgerAppKit's (keys: 7); "2 checked, each matches its module's code". Tests: status 0; the result bundle holds 297 tests, 297 passed, none failed, skipped or expected to fail: `FeatureTodayTests` 89, `LedgerAppKitTests` 208. The bundles were read and deleted |
+
+The build log's only warnings are the three S2's notes already list, in other targets' test files
+(`PayloadVersionAdversarialTests.swift:29`, `LedgerDesignTests/PreviewTests.swift:90`, a `@Test` expansion); none
+names a file of this slice. `git status --short` lists the files under "What landed", these notes, and nothing
+else. No build wrote to the catalog: after the runs it is byte for byte the file the copy files generate
+(`cmp` against a copy written again from them by the scratch script that wrote it).
+
+**Not run, and so not verified:** the full gate (`scripts/check.sh`: the other iOS test targets, watchOS, the
+coverage gate over the whole plan), which is the orchestrator's on the final tree; CI; anything on a device.
+`FeatureToday` is not built for watchOS by any scheme, and I did not build it there.
+
+### Coverage of `TodayPresentation*`
+
+From the simulator session's result bundle (`xcrun xccov view --report --json`), where the module's files are
+measured under `FeatureTodayTests`; the host run (`--enable-code-coverage`, `llvm-cov report` on the test binary)
+gives the same lines and no missed region.
+
+| File | Lines |
+|---|--:|
+| `TodayPresentation.swift` | 126 / 126 |
+| `TodayPresentation+Card.swift` | 241 / 241 |
+| `TodayPresentation+OffSchedule.swift` | 43 / 43 |
+| `TodayPresentation+WeekStrip.swift` | 40 / 40 |
+| `TodayPresentation+Stats.swift` | 55 / 55 |
+| `TodayPresentation+Recent.swift` | 30 / 30 |
+| **`TodayPresentation*`** | **535 / 535, 100 %** |
+| `TodayCopy.swift`, `TodayCopy+Cards.swift`, `TodayModel.swift`, `TodayInput.swift` | 75 / 75, 114 / 114, 5 / 5, 3 / 3 |
+| **`FeatureToday`**, as `scripts/coverage-gate.sh` reads that bundle | **732 / 732, 100 %** (threshold 70 %) |
+
+**Mutants.** 65 one-statement changes to the presentation, each run against the final tests on the host by a
+scratch script that restores the file and checks its SHA-256 afterwards: the two rules each way, the card's
+order, every clamp, every unit, every "+ 1", the marks' precedence, the strip's days, the merge of the session's
+workout, the recent list's limit and rounding. 64 failed a test at once. One survived, "the live card takes its
+title from the program's day": every fixture's workout carried its day's name. `live_swappedExercise_…` now
+renames the workout, and the mutant fails. Set aside: one change that turned out to change nothing (a "Next:"
+line withheld in the last week when the next session is in a later week, which cannot be), and one that does not
+compile.
+
+### Open questions (each with a recommendation)
+
+0. **One PR of 815 lines, or the plan's split** ("Code lines" above). The task says to stop and propose the
+   split above about 750, so this is the orchestrator's to rule before anything is committed. For what it is
+   worth from the implementer: 300 of the lines are declarations and lookups with no branch in them, the rest
+   is one decision table whose parts are held together by one `Context` and by tests that assert the card, the
+   strip and the tiles in the same breath, and standards §10 asks for a split above about 1,000. The split is
+   mechanical on the product side and costs a second gate, test and review cycle and the rework of about a
+   dozen tests.
+1. **Pete's decisions 1 and 2** are built as their defaults. Each other answer is one function
+   (`workoutTakingOver(_:)`, `loggedWorkout(for:_:)`) and its tests. Recommend asking before S4's screenshots.
+2. **The wording before the block begins** (deviation 8): "Nothing scheduled for Sunday in week 1. Next up is
+   Monday." Recommend keeping it; a sentence of its own ("Your block starts Monday.") would be Pete's copy and
+   one more key.
+3. **"This is the last week of the block." in a week that is not the last** (deviation 7), when every later week
+   is empty. Recommend keeping it until F11 can make such a block; then a sentence such as "Nothing else is
+   scheduled in this block." would be Pete's.
+4. **"UP NEXT" over a workout that is running** (deviation 11). Recommend keeping it for S4's screenshots and
+   asking Pete there; another eyebrow is one key and one line.
+5. **"0%"** (deviation 12). Recommend keeping it. Hiding a zero change is one line in `change(_:_:)`.
+6. **Minutes rounded down** in RECENT (deviation 14). Recommend keeping it, and F13's list doing the same.
+7. **RECENT says "Mon" for a workout of any age**: the brief's format has no date. Recommend leaving it; the
+   list holds five workouts and History has the dates.
+8. **The spoken texts** ("Today, …", "24,180 lb moved, +8%"). Recommend S4's accessibility pass reads them aloud
+   once on a device; "+8%" is read "plus eight percent".
+9. **"Resume · %@" is looked up here as a `String`**, with the elapsed time at the model's moment. S4's ticking
+   label is the copy file's timer form with the same key (standards §7). Recommend S4 keeps this `String` as the
+   button's accessibility label, so that VoiceOver does not re-read a label that changes each second.
+
+### Inputs for S4 (what each view is handed)
+
+Views take the model's parts and call nothing in `TodayPresentation` or `TodayCopy`, except the one timer `Text`
+S4 adds to the copy file.
+- **Header**: `model.header.date`, `.title` (the heading that keeps the identifier `today.title`), and
+  `.settings`: its `title` is the gear's label, its `route` what the tap emits.
+- **Strip**: `WeekStrip(days: model.weekStrip)`, as it is.
+- **Card**: `switch model.card`.
+  - `.upNext(card)`: `Eyebrow(card.eyebrow, tint: .accent)`, `card.meta` (optional), `card.title`, `card.rows`
+    (`name`, `scheme`; no ids, so draw by offset), and `card.action`: `.start(action)` is a `PrimaryButton` with
+    `action.title`; `.resume(action, startedAt:)` is the timer label counting from `startedAt`, with
+    `action.title` ("Resume · 3:00") as what a frozen preview and VoiceOver read. Both emit `action.route`;
+    `card.action.action` gives the pair without a `switch`.
+  - `.logged(card)`: `eyebrow`, `elapsed`, `title`, `stats`, `action`, and `next` (optional).
+  - `.restDay(card)`: `eyebrow`, `title`, `body`, `editWeek` (an action) and `offSchedule`: its `title` is the
+    second button and the sheet's title, then `subtitle`, `days` (`name`, `detail`, `logged` when not nil, and
+    `route` for the row's tap) and `cancel`.
+  - `.noProgram(message)` and `.blockComplete(message)`: `title`, `body`, `action`.
+- **Tiles**: `StatTile(value:unit:caption:delta:accessibilitySummary:)` from `model.stats.sessions` and
+  `.volume`, field for field.
+- **Recent**: `model.recent.eyebrow`; `rows` (`name`, `meta`, `route`); `emptyMessage` when it is not nil.
+- **Previews and snapshots**: build a model with `TodayPresentation.make(TodayInput(…))` from fixed values.
+  `Fixtures.seedProgram()` starts 2026-08-17; re-date it as `FeatureTodayTests/Support/TodayTesting.swift` does.
+  `Fixtures.catalogByID()` is internal to `LedgerFakes`; the exercises come from `ExerciseCatalog.seed()`.
+
+### Inputs for S5 (what the store fills in `TodayInput`)
+
+| Field | From |
+|---|---|
+| `program` | `ProgramRepository.observeActive()` |
+| `exercises` | `ExerciseRepository.observeAll()`, keyed by id |
+| `settings` | `SettingsRepository.observe()` |
+| `weekWorkouts` | one `WorkoutRepository.workouts(in:)` over the stats week joined with the program week: from the earlier lower bound to the later upper bound of `WeekCalendar.week(containing: now)` and `bounds(ofWeek: max(0, weekIndex(for: now)))`. With no program, or after the block, the stats week alone. More than these workouts does no harm: the presentation counts by date and by source |
+| `recentWorkouts` | `WorkoutRepository.observeRecent(limit: 5)` |
+| `previousWeekVolume` | `StatsQueries.weeklyVolume(in: WeekCalendar.previousCompleteWeek(before: now))`; zero and nil both hide the change |
+| `session` | nil in S5; in S6 `WorkoutSessionUpdate.state` as it arrives (live, finished or discarded) |
+| `now`, `calendar`, `locale` | `@Dependency(\.date)`, `\.calendar`, `\.locale` |
+
+- The `WeekCalendar` is `WeekCalendar(startDate: program.startDate, weekStart: settings.weekStart, calendar:)`;
+  with no program any start date gives the same stats week.
+- The model is `Equatable`, so the store can skip a publish that changes nothing. `Loadable<TodayModel>` has no
+  `Equatable` (S2's notes).
+- "Resume" does not tick in the model: one model serves until an input changes.
+
+### S3 — orchestrator rulings after G1 (2026-10-05)
+
+- **One slice, one PR.** 815 product lines is over the 500 target and under the ~1,000 line at which standards §10
+  asks for a split; the code is one pure function and its words. The split the implementer laid out stays a
+  description of the files; the PR body declares the overage. (The stop at about 750 was the orchestrator's
+  caution.)
+- **A live workout comes before "no program" and "block complete"** (the decision table's first row): accepted, for
+  the reason given: Today must always be a way back to a running workout.
+- The other deviations (only `TodayRoute` public; the brief's keys split as standards §7 asks; rest and "Next:" copy
+  following `nextScheduledDay`; a day before the block speaking of week 1; every program day in the off-schedule
+  list; minutes rounded down; six lines in `Package.swift`; the two planned catalog tests not written; the texts
+  the brief did not give) go to the reviewer and the tester to judge. The invented texts are listed in the PR for
+  Pete.
+- The orchestrator's full gate on the tree exited 0 before this entry was written.
+
+## Slice S3 — fix round 1 (G1 implementer, 2026-10-05)
+
+On `feat/F09-s3-presentation` at `1d1b550` (the tester's files, the findings and the review). No commits. The
+specification is the brief's "Plan amendments — slice S3 after round 1" (criteria 13 to 18). Product code and my
+own tests only: `git status --short` lists no file under `FeatureTodayTests/Adversarial/`.
+
+### What changed, by finding
+
+- **Criterion 13 (F9-S3-1, n1, F9-S3-7): the order of `weekWorkouts` is not assumed.** `Context.init` orders the
+  week's finished workouts once, after the session's own workout is merged in: `newestFirst(_:)`
+  (`TodayPresentation.swift`) is the repository's order, newest start first and of two that started together the
+  smaller id first. So `loggedWorkout`'s "the first that matches" is the one that started last, and of two that
+  started at the same instant the same one every time. The order is total: a start that is not a number sorts
+  after every moment, so a list that holds one still comes out the same from any order.
+  `TodayInput.weekWorkouts` says that any order is accepted. `recentWorkouts` is still "newest first" by
+  contract and is shown as handed in (the tester's `sameStart_listsBoth` pins that).
+  Tests: `logged_twiceToday_showsTheNewest` now takes both orders;
+  `logged_twoAtTheSameInstant_showTheSameOneInAnyOrder`; `make_weekWorkoutsInAnyOrder_giveTheSameModel` (six
+  workouts, two that tie, two whose start is not a number, 40 shuffles); the seeded suite hands the workouts
+  shuffled, gives one in four the start and the session of the one before it, checks that a Logged card shows
+  one of today's that started last, and that the reversed list gives an equal model.
+- **Criterion 14 (F9-S3-2, R1): the volume tile's spoken line is copy.** `TodayCopy.movedThisWeek(_:units:locale:)`
+  and `movedThisWeek(_:change:units:locale:)`, a key per unit each. The `", "` in `TodayPresentation+Stats.swift`
+  is gone; the one literal left outside the copy files is `separator`, " · ".
+- **Criteria 15 to 17 (F9-S3-3 to -5, R4, n2, n7): one value for the next session.** `NextSession`
+  (`TodayPresentation+Card.swift`): the scheduled day, its weekday's name, and whether its date is one of the
+  strip's seven days; `nextSession(_:_:)` gives it, or nil when the block has none left. Both readers use it:
+  - `restBody(_:_:)`: before the block, "Your block starts on {date}." and nothing else (16); from then on the
+    day and its program week, then "Next up is {weekday}." when the session is on the strip and "Next up is next
+    {weekday}." when it is not, whichever program week it is in (15); with none left, "This is the last week of
+    the block." in the last week and "No sessions are left in this block." in any earlier one (17).
+  - `nextLine(_:_:)`: unchanged in what it says; it still compares the program week, so "Next: week n" never
+    names the week the lifter is in (15).
+  Tests: `restDay_nextWord_followsTheStripNotTheProgramWeek` (a Sunday and a Monday week start, both ways round),
+  `restDay_blockBegunMidweek_tomorrowIsNotNext` (the tester's 11-03 case),
+  `logged_nextLine_followsTheProgramWeekNotTheStrip`, `restDay_beforeBlockStart_saysWhenTheBlockStarts`,
+  `restDay_beforeABlockThatOpensWithARestDay_namesTheBlocksFirstDay`,
+  `restDay_noSessionLeftBeforeTheLastWeek_saysNoneAreLeft`. The two tests that pinned the old sentences
+  (`restDay_beforeBlockStart_speaksOfTheFirstWeek`, `restDay_noSessionLeft_followsTheNextSessionNotTheWeekNumber`)
+  are the last two of these, renamed.
+- **R2: the source test.** `FeatureTodaySourceTests.ambient` gains `Date.init()`, `Calendar(identifier:`,
+  `.dateTime`, a bare `.formatted()`, `DateFormatter(`, `NumberFormatter(` and `DateComponentsFormatter(` (24
+  spellings); `inexact` gains `.doubleValue` and `.floatValue`. The check now reads the code inside string
+  interpolations too, and its comment says what it does not read. `check_findsASpellingInCodeAndInInterpolations`
+  has the interpolated cases and finds every spelling of both lists in code.
+- **R3:** `live_afterTodaysSessionIsLogged_takesOverTheCard`: Lower A finished today, then Lower B live: Resume,
+  the title "Lower A", today's mark done, "1" session.
+- **n3:** the Logged card keeps the program's day name; the comment at the line says so and why. **n4:** the
+  comment on `workoutTakingOver` says the other answer also changes its signature and its one call. **n5:** every
+  key with two or more values has a translator's comment naming them in order, in the code and the catalog
+  together (below). **n6:** the seeded check compares the "/N" unit with the reference's count of planned days
+  for every input, and holds every planned mark to a planned day and no planned day to a rest mark.
+- **Not changed: F9-S3-6** (criterion 18).
+
+### New and changed keys (for Pete)
+
+The catalog has 55 keys (49 before).
+
+| Key | Reads | Where |
+|---|---|---|
+| `%@ lb moved this week, %@ from last week` (new) | "24,180 lb moved this week, +8% from last week" | VoiceOver, the volume tile, when there is a change to draw |
+| `%@ kg moved this week, %@ from last week` (new) | "10,968 kg moved this week, +8% from last week" | the same, in kilograms |
+| `%@ lb moved this week` (new) | "24,180 lb moved this week" | VoiceOver, the volume tile, with no previous week |
+| `%@ kg moved this week` (new) | "10,968 kg moved this week" | the same, in kilograms |
+| `Your block starts on %@.` (new) | "Your block starts on Monday, September 28." | the rest-day card's whole body on a day before the block begins |
+| `Nothing scheduled for %@ in week %lld. No sessions are left in this block.` (new) | "Nothing scheduled for Sunday in week 2. No sessions are left in this block." | the rest-day card, no session left, in a week before the last |
+
+Used differently, text unchanged:
+- `… Next up is %@.` and `… Next up is next %@.`: the word "next" now follows the strip's seven days.
+- `… This is the last week of the block.`: only in the block's last week.
+- `%@ lb moved`, `%@ kg moved`: the Logged card only; the tile no longer speaks them.
+
+With a change that is a fall or nothing, the spoken line reads "21,728 lb moved this week, −3% from last week"
+and "22,400 lb moved this week, 0% from last week": the change is the text the tile draws.
+
+Translators' comments, new or reworded (no text changes): `Week %lld of %lld`, `%lld × %lld @ %@`,
+`%@ of %lld sets`, `Next: %@ · %@`, the four `Nothing scheduled for …` bodies, `%@ of %lld sessions this week`,
+and the six new keys.
+
+### Code lines
+
+Product, counted as before (blank and whole-line comment lines excluded): **917** (815 before), in `FeatureToday`
+910 and the two shared files 7.
+
+| File | Now | Before |
+|---|--:|--:|
+| `TodayCopy+Cards.swift` | 151 | 117 |
+| `TodayCopy.swift` | 115 | 79 |
+| `TodayPresentation+Card.swift` | 214 | 195 |
+| `TodayPresentation.swift` | 151 | 140 |
+| `TodayPresentation+Stats.swift` | 52 | 50 |
+| the other six files | 227 | 227 |
+
+70 of the 102 new lines are the copy files': six lookups, and the comments of n5, each of which turns a one-line
+lookup into six. The logic grew by 32. My tests are 2,135 lines in fourteen files (1,865 in twelve): the seeded
+suite's reference is its own file now, and the order tests have one.
+
+### Runs (final tree; no source changed after the first of them)
+
+| Run | Result |
+|---|---|
+| Host: `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'FeatureTodayTests\|ModuleCopyTests'` | exit 1. `FeatureTodayTests`: 193 tests in 16 suites, **187 pass, 6 fail** (15 issues), each a tester's pin listed below. My 97 pass (89 before), the tester's 96: 90 pass. `ModuleCopyTests`: 6 pass; `FeatureToday` is audited and its built bundle resolves the 55 keys |
+| Host, my suites alone, with coverage (`--filter 'FeatureTodayTests\.(TodayPresentation(Property)?Tests\|TodayCopyTests\|FeatureTodaySourceTests)'`) | exit 0, 97 tests in 4 suites |
+| `scripts/check.sh --lint-only` | exit 0, `check.sh (--lint-only) OK`, 78 s |
+| Simulator, one locked session, as in the first round (`build-for-testing`, `scripts/check-string-catalogs.sh`, `test-without-building -only-testing:FeatureTodayTests -only-testing:LedgerAppKitTests`; iPhone 17, iOS 27.0) | lock free; 13 GB free before and after. Build: status 0. Catalog step: status 0, "string catalog matches the code: LedgerKit/Sources/FeatureToday/Resources/Localizable.xcstrings (keys: 55)", LedgerAppKit's (keys: 7), "2 checked, each matches its module's code". Tests: `xcodebuild` status 65; the bundle holds 401 tests, **395 passed, 6 failed**: `FeatureTodayTests` 193 with the same six failing, `LedgerAppKitTests` 208, all passing. The bundles were read and deleted |
+
+**Coverage of `TodayPresentation*`**, from the simulator's bundle and the same on the host from my suites alone
+(no missed region there): `TodayPresentation.swift` 148 / 148, `+Card` 264 / 264, `+OffSchedule` 43 / 43,
+`+WeekStrip` 40 / 40, `+Stats` 58 / 58, `+Recent` 30 / 30: **583 / 583**. The module: 850 / 850.
+
+**Mutants of the new code**, 20, each against my own suites on the host (the files restored and their SHA-256
+checked): no ordering, oldest first, ties by the larger id, ties left to the input, an order that is not total,
+the oldest logged, "next" by the program week again, always on the strip, the "Next:" line by the strip, no
+sentence before the block, the wrong date in it, the three ways to get the last week wrong, the spoken line
+without its change, in thousands and in the wrong unit, the week off by one, today's weekday for the next. 19
+failed a test at once. One survived, the order that is not total: the fixture's ids rose with its starts. The
+fixture now sets ids against starts, and the mutant fails.
+
+**Not verified.** The full gate (the other targets, watchOS, the coverage gate over the whole plan): not run, as
+told; expect it red at its iOS test step on the six tests below until the tester updates them. CI. Nothing on a
+device. How VoiceOver speaks the new line.
+
+### The tester's tests that need the tester
+
+Six tests fail, on the host and on the simulator alike, and no other. Each pins a text or a count that a ruling
+changes. I did not edit them.
+
+| Test (`FeatureTodayTests/Adversarial/`) | Ruling | It expects | It now gets |
+|---|---|---|---|
+| `TodayWeeksAdversarialTests.blockBegunOnWednesday_usesEachDaysOwnWeek(_:)`, the row of 2026-11-03 (`TodayWeeksAdversarialTests.swift:102-110`); its other five rows pass | 15 | "Nothing scheduled for Tuesday in week 7. Next up is next Wednesday." | "Nothing scheduled for Tuesday in week 7. Next up is Wednesday." |
+| `TodayTilesAdversarialTests.straddlingWeek_keepsTheTwoWeeksApart()` (`+Logged.swift:79`); its other expectations pass | 15 | "Nothing scheduled for Tuesday in week 1. Next up is next Wednesday." | "Nothing scheduled for Tuesday in week 1. Next up is Wednesday." |
+| `TodayWeeksAdversarialTests.beforeTheBlock_isARestDayOfWeekOne(_:)`, both arguments (`+Edited.swift:94-95`); the route, the sheet, the marks and the unit still pass | 16 | a body that begins "Nothing scheduled for Wednesday in week 1. Next up is " and ends " Friday." or " Monday.", with or without "next" | "Your block starts on Friday, September 18." (2 days before) and "Your block starts on Monday, September 28." (12 days before) |
+| `TodayWeeksAdversarialTests.nothingLeftBeforeTheLastWeek_saysSo()` (`+Edited.swift:63-79`) | 17 | "Nothing scheduled for Sunday in week 1. This is the last week of the block." | "Nothing scheduled for Sunday in week 1. No sessions are left in this block." |
+| `TodaySpokenAdversarialTests.volumeTile_speaksTheWholeNumberAndTheChange(_:)`, all seven rows (`:103`, the line ends with the drawn change; `:106`, the line is the whole number alone) | 14 | "24,180 lb moved, +8%"; "10,968 kg moved, +8%"; "21,728 lb moved, −3%"; "22,400 lb moved, 0%"; "24,180 lb moved"; "0 kg moved, −100%"; "0 lb moved" | "24,180 lb moved this week, +8% from last week"; "10,968 kg moved this week, +8% from last week"; "21,728 lb moved this week, −3% from last week"; "22,400 lb moved this week, 0% from last week"; "24,180 lb moved this week"; "0 kg moved this week, −100% from last week"; "0 lb moved this week" |
+| `TodayPurityAdversarialTests.lookups_takeTheInjectedLocale()` (`:127`); its two other expectations pass. Not in the orchestrator's list: it counts the lookups | 14, 16, 17 | `calls.count == 49` | 55 lookups: the six new keys |
+
+The three that failed in round 1 pass unedited: `TodayCardAdversarialTests.sessionDoneTwice_showsTheLaterOne(_:)`
+(both cases), `TodayCardModelAdversarialTests.seededInputsInAnyOrder_showWhatTheSpecificationGives(_:)` (all
+eight batches) and `TodayPurityAdversarialTests.joiner_isTheMiddleDot()`.
+
+### For the next slices
+
+- S5: `weekWorkouts` may be filled in any order, so two reads appended are as good as one read over the union.
+- S4: the rest-day body before the block is one sentence with a date in it, longer than the others at large
+  text sizes ("Your block starts on Wednesday, September 30.").

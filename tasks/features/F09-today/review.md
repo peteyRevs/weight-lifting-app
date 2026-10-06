@@ -712,3 +712,375 @@ None.
 - A device, and a watch whose `Int` is 32 bits.
 - GitHub's runner and its zone database (the three 25-hour rows are new).
 - The tester's files.
+
+## Slice S3 — review (G3 reviewer, 2026-10-05)
+
+Reviewed: `git diff 4abfb8f..906d5a8` on `feat/F09-s3-presentation` (815 product lines in eleven files of
+`FeatureToday`, a 49-key catalog, 2,162 lines of tests, six lines of `Package.swift`, one of
+`coverage-thresholds.json`, the notes), against the brief's "Plan amendments — slice S3" (twelve criteria), the
+body's criteria 1 and 3–11 and its "Copy (exact)", standards §5 and §7, architecture §4, §11 and §12, the product
+spec's Today sections and rules 34–35, 42–43, 45–46, decisions #14, #15, #17, #18, #25, #26 and Naming, and the
+notes' S3 sections. Paths that start with `Today` are under `LedgerKit/Sources/FeatureToday/`; test paths are
+under `LedgerKit/Tests/FeatureTodayTests/`.
+
+**Verdict: approved. 0 Blocking, 4 Should fix, 7 Nits.**
+
+The function does what the twelve criteria say. I found no input a shipped flow can produce for which the card,
+the strip, the tiles or the list is wrong, and no arithmetic in seconds, no `Double` and no ambient clock,
+calendar, locale or zone. The four Should-fix items are one spoken line assembled outside the copy file, a
+source test that will not see the spellings S4 and S5 are most likely to write, one combination of the decision
+table with no worked example, and two rest-day sentences that are false for inputs the specification names and
+no shipped flow can reach yet. None needs to hold the PR; R2 and R3 are cheap enough to do before S4 starts.
+
+### What I ran
+
+- `/code-review` at effort `high` on the range (forked skill; 10 findings, triaged below). It built nothing.
+- The committed catalog (`git show 906d5a8:…/Localizable.xcstrings`) decoded and compared by script with the
+  quoted texts of the brief's copy paragraph (`F09-today.md:48`): source language, state, plural forms, comments,
+  the keys' order by UTF-8 bytes, and the three non-ASCII characters (U+00D7, U+00B7, U+2212).
+- A three-test scratch package to see what Swift Testing in this toolchain (Swift 6.4) writes for a failed
+  expectation: for `#expect(make(input).kind == "x")` only the two sides; for `#expect(input.items.isEmpty)`
+  and the like, the receiver in full (2,000 strings were printed).
+- No test of the slice, on the host or on a simulator (see "What I did not check").
+
+Scratch folder: `/private/tmp/claude-501/-Users-peterarevalo-Dev-workout-app/1007ba2a-4cb4-4801-a9fe-bc3f1e348a39/scratchpad/f09s3-g3`
+(`catalog.json`, `capture/`).
+
+### Blocking
+
+None.
+
+### Should fix
+
+- **R1. The volume tile's spoken text is put together in the presentation, with a literal of its own.**
+  `TodayPresentation+Stats.swift:43-49`: `[TodayCopy.moved(…), delta]` joined with `", "` gives "24,180 lb moved,
+  +8%". Standards §7: spoken text is copy, a lookup in the copy file like any other line, and a presentation
+  builder holds no user-facing literal. `" · "` is the join the convention names; `", "` is not, and the audit
+  cannot see a literal without a letter (its first known limit, left to review). It matters twice: a translator
+  cannot move or qualify the change, and the line as heard says neither "this week" nor what the change is
+  against (the sessions tile says "this week"; this one does not). Criteria 8 and 10. Fix, either: (a) a member
+  per unit in `TodayCopy` for the tile's spoken line with a change (`%@ lb moved, %@`, `%@ kg moved, %@`, or the
+  sentence Pete prefers, such as "24,180 lb moved this week, up 8% on last week", which needs a key per
+  direction), the line without a change staying `%@ lb moved`; or (b) the orchestrator adds ", " to §7 as the
+  join of spoken fragments and it becomes a named constant beside `separator`. (a) is two to six keys and no
+  change to the `stats_*` tests if the English stays.
+- **R2. The source test will not see the ambient reads S4 and S5 are most likely to write.**
+  `FeatureTodaySourceTests.swift:10-15`: the seventeen spellings do not include `.dateTime` (a `Date.FormatStyle`
+  with the device's locale, calendar and zone, the usual way to format a date in a view), `Calendar(identifier:`
+  (a new calendar takes the device's zone), a bare `.formatted()`, `Date.init()`, or the formatter classes
+  (`DateFormatter(`, `NumberFormatter(`, `DateComponentsFormatter(`). And `SwiftSource.lines(ofCode:)` does not
+  search the code inside a string interpolation (`LedgerTestSupport/Localization/SwiftSource.swift:104-105`),
+  which is where a copy member would format a date. None of these is in the module today (searched), so the
+  slice is clean; the test is criterion 11's proof for the 800 lines the next two slices add. Fix: add the
+  spellings; add one interpolated case to `check_findsASpellingInCodeOnly` and either search the literals' parts
+  or say in the suite's comment that interpolations are not read. `presentation_neverNamesDouble` (`:36`) has the
+  same kind of gap (`.doubleValue`, a float literal typed as `Decimal`); one more spelling covers the first.
+- **R3. No worked example of "today's session is logged and another workout is live".**
+  `TodayPresentation+Card.swift:13-15` puts the live workout before `:22` (Logged); the `live_*` tests never have
+  a finished workout of today's session in the input, and `live_finishes_flipsToLoggedInOneUpdate`
+  (`TodayPresentationTests+Live.swift:177-203`) is the other direction. The seeded reference
+  (`TodayPresentationPropertyTests.swift:136-139`) has the rule, but the combination needs a live session, a
+  session day and one of up to eight workouts with today's source started today: by my estimate about one case
+  in the PR lane's 800 inputs, which I did not confirm. It is one of the two rows a product decision can swap.
+  Fix: `live_afterTodaysSessionIsLogged_takesOverTheCard`: week workouts = Lower A finished today, session = a
+  live Lower B; expect Resume, the title "Lower A", today's mark done and "1" session. About fifteen lines.
+- **R4. Two rest-day sentences are false for inputs the specification names.** `TodayPresentation+Card.swift:206`
+  and `:221-231`.
+  (a) Before the block the card's week is clamped to 0, so the body says "in week 1" and "Next up is {weekday}"
+  however far the start is: three weeks before, "Nothing scheduled for Tuesday in week 1. Next up is Monday."
+  (pinned at `TodayPresentationTests+RestDay.swift:91`), and on a Monday a week or more before a block whose
+  first session is a Monday, "Nothing scheduled for Monday in week 1. Next up is Monday." (by reading: `today`
+  and `next` are both "Monday" and `next.weekIndex == 0`).
+  (b) With no session left the body says "This is the last week of the block." in any week: week 2 of 8 at
+  `TodayPresentationTests+RestDay.swift:57`. S2's review (n6) left this sentence to S3.
+  Neither can be reached with a program F08 generates (it starts in the current week and trains every week),
+  except (a) for the one day after flying west on day one, where it reads acceptably. Both become reachable when
+  F11 can empty a week or date a start, and the tests now pin them as if they were the specification. Fix: two
+  sentences from Pete, each one key and one branch of `restBody` (for example "Your block starts on %@." and
+  "Nothing scheduled for %@ in week %lld. No sessions are left in this block."), asked with the other texts of
+  this PR; until then a comment on the two tests that the wording is a placeholder, and an item in F11's brief.
+  The Logged card is right in both cases: it leaves the "Next:" line out.
+
+### Nits
+
+- n1. `TodayInput.swift:13-17`: `weekWorkouts` does not say "newest first", and two rules need it:
+  `loggedWorkout` takes the first match as "the newest" (`TodayPresentation+Card.swift:46-48`) and
+  `withFinishedSession` places the session's workout by scanning for the first that started no later
+  (`TodayPresentation.swift:160-167`). `workouts(in:)` returns that order, so one read is right and two reads
+  appended would not be. Fix: say it in the comment as `recentWorkouts` does, or sort once in `Context.init` (at
+  most a fortnight of workouts) so that `make` asks nothing of the store.
+- n2. `TodayPresentation+Card.swift:228-230` (and `:195`): "later this week" is the program week. When the stats
+  week starts on another weekday than the block did (a week start changed mid-block), the last day of a program
+  week reads "Next up is next Wednesday." for a session that is tomorrow and in the strip the lifter is looking
+  at, and the Logged card reads "Next: week 2". "Next: week n" has to follow the program week; the word "next"
+  in the rest body would read better by the strip's week (`context.stripDays` holds `next.date` or not). Deviation
+  7 chose the program week because the same sentence says "in week 1"; I would change only the word, and only
+  if R4 reopens this function.
+- n3. `TodayPresentation+Card.swift:180`: the Logged card's title is the program's day name; the RECENT row of
+  the same workout (`TodayPresentation+Recent.swift:37`) and the live card (`+Card.swift:137`) use the workout's
+  own. They differ only when the day is renamed after the workout began. The brief says "title day name" and the
+  prototype reads the program's day (v1:1220), so this is to the letter; `workout.name` would keep the card and
+  the row under it in step. Either; say which in the comment.
+- n4. `TodayPresentation+Card.swift:31-39`: the comment says decision 1's other answer is a change to this
+  function. It also needs the `Day` (the function is given only the context), so its signature and the call at
+  `:13` change with it. Still small; correct the comment so that the estimate given to Pete is right.
+  `loggedWorkout`'s other answer is one condition, as stated.
+- n5. Translators' comments are missing where a translator most needs one: the keys with two or three values.
+  `TodayCopy+Cards.swift:12-14` (`Week %lld of %lld`), `:40-42` (`Resume · %@`), `:56-58` (`%@ of %lld sets`),
+  `:65-67` (`Next: %@ · %@`), `:85-109` (the three rest bodies: which `%@` is today and which the next
+  session's weekday), `TodayCopy.swift:75-80` and `:109-114` (the unit lines). Fix: a `comment:` naming each
+  value in order, in the code and the catalog together, before the first translation.
+- n6. `TodayPresentationPropertyTests.swift:225-239`: the seeded check compares planned marks and "/N" with the
+  reference only when there is no program. The generator already makes blocks begun on any weekday under every
+  week start and ten zones, and the one example of a strip across two program weeks
+  (`TodayPresentationTests+WeekStrip.swift:118-138`) is in UTC. Fix: in `checkTiles`, count the strip days whose
+  day of the block is inside it and whose weekday that week schedules; expect `unit == "/\(count)"` and every
+  planned mark on one of those days.
+- n7. `TodayPresentation+Card.swift:190-201` and `:221-231`: `nextLine` and `restBody` each call
+  `nextScheduledDay`, compare its week and format its weekday. One small value ("later this week: weekday and
+  tag; a later week: weekday and week; none") read by both would hold the rule once. Worth doing with R4, not
+  alone.
+
+### Which card
+
+**Right in every combination I could construct.** The order in `card(_:_:)` is the decision table's, and the
+title never depends on the session.
+
+| Combination | Card | Title | Evidence |
+|---|---|---|---|
+| Live workout, no program | Up next (the workout's rows, no meta), Resume | "Today" | `live_blockCompleteOrNoProgram_takesOverTheCard` |
+| Live workout after the block | Up next, Resume; the meta is the workout's own week ("Week 8 of 8 · Deload · ~27 min") | "Today" | the same test |
+| Today's session finished today, a new workout live | Up next, Resume | today's day | by reading (`+Card.swift:13-15`); no example: R3 |
+| Finished yesterday for today's day | Up next, Start (decision 2, default A); the strip marks yesterday done and the tile counts it | today's day | `logged_doneEarlierThisWeek_isOfferedAgain` |
+| The session's own workout finished in the input | Logged at once; strip, tile and RECENT in the same model; counted once when history reports it | today's day | `live_finishes_flipsToLoggedInOneUpdate` |
+| The session's workout discarded | as if there were none | by the calendar | `live_discarded_offersTheSessionAgain` |
+| A workout begun before midnight, still live | Up next, Resume, the workout's name | the new day's | `live_startedYesterday_takesOverTheCard` |
+| The same, finished after midnight | yesterday's (decision #26); today by the calendar | by the calendar | `logged_lateNightWorkout_belongsToItsStartDay` |
+
+- **The two open questions.** `loggedWorkout(for:_:)` is one function and its other answer one condition
+  (dropping `startedToday`); it then needs the program week's workouts in `weekWorkouts`, which the notes'
+  "Inputs for S5" already ask for. `workoutTakingOver(_:)` is one function whose other answer also changes its
+  signature and one call (n4): about five lines and the `live_*` tests. Both are small changes.
+- **The title.** Rows 2 to 6 decide it and the live workout never does, as criterion 1 defines it. The
+  consequence is the notes' deviation 10: "Rest day" over a card that says "UP NEXT … Resume". It is to the
+  letter of the specification and it is the first thing Pete will notice; see the list for him.
+- **Before the block and with nothing left**, the card and its routes are right and the body's wording is R4.
+
+### Dates and weeks
+
+**Right.**
+
+- Every day is a `CivilDate` in the input calendar's zone: today (`TodayPresentation.swift:123`), the strip's
+  seven (`:128-129`, by `adding(days:)`), a workout's day (`:137-139`). The module holds no `addingTimeInterval`,
+  no 86,400 and no `timeIntervalSince` (searched); the one division by 60 is a `Duration`'s whole seconds into
+  minutes (`TodayPresentation+Recent.swift:29`).
+- The strip is the stats week from the settings' week start, independent of the block's start
+  (`firstDayOfWeek(containing:)` reads only the week start). Each strip day is judged by its own program week
+  through `scheduledDay(on:in:)` at that day's first instant, which is inside the day also when midnight is
+  skipped. "Sessions planned" counts those same seven days. "Week n of N", the eyebrow, "Edit this week", the
+  off-schedule list and the rest body use the program week of the moment (clamped to the first before the
+  block). That is the split the notes describe, and `misalignedWeekStart_stripLooksUpEachDate` pins it; n2 is its
+  one awkward reading and n6 the missing seeded check.
+- DST: the dates printed for a strip day are formatted from `CivilDate.startOfDay`, 01:00 on a day whose
+  midnight is skipped; five zone weeks at 01:30, 12:30 and 23:30 on each day, and a workout either side of
+  Santiago's skipped midnight, are tested.
+- Before the first day: a rest day whose card speaks of week 1 and whose strip plans nothing before the start.
+  After the last: block complete, nothing planned, what was trained still shown.
+- `nextScheduledDay` returning nil is read as "no later session": the Logged card drops its line and the rest
+  body takes its third form, which is where R4 (b) comes from.
+- Not a defect, for S5's knowledge: the header and the strip are formatted with the injected calendar, so a
+  lifter whose calendar is not Gregorian sees that calendar's month and day numbers there, over days that are
+  still found on the Gregorian day count. That is consistent and probably wanted; no test has such a calendar.
+  A date a zone once skipped (Apia, 30 December 2011) would be printed as the next day in the strip; no device
+  clock is there.
+
+### Numbers
+
+**Right.**
+
+- Sessions done, the done marks and the week's volume are all read from `Context.finished` filtered by the
+  strip's seven days, so they agree by construction; the Logged card and the off-schedule marks read the same
+  list. RECENT is its own input, with the same merge of the session's workout.
+- The change is `Volume.percentChange(from:)` on exact decimals; its size is clamped before the sign is dropped
+  (`TodayPresentation+Stats.swift:55-61`). The volume is a sum of `Volume`s. Loads, volumes and clock times go
+  to the copy as the Domain's strings. Nothing in the presentation, the copy or the model names `Double`.
+- Units are the settings' everywhere, a key per unit; the percent is the same in either unit (tested).
+- Minutes in RECENT are whole minutes rounded down, as `ClockText` rounds seconds, so a workout never reads
+  longer here than on its receipt; the estimate is `TimeEstimate`'s (half up), a different number. A workout
+  under a minute reads "0 min" (pinned).
+- The estimate counts a slot whose exercise is not stored and the row count does not ("3 exercises · ~38 min"):
+  the plan chose it ("Behaviour the brief leaves open") and two tests pin it. See S5 below for what happens when
+  that card's button is tapped.
+
+### The words
+
+**The 49 keys are the brief's, character for character, where the brief gives them.** 39 are quoted texts of the
+copy paragraph or fragments of one cut at " · ". Of the other ten, five are the brief's lines cut again
+(`%@ of %lld sets`, `/%lld`, `k`, `+%lld%%`, `−%lld%%`), one is the spoken line of `F09-today.md:73`
+(`%@ of %lld sessions this week`), and four the brief does not give (`Today, %@`, `%lld%%`, `%@ kg`,
+`%@ kg moved`). × is U+00D7, · is U+00B7 and the minus is U+2212, as in the brief. No text names the product
+("Program" is the tab).
+
+**The splits are right.** Each counted key counts one number and the other number is text (`%@ of %lld sets`,
+`%@ of %lld sessions this week`); the noun agrees with the total, which is also what governs it in the languages
+I can judge ("0 of 1 set", "5 of 1 session this week"). The fragments joined with " · " are independent phrases
+in every case (week, "Deload", estimate; count of exercises, estimate; sets, volume; weekday, minutes, volume),
+so no language needs to reorder across a join. `/%lld` and `k` are drawn straight after the number by `StatTile`,
+and a translation can carry its own leading space. Every key with a value passes `locale:`. Two things will need
+thought at the first translation and are not caused by the splits: the rest bodies place a weekday's name inside
+a sentence ("for %@", "next %@"), which an inflected language cannot do with one form of the name; and "Today"
+is one key for a title and for a day in a list.
+
+**Texts the brief did not give (for Pete).**
+
+| Text | Where | Judgement |
+|---|---|---|
+| "Today, Wednesday, September 16" (`Today, %@`) | VoiceOver, today's strip cell once it is trained; the component then says "Done" | Good. Keep |
+| "0%" (`%lld%%`) | the volume tile, a change within half a percent | Reasonable; it is drawn in orange like a rise or a fall. Hiding it is one line |
+| "1 of 1 set", "0 of 1 set" | Logged card | Correct English |
+| "1 exercise" | off-schedule row | Correct |
+| "1 week done. Start the next block from Program." | cannot appear: a program has at least two weeks | Harmless |
+| "0 of 1 session this week", "5 of 1 session this week" | VoiceOver, sessions tile | Correct; the second reads oddly and is right |
+| "567 kg moved", "3,683 kg" | Logged card, RECENT | Obvious analogues |
+| "24,180 lb moved, +8%"; "0 lb moved" | VoiceOver, volume tile | Thin: no "this week", nothing to say what the 8% is against, and built in code. R1 |
+| "Today" as the big title | no program; block complete | Decision 5's default. Fine |
+| "Deload", "k", "/4" as texts of their own | cut from the brief's lines | Fine |
+| 24 translators' comments | catalog | Accurate. The many-valued keys have none (n5) |
+
+**The brief's own texts used where it did not foresee them (also for Pete).**
+
+- "Rest day" as the title while a workout runs on a rest day, and "UP NEXT" over a workout that is running
+  (deviations 10 and 11). To the letter of the specification. The eight planned screenshots do not include this
+  state; ask S4 for it.
+- "Nothing scheduled for Sunday in week 1. Next up is Monday." before the block, and "This is the last week of
+  the block." when it is not (R4).
+- "Next up is next Monday." when Monday is two weeks away (criterion 12; accepted).
+- "0 k lb moved · −100%" every Monday morning once last week has volume: decision #15 compares the week so far
+  with the whole week before. Correct by the decision; it will read as bad news until late in each week. Options
+  if it reads badly in S4's screenshots: no change until this week has a workout, or a comparison of the week to
+  date.
+- "1/0 sessions this week" after the block or without a program, once something is trained (criterion 8 gives
+  "0/0").
+- "Wed · 58 min · 100 lb" for a workout of any age; "0 min" under a minute; "135 min" rather than hours.
+- A day marked "Logged" in the off-schedule list can still be picked, and starts that day again.
+
+### The model as an interface
+
+**Right for S4, and fillable by S5 from the calls on `main` without another read.**
+
+- `WeekStrip(days: model.weekStrip)` and `StatTile(value:unit:caption:delta:accessibilitySummary:)` take the
+  model's values field for field (checked against both components). `Message` is `EmptyState`'s arguments,
+  `RecentRow` is `HairlineRow`'s, `OffSchedule` is `SheetChrome`'s title and cancel with rows.
+- Every action carries its route; `.startWorkout(program:weekIndex:day:)` is `WorkoutSource`'s three fields,
+  which is what `StartWorkoutUseCase.start(_:replacingLive:)` on `main` takes.
+- Nothing in it is a decision a view must make again. The view tells a live card from a scheduled one by the
+  action's case, and the eyebrow's tint by the card's case; both are drawing, not logic.
+- Nothing in it is more than S4 needs, except `PreviewRow.isHeld` and `isDeload`, carried for F24 as the plan
+  asks.
+- Only `TodayRoute` public is right: `LedgerAppKit` will see `TodayRoot` (S5) and the route, and maps the route
+  with `LedgerDomain`'s public ids.
+- `TodayInput`: each field has its call (the notes' table is right against `Repositories.swift`). One piece of
+  calendar logic falls to the store unless S5 lifts it: the range of `weekWorkouts`. See S5 below.
+
+### `/code-review`'s ten findings
+
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | Before the block the rest body says "week 1" and "Next up is Monday" at any distance | R4 (a) |
+| 2 | "This is the last week of the block" whenever no session is left | R4 (b) |
+| 3 | "This week" and "next" follow the program week, not the strip's | By deviation 7; n2 |
+| 4 | The header's title ignores the live workout | By criterion 1 and the decision table; for Pete |
+| 5 | The estimate counts a slot whose exercise is missing; the rows and the count do not | Chosen in the plan and pinned by two tests; S5 note |
+| 6 | The change compares the week so far with a whole week ("−100%" on Monday) | Decision #15 as written; for Pete |
+| 7 | "/0" when nothing is planned | Criterion 8 ("0/0"); for Pete |
+| 8 | A finished workout with no end keeps counting | Not reachable: `materialize` refuses one (`Repositories.swift:64`) and the engine sets the end. No action |
+| 9 | Logged's title is the program's day name, RECENT's the workout's | n3 |
+| 10 | `nextLine` and `restBody` repeat the lookup | n7 |
+
+### The seven points
+
+1. **Module boundaries**: pass. The module imports Foundation, `LedgerDomain` and `LedgerDesign` (for
+   `WeekStrip.Day`); nothing in `LedgerDomain` changes; `Package.swift` gains `resources` on one target and no
+   edge; only `TodayRoute` is public.
+2. **Concurrency**: pass. Every type and every extension is `nonisolated`; the model, the input and the route
+   are `Sendable` values; no task; the moment, the calendar and the locale are fields of the input.
+3. **Error handling**: pass. Nothing throws and nothing is swallowed; each "no value" (no calendar date, no such
+   week, no such day, no stored exercise) is a documented nil with a test. What the lifter is told when a start
+   fails is S5's.
+4. **Design fidelity**: no view in this slice. The model's shapes are v2's (the value and its unit apart, the
+   caption and its change apart; v2:108-117) and the copy is the brief's.
+5. **Accessibility**: pass for what the slice owns: each strip cell and each tile carries its spoken text. The
+   cards' lines have none ("~38 min", "5 × 5 @ 250"); see S4 below. R1.
+6. **Test quality**: pass, with R2, R3 and n6. Tests go through `make` and the copy file and assert what is
+   shown; the seeded reference is written with Foundation's calendar alone; seeds come from `PropertySeed.all`
+   and a failure prints the seed and one line of the input; no sleep, nothing disabled. Names follow §6.
+   **No large value is compared inside `#expect`**: the two model equalities are computed first
+   (`TodayPresentationTests.swift:146`, `TodayPresentationTests+Live.swift:201`), and the largest operands
+   anywhere are arrays of at most seven short strings. By the probe above, a failed
+   `#expect(TodayPresentation.make(input)… == …)` records only the two sides, not `input`. Two `#require`s would
+   record a large receiver if they ever failed, once per test because `#require` throws:
+   `TodayPresentationTests+UpNext.swift:17` (the program) and `:24` (the 214-exercise dictionary). Not a risk to
+   the disk; named because the task asked for every one.
+7. **Brief compliance**: pass. Each of the twelve criteria has tests; I checked every name in the notes'
+   "Criteria → tests" table against the files. Nothing of S4 to S6 is in the range (no view, no store, no root);
+   no lint suppression, `try!`, `as!`, `fatalError` or `@unchecked`; the largest file is 248 lines (the lint warns
+   at 300) and the longest function body about 30 (it warns at 40). Nothing reads as compressed to fit.
+   `coverage-thresholds.json` gains `"FeatureToday"` in `required`, and `Package.swift` the six lines of one
+   target written as `LedgerAppKit`'s is.
+
+Also asked: **the two catalog tests the plan named are not needed.** `catalog_holdsEveryKey` is the gate's
+string-catalog step (the catalog against the compiler's keys, both ways) and check 3 of `ModuleCopyTests` (the
+built bundle resolves each key); `catalog_pluralRules` is `StringCatalog.problems`, which `ModuleCopyTests` runs
+on every module and `TodayCopyTests.swift:126-128` runs again, and `countedTexts_haveOneAndSeveral` reads each
+counted text with one and with several. **What the 65 mutants could not reach**: R3's combination; that each
+`locale:` in the presentation is the input's (every number in the tests prints the same in `en_US` whatever
+locale is passed, and only the date is tested in another; the source test stops `.current`, not a constructed
+`Locale`); and code not yet written, which is R2.
+
+### What S4 must be told
+
+- Draw the model and call nothing else, but for the one timer `Text` in the copy file, whose key must be the
+  same `Resume · %@`. `UpNext.meta` is nil for a live workout that is not a session of the active program, and
+  `rows` can be empty.
+- Rows carry no ids and two rows can be equal: draw by offset.
+- The model has spoken text for the strip's cells and the tiles only. If the device pass hears "tilde 38 min" or
+  "5 multiplication sign 5", the spoken forms are new keys in `TodayCopy` and new fields of the model, not labels
+  written in a view.
+- The model does not hold its moment. A preview or a snapshot that freezes the timer passes its own `pauseTime`;
+  `action.title` is the label as it reads at the model's moment.
+- Every off-schedule row carries a route, a "Logged" one too, and `days` can be empty.
+- Add to the previews and screenshots the states that carry Pete's open questions: a workout live on a rest day
+  ("Rest day" over "UP NEXT … Resume"), the volume tile on a Monday ("0" "k", "−100%"), and "1/0".
+- An extension of a `nonisolated` type must itself be written `nonisolated` (the notes' deviation 3), and the
+  source test reads every file of the module, views included (R2).
+
+### What S5 must be told
+
+- `weekWorkouts` is one `workouts(in:)` read over the union the notes give, newest first (n1). Put the range in a
+  pure, tested function of `FeatureToday` beside the presentation, not in the store: it is the one piece of
+  calendar logic the input needs, and the presentation already builds the same `WeekCalendar`.
+- Build each input from one refresh's reads. A model made from a newer RECENT and an older week read shows "Up
+  next" over a list that says "Today · 24:22".
+- S6: a finished session state arrives once and nothing follows it. The presentation merges it by id for as long
+  as it is in the input, so drop it once a history read made after it has returned; otherwise a workout deleted
+  in History stays on Today's strip, tiles, card and list until the next session update or a relaunch. A
+  discarded state can be passed as it is.
+- `.startWorkout` can be refused for a card the model still offers: `emptyDay` (a day with no slots),
+  `unknownExercise` (a slot whose exercise is not stored: the card shows fewer rows and the estimate still counts
+  it), `programNotActive` and `weekOutOfRange` (a model older than the program). The route's handler needs an
+  answer the lifter can read.
+- The model is `Equatable`: skip a publish that changes nothing. It is a function of `now` and does not tick;
+  the day and the week roll over only when the input is filled again.
+- Under decision 2's other answer the program-week half of `weekWorkouts` decides the card, not only the
+  off-schedule marks.
+
+### What I did not check
+
+- The slice's tests. I ran none, on the host or on a simulator: the tester's untracked files are in the target,
+  and the gate on `906d5a8` is the orchestrator's. The 89 tests, 535 of 535 lines and the 65 mutants are the
+  implementer's figures; I did not run a mutant (no edits to product code, no copy of the repository).
+- Whether one of the 200 seeds produces R3's combination.
+- The catalog against the compiler's keys and Xcode's layout (the gate's step). I compared the committed file
+  with the brief and with the copy files by reading and by script.
+- How VoiceOver speaks any of the texts; any locale but `en_US` on a device; a calendar that is not Gregorian.
+- The tester's files, which I did not open.
