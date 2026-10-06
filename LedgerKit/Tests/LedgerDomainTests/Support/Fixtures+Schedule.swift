@@ -20,7 +20,7 @@ extension Fixtures {
 
     /// Spec §6.4's seed schedule as an 8-week block: weeks 1–7 run Upper A on Monday, Lower A on
     /// Wednesday, Upper B on Friday and Lower B on Saturday; week 8 is a deload without the Saturday.
-    static func fourDayProgram(startDate: CivilDate = civil(2026, 9, 14)) throws -> Program {
+    static func datedFourDayProgram(startDate: CivilDate = civil(2026, 9, 14)) throws -> Program {
         let full: [Weekday: DayTemplateID] = [
             .monday: upperADay, .wednesday: lowerADay, .friday: upperBDay, .saturday: lowerBDay
         ]

@@ -39,7 +39,7 @@ extension WeekCalendarTests {
 
     @Test("An empty week is passed over, and a moment before the block gives its first session wherever it is")
     func nextScheduledDay_emptyWeeks_arePassedOver() throws {
-        var program = try Fixtures.fourDayProgram()
+        var program = try Fixtures.datedFourDayProgram()
         program.weeks[1].schedule = [:]
         let weeks = Self.weeks(for: program)
         #expect(weeks.nextScheduledDay(after: Fixtures.date(2026, 9, 19), in: program)
@@ -53,7 +53,7 @@ extension WeekCalendarTests {
 
     @Test("A block that schedules nothing, or has no weeks, has no next session")
     func nextScheduledDay_nothingScheduled_isNil() throws {
-        var program = try Fixtures.fourDayProgram()
+        var program = try Fixtures.datedFourDayProgram()
         for index in program.weeks.indices {
             program.weeks[index].schedule = [:]
         }
@@ -62,7 +62,7 @@ extension WeekCalendarTests {
         for moment in moments {
             #expect(weeks.nextScheduledDay(after: moment, in: program) == nil)
         }
-        var noWeeks = try Fixtures.fourDayProgram()
+        var noWeeks = try Fixtures.datedFourDayProgram()
         noWeeks.weeks = []
         for moment in moments {
             #expect(weeks.nextScheduledDay(after: moment, in: noWeeks) == nil)
@@ -72,7 +72,7 @@ extension WeekCalendarTests {
     @Test("Weeks edited after validation resolve as scheduledDay(on:in:) resolves them")
     func nextScheduledDay_editedWeeks_resolveAsScheduledDayDoes() throws {
         let saturday = Fixtures.date(2026, 9, 19, hour: 12)
-        var reversed = try Fixtures.fourDayProgram()
+        var reversed = try Fixtures.datedFourDayProgram()
         reversed.weeks.reverse()
         let weeks = Self.weeks(for: reversed)
         #expect(weeks.nextScheduledDay(after: saturday, in: reversed)
@@ -80,7 +80,7 @@ extension WeekCalendarTests {
 
         // Two weeks carry index 0 and none carries index 1. `Program.week(at:)` reads the first of the
         // two, so Sunday Sep 20 stays a rest day, and the block's second week has no sessions.
-        var repeated = try Fixtures.fourDayProgram()
+        var repeated = try Fixtures.datedFourDayProgram()
         repeated.weeks[1].index = 0
         repeated.weeks[1].schedule = [.sunday: Fixtures.lowerBDay]
         #expect(weeks.scheduledDay(on: Fixtures.date(2026, 9, 20), in: repeated) == nil)
@@ -89,7 +89,7 @@ extension WeekCalendarTests {
 
         // Without its first week the block is seven weeks long (`isBlockComplete`) and no week carries
         // index 0: the first session is the second week's Monday, and week index 7 is past the block.
-        var shortened = try Fixtures.fourDayProgram()
+        var shortened = try Fixtures.datedFourDayProgram()
         shortened.weeks.removeFirst()
         #expect(weeks.nextScheduledDay(after: Fixtures.date(2026, 9, 1), in: shortened)
             == Self.session(9, 21, week: 1, Fixtures.upperADay))
@@ -112,7 +112,7 @@ extension WeekCalendarTests {
 
     @Test("The earliest and latest moments give the first session and none; no moment traps")
     func nextScheduledDay_extremeMoments_neverTrap() throws {
-        let program = try Fixtures.fourDayProgram()
+        let program = try Fixtures.datedFourDayProgram()
         let weeks = Self.weeks(for: program)
         let first = Self.session(9, 14, week: 0, Fixtures.upperADay)
         #expect(weeks.nextScheduledDay(after: .distantPast, in: program) == first)
