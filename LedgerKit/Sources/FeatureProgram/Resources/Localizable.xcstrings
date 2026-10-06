@@ -1,0 +1,455 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld DAYS" : {
+      "comment" : "Under a week's chip: the number of days that week trains",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld DAY"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld DAYS"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld days" : {
+      "comment" : "A number of training days",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld day"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld days"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld exercises" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld sets" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld set"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld sets a week" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld set a week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sets a week"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld weeks" : {
+      "comment" : "Spoken value of the block's length",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "+ Add training day" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Add training day"
+          }
+        }
+      }
+    },
+    "+%lld" : {
+      "comment" : "On a day's card: how many more exercises the day has than the card names",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld"
+          }
+        }
+      }
+    },
+    "A block needs at least 2 weeks." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A block needs at least 2 weeks."
+          }
+        }
+      }
+    },
+    "Add at least one exercise before scheduling this day." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add at least one exercise before scheduling this day."
+          }
+        }
+      }
+    },
+    "Apply to later weeks" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply to later weeks"
+          }
+        }
+      }
+    },
+    "BLOCK · %lld WEEKS" : {
+      "comment" : "Eyebrow of the block's weeks, with the number of weeks in the block",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "BLOCK · %lld WEEK"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "BLOCK · %lld WEEKS"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Block length" : {
+      "comment" : "Spoken label of the control that adds a week to the block or removes its last week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Block length"
+          }
+        }
+      }
+    },
+    "Copy week %lld" : {
+      "comment" : "Button: the selected week takes the schedule of the week with this number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy week %lld"
+          }
+        }
+      }
+    },
+    "DELOAD" : {
+      "comment" : "Marks a deload week, under its chip and in its title",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DELOAD"
+          }
+        }
+      }
+    },
+    "Deload" : {
+      "comment" : "Button that makes the selected week a deload week; also a deload week's spoken value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deload"
+          }
+        }
+      }
+    },
+    "Double-tap to assign" : {
+      "comment" : "Spoken hint of a weekday in the week's schedule: the tap assigns the next training day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap to assign"
+          }
+        }
+      }
+    },
+    "First week" : {
+      "comment" : "Disabled button on the first week, where another week reads: Copy week 2",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First week"
+          }
+        }
+      }
+    },
+    "MY PROGRAM" : {
+      "comment" : "Eyebrow above the program's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MY PROGRAM"
+          }
+        }
+      }
+    },
+    "New day" : {
+      "comment" : "The name a training day is given when it is added",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New day"
+          }
+        }
+      }
+    },
+    "No exercises yet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No exercises yet"
+          }
+        }
+      }
+    },
+    "Program name" : {
+      "comment" : "Placeholder and spoken label of the field that holds the program's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Program name"
+          }
+        }
+      }
+    },
+    "REST" : {
+      "comment" : "A weekday with no training day, in the week's schedule",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REST"
+          }
+        }
+      }
+    },
+    "Rest" : {
+      "comment" : "Spoken value of a weekday with no training day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest"
+          }
+        }
+      }
+    },
+    "Shared by every week. The schedule above decides which day you train, and when." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared by every week. The schedule above decides which day you train, and when."
+          }
+        }
+      }
+    },
+    "TRAINING DAYS" : {
+      "comment" : "Eyebrow of the list of training days",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRAINING DAYS"
+          }
+        }
+      }
+    },
+    "Tap to assign" : {
+      "comment" : "Hint beside the week's schedule",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to assign"
+          }
+        }
+      }
+    },
+    "W%lld" : {
+      "comment" : "A week's chip: W for week, then the week's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W%lld"
+          }
+        }
+      }
+    },
+    "WEEK %lld" : {
+      "comment" : "Eyebrow of the selected week's schedule: the week's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WEEK %lld"
+          }
+        }
+      }
+    },
+    "Week %lld" : {
+      "comment" : "Spoken label of a week's chip: the week's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week %lld"
+          }
+        }
+      }
+    },
+    "Week %lld has logged sessions and can't be removed." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week %lld has logged sessions and can't be removed."
+          }
+        }
+      }
+    },
+    "~%lld min" : {
+      "comment" : "A day's estimated length",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "~%lld min"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "~%lld min"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "—" : {
+      "comment" : "Stands for the name of an exercise that is not stored",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
