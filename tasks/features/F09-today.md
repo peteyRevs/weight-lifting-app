@@ -161,3 +161,97 @@ existing declaration changes, and nothing the app shows changes.
 4. **`Loadable<T>`** is the type `docs/engineering-standards.md` §5 names for a screen's load state, written as §5
    writes it: `idle`, `loading`, `loaded(T)`, `failed(any Error)`, `Sendable` when its value is.
 5. `LedgerDomain` still imports Foundation only; the new code is covered line for line; no existing test changes.
+
+## Plan amendments — slice S3, the presentation (orchestrator, 2026-10-05)
+
+S1 (the tab shell) is in review as #28 and S2 (the Domain additions) is done; S3 is built on S2's tip and its PR
+opens after both are on `main`. This section is S3's specification; where it and the body above disagree, this
+section wins. The body's acceptance criteria 1 and 3–11 and its "Copy (exact)" paragraph still describe what Today
+shows; S3 delivers their logic as a pure function, with no view and no store. Calls on `main` and line references
+are in `F09-today/implementation-notes.md` ("Brief vs main", "Presentation purity and cost", "Inputs the
+implementer needs › S3").
+
+`TodayPresentation.make(_ input: TodayInput) -> TodayModel` turns the active program, the exercises, the settings,
+this week's finished workouts, the five most recent, the previous complete week's volume, the session's workout
+(live, or just finished), the moment, a calendar and a locale into everything Today draws, every string final.
+
+1. **Header.** The date reads as the body says ("Wednesday, September 16") from the injected moment, locale,
+   calendar and time zone. The title is today's day name before " — ", "Rest day" on a day with no session, and
+   "Today" when there is no program or the block is complete.
+2. **Week strip.** Seven days from the settings' week start. Each day's mark is the first that applies of: done (a
+   finished workout that started that day), today, planned (the program schedules a session that day, judged by
+   that day's own program week), rest. Each cell carries the text VoiceOver reads for it.
+3. **Up next** (the body's criteria 1, 2, 6). On a day with a session not yet logged: the eyebrow, the meta line
+   with the week and the time estimate (the deload wording in a deload week), the day's name, and one preview row
+   per slot whose exercise is stored, "sets × reps @ load" from `ProgressionRules`, the load in the lifter's units
+   with no unit suffix. Lower A has four rows. The action is "Start workout" carrying
+   `TodayRoute.startWorkout(program:weekIndex:day:)`.
+4. **A live workout** (criterion 3's model half). When the input holds a live workout, the card's action is
+   "Resume" with the workout's start, and the card shows that workout: its name and its exercises, whichever day
+   it was started for, also on a rest day. Today never offers "Start workout" while a workout is live. (This is
+   the default of an open product question.)
+5. **Logged** (criteria 3, 4). When today's session was finished today (a finished workout of the same program,
+   week and day that started today, or the session's own workout the moment it is finished), the card shows the
+   eyebrow with the week, the elapsed time, "{done} of {total} sets · {volume} lb moved" ("kg moved"), "View
+   session" carrying `.openWorkout(id)`, and the "Next:" line: the next session's weekday and tag, "Next: week
+   {n+1}" when it is in a later week, nothing when the block has no later session. A session done on another day
+   of the week does not make today's "Logged": today's session is offered again (the body's rule; the default of
+   an open product question, kept in one place so that the other answer is a small change).
+6. **Rest day** (criterion 5). The three bodies of the copy, by where the next session is (later this week, in a
+   later week, none left); a day before the block begins is a rest day whose next session is the block's first.
+   "Edit this week" carries `.editWeek(program:weekIndex:)`. The off-schedule list holds every day of the week
+   with "{n} exercises · ~{m} min" and "Logged" on a day already done this week; picking one carries
+   `.startWorkout` for that day.
+7. **Block complete and no program** (criteria 7, 8). Past the last week: the block-complete card, "Open
+   Program" carrying `.openProgram`, with the strip, the tiles and the recent list still filled. With no program:
+   the no-program card, "Set up program" carrying `.setUpProgram`, a strip with no planned marks, and tiles that
+   read "0/0" and "0" with "k".
+8. **Tiles** (criteria 9, 11). Sessions: finished workouts that started in the strip's seven days, off-schedule
+   ones included, over the days of those seven with a session. Volume: this week's, as `Volume.thousands` and the
+   unit's words, with the change against the previous complete week ("+8%", "−3%") or without it when there is no
+   such week or it was zero. Kilograms when the settings say so. Each tile carries its spoken text.
+9. **Recent** (criterion 10). The five most recent finished workouts, newest first: the name, and "Mon · 58 min ·
+   24,180 lb"; one that started today reads "Today · 24:22 · 8,120 lb". Each carries `.openWorkout(id)`. With none,
+   the empty copy.
+10. **Copy.** Every text is the body's "Copy (exact)", resolved in `TodayCopy` from `FeatureToday`'s String Catalog
+    as `docs/engineering-standards.md` §7 requires (a counted value per key, fragments joined with " · ", a second
+    number passed as text), and spoken texts are copy too. Weights, volumes and clock times are shown as the
+    Domain formats them. No text names the product.
+11. **Purity.** `FeatureToday` reads no clock, calendar, locale or time zone of its own (a source test), no weight
+    or volume passes through `Double`, and `TodayPresentation` is covered line for line.
+12. **What the body leaves open, as decided in the plan:** a slot whose exercise is no longer stored has no
+    preview row; an empty week between today and the next session still says "next {weekday}"; sessions can read
+    "5/4"; a workout belongs to the day and week it started (decision #26).
+
+## Plan amendments — slice S3 after round 1 (orchestrator, 2026-10-05)
+
+Rulings on the tester's findings F9-S3-1 to F9-S3-7 and the reviewer's R1 to R4. They add to the twelve criteria
+of S3 and replace them where they differ.
+
+13. **The order of the input is not assumed** (F9-S3-1, F9-S3-7, review n1). `make` gives the same model for
+    `weekWorkouts` handed in any order: of several finished workouts of today's session the Logged card shows the
+    one that started last, and two that started at the same instant are told apart the same way every time.
+14. **The volume tile's spoken line is copy** (F9-S3-2, R1): one key per unit for the line with a change and one
+    for the line without, naming the week and what the change is against: "24,180 lb moved this week, +8% from
+    last week" and "24,180 lb moved this week" (kilograms alike). No string literal other than the empty one and
+    " · " is left in the module outside the copy files.
+15. **"Next" in the rest-day body follows the seven days on screen** (F9-S3-3, review n2). "Next up is
+    {weekday}." when the next session's date is one of the strip's seven days, "Next up is next {weekday}." when
+    it is not, whichever program week it falls in. The first sentence still names the program week, and the
+    Logged card's "Next:" line still follows the program week ("Next: week n" must never name the week the
+    lifter is in).
+16. **Before the block begins** (F9-S3-4, R4a) the rest-day body is one sentence of its own: "Your block starts
+    on {date}." with the block's first day written as the header writes a date ("Monday, September 28"). The
+    card is otherwise as criterion 6 says (the title "Rest day", "Edit this week" for week 1, the list).
+17. **No session left** (F9-S3-5, R4b). In the block's last week the body ends "This is the last week of the
+    block." as the brief has it. In any earlier week it ends "No sessions are left in this block."
+18. **Unchanged, and recorded for later slices** (F9-S3-6): a slot whose exercise is not stored has no preview
+    row and still counts in the estimate, and the card still offers "Start workout". No program can hold such a
+    slot today (a program is refused on save when a slot's exercise has no row). F12 decides what deleting a
+    custom exercise does to the slots that use it; F10 shows a start that fails.
+
+The two sentences of 16 and 17, and the wording of 14, are texts the brief did not give: they are listed for
+Pete with the slice's other new texts.
+19. **Recorded for S5** (F9-S3-8, round 2): `make` counts a workout once for each time it is handed in. The store
+    hands each finished workout of the week once (one read over the union of the stats week and the program
+    week, or a merge by id), and its test pins that; the comment on `TodayInput.weekWorkouts` says so in S5.

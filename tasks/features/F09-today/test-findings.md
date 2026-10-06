@@ -719,3 +719,438 @@ The failing test, mine:
 | Test | Finding |
 |---|---|
 | `VolumeThousandsAdversarialTests.thousands_smallestDecimalVolume_readsZeroPointZero` (4 expectations) | F9-S2-1 |
+
+## Slice S3 — round 1 (G2 tester, 2026-10-05)
+
+Branch `feat/F09-s3-presentation` at `906d5a8`. Specification: the brief's "Plan amendments — slice S3, the
+presentation" (criteria 1 to 12), the body's criteria 1 and 3 to 11 and its "Copy (exact)", spec §3.5, §6.4 and
+§7.7, decisions #14, #15, #18 and #26, standards §5 and §7.
+
+**Result.** The presentation held against almost everything. Every worked example of the brief reads text for text
+and number for number, in pounds and in kilograms, with a Monday and a Sunday week start. For 4,000 seeded inputs
+the card, its routes, the header, the strip's seven cells and both tiles are what my own model of the
+specification gives. Two things broke, each with a failing test left failing:
+
+- **F9-S3-1** (bug, low): with two finished workouts of today's session, the Logged card shows the one that comes
+  first in `weekWorkouts`, not the one that started last, unless the caller sorted them. The input promises no order.
+- **F9-S3-2** (copy, low): the volume tile's spoken text is joined with a `", "` written in the presentation, not
+  in the catalog.
+
+Four spec questions and one test-quality note follow, none with a failing test. Nothing trapped.
+
+96 tests written, in 12 suites and 26 files under `LedgerKit/Tests/FeatureTodayTests/Adversarial/` (47 are
+parameterized: 341 cases). Host: 93 pass, 3 fail. iPhone 17 simulator (iOS 27.0), the whole target: 185 tests, 182
+pass, the same 3 fail; the implementer's 89 all pass.
+
+**Independence.** I did not read `implementation-notes.md` or `review.md`. I learned the code from a `grep` of
+declarations and doc comments. What that showed me beyond signatures, before my tests existed: the doc comment of
+`+Card` lists the order of the card rules (a live workout first, also with no program and after the block), which
+is how my model reads criterion 4's first sentence too; and one `grep` for a tag printed two declaration lines of
+the implementer's `Support/TodayTesting.swift` (`@Tag static var feature`, `struct SeededGenerator`), which I used
+only to avoid a name clash. I read the String Catalog after the worked-example, card, date, week, tile, preview and
+recent suites had run; the expected text "Today, Wednesday, September 16" in the spoken suite comes from it, since
+the brief gives none. While repairing my own source scan I read one screen of `TodayCopy.swift` (how a lookup is
+written) and grepped the sources for joiners; that grep is where I first saw the line of F9-S3-2, before the test
+that now reports it existed. I read the feature's bodies and the implementer's tests after all my suites had run,
+and added no test afterwards.
+
+The round was interrupted once by a usage limit. Every number below is from runs made after it.
+
+### Findings
+
+Severity is one of: bug, copy, spec question, test-quality.
+
+#### F9-S3-1 — bug (low): of two workouts that log today's session, the card shows the first handed in, not the newest
+
+- **Criterion.** 5: "When today's session was finished today (a finished workout of the same program, week and day
+  that started today …) the card shows … the elapsed time, "{done} of {total} sets · {volume} lb moved", "View
+  session" carrying `.openWorkout(id)`". The declaration of `loggedWorkout(for:_:)` adds "the newest if there are
+  several". `TodayInput.weekWorkouts` states no order; its neighbour `recentWorkouts` states "newest first".
+- **Minimal repro.** `TodayCardAdversarialTests.sessionDoneTwice_showsTheLaterOne(_:)`, case `newestFirst: false`.
+  The seed program from Monday 2026-09-14, now Wednesday 09-16 11:00 UTC, and Lower A of week 1 finished twice
+  today: started 06:00 (ten minutes long) and started 09:00 (24:22 long), handed in as `[06:00, 09:00]`.
+- **Expected.** The card of the 09:00 workout: `.openWorkout` of its id, elapsed "24:22".
+- **Actual.** The 06:00 workout: its id, elapsed "10:00". Handed in as `[09:00, 06:00]` the same test passes.
+- **Where.** `TodayPresentation+Card.swift:47`, `context.finished.first { … }`. `withFinishedSession` places the
+  session's own workout by its start under the same assumption.
+- **Seeded.** `TodayCardModelAdversarialTests.seededInputsInAnyOrder_showWhatTheSpecificationGives(_:)`: 12 of
+  4,000 seeds, in 7 of the 8 batches: 26, 485, 896, 999, 1135, 1403, 1834, 2115, 2746, 2906, 3046, 3264. Each
+  reports only this ("logged carries openWorkout(…), not the newest of today's"). With the same 4,000 inputs handed
+  in newest first, nothing disagrees.
+- **Why low.** `WorkoutRepository.workouts(in:)` returns newest first, so a store that makes one read over the
+  union of the stats week and the program week satisfies it. Nothing says it must: S5 is not written, and the type
+  that carries the list is silent. Either pick the newest by `startedAt`, or state the order on
+  `TodayInput.weekWorkouts` and pin it in the store's test.
+
+#### F9-S3-2 — copy (low): the volume tile's spoken text is joined by a literal outside the catalog
+
+- **Criterion.** 10: "Every text is the body's "Copy (exact)", resolved in `TodayCopy` … (a counted value per key,
+  fragments joined with " · " …), and spoken texts are copy too." Standards §7: presentation builders "hold
+  neither a user-facing literal nor a localized lookup".
+- **Minimal repro.** `TodayPurityAdversarialTests.joiner_isTheMiddleDot()`: a scan of the module's sources outside
+  the copy files for any string literal that is not empty and not `" · "`. One hit:
+  `TodayPresentation+Stats.swift:49`, `spoken.compactMap(\.self).joined(separator: ", ")`.
+- **Expected.** The join comes from `TodayCopy` (one key for the whole spoken line, such as "%@, %@"), or is the
+  " · " every other line uses.
+- **Actual.** VoiceOver's text for the tile is "24,180 lb moved, +8%" with a comma and a space no translator sees.
+  The repository's copy audit passes it because the literal holds no letter.
+- **Judgement.** Small, and a one-key fix. I report it because the criterion names spoken text, not because a
+  lifter would notice in English.
+
+#### F9-S3-3 — spec question: "next Wednesday" for tomorrow, when the block began on another weekday than the week starts on
+
+- **Criterion.** 6: "The three bodies of the copy, by where the next session is (later this week, in a later week,
+  none left)". It does not say which week: the strip's or the program's.
+- **What happens.** The code uses the program week (as its declaration says). With the block begun on Wednesday
+  2026-09-16 and the week starting on Monday, Tuesday 11-03 reads "Nothing scheduled for Tuesday in week 7. Next up
+  is next Wednesday." Wednesday 11-04 is tomorrow, the next cell of the same strip, marked planned. The same on
+  Tuesday 09-22 in week 1, and the Logged card on Monday 09-21 reads "Next: week 2" for Wednesday.
+- **Pinned as it behaves** by `TodayWeeksAdversarialTests.blockBegunOnWednesday_usesEachDaysOwnWeek(_:)`,
+  `…loggedCard_namesTheNextSession(_:)` and `TodayTilesAdversarialTests.straddlingWeek_keepsTheTwoWeeksApart()`.
+  Those tests change if the answer does.
+- **Question.** Should "next {weekday}" and "Next: week n" follow the seven days the lifter sees? It arises only
+  when the start date's weekday is not the week start (a week start changed in Settings after the block began).
+
+#### F9-S3-4 — spec question: the rest-day body before the block begins
+
+- **Criterion.** 6: "a day before the block begins is a rest day whose next session is the block's first".
+- **What happens.** Twelve days before a block that begins on Monday 2026-09-28: "Nothing scheduled for Wednesday
+  in week 1. Next up is Monday." The day is in no week, and "Monday" is not the coming one. Two days before a block
+  that begins on a Friday: "… Next up is Friday.", which reads right.
+- **Pinned loosely** by `TodayWeeksAdversarialTests.beforeTheBlock_isARestDayOfWeekOne(_:)` (either form of "next
+  up" passes; the edit route and the sheet name week 1).
+- **Question.** Does this day want its own sentence ("Your block starts Monday."), which the brief does not give?
+
+#### F9-S3-5 — spec question (copy): "This is the last week of the block." in week 1 of 8
+
+- **Criterion.** 6 picks the third body when no session is left. The body's text says more than that.
+- **What happens.** With weeks 2 to 8 emptied, Sunday of week 1 reads "Nothing scheduled for Sunday in week 1. This
+  is the last week of the block." It is not. Pinned as specified by
+  `TodayWeeksAdversarialTests.nothingLeftBeforeTheLastWeek_saysSo()`. Only an edited block reaches it.
+
+#### F9-S3-6 — spec question: a session whose exercises are not stored still shows its full estimate and "Start workout"
+
+- **Criterion.** 12: "a slot whose exercise is no longer stored has no preview row". Nothing about the rest.
+- **What happens.** With one of Lower A's four exercises gone the card has three rows and "Week 1 of 8 · ~38 min",
+  and the off-schedule list reads "3 exercises · ~38 min". With all four gone: no rows, "~38 min", "0 exercises ·
+  ~38 min", and "Start workout" all the same. `SessionBuilder.build` throws `.unknownExercise` for such a day, so
+  the button leads to a failure F10 has to show. Printed by
+  `TodayPreviewAdversarialTests.slotWithoutItsExercise_hasNoRow(_:)`; not judged.
+
+#### F9-S3-7 — test-quality: no test of the implementer's hands the week's workouts in another order
+
+`TodayPresentationPropertyTests` sorts `weekWorkouts` newest first before every call, and
+`logged_twiceToday_showsTheNewest` hands `[second, first]` under the comment "The repository hands workouts newest
+first". So the precondition behind F9-S3-1 is known, not written on the input, and not pinned. Otherwise the
+implementer's 89 tests assert behaviour: literals from the brief, a reference written with Foundation's calendar
+alone, small values in every `#expect`, nothing disabled. Their seeded reference checks the card's kind, the
+strip's days and spoken dates, the sessions done and the volume; it does not check planned marks or the planned
+count under a program, the week and day of a route, the header's title, or which workout is logged. Their example
+tests cover those, and my seeded model now does for 4,000 inputs.
+
+### Texts the brief does not give
+
+Everything drawn or spoken comes from the catalog's 49 keys, from data (names, tags) or from the Domain's and
+Foundation's formatters, but for the join of F9-S3-2. Each key is asserted with a literal by at least one of my
+tests.
+
+| Text | Where | Judgement |
+|---|---|---|
+| "Today, %@" ("Today, Wednesday, September 16") | spoken label of today's strip cell once it is trained | Good: the mark then says "Done", so nothing else says which day is today. |
+| "%lld%%" ("0%") | the change when it rounds to nothing | Good. The brief has only "+8%" and "−3%"; "+0%" would be worse. |
+| "24,180 lb moved, +8%", "10,968 kg moved", "0 lb moved" | spoken text of the volume tile | Sensible: the whole number the tile rounds, then the change as drawn. The join is F9-S3-2. It does not say what the change is against, and neither does the tile. |
+| "%@ of %lld session this week", "%@ of %lld set", "%lld exercise", "%lld week done. …" | singular forms | Needed. The form follows the counted number, so "2 of 1 session this week" can be heard; correct, slightly odd. |
+| "/%lld" and "k" | the tiles' light suffixes | The brief's "%lld/%lld" and "%@k" in two parts, for `StatTile`. Joined they read the same. |
+| "Deload", "~%lld min", "%lld min", "%lld exercises", "%@ lb", "%@ lb moved", "Week %lld of %lld", "%@ of %lld sets" | fragments | The brief's lines cut at each " · ", as standards §7 asks. Joined they are the brief's. |
+| "kg moved", "%@ kg", "%@ kg moved" | kilograms | The brief names them in brackets. |
+| "Today" as the header's title | no program, block complete | S3 criterion 1, not the body. |
+| "Next: week 4" | Logged, with an empty week 3 ahead | The brief says "week {n+1}"; the code names the week the next session is in. Better than naming a week with nothing in it. |
+| U+2068 … U+2069 around a right-to-left tag in "Next: Friday · {tag}" | Foundation | Not a text: the isolates keep the line's order. Names and tags are otherwise shown byte for byte. |
+
+The tile's caption and its change are two fields ("lb moved", "+8%"); the brief's "lb moved · +8%" is left for S4's
+view to join.
+
+### Attacked and held
+
+**Worked examples** (15 tests, `TodayWorkedExamplesAdversarialTests`). Criteria 1, 3, 4, 5, 6, 7, 8, 9 and 11 with
+every number worked out by hand in a comment: "Week 1 of 8 · ~38 min", the four rows in pounds and in kilograms
+("5 × 5 @ 113.4" …), "Resume · 3:00", "15 of 15 sets · 30,370 lb moved" and "13,776 kg moved", "Next: Friday · UB",
+the deload week ("Week 8 of 8 · Deload · ~29 min", "2 × 11 @ 47.5" …), all four off-schedule details, "2/4",
+"24.2k", "+8%", a real minus in "−3%", "11.0" thousand kilograms, the Sunday strip. Criterion 10 is in the recent
+suite.
+
+**Which card** (`TodayCardModelAdversarialTests`, `TodayCardAdversarialTests`; `TodayOracle` is my model, written
+from criteria 1, 2 and 4 to 8 with Foundation's calendar and integer day arithmetic).
+- Seeds 0 to 3999, handed in newest first: 0 disagreements on the card and its route (program, week, day or
+  workout id), the title, the header's date, each cell's letter, number, mark and spoken date, sessions done and
+  planned, the volume, its caption and its change. The seeds give 794 resume, 537 start, 518 logged, 1,363 rest,
+  336 no program and 452 block complete, over 11 time zones, 7 week starts, both units, blocks begun on any
+  weekday within ten days of 09-14 with weeks emptied, a Sunday session added, a weekday removed or the block cut
+  to two weeks, moments from nine days before the block to nine days after it (the first instant of a day, its
+  second second, its last second, noon, any other), and a session that is absent, live, finished and unknown to
+  history, finished and known, or discarded.
+- Seeds 0 to 299: the same input gives the same model, twice from one input and once from a rebuilt one.
+- Case by case, by hand: a workout live for another day, on a rest day, after the block and with no program; the
+  session done yesterday (offered again), twice today, for another program, another week, another day and no
+  program; the session's finished workout with and without history's copy (counted once; in the strip, the tiles
+  and the list); a discarded session and unfinished rows of history (count for nothing); a workout that goes live
+  after today's was logged; a start still ahead of the clock ("Resume · 0:00").
+
+**Dates and weeks** (`TodayDatesAdversarialTests`, `TodayWeeksAdversarialTests`).
+- Twelve hand rows at UTC+14, UTC−12, UTC+5:45 and UTC, a second before and at midnight.
+- Every clock change of 2026 in ten zones (Santiago, Cairo, Havana, Beirut, Lord Howe, Chatham, St John's,
+  London, New York, Lisbon): 16 moments each, 160 in all, from a day before to a day after, against a civil date
+  found by adding the zone's offset and against the model. Leap day 2028 and the turn of 2026 to 2027.
+- The weekdays named in the rest-day body, the Next line and a recent row in six far zones; a next session on the
+  Sunday whose midnight Santiago skips.
+- The block's first day, its last two and the day after; a block begun on a Wednesday (six days, each cell by its
+  own program week, the routes and the sheet naming the program week); a week with no sessions (no planned marks,
+  "/0", "next Monday" from both sides of it); a block of one week ("Week 1 of 1", "1 week done."); a block that
+  has not begun; the six ordinary rest-day rows; eight Next lines.
+
+**The strip, the tiles and the card agree** (`TodayTilesAdversarialTests`). "5/4" with two workouts on one day;
+seven volumes on and around rounding ties in both units, up to 123,456,789 lb; seeds 1 to 400: the tile and its
+spoken number against my own sum of grams × reps over done sets of every kind, in eighths of a pound and of a
+kilogram; twelve changes (+8, −3, 0, none, a zero week, ±0.5 % ties, ±0.49 %, +100, −100, +1,999,900); the Logged
+card with 15, 9, 1 and 0 of 15 sets done, the drop set counted, in both units; "0 of 0 sets", "1 of 1 set";
+off-schedule marks by program week while the tiles follow the strip.
+
+**Preview rows and time** (`TodayPreviewAdversarialTests`). All 32 days of the seed (4 days × 8 weeks) in both
+units against `ProgressionRules.prescribe` and `TimeEstimate.minutes` called by me, with two slots' misses set;
+the off-schedule estimates of all 8 weeks; a held load by hand; missing exercises; catalog start loads in both
+units; a live workout's own rows for 12 workouts in both units, a swapped exercise, a renamed workout, an
+exercise the catalog no longer holds, a workout of another program and one with no exercises.
+
+**Recent** (`TodayRecentAdversarialTests`). Criterion 10 in both units; 0, 1, 4, 5, 6 and 7 handed in; twelve
+timings ("Today · 0:00" to "Today · 10:22:05", "Tue · 1 min" to "Tue · 120 min", a workout that crossed midnight,
+the same weekday a week ago); Today by the injected zone at UTC+14 and UTC−12; the session's workout placed by
+its start and listed once; two workouts with one start; volumes to "1,234,567 lb".
+
+**The words** (`TodayCopyAdversarialTests`, `TodaySpokenAdversarialTests`). Exercises and minutes for 0, 1 and 2;
+weeks for 1, 2 and 8; the scalars of "−3%", " · ", "×" and "—"; six English locales (en_US, en_DE, en_CH, en_IN,
+en_ZA, en_SE) on a 1,200-week block with 1,500 workouts: weeks, sessions and minutes grouped as the locale groups
+them, and every other text equal once separators between digits are removed, the Domain's volumes unmoved; 48,400
+texts of 1,000 seeded models: none empty, untrimmed, with a placeholder, "nil", a double space, a stray "·" or the
+product's name. Spoken: the seven dates, today's cell once trained, the sessions tile for six pairs, the volume
+tile for seven.
+
+**Purity** (`TodayPurityAdversarialTests`). My own scan of the module's 11 sources for 16 patterns (a clock,
+`.current`, formatters with defaults, a calendar, locale or zone built in place, `Double` and its kin, random):
+no hit. No worded literal and no lookup outside the copy files; all 49 lookups read `.module`, and each that
+carries a value passes `locale: locale`. The date's words in fr_FR, de_DE, ja_JP, es_MX and en_GB against a style
+I built; the calendar's own locale and first weekday change nothing; seven other calendars name one day in the
+header, the cell and its spoken date; ten loads on rounding ties print as the Domain prints the exact weight.
+
+**Robustness** (`TodayRobustnessAdversarialTests`): no trap. A program with no weeks and no days; a schedule
+naming a day the program lost; weeks out of place on 21 days; eleven names (format specifiers, empty, only a
+dash, right-to-left, emoji, 400 characters, a line break); six weights (zero, negative, not a number, the largest
+and smallest decimal, 2⁵³ + 1 lb) against seven previous volumes in both units; thirteen moments for the clock and
+for a workout's start and end (to infinity and not-a-number); the first and last day a `CivilDate` holds; a source
+week of `Int.max`, `Int.min`, −1, 8 and a million.
+
+Seen there and not judged: a moment outside the years 1 to 9999 gives a card and an empty strip, and a
+not-a-number moment an empty date; on 9999-12-31 and 0001-01-01 the strip is shorter than seven where the week
+runs past the calendar; a schedule that names a lost day gives a rest-day card while the strip and "/4" still
+count that day as planned; a program with no weeks reads "0 weeks done." from its start date on; minutes round
+down ("58 min" for 58:59); a recent list handed in out of order is shown in that order (its declaration says
+"newest first"); a live workout of week 2 on a week-1 day reads "Week 2 of 8 · ~37 min", and one of another
+program has no meta line.
+
+### Not attacked
+
+- Line coverage of `TodayPresentation` (criterion 11): not measured by me. The coverage gate is the orchestrator's.
+- The catalog against the compiler's keys (`scripts/check-string-catalogs.sh`): the gate's step.
+- No mutation run this round.
+- Views, snapshots, the store, `Text(timerInterval:)` counting up, a double tap: S4 to S6.
+- Plural rules and words in a language other than English; right-to-left layout.
+- watchOS, a 32-bit `Int`, and time zone data other than this machine's and the simulator's.
+- Speed: nothing asserts a time. The 1,200-week block with 1,500 workouts ran in under 0.2 s on the host.
+- The device's own locale and zone inside the bundle: the host ran in America/Chicago and the simulator under the
+  PR plan; both gave the same results, but neither was varied.
+
+### Commands and exit statuses
+
+All from the worktree root. Logs are in the session's scratch folder (`f09s3-g2/`). The full gate is the
+orchestrator's and was not run.
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter "FeatureTodayTests\..*AdversarialTests"` (host) | 1 | 96 tests in 12 suites: 93 pass, 3 fail (10 issues) |
+| `swift test … --filter FeatureTodayTests` (host) | 1 | 185 tests in 16 suites: 182 pass, the same 3 fail |
+| `sim-lock.py` → `scripts/sim-destination.sh`, `scripts/sim-boot.sh`, `xcodebuild build-for-testing` and `test-without-building -only-testing:FeatureTodayTests`, Ledger scheme, PR plan, iPhone 17, iOS 27.0, with `check.sh`'s flags | 65 | 185 tests: 182 pass, the same 3 fail. Build exit 0. |
+| `scripts/check.sh --lint-only` | 0 | format, lint, script tests |
+
+The simulator ran twice, not once as briefed. The first run's build printed a compiler warning in my
+`TodayAdversarialScenario.swift` (a redundant `#require`). I fixed it, checked on the host that the 4,000 inputs
+and their outcome counts were unchanged, and ran again so that the result is for the files as they are. Both runs
+gave 182 of 185. Both result bundles are deleted; free disk stayed at 16 GiB.
+
+The failing tests, mine, left failing:
+
+| Test | Finding |
+|---|---|
+| `TodayCardAdversarialTests.sessionDoneTwice_showsTheLaterOne(_:)`, case `newestFirst: false` (2 expectations) | F9-S3-1 |
+| `TodayCardModelAdversarialTests.seededInputsInAnyOrder_showWhatTheSpecificationGives(_:)`, 7 of 8 batches | F9-S3-1 |
+| `TodayPurityAdversarialTests.joiner_isTheMiddleDot()` | F9-S3-2 |
+
+Expect the gate red at its iOS test step on these three until the two findings are settled.
+
+## Slice S3 — round 2 (G2 tester, 2026-10-05)
+
+Branch `feat/F09-s3-presentation`; round 1 is `1d1b550`, and the implementer's fixes are uncommitted on top of
+it. Specification for this round: the brief's "Plan amendments — slice S3 after round 1" (criteria 13 to 18).
+
+**Result.** Everything held. Round 1's three failing tests pass with my files untouched, the six tests that pinned
+what the rulings change are updated to the rulings and pass, and 23 new tests against the changed behaviour pass.
+One new spec question (F9-S3-8, low), with no failing test: a workout handed in twice is counted twice.
+
+119 tests in 15 suites and 35 files under `Adversarial/` (61 parameterized: 424 cases). Host: 119 of 119. iPhone 17
+simulator (iOS 27.0), the whole target: 216 of 216 (the implementer's 97 with them).
+
+**Order of work, and what I had seen when.** Before editing: `git diff 1d1b550 --stat -- …/Adversarial/` empty, then
+one host run of my 96 tests as committed: 90 pass, and exactly the six tests named by the orchestrator fail (15
+issues), each on a text the rulings change. That run's failure messages showed me the feature's new texts before I
+edited the six; each expected value I wrote is the brief's wording all the same (table below). I wrote the new
+suites and my model of criteria 15 to 17 (`TodayAdversarialOracle+Rest.swift`) from the brief, ran them, and only
+then read the source and catalog diffs and the implementer's updated tests. That reading suggested two more tests,
+added afterwards: `oddStarts_giveOneModelInEveryOrder` and `sameIdTwice_stillGivesACard`. I did not read
+`implementation-notes.md` or `review.md`.
+
+### Round 1's findings
+
+| Finding | Now | Shown by |
+|---|---|---|
+| F9-S3-1, the first handed in, not the newest | closed (criterion 13) | `TodayCardAdversarialTests.sessionDoneTwice_showsTheLaterOne(_:)`, both cases; `TodayCardModelAdversarialTests.seededInputsInAnyOrder_showWhatTheSpecificationGives(_:)`, 0 of 4,000 seeds; the new `TodayOrderAdversarialTests` |
+| F9-S3-2, the spoken join outside the catalog | closed (criterion 14) | `TodayPurityAdversarialTests.joiner_isTheMiddleDot()`: no literal but "" and " · " outside the copy files; `TodaySpokenAdversarialTests.volumeLine_isTheRulings(_:)`; `…catalog_holdsTheRulingsKeys()` |
+| F9-S3-3, "next Wednesday" for tomorrow | closed, behaviour changed (criterion 15) | `TodayNextAdversarialTests`, all six tests |
+| F9-S3-4, the body before the block | closed, behaviour changed (criterion 16) | `TodayBlockEdgesAdversarialTests.beforeTheBlock_namesItsFirstDay(_:)` and the two tests after it |
+| F9-S3-5, "the last week" in week 1 | closed, behaviour changed (criterion 17) | `TodayBlockEdgesAdversarialTests`, the five tests of `+Left` |
+| F9-S3-6, unstored exercises keep the estimate and Start | unchanged by ruling (criterion 18), for F12 and F10 | `TodayPreviewAdversarialTests.slotWithoutItsExercise_hasNoRow(_:)` prints what it printed: "3 exercises · ~38 min", "0 exercises · ~38 min" |
+| F9-S3-7, no test with another order | closed | the implementer's seeded test now hands the week shuffled, and `TodayPresentationTests+Order.swift` adds two tests (ties, starts that are not numbers, 40 shuffles) |
+
+### The six edits
+
+Each is the expected value only; nothing else in those tests changed (`git diff 1d1b550` shows 22 lines added and 19
+removed in six files, one of them the support file below).
+
+| Test | Old expected | New expected | Criterion |
+|---|---|---|---|
+| `TodayWeeksAdversarialTests.blockBegunOnWednesday_usesEachDaysOwnWeek(_:)`, the 11-03 row | "Nothing scheduled for Tuesday in week 7. Next up is next Wednesday." | "Nothing scheduled for Tuesday in week 7. Next up is Wednesday." | 15: Wednesday 11-04 is on the strip (11-02 … 11-08) |
+| `TodayTilesAdversarialTests.straddlingWeek_keepsTheTwoWeeksApart()` | "Nothing scheduled for Tuesday in week 1. Next up is next Wednesday." | "Nothing scheduled for Tuesday in week 1. Next up is Wednesday." | 15: Wednesday 09-23 is on the strip (09-21 … 09-27) |
+| `TodayWeeksAdversarialTests.beforeTheBlock_isARestDayOfWeekOne(_:)` | begins "Nothing scheduled for Wednesday in week 1. Next up is " and ends " Friday." or " next Friday." (" Monday." for the later block) | "Your block starts on Friday, September 18." and "Your block starts on Monday, September 28." | 16 |
+| `TodayWeeksAdversarialTests.nothingLeftBeforeTheLastWeek_saysSo()` | "Nothing scheduled for Sunday in week 1. This is the last week of the block." | "Nothing scheduled for Sunday in week 1. No sessions are left in this block." | 17 |
+| `TodaySpokenAdversarialTests.volumeTile_speaksTheWholeNumberAndTheChange(_:)` | begins "24,180 lb moved" and ends with the drawn change, or is "24,180 lb moved" alone (seven rows) | "24,180 lb moved this week, {change} from last week", or "24,180 lb moved this week" alone (the same seven rows) | 14 |
+| `TodayPurityAdversarialTests.lookups_takeTheInjectedLocale()` | 49 lookups | 55: the four spoken lines of 14 and the sentences of 16 and 17 | 14, 16, 17 |
+
+One edit outside the six: `TodayAdversarial.exercises()` in my support file now reads the bundled catalog once
+instead of at every call. No expectation depends on it; the new matrices build thousands of inputs.
+
+### New findings
+
+#### F9-S3-8 — spec question (low): a workout handed in twice is counted twice
+
+- **Criterion.** 13: "`make` gives the same model for `weekWorkouts` handed in any order". `TodayInput.weekWorkouts`
+  says "one read"; it does not say each workout appears once.
+- **What happens.** The same finished workout twice in `weekWorkouts` reads 2 sessions and twice its volume
+  ("60.7k" for one Lower A of 30,370 lb). Two copies of one id that differ (9 of 15 sets done, and 15 of 15) give
+  the Logged card of whichever was handed in first, so that list does not satisfy criterion 13's letter.
+- **Why it can matter.** `WorkoutRepository.workouts(in:)` cannot return one id twice. A store that fills the list
+  from two reads, the stats week and the program week, which overlap whenever they differ, would hand in every
+  workout of the overlap twice unless it merges them. S5 is not written.
+- **Shown by** `TodayOrderAdversarialTests.sameIdTwice_stillGivesACard()`, which prints both and judges neither.
+- **Question.** State "each workout once" on the input and pin it in S5's test, or count by id here (the session's
+  own workout is already counted once by its id)?
+
+### Texts of the rulings, as they read
+
+For Pete's list, with the slice's other new texts. All three are in the catalog and asserted with literals.
+
+| Text | Judgement |
+|---|---|
+| "24,180 lb moved this week, +8% from last week" / "… moved this week" (lb, kg) | Reads well aloud, also "0% from last week" and "−100% from last week". |
+| "Your block starts on Monday, September 28." | Good. The date has no year, as the header's has none: a block a year away reads "Your block starts on Monday, September 14." on 2025-09-14, a Sunday. In another locale the date is that locale's inside the English sentence, as specified. |
+| "Nothing scheduled for Sunday in week 7. No sessions are left in this block." | Good, and true where "the last week" was not. |
+
+### Attacked and held
+
+**Order, criterion 13** (`TodayOrderAdversarialTests`, 6 tests).
+- Seeds 0 to 999, the week as generated: every order of up to four workouts and 24 of the 120 orders of five (the
+  reverse among them), 9,472 orders in all, each giving the model of the order it came in.
+- Seeds 0 to 299: two to five finished workouts of today's session that started at 06:00 or 09:00, with the
+  session's own workout among them, or as one more that history lacks, a third of the time each: every order, one
+  model, and the card is always one of those that started last.
+- Two with one start, and the session's own as a third: the same card either way (the smallest id of the three,
+  which is the repository's order; the brief asks only that it be the same every time).
+- Five workouts whose starts are not a number, infinite, `distantPast` or `distantFuture`, with one or two of
+  this morning: all 120 orders of three such groups, one model each, the card one of this morning's.
+- History's older copy of the session's workout beside another workout: one model in either order. The card then
+  shows history's copy ("9 of 15 sets"), not the session's; counted once.
+
+**Next by the strip, criterion 15** (`TodayNextAdversarialTests`, 6 tests).
+- Ten hand rows: Sunday as the strip's last day (from Monday), its first (from Sunday) and inside it (from
+  Tuesday); tomorrow's session off the strip (the week from Wednesday, from Friday); a block begun on Wednesday,
+  where tomorrow opens the next program week and is on screen, and where Monday is in this program week and off it.
+- A session exactly seven days away is "next Monday" under all seven week starts; six days away it is "Sunday"
+  only when the strip begins today.
+- Every rest day of two blocks (the seed, and one that trains once a week on a moving weekday with two weeks
+  empty), each begun on every weekday, from three days before to the last day: 567 rest days under each of the
+  seven week starts, 3,969 in all, against my model of criteria 15 to 17. No disagreement.
+- The Logged card's line for every session of both blocks begun on every weekday (37 sessions × 7): a weekday and
+  tag while the next session is in this program week, a later week's number otherwise, never this week's, and the
+  same under a Monday and a Thursday week start. By hand: logged on the strip's last day, logged where the next
+  session is on the strip and in the next program week ("Next: week 2"), and where it is off the strip and in this
+  one ("Next: Monday · UA").
+- Seeds 0 to 3999 (11 zones, 7 week starts, edited blocks): 1,363 rest-day bodies and 518 Next lines, none
+  disagreeing.
+
+**Before the block, criterion 16** (`TodayBlockEdgesAdversarialTests`, 3 tests). Twelve rows, each at the day's
+second second and its last: one day, a week, 365 and 366 days before; UTC+14, UTC−12 and Chatham; a first day
+whose midnight Santiago skips; New York, Lord Howe and Havana with a clock change between today and the first day
+or on it. Each reads "Your block starts on {date}.", the title "Rest day", "Edit this week" and the list for week
+1; at the block's first instant the sentence is gone. A block whose first session is not on its first day, and
+one that trains nothing, still name the first day; in fr_FR the date is the one the header would write; a live
+workout before the block still takes the card.
+
+**No sessions left, criterion 17** (5 tests). The seed with week 8 emptied (week 7's Sunday against week 8's
+Monday and Sunday, then block complete); eight weeks with one session (none left from the second day through
+week 7, "the last week" in week 8); two weeks with the second empty, and the Logged card without a Next line; a
+block begun on a Wednesday, where the two endings change inside one strip; the change at the first instant of the
+last week at UTC+14, UTC−12 and in Santiago.
+
+**The spoken line, criterion 14.** Eight rows in both units: a rise, a fall with a real minus, no change, no
+previous week, a zero previous week, a +0.5 % tie, nothing moved after a week, nothing at all. The drawn caption
+and change are unchanged, and the Logged card keeps "30,370 lb moved". The catalog holds four keys with "moved
+this week" (two per unit, one of each with "from last week"), one "Your block starts on …" and one of each
+ending, and as many keys as the copy files hold lookups (55).
+
+**Scans, over the changed sources.** The 16 purity patterns: no hit. No worded literal and no lookup outside the
+copy files. Every lookup reads `.module`, and each that carries a value passes the locale.
+
+**Round 1's suites.** All 96 pass with the six edits and nothing else changed: the worked examples, the 4,000-seed
+model in both orders, the dates and zones, the tiles, the rows, the recent list, the words, robustness.
+
+### Not attacked
+
+- Line coverage of the changed files (criterion 11) and the catalog against the compiler's keys: the gate's steps.
+  My count of 55 lookups against 55 keys is a scan of the sources, not the compiler's extraction.
+- No mutation run.
+- The store that fills `weekWorkouts` (S5), which is where F9-S3-8 is decided.
+- Languages other than English; watchOS; time zone data other than this machine's and the simulator's.
+- The implementer's choice of the smaller id for a tie: the brief leaves it open, so I checked only that it is
+  the same in every order.
+
+### Commands and exit statuses
+
+All from the worktree root. Logs are in the session's scratch folder (`f09s3-g2/r2/`). The full gate is the
+orchestrator's and was not run.
+
+| Command | Exit | Result |
+|---|---|---|
+| `git diff 1d1b550 --stat -- LedgerKit/Tests/FeatureTodayTests/Adversarial/`, before any edit | 0 | empty |
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter "FeatureTodayTests\..*AdversarialTests"` (host), my files as committed | 1 | 96 tests: 90 pass; the six named tests fail (15 issues); round 1's three failures pass |
+| the same, after the six edits and the new tests | 0 | 119 tests in 15 suites, 424 cases |
+| `swift test … --filter FeatureTodayTests` (host) | 0 | 216 tests in 19 suites, 748 cases |
+| `sim-lock.py` → `scripts/sim-destination.sh`, `scripts/sim-boot.sh`, `xcodebuild build-for-testing` and `test-without-building -only-testing:FeatureTodayTests`, Ledger scheme, PR plan, iPhone 17, iOS 27.0, once | 0 | 216 of 216. The bundle is deleted; free disk 14 GiB. |
+| `scripts/check.sh --lint-only` | 0 | format, lint, script tests |
+
+No test of mine fails.
