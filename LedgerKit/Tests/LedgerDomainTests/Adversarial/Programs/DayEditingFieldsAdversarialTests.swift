@@ -76,7 +76,7 @@ extension DayEditingFieldsAdversarialTests {
         #expect(tally.cases == 735 * 56)
     }
 
-    @Test("Double progression from every pair makes the top max(top, reps + 2); Linear and Fixed leave it.")
+    @Test("Double chosen from another progression makes the top max(top, reps + 2); any other choice leaves it.")
     func setProgression_fromEveryPair_keepsOrRaisesTheTop() throws {
         var tally = Tally()
         for pair in Self.pairs {
@@ -84,7 +84,8 @@ extension DayEditingFieldsAdversarialTests {
                 let day = try Self.day(reps: pair.reps, top: pair.top, progression: from)
                 let original = try #require(day.slots.first)
                 for target in Progression.allCases {
-                    let top = target == .double ? max(pair.top, pair.reps + 2) : pair.top
+                    // Criterion 14: the progression the slot already has changes nothing.
+                    let top = target == .double && from != .double ? max(pair.top, pair.reps + 2) : pair.top
                     let edited = DayEditing.setProgression(target, slot: Self.slot, in: day).slots.first
                     let holds = Self.isOnly(edited, original) {
                         $0.progression = target

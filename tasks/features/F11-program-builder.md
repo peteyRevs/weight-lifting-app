@@ -200,3 +200,8 @@ screen is redrawn from the stored program; they are never sent again. **For S7**
 and the step a slot resolves to (its own, or the exercise's and the equipment's default in the lifter's unit)
 become two small functions on `Slot`, used by `ProgressionRules` and `DayEditing`, before a presentation
 writes that pair a third time.
+18. **Recorded, not fixed** (F11-S1-4, round 2): the source test of criterion 15 is a tripwire for the likely
+    mistakes (a new `static func` left out of the tables; a line that assigns a slot's misses or exercise). It
+    does not see an instance or `mutating` method, a write through a key path or a whole-slot assignment, or
+    code outside `LedgerDomain/Programs`. The property test over the listed functions remains the proof; a
+    reviewer of any later change to these files checks criterion 12 by reading.

@@ -99,7 +99,7 @@ struct RepsRPERestTests {
 
 extension RepsRPERestTests {
     @Test("RPE(clamping:) holds a value to 5…10 and rounds it to the nearest half, a tie going up (rule 3)")
-    func clampingInitializers_roundToTheStepAndStayInRange() {
+    func rpeClampingInitializer_roundsToTheHalfAndStaysInRange() {
         let rpe = ["4.5": 5, "5": 5, "7.2": 7, "7.25": 7.5, "7.3": 7.5, "7.74": 7.5, "7.75": 8, "9.99": 10, "10.5": 10]
             as [String: Decimal]
         for (text, expected) in rpe {

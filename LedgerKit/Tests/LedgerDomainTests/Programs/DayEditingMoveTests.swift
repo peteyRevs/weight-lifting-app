@@ -7,7 +7,7 @@ import Testing
 /// 3B, 4 on screen.
 @Suite("DayEditing · move", .tags(.domain))
 struct DayEditingMoveTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     struct Row: Sendable, CustomStringConvertible {
         let description: String

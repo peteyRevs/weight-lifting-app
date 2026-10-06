@@ -92,12 +92,12 @@ extension ExerciseSearchTests {
     }
 
     private func names(_ query: String, _ muscle: MuscleFilter?, _ equipment: Equipment?) throws -> [String] {
-        try ExerciseSearch.filter(ExerciseCatalog.seed(), query: query, muscle: muscle, equipment: equipment)
+        try ExerciseSearch.filtered(ExerciseCatalog.seed(), query: query, muscle: muscle, equipment: equipment)
             .map(\.name)
     }
 
     @Test("On the seed catalog, \"row\" with Back and Machine is exactly Chest-Supported Row")
-    func filter_queryMuscleAndEquipmentCombine() throws {
+    func filtered_queryMuscleAndEquipmentCombine() throws {
         #expect(try names("row", .back, .machine) == ["Chest-Supported Row"])
         #expect(try names(" ＲＯＷ ", .back, .machine) == ["Chest-Supported Row"], "the query is folded and trimmed")
         #expect(try names("row", .back, .cable) == ["Seated Cable Row", "Single-Arm Cable Row"])
@@ -107,13 +107,13 @@ extension ExerciseSearchTests {
     }
 
     @Test("\"All\" on both chips and a blank query give the whole catalog, in name order")
-    func filter_noChipsAndBlankQuery_givesEverythingInNameOrder() throws {
+    func filtered_noChipsAndBlankQuery_givesEverythingInNameOrder() throws {
         let catalog = try ExerciseCatalog.seed()
-        let all = ExerciseSearch.filter(catalog, query: "  ", muscle: nil, equipment: nil)
+        let all = ExerciseSearch.filtered(catalog, query: "  ", muscle: nil, equipment: nil)
         #expect(all.count == catalog.count)
         let isInNameOrder = all.map(\.id) == ExerciseSearch.sorted(catalog).map(\.id)
         #expect(isInNameOrder)
-        let ofNothing = ExerciseSearch.filter([], query: "row", muscle: .back, equipment: .machine)
+        let ofNothing = ExerciseSearch.filtered([], query: "row", muscle: .back, equipment: .machine)
         #expect(ofNothing.isEmpty)
     }
 
@@ -131,7 +131,7 @@ extension ExerciseSearchTests {
     }
 
     @Test("A chip keeps an exercise by its primary muscle and its equipment, whatever else it trains")
-    func filter_usesThePrimaryMuscleAndTheEquipment() {
+    func filtered_usesThePrimaryMuscleAndTheEquipment() {
         var curl = Self.exercise(1, "Hammer Curl", .biceps, .dumbbell)
         curl.secondaryMuscles = [.forearms, .chest]
         let exercises = [
@@ -142,7 +142,7 @@ extension ExerciseSearchTests {
             Self.exercise(5, "Wrist Curl", .forearms, .barbell)
         ]
         func kept(_ muscle: MuscleFilter?, _ equipment: Equipment?, query: String = "") -> [String] {
-            ExerciseSearch.filter(exercises, query: query, muscle: muscle, equipment: equipment).map(\.name)
+            ExerciseSearch.filtered(exercises, query: query, muscle: muscle, equipment: equipment).map(\.name)
         }
         #expect(kept(.arms, nil) == ["Hammer Curl", "Wrist Curl"])
         #expect(kept(.chest, nil).isEmpty, "a secondary muscle does not count")

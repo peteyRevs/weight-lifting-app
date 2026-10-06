@@ -6,9 +6,15 @@ import Foundation
 public struct RestDuration: Hashable, Codable, Sendable, Comparable {
     public let seconds: Int
 
+    /// Rule 3: the shortest and the longest rest, in seconds.
+    static let secondsRange = 30 ... 300
+
+    /// Rule 3: rest moves in steps of 15 s.
+    static let stepSeconds = 15
+
     /// Rule 3: `nil` unless `seconds` is in 30…300 and a multiple of 15.
     public init?(seconds: Int) {
-        guard (30 ... 300).contains(seconds), seconds.isMultiple(of: 15) else {
+        guard Self.secondsRange.contains(seconds), seconds.isMultiple(of: Self.stepSeconds) else {
             return nil
         }
         self.seconds = seconds
@@ -18,13 +24,10 @@ public struct RestDuration: Hashable, Codable, Sendable, Comparable {
         seconds = validSeconds
     }
 
-    /// Rule 3: rest moves in steps of 15 s.
-    static let stepSeconds = 15
-
     /// Rule 3 stepper semantics: `seconds` held to 30…300, then rounded to the nearest 15 (no whole number
     /// of seconds is a tie: 37 → 30, 38 → 45).
     public init(clampingSeconds seconds: Int) {
-        let held = min(max(seconds, 30), 300)
+        let held = min(max(seconds, Self.secondsRange.lowerBound), Self.secondsRange.upperBound)
         self.seconds = (held + Self.stepSeconds / 2) / Self.stepSeconds * Self.stepSeconds
     }
 

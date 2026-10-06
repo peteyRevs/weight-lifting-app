@@ -77,7 +77,7 @@ struct ExerciseFilterAdversarialTests {
 extension ExerciseFilterAdversarialTests {
     @Test("Criterion 12: \"row\" with Back and Machine on the seed catalog is exactly Chest-Supported Row.")
     func filter_rowBackMachine_isChestSupportedRow() {
-        let rows = ExerciseSearch.filter(catalog, query: "row", muscle: .back, equipment: .machine)
+        let rows = ExerciseSearch.filtered(catalog, query: "row", muscle: .back, equipment: .machine)
         #expect(rows.map(\.name) == ["Chest-Supported Row"])
     }
 
@@ -103,7 +103,7 @@ extension ExerciseFilterAdversarialTests {
         for chip in chips {
             for kind in equipment {
                 for query in Self.queries {
-                    let rows = ExerciseSearch.filter(catalog, query: query, muscle: chip, equipment: kind).map(\.id)
+                    let rows = ExerciseSearch.filtered(catalog, query: query, muscle: chip, equipment: kind).map(\.id)
                     let expected = Self.reference(entries, query, chip, kind)
                     let asked = "\(String(describing: chip)) \(String(describing: kind))"
                     let note = "\(asked) query of \(query.unicodeScalars.count) scalars"
@@ -120,7 +120,7 @@ extension ExerciseFilterAdversarialTests {
     )
     func filter_nothingAsked_isTheWholeCatalogInNameOrder() {
         for query in ["", "  ", "\n"] {
-            let rows = ExerciseSearch.filter(catalog, query: query, muscle: nil, equipment: nil)
+            let rows = ExerciseSearch.filtered(catalog, query: query, muscle: nil, equipment: nil)
             #expect(rows.count == 224)
             #expect(Set(rows.map(\.id)).count == 224)
             let names = rows.map { Self.folded($0.name) }
@@ -139,7 +139,7 @@ extension ExerciseFilterAdversarialTests {
         let chips: [Chip?] = [nil] + Chip.allCases
         let chip = chips.randomElement(using: &generator) ?? nil
         let query = Self.queries.randomElement(using: &generator) ?? ""
-        let rows = ExerciseSearch.filter(shuffled, query: query, muscle: chip, equipment: nil).map(\.id)
+        let rows = ExerciseSearch.filtered(shuffled, query: query, muscle: chip, equipment: nil).map(\.id)
         let same = rows == Self.reference(catalog.map(Entry.init), query, chip, nil)
         #expect(same, "\(seed)")
     }
@@ -148,28 +148,28 @@ extension ExerciseFilterAdversarialTests {
     func filter_coreExercises_areUnderAllOnly() {
         let core = Set(catalog.filter { $0.primaryMuscle == .core }.map(\.id))
         #expect(core.count == 26)
-        let all = Set(ExerciseSearch.filter(catalog, query: "", muscle: nil, equipment: nil).map(\.id))
+        let all = Set(ExerciseSearch.filtered(catalog, query: "", muscle: nil, equipment: nil).map(\.id))
         #expect(core.isSubset(of: all))
         for chip in Chip.allCases {
-            let rows = Set(ExerciseSearch.filter(catalog, query: "", muscle: chip, equipment: nil).map(\.id))
+            let rows = Set(ExerciseSearch.filtered(catalog, query: "", muscle: chip, equipment: nil).map(\.id))
             #expect(rows.isDisjoint(with: core), "\(chip)")
         }
-        let crunches = ExerciseSearch.filter(catalog, query: "crunch", muscle: nil, equipment: nil)
+        let crunches = ExerciseSearch.filtered(catalog, query: "crunch", muscle: nil, equipment: nil)
         #expect(!crunches.isEmpty)
-        let underArms = ExerciseSearch.filter(catalog, query: "crunch", muscle: .arms, equipment: nil)
+        let underArms = ExerciseSearch.filtered(catalog, query: "crunch", muscle: .arms, equipment: nil)
         #expect(underArms.map(\.name) == [])
     }
 
     @Test("Kettlebell and band exercises, which have no chip, are found by their equipment: 15 and 11.")
     func filter_equipmentWithoutAChip_isStillFiltered() {
-        #expect(ExerciseSearch.filter(catalog, query: "", muscle: nil, equipment: .kettlebell).count == 15)
-        #expect(ExerciseSearch.filter(catalog, query: "", muscle: nil, equipment: .band).count == 11)
+        #expect(ExerciseSearch.filtered(catalog, query: "", muscle: nil, equipment: .kettlebell).count == 15)
+        #expect(ExerciseSearch.filtered(catalog, query: "", muscle: nil, equipment: .band).count == 11)
     }
 
     @Test("A query that is only in short names finds them: \"ohp\" and \"RDL\" match no name of the catalog.")
     func filter_shortNameOnlyQuery_matches() {
         for query in ["ohp", "RDL"] {
-            let rows = ExerciseSearch.filter(catalog, query: query, muscle: nil, equipment: nil)
+            let rows = ExerciseSearch.filtered(catalog, query: query, muscle: nil, equipment: nil)
             #expect(!rows.isEmpty, "\(query)")
             #expect(rows.allSatisfy { Self.folded($0.shortName).contains(Self.folded(query)) }, "\(query)")
             #expect(rows.contains { !Self.folded($0.name).contains(Self.folded(query)) }, "\(query)")
@@ -184,12 +184,12 @@ extension ExerciseFilterAdversarialTests {
             Self.custom(9103, "Meadows Row", .core, .machine),
             Self.custom(9104, "m\u{E9}adows row", .back, .barbell)
         ]
-        let rows = ExerciseSearch.filter(customs + catalog, query: "ROW", muscle: .back, equipment: .machine)
+        let rows = ExerciseSearch.filtered(customs + catalog, query: "ROW", muscle: .back, equipment: .machine)
         #expect(rows.map(\.name) == ["Chest-Supported Row", "Meadows Row", "Meadows Row"])
         #expect(rows.suffix(2).map { EditAdv.number($0.id.rawValue) } == [9101, 9102])
-        let accented = ExerciseSearch.filter(customs, query: "MEADOWS", muscle: nil, equipment: .barbell)
+        let accented = ExerciseSearch.filtered(customs, query: "MEADOWS", muscle: nil, equipment: .barbell)
         #expect(accented.map { EditAdv.number($0.id.rawValue) } == [9104])
-        let ofNothing = ExerciseSearch.filter([], query: "row", muscle: .back, equipment: .machine)
+        let ofNothing = ExerciseSearch.filtered([], query: "row", muscle: .back, equipment: .machine)
         #expect(ofNothing.map(\.name) == [])
     }
 }

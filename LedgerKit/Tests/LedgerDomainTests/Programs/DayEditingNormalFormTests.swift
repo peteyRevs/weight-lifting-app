@@ -6,7 +6,7 @@ import Testing
 /// nothing, and every result is in normal form (its first slot is joined to nothing), whatever arrives.
 @Suite("DayEditing · totality and the normal form", .tags(.domain))
 struct DayEditingNormalFormTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     let upperA: DayTemplate
 

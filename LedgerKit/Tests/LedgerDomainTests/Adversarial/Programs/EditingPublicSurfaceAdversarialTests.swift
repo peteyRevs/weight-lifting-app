@@ -92,7 +92,7 @@ extension EditingPublicSurfaceAdversarialTests {
         #expect(rows.last?.load == .pounds(240))
         let chip = ExerciseSearch.MuscleFilter.chest
         #expect(chip.groups == [.chest])
-        let found = ExerciseSearch.filter(
+        let found = ExerciseSearch.filtered(
             [Fixtures.bench, Fixtures.backSquat],
             query: "squat",
             muscle: chip,

@@ -6,7 +6,7 @@ import Testing
 /// away and does not clamp. Expected values are the spec's (§3.4, rules 1–3 and 6), worked by hand.
 @Suite("DayEditing · fields", .tags(.domain))
 struct DayEditingFieldsTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     /// What `set` stores for a value, on a slot of 1 rep with the top of its range at 2 (so that the clamp
     /// of the top of the range is seen without the coupling).

@@ -71,7 +71,7 @@ public extension ExerciseSearch {
     /// The library's rows: the exercises whose primary muscle is one of the chip's groups, whose equipment
     /// is the one asked for, and whose name or short name contains `query` (decision #23), in name order.
     /// `nil` for a chip is "All", and a blank query matches every exercise. The query is folded once.
-    static func filter(
+    static func filtered(
         _ exercises: [Exercise],
         query: String,
         muscle: MuscleFilter?,

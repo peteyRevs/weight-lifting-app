@@ -7,7 +7,7 @@ import Testing
 /// `DayEditingStartLoadTests`, the move in `DayEditingMoveTests`, totality in `DayEditingNormalFormTests`.
 @Suite("DayEditing", .tags(.domain))
 struct DayEditingTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     let upperA: DayTemplate
     let newID = SlotID(Fixtures.uuid(900))
@@ -181,6 +181,24 @@ extension DayEditingTests {
         #expect(tops.map(\.progression) == [.double, .double, .double])
         #expect(Support.changedFields(narrow.slots[0], tops[0]) == ["repsHi", "progression"])
         #expect(Support.changedFields(narrow.slots[1], tops[1]) == ["progression"])
+    }
+
+    @Test("Choosing Double on a slot that is already double changes nothing: a narrowed range stays narrow")
+    func setProgression_doubleAgain_keepsANarrowedRange() throws {
+        let narrowed = try DayTemplate(id: upperA.id, name: "Day", tag: "DY", slots: [
+            Fixtures.slot(Fixtures.bench, id: 1, reps: 8, repsHi: 9, progression: .double),
+            Fixtures.slot(Fixtures.bench, id: 2, reps: 9, repsHi: 10, progression: .double),
+            Fixtures.slot(Fixtures.bench, id: 3, reps: 8, repsHi: 9, progression: .linear, superset: true)
+        ])
+        for number in [1, 2] {
+            let again = DayEditing.setProgression(.double, slot: Support.slot(number), in: narrowed)
+            #expect(Support.difference(again, narrowed).isEmpty, "slot \(number)")
+        }
+        #expect(DayEditing.setProgression(.double, slot: Support.slot(1), in: narrowed).slots[0].repsHi == 9)
+        let changed = DayEditing.setProgression(.double, slot: Support.slot(3), in: narrowed)
+        #expect(changed.slots[2].repsHi == 10, "changing from linear to double still widens to reps + 2")
+        let linearAgain = DayEditing.setProgression(.linear, slot: Support.slot(3), in: narrowed)
+        #expect(Support.difference(linearAgain, narrowed).isEmpty, "the same holds for every progression")
     }
 
     @Test("Leaving Double keeps the top of the range, hidden", arguments: [Progression.linear, .fixed])

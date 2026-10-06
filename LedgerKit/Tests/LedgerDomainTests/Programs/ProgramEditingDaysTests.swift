@@ -6,6 +6,8 @@ import Testing
 /// block (`Fixtures.fourDayProgram()`).
 @Suite("ProgramEditing · days", .tags(.domain))
 struct ProgramEditingDaysTests {
+    private typealias Support = EditingTestSupport
+
     let program: Program
     let newDay = DayTemplateID(Fixtures.uuid(340))
     let lowerB = Fixtures.fourDayIDs[3]
@@ -24,7 +26,7 @@ struct ProgramEditingDaysTests {
         #expect(day.slots.map(\.id) == [])
         let sameWeeks = added.weeks == program.weeks
         #expect(sameWeeks, "no schedule changed")
-        #expect(EditingSupport.faults(in: added).isEmpty)
+        #expect(Support.faults(in: added).isEmpty)
         #expect(ProgramEditing.addDay(program, id: newDay, name: " Arms\u{0} \n").days.last?.name == "Arms")
     }
 
@@ -37,7 +39,7 @@ struct ProgramEditingDaysTests {
         #expect(edited.days.map(\.tag) == ["UA", "LA", "UB", "D5", "D6"])
         edited = ProgramEditing.addDay(edited, id: DayTemplateID(Fixtures.uuid(360)), name: "New day")
         #expect(edited.days.map(\.tag) == ["UA", "LA", "UB", "D5", "D6", "D7"], "three tags taken above the count")
-        #expect(EditingSupport.faults(in: edited).isEmpty)
+        #expect(Support.faults(in: edited).isEmpty)
     }
 
     @Test("The first day of a program with none is D1")
@@ -55,8 +57,8 @@ struct ProgramEditingDaysTests {
         let reused = ProgramEditing.addDay(program, id: lowerB, name: "New day")
         #expect(blank.days.count == 4)
         #expect(reused.days.count == 4)
-        #expect(EditingSupport.difference(blank, program).isEmpty)
-        #expect(EditingSupport.difference(reused, program).isEmpty)
+        #expect(Support.difference(blank, program).isEmpty)
+        #expect(Support.difference(reused, program).isEmpty)
     }
 
     @Test("Renaming a day stores the cleaned name and leaves its tag, its slots and the schedule")
@@ -66,16 +68,16 @@ struct ProgramEditingDaysTests {
         #expect(renamed.days.map(\.name) == ["Push day", "Upper B — Pull focus"])
         var expected = block
         expected.days[0].name = "Push day"
-        #expect(EditingSupport.difference(renamed, expected).isEmpty)
+        #expect(Support.difference(renamed, expected).isEmpty)
     }
 
     @Test("A blank day name is not stored, and a day the program lacks is not renamed")
     func renameDay_blank_changesNothing() {
         let blank = ProgramEditing.renameDay(program, day: lowerB, to: "\t \n")
-        let unknown = ProgramEditing.renameDay(program, day: DayTemplateID(EditingSupport.unknown), to: "Arms")
+        let unknown = ProgramEditing.renameDay(program, day: DayTemplateID(Support.unknown), to: "Arms")
         #expect(blank.days.map(\.name) == program.days.map(\.name))
-        #expect(EditingSupport.difference(blank, program).isEmpty)
-        #expect(EditingSupport.difference(unknown, program).isEmpty)
+        #expect(Support.difference(blank, program).isEmpty)
+        #expect(Support.difference(unknown, program).isEmpty)
     }
 
     @Test("Deleting Lower B removes it and turns every Saturday into rest (F11 criterion 6)")
@@ -86,7 +88,7 @@ struct ProgramEditingDaysTests {
         #expect(deleted.weeks.map(\.schedule.count) == [3, 3, 3, 3, 3, 3, 3, 3])
         #expect((0 ..< 8).allSatisfy { ProgramEditingTests.strip(deleted, week: $0) == ProgramEditingTests.deloadWeek })
         #expect(deleted.weeks.map(\.isDeload) == program.weeks.map(\.isDeload))
-        #expect(EditingSupport.faults(in: deleted).isEmpty)
+        #expect(Support.faults(in: deleted).isEmpty)
     }
 
     @Test("A day scheduled twice in one week is cleared from both weekdays")
@@ -98,7 +100,7 @@ struct ProgramEditingDaysTests {
         #expect(ProgramEditingTests.strip(edited, week: 0) == ["UA", "LB", "LA", "REST", "UB", "LB", "REST"])
         let deleted = ProgramEditing.deleteDay(edited, day: lowerB)
         #expect(ProgramEditingTests.strip(deleted, week: 0) == ProgramEditingTests.deloadWeek)
-        #expect(EditingSupport.faults(in: deleted).isEmpty)
+        #expect(Support.faults(in: deleted).isEmpty)
     }
 
     @Test("Every day can be deleted: the block is still one the model accepts, with rest on every weekday")
@@ -111,13 +113,13 @@ struct ProgramEditingDaysTests {
         let everyWeekdayRests = edited.weeks.allSatisfy(\.schedule.isEmpty)
         #expect(everyWeekdayRests)
         #expect(edited.weeks.count == 8)
-        #expect(EditingSupport.faults(in: edited).isEmpty)
+        #expect(Support.faults(in: edited).isEmpty)
     }
 
     @Test("Deleting a day the program does not hold changes nothing")
     func deleteDay_unknownDay_changesNothing() {
-        let deleted = ProgramEditing.deleteDay(program, day: DayTemplateID(EditingSupport.unknown))
-        #expect(EditingSupport.difference(deleted, program).isEmpty)
+        let deleted = ProgramEditing.deleteDay(program, day: DayTemplateID(Support.unknown))
+        #expect(Support.difference(deleted, program).isEmpty)
     }
 
     @Test("updateDay replaces one day by the change's result, in its place")
@@ -129,7 +131,7 @@ struct ProgramEditingDaysTests {
         #expect(updated.days[0].slots.map(\.id) == [302, 303, 304, 305].map { SlotID(Fixtures.uuid($0)) })
         let sameWeeks = updated.weeks == block.weeks
         #expect(sameWeeks, "no week changed")
-        #expect(EditingSupport.faults(in: updated).isEmpty)
+        #expect(Support.faults(in: updated).isEmpty)
     }
 
     @Test("A change that returns a day with another id is ignored")
@@ -137,17 +139,17 @@ struct ProgramEditingDaysTests {
         let other = try Fixtures.upperB()
         let updated = ProgramEditing.updateDay(program, day: lowerB) { _ in other }
         #expect(updated.days.map(\.id) == Fixtures.fourDayIDs)
-        #expect(EditingSupport.difference(updated, program).isEmpty)
+        #expect(Support.difference(updated, program).isEmpty)
     }
 
     @Test("updateDay on a day the program does not hold changes nothing and never calls the change")
     func updateDay_unknownDay_changesNothing() {
         var calls = 0
-        let updated = ProgramEditing.updateDay(program, day: DayTemplateID(EditingSupport.unknown)) { day in
+        let updated = ProgramEditing.updateDay(program, day: DayTemplateID(Support.unknown)) { day in
             calls += 1
             return day
         }
         #expect(calls == 0)
-        #expect(EditingSupport.difference(updated, program).isEmpty)
+        #expect(Support.difference(updated, program).isEmpty)
     }
 }

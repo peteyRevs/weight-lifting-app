@@ -6,6 +6,8 @@ import Testing
 /// weeks", on the spec's seed block (`Fixtures.fourDayProgram()`).
 @Suite("ProgramEditing · schedule", .tags(.domain))
 struct ProgramEditingScheduleTests {
+    private typealias Support = EditingTestSupport
+
     let program: Program
 
     init() throws {
@@ -24,7 +26,7 @@ struct ProgramEditingScheduleTests {
         }
         #expect(tuesdays == ["UA", "LA", "UB", "LB", "REST"])
         #expect(counts == [5, 5, 5, 5, 4])
-        #expect(EditingSupport.difference(cycled, program).isEmpty, "five taps come back to the start")
+        #expect(Support.difference(cycled, program).isEmpty, "five taps come back to the start")
     }
 
     @Test("A weekday that trains a day goes to the next day, and only that cell changes")
@@ -38,7 +40,7 @@ struct ProgramEditingScheduleTests {
         )
         #expect(ProgramEditingTests.strip(once, week: 2) == ProgramEditingTests.trainingWeek)
         #expect(ProgramEditingTests.strip(once, week: 4) == ProgramEditingTests.trainingWeek)
-        #expect(EditingSupport.faults(in: once).isEmpty)
+        #expect(Support.faults(in: once).isEmpty)
     }
 
     @Test("With no day to assign, a weekday stays at rest")
@@ -52,7 +54,7 @@ struct ProgramEditingScheduleTests {
         )
         let cycled = ProgramEditing.cycleSchedule(empty, week: 0, weekday: .friday)
         #expect(cycled.weeks[0].schedule.isEmpty)
-        #expect(EditingSupport.difference(cycled, empty).isEmpty)
+        #expect(Support.difference(cycled, empty).isEmpty)
     }
 
     @Test("With one day, a weekday goes rest, the day, rest")
@@ -65,7 +67,7 @@ struct ProgramEditingScheduleTests {
         #expect(once.weeks[1].schedule[.sunday] == Fixtures.fourDayIDs[0])
         let twice = ProgramEditing.cycleSchedule(once, week: 1, weekday: .sunday)
         #expect(twice.weeks[1].schedule[.sunday] == nil)
-        #expect(EditingSupport.difference(twice, single).isEmpty)
+        #expect(Support.difference(twice, single).isEmpty)
     }
 
     @Test("\"Copy week 2\" gives week 3 the schedule of week 2 and keeps week 3's own flag (F11 criterion 3)")
@@ -96,7 +98,7 @@ struct ProgramEditingScheduleTests {
     @Test("\"Copy\" on the first week changes nothing: there is no week before it")
     func copyPreviousWeek_onTheFirstWeek_changesNothing() {
         let edited = ProgramEditing.cycleSchedule(program, week: 0, weekday: .sunday)
-        #expect(EditingSupport.difference(ProgramEditing.copyPreviousWeek(edited, week: 0), edited).isEmpty)
+        #expect(Support.difference(ProgramEditing.copyPreviousWeek(edited, week: 0), edited).isEmpty)
     }
 
     @Test(
@@ -111,12 +113,12 @@ struct ProgramEditingScheduleTests {
         #expect(applied.weeks.filter(\.isDeload).map(\.index) == [7], "week 8 is still the only deload")
         #expect(ProgramEditingTests.strip(applied, week: 0) == ProgramEditingTests.trainingWeek)
         #expect(ProgramEditingTests.strip(applied, week: 1) == ProgramEditingTests.trainingWeek)
-        #expect(EditingSupport.faults(in: applied).isEmpty)
+        #expect(Support.faults(in: applied).isEmpty)
     }
 
     @Test("\"Apply to later weeks\" on the last week changes nothing")
     func applyToLaterWeeks_onTheLastWeek_changesNothing() {
-        #expect(EditingSupport.difference(ProgramEditing.applyToLaterWeeks(program, week: 7), program).isEmpty)
+        #expect(Support.difference(ProgramEditing.applyToLaterWeeks(program, week: 7), program).isEmpty)
     }
 
     @Test(
@@ -130,6 +132,6 @@ struct ProgramEditingScheduleTests {
             ProgramEditing.copyPreviousWeek(program, week: week),
             ProgramEditing.applyToLaterWeeks(program, week: week)
         ]
-        #expect(results.map { EditingSupport.difference($0, program) } == ["", "", "", ""])
+        #expect(results.map { Support.difference($0, program) } == ["", "", "", ""])
     }
 }

@@ -150,3 +150,115 @@ simulators, coverage) is the orchestrator's and was not run.
 | 7 | Command 1 with a temporary file naming an internal symbol under a plain import (then removed) | 1, as intended | did not compile |
 
 Commands 1 to 4 are the evidence; 3 and 4 ran last, with no edit after them. Free disk stayed at 15 GB.
+
+## Slice S1 — round 2 (G2 tester, 2026-10-06)
+
+**Outcome: no bug found; criteria 14 and 16 hold.** One new finding, F11-S1-4 (test-quality, low): the source
+test of criterion 15 guards the spellings in use today and lets other spellings through. All 165 of the
+tester's tests pass; the whole `LedgerDomainTests` target passes on the host (1,109 tests).
+
+Specification: the brief's "Plan amendments — slice S1 after round 1" (criteria 14 to 17). Under test: 4812a2e
+with the implementer's fixes uncommitted on top. The tester's files are now 26 (21 suites, 4,628 lines); two
+are new and uncommitted. No product code and no test of the implementer's was edited.
+
+### Round 1's findings
+
+| Finding | State |
+|---|---|
+| F11-S1-1, a name of only invisible characters is stored | Closed by ruling (criterion 17: kept as built). The pinning test stays and passes. |
+| F11-S1-2, `upward` and `downward` for the plan's `up` and `down` | Closed by ruling (criterion 17: kept as built). |
+| F11-S1-3, three gaps in the implementer's tests | Closed for this slice: covered by the tester's suites, as round 1 said. Not re-examined: whether the implementer's own tests changed in those three places. |
+
+### The implementer's edit to the tester's files
+
+`git diff 4812a2e -- LedgerKit/Tests/LedgerDomainTests/Adversarial/Programs/` before the tester touched
+anything: 15 lines changed in `ExerciseFilterAdversarialTests.swift` and 1 in
+`EditingPublicSurfaceAdversarialTests.swift`, each `ExerciseSearch.filter(` to `ExerciseSearch.filtered(` and
+nothing else. As sanctioned.
+
+### The two expectations changed for criterion 14
+
+Both changes follow the criterion's wording ("returns the day as it was when the slot already has that
+progression"; "changing from linear to double still makes the top of the range at least reps + 2"). Nothing
+else in either test changed, and both pass with the change alone: neither failed for another reason.
+
+| Where | Old expected value | New expected value |
+|---|---|---|
+| `DayEditingFieldsAdversarialTests.setProgression_fromEveryPair_keepsOrRaisesTheTop` | Target Double: top = max(top, reps + 2), from any progression | Target Double from Linear or Fixed: top = max(top, reps + 2). Target Double from Double: top unchanged. (Other targets: top unchanged, as before.) |
+| `DayModel.setProgression`, the model behind `DayEditingModelAdversarialTests.editSequence_matchesTheModelAtEveryStep(seed:)` | Sets the progression; for Double, top = max(top, reps + 2) | Returns at once when the slot already has that progression; otherwise as before |
+
+The display name of the first test was reworded to match. Of that test's 6,615 cases, 30 expect another
+value than in round 1: Double to Double for the 30 pairs with top = reps + 1. The reach suite still meets
+all 24 rules with the new model.
+
+### Findings
+
+**F11-S1-4 — test-quality, low. The source test of criterion 15 catches today's spellings, not the intent.**
+- Rule: criterion 15, "a source test over `LedgerDomain/Programs` fails when a function that returns a
+  `Program` or a `DayTemplate` is missing from the property's tables, or when a line outside `newSlot` assigns
+  a slot's misses or exercise or builds a `Slot`."
+- The test does what it says for the code as it is written now, and
+  `EditingSourceScannerAdversarialTests.scanner_catchesTheSpellingsItWasWrittenFor` shows it: a new
+  `static func … -> DayTemplate`, a line naming `misses` or `exerciseID`, and `Slot(` are all caught.
+- What it would miss, each shown by feeding the line to the implementer's own scanner (the two "pinned as
+  built" tests of the same suite, which pass today and are to be turned round if the scanner is widened):
+  - **An edit that is not a `static func` with a bare result.** Not found, so never asked to be in the
+    tables: an instance method (`func resettingMisses() -> DayTemplate`), a `mutating func`, a `class func`,
+    a result of `DayTemplate?`, `[DayTemplate]` or `(Program, Bool)`, an `inout Program` parameter, and a
+    signature with a `where` clause after the result.
+  - **A write that names neither field.** Not flagged: a whole slot assigned (`slots[index] = slots[index - 1]`,
+    `slots = other.slots`), a key path (`slots[index][keyPath: field] = value`), a slot built as
+    `let copy: Slot = try .init(…)` or decoded (`decode(Slot.self, …)`), and any code after `//` inside a
+    string literal on the same line (the comment stripper cuts the line there).
+  - **Read from the test, not run:** only the folder `LedgerDomain/Programs` is scanned, so an edit added
+    under `Rules/` or as an extension in `Model/` is not seen; a table row is matched by its name, not by
+    what its closure calls, so a row named after a function that it does not call passes; `editing` and
+    `normalized` are exempt by name, so a write placed inside either is drawn by the property only through
+    the rows that call them.
+- Expected against actual: the criterion's words ("a function that returns…", "assigns…", "builds a `Slot`")
+  are wider than the scanner. Nothing is wrong today: the property itself still catches any of these writes
+  in a function that is in the tables. The gap is a new function in an unrecognised form.
+- Smallest repro: `EditingSourceTests.editFunctions(in: ["func resettingMisses() -> DayTemplate {"])` is
+  empty.
+- Options: leave it and say so in the test's comment; or match `func` in any form with a result that
+  mentions `Program` or `DayTemplate`, and flag any assignment to `slots[…]` or `.slots` outside the helpers.
+
+### Attacked and held
+
+Seeds as in round 1 (`PropertySeed.all`, 200 in the PR lane; the six seeded suites once more at 2,000). No
+seed failed.
+
+| Criterion | Attack | Cases | Suite |
+|---|---|---|---|
+| 14 | The progression a slot already has, chosen again, returns the same day by value (a three-slot day, the slot joined and with a miss), from each of the 735 pairs and each progression | 2,205 | `EditingRoundTwo…` |
+| 14 | A range narrowed to reps + 1 after Double stays narrow under a second and a third Double, for reps 1 to 30, coming from Linear and from Fixed | 180 checks | `EditingRoundTwo…` |
+| 14 | To Double, away, to Double twice, away, from each pair and from Linear and Fixed: the top is max(top, reps + 2) after every step and never more; every slot accepted by `Slot.init` | 735 × 2 sequences of 5 | `EditingRoundTwo…` |
+| 14 | Reps pushed under Double (8–10 to 10–11), then Double again: unchanged | 1 | `EditingRoundTwo…` |
+| 14 | Every pair × every progression from × every progression to, with the new expectation; 16,000 seeded day edits (160,000 once) against the updated model; purity; the commutation with a save | 6,615; 200 seeds × 80 | `DayEditingFields…`, `DayEditingModel…`, `EditingCommutes…` |
+| 16 | The renamed `filtered` against the tester's own filter: every chip or none × every equipment or none × 20 queries, in its order; the shuffled catalog; core, kettlebell, band, short names, custom exercises; public under a plain import | 960; 20 seeds | `ExerciseFilter…`, `EditingPublicSurface…` |
+| limits named once | `RPE.range` is 5…10 and `RPE(_:)` accepts exactly the eleven halves in it over every hundredth from −5 to 15, refuses NaN and 5.000…01; a deload is still 2 lower and never below 5 for all eleven; `RestDuration.secondsRange` is 30…300, the step 15, and `init(seconds:)` accepts exactly nineteen values in −1,000…1,000 and neither end of `Int`; `Program.minimumWeeks` is 2, `Program.init` refuses 0 and 1 weeks with `tooFewWeeks`, "−" refuses 2 and takes 3 | 2,001; 11; 2,001; 5 | `EditingRoundTwo…` |
+| 1 to 13 | Everything of round 1 again, unchanged but for the two expectations above: the 18 exit tests, both models, the 7,172 moves, the names, the start loads, the prescriptions | 154 tests | as round 1 |
+
+### Not verified
+
+- Coverage, the simulators and the full gate, as in round 1.
+- `EditingSourceTests` itself was read and its scanner driven, but the tester did not add a function to the
+  product to watch the real test fail: product code is not the tester's to edit.
+- The implementer's other test changes (14 files modified) were not reviewed.
+- The implementer's notes and `review.md` were not read.
+- The mutation check of round 1 was not repeated for the two new suites.
+
+### Commands
+
+All from the worktree root on the final tree; 3 and 4 ran last, with no edit after them. The full gate is the
+orchestrator's and was not run. Free disk: 12 GB.
+
+| # | Command | Exit | Result |
+|---|---|---|---|
+| 1 | `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'LedgerDomainTests\.(ProgramEditing\|DayEditing\|Editing\|ProgressionPrescriptions\|ExerciseFilter)\w*AdversarialTests'` | 0 | 165 tests in 21 suites passed |
+| 2 | The same with `LEDGER_PROPERTY_SEED_COUNT=2000` | 0 | 165 tests in 21 suites passed |
+| 3 | `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerDomainTests` | 0 | 1,109 tests in 171 suites passed |
+| 4 | `scripts/check.sh --lint-only` | 0 | OK |
+
+An earlier run of command 4 in this round exited 2 on one line of the tester's own new file that was three
+characters too long; the test's display name was shortened and commands 1 to 4 were run again.

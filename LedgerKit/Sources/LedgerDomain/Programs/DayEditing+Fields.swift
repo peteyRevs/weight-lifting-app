@@ -6,7 +6,8 @@ public extension DayEditing {
     /// Sets one field of a slot. The value is first clamped to the field's range: sets 1…12, reps 1…30, top of
     /// range 2…40, RPE 5…10 on the half, rest 30…300 s on the 15, start load never below zero. Then the top
     /// of the range is kept above reps (rule 2): reps set at or above the top make the top `reps + 1`, and a
-    /// top set at or below reps becomes `reps + 1`. A value off the field's step goes to the nearest step.
+    /// top set at or below reps becomes `reps + 1`. An RPE or a rest off its step goes to the nearest step; a
+    /// start load is stored as given, on a step or not.
     static func set(_ field: SlotField, slot: SlotID, in day: DayTemplate) -> DayTemplate {
         editing(day, slot: slot) { slots, index in
             slots[index] = applying(field, to: slots[index])

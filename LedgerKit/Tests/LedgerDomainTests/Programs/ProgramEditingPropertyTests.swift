@@ -6,7 +6,7 @@ import Testing
 /// that seed as a fixed case before fixing it (testing-strategy §3 rule 5).
 @Suite("ProgramEditing properties", .tags(.domain, .property))
 struct ProgramEditingPropertyTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     @Test(
         "Thirty random edits of a block keep it one that Program.init and Slot.init accept",
@@ -19,9 +19,10 @@ struct ProgramEditingPropertyTests {
         for step in 0 ..< 30 {
             let edit = try #require(Support.programEdits.randomElement(using: &generator))
             let edited = try edit.apply(program, 50000 + step, &generator)
-            #expect(Support.faults(in: edited).isEmpty, "\(seed), step \(step): \(edit.name)")
-            #expect(edited.id == program.id && edited.startDate == program.startDate, "\(seed): \(edit.name)")
-            #expect(edited.weeks.count >= 2, "\(seed), step \(step): \(edit.name)")
+            // The first fault ends the seed: one line for a seed, however many steps would have failed.
+            try #require(Support.faults(in: edited).isEmpty, "\(seed), step \(step): \(edit.name)")
+            let sameBlock = edited.id == program.id && edited.startDate == program.startDate
+            try #require(sameBlock && edited.weeks.count >= 2, "\(seed), step \(step): \(edit.name)")
             program = edited
         }
     }
@@ -40,7 +41,7 @@ struct ProgramEditingPropertyTests {
         for _ in 0 ... program.days.count {
             seen.append(cycled.weeks[week].schedule[weekday])
             cycled = ProgramEditing.cycleSchedule(cycled, week: week, weekday: weekday)
-            #expect(Support.faults(in: cycled).isEmpty, "\(seed)")
+            try #require(Support.faults(in: cycled).isEmpty, "\(seed)")
         }
         #expect(Support.difference(cycled, program).isEmpty, "\(seed)")
         #expect(Set(seen).count == program.days.count + 1, "\(seed): rest and every day are each seen once")
@@ -70,10 +71,9 @@ struct ProgramEditingPropertyTests {
         program.weeks.removeLast(Int.random(in: 0 ... program.weeks.count - 2, using: &generator))
         let count = program.weeks.count
         let logged = Set((0 ..< 3).map { _ in Int.random(in: -1 ... count, using: &generator) })
-        let result = Result { () throws(ProgramEditError) in try ProgramEditing.removeLastWeek(
-            program,
-            loggedWeeks: logged
-        ) }
+        let result = Result { () throws(ProgramEditError) in
+            try ProgramEditing.removeLastWeek(program, loggedWeeks: logged)
+        }
         switch result {
         case let .success(shortened):
             #expect(count > 2 && !logged.contains(count - 1), "\(seed)")
@@ -94,9 +94,10 @@ struct ProgramEditingPropertyTests {
         var generator = seed.generator
         let program = try Support.randomProgram(using: &generator)
         let day = DayTemplateID(Support.unknown)
-        let week = Bool.random(using: &generator) ? -1 - Int.random(in: 0 ... 3, using: &generator) : program.weeks
-            .count
+        let before = -1 - Int.random(in: 0 ... 3, using: &generator)
+        let week = Bool.random(using: &generator) ? before : program.weeks.count
         let weekday = try #require(Weekday.allCases.randomElement(using: &generator))
+        let everySlot = program.days.flatMap(\.slots)
         let results = [
             "toggleDeload": ProgramEditing.toggleDeload(program, week: week),
             "cycleSchedule": ProgramEditing.cycleSchedule(program, week: week, weekday: weekday),
@@ -104,30 +105,27 @@ struct ProgramEditingPropertyTests {
             "applyToLaterWeeks": ProgramEditing.applyToLaterWeeks(program, week: week),
             "renameDay": ProgramEditing.renameDay(program, day: day, to: "Arms"),
             "deleteDay": ProgramEditing.deleteDay(program, day: day),
-            "updateDay": ProgramEditing.updateDay(program, day: day) { DayEditing.addSlots(
-                $0,
-                program.days.flatMap(\.slots)
-            ) }
+            "updateDay": ProgramEditing.updateDay(program, day: day) { DayEditing.addSlots($0, everySlot) }
         ]
-        for (name, result) in results {
-            #expect(Support.difference(result, program).isEmpty, "\(seed): \(name)")
-        }
+        var changedBy = results.filter { !Support.difference($0.value, program).isEmpty }.keys.sorted()
+        let unknown = SlotID(Support.unknown)
         for existing in program.days {
+            let emptied = DayTemplate(id: existing.id, name: existing.name, tag: existing.tag)
             for edit in Support.dayEdits.dropFirst() {
-                let emptied = DayTemplate(id: existing.id, name: existing.name, tag: existing.tag)
                 let edited = try edit.apply(emptied, 50000, &generator)
-                #expect(Support.difference(edited, emptied).isEmpty, "\(seed): \(edit.name) on a day with no slots")
+                if !Support.difference(edited, emptied).isEmpty {
+                    changedBy.append("\(edit.name) on \(existing.tag) with no slots")
+                }
             }
-            let unknown = SlotID(Support.unknown)
-            #expect(Support.difference(DayEditing.removeSlot(existing, slot: unknown), existing).isEmpty, "\(seed)")
-            #expect(
-                Support.difference(DayEditing.set(.sets(2), slot: unknown, in: existing), existing).isEmpty,
-                "\(seed)"
-            )
-            #expect(
-                Support.difference(DayEditing.move(existing, slot: unknown, .downward), existing).isEmpty,
-                "\(seed)"
-            )
+            let onAnUnknownSlot = [
+                "removeSlot": DayEditing.removeSlot(existing, slot: unknown),
+                "set": DayEditing.set(.sets(2), slot: unknown, in: existing),
+                "move": DayEditing.move(existing, slot: unknown, .downward)
+            ]
+            changedBy += onAnUnknownSlot.filter { !Support.difference($0.value, existing).isEmpty }.keys
+                .map { "\($0) of an unknown slot on \(existing.tag)" }
         }
+        // One expectation for the seed: the functions that changed something, which should be none.
+        #expect(changedBy.prefix(8).isEmpty, "\(seed)")
     }
 }

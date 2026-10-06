@@ -6,6 +6,8 @@ import Testing
 /// The schedule is in `ProgramEditingScheduleTests`, the days in `ProgramEditingDaysTests`.
 @Suite("ProgramEditing", .tags(.domain))
 struct ProgramEditingTests {
+    private typealias Support = EditingTestSupport
+
     struct NameRow: Sendable, CustomStringConvertible {
         let text: String
         let cleaned: String?
@@ -73,14 +75,14 @@ struct ProgramEditingTests {
         #expect(renamed.name == "Push / Pull")
         var expected = program
         expected.name = "Push / Pull"
-        #expect(EditingSupport.difference(renamed, expected).isEmpty)
+        #expect(Support.difference(renamed, expected).isEmpty)
     }
 
     @Test("A blank program name is not stored: the name stays", arguments: ["", "   ", "\u{0}\n\t"])
     func renameProgram_blank_changesNothing(name: String) {
         let renamed = ProgramEditing.renameProgram(program, to: name)
         #expect(renamed.name == "Upper / Lower")
-        #expect(EditingSupport.difference(renamed, program).isEmpty)
+        #expect(Support.difference(renamed, program).isEmpty)
     }
 
     // MARK: - Weeks (F11 criterion 4)
@@ -95,11 +97,11 @@ struct ProgramEditingTests {
         #expect(!last.isDeload)
         #expect(Self.strip(added, week: 8) == Self.deloadWeek, "week 8's three days, though week 8 is the deload")
         #expect(added.weeks.map(\.isDeload) == [false, false, false, false, false, false, false, true, false])
-        #expect(EditingSupport.faults(in: added).isEmpty)
+        #expect(Support.faults(in: added).isEmpty)
         var shortened = added
         shortened.weeks.removeLast()
         #expect(
-            EditingSupport.difference(shortened, program).isEmpty,
+            Support.difference(shortened, program).isEmpty,
             "the first eight weeks and the days are untouched"
         )
     }
@@ -108,7 +110,7 @@ struct ProgramEditingTests {
     func addWeek_idInUse_addsNothing() {
         let added = ProgramEditing.addWeek(program, id: program.weeks[3].id)
         #expect(added.weeks.count == 8)
-        #expect(EditingSupport.difference(added, program).isEmpty)
+        #expect(Support.difference(added, program).isEmpty)
     }
 
     @Test(
@@ -147,7 +149,7 @@ struct ProgramEditingTests {
         let shortened = try ProgramEditing.removeLastWeek(program, loggedWeeks: logged)
         #expect(shortened.weeks.map(\.index) == Array(0 ..< 7))
         #expect(shortened.weeks.map(\.id) == Array(program.weeks.map(\.id).dropLast()))
-        #expect(EditingSupport.faults(in: shortened).isEmpty)
+        #expect(Support.faults(in: shortened).isEmpty)
     }
 
     @Test("\"−\" leaves every day, every slot and every other week as it was")
@@ -158,7 +160,7 @@ struct ProgramEditingTests {
         expected.weeks.removeLast()
         #expect(shortened.weeks.count == 7)
         #expect(shortened.days.map(\.slots.count) == [5, 1])
-        #expect(EditingSupport.difference(shortened, expected).isEmpty)
+        #expect(Support.difference(shortened, expected).isEmpty)
     }
 
     @Test("\"Deload\" flips one week's flag and nothing else; twice gives the block back (F11 criterion 3)")
@@ -167,7 +169,7 @@ struct ProgramEditingTests {
         #expect(toggled.weeks.map(\.isDeload) == [false, false, true, false, false, false, false, true])
         #expect(Self.strip(toggled, week: 2) == Self.trainingWeek)
         #expect(ProgramEditing.toggleDeload(toggled, week: 7).weeks.filter(\.isDeload).map(\.index) == [2])
-        #expect(EditingSupport.difference(ProgramEditing.toggleDeload(toggled, week: 2), program).isEmpty)
+        #expect(Support.difference(ProgramEditing.toggleDeload(toggled, week: 2), program).isEmpty)
     }
 }
 
@@ -195,7 +197,7 @@ extension ProgramEditingTests {
                 ProgramEditing.copyPreviousWeek(empty, week: week),
                 ProgramEditing.applyToLaterWeeks(empty, week: week)
             ]
-            #expect(results.map { EditingSupport.difference($0, empty) } == ["", "", "", ""], "week \(week)")
+            #expect(results.map { Support.difference($0, empty) } == ["", "", "", ""], "week \(week)")
         }
         #expect(ProgramEditing.deleteDay(empty, day: Fixtures.fourDayIDs[0]).days.map(\.tag) == ["LA", "UB", "LB"])
         let added = ProgramEditing.addDay(empty, id: DayTemplateID(Fixtures.uuid(340)), name: "New day")

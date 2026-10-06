@@ -8,7 +8,7 @@ import Testing
 /// A suite never hands a whole program, day or array of slots to `#expect`: a failure would write both values
 /// into the result bundle. It compares ids or small fields, or expects `difference(_:_:)` to be empty, which
 /// prints a few words.
-enum EditingSupport {
+enum EditingTestSupport {
     static let exercises = [
         Fixtures.bench,
         Fixtures.inclineDB,

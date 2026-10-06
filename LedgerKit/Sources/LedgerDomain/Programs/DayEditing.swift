@@ -73,7 +73,9 @@ public enum DayEditing {
     }
 
     /// Appends `slots` in order. One whose id the day already holds is left out; the same exercise may be in
-    /// a day twice, under two ids.
+    /// a day twice, under two ids. An appended slot keeps its own `isSupersetWithPrevious`: one that arrives
+    /// with it set joins the slot before it, which for the first appended is the day's last slot. `newSlot`
+    /// never sets it.
     public static func addSlots(_ day: DayTemplate, _ slots: [Slot]) -> DayTemplate {
         var edited = day
         for slot in slots where !edited.slots.contains(where: { $0.id == slot.id }) {
@@ -94,10 +96,14 @@ public enum DayEditing {
 
     // MARK: - Progression, drop set, superset
 
-    /// "PROGRESSION". Choosing double progression makes the top of the range at least `reps + 2`; leaving it
-    /// keeps the top as it is.
+    /// "PROGRESSION". Changing to double progression makes the top of the range at least `reps + 2`; leaving
+    /// it keeps the top as it is. Choosing the progression the slot already has changes nothing, so a second
+    /// tap on "Double" never widens a range the lifter narrowed.
     public static func setProgression(_ progression: Progression, slot: SlotID, in day: DayTemplate) -> DayTemplate {
         editing(day, slot: slot) { slots, index in
+            guard slots[index].progression != progression else {
+                return
+            }
             slots[index].progression = progression
             if progression == .double {
                 slots[index].repsHi = max(slots[index].repsHi, saturatingSum(slots[index].reps, 2))

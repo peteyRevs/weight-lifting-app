@@ -219,9 +219,10 @@ extension DayModel {
         )
     }
 
-    /// Double progression makes the top of the range at least reps + 2; leaving it keeps the top.
+    /// Double progression makes the top of the range at least reps + 2; leaving it keeps the top. The
+    /// progression the slot already has changes nothing (criterion 14).
     mutating func setProgression(_ progression: Progression, _ id: SlotID) {
-        guard var row = rows[id] else {
+        guard var row = rows[id], row.progression != progression else {
             return
         }
         row.progression = progression

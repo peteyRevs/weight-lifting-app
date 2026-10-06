@@ -8,14 +8,17 @@ import Foundation
 /// hold, a function returns the program unchanged. Given a program `Program.init` accepts, every result is one
 /// it accepts too; fields are assigned directly, because each function keeps the block's invariants itself.
 ///
-/// No function here writes a slot. A slot's misses and its exercise are written by a workout's save alone, so
-/// a builder edit and a workout's save give the same program in either order (F11 slice S1, criterion 12).
+/// No function here writes a slot of its own accord; `updateDay` stores the day its closure returns, so only
+/// `DayEditing`'s functions go in that closure. A slot's misses and its exercise are written by a workout's
+/// save alone, so a builder edit and a workout's save give the same program in either order (F11 slice S1,
+/// criterion 12).
 public enum ProgramEditing {
     // MARK: - Names
 
     /// `text` as a name that can be stored: every control character removed (Unicode category `Cc`, which
-    /// holds U+0000, the tab and the line breaks), then white space trimmed from both ends. `nil` when
-    /// nothing is left.
+    /// holds U+0000, the tab, LF, CR and NEL), then white space trimmed from both ends. `nil` when nothing
+    /// is left. The line and paragraph separators, U+2028 and U+2029, are not of that category: they are
+    /// trimmed from the ends as white space and kept inside a name.
     public static func cleanedName(_ text: String) -> String? {
         let cleaned = String(text.unicodeScalars.filter { $0.properties.generalCategory != .control })
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -54,7 +57,7 @@ public enum ProgramEditing {
         loggedWeeks: Set<Int>
     ) throws(ProgramEditError) -> Program {
         let count = program.weeks.count
-        guard count > 2 else {
+        guard count > Program.minimumWeeks else {
             throw .minimumTwoWeeks
         }
         guard !loggedWeeks.contains(count - 1) else {

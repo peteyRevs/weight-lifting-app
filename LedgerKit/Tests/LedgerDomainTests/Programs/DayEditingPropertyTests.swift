@@ -6,7 +6,7 @@ import Testing
 /// that seed as a fixed case before fixing it (testing-strategy §3 rule 5).
 @Suite("DayEditing properties", .tags(.domain, .property))
 struct DayEditingPropertyTests {
-    private typealias Support = EditingSupport
+    private typealias Support = EditingTestSupport
 
     /// Every day one neighbouring swap away from `groups`: two members inside one group, or two groups.
     static func oneSwapAway(from groups: [[SlotID]]) -> [[[SlotID]]] {
@@ -45,10 +45,10 @@ struct DayEditingPropertyTests {
 
         // 1. The same slots, each once, and nothing but the flag changed in any of them.
         #expect(Support.ids(moved).sorted() == Support.ids(day), "\(seed)")
-        for original in day.slots {
-            let changed = moved.slots.first { $0.id == original.id }.map { Support.changedFields(original, $0) }
-            #expect(changed.map { Set($0).isSubset(of: ["superset"]) } == true, "\(seed)")
+        let changedFields = day.slots.flatMap { original in
+            moved.slots.first { $0.id == original.id }.map { Support.changedFields(original, $0) } ?? ["lost"]
         }
+        #expect(Set(changedFields).isSubset(of: ["superset"]), "\(seed)")
         // 2. Normal form, and every slot one the model accepts.
         #expect(Support.faults(in: moved).isEmpty, "\(seed)")
         // 3. Who is in a superset with whom never changes.
@@ -116,8 +116,10 @@ struct DayEditingPropertyTests {
         for step in 0 ..< 30 {
             let edit = try #require(Support.dayEdits.randomElement(using: &generator))
             let edited = try edit.apply(day, 50000 + step, &generator)
-            #expect(Support.faults(in: edited).isEmpty, "\(seed), step \(step): \(edit.name)")
-            #expect(edited.id == day.id && edited.name == day.name && edited.tag == day.tag, "\(seed): \(edit.name)")
+            // The first fault ends the seed: one line for a seed, however many steps would have failed.
+            try #require(Support.faults(in: edited).isEmpty, "\(seed), step \(step): \(edit.name)")
+            let sameDay = edited.id == day.id && edited.name == day.name && edited.tag == day.tag
+            try #require(sameDay, "\(seed), step \(step): \(edit.name) changed the day's id, name or tag")
             day = edited
         }
     }
@@ -161,13 +163,14 @@ struct DayEditingPropertyTests {
 // MARK: - What editing never writes (slice S1 criterion 12)
 
 extension DayEditingPropertyTests {
-    /// The misses and the exercise of every slot of the program, by slot id.
-    static func workoutOwned(_ program: Program) -> [SlotID: [String]] {
-        var owned: [SlotID: [String]] = [:]
-        for slot in program.days.flatMap(\.slots) {
-            owned[slot.id] = ["\(slot.misses.sorted())", slot.exerciseID.rawValue.uuidString]
+    /// The fixture numbers of the slots that `after` holds with other misses, or another exercise, than
+    /// `before` has under the same id.
+    static func rewritten(from before: [Slot], to after: [Slot]) -> [Int] {
+        let earlier = Dictionary(before.map { ($0.id, $0) }) { first, _ in first }
+        let changed = after.filter { slot in
+            earlier[slot.id].map { $0.misses != slot.misses || $0.exerciseID != slot.exerciseID } ?? false
         }
-        return owned
+        return Support.numbers(changed.map(\.id.rawValue))
     }
 
     @Test(
@@ -177,40 +180,32 @@ extension DayEditingPropertyTests {
     func noFunction_changesMissesOrTheExerciseOfAnExistingSlot(seed: PropertySeed) throws {
         var generator = seed.generator
         var program = try Support.randomProgram(using: &generator)
-        let original = Self.workoutOwned(program)
+        let original = program.days.flatMap(\.slots)
         for step in 0 ..< 30 {
             let edit = try #require(Support.programEdits.randomElement(using: &generator))
-            let before = Self.workoutOwned(program)
+            let before = program.days.flatMap(\.slots)
             program = try edit.apply(program, 50000 + step, &generator)
-            let after = Self.workoutOwned(program)
-            for (slot, owned) in after where before[slot] != nil {
-                #expect(before[slot] == owned, "\(seed), step \(step): \(edit.name)")
-            }
-            for (slot, owned) in after where original[slot] != nil {
-                #expect(original[slot] == owned, "\(seed), step \(step): since the start")
-            }
+            // The first breach ends the seed: one line for a seed, not one for each slot of each later step.
+            let rewritten = Self.rewritten(from: before, to: program.days.flatMap(\.slots))
+            try #require(rewritten.isEmpty, "\(seed), step \(step): \(edit.name) rewrote a slot")
         }
+        let sinceTheStart = Self.rewritten(from: original, to: program.days.flatMap(\.slots))
+        #expect(sinceTheStart.isEmpty, "\(seed): a slot of the seeded program differs after the thirty edits")
     }
 
     @Test(
-        "Each function of DayEditing, on each slot of a day, leaves every slot's misses and exercise",
+        "Each function of DayEditing, on slots drawn from a seeded day, leaves every slot's misses and exercise",
         arguments: PropertySeed.all
     )
-    func everyDayEdit_onEverySlot_leavesMissesAndExercise(seed: PropertySeed) throws {
+    func everyDayEdit_onDrawnSlots_leavesMissesAndExercise(seed: PropertySeed) throws {
         var generator = seed.generator
         let day = try Support.randomDay(0, slots: 1 ... 6, using: &generator)
         for edit in Support.dayEdits {
+            // As many draws as the day has slots; an edit picks its own slot, so some are drawn twice.
             for _ in day.slots {
                 let edited = try edit.apply(day, 50000, &generator)
-                for slot in edited.slots {
-                    guard let original = day.slots.first(where: { $0.id == slot.id }) else {
-                        continue
-                    }
-                    #expect(
-                        slot.misses == original.misses && slot.exerciseID == original.exerciseID,
-                        "\(seed): \(edit.name)"
-                    )
-                }
+                let rewritten = Self.rewritten(from: day.slots, to: edited.slots)
+                try #require(rewritten.isEmpty, "\(seed): \(edit.name) rewrote a slot")
             }
         }
     }

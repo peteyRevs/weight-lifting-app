@@ -6,7 +6,7 @@ import Testing
 // ids the value holds and ids it does not, weeks inside and outside the block, and values far outside every
 // range. `fresh` is a number no id in the value uses yet; an edit takes its new ids from it.
 
-extension EditingSupport {
+extension EditingTestSupport {
     typealias DayEdit = @Sendable (DayTemplate, Int, inout SeededGenerator) throws -> DayTemplate
     typealias ProgramEdit = @Sendable (Program, Int, inout SeededGenerator) throws -> Program
 

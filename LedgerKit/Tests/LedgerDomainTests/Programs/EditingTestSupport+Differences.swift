@@ -4,7 +4,7 @@ import Testing
 
 // MARK: - Short differences
 
-extension EditingSupport {
+extension EditingTestSupport {
     private static let slotFields: [(name: String, differs: @Sendable (Slot, Slot) -> Bool)] = [
         ("exercise", { $0.exerciseID != $1.exerciseID }),
         ("sets", { $0.sets != $1.sets }),
@@ -77,7 +77,7 @@ extension EditingSupport {
 
 // MARK: - Reading a day
 
-extension EditingSupport {
+extension EditingTestSupport {
     static func slot(_ number: Int) -> SlotID {
         SlotID(Fixtures.uuid(number))
     }
