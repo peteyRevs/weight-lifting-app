@@ -100,8 +100,10 @@ Repository protocols (declared in LedgerDomain, implemented in LedgerPersistence
   and a link to the ADR or issue that allows it.
 - Shared mutable state lives in an `actor`. Persistence, HealthKit, and Sync
   each expose an actor-backed service. Exceptions: `LedgerFakes`' in-memory stores
-  keep their state behind a `Synchronization.Mutex` so that `observe…()` registers
-  synchronously (ADR-008 decision 4); and state that a system framework callback
+  keep their state behind a `Synchronization.Mutex`, so that `observe…()` registers
+  synchronously and so that a save that spans linked stores is one step, as the
+  database's transaction is (ADR-008 decision 4 and its amendment of
+  2026-10-05); and state that a system framework callback
   writes synchronously on the framework's own queue, where an actor could be
   reached only after the callback returned, may sit behind a `Mutex`
   (`MirroringStartRegistrar`; Pete, 2026-10-04). Product stores use actors.
