@@ -210,3 +210,19 @@ Risks 1 and 2 apply. About 45 product lines; most of the slice is contract and t
     edit, each listed in the notes (two are testers' files; the edit is sanctioned and audited).
 11. **No migration, no schema change**; the version fixtures and every existing contract clause are untouched
     and pass.
+
+## Plan amendments — slice S3 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (32 tests, 282 cases; one question, F11-S3-1) and the reviewer approved with two
+should-fix items. Atomicity holds by construction on both stores. Rulings, which add to S3's eleven criteria:
+
+12. **The in-memory store cancels as the database does** (F11-S3-1, review S1; ADR-008 decision 5). A call
+    whose task is cancelled before the change, inside the change, or while it waited for the lock throws
+    `CancellationError` and stores nothing; one cancelled after its write is stored whole and returns. The
+    contract's cancellation clauses are strict on both stores, so a store tested over the fakes sees the same
+    rollback path.
+13. **`save` says what it costs** (review S2): its documentation warns that saving an earlier copy of a stored
+    program writes back the misses and the exercise a workout's save put there, and points to `update`.
+14. **Criterion 6, as built:** `update` leaves which program is active as it was when the change does not touch
+    the flag; a change that sets the flag is saved as `save` saves it. A result under another id is refused
+    with the duplicate-identifier error.
