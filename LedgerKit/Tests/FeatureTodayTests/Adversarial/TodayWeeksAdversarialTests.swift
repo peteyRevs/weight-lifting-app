@@ -106,7 +106,7 @@ nonisolated struct TodayWeeksAdversarialTests {
             2,
             "PTP.P..",
             "/3",
-            "Nothing scheduled for Tuesday in week 7. Next up is next Wednesday."
+            "Nothing scheduled for Tuesday in week 7. Next up is Wednesday."
         ),
         Row(11, 9, "Upper A", 9, "T......", "/1", "Week 8 of 8 · Deload · ~29 min"),
         Row(11, 10, "Rest day", 9, "PT.....", "/1", "Nothing scheduled for Tuesday in week 8. \(lastWeek)"),

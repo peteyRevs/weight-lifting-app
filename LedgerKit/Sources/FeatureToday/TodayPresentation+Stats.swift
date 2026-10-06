@@ -32,21 +32,23 @@ nonisolated extension TodayPresentation {
         )
     }
 
-    /// "24.2" "k" "lb moved", and "+8%" against the previous week. VoiceOver reads the whole number, "24,180 lb
-    /// moved", then the change.
+    /// "24.2" "k" "lb moved", and "+8%" against the previous week. VoiceOver reads the whole number and says
+    /// what the change is against: "24,180 lb moved this week, +8% from last week".
     static func volumeTile(_ volume: Volume, _ context: Context) -> TodayModel.Tile {
         let input = context.input
         let units = input.settings.units
         let delta = input.previousWeekVolume
             .flatMap { volume.percentChange(from: $0) }
             .map { change($0, input.locale) }
-        let spoken = [TodayCopy.moved(volume.formatted(in: units), units: units, locale: input.locale), delta]
+        let whole = volume.formatted(in: units)
         return TodayModel.Tile(
             value: volume.thousands(in: units),
             unit: TodayCopy.thousands,
             caption: TodayCopy.movedCaption(units),
             delta: delta,
-            accessibilitySummary: spoken.compactMap(\.self).joined(separator: ", ")
+            accessibilitySummary: delta
+                .map { TodayCopy.movedThisWeek(whole, change: $0, units: units, locale: input.locale) }
+                ?? TodayCopy.movedThisWeek(whole, units: units, locale: input.locale)
         )
     }
 

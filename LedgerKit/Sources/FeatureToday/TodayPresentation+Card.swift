@@ -32,15 +32,18 @@ nonisolated extension TodayPresentation {
     /// started for, also on a rest day, after the block and without a program, so that Today never offers
     /// "Start workout" while a workout runs and always leads back to it (Pete's decision 1, default A).
     ///
-    /// The other answer, the prototype's, keeps the calendar's card and resumes only today's own session: it
-    /// would return the workout only on a `.session` day whose session `SessionBuilder.resumable` accepts.
+    /// The other answer, the prototype's, keeps the calendar's card and resumes only today's own session. It
+    /// needs the day, which this function is not given: its signature gains the `Day`, the call in
+    /// `card(_:_:)` passes it, and it returns the workout only on a `.session` day whose session
+    /// `SessionBuilder.resumable` accepts. About five lines, and the `live_*` tests.
     static func workoutTakingOver(_ context: Context) -> WorkoutState? {
         context.input.session?.phase == .live ? context.input.session : nil
     }
 
     /// The finished workout that makes today's session "Logged": one of the same program, week and day that
-    /// started today, the newest if there are several. A session done on another day of the week is offered
-    /// again (the brief's rule; Pete's decision 2, default A).
+    /// started today, and of several the one that started last (`Context.finished` is newest first, whatever
+    /// order the input came in). A session done on another day of the week is offered again (the brief's rule;
+    /// Pete's decision 2, default A).
     ///
     /// The other answer, "this week's session is done whichever day it was done", drops `startedToday`.
     static func loggedWorkout(for session: Session, _ context: Context) -> WorkoutState? {
@@ -177,6 +180,8 @@ nonisolated extension TodayPresentation {
         return TodayModel.Logged(
             eyebrow: TodayCopy.loggedWeek(session.weekIndex + 1, locale: input.locale),
             elapsed: ClockText.elapsed(workout.elapsed(at: input.now)),
+            // The program's name for the day, as the brief has it ("title day name"), not the workout's own.
+            // They differ only when the day was renamed after the workout began; RECENT then shows the old one.
             title: session.day.name,
             stats: stats.joined(separator: separator),
             action: TodayModel.Action(title: TodayCopy.viewSession, route: .openWorkout(workout.id)),
@@ -184,30 +189,51 @@ nonisolated extension TodayPresentation {
         )
     }
 
-    /// "Next: Friday · UB" while the next session is in today's program week, "Next: week 2" when it is in a
-    /// later one, and nil when the block has no later session. That is what `nextScheduledDay` says, not the
+    /// The block's next session after today, as the rest-day body and the Logged card's "Next:" line both read
+    /// it. There is none when the block has no later session. That is what `nextScheduledDay` says, not the
     /// week's number: a block whose later weeks are empty has none left before its last week.
-    static func nextLine(_ block: Block, _ context: Context) -> String? {
-        let locale = context.input.locale
-        guard let next = block.weeks.nextScheduledDay(after: context.input.now, in: block.program) else {
-            return nil
-        }
-        guard next.weekIndex == block.weekIndex else {
-            return TodayCopy.nextWeek(next.weekIndex + 1, locale: locale)
-        }
-        let weekday = context.weekdayName(context.start(of: next.date))
-        return block.program.days.first { $0.id == next.dayTemplateID }
-            .map { TodayCopy.next(weekday, tag: $0.tag, locale: locale) }
+    struct NextSession {
+        /// Its date, its program week and its day template.
+        let day: ScheduledDay
+        /// "Friday".
+        let weekday: String
+        /// Whether its date is one of the seven days the strip shows.
+        let isOnTheStrip: Bool
     }
 
-    /// The card for a day with no session. A day before the block begins speaks of the block's first week:
-    /// that is the week to edit and to pick a day from.
+    static func nextSession(_ block: Block, _ context: Context) -> NextSession? {
+        block.weeks.nextScheduledDay(after: context.input.now, in: block.program).map { day in
+            NextSession(
+                day: day,
+                weekday: context.weekdayName(context.start(of: day.date)),
+                isOnTheStrip: context.stripDays.contains(day.date)
+            )
+        }
+    }
+
+    /// "Next: Friday · UB" while the next session is in today's program week, "Next: week 2" when it is in a
+    /// later one, and nil when none is left. This line follows the program week, not the strip: it must never
+    /// name the week the lifter is in.
+    static func nextLine(_ block: Block, _ context: Context) -> String? {
+        let locale = context.input.locale
+        guard let next = nextSession(block, context) else {
+            return nil
+        }
+        guard next.day.weekIndex == block.weekIndex else {
+            return TodayCopy.nextWeek(next.day.weekIndex + 1, locale: locale)
+        }
+        return block.program.days.first { $0.id == next.day.dayTemplateID }
+            .map { TodayCopy.next(next.weekday, tag: $0.tag, locale: locale) }
+    }
+
+    /// The card for a day with no session. A day before the block begins is one, and the week to edit and to
+    /// pick a day from is then the block's first.
     static func restDay(_ block: Block, _ context: Context) -> TodayModel.RestDay {
         let weekIndex = max(0, block.weekIndex)
         return TodayModel.RestDay(
             eyebrow: TodayCopy.scheduledRest,
             title: TodayCopy.noSessionToday,
-            body: restBody(block, weekIndex: weekIndex, context),
+            body: restBody(block, context),
             editWeek: TodayModel.Action(
                 title: TodayCopy.editThisWeek,
                 route: .editWeek(program: block.program.id, weekIndex: weekIndex)
@@ -216,18 +242,27 @@ nonisolated extension TodayPresentation {
         )
     }
 
-    /// The copy's three bodies, by where the next session is: later in the card's program week, in a later
-    /// week ("next Monday", also when an empty week lies between), or nowhere in the block.
-    static func restBody(_ block: Block, weekIndex: Int, _ context: Context) -> String {
-        let input = context.input
-        let today = context.weekdayName(input.now)
-        guard let next = block.weeks.nextScheduledDay(after: input.now, in: block.program) else {
-            return TodayCopy.restNothingLeft(today, week: weekIndex + 1, locale: input.locale)
+    /// What the rest-day card says. Before the block begins: the day it starts, and nothing else. From then on:
+    /// the day and its program week, then where the next session is. "Next up is Friday." when it is on one of
+    /// the seven days the strip shows, "next Monday" when it is not (also when an empty week lies between),
+    /// whichever program week it falls in. With none left, that this is the block's last week, or in an earlier
+    /// week that no sessions are left.
+    static func restBody(_ block: Block, _ context: Context) -> String {
+        let locale = context.input.locale
+        guard block.weekIndex >= 0 else {
+            let firstDay = context.fullDate(context.start(of: block.program.startDate))
+            return TodayCopy.blockStarts(on: firstDay, locale: locale)
         }
-        let weekday = context.weekdayName(context.start(of: next.date))
-        return next.weekIndex == weekIndex
-            ? TodayCopy.restNextUp(today, week: weekIndex + 1, next: weekday, locale: input.locale)
-            : TodayCopy.restNextUpLater(today, week: weekIndex + 1, next: weekday, locale: input.locale)
+        let today = context.weekdayName(context.input.now)
+        let week = block.weekIndex + 1
+        guard let next = nextSession(block, context) else {
+            return week == block.program.weeks.count
+                ? TodayCopy.restLastWeek(today, week: week, locale: locale)
+                : TodayCopy.restNoneLeft(today, week: week, locale: locale)
+        }
+        return next.isOnTheStrip
+            ? TodayCopy.restNextUp(today, week: week, next: next.weekday, locale: locale)
+            : TodayCopy.restNextUpLater(today, week: week, next: next.weekday, locale: locale)
     }
 
     static func noProgram() -> TodayModel.Message {

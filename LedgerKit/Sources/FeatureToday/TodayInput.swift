@@ -13,7 +13,8 @@ nonisolated struct TodayInput: Sendable {
     /// The finished workouts that started in the stats week of `now` (the strip's seven days) or in its program
     /// week, which differ when the block began on another weekday than the week starts on. They feed the strip's
     /// done marks, the Logged card, both tiles and the off-schedule list's "Logged" marks; one read, so those
-    /// cannot disagree. A workout outside both weeks is not counted anywhere.
+    /// cannot disagree. A workout outside both weeks is not counted anywhere. Any order is accepted: the
+    /// presentation orders them itself, so the same workouts give the same model however they are handed in.
     var weekWorkouts: [WorkoutState] = []
     /// The finished workouts that started last, newest first. The first five are shown.
     var recentWorkouts: [WorkoutState] = []

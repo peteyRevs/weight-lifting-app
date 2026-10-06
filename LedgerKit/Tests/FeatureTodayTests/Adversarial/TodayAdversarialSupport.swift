@@ -57,9 +57,13 @@ nonisolated enum TodayAdversarial {
         return program
     }
 
-    /// The bundled catalog by id.
-    static func exercises() throws -> [ExerciseID: Exercise] {
+    /// The bundled catalog by id, read once: the round-2 matrices build thousands of inputs.
+    private static let catalog = Result {
         try Dictionary(ExerciseCatalog.seed().map { ($0.id, $0) }) { first, _ in first }
+    }
+
+    static func exercises() throws -> [ExerciseID: Exercise] {
+        try catalog.get()
     }
 
     static func settings(_ units: Units = .lb, weekStart: Weekday = .monday) -> Settings {

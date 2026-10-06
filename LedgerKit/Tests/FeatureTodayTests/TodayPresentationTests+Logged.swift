@@ -201,8 +201,11 @@ nonisolated extension TodayPresentationTests {
         #expect(try Self.model(program, now: Fixtures.now, weekWorkouts: [today]).card.kind == "logged")
     }
 
-    @Test("Of two finished today for the same session, the card shows the one that started last")
-    func logged_twiceToday_showsTheNewest() throws {
+    @Test(
+        "Of two finished today for the same session the card shows the one that started last, in any order",
+        arguments: [false, true]
+    )
+    func logged_twiceToday_showsTheNewest(newestFirst: Bool) throws {
         let program = try TodayFixtures.program()
         let lowerA = TodayFixtures.DayIndex.lowerA
         let first = try Self.finishedSession(
@@ -220,9 +223,53 @@ nonisolated extension TodayPresentationTests {
             startedAt: Fixtures.date(2026, 9, 16, hour: 4),
             seconds: 600
         )
-        // The repository hands workouts newest first.
-        let model = try Self.model(program, now: Fixtures.now, weekWorkouts: [second, first])
+        // The input promises no order (criterion 13): oldest first gives the same card as newest first.
+        let week = newestFirst ? [second, first] : [first, second]
+        let model = try Self.model(program, now: Fixtures.now, weekWorkouts: week)
         #expect(model.card.logged?.action.route == .openWorkout(second.id))
         #expect(model.card.logged?.elapsed == "10:00")
+        #expect(model.stats.sessions.value == "2")
+    }
+
+    @Test("Next follows the program week, not the strip: it never names the week the lifter is in (criterion 15)")
+    func logged_nextLine_followsTheProgramWeekNotTheStrip() throws {
+        // The week starts on Sunday, and week 1 trains on its Sunday (09-20), the first day of the next strip.
+        var settings = Fixtures.settingsLb
+        settings.weekStart = .sunday
+        var program = try TodayFixtures.program()
+        program.weeks[0].schedule[.sunday] = program.days[TodayFixtures.DayIndex.lowerB].id
+        let lowerB = TodayFixtures.DayIndex.lowerB
+        // Logged on Saturday 09-19: Sunday's session is off the strip and in the same program week.
+        var saturday = try TodayFixtures.input(
+            program: program,
+            now: Fixtures.date(2026, 9, 19, hour: 10),
+            settings: settings
+        )
+        saturday.weekWorkouts = try [
+            Self.finishedSession(
+                of: program,
+                weekIndex: 0,
+                dayIndex: lowerB,
+                startedAt: Fixtures.date(2026, 9, 19, hour: 8)
+            )
+        ]
+        #expect(TodayPresentation.make(saturday).card.logged?.next == "Next: Sunday · LB")
+        // Logged on Sunday 09-20: Monday's session is on the same strip and in program week 2.
+        var sunday = try TodayFixtures.input(
+            program: program,
+            now: Fixtures.date(2026, 9, 20, hour: 10),
+            settings: settings
+        )
+        sunday.weekWorkouts = try [
+            Self.finishedSession(
+                of: program,
+                weekIndex: 0,
+                dayIndex: lowerB,
+                startedAt: Fixtures.date(2026, 9, 20, hour: 8)
+            )
+        ]
+        let card = try #require(TodayPresentation.make(sunday).card.logged)
+        #expect(card.eyebrow == "LOGGED · WEEK 1")
+        #expect(card.next == "Next: week 2")
     }
 }

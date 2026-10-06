@@ -72,13 +72,13 @@ nonisolated struct TodaySpokenAdversarialTests {
     }
 
     static let spoken = [
-        Spoken(24180, 22400, .lb, "24,180 lb moved"),
-        Spoken(24180, 22400, .kg, "10,968 kg moved"),
-        Spoken(21728, 22400, .lb, "21,728 lb moved"),
-        Spoken(22400, 22400, .lb, "22,400 lb moved"),
-        Spoken(24180, nil, .lb, "24,180 lb moved"),
-        Spoken(0, 22400, .kg, "0 kg moved"),
-        Spoken(0, nil, .lb, "0 lb moved")
+        Spoken(24180, 22400, .lb, "24,180 lb moved this week"),
+        Spoken(24180, 22400, .kg, "10,968 kg moved this week"),
+        Spoken(21728, 22400, .lb, "21,728 lb moved this week"),
+        Spoken(22400, 22400, .lb, "22,400 lb moved this week"),
+        Spoken(24180, nil, .lb, "24,180 lb moved this week"),
+        Spoken(0, 22400, .kg, "0 kg moved this week"),
+        Spoken(0, nil, .lb, "0 lb moved this week")
     ]
 
     @Test("The volume tile speaks the whole number it rounds, its unit, and the change it draws", arguments: spoken)
@@ -100,8 +100,7 @@ nonisolated struct TodaySpokenAdversarialTests {
         let said = tile.accessibilitySummary
         #expect(said.hasPrefix(row.whole), "\(said)")
         if let delta = tile.delta {
-            #expect(said.hasSuffix(delta), "\(said) against the drawn \(delta)")
-            #expect(said.count > row.whole.count + delta.count)
+            #expect(said == "\(row.whole), \(delta) from last week", "\(said) against the drawn \(delta)")
         } else {
             #expect(said == row.whole)
         }

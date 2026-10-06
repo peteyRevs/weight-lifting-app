@@ -46,15 +46,61 @@ nonisolated extension TodayPresentationTests {
         #expect(thursday.body == "Nothing scheduled for Thursday in week 8. Next up is Friday.")
     }
 
-    @Test("With no session left in the block, the body follows that, also before the last week")
-    func restDay_noSessionLeft_followsTheNextSessionNotTheWeekNumber() throws {
+    @Test("With no session left in an earlier week than the last, the body says none are left (criterion 17)")
+    func restDay_noSessionLeftBeforeTheLastWeek_saysNoneAreLeft() throws {
         var program = try TodayFixtures.program()
         for index in 2 ..< program.weeks.count {
             program.weeks[index].schedule = [:]
         }
-        // Sunday of week 2: weeks 3 to 8 are empty.
-        let card = try Self.restDay(program, now: Fixtures.date(2026, 9, 27, hour: 10))
-        #expect(card.body == "Nothing scheduled for Sunday in week 2. This is the last week of the block.")
+        // Sunday of week 2: weeks 3 to 8 are empty, and week 2 is not the block's last.
+        let sunday = try Self.restDay(program, now: Fixtures.date(2026, 9, 27, hour: 10))
+        #expect(sunday.body == "Nothing scheduled for Sunday in week 2. No sessions are left in this block.")
+        // In the empty weeks the same, until the last one, which says it is the last.
+        let weekSeven = try Self.restDay(program, now: Fixtures.date(2026, 10, 28, hour: 10))
+        #expect(weekSeven.body == "Nothing scheduled for Wednesday in week 7. No sessions are left in this block.")
+        let weekEight = try Self.restDay(program, now: Fixtures.date(2026, 11, 2, hour: 10))
+        #expect(weekEight.body == "Nothing scheduled for Monday in week 8. This is the last week of the block.")
+    }
+
+    @Test("The word next follows the seven days on screen, whichever program week the session is in (criterion 15)")
+    func restDay_nextWord_followsTheStripNotTheProgramWeek() throws {
+        // The week starts on Sunday and the block began on Monday 09-14: a strip runs Sunday to Saturday.
+        var settings = Fixtures.settingsLb
+        settings.weekStart = .sunday
+        var program = try TodayFixtures.program()
+        // Sunday 09-20 closes program week 1; Monday's session is in week 2 and on the strip of 09-20 to 09-26.
+        var input = try TodayFixtures.input(
+            program: program,
+            now: Fixtures.date(2026, 9, 20, hour: 10),
+            settings: settings
+        )
+        #expect(TodayPresentation.make(input).card.restDay?.body
+            == "Nothing scheduled for Sunday in week 1. Next up is Monday.")
+        // With a Monday week start the same day's strip ends on that Sunday: Monday is next week's.
+        input.settings = Fixtures.settingsLb
+        #expect(TodayPresentation.make(input).card.restDay?.body
+            == "Nothing scheduled for Sunday in week 1. Next up is next Monday.")
+
+        // The other way round: week 1 trains on its Sunday and not on its Saturday. On Saturday 09-19 the next
+        // session is in the same program week, and off the strip of 09-13 to 09-19.
+        program.weeks[0].schedule[.saturday] = nil
+        program.weeks[0].schedule[.sunday] = program.days[TodayFixtures.DayIndex.lowerB].id
+        input = try TodayFixtures.input(program: program, now: Fixtures.date(2026, 9, 19, hour: 10), settings: settings)
+        #expect(TodayPresentation.make(input).card.restDay?.body
+            == "Nothing scheduled for Saturday in week 1. Next up is next Sunday.")
+        input.settings = Fixtures.settingsLb
+        #expect(TodayPresentation.make(input).card.restDay?.body
+            == "Nothing scheduled for Saturday in week 1. Next up is Sunday.")
+    }
+
+    @Test("A block begun midweek: tomorrow's session reads without next though it opens the next program week")
+    func restDay_blockBegunMidweek_tomorrowIsNotNext() throws {
+        // The block began on Wednesday 09-16 and the week starts on Monday: Tuesday 11-03 closes program week 7,
+        // and Wednesday 11-04, the next cell of the same strip, opens week 8.
+        let program = try TodayFixtures.program(startingOn: TodayFixtures.civil(2026, 9, 16))
+        let tuesday = try Self.restDay(program, now: Fixtures.date(2026, 11, 3, hour: 12))
+        #expect(tuesday.body == "Nothing scheduled for Tuesday in week 7. Next up is Wednesday.")
+        #expect(tuesday.editWeek.route == .editWeek(program: program.id, weekIndex: 6))
     }
 
     @Test("An empty week between today and the next session still reads next Monday")
@@ -69,28 +115,38 @@ nonisolated extension TodayPresentationTests {
         #expect(wednesday.body == "Nothing scheduled for Wednesday in week 2. Next up is next Monday.")
     }
 
-    @Test("Before the block begins it is a rest day that speaks of week 1, whose first session is next up")
-    func restDay_beforeBlockStart_speaksOfTheFirstWeek() throws {
+    @Test("Before the block begins the body says when it starts, and the card is week 1's (criterion 16)")
+    func restDay_beforeBlockStart_saysWhenTheBlockStarts() throws {
         let program = try TodayFixtures.program()
-        let model = try TodayPresentation.make(
-            TodayFixtures.input(program: program, now: Fixtures.date(2026, 9, 13, hour: 20))
-        )
+        var input = try TodayFixtures.input(program: program, now: Fixtures.date(2026, 9, 13, hour: 20))
+        let model = TodayPresentation.make(input)
         let card = try #require(model.card.restDay)
         #expect(model.header.title == "Rest day")
-        #expect(card.body == "Nothing scheduled for Sunday in week 1. Next up is Monday.")
+        #expect(card.eyebrow == "SCHEDULED REST")
+        #expect(card.title == "No session today")
+        #expect(card.body == "Your block starts on Monday, September 14.")
         #expect(card.editWeek.route == .editWeek(program: program.id, weekIndex: 0))
         #expect(card.offSchedule.subtitle == "Pick a day from week 1.")
-        #expect(card.offSchedule.days.map(\.route).allSatisfy { route in
-            if case .startWorkout(program.id, 0, _) = route {
-                return true
-            }
-            return false
+        #expect(card.offSchedule.days.map(\.route) == program.days.map {
+            TodayRoute.startWorkout(program: program.id, weekIndex: 0, day: $0.id)
         })
-        // Three weeks before, the same: the first week is the only week there is to speak of.
-        let early = try Self.restDay(program, now: Fixtures.date(2026, 8, 25, hour: 9))
-        #expect(early.body == "Nothing scheduled for Tuesday in week 1. Next up is Monday.")
         // Nothing of the week before the block is planned: the strip marks today alone.
         #expect(model.weekStrip.marks == "------T")
+        // Three weeks before, the same sentence: the day is in no week of the block.
+        let early = try Self.restDay(program, now: Fixtures.date(2026, 8, 24, hour: 9))
+        #expect(early.body == "Your block starts on Monday, September 14.")
+        // The date is written as the header writes one: in the injected locale.
+        input.locale = Locale(identifier: "de_DE")
+        #expect(TodayPresentation.make(input).card.restDay?.body == "Your block starts on Montag, 14. September.")
+    }
+
+    @Test("A block whose first session is not on its first day still starts on its first day")
+    func restDay_beforeABlockThatOpensWithARestDay_namesTheBlocksFirstDay() throws {
+        var program = try TodayFixtures.program(startingOn: TodayFixtures.civil(2026, 9, 28))
+        program.weeks[0].schedule[.monday] = nil
+        // Twelve days before: the tester's case, in which "Next up is Monday" named no coming Monday.
+        let card = try Self.restDay(program, now: Fixtures.date(2026, 9, 16, hour: 12))
+        #expect(card.body == "Your block starts on Monday, September 28.")
     }
 
     @Test("The off-schedule list holds every day of the program with its exercises and estimate (criterion 5)")

@@ -55,7 +55,7 @@ nonisolated enum TodayCopy {
             localized: "\(done) of \(planned) sessions this week",
             bundle: .module,
             locale: locale,
-            comment: "Spoken text of the sessions tile: the sessions done, of those planned"
+            comment: "Spoken text of the sessions tile: the sessions done, then the sessions planned"
         )
     }
 
@@ -71,11 +71,53 @@ nonisolated enum TodayCopy {
         }
     }
 
-    /// "24,180 lb moved": a workout's volume on the Logged card, and the week's as VoiceOver reads the volume tile.
+    /// "24,180 lb moved": a workout's volume on the Logged card.
     static func moved(_ volume: String, units: Units, locale: Locale) -> String {
         switch units {
         case .lb: String(localized: "\(volume) lb moved", bundle: .module, locale: locale)
         case .kg: String(localized: "\(volume) kg moved", bundle: .module, locale: locale)
+        }
+    }
+
+    /// "24,180 lb moved this week": what VoiceOver reads for the volume tile when there is no previous week to
+    /// compare with. The tile draws thousands ("24.2k"); this is the whole number.
+    static func movedThisWeek(_ volume: String, units: Units, locale: Locale) -> String {
+        switch units {
+        case .lb:
+            String(
+                localized: "\(volume) lb moved this week",
+                bundle: .module,
+                locale: locale,
+                comment: "Spoken text of the volume tile: the week's volume, in pounds"
+            )
+        case .kg:
+            String(
+                localized: "\(volume) kg moved this week",
+                bundle: .module,
+                locale: locale,
+                comment: "Spoken text of the volume tile: the week's volume, in kilograms"
+            )
+        }
+    }
+
+    /// "24,180 lb moved this week, +8% from last week": the same line with the change the tile draws, and what
+    /// the change is against.
+    static func movedThisWeek(_ volume: String, change: String, units: Units, locale: Locale) -> String {
+        switch units {
+        case .lb:
+            String(
+                localized: "\(volume) lb moved this week, \(change) from last week",
+                bundle: .module,
+                locale: locale,
+                comment: "Spoken text of the volume tile: the week's volume in pounds, then its change, as in +8%"
+            )
+        case .kg:
+            String(
+                localized: "\(volume) kg moved this week, \(change) from last week",
+                bundle: .module,
+                locale: locale,
+                comment: "Spoken text of the volume tile: the week's volume in kilograms, then its change, as in +8%"
+            )
         }
     }
 

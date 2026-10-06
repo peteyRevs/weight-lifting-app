@@ -58,9 +58,15 @@ nonisolated struct TodayCopyTests {
                 == "Nothing scheduled for Saturday in week 1. Next up is next Monday."
         )
         #expect(
-            TodayCopy.restNothingLeft("Saturday", week: 8, locale: locale)
+            TodayCopy.restLastWeek("Saturday", week: 8, locale: locale)
                 == "Nothing scheduled for Saturday in week 8. This is the last week of the block."
         )
+        #expect(
+            TodayCopy.restNoneLeft("Sunday", week: 2, locale: locale)
+                == "Nothing scheduled for Sunday in week 2. No sessions are left in this block."
+        )
+        #expect(TodayCopy
+            .blockStarts(on: "Monday, September 28", locale: locale) == "Your block starts on Monday, September 28.")
     }
 
     @Test("Each unit has its own words")
@@ -70,6 +76,16 @@ nonisolated struct TodayCopyTests {
         #expect(TodayCopy.movedCaption(.kg) == "kg moved")
         #expect(TodayCopy.moved("24,180", units: .lb, locale: locale) == "24,180 lb moved")
         #expect(TodayCopy.moved("10,968", units: .kg, locale: locale) == "10,968 kg moved")
+        #expect(TodayCopy.movedThisWeek("24,180", units: .lb, locale: locale) == "24,180 lb moved this week")
+        #expect(TodayCopy.movedThisWeek("10,968", units: .kg, locale: locale) == "10,968 kg moved this week")
+        #expect(
+            TodayCopy.movedThisWeek("24,180", change: "+8%", units: .lb, locale: locale)
+                == "24,180 lb moved this week, +8% from last week"
+        )
+        #expect(
+            TodayCopy.movedThisWeek("10,968", change: "\u{2212}3%", units: .kg, locale: locale)
+                == "10,968 kg moved this week, \u{2212}3% from last week"
+        )
         #expect(TodayCopy.volume("24,180", units: .lb, locale: locale) == "24,180 lb")
         #expect(TodayCopy.volume("10,968", units: .kg, locale: locale) == "10,968 kg")
     }
@@ -124,7 +140,7 @@ nonisolated struct TodayCopyTests {
     @Test("No text of Today names the product")
     func catalog_neverNamesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureToday")
-        #expect(catalog.keys.count == 49)
+        #expect(catalog.keys.count == 55)
         #expect(catalog.problems == [])
     }
 }

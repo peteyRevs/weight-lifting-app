@@ -202,6 +202,37 @@ nonisolated extension TodayPresentationTests {
         #expect(isSame)
     }
 
+    @Test("A workout that goes live after today's session was logged takes the card; the day stays done")
+    func live_afterTodaysSessionIsLogged_takesOverTheCard() throws {
+        let program = try TodayFixtures.program()
+        var input = try TodayFixtures.input(program: program)
+        // Lower A, today's session, was finished this morning.
+        let morning = try TodayFixtures.liveWorkout(
+            54,
+            of: program,
+            weekIndex: 0,
+            dayIndex: TodayFixtures.DayIndex.lowerA,
+            startedAt: Fixtures.date(2026, 9, 16, hour: 4)
+        )
+        input.weekWorkouts = [TodayFixtures.finished(morning, after: 1462)]
+        #expect(TodayPresentation.make(input).card.kind == "logged")
+        // Then Lower B was started off-schedule, five minutes ago: the first row of the table beats the fourth.
+        input.session = try TodayFixtures.liveWorkout(
+            55,
+            of: program,
+            weekIndex: 0,
+            dayIndex: TodayFixtures.DayIndex.lowerB,
+            startedAt: Fixtures.now.addingTimeInterval(-300)
+        )
+        let model = TodayPresentation.make(input)
+        let card = try #require(model.card.upNext)
+        #expect(card.title == "Lower B — Hinge focus")
+        #expect(card.action.action == TodayModel.Action(title: "Resume · 5:00", route: .resumeWorkout))
+        #expect(model.header.title == "Lower A")
+        #expect(model.weekStrip.marks == "P-D-PP-")
+        #expect(model.stats.sessions.value == "1")
+    }
+
     @Test("A discarded workout is neither live nor logged: the card offers the session again")
     func live_discarded_offersTheSessionAgain() throws {
         let program = try TodayFixtures.program()

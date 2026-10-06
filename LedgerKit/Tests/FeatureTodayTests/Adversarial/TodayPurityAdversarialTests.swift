@@ -124,7 +124,8 @@ nonisolated struct TodayPurityAdversarialTests {
     func lookups_takeTheInjectedLocale() throws {
         let copy = try Self.sources().filter { $0.name.hasPrefix("TodayCopy") }
         let calls = copy.flatMap { Self.lookups(in: $0.lines.joined(separator: "\n")) }
-        #expect(calls.count == 49, "the catalog holds 49 keys")
+        // Round 1's 49, the four spoken lines of criterion 14 and the sentences of criteria 16 and 17.
+        #expect(calls.count == 55, "the catalog holds 55 keys")
         let withoutBundle = calls.filter { !$0.contains("bundle: .module") }.map { String($0.prefix(60)) }
         #expect(withoutBundle == [])
         let carriesAValue = calls.filter { $0.contains("\\(") }

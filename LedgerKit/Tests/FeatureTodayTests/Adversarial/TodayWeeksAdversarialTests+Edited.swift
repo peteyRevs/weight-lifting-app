@@ -73,7 +73,7 @@ nonisolated extension TodayWeeksAdversarialTests {
             14,
             "P.P.PPT",
             "/4",
-            "Nothing scheduled for Sunday in week 1. \(Self.lastWeek)"
+            "Nothing scheduled for Sunday in week 1. No sessions are left in this block."
         )
         try Self.check(row, program)
     }
@@ -89,10 +89,9 @@ nonisolated extension TodayWeeksAdversarialTests {
         let model = try TodayPresentation.make(Support.input(program, now: Support.moment(Support.civil(2026, 9, 16))))
         let card = try Support.rest(model)
         #expect(model.header.title == "Rest day")
-        // The block's first day is a Friday (09-18) or a Monday (09-28); Friday trains Upper B, Monday Upper A.
-        let first = daysBefore == 2 ? "Friday" : "Monday"
-        #expect(card.body.hasPrefix("Nothing scheduled for Wednesday in week 1. Next up is "), "\(card.body)")
-        #expect(card.body.hasSuffix(" \(first).") || card.body.hasSuffix(" next \(first)."), "\(card.body)")
+        // The block's first day is a Friday (09-18) or a Monday (09-28), written as the header writes a date.
+        let first = daysBefore == 2 ? "Friday, September 18" : "Monday, September 28"
+        #expect(card.body == "Your block starts on \(first).")
         #expect(card.editWeek.route == .editWeek(program: program.id, weekIndex: 0))
         #expect(card.offSchedule.subtitle == "Pick a day from week 1.")
         #expect(card.offSchedule.days.map(\.route)

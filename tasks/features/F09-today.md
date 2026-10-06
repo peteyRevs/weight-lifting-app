@@ -252,3 +252,6 @@ of S3 and replace them where they differ.
 
 The two sentences of 16 and 17, and the wording of 14, are texts the brief did not give: they are listed for
 Pete with the slice's other new texts.
+19. **Recorded for S5** (F9-S3-8, round 2): `make` counts a workout once for each time it is handed in. The store
+    hands each finished workout of the week once (one read over the union of the stats week and the program
+    week, or a merge by id), and its test pins that; the comment on `TodayInput.weekWorkouts` says so in S5.

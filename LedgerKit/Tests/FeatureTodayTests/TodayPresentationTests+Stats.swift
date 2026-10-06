@@ -38,7 +38,7 @@ nonisolated extension TodayPresentationTests {
         #expect(stats.volume.unit == "k")
         #expect(stats.volume.caption == "lb moved")
         #expect(stats.volume.delta == "+8%")
-        #expect(stats.volume.accessibilitySummary == "24,180 lb moved, +8%")
+        #expect(stats.volume.accessibilitySummary == "24,180 lb moved this week, +8% from last week")
     }
 
     @Test("The change is signed, with a real minus sign; it is absent with no previous week or an empty one")
@@ -46,10 +46,10 @@ nonisolated extension TodayPresentationTests {
         // 21,728 against 22,400 is −3%, written with U+2212.
         let down = try Self.stats(moving: 21728, previous: 22400).volume
         #expect(down.delta == "\u{2212}3%")
-        #expect(down.accessibilitySummary == "21,728 lb moved, \u{2212}3%")
+        #expect(down.accessibilitySummary == "21,728 lb moved this week, \u{2212}3% from last week")
         let none = try Self.stats(moving: 24180, previous: nil).volume
         #expect(none.delta == nil)
-        #expect(none.accessibilitySummary == "24,180 lb moved")
+        #expect(none.accessibilitySummary == "24,180 lb moved this week")
         #expect(try Self.stats(moving: 24180, previous: 0).volume.delta == nil)
     }
 
@@ -70,6 +70,13 @@ nonisolated extension TodayPresentationTests {
         #expect(TodayPresentation.make(input).stats.volume.delta == "\u{2212}9,223,372,036,854,775,807%")
     }
 
+    @Test("With nothing to compare with, the kilogram tile speaks the week's volume alone (criterion 14)")
+    func stats_kilogramsWithoutAPreviousWeek_speakTheVolumeAlone() throws {
+        let volume = try Self.stats(moving: 24180, previous: nil, settings: Fixtures.settingsKg).volume
+        #expect(volume.delta == nil)
+        #expect(volume.accessibilitySummary == "10,968 kg moved this week")
+    }
+
     @Test("In kilograms the tile says kg moved and the values convert (criterion 9)")
     func stats_kilograms_convert() throws {
         let volume = try Self.stats(moving: 24180, previous: 22400, settings: Fixtures.settingsKg).volume
@@ -77,7 +84,7 @@ nonisolated extension TodayPresentationTests {
         #expect(volume.value == "11.0")
         #expect(volume.caption == "kg moved")
         #expect(volume.delta == "+8%")
-        #expect(volume.accessibilitySummary == "10,968 kg moved, +8%")
+        #expect(volume.accessibilitySummary == "10,968 kg moved this week, +8% from last week")
     }
 
     @Test("No volume reads 0 with k, never 0.0 (criterion 8)")
@@ -85,7 +92,7 @@ nonisolated extension TodayPresentationTests {
         let stats = try TodayPresentation.make(TodayFixtures.input()).stats
         #expect(stats.volume.value == "0")
         #expect(stats.volume.unit == "k")
-        #expect(stats.volume.accessibilitySummary == "0 lb moved")
+        #expect(stats.volume.accessibilitySummary == "0 lb moved this week")
         #expect(stats.sessions.value == "0")
         #expect(stats.sessions.unit == "/4")
     }
@@ -187,7 +194,7 @@ nonisolated extension TodayPresentationTests {
         }
         input.previousWeekVolume = Volume(weight: .pounds(555), reps: .one)
         let volume = TodayPresentation.make(input).stats.volume
-        #expect(volume.accessibilitySummary == "252 kg moved, 0%")
+        #expect(volume.accessibilitySummary == "252 kg moved this week, 0% from last week")
         #expect(volume.value == "0.3")
     }
 }

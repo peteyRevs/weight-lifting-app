@@ -115,7 +115,8 @@ nonisolated extension TodayPresentation {
         /// that have no calendar date at the two ends of the years 1 to 9999.
         let stripDays: [CivilDate]
         let block: Block?
-        /// The week's finished workouts, with the session's own workout the moment it is finished.
+        /// The week's finished workouts, with the session's own workout the moment it is finished, newest start
+        /// first whatever order the input came in.
         let finished: [WorkoutState]
 
         init(_ input: TodayInput) {
@@ -130,7 +131,8 @@ nonisolated extension TodayPresentation {
             block = input.program.flatMap { program in
                 weeks.map { Block(program: program, weeks: $0, weekIndex: $0.weekIndex(for: input.now)) }
             }
-            finished = TodayPresentation.withFinishedSession(input.weekWorkouts, input.session)
+            let merged = TodayPresentation.withFinishedSession(input.weekWorkouts, input.session)
+            finished = TodayPresentation.newestFirst(merged)
         }
 
         /// The calendar day `workout` started on, which is the day it belongs to (product decision #26).
@@ -154,9 +156,10 @@ nonisolated extension TodayPresentation {
         }
     }
 
-    /// `stored` (newest first) without anything that is not finished, and with the session's own workout the
-    /// moment it is finished, placed by its start. History reports that workout too, an update earlier or
-    /// later; it is counted once, by its id.
+    /// `stored` without anything that is not finished, and with the session's own workout the moment it is
+    /// finished. History reports that workout too, an update earlier or later; it is counted once, by its id.
+    /// The workout goes before the first stored one that started no later: its place by its start in a list
+    /// that is newest first, as the recent workouts are handed in. The week's workouts are ordered afterwards.
     static func withFinishedSession(_ stored: [WorkoutState], _ session: WorkoutState?) -> [WorkoutState] {
         var workouts = stored.filter { $0.phase == .finished }
         if let session, session.phase == .finished, !workouts.contains(where: { $0.id == session.id }) {
@@ -164,6 +167,22 @@ nonisolated extension TodayPresentation {
             workouts.insert(session, at: place)
         }
         return workouts
+    }
+
+    /// `workouts` in the repository's order (`WorkoutRepository.workouts(in:)`): newest start first, and of two
+    /// that started together the smaller id first. The week's workouts may be handed in any order; ordered
+    /// here once, "the first that matches" is the newest, and the same one every time. The order is total: a
+    /// start that is not a number comes after every moment.
+    static func newestFirst(_ workouts: [WorkoutState]) -> [WorkoutState] {
+        workouts.sorted { first, second in
+            if first.startedAt > second.startedAt || second.startedAt > first.startedAt {
+                return first.startedAt > second.startedAt
+            }
+            // Neither is later: they started together, or a start is not a number, which equals nothing.
+            let isMoment = (first.startedAt == first.startedAt, second.startedAt == second.startedAt)
+            return isMoment.0 == isMoment.1
+                ? first.id.rawValue.uuidString < second.id.rawValue.uuidString : isMoment.0
+        }
     }
 }
 

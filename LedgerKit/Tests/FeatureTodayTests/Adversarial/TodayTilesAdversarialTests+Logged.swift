@@ -76,7 +76,7 @@ nonisolated extension TodayTilesAdversarialTests {
         let model = try TodayPresentation.make(Support.input(program, now: now, week: done))
         let card = try Support.rest(model)
         #expect(card.offSchedule.days.map(\.logged) == ["Logged", "Logged", "Logged", nil])
-        #expect(card.body == "Nothing scheduled for Tuesday in week 1. Next up is next Wednesday.")
+        #expect(card.body == "Nothing scheduled for Tuesday in week 1. Next up is Wednesday.")
         // Only Monday's Upper A started in the strip (09-21 … 09-27): 5×5×180 + 3×10×50 + 4×8×65 + 3×12×100
         // + 3×15×12.5 = 12,242.5 lb.
         #expect(model.stats.sessions.value == "1")

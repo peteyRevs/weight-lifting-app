@@ -10,7 +10,12 @@ nonisolated extension TodayCopy {
 
     /// "Week 1 of 8": the program week, counted from 1, and the block's length.
     static func week(_ number: Int, of total: Int, locale: Locale) -> String {
-        String(localized: "Week \(number) of \(total)", bundle: .module, locale: locale)
+        String(
+            localized: "Week \(number) of \(total)",
+            bundle: .module,
+            locale: locale,
+            comment: "The program week, counted from 1, then the number of weeks in the block"
+        )
     }
 
     static var deload: String {
@@ -28,7 +33,7 @@ nonisolated extension TodayCopy {
             localized: "\(sets) × \(reps) @ \(load)",
             bundle: .module,
             locale: locale,
-            comment: "An exercise's sets, reps and load; the load carries no unit"
+            comment: "An exercise's sets, then its reps, then its load, which carries no unit"
         )
     }
 
@@ -54,7 +59,12 @@ nonisolated extension TodayCopy {
 
     /// "15 of 15 sets": the sets done, of the workout's set rows.
     static func sets(done: String, of total: Int, locale: Locale) -> String {
-        String(localized: "\(done) of \(total) sets", bundle: .module, locale: locale)
+        String(
+            localized: "\(done) of \(total) sets",
+            bundle: .module,
+            locale: locale,
+            comment: "The sets done in a workout, then all its sets"
+        )
     }
 
     static var viewSession: String {
@@ -63,7 +73,12 @@ nonisolated extension TodayCopy {
 
     /// "Next: Friday · UB": the next session's weekday and its day's tag.
     static func next(_ weekday: String, tag: String, locale: Locale) -> String {
-        String(localized: "Next: \(weekday) · \(tag)", bundle: .module, locale: locale)
+        String(
+            localized: "Next: \(weekday) · \(tag)",
+            bundle: .module,
+            locale: locale,
+            comment: "The next session's weekday, then the short tag of its day, as in UB"
+        )
     }
 
     /// "Next: week 2": the next session is in a later program week.
@@ -81,30 +96,53 @@ nonisolated extension TodayCopy {
         String(localized: "No session today", bundle: .module)
     }
 
-    /// The next session is later in this program week. `today` and `next` are weekdays' names.
+    /// "Your block starts on Monday, September 28.": the card's whole body on a day before the block begins.
+    static func blockStarts(on date: String, locale: Locale) -> String {
+        String(
+            localized: "Your block starts on \(date).",
+            bundle: .module,
+            locale: locale,
+            comment: "The rest-day card before a block begins: the block's first day, as in Monday, September 28"
+        )
+    }
+
+    /// The next session is on one of the seven days the week strip shows. `today` and `next` are weekdays' names.
     static func restNextUp(_ today: String, week: Int, next: String, locale: Locale) -> String {
         String(
             localized: "Nothing scheduled for \(today) in week \(week). Next up is \(next).",
             bundle: .module,
-            locale: locale
+            locale: locale,
+            comment: "Today's weekday, the program week counted from 1, then the next session's weekday"
         )
     }
 
-    /// The next session is in a later program week.
+    /// The next session is on a later day than the week strip shows.
     static func restNextUpLater(_ today: String, week: Int, next: String, locale: Locale) -> String {
         String(
             localized: "Nothing scheduled for \(today) in week \(week). Next up is next \(next).",
             bundle: .module,
-            locale: locale
+            locale: locale,
+            comment: "Today's weekday, the program week counted from 1, then the next session's weekday"
         )
     }
 
-    /// The block has no later session.
-    static func restNothingLeft(_ today: String, week: Int, locale: Locale) -> String {
+    /// The block has no later session, and this is its last week.
+    static func restLastWeek(_ today: String, week: Int, locale: Locale) -> String {
         String(
             localized: "Nothing scheduled for \(today) in week \(week). This is the last week of the block.",
             bundle: .module,
-            locale: locale
+            locale: locale,
+            comment: "Today's weekday, then the program week counted from 1"
+        )
+    }
+
+    /// The block has no later session, in a week before its last: the weeks after this one are empty.
+    static func restNoneLeft(_ today: String, week: Int, locale: Locale) -> String {
+        String(
+            localized: "Nothing scheduled for \(today) in week \(week). No sessions are left in this block.",
+            bundle: .module,
+            locale: locale,
+            comment: "Today's weekday, then the program week counted from 1"
         )
     }
 
