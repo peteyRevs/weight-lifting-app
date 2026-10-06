@@ -222,3 +222,33 @@ this week's finished workouts, the five most recent, the previous complete week'
 12. **What the body leaves open, as decided in the plan:** a slot whose exercise is no longer stored has no
     preview row; an empty week between today and the next session still says "next {weekday}"; sessions can read
     "5/4"; a workout belongs to the day and week it started (decision #26).
+
+## Plan amendments — slice S3 after round 1 (orchestrator, 2026-10-05)
+
+Rulings on the tester's findings F9-S3-1 to F9-S3-7 and the reviewer's R1 to R4. They add to the twelve criteria
+of S3 and replace them where they differ.
+
+13. **The order of the input is not assumed** (F9-S3-1, F9-S3-7, review n1). `make` gives the same model for
+    `weekWorkouts` handed in any order: of several finished workouts of today's session the Logged card shows the
+    one that started last, and two that started at the same instant are told apart the same way every time.
+14. **The volume tile's spoken line is copy** (F9-S3-2, R1): one key per unit for the line with a change and one
+    for the line without, naming the week and what the change is against: "24,180 lb moved this week, +8% from
+    last week" and "24,180 lb moved this week" (kilograms alike). No string literal other than the empty one and
+    " · " is left in the module outside the copy files.
+15. **"Next" in the rest-day body follows the seven days on screen** (F9-S3-3, review n2). "Next up is
+    {weekday}." when the next session's date is one of the strip's seven days, "Next up is next {weekday}." when
+    it is not, whichever program week it falls in. The first sentence still names the program week, and the
+    Logged card's "Next:" line still follows the program week ("Next: week n" must never name the week the
+    lifter is in).
+16. **Before the block begins** (F9-S3-4, R4a) the rest-day body is one sentence of its own: "Your block starts
+    on {date}." with the block's first day written as the header writes a date ("Monday, September 28"). The
+    card is otherwise as criterion 6 says (the title "Rest day", "Edit this week" for week 1, the list).
+17. **No session left** (F9-S3-5, R4b). In the block's last week the body ends "This is the last week of the
+    block." as the brief has it. In any earlier week it ends "No sessions are left in this block."
+18. **Unchanged, and recorded for later slices** (F9-S3-6): a slot whose exercise is not stored has no preview
+    row and still counts in the estimate, and the card still offers "Start workout". No program can hold such a
+    slot today (a program is refused on save when a slot's exercise has no row). F12 decides what deleting a
+    custom exercise does to the slots that use it; F10 shows a start that fails.
+
+The two sentences of 16 and 17, and the wording of 14, are texts the brief did not give: they are listed for
+Pete with the slice's other new texts.
