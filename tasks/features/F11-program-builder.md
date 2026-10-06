@@ -103,3 +103,75 @@ _Filled in by agents during delivery:_
 - `F11-program-builder/implementation-notes.md`
 - `F11-program-builder/test-findings.md`
 - `F11-program-builder/review.md`
+
+---
+
+## Plan amendments (orchestrator, 2026-10-05)
+
+The plan is `F11-program-builder/implementation-notes.md`. Where it and the text above differ, the plan and
+this section are the specification. The differences that change behaviour:
+
+- **Slices.** The feature is delivered as slices, one pull request each (the plan's "Slice plan"). The plan's
+  S1 and S2 are built together as **S1** (below); the number S2 is not used; S3 to S14 keep the plan's numbers.
+- **Criterion 2's count.** From rest, a weekday cycles through the program's days in order and back to rest:
+  with four days, taps one to four give UA, LA, UB, LB and the fifth gives rest.
+- **Signatures** are the plan's ("The editing functions, as proposed"), not the sketch under "Domain changes":
+  new ids are parameters; block editing works on a `Program` and day editing on a `DayTemplate`; the weeks that
+  hold a finished workout are handed to `removeLastWeek`; `ProgramEditError` has two cases.
+- **Saving.** No 300 ms timer is built. An edit is applied on screen at once and stored through
+  `ProgramRepository.update` (S3) by one save loop; edits made while a write runs go together in the next one
+  (the plan's "The 300 ms debounce"). Criterion 13 reads: the first edit is written at once, the stored program
+  after any sequence of edits is the program on screen, and a workout saved meanwhile loses nothing.
+- **Fixtures.** "The F08 default program" in criterion 1 is the spec's seed program (`Fixtures.seedProgram()`);
+  the day cards' minutes are `TimeEstimate`'s (39, 38, 37, 31).
+- **Routes and strings** follow the M1 conventions: `ProgramRoute` in the feature, the mapping in
+  `LedgerAppKit`; one catalog and one copy file family in `FeatureProgram`. Names of Domain values a module
+  shows (equipment, muscles, progression) are entries of that module's own catalog.
+- **Defaults built until Pete answers** (the plan's "Decisions for Pete"): the screens are drawn in the dark
+  design's language, the week chips wrap; a superset moves as one (the brief's rule); the library has the
+  brief's ten chips; "Delete day" sits at the foot of the Day editor and is allowed while that day's workout
+  runs; a day's tag is not editable; the plan's wording for the texts the brief lacks.
+
+## Plan amendments — slice S1, program and day editing in the Domain (orchestrator, 2026-10-05)
+
+The plan's S1 and S2 as one pull request, cut from `main`: every editing rule of spec §7.1 as pure functions
+of `LedgerDomain`, with no screen, no store and no repository. About 570 product lines planned. The functions,
+their behaviour row by row and the worked examples are in the plan: "The editing functions, as proposed",
+"Group-aware move, defined", and "Inputs the implementer needs › S1" and "› S2". The slice is accepted when:
+
+1. **Pure and total.** Every function of `ProgramEditing` and `DayEditing` is a pure function of its
+   arguments, never traps, and returns its input unchanged when given an id the program or day does not hold.
+   Only `removeLastWeek` and `newSlot` throw, with typed throws. Every program a `ProgramEditing` function
+   returns is accepted by `Program.init`, and every slot a `DayEditing` function returns by `Slot.init`.
+2. **Names.** `cleanedName` removes every scalar of category `Cc`, trims, and is `nil` when nothing is left;
+   `renameProgram` and `renameDay` set the cleaned name and change nothing for a blank one.
+3. **Weeks** (criterion 4). `addWeek` appends a week with the next index, the last week's schedule and no
+   deload flag. `removeLastWeek` throws `.minimumTwoWeeks` at two weeks whatever else holds, then
+   `.weekHasLoggedSessions(weekNumber:)` (one-based) when the last index is among the logged weeks, and
+   otherwise drops the last week. `toggleDeload` flips one week's flag.
+4. **Schedule** (criteria 2 and 3). `cycleSchedule` goes rest, first day, …, last day, rest, in the order of
+   the program's days; `copyPreviousWeek` and `applyToLaterWeeks` copy schedules and leave every deload flag.
+5. **Days** (criteria 5 and 6). `addDay` appends a day with no slots and the tag "D{n}", or the next number
+   whose tag is free; `deleteDay` removes the day and every schedule entry that names it; `updateDay` replaces
+   one day and ignores a result with another id.
+6. **Slots.** `newSlot` builds rule 7's defaults (criterion 12: 3 × 8, top 10, RPE 8, the default rest,
+   linear, the exercise's start load in the lifter's unit); `addSlots` appends and leaves out an id the day
+   holds; `removeSlot` removes one, and the next member leads if it led a superset.
+7. **Fields** (criterion 8). `set` clamps (sets 1…12, reps 1…30, top of range 2…40, RPE 5…10 on the half, rest
+   30…300 s on the 15, start load never below zero) and then keeps the top of the range above reps. `stepped`
+   gives the value one step away and does not clamp; the start load goes to the next multiple of the slot's
+   step, or of the equipment's default step in the lifter's unit, and never below zero.
+8. **Progression, drop set, superset** (criteria 9 and 11). Choosing double progression makes the top of the
+   range at least reps + 2; a drop set is 1 or 0; a day is always returned in normal form (its first slot is
+   never joined to a previous one).
+9. **Move** (criterion 10): as "Group-aware move, defined", with its six properties checked on seeded days.
+10. **Every week's prescription** (criterion 7): `ProgressionRules.prescriptions` gives Incline DB Press 50,
+    50, 50, 52.5, 52.5, 52.5, 55 and 47.5 lb with reps 10, 11, 12, 10, 11, 12, 10, 11, and Back Squat 240 lb in
+    the deload week; a missed week marks the next as held.
+11. **The library's filter** (criterion 12): on the seed catalog, "row" with Back and Machine is exactly
+    "Chest-Supported Row"; the five muscle chips map to muscle groups as the plan lists.
+12. **What editing never writes.** No function changes the misses or the exercise of a slot that already
+    exists (a property over every function, on seeded programs). S3 relies on it.
+13. **The Domain's rules.** Foundation only; exact decimals, no `Double`; public pure types `nonisolated` and
+    `Sendable` as their neighbours are; the three ranges of `Slot` become public constants with no change in
+    behaviour (the existing tests pass untouched); 100 % line coverage of the new files.
