@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.4.0...v0.5.0) (2026-10-06)
+
+
+### Features
+
+* **app:** both apps boot on a real database (F07 S2) ([#24](https://github.com/peteyRevs/weight-lifting-app/issues/24)) ([6209706](https://github.com/peteyRevs/weight-lifting-app/commit/6209706a498ab479e2a3ad6f6ea20b7a374b6081))
+* **app:** tab shell, route mapping and the first String Catalog (F09 S1) ([#28](https://github.com/peteyRevs/weight-lifting-app/issues/28)) ([9c6ea8d](https://github.com/peteyRevs/weight-lifting-app/commit/9c6ea8d4db6200c1e3a1dc490ff3952865c732ce))
+* **app:** Today placeholders, debug menu with Diagnostics, UI tests (F07 S3) ([#25](https://github.com/peteyRevs/weight-lifting-app/issues/25)) ([567b9c3](https://github.com/peteyRevs/weight-lifting-app/commit/567b9c33ef8a7a7e78ce79ec7ac588941d7b005b))
+* **deps:** dependency keys, stubs and the LedgerFakes module (F07 S1) ([#22](https://github.com/peteyRevs/weight-lifting-app/issues/22)) ([7ec7643](https://github.com/peteyRevs/weight-lifting-app/commit/7ec7643eb6b3d9c407e24905d5f4fba31011f8b0))
+* **domain:** workout session client seam (F10 S1) ([#27](https://github.com/peteyRevs/weight-lifting-app/issues/27)) ([95b0837](https://github.com/peteyRevs/weight-lifting-app/commit/95b0837a838625353ba9b8c61307843b523cce09))
+* **persistence:** a swap's program change lands with the saved workout; the log goes in the same transaction (F10 S3) ([#30](https://github.com/peteyRevs/weight-lifting-app/issues/30)) ([6943203](https://github.com/peteyRevs/weight-lifting-app/commit/6943203e3ac2440f9905f39747af04048726607e))
+* **sync:** the workout session host, recovery at launch and the start use case (F10 S2) ([#29](https://github.com/peteyRevs/weight-lifting-app/issues/29)) ([6c5939d](https://github.com/peteyRevs/weight-lifting-app/commit/6c5939d151f1687e9dbf0217c6468a0d296ca1a6))
+
 ## [0.4.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.3.0...v0.4.0) (2026-10-03)
 
 

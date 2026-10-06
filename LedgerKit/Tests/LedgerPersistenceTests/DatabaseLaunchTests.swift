@@ -112,7 +112,8 @@ struct DatabaseLaunchTests {
     @Test("The steps are in launch order")
     func steps_inOrder() {
         #expect(LaunchStep.allCases == [
-            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .activateCompanionSession
+            .assignMirroringHandler, .openDatabase, .seedCatalog, .loadSettings, .resumeWorkout,
+            .activateCompanionSession
         ])
     }
 }

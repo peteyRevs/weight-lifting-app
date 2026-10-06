@@ -1710,3 +1710,1671 @@ measurement on a simulator.
   asks for exactly one complaining clause). Accepted.
 - The overlap clauses keep their ten tries. Accepted.
 - The orchestrator's full gate on the touch-up's tree exited 0. The tester's files are unchanged since `92eb79c`.
+
+## Slice S2 — orchestrator's brief (2026-10-05)
+
+S1 merged as #27 (`95b0837`). S2's specification is the brief's last section, "Plan amendments — slice S2". What it
+adds to the plan's S2 row, from S1's rounds:
+
+- The host prunes ended subscribers when a `yield` reports `.terminated`, as the fake does.
+- Recovery is started by the first protocol call if the launch step has not run.
+- The ending update is published after the save; the host's own stamp is never the caller's fault.
+- The contract's pair-by-pair overlap clauses are joined by a seeded script of calls made at once, checked as one
+  history (criterion 11), and the host is run against the contract over stores that suspend, several times over.
+- `update.haptics` is `[Haptic]`; exactly one subscriber plays them, on the workout side (decided in S6).
+- The fake has no scriptable failures yet: S2 tests a failing store through the real stores (a SQLite trigger) or
+  a store wrapper of its own in test support.
+
+## Slice S2 — host and start use case (G1 implementer, 2026-10-05)
+
+On `48403f5`, in the worktree `F10-s2`, on `feat/F10-s2-session-host`. Nothing is committed and no PR is open.
+Paths are under `LedgerKit/` unless they start with `docs/`, `tasks/` or `scripts/`. Scratch files are in
+`scratchpad/f10s2/` (written `f10s2/…` below).
+
+### The stop, and the ruling
+
+The first hand-back of this slice was a stop. One existing test failed because of the slice, in a tester's file
+under `Tests/*/Adversarial/`, which I may not edit: `LaunchAdversarialTests.randomPhases_matchTheModel` (F07's
+tester, 60 seeds), whose hand-written model of the iPhone launch had no `resumeWorkout` step. The plan's list of
+tests that break (this file, lines 358-364) names `LaunchOrderTests` and `DatabaseLaunchTests` only. The
+orchestrator ruled that the launch gaining a step is a change of specification, sanctioned one edit to that
+model, and asked for the slice to be finished. The edit is under "Sanctioned test edits".
+
+### What landed
+
+| File | Contents |
+|---|---|
+| `Sources/LedgerDomain/Engine/HybridLogicalClock.swift` (new) | `HybridLogicalClock`: `newest`, `observe(_:)`, `stamp(now:) -> Date?`, `tick` |
+| `Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift` (new) | `StartWorkoutUseCase`, its `Outcome`, `StartWorkoutError` |
+| `Sources/LedgerSync/LocalWorkoutSessionActor.swift` (new) | the host: state, the six protocol calls, the queue (`inTurn`), own actions, publishing |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` (new) | `resumeFromStore()`, `needsRecovery`, the recovery pass, completing an end, the misses |
+| `Sources/LedgerSync/LedgerSyncError.swift` (new) | `LedgerSyncError.noFiniteStamp` |
+| `Sources/LedgerPersistence/DatabaseLaunch.swift` | `LaunchStep.resumeWorkout` (`:14`); `run(_:retrying:_:)` (`:129`) |
+| `Sources/LedgerAppKit/AppComposition.swift` | builds the host when the database opens (`:44`), binds `workoutSession` (`:147`), runs the step (`:115-120`) |
+| `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` | doc comments only: what a failed save leaves (criterion 4) |
+| `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+ConcurrentScripts.swift`, `+ConcurrentHistory.swift` (new) | criterion 11: the seeded script of calls made at once, and its judge |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` (new) | `StoreProbe`, `ProbedStores`: stores that give way, wait, throw and record |
+| `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+Model.swift` | `Model.init(standing:)`, three lines |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActor{,Clock,Contract,End,Miss,Performance,Recovery,Serial}Tests.swift`, `WorkoutSessionConcurrentScriptTests.swift`, `Support/HostSupport.swift` (new) | the host's suites: 61 test functions |
+| `Tests/LedgerDomainTests/Engine/HybridLogicalClockTests.swift`, `UseCases/StartWorkoutUseCaseTests.swift` (new) | 8 and 10 |
+| `Tests/LedgerPersistenceTests/DatabaseLaunchStepTests.swift` (new) | `run(_:retrying:_:)`, 3 |
+| `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift`, `WorkoutSessionWiringTests.swift` (new) | criteria 7 and 9: 5 and 6 |
+| `docs/architecture.md` §6, and one clause in §4 | the host, recovery, the use case |
+
+Outside the slice's list, and why:
+- `LedgerSyncError.swift`: standards §8, a module's own error, for the stamp.
+- `StoreProbe.swift`: the brief's "a store wrapper of its own in test support".
+- `…Contract+Model.swift`: the judge needs the rules from a given state.
+- `Tests/LedgerSyncTests/Support/Tags.swift`: `.performance` and `.slow`, for criterion 12's suite.
+- `docs/architecture.md` §4: its launch sentence would otherwise be stale.
+- `WorkoutSessionClient.swift`: criterion 4 asks for the documentation.
+
+Unchanged: `Package.swift`, `package-graph.expected.txt`, `project.pbxproj`, the test plans,
+`scripts/coverage-thresholds.json`, the watch app. `tasks/todo.md` is not written: the slice's file list excludes
+it and the orchestrator owns it across lanes.
+
+### Decisions and deviations
+
+`Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its `+Recovery.swift`.
+
+1. **Re-entrancy: a queue of tasks the actor owns** (`Actor:108-124`). `start`, `apply`, `finish`, `discard` and
+   recovery each call `inTurn`, which, before it suspends, takes the place after the operation queued last and
+   starts a `Task` that waits for that one and then runs.
+   - *No interleaving:* an operation starts only when the one before has ended, so none reads state another has
+     not committed.
+   - *No reordering:* the place is taken in the turn the call reaches the actor, so operations, and their
+     updates, run in arrival order.
+   - *No deadlock:* an operation waits only for the one before it and awaits only the stores. No operation calls a
+     method that queues: `begin`, `perform`, `end` (`Actor:162-227`), `recover` and `ready` (`Recovery:34-49`) are
+     the unqueued bodies.
+   - *No starvation:* first in, first out; nothing can overtake. A store that never returns stops the queue, as a
+     held database lock would.
+   - *Cancellation:* the task is the actor's, so a caller cancelled at any point still has its event stored, and
+     only waits (the plan's risk "A cancelled caller"). GRDB refuses a cancelled task's write, which
+     `cancelledCaller_isStoredInTheDatabase` shows on the real store.
+   - *Rejected:* a continuation-based gate with the work in the caller's task (mutant M2: a cancelled caller's
+     write throws, so a set ticked before Minimize is lost); `withTaskCancellationShield`, which would do it with
+     no unstructured task, but is iOS 27 / watchOS 27 only (Apple's documentation, checked today) and the minimum
+     is 26.
+   - `current()` and `updates()` (`Actor:70-87`) do not queue once recovery has run: decision 2 makes that safe.
+2. **`live` changes only in the actor turn that publishes the change** (`Actor:137-140`, `:174-175`,
+   `:208-209`; `Recovery:97-100`). A reader at any turn sees the last update's state, with no suspension between
+   a commit and its publication (clauses 22 to 24).
+3. **Criterion 4's open point: until a finished workout is stored, every reader still sees it as it stood.**
+   `current()` returns the workout as before the finish, open and new streams show it, and no update is published
+   (`ending`, `Actor:40-42`; `settle()`, `Recovery:124-130`).
+   - *Why, from what a screen needs:* (a) Today's Resume and the cover agree, so the lifter can go back in and
+     finish; (b) `start` answers `workoutInProgress`, so no second workout of the day can be started over one that
+     is not yet in history, which the other choice (`current()` nil) invites; (c) it is the rule the protocol
+     already has for a refused append: a call that throws changes nothing a reader can see.
+   - *What follows:* a second `finish` retries and returns the state ended at the first call's date
+     (`Actor:215-220`); `apply` and `discard` complete the pending end first (`Actor:186`), then throw
+     `noLiveWorkout`, or what the save throws; the launch step completes it on the next foreground and publishes
+     without a haptic (`Recovery:66-75`, `:106-112`).
+   - *After a relaunch* nothing is live while the save keeps failing (only the finished state can be rebuilt), so
+     another workout can start: `unsavedWorkout_afterARelaunch_leavesNothingLive`. Open question 2.
+   - Written on the protocol: `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, the type's doc and
+     `current`, `apply`, `finish`, `discard`, `incompleteLog`.
+4. **A log that cannot be dropped after the save is treated as a failed save** (`complete(_:)`,
+   `Recovery:138-150`): one rule, "an end is complete when its log is gone", for finish, discard, retries and
+   recovery. The cost: `finish` can throw although the workout is in history. Open question 3.
+5. **When an append throws, the next call reads the store before it acts** (`persist`, `Actor:247-254`;
+   `ready()`, `Recovery:44-49`). A store that refused leaves nothing changed; one that stored the envelope and
+   then threw is picked up, and streams get the corrected state without a haptic. GRDB rolls back on a throw, so
+   this is for a store that lies, not for M1's.
+6. **Recovery is one idempotent pass** (`reconcile()`, `Recovery:53-80`), used by the launch, by the first
+   protocol call when the launch has not run it, by the call after a failed append, and by the foreground retry.
+   - A store it cannot read throws and leaves the host knowing no more than before: calls throw until a pass reads
+     through, and a stream opened meanwhile starts with what is known and hears the workout a later pass resumes.
+   - A save that throws is collected, the other logs are dealt with, and the first failure is thrown at the end.
+   - Two live logs: the one that started last is resumed, the other kept, a fault logged (`Recovery:85-101`).
+7. **The clock and `seq`.** `HybridLogicalClock` is a value in the actor; `seq` is the highest stored for the live
+   workout from this device, in memory. An own action stamps a copy and keeps it only once the envelope is stored
+   (`Actor:164-174`, `:190-201`). Recovery observes `newestWallClock()` and reads `highestSeq`
+   (`Recovery:54-56`, `:95-96`). A system clock that steps back gives `newest + 1 ms`. One that is not finite
+   gives no stamp: the host logs a fault and throws `LedgerSyncError.noFiniteStamp` before `reduce`
+   (`Actor:232-243`), so never `notStartable` and never "ignored".
+   - **Deviation:** `stamp(now:)` returns `Date?`, not the plan's `Date`
+     (`Sources/LedgerDomain/Engine/HybridLogicalClock.swift:46`). The plan's type cannot say "no stamp", and
+     criterion 3 needs it said before `reduce`.
+8. **"Reports an issue" is a fault-level log and a typed throw; it is not `reportIssue`.** The orchestrator asked
+   for the mechanism the fakes use unless a standard forbids it.
+   - That mechanism is swift-issue-reporting's `reportIssue` (`Sources/LedgerFakes/InMemoryStores.swift:73`).
+     `LedgerFakes` links it by ADR-008's amendment (`docs/adr/ADR-008-ledger-fakes-module.md:69-72`), and all of
+     `LedgerFakes` is `#if DEBUG`.
+   - `LedgerSync` links `LedgerDomain` only (`package-graph.expected.txt`, "library LedgerSync: LedgerDomain").
+     Calling `reportIssue` from the host needs a new edge in `Package.swift`. **The rule is standards §2**
+     (`docs/engineering-standards.md:62-63`): "Adding a dependency edge in `Package.swift` that violates this
+     diagram requires an ADR." `scripts/check-package-graph.sh` fails the gate on it, and architecture §1 allows
+     product code two third-party dependencies, "nothing else without an ADR". So I kept the log.
+   - *What a test sees:* the typed error, asserted in six cases
+     (`Tests/LedgerSyncTests/LocalWorkoutSessionActorClockTests.swift:67`, `:87-93`: two tests, each for NaN, +∞
+     and −∞).
+   - *What a developer sees:* a fault in the log, as for every other "cannot happen" in product code
+     (`Sources/LedgerDependencies/Unimplemented/Unimplemented.swift:23-27`, `DatabaseLaunch.fail`).
+   - What `reportIssue` would add: a test that reaches it without expecting to fails by itself, and Xcode shows a
+     runtime issue in a Debug run. Open question 1 says what it costs.
+9. **`start` stamps seq 1** and does not ask the store (`Actor:165`). S1's open question 4 (a start with the id of
+   an ended workout) stays as the fake has it: accepted. Open question 4.
+10. **A log with rows this version cannot read:** `finish` is refused before anything is stored (`incompleteLog`,
+    the workout stays live; `Actor:196-199`); `discard` ends the workout and keeps the log; recovery keeps an ended
+    one (`Recovery:138-145`, `:113-115`). So the lifter is never stuck with a workout that can neither be finished
+    nor dropped.
+11. **Deviation: `needsRecovery` on the actor** (`Recovery:28-30`), beyond the plan's signature. The composition
+    retries the step on a foreground only while it is true (`Sources/LedgerAppKit/AppComposition.swift:116-117`).
+    That is how a finish whose save failed is retried by the launch (criterion 4) while
+    `LaunchOrderTests.resume_again_runsNothingTwice` still holds. Mutants M13 and M17 pin both halves.
+12. **Deviation: `AppComposition.database` is a `lazy var`** (`AppComposition.swift:25-33`), so that `onOpen` can
+    hand the stores back to the composition (`opened`, `:44-55`); `self` cannot be captured in `init` before
+    `database` exists. `DatabaseLaunchTests.Subject` already builds its launch this way. The import of
+    `LedgerSync` is no longer conditional (`:12`): the module exists on every platform.
+13. **Deviation: the use case reads `exercise(id:)` per slot**, not the plan's `all()`
+    (`Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift:102-108`): it needs the day's exercises, not the
+    catalog. It builds the session before it discards a live workout (`:92-95`), so a build that fails leaves that
+    workout alone. A live workout of the same source is resumed whatever `replacingLive` says (`:85-87`).
+14. **Misses** (`slotUpdates`, `Recovery:155-173`) use `workout.isDeload` (what the lifter was prescribed), the
+    slot as stored now, and nothing when the active program is not the workout's or the workout is ad hoc. The id
+    check is the ruling's rule (O9); real stores already keep a slot in one program, so only a stand-in store can
+    tell the difference (`finish_judgesTheProgramByItsID`, mutant M11).
+15. **The effects are not run by a loop over `[Effect]`.** `perform` runs them in the engine's order as
+    straight-line code: `.persist`, then the end (`.materialize` or `.discardLog`), then the haptics with the
+    update (`Actor:178-211`). An end is completed from the state's phase, as recovery and a retry must do anyway
+    (they have a state, not effects), so there is one way to complete an end, not two. The list still decides what
+    it alone knows: whether the event was ignored, and the haptics. S6 adds the notification cases.
+
+### Criteria → tests
+
+| # | Tests |
+|---|---|
+| 1 | `LocalWorkoutSessionActorContractTests`: `host_keepsTheClause` (24 clauses × 6 set-ups: in-memory, GRDB, suspending; recovered at launch or not), `violations_ofTheHost_areNone` (× 6), `sessionScripts_fakeAndActorPublishTheSame` (200 seeds × 6) |
+| 2 | `LocalWorkoutSessionActorTests`: `apply_assignsNextSeq`, `apply_storesBeforePublishing`, `apply_ignoredEvent_storesNothing`, `apply_storeRefuses_changesNothing`, `start_storeRefuses_startsNothing`, `append_lostAcknowledgement_isRecovered`, `start_afterAnEnd_startsItsSeqAtOne` |
+| 3 | `LocalWorkoutSessionActorClockTests`: `stamps_surviveAStepBack`, `relaunch_continuesTheClock` (× 2), `start_clockNotFinite_isTheHostsFault` (× 3), `apply_clockNotFinite_isTheHostsFault` (× 3), `recovery_skipsNonFiniteStamps`; `HybridLogicalClockTests` (8) |
+| 4 | `LocalWorkoutSessionActorEndTests`: `finish_storesThenSavesThenDrops`, `finish_publishesAfterTheSave` (× 2), `endingUpdate_arrivesAfterTheStoreIsDone`, `finish_saveFails_secondFinishRetries`, `finish_compactFails_waitsAndRetries`, `pendingEnd_isCompletedBeforeAnyChange`, `pendingEnd_isCompletedByTheLaunchStep`, `finish_storeRefusesTheEnd_nothingEnds`, `finish_lostAcknowledgement_isCompletedFromTheStore`, `finish_incompleteLog_staysLive`; `LocalWorkoutSessionActorMissTests` (6) |
+| 5 | `LocalWorkoutSessionActorEndTests`: `discard_dropsTheLog`, `discard_compactFails_secondDiscardCompletes` |
+| 6 | `LocalWorkoutSessionActorRecoveryTests` (13: one per row of the table, twice, two live logs, each read failing, a stream opened meanwhile); `LocalWorkoutSessionActorSerialTests`: `callsDuringRecovery_waitForIt`, `firstProtocolCall_startsRecovery` (× 4); `WorkoutSessionWiringTests.cancelledCaller_neverCancelsTheStep`; `DatabaseLaunchStepTests.run_cancelledCaller_neverCancelsTheStep` |
+| 7 | `WorkoutRelaunchTests`: `killedAfterTheStart_resumes`, `killedMidWorkout_resumesTheSameState`, `killedBeforeTheSave_isSavedAtLaunch`, `killedBeforeTheDrop_isSavedAgainUnchanged`, `killedAfterTheDiscard_dropsTheLog`: a real file, a second composition booted on it, the workout started through `StartWorkoutUseCase` |
+| 8 | `StartWorkoutUseCaseTests` (10) |
+| 9 | `WorkoutSessionWiringTests` (6); `DatabaseLaunchStepTests` (3); `LaunchOrderTests.launch_runsTheStepsInOrder`; `DatabaseLaunchTests.steps_inOrder` |
+| 10 | `LocalWorkoutSessionActorTests`: `effects_forwardHapticsOnly`, `endedStreams_disturbNoOne`; the contract's clause 17 |
+| 11 | `WorkoutSessionConcurrentScriptTests`: `fake_isOneHistory` (200 seeds), `host_isOneHistory` (200 × 6), `noFault_isOneHistory`, `overlapFault_breaksAScript` (9 faults), `script_dependsOnItsSeedAlone`, `scripts_holdEveryKindOfAction` |
+| 12 | `LocalWorkoutSessionActorPerformanceTests.apply_withItsAppend_isUnderBudget`, nightly lane only, as `ReplayPerformanceTests` is |
+
+Also: `LocalWorkoutSessionActorSerialTests`: `laterCallers_startFromWhatTheFirstStored`, `cancelledCaller_stillStores`,
+`cancelledCaller_isStoredInTheDatabase`, `cancelledCaller_keepsItsTurn` (the design point on re-entrancy).
+
+### The failure table
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event (`apply_storeRefuses_changesNothing`, `start_storeRefuses_startsNothing`, `finish_storeRefusesTheEnd_nothingEnds`) | unchanged; marked unrecovered | GRDB: nothing (rolled back) | the store's error | nothing | reads the store first; the same `seq` and stamp when nothing was stored | replay |
+| append that stored and then threw (`append_lostAcknowledgement_isRecovered`, `finish_lostAcknowledgement_…`) | unchanged; marked unrecovered | the envelope | the store's error | nothing, until the next call | the next call adopts what is stored and publishes it without a haptic; an end is completed | replay |
+| the clock is not finite (`…ClockTests`) | unchanged | nothing | `noFiniteStamp`, a fault logged | nothing | works once the clock reads a time | — |
+| `materialize`, after `.finished` is stored (`finish_saveFails_secondFinishRetries`, `pendingEnd_…`) | `live` as before the finish; the end pending; clock and `seq` advanced | the log with its `finished`; no history row | the store's error | nothing; `current()` still the workout | `finish`: saves, compacts, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| `compact`, after the save (`finish_compactFails_waitsAndRetries`) | the same | the log, and the history row | the store's error | nothing | saves again (no change), compacts, publishes once | saved again unchanged, compacted (`killedBeforeTheDrop_…`) |
+| `compact`, after `.discarded` (`discard_compactFails_secondDiscardCompletes`) | the same, a discard pending | the log | the store's error | nothing | `discard`: compacts, publishes. `finish`: completes it, then `noLiveWorkout` | compacted |
+| a read during recovery (`storeUnreadable_theNextCallRetries` × 4) | as before the pass | untouched | the store's error, from every call | a stream starts with what is known | the next call or foreground runs the pass again | — |
+| a save during recovery (`saveThatThrows_keepsItsLog_andCarriesOn`) | the other logs dealt with; the live one resumed | that log kept | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+### Sanctioned test edits (for the tester's and the reviewer's audit)
+
+**`Tests/LedgerAppKitTests/Adversarial/LaunchAdversarialTests.swift`** (F07's tester). Ten lines added, none
+removed or changed (`git diff --numstat`: `10 0`). Line numbers are the file's now.
+
+| Lines | Edit |
+|---|---|
+| 98-99 | in `Model`, after `var hasLoadedSettings = false`: a doc comment naming this ruling, and `var hasResumedWorkout = false` |
+| 139-142 | in `Model.resume(_:)`, inside `if isOpen { … }`, after the settings block: a four-line comment saying what follows and why the step never fails here |
+| 143-146 | `if !hasResumedWorkout { log.append("began resumeWorkout"); hasResumedWorkout = true }` |
+
+What the model now says of the step:
+- *Its place:* after `loadSettings`, before `activateCompanionSession`, as `AppComposition.resume(in:)` runs it.
+- *When it runs:* in the first `resume` that finds the database open, whatever the phase. For a database that
+  failed to open at boot, that is the foreground call that opens it, which is the only call that can.
+- *Done or failed:* it begins once and succeeds. Neither fault the test injects reaches it (a file that is not a
+  database; a trigger on `exercise`): it only reads an empty event log.
+- *Retried:* never here, because a step that succeeded has no work left (`needsRecovery` is false).
+
+No second change was needed. The test's assertions, seeds, faults, `spelled` and every other test in the file are
+as they were. The step's failure and its retry need a fault this test does not inject; they are in
+`WorkoutSessionWiringTests` (`stepFailure_isRecorded_andRetriedInTheForeground`,
+`failedFinish_isRetriedOnTheNextForeground`). All 60 seeds pass. Mutant M17, which retries the step on every
+foreground, fails this test among others, so the model does constrain the step.
+
+The two pinned step lists, as the brief told me to update:
+
+| File | Lines | Edit |
+|---|---|---|
+| `Tests/LedgerAppKitTests/LaunchOrderTests.swift` | 34, 38-41 | `.event(.began(.resumeWorkout))` between the settings and the companion session; `.resumeWorkout` in `LaunchStep.allCases` |
+| `Tests/LedgerPersistenceTests/DatabaseLaunchTests.swift` | 114-117 | `.resumeWorkout` in `LaunchStep.allCases` |
+
+No other existing test file is edited. `git status --short | grep Adversarial` prints that one file.
+`Tests/LedgerSyncTests/Support/Tags.swift` gains two tags and is not a test.
+
+### Code lines
+
+`f10s2/count-lines.py` (S1's, with this base): added lines of `git diff -U0 48403f5`, new files whole, blank and
+whole-line comment lines excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `Sources/LedgerSync/LocalWorkoutSessionActor.swift` | 170 | 0 |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | 123 | 0 |
+| `Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift` | 85 | 0 |
+| `Sources/LedgerAppKit/AppComposition.swift` | 31 | 17 |
+| `Sources/LedgerDomain/Engine/HybridLogicalClock.swift` | 24 | 0 |
+| `Sources/LedgerPersistence/DatabaseLaunch.swift` | 12 | 1 |
+| `Sources/LedgerSync/LedgerSyncError.swift` | 3 | 0 |
+| `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` | 0 | 0 |
+| **Product** (plan: about 390; stop at about 550) | **448** | 18 |
+| `LedgerTestSupport` (4 files) | 423 | 0 |
+| Tests (20 files) | 1,934 | 2 |
+
+Product is 15 % over the estimate, mostly recovery and the pending end. Nothing was compressed to fit; the actor's
+own actions are a `private extension` in the same file because of the 150-line type limit.
+
+### The repeated contract runs
+
+`f10s2/stress.py`: `swift test --skip-build --filter 'LocalWorkoutSessionActorContractTests|WorkoutSessionConcurrentScriptTests|LocalWorkoutSessionActorSerialTests'`,
+each run a process of its own. One run is 144 clause cases, 6 `violations` passes of 24 clauses, 1,200 sequential
+scripts and 1,200 concurrent scripts on the host (a third of each over the stores that give way inside every
+call), 200 concurrent scripts on the fake, and the serial suite. Load average between 3 and 6.
+
+| Pool | Runs | Green | Time |
+|---|--:|--:|--:|
+| default | 60 | **60** | 674 s |
+| one thread (`LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`) | 60 | **60** | 1,462 s |
+
+So 8,640 clause cases, 72,000 sequential and 72,000 concurrent scripts on the host per pool, none failing.
+The host's sources did not change after these runs (the mutants below were each put back and compared byte for
+byte); three tests were added afterwards and are in the gate's run, not in these.
+
+It stays a measurement on one Mac. What makes it more than that is mutant M1: the same suites fail at once on a
+host without the queue.
+
+### Criterion 11: the script, and the faults that break it
+
+`WorkoutSessionClientContract.concurrentScriptViolation(seed:on:)` uses the protocol alone. A script is an
+optional opening start, six tasks of six actions run at once (starts, adds, repeats, rests, finishes, discards,
+streams opened in flight, calls that must be refused or ignored), and a subscriber on a stream opened first that,
+on the update telling it of a workout, reads `current()` and logs a set. It is judged as one history
+(`…Contract+ConcurrentHistory.swift`): the five rules of the brief, each a function there.
+
+How many of the twenty fixed seeds report each fault of `FaultyWorkoutSession`, measured with a throwaway test
+(added, run, deleted; `f10s2/faultcounts-*.log`):
+
+| Fault that needs two calls inside the client | Default pool | One thread |
+|---|--:|--:|
+| `losesAnEditBetweenCallers`, `endsTwiceAtOnce`, `appliesAfterTheEnd`, `registersAfterASuspension`, `publishesTheStartLate`, `commitsTheStartLate` | 20 each | 20 each |
+| `startsTwiceAtOnce` | 19 | 19 |
+| `dropsHapticsUnderOverlap` | 10 | 7 |
+| `judgesAnIgnoredEndLater` | 6 | 8 |
+
+All nine are reported on both pools. `overlapFault_breaksAScript` asks for one seed in twenty.
+
+Of the 22 faults that need no overlap, the concurrent script reports 16 by a violation and 2 by throwing from
+its last change (`keepsTheEndedWorkoutCurrent`, `refusesAStartAfterAnEnd`; the sequential script's `markEnd`
+throws the same way). It never reports four, by construction: `cancellationEndsEveryStream` (no subscriber is
+cancelled), `judgesSnapshotsByPhaseAlone` (its refused snapshot is a finished one), `movesTheEndThroughApply` and
+`terminalThroughApplyStaysLive` (it ends workouts by `finish` and `discard` only). The clauses and the sequential
+scripts cover those. Open question 6.
+
+### Mutants
+
+`f10s2/mutants.py`, logs `mutants1.log` and `mutants2.log`: each applied alone to the source, the suites run, the
+file put back and compared byte for byte. **17 of 17 fail at least one test.**
+
+| Mutant | Failing tests (first) |
+|---|---|
+| M1 `inTurn` runs the operation at once, no queue | `host_keepsTheClause`, `violations_ofTheHost_areNone`, `host_isOneHistory`, `laterCallers_…`, `cancelledCaller_keepsItsTurn` |
+| M2 the operation runs in the caller's task (queued, cancellable) | `cancelledCaller_isStoredInTheDatabase`, `cancelledCaller_keepsItsTurn` |
+| M3 an event is published before it is stored | `apply_storesBeforePublishing`, `apply_storeRefuses_changesNothing`, 2 more |
+| M4 clock and `seq` kept although the append was refused | `apply_storeRefuses_changesNothing` |
+| M5 the ending update is published before the save | `finish_publishesAfterTheSave`, `finish_saveFails_…`, `host_isOneHistory`, 4 more |
+| M6 a save that fails leaves no workout current | `finish_saveFails_…`, `pendingEnd_…` (2), 4 more |
+| M7 recovery does not restore the clock | `relaunch_continuesTheClock`, `recovery_skipsNonFiniteStamps`, `liveLog_isResumed` |
+| M8 recovery does not restore `seq` | `liveLog_isResumed`, `firstProtocolCall_startsRecovery`, 4 more |
+| M9 the stamp is the raw system clock | `stamps_surviveAStepBack`, `HybridLogicalClockTests` (3), 7 more |
+| M10 an incomplete log is completed | `finish_incompleteLog_staysLive`, `unreadableRows_resumeOrKeep` |
+| M11 misses written whatever program is active | `finish_judgesTheProgramByItsID` |
+| M12 a failed append is trusted to have stored nothing | `append_lostAcknowledgement_isRecovered`, `finish_lostAcknowledgement_…` |
+| M13 the host never says it has work left | `failedFinish_isRetriedOnTheNextForeground`, `stepFailure_…`, 4 more |
+| M14 the launch runs the step in the caller's task | `run_cancelledCaller_neverCancelsTheStep` |
+| M15 a start is not judged against the session | `host_keepsTheClause`, `sessionScripts_…`, `host_isOneHistory`, 4 more |
+| M16 recovery drops a log that replays to nothing | `logWithoutAStart_isKept`, `unreadableRows_resumeOrKeep` |
+| M17 the composition retries the step on every foreground | `resume_again_runsNothingTwice`, `randomPhases_matchTheModel`, 3 more |
+
+Two findings of the first round, both fixed with a test:
+- **M11 survived.** With real stores a slot belongs to one program, so "the active program is the workout's" and
+  "the active program holds the workout's slots" cannot differ, and no test could tell. I kept the check (it is
+  the ruling's rule, O9, and does not lean on another module's invariant) and added
+  `finish_judgesTheProgramByItsID`, over a stand-in program store.
+- **M2 was caught for a weak reason** (a cancelled `for await`). The in-memory stores ignore cancellation, so
+  `cancelledCaller_stillStores` could not see it. `cancelledCaller_isStoredInTheDatabase` runs the same on GRDB,
+  whose async write throws in a cancelled task.
+
+### Gate and coverage
+
+**Full gate.** `/usr/bin/python3 <sim-lock> scripts/check.sh` from the worktree root, in the background, the
+shell appending the status to `f10s2/gate2.log`. Started 05:25:59, waited 460 s for the lock (F08's gate), then
+**`check.sh OK`, `GATE_EXIT=0`, 725 s**: lint 62 s, iOS build 24 s, iOS tests 323 s, watchOS build 27 s, watchOS
+tests 287 s, coverage 2 s. 17 test targets ran and passed (PR), 8 (PR-Watch). iOS: 1,822 tests, 1,800 passed, 0
+failed, 13 skipped, 9 expected failures; watchOS: 1,630, 1,612 passed, 0 failed, 13 skipped, 5 expected failures.
+Against S1's last gate that is one more skipped on each (this slice's timing suite, nightly only) and the same
+expected failures. 8.4 GB were free before it, 8.2 GB after.
+
+**It is the final tree.** Only this notes file changed after it started. The iOS result bundle holds this
+slice's suites, all passed: the contract on the host (1,350 cases), the concurrent scripts (1,412), kill and
+relaunch (5), the wiring (8 cases), `Adversarial F07 S2 · iPhone launch` with its 60 seeds, `Launch order`, and
+the rest of the table under "Criteria → tests"; the timing suite is skipped there, as intended. The watchOS
+bundle holds `LedgerSyncTests` and `LedgerDomainTests` too: the host's suites passed on the watch simulator.
+
+**An earlier run, on a tree I then changed** (`f10s2/gate1.log`): started 05:07:09, 240 s for the lock,
+`check.sh OK`, `GATE_EXIT=0`, 739 s, the build cold. Its build output showed five compiler warnings in a test
+file of mine ("no calls to throwing functions occur within 'try'", `StartWorkoutUseCaseTests`), which I had missed
+on the host because I searched my build logs for errors only. I removed the five `try`, recompiled every file I
+touched on the host (the one warning left is `PayloadVersionAdversarialTests.swift:29`, as before the slice), and
+ran the gate again. The coverage is the same in both.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 228 / 237 | 96.20 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2122 / 2140 | 99.15 % | 95 % | ✓ |
+| LedgerFakes | 1415 / 1428 | 99.08 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2498 / 2516 | 99.28 % | 90 % | ✓ |
+| LedgerSync | 338 / 341 | 99.12 % | 90 % | ✓ |
+| Overall | 8761 / 8885 | 98.60 % | 80 % | ✓ |
+
+Per file, in the iOS bundle (`xccov`): `LocalWorkoutSessionActor.swift` 155 / 155, `+Recovery.swift` 152 / 152,
+`HybridLogicalClock.swift` 22 / 22, `StartWorkoutUseCase.swift` 57 / 57, `WorkoutSessionClient.swift` 21 / 21.
+`LedgerSync`'s three uncovered lines are `CompanionSessionActivator.swift`'s, as before (31 / 34). The lines not
+covered in `LedgerDomain` and `LedgerPersistence` are 18 each, as at S1's gate, so every line this slice added to
+them is covered. `AppComposition.swift` is 134 / 135 (`LedgerAppKit` is not gated).
+
+**Warnings.** None in this slice's files. The cold build printed the three it printed before the slice
+(`PayloadVersionAdversarialTests.swift:29`, a `@Test` expansion beside it, `LedgerDesignTests/PreviewTests.swift:90`),
+with xcbeautify's "exit code 0 but produced no further output" lines beside them.
+
+**Format and lint**, on the final tree: `swiftformat --lint` 0 of 635 files, exit 0; `swiftlint --strict` exit 0;
+no new suppression. The gate runs both again.
+
+**Host**, on the final tree (`f10s2/host4.log`): `LedgerDomainTests` 814 tests, `LedgerPersistenceTests` 452,
+`LedgerSyncTests` 147, `LedgerDependenciesTests` 63, `LedgerAppKitTests` 49, `LedgerWatchAppKitTests` 35, all
+passed, exit 0. Every S1 test passes unedited; the tester's files are untouched but for the sanctioned ten lines.
+
+**Release build.** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+**exit 0**, 50 s, no warning (`f10s2/release1.log`). No Release object names `FakeWorkoutSessionClient`,
+`InMemoryStores`, `InMemoryWorkoutEventStore`, `SplitMix64`, `FakeLinkBus` or `Fixtures` (0 symbols each; Debug:
+740, 539, 241, 125, 1139, 2638), and `Release/LedgerFakes.o` is 1,176 bytes with one symbol, as at S1. The host,
+the clock and the use case are in it (818, 119 and 186 symbols). Only test files changed after this build.
+
+**Criterion 12, by hand on the host:** `LEDGER_TEST_LANE=nightly swift test … --filter
+LocalWorkoutSessionActorPerformanceTests`: passed; 20 applies on a real file, on a log of 200 events: 95th
+percentile 98 µs, median 74 µs, against 30 ms (`f10s2/attachments/session-apply.txt`).
+
+**Tree.** `git status --short` shows the files under "What landed", the sanctioned edit and this file, and nothing
+else; HEAD is `48403f5`; nothing is staged or committed.
+
+**Shared state, as the orchestrator asked.** Nothing odd. The lock was held by F08's gates each time I looked
+(05:07 and 05:26), by live processes a few minutes old, and was released to mine both times; at 04:12 its file
+was empty. Of the `swift-test` processes I saw that were not mine, the one at 02:40 ran in the `F09-s1` worktree
+(its working directory); the two at 04:12 and 05:07 filtered other lanes' suites (`FeatureOnboardingTests`,
+`LoadableAdv…`) and were seconds old. I left all three. No test helper of this worktree is running.
+
+**Housekeeping.** Builds of mine that failed to compile left `*.cstemp` files in this worktree's
+`LedgerKit/.build`, which then failed code signing; I deleted them each time. Before the second gate 6.6 GB were
+free, under the 8 GB line, so I deleted this worktree's `LedgerKit/.build` (2.3 GB, ignored build output of
+mine); the host commands above therefore start with a cold build. `swiftformat` was run over the files I touched
+only.
+
+### How to verify by hand
+
+From the worktree root:
+
+1. The host: `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerSyncTests`.
+   Expect 147 tests in 25 suites, with 13 known issues (S1's, on purpose); the timing suite is skipped outside
+   the nightly lane.
+2. Kill and relaunch, the wiring and the launch: `--filter 'WorkoutRelaunchTests|WorkoutSessionWiringTests|LaunchOrderTests|LaunchAdversarialTests|DatabaseLaunch'`.
+3. The contract biting on the host: in `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, replace the body of
+   `inTurn` (`:117-123`) by `return try await operation()` and run step 1. `host_keepsTheClause` fails, among
+   others. Undo it. (`python3 f10s2/mutants.py M1` does this and puts the file back.)
+4. Many times over: `python3 f10s2/stress.py 60 '<the filter above>'`, then the same with
+   `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` as a last argument.
+5. Criterion 12 on the host: `LEDGER_TEST_LANE=nightly swift test … --filter LocalWorkoutSessionActorPerformanceTests --attachments-path <folder>`.
+6. Release: `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`, then,
+   in `.build/out`,
+   `find Intermediates.noindex/LedgerKit.build/Release Products/Release -name '*.o' -print0 | xargs -0 nm 2>/dev/null | grep -v ':$' | grep -c FakeWorkoutSessionClient`
+   prints 0.
+7. The gate: `/usr/bin/python3 <sim-lock> scripts/check.sh`.
+
+### Open questions
+
+1. **`reportIssue` for the stamp** (decision 8). It needs `IssueReporting` on the `LedgerSync` target (one line in
+   `Package.swift`, one in `package-graph.expected.txt`), an amendment like ADR-008's, `import IssueReporting`
+   and one call beside the log; the six clock cases then expect the issue (`withKnownIssue`). The library is
+   already linked through Dependencies. Recommendation: do it as a follow-up once the amendment is agreed; I did
+   not add a dependency edge to a product module on my own.
+2. **After a relaunch a workout that still cannot be saved leaves the slot free**, so the same day can be started
+   again. Recommendation: accept for M1 (it needs a save that fails across a relaunch); S7's copy already says the
+   app will try again.
+3. **`finish` throws when only the compaction failed**, though the workout is in history. Recommendation: keep the
+   one rule. The alternative announces the end and leaves a finished log that a later launch saves again, over any
+   edit made in History meanwhile (F17 "Inputs from F05", S3).
+4. **A start with the id of a workout already in history** would overwrite it at finish. Recommendation: leave; the
+   use case always makes a new id. F17 should decide before a peer can start a workout.
+5. **A pending end that the launch step completes while another workout is live** (only after a relaunch) is saved
+   without an update, because an ended update for another workout would hide Resume. Today then learns of it at
+   its next history read. Recommendation: F09 re-reads history on a return to the foreground.
+6. **The concurrent script ends workouts by `finish` and `discard` only**, and cancels no subscriber. Adding
+   terminal events through `apply` and a live but malformed snapshot is about six lines in its writer.
+   Recommendation: leave to the tester, whose brief is further overlap shapes.
+7. **Criterion 12 is measured on the host only.** Recommendation: read the first nightly run's
+   `session-apply.txt`; the budget is 300 times the host's figure.
+
+### Inputs for S3 and S4, and for F09 S6
+
+Corrected in place in fix round 1 (2026-10-05), as S1's inputs were: S3's transaction (review SF5), S4's replace
+and its Debug row, what a waiting end means for callers (SF2), S7's two open questions and F17's list are new, and
+the line numbers are that round's. `Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its
+`+Recovery.swift`, `Protocol` `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`.
+
+- **S3:** `materialize` is called from one place, `complete(_:)` (`Recovery:142-154`), for a finish, its retries
+  and recovery, so `programUpdates` applied there reach all three. A second materialise of the same workout must
+  still change nothing: `killedBeforeTheDrop_isSavedAgainUnchanged` compares every row of six tables.
+  **Drop the workout's log inside `materialize`'s transaction** (SF5, the orchestrator's ruling): a parameter on
+  `materialize`, a contract clause, the fake following. "Saved but not compacted" then cannot exist over GRDB:
+  `finish` no longer throws for a workout that is already in history, `complete(_:)` no longer compacts after a
+  save (`Recovery:150-153`), and the failure table's row "`compact` after the save" is left for stores that are
+  not one database. The tests of that row (`killedBeforeTheDrop_…` among them) then need such a store, or go.
+- **S4:** build `StartWorkoutUseCase` from the keys (`workoutSession`, the four stores, `deviceID`, `date`,
+  `uuid`). `.conflict(live:)`, then `start(_:replacingLive: true)`. A workout that ended between the two is no
+  longer an error: the new one starts (F10-S2-2). A cancelled `.task` loses no tapped event. When `finish`
+  throws, the workout is still current: show the failure over the screen as it is, and "Try again" is `finish`
+  again. `emptyDay`, `programNotActive` and the builder's `weekOutOfRange` need a state each.
+  **The Debug "Start sample workout" row (O15) makes a new workout id for every start.** With a fixed fixture id
+  the second finish throws `duplicateIdentifier` every time, which is the third consequence below, and a start
+  under an id whose log was kept now continues that log (F10-S2-4) and shows what it replays to.
+  The start itself is fast: 9 ms at the 95th percentile over 20,000 sets on the Mac host (fix round 1, N7), so
+  the cover's loading state is for a slow disk, not for the usual case. Not measured on a phone.
+- **A waiting end, for S4, S7 and F09 S6** (written on `finish`, `Protocol:69-89`). Between a save that failed and
+  its completion, `current()` and every stream show the workout as it stood, with a phase of `.live`. Nothing
+  tells a reader that its end is stored. Three things follow:
+  1. **A `discard` then completes the save.** It saves the waiting finish and throws `noLiveWorkout`; so does an
+     `apply`. A lifter who answers a failed save with "Discard" gets the workout in history.
+  2. **`StartWorkoutUseCase` resumes it or reports a conflict on it,** as for any live workout. For the same day
+     it answers `.resumed`, and the cover opens a workout that accepts no change. For another day it answers
+     `.conflict`; replacing it then saves it and starts the new one, or throws the store's error and starts
+     nothing.
+  3. **A save that can never succeed leaves no exit in this process.** `finish`, `apply` and `discard` throw the
+     store's error each time, `start` answers `workoutInProgress`, and every return to the foreground runs the
+     failing step again and logs a fault. Only a relaunch frees the workout's place. The tester's
+     `HostUnsavableAdversarialTests` pin this (F10-S2-1); M1's screens cannot produce such a workout as long as
+     every start makes a new id.
+- **S6:** the notification effects go where `perform` commits (`Actor:215-225`) and in `conclude`; recovery runs
+  none, so decide whether a resumed rest reschedules its notification. `EndEffectsTests` (LedgerDomainTests) pins
+  what the host relies on when it completes an end from the state's phase: `.materialize(state)` for the finish,
+  `.discardLog` for the discard, neither for any other envelope. It fails if S6's effects change that.
+- **S7:** "Try again" after a failed save is `finish` again, and it keeps the first call's end date. **Two
+  questions are open and are not decided in S2** (the orchestrator's ruling after G2 and G3):
+  1. whether a lifter may abandon a workout that cannot be saved: Pete's to decide;
+  2. how a reader is told that an end is waiting: the orchestrator's, with an ADR-004 paragraph before F17 is
+     planned. ADR-004 is not changed in this slice.
+
+  **When the fake gains a scriptable save failure, the rules of a waiting end become contract clauses:** the
+  three consequences above, "the first save that succeeds publishes the one ending update", "a retried `finish`
+  returns the state ended when the first call said", and "after a relaunch the unsaved workout is not shown".
+  Today only the host's own tests and the tester's hold them (`LocalWorkoutSessionActorEndTests`,
+  `HostEndFailureAdversarialTests`, `HostUnsavableAdversarialTests`), because the fake cannot fail a save.
+- **F09 S6:** the stream's first element arrives only after recovery, so read history when it arrives, not before:
+  a launch that saves a workout the app was killed in publishes nothing, because no stream was open. Re-read
+  history whenever an update's state is not live, the first element included. Until a finished workout is stored
+  Today still shows Resume; that is intended, and it includes a workout whose save failed: Resume then opens a
+  workout that accepts no change (consequence 2), until S7 decides the two questions. `workoutSession` is now the
+  host in the app, not the stub.
+- **F17:**
+  - `discard(endedAt:)` names no workout (S1's protocol), so `StartWorkoutUseCase` discards whatever is live at
+    that moment, not the workout the lifter agreed to replace (review N8). One phone cannot put an end and a
+    start by another caller in between; a peer can.
+  - `start` continues a kept log from this device's highest `seq` (`Actor:173`). A kept log that holds only a
+    peer's envelopes has none, so the start takes `seq` 1 and the host then shows what the whole log replays to.
+    If that log already holds an end the engine accepts after the new `started`, the start returns, the pass
+    completes that end, and nothing is live. Only damage plus a reused id reaches this today; untested.
+  - `seq + 1` traps at `UInt64.max` (`Actor:175`, `:206`). No device writes that many events; a peer's envelope
+    cannot raise this device's `seq`, which is read per device.
+  - An operation added to the host's queue must not call a method that queues: `inTurn` now asserts it in Debug
+    (`Actor:122`), which stops the test instead of the host.
+  - When memory shows a workout and the store holds no log that replays to it, recovery logs a fault and leaves
+    the workout shown (`Recovery:90-93`, review N3). What the host should do then is not decided.
+
+### Not verified
+
+- **Criterion 12 on a simulator or a device.** The timing suite is skipped in the PR lane and I did not run the
+  nightly plan; the 98 µs is a Mac's.
+- **The repeated runs on a simulator.** Sixty runs per pool are the host's; each gate ran the contract once on
+  the iOS simulator and once on the watch's.
+- **Anything on a device,** and the app launched by hand. No screen reads the host yet. The gate's UI smoke
+  tests passed; they launch the app through this `AppComposition`, but assert nothing about the host or the step.
+- **A kill by the system.** The five kill points drop a composition and boot another on the same file, with the
+  step that "died" refused by a SQLite trigger. No process was killed.
+- **`reportIssue`:** not adopted (decision 8, open question 1), so nothing shows that a test reaching the fault
+  by accident fails by itself.
+- The three tests added after the repeated runs have each passed on the host and in both gates, not sixty times.
+
+### S2 — orchestrator rulings after G1 (2026-10-05)
+
+- The edit to F07's tester model (`LaunchAdversarialTests`, ten lines: the `resumeWorkout` step) is the sanctioned
+  one; S2's tester and reviewer audit it.
+- **Decision 8 accepted:** the host's "cannot stamp a finite time" is a typed throw and a fault-level log. No new
+  dependency edge for `reportIssue` (standards §2 puts one behind an ADR, and this does not earn it).
+- 448 product lines against a plan of 390: under the 500 target; nothing to declare.
+- The other deviations (the task queue the actor owns; what readers see between a failed save and its retry;
+  `stamp(now:)` optional; `needsRecovery`; the lazy database; `exercise(id:)`; straight-line effects) go to the
+  reviewer and the tester to judge.
+- The orchestrator's full gate on the tree exited 0 before this entry was written.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 10 nits; it found no way to lose, duplicate or corrupt a workout over the
+GRDB stores, and judged that the actor-owned task queue fits standards §4 as written (F07 S2's precedent). G2 round
+1: 128 tests, no way found to lose or double a workout; four findings, five tests failing on purpose.
+
+For fix round 1:
+- **SF1 accepted:** the protocol's and architecture §6's wording is corrected as the review writes it.
+- **SF2, documented now, decided before S7.** Between a failed save and its completion the workout is shown as it
+  stood, and three consequences are written on `finish`'s documentation and in the inputs for S4, S7 and F09 S6:
+  a `discard` then completes the save; `StartWorkoutUseCase` resumes or reports a conflict on it; and a save that
+  can never succeed leaves no exit in this process. The behaviour does not change in S2 (nothing is lost, and no
+  path through M1's screens produces a workout the store refuses). Two questions stay open and are recorded as
+  inputs for S7: whether a lifter may abandon a workout that cannot be saved (Pete), and how a reader is told that
+  an end is waiting (the orchestrator, with an ADR-004 paragraph before F17 is planned; an ADR change is Pete's to
+  review, so it is not made in this slice). The tester's two pinning tests for F10-S2-1 stay as they are.
+- **SF3 accepted** (no polling loop in the wiring test).
+- **SF4 and F10-S2-3 accepted:** the concurrent script's judge accepts `noLiveWorkout` only where the history allows
+  it, and the acting subscriber's stream is read to the end.
+- **SF5 goes to S3:** the log is dropped inside `materialize`'s transaction, so "saved but not compacted" cannot
+  exist; S3's inputs say so.
+- **F10-S2-2 accepted:** with `replacingLive`, a live workout that has ended by the time of the discard is not an
+  error; the new workout is started.
+- **F10-S2-4 accepted:** `start` reads the store's highest `seq` for the workout and device, so memory follows the
+  store when a log of that id is kept.
+- **Nits:** taken as the review writes them unless one costs more than a few lines; any not taken is listed with
+  its reason.
+- For S4: the Debug "Start sample workout" row makes a new workout id for every start. For S7: when the fake gains a
+  scriptable save failure, the rules of a waiting end become contract clauses.
+
+### S2 fix round 1 (G1 implementer, 2026-10-05)
+
+On `677fc49`, tree clean at the start. Nothing is committed. Paths are under `LedgerKit/` unless they start with
+`docs/` or `tasks/`. `Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its
+`+Recovery.swift`, `Protocol` `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, `UseCase`
+`Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift`, `Judge` and `Script`
+`Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+ConcurrentHistory.swift` and
+`…+ConcurrentScripts.swift`. The full gate was not run, as the brief says: everything below is the Mac host's.
+
+#### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| 1. SF1 | The type: what a call that throws can still let readers see (an end that was waiting, and after a failed write the state found in the store); "in this process" for the one workout there may be. `current`: "the `live` of the last update". `finish`: "That holds in this process. After a relaunch the unsaved workout is no longer shown, another can be started, and the launch step saves the first when it can." | `Protocol:13-18`, `:31`, `:78-79` |
+| 1. SF1 | Architecture §6, the "finished" bullet: the same two corrections | `docs/architecture.md:289-293` |
+| 1. SF1 | The actor's own comment: a call whose append is refused leaves memory as it was; an end that is stored and cannot be completed has moved the clock and `seq` on | `Actor:17-21` |
+| 2. SF2 | `finish`: nothing tells a reader that an end is waiting, and the three consequences. No behaviour changed; ADR-004 is not amended | `Protocol:69-76`, `:81-89` |
+| 2, 8 | "Inputs for S3 and S4, and for F09 S6" above, corrected in place (its first paragraph says so): S3's transaction, S4's replace and Debug row, the waiting end's three consequences for S4, S7 and F09 S6, S7's two open questions and its contract clauses, F17's list | this file, the section before "Not verified" |
+| 3. SF3 | The wiring test waits for the second `.began(.resumeWorkout)` on a stream the harness feeds from `record`; the bounded yield loop is gone | `Tests/LedgerAppKitTests/WorkoutSessionWiringTests.swift:160-166`; `Tests/LedgerAppKitTests/Support/Harness.swift:24`, `:53` |
+| 4. SF4 | The judge places what each task did at points of the history, in the task's own order: a call that published stands at its update; a call that was refused or ignored, a stream opened in flight and a `current()` each need a point where the rules allow them, no earlier than what the same task did before. So `noLiveWorkout` passes only where nothing was live then. The opening call is judged against the first state alone | `Judge:15-42` (`Deed`), `:52-90`, `:95-114`, `:119-141` |
+| 4. F10-S2-3 | The acting subscriber's stream is read on from its reaction to the end and must equal the stream opened first. The subscriber now logs two sets, not one | `Script:104-107`, `:123`, `:180-205` |
+| 4 | Every script holds a start, an end the engine ignores and an end it takes, one place apart in three tasks | `Script:63-81` |
+| 4, faults | `refusesAnApplyUnderOverlap` (an apply that finds another inside throws `noLiveWorkout`; breaks "callers at once") and `repeatsAnUpdateOnTheSecondStream` (the second stream opened gets its second update twice; breaks "two subscribers") | `Tests/LedgerSyncTests/Support/FaultyWorkoutSession.swift:20-23`, `:71-81`, `:223-228`; `…+Fault.swift:70-73`, `:99`, `:134-135` |
+| 4, tests | The script's shape; each overlap fault must be reported by at least 4 of the 20 fixed seeds (was 1); the acting stream's fault must be reported by all 20, as the acting stream's | `Tests/LedgerSyncTests/WorkoutSessionConcurrentScriptTests.swift:34-54`, `:73-89`, `:91-101` |
+| 5. F10-S2-2 | With `replacingLive`, a discard that throws `noLiveWorkout` is not an error: the new workout is started | `UseCase:98-102`, docs `:19-20`, `:69-72`; test `Tests/LedgerDomainTests/UseCases/StartWorkoutUseCaseTests.swift:143` with the session `EndsAfterTheLook` (`:219`) |
+| 6. F10-S2-4 | `start` reads `highestSeq(for:device:)` and stamps the next `seq`. When a log of that id was kept, it then reads the store again (one recovery pass) and shows what the whole log replays to, with no haptic; with no kept log a start costs one more read and nothing else changes | `Actor:171-191`; test `Tests/LedgerSyncTests/LocalWorkoutSessionActorTests.swift:197` |
+
+The tester's five failing tests pass on both pools with no tester file touched (`git status --short | grep
+Adversarial` and `git diff 677fc49 -- 'LedgerKit/Tests/*/Adversarial'` are both empty), and the two tests that pin
+F10-S2-1 (`HostUnsavableAdversarialTests`) pass unchanged.
+
+**SF1, one clause that is not the review's wording.** The review's sentence for the type is "A call that throws
+stores and publishes nothing of its own". Its own point 4 says a finish whose save fails has stored its envelope,
+so I wrote "publishes nothing of its own, and has stored nothing, except an end that reached the log before its
+save or its drop failed".
+
+#### Nits
+
+| Nit | Taken | What | Where |
+|---|---|---|---|
+| N1 | yes, as documentation | `finish`: a retry can find the end completed in between and then throws `noLiveWorkout`. `start`: after a lost answer it names the caller's own workout | `Protocol:74-76`, `:40-41` |
+| N2 | yes | An own envelope the store says it already held: the host is marked unrecovered and throws `LedgerSyncError.alreadyStored(key)`; the next call reads the store | `Actor:260-273`; `Sources/LedgerSync/LedgerSyncError.swift:9-12`; test `LocalWorkoutSessionActorTests.swift:173` |
+| N3 | yes, the log | Recovery logs a fault when the host shows a workout and no stored log replays to it. The workout stays shown; what else to do is F17's | `Recovery:90-93`; test `LocalWorkoutSessionActorRecoveryTests.swift:170` ("documents") |
+| N4 | yes, one sentence | `run` is for a step the launch does not run itself | `Sources/LedgerPersistence/DatabaseLaunch.swift:128-129` |
+| N5 | yes | A task-local set while an operation runs, asserted at the top of `inTurn` | `Actor:52-53`, `:118-126` |
+| N6 | yes | `PerformanceBudget.apply` and `.runs`; architecture §15 gains the row | `Tests/LedgerSyncTests/Support/PerformanceBudget.swift`; `LocalWorkoutSessionActorPerformanceTests.swift`; `docs/architecture.md:506` |
+| N7 | yes, measured once | Below | |
+| N8 | no code | An input for F17 (the inputs section above). The protocol is S1's and a peer is F17's | |
+| N9 | yes | `EndEffectsTests`: over every property seed, a random log that ends by a finish or a discard: `.materialize` of the state it leaves for the finish, `.discardLog` for the discard, neither for any other envelope | `Tests/LedgerDomainTests/Engine/EndEffectsTests.swift` |
+| N10 | **not taken** | It needs the first CI run's times, which I do not have. Host times are under "Host runs" | |
+
+**N5 is not shown by a test.** An assertion that fires ends the process, and the suites have no exit test. The
+assert ran in every Debug test of this round and never fired.
+
+**N7.** A throwaway test in LedgerPersistenceTests, deleted after the run: the stats performance suite's seed
+(a file database, 20,000 sets in 400 workouts, 12 exercises), an active program whose day has 8 slots, each with a
+last performance, and `StartWorkoutUseCase` over the GRDB stores and the fake session. One warm-up, then 20
+starts: **p95 9.1 ms, median 7.0 ms, slowest 9.2 ms**, against the plan's 200 ms. On the Mac host, Debug; not on
+a phone or a simulator.
+
+#### Criterion 11 after SF4: what the faults show
+
+Reports out of the 20 fixed seeds, ten runs on each pool (a throwaway test, deleted):
+
+| Fault | Default pool | One thread |
+|---|---|---|
+| `judgesAnIgnoredEndLater` (the weakest) | **8 to 11** | 9 |
+| `refusesAnApplyUnderOverlap` (new) | 11 to 13 | 10 |
+| `dropsHapticsUnderOverlap` | 10 to 14 | 12 |
+| `startsTwiceAtOnce` | 18 to 19 | 19 |
+| `commitsTheStartLate` | 19 | 19 |
+| `registersAfterASuspension` | 19 to 20 | 20 |
+| `appliesAfterTheEnd`, `publishesTheStartLate`, `endsTwiceAtOnce`, `losesAnEditBetweenCallers` | 20 | 20 |
+| `repeatsAnUpdateOnTheSecondStream` (new, no overlap needed) | 20 | 20 |
+
+- **The weakest fault is reported by 8 of 20 seeds at the least** (the review counted 6, and 8 on one thread).
+  The test asks for 4. With the ignored end and the real one at the same place of two tasks, as the review writes
+  it, one run gave 8; a start one place before and the real end one place after gave the table's figures, and I
+  kept that.
+- **Why not more.** The stand-in looks again a hundred yields after the ignored end came in, and strikes only if
+  nothing is live then. By then the script's other tasks have run on, and in about half the scripts one of them
+  has started another workout. By the place of the ignored end the reports were 2, 3, 4 and 4 of 5 seeds: the
+  later it comes, the less follows it. I did not move every ignored end to the end of its script, because that
+  fits the script to this stand-in's window and not to a host's. When the fault does strike it is always
+  reported: the rules allow an ignored end to return at no point.
+- **`refusesAnApplyUnderOverlap` is what shows SF4.** Under the old judge a `noLiveWorkout` passed wherever it
+  was thrown. It is reported by half the scripts and not by all, because a refusal whose task published nothing
+  afterwards can still be placed at a later point where nothing was live. To do better the judge would need to
+  know when each call began and ended, not only its task's order.
+
+Mutants of this round (`fix1/mutants-fix1.py`: each applied alone, the named suites run, the file put back and
+compared byte for byte):
+
+| Mutant | Killed by |
+|---|---|
+| R1 the use case rethrows the discard's `noLiveWorkout` | 3 tests: mine and the tester's two |
+| R2 `start` stamps `seq` 1 whatever the store holds | 1: `start_overAKeptLog_followsTheStore` |
+| R3 `start` over a kept log keeps the bare snapshot | 2: mine and the tester's |
+| R4 an envelope the store already held is taken for stored | 1: `apply_envelopeAlreadyStored_readsTheStore` |
+| R5 the judge places a refusal anywhere in the history | 2: `overlapFault_breaksAScript` and the tester's margin test |
+| R6 the acting stream is read only up to its reaction | 2: `faultOnTheActingStream_breaksEveryScript` and the tester's |
+| E1 the engine drops a finished workout's log instead of materialising it | `EndEffectsTests` |
+| E2 a discard has no `.discardLog` | `EndEffectsTests` |
+| E3 a skipped rest drops the log | `EndEffectsTests` |
+| E4 a finish materialises the state as it was before the end | `EndEffectsTests` |
+
+Ten of ten killed. Not mutated: the documentation, N3's log line, N5's assertion.
+
+#### Files outside the slice's list, and why
+
+- `Tests/LedgerAppKitTests/Support/Harness.swift` (F07's): `onEvent`, called from `record`. SF3's fix as the
+  review writes it needs the harness to tell of an event; nothing else in the harness changed.
+- `Tests/LedgerSyncTests/Support/FaultyWorkoutSession.swift` and `+Fault.swift` (S1's stand-in): the two faults.
+- `Sources/LedgerSync/LedgerSyncError.swift`: the case `alreadyStored`, and `import LedgerDomain` for
+  `EnvelopeKey`. LedgerSync already depends on LedgerDomain: no new edge.
+- `Sources/LedgerPersistence/DatabaseLaunch.swift`: N4's sentence.
+- New: `Tests/LedgerDomainTests/Engine/EndEffectsTests.swift`, `Tests/LedgerSyncTests/Support/PerformanceBudget.swift`.
+
+#### Host runs, lint, Release build
+
+`env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+'^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests)\.'` on the final tree, once as it
+is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`fix1/final-default.log`, `fix1/final-onethread.log`):
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 244 tests in 43 suites, passed (13 known issues, S1's) | 244 tests, **2 issues**, both below |
+| LedgerPersistenceTests | 452 tests in 104 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerAppKitTests | 63 tests in 15 suites, passed | the same |
+| Exit | **0** | **1** |
+
+At `677fc49` on the default pool (`fix1/baseline.log`) the counts were 239, 452, 836 and 63, with 13 issues, all
+in the tester's five tests. This round adds five tests to Sync and two to Domain.
+
+**One thread: two of S1's tester tests fail, in every run, and they are not this round's.**
+`racyClient_isRejectedByThisSuitesOverlapChecks` at `SessionContractBiteAdversarialTests.swift:111`
+(`.racyLateRegistration`) and at `SessionContractRoundTwoAdversarialTests.swift:116`
+(`.registersBeforeItsFirstElement`), in 8 of 8 runs of the Sync target on one thread, and when the two suites run
+alone (14 tests, 2 issues). They are the two that S1's touch-up records above as failing on one thread in every
+run ("The one-thread check", "For the tester"). They run the tester's own `Seam` checks on the tester's own
+clients and call nothing this round changed. Everything else passed on one thread: the tester's five tests, the
+two that pin F10-S2-1, and mine. I did not run the two at `677fc49`, which needs a checkout.
+
+| Command | Exit | Result |
+|---|---|---|
+| The filter above, default pool | 0 | the table |
+| The same, one thread | 1 | the two S1 tests |
+| `stress.py 20 '<nine suites>'`: the script suite, the host's contract, serial and own-action suites, the tester's three script and kept-log suites, the wiring suite, the use case's | 0 | 20 of 20 green, 231 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 585 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter LocalWorkoutSessionActorPerformanceTests`, once | 0 | passed with the budget moved to `PerformanceBudget` |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, script tests; 61 s. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `FakeWorkoutSessionClient`, `InMemoryStores`, `SplitMix64`, the stand-in or the scripts in a Release object |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's, as the brief says |
+
+**For N10.** The Sync target took 14.5 to 22.5 s on the default pool, with the load, against 14.4 s at `677fc49`,
+and 52 to 56 s on one thread. On one thread every test waits for all the others, and the suites' limit is one
+minute, so the tests that span the run have a few seconds left there. Skipping the whole script suite took 5 s
+off the one-thread run, so this round's share is small; the rest is S1's and S2's suites as they were. Nothing
+timed out in any run.
+
+#### Code lines
+
+`count-lines.py` as before (`git diff -U0`, blank and whole-line comment lines excluded):
+
+| | Against `48403f5` (the slice) | This round, against `677fc49` |
+|---|---|---|
+| Product | **+466 −18** (was +448) | +23 −5 |
+| Test support | +500 −0 | +147 −70 |
+| Tests, the tester's included | +6095 −7 | +205 −15 |
+
+Under the stop line of about 550.
+
+#### Not verified, and what I saw
+
+- **The full gate, and anything on a simulator or a device.** Not run, as the brief says. The orchestrator runs it.
+- **The two S1 tester tests that fail on one thread, at `677fc49`.** I could not build that commit without
+  moving HEAD. That they are not this round's rests on S1's notes ("The one-thread check"), on their failing when
+  the two suites run alone, and on their calling nothing this round changed.
+- **N5's assertion** (no exit test), **N10** (no CI times), and **N7 on a phone**.
+- **The repeated runs** are 20 per pool of nine suites, not the 60 of the first round, and on the host.
+- **A start under a kept log that already holds an end** (the inputs for F17): reasoned from the code, not tested.
+- A compiler warning in the tester's file, seen when the test target was recompiled:
+  `Tests/LedgerSyncTests/Adversarial/RacyHostAdversarialSupport.swift:151`, "no 'async' operations occur within
+  'await' expression". Not touched. A warning in a test target did not fail the first round's gates
+  (`PayloadVersionAdversarialTests.swift:29` is in both of their logs).
+- Nothing odd in shared state. Other lanes' builds kept the load average between 3 and 22 during the runs.
+- No test helper process was left running.
+
+### S2 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0. The tester's five tests pass and the tester's files
+  are unchanged since `677fc49`, which was the tester's closing condition: **G2 is closed. G3 approved.**
+- Known, not this slice's: on a one-thread pool two of S1's tester tests fail in every run (that tester's own
+  overlap checks need a yield between calls, as the contract's got in S1's touch-up). Queued as a follow-up.
+- Nit N10 is not taken (it needs CI timings); N8 is a note for F17.
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S2 merged as #29 (`6c5939d`). S3's specification is the brief's last section, "Plan amendments — slice S3".
+
+- **O8 stands** (the program change is applied inside `materialize`; no `replaceSlotExercise`; no migration), with
+  one addition from F05 S2's lesson: an update may only touch a slot of the workout's own program.
+- **SF5 from S2's review is in scope:** the log is dropped in `materialize`'s transaction, and the host stops
+  compacting after a save.
+- **O10 is not in S3.** The swap event keeps its payload; S8 decides, and an ADR-004 change would go to Pete.
+- **CI cost (criterion 9).** #29's macOS job took 38 minutes: the iOS build 1,148 s on a cold cache (a new branch
+  restores nothing) and the iOS tests 998 s, against 570 s and 422 s for #27. The tests are the part this slice can
+  cut. The step's deadline in `check.sh` is 2,400 s, so there is little room left.
+- Some of S2's tests, the implementer's and the tester's, pin "the save succeeded and the compaction failed". Over
+  the database that state goes away. The implementer's own tests are its to change; a tester's test that
+  contradicts criteria 4 or 5 is not edited: it is listed with the criterion, and the tester moves it.
+
+## Slice S3 — the persistence follow-up (G1 implementer, 2026-10-05)
+
+On `95ac9b8`, in the worktree `F10-s3`, on `feat/F10-s3-program-updates`. Nothing is committed and no PR is open.
+Paths are under `LedgerKit/` unless they start with `docs/`, `tasks/` or `scripts/`. Scratch files are in
+`scratchpad/f10s3/` (written `f10s3/…` below). Short names: `Repositories` is
+`Sources/LedgerDomain/Protocols/Repositories.swift`, `GRDB` `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift`,
+`Events` `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift`, `Recovery`
+`Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift`, `Fake` `Sources/LedgerFakes/InMemoryWorkoutRepository.swift`,
+`FakePrograms` and `FakeEvents` its neighbours `InMemoryProgramRepository.swift` and `InMemoryWorkoutEventStore.swift`,
+`Linked` `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift`. The full gate was not run, as
+the brief says: everything below is the Mac host's, plus two runs of two test targets on the iOS simulator for
+criterion 9.
+
+**Two things are not as the specification asks, and one tester test fails by ruling:**
+
+1. **Criterion 9 is met for the suites I may change and not for the session suites as a whole.** The session
+   suites cost 58.1 s before and 36.9 s after on the simulator: 64 %, not a third. The implementer's suites went
+   from 25.7 s to 5.9 s (23 %). The tester's suites are 31 s of what is left, and I may not edit them. The
+   figures and the edits they need are under "Criterion 9".
+2. **`materialize(_:slotUpdates:)` stays on the protocol beside the new call** (decision 1): four tester types
+   conform to `WorkoutRepository`, and a requirement they do not implement would stop their targets compiling.
+3. `WorkoutRelaunchAdversarialTests.kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch` fails, as criteria 4
+   and 5 say it must. It is under "Tester tests that now contradict a criterion".
+
+### What landed
+
+| File | Contents |
+|---|---|
+| `Sources/LedgerDomain/Protocols/Repositories.swift` | `materialize(_:slotUpdates:)`'s documentation: program updates are applied, and by which rule. New requirement `materialize(_:slotUpdates:droppingLog:) -> Bool` (`:87`) with its default (`:109-115`) |
+| `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift`, `WorkoutSessionClient.swift` | documentation only: who drops a finished workout's log; what `finish` stores in one transaction, and what a failed save leaves |
+| `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` | both forms of `materialize` (`:55`, `:69`); `writeProgramUpdates` (`:205-247`) |
+| `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift` | `deleteLog(of:in:)` (`:92`), the one statement `compact` and the save both run |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | `complete(_:)` (`:147-162`): one call that saves and drops; the compaction after it only when the repository answers that the log is still there |
+| `Sources/LedgerFakes/InMemoryWorkoutRepository.swift`, `InMemoryProgramRepository.swift`, `InMemoryWorkoutEventStore.swift`, `InMemoryStores.swift` | the linked stores follow: `writeSave(misses:exercises:inProgram:)`, `drop(_:)`, the event store linked into the workout store |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift` (new) | `linkedClauses` (six), `Program.difference(from:)`, three public fixtures |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract.swift` | `HistoryStores.events`, optional |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` | `ProbedWorkoutRepository` forwards the new call |
+| `Tests/LedgerPersistenceTests/WorkoutRepositoryLinkedTests.swift` (new) | the rows and statements of a save: 7 test functions, 12 cases |
+| `Tests/LedgerPersistenceTests/LinkedSaveDifferentialTests.swift` (new) | seeded scripts, the linked fakes against GRDB: 30 seeds in the PR lane, every seed in the nightly one |
+| `Tests/LedgerPersistenceTests/{InMemoryContractTests,WorkoutRepositoryTests,MigrationCompatibilityTests}.swift`, `Performance/RecordReplayPerformanceTests.swift`, `Performance/PerformanceBudget.swift`, `Support/RepositoryTesting.swift` | the linked clauses on both stores; an unlinked fake; the version-1 fixture; criterion 8's timing |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActorSaveTests.swift`, `LocalWorkoutSessionActorProgramTests.swift` (new) | criterion 5 on the host: 4 and 5 tests |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActor{End,Recovery,Contract}Tests.swift`, `WorkoutSession{ClientContract,ConcurrentScript}Tests.swift`, `Support/{HostSupport,Tags}.swift`; `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift` | changed: listed under "Tests changed" |
+| `docs/architecture.md` | §5 (`WorkoutState.programUpdates`), §6 (the save, recovery, the `.materialize` comment), §7 (the `workout_event` row), §15 (the budget's row) |
+
+Unchanged: `Migrations.swift`, every fixture under `Tests/LedgerPersistenceTests/Fixtures/`, `Package.swift`,
+`package-graph.expected.txt`, `project.pbxproj`, every test plan, `scripts/`, ADR-004 and ADR-008, every file under
+a `Tests/*/Adversarial/` folder (`git status --short | grep Adversarial` prints nothing), `tasks/todo.md`.
+
+### Decisions and deviations
+
+1. **The shape: a second requirement, `materialize(_:slotUpdates:droppingLog:) -> Bool`, with a default**
+   (`Repositories:72-87`, `:109-115`).
+   - *The parameter* is the ruling's. `droppingLog: true` asks for the save and the end of the log as one step.
+   - *The answer* is whether the log went with the save. A repository knows whether it shares a database with
+     the log; the host does not, and a flag on the host could disagree with its stores. So the path for a store
+     that is not one database needs no configuration: such a repository answers `false`, and the host then
+     compacts in a second step (`Recovery:157-161`), which is S2's path, row for row.
+   - *The default* (`Repositories:109-115`) is that repository: it saves through `materialize(_:slotUpdates:)` and
+     answers `false`. A wrapper that forwards only the old call therefore loses the one transaction and nothing
+     else. `WorkoutEventStore.unreadableCount(for:)` has no default for the opposite reason: there a wrapper that
+     did not forward would let the host drop rows it cannot see.
+   - **Deviation: the old requirement stays.** One requirement with `droppingLog` and a convenience for the
+     two-argument call would be smaller. Four types in tester files conform to `WorkoutRepository` and implement
+     only the old call: `HistoryModel` (`Tests/LedgerPersistenceTests/Adversarial/HistoryModel+Repositories.swift:6`),
+     `SiegeWorkoutRepository` and `SabotagedWorkoutRepository` (`Tests/LedgerSyncTests/Adversarial/HostSiegeStoresAdversarialSupport.swift:66`,
+     `HostSiegeSabotageAdversarialSupport.swift:61`), `BriefWorkoutRepository`
+     (`Tests/LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift:41`). Removing the requirement they
+     implement stops three test targets compiling, and I may not edit them. Open question 4.
+   - *Why the workout repository may delete event rows.* A workout's log is that workout before it was saved
+     (ADR-004 rule 5), and the save is what ends its use, so "saved" and "log gone" are one fact, and two
+     transactions make room for a third state, which is SF5. The repository drops that one log, on request,
+     never reads an envelope and never writes one. Over GRDB it does not hold the SQL either: `compact` and the
+     save both run `GRDBWorkoutEventStore.deleteLog(of:in:)` (`Events:92`, called at `GRDB:83`).
+   - *What it does not do.* It does not check that the log is complete. The host still asks
+     `unreadableCount(for:)` first (`Recovery:148`), in a read of its own, as before S3. Open question 7.
+2. **The order of writes in the transaction** (`GRDB:75-85`): the workout's place in history (a read), its rows
+   (workout, exercises, sets), its records, the misses, the program updates, the log.
+   - Every refusal the protocol names is thrown before the misses are written. What comes after never refuses:
+     it skips, and logs at notice level. So a refused workout has changed no slot and dropped no log even before
+     the rollback.
+   - Anything that fails later (a full disk; in the tests a trigger on `slot_miss`, on `slot.exercise_id` or on
+     `workout_event`) rolls all of it back: `lateFailure_rollsEverythingBack` compares every row of ten tables.
+   - The log goes last so that a log is never dropped ahead of a statement that can still be refused. Mutant G9
+     (the log first) is seen only by the statement order, which `save_isOneTransaction_inOrder` pins.
+3. **Which update is applied** (`writeProgramUpdates`, `GRDB:205-247`). An entry is applied when its slot is
+   live, under a live day, of the workout's own live program (`source.programID`), and its exercise has a row.
+   - *Another program's slot* is never written. This is the class of F05 S2's B1 (a save that silently took over
+     another program's rows): a workout of block 1 that is saved late must not rewrite block 2. The check is one
+     query that joins `slot`, `day_template` and `program` (`GRDB:216-222`) and reads no id out of the database.
+   - *The exercise* is checked as a program save checks it (`ProgramRows.refuseUnknownExercises`): the row
+     exists, deleted or not, which is what the slot's foreign key asks. Without the check the update would fail
+     the foreign key and with it the whole save.
+   - *An ad-hoc workout* has no program, so every entry is skipped.
+   - *The active program plays no part.* A swap lands on the workout's program whether or not it is the active
+     one. The misses differ: the host sends none when another program is active (S2, ruling O9).
+     `finish_anotherProgramActive_changesTheWorkoutsProgram` pins both.
+   - *What is written:* `slot.exercise_id` and that row's `updated_at`. The slot's numbers, its misses and the
+     program's own row are untouched (Pete's default 2: a program swap keeps the slot's numbers).
+   - *A slot that already holds the exercise* is not written at all (`GRDB:231-233`), so a second materialisation
+     still runs no `INSERT` and no `UPDATE`, as F05's decision 1 says.
+   - *Two updates for one slot* cannot be given: `programUpdates` is a dictionary, and the engine keeps the
+     latest swap of a slot. Entries are applied in slot-id order, so the statements run in one order.
+4. **Idempotence.** Materialising the same workout again changes no row of any table, with the log gone or
+   there again (`secondSave_writesNoRow`; the contract's `programUpdatesTwice` on both stores).
+   - It is not idempotent against a program that was edited in between: a second materialisation sets the slot
+     back to the workout's swap, as re-sent slots would clear misses recorded since (F10 "Inputs from F05",
+     item 6). Over the database nothing materialises a workout twice any more, because no log is left to do it
+     from. Open question 2.
+   - A workout read from history has no `programUpdates` (a live-only field, reset on a read), so storing one
+     again never touches a program.
+5. **The host** (`complete(_:)`, `Recovery:147-162`): `unreadableCount`, the misses from the program as stored
+   now, then one call that saves and drops. It returns at once when the repository answers that the log went
+   with the save, and compacts otherwise. A discarded workout's log is compacted as before. Nothing else in the
+   host changed: the waiting end, `settle()`, `reconcile()` and `needsRecovery` are S2's. The tables below say
+   what each call now does.
+6. **The fakes** (ADR-008 decision 5).
+   - `InMemoryWorkoutRepository` writes the misses and the program updates, and drops the log, inside its own
+     write, after the last statement that can throw (`Fake:52-67`): all or nothing, in the database's order.
+   - The program store takes both in one step, `writeSave(misses:exercises:inProgram:)` (`FakePrograms:81-93`),
+     so that store never holds half of a save.
+   - **`InMemoryWorkoutEventStore` keeps its logs behind a `Mutex`, and is still an actor** (`FakeEvents:13`,
+     `drop(_:)` at `:73`). A write under a lock cannot wait for an actor, and a save that awaited the event
+     store after its own write would let a reader see the workout in history with its log still there, which is
+     the state this slice removes. ADR-008 decision 4 says the event store "stays an actor"; it does, so the ADR
+     is not edited. An actor whose state sits behind a lock is a class in all but name. Open question 3.
+   - *Lock order:* history, then programs, then exercises; history, then events. Never the other way.
+   - *What the fake cannot give.* The programs and the log change under their own locks, inside the history's
+     write. A reader that reads history never sees half a save. A reader that reads only the programs and the
+     log, at that instant, can see the program changed and the log still there. One lock over the six stores
+     would close it; I did not rebuild the fakes for it.
+   - A stand-alone `InMemoryWorkoutRepository()` holds no log, answers `false`, and its programs check no
+     exercise, as before (`unlinkedWorkouts_holdNoLog`).
+7. **The contract: a third list, `linkedClauses`** (`Linked:12-35`), beside `clauses` and `storageClauses`.
+   F05's oracle `HistoryModel` runs `clauses` (`HistoryContractAdversarialTests.swift:15`) and models neither a
+   slot's exercise nor the log, as it does not model columns. `HistoryStores.events` is optional for the same
+   subject.
+8. **The differential scripts.** The three that exist are tester files (`Fakes{History,Store,Catalog}DifferentialAdversarialTests`).
+   They pass unchanged. I added one of my own, `LinkedSaveDifferentialTests`, for the saves this slice changed.
+9. **Criterion 9 by a lane check in the test target, not by a plan change** (`Tests/LedgerSyncTests/Support/Tags.swift:19-26`,
+   `WorkoutSessionClientContractTests.swift:29`). No test plan, no `project.pbxproj` and no environment
+   variable changed.
+10. **ADR-004 rule 5 still reads "compacted after successful materialisation".** Over the database it is now
+    "with". ADR-004 is not edited (an ADR change is Pete's to review). Open question 5.
+11. **A failing test prints a line, not the values.** The new clauses and suites compare to a `Bool` or a count
+    and name what differs (`Program.difference(from:)`, `Linked:38-66`; `difference` in the two row suites), as
+    the orchestrator asked during the slice. `WorkoutRelaunchTests` compared every row of six tables inside
+    `#expect`; it no longer does.
+
+### Criteria → tests
+
+| # | Tests |
+|---|---|
+| 1 | `linkedClauses`: `appliesProgramUpdates`, `observersHearTheSave` (GRDB and fakes); `WorkoutRepositoryLinkedTests`: `save_isOneTransaction_inOrder`, `programUpdate_writesTwoColumnsOfOneRow`; host: `LocalWorkoutSessionActorProgramTests` (5) |
+| 2 | `linkedClauses.skipsWhatCannotBeApplied`; `estrangedSlot_isSkipped` (× 4: a deleted slot, a deleted day, a deleted program, another program's), `whatCannotBeApplied_writesNoSlot` |
+| 3 | `linkedClauses.programUpdatesTwice`; `secondSave_writesNoRow`; `savedLog_isSavedAgainAndDropped` (× 2); `logLeftBehindASavedWorkout_isSavedAgainUnchanged` (a real file, seven tables) |
+| 4 | `linkedClauses`: `dropsTheLog`, `refusedSaveChangesNothing`; `lateFailure_rollsEverythingBack` (× 3), `refusedWorkout_rollsEverythingBack`; `saveThatCannotDropTheLog_savesNothing` (a real file) |
+| 5 | `LocalWorkoutSessionActorSaveTests` (4); `LocalWorkoutSessionActorEndTests`: `finish_storesThenSavesAndDropsInOneStep`, `finish_publishesAfterTheSave` (× 3), `finish_saveFails_secondFinishRetries` (× 2); `LocalWorkoutSessionActorRecoveryTests`: `finishedLog_isSavedAndDropped` (× 2); `WorkoutRelaunchTests` (6); the host's contract and concurrent scripts in all six set-ups |
+| 6 | the six linked clauses on `InMemoryStores` (`workouts_keepTheLinkedClauses`); `LinkedSaveDifferentialTests` (30 seeds, every seed of the lane in the nightly one; `scripts_holdEveryKindOfStep`); `unlinkedWorkouts_holdNoLog`; the tester's three differential suites, unchanged |
+| 7 | `MigrationCompatibilityTests.open_savesWithAProgramUpdateAndTheLogDropped` (the version-1 fixture, and the applied migrations after it); `fixture_isAtV001` and `SchemaTests`, unchanged; no migration and no fixture in the diff |
+| 8 | `RecordReplayPerformanceTests.finishWithProgramUpdatesAndTheLog_underBudget`, nightly lane only |
+| 9 | `Seeds.hostSeeds`; the figures below |
+
+### Mutants
+
+`f10s3/mutants.py`, logs `mutants1.log` and `mutants2.log`: each applied alone, the named suites run, the file put
+back and compared byte for byte. **24 of 26 fail at least one test.**
+
+| Mutant | Killed by (first) |
+|---|---|
+| G1 any stored slot takes the update, whatever its program | `estrangedSlot_isSkipped`, the GRDB linked clause, the differential |
+| G2, G3, G4 a deleted slot, a slot under a deleted day, a slot of a deleted program takes it | `estrangedSlot_isSkipped`, each by its own case and by no other test |
+| G5 the exercise is not checked | `whatCannotBeApplied_writesNoSlot`, the linked clause, the differential |
+| G6 a slot that holds the exercise is written again | `secondSave_writesNoRow` |
+| G7 the log is never dropped and the answer is yes; G10 every log is dropped | 7 tests each |
+| G8 the log is dropped whatever was asked | the linked clause, the differential |
+| G9 the log is dropped before the workout's rows | `save_isOneTransaction_inOrder` alone |
+| G11 the answer is always no | 6 tests |
+| G12 the program updates are not applied | 8 tests |
+| G13 the log is dropped in a transaction of its own, after the save | `saveThatCannotDropTheLog_savesNothing`, `save_isOneTransaction_inOrder`, `lateFailure_rollsEverythingBack` |
+| F1 the fake changes any program's slot; F3b an ad-hoc workout's; F2 it checks no exercise | the fake's linked clause, the differential |
+| F4 the fake never drops the log and answers yes | 19 tests |
+| F5 the fake drops the log whatever was asked; F6 it writes the program and drops the log before the workout can be refused | the fake's linked clause, the differential |
+| F7 the fake applies no program update | 8 tests |
+| H1 the host compacts after every save; H3 it saves without dropping the log | 7 and 8 tests |
+| H2 the host never compacts after a save; D1 the protocol's default answers that it dropped the log | 31 tests each, the tester's siege suites among them |
+| **F3 the fake changes a deleted program** | **survives.** The protocol cannot show a deleted program, and saving it again replaces it whole. The database's rule is G4, killed at the row |
+| **F8 the fake writes the misses and the exercises in two steps** | **survives.** A stream keeps its newest value, so only a reader racing the save could see the half; I wrote no test that rests on a race |
+
+H2 and D1 also hang one test for good: `finish_publishesAfterTheSave` holds `.compact`, which never comes, and
+`StoreProbe.waitUntilHeld()` cannot be cancelled by a time limit. I stopped the helper by hand both times. It is how
+the first run of this slice lost ten minutes. Open question 8.
+
+### The failure table
+
+What changed since S2 is in bold. "The database" also means the linked in-memory stores.
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event | unchanged; marked unrecovered | nothing (rolled back) | the store's error | nothing | reads the store first; the same `seq` and stamp when nothing was stored | replay |
+| append that stored and then threw (a store that lies) | unchanged; marked unrecovered | the envelope | the store's error | nothing, until the next call | the next call adopts what is stored and publishes it without a haptic; an end is completed | replay |
+| the clock is not finite | unchanged | nothing | `noFiniteStamp`, a fault logged | nothing | works once the clock reads a time | — |
+| **the save, after `.finished` is stored: one transaction** (`finish_saveFails_secondFinishRetries` × 2, `lateFailure_rollsEverythingBack` × 3, `saveThatCannotDropTheLog_savesNothing`, `finish_saveFails_theProgramWaitsWithTheWorkout`) | `live` as before the finish; the end pending; clock and `seq` advanced | **the log whole, with its `finished`; no history row, no miss, no program change** | the store's error | nothing; `current()` still the workout | `finish`: saves **and drops** in one transaction, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| **the save that stored and then threw (a store that lies; `finish_saveAnswerLost_theRetryEndsIt`)** | the same | the workout in history, the log gone | the store's error | nothing; `current()` still the workout | `finish`: saves again (no change), publishes once | nothing live, nothing to do |
+| `compact`, after the save: **only over stores that are not one database** (`finish_separateStores_compactFails_waitsAndRetries`; the tester's siege suites) | the same | the log, and the history row with its misses and program changes | the store's error | nothing | saves again (no change), compacts, publishes once | saved again unchanged, compacted |
+| `compact`, after `.discarded` | the same, a discard pending | the log | the store's error | nothing | `discard`: compacts, publishes. `finish`: completes it, then `noLiveWorkout` | compacted |
+| a read during recovery | as before the pass | untouched | the store's error, from every call | a stream starts with what is known | the next call or foreground runs the pass again | — |
+| a save during recovery | the other logs dealt with; the live one resumed | that log kept whole, **and nothing of its save** | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+What each call does now, over the database:
+
+- **`finish`:** stores `finished`; then one transaction; then the ending update. After the transaction nothing
+  is left that can fail, so `finish` never throws for a workout that is in history
+  (`finish_oneDatabase_neverThrowsOnceSaved`: a compaction made to fail a hundred times is never reached).
+- **A second `finish`:** `noLiveWorkout` when the first succeeded; the retry of the whole transaction when the
+  first save failed.
+- **`discard`:** unchanged: stores `discarded`, compacts in the event store's own transaction, publishes. No
+  program changes. A `discard` while a finish waits still saves the workout (S2, SF2).
+- **The launch step and a relaunch:** the table below.
+
+### The recovery table
+
+| Stored when the app died | The step | Afterwards |
+|---|---|---|
+| nothing, or a `started` that never reached the store | nothing | no workout |
+| a live log | resumes it: no haptic, no effect run | `current()` is the workout |
+| `finished` stored, not saved | **one transaction:** saves, with the misses from the program as stored now and the program updates, and drops the log | in history; no live workout |
+| **saved, and the log still there** | saves again, which changes nothing, and drops the log, **in one transaction over the database** | the same |
+| `discarded` stored, not compacted | compacts | nothing in history, no program changed |
+| a log that replays to nothing | keeps it and logs a notice | no workout |
+| a log with rows this version cannot read | live: resumes from what it reads; ended: keeps it | a workout, or none |
+| a save that throws | keeps the log whole; nothing is saved; records the step as failed; carries on with the other logs | retried on the next foreground |
+
+The fourth row is the one criterion 5 speaks of. The host no longer produces it over the database. It is still
+handled, for two sources: a workout repository that does not hold the log (the protocol's default; every store
+of the tester's siege), and a database left so by a build from before this slice. Both are tested
+(`savedLog_isSavedAgainAndDropped` × 2; `logLeftBehindASavedWorkout_isSavedAgainUnchanged` on a real file).
+
+### Tests changed, with reasons
+
+All are S2's implementer tests or F05's and F07's implementer tests and support. No tester file is touched.
+
+| File | Change | Why |
+|---|---|---|
+| `Tests/LedgerSyncTests/Support/HostSupport.swift` | `Subject.init(oneDatabase:)`; `SeparateWorkoutRepository`, which forwards every call but the new one | the two-step path needs a store that is not one database (criterion 5) |
+| `LocalWorkoutSessionActorEndTests.swift` | `finish_storesThenSavesThenDrops` → `finish_storesThenSavesAndDropsInOneStep`: the writes are `[.append, .materialize]`, were `[.append, .materialize, .compact]` | criterion 5 |
+| | `finish_publishesAfterTheSave`: its cases were `.materialize` and `.compact` on linked stores; now `.materialize` on both kinds of store and `.compact` on separate stores | over one database no compaction follows a save, so a held `.compact` never arrives |
+| | `finish_saveFails_secondFinishRetries`: runs on both kinds of store | the row is the same on both |
+| | `finish_compactFails_waitsAndRetries` → `LocalWorkoutSessionActorSaveTests.finish_separateStores_compactFails_waitsAndRetries`, on separate stores, assertions unchanged | the row exists only there (criterion 5) |
+| `LocalWorkoutSessionActorRecoveryTests.swift` | `finishedLog_isSavedThenDropped` → `finishedLog_isSavedAndDropped` (× 2): `[.materialize]` over one database, `[.materialize, .compact]` over separate stores | criterion 5 |
+| | `savedLog_isSavedAgainAndDropped`: on both kinds of store, and it asserts that nothing is left to recover | the row is handled for both |
+| `LocalWorkoutSessionActorContractTests.swift`, `WorkoutSessionConcurrentScriptTests.swift`, `WorkoutSessionClientContractTests.swift`, `Support/Tags.swift` | the two host matrices take `Seeds.hostSeeds`; `TestLane.isNightly` | criterion 9. No assertion changed |
+| `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift` | `killedBeforeTheDrop_isSavedAgainUnchanged` is replaced by `saveThatCannotDropTheLog_savesNothing` and `logLeftBehindASavedWorkout_isSavedAgainUnchanged`; both workouts now hold a swap with the program; `rows()` reads `slot` too | the kill point "after the save, before the drop" is gone (criteria 4 and 5): a drop that fails takes the save with it. The second test keeps what the old one showed, from a log put back beside the saved workout |
+| `Tests/LedgerPersistenceTests/Support/RepositoryTesting.swift`, `InMemoryContractTests.swift` | `Repositories.events`; `history` and `history()` hand the event store to `HistoryStores` | the linked clauses need the log |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract.swift` | `HistoryStores.events`, optional, `nil` by default | the same; the tester's `HistoryStores(workouts:stats:programs:)` still compiles |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` | `ProbedWorkoutRepository` forwards `materialize(_:slotUpdates:droppingLog:)` under `.materialize` | a host over probed stores of one database must still get the one transaction |
+
+### Tester tests that now contradict a criterion
+
+**One fails, and is left failing.**
+
+`Tests/LedgerAppKitTests/Adversarial/WorkoutRelaunchAdversarialTests.swift:77-92`,
+`kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch`, at `:85` (`saved.count == 1`) and `:89`
+(`relaunched.history() == saved`).
+
+- *What it does:* it refuses `DELETE ON workout_event` with a trigger, expects `finish` to throw with the workout
+  already in history, and expects the relaunch to compact.
+- *What contradicts it:* criterion 4 ("when it fails, nothing changed: no history row, no program change, the log
+  whole") and criterion 5 ("over the database a workout can no longer be in history and still shown as live").
+  The trigger now fails the one transaction, so the save is rolled back with the drop.
+- *The change it needs,* either of two:
+  - keep the kill point and assert what is now right: `:85` becomes `#expect(saved.isEmpty)`, and `:89` becomes
+    `#expect(try await relaunched.history() == [Launch.asStored(finished)].compactMap(\.self))` with
+    `finished = Launch.folded(Launch.middle + [.finished(endedAt: Launch.end)])`, as the test above it has; the
+    title becomes "A finish whose log cannot be dropped saves nothing; the relaunch saves and compacts";
+  - or keep the row "saved, log still there" and build it without the host: let the first relaunch save, append
+    the finished log again with `stores.events.append`, relaunch, and compare. My
+    `logLeftBehindASavedWorkout_isSavedAgainUnchanged` does this.
+
+**None other fails, but the tester should know why.** `SiegeWorkoutRepository` and `SabotagedWorkoutRepository`
+implement only `materialize(_:slotUpdates:)`, so every host of the tester's siege gets the protocol's default and
+takes the two-step path, over the in-memory backing and over the GRDB one alike. Their tests of a compaction
+that fails after the save (`HostEndFailureAdversarialTests.finish_compactionFails_savedOnceAndEndedOnce`,
+`HostMissesRetryAdversarialTests`, `HostStartUseCaseAdversarialTests:107`, the siege's `.compact` faults) pass
+because of that, and they now test a store that is not one database. Nothing in the tester's Sync suites
+exercises the one transaction. To siege it, the two wrappers forward the new call; the `.compact` faults after a
+save then stop firing, and the tests that inject them need a wrapper that does not forward. That is the
+tester's choice to make.
+
+### Criterion 9: before and after
+
+**How it was measured.** `f10s3/measure.sh <label>`, through the lock, from the worktree root:
+`/usr/bin/python3 <sim-lock> f10s3/measure.sh before` on the tree at `95ac9b8`, and `… after` on the tree with
+the slice. The script boots the iPhone 17 simulator (iOS 27.0), runs `xcodebuild build-for-testing` and then
+`test-without-building` with `-testPlan PR -only-testing:LedgerSyncTests -only-testing:LedgerPersistenceTests` and
+`check.sh`'s flags (`-parallel-testing-enabled NO`, timeouts on, 60 s allowance). `f10s3/suites.py` sums, per
+suite, the durations of its test runs in the result bundle; the tests run one after another, so the sum is the
+time (135 test-seconds of a 141 s test operation in the first run).
+
+| | Before | After |
+|---|--:|--:|
+| The test step, both targets | 145 s | 120 s |
+| `LedgerSyncTests` | 58.5 s, 4,633 runs | 37.3 s, 2,485 runs |
+| `LedgerPersistenceTests` | 76.5 s, 4,418 runs | 77.1 s, 4,474 runs |
+| Load average when the tests started | 68.6 | 13.8 |
+
+The first run started under another lane's load. It mattered little: the tester's suites, which did not change,
+took 32.3 s in it and 31.0 s in the second. The second run was taken before two small changes (the fake's
+one-step program write, one more contract clause), so I ran a third on the final tree, at a load of 4.6
+(`f10s3/final.xcresult`): 122 s for the step, `LedgerSyncTests` 37.3 s in 2,485 runs, the session suites 36.9 s,
+`LedgerPersistenceTests` 75.8 s in 4,476 runs, both targets passing. The slice's own new suites cost 1.4 s
+there, 1.3 s of it the differential's 30 scripts. Per session suite (every suite of `LedgerSyncTests` but the
+`FakeLinkBus` and companion-session ones):
+
+| Suite | Whose | Before | After |
+|---|---|--:|--:|
+| `LocalWorkoutSessionActor · the contract` | implementer | 14.7 s, 1,350 runs | 2.1 s, 270 runs |
+| `Adversarial F10 S2 · never lost, never doubled` (`HostNeverLostAdversarialTests`) | tester | 12.6 s, 304 | 12.1 s, 304 |
+| `WorkoutSessionClient · calls made at once, as one history` | implementer | 9.3 s, 1,415 | 2.0 s, 335 |
+| `Adversarial F10 S1 · does the session contract bite` | tester | 4.7 s, 145 | 4.7 s |
+| `Adversarial F10 S2 · does the concurrent script bite` | tester | 4.1 s, 17 | 3.7 s |
+| `Adversarial F10 S2 · the contract over this suite's stores` (`HostContractRunAdversarialTests`) | tester | 3.8 s, 202 | 3.6 s |
+| `Adversarial F10 S1 · the contract after the fix round` | tester | 3.3 s, 39 | 3.3 s |
+| `Adversarial F10 S2 · many callers at once` (`HostReentrancyAdversarialTests`) | tester | 1.6 s, 185 | 1.5 s |
+| `WorkoutSessionClient · the contract notices a faulty client` | implementer | 0.9 s, 57 | 1.0 s |
+| `Adversarial F10 S1 · fake session vs the engine` | tester | 0.8 s, 201 | 0.8 s |
+| `WorkoutSessionClient · the contract on the fake` | implementer | 0.7 s, 227 | 0.7 s |
+| every other session suite | both | 1.6 s | 1.4 s |
+| **The implementer's session suites** | | **25.7 s** | **5.9 s (23 %)** |
+| **The tester's session suites** | | 32.3 s | 31.0 s |
+| **All session suites** | | **58.1 s** | **36.9 s (64 %)** |
+
+**What was cut.** The two matrices of seeds by host set-ups: `sessionScripts_fakeAndActorPublishTheSame` and
+`host_isOneHistory`, each 200 seeds × 6 set-ups in the PR lane, now 20 × 6. The twenty are the fixed seeds, which
+existing tests show to reach every call and every refusal (`scripts_reachEveryCallAndRefusal`), every kind of
+action (`scripts_holdEveryKindOfAction`) and every overlap fault (`overlapFault_breaksAScript`). The nightly lane
+runs every seed of the lane on every set-up, as before: `TestLane.isNightly` reads `LEDGER_TEST_LANE`.
+
+**What still runs once or more in the PR lane.** Every clause on every set-up (144 cases, and `violations` on
+each set-up); every kind of store (in-memory, GRDB, suspending), each recovered at launch and not, on 20
+sequential and 20 concurrent scripts; every fault of the stand-in, by clause and by script; the fake's 200
+sequential and 200 concurrent scripts. No assertion changed.
+
+**Why it is not a third.** The tester's suites were 56 % of the cost before, and no cut of mine reaches them:
+with the implementer's suites at zero the whole would still be 53 %. The edits that would get there, which I did
+not make:
+
+| Tester suite | Edit | Saves, about |
+|---|---|--:|
+| `HostNeverLostAdversarialTests` | the PR lane sieges 20 seeds in memory and 20 over GRDB, where it sieges `SeamSeed.all` (200) and `.prefix(100)`; the nightly lane keeps both | 9.5 s |
+| `HostContractRunAdversarialTests` | `.prefix(10)` in the PR lane, where it has `.prefix(40)` | 2.7 s |
+| `HostReentrancyAdversarialTests` | 30 and 15 storms in the PR lane, where it has 120 and 60 | 1.1 s |
+
+That gives about 23.6 s, 41 %. The last eight points are in the three "does it bite" suites (11.7 s for 201
+runs), which run each fault many times over until it strikes; I have not read them closely enough to name a cut.
+
+### Code lines
+
+`f10s3/count-lines.py 95ac9b8` (S2's script): added lines of `git diff -U0 95ac9b8`, new files whole, blank and
+whole-line comment lines excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` | 50 | 0 |
+| `Sources/LedgerDomain/Protocols/Repositories.swift` | 9 | 0 |
+| `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift` | 7 | 6 |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | 4 | 1 |
+| `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift`, `WorkoutSessionClient.swift` | 0 | 0 |
+| **Product** (the brief: about 50 to 90) | **70** | 7 |
+| `Sources/LedgerFakes/InMemoryWorkoutEventStore.swift` | 28 | 20 |
+| `Sources/LedgerFakes/InMemoryProgramRepository.swift` | 27 | 11 |
+| `Sources/LedgerFakes/InMemoryWorkoutRepository.swift` | 20 | 2 |
+| `Sources/LedgerFakes/InMemoryStores.swift` | 2 | 2 |
+| **`LedgerFakes`** (the plan: about 20) | **77** | 35 |
+| `LedgerTestSupport` (3 files) | 247 | 1 |
+| Tests (19 files) | 780 | 53 |
+
+The fakes are well over the plan's twenty lines. The plan counted the program update alone. The log's drop
+needed the event store's state behind a lock (28 lines, 20 of them the old ones rewritten), and the one-step
+program write another 16.
+
+### Host runs, lint, Release build
+
+On the final tree. `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file
+--skip-build --filter '^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests|LedgerDependenciesTests)\.'`,
+once as it is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`f10s3/final-default.log`,
+`f10s3/final-onethread.log`). At `95ac9b8` the default pool gave 244, 452, 838, 63 and 63 tests, all passing
+(`f10s3/host-baseline-default.log`).
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 252 tests in 45 suites, passed (13 known issues, S1's) | 252 tests, **2 issues**: S1's two tester tests, below |
+| LedgerPersistenceTests | 466 tests in 106 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerDependenciesTests | 63 tests in 11 suites, passed (17 known issues) | the same |
+| LedgerAppKitTests | 64 tests in 15 suites, **1 failing**: the tester's test above | the same |
+| Exit | **1** | **1** |
+
+- The one-thread failures are `SessionContractBiteAdversarialTests.swift:111` and
+  `SessionContractRoundTwoAdversarialTests.swift:116`, the two the brief names. Nothing else fails there.
+- Eight tests are new in Sync, fourteen in Persistence and one in AppKit.
+
+| Command | Exit | Result |
+|---|---|---|
+| The full matrix on the host: `LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200 swift test … --filter 'LocalWorkoutSessionActorContractTests\|WorkoutSessionConcurrentScriptTests\|WorkoutSessionClientContractTests\|LinkedSaveDifferentialTests'` | 0 | 144 clause cases, 1,200 sequential and 1,200 concurrent scripts on the host, 200 differential scripts; the same on one thread |
+| `stress.py 20 '<seven host suites>' LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200`: the contract, the concurrent scripts, the serial, end, save, recovery and program suites | 0 | 20 of 20 green, 173 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 432 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter RecordReplayPerformanceTests`, once | 0 | criterion 8 on the Mac host, Debug: the finish save with 2 program updates, 5 misses and a log of 60 dropped, at the end of 400 workouts and 20,000 sets: p95 16.0 ms, median 10.7 ms, against 50 ms. The plain save beside it: p95 14.9 ms, median 9.7 ms (`f10s3/attachments/finish-save.txt`) |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, pins, script tests. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `InMemoryStores`, `InMemoryWorkoutEventStore`, `InMemoryWorkoutRepository`, `InMemoryProgramRepository`, `FakeWorkoutSessionClient`, `SplitMix64`, `FakeLinkBus` or `Fixtures` in a Release object; `Release/LedgerFakes.o` is 1,176 bytes, as at S1 and S2 |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+### Open questions
+
+1. **Criterion 9 is at 64 %, not a third.** Recommendation: the tester makes the three cuts in the table (about
+   41 %), with the same lane check, and looks at the "bite" suites for the rest; or the orchestrator sanctions
+   those edits as it sanctioned the launch model's in S2. Lowering `LEDGER_PROPERTY_SEED_COUNT` in the PR plan would
+   also cut the Domain's and the persistence suites' seeds, which nobody asked for.
+2. **A second materialisation sets a slot back if the program was edited in between.** Recommendation: accept
+   for M1. Over the database no log is left to materialise from. F17's rebuilds decide it with the misses' rule
+   (never re-send an older workout's slots), and F11 should know that a swap can land on a program edited during
+   the workout: the slot's exercise is the swap's, its other fields the edit's.
+3. **`InMemoryWorkoutEventStore` is an actor with its state behind a `Mutex`.** Recommendation: a mechanical
+   follow-up that makes it a final class like the other fakes, with one sentence of ADR-008 decision 4 amended.
+   No caller changes: every call is already awaited.
+4. **Two forms of `materialize` on the protocol.** Recommendation: keep both. The default is the honest answer
+   of a store that holds no log, and it is what keeps every wrapper safe. If one requirement is wanted, the four
+   tester types need a two-line forward each.
+5. **ADR-004 rule 5** says the log is "compacted after successful materialisation". Recommendation: one line, with
+   the paragraph on a waiting end that S2's rulings already owe ADR-004, in a PR Pete reviews.
+6. **A skipped program update is silent.** The log says which slot and why; the lifter is told nothing.
+   Recommendation: S8 decides. It happens only when the program was edited or deleted during the workout.
+7. **The completeness check and the drop are two reads apart** (`Recovery:148`, then the transaction).
+   Recommendation: leave for M1, where only the host writes the log and it takes one operation at a time. F17,
+   which appends a peer's envelopes, keeps those appends in the host's queue, or moves the check into the
+   transaction.
+8. **`StoreProbe.waitUntilHeld()` waits for ever when the held call never comes,** and a time limit cannot
+   cancel it. Under xcodebuild the 60 s allowance ends the runner; under `swift test` nothing does.
+   Recommendation: about eight lines in `StoreProbe` that resume the waiter on cancellation, in the next change
+   to that file.
+9. **The fake's programs and log are not under the history's lock for a reader that reads only those two**
+   (decision 6). Recommendation: leave; say so in ADR-008 when it is next amended.
+
+### Inputs for S4, S7, S8 and F13
+
+Corrected in place in fix round 1 (2026-10-05), as S2's inputs were: S7's sentence on what `finish` may throw and
+its "Discard" line, S8's compare-and-set bullet (review S3-SF2) and its last bullet (S3-N6, which was wrong), and
+F17's rule for a peer's or a rebuilt workout.
+
+- **S4.** Nothing new to call. When `finish` returns, or its update arrives, the workout is in history, the
+  program holds its swaps and the log is gone, all at once. The Debug "Start sample workout" row still needs a
+  new workout id for every start.
+- **S7.**
+  - A failed save leaves nothing half done: no row, no miss, no program change. "Try again" is still `finish`,
+    it retries the whole transaction, and it keeps the first end date. S2's three consequences of a waiting end
+    stand unchanged, and so do its two open questions.
+  - Over the database the call that saves a workout does not throw once the workout is in history, so the
+    receipt may read history as soon as `finish` returns. (It would take the host's look at its event store and
+    the compaction that answers a failed look to fail one after the other, right after a save that succeeded.)
+  - "Discard" after a failed save saves the workout **and** changes the program, as a waiting finish is
+    completed first. Decide with Pete's question on abandoning a workout that cannot be saved.
+  - `FakeWorkoutSessionClient` stores nothing: a test that the program changed at Finish needs the host over
+    `InMemoryStores`, as `LocalWorkoutSessionActorProgramTests` does.
+- **S8.**
+  - A swap with `alsoUpdateProgram: true` records `programUpdates[slotID]`; the program changes when the
+    workout is saved, and never when it is discarded (Pete's decision 1, default A).
+  - Only an exercise with a `slotID` can record one (`Sources/LedgerDomain/Engine/WorkoutEngine+Reduce.swift:150`):
+    hide the toggle for an ad-hoc workout, or it does nothing.
+  - **A later swap of the same slot with the toggle off does not clear the earlier entry** (the same line: the
+    entry is only ever written). Bench to dumbbell bench with the toggle on, then to incline with it off, saves
+    a workout that did incline and a program that says dumbbell bench. It is the engine's rule (F04), not this
+    slice's; decide it with O10.
+  - **Make the swap compare-and-set, with O10** (review S3-SF2). Today an entry is applied by every
+    materialisation, whenever the slot does not already hold its exercise. So a save that lands after the lifter
+    changed that slot (a waiting end completed days later, a retry, a rebuild) sets the slot back to the swap's
+    exercise, with no log line: the lifter's later choice is replaced by an older one. The protocol says so now,
+    and the contract pins it (`linkedClauses.laterSaveSetsTheSlotBack`). The cure: the swap carries the exercise
+    the slot held when the lifter swapped, `programUpdates[slot]` becomes that pair, and an entry is applied
+    only while the slot still holds the first of the two. The write is then safe at any time and in any order.
+    In the repository it is one more bound value in a query that already reads the slot's exercise
+    (`writeProgramUpdates`), the same in the fake, and the clause turns round. It changes an engine payload,
+    which is why it goes with O10.
+  - The slot keeps its sets, reps, loads and misses (Pete's decision 2, default A), and this workout's miss is
+    recorded on it, judged on the replacement's sets against the targets the swap kept.
+  - The update goes to the workout's own program even when another is active; the misses do not (ruling O9).
+  - `observeActive()` emits the program once the save has changed it (`linkedClauses.observersHearTheSave`), so
+    Today's next session follows without a reload.
+  - The replacement must have a row: an update naming an exercise with none is skipped. A soft-deleted exercise
+    keeps its row, so an update naming one is applied, as a program save accepts it
+    (`ProgramRows.holdsExercise(_:in:)`, the one rule for both). No call deletes an exercise today.
+  - Nothing tells the lifter that an update was skipped (open question 6).
+- **F13.**
+  - Over the database a saved workout has no log, so the phone's own finish can no longer bring back a workout
+    History deleted, or overwrite `updateSets` edits (F17 "Inputs from F05", S3). One exception in this
+    process: a save that committed and was answered as a failure is saved again from memory at the next call or
+    foreground. The hazard remains for F17's rebuilds from a peer's envelopes.
+  - `delete(id:)` does not undo a program change or a miss: both belong to the program.
+  - Storing a workout that was read from history never touches a program (decision 4): it has no
+    `programUpdates`.
+  - A stored workout's exercise row carries the swapped exercise's id and name with the original's equipment
+    and step. That is O10, not decided here.
+- **F17.**
+  - **The rule for a peer's or a rebuilt workout** (review S3-SF2; for the ADR-004 amendment). A
+    materialisation is not free to repeat: each one writes the misses and the program updates again, on the
+    program as stored then. So a rebuild that stores an older workout again sends no slots and no
+    `programUpdates` (the workout as history returns it has none), until swaps are compare-and-set. A peer's
+    finished workout that the phone materialises for the first time carries the peer's `programUpdates`: they
+    land on the phone's copy of the program by the same rule (the workout's own program, a stored exercise).
+    Decide whether both devices apply a swap, or only the one where the lifter asked for it.
+  - Until then the order of saves decides which swap a slot keeps. A recovery pass completes ended logs in the
+    order their workouts started (fix round 1, S3-N5); a rebuild path must keep that order.
+  - A saved workout has no log on this device. A late envelope for it finds no `started`, replays to nothing
+    and is kept: the amendment must say what the host does then.
+  - The host looks in its own event store after every save (F10-S3-1), so a workout repository paired with
+    another store's log cannot leave one behind. A wrapper around `WorkoutRepository` now has to implement the
+    one call and say what it answers; there is no default to fall into.
+  - The completeness check and the drop are still two reads apart (open question 7), and
+    `GRDBWorkoutRepository` answers for its own queue only.
+
+### Not verified
+
+- **The full gate, anything on watchOS, and the coverage gate.** Not run. The simulator saw only
+  `LedgerSyncTests` and `LedgerPersistenceTests`, on iOS, twice.
+- **Criterion 8 on a simulator.** The timing suite is nightly only; the 16 ms is a Mac's.
+- **Criterion 9 on CI.** The figures are one Mac's, one run each, under different loads. Whether 64 % locally is
+  64 % of CI's 576 s I cannot say.
+- **The nightly lane's full matrix on a simulator** (2,000 seeds × 6). On the host I ran 200 × 6 with the lane
+  set to nightly.
+- **The one-step program write in the fake** (mutant F8) and **the fake's deleted program** (F3): no test tells
+  them apart.
+- **A kill by the system.** As in S2, a kill point is a trigger that refuses a statement.
+- Shared state: the disk ran low at about 11:40, as the orchestrator reported. One host run of mine straddled
+  it and its log is cut in the middle of a line; I ran it again. The hang in that run was real and is open
+  question 8, not the disk. The lock was held by F08's runs when I first asked for it (110 s) and free
+  afterwards. No test helper process is left running.
+
+### S3 — orchestrator rulings after G1 (2026-10-05)
+
+- **Deviation 1 accepted for now:** the two-argument `materialize` stays a requirement beside the new call, so the
+  testers' conforming types still compile. The reviewer judges whether one of the two should go once the testers'
+  types are moved.
+- **Criterion 9 is half done:** the implementer's session suites went from 25.7 s to 5.9 s; the S1 and S2 testers'
+  suites (about 31 s) are theirs. S2's tester, who tests this slice too, cuts its own in the PR lane by the same
+  lane check (nightly keeps the full matrix); S1's tester's suites are cut in the same pass, as sanctioned edits
+  limited to how many seeds and set-ups run in which lane.
+- **The tester test that fails by ruling** (`kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch`) is the
+  tester's to move: over one database that state no longer exists.
+- **ADR-004 rule 5** ("compacted after successful materialisation") now reads "with" over the database. The ADR is
+  not edited in this slice; the wording goes into one ADR-004 amendment with the waiting-end paragraph, for Pete's
+  review, before F17 is planned.
+- This commit has not had the orchestrator's full gate: one test fails by ruling until the tester moves it. The gate
+  runs on the tree after the tester's round.
+
+### S3 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 6 nits; the save is one transaction in the right order, and it found no way
+to lose, duplicate or half-save a workout or to write another program's rows. G2 round 1: the save held; one latent
+bug in how the host uses it (two tests failing on purpose); its failing S2 test is replaced; the session suites
+now cost 14.6 s in the PR lane against 58.1 s before the slice (criterion 9 is met).
+
+For fix round 1:
+- **F10-S3-1 accepted:** the host does not take the repository's word alone. After a save that answered that the
+  log was dropped, the host checks its own event store, and compacts there when the log is still present. A host
+  whose repository and event store are not one database then ends with the log gone, as the rule "an end is
+  complete when its log is gone" asks. The tester's two tests pass unedited.
+- **S3-SF1 accepted, now:** `materialize(_:slotUpdates:droppingLog:) -> Bool` is the one requirement, with no
+  default and not discardable; the two-argument call is an extension that passes `droppingLog: false`. Every
+  conforming type states what it holds. The mechanical change to the testers' conforming types is sanctioned
+  (implement the three-argument form: save and answer `false`, or forward where the type wraps a linked store);
+  each changed line is listed, and the tester audits it.
+- **S3-SF2:** the protocol says now that a later materialisation sets a slot back to the swap's exercise if the
+  lifter changed it in between, as it already says of misses. Making the swap compare-and-set belongs to S8 with
+  O10; the rule for a peer's and a rebuilt workout goes into the ADR-004 amendment (Pete), before F17 is planned.
+- **S3-SF3:** not in this slice. ADR-008's and standards §4's description of the event-store fake is corrected in
+  the same amendment PR as ADR-004's; the PR body of this slice says so.
+- **S3-SF4 and S3-SF5 accepted** (a probe that fails instead of waiting for ever; programs compared to a `Bool`
+  with a printed difference, never whole inside `#expect`).
+- **Nits** as the review writes them unless one costs more than a few lines; S3-N5 (recovery deals with ended logs
+  in a stated order) is taken.
+- **F10-S3-2** (two overlap cases of S1's tester fail on one thread; the cut keeps them in the nightly lane only)
+  joins the chore list.
+
+### S3 fix round 1 (G1 implementer, 2026-10-05)
+
+On `f1427aa`, tree clean at the start. Nothing is committed. Paths are under `LedgerKit/` unless they start with
+`docs/` or `tasks/`. `Repositories` is `Sources/LedgerDomain/Protocols/Repositories.swift`, `Protocol`
+`Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, `GRDB`
+`Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift`, `Recovery`
+`Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift`, `Probe`
+`Sources/LedgerTestSupport/Engine/StoreProbe.swift`, `Linked`
+`Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift`. Scratch files are in
+`scratchpad/f10s3/fix1/`. The full gate was not run, as the brief says: everything below is the Mac host's.
+
+**Three things to know first:**
+
+1. **A fifth tester type was changed, which the review does not name.** `OldWrapper`
+   (`Tests/LedgerPersistenceTests/Adversarial/LinkedSaveLogAdversarialTests.swift:125`) conforms to
+   `WorkoutRepository` through the default that S3-SF1 removes, so its target stopped compiling. I made the same
+   mechanical change there and nothing else; its comment and its test's premise are now the tester's to reword
+   (under "Sanctioned test edits").
+2. **A look that fails is not thrown** (item 2 below). The host compacts instead. I chose that over letting the
+   read's error out, so that the call that saves a workout still does not throw once the workout is in history.
+3. **In the nightly lane on one thread three tests fail**, none of them this round's by what they check: S1's
+   tester's two overlap-check tests and S2's timing test. In the PR lane nothing fails on either pool.
+
+#### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| 1. S3-SF1 | `materialize(_:slotUpdates:droppingLog:) -> Bool` is the one requirement: no default, not discardable. The two-argument call is an extension method that passes `droppingLog: false` and drops the answer | `Repositories:54-88`, `:110-115` |
+| 1 | The forwarding methods are gone from the GRDB repository and the fake; each states what it answers (its own queue's log; the linked event store's, or none) | `GRDB:32-87`; `Sources/LedgerFakes/InMemoryWorkoutRepository.swift:38-64` |
+| 1 | The stub, the probe's wrapper and `SeparateWorkoutRepository` implement the one form: the stub throws, the probe passes the call on with its answer, the separate repository saves and answers `false` | `Sources/LedgerDependencies/Unimplemented/UnimplementedStores.swift:62`; `Sources/LedgerTestSupport/Engine/ProbedStores.swift:89`; `Tests/LedgerSyncTests/Support/HostSupport.swift:100` |
+| 1 | The testers' conforming types: under "Sanctioned test edits" | |
+| 2. F10-S3-1 | After a save that answered `true` the host looks in its own event store (`holdsNoLog(of:)`: one `uncompactedWorkoutIDs()`), and returns only when the log is not listed. Listed, or the look failed: it compacts, as after an answer of `false` | `Recovery:150-181`, `:183-202` |
+| 2 | What the answer means, and that a caller holding an event store looks there | `Repositories:79-83`; `GRDB:22-26` (the queue), `:61-62`; `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift:40-44`, `:55-57`; `Protocol:89-94`; `docs/architecture.md` §6 |
+| 3. S3-SF2 | "changes nothing, the program included as long as it was not edited in between"; a new bullet: an entry is applied by every materialisation, and one made after the lifter changed the slot sets it back; store an older workout again without its `programUpdates` | `Repositories:60-61`, `:70-72`; `GRDB:50-52` |
+| 3 | The same rule as a contract clause, on GRDB and the linked fakes: stored again without its entries a workout leaves the program alone, with them it sets the slot back | `Linked:26-29`, `:181-205` |
+| 3 | Compare-and-set into the inputs for S8, and the rule for a peer's or a rebuilt workout into the inputs for F17 | this file, "Inputs for S4, S7, S8 and F13", corrected in place (its first paragraph says so) |
+| 4. S3-SF4 | `waitUntilHeld()` throws `StoreProbe.NeverHeld`, which names the held call, when its task is cancelled before the call came, as a suite's time limit cancels it. The waiters sit behind a `Mutex`, so the cancellation handler lets one go without waiting for the actor, and a waiter cancelled before it could wait is marked so | `Probe:26-39`, `:53-62`, `:92-123`, `:142-148`; six callers now `try` |
+| 4 | `StoreProbe.swift` went over the file limit with it: the probed store wrappers moved, unchanged but for item 1, to a file of their own | `Sources/LedgerTestSupport/Engine/ProbedStores.swift` (new) |
+| 5. S3-SF5 | The host's program suite compares programs by `Program.difference(from:)`, and a saved workout by a `Bool`: no whole program or workout inside `#expect` | `Tests/LedgerSyncTests/LocalWorkoutSessionActorProgramTests.swift:36-44`, and the eleven expectations that use them |
+| 6. S3-N5 | A recovery pass reads every log first, then completes the ended ones in the order their workouts started, then by id (`startedBefore`, which `resume` uses too) | `Recovery:15-17`, `:62-88`, `:116-119` |
+
+**Item 2, the design.** `complete(_:)` saves; on `true` it looks; it returns when the log is not listed, and in
+every other case it runs the compaction it always ran after `false`.
+
+- *Which read.* `uncompactedWorkoutIDs()` is the store's own definition of "a log is still there", unreadable
+  rows included. `envelopes(for:)` leaves unreadable rows out and `highestSeq` asks about one device.
+- *A log still listed* after `true` means the repository dropped another store's. The host logs a fault, because
+  no composition of the app pairs stores so, and compacts.
+- *A look that fails* is logged at error level and answered by the compaction too. Compacting a log that is gone
+  does nothing, so the end is still only complete once the log is known to be gone: either the look said so or
+  the compaction succeeded. The alternative, throwing the read's error, would make `finish` throw for a workout
+  that is in history whenever one read failed after the commit. As built it takes the look **and** the
+  compaction failing, one after the other, right after a save that succeeded
+  (`finish_theLookAndTheCompactionFail_theEndWaits`): the end then waits as any other, and the retry saves again
+  and ends it.
+- *What the fix does not do.* It does not tie a repository to an event store. A pairing of two stores is still
+  only found out at the first finish, by the fault in the log.
+
+#### The cost of the host's look
+
+One read of the event store per save of a finished workout: at `finish`, at its retry, and for each finished log
+a recovery pass saves. No write, unless the log is still listed or the look failed, and then one compaction.
+
+- Over GRDB it is `SELECT DISTINCT workout_id FROM workout_event`, on the table's index, in a read of its own.
+  After a save that dropped the log the table holds only the logs that are kept: usually none.
+- Measured in the nightly timing test, which now times the look after each save
+  (`RecordReplayPerformanceTests.finishWithProgramUpdatesAndTheLog_underBudget`), by hand on the Mac host, Debug, a
+  file database of 20,000 sets with a kept log of 200 events beside the one dropped: **p95 80 µs, median 56 µs**,
+  against p95 11.1 ms and median 10.5 ms for the save before it. Under one per cent of the finish
+  (`fix1/attachments/finish-save.txt`).
+- That test now holds the save and the look together to the save's budget of 50 ms.
+- Call for call, a finish over one database is now `unreadableCount`, `append`, `unreadableCount`, `materialize`,
+  `uncompactedWorkoutIDs` (`finish_oneDatabase_looksOnceAfterTheSave` pins the list).
+
+#### The failure table, as it now stands
+
+Rows changed in this round are in bold; the others are as in the slice's section above.
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event; an append that stored and then threw; the clock | as in S2 | | | | | |
+| the save, after `.finished` is stored: one transaction | `live` as before the finish; the end pending; clock and `seq` advanced | the log whole, with its `finished`; no history row, no miss, no program change | the store's error | nothing; `current()` still the workout | `finish`: saves and drops in one transaction, looks, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| the save that stored and then threw (a store that lies) | the same | the workout in history, the log gone | the store's error | nothing; `current()` still the workout | `finish`: saves again (no change), looks, publishes once | nothing live, nothing to do |
+| **the look after the save** (`finish_theLookFails_theHostCompacts`) | nothing pending | the workout in history; the log gone, or still listed | **nothing is thrown:** the host compacts, and `finish` returns | the ending update, once | — | — |
+| **the look, and then the compaction** (`finish_theLookAndTheCompactionFail_theEndWaits`) | `live` as before the finish; the end pending | the workout in history; over one database the log is gone and the host does not know it | the compaction's error | nothing; `current()` still the workout | `finish`: saves again (no change), looks, publishes once | over one database nothing is left; otherwise saved again, compacted |
+| **`compact` after the save, where the host's own event store still lists the log:** the repository holds no log (`false`), or holds another store's (`true`, and the look finds the log; `finish_repositoryAnswersForAnotherStore_theHostDropsItsOwnLog`, the tester's `HostMixedStoresAdversarialTests`) | the same | the log, and the history row with its misses and program changes | the store's error | nothing | saves again, compacts, publishes once | saved again, compacted |
+| `compact`, after `.discarded`; a read during recovery | as in S2 | | | | | |
+| a save during recovery | the other logs dealt with, **in start order**; the live one resumed | that log kept whole, and nothing of its save | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+"Saves again" changes nothing as long as the program was not edited in between (S3-SF2).
+
+- **`finish` over the database:** stores `finished`; one transaction; one read; the ending update. Nothing is
+  thrown after the transaction unless that read and the compaction that answers it both fail.
+- **`discard`, a second `finish`, the launch step:** as in the slice's section.
+
+#### The recovery table, as it now stands
+
+| Stored when the app died | The step | Afterwards |
+|---|---|---|
+| nothing, or a `started` that never reached the store | nothing | no workout |
+| a live log | resumes it: no haptic, no effect run | `current()` is the workout |
+| `finished` stored, not saved | one transaction: saves, with the misses from the program as stored now and the program updates, and drops the log; **then looks** | in history; no live workout |
+| saved, and the log still there | saves again and drops the log; **where the repository answered for another store's log, the look finds it and the host compacts** | the same; the program as the save leaves it (S3-SF2) |
+| `discarded` stored, not compacted | compacts | nothing in history, no program changed |
+| a log that replays to nothing | keeps it and logs a notice | no workout |
+| a log with rows this version cannot read | live: resumes from what it reads; ended: keeps it | a workout, or none |
+| a save that throws | keeps the log whole; nothing is saved; records the step as failed; carries on with the other logs | retried on the next foreground |
+
+**Order (new).** A pass reads every log before it completes any, so a read that fails leaves nothing completed.
+The ended logs are then completed in the order their workouts started, then by id, whatever order the store
+lists them in: of two finished workouts that swapped one slot, the program keeps the later one's exercise
+(`recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted`, with the later log listed first and last).
+
+#### Sanctioned test edits (for the tester's audit)
+
+`git diff f1427aa -- 'LedgerKit/Tests/*/Adversarial'` shows four files and these lines only. Line numbers are the
+files' now.
+
+| File | Line | Old | New |
+|---|---|---|---|
+| `Tests/LedgerPersistenceTests/Adversarial/HistoryModel+Repositories.swift` | 7 | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {` | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {` |
+| | 16 | (no line) | `return false`, after the `write { … }` block |
+| `Tests/LedgerSyncTests/Adversarial/HostSiegeSabotageAdversarialSupport.swift` | 64-66 | `func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}` | `func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {`, `false`, `}` |
+| `Tests/LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift` | 42-45 | `func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}` | the same three lines, and a blank line after them, which the formatter asks for after a body of more than one line (`blankLinesBetweenScopes`; checked on a copy) |
+| `Tests/LedgerPersistenceTests/Adversarial/LinkedSaveLogAdversarialTests.swift` (`OldWrapper`, **not named by the review**) | 128 | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {` | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {` |
+| | 130 | (no line) | `return false` |
+
+- **`SiegeWorkoutRepository` is not edited.** It already implements the three-argument form
+  (`HostSiegeStoresAdversarialSupport.swift:81`); its two-argument method is now an ordinary method, which its
+  own unlinked path calls.
+- **`HistoryModel`, `SabotagedWorkoutRepository`, `BriefWorkoutRepository`** each save as before (or not at all)
+  and answer `false`: none holds a log.
+- **`OldWrapper`, for the tester.** It was written to show what the default did for "a wrapper written before
+  S3". There is no default now, and such a wrapper no longer compiles, which is S3-SF1's point. With the edit it
+  is a wrapper that does not pass `droppingLog` on, and its test
+  (`save_throughAWrapperOfBeforeS3_keepsTheLogAndSaysSo`) passes on both stores and still shows something true: a
+  wrapper that saves through the two-argument call keeps the log, says so, and loses no program change. Left as
+  they were, and no longer exact: the comment at `:124` ("inherits the new one's default"; it could read "it
+  saves through the two-argument call and answers that the log is still there") and the test's name. I did not
+  touch either.
+- **The tester's two failing tests pass unedited:** `finish_eventStoreElsewhere_dropsItsLog` and
+  `relaunch_afterAFinish_findsNoLogToSaveAgain`, four pairings each, on both pools.
+- No other tester file is changed, and no tester test fails.
+
+Tests of my own that changed: the six `waitUntilHeld()` callers (`try`); `LocalWorkoutSessionActorProgramTests`
+(S3-SF5); `LinkedSaveDifferentialTests` (its own thirty seeds); the timing test (the look);
+`LocalWorkoutSessionActorPerformanceTests` (the lane's one name); `SeparateWorkoutRepository` (item 1).
+
+New tests: `LocalWorkoutSessionActorSaveTests`: `finish_oneDatabase_looksOnceAfterTheSave`,
+`finish_repositoryAnswersForAnotherStore_theHostDropsItsOwnLog`, `finish_theLookFails_theHostCompacts`,
+`finish_theLookAndTheCompactionFail_theEndWaits`, `probe_waitForACallThatNeverComes_endsOnCancellation`;
+`LocalWorkoutSessionActorProgramTests.recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted` (× 2); the contract
+clause `laterSaveSetsTheSlotBack` (× 2 stores).
+
+#### Nits
+
+| Nit | Taken | What | Where |
+|---|---|---|---|
+| S3-N1 | yes | The differential builds its own thirty seeds; the nightly lane runs every seed of the lane and never fewer than the thirty | `Tests/LedgerPersistenceTests/LinkedSaveDifferentialTests.swift:20-28`, `:64` |
+| S3-N2 | **in part** | `hostSeeds` is the longer of the lane's seeds and the fixed twenty. The Sync target reads the lane by one name (`TestLane.isNightly`; the inline read is gone). Testing-strategy §1 and §6 say how a matrix is cut by lane. **Not taken: one name across targets.** The tester's `SessionLane` uses `TestLane.isNightly` (`Tests/LedgerSyncTests/Adversarial/SessionLaneAdversarialSupport.swift:10`), and tester files of Persistence and Design use `TestLane.runsSlowTests`: either rename edits a tester's file | `Tests/LedgerSyncTests/WorkoutSessionClientContractTests.swift:24-30`; `LocalWorkoutSessionActorPerformanceTests.swift:15`; `docs/testing-strategy.md` §1, §6 |
+| S3-N3 | yes | The repository's `init` says which queue its answer is about, and that a host looks in its own event store all the same | `GRDB:22-26` |
+| S3-N4 | yes | One rule for "the exercise is stored", `ProgramRows.holdsExercise(_:in:)`, used by a program save and by the program updates. An ad-hoc workout returns before the loop, with one notice | `Sources/LedgerPersistence/Records/ProgramRows.swift:87`, `:94-99`; `GRDB:210-216`, `:238` |
+| S3-N5 | yes | item 6 above | |
+| S3-N6 | yes | "A host whose stores are one database saves in one transaction"; "the call that saves it does not throw once it is in history"; "`discard` saves the workout, with its program changes". The notes' sentence on a deleted custom exercise was wrong and is corrected in place | `Protocol:64-69`, `:97-99`; this file, the inputs for S8 |
+
+#### Mutants of this round
+
+`fix1/mutants-fix1.py` (logs `fix1/mutants.log`, `fix1/mutants2.log`): each applied alone, the named suites run,
+the file put back and compared byte for byte. **Thirteen of thirteen are seen, one of them by a hang.**
+
+| Mutant | Seen by |
+|---|---|
+| R1 the host takes the repository's word: no look | 6 tests: mine and the tester's two |
+| R2 a look that fails is taken for a log that is gone | `finish_theLookFails_theHostCompacts`, `finish_theLookAndTheCompactionFail_theEndWaits` |
+| R3 a log that is still listed is taken for gone | mine and the tester's two |
+| R4 recovery completes ended logs in the store's order; R5 latest first | `recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted` alone |
+| H1 the host compacts after every save | 7 tests, in 11 s |
+| H2 the host never compacts after a save | 37 tests, **in 70 s**: `finish_publishesAfterTheSave` waits to its time limit and then fails with `NeverHeld`. In the first round this mutant hung the run for good |
+| H3 the host saves without dropping the log | 11 tests |
+| G5 the exercise is not checked; G5b the shared rule asks for a live row; G11 the answer is always no; G14 an ad-hoc workout's updates reach a program | 1 to 4 tests each |
+| **R6 the probe's wait ignores cancellation** | **a hang**, which is the fault it puts back: the probe's own test never returns. The script stopped it after 420 s |
+
+**My first version of the probe's test hung under H1, H3 and G11.** It held `.compact` and then called `finish`
+on a host that must not compact; a host that did compact parked there for good. The test now uses a bare probe
+and no host (`Tests/LedgerSyncTests/LocalWorkoutSessionActorSaveTests.swift:31-43`). The general weakness stays: a held call that does
+come, in a test that then fails before its `release()`, still waits for ever. Open question below.
+
+#### Host runs, lint, Release build
+
+On the final tree. `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file
+--skip-build --filter '^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests|LedgerDependenciesTests)\.'`,
+once as it is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`fix1/final-default.log`,
+`fix1/final-onethread.log`):
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 276 tests in 48 suites, passed (13 known issues, S1's) | the same |
+| LedgerPersistenceTests | 495 tests in 113 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerDependenciesTests | 63 tests in 11 suites, passed (17 known issues) | the same |
+| LedgerAppKitTests | 66 tests in 16 suites, passed | the same |
+| Exit | **0** | **0** |
+
+At `f1427aa` the Sync target had 270 tests, with the tester's two failing on purpose; six are new.
+
+| Command | Exit | Result |
+|---|---|---|
+| The filter above, default pool | 0 | the table |
+| The same, one thread | 0 | the table: nothing fails there in the PR lane |
+| `LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200 swift test … --filter '^LedgerSyncTests\.\|LinkedSave\|InMemoryContractTests\|WorkoutRepositoryLinkedTests'`, default pool | 0 | 276 and 53 tests passed, the full matrices |
+| The same, one thread | **1** | three tests fail, below |
+| `stress.py 20 'LocalWorkoutSessionActor\|WorkoutSessionConcurrentScriptTests\|HostMixedStoresAdversarialTests\|HostLinkedSaveAdversarialTests\|HostNeverLostAdversarialTests\|HostRecovery\|HostEndFailure\|HostProgramUpdate'`: the host's own suites and the tester's save, siege and recovery suites, 123 tests in 18 suites | 0 | 20 of 20 green, 109 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 188 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter RecordReplayPerformanceTests`, once | 0 | the look's cost, above |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, pins, script tests. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `InMemoryStores`, `InMemoryWorkoutEventStore`, `InMemoryWorkoutRepository`, `InMemoryProgramRepository`, `FakeWorkoutSessionClient`, `SplitMix64`, `FakeLinkBus` or `Fixtures` in a Release object; `Release/LedgerFakes.o` is 1,176 bytes, as before |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+**The nightly lane on one thread: three tests fail, in every such run I made (one).**
+
+- `SessionContractBiteAdversarialTests.racyClient_isRejectedByThisSuitesOverlapChecks` and
+  `SessionContractRoundTwoAdversarialTests`' test of the same name: the two cases the tester's finding F10-S3-2
+  names (`found != nil`), and nine more cases of the same two tests that met their one-minute time limit. On one
+  thread a test waits for every other test of the run, and the whole Sync target took 65 s there with the
+  nightly matrices.
+- `LocalWorkoutSessionActorPerformanceTests.apply_withItsAppend_isUnderBudget` (S2's timing test): over its
+  budget while the rest of the target ran on the same one thread. Alone it passes: p95 116 µs.
+- None of them checks anything this round changed. I did not run the same at `f1427aa`, which needs a checkout,
+  so that they fail there too is not shown.
+
+#### Code lines
+
+`count-lines.py` as before (`git diff -U0`, blank and whole-line comment lines excluded):
+
+| | Against `95ac9b8` (the slice) | This round, against `f1427aa` |
+|---|---|---|
+| Product | **+100 −20** (was +70 −7) | +45 −28 |
+| `LedgerFakes` | +74 −36 | +0 −4 |
+| Test support | +433 −118 | +193 −124 (113 of each are the wrappers moved to `ProbedStores.swift`) |
+| Tests, the testers' included | +2,782 −108 | +197 −35 |
+
+Product by file, this round: `Recovery` +29 −10 (the look, the order), `GRDB` +9 −10, `ProgramRows.swift` +4 −1,
+`Repositories` +2 −6, `UnimplementedStores.swift` +1 −1. The slice is now ten lines over the brief's "about 50 to
+90"; the look and the order are what took it there.
+
+#### Open questions
+
+1. **A held store call in a test that fails before its `release()` still waits for ever** (`StoreProbe.hold`,
+   and the tester's `Siege.hold` alike). S3-SF4 closed the wait for a call that never comes, not this.
+   Recommendation: a `withHeld(_:during:)` on the probe that releases on every way out of its body, when the
+   next test needs a held call.
+2. **A look that fails is answered by a compaction, not thrown.** Recommendation: keep. If the reviewer would
+   rather have every store error reach the caller, it is two lines, and `finish` then throws for a saved
+   workout on one failed read.
+3. **The lane check has two names across targets** (S3-N2). Recommendation: the chore that moves S1's two
+   one-thread cases can rename one of them, since it edits tester files anyway.
+4. **`OldWrapper`'s comment and test name** are the tester's to reword (above).
+5. **Product lines are at 100.** Recommendation: accept; nothing was compressed, and what was added is the
+   ruling's.
+
+#### Not verified
+
+- **The full gate, anything on a simulator or a watch, coverage.** Not run in this round. The orchestrator runs
+  the gate.
+- **Criterion 9's figure after this round.** Six host tests are new and none is a matrix; I did not measure
+  again.
+- **The three nightly, one-thread failures at `f1427aa`** (above), and the nightly lane's 2,000 seeds.
+- **The look's cost on a simulator or a phone.** 80 µs is the Mac's.
+- **The probe's wait under a real time limit** is shown by mutant H2 (70 s, then a failure); the probe's own
+  test cancels its waiter by hand.
+- Nothing odd in shared state. No helper process is left running. I interrupted my own mutant run once, and
+  checked afterwards that every mutated file was back, by its diff.
+
+### S3 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0. The tester's two tests for F10-S3-1 pass unedited,
+  which was the finding's closing condition. **G2 is closed; G3 approved.**
+- The edits to the testers' conforming types were read by the orchestrator line by line: each is the new signature
+  answering `false`, nothing else (four files; a fifth type, `OldWrapper`, for the same reason).
+- Not in this slice, queued: S3-SF3 and the ADR-004 wording (one amendment for Pete); S3-N2's name across targets;
+  the three tests that fail in the nightly lane on one thread (S1's two overlap tests, S2's timing test).

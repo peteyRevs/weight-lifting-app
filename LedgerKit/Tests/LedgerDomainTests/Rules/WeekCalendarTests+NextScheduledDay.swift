@@ -27,7 +27,7 @@ extension WeekCalendarTests {
         arguments: NextSessionRow.all
     )
     func nextScheduledDay_fourDayBlock_isTheFirstLaterSession(row: NextSessionRow) throws {
-        let program = try Fixtures.fourDayProgram()
+        let program = try Fixtures.datedFourDayProgram()
         let next = Self.weeks(for: program).nextScheduledDay(after: row.after, in: program)
         #expect(next == row.expected)
         #expect(next?.weekday == row.weekday)
@@ -35,7 +35,7 @@ extension WeekCalendarTests {
 
     @Test("One instant is a different day far east and far west of UTC, and the next session follows the local day")
     func nextScheduledDay_sameInstant_followsEachZonesDay() throws {
-        let program = try Fixtures.fourDayProgram()
+        let program = try Fixtures.datedFourDayProgram()
         // 2026-09-18 10:30 UTC is Saturday 00:30 on Kiritimati (UTC+14) and Thursday 23:30 in Pago Pago (UTC−11).
         let instant = Fixtures.date(2026, 9, 18, hour: 10, minute: 30)
         let kiritimati = try Self.weeks(for: program, in: Fixtures.zone("Pacific/Kiritimati"))

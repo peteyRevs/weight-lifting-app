@@ -31,6 +31,10 @@ private struct BriefProgramRepository: ProgramRepository {
     }
 
     func save(_: Program) async throws {}
+    func update(_ id: ProgramID, _: @Sendable (Program) throws -> Program) async throws -> Program {
+        throw RepositoryError.missingRow("program \(id.rawValue.uuidString)")
+    }
+
     func setActive(_: ProgramID) async throws {}
     func delete(_: ProgramID) async throws {}
     func observeActive() -> AsyncStream<Program?> {
@@ -39,7 +43,10 @@ private struct BriefProgramRepository: ProgramRepository {
 }
 
 private struct BriefWorkoutRepository: WorkoutRepository {
-    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}
+    func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
+        false
+    }
+
     func workout(id _: WorkoutID) async throws -> WorkoutState? {
         nil
     }

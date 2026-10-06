@@ -76,7 +76,8 @@ Rules:
    produced or received. On `finished`, `LedgerPersistence` materialises the
    final `WorkoutState` into normalized `workouts` / `logged_sets` rows used by
    history queries. The event log is kept for the workout's lifetime, then
-   compacted after successful materialisation.
+   compacted after successful materialisation. *(Amended 2026-10-05: the log is
+   dropped with the save, not after it. See the amendment of that date, point 1.)*
 6. **Recovery.** If either app is killed mid-workout, it replays its local log
    on launch and resumes.
 
@@ -179,3 +180,151 @@ live, when at least one set is done in `new` that was not done in `old`. So a si
 device buzzes here (F17 criterion 9), and a reconnect that brings many sets buzzes once (Pete). A rebuild
 that ends finished or discarded never buzzes, even for a late set (orchestrator), and a rebuild plays no
 other haptic.
+
+## Amendment (2026-10-05): the save, the log and a workout that cannot be saved
+
+F10's first three slices are on `main`: the session interface (`WorkoutSessionClient`, #27), its host
+(`LocalWorkoutSessionActor`, #29) and the save of a finished workout (#30). Their reviews left three points that
+change or extend this ADR. Each is written as what the code does **now**, then what is **proposed, for
+approval**. Nothing under "Proposed" is built. The product questions in points 2 and 3 are put to Pete in
+`tasks/decisions-for-pete-2026-10-05-saves.md`.
+
+Evidence: `tasks/features/F10-active-workout/review.md` (S2: SF1, SF2, SF5; S3: S3-SF2, S3-N5),
+`test-findings.md` (F10-S2-1, F10-S3-1), and the failure and recovery tables in `implementation-notes.md` ("S3
+fix round 1"). Some of those findings describe a commit that was fixed afterwards (the order of a recovery
+pass, a host that took the repository's word for the log, a replace that started nothing). What follows is the
+code on `main`.
+
+### 1. The log is dropped with the save, not after it (amends rule 5)
+
+**Now.**
+
+- The save is one call, `WorkoutRepository.materialize(_:slotUpdates:droppingLog:) -> Bool`. Where history and
+  the event log are one database it is one transaction: the workout's rows, its personal records, the misses
+  it leaves on its program's slots, the program updates its swaps asked for, and the deletion of its log,
+  last. If any of it fails, none of it happened and the log is whole.
+- The host asks for it once `finished` is in the log. The answer `true` speaks only for the repository's own
+  database, so the host then reads its own event store, once. It compacts there, as a second step, when the
+  answer was `false`, the log is still listed, or that read failed.
+- **An end is complete when its log is gone from the host's own event store**, and only then is the ending
+  update published. A discarded workout's log is compacted by the event store, as before; it reaches no
+  history and no program.
+- A log with rows this version cannot read is never saved or dropped: a finish is refused before its end is
+  stored (`incompleteLog`), and a discarded workout is over while its log is kept for a version that reads it.
+
+So over one database a workout is in history and no longer live, or neither, and a workout in history has no
+log on that device. Rule 5's last sentence now reads: the log is kept until the workout is saved, and goes in
+the transaction that saves it. For F13 this means the phone's own log can no longer bring back a workout that
+History deleted, or overwrite an edit (F13 "Inputs from F05", item 6); a rebuild from a peer's envelopes still
+could, which is F17's to prevent.
+
+**What remains for stores that are not one database.** A repository that holds no log answers `false`, and the
+drop is a step that can fail alone. When it fails, the workout is in history and is still the workout readers
+see: its end waits (point 2), and the retry saves again and drops the log. Saving again changes nothing unless the
+program was edited in between (point 3). Recovery's row "saved, and the log still there" exists only for such
+stores. The app pairs none: `AppComposition` builds the host from one `LedgerStores`, whose repository and event
+store share a queue, and the watch gets its host, over its own database, in F18.
+
+**Proposed, for approval.** F17's plan answers two questions that this point sharpens and does not decide:
+
+- *A late envelope for a saved workout* finds no log. It is stored in a log that replays to nothing, and kept;
+  a resend of the peer's own envelopes cannot rebuild the workout, because its `started` is gone. So a
+  rebuild's "`.materialize` again when a finished workout changed" (F17 "Inputs from F04", item 2) can happen
+  only while the log remains. Item 8 there names the choice: drop after the peer acknowledges the end, or keep
+  a tombstone.
+- *The completeness check and the drop are two reads.* That is safe while only the host writes a log, one
+  operation at a time. Once a peer's envelopes are appended, either the append runs in the host's queue or the
+  check moves into the save's transaction.
+
+Where F17's brief has the actor compact after the materialisation commits, this point replaces it.
+
+### 2. A finished workout whose save fails: a waiting end
+
+`finish` stores `finished` in the log and then saves. When the save fails (a full disk, or a workout the store
+refuses), the end is stored and the workout is not in history: a *waiting end*. The host loop above has no such
+state.
+
+**Now.** Nothing is lost and nothing is half done: the end stays in the log, and over one database no row of
+history, no miss and no program slot has changed. Until a save succeeds:
+
+| | While the end waits |
+|---|---|
+| `current()`, open streams, a new stream | The workout as it stood before `finish`, with phase `.live`. No update is published. |
+| `finish` again | Saves again. On success: the one ending update, and the state ended when the first call said. On failure: the store's error again. `noLiveWorkout` if the launch step completed the end in between. |
+| `apply`, `discard` | Complete the waiting finish first, so the workout is saved, with its program changes, and then throw `noLiveWorkout`; or throw the store's error. Their own event is never stored. |
+| `start` | `workoutInProgress`. `StartWorkoutUseCase` answers `.resumed` for the same day and `.conflict` for another; replacing saves the waiting workout and starts the new one, or throws the store's error and starts nothing. |
+| A return to the foreground | The launch step runs again while the host has work left (`needsRecovery`). A save that succeeds publishes the ending update, with no haptic. |
+| A relaunch | Nothing is live, and a new workout can be started. The launch step tries the save at launch and on each return to the foreground; when it succeeds nothing is published, since no reader was shown that workout. |
+
+A discard whose log cannot be dropped waits in the same way, and a second `discard` completes it. In both
+cases the host's clock and `seq` have moved on, because the end is stored.
+
+Two things are missing. Both matter more once there is a peer: the engine orders `.transmit` after `.persist`
+and before the save, so F17 will send `finished` to the peer while this device still shows the workout live.
+
+**Proposed, for approval (a): how a screen learns that an end is waiting.** Today nothing on the interface says
+so. An update carries the state and the haptics, the state's phase is `.live`, and `needsRecovery` is the
+host's, not the protocol's. A reopened workout looks live and accepts no change.
+
+| Option | The interface | The watch (F17) |
+|---|---|---|
+| **A. Say it on the update** | `WorkoutSessionUpdate` gains the waiting end (the ended state; nil when none), in a stream's first element too. The host publishes when an end starts to wait and when it is completed, which makes one exception to "a call that throws publishes nothing of its own". `state`, `current()` and `start`'s guard stay as they are. New contract clauses, and a fake whose save can be made to fail (already owed for S7). | Nothing new crosses the link: each device reports its own save. This device can show what the peer shows, "ended", and add "not saved yet". |
+| B. Publish the end when it is stored | Readers see `.finished` at once and `current()` is nil; a second signal must still report the save. S1's promise that a subscriber may read history when the ending update arrives goes, `start` no longer guards a workout that is not in history, and Today loses Resume as the way back to the retry. | Both devices show one phase by construction. |
+| C. Leave it; the screen infers | No change. S7's store remembers a failure it saw; a cover reopened later learns from the first call that is refused. | The peer shows the workout ended while this device shows it live, until the save succeeds. |
+
+Recommendation: **A**. It is the smallest change that makes the state visible, and it keeps what the waiting end
+protects: one workout at a time, and a way back to the retry. The fact belongs on the update and not in
+`WorkoutState`, because `WorkoutState` is what both devices compute from the same envelopes (rule 3), and "not
+saved here yet" is true of one device only.
+
+**Proposed, for approval (b): may a lifter abandon a workout that can never be saved?** Today nothing they can
+do in the running app removes a waiting end. "Discard" completes the save when the store allows it. When it
+never does, `finish`, `apply` and `discard` throw the store's error each time and `start` answers
+`workoutInProgress`. After a relaunch the workout is off the screen, its log is kept, and the launch step fails
+on every return to the foreground. The store's lasting refusals are `duplicateIdentifier`, `nulInText`,
+`inexactWeight` and `nonFiniteDate`; the tester knows no path through M1's screens that produces one (F10-S2-1).
+
+| Option | The interface | The watch (F17) |
+|---|---|---|
+| A. No abandon (today) | No change. S7 offers "Try again" and "Close", and never "Discard". The launch step could stop reporting work left for a refusal that is not transient. | Nothing. |
+| **B. An explicit abandon** | A new call on the protocol drops the log of a waiting end without saving it. It cannot be `discard`, and cannot be an event: the log already holds `finished`, and rule 3 ignores a later terminal event. `discard` goes on completing a waiting finish, which `StartWorkoutUseCase`'s replace relies on. After a relaunch the workout is not shown, so S7 says where the lifter finds it. | `finished` has already reached the peer, which saves its own copy. The abandon is this device's alone unless F17 adds a message for it, and F17 says whether the peer's copy comes back here. |
+| C. Refuse before the end is stored | `finish` asks whether the store would take the workout and throws while it is still live, as it does for `incompleteLog`. The lifter goes on, or discards, which needs no save. Needs a "would it save" answer from the repository. | Nothing reaches the peer: the refusal comes before `.persist`. An end received from a peer is not covered. |
+
+Recommendation: **B**, as the lifter's own choice, confirmed, on the failure screen. It is Pete's to decide
+(decision 1). C is a sound guard to add with B or later, and needs no product decision. A leaves the lifter no
+exit short of force-quitting.
+
+### 3. A program change that arrives late
+
+**Now.** A swap made with "Also update program" records `programUpdates[slot] = exercise` in the workout's
+state, and the save applies it. Every materialisation applies each entry whenever the slot does not already
+hold that exercise, given a live slot of the workout's own program and a stored exercise; anything else is
+logged and skipped. It does not ask what the slot held when the lifter swapped, or when. So a materialisation
+made after the lifter changed that slot sets it back to the swap's exercise, silently, and stamps the slot with
+the time of the save. The protocol says so and the contract pins it (`laterSaveSetsTheSlotBack`). Three paths
+save late or twice:
+
+- a waiting end (point 2) that is saved hours or days later;
+- a second save of a workout already in history: the retry where the stores are not one database, or after a
+  save whose answer was lost;
+- with F17, a rebuild of a finished workout, and a peer's finished workout, which carries the peer's swaps.
+
+Two ended logs met in one recovery pass are completed in the order their workouts started, then by id,
+whatever order the store lists them in. So of two workouts that swapped one slot, the later one's exercise
+stays.
+
+**Proposed, for approval: the rule F17 and the swap slice (F10 S8) follow.**
+
+| Option | The rule | What the swap's payload needs |
+|---|---|---|
+| **A. Compare-and-set** | An entry is applied only while the slot still holds the exercise that was swapped out. Otherwise it is logged and skipped, and the lifter's later choice stays. | That exercise, beside the new one, in `programUpdates`. Either `exerciseSwapped` carries it, or the reducer takes it from the row before its first swap. Both change an encoded shape (`programUpdates` is part of the `started` snapshot), so the version-1 fixtures are proven to decode or the payload version is raised. |
+| B. Last writer by time | An entry is applied only when the swap is newer than the slot's last change. | A payload time on the swap, which has none (`wallClock` is the ordering stamp, never the time of an action). The slot also needs a time for its exercise alone, since `updated_at` moves for any change to the row. The answer then rests on two devices' clocks. |
+| C. Keep today's rule | Every materialisation applies its entries; callers avoid saving late with them. | Nothing. A waiting end and a peer's workout stay exposed. |
+
+Recommendation: **A**, decided with ruling O10 when S8 starts, because both change the same payload. It is safe
+at any time, in any order and on both devices, and needs no clock; in the repository it is one more bound value
+in a query that already reads the slot's exercise. Which choice wins is Pete's to decide (decision 2).
+
+Until it is built, a rebuild that stores an older workout again sends no slots and no `programUpdates` (a
+workout read from history has none), and any pass over several ended workouts keeps the start order. F17 also
+says whether a peer's swap is applied on both devices or only where the lifter asked for it.

@@ -12,7 +12,8 @@ import Testing
 ///   2,250 lb single takes every later estimate record away, the fix gives them back), a History write
 ///   (`PerformanceBudget.historyWrite`);
 /// - the bests F10 asks for before a new workout, a query (`statsQuery`);
-/// - recording new workouts at the end of history, each replaying only itself (`recordNewWorkout`).
+/// - recording new workouts at the end of history, each replaying only itself (`recordNewWorkout`), and the
+///   same with what a finish adds since F10 S3: program updates, misses and the log dropped.
 @Suite(
     "GRDBWorkoutRepository · record replay timing",
     .tags(.persistence, .performance, .slow),
@@ -84,6 +85,55 @@ struct RecordReplayPerformanceTests {
         }
         let report = timed.map { Self.line($0.0, Array($0.1.dropFirst())) }.joined(separator: "\n")
         Attachment.record(report, named: "record-replay.txt")
+    }
+
+    /// F10 S3 criterion 8: the finish path as the host now runs it. Each run stores a new workout at the end of
+    /// history with a swap that changes two slots of its program, the misses of a day's five slots, and its
+    /// log of sixty events dropped, in the one transaction; then makes the host's look at its event store
+    /// (`uncompactedWorkoutIDs()`), with a kept log of two hundred events beside it. The save and the look
+    /// together are within the budget of the save.
+    @Test("A finish at the end of 400 workouts, with its program updates, misses, log and the host's look, in budget")
+    func finishWithProgramUpdatesAndTheLog_underBudget() async throws {
+        let directory = TemporaryDirectory()
+        defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
+        let queue = try await Self.seeded(in: directory)
+        let workouts = GRDBWorkoutRepository(queue, now: { Self.now })
+        let events = GRDBWorkoutEventStore(queue, now: { Self.now })
+        try await GRDBExerciseRepository(queue, now: { Self.now })
+            .seedIfNeeded(ProgramRepositoryContract.exercises, version: 1)
+        let program = try ProgramRepositoryContract.program()
+        try await GRDBProgramRepository(queue, now: { Self.now }).save(program)
+        let kept = Seeders.workoutID(9999)
+        _ = try await events.append(WorkoutRepositoryContract.log(of: kept, count: 200))
+        let clock = ContinuousClock()
+        var saves: [Duration] = []
+        var looks: [Duration] = []
+        for run in 0 ... PerformanceBudget.statsRuns { // the first run is the warm-up
+            var new = Self.workout(400 + run)
+            new.source = WorkoutSource(programID: program.id, weekIndex: 1, dayTemplateID: program.days[0].id)
+            // Each run swaps the two slots to another exercise than the run before, and moves every miss.
+            let exercise = ProgramRepositoryContract.exercises[1 + run % 2].id
+            new.programUpdates = [program.days[0].slots[0].id: exercise, program.days[0].slots[2].id: exercise]
+            let slots = program.days[0].slots.map { slot in
+                var missed = slot
+                missed.misses = [run % 7]
+                return missed
+            }
+            _ = try await events.append(WorkoutRepositoryContract.log(of: new.id, count: 60))
+            let saved = new
+            try await saves.append(clock.measure {
+                _ = try await workouts.materialize(saved, slotUpdates: slots, droppingLog: true)
+            })
+            try await looks.append(clock.measure { _ = try await events.uncompactedWorkoutIDs() })
+        }
+        #expect(try await events.uncompactedWorkoutIDs() == [kept])
+        #expect(try await queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM workout") } == 421)
+        let finishes = Array(zip(saves, looks).map { $0 + $1 }.dropFirst())
+        #expect(Self.percentile95(finishes) < PerformanceBudget.recordNewWorkout, "the save and the look: \(finishes)")
+        let save = "materialize a new workout at the end, with 2 program updates, 5 misses and a log of 60 dropped"
+        let look = "the host's look after it, uncompactedWorkoutIDs() beside a kept log of 200"
+        let report = [Self.line(save, Array(saves.dropFirst())), Self.line(look, Array(looks.dropFirst()))]
+        Attachment.record(report.joined(separator: "\n"), named: "finish-save.txt")
     }
 
     static func percentile95(_ timings: [Duration]) -> Duration {

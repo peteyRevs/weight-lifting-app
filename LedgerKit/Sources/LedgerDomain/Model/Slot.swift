@@ -10,7 +10,8 @@ public enum Progression: String, Codable, Sendable, CaseIterable {
 /// Validation happens only in `init` and when decoding (engineering-standards §5). The ranged
 /// properties are `var` by design (F02 brief), and assigning one directly skips validation, so an
 /// editor that changes `sets`, `reps`, `repsHi`, `dropSets`, `startLoad` or `step` rebuilds the slot
-/// through `init` (a directly mutated out-of-range slot still encodes, but will not decode).
+/// through `init` (a directly mutated out-of-range slot still encodes, but will not decode). The one
+/// exception is `DayEditing` (F11), which assigns them and keeps every range itself.
 public struct Slot: Identifiable, Hashable, Codable, Sendable {
     public let id: SlotID
     public var exerciseID: ExerciseID
@@ -32,6 +33,13 @@ public struct Slot: Identifiable, Hashable, Codable, Sendable {
     public var dropSets: Int
     /// Week indices in which this slot was missed (rule 13, decision #5).
     public var misses: Set<Int>
+
+    /// Rule 3: sets per slot.
+    public static let setsRange = 1 ... 12
+    /// Rule 2: template reps.
+    public static let repsRange = 1 ... 30
+    /// Rule 2: the top of the double-progression range, which is also always above `reps`.
+    public static let repsHiRange = 2 ... 40
 
     /// Validates rules 1–3 and 6 and throws the first violated range, checked in this order:
     /// sets, reps, repsHi, repsHi > reps, rpe, rest, drop sets, start load, step.
@@ -74,13 +82,13 @@ public struct Slot: Identifiable, Hashable, Codable, Sendable {
     }
 
     private static func validate(sets: Int, reps: Int, repsHi: Int) throws(SlotValidationError) {
-        guard (1 ... 12).contains(sets) else {
+        guard setsRange.contains(sets) else {
             throw .setsOutOfRange(sets)
         }
-        guard (1 ... 30).contains(reps) else {
+        guard repsRange.contains(reps) else {
             throw .repsOutOfRange(reps)
         }
-        guard (2 ... 40).contains(repsHi) else {
+        guard repsHiRange.contains(repsHi) else {
             throw .repsHiOutOfRange(repsHi)
         }
         guard repsHi > reps else {

@@ -7,17 +7,26 @@ import Foundation
 public struct RPE: Hashable, Codable, Sendable, Comparable {
     private let halfPoints: Int
 
+    /// Rule 3: the lowest and the highest RPE.
+    static let range: ClosedRange<Decimal> = 5 ... 10
+
+    /// Rule 3: RPE moves in halves.
+    static let step = Decimal(1) / 2
+
     /// Rule 3: `nil` unless `value` is in 5…10 and a multiple of 0.5.
     public init?(_ value: Decimal) {
         let doubled = value * 2
-        guard doubled.rounded(scale: 0, .toNearestOrAwayFromZero) == doubled, doubled >= 10, doubled <= 20 else {
+        guard doubled.rounded(scale: 0, .toNearestOrAwayFromZero) == doubled, Self.range.contains(value) else {
             return nil
         }
         halfPoints = doubled.roundedToInt()
     }
 
-    private init(halfPoints: Int) {
-        self.halfPoints = halfPoints
+    /// Rule 3 stepper semantics: `value` held to 5…10, then rounded to the nearest half (a tie goes up:
+    /// 7.25 → 7.5). A NaN, which `Decimal` orders below every number, becomes 5.
+    public init(clamping value: Decimal) {
+        let held = min(max(value, Self.range.lowerBound), Self.range.upperBound)
+        halfPoints = (held * 2).roundedToInt()
     }
 
     /// The RPE value, e.g. `8.5`.
@@ -32,7 +41,7 @@ public struct RPE: Hashable, Codable, Sendable, Comparable {
 
     /// Rule 12 / decision #3: deload lowers RPE by 2, never below 5.
     func deloaded() -> RPE {
-        RPE(halfPoints: max(10, halfPoints - 4))
+        RPE(clamping: value - 2)
     }
 
     public static func < (lhs: RPE, rhs: RPE) -> Bool {

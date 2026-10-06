@@ -8,7 +8,11 @@ import LedgerDomain
 public extension ProgramRepositoryContract {
     static let storageClauses: [Clause] = [
         Clause("a slot start load or step no column keeps exactly throws inexactWeight; nothing is saved", exactLoads),
-        Clause("a slot naming an exercise that is not stored throws unknownExercise; nothing is saved", knownExercises)
+        Clause("a slot naming an exercise that is not stored throws unknownExercise; nothing is saved", knownExercises),
+        Clause(
+            "update refuses an inexact load and an unknown exercise with save's errors; nothing is written",
+            updateRefusesAtTheBoundary
+        )
     ]
 }
 
@@ -47,6 +51,32 @@ extension ProgramRepositoryContract {
         return try await ContractCheck.first(
             issue.map { "the first slot naming an unknown exercise: \($0)" },
             ContractCheck.expect(repository.active(), program, "active() after the refused save")
+        )
+    }
+
+    /// F11 S3 criterion 4, at the storage boundary: the two results above, returned by a change.
+    static func updateRefusesAtTheBoundary(_ repository: any ProgramRepository) async throws -> String? {
+        let program = try program()
+        try await repository.save(program)
+        let unknown = Seeders.catalogID(9999)
+        let inexact = await ContractCheck.expectError(RepositoryError.inexactWeight(eighthPound.grams)) {
+            _ = try await repository.update(program.id) { stored in
+                var result = stored
+                result.days[2].slots[0].step = eighthPound
+                return result
+            }
+        }
+        let unstored = await ContractCheck.expectError(RepositoryError.unknownExercise(key("exercise", unknown))) {
+            _ = try await repository.update(program.id) { stored in
+                var result = renamed(stored)
+                result.days[2].slots[1].exerciseID = unknown
+                return result
+            }
+        }
+        return try await ContractCheck.first(
+            inexact.map { "a ⅛ lb step: \($0)" },
+            unstored.map { "a slot naming an unknown exercise: \($0)" },
+            same(repository.active(), program, "active() after the refused updates")
         )
     }
 }
