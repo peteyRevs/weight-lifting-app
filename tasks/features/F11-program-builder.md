@@ -258,3 +258,50 @@ should-fix items. Atomicity holds by construction on both stores. Rulings, which
 15. **One ending on both stores** (F11-S3-2, round 2): when a call is cancelled inside a change whose result
     is also refused, both stores report what the database reports. The in-memory store makes the database's
     checks in the database's order: the result's id and validity, then cancellation, then the write.
+
+## Plan amendments — slice S5, the builder's presentation (orchestrator, 2026-10-06)
+
+Cut from `main`, which now holds the tab shell and the localization rule (#28), the editing rules (S1) and the
+atomic update (S3). The logic and the words of the Program builder screen, with no view and no store: one pure
+function, `ProgramPresentation.make(_:) -> ProgramBuilderModel`, in the form `FeatureToday`'s presentation
+has on `main`. The views (S9) only draw the model and the store (S13) only fills the input and sends the
+model's actions to `ProgramEditing`. About 470 product lines planned (the plan's S5 row lists the files). The
+slice is accepted when:
+
+1. **One input, one model.** `make` takes one input value (the program, the exercises, the settings, the
+   selected week, the weeks that hold a finished workout, a notice if one is showing, the calendar and the
+   locale) and returns a model whose every string is final and whose every action is a value the store can
+   apply without deciding anything: an edit named by ids and places, or a `ProgramRoute`.
+2. **The header and the block** (criterion 1): the eyebrow "MY PROGRAM", the program's name with its
+   placeholder, "BLOCK · 8 WEEKS", "−" and "+", and one chip per week reading "W1" with "4 DAYS", or "DELOAD"
+   for a deload week, the selected one marked.
+3. **The selected week** (criteria 1 to 3): "WEEK 3" or "WEEK 3 · DELOAD"; the seven cells in the order of the
+   settings' week start, each with the weekday's letter from the injected calendar and locale and the day's
+   tag or "REST"; each cell's action is the cycle of that weekday; the hint "Tap to assign"; the week's
+   actions "First week" (disabled) or "Copy week 2", "Apply to later weeks" (absent on the last week), and
+   the deload toggle with its state.
+4. **The seed program reads as criterion 1 gives it:** W1 to W7 "4 DAYS", W8 "DELOAD"; week 1's strip
+   M UA · T REST · W LA · T REST · F UB · S LB · S REST; "4 days · 58 sets a week"; four day cards whose
+   minutes are `TimeEstimate`'s (39, 38, 37, 31).
+5. **The day cards** (criterion 5): name, tag, the meta line from the slots' own numbers (exercises, sets as
+   Σ(sets + drop sets), minutes), "No exercises yet" for an empty day, each carrying `ProgramRoute.day(id)`;
+   and "+ Add training day".
+6. **Notices** (criterion 4 and behaviour 6): "A block needs at least 2 weeks.", "Week 8 has logged sessions
+   and can't be removed.", and the notice for a weekday assigned to a day with no exercises, each a final
+   string the store shows from an error or an edit's result, built here.
+7. **Words.** Every text is the brief's "Copy (exact)" or the plan's decision 6, resolved in `ProgramCopy`
+   from `FeatureProgram`'s own String Catalog under standards §7 (one counted value per key; `locale:` when
+   a key carries a value; spoken texts are copy; no literal outside the copy files but "" and " · "). The
+   equipment names this slice needs are entries of this catalog. Texts the brief does not give are listed
+   in the notes for Pete.
+8. **Spoken texts** for the chips, the cells ("Tuesday, rest") and the cards exist, are copy, and agree with
+   what is drawn.
+9. **Pure and total.** No `Date()`, `Calendar.current`, `Locale.current` or `TimeZone.current` in the module
+   (a source test in the form of `FeatureToday`'s); nothing traps for a program with no days, a selected week
+   out of range (read as the nearest week), a day with no slots, a slot whose exercise is not stored; the
+   same input gives the same model in any order of the exercises handed in.
+10. **No rule of its own.** Counts, minutes, limits and the cycle come from `LedgerDomain`
+    (`ProgramEditing`, `TimeEstimate`, `WeekCalendar`); the presentation adds no clamp and no schedule rule.
+11. **The module is wired as `FeatureToday` is:** the target's `resources`, `FeatureProgram` in the coverage
+    thresholds, the placeholder file and its test gone; the gate's string-catalog step and `ModuleCopyTests`
+    pass with no exemption.
