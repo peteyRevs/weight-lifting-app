@@ -39,7 +39,10 @@ private struct BriefProgramRepository: ProgramRepository {
 }
 
 private struct BriefWorkoutRepository: WorkoutRepository {
-    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}
+    func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
+        false
+    }
+
     func workout(id _: WorkoutID) async throws -> WorkoutState? {
         nil
     }

@@ -28,7 +28,7 @@ Goals, in priority order:
 |---|---|---|---|---|
 | Domain unit + property | Swift Testing | ~55 % | ~550 tests, ~1,200 parameterized cases | PR |
 | Persistence integration | Swift Testing + in-memory GRDB | ~15 % | ~150 | PR (performance suite: nightly) |
-| Sync integration + property | Swift Testing + `FakeTransport` | ~10 % | ~90 tests, 200 seeds/PR | PR |
+| Sync integration + property | Swift Testing + `FakeTransport` | ~10 % | ~90 tests, 200 seeds/PR (a matrix of seeds by host set-ups: its fixed seeds, §6) | PR |
 | Health | Swift Testing + `FakeHealthStore` | ~3 % | ~30 | PR |
 | Design system snapshots | swift-snapshot-testing | ~5 % | ~50 tests → ~100 PNGs | PR |
 | Feature stores + screen snapshots | Swift Testing | ~10 % | ~120 store tests + ~45 snapshot tests → ~170 PNGs | PR |
@@ -376,7 +376,13 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   `.enabled(if: TestLane.isDevice)`. A single `.slow` test inside a PR suite
   carries `.enabled(if: TestLane.runsSlowTests)` instead, which is true only
   when `LEDGER_TEST_LANE` is `nightly` (F06: LedgerDesignTests' full
-  bare-font matrix; the PR lane runs a representative subset).
+  bare-font matrix; the PR lane runs a representative subset). A seeded
+  matrix that multiplies its seeds by set-ups is cut the same way (F10 S3):
+  the PR lane and `swift test` run a fixed list of seeds that a test of the
+  suite shows to reach every case, on every set-up; the nightly lane runs
+  every seed of the lane, and never fewer than the fixed list. A test target
+  spells the check once (`TestLane.runsSlowTests`; `TestLane.isNightly` in
+  LedgerSyncTests).
 
 | Lane | Plans | Runs |
 |---|---|---|

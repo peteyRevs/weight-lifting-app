@@ -51,20 +51,41 @@ public protocol ProgramRepository: Sendable {
 /// changed onward: so correcting a typo in an old workout removes the false record and gives a later workout
 /// the record it then deserves. Callers never supply records.
 public protocol WorkoutRepository: Sendable {
-    /// Rule 31: stores the finished workout with its exercises and sets, and the misses of `slotUpdates`
-    /// (rule 13), and detects personal records again from it onward, in one transaction: all of it or nothing.
+    /// Rule 31: stores the finished workout with its exercises and sets, the misses of `slotUpdates` (rule 13)
+    /// and the program changes its swaps asked for (`workout.programUpdates`, decision #13), detects personal
+    /// records again from it onward and, when `droppingLog`, drops the workout's event log
+    /// (`WorkoutEventStore`), in one transaction: all of it or nothing. When it throws, nothing changed: no
+    /// workout, no miss, no program change, and the log whole.
     ///
-    /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, a
-    ///   changed one replaces its exercises and sets, and a deleted one comes back. A workout stored late, before
-    ///   others, takes its place in the order, and the records of those after it follow.
+    /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, the
+    ///   program included as long as it was not edited in between; a changed one replaces its exercises and
+    ///   sets, and a deleted one comes back. A workout stored late, before others, takes its place in the
+    ///   order, and the records of those after it follow.
     /// - Of each slot in `slotUpdates` only `misses` is written, replacing the slot's stored misses whole, so
     ///   build each slot from the program as stored now. A slot that is not stored is skipped.
-    /// - `workout.programUpdates` is not applied.
+    /// - Each entry of `workout.programUpdates` sets the exercise of one slot, and nothing else of it. It may
+    ///   only touch a stored slot of the workout's own program (`source.programID`), and only name a stored
+    ///   exercise: an entry of an ad-hoc workout, or one naming a slot that is not stored, a slot of another
+    ///   program or an exercise that is not stored, is skipped. A skipped entry never fails the save.
+    /// - An entry is applied by every materialisation: one made after the lifter changed that slot sets it
+    ///   back to the swap's exercise. So store an older workout again without its `programUpdates`, as
+    ///   without its slots.
+    ///
+    /// **The log.** A workout's log is that workout before it was saved (ADR-004 rule 5), and the save is what
+    /// ends its use: that is why this repository may drop it. It drops that one log, never reads an envelope
+    /// and never writes one; the caller has made sure the log is complete
+    /// (`WorkoutEventStore.unreadableCount(for:)`).
+    ///
+    /// Returns whether this repository dropped the log with the save. `false` when `droppingLog` is false, and
+    /// from a repository that holds no log, whose caller then compacts it in a second step. `true` says only
+    /// that the log is gone from the repository's own database: nothing ties a repository to the event store
+    /// a caller holds beside it, so a caller that holds one looks there before it takes the log for gone, as
+    /// the session host does. Every implementation states which it is; there is no default.
     ///
     /// Throws `notFinished` unless the workout is `.finished` with an `endedAt`; `duplicateIdentifier` for an
     /// exercise or set id used twice, or held by another stored workout (even a deleted one); `nulInText` for a
     /// name or tag holding U+0000.
-    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool
     /// The stored workout, or `nil`. A history read resets the live-only fields: no `cursor`, no `rest`, no
     /// `programUpdates`, no exercise's `lastPerformance`, and `autoRest` true.
     func workout(id: WorkoutID) async throws -> WorkoutState?
@@ -84,6 +105,13 @@ public protocol WorkoutRepository: Sendable {
     func delete(id: WorkoutID) async throws
     /// `recent(limit:)` now, then after every change that alters it, and for no other write.
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]>
+}
+
+public extension WorkoutRepository {
+    /// The save alone: `materialize(_:slotUpdates:droppingLog:)` that leaves the workout's log where it is.
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+        _ = try await materialize(workout, slotUpdates: slotUpdates, droppingLog: false)
+    }
 }
 
 /// User preferences (single row).

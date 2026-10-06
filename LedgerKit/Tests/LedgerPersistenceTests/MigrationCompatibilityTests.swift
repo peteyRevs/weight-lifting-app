@@ -152,6 +152,35 @@ struct MigrationCompatibilityTests {
     }
 }
 
+/// F10 S3 criterion 7: the save that changes a slot's exercise and drops a log needs no migration.
+extension MigrationCompatibilityTests {
+    @Test("A database written at v001 takes a save with a program update and its log dropped, with no new migration")
+    func open_savesWithAProgramUpdateAndTheLogDropped() async throws {
+        let directory = TemporaryDirectory()
+        defer { try? directory.remove() } // cleanup only: a leftover temporary file fails nothing
+        let queue = try LedgerDatabase.open(at: Self.fixtureCopy(in: directory))
+        let program = try await Self.expectTheProgram(in: queue)
+        let slot = program.days[0].slots[0]
+        var finished = Seeders.workout(number: 7, endedAt: Self.ended.addingTimeInterval(86400), [
+            Seeders.ExerciseLog(ProgramRepositoryContract.exercises[0], slotID: slot.id, [.init(190, 5)])
+        ])
+        finished.source = WorkoutSource(programID: program.id, weekIndex: 4, dayTemplateID: program.days[0].id)
+        finished.programUpdates = [slot.id: Self.landmine]
+        let events = GRDBWorkoutEventStore(queue, now: { Self.ended })
+        _ = try await events.append(WorkoutRepositoryContract.log(of: finished.id, count: 4))
+        let workouts = GRDBWorkoutRepository(queue, now: { Self.ended })
+        #expect(try await workouts.materialize(finished, slotUpdates: [], droppingLog: true))
+        let stored = try #require(try await GRDBProgramRepository(queue, now: { Self.ended }).active())
+        #expect(slot.exerciseID != Self.landmine && stored.days[0].slots[0].exerciseID == Self.landmine)
+        #expect(stored.days[0].slots[0].misses == [3] && stored.days.flatMap(\.slots).count == 20)
+        // The fixture's own log, of another workout, is whole; the saved workout's is gone.
+        #expect(try await events.uncompactedWorkoutIDs() == [PayloadV1.workout])
+        #expect(try await events.envelopes(for: PayloadV1.workout).count == 13)
+        let applied = try await queue.read { try LedgerDatabase.migrator.appliedIdentifiers($0) }
+        #expect(applied == ["v001_createSchema", "v002_workoutStartedIndex"])
+    }
+}
+
 /// What the fixture holds, read through the repositories and the stats queries.
 extension MigrationCompatibilityTests {
     static func expectTheFixturesData(in queue: DatabaseQueue) async throws {

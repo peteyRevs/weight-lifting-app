@@ -64,7 +64,7 @@ struct FakeSessionDifferentialAdversarialTests {
 
     @Test(
         "A seeded script: the fake returns, throws, holds and publishes what the engine says",
-        arguments: SeamSeed.all
+        arguments: SessionLane.cut(SeamSeed.all, to: 40)
     )
     func script_fakeAnswersAsTheEngine(seed: SeamSeed) async throws {
         let divergence = try await Self.divergence(seed: seed.value, on: FakeWorkoutSessionClient())

@@ -240,3 +240,112 @@ added, and criteria 1, 3, 4 and 8 below were tightened.)
   wiring in `LedgerAppKit` (`AppComposition`, `MainRoot`), not under `Apps/Ledger/Sources/`.
 - The check's label on a logged row is "Undo set 2".
 - Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above.
+
+## Plan amendments — slice S2, host and start use case (orchestrator, 2026-10-05)
+
+S1 (the session seam) is on `main` (#27). This section is the specification of S2; where it and anything above
+disagree, this section wins. Evidence and signatures are in `F10-active-workout/implementation-notes.md` ("Inputs
+the implementer needs › S2", "Inputs for S2", the orchestrator's rulings).
+
+**What S2 delivers.** `LocalWorkoutSessionActor` in `LedgerSync` (the real `WorkoutSessionClient`),
+`HybridLogicalClock` and `StartWorkoutUseCase` in `LedgerDomain`, the launch step `LaunchStep.resumeWorkout`, and
+the iPhone app's wiring in `AppComposition`. No screen: nothing the lifter sees changes, but a live workout now
+survives a relaunch.
+
+1. **The contract.** The host keeps every clause and every seeded script of `WorkoutSessionClientContract`: over
+   in-memory stores, over the GRDB stores, and over stores that suspend inside every call; and also when its
+   recovery has not been started (the first protocol call starts it, and every call waits for it).
+2. **Own actions follow ADR-004's host loop.** An event is stamped with `seq` = the highest stored for this
+   workout and device + 1 and with the hybrid logical clock, reduced, and its effects run in order, `.persist`
+   first. If the store refuses the append, the call throws and nothing changes: no state, no clock, no `seq`, no
+   update. An event the engine ignores stores nothing and takes no `seq`.
+3. **The clock.** A stamp is `max(now, newest stamp seen or sent + 1 ms)`. After a relaunch the clock continues
+   from the store's newest wall clock, so a system clock that stepped back never yields a stamp older than one
+   already stored (F04 findings 6 and 12). The host never produces a stamp that is not finite: if it cannot, it
+   reports an issue and throws, and it never answers `notStartable` for a snapshot the engine would start.
+4. **Finish.** `.finished` is stored, the workout is materialised (with the slots' misses from `MissTracking`,
+   applied to the program as stored at that moment and only when the active program is the workout's), the log is
+   compacted, and only then is the ending update published; `current()` is nil afterwards. If the save fails,
+   `finish` throws, the log is kept, nothing is lost, and no ending update is published until a save succeeds: a
+   second `finish` retries it and publishes once, and so does the launch step on the next foreground or relaunch.
+   What `current()` and open streams show between the failed save and the retry is the implementer's to define, on
+   the protocol's documentation and in the notes.
+5. **Discard.** `.discarded` is stored, the log is compacted, the ending update is published; nothing reaches
+   history.
+6. **Recovery** (`resumeFromStore()`; the launch runs it as `LaunchStep.resumeWorkout`, after `loadSettings`, and
+   owns the step's task as it owns the others). For each log the store has not compacted:
+
+   | Stored when the app died | The step | Afterwards |
+   |---|---|---|
+   | nothing, or a `started` that never reached the store | nothing | no workout |
+   | a live log | resumes it: no haptic, no effect run | `current()` is the workout, with the same sets, cursor and rest |
+   | `finished` stored, not materialised | materialises (misses from the program as stored now), compacts | the workout is in history; no live workout |
+   | materialised, not compacted | materialises again (no change), compacts | the same |
+   | `discarded` stored, not compacted | compacts | nothing in history |
+   | a log that replays to nothing | keeps it and logs a notice | no workout |
+   | a log with rows this version cannot read | live: resumes from what it reads; ended: keeps it | a workout, or none |
+   | a save that throws | keeps the log, records the step as failed, carries on with the other logs | retried on the next foreground |
+
+   Running the step twice changes nothing. A scene-phase task that is cancelled never cancels the step.
+7. **Kill and relaunch** (the brief's criterion 12), on a real database file: after `started` is stored; in the
+   middle of a workout with a rest running; after `finished` is stored and before the save; after the save and
+   before the compaction; after `discarded` and before the compaction. Each gives the row above.
+8. **`StartWorkoutUseCase.start(_:replacingLive:)`**: `.started` (a workout built by `SessionBuilder` from the
+   stored program, exercises, last performances and settings, then `session.start`); `.resumed` (a live workout with
+   the same source, rule 17); `.conflict(live:)` (a live workout with another source: nothing changes); with
+   `replacingLive: true` the live workout is discarded and the new one started. It throws `programNotActive`,
+   `dayNotInProgram` or `emptyDay`, and starts nothing then.
+9. **The app.** When the database opens, the iPhone's composition builds the host over the GRDB stores, binds
+   `workoutSession`, and the launch runs the step. A failure is recorded and retried on the next foreground. The
+   watch app is unchanged (it gets the host in F18).
+10. **Subscribers and effects.** An ended subscriber is dropped when a publication finds it ended: no lock, no
+    unstructured task. The host forwards haptics only; it runs no notification effect yet (S6) and ignores
+    `.transmit` and `.updateLiveActivity`.
+11. **The contract grows.** It gains a seeded script of calls made at once (starts, applies, ends, subscriptions, and
+    a subscriber that acts on what it is told), checked as one history: every update follows from the one before it
+    by exactly one call that succeeded, every success is published once, every refusal is one the protocol allows
+    for that call, a late stream is a suffix of the history, and haptics are the engine's. It passes on the host over
+    suspending stores and on the fake, and a fault shows it can fail.
+12. **Budget.** An `apply`, including its append to the GRDB store, takes under 30 ms (architecture §15), measured
+    in the nightly tier.
+
+## Plan amendments — slice S3, the persistence follow-up (orchestrator, 2026-10-05)
+
+S1 (the seam, #27) and S2 (the host, #29) are on `main`. This section is S3's specification; where it and anything
+above disagree, this section wins. Evidence and line references are in `F10-active-workout/implementation-notes.md`
+("Inputs the implementer needs › S3", S2's "Inputs for S3", the review's SF5, the rulings).
+
+S3 finishes the save of a finished workout: the program change a swap asked for lands with the workout, and the
+workout's event log is dropped in the same transaction. No screen; nothing the lifter sees changes yet (the swap
+sheet is S8).
+
+1. **A program change lands with the workout.** Given a finished workout whose `programUpdates` name a stored slot
+   of the workout's own program and a stored exercise, `materialize` stores the workout and sets that slot's
+   exercise, in one transaction. Nothing else of the program changes, and the slots' misses are written as before.
+   (This is the default of the open product question on "Also update program": the program changes when the workout
+   is saved, so a discarded workout leaves it alone.)
+2. **What cannot be applied is skipped, not fatal.** An update that names a slot that is not stored, a slot of
+   another program, or an exercise that is not stored is logged and skipped; the workout and the other updates are
+   still stored.
+3. **Saving twice changes nothing.** Materialising the same finished workout again leaves every row of every table
+   as it was, the program's included.
+4. **The log goes with the save.** `materialize` can be asked to drop the workout's event log in the same
+   transaction. When it succeeds, no event of that workout remains; when it fails, nothing changed: no history row,
+   no program change, the log whole.
+5. **The host uses it.** A finish is: store `finished`, then one transaction (the workout, its records, the misses,
+   the program updates, the log dropped), then the ending update. Over the database a workout can no longer be in
+   history and still shown as live, `finish` no longer throws for a workout that is already in history, and
+   recovery's row "saved, not compacted" remains only for stores that are not one database. The protocol's
+   documentation, the failure table in the notes and architecture §6 say so.
+6. **The fakes follow** (ADR-008): the in-memory stores apply the same rules, refuse what the database refuses in
+   the same order, and are held to the database by the shared contract and the seeded differential scripts.
+7. **No migration.** The schema and the version-1 fixtures are unchanged.
+8. **Budgets hold** (architecture §15): storing a new workout at the end of history with its program updates and
+   the log dropped stays under 50 ms on the 20,000-set fixture, in the nightly lane.
+9. **The PR lane gets cheaper.** #29's host suites doubled the iOS test step on CI (998 s against 422 s before it).
+   The seeded matrices of the session suites are cut in the PR lane (fewer seeds or set-ups; every clause, every
+   kind of store and every fault still run at least once) so that the session suites cost at most a third of what
+   they do now, measured locally and reported; the nightly lane keeps the full matrix.
+
+Not in S3: the swap event's payload (O10 is decided when S8 starts), anything History edits or deletes (F13), any
+screen.

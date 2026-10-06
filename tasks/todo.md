@@ -96,8 +96,44 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 | F14 | Settings: units, rest, plates, toggles, CSV export, Health row | F07 |
 | F15 | iOS UI tests for critical flows, accessibility audit, Dynamic Type pass | F08–F14 |
 
-- [ ] F08 · [ ] F09 · [ ] F10 · [ ] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15
+- [~] F08 · [~] F09 · [~] F10 · [ ] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15
 - [ ] M1 exit: a new user can onboard, run a full workout on the phone, see it in history and in the exercise chart; all flows pass the accessibility audit.
+
+### Status — 2026-10-05: M1 opened with three lanes (Pete approved 2026-10-04)
+
+Each feature is delivered as slices, one PR each. Slice plans, rulings and each slice's specification are in the
+feature's brief ("Plan amendments") and notes. "Built" means implemented, adversarially tested, reviewed and
+gated locally, on a branch pushed for safe keeping with no PR yet.
+
+| Slice | What it is | State |
+|---|---|---|
+| F08 S1 | Program generator (goal and days per week to an 8-week program) | Built (`feat/F08-s1-templates`); **waits for Pete:** do our 3, 5 and 6-day programs ship as defaults; should "Get stronger" accessories use reps-first progression |
+| F08 S2 | The three-step onboarding screen | Built (`feat/F08-s2-onboarding-ui`); PR after #28 and S1 |
+| F08 S3 | A fresh install opens on onboarding; the root follows the active program | Built (`feat/F08-s3-root-gate`); PR after S2 |
+| F09 S1 | Four-tab shell, navigation, the first String Catalog and the localization checks | **PR #28, CI green, waits for Pete's review** (architecture §4, standards §7, a reworded sentence, tab colour and icons) |
+| F09 S2 | Domain additions for Today (next scheduled day, volume change, load state) | Built (`feat/F09-s2-domain`); PR after #28 |
+| F09 S3 | Today's presentation: which card, every word | In progress |
+| F09 S4–S6 | Today's views, store and wiring, live session | Not started |
+| F10 S1 | The workout session interface, its test double and shared contract | **On `main`** (#27) |
+| F10 S2 | The real session host, recovery after a kill, the start use case | **On `main`** (#29) |
+| F10 S3 | A swap's program change lands with the saved workout; the log goes in the same transaction | **On `main`** (#30) |
+| F10 S4–S9 | The workout screens: cover, logging, rest, finish and receipt, swap, supersets | Not started; S4 needs #28 |
+
+- **Waiting on Pete:** PR #28; the two questions on F08 S1's program tables; the open product questions asked on
+  2026-10-04 (defaults are built: elapsed time past an hour as "1:01:05"; units and week start from the stored
+  settings; a live workout takes over Today's card; a session done on another day is offered again; "Also update
+  program" lands with the saved workout; a swap keeps the original's load) and one new one: may a lifter abandon a
+  finished workout that cannot be saved. An ADR-004 / ADR-008 amendment is owed to him before F17 is planned.
+- **Conventions settled in M1 so far:** one String Catalog and one copy file per module, checked by the gate
+  against the compiler's keys (standards §7, in #28); a screen that scrolls is its pinned parts plus a scroll view
+  around one page view, and its VoiceOver tree is pinned on the page (testing-strategy, with F08 S2); stores take
+  synchronous intents and run their work from the view's task; a feature exposes a route and never presents
+  another feature.
+- **CI:** a new branch's first run is cold (#29 took 38 minutes); the session suites' seeded matrices now run in
+  full only in the nightly lane (#30: 17 minutes). A branch pushed without a PR starts no run.
+- **Chores queued:** package targets do not yet build with warnings as errors in `check.sh`; `LedgerDesign`'s and
+  the watch's strings are not in catalogs yet; a recording seam for the logger; tests that compare large values
+  inside an expectation (a red run can fill the disk); three tests that fail in the nightly lane on one thread.
 
 ## M2 — Apple Watch (target: 3 weeks; real devices required)
 

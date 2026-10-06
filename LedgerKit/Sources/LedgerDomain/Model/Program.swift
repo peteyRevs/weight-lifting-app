@@ -21,6 +21,9 @@ public struct Program: Identifiable, Hashable, Codable, Sendable {
     public var daysPerWeek: Int?
     public var isActive: Bool
 
+    /// Rule 4: the fewest weeks a block can have.
+    static let minimumWeeks = 2
+
     public init(
         id: ProgramID,
         name: String,
@@ -44,7 +47,7 @@ public struct Program: Identifiable, Hashable, Codable, Sendable {
     }
 
     private static func validate(weeks: [Week], days: [DayTemplate]) throws(ProgramValidationError) {
-        guard weeks.count >= 2 else {
+        guard weeks.count >= minimumWeeks else {
             throw .tooFewWeeks(count: weeks.count)
         }
         let indices = weeks.map(\.index)

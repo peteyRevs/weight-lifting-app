@@ -19,6 +19,9 @@ final class Harness {
 
     let directory: URL
     private(set) var log: [Entry] = []
+    /// Told of each launch event as it is recorded, after `log` holds it: for a test that waits for a step to
+    /// begin without polling `log`.
+    var onEvent: (LaunchEvent) -> Void = { _ in }
 
     init(_ name: String = #function) {
         let safe = name.filter { $0.isLetter || $0.isNumber }
@@ -45,7 +48,10 @@ final class Harness {
                 now: { now },
                 newID: { Harness.deviceUUID },
                 logger: .disabled,
-                record: { [weak self] in self?.log.append(.event($0)) },
+                record: { [weak self] event in
+                    self?.log.append(.event(event))
+                    self?.onEvent(event)
+                },
                 assignMirroringHandler: { [weak self] in self?.log.append(.handlerAssigned) },
                 activateCompanionSession: { [weak self] in self?.log.append(.companionActivated) },
                 preparesDependencies: false,

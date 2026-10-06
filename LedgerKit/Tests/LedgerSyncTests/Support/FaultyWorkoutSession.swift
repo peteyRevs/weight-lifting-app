@@ -17,6 +17,10 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
     private var applying = 0
     /// Whether an end has been refused with `invalidEndDate` (`refusesEveryEndAfterOne`).
     private var refusedAnEnd = false
+    /// Applies that are inside the client and have not ended (`refusesAnApplyUnderOverlap`).
+    private var inside = 0
+    /// How many updates the second stream opened has been given (`repeatsAnUpdateOnTheSecondStream`).
+    private var givenToTheSecondStream = 0
 
     init(_ fault: Fault?) {
         self.fault = fault
@@ -65,7 +69,16 @@ actor FaultyWorkoutSession: WorkoutSessionClient {
     }
 
     func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
-        try await perform(event, through: .apply)
+        if fault == .refusesAnApplyUnderOverlap, live != nil {
+            // Refuses an edit of a workout that is live the whole time, because another apply is inside too.
+            inside += 1
+            defer { inside -= 1 }
+            await letOthersIn()
+            if inside > 1 {
+                throw WorkoutSessionError.noLiveWorkout
+            }
+        }
+        return try await perform(event, through: .apply)
     }
 
     func finish(endedAt: Date) async throws -> WorkoutState {
@@ -203,9 +216,15 @@ private extension FaultyWorkoutSession {
         lastHaptics = fault == .dropsTheHaptics ? [] : haptics
         let update = WorkoutSessionUpdate(state: state, haptics: lastHaptics)
         var someoneStopped = false
-        for listener in listeners {
+        for (number, listener) in listeners.enumerated() {
             if case .terminated = listener.yield(update) {
                 someoneStopped = true
+            }
+            if fault == .repeatsAnUpdateOnTheSecondStream, number == 1 {
+                givenToTheSecondStream += 1
+                if givenToTheSecondStream == 2 {
+                    listener.yield(update)
+                }
             }
         }
         if someoneStopped, fault == .cancellationEndsEveryStream {

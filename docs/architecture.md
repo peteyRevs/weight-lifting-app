@@ -156,8 +156,8 @@ targets only.
   (`AppComposition`, F07): it assigns
   `HKHealthStore.workoutSessionMirroringStartHandler` **synchronously at the
   top of launch** (R1 §2.5 gotcha 4), then opens and migrates the database.
-  Seeding, settings and the WatchConnectivity session delegate follow the
-  first frame.
+  Seeding, settings, the live workout's recovery (§6) and the WatchConnectivity
+  session delegate follow the first frame.
 - Both apps share the database half of their launch: `DatabaseLaunch`
   (`LedgerPersistence`, a `@MainActor` observable type) opens the file (product
   decision #29), seeds the catalog (#28), loads the settings and retries on
@@ -254,7 +254,7 @@ Entities (all `struct`, `Equatable`, `Sendable`, `Codable`):
 | `DayTemplate` | id, name, tag, slots: [Slot] |
 | `Slot` | id, exercise, sets (1–12), reps (1–30), repsHi (2–40), rpe (5–10 by 0.5), rest (30–300 s by 15), progression (`linear/double/fixed`), startLoad, step?, isSupersetWithPrevious, dropSets (0/1), misses: Set<Int> |
 | `Prescription` | load, sets, reps, rpe, rest, step, progression, isHeld, isDeload — computed by `ProgressionRules.prescribe(week:slot:)` per spec §7.2 |
-| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`) |
+| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`), programUpdates: [SlotID: ExerciseID] (swaps with "Also update program"; live only, applied to the workout's own program when it is saved, §6) |
 | `WorkoutExercise` | id, exercise snapshot (id, name, equipment, step, rest, rpe, isSupersetWithPrevious), target (sets, reps, load), sets: [LoggedSet], lastPerformance? |
 | `LoggedSet` | id, weight, reps, kind (`working/drop/added/warmup`), doneAt? |
 | `WorkoutSummary` | elapsed, doneSets, totalSets, volume, prs: [PersonalRecord], rows for the receipt |
@@ -298,7 +298,7 @@ public enum Effect: Hashable, Sendable {
     case updateLiveActivity
     case persist(EventEnvelope)         // before .transmit
     case transmit(EventEnvelope)
-    case materialize(WorkoutState)      // F05 writes the rows and the receipt (summary)
+    case materialize(WorkoutState)      // the save: rows, records, misses, program updates, the log dropped
     case discardLog
 }
 ```
@@ -306,17 +306,46 @@ public enum Effect: Hashable, Sendable {
 The shipped API is in `LedgerDomain/Engine` (with `WorkoutEventStore` in `LedgerDomain/Protocols`); the
 rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed envelopes, the host loop).
 
-- Both apps hold a `WorkoutSessionActor` (in `LedgerSync`) that owns the log,
-  applies local intents (creating envelopes with its `DeviceID`, next `seq` and
-  a hybrid-logical-clock `wallClock`), rebuilds by `replay` on received
-  envelopes, and publishes `WorkoutState` as an `AsyncStream`.
+- The live workout is hosted by `LocalWorkoutSessionActor` (`LedgerSync`; on the iPhone since F10, on the
+  watch with F18): the real `WorkoutSessionClient` (`LedgerDomain/Protocols`; key `workoutSession`, §13).
+  Screens call it (`start`, `apply`, `finish`, `discard`, `current`) and watch `updates()`: a new stream per
+  call, which starts with the workout as it stands and then carries one `WorkoutSessionUpdate` (the state, and
+  the haptics to play) for each event the engine accepts. `FakeWorkoutSessionClient` (`LedgerFakes`) is the same
+  engine without a store; `WorkoutSessionClientContract` (`LedgerTestSupport`) holds both to one set of rules.
+- An own action is stamped with the device's next `seq` and its `HybridLogicalClock` (`LedgerDomain/Engine`),
+  reduced, stored, and only then published. The host takes one operation at a time, each in a task it owns, so
+  two callers never start from the same state and a cancelled caller loses nothing; its memory changes only
+  once the store has taken the envelope. F17 adds the envelopes it receives (`replay`, then
+  `effects(from:to:)`) and the transport.
 - The rest timer is `RestTimer(endsAt: Date, total: Duration)`. Views render
   with `TimelineView`/`Text(timerInterval:)`; no tick events cross devices.
-- On `finished`, `LedgerPersistence` materialises normalized rows and computes
-  PRs and misses; the event log is compacted after that transaction commits.
-- Recovery: on launch, each log in `WorkoutEventStore.uncompactedWorkoutIDs()`
-  is replayed: live → resume, ended → materialise or drop; both apps also hook
-  HealthKit recovery (`handleActiveWorkoutRecovery` / `shouldHandleActiveWorkoutRecovery`).
+- On `finished`, the host stores the envelope, then saves the workout in one transaction
+  (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`, F10 S3): the rows, the records it detects, the
+  slots' misses from `MissTracking` on the program as stored then (when it is the active one), the program
+  changes its swaps asked for (`WorkoutState.programUpdates`: a slot's exercise, only on the workout's own
+  program, and what cannot be applied is logged and skipped), and the end of its log. Only then does it publish
+  the ending update. So over the database a workout is in history and no longer live, or neither, and a
+  discarded workout changes no program. A save that fails changes nothing: it leaves the end in the log and,
+  in this process, the workout in front of every reader as it stood, where nothing can be started over it; the
+  next `finish`, any later change to the workout, the next return to the foreground and the next launch each
+  try again. After a relaunch the unsaved workout is no longer shown and another can be started; the launch
+  step saves the first when it can. An end is complete when its log is gone from the host's own event store,
+  and the host does not take the repository's word for it: after the save it looks there (one read), and where
+  the log is still listed, because the repository holds no log or holds another store's (no composition of the
+  app), it compacts in a second step, which can fail by itself and is retried the same way.
+- Recovery is `LocalWorkoutSessionActor.resumeFromStore()`: the launch step `LaunchStep.resumeWorkout`
+  (after `loadSettings`; the launch owns its task), or the first protocol call when the launch has not run it,
+  and every call waits for it. The clock continues from `WorkoutEventStore.newestWallClock()`, and each log in
+  `uncompactedWorkoutIDs()` is replayed: live → resume (no haptic, no effect), finished → materialise with
+  the log dropped in the same transaction (a workout found already saved is saved again, which changes
+  nothing unless its program was edited since), discarded → compact; a log that replays to nothing, or an
+  ended one with rows this version cannot read, is kept. Every log is read first, and the ended ones are then
+  completed in the order their workouts started, so a later workout's misses and swaps are written last. Both
+  apps also hook HealthKit recovery (`handleActiveWorkoutRecovery` /
+  `shouldHandleActiveWorkoutRecovery`).
+- `StartWorkoutUseCase` (`LedgerDomain/UseCases`) is "Start workout": it resumes the day's live workout
+  (rule 17), reports a conflict with another day's, or builds the session with `SessionBuilder` from what is
+  stored and starts it.
 
 ---
 
@@ -337,7 +366,7 @@ nullable `deleted_at` soft-delete for sync):
 | `workout`, `workout_exercise`, `logged_set` | finished history | yes |
 | `workout_health` | avg/max HR, active energy, HealthKit workout UUID | **never** (App Review 5.1.3(ii), R1 §3.4) |
 | `personal_record` | PRs, derived from `logged_set` and recomputed on a new device | never (F05) |
-| `workout_event` | live event log (envelopes) | never; compacted after finish |
+| `workout_event` | live event log (envelopes) | never; dropped in the transaction that saves the finished workout, or after a discard |
 | `settings` | single-row preferences + plate inventory | yes |
 | `device` | this device's `DeviceID`, name, last sync marks | never |
 
@@ -519,7 +548,8 @@ dependencies.
 | Cold launch to Today (iPhone 15 class) | < 600 ms |
 | Set logged → other device reflects (reachable) | < 1 s |
 | Any stats query (20 k sets) | < 50 ms |
-| Recording a new workout at the end of history, its record replay included (20 k sets) | < 50 ms |
+| Recording a new workout at the end of history, its record replay included, and with what a finish adds: its program updates, its misses and its log dropped (20 k sets) | < 50 ms |
+| An `apply` on the session host, its append to the store included (F10) | < 30 ms |
 | A History write that re-detects records: edit, delete, late or moved workout (20 k sets, 400 workouts, 5 lifts; p95, simulator, Debug) | < 250 ms |
 | Watch set-ready screen update on crown detent | next frame |
 | App size (iOS) | < 15 MB |

@@ -14,7 +14,8 @@ enum PerformanceBudget {
     static let statsQuery: Duration = .milliseconds(50)
     /// Architecture §15 (orchestrator, records follow-up fix round 1): recording a new workout at the end of
     /// history, its record replay included, at 20,000 sets: the finish path, at the 95th percentile of
-    /// `statsRuns` runs.
+    /// `statsRuns` runs. Since F10 S3 the finish path also writes the workout's program updates and drops its
+    /// log, in the same transaction and within the same budget.
     static let recordNewWorkout: Duration = .milliseconds(50)
     /// Architecture §15: a History write that detects records again (an edit, a delete, a late or moved workout),
     /// at 20,000 sets in 400 workouts of up to five lifts, at the 95th percentile of `statsRuns` runs on a
