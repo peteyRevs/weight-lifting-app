@@ -1005,3 +1005,373 @@ feature. F09 S1 lands the localization scaffolding and writes rules 1 and 3 into
    holds before it looks at the live workout.
 5. **For S3:** what GRDB does with a write whose task is cancelled is established there, by a test, before
    S13 relies on "all of it is stored or none".
+
+## Slice S1 — program and day editing (G1 implementer, 2026-10-05)
+
+Built on `feat/F11-s1-program-editing` at `fee3c70`, on the host only. Nothing is committed. Paths are written
+as in the rest of this file. Two numberings appear below: **S1 criterion n** is one of the thirteen of "Plan
+amendments — slice S1" in the brief; **F11 criterion n** is one of the brief's acceptance criteria, whose
+worked examples the tests use.
+
+### What landed
+
+Product, all in `LedgerDomain`:
+
+- new `LedgerDomain/Programs/ProgramEditing.swift`: `cleanedName`, `renameProgram`, `addWeek`,
+  `removeLastWeek`, `toggleDeload`, `cycleSchedule`, `copyPreviousWeek`, `applyToLaterWeeks`.
+- new `LedgerDomain/Programs/ProgramEditing+Days.swift`: `addDay`, `renameDay`, `deleteDay`, `updateDay`.
+- new `LedgerDomain/Programs/DayEditing.swift`: `SlotField` and `SlotField.Kind`, `StepDirection`,
+  `MoveDirection`, and `DayEditing.newSlot`, `addSlots`, `removeSlot`, `setProgression`, `setDropSet`,
+  `setSuperset`, `groups(of:)`.
+- new `LedgerDomain/Programs/DayEditing+Fields.swift`: `DayEditing.set` and `stepped`.
+- new `LedgerDomain/Programs/DayEditing+Move.swift`: `DayEditing.move`, alone in its file.
+- `LedgerDomain/Errors.swift`: `ProgramEditError`, appended.
+- `LedgerDomain/Model/Slot.swift`: `Slot.setsRange`, `repsRange`, `repsHiRange`, used by `validate`.
+- `LedgerDomain/Units/RPE.swift`: `RPE(clamping:)`. `LedgerDomain/Units/RestDuration.swift`:
+  `RestDuration(clampingSeconds:)`.
+- `LedgerDomain/Rules/ProgressionRules.swift`: `prescriptions(for:weeks:exercise:units:)`.
+- `LedgerDomain/Rules/ExerciseSearch.swift`: `MuscleFilter` (five chips) and `filtered` (named `filter` until fix round 1).
+
+Tests, all in `Tests/LedgerDomainTests/`:
+
+- new `Programs/ProgramEditingTests.swift` (names, weeks), `ProgramEditingScheduleTests.swift`,
+  `ProgramEditingDaysTests.swift`, `ProgramEditingPropertyTests.swift`.
+- new `Programs/DayEditingTests.swift` (slots, progression, drop set, superset),
+  `DayEditingFieldsTests.swift`, `DayEditingStartLoadTests.swift`, `DayEditingMoveTests.swift`,
+  `DayEditingNormalFormTests.swift`, `DayEditingPropertyTests.swift`.
+- new `Programs/EditingTestSupport.swift`, `EditingTestSupport+Differences.swift`,
+  `EditingTestSupport+Edits.swift`: seeded programs and days, random edits, the rebuild through
+  `Program.init` and `Slot.init`, and short differences.
+- new `Rules/ProgressionRulesPrescriptionsTests.swift`.
+- additions to `Rules/ExerciseSearchTests.swift`, `Units/RepsRPERestTests.swift` and
+  `Support/Fixtures+Program.swift` (`fourDayProgram()`, `fourDayIDs`). Each is an appended extension; no
+  existing test changed (the diff of the three files has no removed line).
+
+No other module, no repository, no feature code, no `Package.swift` change. `ExerciseSearch.filtered` and
+`ProgressionRules.prescriptions` are both in: the slice is far under the size at which they were to move.
+
+### Decisions and deviations
+
+Deviations from the plan's text. Each was forced by the code or the lint, and none changes a rule.
+
+1. **The direction cases are `upward` and `downward`, not `up` and `down`**
+   (`LedgerDomain/Programs/DayEditing.swift:21`, `:27`). SwiftLint's `identifier_name` refuses a name under
+   three characters, and its exclusions are `id`, `lb`, `kg` and the spacing steps (`.swiftlint.yml:41-46`).
+   A suppression is not allowed and the lint's configuration is not this slice's. Call sites read
+   `DayEditing.move(day, slot: id, .downward)` and `DayEditing.stepped(.rest, .upward, of: …)`.
+2. **The tests of `prescriptions` are in a new file**, `Rules/ProgressionRulesPrescriptionsTests.swift`, not
+   in `Rules/ProgressionRulesTests.swift`: that file has 285 lines and the lint stops at 300
+   (`.swiftlint.yml:52-54`).
+3. **More test files than the plan lists**, for the same limit and for the 150-line limit on a type's body
+   (`.swiftlint.yml:55-57`): one suite per source file or topic (the list above), and three support files.
+   The support is shared by ten suites, so it is not private to one of them.
+4. **`RPE.step` and `RestDuration.stepSeconds`** (`LedgerDomain/Units/RPE.swift:24`,
+   `LedgerDomain/Units/RestDuration.swift:22`), two internal constants beside the two clamping initializers
+   the plan asks for. `DayEditing.stepped` reads them, so the size of a step is written once.
+5. **One sentence added to `Slot`'s comment** (`LedgerDomain/Model/Slot.swift:13-14`). It told every editor
+   to rebuild a slot through `init`; `DayEditing` now assigns fields, as "Brief vs main" row 11 decided.
+
+Decisions the plan left to the implementer:
+
+6. **Normal form and an unknown id.** Every `DayEditing` function reads the day as its normal form and returns
+   a day in normal form (`DayEditing.swift:135-141`, `:144-151`). So a slot id the day does not hold returns
+   the day unchanged when the day is in normal form, which every day these functions return is, and returns
+   the normal form of a day that arrived with its first slot joined. The two sentences of S1 criteria 1 and 8
+   disagree only on that one input (a day not in normal form and an unknown id); "always in normal form" was
+   chosen because the plan says such a day "is read as its normal form". Pinned by
+   `DayEditingNormalFormTests.firstSlotArrivesJoined_isReadAsItsNormalForm`.
+7. **A week is found by its place in `weeks`** (`LedgerDomain/Programs/ProgramEditing.swift:105-112`), which
+   `Program.init` keeps equal to `Week.index`. No function does arithmetic on a week index it was handed,
+   so `Int.min` and `Int.max` cannot trap; `removeLastWeek` reports `weeks.count` as the week's number
+   (`ProgramEditing.swift:52-66`).
+8. **No edit traps on a slot whose numbers are outside the model.** A slot's fields are `var`, so a slot
+   can hold `Int.max` reps. Sums on a slot's own numbers saturate (`DayEditing.saturatingSum`,
+   `DayEditing.swift:155-161`), used by `stepped`, by the top-of-range coupling
+   (`DayEditing+Fields.swift:48`) and by `setProgression`. For such a slot the result is not promised to be
+   valid, only that nothing traps. Pinned by `DayEditingNormalFormTests.slotOutsideTheModel_noEditTraps`.
+9. **A NaN** is no number and `Decimal` orders it below every number. `RPE(clamping: .nan)` is 5 and a NaN
+   start load becomes zero (`DayEditing+Fields.swift:54`), with no branch written for it. Both are rows of
+   `DayEditingFieldsTests.set_clampsEveryField`.
+10. **The start load's step** (`DayEditing+Fields.swift:63-75`): the load is rounded to a multiple of the
+    step towards the side asked for; if that multiple is not past the load (the load was on a multiple), it
+    moves one step further; the result is never below zero. A step of zero, which only a slot set outside
+    the model can hold, moves nothing.
+11. **`addSlots` also leaves out an id that comes twice in one call**: the first wins
+    (`DayEditing.swift:79`). The store draws a fresh id per pick, so this is a guard only.
+12. **`deleteDay` of a day the program does not hold returns the program** before it looks at any schedule
+    (`ProgramEditing+Days.swift:32`). `cycleSchedule` has no special case for a program with no days: the
+    cell stays at rest (`ProgramEditing.swift:80-82`). An entry naming a day the program lacks, which
+    `Program.init` refuses, would go to the first day.
+13. **`cleanedName` removes control characters and does not put a blank in their place**: "A⇥B" becomes
+    "AB". It trims what Foundation calls white space, which includes the zero-width space.
+14. **Nothing was added to the proposed signatures**: no `SlotField.kind`, no `CaseIterable` on the
+    directions. `DayEditing.editing`, `normalized` and `saturatingSum` are internal.
+
+### Criteria → tests
+
+Suites are in `Tests/LedgerDomainTests/Programs/` unless a folder is given.
+
+| S1 criterion | Tests |
+|---|---|
+| 1 Pure and total | `ProgramEditingPropertyTests.randomEdits_keepTheProgramValid(seed:)` (every result rebuilt through `Program.init` and `Slot.init`), `unknownIDsAndWeeks_changeNothing(seed:)`; `ProgramEditingScheduleTests.weekOutsideTheBlock_changesNothing` (−1, 8, 9, `Int.max`, `Int.min`); `ProgramEditingTests.blockWithNoWeeks_noFunctionTraps`; `DayEditingNormalFormTests.unknownSlot_changesNothing`, `emptyDay_staysEmpty`, `slotOutsideTheModel_noEditTraps`; `DayEditingPropertyTests.randomEdits_keepTheNormalForm(seed:)`. Typed throws: `ProgramEditingPropertyTests.removeLastWeek_followsRuleFour(seed:)` and `DayEditingTests.newSlot_negativeStartLoad_throws` each hold a closure that compiles only with the typed error. |
+| 2 Names | `ProgramEditingTests.cleanedName_removesControlCharactersAndTrims` (11 rows), `cleanedName_longName_isKept`, `renameProgram_setsTheCleanedName`, `renameProgram_blank_changesNothing`; `ProgramEditingDaysTests.renameDay_setsTheCleanedName`, `renameDay_blank_changesNothing` |
+| 3 Weeks (F11 criterion 4) | `ProgramEditingTests.addWeek_copiesTheLastWeeksSchedule_notADeload`, `addWeek_idInUse_addsNothing`, `removeLastWeek_atTwoWeeks_throwsMinimumTwoWeeks`, `removeLastWeek_loggedWeek_throwsWithItsNumber`, `removeLastWeek_lastWeekNotLogged_dropsIt`, `removeLastWeek_leavesEveryDayAndSlotUntouched`, `toggleDeload_flipsOneWeek`; `ProgramEditingPropertyTests.addWeek_thenRemoveLastWeek_isTheIdentity(seed:)`, `removeLastWeek_followsRuleFour(seed:)` |
+| 4 Schedule (F11 criteria 2, 3) | `ProgramEditingScheduleTests.cycleSchedule_restThenEachDayThenRest`, `cycleSchedule_fromADay_goesToTheNext`, `cycleSchedule_noDays_changesNothing`, `cycleSchedule_oneDay_alternates`, `copyPreviousWeek_takesTheScheduleOnly`, `copyPreviousWeek_onTheSecondWeek_takesTheFirstWeeks`, `copyPreviousWeek_onTheFirstWeek_changesNothing`, `applyToLaterWeeks_leavesTheDeloadFlags`, `applyToLaterWeeks_onTheLastWeek_changesNothing`; `ProgramEditingPropertyTests.cycleSchedule_daysPlusOneTimes_returnsToTheStart(seed:)` |
+| 5 Days (F11 criteria 5, 6) | `ProgramEditingDaysTests.addDay_isNamedAndTaggedByCount_withNoSlots`, `addDay_tagSkipsNumbersInUse`, `addDay_toAProgramWithNoDays_isTaggedD1`, `addDay_blankNameOrIDInUse_addsNothing`, `deleteDay_turnsItsScheduleEntriesIntoRest`, `deleteDay_scheduledTwiceInAWeek_clearsBoth`, `deleteDay_everyDay_leavesAValidProgram`, `deleteDay_unknownDay_changesNothing`, `updateDay_replacesTheDay`, `updateDay_resultWithAnotherID_isIgnored`, `updateDay_unknownDay_changesNothing` |
+| 6 Slots (F11 criterion 12) | `DayEditingTests.newSlot_hasRule7Defaults`, `newSlot_kilogramsAndAnotherDefaultRest`, `newSlot_exerciseWithOneUnitOrNone_stillHasAStartLoad`, `newSlot_negativeStartLoad_throws`, `addSlots_appendsInOrder`, `addSlots_sameExerciseTwice_isAllowed`, `addSlots_idTheDayHolds_isLeftOut`, `addSlots_toAnEmptyDay_firstSlotIsNeverJoined`, `removeSlot_firstOfAGroup_theNextMemberLeads`, `removeSlot_otherPlaces_keepTheGroups`, `removeSlot_onlySlot_leavesAnEmptyDay` |
+| 7 Fields (F11 criterion 8) | `DayEditingFieldsTests.set_clampsEveryField` (49 rows: each limit, each side of it, `Int.min`, `Int.max`, NaN, values off the step), `setReps_atOrAboveTheTop_pushesTheTop`, `setRepsHi_atOrBelowReps_snapsAbove`, `setStartLoad_isStoredExactly`, `stepped_isOneStepAway`, `stepped_atALimit_doesNotClamp`, `setStepped_atALimit_theValueStays`, `setStepped_repsAgainstTheTop_keepsTheRange`; `DayEditingStartLoadTests.steppedStartLoad_goesToTheNextMultiple` (13 rows, pounds and kilograms, kettlebells), `steppedStartLoad_offTheSteps_goesToTheNextMultiple`, `steppedStartLoad_manySteps_staysExact`, `steppedStartLoad_exerciseWithOneUnit_usesTheConvertedLoad`, `steppedStartLoad_neverBelowZero`; `DayEditingPropertyTests.set_anyValue_givesASlotTheModelAccepts(seed:)`, `steppedStartLoad_landsOnTheNextMultiple(seed:)`; `Units/RepsRPERestTests.rpeClampingInitializer_roundsToTheHalfAndStaysInRange`, `restClampingInitializer_roundsToFifteenAndStaysInRange`. The ranges: the existing `Model/SlotValidationTests` and `Adversarial/SlotAdversarialTests`, untouched. |
+| 8 Progression, drop set, superset (F11 criteria 9, 11) | `DayEditingTests.setProgression_double_widensTheRangeToTwo`, `setProgression_awayFromDouble_keepsTheTop`, `setDropSet_isOneOrNone`, `setSuperset_joinsAndBreaksOut`, `setSuperset_off_inTheMiddle_splitsTheGroupThere`, `setSuperset_on_mergesWithTheGroupAhead`, `setSuperset_onTheFirstSlot_staysOff`, `groups_followTheFlags`; `DayEditingNormalFormTests.firstSlotArrivesJoined_isReadAsItsNormalForm`; `DayEditingPropertyTests.randomEdits_keepTheNormalForm(seed:)` |
+| 9 Move (F11 criterion 10) | `DayEditingMoveTests.move_soloSlot_passesTheWholeGroup`, `move_insideAGroup_swapsTheTwoMembers`, `move_fromAGroupsEdge_carriesTheGroup`, `move_table` (15 rows), `move_changesOnlyOrderAndFlags`, `move_groupFromItsEdge_thenBack_swapsInsideTheGroup` (decision 2's oddity), `move_unknownSlotOrEmptyDay_changesNothing`, `move_firstSlotArrivesJoined_isReadAsItsNormalForm`; the six properties, numbered in the test: `DayEditingPropertyTests.move_keepsEveryGroupAndTheNormalForm(seed:)` |
+| 10 Every week's prescription (F11 criterion 7) | `Rules/ProgressionRulesPrescriptionsTests.prescriptions_inclineDBPress_followRule10`, `prescriptions_backSquatWeek8_isTheDeload`, `prescriptions_missedWeek_marksTheNextAsHeld`, `prescriptions_useEachWeeksOwnIndex` |
+| 11 The library's filter (F11 criterion 12) | `Rules/ExerciseSearchTests.filtered_queryMuscleAndEquipmentCombine`, `filtered_noChipsAndBlankQuery_givesEverythingInNameOrder`, `muscleFilter_groups`, `filtered_usesThePrimaryMuscleAndTheEquipment` |
+| 12 What editing never writes | `DayEditingPropertyTests.noFunction_changesMissesOrTheExerciseOfAnExistingSlot(seed:)` (thirty random edits of a seeded program, drawn from every function of both namespaces, the day's functions through `updateDay`), `everyDayEdit_onDrawnSlots_leavesMissesAndExercise(seed:)`; `DayEditingNormalFormTests.everyEdit_leavesMissesAndTheExercise` |
+| 13 The Domain's rules | Foundation only: the existing `ModuleBoundaryTests.sources_importFoundationOnly`. Exact decimals: `setStartLoad_isStoredExactly`, `steppedStartLoad_manySteps_staysExact` and the start-load rows compare grams; no `Double` is written in the new code. The ranges: every existing test of `Slot`, `RPE` and `RestDuration` passes as it was. Coverage: below. |
+
+"Behaviour the brief leaves open": 3 `copyPreviousWeek_onTheFirstWeek_changesNothing`; 4
+`addDay_tagSkipsNumbersInUse`; 5 `cleanedName_removesControlCharactersAndTrims`,
+`renameDay_blank_changesNothing`; 7 `removeSlot_firstOfAGroup_theNextMemberLeads`; 8
+`setSuperset_off_inTheMiddle_splitsTheGroupThere`; 9 `setSuperset_on_mergesWithTheGroupAhead`; 10
+`steppedStartLoad_offTheSteps_goesToTheNextMultiple`; 11 `set_clampsEveryField`,
+`setStepped_atALimit_theValueStays`; 12 `setProgression_awayFromDouble_keepsTheTop`; 18 the property suites
+and `unknownSlot_changesNothing`.
+
+How the tests were checked. Forty-one deliberate bugs were put into the product code in two batches, one
+per function or rule (a clamp's bound, the order of `removeLastWeek`'s two checks, a coupling off by one, a
+flag copied, the normal form dropped, the move reversed, `misses` cleared by `setDropSet`, …), and the suite
+run on each batch. Forty were caught by a test of the function they were in. One survived:
+`copyPreviousWeek` refusing week 2. `copyPreviousWeek_onTheSecondWeek_takesTheFirstWeeks` was added for it.
+`setDropSet` clearing the misses was caught by the two seeded properties only, so
+`everyEdit_leavesMissesAndTheExercise` was added as a fixed case. The product files were restored from
+copies and the runs below are of the restored tree.
+
+No test hands a program, a day or an array of slots to `#expect`. They compare ids, tags, flags and counts,
+or expect `EditingTestSupport.difference(_:_:)` or `faults(in:)` to be empty; a failure prints a few words. The
+log of a run with twenty bugs in the code at once was 7.8 MB.
+
+### Code lines per file
+
+Non-blank, non-comment lines added outside tests (`docs/engineering-standards.md:258-261`). Counted when
+the block editing was done and again at the end.
+
+| File | Lines |
+|---|---|
+| `LedgerDomain/Programs/ProgramEditing.swift` (new) | 71 |
+| `LedgerDomain/Programs/ProgramEditing+Days.swift` (new) | 56 |
+| `LedgerDomain/Errors.swift` | +4 |
+| **Block editing** | **131** (planned about 200) |
+| `LedgerDomain/Programs/DayEditing.swift` (new) | 97 |
+| `LedgerDomain/Programs/DayEditing+Fields.swift` (new) | 60 |
+| `LedgerDomain/Programs/DayEditing+Move.swift` (new) | 28 |
+| `LedgerDomain/Model/Slot.swift` | +6 (3 replaced) |
+| `LedgerDomain/Units/RPE.swift` | +4 |
+| `LedgerDomain/Units/RestDuration.swift` | +5 |
+| `LedgerDomain/Rules/ProgressionRules.swift` | +8 |
+| `LedgerDomain/Rules/ExerciseSearch.swift` | +28 |
+| **Day editing** | **236** (planned about 370) |
+| **Total** | **367** (planned about 570) |
+
+Tests and their support: thirteen new files of 2,250 lines in `Programs/`, one of 62 in `Rules/`, and 143
+lines appended to three existing files.
+
+### Runs
+
+All from the worktree root, on the host, on the final tree. No simulator, no `xcodebuild`, no full gate.
+
+| Command | Result |
+|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerDomainTests` | exit 0. 939 tests in 149 suites passed, no issue, no compiler warning. Before the slice, on the same tree with only the product code added: 838 tests in 138 suites. |
+| the same with `--enable-code-coverage` | exit 0. 939 tests in 149 suites. |
+| `LEDGER_PROPERTY_SEED_COUNT=2000 swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'DayEditingPropertyTests\|ProgramEditingPropertyTests'` | exit 0. The 11 seeded tests, 2,000 cases each. |
+| `scripts/check.sh --lint-only` | exit 0 (format, SwiftLint strict, package graph and pins, catalog version, script tests). |
+| `git status --short` | the six product files and three test files above as modified; `Sources/LedgerDomain/Programs/`, `Tests/LedgerDomainTests/Programs/` and `Rules/ProgressionRulesPrescriptionsTests.swift` as new; this file. |
+
+Not run by this slice: `scripts/check.sh` in full, the iOS and watchOS simulators, CI. `LedgerDomainTests`
+also runs on both simulators in the gate; nothing here was seen there.
+
+### Coverage
+
+`xcrun llvm-cov report LedgerKit/.build/out/Products/Debug/LedgerDomainTests.xctest/Contents/MacOS/LedgerDomainTests
+-instr-profile=LedgerKit/.build/out/Products/Debug/codecov/default.profdata <files>`, after the coverage run:
+
+| File | Lines | Missed | Regions missed | Functions missed |
+|---|---|---|---|---|
+| `Programs/ProgramEditing.swift` | 84 | 0 | 0 of 38 | 0 of 20 |
+| `Programs/ProgramEditing+Days.swift` | 60 | 0 | 0 of 27 | 0 of 12 |
+| `Programs/DayEditing.swift` | 95 | 0 | 0 of 35 | 0 of 19 |
+| `Programs/DayEditing+Fields.swift` | 51 | 0 | 0 of 33 | 0 of 8 |
+| `Programs/DayEditing+Move.swift` | 40 | 0 | 0 of 14 | 0 of 6 |
+| `Model/Slot.swift` (whole file) | 66 | 0 | 0 of 39 | 0 of 4 |
+| `Units/RPE.swift` (whole file) | 40 | 0 | 0 of 16 | 0 of 9 |
+| `Units/RestDuration.swift` (whole file) | 46 | 0 | 0 of 21 | 0 of 8 |
+| `Rules/ProgressionRules.swift` (whole file) | 42 | 0 | 0 of 13 | 0 of 6 |
+| `Rules/ExerciseSearch.swift` (whole file) | 53 | 0 | 0 of 24 | 0 of 17 |
+
+The five new files and every line added elsewhere are covered, by line, region and function.
+`Errors.swift` has no executable line. `LedgerDomain` as a whole on the host: 2,514 lines, 29 missed,
+98.85 % (the gate asks 95 %, from the simulator bundles).
+
+### Open questions, with a recommendation each
+
+1. **`upward` and `downward`** (deviation 1). *Recommendation:* keep them. If the plan's `up` and `down` are
+   wanted, add `"^up$"` to `identifier_name.excluded` in `.swiftlint.yml` in a change of its own, then rename
+   two cases.
+2. **An unknown id on a day that is not in normal form returns the normal form, not the day as it came**
+   (decision 6). The tester should take "unchanged" as: unchanged for a day in normal form. *Recommendation:*
+   keep. For S3's "a change that returns the program unchanged writes no row", the only effect is that the
+   first edit of a stored day whose first slot is joined rewrites that one slot's row once.
+3. **`ProgressionRules.prescribe` can trap or run for a very long time on input outside the model, and
+   `prescriptions` is that function mapped.** `weekIndex - 1` overflows at `Int.min`
+   (`LedgerDomain/Rules/ProgressionRules.swift:58`); `repsHi - reps + 1` overflows for a slot set to the ends
+   of `Int` (`:37`); a week index near `Int.max` counts that many weeks (`:28`). No program or slot the
+   model accepts reaches any of them, and the code is F02's, not this slice's. *Recommendation:* leave
+   `prescribe` as it is unless the tester's brief asks for totality of `prescriptions` over any `[Week]`;
+   then harden those three lines in a change of its own, with F02's tests as the guard.
+4. **`newSlot` throws for an exercise whose start load is below zero**, as the signature says. Only a custom
+   exercise can hold one. *Recommendation:* F12's form refuses a negative start load; S14's store builds the
+   picked slots before it queues the edit, and leaves out and logs an exercise that throws.
+5. **`ExerciseSearch.filter(…).isEmpty` tripped SwiftLint's `contains_over_filter_is_empty`**
+   (`.swiftlint.yml:33`), which matches the name `filter`. *Settled in fix round 1 (S1 criterion 16):* the
+   function is `ExerciseSearch.filtered(_:query:muscle:equipment:)`, and `filtered(…).isEmpty` passes the lint.
+6. **A name can be invisible.** `cleanedName` removes category `Cc` and trims white space, as specified; a
+   name of only a combining mark, a byte-order mark or a joiner is kept. *Recommendation:* accept for M1; a
+   rule "a name has a visible character" is a product decision.
+7. **Pete's decision 2** (a superset moves as one). Unchanged: the rule is `DayEditing.move`, 28 lines in its
+   own file, with `DayEditingMoveTests` and one property. The other rule replaces those and nothing else.
+
+### Inputs for S3 and for the presentations
+
+What a store sends, and how:
+
+- A block edit is one call: `{ ProgramEditing.toggleDeload($0, week: 2) }`. A day edit is one call inside
+  `updateDay`: `{ ProgramEditing.updateDay($0, day: id) { DayEditing.setDropSet(true, slot: slot, in: $0) } }`.
+  Days and slots are named by id, and a stepper's value is absolute (`stepped` once, then `set`). Four
+  functions are relative, and every `week:` is a place in the block, not a `WeekID`: `toggleDeload` flips,
+  `cycleSchedule` goes to the next value, `move` carries a slot one place, `removeLastWeek` names "the last".
+  Applied once to the program on screen and once to the stored program inside `ProgramRepository.update`,
+  they agree. Applied twice to the stored program they do not: a deload toggled twice is off, a cell cycled
+  twice skips a day. So S13 must let each queued edit reach the stored program exactly once: after an
+  `update` that failed or was cancelled, the waiting edits are dropped and the screen is redrawn from the
+  stored program; they are never sent again (corrected in fix round 1, review S-3). The other functions give
+  the same result applied twice.
+- **Misses of a removed week.** No edit writes misses (S1 criterion 12), so `removeLastWeek` leaves the
+  removed week's index in a slot's misses, and a workout finished late may write one for a week the block
+  no longer has. "Nothing reads them" (the table of "A live workout, and a finished one", this file's line
+  347) holds only until "+" adds a week at that index again: then that week counts as missed and the week
+  after it shows " · HELD".
+- **A stepper** works out the new value once, from the slot on screen:
+  `let field = DayEditing.stepped(.rest, .upward, of: slot, exercise: exercise, units: settings.units)`, and
+  queues `DayEditing.set(field, slot: slot.id, in: $0)`. It does not call `stepped` again inside the save.
+- **New ids** (`addWeek`, `addDay`, `newSlot`) are drawn once from `@Dependency(\.uuid)` when the lifter
+  taps, and captured by the queued edit.
+- **`newSlot` is called before the edit is queued**, once per picked exercise, with `settings.units` and
+  `settings.defaultRest`; the edit is `DayEditing.addSlots($0, slots)`. It throws only for a start load below
+  zero (open question 4).
+- **`removeLastWeek`** is tried on the program on screen first, to choose between the edit and one of the
+  two messages; `loggedWeeks` comes from the store ("How a week is known to have logged sessions").
+  `.weekHasLoggedSessions(weekNumber:)` carries the number the message prints.
+- **Names**: the store passes the text as typed to `renameProgram` and `renameDay`. A blank text changes
+  nothing; the field may show what was typed while the stored name stays. `addDay` takes the catalog's
+  "New day".
+- **Superset actions** (spec §3.4 e). "Break out", offered on a slot that is not the first of its group, is
+  `setSuperset(false, slot: thatSlot)`. "Superset with next", offered on the last of its group when it is not
+  the day's last slot, is `setSuperset(true, slot: theNextSlot)`: the id passed is the next slot's.
+- **Groups and letters**: `DayEditing.groups(of:)` gives the ids in their groups, in order; a member's letter
+  is `SupersetRounds.letter(forMemberAt:)`. A presentation never reads `isSupersetWithPrevious` itself.
+- **The strip of weekly loads**: `ProgressionRules.prescriptions(for: slot, weeks: program.weeks, exercise:,
+  units:)`, one prescription per week, each with `isDeload` and `isHeld`.
+- **The library**: `ExerciseSearch.filtered(exercises, query:, muscle:, equipment:)` with `nil` for "All";
+  `ExerciseSearch.MuscleFilter.allCases` is the chips' order. The result is in name order.
+- **The limits**, should a view need them for VoiceOver: `Slot.setsRange`, `repsRange`, `repsHiRange`.
+
+What a store or a presentation must not do:
+
+- Clamp, round or couple anything: no `min(`, no `max(`, no assignment to `repsHi`, no arithmetic on a
+  load, a rest or an RPE. `set` and `stepped` are the only path (the DoD's line, brief:97).
+- Assign a slot's field, build an edited slot through `Slot.init`, or reorder, insert or remove in
+  `day.slots` or `program.weeks` itself.
+- Write `misses` or `exerciseID` of a slot that exists. No function here does, and S3's argument that a
+  builder edit and a workout's save commute rests on it (S1 criterion 12).
+- Expect `updateDay` to accept a day with another id, or an edit with an unknown id or a week outside the
+  block to fail: each returns its input, so an edit queued for a day or slot that a later stored program no
+  longer holds is a no-op, not an error.
+
+## Slice S1 — fix round 1 (G1 implementer, 2026-10-06)
+
+On `feat/F11-s1-program-editing` at `4812a2e`, uncommitted, host only. The rulings are the brief's "Plan
+amendments — slice S1 after round 1" (S1 criteria 14 to 17); the items are `review.md`'s. The round was cut
+once by a usage limit; every run below was made after it, on the final tree.
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| S1 criterion 14 (S-1) | `DayEditing.setProgression` returns the day as it was when the slot already has that progression: a guard as the first line of its closure (`LedgerDomain/Programs/DayEditing.swift:104-106`). Linear to double still makes the top at least reps + 2. New test `DayEditingTests.setProgression_doubleAgain_keepsANarrowedRange` (double 8–9 and 9–10 stay; linear 8–9 to double gives 10; linear again changes nothing). |
+| S1 criterion 15 (S-2) | New `Tests/LedgerDomainTests/Programs/EditingSourceTests.swift`, in the form of `ModuleBoundaryTests`: it reads `Sources/LedgerDomain/Programs/*.swift`. `sources_everyEditIsInThePropertysTables`: every `static func` whose result is `Program` or `DayTemplate` is a row of `EditingTestSupport.dayEdits` or `programEdits`, bar the two helpers named in the suite (`editing`, `normalized`); and every row names a function, bar `set(stepped)`. `sources_onlyNewSlotNamesWhatAWorkoutOwns`: no code line outside `newSlot` names `misses` or `exerciseID`, or holds `Slot(` or `Slot.init(`. The check is by name, so a line that only reads them fails too; that is said in the suite's comment. Two tests of the scanner on a sample (`scanner_findsFunctionsByTheirResult`, `scanner_flagsWhatOnlyNewSlotMayName`). The second caught a real hole while it was written: Swift's `Regex` reads `\b` by Unicode's word rules, under which "slot.misses" is one word; the scanner uses simple boundaries. Shown to fail on the real sources: with a function `sneaky(_:) -> DayTemplate` that cleared a slot's misses planted in `DayEditing.swift`, and the guard of criterion 14 removed, both source tests and the new progression test failed; the file was restored from a copy. |
+| S1 criterion 16 (N-1) | `ExerciseSearch.filter` is `ExerciseSearch.filtered` (`LedgerDomain/Rules/ExerciseSearch.swift:74`). My four call sites and three test names in `Rules/ExerciseSearchTests.swift` follow (`filtered_…`). My S1 section above says `filtered`; the planner's sections are left as written. |
+| S-3 | No code change. In "Inputs for S3 and for the presentations" above, the sentence "never a position or a difference" is replaced: it names the four relative functions and what that requires of S13. A bullet beside it carries the reviewer's sentence on misses of a removed week. The planner's table at line 347 is not mine and is unchanged; the bullet points at it. |
+| N-2 | `set`'s comment: an RPE or a rest off its step goes to the nearest step; a start load is stored as given. |
+| N-3 | `cleanedName`'s comment names U+0000, the tab, LF, CR and NEL, and says U+2028 and U+2029 are trimmed at the ends and kept inside. The characters removed are unchanged. |
+| N-4 | Each limit is written once. `RPE.range` (5…10), read by `RPE(_:)`, `RPE(clamping:)` and `deloaded()`; the last held the lower limit a third time as ten half points, which the review did not list, and is now `RPE(clamping: value - 2)`, so the private `init(halfPoints:)` it alone used is gone. `RestDuration.secondsRange` (30…300) and the existing `stepSeconds`, read by both initializers. `Program.minimumWeeks`, read by `Program.init`'s check and by `removeLastWeek`. All three are internal. No behaviour changed: the existing tests of `RPE`, `RestDuration` and `Program` pass untouched. |
+| N-5 | `prescriptions`' comment says the weeks are a program's and the slot one `Slot.init` accepts, as for `prescribe`. |
+| N-6 | A seeded test records at most a line or two for a seed. The two tests of criterion 12 compute the slots rewritten by a step (`DayEditingPropertyTests.rewritten(from:to:)`, fixture numbers only) and stop at the first with `try #require`; "since the start" is checked once, after the thirty edits. The same in the other step loops (`randomEdits_keepTheNormalForm`, `randomEdits_keepTheProgramValid`, `cycleSchedule_daysPlusOneTimes_returnsToTheStart`); `unknownIDsAndWeeks_changeNothing` and the move property's first check collect and expect once. |
+| N-7 | `clampingInitializers_roundToTheStepAndStayInRange` is `rpeClampingInitializer_roundsToTheHalfAndStaysInRange`. `everyDayEdit_onEverySlot_leavesMissesAndExercise` is `everyDayEdit_onDrawnSlots_leavesMissesAndExercise`, with a display name and a comment that say the slots are drawn. The support type is `EditingTestSupport`, as its three files are named; the three block suites take the `Support` alias the day suites already had. |
+| N-8 | Not this slice (S7). |
+| N-9 | `addSlots`' comment says an appended slot keeps its own superset flag. `ProgramEditing`'s header says `updateDay` stores the day its closure returns, so only `DayEditing`'s functions go in it. |
+
+Not changed, as ruled: the direction cases, invisible names, `prescriptions`' preconditions.
+
+### Sanctioned edits to the tester's files
+
+The word `filter` became `filtered` at each call of `ExerciseSearch.filter(`; each file was compared with
+`HEAD` and differs by that word alone.
+
+- `Tests/LedgerDomainTests/Adversarial/Programs/ExerciseFilterAdversarialTests.swift`: lines 80, 106, 123,
+  142, 151, 154, 157, 159, 165, 166, 172, 187, 190, 192. The suite's display name on line 8,
+  "ExerciseSearch.filter (adversarial)", is a string and was left.
+- `Tests/LedgerDomainTests/Adversarial/Programs/EditingPublicSurfaceAdversarialTests.swift`: line 95.
+
+### Tester's pins that now fail, for the tester to update
+
+Both pin the behaviour criterion 14 replaced. Neither was touched.
+
+1. `DayEditingFieldsAdversarialTests.setProgression_fromEveryPair_keepsOrRaisesTheTop`
+   (`Adversarial/Programs/DayEditingFieldsAdversarialTests.swift:80`, the expected value at `:87`). Old: for
+   every starting progression, a target of double expects the top `max(top, reps + 2)`. New: when the slot
+   is already double, the top stays as it is; from linear or fixed, as before. 30 of its 6,615 cases fail:
+   double to double with the top at reps + 1.
+2. `DayEditingModelAdversarialTests.editSequence_matchesTheModelAtEveryStep(seed:)`
+   (`Adversarial/Programs/DayEditingModelAdversarialTests.swift:50`), through its reference
+   `DayModel.setProgression` (`Adversarial/Programs/DayModelAdversarialSupport.swift:223-232`). Old: double
+   always makes the top `max(top, reps + 2)`. New: a row that already has the progression is left as it is.
+   11 of the 200 seeds fail: 134640, 308858, 506833, 760241, 807755, 863188, 918621, 1116596, 1465032,
+   1472951, 1575898 (first: seed 134640, step 73, top expected 29, found 28).
+
+### Product lines now
+
+Non-blank, non-comment lines added outside tests, against `fee3c70`: **377** (367 after the first round).
+`DayEditing.swift` 100 (+3, the guard), `Model/Program.swift` +2 (new to the slice), `Units/RPE.swift` +7
+(was +4; one initializer of three lines removed), `Units/RestDuration.swift` +7 (was +5); the others as
+before: `ProgramEditing.swift` 71, `ProgramEditing+Days.swift` 56, `DayEditing+Fields.swift` 60,
+`DayEditing+Move.swift` 28, `Errors.swift` +4, `Slot.swift` +6, `ProgressionRules.swift` +8,
+`ExerciseSearch.swift` +28.
+
+### Runs
+
+From the worktree root, on the host, on the final code tree, after the cut.
+
+| Command | Result |
+|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerDomainTests` | exit 1, as expected. 1,098 tests in 169 suites (1,093 in 168 before the round: one progression test and the four of `EditingSourceTests`). 1,096 pass; **2 fail, with 12 issues, both tester's pins listed above** and no other: `setProgression_fromEveryPair_keepsOrRaisesTheTop` (1 issue) and `editSequence_matchesTheModelAtEveryStep(seed:)` (11 seeds). No compiler warning. |
+| the same with `--enable-code-coverage` | exit 1, the same two tests. Because the run failed, SwiftPM merged no profile; the run's 63 raw profiles were merged by hand with `xcrun llvm-profdata merge -sparse`. |
+| `scripts/check.sh --lint-only` | exit 0. |
+
+Coverage, `xcrun llvm-cov report` on that profile: lines, regions and functions all without a miss in the
+five new files (`ProgramEditing.swift` 84 lines, `ProgramEditing+Days.swift` 60, `DayEditing.swift` 101,
+`DayEditing+Fields.swift` 51, `DayEditing+Move.swift` 40) and in the whole of the six edited ones
+(`Slot.swift` 66, `Program.swift` 50, `RPE.swift` 38, `RestDuration.swift` 46, `ProgressionRules.swift` 42,
+`ExerciseSearch.swift` 53).
+
+Not run: the seeded suites at 2,000 seeds this round; `scripts/check.sh` in full; the simulators; CI.
+`EditingSourceTests` reads source files by `#filePath`, as `ModuleBoundaryTests` does; it was run on the
+host only.
+

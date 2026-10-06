@@ -80,6 +80,32 @@ extension Fixtures {
         let weeks = (0 ..< weekCount).map { week($0, deload: $0 == 7, schedule: schedule) }
         return try Program(id: programID, name: "Upper / Lower", startDate: startDate, weeks: weeks, days: days)
     }
+
+    /// The ids of `fourDayProgram()`'s days, in order: UA, LA, UB, LB.
+    static let fourDayIDs = [300, 310, 320, 330].map { DayTemplateID(uuid($0)) }
+
+    /// Spec §6.4's seed block without its exercises (F11 block editing): four days tagged UA, LA, UB, LB and
+    /// eight weeks. Weeks 1–7 train UA on Monday, LA on Wednesday, UB on Friday and LB on Saturday; week 8
+    /// trains the first three and is the deload.
+    static func fourDayProgram() throws -> Program {
+        let names = [
+            ("Upper A — Push focus", "UA"),
+            ("Lower A — Squat focus", "LA"),
+            ("Upper B — Pull focus", "UB"),
+            ("Lower B — Hinge focus", "LB")
+        ]
+        let days = zip(fourDayIDs, names).map { DayTemplate(id: $0, name: $1.0, tag: $1.1) }
+        let deload = Dictionary(uniqueKeysWithValues: zip([Weekday.monday, .wednesday, .friday], fourDayIDs))
+        let training = deload.merging([.saturday: fourDayIDs[3]]) { _, new in new }
+        let weeks = (0 ..< 8).map { week($0, deload: $0 == 7, schedule: $0 == 7 ? deload : training) }
+        return try Program(
+            id: programID,
+            name: "Upper / Lower",
+            startDate: civil(2026, 8, 17),
+            weeks: weeks,
+            days: days
+        )
+    }
 }
 
 // MARK: - Workouts

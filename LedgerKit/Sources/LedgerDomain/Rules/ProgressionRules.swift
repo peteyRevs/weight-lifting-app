@@ -59,4 +59,18 @@ public enum ProgressionRules {
             isDeload: week.isDeload
         )
     }
+
+    /// The slot's prescription in each of `weeks`, in their order, each under its own index: one slot's row
+    /// of the block's table, and what the Day editor's strip of weekly loads prints (F11 criterion 7).
+    ///
+    /// The weeks are a program's (indices 0 … n − 1) and the slot is one `Slot.init` accepts, as for
+    /// `prescribe`: this is that function for each week, with the same preconditions.
+    public static func prescriptions(
+        for slot: Slot,
+        weeks: [Week],
+        exercise: Exercise,
+        units: Units
+    ) -> [Prescription] {
+        weeks.map { prescribe(week: $0, weekIndex: $0.index, slot: slot, exercise: exercise, units: units) }
+    }
 }
