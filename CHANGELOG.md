@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.5.0...v0.6.0) (2026-10-06)
+
+
+### Features
+
+* **domain:** program and day editing rules (F11 S1) ([#34](https://github.com/peteyRevs/weight-lifting-app/issues/34)) ([582bed6](https://github.com/peteyRevs/weight-lifting-app/commit/582bed65fa828f55da0890a05b09c690df10b28e))
+* **domain:** the next scheduled day, volume change and load state for Today (F09 S2) ([#37](https://github.com/peteyRevs/weight-lifting-app/issues/37)) ([a627494](https://github.com/peteyRevs/weight-lifting-app/commit/a627494246c3032d5505eca9717d442b38a03c3c))
+* **persistence:** a program is changed where it is stored, in one step (F11 S3) ([#36](https://github.com/peteyRevs/weight-lifting-app/issues/36)) ([50f2c6d](https://github.com/peteyRevs/weight-lifting-app/commit/50f2c6d1505bce01b8fd33591a0f14ef05141c60))
+* **today:** the presentation that decides what Today shows (F09 S3) ([#38](https://github.com/peteyRevs/weight-lifting-app/issues/38)) ([6ba3c42](https://github.com/peteyRevs/weight-lifting-app/commit/6ba3c42372f97557489d0b5382597c342b780711))
+
 ## [0.5.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.4.0...v0.5.0) (2026-10-06)
 
 
