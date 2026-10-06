@@ -97,9 +97,8 @@ extension ProgramRepositoryContract {
         )
     }
 
-    /// The task is cancelled while the store's write runs, after its read. The database rolls back and throws;
-    /// the in-memory store, where nothing suspends, stores the change and returns. Either keeps the rule S13
-    /// builds on: all of the change or none, and a `CancellationError` only for none.
+    /// The task is cancelled while the store's write runs, after its read: every store rolls back and throws
+    /// (criterion 12), so a store tested over the in-memory stores meets the path it meets on a phone.
     static func updateCancelledInside(_ repository: any ProgramRepository) async throws -> String? {
         let program = try program()
         try await repository.save(program)
@@ -110,17 +109,14 @@ extension ProgramRepositoryContract {
                 return try edited(stored)
             }
         }.result
-        let stored = try await repository.active()
-        switch result {
-        case let .success(returned):
-            return try ContractCheck.first(
-                same(stored, edited(program), "active() after the call returned"),
-                same(returned, stored, "what the call returned")
-            )
-        case .failure(is CancellationError):
-            return same(stored, program, "active() after the call threw CancellationError")
-        case let .failure(error):
-            return "the cancelled call threw \(String(reflecting: error).prefix(200))"
+        let outcome = switch result {
+        case .success: "returned"
+        case .failure(is CancellationError): "CancellationError"
+        case let .failure(error): String(String(reflecting: error).prefix(200))
         }
+        return try await ContractCheck.first(
+            ContractCheck.expect(outcome, "CancellationError", "the call cancelled inside its change"),
+            same(repository.active(), program, "active() after it")
+        )
     }
 }

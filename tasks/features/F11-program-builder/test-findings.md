@@ -132,3 +132,74 @@ Three expectations of mine were wrong and are corrected; none was the product's 
 | `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'LedgerPersistenceTests'` | 0: 549 tests in 125 suites, 1 known issue (not mine) |
 | `scripts/check.sh --lint-only` | 0 |
 | iOS simulator, PR plan, `-only-testing:LedgerPersistenceTests` (through the lock) | Run 1: 65. 548 counted, 536 passed, 10 skipped, 1 expected failure, **1 failed**: my own race around the commit, its self-check ("Corrected" 2). Run 2, after that correction and with the history test: **0**. 537 passed, 0 failed, 10 skipped, 1 expected failure. Both result bundles read and deleted |
+
+## Slice S3 — round 2 (G2 tester, 2026-10-06)
+
+Under test: `d77550f` plus the implementer's uncommitted fixes for criteria 12 to 14. My round 1 files were
+untouched (`git diff d77550f -- LedgerKit/Tests/LedgerPersistenceTests/Adversarial/` was empty) and all 32
+tests passed on the fixed code before I changed anything.
+
+**Result: F11-S3-1 closed. One new finding, F11-S3-2 (the two stores disagree; one test of mine fails and
+stays failing). 35 tests of mine: 34 pass, 1 fails.**
+
+### F11-S3-1 — closed
+
+The in-memory store now ends a cancelled call as the database does. Shown by, on all three stores:
+`cancelledBeforeTheCall_…`, `cancelledInsideTheChange_…` (before and after the change computed) and
+`cancelledWhileWaiting_…` (0, 5, 200, 5,000 yields) in `ProgramUpdateCancelAdversarialTests`, each now
+requiring `CancellationError`, nothing stored and, before the call and while waiting, that the change never
+ran; and `heldAtTheProbeAndCancelled_sameEndingOnBothStores`. Each still ends with `stillWorks` (an update
+and a workout's save are then taken and kept).
+
+### F11-S3-2 — bug (minor) — criterion 12: cancelled inside a change whose result is refused before any statement, the database throws the refusal, the in-memory store `CancellationError`
+
+Test: `ProgramUpdateCancelAlikeAdversarialTests.cancelledInsideTheChange_everyResult_sameEndingOnBothStores`
+(fails, deterministically: 7 of 36 results differ; 5 runs). The task is cancelled inside the change; the
+change then returns its result.
+
+| Result returned by the cancelled change | Database | In memory |
+|---|---|---|
+| another program id (unused; program 2's; program 2 itself) | `duplicateIdentifier("program …")` | `CancellationError` |
+| one week only | `tooFewWeeks(count: 1)` | `CancellationError` |
+| a schedule naming a day the program lacks | `danglingSchedule(…)` | `CancellationError` |
+| week indices with a gap | `nonContiguousWeeks(…)` | `CancellationError` |
+| a slot of 99 sets | `setsOutOfRange(99)` | `CancellationError` |
+
+Minimal repro: cancel the task from inside the change (a handle in a `Mutex`), return
+`try Program(id: otherID, …)`; compare `"\(error)"` on `LinkedStores.make(.database)` and `.memory`.
+
+Expected (criterion 12): `CancellationError` on both, nothing stored. Actual: nothing is stored on either
+(checked row for row), but the database reports the refusal. Cause, from the diff: the in-memory store checks
+the task again right after `change` returns; the database only notices a cancelled task at its next SQL
+statement, and the id check and `ProgramRows.init` (the `init`s' validation) throw before one runs. The other
+29 results agree: the 9 refusals found by a statement or a column (`CancellationError` on both), a change
+that throws (its own error on both), 5 unchanged results and 15 edits (`CancellationError` on both). Either a
+`Task.checkCancellation()` after `change` in the database's `update`, or a ruling that a refusal may win over
+a cancellation, settles it. Impact is small: no builder edit produces such a result, and nothing is written.
+
+### My edits
+
+- `ProgramUpdateCancelAdversarialTests.swift`: the two `if place != .memory` guards are gone, so "inside the
+  change" and "while waiting" demand `CancellationError` on the in-memory store too; the waiting call counts
+  its change's runs (must be none).
+- `ProgramUpdateCancelAlikeAdversarialTests.swift` (new, 3 tests): the differential above over 36 results;
+  a cancelled update of a program that is not stored or deleted (same ending on both); held at the probe and
+  cancelled (strict, both stores, nothing written).
+- `ProgramUpdateProbeAdversarialTests.swift`: unchanged in the end.
+
+### Also looked for, and agreed
+
+The product diff (`git diff d77550f -- LedgerKit/Sources`): the read-back after the write now throws
+`missingRow` on both stores where it returned the change's result; not reachable by a test of mine (the result
+has the program's id and was just written). `save`'s new warning and the reworded `change` paragraph are
+documentation (criterion 13). Criterion 14 is what round 1's activity tests already hold.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'ProgramUpdate.*Adversarial'` before my edits | 0: 32 tests |
+| the same after my edits (five times) | 1 each: 35 tests in 9 suites, 1 issue (F11-S3-2) |
+| `swift test … --filter 'LedgerPersistenceTests'` | 1: 552 tests in 126 suites, 1 failure (F11-S3-2), 1 known issue (not mine) |
+| `scripts/check.sh --lint-only` | 0 |
+| Simulator | not run this round, as instructed |

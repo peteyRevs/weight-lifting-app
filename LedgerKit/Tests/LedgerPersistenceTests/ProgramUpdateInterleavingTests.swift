@@ -157,17 +157,21 @@ struct ProgramUpdateInterleavingTests {
             }
             try await group.waitForAll()
         }
+        let first = program.daysPerWeek ?? 0
         var expected = program
-        expected.daysPerWeek = 204
-        for number in 0 ..< 8 {
-            expected.days[number / 5].slots[number % 5].exerciseID = Contract.replacement(for: slots[number])
-            expected.days[number / 5].slots[number % 5].misses = [6, 7]
+        expected.daysPerWeek = first + 200
+        let saved = Set(slots.prefix(8).map(\.id))
+        for day in expected.days.indices {
+            for index in expected.days[day].slots.indices where saved.contains(expected.days[day].slots[index].id) {
+                expected.days[day].slots[index].exerciseID = Contract.replacement(for: expected.days[day].slots[index])
+                expected.days[day].slots[index].misses = [6, 7]
+            }
         }
         let stored = try #require(await side.programs.active())
         // In the order the store took them, each update saw what the one before it wrote.
-        let sawEachBefore = taken.order.withLock { $0 } == Array(4 ..< 204)
+        let sawEachBefore = taken.order.withLock { $0 } == Array(first ..< first + 200)
         #expect(sawEachBefore)
-        #expect(stored.daysPerWeek == 204)
+        #expect(stored.daysPerWeek == first + 200)
         let isExpected = stored == expected
         #expect(isExpected, "\(stored.difference(from: expected) ?? "")")
         #expect(try await side.workouts.recent(limit: 20).count == 8)

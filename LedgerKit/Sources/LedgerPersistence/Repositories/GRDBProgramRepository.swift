@@ -79,7 +79,10 @@ public struct GRDBProgramRepository: ProgramRepository {
                 throw LedgerPersistenceError.duplicateIdentifier("program \(ColumnCodec.text(changed.id))")
             }
             try Self.write(ProgramRows(changed), isActive: changed.isActive, in: database, at: timestamp)
-            return try ProgramRows.program(id, in: database) ?? changed
+            guard let saved = try ProgramRows.program(id, in: database) else {
+                throw LedgerPersistenceError.missingRow("program \(ColumnCodec.text(id))")
+            }
+            return saved
         }
     }
 

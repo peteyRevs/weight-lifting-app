@@ -226,3 +226,6 @@ should-fix items. Atomicity holds by construction on both stores. Rulings, which
 14. **Criterion 6, as built:** `update` leaves which program is active as it was when the change does not touch
     the flag; a change that sets the flag is saved as `save` saves it. A result under another id is refused
     with the duplicate-identifier error.
+15. **One ending on both stores** (F11-S3-2, round 2): when a call is cancelled inside a change whose result
+    is also refused, both stores report what the database reports. The in-memory store makes the database's
+    checks in the database's order: the result's id and validity, then cancellation, then the write.

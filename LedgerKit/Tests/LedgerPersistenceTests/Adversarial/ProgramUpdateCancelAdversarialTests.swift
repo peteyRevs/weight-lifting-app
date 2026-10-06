@@ -112,9 +112,8 @@ struct ProgramUpdateCancelAdversarialTests {
         start.yield()
         let issue = try await Self.verdict(call, on: stores, after: before)
         #expect(issue == nil, "\(place): \(issue ?? "")")
-        if place != .memory {
-            #expect(await Self.wasCancelled(call), "\(place): a write cancelled inside its transaction committed")
-        }
+        // Criterion 12: on every store, the in-memory one included.
+        #expect(await Self.wasCancelled(call), "\(place): a write cancelled inside its change was stored")
         let later = try await Self.stillWorks(stores)
         #expect(later == nil, "\(place): \(later ?? "")")
     }
@@ -135,7 +134,13 @@ struct ProgramUpdateCancelAdversarialTests {
             }
         }
         await gate.untilReached()
-        let call = Call { try await stores.programs.update(UpdateKit.one, Self.wide) }
+        let runs = UpdateTally()
+        let call = Call {
+            try await stores.programs.update(UpdateKit.one) { program in
+                runs.add()
+                return try Self.wide(program)
+            }
+        }
         for _ in 0 ..< yields {
             await Task.yield()
         }
@@ -144,9 +149,8 @@ struct ProgramUpdateCancelAdversarialTests {
         let held = try await holder.value
         let issue = try await Self.verdict(call, on: stores, after: before)
         #expect(issue == nil, "\(place), \(yields) yields: \(issue ?? "")")
-        if place != .memory {
-            #expect(await Self.wasCancelled(call), "\(place): a write cancelled while it waited for the writer ran")
-        }
+        // Criterion 12: on every store, and the change is never called.
+        #expect(await Self.wasCancelled(call) && runs.isZero, "\(place): cancelled while waiting, \(runs.count) runs")
         #expect(held.name == "Held", "the holding update's change was \(held.name)")
         let later = try await Self.stillWorks(stores)
         #expect(later == nil, "\(place): \(later ?? "")")

@@ -29,6 +29,10 @@ public protocol ProgramRepository: Sendable {
     /// `duplicateIdentifier`; a slot naming an exercise that is not stored throws `unknownExercise` (seed the
     /// catalog first; product decision #28); a name or tag holding U+0000 throws `nulInText`; a failed save writes
     /// nothing.
+    ///
+    /// For a new program, or to replace one whole (an import, a repair). To edit a program that is already
+    /// stored use `update`: a copy read earlier and saved here writes back the misses and the exercises a
+    /// workout's save stored since.
     func save(_ program: Program) async throws
     /// Applies `change` to the program `id` as it is stored now and saves the result as `save` would, in one
     /// step that no other write can come between. Returns the program as stored afterwards.
@@ -49,11 +53,11 @@ public protocol ProgramRepository: Sendable {
     /// - A call whose task is cancelled stores all of its change or none of it, and throws
     ///   `CancellationError` only when it stored none.
     ///
-    /// **`change` runs inside the store's write**, on a thread of the store's own, while every other call on
-    /// that store waits. Keep it a quick, pure function of its argument and of values it captured: it must
-    /// not call this repository or any other store (that deadlocks, or traps), and must not wait for
-    /// anything. It is called at most once. There is no default: reading, changing and saving in three steps
-    /// is the sequence this requirement replaces.
+    /// **`change` runs inside the store's write**, while every other call on that store waits. Keep it a
+    /// quick, pure function of its argument and of values it captured, and never call a store from it. It is
+    /// synchronous, so the compiler already refuses every `async` call; the one call that compiles is
+    /// `observeActive()`, which deadlocks or traps there. It is called at most once. There is no default:
+    /// reading, changing and saving in three steps is the sequence this requirement replaces.
     func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program
     /// Makes the program the one active one; one that is not saved, or is deleted, throws `missingRow`.
     func setActive(_ id: ProgramID) async throws

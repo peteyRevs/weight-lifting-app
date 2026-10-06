@@ -36,7 +36,7 @@ extension ProgramRepositoryContract {
             updateCancelledBefore
         ),
         Clause(
-            "a task cancelled inside the change stores all of the change or none of it, and throws only for none",
+            "update on a task cancelled inside its change throws CancellationError and writes nothing",
             updateCancelledInside
         )
     ]

@@ -60,12 +60,17 @@
         /// the state stays as it was and no stream yields. `change` runs under the lock: it must not call this
         /// store, whose lock is not re-entrant.
         ///
-        /// A task that is already cancelled throws `CancellationError` before anything is read, as the
-        /// database's write does before it starts and while it waits. Nothing here suspends, so a task
-        /// cancelled later stores its change whole, where the database rolls back.
+        /// A cancelled task ends as it does on the database (F11 S3 criterion 12). The task is checked once
+        /// the lock is held, so one cancelled before the call or while it waited for the lock throws
+        /// `CancellationError` before anything is read, and `change` is not called; and again once `change`
+        /// has returned and its result has passed the checks the database makes before its first statement
+        /// (the id, then the `init`s), so one cancelled inside `change` throws what the database throws: the
+        /// refusal for such a result, else `CancellationError`. Nothing is stored either way. There is no
+        /// later moment to be cancelled at: the database's "cancelled once committed" is, here, a call that
+        /// has returned.
         public func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
-            try Task.checkCancellation()
-            return try state.write { current in
+            try state.write { current in
+                try Task.checkCancellation()
                 guard let stored = current.programs[id], !stored.isDeleted else {
                     throw RepositoryError.missingRow("program \(id.rawValue.uuidString)")
                 }
@@ -73,8 +78,15 @@
                 guard changed.id == id else {
                     throw RepositoryError.duplicateIdentifier("program \(changed.id.rawValue.uuidString)")
                 }
-                try Self.store(changed, in: &current, exercises: exercises)
-                return current.programs[id]?.program ?? changed
+                // The database refuses another id and a result its `init`s refuse before its first statement,
+                // which is where it first meets the cancellation: the same order here, so both throw alike.
+                let valid = try Self.revalidated(changed)
+                try Task.checkCancellation()
+                try Self.store(valid, in: &current, exercises: exercises)
+                guard let saved = current.programs[id]?.program else {
+                    throw RepositoryError.missingRow("program \(id.rawValue.uuidString)")
+                }
+                return saved
             }
         }
 
