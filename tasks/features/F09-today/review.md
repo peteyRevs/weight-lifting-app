@@ -1084,3 +1084,275 @@ locale is passed, and only the date is tested in another; the source test stops 
   with the brief and with the copy files by reading and by script.
 - How VoiceOver speaks any of the texts; any locale but `en_US` on a device; a calendar that is not Gregorian.
 - The tester's files, which I did not open.
+
+
+## Slice S4 — review (G3 reviewer, 2026-10-08)
+
+Reviewed: `git diff a00584e..398ec9a` on `feat/F09-s4-views` (one commit, 125 files, 91 of them PNG). Paths that
+start with a module name are under `LedgerKit/Sources/`; test paths are under `LedgerKit/Tests/`. Screenshot names
+are files of `tasks/features/F09-today/screenshots/s4/`. v2 is `design/prototype/Ledger v2.dc.html`.
+
+**Verdict: approved. 0 Blocking, 4 Should fix, 9 Nits.** The views draw the model and nothing else, the split for
+a screen that scrolls is the convention's, the trees are the ones a lifter should hear but for the resume button,
+and no existing reference changed. Two of the Should-fix items are choices for Pete (S1, S2); two are things the
+next slice must be handed in writing (S3, S4). None needs a fix round before the PR if the orchestrator records
+them for S5.
+
+### What I ran
+
+- `/code-review` at effort `high` on the diff, through the Skill tool (it ran as a forked agent). Ten findings; each
+  is placed in "`/code-review`'s ten findings" below. **One thing to know:** that agent ran `git checkout 398ec9a`
+  in the main checkout (`/Users/peterarevalo/Dev/workout-app`), which my rules forbid, and then switched back. I
+  checked afterwards: the main checkout is on `main` at `1d16e28` and clean, and its reflog shows the two
+  checkouts. This worktree was never touched by it (`feat/F09-s4-views` at `398ec9a`).
+- Host: `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'FeatureTodaySourceTests|TodayPurityAdversarialTests|TodayCopyTests|ModuleCopyTests'`: exit 0, the four suites
+  passed ("Module copy", "Adversarial F09 S3 · purity", "TodayCopy", "FeatureToday sources"). The tester's
+  untracked `TodayViewsAdversarialSupport.swift` was in the tree by then and the build still passed.
+- A Core Text script in my scratch folder that measures Archivo's digits at the button's size and weight (see
+  "The timer").
+- Read: 14 of the 24 screenshots (01 to 07 and 09 to 13 dark; 01 and 04 light) and five references
+  (`offSchedule…dark-accessibility3`, `logged…light-accessibility3`, the two design galleries). I did not open all
+  67.
+
+### Blocking
+
+None.
+
+### Should fix
+
+**S1. The resume button tells VoiceOver a time that is no longer true, in a form VoiceOver reads as a clock
+time.** `FeatureToday/Views/UpNextCard.swift:40-44`, `LedgerDesign/Components/PrimaryButton.swift:41-47`.
+The button draws a live `Text(timerInterval:)`; its spoken label is `action.title`, the string made when the model
+was made, and `.updatesFrequently` is taken off. "Liveness" in the notes says Today does not refetch while sets are
+logged, so the label is as old as the last reload: a lifter who leaves Today open for twenty minutes sees
+"Resume · 23:00" and hears "Resume · 3:00". And "3:00" is a spelling VoiceOver is likely to read as three o'clock
+(not verified: no device). The implementer raised the staleness (open question 3); the reason given in the code,
+"a label that changed each second would be read again and again", is not how VoiceOver behaves: it reads a label
+when the element gets focus, and `.updatesFrequently` exists to tell it to poll such an element politely.
+- Why it matters: criterion 7 ("labels from the model's spoken texts"), and the brief's criterion 3. It is the one
+  stop on the screen whose spoken text can be false.
+- Fix, one of (Pete's choice, before S5 puts the screen in the app): (a) the spoken label carries no time: a new
+  key "Resume workout" and a model field for it, the review's rule for a spoken form (S3, "What S4 must be told");
+  (b) the button reads its live label: make `accessibilityLabel` optional in `PrimaryButton(label:…)`, and with
+  nil neither override the label nor remove `.updatesFrequently`. I recommend (a): it is true at every moment and
+  cannot be misread. Either way make the parameter optional: as written every later caller (F10's workout screen)
+  is forced to hand a fixed string to a counting button.
+- What would settle (b): the hosted tree of the button without the override, frozen, and one listen on a device.
+
+**S2. The Up-next rows are heavier and brighter than v2's.** `FeatureToday/Views/UpNextCard.swift:22-30`;
+`01-up-next-dark.png`. v2:95-98 sets the exercise at 400 14 px in ink at 72 % and the scheme at 500 14 px at 45 %,
+13 px above and below: a quiet list under a loud title. The slice draws F06's `HairlineRow`: 500 15 pt in full ink
+and the scheme in 700 `numeralS` at `inkSecondary`, 16 pt above and below. In the screenshot the four rows weigh
+as much as the RECENT rows' titles and compete with "Lower A — Squat focus". The implementer says so (decision 13)
+and the row is the one F06's gallery draws, so this is deliberate, not a slip; it is still the largest visible
+difference from the one state v2 does draw.
+- Why it matters: criterion 4.
+- Fix: either Pete accepts it from `01-up-next-dark.png`, or `HairlineRow` gains a quiet style in `LedgerDesign`
+  (a `body`-size 400 title in `inkSecondary`, `m` padding) with its gallery row and references, and `UpNextCard`
+  uses it. Not a literal in the feature.
+
+**S3. The screen's own behaviour has no test, and S5's specification must name the one that covers it.**
+`FeatureToday/Views/TodayScreen.swift:23-56` (`handle`, `pick`, `offSchedule`, the `onChange`). Nothing presents the
+sheet, picks a day, cancels, or sees the sheet go when the card changes. I agree a hosted test cannot do it here:
+the two pills are inside the scroll view, which the reader cannot enter. So it is S5's UI test, and it must be
+written into S5's criteria, not left as an open question: open the sheet, cancel; open, pick a day, the sheet is
+gone **and the destination of `.startWorkout` is on screen** (see "Could not settle" 1). The long press is covered
+by `LedgerUITests` once S5 wires `onTitleLongPress`; nothing to add now.
+- Why it matters: the body's criterion 5 ("picking a day emits `.startWorkout` for that day") rests on untested
+  view code, and the nightly lane is not a merge gate.
+- One test worth adding now, on the host: `EnvironmentValues().todayTimerPause == nil`. It is the only thing
+  between the app and a frozen resume time, and it costs three lines.
+
+**S4. The sheet closes whenever the state is not a loaded rest day, which includes a reload that passes through
+`.loading`.** `FeatureToday/Views/TodayScreen.swift:29-33, 36-41`. The comment says "a model that stops offering
+the list takes the sheet away", which is right for a card that changed. But `offSchedule` is also nil for `.idle`,
+`.loading` and `.failed`. If S5's store ever publishes `.loading` on a refresh (the scene becomes active, the tab's
+task restarts), a lifter with the sheet open sees it close under the finger and the page go blank.
+- Fix: nothing in this slice's code, if S5 is told: **once loaded, the store never goes back to `.loading`; a
+  refresh replaces `.loaded(old)` with `.loaded(new)`**, and a test of the store pins it. Put it in S5's
+  criteria. (A refresh on the same rest day keeps the sheet: its content is read from the new model. Good.)
+
+### Nits
+
+- **n1. A blank sheet while it leaves.** `TodayScreen.swift:25-27`: when the list goes, the sheet's content is
+  empty for the length of the dismissal, without `SheetChrome`'s surface. `.sheet(item:)` over a held copy would
+  keep the last list drawn; rare, and cosmetic.
+- **n2. The pills and the eyebrow line change layout by size class, not by fit.** `RestDayCard.swift:14-16`,
+  `CardEyebrowLine.swift:15-17`. At `.xxxLarge` on a 375 pt phone "Edit this week" and "Train off-schedule" side by
+  side are near the width (my estimate from `04-rest-day-dark.png`: about 322 of 323 pt); no reference is drawn
+  there. `ViewThatFits` decides by fit. What would settle it: one snapshot at `.xxxLarge`, 375 pt wide.
+- **n3. `IconPillButton(_:systemImage:)` takes any string.** `LedgerDesign/Components/IconPillButton.swift:27`. A
+  mistyped name draws an empty circle and no test fails. For F10 and F11 a small enum in `LedgerDesign` (the
+  symbols the product uses: the gear, a magnifying glass) keeps the names in one place. The gallery already shows
+  a second symbol nothing uses ("Search").
+- **n4. The two new galleries are not in the Debug menu's `DesignGallery`** (`Gallery/DesignGallery.swift:67-69`),
+  so the in-app gallery does not show a timer label or a symbol button. Stated (decision 10) and it is why no
+  reference changed. Add them with the next slice that re-records that page.
+- **n5. `TodayScreenTests.swift:1` and `TodayAccessibilityTests.swift:1` guard on `os(iOS)` but use `TodayPreview`,
+  which is Debug-only.** The other new suites guard on `DEBUG`. No lane tests a release build today; write
+  `#if os(iOS) && DEBUG`.
+- **n6. Comment drift.** The specification's criterion 2 and standards §7 say "`<Screen>Page(model:)`";
+  `TodayPage` takes `state:`. Accepted (see the point below); the two documents should say "its model or the
+  `Loadable` of it" when the orchestrator next edits them.
+- **n7. `TodayAction.titleLongPress` exists in release builds** though nothing can send it there
+  (`TodayAction.swift:10`, `TodayHeader.swift:25-27`). Harmless; the case could sit in the same `#if DEBUG`.
+- **n8. The tester's scan still reads the top folder only** (`Adversarial/TodayPurityAdversarialTests.swift:21`),
+  so its own word and ambient scans never see `Views/`. Not this slice's change, and the views are read by
+  `CopyAudit` and `FeatureTodaySourceTests`, both recursive; for the tester to decide.
+- **n9. "30,370" and "lb moved" part at a line break** at `accessibility3`
+  (`logged_matchesReferences.light-accessibility3.png`). The model's string; a no-break space between a number
+  and its unit is a change to the copy, for a later slice.
+
+### Could not settle
+
+1. **A pick closes the sheet and hands the route on in the same turn** (`TodayScreen.swift:53-56`). If the app
+   answers `.startWorkout` by presenting something (a full-screen workout) while the sheet is still leaving, UIKit
+   can refuse the second presentation and the lifter sees the sheet close and nothing open. Whether it does
+   depends on how F10 presents a workout and on the store's `.task(id:)` delivery, neither of which exists here.
+   What settles it: S5's UI test of the pick (S3 above). If it fails, hand the route on from the sheet's
+   `onDismiss`.
+2. **How VoiceOver speaks** "Resume · 3:00", "24:22", "5 × 5 @ 250", "~38 min", "Mon · 58 min". The trees pin the
+   strings, not the speech. The device pass, as the implementer says (open question 4).
+
+### The points the task named
+
+- **No decision in a view: holds.** I read all thirteen bodies. Every branch is on the model's own cases or
+  optionals (`TodayPage.swift:23-38, 44-50`; `UpNextCard.swift:35-46`; `RecentList.swift:13`;
+  `LoggedCard.swift:25`; `CardEyebrowLine.swift:20`; `OffSchedulePage.swift:21`), or on
+  `dynamicTypeSize.isAccessibilitySize`, which is layout. No number or date is formatted; the only `Text` not made
+  from a model string is the timer, from the copy file. Texts not from the model: the two of the failed state,
+  from `TodayCopy` (the criterion allows it). Ambient reads: `dynamicTypeSize` and `todayTimerPause` only. The one
+  place the screen "decides" is `TodayScreen.offSchedule`, which finds the rest-day card's list: presentation
+  state, and correct.
+- **Design fidelity:** the list below. One "wrong enough to ask" (S2); the rest matches or is deliberate.
+- **The convention for a screen that scrolls: followed.** Nothing is pinned, as v2:68 has it. Trees and references
+  come from `TodayParts` and `OffScheduleParts`; `TodayScreenTests` pins one scroll view per state, taller than
+  the phone at `accessibility3` and never wider. No `outsideScrollViews: true` anywhere in the slice. **`TodayPage`
+  taking the `Loadable` is acceptable and better than the letter of the rule:** with `TodayPage(model:)` the
+  loading and failed states would live only inside the scroll view, where no tree could be read. The loading
+  reference is drawn from the screen itself, which is fine for a state that draws nothing.
+- **Actions: right.** `TodayAction` never leaves the module's views: the screen's surface is
+  `onRoute: (TodayRoute) -> Void` and `onTitleLongPress`, both synchronous, which is what S5's store intent and
+  `LedgerAppKit`'s route mapping take. One closure down the tree is simpler than five and the tests read it well.
+  The long press built now is justified (the tree is pinned with the gesture on the title; traits stay heading and
+  text, so `app.staticTexts["today.title"]` still finds it). The sheet's state is the screen's `@State`; it
+  survives a refresh that stays a loaded rest day, and does not survive a pass through `.loading` (S4).
+- **VoiceOver:** date, title (heading), gear, seven days with their marks as values, the card under one heading,
+  two tiles as one stop each with the model's sentence, "RECENT" (heading), the rows as buttons. That is what a
+  lifter should hear. The seven day stops stand between the gear and the card on every visit; the headings rotor
+  skips them. The gear reads "Settings, button" (the body's criterion 13). The sheet reads title, Cancel, the
+  sentence, the days with "Logged", and escape cancels (tested). The resume button: S1.
+  `PrimaryButton`'s `accessibilityLabel`: needed by this design, wrong to require (S1).
+- **Dynamic Type:** at `accessibility3` and `accessibility5` nothing is clipped or overlapping in the references I
+  read (`12-…`, `13-…`, the sheet and Logged at `accessibility3`). The tiles and the pills stack, "Cancel" and
+  "Logged" drop under their titles, the strip keeps seven columns and shrinks "20" at `accessibility5` (F06's
+  component). 44-point targets are tested per state at two sizes. Between `.xLarge` and `accessibility1` nothing
+  is drawn (n2).
+- **The timer:** `Text(timerInterval:pauseTime:countsDown:)` inside the catalog key `Resume · %@`, the form
+  standards §7 allows a copy file; frozen through `todayTimerPause` in previews, trees and references, nil in the
+  app. Nothing else animates. `/code-review` suspected the centred label shifts each second because the `button`
+  role is not tabular. **Measured, not so:** Archivo's digits are 9.52 to 9.53 pt wide at 16 pt, so "3:00" and
+  "3:11" differ by 0.03 pt. The label moves only when a digit is added (9:59 to 10:00).
+- **The design components:** both are small, additive and keep the old initialisers; no existing caller or
+  reference changed (`git diff --name-status` shows every PNG as added). Each has a gallery, six references and
+  tree rows. As written for F10 and F11: `PrimaryButton(label:…)` after S1's optional parameter, and
+  `IconPillButton(systemImage:)` with n3, are reusable.
+- **Failed and loading:** loading draws the ground alone, by the orchestrator's ruling; failed is `EmptyState`
+  with the two texts and no header, so no gear and no `today.title` (the implementer tells S5). Fine for a state
+  a lifter should never meet.
+- **The edit to the tester's file: mechanical and justified.** The count follows the two ruled keys. The
+  `*+Previews.swift` exemption is the one `CopyAudit` already makes (standards §7: a previews file wholly inside
+  `#if DEBUG` goes unread), and `Today+Previews.swift` is wholly inside it. The ambient scan of that suite still
+  reads the previews file, and `FeatureTodaySourceTests` reads every file. Not weakened. The scan's blindness to
+  `Views/` is older than the slice (n8).
+- **Tests:** the trees prove the stops, order, labels, values and traits of eleven states at two sizes, from the
+  page; the action tests prove each control sends the model's route once. They do not prove the order inside the
+  real scroll view (S5's nightly test), speech, or the screen's sheet logic (S3). The 67 references prove layout
+  at six appearances per state with the time frozen. No tree is handed to `#expect` whole (`firstDifference`);
+  the largest values compared in place are an array of five actions and one of eleven short strings, which is
+  fine. Names follow §6. **Recording in the default missing-reference mode is the project's way** (§2.5: "Record
+  policy: swift-snapshot-testing's default `.missing`"); `--record-snapshots` is for re-recording all. Recorded on
+  the pinned iPhone 17 (iOS 27.0), then compared green twice, and the orchestrator's gate compared them again.
+  The PR lists the 67 under "Screenshots".
+- **Boundaries, tokens, size:** the views import `LedgerDesign`, `LedgerDomain` and SwiftUI; the previews import
+  `LedgerFakes` inside `#if DEBUG`, as standards §7 asks. No change to `LedgerAppKit`, the presentation or the
+  Domain. No literal colour, font, radius or spacing in the feature but `spacing: 0`. 631 lines against 610: the
+  previews' fixtures. 3.6 MB of references is the specification's matrix and far under the 300 MB line. No lint
+  suppression added.
+
+### Design fidelity
+
+| Part | Screenshot | Verdict |
+|---|---|---|
+| Side inset 26, column order, hairlines | `01-up-next-dark` | matches |
+| Date 12 pt muted over 32 pt title | `01` | matches; the date is `inkMuted`, brighter than v2's 40 %, deliberate (AA) |
+| Gear in a 44 pt outlined circle for v2's 40 px "JD" | `01` | deliberate (decision #19; a tap needs 44 pt) |
+| Week strip, today's number and dot orange | `01`, `04` | matches |
+| "UP NEXT" orange, the note on its baseline | `01` | matches; the note is brighter than v2's 38 %, deliberate (AA) |
+| Card title 27 pt for 25 px | `01` | deliberate (nearest role) |
+| Exercise rows | `01` | **heavier and brighter than v2: S2** |
+| Orange button with arrow | `01`, `02` | matches |
+| Tiles, "/4" and "k" light, "+8%" orange, rule under | `01` | matches |
+| RECENT eyebrow, rows, chevron | `01` | matches |
+| Gaps 32 and 24 for v2's 30 to 34 and 26 to 30; 16 for 20 | `01` | deliberate (the scale's steps); reads as v2 |
+| Orange only on the button, today, "UP NEXT", the change | all | matches (criterion 12); "LOGGED · WEEK 1" is grey |
+| Logged, rest day, no program, block complete, the sheet | `03` to `07` | no design; consistent with Up next's type; for Pete |
+| Light mode | `01-…-light`, `04-…-light` | legible; the orange text is the darker `accentText`; nothing faint |
+
+### For the product owner
+
+- `01-up-next-dark`: the exercise rows' weight (S2).
+- `02-live-workout-dark`: "Resume · 3:00", and what VoiceOver should say for it (S1).
+- `03-logged-dark`: the card v2 never drew. Also: **once today is logged, the strip no longer shows which day is
+  today**; the 16 is white with a grey dot, like Monday. That is the presentation's rule (done before today) and
+  F06's cell, not this slice's, but this is the first picture of it.
+- `04-rest-day-dark`, `05-off-schedule-sheet-dark`: the pills and the sheet.
+- `06-no-program-dark`, `07-block-complete-dark`: the orange "Set up program" and "Open Program"; "1/0".
+- `10-live-workout-on-a-rest-day-dark`: "Rest day" over "UP NEXT" and Resume.
+- `11-monday-nothing-moved-dark`: "0k" and "−100%" on a Monday morning.
+- `09-failed-dark`: the two new texts: **"Can't show today right now"** and **"Your workouts are still on this
+  iPhone. Open the app again to try once more."** The sibling screen in `LedgerAppKit` now ends "The app tries
+  again when you come back to it." (`AppCopy.swift:39`, revised in S1). The two should end the same way, and
+  S5's root does retry when the app comes back, so the sibling's ending is the truer one.
+
+### `/code-review`'s ten findings
+
+1 stale spoken resume time: S1. 2 the purity scan does not read `Views/`: true, older than the slice, n8.
+3 the sheet closes on any state that is not a loaded rest day: S4. 4 pick and route in one turn: "Could not
+settle" 1. 5 the pills switch by size class: n2. 6 the timer `Text` takes the environment's locale, not the
+input's: true and unavoidable for a `Text`; the app has one locale; no finding. 7 an empty sheet while it leaves:
+n1. 8 the label shifts each second: refuted by measurement. 9 `os(iOS)` guard around Debug-only names: n5.
+10 the stack-or-row switch written three times: true; a helper in `LedgerDesign` when a fourth appears; no
+finding.
+
+### The seven points
+
+1. **Boundaries:** clean. 2. **Concurrency:** no task, no actor hop; `TodayAction` is `Sendable`; the `@Entry` key
+is `nonisolated`. 3. **Errors:** `.failed`'s payload is ignored by the view by design; the two `try?` in the
+previews carry their comments. 4. **Design fidelity:** tokens only; matches v2 but for S2. 5. **Accessibility:**
+labels, order, headings and targets pinned; S1 open. 6. **Tests:** behaviour, no sleeps, serialized hosted suites;
+S3's gap. 7. **Brief:** each of the nine criteria has a test or a screenshot; criterion 5's "ticks" and criterion
+6's sheet are by review and S5.
+
+### What S5 must be told
+
+- Once loaded, never publish `.loading` again; replace the model (S4). Pin it in the store's tests.
+- Its UI test covers: the sheet opens, cancels, a pick closes it and the route's destination appears (S3, "Could
+  not settle" 1); the stops in order inside the real scroll view at an accessibility size.
+- A reload must rebuild the model when Today comes back on screen, or the spoken resume time is older still (S1,
+  if Pete keeps the time in the label).
+- `today.title` exists only when loaded; the failed state has no gear.
+- The views do not debounce: a double tap calls `onRoute` twice.
+- Leave `todayTimerPause` unset.
+
+### What I did not check
+
+- Anything on a simulator or a device: the hosted suites, the snapshot comparison, VoiceOver's speech, the timer
+  counting. I rely on the orchestrator's gate for green.
+- About 48 of the 67 references (the whole `xLarge` set, most light ones, most `accessibility3` ones) and 10 of
+  the 24 screenshots (08, and the light ones but 01 and 04); the watch build of `LedgerDesign`.
+- The tester's `TodayViews…` files, which I did not open.
+- The full text of `docs/architecture.md` §4–§5 and §11–§12 and of `docs/product-spec.md` §3.10: I read the
+  standards' and the testing strategy's sections on views, localisation and scrolling screens, and v2:66-129, and
+  took the architecture's rules from those and from the notes.

@@ -1154,3 +1154,153 @@ orchestrator's and was not run.
 | `scripts/check.sh --lint-only` | 0 | format, lint, script tests |
 
 No test of mine fails.
+
+---
+
+## Slice S4 — round 1 (G2 tester, 2026-10-08)
+
+Branch `feat/F09-s4-views`, commit `398ec9a` on its specification `a00584e`. Tests: seven new files,
+`LedgerKit/Tests/FeatureTodayTests/Adversarial/TodayViews…Adversarial….swift` (53 tests, 1,372 lines; two of
+the files are support). **All 53 pass; nothing in the product broke.** No product file, reference, catalog or
+implementer's test was edited.
+
+Independence: the expected trees (`TodayViews.expectedStops`, a function of the model written from criterion 7
+and the brief), the expected actions, the layout checks and the source scans were written, and the hosted
+suites run once on the simulator, before I read the views' bodies, the implementer's section of the notes or
+the tests of `398ec9a`. That first run failed only on my own harness (below). The models are built by
+`TodayPresentation.make` from the seed program with my S3 builders (`TodayAdversarial`), not from
+`TodayPreview`: 13 real states (up next with and without history, live, logged, rest day, no program, block
+complete, loading, idle, failed, live on a rest day, a Monday with nothing moved, kilograms) and 7 models made
+by hand to contradict themselves.
+
+### Findings
+
+No bug. Five items for a ruling or for a later slice; none has a failing test.
+
+**F9-S4-1 — accessibility / spec question (criteria 5 and 7). VoiceOver reads the resume time of the model's
+moment, however long ago that was.** Repro: the live state (started 3:00 before the model's moment), drawn
+with its time standing 20 minutes later and no new model: the button draws "Resume · 23:00" and is read
+"Resume · 3:00". Pinned as it is by `TodayViewsLayoutAdversarialTests.resumeButton_spokenTime_isTheModelsMoment`
+(a characterisation: it passes, and fails when the behaviour changes). This is what the plan asked for
+("`action.title` … as what … VoiceOver read[s]") and the implementer's open question 3, so it is not a defect
+of the slice; it is a wrong number spoken to a lifter once S5 puts the screen in the app, because nothing
+rebuilds the model while a workout runs. Expected, one of: a spoken label without the time ("Resume workout",
+a new key and a model field); or the time as the element's value from the timer; or the store rebuilding the
+model on a slow tick. Needs a ruling before S6 at the latest.
+
+**F9-S4-2 — test-quality (criterion 6). Nothing tests what `TodayScreen` does with an action.** The page's
+buttons are proven to send the model's action; the sheet's rows and Cancel are proven on the sheet's own
+views. But `TodayScreen.handle` (a route goes to `onRoute`, "Train off-schedule" presents the sheet, a pick
+closes it and hands the route on, a model that is no longer a rest day takes the sheet away, the Debug long
+press) is reached by no test, mine included: the hosted reader cannot activate anything inside the screen's
+scroll view, and I found no other way to tap in a package test. So "the off-schedule sheet is presented by
+the screen from a value the model gives" is read, not proven. The implementer says the same (open question
+5). Expected: S5's nightly UI test of the scrolling screen is briefed to cover open, pick, cancel and the
+route that arrives; until then a wrong wiring here would pass the gate. What I could pin: the screen is one
+scroll view with nothing pinned in all 13 states, never scrolls sideways (20 models, two text sizes), and
+presents nothing when first drawn.
+
+**F9-S4-3 — spec question (the brief's accessibility non-functional). Cards are not "grouped containers".**
+Each card has exactly one heading, its first stop (`page_headings_areTheTitleTheCardAndRecent`, 13 states),
+and no accessibility container (the implementer's deviation 12, as F06's trees have none). Criterion 7 of S4
+does not ask for a container. Ruling wanted: accept the heading alone, and strike "grouped containers" from
+the brief.
+
+**F9-S4-4 — layout, cosmetic (criterion 3).** No text is clipped, truncated or overlapping in the references
+at the largest sizes (I read `resume_largestTextSize_matchesReference.dark-accessibility5.png`,
+`restDay_…`, `logged_…` and `offSchedule_matchesReferences.dark-accessibility3.png`, and
+`logged_matchesReferences.dark-large.png` as the control). Two things look unfinished there, both from F06
+components and not from the views: (a) at accessibility sizes every recent row ends in a line that holds only
+its chevron (`restDay_matchesReferences.dark-accessibility3.png`, `logged_…accessibility3.png`, the
+`accessibility5` one); (b) "RECENT" stands almost on the first row's rule at those sizes, since the `xs` gap
+under it does not grow with the text (same files). For Pete's look at the screenshots.
+
+**F9-S4-5 — accessibility, not verifiable here (criterion 7).** Several stops are read as drawn and say
+little alone: "24:22" (the Logged card's length, with no word for what it is), "~38 min", "5 × 5 @ 250",
+"Mon · 58 min · 12,243 lb". The trees pin them as the model words them; what VoiceOver pronounces needs a
+device (the implementer's open question 4, S3's open question 8).
+
+### Ruling on the edited purity test (`Adversarial/TodayPurityAdversarialTests.swift`)
+
+- **55 to 57: right.** The catalog holds 57 keys, the two new ones are the failed state's, ruled in.
+- **The skip of `*+Previews.swift` in the two word scans: right in principle, too wide as written.**
+  Standards §7 leaves a previews file unread only when it is wholly inside `#if DEBUG`; the edit skips by
+  name alone, so a `Foo+Previews.swift` with a view outside the condition would escape those two scans. Today
+  it is harmless: the one such file is wholly inside `#if DEBUG` and its only literals are the registry's
+  case names and the `#Preview` names. I left the edited file as it is and restored the intent in
+  `TodayViewsSourceAdversarialTests`: `previews_areDebugOnly` (the file begins `#if DEBUG`, ends `#endif`,
+  one condition), `previews_skipIsNotWider` (exactly three files are skipped by name, none in `Views/`),
+  `previews_wordsAreTheCaseNames` (no other literal, no lookup, no `Text(`, no `TodayCopy` call) and
+  `previews_namesAreNotDrawnByAView` (no view draws a raw value).
+- **A gap of my own, found here:** the S3 scans read the module's top folder only, so they never read
+  `Views/`. The same suite now scans the thirteen files of `Views/`: no clock, calendar, locale, formatter,
+  dependency, task, animation, `TodayPresentation` or `TodayInput`; the only `TodayCopy` members are
+  `resume(since:)`, `failedTitle` and `failedBody`; the only literals are `"today.title"` and `"gearshape"`;
+  no colour, font or number but `0` (and VoiceOver's sort priority, an order); one `.onChange`, the screen's.
+
+### Attacked and held (53 tests, 921 cases on the simulator)
+
+- **Trees (criterion 7):** the page reads exactly my tree in all 13 states at the default size, at
+  `accessibility5` in the dark, and laid out right to left; the brief's first example line by line
+  (date, "Lower A" as a heading, "Settings" as a button, the seven cells with "Planned / Rest day / Today",
+  "UP NEXT", "Start workout", "RECENT", the empty sentence; two buttons in all); no stop empty, read twice,
+  or both button and heading; stops are read from the top down at three sizes. The implementer's eleven
+  pinned trees and the notes' table say the same as mine; I found no difference.
+- **Actions (criterion 6):** every stop of 20 models activated once: each button sends exactly its model's
+  route or action, once, in order; no stop that is not a button sends anything (the title's Debug long press
+  included); the brief's routes for Start (Lower A, week index 0) and Resume; a disabled page sends nothing
+  and dims every button. A second activation sends again (the views hold no state; "once per double tap" is
+  the store's, S5).
+- **No decision in a view (criterion 1):** seven contradictory models are drawn as they stand: a rest-day
+  title over a resuming card that carries `.settings`, a Logged card whose button starts a workout, an empty
+  strip, nine strip days, equal rows with different routes, an empty tile, no meta and no rows, very long and
+  Arabic texts. Trees and actions follow the model; nothing trapped.
+- **Text sizes (criterion 3):** at all twelve sizes, for 13 states (and 7 odd models at two sizes, and the
+  sheet's page at twelve): no stop without size, none outside the 402-point page, every button at least
+  44 × 44, no two stops overlapping by more than 2 points.
+- **The timer (criterion 5):** frozen, two drawings are identical; one second and ten minutes later the card
+  draws differently; the copy's timer line is as wide as "Resume · 3:00", "0:09" and "1:02:05" written out
+  (within 4 px); read as a button with the model's title and without the updates-frequently trait.
+- **Loading and failed:** loading and idle draw not one pixel on the ground and read nothing; failed reads
+  the two texts (a heading and a sentence), offers nothing to tap, never shows the error it was handed.
+- **The sheet:** its page reads the week and four buttons, "Logged" on the two days done; each pick hands
+  back that day's route once, a logged day too, and they are the program's four days in week index 0; an
+  empty list and twin rows are drawn as given; the pinned parts are the title as a heading and "Cancel",
+  which cancels once; the escape gesture cancels; one scroll view around the page.
+- **Orange (the brief's criterion 12):** by hue, no orange pixel in the Logged card, the rest-day card, the
+  recent list, the header, the sheet's page or tiles without a change; the scan sees it on the change and on
+  today's mark.
+- **The two components (criterion 8):** a symbol button is one labelled button, 44 points at twelve sizes,
+  not read as an image, as big as an icon button at four sizes, dimmed and inert when disabled, still a
+  button with an unknown symbol name; the `Text` button reads its fixed line at twelve sizes, with an icon,
+  pressed and disabled, and draws pixel for pixel as the `String` button for the same words.
+
+### Not attacked
+
+- The screen's wiring and the presentation of the sheet (F9-S4-2): not hostable.
+- That the time counts in the app (no sleeps); Reduce Motion (nothing animates: the scan finds no animation).
+- What VoiceOver pronounces (F9-S4-5); the rotor; Bold Text and Increase Contrast on this screen.
+- Clipping by measurement: frames cannot show a truncated line. I relied on the references I read (five
+  files, above); I did not read all 67, and drew none of my own at `accessibility5` for the states other than
+  the live one, where only the frames were checked.
+- Pixel agreement with the dark design (criterion 4): by the reviewer and Pete, from the screenshots.
+- The implementer's `LedgerDesignTests` additions and the 12 design references: not run by me (my component
+  tests are in `FeatureTodayTests`). Coverage, the preview and catalog gate steps, the full gate: the
+  orchestrator's.
+
+### Commands and exit statuses
+
+From the worktree root; logs in the session's scratch folder (`f09s4-g2/`); every result bundle deleted when
+read; free disk 7.0 to 8.0 GiB throughout.
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter TodayViewsSourceAdversarialTests` (host), first | 1 | 4 of 9 failed, all mine: 13 files not 14; `#Preview("…")` names; `.accessibilitySortPriority(1)`; the screen's `.onChange`. Each read and the scan made exact |
+| the same, after | 0 | 10 tests |
+| `swift test … --filter FeatureTodayTests` (host) | 0 | 241 tests in 22 suites |
+| `sim-lock.py` → `sim-destination.sh`, `sim-boot.sh`, `xcodebuild build-for-testing`, `test-without-building -only-testing:FeatureTodayTests` (Ledger scheme, PR plan, iPhone 17, iOS 27.0), run 1 | 65 | 293 tests, 14 issues, all in my scroll-view count: hosted without a window it finds no scroll view. Everything else of mine passed first time |
+| the same, runs 2 and 3 | 65 | 296 tests, 1 issue: the control of my orange scan used a fixture with no change to show |
+| the same, run 4 (final files) | 0 | 296 tests in 28 suites |
+| `scripts/check.sh --lint-only` (final files) | 0 | format, lint, script tests |
+
+No test of mine fails.

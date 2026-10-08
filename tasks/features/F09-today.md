@@ -289,3 +289,25 @@ handed. About 610 product lines planned. The slice is accepted when:
    change only where the plan says they do, and each changed reference is listed.
 9. **Wiring of the test targets** as the plan's row says (`snapshotTestTargets`, `PreviewScan`); the gate's
    preview and string-catalog steps pass; `FeatureToday` stays at or above its coverage threshold.
+
+## Plan amendments — slice S4 after round 1 (orchestrator, 2026-10-08)
+
+The tester found no bug (53 tests; its trees, written first, matched the page in all thirteen states) and the
+reviewer approved with four should-fix items. Rulings, which add to S4's nine criteria:
+
+10. **The resume button speaks without a time** (F9-S4-1, review S1): VoiceOver reads "Resume workout", one new
+    text in the catalog; the drawn label keeps its ticking time. `PrimaryButton`'s spoken label is optional.
+    (Default until Pete answers; the other answer is to read the live time.)
+11. **At the accessibility sizes the recent list reads cleanly** (F9-S4-4): no row ends in a line that holds
+    only the chevron, and the "RECENT" label clears its rule.
+12. **Kept as built, for Pete to see:** the exercise rows of the up-next card use the design system's standard
+    row, heavier and brighter than the dark design draws them (review S2; a quieter row style is the other
+    answer). Each card has one heading and is not an accessibility container (F9-S4-3).
+13. **The purity scans** (the tester's ruling): the catalog holds 57 texts; preview files are skipped by the
+    S3 scans, and the tester's new scans read `Views/` and check previews another way. The implementer's edit
+    to the S3 tester's file stands as audited.
+
+**For S5** (review S3, S4; F9-S4-2): the nightly UI test of Today opens the off-schedule sheet, picks a day and
+cancels, and checks the route; the store never returns to loading once it has loaded, since the sheet closes
+when the state passes through it. **For F15** (F9-S4-5): how VoiceOver pronounces "24:22" and "~38 min" is
+checked on a device.
