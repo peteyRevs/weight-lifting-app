@@ -21,10 +21,20 @@
         /// The view's accessibility elements in VoiceOver's order, with the view laid out as
         /// `assertPhoneSnapshot` lays it out: `appearance` in SwiftUI's environment, the iPhone 17 width,
         /// its own height (F06 criterion 6, `ComponentAccessibilityTests`).
+        ///
+        /// **Scroll views.** The reader cannot see inside a scroll view (docs/testing-strategy.md §2.6), and
+        /// the two readers below share its walk and its rule:
+        /// - By default it fails the test when the view holds one: read the page a screen scrolls, not the
+        ///   screen. What it returns then is only what stands outside the scroll view.
+        /// - With `outsideScrollViews: true` it leaves every scroll view out, content and all, without
+        ///   failing, and returns the elements outside them. That is for a caller that knowingly reads the
+        ///   pinned parts around a scroll view (a sheet's title over its scrolling rows), and never for
+        ///   reading a page: what scrolls is not in the result.
         func accessibilityElements(
-            _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large)
+            _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large),
+            outsideScrollViews: Bool = false
         ) -> [AccessibilityElementSnapshot] {
-            withAccessibilityElements(appearance) { elements in
+            withAccessibilityElements(appearance, outsideScrollViews: outsideScrollViews) { elements in
                 elements.map { element in
                     AccessibilityElementSnapshot(
                         label: element.accessibilityLabel ?? "",
@@ -36,23 +46,30 @@
             }
         }
 
-        /// Hosts the view as ``accessibilityElements(_:)`` does and hands `body` the live elements, for
-        /// a test that performs their actions (`accessibilityActivate()`, `accessibilityIncrement()`).
+        /// Hosts the view as ``accessibilityElements(_:outsideScrollViews:)`` does and hands `body` the live
+        /// elements, for a test that performs their actions (`accessibilityActivate()`,
+        /// `accessibilityIncrement()`). `outsideScrollViews` is that reader's: false fails the test on a
+        /// scroll view, true reads only what stands outside one.
         func withAccessibilityElements<Result>(
             _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large),
+            outsideScrollViews: Bool = false,
             _ body: ([NSObject]) -> Result
         ) -> Result {
-            withLiveAccessibilityElements(appearance) { read in body(read()) }
+            withLiveAccessibilityElements(appearance, outsideScrollViews: outsideScrollViews) { read in
+                body(read())
+            }
         }
 
         /// Hosts the view and hands `body` a reader that lays the view out again and returns its
         /// elements, for a test that changes the view's state through an element (an adjustable's
-        /// increment) and then reads what VoiceOver would announce.
+        /// increment) and then reads what VoiceOver would announce. `outsideScrollViews` is
+        /// ``accessibilityElements(_:outsideScrollViews:)``'s, for every read `body` makes.
         ///
         /// SwiftUI builds its accessibility tree only for an assistive technology, so this turns on
         /// UIKit's accessibility automation while the view is hosted, and restores it afterwards.
         func withLiveAccessibilityElements<Result>(
             _ appearance: SnapshotAppearance = SnapshotAppearance(.light, .large),
+            outsideScrollViews: Bool = false,
             _ body: (_ read: () -> [NSObject]) -> Result
         ) -> Result {
             let width = SnapshotConfig.phoneWidth
@@ -68,7 +85,7 @@
                 return body {
                     host.view.setNeedsLayout()
                     host.view.layoutIfNeeded()
-                    return elements(in: host.view)
+                    return elements(in: host.view, outsideScrollViews: outsideScrollViews)
                 }
             }
         }
@@ -76,18 +93,50 @@
 
     /// Depth first, the way VoiceOver walks a container: an element, else its `accessibilityElements`,
     /// else its indexed elements, else (a view) its subviews.
-    private func elements(in object: NSObject) -> [NSObject] {
+    ///
+    /// A scroll view that yields no element fails the test. In a package test process a hosted SwiftUI
+    /// `ScrollView` hands UIKit no accessibility children (measured on iOS 27.0, F08 S2: its
+    /// `accessibilityElements` are nil, its element count is 0, and no subview has any), so the walk would
+    /// return what stands around the scroll view and nothing of what scrolls, in silence, and a tree pinned
+    /// from that reading would pin the wrong thing.
+    ///
+    /// With `outsideScrollViews` the caller has said that the parts around a scroll view are all it reads:
+    /// the walk then leaves each scroll view out whole, and records nothing.
+    private func elements(in object: NSObject, outsideScrollViews: Bool) -> [NSObject] {
         if object.isAccessibilityElement {
             return [object]
         }
-        if let children = object.accessibilityElements as? [NSObject], !children.isEmpty {
-            return children.flatMap(elements(in:))
+        if outsideScrollViews, object is UIScrollView {
+            return []
+        }
+        let found = children(of: object).flatMap { elements(in: $0, outsideScrollViews: outsideScrollViews) }
+        if found.isEmpty, object is UIScrollView {
+            // Loud, not silent, for the same reason as the automation switch below.
+            Issue.record(
+                """
+                The accessibility reader cannot see inside a scroll view (\(type(of: object))): it read \
+                nothing of what scrolls. Host the page the scroll view holds, without the scroll view, \
+                and read that; the screen is its pinned parts plus `ScrollView { Page }` \
+                (docs/testing-strategy.md §2.6, "A screen that scrolls"). A test that reads only the \
+                parts around a scroll view says so with `outsideScrollViews: true`, which is never the \
+                way to read a page: what scrolls is then missing from the result.
+                """
+            )
+        }
+        return found
+    }
+
+    /// What `object` holds, as the walk meets it: its `accessibilityElements`, else its indexed elements,
+    /// else (a view) its subviews.
+    private func children(of object: NSObject) -> [NSObject] {
+        if let listed = object.accessibilityElements as? [NSObject], !listed.isEmpty {
+            return listed
         }
         let count = object.accessibilityElementCount()
         if count != NSNotFound, count > 0 {
-            return (0 ..< count).compactMap { object.accessibilityElement(at: $0) as? NSObject }.flatMap(elements(in:))
+            return (0 ..< count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
         }
-        return (object as? UIView)?.subviews.flatMap(elements(in:)) ?? []
+        return (object as? UIView)?.subviews ?? []
     }
 
     /// `_AXSSetAutomationEnabled` in libAccessibility: private, test-only. It is how KIF and
