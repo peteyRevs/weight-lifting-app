@@ -43,7 +43,13 @@ public enum SupersetRounds {
     /// Rule 19 / decision #7: a superset rests once per round for the longest member rest.
     /// An empty or out-of-range block falls back to the default rest.
     public static func groupRest(block: Block, exercises: [WorkoutExercise]) -> RestDuration {
-        members(of: block, in: exercises).map(\.rest).max() ?? .defaultRest
+        groupRest(of: members(of: block, in: exercises).map(\.rest))
+    }
+
+    /// Rule 19 / decision #7 over the members' rests: the longest. A group rests once a round for it, in
+    /// the workout, in the time estimate and on the Day editor's row. No rests falls back to the default.
+    public static func groupRest(of rests: [RestDuration]) -> RestDuration {
+        rests.max() ?? .defaultRest
     }
 
     /// Rule 44 member letters: 0 → "A" … 4 → "E", continuing through "Z"; beyond that the

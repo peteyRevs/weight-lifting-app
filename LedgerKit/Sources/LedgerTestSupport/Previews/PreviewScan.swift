@@ -7,7 +7,7 @@ public enum PreviewScan {
     /// The modules whose test targets check a preview registry. A module that gains its first `#Preview` adds a
     /// registry, those two suites, and its name here.
     public static let registeredModules: Set<String> = [
-        "FeatureWorkout", "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit"
+        "FeatureToday", "FeatureWorkout", "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit"
     ]
 
     /// `LedgerKit/Sources`, found from this file's place in the repository.

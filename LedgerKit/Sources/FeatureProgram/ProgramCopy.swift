@@ -75,13 +75,13 @@ nonisolated enum ProgramCopy {
         String(localized: "DELOAD", bundle: .module, comment: "Marks a deload week, under its chip and in its title")
     }
 
-    /// "Week 3": what VoiceOver reads for a week's chip.
+    /// "Week 3": what VoiceOver reads for a week's chip, and the start of the Day editor's summary line.
     static func week(_ number: Int, locale: Locale) -> String {
         String(
             localized: "Week \(number)",
             bundle: .module,
             locale: locale,
-            comment: "Spoken label of a week's chip: the week's number, counted from 1"
+            comment: "A week by its number, counted from 1: a chip's spoken label, and the Day editor's summary"
         )
     }
 
@@ -107,11 +107,19 @@ nonisolated enum ProgramCopy {
     }
 
     static var rest: String {
-        String(localized: "REST", bundle: .module, comment: "A weekday with no training day, in the week's schedule")
+        String(
+            localized: "REST",
+            bundle: .module,
+            comment: "A weekday with no training day, in the week's schedule; also the label of the stepper for rest"
+        )
     }
 
     static var restSpoken: String {
-        String(localized: "Rest", bundle: .module, comment: "Spoken value of a weekday with no training day")
+        String(
+            localized: "Rest",
+            bundle: .module,
+            comment: "Spoken value of a weekday with no training day; also the spoken label of the stepper for rest"
+        )
     }
 
     static var assignHint: String {

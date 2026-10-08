@@ -712,3 +712,225 @@ were run, not read.
 | `swift test … --filter 'LedgerDomainTests'` | 0: 1212 tests in 185 suites |
 | `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests` (iPhone 17, iOS 27.0) through the lock, once | 0: 120 passed, 0 failed, 0 skipped; bundle deleted |
 | `scripts/check.sh --lint-only` | 0 |
+
+## Slice S6 — round 1 (G2 tester, 2026-10-08)
+
+Attacked 63f397f against the slice's ten criteria, the brief's criteria 7 to 11 and "Copy (exact)". **No bug
+found.** 53 tests of mine in 8 suites (81 cases), all passing on the host and on the simulator. Six findings:
+three questions about cases the specification leaves open, two notes on copy, one note on a mark. None changes
+what a lifter sees on a seed day.
+
+Tests are in `LedgerKit/Tests/FeatureProgramTests/Adversarial/DayEditor*Adversarial*.swift` (11 files). I wrote
+a model of the screen from the brief ("Copy (exact)", criteria 7 to 11), product spec §3.4 and the slice's
+criteria (`DayEditorAdversarialScreen.swift`, `DayEditorAdversarialPanel.swift`). It reads the input and the
+Domain and never the feature. The feature's model and mine are both written as lines "key=value" and compared
+line by line. I learnt the feature from declarations and doc comments only; I read no function body, no S6
+test and no implementer's note before my tests ran. Afterwards I read the feature's bodies and skimmed the
+implementer's tests; I did not read the implementer's notes at all.
+
+Where my first expectation was wrong, I say so here rather than hide it: I had the confirmation's title carry
+the day's whole name (the brief's "Delete Lower B?" is the short title, which the feature prints); I had
+"Bench Press" for the catalog's "Barbell Bench Press"; three sums of my own were off (a minute count, a rest, a
+linear load in a deload week). The feature was right each time.
+
+### Findings
+
+- **F11-S6-1 — spec question (criterion 3; brief "Copy (exact)", sub line).** In a deload week a row's sub line
+  prints the week's RPE, two lower, beside the slot's own range or step. Repro: seed program, Lower A, week 8:
+  Back Squat reads "Barbell · +5/wk · RPE 6 · 3 min rest" (the slot holds RPE 8). The brief gives the format
+  and not which RPE. The scheme and load on the same row are the week's, so the week's RPE is coherent, and I
+  recommend keeping it and saying so in the spec. My model follows the feature here and says so in its comment.
+- **F11-S6-2 — spec question (criterion 5).** `WeekLine.isHeld` and `Entry.isHeld` are false in a deload week
+  that follows a missed week, where the Domain's prescription has `isHeld == true`. Repro: Back Squat with
+  `misses = [6]`, week 8: eyebrow "WEEK 8 · DELOAD", strip "W8 240 (deload)", both flags false. The texts are
+  the spec's ("DELOAD or HELD"). The flag means "printed as held", which its declaration does not say; a view
+  that colours by the flag will follow the text. Recommend one sentence on the two fields.
+- **F11-S6-3 — spec question (criteria 2 and 3; behaviours 13 and 19).** A slot whose exercise is not stored
+  keeps its own sets and RPE in a deload week, while its neighbours lose a set and two points, and the meta
+  line counts its own sets. Repro: three slots of 3, 4 (+ drop) and 3 sets, no exercise stored, a deload week:
+  rows "3×8", "4×8", "3×8", meta "Week 3 · 3 exercises · 11 sets · ~25 min"; with exercises stored the first
+  row reads "2×8". Rule 12's set and RPE need no exercise. It follows `TimeEstimate`'s documented fallback and
+  cannot be reached in M1 (nothing deletes an exercise). Pinned as built; a ruling is wanted before F12 lets an
+  exercise go.
+- **F11-S6-4 — copy.** One catalog key serves two meanings: "REST" is the schedule's rest day and the
+  stepper's label for rest between sets; "Rest" likewise for the two spoken texts. The comments say so. English
+  is right; a translation cannot give them two words. Split when a second language comes.
+- **F11-S6-5 — copy (criterion 7, spoken texts).** Spoken texts reuse the drawn abbreviations. A row's spoken
+  value is "3×12 · 100 lb · Cable · Reps 12–14 · RPE 9 · no rest"; a linear row says "+5/wk"; a stepper's value
+  is "45s", "2:30" or "50 lb". There is no spoken form of its own for any of them. How VoiceOver reads "×",
+  "/wk" and "45s" is not established here; it belongs to the VoiceOver table of S10 and S11.
+- **F11-S6-6 — note (criterion 10).** "Remove" is marked relative, as the criterion asks, and is in fact
+  idempotent: over seeds 1 to 40 every removal applied twice gave what one gave (more than 50 removals, none
+  differed), while moves did differ. Both statements of the implementer are true. The mark costs nothing: a relative edit is
+  only never sent again, and no edit is sent again after a failed save (S1 ruling, "For S13 and S14").
+
+Answers to the brief's direct questions:
+
+- **Both superset actions at once** is a state the specification allows: product spec §3.4 e shows "Break out"
+  on any exercise that is not the first of its group, and "Superset with next" on the last of a group that is
+  not the day's last. The last member of a superset followed by another exercise meets both. Checked on
+  [1, 2, 3A, 3B, 4] with 3B open, and on every grouping of up to six slots.
+- **A stepper at its limit** is offered and holds the value (the plan's behaviour 11): the one control that is
+  offered and can do nothing. Nothing else offered left the day as it was.
+- **Criterion 1 names a calendar in the input; the input has none.** Nothing on this screen reads a weekday or
+  a date, so none is needed. Not a finding.
+- **Letters past Z.** The 27th member of a superset is numbered ("127" for the 27th of group 1). Thirty joined
+  slots draw without a trap and with thirty different indices. Out of reach of any real day.
+
+### Texts the brief does not give
+
+| Text | Where | Judgement |
+|---|---|---|
+| "Delete day" | the button at the foot | The plan's decision 6. Fine. |
+| "Day name" | the name field's placeholder and spoken label | Plain, matches "Program name". Fine. |
+| "Week 1 · No exercises yet" | meta line of a day with no exercise | The builder's own words after the week. Fine. |
+| "W5 190 (held)" | a held week in the strip | The brief gives " · HELD" for the eyebrow and "(deload)" for the strip. "(held)" matches the strip's form. Pete should see it once. |
+| "—" | name of a row whose exercise is not stored | Behaviour 19. Fine; spoken as "2A, —", which VoiceOver may skip. |
+| "drop · RPE 8 · no rest" | sub line of such a row | Equipment and progression left out. The range and "Fixed" need no exercise and could stay; minor. |
+| "Sets", "Reps", "Rep floor", "Top of range", "Start load", "Target RPE", "Rest" | steppers' spoken labels | The drawn labels in sentence case. Fine. |
+| "Superset" | the header's spoken label | Fine. |
+| "4A, Lat Pulldown" and "3×12 · 100 lb · Cable · …" | a row's spoken label and value | See F11-S6-5. |
+| "kg" for "lb" in every line that prints a load | rows, week line, notes, start load | Decision #9. Fine. |
+| "Kettlebell", "Band" | equipment in the sub line | The brief's chips leave them out; the catalog has them. Fine. |
+| "1 exercise", "1 set", "It's scheduled in 1 week. …" | singular forms | Decision 6 and the Definition of Done. Fine. |
+
+### Attacked and held
+
+- **The brief's examples, word for word** (10 tests): Upper A's header, rows 1, 2, 3, 4A, 4B with sub lines,
+  schemes and loads; "Barbell · +5/wk · RPE 8 · 2:30 rest"; Incline DB Press's strip "W1 50 · W2 50 · W3 50 ·
+  W4 52.5 · W5 52.5 · W6 52.5 · W7 55 · W8 47.5 (deload)" and reps 10, 11, 12, 10, 11, 12, 10, 11; Back Squat
+  "W8 240 (deload)", "WEEK 8 · DELOAD", "4 × 5 @ 240 lb · RPE 6"; "WEEK 4 · HELD" after a miss; the six
+  steppers' labels and values; rest "45s", "2 min", "2:30"; the three notes and both drop-set notes; the
+  confirmation in 7 weeks, 8 weeks, 1 week, nowhere.
+- **The whole screen against my model**: 280 seed screens (4 days × 2 units × weeks 1 to 7 × each slot open and
+  none); seeds 1 to 25 × 2 units × every week × each slot open, deload weeks in a test of their own.
+- **Every action applied and drawn again** (seeds 1 to 10, over 400 actions): `applied(to:)` equals the Domain
+  call I spell, and the next screen equals my model of the result. Each stepper's "−" and "+" equals
+  `DayEditing.set(DayEditing.stepped(…))`.
+- **Steppers pressed** (seeds 1 to 12 × 250 presses, pounds and kilograms) against a counter of my own: every
+  limit, the reps and top-of-range coupling, exact loads. Each limit holds with both buttons offered. Steps for
+  7 kinds of equipment × 2 units (5 / 2.5 lb, 2.5 / 1.25 kg, kettlebell 5 lb / 2 kg). A slot's own step wins.
+  180 lb in kilograms reads "81.6 kg" and steps to 82.5 and 80. A hundred steps up and down return "52.5 lb"
+  and "23.75 kg". "1000000 lb" and "RPE 8.5" draw whole; a start load of zero holds at "0 lb".
+- **Absolute and relative** (seeds 1 to 40, with slots of exercises not stored): only moves and removals are
+  marked; every other edit applied twice is once.
+- **Offered only when it can do something**: 321 panels (every grouping of 1 to 6 slots × each slot open):
+  moves exactly when `DayEditing.move` changes the day, "Break out" and "Superset with next" by §3.4 e.
+  Criteria 10 and 11 through the model's own actions; behaviours 8 and 9; the drop-set switch; remove.
+- **Superset letters and headers**: all 63 groupings of 1 to 6 slots against `DayEditing.groups`.
+- **Stale and odd inputs**: an open slot not held, or of another day; a day not held; weeks `Int.min` to
+  `Int.max`; no slots; one slot of one set; a first slot stored as joined; exercises not stored (seeds 1 to
+  30); misses in any weeks (seeds 1 to 60); actions of one program applied to it after the day was deleted, a
+  slot removed or moved (seeds 1 to 8, over 800 applications): equal to the Domain's call, other days untouched.
+- **Purity**: same input, same model; an extra exercise changes nothing; a German locale changes no load, RPE
+  or rest. My scan of the 11 new files finds no clock, calendar, locale, zone, random draw or default, and no
+  text outside the copy files but "" and " · "; every lookup names the module's bundle, and the locale when it
+  carries a value.
+- **The words** (seeds 1 to 16, over 2,000 texts): every text is the brief's by pattern, or one listed above.
+- **`resolvedStartLoad` / `resolvedStep`**: 64 slots (the seed's 16, each four ways) × 2 units equal the old
+  pair of fallbacks; 2,048 prescriptions equal spec §7.2 worked by me, with misses; the start load's stepper
+  goes to the next multiple from the old pair.
+
+### Not attacked
+
+- The implementer's tests were skimmed for shape, not reviewed line by line; no mutation of product code.
+- The catalog against the compiler's keys, and coverage: the gate's.
+- VoiceOver's reading of any text; any view or store (none exists yet).
+- Locales other than `en_US` beyond one German check; right-to-left; digits of other scripts (S5 ruling 15).
+- A program with no weeks; a day holding one slot id twice (the implementer has a test of each, not checked).
+- Performance.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'DayEditor.*Adversarial'` | 0: 53 tests in 8 suites |
+| the same with `--filter FeatureProgramTests` | 0: 252 tests in 24 suites |
+| `xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR -destination <iPhone 17, iOS 27.0, by UDID> -only-testing:FeatureProgramTests …` through the simulator lock, once | 0: 252 passed, 0 failed, 0 skipped; bundle read and deleted |
+| `scripts/check.sh --lint-only` | 0 |
+
+`LedgerDomainTests` was not run by me: I changed nothing there. Free disk stayed between 7.6 and 8.0 GB.
+
+Round 1 complete.
+
+## Slice S6 — round 2 (G2 tester, 2026-10-08)
+
+Attacked the implementer's uncommitted fixes on 90fadb4 against criteria 11 to 16. **No bug found.** 59 tests of
+mine now in 9 suites (53 of round 1, seven of them passing again after four edits, and 6 new in
+`DayEditorSupersetRestAdversarialTests.swift`), all passing on the host. One new note, F11-S6-7.
+
+`git diff 90fadb4 -- LedgerKit/Tests/FeatureProgramTests/Adversarial/` was empty before I began: none of my
+files had been touched.
+
+### Round 1's findings
+
+| Finding | Now |
+|---|---|
+| F11-S6-1, the week's RPE on a deload row | Closed: kept as built (criterion 15). My model already follows it. |
+| F11-S6-2, `isHeld` false in a deload week | Closed: kept as built (criterion 15). Pinned by my test. |
+| F11-S6-3, a missing exercise keeps its own sets in a deload week | Closed for M1: kept as built (criterion 15). Still wants a ruling before F12 can delete an exercise. |
+| F11-S6-4, one key for "rest" the day and the pause | Kept as one key with a comment; see F11-S6-7. |
+| F11-S6-5, spoken texts reuse abbreviations | Deferred to F15. |
+| F11-S6-6, remove is marked relative and is idempotent | Closed: kept (criterion 15); the comment on `isRelative` now says the mark follows the list. |
+
+### My seven tests that pinned the old rest line
+
+All seven failed for this one reason and no other; each passes after the edit. Four edits cover them.
+
+| Test | Old expected | New expected |
+|---|---|---|
+| `seed_upperA_rowsReadAsTheSpec` | 4B "Cable · Reps 15–17 · RPE 9 · 1 min rest" | "… · 1:15 rest" (Lat Pulldown rests 75 s, the raise 60 s) |
+| `seed_progressionAndDropSet_readAsTheBrief` | Lower A 3B "Machine · Fixed · RPE 9 · 1 min rest" | "… · 1:30 rest" (Leg Press 90 s, the calf raise 60 s) |
+| `slotOfAMissingExercise_isListedUnderADashAndRemovable` | 2B "RPE 8 · 1:30 rest" | "RPE 8 · 2:30 rest" (2A rests 150 s, 2B 90 s) |
+| `seed_everyDayWeekUnitAndOpenSlot_agreesWithTheTestersScreen`, `seededDays_outsideADeload_…`, `seededDays_inADeloadWeek_…`, `everyAction_appliedAndRedrawn_isTheTestersScreen` | my model printed the last member's own rest | one line of `DayEditorAdversarialScreen.swift`: the longest of the group's members' rests, taken by my own `max` |
+
+### Findings
+
+- **F11-S6-7 — note (criterion 14).** The brief's criterion 14 still asks for separate keys for "rest" the day
+  and "rest" the pause. The code keeps one key each for "REST" and "Rest", with a comment naming both uses, as
+  the orchestrator told me the criterion was withdrawn (the English text is the key). The brief's text and the
+  code now disagree; the criterion should be struck or reworded in the brief so the reviewer and the gate read
+  the same rule.
+
+### Attacked and held
+
+- **The superset's rest line, three callers agreeing**: all 63 groupings of 1 to 6 slots (192 groups) with
+  rests and sets drawn per grouping. The row after each group's last member prints my own longest rest; every
+  other member prints "no rest"; the workout built from the same day by `SessionBuilder` rests the same, read
+  by the call the engine's reducer makes when a round's last set is logged (`SupersetRounds.groupRest(block:exercises:)`
+  over `blocks(in:)`); and `TimeEstimate.minutes` equals decision #14's formula written out by me.
+- **The longest rest at any place** of a superset of three (first, middle, last): shown after the last; the
+  stepper still shows the slot's own rest; broken out, each row shows its own again.
+- **The seed**: Upper A's superset reads 1:15 and Lower A's 1:30; Upper A's workout rests 2:30, 1:30, 1:30, 1:15.
+- **Nothing else moved in the estimate**: the seed's four days are 39, 38, 37, 31; seeds 1 to 40 × every week
+  (deloads, drop sets, slots of exercises not stored), with and without prescriptions, equal the old formula.
+  `git diff 90fadb4` removes no line from `TimeEstimateTests.swift` or `SupersetRoundsTests.swift`: every value
+  pinned before still stands.
+- **`TimeEstimate.setCount`**: for a day with a week's prescription, for a day as written and for several days,
+  against my own sum on the same seeds; 58 for the seed (18, 15, 15, 10); 0 for no slots and for no days; the
+  builder still reads "4 days · 58 sets a week"; Upper A reads 18 sets in week 1 and 13 in week 8, Upper B 11
+  in week 8 with its drop set kept.
+- **Criterion 13**: an example of my own. On a fixed slot of 8 reps with top 12, the queue "top of range 9",
+  "Double" gives top 10 once and top 9 sent twice; neither edit is marked relative, and each alone drawn again
+  over its own result changes nothing.
+
+### Not attacked
+
+- The workout's rest was read through the reducer's own call on a built session, not by driving the engine set
+  by set. The engine's code is unchanged by this round apart from that call's body.
+- The implementer's changed tests were run, not read. No simulator run this round (the orchestrator's gate).
+- Review S-4 (no whole model inside an expectation) is the reviewer's to confirm.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'DayEditor.*Adversarial'` before my edits | 1: 53 tests, the seven named above failing |
+| the same, after the edits and the new suite | 0: 59 tests in 9 suites |
+| `swift test … --filter FeatureProgramTests` | 0: 260 tests in 25 suites |
+| `swift test … --filter LedgerDomainTests` | 0: 1222 tests in 186 suites |
+| `scripts/check.sh --lint-only` | 0 |
+
+Free disk stayed between 7.0 and 8.2 GB.
+
+Round 2 complete.

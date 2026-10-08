@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// The texts of Today's five cards and of the off-schedule sheet (`TodayCopy`; standards §7).
 nonisolated extension TodayCopy {
@@ -44,6 +45,21 @@ nonisolated extension TodayCopy {
     /// "Resume · 3:00": the button of a live workout, with the time since it started.
     static func resume(_ elapsed: String, locale: Locale) -> String {
         String(localized: "Resume · \(elapsed)", bundle: .module, locale: locale)
+    }
+
+    /// What VoiceOver reads for that button: no time, so the line is true however long ago the model was made.
+    static var resumeWorkout: String {
+        String(localized: "Resume workout", bundle: .module, comment: "Spoken label of the button of a live workout")
+    }
+
+    /// The same line as the button draws it, counting on by the wall clock from the workout's start, so the
+    /// model is not rebuilt each second. `pause` freezes it at that moment, for previews and tests; nil counts.
+    /// The key is `resume(_:locale:)`'s.
+    static func resume(since start: Date, pausedAt pause: Date?) -> Text {
+        Text(
+            "Resume · \(timerInterval: start ... .distantFuture, pauseTime: pause, countsDown: false)",
+            bundle: .module
+        )
     }
 
     // MARK: Logged

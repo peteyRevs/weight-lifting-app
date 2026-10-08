@@ -35,6 +35,11 @@ nonisolated struct TodayCopyTests {
         #expect(TodayCopy.thousands == "k")
         #expect(TodayCopy.recent == "RECENT")
         #expect(TodayCopy.noSessionsYet == "No sessions yet. Your first workout lands here.")
+        #expect(TodayCopy.resumeWorkout == "Resume workout")
+        #expect(TodayCopy.failedTitle == "Can't show today right now")
+        #expect(
+            TodayCopy.failedBody == "Your workouts are still on this iPhone. Open the app again to try once more."
+        )
     }
 
     @Test("The texts with values read as the brief writes them")
@@ -140,7 +145,8 @@ nonisolated struct TodayCopyTests {
     @Test("No text of Today names the product")
     func catalog_neverNamesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureToday")
-        #expect(catalog.keys.count == 55)
+        // S3's 55, the two texts of the failed state and the resume button's spoken label (S4).
+        #expect(catalog.keys.count == 58)
         #expect(catalog.problems == [])
     }
 }

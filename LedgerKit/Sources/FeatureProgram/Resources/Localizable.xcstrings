@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ kg" : {
+      "comment" : "A load in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "comment" : "A load in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%@ rest" : {
+      "comment" : "On an exercise's row: the rest after each set, as in 2:30 rest or 45s rest",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ rest"
+          }
+        }
+      }
+    },
+    "%@, %@" : {
+      "comment" : "Spoken label of an exercise in the Day editor: its place in the day, as in 4A, then its name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %@"
+          }
+        }
+      }
+    },
     "%lld DAYS" : {
       "comment" : "Under a week's chip: the number of days that week trains",
       "localizations" : {
@@ -63,6 +107,29 @@
                 "stringUnit" : {
                   "state" : "translated",
                   "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld exercises back to back" : {
+      "comment" : "Under SUPERSET: how many exercises the superset has",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercise back to back"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercises back to back"
                 }
               }
             }
@@ -139,12 +206,78 @@
         }
       }
     },
+    "%lld × %lld @ %@ kg" : {
+      "comment" : "A week's prescription: sets, then reps, then the load in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ kg"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ lb" : {
+      "comment" : "A week's prescription: sets, then reps, then the load in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ lb"
+          }
+        }
+      }
+    },
+    "%lld%@" : {
+      "comment" : "An exercise's place in its day: its number, then its letter within a superset, as in 4A",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%@"
+          }
+        }
+      }
+    },
+    "%lld×%lld" : {
+      "comment" : "On an exercise's row: its sets, then its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld×%lld"
+          }
+        }
+      }
+    },
+    "+ Add exercise from library" : {
+      "comment" : "Button under a day's exercises",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Add exercise from library"
+          }
+        }
+      }
+    },
     "+ Add training day" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "+ Add training day"
+          }
+        }
+      }
+    },
+    "+%@/wk" : {
+      "comment" : "On an exercise's row: the load it adds each week, with no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@/wk"
           }
         }
       }
@@ -176,6 +309,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Add at least one exercise before scheduling this day."
+          }
+        }
+      }
+    },
+    "Adds %@ kg a week from %@ kg. A week with a missed set holds the load." : {
+      "comment" : "Linear progression: the kilograms added each week, then the first week's load in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds %@ kg a week from %@ kg. A week with a missed set holds the load."
+          }
+        }
+      }
+    },
+    "Adds %@ lb a week from %@ lb. A week with a missed set holds the load." : {
+      "comment" : "Linear progression: the pounds added each week, then the first week's load in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds %@ lb a week from %@ lb. A week with a missed set holds the load."
+          }
+        }
+      }
+    },
+    "Adds a rep each week up to %lld, then +%@ kg back at %lld." : {
+      "comment" : "Double progression: the most reps of the range, the kilograms then added, the fewest reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds a rep each week up to %lld, then +%@ kg back at %lld."
+          }
+        }
+      }
+    },
+    "Adds a rep each week up to %lld, then +%@ lb back at %lld." : {
+      "comment" : "Double progression: the most reps of the range, the pounds then added, the fewest reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adds a rep each week up to %lld, then +%@ lb back at %lld."
           }
         }
       }
@@ -213,6 +390,28 @@
         }
       }
     },
+    "Band" : {
+      "comment" : "Equipment: a resistance band",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Band"
+          }
+        }
+      }
+    },
+    "Barbell" : {
+      "comment" : "Equipment: a barbell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barbell"
+          }
+        }
+      }
+    },
     "Block length" : {
       "comment" : "Spoken label of the control that adds a week to the block or removes its last week",
       "localizations" : {
@@ -220,6 +419,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Block length"
+          }
+        }
+      }
+    },
+    "Bodyweight" : {
+      "comment" : "Equipment: the lifter's own body",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bodyweight"
+          }
+        }
+      }
+    },
+    "Break out" : {
+      "comment" : "Button that takes an exercise out of its superset",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Break out"
+          }
+        }
+      }
+    },
+    "Cable" : {
+      "comment" : "Equipment: a cable machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cable"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "comment" : "Dismisses the confirmation; the day stays",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
           }
         }
       }
@@ -235,6 +478,17 @@
         }
       }
     },
+    "DAY %lld OF %lld" : {
+      "comment" : "Eyebrow of the Day editor: the day's place among the program's days, then how many there are",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DAY %lld OF %lld"
+          }
+        }
+      }
+    },
     "DELOAD" : {
       "comment" : "Marks a deload week, under its chip and in its title",
       "localizations" : {
@@ -242,6 +496,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "DELOAD"
+          }
+        }
+      }
+    },
+    "Day name" : {
+      "comment" : "Placeholder and spoken label of the field that holds a training day's name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day name"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "comment" : "Confirms that a training day is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "Delete %@?" : {
+      "comment" : "Title of the confirmation before a training day is deleted: the day's short name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete %@?"
+          }
+        }
+      }
+    },
+    "Delete day" : {
+      "comment" : "Button at the foot of the Day editor",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete day"
           }
         }
       }
@@ -257,6 +555,28 @@
         }
       }
     },
+    "Done" : {
+      "comment" : "Button that leaves the Day editor",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "Double" : {
+      "comment" : "A progression: more reps, then more load",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double"
+          }
+        }
+      }
+    },
     "Double-tap to assign" : {
       "comment" : "Spoken hint of a weekday in the week's schedule: the tap assigns the next training day",
       "localizations" : {
@@ -264,6 +584,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Double-tap to assign"
+          }
+        }
+      }
+    },
+    "Drop set" : {
+      "comment" : "Switch that adds a drop set to an exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set"
+          }
+        }
+      }
+    },
+    "Dumbbell" : {
+      "comment" : "Equipment: dumbbells",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dumbbell"
           }
         }
       }
@@ -279,6 +621,73 @@
         }
       }
     },
+    "Fixed" : {
+      "comment" : "A progression that keeps the same load every week: on an exercise's row, and as its choice",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fixed"
+          }
+        }
+      }
+    },
+    "HELD" : {
+      "comment" : "Marks a week whose load is held because a set was missed the week before",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HELD"
+          }
+        }
+      }
+    },
+    "It's scheduled in %lld weeks. Those days become rest." : {
+      "comment" : "Under the confirmation's title: how many weeks of the block train the day",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "It's scheduled in %lld week. Those days become rest."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "It's scheduled in %lld weeks. Those days become rest."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Kettlebell" : {
+      "comment" : "Equipment: a kettlebell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kettlebell"
+          }
+        }
+      }
+    },
+    "Linear" : {
+      "comment" : "A progression: more load each week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linear"
+          }
+        }
+      }
+    },
     "MY PROGRAM" : {
       "comment" : "Eyebrow above the program's name",
       "localizations" : {
@@ -286,6 +695,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MY PROGRAM"
+          }
+        }
+      }
+    },
+    "Machine" : {
+      "comment" : "Equipment: a weight machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machine"
+          }
+        }
+      }
+    },
+    "Move down" : {
+      "comment" : "Carries an exercise towards the foot of its day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move down"
+          }
+        }
+      }
+    },
+    "Move up" : {
+      "comment" : "Carries an exercise towards the top of its day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move up"
           }
         }
       }
@@ -311,6 +753,48 @@
         }
       }
     },
+    "One extra set at −15% after the last working set." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One extra set at −15% after the last working set."
+          }
+        }
+      }
+    },
+    "One extra set at −15%, straight after the last working set." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One extra set at −15%, straight after the last working set."
+          }
+        }
+      }
+    },
+    "PROGRESSION" : {
+      "comment" : "Eyebrow of the choice of a progression",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PROGRESSION"
+          }
+        }
+      }
+    },
+    "Program" : {
+      "comment" : "Back button of the Day editor: to the Program screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Program"
+          }
+        }
+      }
+    },
     "Program name" : {
       "comment" : "Placeholder and spoken label of the field that holds the program's name",
       "localizations" : {
@@ -322,8 +806,30 @@
         }
       }
     },
+    "REP FLOOR" : {
+      "comment" : "Label of the stepper for the fewest reps of a range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REP FLOOR"
+          }
+        }
+      }
+    },
+    "REPS" : {
+      "comment" : "Label of the stepper for an exercise's reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REPS"
+          }
+        }
+      }
+    },
     "REST" : {
-      "comment" : "A weekday with no training day, in the week's schedule",
+      "comment" : "A weekday with no training day, in the week's schedule; also the label of the stepper for rest",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -333,13 +839,112 @@
         }
       }
     },
+    "RPE %@" : {
+      "comment" : "A target RPE, as in RPE 8.5",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RPE %@"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "comment" : "Button that removes an exercise from its day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
+          }
+        }
+      }
+    },
+    "Rep floor" : {
+      "comment" : "Spoken label of the stepper for the fewest reps of a range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rep floor"
+          }
+        }
+      }
+    },
+    "Reps" : {
+      "comment" : "Spoken label of the stepper for an exercise's reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reps"
+          }
+        }
+      }
+    },
+    "Reps %lld–%lld" : {
+      "comment" : "On an exercise's row: the fewest reps of its range, then the most",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reps %lld–%lld"
+          }
+        }
+      }
+    },
     "Rest" : {
-      "comment" : "Spoken value of a weekday with no training day",
+      "comment" : "Spoken value of a weekday with no training day; also the spoken label of the stepper for rest",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rest"
+          }
+        }
+      }
+    },
+    "SETS" : {
+      "comment" : "Label of the stepper for an exercise's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETS"
+          }
+        }
+      }
+    },
+    "START LOAD" : {
+      "comment" : "Label of the stepper for the load of the first week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "START LOAD"
+          }
+        }
+      }
+    },
+    "SUPERSET" : {
+      "comment" : "Eyebrow above exercises done back to back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SUPERSET"
+          }
+        }
+      }
+    },
+    "Sets" : {
+      "comment" : "Spoken label of the stepper for an exercise's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sets"
           }
         }
       }
@@ -350,6 +955,83 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Shared by every week. The schedule above decides which day you train, and when."
+          }
+        }
+      }
+    },
+    "Start load" : {
+      "comment" : "Spoken label of the stepper for the load of the first week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start load"
+          }
+        }
+      }
+    },
+    "Stays at %@ kg for the whole block." : {
+      "comment" : "Fixed progression: the load of every week, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stays at %@ kg for the whole block."
+          }
+        }
+      }
+    },
+    "Stays at %@ lb for the whole block." : {
+      "comment" : "Fixed progression: the load of every week, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stays at %@ lb for the whole block."
+          }
+        }
+      }
+    },
+    "Superset" : {
+      "comment" : "Spoken heading above exercises done back to back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Superset"
+          }
+        }
+      }
+    },
+    "Superset with next" : {
+      "comment" : "Joins the next exercise to this one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Superset with next"
+          }
+        }
+      }
+    },
+    "TARGET RPE" : {
+      "comment" : "Label of the stepper for an exercise's target RPE",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TARGET RPE"
+          }
+        }
+      }
+    },
+    "TOP OF RANGE" : {
+      "comment" : "Label of the stepper for the most reps of a range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TOP OF RANGE"
           }
         }
       }
@@ -376,6 +1058,28 @@
         }
       }
     },
+    "Target RPE" : {
+      "comment" : "Spoken label of the stepper for an exercise's target RPE",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Target RPE"
+          }
+        }
+      }
+    },
+    "Top of range" : {
+      "comment" : "Spoken label of the stepper for the most reps of a range",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top of range"
+          }
+        }
+      }
+    },
     "W%lld" : {
       "comment" : "A week's chip: W for week, then the week's number, counted from 1",
       "localizations" : {
@@ -383,6 +1087,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "W%lld"
+          }
+        }
+      }
+    },
+    "W%lld %@" : {
+      "comment" : "One week among the loads of every week: W for week and its number, then its load, with no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W%lld %@"
+          }
+        }
+      }
+    },
+    "W%lld %@ (deload)" : {
+      "comment" : "A deload week among the loads of every week: the week's number, then its load, with no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W%lld %@ (deload)"
+          }
+        }
+      }
+    },
+    "W%lld %@ (held)" : {
+      "comment" : "A week whose load is held, among the loads of every week: its number, then its load, with no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W%lld %@ (held)"
           }
         }
       }
@@ -399,7 +1136,7 @@
       }
     },
     "Week %lld" : {
-      "comment" : "Spoken label of a week's chip: the week's number, counted from 1",
+      "comment" : "A week by its number, counted from 1: a chip's spoken label, and the Day editor's summary",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -416,6 +1153,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Week %lld has logged sessions and can't be removed."
+          }
+        }
+      }
+    },
+    "drop" : {
+      "comment" : "On an exercise's row: it ends on a drop set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "drop"
+          }
+        }
+      }
+    },
+    "no rest" : {
+      "comment" : "On the row of an exercise in a superset that is not its last: the next exercise follows at once",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no rest"
+          }
+        }
+      }
+    },
+    "rest after %@" : {
+      "comment" : "Under SUPERSET: the letter of the superset's last exercise, after which the lifter rests",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rest after %@"
           }
         }
       }
