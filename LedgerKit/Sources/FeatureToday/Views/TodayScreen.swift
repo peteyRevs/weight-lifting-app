@@ -45,7 +45,9 @@ struct TodayScreen: View {
         switch action {
         case let .route(route): onRoute(route)
         case .pickOffScheduleDay: isPickingDay = true
-        case .titleLongPress: onTitleLongPress()
+        #if DEBUG
+            case .titleLongPress: onTitleLongPress()
+        #endif
         }
     }
 

@@ -1,4 +1,4 @@
-#if os(iOS)
+#if os(iOS) && DEBUG
     @testable import FeatureToday
     import UIKit
 
@@ -112,7 +112,7 @@
 
         static let resume = wednesday(card: [
             .heading("UP NEXT"), .text("Week 1 of 8 · ~38 min"), .text("Lower A — Squat focus")
-        ] + lowerARows + [.button("Resume · 3:00")])
+        ] + lowerARows + [.button("Resume workout")])
 
         static let logged: [Stop] = [
             .text("Wednesday, September 16"), .heading("Lower A"), .button("Settings")
@@ -195,7 +195,7 @@
             .text("Deadlift, 4 × 4 @ 315"),
             .text("Front Squat, 3 × 8 @ 185"),
             .text("Seated Leg Curl, 3 × 12 @ 90"),
-            .button("Resume · 12:40")
+            .button("Resume workout")
         ])
 
         static let mondayVolume: [Stop] = [

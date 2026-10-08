@@ -6,8 +6,10 @@ nonisolated enum TodayAction: Equatable, Sendable {
     case route(TodayRoute)
     /// The rest-day card's "Train off-schedule": the screen presents the sheet.
     case pickOffScheduleDay
-    /// A long press on the title, in Debug builds only: the app opens its Debug menu (F07 criterion 7).
-    case titleLongPress
+    #if DEBUG
+        /// A long press on the title, in Debug builds only: the app opens its Debug menu (F07 criterion 7).
+        case titleLongPress
+    #endif
 }
 
 /// `nonisolated`, so the key `@Entry` generates is not main-actor-isolated by this module's default.

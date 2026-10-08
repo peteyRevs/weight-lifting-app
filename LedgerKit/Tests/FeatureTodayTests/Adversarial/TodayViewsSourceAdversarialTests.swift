@@ -59,15 +59,15 @@ nonisolated struct TodayViewsSourceAdversarialTests {
         #expect(hits.count == 1 && hits.allSatisfy { $0.hasPrefix("TodayScreen.swift:") }, "\(hits)")
     }
 
-    @Test("The one copy a view asks for is the timer line and the two texts of the failed state")
-    func views_copyLookups_areTheThreeRuledIn() throws {
+    @Test("The copy a view asks for is the timer line, its spoken line and the two texts of the failed state")
+    func views_copyLookups_areTheFourRuledIn() throws {
         let lines = try Self.bare(Self.views()).flatMap { source in
             source.lines.filter { $0.contains("TodayCopy.") }.map { $0.trimmingCharacters(in: .whitespaces) }
         }
         let members = lines.flatMap { line in
             line.matches(of: /TodayCopy\.(\w+)/).map { String($0.1) }
         }
-        #expect(members.sorted() == ["failedBody", "failedTitle", "resume"], "\(members)")
+        #expect(members.sorted() == ["failedBody", "failedTitle", "resume", "resumeWorkout"], "\(members)")
         #expect(lines.count(where: { $0.contains("TodayCopy.resume(since:") }) == 1, "\(lines)")
     }
 

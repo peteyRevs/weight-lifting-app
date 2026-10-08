@@ -169,7 +169,7 @@
             case let .upNext(card):
                 [.heading(card.eyebrow)] + (card.meta.map { [.text($0)] } ?? []) + [.text(card.title)]
                     + card.rows.map { .text("\($0.name), \($0.scheme)") }
-                    + [.button(card.action.action.title)]
+                    + [.button(spokenTitle(of: card.action))]
             case let .logged(card):
                 [
                     .heading(card.eyebrow), .text(card.elapsed), .text(card.title), .text(card.stats),
@@ -182,6 +182,16 @@
                 ]
             case let .noProgram(card), let .blockComplete(card):
                 [.heading(card.title), .text(card.body), .button(card.action.title)]
+            }
+        }
+
+        /// What VoiceOver reads for the card's orange button. A live workout's reads "Resume workout", with no
+        /// time, whatever the model's own title says (criterion 10 of the rulings after round 1): the drawn
+        /// label ticks, and a spoken time would be as old as the model.
+        static func spokenTitle(of action: TodayModel.PrimaryAction) -> String {
+            switch action {
+            case let .start(action): action.title
+            case .resume: "Resume workout"
             }
         }
 

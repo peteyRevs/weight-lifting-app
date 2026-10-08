@@ -132,7 +132,8 @@ nonisolated struct TodayPurityAdversarialTests {
         let calls = copy.flatMap { Self.lookups(in: $0.lines.joined(separator: "\n")) }
         // Round 1's 49, the four spoken lines of criterion 14, the sentences of criteria 16 and 17, and the two
         // texts of the failed state (S4, by the orchestrator's ruling of 2026-10-08).
-        #expect(calls.count == 57, "the catalog holds 57 keys")
+        // And the resume button's spoken line, "Resume workout" (S4 after round 1, criterion 10).
+        #expect(calls.count == 58, "the catalog holds 58 keys")
         let withoutBundle = calls.filter { !$0.contains("bundle: .module") }.map { String($0.prefix(60)) }
         #expect(withoutBundle == [])
         let carriesAValue = calls.filter { $0.contains("\\(") }

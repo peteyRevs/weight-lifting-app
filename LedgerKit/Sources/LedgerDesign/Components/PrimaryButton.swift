@@ -5,8 +5,9 @@ import SwiftUI
 /// grey (v1 "Select exercises to add": ink .10 fill).
 ///
 /// `title` is shown as given; features pass copy from their string catalog. A label that changes by
-/// itself (v2 "Resume workout · 12:48", a `Text` that holds a timer) is passed as a `Text`, with the
-/// fixed line VoiceOver reads for it: a label that changed each second would be read again and again.
+/// itself (v2 "Resume workout · 12:48", a `Text` that holds a timer) is passed as a `Text`. Such a
+/// button can be given a fixed line for VoiceOver to read in the label's place; without one VoiceOver
+/// reads the label as it stands when the button gets focus.
 public struct PrimaryButton: View {
     /// Spec §8.6: "primary CTA height ≈ 54 px".
     static let minimumHeight: CGFloat = 54
@@ -25,15 +26,19 @@ public struct PrimaryButton: View {
     }
 
     /// A button whose label is a `Text` the caller built, such as one that counts with
-    /// `Text(timerInterval:)`. `accessibilityLabel` is what VoiceOver reads in its place.
+    /// `Text(timerInterval:)`. `accessibilityLabel` is what VoiceOver reads in its place; nil leaves the
+    /// label to be read as drawn, and the element as SwiftUI marks it (one that holds a timer updates
+    /// frequently). A line that is empty or only white space is no line: it is treated as nil, so the
+    /// button is never one VoiceOver reads as nothing.
     public init(
         label: Text,
-        accessibilityLabel: String,
+        accessibilityLabel: String? = nil,
         icon: LedgerIcon? = nil,
         action: @escaping () -> Void
     ) {
         self.label = label
-        spoken = accessibilityLabel
+        let line = accessibilityLabel ?? ""
+        spoken = line.allSatisfy(\.isWhitespace) ? nil : line
         self.icon = icon
         self.action = action
     }
@@ -92,8 +97,8 @@ struct PrimaryButtonTimerGallery: View {
 
     var body: some View {
         VStack(spacing: LedgerSpacing.xl) {
-            PrimaryButton(label: Self.elapsed, accessibilityLabel: "Resume workout, 12:48", icon: .arrow) {}
-            PrimaryButton(label: Self.elapsed, accessibilityLabel: "Resume workout, 12:48") {}.disabled(true)
+            PrimaryButton(label: Self.elapsed, accessibilityLabel: "Resume workout", icon: .arrow) {}
+            PrimaryButton(label: Self.elapsed, accessibilityLabel: "Resume workout") {}.disabled(true)
         }
     }
 

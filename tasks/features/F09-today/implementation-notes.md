@@ -2991,3 +2991,146 @@ not run it on `main` to compare.
 - **The nightly UI test** of the scrolling screen (criterion 2): the stops of "The intended VoiceOver trees"
   in their order inside the real scroll view at an accessibility text size, and the sheet's open, pick and
   cancel (open question 5).
+
+## Slice S4 — fix round 1 (G1 implementer, 2026-10-08)
+
+On `feat/F09-s4-views` at `3bc7a53` (the slice as `398ec9a`, then the tester's files, the findings and the
+review). No commits. The specification is the brief's "Plan amendments — slice S4 after round 1" (criteria 10 to
+13). Product code and my own tests only: `git status --short` lists no file under `Adversarial/`.
+
+### What changed
+
+- **Criterion 10 (F9-S4-1, review S1): the resume button speaks without a time.** `TodayCopy.resumeWorkout`
+  ("Resume workout", `TodayCopy+Cards.swift`) and its catalog key; `UpNextCard` hands it to the button as its
+  spoken label in place of the model's `action.title`. It is looked up by the view, as the failed state's two
+  texts are (S4's criterion 1: "a `TodayCopy` lookup the model does not carry"); the presentation and the model
+  are unchanged, as the coordinator's instruction has it, where the review's rule would add a model field. The
+  drawn label still counts. `PrimaryButton(label:accessibilityLabel:icon:action:)`: `accessibilityLabel` is now
+  `String? = nil`; with nil the label is read as drawn and the element keeps `updatesFrequently`, with a line the
+  trait is removed as before. `PrimaryButtonTimerGallery`'s spoken line is "Resume workout" (not drawn: its
+  references are unchanged).
+- **Criterion 11 (F9-S4-4): the recent list at the accessibility sizes.** `RecentList` reads the text size: at
+  an accessibility size a row has no chevron (F06's `HairlineRow` moves an accessory under the title there, and
+  the chevron alone made a line of its own), and the gap under "RECENT" is `m` (12) instead of `xs` (4). At the
+  other sizes nothing changed. `HairlineRow` itself is untouched, so no `LedgerDesign` reference changed; the
+  off-schedule sheet's "Logged" still moves under its day, where it is a word and not an ornament.
+- **Review S3's one test:** `PreviewTests.timerPause_isNilByDefault`.
+
+### New text (for Pete)
+
+| Key | Reads | Where |
+|---|---|---|
+| `Resume workout` (new) | "Resume workout" | VoiceOver, the button of a live workout; the button still draws "Resume · 3:00", counting |
+
+The catalog has 58 keys (57 before). `Resume · %@` is still looked up twice: by the model's `action.title`,
+which nothing draws or speaks now but tests and S3's contract hold, and by the timer form.
+
+### The reviewer's nits
+
+| Nit | Done or declined |
+|---|---|
+| n1, a blank sheet while it leaves | Declined: it would change how the sheet is presented (`.sheet(item:)` over a held copy), behaviour beyond the criteria, for a cosmetic case no reference or test can show here. For S5, with the UI test that opens the sheet |
+| n2, layout by size class, not by fit | Declined as a change, settled by a test: `TodayAccessibilityTests.restDayPills_narrowPhoneLargestStandardSize_fit` hosts the rest day 375 pt wide at `.xxxLarge` and holds the two pills side by side, apart, inside the insets (result under "Runs"). `ViewThatFits` would also change which layout the six accessibility references show wherever a line happens to fit ("LOGGED · WEEK 1" beside "24:22"), which no criterion asks |
+| n3, `systemImage:` takes any string | Declined: the signature is the plan's (orchestrator decision 9), and a mistyped name already fails: the gear is in every loaded reference and in `iconPillButtonSymbol`'s. A typed list of symbols is a design-system decision for the slice that uses a second one |
+| n4, the two galleries are not in `DesignGallery` | Declined now, as the reviewer says: with the next slice that re-records that page |
+| n5, `os(iOS)` guards over Debug-only types | Done: `#if os(iOS) && DEBUG` in `TodayScreenTests`, `TodayAccessibilityTests`, `TodayAccessibilityTrees` |
+| n6, "`<Screen>Page(model:)`" in the two documents | Not mine: the orchestrator's, when it next edits them |
+| n7, `TodayAction.titleLongPress` in release builds | Done: the case and the screen's branch for it are inside `#if DEBUG` |
+| n8, the tester's scan reads the top folder only | The tester's, and answered by its new `TodayViewsSourceAdversarialTests` |
+| n9, "30,370" and "lb moved" part at a line break | Declined: a change to the copy (a no-break space in a key), for a later slice, as the reviewer says |
+
+Not changed, as ruled: criterion 12's rows and headings.
+
+### Inputs for S5, added (the brief's "For S5")
+
+- **The nightly UI test of Today opens the off-schedule sheet, picks a day and cancels, and checks the route.**
+  Open and cancel: the sheet is gone and nothing was routed. Open and pick: the sheet is gone and the
+  destination of that day's `.startWorkout` is on screen (the screen closes the sheet and hands the route on in
+  the same turn; if the app's presentation is refused while the sheet leaves, hand the route on from the
+  sheet's `onDismiss`: review, "Could not settle" 1). Nothing in the package tests reaches
+  `TodayScreen.handle`.
+- **Once it has loaded, the store never returns to `.loading`.** A refresh replaces `.loaded(old)` with
+  `.loaded(new)`, and a store test pins it. The sheet's list is read from the state on screen, so the sheet
+  closes whenever the state is not a loaded rest day: a pass through `.loading` (or `.idle`, or `.failed`)
+  would close it under the lifter's finger and blank the page.
+- Also changed for S5 by this round: the resume button's spoken label no longer depends on the model's age, so
+  the store need not rebuild the model for VoiceOver's sake.
+
+### References re-recorded (13), and why
+
+Criterion 11 changes every loaded page at an accessibility size: the recent rows lose their chevron line, and
+"RECENT" stands 8 pt further from the first rule (in "no program", from the empty sentence). Each file was
+deleted, then written by one locked run of `FeatureTodayTests` in the library's missing-reference mode (the
+coordinator's ruling: not `--record-snapshots`), then compared green in the final run. I looked at each of the
+thirteen: no row ends in a chevron, "RECENT" clears its rule, nothing else moved but the page's height.
+`git status` shows no other PNG under `__Snapshots__` changed.
+
+`Tests/FeatureTodayTests/__Snapshots__/TodaySnapshotTests/`:
+- `upNext_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `resume_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `logged_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `restDay_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `noProgram_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `blockComplete_matchesReferences.light-accessibility3.png`, `.dark-accessibility3.png`
+- `resume_largestTextSize_matchesReference.dark-accessibility5.png`
+
+Unchanged: every `large` and `xLarge` reference, `failed`, `offSchedule`, `loading`, the two open-question
+states, and all of `LedgerDesignTests`' (152). Screenshots refreshed: `12-live-workout-largest-text-dark.png`
+and `13-rest-day-accessibility3-dark.png`; the other 22 show sizes that did not change.
+
+### The tester's tests that need the tester
+
+Nine tests of `FeatureTodayTests/Adversarial/` fail, on the simulator, and no other test of the three targets.
+Each pins the old spoken label, the count of 57 texts, or the three copy members a view may ask for. I did not
+edit them. No file of the tester's stopped compiling.
+
+| Test | Ruling | It expects | It now gets |
+|---|---|---|---|
+| `TodayPurityAdversarialTests.lookups_takeTheInjectedLocale()` (`:135`) | 10 | `calls.count == 57` | 58 lookups: the new `Resume workout` |
+| `TodayViewsSourceAdversarialTests.views_copyLookups_areTheThreeRuledIn()` (`:70`) | 10 | the views' `TodayCopy` members are `failedBody`, `failedTitle`, `resume` | those and `resumeWorkout` |
+| `TodayViewsLayoutAdversarialTests.resumeButton_isReadAsTheModelsTitle()` (`:224-230`) | 10 | one stop labelled "Resume · 3:00", a button that does not update frequently | none with that label; the button reads "Resume workout" (still a button, still not updating frequently) |
+| `TodayViewsLayoutAdversarialTests.resumeButton_spokenTime_isTheModelsMoment()` (`:237-242`), the characterisation of F9-S4-1 | 10 | twenty minutes on, the button reads "Resume · 3:00" | "Resume workout" |
+| `TodayViewsLayoutAdversarialTests.page_rightToLeft_readsTheSameTree(_:)`, the two live cases | 10 | live workout, stop 18: "Resume · 3:00"; live workout on a rest day, stop 17: "Resume · 12:34" | "Resume workout" at both |
+| `TodayViewsTreeAdversarialTests.page_tree_isTheModels(_:)`, the two live cases | 10 | the same two stops | "Resume workout" at both |
+| `TodayViewsTreeAdversarialTests.page_tree_isTheSameAtAccessibility5(_:)`, the two live cases | 10 | the same two stops | "Resume workout" at both |
+| `TodayViewsTreeAdversarialTests.page_inconsistentModel_isDrawnAsGiven(_:)`, one case (a rest-day title over an up-next card that resumes with another route) | 10 | stop 16: the model's own title, "Spoken resume" | "Resume workout": the button no longer speaks the model's title |
+| `TodayViewsTreeAdversarialTests.primaryButton_emitsTheBriefsRoutes()` (`:115-139`), its live case | 10 | a stop labelled "Resume · 3:00" to activate | none; the stop is "Resume workout" (its route is pinned by my `resume_button_sendsResume`) |
+
+The tester's trees take the resume stop from the model's `action.title`
+(`TodayViewsAdversarialSupport.swift:172`); under criterion 10
+that stop is the fixed text. The contradiction case is worth its eye: the model's title for a resume action is
+now drawn nowhere and spoken nowhere.
+
+### Code lines
+
+Product, counted as before: **642** (631 before): `PrimaryButton.swift` +3, `TodayCopy+Cards.swift` +3,
+`RecentList.swift` +4, `TodayAction.swift` +2, `TodayScreen.swift` +2 (the two `#if DEBUG` pairs), and the
+changed lines counted once. Not counted: the catalog (11 lines of JSON). My tests grew by about 35 lines (the
+two new tests, a tree row, the three guards).
+
+### Runs (final tree; no source changed after the recording run)
+
+| Run | Result |
+|---|---|
+| Host: `swift test … --filter 'FeatureTodayTests\|ModuleCopyTests'` (before the recording) | `ModuleCopyTests` 6 passed; `FeatureTodayTests` 242 tests, 2 failed, both on the list above (the two that run on the host) |
+| Simulator, locked, recording: `sim-run.sh` (`check.sh`'s step 3, `-only-testing:FeatureTodayTests`), iPhone 17, iOS 27.0; 7.9 GB free before, 7.6 GB after | build 0; catalog step 0 (FeatureToday: 58 keys); 298 tests, 16 failed: the 7 snapshot tests whose 13 references were just written, and the 9 above |
+| **Simulator, locked, final**: the same script, `FeatureTodayTests`, `LedgerDesignTests`, `LedgerAppKitTests`; 7.6 GB free before, 7.8 GB after the bundle was deleted | build status 0; catalog step status 0, "3 checked, each matches its module's code" (FeatureToday keys: 58); `xcodebuild` status 65: **846 tests, 830 passed, 9 failed, 1 skipped, 6 expected failures**. `FeatureTodayTests` 298: 289 passed, 9 failed, exactly the nine above. `LedgerDesignTests` 312: 305 passed, 1 skipped, 6 expected failures. `LedgerAppKitTests` 236 passed. n2's test (`restDayPills_narrowPhoneLargestStandardSize_fit`) and `timerPause_isNilByDefault` passed. The bundles were read and deleted |
+| Host: `scripts/check.sh --lint-only` (after the final run) | exit 0, `check.sh (--lint-only) OK` |
+
+**Not verified:** the full gate, coverage, watchOS, CI; a device, and how VoiceOver says "Resume workout" or
+anything else; the app (S5); that `PrimaryButton` with no spoken line reads a live, unfrozen timer sensibly
+(its hosted tree is pinned frozen: "12:48", a button that updates frequently); a release build of the
+`#if DEBUG` case (no lane builds one); n2 at any width but 375 pt and any size but `.xxxLarge`.
+
+### Fix round 2 (2026-10-08): F9-S4-6
+
+- `PrimaryButton(label:accessibilityLabel:…)`: a spoken line that is empty or only white space is treated as
+  absent (decided once, in the initializer), so the button reads its drawn label and keeps SwiftUI's own traits;
+  the parameter's doc comment says so. The tester's `textButton_emptySpokenLine_isStillNamed` is unedited.
+- My test: `LedgerDesignTests/ButtonAdditionsTests.blankSpokenLine_readsTheDrawnLabel(_:)` (four blank lines, a
+  plain label and a timer's). No reference changed. Runs: see below.
+- Runs, final tree: one locked simulator session (`build-for-testing`, the catalog step, `FeatureTodayTests`
+  and `LedgerDesignTests`; iPhone 17, iOS 27.0): build 0, catalog step 0, tests status 0: 625 tests, 618 passed,
+  none failed, 1 skipped, 6 expected failures (`FeatureTodayTests` 312 passed; `LedgerDesignTests` 306 passed,
+  1 skipped, 6 expected failures). `scripts/check.sh --lint-only` exit 0. `git status` lists no PNG beyond fix
+  round 1's thirteen references and two screenshots. Not run: `LedgerAppKitTests`, the full gate, a device.

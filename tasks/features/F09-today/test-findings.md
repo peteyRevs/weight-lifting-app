@@ -1304,3 +1304,108 @@ read; free disk 7.0 to 8.0 GiB throughout.
 | `scripts/check.sh --lint-only` (final files) | 0 | format, lint, script tests |
 
 No test of mine fails.
+
+---
+
+## Slice S4 — round 2 (G2 tester, 2026-10-08)
+
+On `3bc7a53` with the implementer's fix round uncommitted on top; the rulings are the brief's criteria 10 to
+13. Before any edit `git diff 3bc7a53 -- LedgerKit/Tests/FeatureTodayTests/Adversarial/` was empty: none of my
+files had been touched. Final simulator run: **312 tests, 311 pass; the one that fails is mine and is
+F9-S4-6.** `scripts/check.sh --lint-only` passes.
+
+### Round 1's findings
+
+| Finding | Status |
+|---|---|
+| F9-S4-1, the spoken resume time | **Closed** by criterion 10. The button reads "Resume workout" in the three fixtures that resume, at all twelve sizes; twenty minutes on with no new model it reads the same; nothing spoken on such a page carries a clock time but a recent row's own length; no stop is marked as updating by itself, the time counting |
+| F9-S4-2, the screen's wiring is tested by nothing | **Recorded for S5** (the nightly UI test opens the sheet, picks, cancels, checks the route). Still untested here |
+| F9-S4-3, cards are no containers | **Closed** by criterion 12: kept as built |
+| F9-S4-4, the chevron-only line and "RECENT" on its rule | **Closed** by criterion 11: measured at every size and seen in the references (below) |
+| F9-S4-5, how "24:22" and "~38 min" are pronounced | **Recorded for F15**, on a device |
+| The purity ruling | Stands (criterion 13). The count is now 58, with "Resume workout" |
+
+### The nine updates
+
+All nine failed for the reason the rulings give; none for another. Nothing else in those tests changed.
+
+| Test | Old expected | New expected |
+|---|---|---|
+| `TodayViewsTreeAdversarialTests.page_tree_isTheModels` (the two live states) | the card's button reads the model's title, "Resume · 3:00" / "Resume · 12:34" | "Resume workout" (one change in the oracle, `TodayViews.spokenTitle(of:)`, the literal of criterion 10) |
+| `…page_tree_isTheSameAtAccessibility5` (the same two) | as above | as above, by the same change |
+| `…page_inconsistentModel_isDrawnAsGiven` (the resuming model) | "Spoken resume", the hand-made model's title | "Resume workout": the spoken line is no longer the model's |
+| `TodayViewsLayoutAdversarialTests.page_rightToLeft_readsTheSameTree` (the two live states) | as the first row | as the first row |
+| `TodayViewsTreeAdversarialTests.primaryButton_emitsTheBriefsRoutes` | the stop labelled "Resume · 3:00" sends `.resumeWorkout` | the stop labelled "Resume workout" does |
+| `TodayViewsLayoutAdversarialTests.resumeButton_isReadAsTheModelsTitle`, now `resumeButton_isReadWithoutATime` | one button "Resume · 3:00", not updating | one button "Resume workout", not updating |
+| `…resumeButton_spokenTime_isTheModelsMoment`, now `resumeButton_spokenLine_holdsNoTime` | twenty minutes on: "Resume · 3:00" (round 1's characterisation of F9-S4-1) | twenty minutes on: "Resume workout" |
+| `TodayViewsSourceAdversarialTests.views_copyLookups_areTheThreeRuledIn`, now `…areTheFourRuledIn` | the views ask `TodayCopy` for `failedBody`, `failedTitle`, `resume` | and `resumeWorkout` |
+| `TodayPurityAdversarialTests.lookups_takeTheInjectedLocale` | 57 lookups | 58 |
+
+None of my round 1 tests pinned the chevron; the nine are the spoken label (seven), the views' copy (one) and
+the count (one).
+
+### New findings
+
+**F9-S4-6 — accessibility, low (criterion 10; `LedgerDesign`, `PrimaryButton`). An empty spoken line leaves a
+button that reads nothing.** Repro: `PrimaryButton(label: Text(verbatim: "Start workout"), accessibilityLabel:
+"") {}` hosted and read: one stop, a button, label `""`. Expected: now that the spoken line is optional and
+"nil leaves the label to be read as drawn", an empty one does the same (or the initialiser refuses it); actual:
+VoiceOver has a button with no name. No caller passes an empty line today (the one caller passes the
+catalog's "Resume workout"), so nothing a lifter meets is wrong; it is a trap in a public component for the
+next feature. Test, failing and left so:
+`TodayViewsRound2AdversarialTests.textButton_emptySpokenLine_isStillNamed`. A one-line cure in the component
+(`if let spoken, !spoken.isEmpty`), or a ruling that the caller owns it, in which case I turn the test into a
+characterisation.
+
+**Observation, no finding.** At the accessibility sizes a recent row now shows nothing that says it can be
+tapped (no chevron; VoiceOver still reads it as a button). That is criterion 11 as ruled; for Pete's look at
+`logged_matchesReferences.light-accessibility3.png`.
+
+### Attacked and held (14 new tests in `TodayViewsRound2AdversarialTests.swift`; 67 of mine in all)
+
+- **The spoken line:** as in the table's first row; and the drawn label still counts (round 1's three timer
+  tests pass unchanged: frozen alike, a second later different, as wide as "Resume · 3:00").
+- **`PrimaryButton` with and without a spoken line:** without one, a plain `Text` button reads its label
+  ("Start workout"), is not marked as updating, acts once, and is dimmed and inert when disabled; a timer
+  button reads the time as it stands ("12:48"), one button, 44 points; with and without the line the button
+  draws pixel for pixel alike. Round 1's eight component tests pass unchanged.
+- **The recent list at all twelve sizes:** the same tree (the heading, one button per row reading name and
+  meta) and each row sends its route once; at the five accessibility sizes a row is exactly as tall as the
+  same row with no accessory at all (within 0.5 pt), so no line is left for a chevron; the chevron is drawn at
+  each of the seven standard sizes and nothing stands at the trailing edge at accessibility1 to 3; "RECENT"
+  ends at least 8 pt above the first row at the accessibility sizes and 2 pt at the others; with no workout
+  the empty sentence stands clear under it at every size. Round 1's twelve-size frame check of the whole page
+  passes unchanged.
+- **References:** `git status --short` shows 13 changed PNG under `__Snapshots__`, all `FeatureTodayTests`,
+  all at `accessibility3` or `accessibility5` (12 and 1), every one a state with a recent list; no reference
+  at `large` or `xLarge`, none of `LedgerDesignTests`, and no new or deleted file. (Two screenshots under
+  `tasks/…/screenshots/s4/` changed with them.) I read six: `restDay_…dark-accessibility3`,
+  `resume_largestTextSize_…dark-accessibility5`, `noProgram_…dark-accessibility3`,
+  `blockComplete_…dark-accessibility3`, `logged_…light-accessibility3`, `resume_…light-accessibility3`. In
+  each the rows end after their meta line, "RECENT" stands clear of the rule, and nothing is clipped or
+  overlapping; I saw no change the rulings do not explain. The drawn button still reads "Resume · 3:00".
+
+### Not attacked
+
+- The other seven re-recorded references (the light or dark twins of those read, and `upNext_…`), beyond
+  the fact that they changed; the frame checks cover their layouts.
+- A probe of mine was wrong and is corrected: read by pixels, the trailing edge holds wrapped text at
+  accessibility4 and 5, so "no chevron" is proven there by the row's height, not by the drawing.
+- The implementer's changed tests and `LedgerDesignTests` (the orchestrator's gate); F9-S4-2 and F9-S4-5.
+- The `#if DEBUG` now around `titleLongPress`: Release is not built here.
+
+### Commands and exit statuses
+
+From the worktree root; logs in the scratch folder (`f09s4-g2/`, `r2-*` and `sim-r2*`); every result bundle
+deleted when read; free disk 7.4 to 8.1 GiB.
+
+| Command | Exit | Result |
+|---|---|---|
+| `git diff 3bc7a53 -- LedgerKit/Tests/FeatureTodayTests/Adversarial/`, before any edit | 0 | empty |
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter FeatureTodayTests` (host), after the nine updates | 0 | 242 tests in 22 suites |
+| `sim-lock.py` → `xcodebuild build-for-testing` (run a) | 65 | my new file did not compile (a key path in a test's arguments, a missing `try`) |
+| the same and `test-without-building -only-testing:FeatureTodayTests`, runs b and c (iPhone 17, iOS 27.0, PR plan) | 65 | 311 tests, 4 issues: F9-S4-6, and my pixel probe at xSmall, accessibility4 and 5 (c repeated b: an edit of mine had not applied) |
+| the same, run d (final files) | 65 | 312 tests in 29 suites, 1 issue: F9-S4-6 |
+| `scripts/check.sh --lint-only` (final files) | 0 | format, lint, script tests |
+
+Expect the gate red at its iOS test step on `textButton_emptySpokenLine_isStillNamed` until F9-S4-6 is ruled.

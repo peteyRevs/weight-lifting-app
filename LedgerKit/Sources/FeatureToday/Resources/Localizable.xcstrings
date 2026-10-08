@@ -455,6 +455,17 @@
         }
       }
     },
+    "Resume workout" : {
+      "comment" : "Spoken label of the button of a live workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume workout"
+          }
+        }
+      }
+    },
     "Resume · %@" : {
       "localizations" : {
         "en" : {

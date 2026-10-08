@@ -121,7 +121,7 @@
                     "Start workout",
                     TodayRoute.startWorkout(program: program.id, weekIndex: 0, day: lowerA.id)
                 ),
-                ("live workout", "Resume · 3:00", TodayRoute.resumeWorkout)
+                ("live workout", "Resume workout", TodayRoute.resumeWorkout)
             ] {
                 let item = try #require(ViewsCases.all.first { $0.name == name })
                 let sent = TodayViews.Sent()

@@ -47,6 +47,11 @@ nonisolated extension TodayCopy {
         String(localized: "Resume · \(elapsed)", bundle: .module, locale: locale)
     }
 
+    /// What VoiceOver reads for that button: no time, so the line is true however long ago the model was made.
+    static var resumeWorkout: String {
+        String(localized: "Resume workout", bundle: .module, comment: "Spoken label of the button of a live workout")
+    }
+
     /// The same line as the button draws it, counting on by the wall clock from the workout's start, so the
     /// model is not rebuilt each second. `pause` freezes it at that moment, for previews and tests; nil counts.
     /// The key is `resume(_:locale:)`'s.

@@ -1,4 +1,4 @@
-#if os(iOS)
+#if os(iOS) && DEBUG
     @testable import FeatureToday
     import LedgerDomain
     @testable import LedgerSnapshotTesting

@@ -1,4 +1,4 @@
-#if os(iOS)
+#if os(iOS) && DEBUG
     @testable import FeatureToday
     import LedgerDomain
     import LedgerSnapshotTesting
@@ -66,6 +66,27 @@
                     )
                 }
             }
+        }
+
+        /// Review n2: the rest day's two pills change from side by side to stacked by the size class, not by fit.
+        /// The tightest case that is still side by side is the largest size below the accessibility ones on the
+        /// narrowest phone iOS 26 runs on (375 pt).
+        @Test("On a 375 pt phone at xxxLarge the rest day's two pills stand side by side inside the page's insets")
+        func restDayPills_narrowPhoneLargestStandardSize_fit() throws {
+            let narrow: CGFloat = 375
+            let page = TodayParts(preview: .restDay).frame(width: narrow)
+            let pills = page.accessibilityElements(SnapshotAppearance(.dark, .xxxLarge)).filter {
+                $0.label == "Edit this week" || $0.label == "Train off-schedule"
+            }
+            let edit = try #require(pills.first).frame
+            let train = try #require(pills.last).frame
+            #expect(pills.count == 2)
+            #expect(abs(edit.midY - train.midY) < 1, "side by side: \(edit) and \(train)")
+            #expect(edit.maxX <= train.minX, "they do not overlap: \(edit) and \(train)")
+            // The reader hosts the 375 pt page in the middle of its 402 pt window.
+            let leading = (SnapshotConfig.phoneWidth - narrow) / 2 + 26
+            let trailing = SnapshotConfig.phoneWidth - leading
+            #expect(edit.minX >= leading - 0.5 && train.maxX <= trailing + 0.5, "\(edit) \(train)")
         }
 
         /// What activating every button of `preview`, top to bottom, sends.

@@ -59,6 +59,24 @@
                 }
             }
 
+            @Test(
+                "A spoken line that is empty or only white space is no line: the button reads its drawn label",
+                arguments: ["", " ", "\n\t ", "\u{00A0}"]
+            )
+            func blankSpokenLine_readsTheDrawnLabel(_ blank: String) throws {
+                let button = PrimaryButton(label: Text(verbatim: "Start workout"), accessibilityLabel: blank) {}
+                let elements = button.accessibilityElements()
+                let element = try #require(elements.first)
+                #expect(elements.count == 1)
+                #expect(element.label == "Start workout")
+                expectButton(element)
+                // As with no line at all, a timer's element keeps the trait SwiftUI gives it.
+                let timer = PrimaryButton(label: PrimaryButtonTimerGallery.elapsed, accessibilityLabel: blank) {}
+                let counting = try #require(timer.accessibilityElements().first)
+                #expect(counting.label == "12:48")
+                #expect(counting.traits.contains(.updatesFrequently))
+            }
+
             @Test("A symbol button is one button that reads its label, with a 44 pt target, and acts")
             func symbolButton_isOneLabelledButton() throws {
                 for appearance in ComponentAccessibilityTests.sizes {

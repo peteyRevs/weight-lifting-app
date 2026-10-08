@@ -311,3 +311,5 @@ reviewer approved with four should-fix items. Rulings, which add to S4's nine cr
 cancels, and checks the route; the store never returns to loading once it has loaded, since the sheet closes
 when the state passes through it. **For F15** (F9-S4-5): how VoiceOver pronounces "24:22" and "~38 min" is
 checked on a device.
+14. **A blank spoken label is no label** (F9-S4-6, round 2): `PrimaryButton` given an empty or white-space-only
+    spoken label speaks its drawn label.

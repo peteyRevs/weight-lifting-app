@@ -220,26 +220,25 @@
             #expect(TodayCopy.resume(TodayAdversarialClock.text(seconds), locale: Fixtures.locale) == line)
         }
 
-        @Test("VoiceOver reads the resume button as the model's title, a button that does not update by itself")
-        func resumeButton_isReadAsTheModelsTitle() throws {
+        @Test("VoiceOver reads the resume button as Resume workout, a button that does not update by itself")
+        func resumeButton_isReadWithoutATime() throws {
             let item = try #require(ViewsCases.all.first { $0.name == "live workout" })
             let traits = TodayViews.page(item).withAccessibilityElements { elements in
-                elements.filter { $0.accessibilityLabel == "Resume · 3:00" }.map(\.accessibilityTraits)
+                elements.filter { $0.accessibilityLabel == "Resume workout" }.map(\.accessibilityTraits)
             }
-            #expect(traits.count == 1, "\(traits.count) stops read Resume · 3:00")
+            #expect(traits.count == 1, "\(traits.count) stops read Resume workout")
             #expect(traits.allSatisfy { $0.contains(.button) && !$0.contains(.updatesFrequently) })
         }
 
-        /// Spec question F9-S4 (see the findings): what VoiceOver reads once the drawn time has moved on. The
-        /// plan gives the model's title, which is the time at the model's moment; this pins what is read 20
-        /// minutes later, with no new model.
-        @Test("Twenty minutes on, with no new model, VoiceOver still reads the model's moment (characterisation)")
-        func resumeButton_spokenTime_isTheModelsMoment() throws {
+        /// F9-S4-1, as ruled (criterion 10): the spoken line carries no time, so it is true however old the
+        /// model is. Twenty minutes on with no new model, it reads the same.
+        @Test("Twenty minutes on, with no new model, VoiceOver reads the same line, and no time anywhere in it")
+        func resumeButton_spokenLine_holdsNoTime() throws {
             let item = try #require(ViewsCases.all.first { $0.name == "live workout" })
             let later = TodayPage(state: item.state) { _ in }
                 .environment(\.todayTimerPause, item.now.addingTimeInterval(1200))
             let resume = TodayViews.stops(of: later).filter { $0.role == .button && $0.label.hasPrefix("Resume") }
-            #expect(resume.map(\.label) == ["Resume · 3:00"], "\(resume)")
+            #expect(resume.map(\.label) == ["Resume workout"], "\(resume)")
         }
     }
 

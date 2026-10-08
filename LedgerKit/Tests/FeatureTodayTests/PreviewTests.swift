@@ -23,6 +23,11 @@
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
         }
 
+        @Test("In the app the resume time counts: nothing stops it unless a preview or a test says when")
+        func timerPause_isNilByDefault() {
+            #expect(EnvironmentValues().todayTimerPause == nil)
+        }
+
         @Test("Every preview shows the state it is named for: its fixture builds, and the card is the state's")
         func preview_showsItsState() throws {
             var kinds: [String] = []
