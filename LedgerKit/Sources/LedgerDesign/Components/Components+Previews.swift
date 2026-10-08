@@ -10,10 +10,12 @@
         case eyebrow = "Eyebrow"
         case hairlineList = "HairlineList"
         case iconPillButton = "IconPillButton"
+        case iconPillButtonSymbol = "IconPillButton symbol"
         case ledgerIcon = "LedgerIcon"
         case pillButton = "PillButton"
         case pillButtonStates = "PillButton states"
         case primaryButton = "PrimaryButton"
+        case primaryButtonTimer = "PrimaryButton timer"
         case restRing = "RestRing"
         case setRow = "SetRow"
         case setRowSteppers = "SetRowSteppers"
@@ -34,10 +36,12 @@
             case .eyebrow: EyebrowGallery().ledgerGalleryPage()
             case .hairlineList: HairlineListGallery().ledgerGalleryPage()
             case .iconPillButton: IconPillButtonGallery().ledgerGalleryPage()
+            case .iconPillButtonSymbol: IconPillButtonSymbolGallery().ledgerGalleryPage()
             case .ledgerIcon: Self.iconsPage
             case .pillButton: PillButtonGallery().ledgerGalleryPage()
             case .pillButtonStates: PillButtonStatesGallery().ledgerGalleryPage()
             case .primaryButton: PrimaryButtonGallery().ledgerGalleryPage()
+            case .primaryButtonTimer: PrimaryButtonTimerGallery().ledgerGalleryPage()
             case .restRing: RestRingGallery().ledgerGalleryPage()
             case .setRow: SetRowGallery().ledgerGalleryPage()
             case .setRowSteppers: Self.setRowSteppersPage
@@ -105,6 +109,10 @@
         DesignPreview.iconPillButton.content
     }
 
+    #Preview("IconPillButton symbol") {
+        DesignPreview.iconPillButtonSymbol.content
+    }
+
     #Preview("LedgerIcon") {
         DesignPreview.ledgerIcon.content
     }
@@ -119,6 +127,10 @@
 
     #Preview("PrimaryButton") {
         DesignPreview.primaryButton.content
+    }
+
+    #Preview("PrimaryButton timer") {
+        DesignPreview.primaryButtonTimer.content
     }
 
     #Preview("RestRing") {

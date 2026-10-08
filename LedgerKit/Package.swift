@@ -64,7 +64,7 @@ let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistenc
 
 /// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
 /// PNGs as sources. Add a target here with its first snapshot suite.
-let snapshotTestTargets: Set<String> = ["LedgerDesign", "LedgerAppKit", "LedgerWatchAppKit"]
+let snapshotTestTargets: Set<String> = ["LedgerDesign", "LedgerAppKit", "LedgerWatchAppKit", "FeatureToday"]
 
 /// Test targets that read committed fixtures through `Bundle.module` (F05: `schema-v001.sql`; F09 S1: the string
 /// catalog fixture that proves a formatted string and a plural resolve from a package target's bundle).
