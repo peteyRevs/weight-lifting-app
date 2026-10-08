@@ -1283,3 +1283,360 @@ ownership rules, which are the database's too.
   two queues: reasoned, not run.
 - That the 60 s allowance ends a hung probe wait under xcodebuild: the notes say so.
 - A process killed by the system, watchOS, and anything on a device.
+
+## Slice S4 — review (G3 reviewer, 2026-10-08)
+
+Reviewed: `git diff d61a3c4..46d4103` (one commit, `46d4103`), read in the worktree `F10-s4`. The tester's
+untracked files were not read.
+
+**Verdict: APPROVE. Blocking 0 · Should fix 5 · Nit 11.**
+
+The lifecycle is sound. The session is the one source of truth for what is live; the launcher holds only
+"what is presented" and the store only "what the session last published plus this cover's dialogs". I found no
+path on which two workouts are live, a workout is lost without the lifter choosing "Discard", a choice runs
+twice, or the cover goes on showing a workout that ended. The five Should-fix items are one product call (the
+invisible Cancel), one test that proves less than its name, one alert line that claims more than the launcher
+knows, and two small pins.
+
+**The `/code-review` pass** ran at effort `high` as a forked agent, given the range and this worktree and told
+to read only. It returned ten findings, none a correctness bug that blocks. What I did with each:
+
+| Its finding | Disposition |
+|---|---|
+| A cancelled "Discard and start new" ends `idle` with the old workout already discarded (`WorkoutLauncher.swift:109`) | Not reachable on the host: `inTurn` runs each call in the actor's own task and a cancelled caller's `task.value` does not throw, and nothing but `session.start` stands between the discard and the start. A session that did throw `CancellationError` there would lose the word, so the comment at `:97-99` should say "on a host that completes its calls". No finding. |
+| "was kept" said when the old workout was discarded and a third one is live (`:159`) | True on two devices only. Folded into S4-N4. |
+| `onRoute` fires before the cover is down | S4-N2. |
+| The loading cover has no control | S4-N9 (new). |
+| The failure alert's title goes empty as it dismisses (`WorkoutCover.swift:68`) | S4-N10 (new); not verified. |
+| The "same workout" rule is written in the launcher as well as in `SessionBuilder.resumable` | By criterion 3's own wording. Carried to "What S5 and F09 S5 must be told" for the watch. |
+| VoiceOver hears no elapsed time | Open question 1, already ruled for S4. |
+| `today.waitForExistence` after Minimize and Discard is vacuous (`Smoke.swift:51`, `:64`) | Right. Folded into S4-SF2. |
+| The dismissal binding, the logger accessor and the run-once guard are each written twice | S4-N11 (new). |
+| A store is made on every evaluation of the cover's content | S4-N7. |
+
+### Should fix
+
+- **S4-SF1. The conflict dialog offers a destructive choice and no visible way out.**
+  `LedgerKit/Sources/FeatureWorkout/WorkoutCover.swift:60-65`; `screenshots/s4/conflict-dialog-light.png`,
+  `conflict-dialog-dark.png`. On iOS 27 the dialog draws "Resume it" and, in red, "Discard and start new";
+  the `role: .cancel` button is not drawn, and the only way to back out is a tap outside the card, which
+  nothing on screen says. A lifter who tapped the wrong day's "Start workout" has two visible choices, and
+  neither is "leave things as they are, show me nothing". The brief's "Copy (exact)" names only the two
+  buttons, but the S4 amendment's criterion 4 names three choices ("resume the live one; discard it and start
+  the new one; cancel"), and the finish dialog in the same slice already solved this the other way (a plain
+  button with no role is drawn). The two dialogs of one feature should not differ here, and the one that can
+  destroy a workout from outside the cover is the one that most needs the button.
+  **Fix (smallest):** drop `role: .cancel` at `:64`, as `WorkoutRoot.swift:37` does for "Keep lifting"; the
+  dismissal binding still sends `.cancelConflict` for a tap outside, and `accept` already takes the two in
+  either order. One line, no new copy ("Cancel" is in the catalog), no reference changes (the dialog is not
+  in a snapshot). **Alternative, if Pete wants it harder to do by accident:** an `.alert` with the same three
+  buttons: an alert draws every button and a tap outside does not dismiss it. I recommend the first now and
+  leave the second to Pete. Either way retake the two screenshots when Today can reach the dialog (F09 S5).
+- **S4-SF2. The UI test does not prove "0:00 advances"; it can pass on the cover's own animation.**
+  `Apps/LedgerUITests/Smoke.swift:42-48`. `atStart` is the first screenshot of the element, taken right after
+  `waitForExistence` and three synchronous reads, which can be inside the cover's slide-up; the expectation is
+  then "any later screenshot differs". A frame of the transition, or the dot's antialiasing settling,
+  satisfies it with a timer that never counts, and nothing in the test ever reads "0:00" (the element's label
+  is the fixed "Elapsed time"). Criterion 10 asks that the test "sees '0:00' advance". **Fix:** take the first
+  picture only when the cover has settled (wait for `minimize.isHittable`, then until two consecutive
+  screenshots are equal), then wait for a third that differs; and say in the test's comment that the reading
+  itself ("0:00", "1:01:05") is pinned by `WorkoutSnapshotTests`, not here. If a real reading is wanted in the
+  app, the cheap way is open question 1's (a value made when asked), which S6 is to decide.
+  The same test's `today.waitForExistence` after Minimize (`:51`) and after Discard (`:64`) proves nothing:
+  the title exists under the cover, which is why `:37` asks `isHittable`. Wait for `today.isHittable` in both
+  places; the second long press on the title then also stops racing the cover's way down.
+- **S4-SF3. "Nothing was changed. Try again." is said when the launcher does not know that.**
+  `WorkoutLauncher.swift:147-168` with `WorkoutPresentation.swift:65`. After a `.start` that threw, the
+  launcher reads the session again; when that read also throws, `aftermath` stays `.unknown` and is then
+  dropped, because `.notStarted` carries only a `Reason`. The alert says "Nothing was changed." Row L19 of
+  the implementer's own table is the case where that is false: the write went through and its answer was
+  lost. The notes say of the replace path that an unreadable session gives a line that "claims nothing"; the
+  start path should hold to the same rule. **Fix:** when the re-read fails, return a failure whose line is
+  `WorkoutCopy.tryAgain` (for instance `.notStarted(.unknown)` mapped to "Try again.", or reuse
+  `.notOpened`), keep "Nothing was changed. Try again." for a start that failed with the session read; one
+  test beside `sessionCannotBeRead_opensNothing`, which today pins the wrong line for this case.
+- **S4-SF4. Criterion 7's "no unstructured task" is pinned by nothing; the notes say a test pins it.**
+  `LedgerKit/Tests/FeatureWorkoutTests/FeatureWorkoutSourceTests.swift:28-31`; notes, "Criteria → tests",
+  row 7 ("no `Task {` and no sleep in the module: `sources_neverCountTime` and review"). The list holds
+  `Task.sleep` and no spelling of a task being made. The module is clean today (I searched), but S5 adds the
+  intent pump and S6 the rest effects, which is exactly where a `Task { }` in a store gets written.
+  **Fix:** a third list, `["Task{", "Task(", "Task.detached", "Task.init"]`, and a test
+  `sources_startNoTaskOfTheirOwn`; the existing `check_findsASpelling…` loop then covers it. (`FeatureToday`'s
+  and `FeatureProgram`'s source tests lack it too: the ambient list here is theirs word for word, so this
+  module knows what they learned and no more. Worth one follow-up for all three.)
+- **S4-SF5. The translator's comment on the one two-value key does not say which number is which.**
+  `WorkoutCopy.swift:39` and the catalog's `"Exercise %lld of %lld"` (`Localizable.xcstrings:120`): "Which
+  exercise of the workout is the current one". `FeatureToday` writes the order for every such key ("The
+  program week, counted from 1, then the number of weeks in the block", `TodayCopy+Cards.swift:17`), because a
+  language that turns the phrase round needs it. **Fix:** "The current exercise's place in the workout,
+  counted from 1, then the number of exercises", in both files, word for word (the gate compares them).
+
+### Nit
+
+- **S4-N1. A cover asked for again while the last one is still going down could, in principle, be handed
+  the old store.** `WorkoutCover.swift:44-50`, `WorkoutRoot.swift:10`. The store is `@State` of the cover's
+  content, and a store whose `exit` is set answers nothing (`WorkoutStore.swift:85`) and disables both
+  buttons. If SwiftUI ever keeps the content's state across `isPresented` going false then true inside one
+  dismissal, the lifter gets a cover with no way out. I do not know that it does: UIKit ignores touches under
+  a transition, and the UI test's second start goes through the Debug sheet, which is slow. **What would
+  settle it:** F09 S5's UI test tapping "Resume" straight after "Minimize". **Cheap insurance now:**
+  `WorkoutRoot { … }.id(launcher.request?.number)` at `:45`, so each accepted request is a new store by
+  construction rather than by SwiftUI's habit.
+- **S4-N2. `onRoute` is documented as told "after it has closed"; it is told as the dismissal begins.**
+  `WorkoutCover.swift:9`, `:45-49`: `launcher.send(.coverClosed)` and `onRoute(route)` run in the same turn.
+  Harmless for `.saved` → `selectedTab = .today` (under the cover). It will matter if a route ever presents
+  something (a sheet cannot go up over a cover that is still going down: `MainRoot`'s own comment on the
+  Debug sheet). Fix the sentence, or call `onRoute` from the cover's `onDismiss`.
+- **S4-N3. Two quiet outcomes on Resume.** (a) `WorkoutLauncher.swift:164`: a `.resume` whose first read
+  threw and whose second read finds a live workout still shows "Couldn't open this workout"; it could return
+  `.cover`. (b) Row L14: "Resume it" after the live workout ended elsewhere does nothing at all, with no word.
+  Both are rare; (b) is right for a phone alone and worth a line once the watch can end a workout (F15+).
+- **S4-N4. A replacement that cannot be built does not say why.** `WorkoutLauncher.swift:165`: `.replace`
+  drops the error, so a block that has ended gives "Couldn't start the new workout / Your workout in progress
+  was kept." and the same again on every try. `.notReplaced` could carry the `Reason` when the live workout
+  was kept. Product owner's call; one more text. The same lines (`:156-159`) call the aftermath `liveKept`
+  whenever anything is live: if the discard went through and another device started a third workout before
+  the start, the alert says "was kept" of a workout that is gone. Two devices only; the launcher would need
+  the id of the workout it set out to replace (the use case's `.conflict(live:)` has it; `.conflict(source)`
+  drops it). For F15's list.
+- **S4-N5. The header's dot is `LedgerColor.accent`; every other small orange mark on paper is
+  `accentText`.** `Views/WorkoutHeader.swift:45` against `ProgressSegments.swift:73` ("the orange that reads
+  on paper too"), `WeekStrip.swift:94`, `SetRow.swift:185`. In `cover-after-24-minutes-light.png` the dot and
+  the current segment, 100 pt apart, are two different oranges. The prototype has one orange, on a dark
+  ground only. Also `:18` is a raw `5` in a feature view; the standards' token list does not cover a shape's
+  size, so this is not a violation, but the dot belongs to `LedgerDesign` the day a second screen draws it
+  (Today's Resume card, the Live Activity).
+- **S4-N6. The plan's surface is stale in two places** (notes, "S4 — cover and header": `start` is `async`,
+  `WorkoutRoot` is `public`). The code follows the later rulings; correct the block so F09 S5 does not copy it.
+- **S4-N7. `WorkoutRoot.init(onExit:)` makes a `WorkoutStore` on every evaluation of the cover's content**
+  (`WorkoutRoot.swift:14`), each with four `@Dependency` wrappers, of which `@State` keeps the first. It is
+  the pattern `MainRoot`'s comment sanctions, and S4's store is cheap. Tell S5–S9: nothing in
+  `WorkoutStore.init`, ever.
+- **S4-N8. Sixteen or seventeen?** The notes' table has 17 rows, their open question 5 says "Sixteen texts
+  are mine". Seventeen: the table is right.
+- **S4-N9. The loading cover has no way out.** `Views/WorkoutScreen.swift:23-24`: `.loading` draws the ground
+  alone, and a full-screen cover cannot be swiped away. It should last one turn: the launcher has already
+  awaited `current()`, which waits for the same recovery `updates()` waits for. If the stream's first element
+  were ever late, the lifter would face a blank screen until they killed the app. A "Minimize" in the loading
+  state costs a few lines; at least S5 should not make loading any longer.
+- **S4-N10. The failure alert's title is read from live state, its message from `presenting:`.**
+  `WorkoutCover.swift:68`: `failure?.title ?? ""` is empty the moment "OK" sets the phase to `idle`, while the
+  message is still held. If SwiftUI redraws the alert as it goes down, it shows a message under no title. Not
+  verified (no alert was screenshot or driven). What would settle it: one look on the simulator at a refused
+  start. Fix if seen: keep the last failure's model in the launcher until the next request.
+- **S4-N11. Three small things are each written twice**: the dismissal binding (`WorkoutCover.swift:80`,
+  `WorkoutRoot.swift:60`), the logger accessor and the run-once guard (launcher and store). Fine at this size;
+  fold them when S5 adds a third.
+
+### The points asked about
+
+**The lifecycle (criteria 1–5): sound.** Read against the table, row by row.
+
+| Question | Answer |
+|---|---|
+| Two workouts live? | No. The launcher never starts one itself: the use case does, and the host's `start` refuses while one is live (`workoutInProgress`). A second request is dropped while `working` or `cover` (`WorkoutLauncher.swift:86`); `run()` is single-flight (`:102`). |
+| One lost? | Only by "Discard" or "Discard and start new". The replace order is the use case's: build, then discard, then start (`StartWorkoutUseCase.swift:96-104`), so a day that cannot be built discards nothing (L12) and a discard that fails starts nothing (L10). L11 (discarded, start failed) leaves none live and says so; that is the one unavoidable loss and it is told truthfully. |
+| Cover showing a workout that ended? | No. The store shows only what `updates()` publishes and leaves on the first update that is not live (`WorkoutStore.swift:136-139`); a new stream starts with the present state, so a cover put up late closes itself (S11). |
+| A failure swallowed? | No error is dropped unlogged or unshown, cancellation apart (standards §8). Three outcomes are quiet by design: L5, L14, S7. One line overclaims: S4-SF3. |
+| A choice run twice? | No. The dialog's dismissal and its button arrive in either order and make one request (`accept`); "Discard" twice is one attempt (`isDiscarding`, `isDiscardRunning`). Tested (S5, L17). |
+| Resume through `StartWorkoutUseCase.start`? | Never: `.resume` reads `current()` only; `.start` for the live day returns before the use case (`:124-126`), and compares `source` exactly as `SessionBuilder.resumable` does, so the two cannot disagree. L3 tests a deleted and an emptied day, with a control. |
+| An update during a dialog or a call? | Store: a change keeps the finish dialog up (S8); an end takes it down with the cover (S9, S10). Launcher: it does not follow the stream, and need not: each choice reads the session afresh (L13, L14). An update that lands while `discard` is in flight is harmless: `leave` is idempotent and the first reason stands. |
+
+One thing the table does not say and the protocol does: the session's `discard` names no workout. If another
+device replaced the live workout between the lifter's tap and the call, the new one is discarded. That is
+S1's contract, not this slice's, and cannot happen on a phone alone; it should be on F15's list.
+
+**Two owners: sound, and I recommend the deviation be accepted.** The conflict dialog shows with no cover up,
+so it cannot live in an object that lives with the cover. Who owns "which workout is showing": nobody but the
+session. `WorkoutLaunchPhase.cover` deliberately carries no workout id, and the store keeps no workout of its
+own, so there is no second copy to drift. The seam between the two is one value in one direction
+(`WorkoutExit`, through `onExit`). It will hold for S5–S9 provided they keep to it: everything inside the
+cover grows the store; the launcher gains nothing. Two places will strain:
+- **S7.** `follow()` leaves the cover on the update that carries the finished state
+  (`WorkoutStore.swift:136-138`, `:153`). The cover's own save must instead stay up for the receipt. S7 has to
+  tell "finished by this cover" from "finished elsewhere" before that line, and `WorkoutRoute.saved` is then
+  sent by "Done".
+- **F09 S5 and the builder.** Callers hold the one launcher from `MainRoot`; a second launcher, or a second
+  `.workoutCover`, would give two presenters over one session. Keep it to one, passed down as intents.
+
+**The store and the conventions (criterion 7): met.** `@MainActor @Observable final`, dependencies
+`@ObservationIgnored @Dependency`, intents synchronous and state-only, both pieces of work run from
+`WorkoutRoot`'s `.task` and `.task(id:)`, `Loadable<WorkoutState>`, no `Task`, no stored task. Minimize and
+show again: a new `WorkoutRoot`, so a new store and a new stream; the old `.task` is cancelled with the view,
+its `for await` ends, and the host prunes ended continuations when it next publishes
+(`LocalWorkoutSessionActor.swift:154-160`). Nothing is missed in between, because a stream's first element is
+the present state. Cancelling the root's task is not treated as a failure (`:142`, `:177`), and the host
+finishes a call in its own task (S13, L18 test both). See S4-N1 for the one assumption in this paragraph.
+
+**Concurrency: clean.** No `nonisolated(unsafe)`, no `@unchecked Sendable`, no detached or unstructured work
+in product code. Everything that crosses to the session is a `Sendable` value; the use case is built per
+request from `Sendable` dependencies, and its two closures capture the date and UUID generators, not `self`.
+`WorkoutTimeline`'s environment entry is `nonisolated` for the reason its comment gives.
+
+**The elapsed time (criterion 6): met.** One `Text(timerInterval:pauseTime:countsDown:)`, in
+`WorkoutTimeline`, pinned by the source test; the header reads the timeline from the environment and no
+clock. Fixed in previews, snapshots and the tree. "1:01:05" is in a reference. A start in the future reads
+"0:00" until it comes; a start outside the calendar's range cannot trap. VoiceOver hears "Elapsed time" and
+no frozen number, as ruled; open question 1 (a value made when asked) is a fair S6 item and I support it.
+
+**The presentation and the words (criterion 8): met, with S4-SF5.** `WorkoutPresentation` is pure and
+`nonisolated`; no view or store holds a literal. The brief's ten texts are character for character
+("Exercise %lld of %lld", "You have a workout in progress", "Resume it", "Discard and start new",
+"End workout?", "Discard", "Keep lifting", "Minimize", "Finish"; "Cancel" borrowed from the swap sheet). The
+three refusal reasons map one to one (`emptyDay`; `programNotActive` and `dayNotInProgram` together;
+`weekOutOfRange`), and `unknownExercise` falls to "Nothing was changed. Try again.", which is true. The
+`debugOnly` exemption of `WorkoutLauncher+Sample.swift` is confirmed: the file is wholly inside `#if DEBUG`
+and its one literal is the Debug row's title.
+
+**The dialogs:** S4-SF1 for the conflict. The finish dialog (`finish-dialog-dark.png`) is acceptable as an
+interim: both choices are drawn, "Keep lifting" is a real button, a tap outside keeps lifting. Its red
+"Discard" sits first, directly under the title; when S7 rebuilds it as a sheet, "Save workout" should be the
+first and prominent choice and "Discard" the last.
+
+**Design fidelity: acceptable, with three things for Pete.** Against `Ledger v2.dc.html:134-149`:
+row, dot, time and pill are where the prototype puts them; the time is the spec's 700 15 pt where the
+prototype draws 500 14 px (the notes say which wins); the bars are 16 pt under the row for the prototype's 18.
+- "Minimize" without its chevron reads as a label more than as a way back. Accept for S4; the notes' plan
+  (an optional leading icon on `PillButton` in S6) is right. It should not slip past S6.
+- The workout's name as an eyebrow is not in v2. It answers criterion 1, but S5 puts "Exercise 2 of 5", also
+  an eyebrow, a few points under it. Pete should look at the two together in S5's screenshots.
+- "The current segment wins over done": right. It is what the prototype does (`:578`, `i === exIdx` is
+  orange whatever the sets), and it keeps the orange bar and the spoken "Exercise n of m" on the same
+  exercise. The implementation is stricter than the prototype for the others (done means every set done, not
+  "left of the cursor"), which `cover-past-an-hour-dark.png` shows: the fourth bar is not done while the fifth
+  is current. That is the truthful reading of a superset and I would keep it.
+
+**The shell (criterion 9): met.** The modifier is on `MainRoot.body`, above `content`, where the conventions
+reserve it; `AppRouter.resolve(_: WorkoutRoute)` is three lines and tested; the Debug row starts the sample
+from the sheet's `onDismiss`. `WorkoutRoot` internal: **accept.** Convention 3 already says a feature that
+presents itself exports "its presenter and modifier", and `LedgerAppKit` uses exactly `WorkoutLauncher`,
+`View.workoutCover(_:onRoute:)` and `WorkoutRoute`. A public `WorkoutRoot` would let the app present the
+cover a second way.
+
+**Tests (criterion 10): met, with S4-SF2 and S4-SF4.** Every row L1–L19 and S1–S13 has a test that I could
+find by name; the failure rows run on the real host over probed stores, with held calls and no sleep (waits
+are `Observations` or a gate). No test compares a whole `WorkoutState` inside `#expect` (they compare ids or
+bind a `Bool` first). Names follow §6. Not covered anywhere but by the one UI test: the wiring in
+`WorkoutCover` and `WorkoutRoot` (bindings, `onChange` → `onExit` → `onRoute`). Not exercised in the app at
+all: "Discard and start new", a failure alert, and kill-and-relaunch into the cover. The first two cannot be
+reached until Today asks for a second day; they belong in F09 S5's UI test.
+
+**Size, boundaries, tokens: accept 952.** Nothing here belongs to a later slice: about 150 lines are the
+failure states criteria 4 and 5 ask for, about 115 are Debug-only (previews, the sample). `WorkoutRoute.saved`
+and its mapping are six lines of the planned surface. `LedgerDomain` gained `checkedCursor` (planned, tested);
+`LedgerDesign` gained `DebugMenu.Action` (Debug only). Imports are inside the feature spine; `LedgerFakes` is
+imported in two files, both wholly `#if DEBUG`. Tokens only in the views (S4-N5 apart). No lint suppression
+was added, and no `project.pbxproj` or test plan changed.
+
+### Rulings I recommend
+
+| Deviation or open question | Recommendation |
+|---|---|
+| D1 two objects | Accept. |
+| D2 `start` synchronous | Accept; fix the plan's block (S4-N6). |
+| D3 `WorkoutRoot` internal | Accept. |
+| D4 `Text(timerInterval:)` | Accept; criterion 6 supersedes the older line. |
+| D5 current wins over done | Accept. |
+| D6 the name as an eyebrow | Accept for S4; Pete looks again with S5's page under it. |
+| D7 / OQ2 no chevron | Accept for S4; due in S6 with `PillButton`'s icon. |
+| D8 system finish dialog | Accept until S7. |
+| D12 Minimize disabled during a discard | Accept: the host's discard is two local store calls. Revisit if a discard ever waits on a peer. |
+| D15 / OQ3 invisible Cancel | Do not accept as is: S4-SF1. |
+| OQ1 VoiceOver and the elapsed time | S6, as proposed. |
+| OQ4 "was kept" while an end waits | Leave, as proposed; ADR-004's paragraph first. |
+| OQ5 the invented texts | Pete reads the table below before S5 merges. |
+| OQ6 `.saved` selects Today | Keep until S7. |
+| OQ7 the header at the largest sizes | S5, as proposed; `.accessibility5` has not been drawn by anyone. |
+
+### For the product owner: the invented texts
+
+Seventeen. None is in a screenshot (the alerts were not captured); two are spoken only.
+
+| Text | Shows when | Judgement |
+|---|---|---|
+| "Elapsed time" | VoiceOver, the header's time | Good. |
+| "Workout progress" | VoiceOver, the bars; value "Exercise 2 of 5" | Good. |
+| "OK" | every alert's one button | Good. |
+| "Couldn't start this workout" | alert title, a start refused | Good. |
+| "This day has no exercises yet." | its line, an empty day | Good; "yet" invites the fix. |
+| "This day is no longer in your program." | its line, the day or its program is gone | Good. Also said when the whole program was replaced, where it is still true. |
+| "Your program's block has ended." | its line, the week is past the block | True but a dead end: it does not say what to do. Consider "Your program's block has ended. Start a new block in Program." once F11 has that action. |
+| "Nothing was changed. Try again." | its line, anything else | Good when true; see S4-SF3. |
+| "Couldn't start the new workout" | alert title, "Discard and start new" failed | Good. |
+| "Your workout in progress was kept." | its line, the old one is still live | Good. Says nothing of why (S4-N4). |
+| "Your workout in progress was discarded." | its line, the old one is gone and the new did not start | Honest and blunt, which is right; this is the worst outcome the slice has. Consider adding "Try starting again." |
+| "Try again." | its line when the app cannot tell; and under "Couldn't open this workout" | Thin as a whole message, but claims nothing. Fine. |
+| "Couldn't open this workout" | alert title (Resume could not read); title on the cover when it loses the session | Good. |
+| "Close this screen and try again." | under that title, on the cover | Good. |
+| "Close" | the button under it | Good. |
+| "Couldn't discard this workout" | alert title over the cover | Good. |
+| "It's still in progress. Try again." | its line | Good. |
+
+Tone is consistent (contractions, no blame, no product name, full stops on lines and none on titles).
+
+### For the product owner: what to look at
+
+| Choice | Screenshot | Note |
+|---|---|---|
+| The conflict dialog has no visible Cancel | `conflict-dialog-light.png`, `conflict-dialog-dark.png` | S4-SF1. |
+| The dialog does not name the workout in progress or what discarding loses | the same | "Upper A · 6 of 15 sets logged" as the dialog's message would make the red button an informed choice. Not in the brief; a later slice. |
+| The finish dialog: red "Discard" first | `finish-dialog-light.png`, `finish-dialog-dark.png` | Interim until S7. |
+| "Minimize" with no chevron | `cover-just-started-*.png` | Due in S6. |
+| The name as an eyebrow, in capitals | `cover-after-24-minutes-light.png` | The lifter's own day name is drawn in capitals by `Eyebrow`. |
+| Two oranges in light | `cover-after-24-minutes-light.png` | S4-N5. |
+| The fourth bar not done while the fifth is current | `cover-past-an-hour-dark.png` | Truthful for a superset; differs from the prototype's colouring by position. |
+
+### The seven points
+
+1. **Module boundaries:** clean; no new edge in `Package.swift` but the target's resources.
+2. **Concurrency:** clean; structured work only, injected date and UUID.
+3. **Error handling:** nothing swallowed; one line overclaims (S4-SF3).
+4. **Design fidelity:** tokens only; matches v2's header but for the chevron, the name and the dot (above).
+5. **Accessibility:** five stops pinned at two sizes, 44 pt targets tested; above `.accessibility3` undrawn.
+6. **Test quality:** behaviour, not implementation; no sleeps; one weak UI assertion (S4-SF2), one unpinned
+   rule (S4-SF4).
+7. **Brief compliance:** each of the eleven criteria has a test or a screenshot; criterion 2's relaunch and
+   criterion 4's replace path are proven below the UI only.
+
+### What S5 and F09 S5 must be told
+
+**S5 (and S6–S9):**
+- Grow the store, never the launcher. No workout is kept outside `workout`, which only `follow()` writes.
+- Nothing in `WorkoutStore.init`; no `Task` anywhere in the module (S4-SF4 pins it if taken).
+- The intent pump must not write `workout` from a call's return; take the return as the base of the next
+  intent only, as the notes say.
+- `isBusy` must reach the page's controls, or a set can be logged into a workout that is being discarded.
+- S7: `follow()` closes the cover on a finished update today; the cover's own save must not.
+- S6: the chevron, and VoiceOver's elapsed value, are both parked on you.
+
+**F09 S5:**
+- One launcher, `MainRoot`'s. `start(_:)` and `resume()` are synchronous, and a call made while the launcher
+  is working or the cover is up is dropped without a word: do not disable Today's button on the launcher's
+  state, there is none public.
+- Today need not look at the session before calling: same day resumes, another day asks, a refusal shows its
+  own alert.
+- The UI test owes what S4 could not reach: the conflict dialog with each choice in the running app
+  (dialog down, then cover up, in one go), a start alert, "Resume" tapped straight after "Minimize"
+  (S4-N1), and kill-and-relaunch into Resume.
+- The plan's surface block is stale (S4-N6); the notes' "Inputs for F09 S5" is the one to read.
+
+**F15 and any other caller of `StartWorkoutUseCase`:** criterion 3 is kept by the launcher looking at the
+session before the use case does. A caller without a launcher (the watch, an intent) still meets the refusal
+for a live workout whose day was emptied or deleted. The lasting cure is in the use case: look for a
+resumable live workout before validating the program.
+
+### What I did not check
+
+- **I ran no build and no test.** Disk had 11 GB free; the tester was changing the tree, and the
+  orchestrator's gate on this tree had exited 0. Every claim above is from reading.
+- Nothing on a simulator: the dialogs and the cover are judged from the ten committed screenshots (I opened
+  four: `conflict-dialog-light`, `finish-dialog-dark`, `cover-after-24-minutes-light`,
+  `cover-past-an-hour-dark`) and the code. The four alerts have no screenshot.
+- S4-N1 is reasoned, not reproduced. So is S4-SF2's animation path: I did not make the test pass falsely.
+- The five snapshot references were not opened; the notes' descriptions of them were taken as given.
+- `WorkoutLauncherTests`, `WorkoutLauncherRefusalTests`, `WorkoutPresentationTests`,
+  `WorkoutAccessibilityTests`, `WorkoutCopyTests` and `PreviewTests` were read by their test names and
+  display names only; the store's, the conflict's and the failure suites were read in full.
+- The catalog was not diffed key by key against the copy file: the gate's catalog step does that and passed.
+- Coverage, lint, the Release build, watchOS (`DebugMenu` builds there too), and the line count of 952.
+- The tester's files, by instruction.

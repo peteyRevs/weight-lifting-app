@@ -394,3 +394,28 @@ files; "Inputs the implementer needs › S4 — cover and header", "What the cov
     resumes and discards.
 11. **Wiring of the module** as `FeatureToday` and `FeatureProgram` have it: the target's `resources`, the
     coverage thresholds, the snapshot and preview registrations; the gate's catalog and preview steps pass.
+
+## Plan amendments — slice S4 after round 1 (orchestrator, 2026-10-08)
+
+The tester's lifecycle table held over the fake and the real host and under 80 seeded fault sequences (81
+tests; two left red on findings); the reviewer approved with five should-fix items and found no path to two
+live workouts or a lost one. Rulings, which add to S4's eleven criteria:
+
+12. **The conflict dialog shows its way out** (review SF1, F10-S4-4): three visible choices, "Resume it",
+    "Discard and start new" and "Cancel", the last drawn as an ordinary button as "Keep lifting" is.
+    (Default until Pete answers; an alert is the other form.)
+13. **When every set is logged, every segment reads done** (F10-S4-1): no segment is current.
+14. **The elapsed time never traps** (F10-S4-2): a start that is not a finite time reads "0:00".
+15. **A start that fails says why, also after a discard** (F10-S4-3): the same reasons as a plain start (the
+    day has no exercise; the day is gone; the block has ended).
+16. **A failure line claims only what is known** (review SF3): when the session could not be read again after
+    a failed call, the text does not say that nothing was changed.
+17. **The UI test proves what it says** (review SF2): it reads "0:00", then a later time, by the label's
+    value; no check in it can pass without the thing it names. **No unstructured task** in the module is
+    pinned by the source test (SF4). The translator's comment on "Exercise %lld of %lld" names each number
+    (SF5).
+18. **The conflict can be reached in the app** (F10-S4-5): the Debug menu gains a second row that asks for a
+    sample workout of another day, and one UI test starts one, asks for the other, and takes each of the
+    three choices in turn. If this would take the slice past 1,000 product lines, it moves to S5 and the
+    implementer says so. Kill and relaunch with a live workout stays with F15, which needs a UI-test launch
+    that keeps its database.
