@@ -205,6 +205,10 @@ nonisolated extension ProgramCopy {
     }
 
     static var cancel: String {
-        String(localized: "Cancel", bundle: .module, comment: "Dismisses the confirmation; the day stays")
+        String(
+            localized: "Cancel",
+            bundle: .module,
+            comment: "Dismisses the confirmation and the day stays; also closes the exercise library"
+        )
     }
 }

@@ -45,6 +45,17 @@
         }
       }
     },
+    "%@: %@" : {
+      "comment" : "Spoken label of a filter chip: Muscle or Equipment, then the chip's own text",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: %@"
+          }
+        }
+      }
+    },
     "%lld DAYS" : {
       "comment" : "Under a week's chip: the number of days that week trains",
       "localizations" : {
@@ -303,6 +314,29 @@
         }
       }
     },
+    "Add %lld exercises" : {
+      "comment" : "The exercise library's button: adds the picked exercises to the day",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Add at least one exercise before scheduling this day." : {
       "localizations" : {
         "en" : {
@@ -357,12 +391,34 @@
         }
       }
     },
+    "All" : {
+      "comment" : "First filter chip of the exercise library, in the muscle row and in the equipment row: no filter",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        }
+      }
+    },
     "Apply to later weeks" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apply to later weeks"
+          }
+        }
+      }
+    },
+    "Arms" : {
+      "comment" : "Filter chip: every muscle of the arms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arms"
           }
         }
       }
@@ -390,6 +446,17 @@
         }
       }
     },
+    "Back" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        }
+      }
+    },
     "Band" : {
       "comment" : "Equipment: a resistance band",
       "localizations" : {
@@ -408,6 +475,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Barbell"
+          }
+        }
+      }
+    },
+    "Biceps" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biceps"
           }
         }
       }
@@ -456,13 +534,46 @@
         }
       }
     },
+    "Calves" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calves"
+          }
+        }
+      }
+    },
     "Cancel" : {
-      "comment" : "Dismisses the confirmation; the day stays",
+      "comment" : "Dismisses the confirmation and the day stays; also closes the exercise library",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Chest" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chest"
+          }
+        }
+      }
+    },
+    "Clear filters" : {
+      "comment" : "Button under: Nothing matches that filter. It empties the search and sets both chip rows to All",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear filters"
           }
         }
       }
@@ -474,6 +585,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copy week %lld"
+          }
+        }
+      }
+    },
+    "Core" : {
+      "comment" : "Muscle group: the abdominals and lower back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core"
           }
         }
       }
@@ -610,6 +732,28 @@
         }
       }
     },
+    "Equipment" : {
+      "comment" : "Spoken name of the exercise library's equipment chips",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Equipment"
+          }
+        }
+      }
+    },
+    "Exercise library" : {
+      "comment" : "Title of the sheet that adds exercises to a day",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exercise library"
+          }
+        }
+      }
+    },
     "First week" : {
       "comment" : "Disabled button on the first week, where another week reads: Copy week 2",
       "localizations" : {
@@ -632,6 +776,28 @@
         }
       }
     },
+    "Forearms" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forearms"
+          }
+        }
+      }
+    },
+    "Glutes" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glutes"
+          }
+        }
+      }
+    },
     "HELD" : {
       "comment" : "Marks a week whose load is held because a set was missed the week before",
       "localizations" : {
@@ -639,6 +805,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "HELD"
+          }
+        }
+      }
+    },
+    "Hamstrings" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hamstrings"
           }
         }
       }
@@ -673,6 +850,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kettlebell"
+          }
+        }
+      }
+    },
+    "Legs" : {
+      "comment" : "Filter chip: every muscle of the legs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legs"
           }
         }
       }
@@ -728,6 +916,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Move up"
+          }
+        }
+      }
+    },
+    "Muscle" : {
+      "comment" : "Spoken name of the exercise library's muscle chips",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muscle"
           }
         }
       }
@@ -802,6 +1001,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Program name"
+          }
+        }
+      }
+    },
+    "Quads" : {
+      "comment" : "Muscle group: the quadriceps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quads"
           }
         }
       }
@@ -938,6 +1148,28 @@
         }
       }
     },
+    "Search exercises" : {
+      "comment" : "Placeholder and spoken label of the exercise library's search field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search exercises"
+          }
+        }
+      }
+    },
+    "Select exercises to add" : {
+      "comment" : "The exercise library's button while no exercise is picked; it is disabled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select exercises to add"
+          }
+        }
+      }
+    },
     "Sets" : {
       "comment" : "Spoken label of the stepper for an exercise's sets",
       "localizations" : {
@@ -955,6 +1187,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Shared by every week. The schedule above decides which day you train, and when."
+          }
+        }
+      }
+    },
+    "Shoulders" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shoulders"
           }
         }
       }
@@ -1080,6 +1323,17 @@
         }
       }
     },
+    "Triceps" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Triceps"
+          }
+        }
+      }
+    },
     "W%lld" : {
       "comment" : "A week's chip: W for week, then the week's number, counted from 1",
       "localizations" : {
@@ -1153,6 +1407,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Week %lld has logged sessions and can't be removed."
+          }
+        }
+      }
+    },
+    "already in this day" : {
+      "comment" : "On an exercise's row in the library, after its equipment and muscle: the day holds it already",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "already in this day"
           }
         }
       }

@@ -85,7 +85,11 @@ nonisolated struct FeatureProgramSourceTests {
             "DayEditorAction.swift",
             "SlotEditorPresentation.swift",
             "SlotEditorPresentation+Fields.swift",
-            "SlotEditorPresentation+Preview.swift"
+            "SlotEditorPresentation+Preview.swift",
+            // The exercise library's (F11 S8 criterion 13).
+            "ExercisePickerPresentation.swift",
+            "ExercisePickerAction.swift",
+            "ExercisePickerInput.swift"
         ] {
             #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")
         }
