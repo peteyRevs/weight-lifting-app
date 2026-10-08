@@ -16,9 +16,9 @@ struct MainRoot: View {
     @State private var workout = WorkoutLauncher()
     @State private var isDebugMenuShown = false
     #if DEBUG
-        /// Set by the Debug menu's "Start sample workout": the workout starts once the menu's sheet is down,
-        /// because a cover cannot go up over a sheet that is still there.
-        @State private var startsSampleWorkout = false
+        /// Set by the Debug menu's sample rows, to the day asked for: the workout starts once the menu's sheet
+        /// is down, because a cover cannot go up over a sheet that is still there.
+        @State private var sampleDay: Int?
     #endif
     private let composition: AppComposition
 
@@ -42,23 +42,21 @@ struct MainRoot: View {
         AppTabs(router: router) { isDebugMenuShown = true }
         #if DEBUG
             .sheet(isPresented: $isDebugMenuShown, onDismiss: startSampleWorkoutIfAsked) {
-                DebugMenu(actions: [
-                    .startSampleWorkout {
-                        startsSampleWorkout = true
-                        isDebugMenuShown = false
-                    }
-                ]) { await composition.diagnostics() }
+                DebugMenu(actions: DebugMenu.Action.sampleWorkouts { day in
+                    sampleDay = day
+                    isDebugMenuShown = false
+                }) { await composition.diagnostics() }
             }
         #endif
     }
 
     #if DEBUG
         private func startSampleWorkoutIfAsked() {
-            guard startsSampleWorkout else {
+            guard let day = sampleDay else {
                 return
             }
-            startsSampleWorkout = false
-            workout.startSample()
+            sampleDay = nil
+            workout.startSample(day: day)
         }
     #endif
 }

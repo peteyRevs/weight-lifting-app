@@ -36,7 +36,7 @@ nonisolated enum WorkoutCopy {
             localized: "Exercise \(number) of \(count)",
             bundle: .module,
             locale: locale,
-            comment: "Which exercise of the workout is the current one"
+            comment: "The current exercise's place in the workout, counted from 1, then the number of exercises"
         )
     }
 

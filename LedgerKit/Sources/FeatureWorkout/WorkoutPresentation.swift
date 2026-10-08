@@ -63,6 +63,7 @@ nonisolated enum WorkoutPresentation {
         case .dayNotInProgram: WorkoutCopy.dayNotInProgram
         case .blockEnded: WorkoutCopy.blockEnded
         case .other: WorkoutCopy.nothingChanged
+        case .unknown: WorkoutCopy.tryAgain
         }
     }
 

@@ -17,6 +17,8 @@ actor AdversarialSession: WorkoutSessionClient {
     private struct Fault {
         var times: Int
         let afterwards: Bool
+        /// Calls let through before the first that fails.
+        var skipping = 0
     }
 
     /// Every call made, in order.
@@ -31,10 +33,11 @@ actor AdversarialSession: WorkoutSessionClient {
         self.base = base
     }
 
-    /// The next `times` calls of `call` throw `Refusal`: before the client is asked or, with `afterwards`,
+    /// After `skipping` calls of `call` that are let through, the next `times` throw `Refusal`: before the client is
+    /// asked or, with `afterwards`,
     /// once it has done what was asked (an answer that is lost).
-    func fail(_ call: Call, times: Int = 1, afterwards: Bool = false) {
-        faults[call] = Fault(times: times, afterwards: afterwards)
+    func fail(_ call: Call, times: Int = 1, afterwards: Bool = false, skipping: Int = 0) {
+        faults[call] = Fault(times: times, afterwards: afterwards, skipping: skipping)
     }
 
     func heal() {
@@ -84,6 +87,10 @@ actor AdversarialSession: WorkoutSessionClient {
 
     private func refuse(_ call: Call, afterwards: Bool) throws {
         guard let fault = faults[call], fault.afterwards == afterwards, fault.times > 0 else {
+            return
+        }
+        guard fault.skipping == 0 else {
+            faults[call]?.skipping -= 1
             return
         }
         faults[call]?.times -= 1

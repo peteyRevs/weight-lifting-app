@@ -623,6 +623,9 @@ public extension WorkoutState { var checkedCursor: Cursor? { get } }   // Ledger
 
 - A segment is one exercise: length its set count; done when every set is done, current when it holds the
   shown row, upcoming otherwise.
+- *Corrected after S4 (review S4-N6):* the surface above is stale in two places. `WorkoutLauncher.start(_:)` is a
+  synchronous intent, as `resume()` is (the rulings below), and `WorkoutRoot` is internal: the app uses
+  `WorkoutLauncher`, `View.workoutCover(_:onRoute:)` and `WorkoutRoute` only.
 
 ### S5 — solo exercise
 
@@ -3734,3 +3737,188 @@ LedgerDesign's and LedgerAppKit's (in the 544) passed. `LedgerSyncTests` was not
 6. **`.saved` selects Today.** Recommendation: keep until S7 decides what "Done" on the receipt does.
 7. **The header at the largest text sizes** is one row whatever the size. Recommendation: S5, which draws the
    whole screen at `.accessibility3` and above, decides whether the row stacks.
+
+## Slice S4 — fix round 1 (G1 implementer, 2026-10-08)
+
+On `fcb9fa0` (the slice as `46d4103`, the tester's files and the review on top), in the worktree `F10-s4`. Nothing
+is committed. Criteria 12 to 18 are the brief's "Plan amendments — slice S4 after round 1". **Written before the
+long runs; "The runs" at the end says what was run.**
+
+### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| Criterion 14 (F10-S4-2) | The guard asks `timeIntervalSinceReferenceDate.isFinite` first: every comparison of a `Date` that is not a number holds, so the range was built from it and SwiftUI trapped when it formatted the timer. Such a start now counts from the far future and reads "0:00". | `Views/WorkoutTimeline.swift`; the tester's `elapsed_startNotANumber_readsZero`; my `WorkoutTimelineTests` now holds NaN and a signalling NaN |
+| Criterion 13 (F10-S4-1) | "Done" is decided first: an exercise whose every set is done is done also when the cursor rests on it; of the others the cursor's is current. A workout with every set logged has no current segment. The spoken value still names the cursor's exercise. | `WorkoutPresentation+Header.swift`; the tester's `segments_allDone`; `WorkoutPresentationTests.segments_everySetLogged_areAllDone`, `segments_doneWinsOverCurrent_andAnEmptyExerciseIsNeverDone` |
+| Criterion 12 (SF1, F10-S4-4) | "Cancel" has no cancel role, as "Keep lifting": the system draws it. A tap outside still cancels. | `WorkoutCover.swift`; UI `Smoke.test_sampleWorkout_anotherDay_cancelResumeAndReplace` (three buttons hittable, by label); screenshots retaken |
+| Criterion 15 (F10-S4-3) | "Discard and start new" that is refused for a reason a lifter can act on (empty day, day gone, block ended), with the old workout still live, ends as `.notStarted(reason)`: the plain start's title and line. No new text. `.notReplaced` remains for a failure with no such reason. | `WorkoutLauncher.phase(afterFailing:_:)`; `WorkoutLauncherFailureTests.replace_dayCannotBeBuilt_discardsNothing_saysWhy`, `replace_weekPastTheBlock_discardsNothing_saysTheBlockEnded` |
+| Criterion 16 (SF3) | New `Reason.unknown`: a start that failed for no nameable reason **and** whose session could not be read again says "Couldn't start this workout / Try again." "Nothing was changed. Try again." is said only when the session was read and shows it. No new text ("Try again." exists). | `WorkoutLaunch.swift`, `WorkoutLauncher.swift`, `WorkoutPresentation.swift`; `WorkoutLauncherRefusalTests.sessionCannotBeRead_opensNothing`; the alert table's new row |
+| Criterion 17 (SF2) | The UI test reads the time as text: the system's timer draws a static text inside the element VoiceOver knows as "Elapsed time" (the tester's F10-S4-6). It asserts at most 2 s on the clock when the cover is first read, then a later reading, then a still later one after Minimize and back. Minimize and Discard are each followed by `today.isHittable`, not `exists`. **Not exactly "0:00"**: by the time XCUITest can read the cover its first second may have passed; that a start reads "0:00" is the reference's. | `Apps/LedgerUITests/Smoke.swift` |
+| Criterion 17 (SF4) | A third list, `unstructured` (`Task{`, `Task(`, `Task.detached`, `Task.init`, `Task<`), and `sources_startNoTaskOfTheirOwn`. | `FeatureWorkoutSourceTests.swift` |
+| Criterion 17 (SF5) | "The current exercise's place in the workout, counted from 1, then the number of exercises", in the copy file and the catalog, word for word. | `WorkoutCopy.swift`, `Localizable.xcstrings` |
+| Criterion 18 (F10-S4-5) | `WorkoutLauncher.startSample(day:)` (0 by default) and a second Debug row, "Start another day's sample workout" (`debug.menu.startOtherSampleWorkout`), which asks for the active program's second day. `DebugMenu.Action.sampleWorkouts(_:)` gives `MainRoot` both rows. One UI test takes Cancel, Resume it and Discard and start new in turn. It is in `Smoke`, so it runs in the PR lane: the plan selects that class only, and a test plan is not mine to edit. | `WorkoutLauncher+Sample.swift`, `WorkoutLaunch.swift`, `WorkoutLauncher.swift`, `MainRoot.swift`; `WorkoutLauncherTests.startSample_otherDay_conflictsWithTheFirst` |
+
+Decision 5 of the slice's notes ("the current segment wins over done") is reversed by criterion 13. Decision 13
+("a `Date` cannot hold NaN on this SDK") was wrong: my probe's output was lost in the crash it caused, and the trap
+was SwiftUI's, as the tester's crash report shows. Decision 15 (the conflict's Cancel is not drawn) is superseded
+by criterion 12. Open question 5 said sixteen texts; the table has seventeen (S4-N8).
+
+### The reviewer's nits
+
+| Nit | Done or declined |
+|---|---|
+| N1 a stale store on a fast re-present | **Not changed.** I could not observe it: the only way to ask for the cover again in the app is through the Debug sheet, which takes seconds. The two UI tests re-present the cover five times through that sheet and each new cover answers (Minimize works on it). F09 S5's "Resume" straight after "Minimize" is the test that would show it; the `.id(launcher.request?.number)` insurance is one line if it does. |
+| N2 `onRoute`'s sentence | Done: the doc says it is told as the cover starts to go down, and that a route must not present anything in that turn. |
+| N3 (a) a resume whose second read finds the workout | Done: it opens the cover (`resume_firstReadFails_secondFindsTheWorkout_opensTheCover`). (b) "Resume it" after the workout ended elsewhere stays silent: right for a phone alone; F15's list. |
+| N4 a replacement that cannot be built does not say why | Done by criterion 15. The two-device case ("was kept" of a workout a third device replaced) is declined here: it needs the replaced workout's id carried through the dialog; F15's list. |
+| N5 the dot's orange | Done: `LedgerColor.accentText`, the orange of the current segment. The two light references changed. The raw `5` stays (a shape's size; not a token). |
+| N6 the plan's stale surface | Done: a note under the plan's block ("Inputs the implementer needs › S4"). |
+| N7 a store per evaluation | Done as a sentence on `WorkoutStore`: making one does nothing, and must stay so. |
+| N8 sixteen or seventeen | Seventeen. Corrected above. |
+| N9 the loading cover has no way out | **Declined for S4.** It would add a state to the pinned tree and a control that, on the app's host, is never drawn: the launcher has awaited `current()` before the cover goes up. S5 must not make loading longer; if it ever can be, the failed screen's "Close" is the control to reuse. |
+| N10 the alert's title goes empty as it dismisses | **Not changed, and not observed.** No failure alert can be raised in the running app from the Debug rows (a refused start needs an emptied day or a failing store). What would settle it: F09 S5 starting an emptied day, or a Debug row that fails. The fix, if seen, is to keep the last failure's model until the next request. |
+| N11 three things written twice | Declined until a third use (the reviewer's own advice). |
+| `/code-review`: the comment on a cancelled request | Done: it now says "on a host that completes each call in a task of its own, as the app's does". |
+
+### New and changed texts
+
+No new catalog key. One comment changed (SF5). One new Debug-only literal, not in the catalog: the row
+"Start another day's sample workout".
+
+For the product owner, what the fix round changes in when a text shows:
+
+| Text | Now also shows when | No longer shows when |
+|---|---|---|
+| "Couldn't start this workout" with "This day has no exercises yet." / "This day is no longer in your program." / "Your program's block has ended." | "Discard and start new" was refused for that reason; the workout in progress is untouched | |
+| "Couldn't start the new workout" / "Your workout in progress was kept." | | the refusal has one of those three reasons |
+| "Couldn't start this workout" / "Try again." (a new pairing of two existing texts) | a start failed for no nameable reason and the app could not read the session afterwards | |
+| "Nothing was changed. Try again." | | the app could not read the session afterwards |
+| "Cancel" | drawn as the conflict dialog's third button | |
+
+### The tester's tests that now fail, by design
+
+Each pins the old line for a replacement that cannot be built; criterion 15 changes it. Not edited.
+
+| Test | It expects | It now gets |
+|---|---|---|
+| `WorkoutConflictAdversarialTests` "L14: a new day that cannot be built leaves the old workout live, with no discard" (two cases: fake, host; `WorkoutConflictAdversarialTests.swift:126`) | "Couldn't start the new workout / Your workout in progress was kept. / OK" | "Couldn't start this workout" with the reason's line (see the run for the exact text) |
+| `WorkoutConflictAdversarialTests` "A day past the block's end asked over a live workout: the dialog shows, and replacing discards nothing" (`+Changed.swift:139`) | `phase == .failed(.notReplaced(.liveKept))` | `.failed(.notStarted(.blockEnded))` |
+
+In the L14 row above, the text it now gets is "Couldn't start this workout / This day has no exercises yet. / OK"
+(read from the run).
+
+### References and screenshots
+
+Two references re-recorded, by deleting them and running `WorkoutSnapshotTests` once in the library's default mode
+(it failed once and wrote them; the next run passed). Cause: the header's dot is now `accentText` (S4-N5). Both
+were looked at: the dot is the darker orange of the current segment; nothing else moved.
+
+| File | Shows |
+|---|---|
+| `header_matchesReferences.light-large.png` | as before, with the dot in the current segment's orange |
+| `header_matchesReferences.light-xLarge.png` | the same, one text size up |
+
+The old references still passed with the new dot (five points of colour are inside the suite's precision), so
+they were re-recorded on purpose, for the stated cause, and not to turn a red test green. The three dark
+references are unchanged: in dark the two oranges are one.
+
+`screenshots/s4/conflict-dialog-light.png` and `conflict-dialog-dark.png` were retaken from the new UI test's
+attachment on the final build (the dark one with the simulator's appearance set to dark for that one run, then
+set back to light): three buttons, "Resume it", "Discard and start new" in red, "Cancel". No temporary code was
+needed this time. **Not retaken:** the three `cover-*-light.png`, which still show the dot in the brighter orange.
+
+### Code lines per file
+
+965 in total (952 before this round; the limit is 1,000). Counted before the round and once after criterion 18,
+not after each item as asked: items 1 to 5 were written in one pass, and the count was taken when 18 was in.
+
+| File | Lines | Change |
+|---|---|---|
+| `FeatureWorkout/WorkoutLauncher.swift` | 144 | +4 |
+| `FeatureWorkout/WorkoutStore.swift` | 121 | |
+| `FeatureWorkout/WorkoutCopy.swift` | 105 | |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 86 | |
+| `FeatureWorkout/WorkoutCover.swift` | 84 | |
+| `FeatureWorkout/WorkoutPresentation.swift` | 64 | +1 |
+| `FeatureWorkout/WorkoutRoot.swift` | 52 | |
+| `FeatureWorkout/WorkoutLaunch.swift` | 44 | +1 |
+| `FeatureWorkout/Views/WorkoutHeader.swift` | 43 | |
+| `FeatureWorkout/WorkoutModel.swift` | 42 | |
+| `FeatureWorkout/WorkoutLauncher+Sample.swift` (Debug) | 38 | +8 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 33 | |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 23 | |
+| `FeatureWorkout/Views/WorkoutTimeline.swift` | 20 | +1 |
+| `FeatureWorkout/WorkoutRoute.swift` | 6 | |
+| `LedgerAppKit/MainRoot.swift` | +20 | −2 |
+| `LedgerAppKit/Routes+Workout.swift` | 11 | |
+| `LedgerDesign/Gallery/DebugMenu.swift` | +17 | |
+| `LedgerDesign/Components/Components+Previews.swift` | +4 | |
+| `LedgerDomain/Model/WorkoutState.swift` | +8 | |
+| **Total** | **965** | **+13** |
+
+### The runs
+
+On the final tree, 2026-10-08, simulator runs through the lock on iPhone 17 (iOS 27.0), `PR` plan.
+
+| Run | Result |
+|---|---|
+| iOS `build-for-testing` | exit 0 |
+| `scripts/check-string-catalogs.sh` after that build | exit 0 |
+| `FeatureWorkoutTests` (mine and the tester's) | 156 results: 154 passed, 2 failed. The two are the tester's pins in the table above (`replace_newDayEmptied_keepsTheOldWorkout`, both cases; `replace_weekPastTheBlock_keepsTheOldWorkout`), and no other. The tester's `segments_allDone` and `elapsed_startNotANumber_readsZero` pass, unedited; the process no longer traps |
+| `LedgerUITests/Smoke` | 3 of 3 passed: launch 6 s, the cover 22 s, the conflict's three choices 32 s |
+| `LedgerAppKitTests` + `LedgerDesignTests` | 544 results: 537 passed, 6 expected failures, 1 skipped, 0 failed |
+| `swift test --filter FeatureWorkoutTests` (Mac host; before the wrong test of mine was removed) | 142 tests; the failures were the tester's two pins and that one test |
+| `scripts/check.sh --lint-only` | exit 0 |
+
+### Not verified
+
+- The full gate, watchOS and the coverage gate: the orchestrator's. The PR lane's UI step grows by about 55 s
+  with the two workout tests in `Smoke`.
+- The tester's nightly UI test `WorkoutAdversarial` was not run after this round (it is not in the `PR` plan); it
+  taps "debug.menu.startSampleWorkout", which is unchanged.
+- N1 and N10 were not observed either way (reasons in the table).
+- `LedgerDomainTests` and the Mac-host run were not repeated on the final tree; `LedgerDomain` was not touched in
+  this round.
+- A failure alert in the running app, kill and relaunch with the cover (F15), VoiceOver on a device, text sizes
+  above `.accessibility3`: as before.
+- The first reading of the clock in the UI test is asserted as at most 2 s, not as exactly "0:00" (criterion 17's
+  words): see the item's row.
+
+### Fix round 2 (G1 implementer, 2026-10-08): criterion 19
+
+On fix round 1 plus the tester's uncommitted round 2. Nothing committed.
+
+- **(a) F10-S4-7.** A replacement refused for a reason (empty day, day gone, block ended) says that reason whatever
+  the session shows or fails to show afterwards: `.replace where reason == .other` is now the only path to
+  `.notReplaced` (`WorkoutLauncher.phase(afterFailing:_:)`). Each such refusal is thrown before anything is
+  discarded, so the reason needs no read.
+- **(c) F10-S4-9.** `WorkoutPresentation.currentExercise(of:cursor:)`: the cursor's exercise while it has a set to
+  log, otherwise the first exercise that has one; nil when every set is logged. The spoken value names the same
+  exercise as the orange segment (with every set logged, the cursor's). Mine:
+  `header_cursorOnAFinishedExercise_marksTheFirstUnfinished`.
+- **(b) F10-S4-8: half done, and stopped for a ruling.** With (a), a workout finished elsewhere under the dialog is
+  no longer called discarded when the replacement is refused for a reason (the tester's red test). What is **not**
+  done: the neutral text for the remaining case (it ended elsewhere, and the new start then fails for no nameable
+  reason), which still reads "Your workout in progress was discarded." Any new or reworded key fails the tester's
+  green `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` (27 keys, by name), and rewording the
+  existing line also fails its pins of that line (`WorkoutConflictAdversarialTests.swift:66`, `:106`,
+  `WorkoutRulingsAdversarialTests+Replace.swift:47`, `WorkoutWordsAdversarialTests.swift:45`, `:79`). Telling
+  "ended elsewhere" from "this request discarded it" also needs a read of the session before the use case runs,
+  which shifts the call counts the tester's fault tests skip by. Proposed, once ruled: reword the one line to
+  "Your workout in progress has ended." (true of both cases, no extra read, no new key), with those pins updated
+  by the tester.
+- **One detail where the tester's pin and criterion 19 differ.** "While any set is not logged exactly one segment
+  is current" is not held when the cursor names no row: then none is current and no value is spoken, as the
+  tester's green `segments_cursorOutOfRange` and the round 1 tree expect. No session publishes such a cursor. Left
+  as the tester has it.
+
+The tester's three red tests pass unedited (`refusedReplacement_sessionUnreadable_stillSaysWhy`,
+`refusedReplacement_afterFinishElsewhere_doesNotSayDiscarded`, `segments_anyOrder`).
+
+**Lines:** 973 product lines (965 before; `WorkoutPresentation+Header.swift` 33 → 41). No catalog change.
+
+**Runs.** Through the lock, iPhone 17 (iOS 27.0): build exit 0; catalog step exit 0; `FeatureWorkoutTests` 169 of
+169 passed; `LedgerUITests/Smoke` 3 of 3. `scripts/check.sh --lint-only` exit 0. After the simulator run two of
+my tests were moved, unchanged, into a new suite (`WorkoutPresentationDialogTests`; the old one was five lines
+over the lint's type length): that move was run on the Mac host only (150 tests in 23 suites passed).
+`LedgerAppKitTests`, `LedgerDesignTests` and the tester's nightly UI tests were not run in this round.

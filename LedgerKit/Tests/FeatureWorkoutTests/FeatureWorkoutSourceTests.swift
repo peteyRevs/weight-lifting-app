@@ -30,6 +30,10 @@ nonisolated struct FeatureWorkoutSourceTests {
         "style:.timer", "ContinuousClock(", "SuspendingClock("
     ]
 
+    /// The spellings that make a task of the module's own (M1 store convention; standards §3 and §4): work is
+    /// run from a view's `.task`, which SwiftUI ends with the view.
+    static let unstructured = ["Task{", "Task(", "Task.detached", "Task.init", "Task<"]
+
     /// The lines of `source` on which `spelling` stands in code: the file's own, or a string interpolation's.
     static func lines(of spelling: String, in source: SwiftSource) -> [Int] {
         let interpolated = source.literals.flatMap { literal in
@@ -62,6 +66,11 @@ nonisolated struct FeatureWorkoutSourceTests {
         #expect(try Self.uses(of: Self.ticking) == [])
     }
 
+    @Test("No file of FeatureWorkout starts a task of its own: no store, launcher or view outlives its `.task`")
+    func sources_startNoTaskOfTheirOwn() throws {
+        #expect(try Self.uses(of: Self.unstructured) == [])
+    }
+
     @Test("The elapsed time is drawn in one place, and that place takes its pause from the timeline")
     func elapsedTime_isDrawnByTheTimelineAlone() throws {
         let uses = try Self.uses(of: ["timerInterval:"])
@@ -88,7 +97,7 @@ nonisolated struct FeatureWorkoutSourceTests {
         #expect(Self.lines(of: "Date.now", in: source) == [6])
         #expect(Self.lines(of: "Task.sleep", in: source) == [])
         // Every spelling of the two lists is found when it stands in code.
-        for spelling in Self.ambient + Self.ticking {
+        for spelling in Self.ambient + Self.ticking + Self.unstructured {
             #expect(Self.lines(of: spelling, in: SwiftSource("let value = call(\(spelling)")) == [1], "\(spelling)")
         }
     }

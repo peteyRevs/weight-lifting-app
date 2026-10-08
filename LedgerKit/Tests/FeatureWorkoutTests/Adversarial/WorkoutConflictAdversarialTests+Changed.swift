@@ -123,9 +123,8 @@ extension WorkoutConflictAdversarialTests {
         }
     }
 
-    /// Finding F10-S4-3 is about the words here: the lifter is told the old workout was kept, and not why the
-    /// new one did not start, which the same day asked for with nothing live does say ("Your program's block
-    /// has ended."). What is pinned is only what must hold whatever the words: nothing is discarded.
+    /// Finding F10-S4-3, closed by criterion 15 (round 2): the lifter is told why the new day did not start,
+    /// as the same day asked for with nothing live is told. Whatever the words, nothing is discarded.
     @Test("A day past the block's end asked over a live workout: the dialog shows, and replacing discards nothing")
     func replace_weekPastTheBlock_keepsTheOldWorkout() async throws {
         try await World.run(.host) { world in
@@ -136,7 +135,7 @@ extension WorkoutConflictAdversarialTests {
             #expect(rig.phase == .conflict(late), "\(rig.phase)")
             await world.session.clearCalls()
             await rig.answer(.replaceLive(late))
-            #expect(rig.phase == .failed(.notReplaced(.liveKept)), "\(rig.phase)")
+            #expect(rig.phase == .failed(.notStarted(.blockEnded)), "\(rig.phase)")
             #expect(await world.session.count(.discard) == 0)
             #expect(try await unchanged(world.live(), first))
         }

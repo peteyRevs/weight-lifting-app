@@ -16,13 +16,14 @@ struct WorkoutTimelineTests {
         #expect(WorkoutTimeline.fixed(at: Fixtures.now).pausedAt == Fixtures.now)
     }
 
-    @Test("No start traps the elapsed time: not one before every calendar, nor one after every calendar")
+    @Test("No start traps the elapsed time: not one outside every calendar, and not one that is no time at all")
     func elapsed_anyStart_makesAText() {
         let starts = [
             Fixtures.now, Fixtures.now.addingTimeInterval(86400), .distantPast, .distantFuture,
             Date(timeIntervalSinceReferenceDate: .infinity), Date(timeIntervalSinceReferenceDate: -.infinity),
             Date(timeIntervalSinceReferenceDate: .greatestFiniteMagnitude),
-            Date(timeIntervalSinceReferenceDate: -.greatestFiniteMagnitude)
+            Date(timeIntervalSinceReferenceDate: -.greatestFiniteMagnitude),
+            Date(timeIntervalSinceReferenceDate: .nan), Date(timeIntervalSinceReferenceDate: .signalingNaN)
         ]
         for timeline in [WorkoutTimeline.live, .fixed(at: Fixtures.now)] {
             for start in starts {

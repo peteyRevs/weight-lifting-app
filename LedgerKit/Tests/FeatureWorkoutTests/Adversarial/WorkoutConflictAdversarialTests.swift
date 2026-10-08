@@ -123,7 +123,8 @@ struct WorkoutConflictAdversarialTests {
             #expect(await world.session.count(.discard) == 0)
             #expect(await world.session.count(.start) == 0)
             #expect(try await unchanged(world.live(), first))
-            #expect(message(rig) == "Couldn't start the new workout / Your workout in progress was kept. / OK")
+            // Round 2, criterion 15: the reason is said, as a plain start says it. Nothing was discarded.
+            #expect(message(rig) == "Couldn't start this workout / This day has no exercises yet. / OK")
         }
     }
 

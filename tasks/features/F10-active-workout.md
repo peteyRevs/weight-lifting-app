@@ -419,3 +419,11 @@ live workouts or a lost one. Rulings, which add to S4's eleven criteria:
     three choices in turn. If this would take the slice past 1,000 product lines, it moves to S5 and the
     implementer says so. Kill and relaunch with a live workout stays with F15, which needs a UI-test launch
     that keeps its database.
+19. **Rulings on round 2** (F10-S4-7 to -9). A refused replacement keeps its reason also when the session
+    could not be read again. A workout that ended elsewhere while the conflict dialog showed is reported as
+    ended, not as discarded (one neutral text). While any set is not logged exactly one segment is current:
+    the cursor's exercise if it still has a set to log, otherwise the first exercise that has one.
+20. **Deferred to F17, with the product owner's wording** (F10-S4-8): a workout that ended elsewhere while the
+    conflict dialog showed is still reported with the "discarded" text. It cannot happen on one phone; it can
+    once the watch syncs. Proposed wording: "Your workout in progress has ended." A cursor that names no row
+    leaves no segment current, as the tester pins.

@@ -168,5 +168,20 @@ struct WorkoutLauncherTests {
             #expect(second?.source == first?.source)
             #expect(second?.id != first?.id)
         }
+
+        @Test("The Debug menu's other sample asks for the second day: with the first day's running, it conflicts")
+        func startSample_otherDay_conflictsWithTheFirst() async throws {
+            let scene = try Scene.onFake()
+            await scene.ask { $0.startSample() }
+            scene.launcher.send(.coverClosed)
+            await scene.ask { $0.startSample(day: 1) }
+            let program = try Fixtures.seedProgram()
+            let second = WorkoutSource(programID: program.id, weekIndex: 0, dayTemplateID: program.days[1].id)
+            #expect(scene.launcher.phase == .conflict(second))
+
+            scene.launcher.send(.cancelConflict)
+            await scene.ask { $0.startSample(day: 9) }
+            #expect(scene.launcher.phase == .failed(.notStarted(.other)), "no such day: nothing starts")
+        }
     #endif
 }

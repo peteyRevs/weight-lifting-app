@@ -42,7 +42,7 @@ struct WorkoutHeader: View {
     private var elapsed: some View {
         HStack(spacing: LedgerSpacing.s) {
             Circle()
-                .fill(LedgerColor.accent)
+                .fill(LedgerColor.accentText)
                 .frame(width: Self.dot, height: Self.dot)
             timeline.elapsed(since: model.startedAt)
                 .ledgerFont(.numeralS)

@@ -113,3 +113,43 @@ struct EndedSession: WorkoutSessionClient {
         throw error
     }
 }
+
+/// The fake session whose first `current()` throws and whose later ones answer: a read that failed once.
+actor FlakySession: WorkoutSessionClient {
+    struct Unread: Error {}
+
+    private let base: FakeWorkoutSessionClient
+    private var hasFailed = false
+
+    init(base: FakeWorkoutSessionClient) {
+        self.base = base
+    }
+
+    func updates() async -> AsyncStream<WorkoutSessionUpdate> {
+        await base.updates()
+    }
+
+    func current() async throws -> WorkoutState? {
+        guard hasFailed else {
+            hasFailed = true
+            throw Unread()
+        }
+        return await base.current()
+    }
+
+    func start(_ initial: WorkoutState) async throws {
+        try await base.start(initial)
+    }
+
+    func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
+        try await base.apply(event)
+    }
+
+    func finish(endedAt: Date) async throws -> WorkoutState {
+        try await base.finish(endedAt: endedAt)
+    }
+
+    func discard(endedAt: Date) async throws {
+        try await base.discard(endedAt: endedAt)
+    }
+}

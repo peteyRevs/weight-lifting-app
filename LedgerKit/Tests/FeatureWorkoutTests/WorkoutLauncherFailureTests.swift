@@ -74,8 +74,8 @@ struct WorkoutLauncherFailureTests {
             == "Your workout in progress was discarded.")
     }
 
-    @Test("L12. \"Discard and start new\" for a day that can no longer be built discards nothing")
-    func replace_dayCannotBeBuilt_discardsNothing() async throws {
+    @Test("L12. \"Discard and start new\" for a day that can no longer be built discards nothing, and says why")
+    func replace_dayCannotBeBuilt_discardsNothing_saysWhy() async throws {
         let running = try Fixtures.seedSession()
         let scene = try Scene.onFake(live: running)
         let lowerA = try Scene.source(day: 1)
@@ -83,7 +83,22 @@ struct WorkoutLauncherFailureTests {
         try await scene.emptyDay(1)
 
         await scene.ask { $0.send(.replaceLive(lowerA)) }
-        #expect(scene.launcher.phase == .failed(.notReplaced(.liveKept)))
+        #expect(scene.launcher.phase == .failed(.notStarted(.emptyDay)))
+        #expect(try await scene.holds(running))
+        #expect(await scene.asked() == [])
+    }
+
+    @Test("L12. A week past the block is offered the dialog, and \"Discard and start new\" then says the block ended")
+    func replace_weekPastTheBlock_discardsNothing_saysTheBlockEnded() async throws {
+        let running = try Fixtures.seedSession()
+        let scene = try Scene.onFake(live: running)
+        let late = try Scene.source(day: 1, week: 8)
+        await scene.ask { $0.start(late) }
+        #expect(scene.launcher.phase == .conflict(late))
+
+        await scene.ask { $0.send(.replaceLive(late)) }
+        #expect(scene.launcher.phase == .failed(.notStarted(.blockEnded)))
+        #expect(WorkoutPresentation.alert(for: .notStarted(.blockEnded)).message == "Your program's block has ended.")
         #expect(try await scene.holds(running))
         #expect(await scene.asked() == [])
     }

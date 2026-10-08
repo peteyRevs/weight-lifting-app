@@ -95,8 +95,9 @@ public final class WorkoutLauncher {
     /// arrives while one is running does nothing.
     ///
     /// A request cancelled because the view went away is not a failure: it is neither shown nor logged as
-    /// one, and the launcher is `idle` again unless the work had already gone through. The session's host
-    /// completes a call in a task of its own, so a cancelled request leaves no workout half started.
+    /// one, and the launcher is `idle` again unless the work had already gone through. On a host that
+    /// completes each call in a task of its own, as the app's does, a cancelled request leaves no workout
+    /// half started and none half replaced.
     func run() async {
         guard let request, phase == .working, !isRunning else {
             return
@@ -127,8 +128,8 @@ public final class WorkoutLauncher {
         case let .replace(source):
             return try await phase(after: useCase.start(source, replacingLive: true), asking: source)
         #if DEBUG
-            case .sample:
-                return try await answer(.start(WorkoutSample.source(in: programs)))
+            case let .sample(day):
+                return try await answer(.start(WorkoutSample.source(day: day, in: programs)))
         #endif
         }
     }
@@ -160,10 +161,17 @@ public final class WorkoutLauncher {
         } catch {
             logger.log.error("The session could not be read: \(String(describing: error), privacy: .public)")
         }
+        let reason = Self.reason(error)
         switch job {
-        case .resume: return .failed(.notOpened)
-        case .replace: return .failed(.notReplaced(aftermath))
-        default: return .failed(.notStarted(Self.reason(error)))
+        case .resume:
+            return aftermath == .liveKept ? .cover : .failed(.notOpened)
+        case .replace where reason == .other:
+            return .failed(.notReplaced(aftermath))
+        default:
+            // A replacement refused for a reason the lifter can act on says why, as a plain start does,
+            // whatever the session shows or fails to show afterwards: each such refusal is thrown before
+            // anything is discarded. "Nothing was changed" is said only when the session was read.
+            return .failed(.notStarted(reason == .other && aftermath == .unknown ? .unknown : reason))
         }
     }
 

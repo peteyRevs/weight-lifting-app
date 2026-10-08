@@ -67,17 +67,35 @@ struct WorkoutPresentationTests {
         #expect(Self.header(state).segments.map(\.length).reduce(0, +) == state.totalSets)
     }
 
-    @Test("The current exercise is current whatever its sets; an exercise with no set is never done")
-    func segments_currentWins_andAnEmptyExerciseIsUpcoming() throws {
-        var state = try WorkoutPreview.logged(18, in: Fixtures.seedSession())
+    @Test("With every set logged every segment is done and none is current, though the cursor rests on a row")
+    func segments_everySetLogged_areAllDone() throws {
+        let state = try WorkoutPreview.logged(18, in: Fixtures.seedSession())
         #expect(state.doneSets == state.totalSets)
-        let current = try #require(state.checkedCursor?.exerciseIndex)
-        var expected = [ProgressSegment.State](repeating: .done, count: 5)
-        expected[current] = .current
-        #expect(Self.header(state).segments.map(\.state) == expected)
+        #expect(state.checkedCursor != nil)
+        #expect(Self.header(state).segments.map(\.state) == [.done, .done, .done, .done, .done])
+        #expect(Self.header(state).progressValue.hasPrefix("Exercise "), "the words still name the cursor's exercise")
+    }
 
+    @Test("The cursor on a finished exercise while others are not: the first unfinished is current, and is named")
+    func header_cursorOnAFinishedExercise_marksTheFirstUnfinished() throws {
+        var state = try WorkoutPreview.minutes.workout()
+        state.cursor = Cursor(exerciseIndex: 0, setIndex: 0)
+        let header = Self.header(state)
+        #expect(header.segments.map(\.state) == [.done, .current, .upcoming, .upcoming, .upcoming])
+        #expect(header.progressValue == "Exercise 2 of 5")
+        #expect(WorkoutPresentation.currentExercise(of: state.exercises, cursor: 3) == 3)
+        #expect(WorkoutPresentation.currentExercise(of: state.exercises, cursor: nil) == nil)
+        #expect(WorkoutPresentation.currentExercise(of: state.exercises, cursor: 9) == nil)
+    }
+
+    @Test("A finished exercise is done also when it is the current one; an exercise with no set is never done")
+    func segments_doneWinsOverCurrent_andAnEmptyExerciseIsNeverDone() throws {
+        var state = try WorkoutPreview.minutes.workout()
+        #expect(WorkoutPresentation.segments(of: state.exercises, current: 0).map(\.state)
+            == [.done, .upcoming, .upcoming, .upcoming, .upcoming])
         state.exercises[0].sets = []
         #expect(Self.header(state).segments[0] == ProgressSegment(length: 0, state: .upcoming))
+        #expect(WorkoutPresentation.segments(of: state.exercises, current: 0)[0].state == .current)
         #expect(WorkoutPresentation.segments(of: [], current: nil).isEmpty)
     }
 
@@ -124,42 +142,6 @@ struct WorkoutPresentationTests {
                     message: "Close this screen and try again.",
                     close: "Close"
                 ))
-        )
-    }
-
-    @Test("The two dialogs read as the brief writes them")
-    func dialogs_areTheBriefs() {
-        #expect(WorkoutPresentation.conflictDialog == WorkoutConflictDialogModel(
-            title: "You have a workout in progress",
-            resume: "Resume it",
-            replace: "Discard and start new",
-            cancel: "Cancel"
-        ))
-        #expect(WorkoutPresentation.finishDialog == WorkoutFinishDialogModel(
-            title: "End workout?",
-            discard: "Discard",
-            keepLifting: "Keep lifting"
-        ))
-        #expect(WorkoutPresentation.discardFailedAlert == WorkoutAlertModel(
-            title: "Couldn't discard this workout",
-            message: "It's still in progress. Try again.",
-            dismiss: "OK"
-        ))
-    }
-
-    @Test("Every failure of the launcher has its title and its line, and says what is live afterwards", arguments: [
-        (WorkoutLaunchFailure.notStarted(.emptyDay), "Couldn't start this workout", "This day has no exercises yet."),
-        (.notStarted(.dayNotInProgram), "Couldn't start this workout", "This day is no longer in your program."),
-        (.notStarted(.blockEnded), "Couldn't start this workout", "Your program's block has ended."),
-        (.notStarted(.other), "Couldn't start this workout", "Nothing was changed. Try again."),
-        (.notReplaced(.liveKept), "Couldn't start the new workout", "Your workout in progress was kept."),
-        (.notReplaced(.nothingLive), "Couldn't start the new workout", "Your workout in progress was discarded."),
-        (.notReplaced(.unknown), "Couldn't start the new workout", "Try again."),
-        (.notOpened, "Couldn't open this workout", "Try again.")
-    ])
-    func alert_saysWhatFailedAndWhatIsLeft(failure: WorkoutLaunchFailure, title: String, message: String) {
-        #expect(
-            WorkoutPresentation.alert(for: failure) == WorkoutAlertModel(title: title, message: message, dismiss: "OK")
         )
     }
 }

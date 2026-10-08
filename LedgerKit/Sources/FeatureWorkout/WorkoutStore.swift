@@ -41,6 +41,9 @@ nonisolated enum WorkoutStoreError: Error, Equatable {
 /// discard or by any other hand, closes the cover through `exit`. Intents are synchronous and only change
 /// state; `WorkoutRoot` runs `follow()` and `discard()` from its `.task`s, so nothing here outlives the view.
 ///
+/// **Making one does nothing.** `WorkoutRoot` makes a store each time SwiftUI evaluates the cover's content
+/// and `@State` keeps the first, so the initializer must stay empty.
+///
 /// **Haptics.** An update carries the haptics of its change. This slice plays none. When S6 does, they are
 /// played here, from the stream and from nowhere else, so that a change is never felt twice: not from a
 /// call's return as well, and not by Today, which reads the same stream.

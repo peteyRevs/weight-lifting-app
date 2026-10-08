@@ -1223,3 +1223,145 @@ button, "Close", which closes it.
 Both result bundles were read and deleted; the logs are in the scratch folder. One test was added after run 2
 (`replace_weekPastTheBlock_keepsTheOldWorkout`); it ran on the host only. No app or helper was left running.
 The full gate was not run.
+
+## Slice S4 — round 2 (G2 tester, 2026-10-08)
+
+On fcb9fa0 with the implementer's fixes uncommitted on top; the rulings are the brief's "Plan amendments —
+slice S4 after round 1" (criteria 12 to 18). `git diff fcb9fa0` over my round 1 files was empty when this round
+began: none was touched.
+
+### Result
+
+The rulings hold where they were aimed: both of round 1's red tests pass unedited, the conflict shows its
+three choices in the running app, and no failure line claims more than it knows in 20 fault cases. 13 tests
+added (8 host, 4 simulator, 1 UI); 94 in all. **Three stay red, each a new finding (F10-S4-7 to -9).** None
+loses a workout or makes two.
+
+### Round 1's findings
+
+| Finding | Now |
+|---|---|
+| F10-S4-1 all sets logged, last segment current | **Closed** (criterion 13). `segments_allDone` passes unedited. The ruling opened F10-S4-9 |
+| F10-S4-2 a NaN start traps | **Closed** (criterion 14). `elapsed_startNotANumber_readsZero` passes unedited; no trap in 17 starts × 3 ways |
+| F10-S4-3 no reason after the conflict | **Closed** for the usual case (criterion 15); two corners open as F10-S4-7 and -8 |
+| F10-S4-4 no visible Cancel | **Closed** (criterion 12). Tree below |
+| F10-S4-5 conflict and relaunch not reachable in the app | Conflict: **closed** (criterion 18). Relaunch: **deferred** to F15 by the ruling |
+| F10-S4-6 test quality | **Closed**: the timeline test has NaN, `Smoke` reads the clock |
+
+### My three expectations that criterion 15 changed
+
+The answer to the question put: **nothing is discarded before the new day is known to be buildable.**
+`StartWorkoutUseCase` refuses an empty or missing day before it looks at the session, and builds the new
+session (where `weekOutOfRange` is thrown) before it calls `discard`. In all three cases the tests still
+assert, and still pass, that `discard` was not called, `start` was not called and the live workout is equal
+in every field to what it was. Only the words moved, as criterion 15 says they should. No finding.
+
+| Test | Old expectation | New expectation |
+|---|---|---|
+| `replace_newDayEmptied_keepsTheOldWorkout` (fake, host) | "Couldn't start the new workout / Your workout in progress was kept. / OK" | "Couldn't start this workout / This day has no exercises yet. / OK" |
+| `replace_weekPastTheBlock_keepsTheOldWorkout` | `.failed(.notReplaced(.liveKept))` | `.failed(.notStarted(.blockEnded))` |
+
+One thing the new line gives up: it no longer says the workout in progress was kept. It was; "Resume" shows
+it (`refusedReplacement_saysWhy` checks). `AdversarialSession.fail` gained `skipping:` (fail the Nth call),
+which is the only other edit to a round 1 file.
+
+### New findings
+
+**F10-S4-7 · copy, low · criterion 15 · the reason is dropped when the session cannot be read afterwards.**
+A replacement refused for a reason, with the launcher's second read of the session failing, says "Couldn't
+start the new workout / Try again." A plain start in the same double fault says the reason. The reason needs
+no read: each of these errors is thrown before the use case discards anything
+(`case .replace where aftermath != .liveKept || reason == .other`: `unknown` is not `liveKept`).
+- Repro: Upper A live; ask Lower A; empty Lower A (or delete it, or ask a week past the block);
+  `current()` fails from then on; "Discard and start new".
+- Expected a line ending "This day has no exercises yet."; actual "Try again.". The workout is untouched.
+- Red: `refusedReplacement_sessionUnreadable_stillSaysWhy` (3 cases). Two faults at once; low.
+
+**F10-S4-8 · copy, low until F17 · criteria 15 and 16 · a workout saved by another hand is called
+discarded.** The live workout is finished elsewhere while the dialog shows; the replacement is then refused
+for a reason (or its start fails). The launcher reads nothing live and says "Couldn't start the new workout /
+Your workout in progress was discarded." It is in history, and the reason is not said. `nothingLive` is taken
+to mean "we discarded it"; only a discard this request made proves that.
+- Expected: no "discarded", and the reason. Red: `refusedReplacement_afterFinishElsewhere_doesNotSayDiscarded`
+  (3 cases). On one phone no other hand exists yet, so this waits for the watch; it was also true in round 1
+  for a start that fails after a finish elsewhere.
+
+**F10-S4-9 · spec question · criterion 13 · with sets logged out of order, an unfinished workout often has
+no current segment.** Criterion 13 as built: a finished exercise is done "also when the cursor rests on it".
+The engine leaves the cursor on a finished exercise whenever the row logged was not the cursor's own, so the
+bar shows no orange while the words still say "Exercise 2 of 4".
+- Repro (sets 3, 1, 4, 2): log one set of exercise 2, the one set of exercise 1, then the three of exercise
+  0. Bar `dduu`, cursor (1, 0), nothing current, two exercises unfinished.
+- Expected, as the round was asked to check: none current only when all are done, exactly one otherwise.
+  54 of seeds 1 to 60 break it within 40 random logs and unlogs. Logged in cursor order it holds at every
+  count (`segments_everyCountInOrder`, green).
+- Red: `segments_anyOrder`. Not reachable in S4 (no row can be logged); S5 reaches it the first time a lifter
+  ticks a row that is not the selected one. Either the presentation marks the first unfinished exercise when
+  the cursor's is done, or the engine's cursor must never rest on a finished exercise while another is not:
+  a ruling for S5.
+
+**Observations, no test red.**
+- A resume whose first read fails and whose second finds nothing live says "Couldn't open this workout / Try
+  again."; there is no workout to open, and trying again does nothing.
+- The Debug sample job is not "asked" in the launcher's failure path, so a sample start whose answer is lost
+  says "Nothing was changed" over a workout that is live. Debug builds only.
+
+### The conflict dialog in the running app (criteria 12, 18)
+
+```
+Other 'PopoverDismissRegion' 'dismiss popup'  {{0,0},{402,874}}
+Popover {{81,321},{240,258}}
+  Sheet 'You have a workout in progress'
+    StaticText 'You have a workout in progress'
+    Button 'workout.conflict.resume'  'Resume it'              {{97,403},{208,48}}
+    Button 'workout.conflict.replace' 'Discard and start new'  {{97,459},{208,48}}
+    Button 'workout.conflict.cancel'  'Cancel'                 {{97,515},{208,48}}
+```
+"Cancel" is a button, drawn, enabled, 48 points high and read last. `WorkoutConflictAdversarial` (new, 55 s,
+green) adds what `Smoke` does not ask: a tap outside cancels too; after each way out the first day's row shows
+"Upper A" with no dialog and a clock that has not gone back; after "Discard and start new" the other day's
+row shows "Lower A" with no dialog and the first day's row now raises the dialog, whose "Resume it" shows
+"Lower A": one workout is left.
+
+**The implementer's `test_sampleWorkout_anotherDay_cancelResumeAndReplace`, check by check: each can fail.**
+The three labels and `isHittable` fail if a button is not drawn. "Cancel discarded nothing: it asks again"
+fails if Cancel discarded (the second ask would start Lower A with no dialog). "Resume it" fails on the wrong
+title, and on a new workout through `ran > 5`. "Discard and start new" fails on the title. Two soft spots:
+`ran > 5` leans on the test's own pace (it read well above that here, but nothing guarantees five seconds),
+and "newly started" (`< ran`) can hardly fail once the title is Lower A. It does not check that the first
+workout is gone; mine does. `elapsedSeconds` fails loudly on anything that is not a time.
+
+### Attacked and held
+
+- **Criterion 12**: the model's three texts; the tree above; Cancel and a tap outside change nothing (host:
+  L11, the sequences; app: the UI test).
+- **Criterion 13**: every count 0 to 10 in order: one current until the last set, then none.
+- **Criterion 14** (simulator): 17 starts (three NaNs, ±infinity, ±greatest finite, ±1e300, ±1e19, zero,
+  the least number, both distant dates and one second past each) × {paused, running, in the header on both
+  timelines}; the pause itself at both distant dates. Nothing traps; every uncountable start reads "0:00".
+- **Criterion 15**: emptied, deleted, block ended after the dialog: the reason, no discard, the old workout
+  equal in every field and reachable.
+- **Criterion 16**: a start with one fault at each call (program store, first read, second read, `start`,
+  `start`'s answer lost) × the session readable afterwards or not: "Nothing was changed. Try again." only
+  when it was read and nothing is live; "Try again." when it could not be read; the cover when the workout
+  is live and the session said so; the next try always opens the workout. A replacement with one fault
+  (discard, its answer lost, start, its answer lost, program store) × readable or not: "kept" only when it
+  is kept, "discarded" only when this request discarded it, "Try again." alone when unreadable, and the old
+  workout gone only with its discard. 20 cases, over the host.
+- Round 1's suites again: the table, the 80 sequences (seeds 1 to 40 × fake, host) and the reach test pass.
+
+### Not attacked
+
+Kill and relaunch in the app (F15); VoiceOver itself; the alert form of the conflict; GRDB stores; the
+snapshot references the implementer re-recorded (they pass; I did not judge the pixels).
+
+### Commands and exit statuses
+
+| Command | Exit | Result |
+|---|---|---|
+| `git diff fcb9fa0 -- LedgerKit/Tests/FeatureWorkoutTests/Adversarial/ Apps/LedgerUITests/WorkoutAdversarial.swift` (at the start) | 0 | empty |
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter FeatureWorkoutTests` | 1 | 149 tests in 22 suites; failing: the three red tests only (54 + 3 + 3 cases) |
+| Simulator (lock), iPhone 17, iOS 27.0: `xcodebuild test -scheme Ledger -testPlan Nightly -only-testing:FeatureWorkoutTests -only-testing:LedgerUITests/Smoke -only-testing:LedgerUITests/WorkoutAdversarial -only-testing:LedgerUITests/WorkoutConflictAdversarial` | 65 | Hosted: 168 tests in 25 suites, the same three failing, no trap. UI: 5 of 5 passed (143 s) |
+| `scripts/check.sh --lint-only` | 0 | OK |
+
+The result bundle was read and deleted; `run3.log` is in the scratch folder. The full gate was not run.

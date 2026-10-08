@@ -19,10 +19,12 @@ nonisolated struct WorkoutTimeline: Equatable, Sendable {
     /// "24:22", and "1:01:05" from an hour on, as `ClockText.elapsed` writes it. Before `start` it reads
     /// "0:00".
     ///
-    /// A start that no calendar holds (it can come from a peer's envelope) counts from the far future, and
-    /// so reads "0:00": a range cannot be made from it.
+    /// A start that is not a finite time, or that no calendar holds, counts from the far future, and so reads
+    /// "0:00": a range cannot be made from it, and SwiftUI traps on a timer that starts at no time at all.
+    /// Finiteness is asked first, of the number: every comparison of a `Date` that is not a number holds.
     func elapsed(since start: Date) -> Text {
-        let isCountable = start >= .distantPast && start <= .distantFuture
+        let isCountable = start.timeIntervalSinceReferenceDate.isFinite
+            && start >= .distantPast && start <= .distantFuture
         return Text(
             timerInterval: (isCountable ? start : .distantFuture) ... .distantFuture,
             pauseTime: pausedAt,

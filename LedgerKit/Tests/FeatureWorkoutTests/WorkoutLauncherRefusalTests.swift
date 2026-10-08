@@ -74,8 +74,10 @@ struct WorkoutLauncherRefusalTests {
         #expect(alert.message == "Try again.")
 
         scene.launcher.send(.dismissFailure)
+        // Criterion 16: the session could not be read again, so the line does not say that nothing changed.
         try await scene.ask { try $0.start(Scene.source(day: 0)) }
-        #expect(scene.launcher.phase == .failed(.notStarted(.other)))
+        #expect(scene.launcher.phase == .failed(.notStarted(.unknown)))
+        #expect(WorkoutPresentation.alert(for: .notStarted(.unknown)).message == "Try again.")
         scene.launcher.send(.dismissFailure)
         try await scene.ask { try $0.send(.replaceLive(Scene.source(day: 0))) }
         #expect(scene.launcher.phase == .failed(.notReplaced(.unknown)))
@@ -86,5 +88,14 @@ struct WorkoutLauncherRefusalTests {
         let scene = try Scene.on(EndedSession(error: CancellationError()))
         await scene.ask { $0.resume() }
         #expect(scene.launcher.phase == .failed(.notOpened))
+    }
+
+    @Test("A resume whose read failed and whose second read finds the workout opens the cover on it")
+    func resume_firstReadFails_secondFindsTheWorkout_opensTheCover() async throws {
+        let running = try Fixtures.seedSession()
+        let scene = try Scene.on(FlakySession(base: FakeWorkoutSessionClient(live: running)))
+        await scene.ask { $0.resume() }
+        #expect(scene.launcher.phase == .cover)
+        #expect(try await scene.holds(running))
     }
 }

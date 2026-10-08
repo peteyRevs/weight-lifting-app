@@ -24,8 +24,10 @@ nonisolated enum WorkoutLaunchFailure: Equatable, Sendable {
         case dayNotInProgram
         /// The week asked for is past the end of the block.
         case blockEnded
-        /// A store or the session failed.
+        /// A store or the session failed, and the session shows that nothing changed.
         case other
+        /// A store or the session failed, and the session could not be read afterwards: nothing is known.
+        case unknown
     }
 
     /// What became of the workout that was to be replaced.
@@ -38,9 +40,9 @@ nonisolated enum WorkoutLaunchFailure: Equatable, Sendable {
         case unknown
     }
 
-    /// A start that changed nothing: whatever was live before still is.
+    /// A start, or a replacement, that changed nothing as far as is known: whatever was live before still is.
     case notStarted(Reason)
-    /// "Discard and start new" did not end with the new workout live.
+    /// "Discard and start new" did not end with the new workout live, for no reason a lifter can act on.
     case notReplaced(Aftermath)
     /// A resume could not read the session.
     case notOpened
@@ -69,8 +71,9 @@ nonisolated struct WorkoutLaunchRequest: Hashable, Sendable {
         /// "Discard and start new".
         case replace(WorkoutSource)
         #if DEBUG
-            /// The Debug menu's "Start sample workout" (`WorkoutLauncher.startSample()`).
-            case sample
+            /// The Debug menu's sample workouts (`WorkoutLauncher.startSample(day:)`): the day at this place
+            /// in the active program.
+            case sample(day: Int)
         #endif
     }
 

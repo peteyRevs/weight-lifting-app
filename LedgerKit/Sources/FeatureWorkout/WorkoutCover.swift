@@ -6,7 +6,8 @@ public extension View {
     /// alert of a start that failed, as `launcher` says, and runs the launcher's work. The app's root applies
     /// it once, above the tabs (architecture §4).
     ///
-    /// `onRoute` is told why the cover closed, after it has closed.
+    /// `onRoute` is told why the cover closed, as it starts to go down: a route must not present anything
+    /// of its own in that turn.
     func workoutCover(
         _ launcher: WorkoutLauncher,
         onRoute: @escaping @MainActor (WorkoutRoute) -> Void = { _ in }
@@ -59,9 +60,10 @@ struct WorkoutCover: ViewModifier {
                     .accessibilityIdentifier("workout.conflict.resume")
                 Button(dialog.replace, role: .destructive) { launcher.send(.replaceLive(source)) }
                     .accessibilityIdentifier("workout.conflict.replace")
-                // The cancelling role: the system decides how it is offered. From iOS 26 it draws no button
-                // for it, and tapping outside the dialog cancels.
-                Button(dialog.cancel, role: .cancel) { launcher.send(.cancelConflict) }
+                // No cancel role, as for "Keep lifting": the system draws no cancelling button in a dialog
+                // (iOS 26 on), and the way out of this one must be seen (F10 S4 criterion 12). Tapping
+                // outside the dialog cancels too.
+                Button(dialog.cancel) { launcher.send(.cancelConflict) }
                     .accessibilityIdentifier("workout.conflict.cancel")
             }
             .alert(
