@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.7.0...v0.8.0) (2026-10-08)
+
+
+### Features
+
+* **program:** the presentation of the day editor and its slot panel (F11 S6) ([#44](https://github.com/peteyRevs/weight-lifting-app/issues/44)) ([56c06a5](https://github.com/peteyRevs/weight-lifting-app/commit/56c06a5ac7ad64927e532d4705367a46fd1abe3f))
+* **today:** the views of the Today screen (F09 S4) ([#43](https://github.com/peteyRevs/weight-lifting-app/issues/43)) ([127eb70](https://github.com/peteyRevs/weight-lifting-app/commit/127eb7071fc548935c8c0f0d9d6419b4c4c8b275))
+
 ## [0.7.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.6.0...v0.7.0) (2026-10-08)
 
 
