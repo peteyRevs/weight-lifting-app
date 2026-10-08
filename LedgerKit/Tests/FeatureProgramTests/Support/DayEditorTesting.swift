@@ -166,6 +166,11 @@ nonisolated extension DayEditorModel {
     }
 
     struct DayIsGone: Error {}
+
+    /// Whether the model says the day is gone: a flag to expect, so that a failure prints no model.
+    var isGone: Bool {
+        self == .dayIsGone
+    }
 }
 
 nonisolated extension DayEditorModel.Content {

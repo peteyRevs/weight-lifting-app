@@ -251,6 +251,7 @@
       }
     },
     "+ Add exercise from library" : {
+      "comment" : "Button under a day's exercises",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -390,6 +391,7 @@
       }
     },
     "Band" : {
+      "comment" : "Equipment: a resistance band",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -400,6 +402,7 @@
       }
     },
     "Barbell" : {
+      "comment" : "Equipment: a barbell",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -421,6 +424,7 @@
       }
     },
     "Bodyweight" : {
+      "comment" : "Equipment: the lifter's own body",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -442,6 +446,7 @@
       }
     },
     "Cable" : {
+      "comment" : "Equipment: a cable machine",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -452,6 +457,7 @@
       }
     },
     "Cancel" : {
+      "comment" : "Dismisses the confirmation; the day stays",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -594,6 +600,7 @@
       }
     },
     "Dumbbell" : {
+      "comment" : "Equipment: dumbbells",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -660,6 +667,7 @@
       }
     },
     "Kettlebell" : {
+      "comment" : "Equipment: a kettlebell",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -692,6 +700,7 @@
       }
     },
     "Machine" : {
+      "comment" : "Equipment: a weight machine",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -702,6 +711,7 @@
       }
     },
     "Move down" : {
+      "comment" : "Carries an exercise towards the foot of its day",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -712,6 +722,7 @@
       }
     },
     "Move up" : {
+      "comment" : "Carries an exercise towards the top of its day",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -993,6 +1004,7 @@
       }
     },
     "Superset with next" : {
+      "comment" : "Joins the next exercise to this one",
       "localizations" : {
         "en" : {
           "stringUnit" : {

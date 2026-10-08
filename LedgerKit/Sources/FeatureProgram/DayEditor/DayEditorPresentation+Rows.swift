@@ -10,8 +10,10 @@ nonisolated extension DayEditorPresentation {
         let number: Int
         /// "A", "B", …; empty for an exercise on its own.
         let letter: String
-        /// Whether the slot is the last member of its group, the one the lifter rests after.
-        let isLast: Bool
+        /// The rest taken after the slot: its group's, which is the longest of the members' and for an
+        /// exercise on its own its own. Nil for a member of a superset that is not the last: the next
+        /// exercise follows at once.
+        let rest: RestDuration?
     }
 
     static func groups(_ context: Context) -> [DayEditorModel.Group] {
@@ -21,11 +23,12 @@ nonisolated extension DayEditorPresentation {
             let members = remaining.prefix(ids.count)
             remaining = remaining.dropFirst(ids.count)
             let isSuperset = members.count > 1
+            let groupRest = SupersetRounds.groupRest(of: members.map(\.rest))
             let rows = members.enumerated().map { position, slot in
                 let place = Place(
                     number: offset + 1,
                     letter: isSuperset ? SupersetRounds.letter(forMemberAt: position) : "",
-                    isLast: position == members.count - 1
+                    rest: position == members.count - 1 ? groupRest : nil
                 )
                 return row(of: slot, place, context)
             }
@@ -83,7 +86,8 @@ nonisolated extension DayEditorPresentation {
     }
 
     /// "Barbell · +5/wk · RPE 8 · 2:30 rest", with "drop" after the progression for a drop set, and "no rest"
-    /// in place of the rest for a member of a superset that is not its last.
+    /// in place of the rest for a member of a superset that is not its last. The last member shows the rest
+    /// the workout takes after the round, the Domain's for the group, which need not be its own.
     static func subLine(of slot: Slot, _ shown: Shown?, _ place: Place, _ context: Context) -> String {
         let locale = context.locale
         var parts: [String] = []
@@ -95,7 +99,7 @@ nonisolated extension DayEditorPresentation {
             parts.append(ProgramCopy.dropMark)
         }
         parts.append(ProgramCopy.rpe((shown?.prescription.rpe ?? slot.rpe).label, locale: locale))
-        parts.append(place.isLast ? ProgramCopy.restOf(slot.rest.label, locale: locale) : ProgramCopy.noRest)
+        parts.append(place.rest.map { ProgramCopy.restOf($0.label, locale: locale) } ?? ProgramCopy.noRest)
         return parts.joined(separator: separator)
     }
 

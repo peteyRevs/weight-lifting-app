@@ -102,7 +102,7 @@ nonisolated struct DayEditorTotalityAdversarialTests {
         // Week 3 is a deload, and a row with no exercise has no prescription: it prints the slot's own sets
         // and RPE, not one set fewer and two points lower (finding F11-S6-3).
         #expect(AdvDay.rows(bare).map(\.scheme) == ["3×8", "4×8", "3×8"])
-        #expect(AdvDay.rows(bare).map(\.sub) == ["RPE 8 · 1:30 rest", "drop · RPE 8 · no rest", "RPE 8 · 1:30 rest"])
+        #expect(AdvDay.rows(bare).map(\.sub) == ["RPE 8 · 1:30 rest", "drop · RPE 8 · no rest", "RPE 8 · 2:30 rest"])
         #expect(AdvDay.content(bare)?.header.meta == "Week 3 · 3 exercises · 11 sets · ~25 min")
         #expect(AdvDay.panel(bare)?.supersetActions.map(\.title) == ["Break out"])
     }

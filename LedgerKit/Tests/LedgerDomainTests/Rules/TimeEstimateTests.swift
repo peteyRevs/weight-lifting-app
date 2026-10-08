@@ -69,4 +69,38 @@ struct TimeEstimateTests {
         let fiveShort = try Fixtures.slot(Fixtures.bench, id: 2, sets: 5, reps: 5, rest: 30)
         #expect(TimeEstimate.minutes(day: day([fiveShort]), prescriptions: [:]) == 6)
     }
+
+    @Test("A day's sets are every slot's sets and its drop sets, as the minutes count them")
+    func setCount_day_countsSetsAndDropSets() throws {
+        let slots = try [
+            Fixtures.slot(Fixtures.bench, id: 1, sets: 5, reps: 5),
+            Fixtures.slot(Fixtures.barbellCurl, id: 2, sets: 3, reps: 12, dropSets: 1),
+            Fixtures.slot(Fixtures.lateralRaise, id: 3, sets: 3, reps: 15, superset: true)
+        ]
+        #expect(TimeEstimate.setCount(day: day(slots), prescriptions: [:]) == 12)
+        #expect(TimeEstimate.setCount(day: day([]), prescriptions: [:]) == 0)
+    }
+
+    @Test("A week's prescription gives its own sets: a deload week counts one fewer for the slot it covers")
+    func setCount_prescriptions_overrideTheSlotsSets() throws {
+        let squat = try Fixtures.slot(Fixtures.backSquat, id: 1, sets: 5, reps: 5)
+        let curl = try Fixtures.slot(Fixtures.barbellCurl, id: 2, sets: 3, reps: 12, dropSets: 1)
+        let deload = ProgressionRules.prescribe(
+            week: Fixtures.week(7, deload: true), weekIndex: 7, slot: squat, exercise: Fixtures.backSquat, units: .lb
+        )
+        // 4 for the squat's deload; the curl has no prescription and keeps 3 and its drop set.
+        #expect(TimeEstimate.setCount(day: day([squat, curl]), prescriptions: [squat.id: deload]) == 8)
+        // A prescription for a slot the day does not hold counts nothing.
+        #expect(TimeEstimate.setCount(day: day([curl]), prescriptions: [squat.id: deload]) == 4)
+    }
+
+    @Test("Several days count their written sets together, and no day counts none")
+    func setCount_days_addsTheDaysUp() throws {
+        let upperA = try Fixtures.upperA()
+        let upperB = try Fixtures.upperB()
+        let each = [upperA, upperB].map { TimeEstimate.setCount(day: $0, prescriptions: [:]) }
+        #expect(TimeEstimate.setCount(days: [upperA, upperB]) == each[0] + each[1])
+        #expect(each[0] == 18)
+        #expect(TimeEstimate.setCount(days: []) == 0)
+    }
 }

@@ -21,7 +21,8 @@ nonisolated enum DayEditorModel: Equatable, Sendable {
         let deleteDay: DeleteDay
     }
 
-    /// A button: its title, and the action of its tap. A control that could do nothing is not in the model.
+    /// A button: its title, and the action of its tap. A control that could do nothing is not in the model, but a
+    /// stepper, which offers both directions at its limit.
     struct Control: Equatable, Sendable {
         let title: String
         let action: DayEditorAction
@@ -88,7 +89,8 @@ nonisolated extension DayEditorModel {
         let scheme: String
         /// "185 lb": the shown week's load in the lifter's unit. Nil when the exercise is not stored.
         let load: String?
-        /// Whether the slot ends on a drop set: the sub line then says "drop".
+        /// Whether the slot ends on a drop set: the sub line then says "drop". For a view that marks such a
+        /// row; it picks no colour.
         let hasDropSet: Bool
         let isOpen: Bool
         /// "4A, Lat Pulldown".

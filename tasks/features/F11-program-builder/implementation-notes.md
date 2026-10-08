@@ -2855,3 +2855,121 @@ The tables under "The model and the actions" are the contract. Beyond them:
 - **Not run:** the full gate, the watchOS build, `LedgerDomainTests` and every other target on the simulator,
   the coverage gate script (it reads the full PR result bundle), the nightly lane's 2,000 seeds, and on the
   host any target but the three named.
+
+## Slice S6 — fix round 1 (G1 implementer, 2026-10-08)
+
+On 90fadb4 (the slice 63f397f, the tester's files, findings and the review). Not committed. The brief's "Plan
+amendments — slice S6 after round 1" (criteria 11 to 16) is the specification of this round. Written before
+the long runs; "The runs" was filled in after them.
+
+### What changed, per item
+
+Paths under `LedgerKit/`.
+
+| Item | Change |
+|---|---|
+| **Criterion 11** (review S-1): a superset shows the rest the workout takes | `Sources/LedgerDomain/Rules/SupersetRounds.swift` gains `groupRest(of rests: [RestDuration]) -> RestDuration` (the longest; no rests gives the default). The Domain had the rule twice and for no slot: `groupRest(block:exercises:)` over a workout's exercises (what `WorkoutEngine+Reduce.swift:85` rests for) and `rests.max()` inside `TimeEstimate.minutes`. Both now call the new function, so the workout, the minutes and the row read one rule. In the feature, `DayEditorPresentation+Rows.swift`: `Place.isLast` became `Place.rest`, the group's rest for the last member and nil for the others, and `subLine` prints it or "no rest". The seed's Upper A reads "Cable · Reps 15–17 · RPE 9 · 1:15 rest" on 4B; Lower A's calf raise reads "1:30 rest". A member's own REST stepper still shows its own value. Tests: `DayEditorPresentationTests.superset_lastRow_showsTheGroupsRest` (new; the row follows a step of either member's rest), `subLine_linearDoubleFixedDropAndNoRest` (the two expected lines changed); `SupersetRoundsTests.groupRestOfRests_isTheLongest`. |
+| **Criterion 12** (review S-3): set counts from the Domain | `Sources/LedgerDomain/Rules/TimeEstimate.swift` gains `setCount(day:prescriptions:)` (every slot's prescribed sets, or its own, and its drop sets) and `setCount(days:)` (several days as written, for the builder's "58 sets a week"). `minutes` is written with the first: work is `setCount × 42 s`, and the rests are summed per group as before. `ProgramPresentation.setCount` is gone, with the parameter round 0 added; `ProgramPresentation+Days.swift` and `DayEditorPresentation.swift` call the Domain and sum nothing. Tests: `TimeEstimateTests.setCount_day_countsSetsAndDropSets`, `setCount_prescriptions_overrideTheSlotsSets`, `setCount_days_addsTheDaysUp`; every existing `minutes` test passes untouched. |
+| **Criterion 13** (review S-2): no queued edit is safe to send twice | The comment on `DayEditorEdit.isRelative` (`DayEditor/DayEditorAction.swift`) now says the mark is about one edit drawn again over a program that already has it, not about a queue, and that every queued edit reaches the stored program exactly once. Test: `DayEditorActionTests.queue_replayed_givesAnotherProgram` ("Superset with next" on the second of three, then "Remove" on it: replayed over its own result, the join finds another slot before the third and joins it there). Run, not only read: the reviewer's example holds. |
+| **Criterion 14** (F11-S6-4): "Rest" the day and "rest" the pause | **Not built, by the orchestrator's ruling during the round (option B).** Standards §7 makes the key the English text and the catalog check refuses a plain key whose English text is not its key (`Sources/LedgerTestSupport/Localization/StringCatalog.swift`, pinned at `Tests/LedgerAppKitTests/StringCatalogTests.swift:96`), so two keys cannot hold the same English. The one key "REST" and the one key "Rest" stay, each with the comment that names both uses; the brief's "REST" label is unchanged. Open below. |
+| **Criterion 15** | Nothing changed. |
+| **Criterion 16** (review S-4): no whole model in an expectation | The eight places: `DayEditorPresentationTests+Total.swift` (four `== .dayIsGone`, now `model.isGone`, a flag in `Support/DayEditorTesting.swift`; two `details == nil`, now `hasDetails`), `DayEditorPresentationPropertyTests.swift` (`model.isGone`; `isDeleted`). |
+
+**The nits.**
+
+| Nit | Done or declined |
+|---|---|
+| N-1 a removal is marked relative and is not | Kept, as criterion 15 rules. The comment on `SlotEdit` now says the mark follows the criterion's list, not the definition. |
+| N-2 two comments promise more than the model gives | Done: both say "but a stepper, which offers both directions at its limit". |
+| N-3 stale file name in a test comment | Done. |
+| N-4 the source test does not name the steps' file | Done: `SlotEditorPresentation+Fields.swift` is in the list. |
+| N-5 `Row.hasDropSet` has no stated use | Kept, with its use stated in its comment (a view that marks such a row; it picks no colour). The tester's screen reads it, so removing it is not this round's. |
+| N-6 one-word keys without a comment | Done, on the lines named: the seven kinds of equipment, "+ Add exercise from library", "Cancel", "Superset with next", "Move up", "Move down". No line added. |
+| N-7 a program with no weeks is drawn as if every exercise were missing | Declined, as the reviewer allows: `Program.init` refuses such a program, and splitting the guard is a branch for a state only a test reaches. |
+| N-8 "HELD" on a fixed slot | Not changed: the flag is the Domain's and spec §7.2's. For Pete with F24. |
+| N-9 every week's prescription for every slot | Declined: far inside the budget; S14's timing test decides. |
+| N-10 two test names lack their expectation | Done: `weekStrip_kilograms_printsKilogramsByTheUnitsSteps`, `progression_notes_kilograms_nameKilogramsAndTheUnitsStep`. |
+| N-11 `Group.id` is optional | Declined: a stored id needs a branch no test can reach (round 0's deviation 20). |
+
+### Catalog texts
+
+No key added, removed or reworded: 101 keys. Twelve keys gained a translator's comment (N-6): "Barbell"
+("Equipment: a barbell"), "Dumbbell" ("Equipment: dumbbells"), "Cable" ("Equipment: a cable machine"),
+"Machine" ("Equipment: a weight machine"), "Bodyweight" ("Equipment: the lifter's own body"), "Kettlebell"
+("Equipment: a kettlebell"), "Band" ("Equipment: a resistance band"), "+ Add exercise from library" ("Button
+under a day's exercises"), "Cancel" ("Dismisses the confirmation; the day stays"), "Superset with next"
+("Joins the next exercise to this one"), "Move up" and "Move down" ("Carries an exercise towards the top of
+its day", "… the foot …").
+
+**What a lifter reads differently:** the last row of a superset shows the longest rest of its members, where
+round 0 (and the prototype) showed that row's own. Listed for Pete in the brief.
+
+### The tester's pins that now fail, for the tester
+
+Seven tests in `Tests/FeatureProgramTests/Adversarial/`, all because they pin the last member's own rest
+(criterion 11). No file of the tester's was edited; all compile. No other test of the two targets fails.
+
+| Test | It expects | Now |
+|---|---|---|
+| `DayEditorSeedAdversarialTests.seed_upperA_rowsReadAsTheSpec` (`:32`) | 4B "Cable · Reps 15–17 · RPE 9 · 1 min rest" | "… · 1:15 rest" (Lat Pulldown's 75 s is the longer) |
+| `DayEditorSeedAdversarialTests.seed_progressionAndDropSet_readAsTheBrief` (`:137`) | Lower A's calf raise "Machine · Fixed · RPE 9 · 1 min rest" | "… · 1:30 rest" (Leg Press's 90 s) |
+| `DayEditorTotalityAdversarialTests.slotOfAMissingExercise_isListedUnderADashAndRemovable` (`:105`) | the third row "RPE 8 · 1:30 rest" | "RPE 8 · 2:30 rest": it closes a superset whose other member rests 2:30 |
+| `DayEditorSeedAdversarialTests.seed_everyDayWeekUnitAndOpenSlot_agreesWithTheTestersScreen` (`:192`) | the tester's screen (`DayEditorAdversarialScreen.swift:130`): the last member's `slot.rest.label` | the group's rest, `SupersetRounds.groupRest(of:)` over the members' rests |
+| `DayEditorModelAdversarialTests.seededDays_outsideADeload_agreeWithTheTestersScreen` (`:39`) | the same screen | the same |
+| `DayEditorModelAdversarialTests.seededDays_inADeloadWeek_agreeWithTheTestersScreen` (`:63`) | the same screen | the same |
+| `DayEditorActionsAdversarialTests.everyAction_appliedAndRedrawn_isTheTestersScreen` (`:45`) | the same screen | the same |
+
+### Product lines now
+
+| File | Round 0 | Now |
+|---|---|---|
+| `FeatureProgram/DayEditor/DayEditorPresentation+Rows.swift` | 91 | 92 |
+| The folder's ten other files | 899 | 899 (comments and one-line lookups changed; no line added) |
+| `FeatureProgram/ProgramPresentation+Days.swift` | 54 | 51 (`setCount` gone) |
+| `FeatureProgram/ProgramCopy.swift`, `ProgramPresentation.swift` | 123, 73 | unchanged |
+| `LedgerDomain/Model/Slot.swift` | 116 | unchanged |
+| `LedgerDomain/Rules/TimeEstimate.swift` | 18 | 23 |
+| `LedgerDomain/Rules/SupersetRounds.swift` | 67 | 70 |
+| **The slice** (against 7e15f61) | **1,007** | **1,013** |
+
+Counted before the round (1,007) and after (1,013): six lines, under the 1,050 at which the seam is taken.
+
+### Open, with a recommendation
+
+- **Two uses of one English text** (criterion 14). The localization rule has no way to tell them apart: a
+  standards matter, not this slice's. *Recommendation:* before the first translation, either Pete gives the
+  pause a second English text, or §7 and its three checks learn a key that is not its text (a lookup with a
+  default value); "REST" and "Rest" here are the first case, "Deload" in the builder the second (S5's N-5).
+- **For the stores (S14), changed by this round:** the mark `isRelative` says nothing about a queue. Sent
+  edits are dropped before the screen is redrawn from the stored program; no queue is ever applied to a
+  program that already holds it (`queue_replayed_givesAnotherProgram` is the example).
+- **For the views (S10):** a superset's last row shows the group's rest, and that member's REST stepper its
+  own; when the two differ the row does not change with the stepper until it passes the longest. If that
+  reads as a bug on a screenshot, the header's note ("rest after B") is where a word could go; Pete's.
+
+### The runs
+
+- Host, `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+  'FeatureProgramTests|LedgerDomainTests|ModuleCopyTests'`: exit 1, by the seven pins alone.
+  `LedgerDomainTests`: 1,222 tests in 186 suites passed (1,218 before; the four new ones). `ModuleCopyTests`:
+  6 passed. `FeatureProgramTests`: 254 tests in 24 suites, 247 passed, 7 failed: exactly the seven of the
+  table above. The implementer's own suites, run without the tester's (`--skip Adversarial`): 147 tests in 9
+  suites passed.
+- `scripts/check.sh --lint-only`: exit 0, on the final sources.
+- Coverage, host, `llvm-cov export -summary-only` on each bundle: `FeatureProgram` 1,305 / 1,305 lines from
+  the implementer's suites alone, the Day editor's folder complete in lines and regions.
+  `LedgerDomain/Model/Slot.swift` 74 / 74. `Rules/TimeEstimate.swift` 36 / 38 and `Rules/SupersetRounds.swift`
+  89 / 90: the three lines are the `?? 0` fallbacks of a `max()` over a group's members (`TimeEstimate.swift:23`,
+  twice; `SupersetRounds.swift:99`), which no group reaches because a group is never empty. The first two
+  fallbacks stood in `minutes` before this round (the same expressions, on other lines; their coverage was
+  not measured then); the third is untouched.
+- Simulator, once, through the lock (iPhone 17, iOS 27.0, the worktree's `.derivedData`): `build-for-testing`
+  exit 0; `scripts/check-string-catalogs.sh` exit 0, "string catalog matches the code:
+  …/FeatureProgram/Resources/Localizable.xcstrings (keys: 101)", `FeatureToday`'s (55), `LedgerAppKit`'s (7);
+  `test-without-building` of `FeatureProgramTests` and `LedgerAppKitTests`: exit 65, 490 tests, 483 passed,
+  7 failed: `LedgerAppKitTests` 236 passed; `FeatureProgramTests` 254 with the same seven failing, by name.
+  The result bundles were read and deleted. No source was edited after that build.
+- **Not run:** the full gate, the watchOS build, `LedgerDomainTests`, `FeatureTodayTests` and every other
+  target on the simulator, the coverage gate script, the nightly seeds, and on the host any target but the
+  three named. `FeatureToday` calls `TimeEstimate.minutes`, whose body changed: its host tests were run for
+  that reason, `--filter FeatureTodayTests`, 216 tests in 19 suites passed.

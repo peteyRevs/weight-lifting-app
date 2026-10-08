@@ -30,7 +30,7 @@ nonisolated extension SlotEditorPresentationTests {
     }
 
     @Test("In kilograms the notes name kilograms and the unit's step")
-    func progression_notes_kilograms() throws {
+    func progression_notes_kilograms_nameKilogramsAndTheUnitsStep() throws {
         let incline = Fixtures.CatalogID.inclineDBPress
         var screen = try Self.screen(DayEditorFixtures.slot(1, incline, startLoad: .kilograms(22.5)), units: .kg)
         #expect(try screen.details().progression.note

@@ -9,7 +9,7 @@ nonisolated extension ProgramPresentation {
 
     static func trainingDays(_ context: Context) -> ProgramBuilderModel.TrainingDays {
         let days = context.program.days
-        let sets = days.reduce(0) { $0 + setCount(of: $1) }
+        let sets = TimeEstimate.setCount(days: days)
         let summary = [
             ProgramCopy.days(days.count, locale: context.locale),
             ProgramCopy.setsAWeek(sets, locale: context.locale)
@@ -24,12 +24,6 @@ nonisolated extension ProgramPresentation {
                 action: .addDay(name: ProgramCopy.newDay, weekIndex: context.selected)
             )
         )
-    }
-
-    /// A day's sets as the brief counts them: every slot's sets and its drop sets. A slot with a prescription
-    /// counts the prescription's sets (a deload week trains one fewer), as `TimeEstimate.minutes` does.
-    static func setCount(of day: DayTemplate, prescriptions: [SlotID: Prescription] = [:]) -> Int {
-        day.slots.reduce(0) { $0 + (prescriptions[$1.id]?.sets ?? $1.sets) + $1.dropSets }
     }
 
     static func card(of day: DayTemplate, _ context: Context) -> ProgramBuilderModel.DayCard {
@@ -58,7 +52,7 @@ nonisolated extension ProgramPresentation {
         }
         return [
             ProgramCopy.exercises(day.slots.count, locale: locale),
-            ProgramCopy.sets(setCount(of: day), locale: locale),
+            ProgramCopy.sets(TimeEstimate.setCount(day: day, prescriptions: [:]), locale: locale),
             ProgramCopy.estimate(minutes: TimeEstimate.minutes(day: day, prescriptions: [:]), locale: locale)
         ]
         .joined(separator: separator)

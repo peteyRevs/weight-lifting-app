@@ -27,8 +27,10 @@ nonisolated enum DayEditorEdit: Hashable, Sendable {
     /// One edit of the day's slots.
     case slot(SlotEdit, day: DayTemplateID)
 
-    /// Whether the edit says what to do and not what the day becomes: such an edit reaches the stored program
-    /// exactly once, and is never sent again after a failed save.
+    /// Whether this one edit, drawn again over a program that already has it, gives another program: the mark
+    /// is about a single edit, not about a queue. No queued edit, marked or not, is safe to send twice (a
+    /// superset edit names "the slot before", whoever that is by then): each reaches the stored program
+    /// exactly once, and none is sent again after a failed save.
     var isRelative: Bool {
         switch self {
         case .renameDay, .deleteDay: false
@@ -54,7 +56,8 @@ nonisolated enum DayEditorEdit: Hashable, Sendable {
 ///
 /// A field is edited by the value it is set to, the drop set and the superset by the state they turn to, so
 /// one of those drawn or applied twice gives what one application gives. A move carries a slot one place from
-/// wherever it stands, and a removal leaves the next member of a superset to lead it: both are marked relative.
+/// wherever it stands, and is marked relative. A removal is marked too, as the slice's criterion 10 lists it,
+/// although it names its slot and a second one finds nothing: the mark follows that list, not the definition.
 nonisolated enum SlotEdit: Hashable, Sendable {
     /// The field with the value it takes: the one `DayEditing.stepped` gave for the slot on screen. `set`
     /// holds it within the field's range.

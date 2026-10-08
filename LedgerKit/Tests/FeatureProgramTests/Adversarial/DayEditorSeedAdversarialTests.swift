@@ -34,7 +34,7 @@ nonisolated struct DayEditorSeedAdversarialTests {
             "Dumbbell · Reps 10–12 · RPE 8 · 1:30 rest",
             "Machine · +2.5/wk · RPE 8 · 1:30 rest",
             "Cable · Reps 12–14 · RPE 9 · no rest",
-            "Cable · Reps 15–17 · RPE 9 · 1 min rest"
+            "Cable · Reps 15–17 · RPE 9 · 1:15 rest"
         ])
         #expect(rows.map(\.scheme) == ["5×5", "3×10", "4×8", "3×12", "3×15"])
         #expect(rows.map(\.load) == ["180 lb", "50 lb", "65 lb", "100 lb", "12.5 lb"])
@@ -134,7 +134,7 @@ nonisolated extension DayEditorSeedAdversarialTests {
         #expect(double.progression.note == "Adds a rep each week up to 12, then +2.5 lb back at 10.")
         let fixed = try #require(try AdvDay.panel(AdvDay.seed(day: 1, open: 3))?.details)
         #expect(fixed.progression.note == "Stays at 160 lb for the whole block.")
-        #expect(try AdvDay.rows(AdvDay.seed(day: 1))[3].sub == "Machine · Fixed · RPE 9 · 1 min rest")
+        #expect(try AdvDay.rows(AdvDay.seed(day: 1))[3].sub == "Machine · Fixed · RPE 9 · 1:30 rest")
         let curl = try AdvDay.seed(day: 2, open: 3)
         let dropped = try #require(AdvDay.panel(curl)?.details)
         #expect(dropped.dropSet.isOn)

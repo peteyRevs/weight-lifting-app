@@ -2,7 +2,7 @@ import LedgerDomain
 
 /// The panel under the open exercise, as `SlotEditorPresentation` builds it: the shown week's prescription,
 /// the stepper fields, the progression, the drop set, the loads of every week, and the slot's actions. A
-/// control that could do nothing is absent.
+/// control that could do nothing is absent, but a stepper, which offers both directions at its limit.
 nonisolated struct SlotEditorModel: Equatable, Sendable {
     /// What needs the exercise to be written. Nil for a slot whose exercise is not stored, which can still be
     /// moved, joined, broken out and removed.

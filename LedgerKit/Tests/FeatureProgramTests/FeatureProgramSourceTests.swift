@@ -84,6 +84,7 @@ nonisolated struct FeatureProgramSourceTests {
             "DayEditorPresentation+Rows.swift",
             "DayEditorAction.swift",
             "SlotEditorPresentation.swift",
+            "SlotEditorPresentation+Fields.swift",
             "SlotEditorPresentation+Preview.swift"
         ] {
             #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")

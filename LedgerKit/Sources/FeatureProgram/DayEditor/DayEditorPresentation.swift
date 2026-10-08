@@ -61,7 +61,7 @@ nonisolated enum DayEditorPresentation {
         return [
             week,
             ProgramCopy.exercises(day.slots.count, locale: locale),
-            ProgramCopy.sets(ProgramPresentation.setCount(of: day, prescriptions: prescriptions), locale: locale),
+            ProgramCopy.sets(TimeEstimate.setCount(day: day, prescriptions: prescriptions), locale: locale),
             ProgramCopy.estimate(minutes: minutes, locale: locale)
         ]
         .joined(separator: separator)

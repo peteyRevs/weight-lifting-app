@@ -127,6 +127,23 @@ nonisolated struct DayEditorActionTests {
         #expect(removed.days[0].slots.map(\.isSupersetWithPrevious) == [false, false, false, false])
     }
 
+    @Test("A queue of unmarked edits replayed over its own result gives another program: no queue is sent twice")
+    func queue_replayed_givesAnotherProgram() throws {
+        // Three exercises on their own. "Superset with next" on the second names the third; then the second
+        // is removed, and the third leads what is left.
+        let slots = try [DayEditorFixtures.slot(1), DayEditorFixtures.slot(2), DayEditorFixtures.slot(3)]
+        let input = try DayEditorFixtures.input(slots: slots)
+        let join = DayEditorEdit.slot(.setSuperset(true, slot: slots[2].id), day: input.day)
+        let queue = [join, .slot(.remove(slot: slots[1].id), day: input.day)]
+        #expect(join.isRelative == false)
+        let once = queue.reduce(input.program) { $1.applied(to: $0) }
+        #expect(once.days[0].slots.map(\.isSupersetWithPrevious) == [false, false])
+        // Replayed, the join finds another slot before the third and joins it to that one.
+        let twice = queue.reduce(once) { $1.applied(to: $0) }
+        #expect(twice.days[0].slots.map(\.id) == [slots[0].id, slots[2].id])
+        #expect(twice.days[0].slots.map(\.isSupersetWithPrevious) == [false, true])
+    }
+
     @Test("The name field's action is the rename edit with the text as typed, and it leaves the panel open")
     func rename_isTheRenameEditWithTheTypedText() {
         let day = DayTemplateID(Fixtures.uuid(300))

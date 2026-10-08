@@ -38,7 +38,7 @@ nonisolated extension DayEditorPresentationTests {
         var screen = try DayScreen(DayEditorFixtures.seedInput(dayIndex: DayIndex.lowerB))
         let deleted = screen.input.day
         try screen.tap(screen.content().deleteDay.confirmation.confirm.action)
-        #expect(screen.model == .dayIsGone)
+        #expect(screen.model.isGone)
         #expect(screen.input.program.days.map(\.tag) == ["UA", "LA", "UB"])
         #expect(screen.input.program.weeks.allSatisfy { !$0.schedule.values.contains(deleted) })
         #expect(screen.input.program.weeks.map(\.schedule.count) == [3, 3, 3, 3, 3, 3, 3, 3])
@@ -48,7 +48,7 @@ nonisolated extension DayEditorPresentationTests {
     func deleteDay_theOnlyDay_isAllowed() throws {
         var screen = try DayScreen(DayEditorFixtures.input(slots: [DayEditorFixtures.slot(1)]))
         try screen.tap(screen.content().deleteDay.confirmation.confirm.action)
-        #expect(screen.model == .dayIsGone)
+        #expect(screen.model.isGone)
         #expect(screen.input.program.days.isEmpty)
     }
 
@@ -58,9 +58,9 @@ nonisolated extension DayEditorPresentationTests {
     func missingDay_isGone() throws {
         var input = try DayEditorFixtures.seedInput()
         input.day = DayTemplateID(Fixtures.uuid(999))
-        #expect(DayEditorPresentation.make(input) == .dayIsGone)
+        #expect(DayEditorPresentation.make(input).isGone)
         input.program.days = []
-        #expect(DayEditorPresentation.make(input) == .dayIsGone)
+        #expect(DayEditorPresentation.make(input).isGone)
     }
 
     @Test("A day with no exercise has no row, says so in the meta line, and can still be added to and deleted")
@@ -126,7 +126,8 @@ nonisolated extension DayEditorPresentationTests {
         // The day still counts it, with its own sets: 5 + 2 + 3 + 2 + 2.
         #expect(try screen.content().header.meta.hasPrefix("Week 8 · 5 exercises · 14 sets · "))
         try screen.open("1")
-        #expect(try screen.panel().details == nil)
+        let hasDetails = try screen.panel().details != nil
+        #expect(!hasDetails)
         #expect(try screen.panel().actionLine == "Superset with next · Move down · Remove")
         try screen.tap(screen.panel().remove.action)
         #expect(try screen.content().rows.map(\.name).contains("—") == false)
@@ -142,7 +143,9 @@ nonisolated extension DayEditorPresentationTests {
         #expect(content.header.meta == "Week 1 · 5 exercises · 18 sets · ~39 min")
         #expect(content.rows.map(\.scheme) == ["5×5", "3×10", "4×8", "3×12", "3×15"])
         #expect(content.rows.allSatisfy { $0.load == nil })
-        #expect(try content.row("2").panel?.details == nil)
+        let panel = try #require(content.row("2").panel)
+        let hasDetails = panel.details != nil
+        #expect(!hasDetails)
         #expect(content.deleteDay.confirmation.message == nil)
     }
 

@@ -19,7 +19,7 @@ nonisolated struct DayEditorPresentationPropertyTests {
             let isSame = DayEditorPresentation.make(input) == model
             #expect(isSame, "the same input gave another model")
             guard let day = input.program.days.first(where: { $0.id == input.day }) else {
-                #expect(model == .dayIsGone)
+                #expect(model.isGone)
                 continue
             }
             let content = try model.content()
@@ -98,7 +98,8 @@ nonisolated struct DayEditorPresentationPropertyTests {
         for _ in 0 ..< 10 {
             guard case let .editing(content) = screen.model else {
                 // The day was deleted: nothing more is offered.
-                #expect(screen.day == nil)
+                let isDeleted = screen.day == nil
+                #expect(isDeleted)
                 return
             }
             let action = try #require(Self.actions(of: content).randomElement(using: &generator))

@@ -852,3 +852,85 @@ Answers to the brief's direct questions:
 `LedgerDomainTests` was not run by me: I changed nothing there. Free disk stayed between 7.6 and 8.0 GB.
 
 Round 1 complete.
+
+## Slice S6 — round 2 (G2 tester, 2026-10-08)
+
+Attacked the implementer's uncommitted fixes on 90fadb4 against criteria 11 to 16. **No bug found.** 59 tests of
+mine now in 9 suites (53 of round 1, seven of them passing again after four edits, and 6 new in
+`DayEditorSupersetRestAdversarialTests.swift`), all passing on the host. One new note, F11-S6-7.
+
+`git diff 90fadb4 -- LedgerKit/Tests/FeatureProgramTests/Adversarial/` was empty before I began: none of my
+files had been touched.
+
+### Round 1's findings
+
+| Finding | Now |
+|---|---|
+| F11-S6-1, the week's RPE on a deload row | Closed: kept as built (criterion 15). My model already follows it. |
+| F11-S6-2, `isHeld` false in a deload week | Closed: kept as built (criterion 15). Pinned by my test. |
+| F11-S6-3, a missing exercise keeps its own sets in a deload week | Closed for M1: kept as built (criterion 15). Still wants a ruling before F12 can delete an exercise. |
+| F11-S6-4, one key for "rest" the day and the pause | Kept as one key with a comment; see F11-S6-7. |
+| F11-S6-5, spoken texts reuse abbreviations | Deferred to F15. |
+| F11-S6-6, remove is marked relative and is idempotent | Closed: kept (criterion 15); the comment on `isRelative` now says the mark follows the list. |
+
+### My seven tests that pinned the old rest line
+
+All seven failed for this one reason and no other; each passes after the edit. Four edits cover them.
+
+| Test | Old expected | New expected |
+|---|---|---|
+| `seed_upperA_rowsReadAsTheSpec` | 4B "Cable · Reps 15–17 · RPE 9 · 1 min rest" | "… · 1:15 rest" (Lat Pulldown rests 75 s, the raise 60 s) |
+| `seed_progressionAndDropSet_readAsTheBrief` | Lower A 3B "Machine · Fixed · RPE 9 · 1 min rest" | "… · 1:30 rest" (Leg Press 90 s, the calf raise 60 s) |
+| `slotOfAMissingExercise_isListedUnderADashAndRemovable` | 2B "RPE 8 · 1:30 rest" | "RPE 8 · 2:30 rest" (2A rests 150 s, 2B 90 s) |
+| `seed_everyDayWeekUnitAndOpenSlot_agreesWithTheTestersScreen`, `seededDays_outsideADeload_…`, `seededDays_inADeloadWeek_…`, `everyAction_appliedAndRedrawn_isTheTestersScreen` | my model printed the last member's own rest | one line of `DayEditorAdversarialScreen.swift`: the longest of the group's members' rests, taken by my own `max` |
+
+### Findings
+
+- **F11-S6-7 — note (criterion 14).** The brief's criterion 14 still asks for separate keys for "rest" the day
+  and "rest" the pause. The code keeps one key each for "REST" and "Rest", with a comment naming both uses, as
+  the orchestrator told me the criterion was withdrawn (the English text is the key). The brief's text and the
+  code now disagree; the criterion should be struck or reworded in the brief so the reviewer and the gate read
+  the same rule.
+
+### Attacked and held
+
+- **The superset's rest line, three callers agreeing**: all 63 groupings of 1 to 6 slots (192 groups) with
+  rests and sets drawn per grouping. The row after each group's last member prints my own longest rest; every
+  other member prints "no rest"; the workout built from the same day by `SessionBuilder` rests the same, read
+  by the call the engine's reducer makes when a round's last set is logged (`SupersetRounds.groupRest(block:exercises:)`
+  over `blocks(in:)`); and `TimeEstimate.minutes` equals decision #14's formula written out by me.
+- **The longest rest at any place** of a superset of three (first, middle, last): shown after the last; the
+  stepper still shows the slot's own rest; broken out, each row shows its own again.
+- **The seed**: Upper A's superset reads 1:15 and Lower A's 1:30; Upper A's workout rests 2:30, 1:30, 1:30, 1:15.
+- **Nothing else moved in the estimate**: the seed's four days are 39, 38, 37, 31; seeds 1 to 40 × every week
+  (deloads, drop sets, slots of exercises not stored), with and without prescriptions, equal the old formula.
+  `git diff 90fadb4` removes no line from `TimeEstimateTests.swift` or `SupersetRoundsTests.swift`: every value
+  pinned before still stands.
+- **`TimeEstimate.setCount`**: for a day with a week's prescription, for a day as written and for several days,
+  against my own sum on the same seeds; 58 for the seed (18, 15, 15, 10); 0 for no slots and for no days; the
+  builder still reads "4 days · 58 sets a week"; Upper A reads 18 sets in week 1 and 13 in week 8, Upper B 11
+  in week 8 with its drop set kept.
+- **Criterion 13**: an example of my own. On a fixed slot of 8 reps with top 12, the queue "top of range 9",
+  "Double" gives top 10 once and top 9 sent twice; neither edit is marked relative, and each alone drawn again
+  over its own result changes nothing.
+
+### Not attacked
+
+- The workout's rest was read through the reducer's own call on a built session, not by driving the engine set
+  by set. The engine's code is unchanged by this round apart from that call's body.
+- The implementer's changed tests were run, not read. No simulator run this round (the orchestrator's gate).
+- Review S-4 (no whole model inside an expectation) is the reviewer's to confirm.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'DayEditor.*Adversarial'` before my edits | 1: 53 tests, the seven named above failing |
+| the same, after the edits and the new suite | 0: 59 tests in 9 suites |
+| `swift test … --filter FeatureProgramTests` | 0: 260 tests in 25 suites |
+| `swift test … --filter LedgerDomainTests` | 0: 1222 tests in 186 suites |
+| `scripts/check.sh --lint-only` | 0 |
+
+Free disk stayed between 7.0 and 8.2 GB.
+
+Round 2 complete.

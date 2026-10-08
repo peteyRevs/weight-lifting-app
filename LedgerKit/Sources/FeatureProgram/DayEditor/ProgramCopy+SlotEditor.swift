@@ -224,15 +224,15 @@ nonisolated extension ProgramCopy {
     }
 
     static var supersetWithNext: String {
-        String(localized: "Superset with next", bundle: .module)
+        String(localized: "Superset with next", bundle: .module, comment: "Joins the next exercise to this one")
     }
 
     static var moveUp: String {
-        String(localized: "Move up", bundle: .module)
+        String(localized: "Move up", bundle: .module, comment: "Carries an exercise towards the top of its day")
     }
 
     static var moveDown: String {
-        String(localized: "Move down", bundle: .module)
+        String(localized: "Move down", bundle: .module, comment: "Carries an exercise towards the foot of its day")
     }
 
     static var remove: String {

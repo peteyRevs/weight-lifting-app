@@ -19,6 +19,24 @@ nonisolated extension DayEditorPresentationTests {
         #expect(content.groups.compactMap(\.id) == [301, 302, 303, 304].map { SlotID(Fixtures.uuid($0)) })
     }
 
+    @Test("A superset's last row shows the longest rest of its members, the one the workout and the minutes take")
+    func superset_lastRow_showsTheGroupsRest() throws {
+        var screen = try DayScreen(DayEditorFixtures.seedInput())
+        // Lat Pulldown rests 1:15 and Cable Lateral Raise a minute: the round rests 1:15.
+        #expect(try screen.content().row("4B").sub == "Cable · Reps 15–17 · RPE 9 · 1:15 rest")
+        #expect(try screen.content().row("4B").spokenValue.hasSuffix("1:15 rest"))
+        // The last member's own stepper still shows its own minute; raising it past 1:15 changes the row.
+        try screen.open("4B")
+        #expect(try screen.details().value("REST") == "1 min")
+        try screen.step("REST", .upward, times: 2)
+        #expect(try screen.content().row("4B").sub.hasSuffix("1:30 rest"))
+        // Raising the first member's rest changes the last row too, as it changes the minutes.
+        try screen.open("4A")
+        try screen.step("REST", .upward, times: 3)
+        #expect(try screen.content().row("4A").sub.hasSuffix("no rest"))
+        #expect(try screen.content().row("4B").sub.hasSuffix("2 min rest"))
+    }
+
     @Test("Three exercises back to back are lettered A, B and C, and only C rests")
     func superset_ofThree_lettersAndRests() throws {
         let slots = try [

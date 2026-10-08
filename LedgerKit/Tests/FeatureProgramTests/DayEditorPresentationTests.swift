@@ -5,8 +5,8 @@ import LedgerTestSupport
 import Testing
 
 /// F11 S6: the Day editor's display model for the brief's worked examples. This file holds the header, the
-/// meta line and the rows; the superset and the moves (criteria 10 and 11) are in `+Groups`, "Delete day" in
-/// `+Delete`, the odd days in `+Total`.
+/// meta line and the rows; the superset and the moves (criteria 10 and 11) are in `+Groups`, the loads in
+/// `+Loads`, "Delete day" and the odd days in `+Total`.
 @Suite("DayEditorPresentation", .tags(.feature))
 nonisolated struct DayEditorPresentationTests {
     typealias DayIndex = ProgramFixtures.DayIndex
@@ -32,7 +32,7 @@ nonisolated struct DayEditorPresentationTests {
         #expect(content.id == DayTemplateID(Fixtures.uuid(300)))
     }
 
-    @Test("A sub line names the equipment, the progression, the RPE and the rest; a superset's first says no rest")
+    @Test("A sub line names the equipment, the progression, the RPE and the rest; a superset rests its longest")
     func subLine_linearDoubleFixedDropAndNoRest() throws {
         let upperA = try DayEditorPresentation.make(DayEditorFixtures.seedInput()).content()
         #expect(upperA.rows.map(\.sub) == [
@@ -40,12 +40,13 @@ nonisolated struct DayEditorPresentationTests {
             "Dumbbell · Reps 10–12 · RPE 8 · 1:30 rest",
             "Machine · +2.5/wk · RPE 8 · 1:30 rest",
             "Cable · Reps 12–14 · RPE 9 · no rest",
-            "Cable · Reps 15–17 · RPE 9 · 1 min rest"
+            "Cable · Reps 15–17 · RPE 9 · 1:15 rest"
         ])
+        // The superset's last row shows the rest the workout takes: the pulldown's 1:15, not its own minute.
         // Lower A ends on a fixed exercise that closes a superset; Upper B's curl has a drop set.
         let lowerA = try DayEditorPresentation.make(DayEditorFixtures.seedInput(dayIndex: DayIndex.lowerA)).content()
         #expect(lowerA.rows.map(\.sub).suffix(2) == [
-            "Machine · Reps 12–14 · RPE 9 · no rest", "Machine · Fixed · RPE 9 · 1 min rest"
+            "Machine · Reps 12–14 · RPE 9 · no rest", "Machine · Fixed · RPE 9 · 1:30 rest"
         ])
         let upperB = try DayEditorPresentation.make(DayEditorFixtures.seedInput(dayIndex: DayIndex.upperB)).content()
         #expect(upperB.rows.last?.sub == "Barbell · Reps 12–14 · drop · RPE 9 · 1 min rest")

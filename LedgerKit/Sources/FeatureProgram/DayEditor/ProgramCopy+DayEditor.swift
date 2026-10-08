@@ -87,13 +87,13 @@ nonisolated extension ProgramCopy {
 
     static func equipment(_ equipment: Equipment) -> String {
         switch equipment {
-        case .barbell: String(localized: "Barbell", bundle: .module)
-        case .dumbbell: String(localized: "Dumbbell", bundle: .module)
-        case .cable: String(localized: "Cable", bundle: .module)
-        case .machine: String(localized: "Machine", bundle: .module)
-        case .bodyweight: String(localized: "Bodyweight", bundle: .module)
-        case .kettlebell: String(localized: "Kettlebell", bundle: .module)
-        case .band: String(localized: "Band", bundle: .module)
+        case .barbell: String(localized: "Barbell", bundle: .module, comment: "Equipment: a barbell")
+        case .dumbbell: String(localized: "Dumbbell", bundle: .module, comment: "Equipment: dumbbells")
+        case .cable: String(localized: "Cable", bundle: .module, comment: "Equipment: a cable machine")
+        case .machine: String(localized: "Machine", bundle: .module, comment: "Equipment: a weight machine")
+        case .bodyweight: String(localized: "Bodyweight", bundle: .module, comment: "Equipment: the lifter's own body")
+        case .kettlebell: String(localized: "Kettlebell", bundle: .module, comment: "Equipment: a kettlebell")
+        case .band: String(localized: "Band", bundle: .module, comment: "Equipment: a resistance band")
         }
     }
 
@@ -173,7 +173,7 @@ nonisolated extension ProgramCopy {
     // MARK: The foot
 
     static var addExerciseFromLibrary: String {
-        String(localized: "+ Add exercise from library", bundle: .module)
+        String(localized: "+ Add exercise from library", bundle: .module, comment: "Button under a day's exercises")
     }
 
     static var deleteDay: String {
@@ -205,6 +205,6 @@ nonisolated extension ProgramCopy {
     }
 
     static var cancel: String {
-        String(localized: "Cancel", bundle: .module)
+        String(localized: "Cancel", bundle: .module, comment: "Dismisses the confirmation; the day stays")
     }
 }

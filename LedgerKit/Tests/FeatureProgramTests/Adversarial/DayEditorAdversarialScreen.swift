@@ -127,7 +127,9 @@ nonisolated struct AdvDayScreen {
                 }
                 let shown = prescriptions(slot)[week]
                 let index = ids.count > 1 ? "\(place + 1)\(Self.letters[position])" : "\(place + 1)"
-                let rest = position < last ? "no rest" : "\(slot.rest.label) rest"
+                // Criterion 11: after the last member, the rest the workout takes: the longest of the group's.
+                let longest = ids.compactMap { slots[$0]?.rest }.max() ?? slot.rest
+                let rest = position < last ? "no rest" : "\(longest.label) rest"
                 let sub = [
                     Self.equipment[exercise.equipment] ?? "?", progressionMark(slot, shown),
                     slot.dropSets > 0 ? "drop" : nil, "RPE \(shown.rpe.label)", rest

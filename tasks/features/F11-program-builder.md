@@ -400,3 +400,8 @@ is taken only if fixes pass about 1,050). Rulings, which add to S6's ten criteri
 
 **For F15** (F11-S6-5): spoken texts that reuse drawn abbreviations ("+5/wk", "3×12", "45s") are reworded for
 VoiceOver in the accessibility pass, with the product owner's wording.
+
+**Criterion 14 of this section is withdrawn** (orchestrator, 2026-10-08; F11-S6-7): standards §7 makes the
+English text the key, so "rest" the day and "rest" the pause stay one key with a translator's comment that
+names both uses. How the localization rule tells two uses of one English text apart is a question for the
+first translation and for the product owner; it is not decided here.

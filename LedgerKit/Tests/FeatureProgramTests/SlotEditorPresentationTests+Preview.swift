@@ -79,7 +79,7 @@ nonisolated extension SlotEditorPresentationTests {
     }
 
     @Test("In kilograms the strip and the line print kilograms, by the unit's steps")
-    func weekStrip_kilograms() throws {
+    func weekStrip_kilograms_printsKilogramsByTheUnitsSteps() throws {
         let incline = Fixtures.CatalogID.inclineDBPress
         let slot = try DayEditorFixtures.slot(
             1,
