@@ -78,6 +78,16 @@ nonisolated struct FeatureProgramSourceTests {
         let read = try CopyAudit.sources(ofModule: "FeatureProgram").keys.filter(Self.canHoldLogic)
         #expect(read.count >= 5, "the files that hold logic were not found: \(read.sorted())")
         #expect(read.contains("ProgramBuilderAction.swift") && read.contains("ProgramPresentation+Weeks.swift"))
+        // The Day editor's files (F11 S6 criterion 9) are read too, from their folder.
+        for name in [
+            "DayEditorPresentation.swift",
+            "DayEditorPresentation+Rows.swift",
+            "DayEditorAction.swift",
+            "SlotEditorPresentation.swift",
+            "SlotEditorPresentation+Preview.swift"
+        ] {
+            #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")
+        }
     }
 
     @Test("The presentations, the copy and the models never name Double: weights stay exact")

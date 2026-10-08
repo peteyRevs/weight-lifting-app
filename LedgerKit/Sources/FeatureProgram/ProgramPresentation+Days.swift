@@ -26,9 +26,10 @@ nonisolated extension ProgramPresentation {
         )
     }
 
-    /// A day's sets as the brief counts them: every slot's sets and its drop sets.
-    static func setCount(of day: DayTemplate) -> Int {
-        day.slots.reduce(0) { $0 + $1.sets + $1.dropSets }
+    /// A day's sets as the brief counts them: every slot's sets and its drop sets. A slot with a prescription
+    /// counts the prescription's sets (a deload week trains one fewer), as `TimeEstimate.minutes` does.
+    static func setCount(of day: DayTemplate, prescriptions: [SlotID: Prescription] = [:]) -> Int {
+        day.slots.reduce(0) { $0 + (prescriptions[$1.id]?.sets ?? $1.sets) + $1.dropSets }
     }
 
     static func card(of day: DayTemplate, _ context: Context) -> ProgramBuilderModel.DayCard {

@@ -69,12 +69,7 @@ nonisolated extension ProgramPresentation {
 
         init(_ input: ProgramBuilderInput) {
             self.input = input
-            let places = input.program.weeks.indices
-            if places.contains(input.selectedWeek) {
-                selected = input.selectedWeek
-            } else {
-                selected = input.selectedWeek < 0 ? 0 : places.last ?? 0
-            }
+            selected = ProgramPresentation.nearestPlace(to: input.selectedWeek, in: input.program.weeks.indices)
             let weekStart = input.settings.weekStart
             weekdays = Weekday.allCases.filter { $0 >= weekStart } + Weekday.allCases.filter { $0 < weekStart }
             var calendar = input.calendar
@@ -100,6 +95,15 @@ nonisolated extension ProgramPresentation {
         func name(of weekday: Weekday) -> String {
             ProgramPresentation.symbol(of: weekday, in: names)
         }
+    }
+
+    /// The week a selection means: `place` when the block has it, the first week for a place before the
+    /// block, the last for one after it, and 0 in a block with no week.
+    static func nearestPlace(to place: Int, in places: Range<Int>) -> Int {
+        if places.contains(place) {
+            return place
+        }
+        return place < 0 ? 0 : places.last ?? 0
     }
 
     /// The symbol of `weekday` among a calendar's weekday symbols, which Foundation orders from Sunday; empty

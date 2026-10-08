@@ -109,6 +109,23 @@ public struct Slot: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+// MARK: - The start load and the step in a unit
+
+public extension Slot {
+    /// Spec §7.2 `start = slot.load ?? W0`: the load week 1 starts from, in `units`. The slot's own when it
+    /// has one, else the start load of `exercise` in `units`. `exercise` is the slot's exercise; the pair is
+    /// not cross-checked.
+    func resolvedStartLoad(exercise: Exercise, units: Units) -> Weight {
+        startLoad ?? exercise.startLoad(in: units)
+    }
+
+    /// Rule 1 (decisions #9 and #22): the step the slot's load moves by, in `units`. The slot's own when it
+    /// has one, else the default step of the exercise's equipment in `units`.
+    func resolvedStep(exercise: Exercise, units: Units) -> Weight {
+        step ?? exercise.equipment.defaultStep(in: units)
+    }
+}
+
 // MARK: - Codable (re-validates)
 
 extension Slot {

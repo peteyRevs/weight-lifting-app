@@ -67,8 +67,8 @@ public extension DayEditing {
         exercise: Exercise,
         units: Units
     ) -> Weight {
-        let load = slot.startLoad ?? exercise.startLoad(in: units)
-        let step = slot.step ?? exercise.equipment.defaultStep(in: units)
+        let load = slot.resolvedStartLoad(exercise: exercise, units: units)
+        let step = slot.resolvedStep(exercise: exercise, units: units)
         let multiple = load.rounded(toStep: step, direction == .upward ? .up : .down)
         let isPastLoad = direction == .upward ? multiple > load : multiple < load
         let next = isPastLoad ? multiple : multiple.advanced(bySteps: direction == .upward ? 1 : -1, of: step)
