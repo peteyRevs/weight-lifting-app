@@ -33,6 +33,25 @@ nonisolated enum TodayCopy {
         )
     }
 
+    // MARK: When Today cannot be shown
+
+    /// The title in place of the screen when its data cannot be read (Pete's decision 5, the default wording).
+    static var failedTitle: String {
+        String(
+            localized: "Can't show today right now",
+            bundle: .module,
+            comment: "Title shown in place of the Today screen when its data cannot be read"
+        )
+    }
+
+    static var failedBody: String {
+        String(
+            localized: "Your workouts are still on this iPhone. Open the app again to try once more.",
+            bundle: .module,
+            comment: "Under the title shown when the Today screen's data cannot be read"
+        )
+    }
+
     // MARK: Tiles
 
     /// The sessions planned this week, drawn light after the number done: "2" then "/4".

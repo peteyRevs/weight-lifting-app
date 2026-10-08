@@ -43,6 +43,12 @@ nonisolated struct TodayPurityAdversarialTests {
         return kept
     }
 
+    /// The files that may hold no word: all but the copy files and, since S4, the previews' registry, whose
+    /// names are a developer's (Debug builds only; standards §7 leaves a `*+Previews.swift` unread).
+    static func holdsNoCopy(_ source: Source) -> Bool {
+        !source.name.hasPrefix("TodayCopy") && !source.name.hasSuffix("+Previews.swift")
+    }
+
     static func hits(_ pattern: String, in sources: [Source]) -> [String] {
         sources.flatMap { source in
             source.lines.enumerated().compactMap { index, line in
@@ -71,7 +77,7 @@ nonisolated struct TodayPurityAdversarialTests {
 
     @Test("Outside the copy files no source holds a word a lifter could read, or looks one up")
     func words_liveInTheCopyFiles() throws {
-        let other = try Self.sources().filter { !$0.name.hasPrefix("TodayCopy") }
+        let other = try Self.sources().filter(Self.holdsNoCopy)
         // A literal with a letter in it, once its interpolations are taken out.
         let worded = other.flatMap { source in
             source.lines.enumerated().compactMap { index, line -> String? in
@@ -86,7 +92,7 @@ nonisolated struct TodayPurityAdversarialTests {
 
     @Test("Outside the copy files the one literal that joins texts is the middle dot between spaces")
     func joiner_isTheMiddleDot() throws {
-        let other = try Self.sources().filter { !$0.name.hasPrefix("TodayCopy") }
+        let other = try Self.sources().filter(Self.holdsNoCopy)
         // Every string literal that is not empty and not the separator: S3 criterion 10 joins fragments with
         // " · ", and standards §7 keeps every other text a lifter reads or hears in the catalog.
         let literals = other.flatMap { source in
@@ -124,8 +130,9 @@ nonisolated struct TodayPurityAdversarialTests {
     func lookups_takeTheInjectedLocale() throws {
         let copy = try Self.sources().filter { $0.name.hasPrefix("TodayCopy") }
         let calls = copy.flatMap { Self.lookups(in: $0.lines.joined(separator: "\n")) }
-        // Round 1's 49, the four spoken lines of criterion 14 and the sentences of criteria 16 and 17.
-        #expect(calls.count == 55, "the catalog holds 55 keys")
+        // Round 1's 49, the four spoken lines of criterion 14, the sentences of criteria 16 and 17, and the two
+        // texts of the failed state (S4, by the orchestrator's ruling of 2026-10-08).
+        #expect(calls.count == 57, "the catalog holds 57 keys")
         let withoutBundle = calls.filter { !$0.contains("bundle: .module") }.map { String($0.prefix(60)) }
         #expect(withoutBundle == [])
         let carriesAValue = calls.filter { $0.contains("\\(") }

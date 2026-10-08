@@ -253,6 +253,17 @@
         }
       }
     },
+    "Can't show today right now" : {
+      "comment" : "Title shown in place of the Today screen when its data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show today right now"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -577,6 +588,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your block starts on %@."
+          }
+        }
+      }
+    },
+    "Your workouts are still on this iPhone. Open the app again to try once more." : {
+      "comment" : "Under the title shown when the Today screen's data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workouts are still on this iPhone. Open the app again to try once more."
           }
         }
       }

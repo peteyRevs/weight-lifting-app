@@ -160,6 +160,20 @@
             TreeCase("PrimaryButton, disabled", [.button("Save workout", .notEnabled)]) {
                 PrimaryButton("Save workout") {}.disabled(true)
             },
+            TreeCase("PrimaryButton, a timer for a label: its spoken line", [.button("Resume workout, 12:48")]) {
+                PrimaryButton(
+                    label: PrimaryButtonTimerGallery.elapsed,
+                    accessibilityLabel: "Resume workout, 12:48",
+                    icon: .arrow
+                ) {}
+            },
+            TreeCase(
+                "PrimaryButton, a timer for a label, disabled",
+                [.button("Resume workout, 12:48", .notEnabled)]
+            ) {
+                PrimaryButton(label: PrimaryButtonTimerGallery.elapsed, accessibilityLabel: "Resume workout, 12:48") {}
+                    .disabled(true)
+            },
             TreeCase("PillButton, outline", [.button("Finish")]) { PillButton("Finish") {} },
             TreeCase("PillButton, filled (selected)", [.button("Chest", .selected)]) {
                 PillButton("Chest", style: .filled) {}
@@ -185,6 +199,16 @@
             },
             TreeCase("IconPillButton, pressed", [.button("Swap exercise")]) {
                 IconPillButton("Swap exercise", icon: .swap) {}.environment(\.ledgerDrawsPressed, true)
+            },
+            TreeCase("IconPillButton, a symbol (the symbol is no stop)", [.button("Settings")]) {
+                IconPillButton("Settings", systemImage: "gearshape") {}
+            },
+            TreeCase(
+                "IconPillButton, a symbol, at the largest text size of the matrix",
+                at: SnapshotAppearance(.dark, .accessibility3),
+                [.button("Settings")]
+            ) {
+                IconPillButton("Settings", systemImage: "gearshape") {}
             }
         ]
 
