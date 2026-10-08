@@ -63,6 +63,14 @@ struct SupersetRoundsTests {
         #expect(SupersetRounds.groupRest(block: outOfRange, exercises: exercises) == .defaultRest)
     }
 
+    @Test("The longest of the rests handed in is the group's; one rest is its own, and none is the default")
+    func groupRestOfRests_isTheLongest() throws {
+        let rests = try [75, 60, 120].map { try #require(RestDuration(seconds: $0)) }
+        #expect(SupersetRounds.groupRest(of: rests).seconds == 120)
+        #expect(SupersetRounds.groupRest(of: [rests[1]]).seconds == 60)
+        #expect(SupersetRounds.groupRest(of: []) == .defaultRest)
+    }
+
     @Test("A shorter member drops out of later rounds")
     func unequalSetCounts_shorterMemberLeavesLaterRounds() throws {
         let exercises = try [exercise(0, working: 4), exercise(1, working: 2, superset: true)]
