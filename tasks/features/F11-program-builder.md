@@ -332,3 +332,47 @@ approved with six should-fix items. Rulings, which add to S5's eleven criteria:
     edit, which is S13's to build); standards §7 gains the sentence of ruling 3 (S-4), as the reviewer words it.
 17. **Criterion 14, as built** (F11-S5-5, round 2): the rename is the action `ProgramBuilderAction.rename(_:)`,
     which takes the typed text; it is not a field of the model, since the model cannot know the text.
+
+## Plan amendments — slice S6, the Day editor's and the slot editor's presentation (orchestrator, 2026-10-08)
+
+The plan's S6 and S7 as one pull request (Pete asked on 2026-10-08 for larger batches; the number S7 is not
+used). Cut from `main`, which holds the builder's presentation (S5) and the editing rules. The logic and the
+words of the Day editor screen, including the panel that opens under one exercise, with no view and no store:
+pure functions in `FeatureProgram/DayEditor/` in the form `ProgramPresentation` has, and their copy files and
+catalog entries. About 720 product lines planned (the plan's S6 and S7 rows list the files); one pull request
+while it stays under about 1,000. The slice is accepted when:
+
+1. **One input, one model.** `DayEditorPresentation.make` takes one input value (the program, the day's id,
+   the exercises, the settings, the week shown, the open slot if any, the calendar and locale) and returns a
+   model whose every string is final and whose every action is a value the store applies with one
+   `ProgramEditing.updateDay` around one `DayEditing` call, or a `ProgramRoute`. A day the program no longer
+   holds gives a model that says so (the store closes the editor).
+2. **The header and the meta line** (brief, "Copy (exact)"): the day's name and tag, "Week n" with the counts
+   of that week's prescription (behaviour 13: a deload week counts its own sets and minutes), back and done.
+3. **The rows** (criteria 7, 10, 11): each exercise's name, its sub line (sets × reps or range, load in the
+   lifter's unit, RPE, rest as "45s" / "2 min" / "2:30", "no rest" inside a superset), the superset headers
+   ("2 exercises back to back · rest after B") with letters A, B, …, a drop set's mark; a slot whose exercise
+   is not stored is listed under a dash and can be removed (behaviour 19).
+4. **The open slot's fields** (criteria 8, 9): the six steppers with their labels ("REPS" / "REP FLOOR" and
+   "TOP OF RANGE" for double progression), each value drawn, each "−" and "+" an action carrying
+   `DayEditing.set(DayEditing.stepped(…))`'s field so that the store adds nothing; the progression chips with
+   the note ("Adds a rep each week up to 10, then +5 lb back at 8."), the drop-set switch, the superset
+   action that applies ("Superset with next" or "Break out"), move up, move down and remove, each present
+   only when it can do something.
+5. **Every week's prescription** (criterion 7): the selected week's line and the strip "W1 50 · W2 50 · …"
+   from `ProgressionRules.prescriptions`, with "(deload)" and " · HELD" where they apply, the eyebrow
+   "WEEK 8 · DELOAD", in pounds and in kilograms.
+6. **Delete day** (Pete's decision 4, default): the button, and the confirmation's title and lines ("Delete
+   Lower B?", "It's scheduled in 8 weeks. Those days become rest.", one week, nowhere), as values.
+7. **Words.** Every text is the brief's "Copy (exact)" or the plan's decision 6, resolved in the module's
+   copy files from `FeatureProgram`'s catalog under standards §7; equipment and progression names are entries
+   of this catalog; spoken texts (each stepper as one adjustable element with its value; rows; headers) are
+   copy. Texts the brief does not give are listed in the notes for Pete.
+8. **No rule of its own.** Limits, coupling, steps, groups, moves, counts and minutes come from
+   `LedgerDomain`. The start load and the step a slot resolves to become two small functions on `Slot`
+   used by `ProgressionRules`, `DayEditing` and this presentation (the note "For S7" of S1's rulings).
+9. **Pure and total.** No ambient clock, calendar, locale or zone (the module's source test covers the new
+   files); nothing traps for a day with no slots, one slot, a week out of range, an open slot the day no
+   longer holds (read as none open); the same input gives the same model.
+10. **Absolute where it can be.** Field edits name the value they set; the drop set and the superset name
+    the state they turn to; only move and remove are relative, and the model marks them so.
