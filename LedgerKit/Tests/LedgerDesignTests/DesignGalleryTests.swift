@@ -16,7 +16,8 @@
                 "PrimaryButton", "PillButton", "IconPillButton", "LedgerIcon", "LedgerIconView", "Eyebrow",
                 "HairlineList", "HairlineRow", "HairlineRule", "SetRow", "SetRowHeader", "SetRowSteppers",
                 "RestRing", "WeekStrip", "StatTile", "StatTileRow", "ProgressSegments", "SheetChrome", "EmptyState",
-                "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock"
+                "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock",
+                "StepperField", "LedgerToggleStyle", "WrapLayout"
             ]
             /// Every token type in `LedgerDesign/Tokens`.
             static let tokenTypes = [

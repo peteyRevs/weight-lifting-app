@@ -145,7 +145,7 @@
 
     /// The tables: every component in every state it offers, and its intended tree.
     nonisolated enum TreeTables {
-        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings + slice3
+        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings + slice3 + forms
 
         nonisolated static let buttons: [TreeCase] = [
             TreeCase("PrimaryButton with an icon", [.button("Start workout")]) {
