@@ -376,3 +376,27 @@ while it stays under about 1,000. The slice is accepted when:
    longer holds (read as none open); the same input gives the same model.
 10. **Absolute where it can be.** Field edits name the value they set; the drop set and the superset name
     the state they turn to; only move and remove are relative, and the model marks them so.
+
+## Plan amendments — slice S6 after round 1 (orchestrator, 2026-10-08)
+
+The tester found no bug (53 tests against its own model of the screen; six questions and notes) and the
+reviewer approved with four should-fix items and recommends one pull request at about 1,007 lines (the seam
+is taken only if fixes pass about 1,050). Rulings, which add to S6's ten criteria:
+
+11. **A superset shows the rest the workout takes** (review S-1): the line after a superset's last exercise
+    reads the rest the Domain gives the group (the longest of its members'), not that row's own. The seed's
+    Upper A superset reads 1:15. (The prototype printed the row's own; listed for Pete.)
+12. **Set counts come from the Domain** (review S-3): `TimeEstimate` gains the count of sets for a day and
+    for a week's prescription; the builder's and the Day editor's presentations call it and sum nothing.
+13. **No queued edit is safe to send twice** (review S-2): the comment on `isRelative` says that the mark is
+    about drawing an edit again over a program that already has it, not about replaying a queue; a test
+    pins an example in which two unmarked edits replayed give another program.
+14. **"Rest" the day and "rest" the pause are different texts** (F11-S6-4): separate keys with translators'
+    comments, although the English is the same.
+15. **Kept as built:** in a deload week a row's line shows that week's prescription, RPE included
+    (F11-S6-1, -3); `isHeld` is false in a deload week (F11-S6-2); remove is marked relative (F11-S6-6); both
+    superset actions can show (spec §3.4 e); a slot whose exercise is missing is listed and removable only.
+16. **Housekeeping:** no whole model inside an expectation (review S-4).
+
+**For F15** (F11-S6-5): spoken texts that reuse drawn abbreviations ("+5/wk", "3×12", "45s") are reworded for
+VoiceOver in the accessibility pass, with the product owner's wording.

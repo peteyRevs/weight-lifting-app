@@ -939,3 +939,312 @@ Three things that are the brief's own wording, built as written, that you may no
 - The tester's files and findings for this slice were not read, as instructed.
 - `docs/architecture.md`: §4's routing rules and §12 were read; §5 and §11 were not (no Domain change and
   no view in this slice).
+
+---
+
+## Slice S6 — review (G3 reviewer, 2026-10-08)
+
+Reviewed: `git diff 7e15f61..63f397f` on `feat/F11-s6-day-slot-presentation` (the committed slice; the
+tester's untracked `Adversarial/DayEditor…` files were not read). Paths are under `LedgerKit/` unless they
+begin with `docs/`, `design/` or `tasks/`; `DayEditor/…` is `Sources/FeatureProgram/DayEditor/…` and
+`Tests/…` is `Tests/FeatureProgramTests/…`.
+
+### Verdict
+
+**Approved: 0 Blocking, 4 Should fix, 11 Nit.** The slice does what its ten criteria ask. `make` reads its
+input and nothing else; every text is the brief's, character for character, or is listed for Pete; each edit
+is one Domain call; the numbers are the Domain's in both units; nothing of a view or a store is in it.
+
+What I ran, on the host: `swift build --build-tests` exit 0, with no error or warning line (an incremental
+build of an up-to-date tree, about 4 s). The tester's files then appeared and stopped `FeatureProgramTests`
+from compiling (`Adversarial/DayEditorAdversarialScreen.swift:143`, `:194`: `AdvDayPanel` not in scope), so
+the tests were run with `swift test --skip-build` from the binaries of that first build, which was made from
+the committed tree alone: `FeatureProgramTests` 199 tests in 16 suites passed; the Domain suites named
+`DayEditing…`, `ProgressionRules…` and `Slot · resolved start load and step` 157 tests in 19 suites passed;
+`ModuleCopyTests` 6 passed. No helper process was left running.
+
+### Should fix
+
+**S-1. The last member of a superset shows its own rest; the workout rests the longest member's.**
+`DayEditor/DayEditorPresentation+Rows.swift:98`, under the header built at `:41-44`.
+- *What.* A row of a superset's last member prints `slot.rest`. The Domain rests a superset once a round
+  for the longest rest among its members (decision #7; `Sources/LedgerDomain/Rules/SupersetRounds.swift:43-47`),
+  and `TimeEstimate.minutes` counts that rest (`Rules/TimeEstimate.swift:22`, `:26`). The seed program shows
+  the difference on its first day: Lat Pulldown rests 75 s and Cable Lateral Raise 60 s
+  (`Sources/LedgerFakes/Fixtures/Fixtures+Program.swift:73`, `:78`), so Upper A reads "4A … no rest" and
+  "4B … 1 min rest" under "rest after B" (pinned at `Tests/DayEditorPresentationTests.swift:42-43`), while
+  the workout rests 1:15 and the header's "~39 min" counts 1:15. Stepping 4A's REST changes the minutes and
+  no row shows why; stepping 4B's below 4A's changes the row and not the workout.
+- *Why it is not Blocking.* It is the prototype's line (`design/prototype/Ledger.dc.html:1370`) and the
+  brief's ("no rest" for non-last members), so the slice is built as specified. The specification and the
+  Domain disagree, and criterion 8 says a rest is the Domain's to decide.
+- *Fix.* A ruling, then a few lines. Recommended: the last member's row prints the group's rest, from a
+  Domain function over slots (for example `SupersetRounds.rest(of slots: [Slot]) -> RestDuration`, which
+  `TimeEstimate.minutes` then also calls), and `subLine` takes that value; one test on Upper A ("1:15 rest").
+  If Pete prefers the prototype's line, record it as a decision so that S11 does not rediscover it.
+
+**S-2. `isRelative` reads as a promise that the other edits may be sent again; a queue of them may not.**
+`DayEditor/DayEditorAction.swift:30-31` ("such an edit reaches the stored program exactly once, and is never
+sent again after a failed save") and `:55-57`; the notes' "Inputs for the stores", "Relative edits".
+- *What.* Every edit not marked is safe applied twice on its own, and the tests show it
+  (`Tests/DayEditorActionTests.swift:104-114`, the property at `DayEditorPresentationPropertyTests.swift:49-53`).
+  A queue of them is not. On the day [Z, A, B]: "Superset with next" on A is `setSuperset(true, slot: B)`,
+  then "Remove" on A leaves [Z, B] with B leading (`Sources/LedgerDomain/Programs/DayEditing.swift:88-95`).
+  Applied again to that result, `setSuperset(true, slot: B)` joins B to Z (`DayEditing.swift:125-129`: the
+  edit means "the slot before it", whoever that now is) and the removal finds nothing: the day ends as
+  [Z, B joined to Z]. This is read from the code, not run. A superset edit is absolute in its state and
+  relative in its neighbour.
+- *Why it matters.* S5's ruling 12 made edits absolute so that a screen drawn as "stored + waiting edits"
+  when the stored program already holds them is still right. For the Day editor that holds for one edit and
+  not for every queue, and a store author who reads the mark as "safe to re-apply" builds the wrong thing.
+- *Fix.* No behaviour changes. Reword the comment at `DayEditorAction.swift:30-31` and the notes: every
+  queued edit, marked or not, reaches the stored program exactly once, and the sent edits are dropped
+  before the screen is redrawn from the stored program; the mark says only which single edits differ when
+  repeated. Add the example above as one test in `DayEditorActionTests` so the limit is pinned.
+
+**S-3. The day's sets are still summed in the feature, after a second deferral.**
+`Sources/FeatureProgram/ProgramPresentation+Days.swift:31-33`, called at `DayEditor/DayEditorPresentation.swift:64`.
+- *What.* Criterion 8 lists counts among what comes from `LedgerDomain`. `setCount` knows two things the
+  Domain also knows inside `TimeEstimate.minutes` (`Rules/TimeEstimate.swift:21-24`): a prescription's sets
+  replace the slot's, and a drop set is one more set. S5's deviation 8 left this for S6; S6 leaves it for F09.
+- *Why it matters.* The header prints the count beside minutes worked out from the same sum; two copies can
+  part, and no test would say which is wrong.
+- *Fix.* Now, since this pull request already changes `LedgerDomain`: `TimeEstimate.setCount(day:prescriptions:) -> Int`
+  beside `minutes`, used by `minutes` and by `ProgramPresentation.setCount` (about six lines and one test). If
+  the orchestrator prefers not to touch the Domain again here, amend criterion 8 to say so; do not defer a
+  third time without a named slice.
+
+**S-4. Whole models are compared inside expectations** (S5's ruling 16, for `Program` there). A failure
+prints the entire `DayEditorModel`, `Details` or `DayTemplate`. Every place:
+`Tests/DayEditorPresentationTests+Total.swift:41`, `:51`, `:61`, `:63` (`… == .dayIsGone`), `:129`, `:145`
+(`details == nil`); `Tests/DayEditorPresentationPropertyTests.swift:22` (`model == .dayIsGone`), `:101`
+(`screen.day == nil`).
+- *Fix.* As the files do elsewhere: `let isGone = model == .dayIsGone; #expect(isGone)`, or a small
+  `var isGone: Bool` on the model in `Support/DayEditorTesting.swift`; `details == nil` as
+  `let hasDetails = … != nil`. The other comparisons in the new files are of strings, flags, ids or three
+  edits at most, and are fine.
+
+### Nit
+
+- **N-1. A removal is marked relative and is not.** `DayEditor/DayEditorAction.swift:73`. By the brief's own
+  definition ("applied twice they do not give what one application gives") and by this slice's test
+  (`Tests/DayEditorActionTests.swift:121-126`) a removal is absolute; criterion 10 names it relative. See the
+  ruling below; either way the comment at `:55-57` should say which definition the mark follows.
+- **N-2. Two comments promise more than the model gives.** `DayEditor/DayEditorModel.swift:24` and
+  `SlotEditorModel.swift:5`: "A control that could do nothing is absent", yet a stepper at its limit and
+  its two actions are always there (`SlotEditorModel.swift:43-44` says so). Add "but a stepper" to both.
+- **N-3. Stale file name in a comment.** `Tests/DayEditorPresentationTests.swift:8-9` says "Delete day" is in
+  `+Delete`; it is in `+Total`.
+- **N-4. The source test does not name the file that holds the steps.**
+  `Tests/FeatureProgramSourceTests.swift:82-88` lists five Day editor files; add
+  `SlotEditorPresentation+Fields.swift`, the one a clamp would most likely be written in. (It is read today:
+  the check reads every file of the module; the list only proves it.)
+- **N-5. `Row.hasDropSet` has no stated use.** `DayEditor/DayEditorModel.swift:91-92`. The sub line already
+  says "drop", and the notes' list of facts that pick a colour leaves it out. Say what S10 does with it, or
+  remove it.
+- **N-6. One-word keys without a translator's comment.** `DayEditor/ProgramCopy+DayEditor.swift:90-96`
+  ("Band", "Cable" and "Machine" read as other things alone), `:176`, `:208`, and
+  `ProgramCopy+SlotEditor.swift:227`, `:231`, `:235`. Not required by §7 (no value), cheap to add.
+- **N-7. A program with no weeks is drawn as if every exercise were missing.**
+  `DayEditor/DayEditorPresentation.swift:122`: stored exercises read "—". `Program.init` refuses such a
+  program, so nothing reaches it but a test (`+Total.swift:136`); leave it, or split the guard so the name
+  survives.
+- **N-8. "HELD" on a slot that holds nothing.** `DayEditor/SlotEditorPresentation+Preview.swift:60-62` takes
+  the Domain's `isHeld`, which is "the week before was missed" for every progression. A fixed slot then
+  reads "W5 160 (held)" under "Stays at 160 lb for the whole block." The flag is the Domain's and spec §7.2's;
+  a question for Pete with F24, not for this slice.
+- **N-9. Every week's prescription is worked out for every slot on each `make`**
+  (`DayEditorPresentation.swift:125-131`), though only the open slot's strip needs the block. About
+  slots × weeks calls; far inside the 16 ms budget at 8 × 16. Leave unless S14's timing test says otherwise.
+- **N-10. Two test names lack their expectation** (testing-strategy §6):
+  `Tests/SlotEditorPresentationTests+Preview.swift:82` `weekStrip_kilograms`,
+  `SlotEditorPresentationTests+Progression.swift:33` `progression_notes_kilograms`.
+- **N-11. `Group.id` is optional** (`DayEditor/DayEditorModel.swift:62-64`) to avoid an unreachable branch.
+  It works as an `Identifiable` id; a stored `let id: SlotID` set where the group is built
+  (`DayEditorPresentation+Rows.swift:32`) would be plainer. Leave if it costs a branch.
+
+### The bug pass (`/code-review`, effort high)
+
+Run through the Skill tool on the range and the worktree path, told to run no `git checkout`, `switch`,
+`reset`, `stash` or `commit`; afterwards the main checkout is on `main`, clean, with no stash, and this
+worktree is on its branch.
+It returned ten candidates. Kept: the superset's rest (S-1); the superset edit's dependence on order, which
+I narrowed to the queue case (S-2); the no-weeks fold (N-7); HELD on a fixed slot (N-8); every week for
+every slot (N-9); derived state (N-11). Not findings: steppers offered at their limit (the plan's behaviour
+11, pinned); two taps from one model give one step (the cost of absolute edits, in "What the views and the
+stores must be told"); the row's spoken value in drawn form (the plan's VoiceOver tree writes it so; S11's
+pass); "REST" with two meanings (deviation 18, ruled below).
+
+### The split: recommendation
+
+**One pull request.** Its description must carry the line standards §10 asks for: 1,007 code lines, and the
+split considered (the week strip and the delete confirmation, about 185).
+
+- *Why one.* The figure is seven lines past "about 1,000", and 353 of the lines are copy lookups that are
+  checked mechanically (I compared the 68 keys with the brief by script, and the gate compares catalog and
+  code). The logic is 434 lines in five files, none over 161 lines, all pure, at 100 % line coverage, and
+  it was reviewable in one sitting. The two halves test each other: a row embeds its panel, and the strip
+  is how criteria 5 and 7 are read.
+- *Cost of one.* A precedent a hair past the line, and a fix round that must not grow it: S-1 and S-3 add
+  about twelve Domain lines and remove none here. If the fix round takes it past about 1,050, take the
+  smaller seam then (the delete confirmation, about 60 lines, which nothing else reads).
+- *Cost of two.* A second G1 to G5 cycle and a second paid CI run for 185 lines; no stacked pull requests,
+  so the second waits for the first to merge; S10 and S11 need both before they draw, so nothing starts
+  sooner; and the first half would ship a panel with no week line, which no criterion describes.
+- *For the plan.* The overrun is the copy (353 against 260) and an action file the plan again did not list.
+  Planning figures for a presentation slice should count about five lines a key and the action file.
+
+### Verdict on each point
+
+**The models as interfaces: sound.** A view is handed final strings, ids for `ForEach`, flags for accents,
+and an action per control; I found no decision left to a view but two that are design's: which of `label`
+and `spokenLabel` a stepper draws (Pete's decision 1), and what `hasDropSet` is for (N-5). The store fills
+seven fields and applies four action cases, and `DayScreen.tap` (`Tests/Support/DayEditorTesting.swift:125-139`)
+is that contract in fifteen lines. `.open` and `.openLibrary` storing nothing is right: both are screen
+state, as `.selectWeek` is in the builder. **The store owns the open slot**, because the model is a function
+of it (the panel is built for that slot alone); the view owns only whether the delete confirmation and the
+library sheet are showing. `.dayIsGone` as a case, not an optional, is the right shape (standards §5).
+
+**The actions: sound, with S-2.** `SlotEdit.applied` is one `DayEditing` call per case
+(`DayEditorAction.swift:78-93`) and `DayEditorEdit.applied` one `ProgramEditing` call (`:41-50`): `renameDay`
+and `deleteDay` are the Domain's own functions for those edits and `updateDay { DayEditing.… }` the rest,
+which is the honest reading of criterion 1. All three are synchronous, non-throwing and hold only `Sendable`
+values, so `programs.update(id) { edits.reduce($0) { $1.applied(to: $0) } }` compiles inside the `@Sendable`
+closure of `Repositories.swift:61`. **The marks:** `move` is truly relative; `remove` is not (N-1). A wrong
+mark on `remove` costs S13 and S14 nothing as specified, because every waiting edit is dropped after a
+failed `update` whatever its mark; it would cost something only if a store gave marked edits a heavier path
+(waiting for the write, disabling the control), which Remove would then take for no reason. **`closesPanel`
+is a display fact**, the spec's (`docs/product-spec.md:247-248`), carried on the action so the store decides
+nothing; it is not a rule of training. It is needed only for the two superset actions: after a removal or a
+delete the open slot is read as none anyway.
+
+**Numbers: correct.** Loads, steps and start loads go through `Weight.formatted(in:)`, RPE and rest through
+their `label`; no `Double` (source test, and by reading). The strip is `ProgressionRules.prescriptions`
+(`DayEditorPresentation.swift:125`), one entry a week, with "(deload)" and "(held)", a deload winning over
+a hold as the prototype does (`Ledger.dc.html:1373`). The meta line counts the shown week's sets and minutes
+(`:59-65`), and a slot without a stored exercise counts its own, as `TimeEstimate` does. Kilograms: the
+equipment's step in the lifter's unit, kettlebell 2 kg, pinned. The one wrong number on screen is S-1.
+
+**`Slot.resolvedStartLoad` / `resolvedStep`: correct.** `Sources/LedgerDomain/Model/Slot.swift:118`, `:124`
+are the two fallbacks word for word; `ProgressionRules.swift:29-30` and `DayEditing+Fields.swift:70-71` call
+them and nothing else changed there; no other copy of the pair is left in `Sources`. The only existing test
+file the diff modifies is `FeatureProgramSourceTests.swift` (ten added lines); the Domain's suites pass
+untouched.
+
+**The words: as the brief.** Of the 44 texts "Copy (exact)" quotes for the Day editor, 34 are catalog keys
+character for character (×, –, − included; compared by script); the other ten are joined lines or examples
+("W8 240 (deload)", "4A"), present as their fragments under §7's rule of one counted value a key. The
+confirmation's four texts, quoted in the builder's half of that paragraph, are keys too. Every key with two or more values has a translator's comment naming their
+order. The two counted keys have `one` and `other`. Equipment (seven) and progression (three) names are this
+catalog's own entries, one lookup a case. Splits and other languages: "%@, %@", "W%lld %@ (held)" and
+"DAY %lld OF %lld" hold no counted value and can be reordered with positional specifiers; the fragments
+"drop", "no rest", "%@ rest" and "rest after %@" are lower-case pieces of a " · " list, which a language
+that capitalises nouns handles and one that needs agreement across the dot cannot, as with every joined line
+in M1. "%lld%@" and "%lld×%lld" are keys with no word: harmless, and they carry the locale's digits.
+
+**Purity and structure: sound.** Every new type is `nonisolated`; imports are Foundation and `LedgerDomain`;
+no ambient read (the one formatter is given the injected locale,
+`SlotEditorPresentation+Fields.swift:52`); the three source checks read the new folder (N-4). Largest file
+241 lines, largest function about 25; no suppression; nothing reads as squeezed (the comments are full
+sentences and the lookups one a line).
+
+**Tests: good, with S-4.** They tap the model's controls and read the next model, as a store will; expected
+strings are written out; criteria 7 to 11 of the brief each have a test that quotes it (the strip and reps
+of rule 10, "W8 240 (deload)" and "WEEK 8 · DELOAD", HELD; the reps and top-of-range coupling and each
+clamp; Double from 8 and 9 to 10 with the note; the three moves on [1, 2, 3A, 3B, 4]; "Superset with next"
+and "Break out"). The properties check the model against the Domain on seeded days in both units and six
+locales, with the limits drawn often; no sleeps, no clock. Coverage: the orchestrator's 1,306 of 1,306 was
+not re-measured.
+
+**Boundaries and the brief.** Nothing of a view or a store is in the diff; no `LedgerAppKit`, project file,
+test plan or lint change. Criteria 1 to 10 each map to tests in the notes' table, and I found the tests
+named.
+
+**The "transient compiler error lines".** They were printed by `xcodebuild` on the simulator beside
+`LedgerPersistenceTests`. On the host the package's tests build with exit 0 and no error or warning line,
+but that build compiled only what was stale, so it neither reproduces nor explains them. Not settled here;
+what would settle it is the same `build-for-testing` on a quiet machine with the log kept.
+
+### Ruling recommendations: the deviations and the open questions
+
+| # | Matter | Recommendation |
+|---|---|---|
+| D-3 | No calendar in the input | **Accept**, and amend criterion 1: the Day editor draws no date and no weekday; a field nothing reads would be dead. |
+| D-7 | Both superset actions can show | **Accept.** It is the spec's rule (`docs/product-spec.md:247`): the last member of a superset that is not the day's last exercise has both. Criterion 4's "or" was loose. |
+| D-9, Q7 | A slot whose exercise is missing: listed, movable, removable, not editable | **Accept for M1** (nothing deletes an exercise). Note for F12: sets, reps, RPE, rest, drop set and a double or fixed mark do not need the exercise; only the load, the step and the strip do. |
+| D-11, Q2 | The set count summed in the feature | **Add the Domain function now** (S-3). A sum of the brief's formula is small, but which sets it sums is a rule the Domain already holds. |
+| — | `ProgramPresentation` gained `nearestPlace` and a `prescriptions` parameter | **Accept.** `nearestPlace` is the three removed lines moved; the default `[:]` leaves the builder's cards on the slots' own numbers, and S5's tests (58 sets a week; 39, 38, 37, 31) still pin that and passed. |
+| D-18, Q4 | "REST", "Rest", "Fixed", "Week %lld" used twice | "Fixed" and "Week %lld" mean one thing in both places: **fine**. "REST" and "Rest" mean a rest day and a rest between sets; a translation will want two words. **Ask Pete** for a second English text (for example "REST TIME") before the first translation, not before this merge. |
+| D-5, Q1 | Is a removal relative? | **Rule that it is absolute** and change `DayEditorAction.swift:73`, two tests and criterion 10's wording; or keep the mark and say in the comment that it follows the criterion's list, not the definition. I prefer the first: a mark the suite itself shows to be untrue will be misread. Either way S-2's rewording stands. |
+| D-4 | `closesPanel` on the action | **Accept** (a display fact from the spec). |
+| D-10 | "Week 1 · No exercises yet" | **Accept**; for Pete below. |
+| D-13, D-14, Q6 | One mark a week; "(held)" in the strip | **Accept** the first (the prototype's). Show Pete "(held)" with S11's screenshots, and N-8 with it. |
+| D-16 | A stepper's number formatted, not looked up | **Accept**: the locale is the injected one. |
+| D-19, Q5 | The row's spoken value and the strip to VoiceOver | **S11's VoiceOver pass decides both**; expect three or four more keys there ("+5/wk", "2:30", "W1 50" are drawn forms). |
+| D-24, Q3 | Size | One pull request (above). |
+| Q8 | What the library is handed | S8's input takes the program and the day's id, as the notes say. |
+
+### For the product owner: the texts this slice wrote
+
+| Text | Where | Judgement |
+|---|---|---|
+| "Delete day" | The button at the foot of the editor | Good; plain and parallel to "Delete" in the confirmation. |
+| "It's scheduled in 1 week. Those days become rest." | The confirmation, for a day one week trains | Correct as a plural form. "Those days" reads oddly when it is one weekday in one week; the brief's sentence does the same. Consider "It becomes rest there." only if it bothers you. |
+| "Day name" | The name field's placeholder and VoiceOver label | Good; matches "Program name". |
+| "Kettlebell", "Band" | The sub line of such an exercise | Needed (the Domain has seven kinds). "Band" alone is thin; "Resistance band" is clearer if the row has room. |
+| "W4 260 (held)" | The strip, a week after a missed one | Reasonable and parallel to "(deload)". See it on a screenshot before keeping it; see also N-8. |
+| "4A, Lat Pulldown" | VoiceOver, a row's label | Good. |
+| "Superset" | VoiceOver, a superset header's heading | Good. |
+| "Sets", "Reps", "Rep floor", "Top of range", "Start load", "Target RPE" (and "Rest") | VoiceOver, each stepper; also what decision 1 would draw | Good. "Rest" is the word with two meanings (D-18). |
+| "1 exercise back to back" | Never shown (a superset has two) | Only there because the catalog rule asks for a `one` form. |
+| "Week 1 · No exercises yet" | The header of a day with no exercise | Fine; "Week 1" says little on an empty day, and dropping it there is one line if you prefer. |
+| "%@ kg" and the kilogram form of each line with a load | Everywhere a load is printed in kilograms | The plan's row 17; the same sentences with "kg". |
+| "1 min rest" on the last exercise of a superset | A row | The brief's wording, but the number can be wrong (S-1). |
+
+### The seven review points
+
+1. **Module boundaries:** pass. `FeatureProgram` imports Foundation and `LedgerDomain`; the Domain gains two functions on `Slot` and imports nothing new.
+2. **Concurrency:** pass. Pure `nonisolated` `Sendable` values; no task, clock or id made here.
+3. **Error handling:** pass. Nothing throws; an unknown day or slot changes nothing; a missing day is a case of the model.
+4. **Design fidelity:** not applicable (no view). The model follows the prototype's lines, S-1 included.
+5. **Accessibility:** spoken labels and values exist as copy for rows, headers and steppers; the strip and the row's value are drawn forms, left to S11 (D-19).
+6. **Test quality:** pass with S-4, N-3, N-10. Behaviour through the model; seeded; no sleeps.
+7. **Brief compliance:** pass. Criteria 1 to 10 each have tests; the deviations are recorded and ruled on above.
+
+### What the views (S10, S11) and the stores (S14) must be told
+
+- **Stores.** Every queued edit reaches the stored program exactly once, whatever `isRelative` says, and the
+  edits just sent are dropped before the screen is redrawn from the stored program (S-2). Do not re-send
+  after a failed or cancelled `update`.
+- **Stores.** A stepper's edit carries a value worked out when the model was built. Apply each edit to the
+  program on screen and rebuild the model before the next intent is handled; two taps taken from one model
+  set one step, not two. That is a lost tap, never a wrong value.
+- **Stores.** A stepper at its limit, and a rename to the stored name, give an edit that changes nothing.
+  Compare `edit.applied(to: program)` with `program` and queue nothing when they are equal, so that no
+  write is made for it.
+- **Stores.** The open slot is the store's; it needs no repair after a move, a removal or a change from
+  elsewhere. `closesPanel` is the only thing that clears it besides `.open(nil)`.
+- **Stores.** The builder's edits (`ProgramBuilderEdit`) carry no `isRelative`; if S13 and S14 share a
+  queue, do not branch on the mark.
+- **Views.** Draw whole strings; never split `eyebrow`, `sub`, `strip.text` or `meta`, and never join
+  entries. Colour from the flags only. Say what `hasDropSet` does or ask for its removal (N-5).
+- **Views.** A stepper's VoiceOver adjustable action sends `increment` or `decrement` from the model on
+  screen; the same one-model rule as above applies to repeated swipes.
+- **Views.** "Expanded" and "collapsed" for a row have no text in the model. If the system trait does not
+  say it, S11 needs two spoken keys.
+- **Views.** A selected chip has no action: draw it selected and keep it in the radio group for VoiceOver.
+- **Both.** Until S-1 is ruled, the rest on a superset's last row is that exercise's own.
+
+### What I did not check
+
+- The simulator, the full gate, the watch build and coverage: not run; the orchestrator's figures stand.
+- A clean host build: mine was incremental, so the simulator's "transient error lines" are not explained.
+- The tests after the tester's files appeared were run from binaries built before them; no later source of
+  the committed slice differs, but nothing was rebuilt.
+- S-2's example is from reading `DayEditing`, not from a run.
+- The tester's files and findings: not read, as instructed.
+- `docs/architecture.md` and `docs/testing-strategy.md` beyond §6: not re-read for this slice (no route, no
+  view, no store, no migration); `docs/product-spec.md` only at `:236-248` and decision #7.
+- The catalog's layout and order against `xcstringstool`: left to the gate's string-catalog step, which the
+  orchestrator's run passed.
+- The plural rule and word order in any language but English: by reasoning only.
