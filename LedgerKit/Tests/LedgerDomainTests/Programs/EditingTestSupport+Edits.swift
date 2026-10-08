@@ -122,6 +122,24 @@ extension EditingTestSupport {
                 weekday: weekday
             )
         }),
+        ("setDeload", { program, _, generator in
+            ProgramEditing.setDeload(
+                program,
+                Bool.random(using: &generator),
+                week: someWeek(of: program, using: &generator)
+            )
+        }),
+        ("setSchedule", { program, _, generator in
+            let weekday = Weekday.allCases.randomElement(using: &generator) ?? .monday
+            // Rest one time in four; otherwise a day, which `someDay` now and then draws from outside the program.
+            let isRest = Int.random(in: 0 ..< 4, using: &generator) == 0
+            return ProgramEditing.setSchedule(
+                program,
+                week: someWeek(of: program, using: &generator),
+                weekday: weekday,
+                day: isRest ? nil : someDay(of: program, using: &generator)
+            )
+        }),
         ("copyPreviousWeek", { program, _, generator in
             ProgramEditing.copyPreviousWeek(program, week: someWeek(of: program, using: &generator))
         }),

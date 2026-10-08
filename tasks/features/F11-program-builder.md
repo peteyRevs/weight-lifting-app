@@ -258,3 +258,77 @@ should-fix items. Atomicity holds by construction on both stores. Rulings, which
 15. **One ending on both stores** (F11-S3-2, round 2): when a call is cancelled inside a change whose result
     is also refused, both stores report what the database reports. The in-memory store makes the database's
     checks in the database's order: the result's id and validity, then cancellation, then the write.
+
+## Plan amendments — slice S5, the builder's presentation (orchestrator, 2026-10-06)
+
+Cut from `main`, which now holds the tab shell and the localization rule (#28), the editing rules (S1) and the
+atomic update (S3). The logic and the words of the Program builder screen, with no view and no store: one pure
+function, `ProgramPresentation.make(_:) -> ProgramBuilderModel`, in the form `FeatureToday`'s presentation
+has on `main`. The views (S9) only draw the model and the store (S13) only fills the input and sends the
+model's actions to `ProgramEditing`. About 470 product lines planned (the plan's S5 row lists the files). The
+slice is accepted when:
+
+1. **One input, one model.** `make` takes one input value (the program, the exercises, the settings, the
+   selected week, the weeks that hold a finished workout, a notice if one is showing, the calendar and the
+   locale) and returns a model whose every string is final and whose every action is a value the store can
+   apply without deciding anything: an edit named by ids and places, or a `ProgramRoute`.
+2. **The header and the block** (criterion 1): the eyebrow "MY PROGRAM", the program's name with its
+   placeholder, "BLOCK · 8 WEEKS", "−" and "+", and one chip per week reading "W1" with "4 DAYS", or "DELOAD"
+   for a deload week, the selected one marked.
+3. **The selected week** (criteria 1 to 3): "WEEK 3" or "WEEK 3 · DELOAD"; the seven cells in the order of the
+   settings' week start, each with the weekday's letter from the injected calendar and locale and the day's
+   tag or "REST"; each cell's action is the cycle of that weekday; the hint "Tap to assign"; the week's
+   actions "First week" (disabled) or "Copy week 2", "Apply to later weeks" (absent on the last week), and
+   the deload toggle with its state.
+4. **The seed program reads as criterion 1 gives it:** W1 to W7 "4 DAYS", W8 "DELOAD"; week 1's strip
+   M UA · T REST · W LA · T REST · F UB · S LB · S REST; "4 days · 58 sets a week"; four day cards whose
+   minutes are `TimeEstimate`'s (39, 38, 37, 31).
+5. **The day cards** (criterion 5): name, tag, the meta line from the slots' own numbers (exercises, sets as
+   Σ(sets + drop sets), minutes), "No exercises yet" for an empty day, each carrying `ProgramRoute.day(id)`;
+   and "+ Add training day".
+6. **Notices** (criterion 4 and behaviour 6): "A block needs at least 2 weeks.", "Week 8 has logged sessions
+   and can't be removed.", and the notice for a weekday assigned to a day with no exercises, each a final
+   string the store shows from an error or an edit's result, built here.
+7. **Words.** Every text is the brief's "Copy (exact)" or the plan's decision 6, resolved in `ProgramCopy`
+   from `FeatureProgram`'s own String Catalog under standards §7 (one counted value per key; `locale:` when
+   a key carries a value; spoken texts are copy; no literal outside the copy files but "" and " · "). The
+   equipment names this slice needs are entries of this catalog. Texts the brief does not give are listed
+   in the notes for Pete.
+8. **Spoken texts** for the chips, the cells ("Tuesday, rest") and the cards exist, are copy, and agree with
+   what is drawn.
+9. **Pure and total.** No `Date()`, `Calendar.current`, `Locale.current` or `TimeZone.current` in the module
+   (a source test in the form of `FeatureToday`'s); nothing traps for a program with no days, a selected week
+   out of range (read as the nearest week), a day with no slots, a slot whose exercise is not stored; the
+   same input gives the same model in any order of the exercises handed in.
+10. **No rule of its own.** Counts, minutes, limits and the cycle come from `LedgerDomain`
+    (`ProgramEditing`, `TimeEstimate`, `WeekCalendar`); the presentation adds no clamp and no schedule rule.
+11. **The module is wired as `FeatureToday` is:** the target's `resources`, `FeatureProgram` in the coverage
+    thresholds, the placeholder file and its test gone; the gate's string-catalog step and `ModuleCopyTests`
+    pass with no exemption.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (44 tests, 300 cases; findings F11-S5-1 to -4 are questions and notes) and the reviewer
+approved with six should-fix items. Rulings, which add to S5's eleven criteria:
+
+12. **The screen's edits of a cell and of a deload are absolute** (review S-1). A cell's action names what the
+    cell becomes (a day's id, or rest) and the deload switch names the state it turns to, so an edit drawn or
+    applied twice gives what one application gives. `LedgerDomain` gains `ProgramEditing.setSchedule(_:week:weekday:day:)`
+    (a day the program lacks changes nothing) and `setDeload(_:_:week:)`; the cycle's order (rest, first day, …,
+    last day, rest) is one pure function the presentation asks for the next value. `cycleSchedule` and
+    `toggleDeload` stay and are written in terms of them. Adding a week, removing the last week and moving
+    stay relative, and the note "For S13 and S14" still holds for them.
+13. **With no training day, a cell offers nothing** (F11-S5-2): no action, no hint, and its spoken text says
+    only the weekday and "rest".
+14. **The name is a draft in the store** (review S-3): the model carries the stored name and a `rename` action
+    that takes the typed text; the comment says a view binds a draft, not the model's name.
+15. **Kept as built:** the seven cells follow the settings' week start (criterion 3; F11-S5-1), with the
+    letters and spoken names from the injected calendar and locale. Digits and plural forms follow the injected
+    locale (F11-S5-3): as for Today, the store hands in the app's locale, which is English while the catalogs
+    hold English only.
+16. **Housekeeping from the review:** no whole `Program` is compared inside an expectation (S-5); the source
+    test checks the `Double` spellings as Today's does (S-6); the notes no longer claim that `update` refuses
+    "−" when a workout finished meanwhile (S-2: the store reads the logged weeks again before it sends that
+    edit, which is S13's to build); standards §7 gains the sentence of ruling 3 (S-4), as the reviewer words it.
+17. **Criterion 14, as built** (F11-S5-5, round 2): the rename is the action `ProgramBuilderAction.rename(_:)`,
+    which takes the typed text; it is not a field of the model, since the model cannot know the text.

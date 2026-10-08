@@ -135,7 +135,12 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: uiSettings
         ),
-        .target(name: "FeatureProgram", dependencies: featureSpine, swiftSettings: uiSettings),
+        .target(
+            name: "FeatureProgram",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
         .target(name: "FeatureLibrary", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(name: "FeatureHistory", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(name: "FeatureSettings", dependencies: featureSpine, swiftSettings: uiSettings),

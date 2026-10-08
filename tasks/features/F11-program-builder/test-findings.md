@@ -467,3 +467,248 @@ documentation (criterion 13). Criterion 14 is what round 1's activity tests alre
 | `swift test … --filter 'LedgerPersistenceTests'` | 1: 552 tests in 126 suites, 1 failure (F11-S3-2), 1 known issue (not mine) |
 | `scripts/check.sh --lint-only` | 0 |
 | Simulator | not run this round, as instructed |
+
+## Slice S5 — round 1 (G2 tester, 2026-10-06)
+
+Attacked `ProgramPresentation.make(_:)` at 3203d25 against the S5 amendment's eleven criteria, the brief's
+criteria 1 to 6 and its "Copy (exact)". **No bug found.** 44 tests of mine (300 parameterised cases among
+them), all passing on the Mac host and on the iOS simulator. Two questions, one note on copy, one on test
+quality. My tests were written and run before I read a function body, the implementer's tests or the catalog;
+the implementer's section of the notes was not read at all.
+
+Tests: `LedgerKit/Tests/FeatureProgramTests/Adversarial/` — `ProgramAdversarialSupport.swift` (seeded programs;
+an action applied as its documentation tells the store, each edit one `ProgramEditing` call spelled by me),
+`ProgramAdversarialScreen.swift` (my own model of the screen as a flat list of lines, from the brief),
+`ProgramSeedAdversarialTests`, `ProgramActionsAdversarialTests`, `ProgramWeekdaysAdversarialTests`,
+`ProgramCountsAdversarialTests`, `ProgramTotalityAdversarialTests`, `ProgramWordsAdversarialTests`.
+
+### Findings
+
+**F11-S5-1 — spec question (low) — criterion 3 against the plan's "Brief vs main" row 20: what orders the strip.**
+The amendment says "the seven cells in the order of the settings' week start"; the plan's row 20 says the strip
+starts on the weekday of `program.startDate`, "so left to right is the order the days come in". The code follows
+the amendment (pinned by `everyWeekStart_ordersTheCellsFromIt`, seven starts). The two differ when the week start
+is not the weekday the block began on (the lifter changed the setting after the block began; F08 starts a block
+on the week start). Repro: the seed program (starts Monday 2026-08-17) with `settings.weekStart = .sunday`.
+- Actual: "S REST · M UA · T REST · W LA · T REST · F UB · S LB".
+- By the Domain (`WeekCalendar.weekIndex`, a program week is seven days from `startDate`), week 1 is Mon 17 to
+  Sun 23 August: the first cell drawn is the week's last day. No day moves to another weekday; only the reading
+  order is not the order the days come in.
+- Asked: is the amendment's order the wanted one in that case, or row 20's? Nothing to fix if the amendment stands.
+
+**F11-S5-2 — spec question (low) — criteria 1 and 3: a cell of a program with no training days.**
+With `days == []` each of the seven cells still carries `.edit(.cycleSchedule(week:weekday:))` and speaks
+"Double-tap to assign". Applied, the edit returns the program as it was (`ProgramEditing`: "a program with no
+days stays at rest"), and no notice is shown: a tap that does nothing and says nothing
+(`noDays_readsZeroAndRests`). `Cell.action` is not optional, so the model cannot disable a cell. S13 will send
+an `update` that changes nothing (S3 criterion 5: no row written). The same holds for "Copy week n" and "Apply to
+later weeks" when the schedules are already equal. Asked: intended? The implementer's tests pin it as intended.
+
+**F11-S5-3 — copy (note, no defect of this slice) — numbers and plural forms follow the locale handed in, over
+English words.** Measured on the seed program:
+- `en_US` groups thousands in every text: "BLOCK · 1,200 WEEKS", chip "W1,101", "WEEK 1,101", "Copy week 1,100",
+  "Week 1,200 has logged sessions and can't be removed.", "6 days · 6,480 sets a week", "~6,156 min". Reached only
+  from 1,000 weeks (the block has no upper limit) or 1,000 sets.
+- `ar_SA`: "BLOCK · ٨ WEEKS", "W١" / "١ DAY", "٤ days · ٥٨ sets a week", "Copy week ٧"; `hi_IN@numbers=deva` alike.
+- `ja_JP` (no singular in Japanese): a week of one day reads "1 DAYS", spoken "1 days".
+- `fr_FR`: "0 DAY" by the same rule (standards §7 pins it for another key).
+This is standards §7 as written, and the implementer pins it for the copy members. It becomes visible only if
+S13 hands in a locale whose language the catalog lacks; until a translation ships, S13 should hand in the
+locale the app runs in (English), not the region's language.
+
+**F11-S5-4 — test-quality (minor, no action asked).** The implementer's property suite takes its expected
+texts from `ProgramCopy` (`checkBlock`, `checkDays`) and its `BuilderScreen.tap` applies an edit through
+`ProgramBuilderEdit.applied(to:)`: both are the code under test. Nothing escapes, because `ProgramCopyTests`
+pins every member against a literal and `ProgramBuilderActionTests` pins `applied` against `ProgramEditing`,
+and the fixed tests assert the brief's literals. Their tests assert behaviour; their source test bans more
+spellings than mine (`Calendar(identifier:`, formatters) and tests itself. My suites add the check that is
+independent of both.
+
+### Texts the brief does not give (all found on screen by `everyText_isTheBriefsOrListedOrData`)
+
+Every other text drawn or spoken on the seed's eight weeks (with an added empty day, a missing exercise and
+each notice) matched a pattern of the brief's "Copy (exact)", a weekday's letter or name, or data.
+
+| Text | Where | Judgement |
+|---|---|---|
+| "Block length" | spoken label of "−" and "+" as one adjustable element | Clear. Fine. |
+| "8 weeks" / "1 week" | its spoken value | Fine; "1 week" cannot be reached (two weeks at least). |
+| "Week 3" | a chip's spoken label | The plan's decision 6 ("Week 3, 4 days"). Fine. |
+| "4 days" / "1 day" (spoken) | a chip's spoken value; the same key as the summary's "4 days" | Fine. One key, two uses; its comment says so. |
+| "Deload" (spoken) | a deload chip's spoken value; the same key as the toggle's title | Fine in English; a translator cannot split the two uses. The day count is not spoken for a deload week, as it is not drawn. |
+| "Rest" | a rest cell's spoken value | The plan's "Tuesday, rest". Fine. |
+| "Double-tap to assign" | every cell's spoken hint | From the brief's Accessibility line ("button — double-tap to assign"). Apple's guidance is that a hint names the result and not the gesture ("Assigns the next training day"); VoiceOver adds its own "double-tap to activate". For Pete or the S9 VoiceOver table. |
+| "—" (em dash) | a card's chip for an exercise that is not stored | The plan's "named by a dash". Not spoken (chips are not). Fine. |
+| "1 DAY", "1 exercise", "1 set", "1 set a week", "1 day" | singular forms | The brief gives only the plural; the plan's row 18 asks for `one`. Fine. "~1 min" has one form. |
+| "BLOCK · 1 WEEK" | catalog form, cannot be reached | Fine. |
+| "New day" | the name `addDay` carries | Brief criterion 5. Data once stored. |
+
+Not in the model, so nothing to judge here: titles for "−" and "+" (icons, spoken as the adjustable above), the
+delete confirmation, the empty and failed states (S6, S13).
+
+### Attacked and held
+
+Seeds: programs from `SplitMix64(seed)` for seeds 1…60 (actions) and 101…140 (purity); the walk's choices from
+`SplitMix64(seed × 7919)`. `seeds_reachEveryState` shows the sixty programs hold: no days, six days, two weeks,
+a deload, an empty day, a day of more than four slots, a drop set, a superset, an exercise that is not stored.
+`testersModel_isNotBlind` shows my model tells an edit, a selection, a notice, a week start and a tag apart.
+
+- **Criterion 1, text for text** (11 tests, one of them over the 8 weeks): header, "BLOCK · 8 WEEKS", W1–W7 "4 DAYS" and W8 "DELOAD",
+  the strip, "4 days · 58 sets a week", four cards, minutes 39, 38, 37, 31 from `TimeEstimate`, chips (four names
+  and "+1"), every week of the block against my model, "WEEK 8 · DELOAD" with the toggle on, "Copy week 7", no
+  "Apply to later weeks"; criterion 2 as amended (UA, LA, UB, LB, REST; the chip 5, 5, 5, 5, 4 DAYS; five taps
+  give the seed back); criterion 3 (copy, apply, deload; deload flags left); criterion 4 ("+" appends week 8's
+  three days, not a deload, selected; "−"; the logged last week; earlier logged weeks do not hold it); criterion 5
+  ("New day" / "D5" / "No exercises yet", the route with the selected week); behaviour 6 (the fifth tap carries
+  the notice, the sixth drops it).
+- **Every action applied** (60 seeds × 3 properties, 6 day counts × 7 weekdays, 3 more): no action of any screen
+  names a week other than the selected one, a weekday twice, or a day not held, for selections from −2 to
+  count + 1; every edit offered equals my one `ProgramEditing` call and "−" never offers an edit the Domain
+  refuses (three sets of logged weeks); a walk of forty actions per seed keeps the whole screen, notice
+  included, equal to my model after every step; the cycle on every weekday for one to six days touches no other
+  cell and no other week; "−" on two weeks is the notice whatever is logged and changes nothing else.
+- **Week starts and locales** (7 tests, 17 cases among them): seven week starts; letters and spoken names in English,
+  German and Japanese written by hand, Arabic against a `DateFormatter` on seven known dates (seven distinct
+  letters); the calendar's first weekday (1…7), time zone (four, to UTC+14 and UTC−11) and own locale change
+  nothing; seven other calendar identifiers (Hebrew, Umm al-Qura, Persian, Chinese …); a cell's spoken value agrees with its label in all eight weeks.
+- **The selected week** (9 cases): `Int.min`, −1000, −1, 0, 3, 4, 5, 1000, `Int.max` on five weeks: the screen is
+  exactly the nearest week's, and every action names it.
+- **Counts and plurals** (5 tests + 3 cases): 0, 1, 2, 7 days on a chip; one exercise, one set, one minute; no
+  days; drop sets in the sets; a superset's minutes (a fixture where joining changes them); four, five and six
+  exercises; blocks of 2, 16 and 52 weeks by six days with every week a deload.
+- **Notices** (6 cases + 1): the three texts word for word, week numbers 1, 3, 8, 52; header, block, week and
+  days unchanged by a notice.
+- **Words and sources** (5 tests + 8 cases): every text classified (above); no literal but "" and " · " and no
+  lookup outside the copy files; all 33 lookups name `.module`, and exactly those with a value name `locale:`;
+  21 ambient spellings absent from the module's nine files. Catalog read by hand: 33 keys, all `translated`,
+  seven counted keys with `one` and `other` and one `%lld` each, no key with two numbers.
+- **Purity and totality** (40 seeds + 14 names + 9 locales + 2): the same input twice; the exercises inserted in
+  another order into a dictionary of another capacity; unused exercises, units, start date change nothing; a
+  slot of a missing exercise is counted, timed and reads "—"; names of 0 to 20,000 characters, Arabic, Japanese,
+  emoji, combining marks, bidi override, format specifiers ("%@ %lld") drawn as stored; odd locales and logged
+  weeks (`Int.min`, `Int.max`); a schedule entry for a day no longer held reads REST and is not counted.
+- **Measured, not kept as a test**: sixteen weeks by six days of eight exercises, 100 calls in 0.74 s on the
+  host in a debug build (7 ms a call; the budget is 100 ms for the first frame).
+
+### Not attacked
+
+- Anything a store does: which locale and calendar it hands in, that an edit reaches the stored program once,
+  an edit computed on the screen's program and applied to a stored one that differs, when a notice is dropped
+  (S13).
+- Views, snapshots, Dynamic Type, VoiceOver as heard (S9). The spoken texts were checked as strings only.
+- A program `Program.init` refuses, beyond a schedule entry for a missing day: duplicate day ids, week indices
+  that are not their places. A program emptied of its weeks was not run by me (the implementer tests it).
+- A translated catalog (none exists); right-to-left layout.
+- `scripts/check-string-catalogs.sh`, `ModuleCopyTests`, coverage and the full gate (the orchestrator's);
+  criterion 11's wiring was not checked beyond the test plan running the target.
+- The ambient locale and time zone were not changed under the process; purity there rests on the two source scans.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter 'FeatureProgramTests.*Adversarial'` (first run that compiled) | 1: 41 tests, 1 issue, in my own scan (it counted one-line lookups only; corrected, not a finding) |
+| the same, final | 0: 44 tests in 6 suites, 300 parameterised cases |
+| `swift test … --filter 'FeatureProgramTests'` | 0: 105 tests in 11 suites (61 the implementer's, 44 mine) |
+| `xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR -destination <iPhone 17, iOS 27.0, by UDID> -only-testing:FeatureProgramTests …` through the simulator lock, once | 0: 105 tests passed, 0 failed, 0 skipped; bundle read and deleted |
+| `scripts/check.sh --lint-only` | 0 |
+
+## Slice S5 — round 2 (G2 tester, 2026-10-06)
+
+Attacked the implementer's uncommitted fixes on f22bc30 against criteria 12 to 16. **No bug found.** 54 tests of
+mine now (44 of round 1, nine of them updated, and 10 new in `ProgramAbsoluteAdversarialTests.swift`), 559
+parameterised cases counted in the log, all passing on the host and on the simulator. One new question (F11-S5-5).
+
+### Round 1's findings
+
+| Finding | State |
+|---|---|
+| F11-S5-1, the strip's order | Closed by ruling 15: kept as built. Still pinned by `everyWeekStart_ordersTheCellsFromIt`. |
+| F11-S5-2, a cell of a program with no days | Closed by ruling 13 and fixed: no action, no hint, no "Tap to assign"; verified in every state (below). "Copy week n" and "Apply to later weeks" on equal schedules still offer an edit that changes nothing; the ruling does not ask otherwise. |
+| F11-S5-3, the locale's digits and plural forms | Closed by ruling 15: kept; the store hands in the app's locale (S13). |
+| F11-S5-4, the property suite's expected texts | Closed: no action was asked. |
+
+### New finding
+
+**F11-S5-5 — spec question (low) — criterion 14: "the model carries … a `rename` action".** The model carries
+no such value: `ProgramBuilderModel.Header` has `eyebrow`, `name` and `namePlaceholder` as before, and the
+action is the static function `ProgramBuilderAction.rename(_:)`, which a view calls with the draft's text ("the
+one action a view makes itself"). It behaves as the ruling wants (`rename_typedText_isCleanedOnce`: one
+`renameProgram` edit of the text as typed, no notice; blank and control-only text change nothing; sent twice
+it is one rename), and a function of the typed text cannot be an `Equatable` field without a closure. Asked:
+is the static function what the ruling means by "carries"? If so, nothing to fix; S9's view test should then
+show the field sends this function's value and no edit of its own spelling.
+
+### Audit of the nineteen sanctioned edits (`git diff f22bc30 -- LedgerKit/Tests/FeatureProgramTests/Adversarial/`)
+
+Nineteen change sites in seven files, all spelling at a call site; none adds, removes or weakens an
+expectation by itself. No finding.
+
+| File | Sites | What |
+|---|---|---|
+| `ProgramActionsAdversarialTests` | 3 | `offered` skips a cell with no action (`compactMap`); the `strays` pattern names `setDeload` and `setSchedule`; one `#require(cell.action)` |
+| `ProgramAdversarialScreen` | 3 | my expected deload action respelt `.setDeload(true, …)` and my expected cell action `.setSchedule(…, day: nil)`; `week.hint ?? "absent"` |
+| `ProgramAdversarialSupport` | 2 | the two cases of `AdvStore.edited` call `setDeload` and `setSchedule` |
+| `ProgramCountsAdversarialTests` | 2 | `#require(cells[0].action)`; `.setDeload(true, week: nearest)` |
+| `ProgramSeedAdversarialTests` | 4 | `.setDeload(true, week: 7)`; `.setSchedule(…, day: nil)`; two `#require(…action)` |
+| `ProgramWeekdaysAdversarialTests` | 2 | `.setSchedule(…, day: nil)`; `spokenHint ?? ""` |
+| `ProgramWordsAdversarialTests` | 3 | `week.hint ?? "REST"`; the hint listed when present; `#require(cells[0].action)` |
+
+The six respelt payloads (`true`, `day: nil`) are placeholders: the old cases had no such value, so a value
+had to be written and the right one was mine to derive. They are why the nine tests failed, and nothing else
+was. `week.hint ?? "REST"` follows the file's own idiom for an absent text.
+
+### My nine updates (each failed only on a placeholder payload or on criterion 13)
+
+| Test | Round 1 expected | Now expected (criterion) |
+|---|---|---|
+| `seed_deloadWeek_readsAsTheBrief` | toggle action `.toggleDeload(week: 7)` | `.setDeload(false, week: 7)`: the week is a deload, the switch turns it off (12) |
+| `seed_tuesdayTappedFiveTimes_cyclesAndCounts` | each tap `.cycleSchedule(week: 0, weekday: .tuesday)` | taps 1 to 4 name the seed's days in order, tap 5 names rest (12) |
+| `sundayStart_seed_rotatesTheStripOnly` | every cell `.cycleSchedule` of its weekday | every cell names my own next of its cycle; Saturday (LB, the last day) names rest (12) |
+| `selectedWeek_outOfRange_isTheNearestWeek` | `.toggleDeload(week: nearest)` | `.setDeload(` the other state `, week: nearest)` (12) |
+| `noDays_readsZeroAndRests` | a cell's tap changes nothing and says nothing | no cell has an action or a hint, the week has no hint, each speaks its weekday and "Rest" (13) |
+| `seed_everyWeek_matchesTheTestersScreen`, `walk_everyStep_matchesTheTestersScreen`, `blockLengths_readTheirWeeks`, `testersModel_isNotBlind` | through my model: `.toggleDeload`, `.cycleSchedule` | through my model, changed in one place: the deload action names `!isDeload`; a cell's action names `AdvScreen.next(…)?.id`, or is absent with both hints when the program has no day (12, 13). The model now also compares each cell's spoken hint |
+
+Two more changes to my own files, neither to satisfy the feature: `strays` now also refuses a cell action that
+names a day the program does not hold; my model's chip count now counts only entries of days the program holds
+(spec §3.2). The second was a fault of my model that round 1 never reached; the new no-days test with dangling
+entries found it, and the feature was right.
+
+### Attacked and held (new, `ProgramAbsoluteAdversarialTests`, seeds 201…260 through `AdvProgram.random`, one slot given misses; choices from `SplitMix64(seed × 104729)`)
+
+- **Applied twice** (60 seeds × 2): every cell action of every week, and the deload switch of every week,
+  give once and twice the program with exactly that entry (my own cycle) or that flag changed; the result is
+  one `Program.init` accepts; after the switch its action names the other state.
+- **A program that changed meanwhile** (1 test, 6 cases in it): a cell action whose day was deleted changes
+  nothing and leaves no dangling entry; after a day was added the weekday becomes the day the cell promised,
+  not the new day; after the week was removed nothing changes; the deload action on a removed week changes
+  nothing, and on a week switched off meanwhile leaves it off. Note for S13: a week is named by its place, so an
+  edit for week 8 sent after "−" and "+" lands on the new week 8.
+- **`nextInCycle`** (0 to 6 days): from rest, from every day, from an id not held; walked from rest it visits
+  every day once and returns to rest.
+- **`setSchedule`, `setDeload`** (60 seeds × 20 draws): weeks `Int.min`, −1, count, 1000, `Int.max` and a day not
+  held change nothing; one entry or one flag changes and nothing else; days (so misses and exercises) equal;
+  idempotent; valid. `cycleSchedule` and `toggleDeload` still give my cycle and the other state (60 seeds).
+- **No training day** (blocks of 2, 3, 9 weeks × selections −1…count × 7 week starts × a program with no
+  entries and one with entries left dangling, notices and logged weeks varied): seven cells, none with an
+  action or hint, no "Tap to assign", "REST" / weekday / "Rest", and the rest of the screen equal to my model;
+  after "+ Add training day" the seven actions name the new day with the empty-day notice and both hints return.
+- **`rename`** (10 texts + 1): blank, spaces, control-only, trimmed, inner control characters removed, NEL,
+  Japanese, emoji, format specifiers; 20,801 characters stored and drawn whole.
+
+### Not attacked
+
+As round 1, and: the store's use of the draft name (S13); criterion 16's housekeeping (the source test's
+`Double` spellings, the notes, standards §7), which is the reviewer's; the implementer's new and changed tests
+were run, not read.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| `swift test … --filter 'FeatureProgramTests.*Adversarial'` before my updates | 1: 44 tests, the nine named above failing |
+| the same, after updates and new tests | 0: 54 tests in 7 suites |
+| `swift test … --filter 'FeatureProgramTests'` | 0: 120 tests in 12 suites |
+| `swift test … --filter 'LedgerDomainTests'` | 0: 1212 tests in 185 suites |
+| `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests` (iPhone 17, iOS 27.0) through the lock, once | 0: 120 passed, 0 failed, 0 skipped; bundle deleted |
+| `scripts/check.sh --lint-only` | 0 |
