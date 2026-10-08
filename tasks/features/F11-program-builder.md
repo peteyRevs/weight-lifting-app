@@ -405,3 +405,67 @@ VoiceOver in the accessibility pass, with the product owner's wording.
 English text the key, so "rest" the day and "rest" the pause stay one key with a translator's comment that
 names both uses. How the localization rule tells two uses of one English text apart is a question for the
 first translation and for the product owner; it is not decided here.
+
+## Plan amendments — slice S8, the form controls and the exercise library's presentation (orchestrator, 2026-10-08)
+
+The plan's S4 and S8 as one pull request (larger batches; the number S4 is not used again). Cut from `main`,
+which holds the builder's and the Day editor's presentations. Two parts in two modules, with no view of a
+screen and no store: three controls in `LedgerDesign` that every later view slice of F11 (and F14) draws with,
+and the logic and words of the exercise library sheet in `FeatureProgram/Picker/`. About 480 product lines
+planned (the plan's S4 and S8 rows list the files; "Inputs the implementer needs", S4, gives the shapes); one
+pull request while it stays under about 1,000; past about 800 the implementer stops and reports before
+going on. The slice is accepted when:
+
+**Part one: the controls (`LedgerDesign/Components/`).**
+
+1. **`StepperField`**: a label, a value, "−" and "+". It takes `String`s and one closure per step and looks
+   nothing up; either step can be switched off (a value at its limit), and a switched-off step is drawn and
+   spoken as such. To VoiceOver it is one adjustable element with the label and the value; a spoken value
+   can be given apart from the drawn one. Both buttons are 44 pt targets; the parts stack at accessibility
+   sizes.
+2. **`LedgerToggleStyle`** (`.toggleStyle(.ledger)`): an ink track when on, no orange (Pete's decision 1,
+   default A); the knob reads in both themes and under Increase Contrast; VoiceOver keeps SwiftUI's switch
+   with its value.
+3. **`WrapLayout`**: children run along a row and wrap onto the next; right-to-left runs from the right; no
+   child, one child and a child wider than the row (it gets the row's width) all lay out; the size it
+   reports is the size it uses.
+4. **Registered and shown**: each control has its cases in the preview registry and a section of the design
+   gallery; snapshot references at the six cells of testing-strategy §2.5; one pinned VoiceOver tree each
+   (the layout's with pill buttons inside it); the 44 pt check. They compile for watchOS.
+5. **The set row is not touched.** Its private stepper stays as it is; whether the two become one is a
+   later chore, named in the notes.
+
+**Part two: the exercise library's presentation (`FeatureProgram/Picker/`).**
+
+6. **One input, one model.** `ExercisePickerPresentation.make` takes one input value (the stored exercises,
+   the exercises already in the day, the query, the muscle and equipment chosen, the picks in the order
+   picked, the locale) and returns a model whose every string is final and whose every action is a value.
+   The list is `ExerciseSearch.filtered`'s, in its order; the presentation filters and sorts nothing itself.
+7. **The chips** (Pete's decision 3, default B): "All, Chest, Back, Shoulders, Legs, Arms" and "All,
+   Barbell, Dumbbell, Cable, Machine, Bodyweight", one selected in each row, each an action that names the
+   filter it sets (absolute). The chips are built from one list each, so that decision A (Core, Kettlebell,
+   Band) is three more entries and no other change.
+8. **The rows** (criterion 12): the name; the line "Machine · Back", with " · already in this day" when the
+   day holds the exercise (the mark is a separate value too, so that the view can draw it apart); whether
+   it is picked, and its place among the picks; the action that picks or unpicks it. An exercise in the day
+   can still be picked (the spec allows it twice). Custom exercises are rows like any other.
+9. **Nothing matches**: "Nothing matches that filter." and "Clear filters", whose action resets the query
+   and both chips. A catalog with no exercise at all gives the same model and does not trap.
+10. **The foot**: "Select exercises to add" (disabled), "Add 1 exercise", "Add %lld exercises" by the
+    catalog's plural forms; its action carries the picked exercises' ids in the order picked, each at most
+    once per pick, and only those still stored. Title "Exercise library", "Cancel", placeholder "Search
+    exercises".
+11. **The picks become slots through the Domain.** The Day editor's edit gains the one case S6's notes
+    name (`.slot(.add…)` around `DayEditing.addSlots` and `newSlot`): rule 7's defaults come from there, and
+    the presentation builds no slot.
+12. **Words.** Every text is the brief's "Copy (exact)", resolved in `ProgramCopy+Picker.swift` from the
+    module's catalog under standards §7; the muscle names are entries of this catalog; the equipment names
+    are the entries S6 added and are not added again. Spoken texts (a chip with its row's name, a row with
+    its line and whether it is picked, the foot) are copy. Texts the brief does not give are listed in the
+    notes for Pete.
+13. **Pure and total.** No ambient clock, calendar, locale or zone (the module's source test covers the new
+    files); the same input gives the same model; picks or day exercises that are no longer stored are
+    ignored, not trapped on.
+
+**Not in this slice:** the library's views (S12, with the builder's views next), its store (S14), any change
+to `LedgerAppKit`, the project file or a test plan.
