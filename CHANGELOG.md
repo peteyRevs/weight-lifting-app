@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.6.0...v0.7.0) (2026-10-08)
+
+
+### Features
+
+* **program:** the presentation of the program builder (F11 S5) ([#40](https://github.com/peteyRevs/weight-lifting-app/issues/40)) ([1b6df7f](https://github.com/peteyRevs/weight-lifting-app/commit/1b6df7f18c99ec292eac31b24fca9eec2c1259e2))
+
 ## [0.6.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.5.0...v0.6.0) (2026-10-06)
 
 
