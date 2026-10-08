@@ -1,3 +1,4 @@
+import FeatureWorkout
 import LedgerDesign
 import SwiftUI
 
@@ -11,16 +12,24 @@ struct MainRoot: View {
     /// `@State` keeps the first router and drops the one each later `init` builds, which costs a small class
     /// with no work in its initializer. A presenter beside it follows the same rule: nothing in its `init`.
     @State private var router = AppRouter()
+    /// The workout's presenter: which workout is showing over the tabs, if any (F10).
+    @State private var workout = WorkoutLauncher()
     @State private var isDebugMenuShown = false
+    #if DEBUG
+        /// Set by the Debug menu's "Start sample workout": the workout starts once the menu's sheet is down,
+        /// because a cover cannot go up over a sheet that is still there.
+        @State private var startsSampleWorkout = false
+    #endif
     private let composition: AppComposition
 
     init(composition: AppComposition) {
         self.composition = composition
     }
 
-    /// What is presented over everything `content` shows: F10 adds the workout's cover modifier here.
+    /// What is presented over everything `content` shows: the workout's cover, its dialogs and its routes.
     var body: some View {
         content
+            .workoutCover(workout) { router.resolve($0) }
     }
 
     /// Which screen the root shows: F08 adds its "no active program" branch here, around `tabs`.
@@ -32,9 +41,24 @@ struct MainRoot: View {
     private var tabs: some View {
         AppTabs(router: router) { isDebugMenuShown = true }
         #if DEBUG
-            .sheet(isPresented: $isDebugMenuShown) {
-                DebugMenu { await composition.diagnostics() }
+            .sheet(isPresented: $isDebugMenuShown, onDismiss: startSampleWorkoutIfAsked) {
+                DebugMenu(actions: [
+                    .startSampleWorkout {
+                        startsSampleWorkout = true
+                        isDebugMenuShown = false
+                    }
+                ]) { await composition.diagnostics() }
             }
         #endif
     }
+
+    #if DEBUG
+        private func startSampleWorkoutIfAsked() {
+            guard startsSampleWorkout else {
+                return
+            }
+            startsSampleWorkout = false
+            workout.startSample()
+        }
+    #endif
 }

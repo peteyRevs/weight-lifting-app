@@ -3378,3 +3378,359 @@ Product by file, this round: `Recovery` +29 −10 (the look, the order), `GRDB` 
   answering `false`, nothing else (four files; a fifth type, `OldWrapper`, for the same reason).
 - Not in this slice, queued: S3-SF3 and the ADR-004 wording (one amendment for Pete); S3-N2's name across targets;
   the three tests that fail in the nightly lane on one thread (S1's two overlap tests, S2's timing test).
+
+## Slice S4 — the cover and the header (G1 implementer, 2026-10-08)
+
+Built on `d61a3c4` (`main` `1d16e28` plus the specification), in the worktree `F10-s4`, on `feat/F10-s4-cover`.
+Nothing is committed and no PR is open. **This section is written as the work goes; "The runs" at its end says
+what was run and what was not.**
+
+### The lifecycle table
+
+Two objects, with one job each. `WorkoutLauncher` (public; the app's root holds one for its life) owns *which
+workout is showing*: its `phase` is one of `idle`, `working`, `cover`, `conflict(source)`, `failed(failure)`, so
+the cover, the conflict dialog and a failure can never be up together. `WorkoutStore` (one per presentation of
+the cover) owns *the workout on screen*: it follows `WorkoutSessionClient.updates()`, and holds the finish
+dialog, the discard and the reason the cover closes (`exit`). Neither keeps a workout of its own: what is live is
+always what the session says.
+
+An intent is accepted by the launcher only while it is `idle`, `conflict` or `failed`; while it is `working` or
+the cover is up, `start`, `resume` and the dialog's choices do nothing. Each row below is one test
+("Criteria → tests").
+
+| # | What happens | Launcher `phase` / store state afterwards | What the lifter sees | The session afterwards |
+|---|---|---|---|---|
+| L1 | `start(day)`, nothing live | `working` → `cover`; `StartWorkoutUseCase.start` ran once | the cover: the day's name, 0:00 counting, no segment done | that day's new workout, live |
+| L2 | `start(day)`, that day's workout live (resume) | `working` → `cover`; the use case is **not** called (criterion 3) | the cover, with the workout as it stands and its real elapsed time | unchanged |
+| L3 | `start(day)`, that day's workout live, and the day since deleted or emptied in the program | as L2 | as L2 | unchanged |
+| L4 | `resume()`, a workout live | `working` → `cover`; no use case | the cover | unchanged |
+| L5 | `resume()`, nothing live | `working` → `idle` | nothing | none |
+| L6 | `start(other day)`, a workout live | `working` → `conflict(other day)`; the use case answered `.conflict` | "You have a workout in progress" with its three choices | unchanged: the first workout, live |
+| L7 | conflict → "Resume it" | `working` → `cover` (as L4) | the cover, with the live workout | unchanged |
+| L8 | conflict → "Discard and start new" | `working` → `cover`; the use case ran with `replacingLive`: built the new one, **then** discarded, **then** started | the cover, with the new workout at 0:00 | the new workout, live; the old one discarded, nothing of it in history |
+| L9 | conflict → "Cancel" (or the dialog dismissed) | `idle` | the tabs | unchanged |
+| L10 | conflict → "Discard and start new", the discard fails | `failed(.notReplaced(.liveKept))`; no `start` was made | "Couldn't start the new workout" / "Your workout in progress was kept." | the old workout, live |
+| L11 | conflict → "Discard and start new", the discard succeeds and the start fails | `failed(.notReplaced(.nothingLive))` | "Couldn't start the new workout" / "Your workout in progress was discarded." | none |
+| L12 | conflict → "Discard and start new", the new day cannot be built (emptied, deleted, block over) | `failed(.notReplaced(.liveKept))`; nothing was discarded | as L10 | the old workout, live |
+| L13 | the live workout ends elsewhere while the conflict dialog shows, then "Discard and start new" | `cover` | the cover, with the new workout | the new workout, live |
+| L14 | the live workout ends elsewhere while the conflict dialog shows, then "Resume it" | `idle` (as L5) | the tabs | none |
+| L15 | `start(day)` refused: the day has no exercise / is not in the active program / its week is past the block / anything else | `failed(.notStarted(reason))`, one reason each | "Couldn't start this workout" and the reason's line | unchanged: none, or the other day's workout that was live |
+| L16 | `resume()` and the session cannot be read | `failed(.notOpened)` | "Couldn't open this workout" / "Try again." | unknown to the app; nothing was changed |
+| L17 | a second `start` or `resume` while one is `working`, or while the cover is up | unchanged; the second is dropped | nothing new | at most the one workout the first made |
+| L18 | the view that runs the launcher's task goes away while it works | what the work reached: `cover` if the start went through, else `idle`; a cancellation is never shown as a failure | — | whatever the session completed: the host finishes a call in its own task |
+| L19 | `start(day)`: the store took the write and its answer was lost, so the call threw | `cover`: the launcher reads the session after any failure, and the workout asked for is live | the cover | that day's workout, live |
+| S1 | the cover opens on a live workout | store `loaded(workout)` | the header | unchanged |
+| S2 | "Minimize" | `exit = .minimized`; launcher `idle`; route `.minimized` | the tabs | unchanged: live |
+| S3 | "Finish" | `dialog = .finish` | "End workout?" with "Discard" and "Keep lifting" | unchanged |
+| S4 | "Keep lifting" (or the dialog dismissed) | `dialog = nil` | the cover | unchanged |
+| S5 | "Discard" | `isDiscarding`, then `exit = .discarded`; launcher `idle`; route `.discarded` | the header's buttons disabled, then the tabs | none; nothing in history |
+| S6 | "Discard", and the session refuses it | `dialog = .discardFailed`, `isDiscarding` false | "Couldn't discard this workout" / "It's still in progress. Try again."; then the cover as before | the workout, live (a host keeps its end waiting and shows it live) |
+| S7 | "Discard", and the workout had already ended (`noLiveWorkout`) | no failure; the stream's ending update closes the cover (S9 or S10) | the tabs | none |
+| S8 | another change to the workout arrives (a set logged elsewhere) | `loaded(new state)`; a dialog that shows stays | the header redrawn | as published |
+| S9 | the workout is discarded elsewhere, with or without a dialog showing | `dialog = nil`, `exit = .discarded` | the tabs | none |
+| S10 | the workout is finished elsewhere, with or without a dialog showing | `dialog = nil`, `exit = .saved(id)`; the app selects Today | the tabs | none; the workout is in history |
+| S11 | the cover opens and nothing is live (the stream's first element is nil) | `exit = .nothingToShow`: the cover closes and no route is sent | the tabs | none |
+| S12 | the stream ends while the cover is up (no session bound; a host never ends one) | `failed` | "Couldn't open this workout" / "Close this screen and try again." with "Close" (which minimizes) | unchanged |
+| S13 | the cover goes away (minimize, or the app's root is torn down) while a discard is running | no failure is shown or logged for the cancellation | — | the host completes the discard in its own task |
+| S14 | haptics in an update | ignored in this slice; S6 plays them from the stream only, never from a call's return, so never twice | — | — |
+
+After any request that threw, the launcher reads `session.current()` once more and lets that decide (L10 to L12,
+L19): the error says a call failed, the session says what is live. A read that fails too gives
+`.notReplaced(.unknown)`, whose line claims nothing ("Try again.").
+
+### What landed
+
+- **`FeatureWorkout`** (was a placeholder): `WorkoutRoute`; `WorkoutLauncher` with its state types
+  (`WorkoutLaunch.swift`: phase, failure, action, request) and `View.workoutCover(_:onRoute:)` (`WorkoutCover.swift`);
+  `WorkoutRoot`; `WorkoutStore`; `WorkoutPresentation` (+`Header`) and its models (`WorkoutModel.swift`);
+  `Views/WorkoutScreen`, `Views/WorkoutHeader`, `Views/WorkoutTimeline`; `WorkoutCopy` and
+  `Resources/Localizable.xcstrings` (27 keys); `Workout+Previews` (six states); `WorkoutLauncher+Sample` (Debug only).
+- **`LedgerDomain`**: `WorkoutState.checkedCursor`.
+- **`LedgerAppKit`**: `MainRoot` holds the launcher and applies the modifier in `body`; `Routes+Workout.swift`
+  (`AppRouter.resolve(_: WorkoutRoute)`); the Debug menu's sheet passes the extra row and starts the sample once the
+  sheet is down.
+- **`LedgerDesign`**: `DebugMenu(actions:diagnostics:)` and `DebugMenu.Action`; the menu's preview shows one.
+- **Registrations**: `Package.swift` (the target's `resources`, `snapshotTestTargets`), `coverage-thresholds.json`
+  (`required`), `PreviewScan.registeredModules`, `ModuleCopyTests.exemptions` (the Debug-only sample file).
+- **Tests**: twelve suites in `FeatureWorkoutTests`, `WorkoutRoutesTests` in `LedgerAppKitTests`, one test added to
+  `WorkoutStateTests`, and one UI test in `Apps/LedgerUITests/Smoke.swift`.
+
+### The cover's VoiceOver tree
+
+Pinned by `WorkoutAccessibilityTests.tree_isExactlyTheTable`, for every preview state, at light `.large` and dark
+`.accessibility3`. Read from `WorkoutScreen` itself, which holds no scroll view yet.
+
+| # | Stop | Label | Value | Traits |
+|---|---|---|---|---|
+| 1 | Minimize | "Minimize" | | button (and not enabled while a discard runs) |
+| 2 | the dot and the time, one element | "Elapsed time" | | none |
+| 3 | Finish | "Finish" | | button (and not enabled while a discard runs) |
+| 4 | the workout's name | "Upper A — Push focus" | | header, static text |
+| 5 | the progress segments, one element | "Workout progress" | "Exercise 2 of 5" (empty when the cursor names no row) | none |
+
+Loading has no stop. Failed reads: "Couldn't open this workout" (header), "Close this screen and try again.",
+"Close" (button). The two dialogs and the two alerts are the system's, and are tested through state, not by tree.
+
+### Decisions and deviations
+
+1. **Two objects, not one** (see the table's first paragraph). The task's "the store ... the two dialogs" is read
+   as: the store has the finish dialog and the alert of a discard that failed; the launcher has the conflict
+   dialog and the alert of a start that failed. The conflict dialog shows with no cover up, so it cannot belong
+   to an object that lives with the cover. Tests are split the same way (`WorkoutLauncher…Tests`,
+   `WorkoutStore…Tests`), as the plan's test table has them.
+2. **`WorkoutLauncher.start(_:)` is synchronous** (the rulings, `implementation-notes.md` "O11 accepted. O12–O14";
+   the plan's surface at "S4 — cover and header" still says `async`). An accepted intent makes the next
+   `request`; the modifier's `.task(id: launcher.request)` runs it. Same pattern as onboarding's save attempt.
+3. **`WorkoutRoot` is internal**, where the plan lists it as public. The app never builds it: it only holds the
+   launcher and applies the modifier. Its closure takes a `WorkoutExit`, which is a route or "nothing to show"
+   (row S11), because a cover that found no workout has no route to send.
+4. **`Text(timerInterval:)` is used**, by the specification's criterion 6, against the plan's older line
+   ("`Text(timerInterval:)` … are not used", "Snapshots per slice"). It is written once, in `WorkoutTimeline`, with
+   the timeline's `pauseTime`; `FeatureWorkoutSourceTests` pins both.
+5. **The current segment wins over "done".** The S4 input says "done when every set is done, current when it holds
+   the shown row"; the prototype colours by position (`Ledger v2.dc.html:578`). Here the exercise that holds the
+   cursor is current whatever its sets, so the orange segment is always the exercise the spoken value names; a
+   workout with every set done keeps one orange segment, as the prototype does.
+6. **The workout's name is under the row, as an eyebrow.** Criterion 1 asks for the name; v2's header draws none
+   (`:134-149`), v1 draws it as an eyebrow over the bars (`Ledger.dc.html:520`). It is a VoiceOver heading.
+7. **"Minimize" has no chevron.** v2 draws "‹ Minimize" with a left chevron (`:137-139`). `PillButton` takes no
+   icon, `LedgerIcon` has no left chevron, and `LedgerPressStyle` is internal to `LedgerDesign`, so a button of the
+   feature's own could not press like the others. It is `PillButton(.ghost, flush: .leading)`. See open question 2.
+8. **The finish dialog is the system's `confirmationDialog`** with "Discard" (destructive) and "Keep lifting"
+   (cancel), and no line of sets and volume: S7 replaces it with the "End workout?" sheet, which has that line.
+9. **A dialog's dismissal and its button's action are accepted in either order.** SwiftUI sets `isPresented` to
+   false and calls the action, and the order is not documented. So "Discard", "Resume it" and "Discard and start
+   new" do not depend on the dialog's flag still being up (`WorkoutStore.send`, `WorkoutLauncher.accept`), and a
+   dismissal is only ever the cancelling choice.
+10. **The sample row lives in `FeatureWorkout`** (`WorkoutLauncher+Sample.swift`, wholly `#if DEBUG`, exempt in
+    `ModuleCopyTests` as `debugOnly`): its title is a literal, which `LedgerAppKit`'s audit would refuse in
+    `MainRoot`, and `Fixtures` is `LedgerFakes`', which the feature already links. It starts **week 1** of the
+    active program's first day, not the calendar's week: the seed program's block ends on 2026-10-11, after which
+    a start by date would be refused. `MainRoot` starts it from the sheet's `onDismiss`, because a cover cannot
+    go up over a sheet that is still there.
+11. **`.saved` selects Today** (`Routes+Workout.swift`); `.minimized` and `.discarded` do nothing. Nothing in this
+    slice emits `.saved` except a workout finished elsewhere.
+12. **Header buttons are disabled while a discard runs**, Minimize included. A discard that hung would leave no
+    exit; a host's discard is two store calls, so this was not given a way round.
+13. **A `Date` cannot hold NaN on this SDK** (`Date(timeIntervalSinceReferenceDate: .nan)` traps in `Integers.swift`,
+    measured on the Mac host), so `WorkoutTimeline` guards only a start outside `distantPast ... distantFuture`.
+14. **`FeatureWorkoutTests` imports `LedgerSync`** for the real host over `ProbedStores` (the failure rows): it
+    reaches it through `LedgerTestSupport`, with no new edge in `Package.swift`.
+
+### The catalog's keys
+
+The brief's, word for word (10): "Minimize", "Finish", "Exercise %lld of %lld", "You have a workout in progress",
+"Resume it", "Discard and start new", "Cancel" (the brief gives it for the swap sheet; the conflict's third choice
+uses it), "End workout?", "Discard", "Keep lifting".
+
+**Texts the brief does not give, for the product owner's copy review** (17 keys; "Try again." is used in three
+places):
+
+| Text | When it shows |
+|---|---|
+| "Elapsed time" | spoken only: VoiceOver's name for the running time in the header |
+| "Workout progress" | spoken only: VoiceOver's name for the progress bars; its value is "Exercise 2 of 5" |
+| "OK" | the one button of every alert below |
+| "Couldn't start this workout" | alert title: a start was refused and nothing changed |
+| "This day has no exercises yet." | its message when the day has no exercise |
+| "This day is no longer in your program." | its message when the day, or its program, is not the active program's |
+| "Your program's block has ended." | its message when the week asked for is past the last week |
+| "Nothing was changed. Try again." | its message for any other cause (a store or the session failed) |
+| "Couldn't start the new workout" | alert title: "Discard and start new" did not end with the new workout live |
+| "Your workout in progress was kept." | its message when the old workout is still live |
+| "Your workout in progress was discarded." | its message when the old workout was discarded and the new one did not start |
+| "Try again." | its message when the app cannot tell which; and the message of "Couldn't open this workout" as an alert |
+| "Couldn't open this workout" | alert title when Resume cannot read the session; and the title on the cover when it loses the session |
+| "Close this screen and try again." | under that title, on the cover |
+| "Close" | the button under it; it closes the cover and leaves the session alone |
+| "Couldn't discard this workout" | alert title, over the cover: "Discard" was refused |
+| "It's still in progress. Try again." | its message |
+
+### Inputs for S5
+
+- **Where the body goes.** `Views/WorkoutScreen.swift`, the `.workout` case: the header stays pinned and
+  `ScrollView { WorkoutPage(model: workout.page) }` goes under it; `WorkoutModel` gains `page`. The header's
+  horizontal inset is the screen's (`WorkoutScreen.body`), so move that padding onto the header when the page
+  takes its own. `Support/WorkoutParts.swift` (tests) then stacks the header and the page; trees and references
+  come from it, and `WorkoutAccessibilityTests.screen` must switch to it once the screen holds a scroll view.
+- **How the store grows.** `WorkoutStore.send` is the one switch; add the set intents to `WorkoutAction`. Work that
+  awaits follows the discard's shape: the intent makes the next id, `WorkoutRoot` runs it from a `.task(id:)`. For
+  a queue of taps (two quick "+"), one `.task` draining an `AsyncStream` of intents is the plan's pump; take
+  `apply`'s return as the base for the next intent and leave `workout` to the stream.
+- **Selection.** `WorkoutPresentation.header` reads `checkedCursor`; give it the shown row
+  (`selectedSetID` or the cursor) as a parameter. `segments(of:current:)` already takes the index.
+- **Haptics** are S6's, and belong in `WorkoutStore.follow()`'s loop (`update.haptics`), nowhere else.
+- **`isBusy`** disables the header; the page's controls should read the same flag.
+- The preview fixture `WorkoutPreview.logged(_:in:)` logs rows through the engine at the cursor; S5's states can
+  be built with it.
+
+### Inputs for F09 S5: how Today calls the launcher
+
+`MainRoot` already holds `workout` (a `WorkoutLauncher`). In `Routes+Today.swift`:
+`.startWorkout(program:weekIndex:day:)` → `workout.start(WorkoutSource(programID:weekIndex:dayTemplateID:))`;
+`.resumeWorkout` → `workout.resume()`. Both are synchronous and return at once; a second tap while one is being
+answered is dropped. Today need not check anything first: a live workout of the same day is shown as it is, even
+if its day has since left the program; another day's asks; a refusal shows its own alert. Today keeps following
+`workoutSession.updates()` for its card; the launcher tells it nothing. `onRoute` gives `.minimized`, `.discarded`
+or `.saved(id)` after the cover has closed. The Debug row can go once Today starts workouts, or stay for a
+database with no program.
+
+### Criteria → tests
+
+Suites are in `LedgerKit/Tests/FeatureWorkoutTests` unless another place is named. "Ln" and "Sn" are the rows of
+the lifecycle table; each test's display name starts with its row.
+
+| Criterion | Tests |
+|---|---|
+| 1 Start | `WorkoutLauncherTests.start_nothingLive_startsTheDayAndOpensTheCover` (L1); `WorkoutPresentationTests.header_justStarted_isWordForWord` (name, start, no segment done); `WorkoutSnapshotTests`; UI `Smoke.test_sampleWorkout_startsCountsMinimizesResumesDiscards` |
+| 2 Resume | `WorkoutLauncherTests.start_sameDayLive_opensTheCoverWithoutTheUseCase` (L2), `resume_live_opensTheCover` (L4), `resume_nothingLive_staysIdle` (L5), `send_onlyActsOnItsOwnPhase` (minimize, then again); `WorkoutStoreTests.follow_live_showsTheSessionsWorkout` (S1), `minimize_closesAndKeepsTheWorkoutLive` (S2); the UI test. After a kill: the launcher only reads `session.current()`; recovery itself is S2's `WorkoutRelaunchTests`. Not driven on the simulator here ("Not verified") |
+| 3 Resume never meets the start refusal | `WorkoutLauncherTests.start_sameDayLive_dayGoneFromTheProgram_stillOpens` (L3; deleted and emptied, with a control that the use case does refuse that day), and L2's check that the program store was never read |
+| 4 Conflict | `WorkoutLauncherConflictTests` (L6 to L9, L13, L14: the order `discarded` then `started` is read from the fake's record); `WorkoutLauncherFailureTests.replace_discardFails_keepsTheOldWorkout_startsNothing` (L10), `replace_startFailsAfterTheDiscard_leavesNoneLive` (L11), `replace_dayCannotBeBuilt_discardsNothing` (L12); `WorkoutPresentationTests.dialogs_areTheBriefs` |
+| 5 Finish, for now | `WorkoutStoreTests.finish_asks_keepLiftingReturns` (S3, S4); `WorkoutStoreDiscardTests` (S5 to S7, S13); the UI test |
+| 6 Elapsed time | `FeatureWorkoutSourceTests.elapsedTime_isDrawnByTheTimelineAlone`; `WorkoutTimelineTests`; `WorkoutSnapshotTests.header_pastAnHour_matchesReference` ("1:01:05"); `PreviewTests.preview_showsItsState` (the three times through `ClockText`); the tree's stop 2 ("Elapsed time", no value) |
+| 7 The store | `WorkoutStoreTests` (S1 to S4, S8 to S12), `WorkoutStoreDiscardTests`; no `Task {` and no sleep in the module: `FeatureWorkoutSourceTests.sources_neverCountTime` and review |
+| 8 Presentation and copy | `WorkoutPresentationTests`, `WorkoutCopyTests`, `FeatureWorkoutSourceTests`; `LedgerAppKitTests/ModuleCopyTests` (the audit, and the built bundle resolves all 27 keys); the gate's catalog step |
+| 9 The shell | `LedgerAppKitTests/WorkoutRoutesTests`; the UI test (the cover over the tabs, the Debug row); `WorkoutLauncherTests.startSample_noProgram_savesTheSeedProgramAndStarts`; the tester's `AppRootAdversarialTests.root_idleAndReady_readToVoiceOver` still reads "Today" alone |
+| 10 Tests | this table; `WorkoutAccessibilityTests` (the tree, 44 pt targets, what each button sends) |
+| 11 Wiring | `PreviewTests` (registry and render), `LedgerDesignTests`' rule that every module with a `#Preview` is registered, `ModuleCopyTests`, the catalog step |
+
+Failure rows not named above: L15 `WorkoutLauncherRefusalTests.start_refused_saysWhy`,
+`start_refused_whileAnotherIsLive_keepsIt`, `start_storeRefusesTheWrite_startsNothing`; L16
+`sessionCannotBeRead_opensNothing`; L17 `WorkoutLauncherTests.secondRequest_whileWorkingOrCovered_isDropped` and
+`WorkoutLauncherFailureTests.start_stillRunning_secondRunAndRequestDoNothing`; L18
+`start_viewGoesAwayWhileItRuns_isNoFailure`, `request_cancelledBeforeItsAnswer_isIdle`; L19
+`start_answerLost_opensTheWorkoutThatIsLive`; S8 `update_fromElsewhere_isShown`; S9, S10
+`endedElsewhere_closesTheCover` (four cases); S11 `follow_nothingLive_closesWithNoRoute`; S12
+`follow_streamEnds_fails`. S14 has no test of its own: the store has no haptics dependency, and S8's update
+carries the engine's `.setLogged` haptic through a store built on test dependencies, where touching `haptics`
+would fail the test.
+
+The failure rows run on the real host (`LocalWorkoutSessionActor`) over `ProbedStores` on the in-memory stores:
+the fake cannot refuse a write or hold a call. L11 holds the discard's `compact`, then fails the next `append`,
+so the start is the call that fails; no test sleeps. Two doubles are the tests' own
+(`Support/SessionDoubles.swift`): `EndedSession` (the key's stub: updates end, calls throw) and `GatedSession`
+(the fake behind a gate that throws `CancellationError` to a cancelled caller).
+
+Two more decisions, found on the simulator:
+
+15. **The conflict's "Cancel" is not drawn.** From iOS 26 the system draws no button for a dialog's cancelling
+    role; tapping outside the dialog cancels (seen on iOS 27.0, `screenshots/s4/conflict-dialog-*.png`). The
+    choice exists and does what it says (L9); the lifter reaches it the platform's way. "Keep lifting" is in the
+    brief's copy, so it is a plain button with no role, and is drawn (`finish-dialog-*.png`).
+16. **Only the header's two buttons are disabled during a discard**, not the row: a disabled row made the elapsed
+    time read "dimmed" to VoiceOver (found by the tree test).
+
+### References added
+
+Five, in `LedgerKit/Tests/FeatureWorkoutTests/__Snapshots__/WorkoutSnapshotTests/`, written by a run in the
+library's default mode (each failed once, then passed), on the iPhone 17 simulator (iOS 27.0). Each was looked at.
+
+| File | Shows |
+|---|---|
+| `header_matchesReferences.light-large.png` | "Minimize", the dot and "24:22", "Finish"; "UPPER A — PUSH FOCUS"; five segments: done, current (orange), three upcoming |
+| `header_matchesReferences.light-xLarge.png` | the same, one text size up |
+| `header_matchesReferences.dark-large.png` | the same on the dark ground |
+| `header_matchesReferences.dark-xLarge.png` | the same, one text size up |
+| `header_pastAnHour_matchesReference.dark-large.png` | "1:01:05"; three segments done, the fourth upcoming, the fifth current |
+
+One more than the plan's four: nothing else can show what the timer text reads past an hour.
+
+### Screenshots for the product owner
+
+`tasks/features/F10-active-workout/screenshots/s4/`, light and dark of each: `cover-just-started`,
+`cover-after-24-minutes`, `cover-past-an-hour` (the previews' states, drawn by a test at 402 × 874 with time
+standing still; no status bar), `conflict-dialog` and `finish-dialog` (the running app on the simulator, from a UI
+test's attachments). The conflict dialog cannot be reached in the app yet (the Debug row always asks for the same
+day), so for those two shots only, the sample alternated between two days in a temporary build; that change and
+the two temporary tests were removed, and the final runs below are of the tree without them.
+
+### Code lines per file
+
+Non-blank, non-comment lines of product code (tests, `LedgerTestSupport`, the catalog and docs left out). Counted
+when the store and the launcher were done (947) and at the end (952). The plan said about 580; the orchestrator
+was told at 947 and ruled: one pull request, nothing cut.
+
+| File | Lines |
+|---|---|
+| `FeatureWorkout/WorkoutLauncher.swift` | 140 |
+| `FeatureWorkout/WorkoutStore.swift` | 121 |
+| `FeatureWorkout/WorkoutCopy.swift` | 105 |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 86 |
+| `FeatureWorkout/WorkoutCover.swift` | 84 |
+| `FeatureWorkout/WorkoutPresentation.swift` | 63 |
+| `FeatureWorkout/WorkoutRoot.swift` | 52 |
+| `FeatureWorkout/WorkoutLaunch.swift` | 43 |
+| `FeatureWorkout/Views/WorkoutHeader.swift` | 43 |
+| `FeatureWorkout/WorkoutModel.swift` | 42 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 33 |
+| `FeatureWorkout/WorkoutLauncher+Sample.swift` (Debug) | 30 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 23 |
+| `FeatureWorkout/Views/WorkoutTimeline.swift` | 19 |
+| `FeatureWorkout/WorkoutRoute.swift` | 6 |
+| `LedgerAppKit/MainRoot.swift` | +22 (−2) |
+| `LedgerAppKit/Routes+Workout.swift` | 11 |
+| `LedgerDesign/Gallery/DebugMenu.swift` | +17 (−1) |
+| `LedgerDesign/Components/Components+Previews.swift` | +4 (−1) |
+| `LedgerDomain/Model/WorkoutState.swift` | +8 |
+| `FeatureWorkout/FeatureWorkout.swift` (the placeholder, deleted) | −3 |
+| **Total** | **952** |
+
+Where the plan's estimate fell short: the failure states and their sixteen texts (types, presentation, copy:
+about 150), the two system dialogs and two alerts with their bindings (`WorkoutCover`, `WorkoutRoot`: about 90
+over a bare cover), and the previews' workout built through the engine (about 40).
+
+### The runs
+
+All on the final tree (the temporary screenshot code removed), 2026-10-08. Simulator runs went through the lock,
+on iPhone 17 (iOS 27.0), `PR` plan, `build-for-testing` then `test-without-building -only-testing`.
+
+| Run | Result |
+|---|---|
+| iOS `build-for-testing` (scheme Ledger, plan PR) | exit 0 |
+| `scripts/check-string-catalogs.sh` (the gate's catalog step, after that build) | exit 0 |
+| `FeatureWorkoutTests` (simulator) | 71 of 71 passed |
+| `LedgerUITests/Smoke` | 2 of 2 passed; the new test takes 22 s |
+| `LedgerAppKitTests` + `LedgerDesignTests` (simulator) | 544 results: 537 passed, 6 expected failures, 1 skipped, 0 failed (none of the seven is this slice's) |
+| `swift test --filter FeatureWorkoutTests` (Mac host; before the last two view edits) | 66 tests passed (no snapshot is drawn there, the tree tests are iOS only) |
+| `swift test --filter LedgerDomainTests` (Mac host) | 1,213 tests passed |
+| `scripts/check.sh --lint-only` | exit 0 |
+
+The gate's preview step is `PreviewTests` in each registered module: FeatureWorkout's (in the 71) and
+LedgerDesign's and LedgerAppKit's (in the 544) passed. `LedgerSyncTests` was not run: `LedgerSync` was not touched.
+
+### Not verified
+
+- **The full gate**, watchOS, and the coverage gate (FeatureWorkout is now `required` at 70 %): the
+  orchestrator's. `LedgerDesign` builds for watchOS too; the `DebugMenu` change was not built there.
+- **Kill and relaunch with the cover** (criterion 2's last sentence) was not driven on the simulator. The
+  launcher reads `session.current()` and S2's `WorkoutRelaunchTests` prove recovery; the two were not run together.
+- **"Discard and start new" in the running app.** The conflict dialog and "Resume it" were driven once in the app
+  (the temporary screenshot run); the replace path is proven by the launcher's tests only.
+- **VoiceOver itself**, on a device: the tree is read through UIKit in a test process.
+- **The alerts' look** (four failure alerts): system alerts, tested through state; none was screenshot.
+- **Accessibility sizes above `.accessibility3`** for the header's row. At `.accessibility3` every element is
+  inside the screen and every button is 44 pt (the tree suite); `.accessibility5` was not drawn.
+- The host run of `FeatureWorkoutTests` was not repeated after the last two view edits (the buttons' `disabled`,
+  "Keep lifting" without a role); the simulator run was.
+
+### Open questions
+
+1. **Should VoiceOver hear the elapsed time?** Today it hears "Elapsed time" and no number (F09 S4's ruling). A
+   lifter who cannot see the header cannot learn how long they have trained. Recommendation: in S6, when the rest
+   card needs spoken times anyway, give this element a value made at the moment it is asked for (a custom
+   accessibility value from the injected date), and pin it with the timeline fixed.
+2. **"Minimize" has no chevron** (decision 7). Recommendation: S6 already changes `PillButton` and re-records its
+   gallery; add an optional leading icon and a left chevron there, then one line here.
+3. **The conflict's "Cancel" is invisible on iOS 26 and later** (decision 15). Recommendation: accept the
+   platform's way for the conflict; or, if Pete wants a visible third choice, make it a plain button as
+   "Keep lifting" is.
+4. **"Your workout in progress was kept." after a discard whose log could not be dropped.** A host stores the end,
+   fails to drop the log, and goes on showing the workout live; the next call completes the discard (S1's
+   protocol, "a waiting end"). The line is true of what the session shows and may stop being true a moment
+   later. Recommendation: leave it until ADR-004's paragraph on telling readers that an end is waiting; the
+   launcher then has something to read.
+5. **Sixteen texts are mine** (the table above). Recommendation: Pete reads the table before S5 merges; each is one
+   catalog key and one copy member.
+6. **`.saved` selects Today.** Recommendation: keep until S7 decides what "Done" on the receipt does.
+7. **The header at the largest text sizes** is one row whatever the size. Recommendation: S5, which draws the
+   whole screen at `.accessibility3` and above, decides whether the row stacks.

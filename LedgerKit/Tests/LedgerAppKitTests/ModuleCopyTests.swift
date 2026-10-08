@@ -43,6 +43,8 @@ nonisolated struct ModuleCopyTests {
     /// What each audited module sets aside (`CopyAudit.Exemptions`; standards §7: the reviewer confirms each).
     /// A shared file in the sense of M1 convention 4: a feature lane adds only its own module's entry.
     static let exemptions: [String: CopyAudit.Exemptions] = [
+        // The Debug menu's "Start sample workout" row and the seed program it starts.
+        "FeatureWorkout": CopyAudit.Exemptions(debugOnly: ["WorkoutLauncher+Sample.swift"]),
         "LedgerAppKit": CopyAudit.Exemptions(
             // The UI-test launch argument (twice) and the temporary database's path: read by the launch, never drawn.
             literals: ["AppComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"]],

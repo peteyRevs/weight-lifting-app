@@ -1,0 +1,288 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "comment" : "Closes the workout screen when the workout cannot be shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "Close this screen and try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close this screen and try again."
+          }
+        }
+      }
+    },
+    "Couldn't discard this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't discard this workout"
+          }
+        }
+      }
+    },
+    "Couldn't open this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't open this workout"
+          }
+        }
+      }
+    },
+    "Couldn't start the new workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start the new workout"
+          }
+        }
+      }
+    },
+    "Couldn't start this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start this workout"
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "comment" : "Ends the workout without saving it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "Discard and start new" : {
+      "comment" : "Discards the workout that is running and starts the one that was asked for",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard and start new"
+          }
+        }
+      }
+    },
+    "Elapsed time" : {
+      "comment" : "Spoken label of the workout's running time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed time"
+          }
+        }
+      }
+    },
+    "End workout?" : {
+      "comment" : "Title of the dialog the Finish button opens",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End workout?"
+          }
+        }
+      }
+    },
+    "Exercise %lld of %lld" : {
+      "comment" : "Which exercise of the workout is the current one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exercise %lld of %lld"
+          }
+        }
+      }
+    },
+    "Finish" : {
+      "comment" : "Button that asks how to end the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish"
+          }
+        }
+      }
+    },
+    "It's still in progress. Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It's still in progress. Try again."
+          }
+        }
+      }
+    },
+    "Keep lifting" : {
+      "comment" : "Closes the dialog and returns to the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep lifting"
+          }
+        }
+      }
+    },
+    "Minimize" : {
+      "comment" : "Button that closes the workout screen and keeps the workout running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minimize"
+          }
+        }
+      }
+    },
+    "Nothing was changed. Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing was changed. Try again."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Resume it" : {
+      "comment" : "Opens the workout that is already running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume it"
+          }
+        }
+      }
+    },
+    "This day has no exercises yet." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This day has no exercises yet."
+          }
+        }
+      }
+    },
+    "This day is no longer in your program." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This day is no longer in your program."
+          }
+        }
+      }
+    },
+    "Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again."
+          }
+        }
+      }
+    },
+    "Workout progress" : {
+      "comment" : "Spoken label of the workout's progress bar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout progress"
+          }
+        }
+      }
+    },
+    "You have a workout in progress" : {
+      "comment" : "Title of the dialog shown when starting a workout while another is running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have a workout in progress"
+          }
+        }
+      }
+    },
+    "Your program's block has ended." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your program's block has ended."
+          }
+        }
+      }
+    },
+    "Your workout in progress was discarded." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workout in progress was discarded."
+          }
+        }
+      }
+    },
+    "Your workout in progress was kept." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workout in progress was kept."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
