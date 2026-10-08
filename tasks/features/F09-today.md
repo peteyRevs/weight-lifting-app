@@ -255,3 +255,37 @@ Pete with the slice's other new texts.
 19. **Recorded for S5** (F9-S3-8, round 2): `make` counts a workout once for each time it is handed in. The store
     hands each finished workout of the week once (one read over the union of the stats week and the program
     week, or a merge by id), and its test pins that; the comment on `TodayInput.weekWorkouts` says so in S5.
+
+## Plan amendments — slice S4, the views (orchestrator, 2026-10-08)
+
+Cut from `main`, which holds the presentation (S3) and the scrolling-screens convention
+(`docs/testing-strategy.md` §2.5–§2.6). The Today screen drawn from a `TodayModel` and nothing else: no store,
+not yet in the app (the placeholder stays until S5). The plan's S4 row lists the files; "Inputs the implementer
+needs › S4 — views", S3's "Inputs for S4" and the review's "What S4 must be told" give what each view is
+handed. About 610 product lines planned. The slice is accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `TodayModel` (or `Loadable` of it) and closures;
+   no view decides which card, formats a number or a date, or reads a clock, calendar or locale. Every text on
+   screen is a string of the model or a `TodayCopy` lookup the model does not carry (none is expected).
+2. **The screen scrolls as the convention says:** `TodayScreen` is its pinned parts plus a `ScrollView` around
+   one page view (`TodayPage(model:)`); snapshots and VoiceOver trees are taken from the page; the screen has
+   its one nightly UI test listed for S5, when it is in the app.
+3. **All eight states have a preview and snapshots** (the registry `TodayPreview`): up next, a live workout
+   with Resume, logged, rest day with the off-schedule sheet's list, no program, block complete, loading and
+   failed, in light and dark at the sizes `docs/testing-strategy.md` gives for a screen, and one at the
+   largest accessibility size without clipped or overlapping text.
+4. **The header, the week strip, the card, the tiles and the recent list** match the dark design
+   (`design/prototype/Ledger v2.dc.html`, the regions the notes cite) with `LedgerDesign` tokens and
+   components only: no literal colour, font or spacing in the feature.
+5. **The resume button's time ticks** from the model's start instant with `Text(timerInterval:)` and is frozen
+   in previews and tests; nothing else on the screen animates on its own.
+6. **Actions.** Every button and row calls its closure with the model's `TodayRoute` or action value; the
+   off-schedule sheet is presented by the screen from a value the model gives; a tap is at least 44 points.
+7. **VoiceOver.** One intended tree for the page, written in the notes and pinned by a test, for each of the
+   eight states: order, labels from the model's spoken texts, traits (headings, buttons), the strip's cells
+   read as the model says, the tiles as one element each; nothing decorative is read.
+8. **The two additions to `LedgerDesign`** the plan names (`IconPillButton`, `PrimaryButton` taking a `Text`)
+   are components with gallery cases, snapshots and tree rows, usable by other features; existing references
+   change only where the plan says they do, and each changed reference is listed.
+9. **Wiring of the test targets** as the plan's row says (`snapshotTestTargets`, `PreviewScan`); the gate's
+   preview and string-catalog steps pass; `FeatureToday` stays at or above its coverage threshold.
