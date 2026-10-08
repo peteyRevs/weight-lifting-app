@@ -349,3 +349,48 @@ sheet is S8).
 
 Not in S3: the swap event's payload (O10 is decided when S8 starts), anything History edits or deletes (F13), any
 screen.
+
+## Plan amendments — slice S4, the cover and the header (orchestrator, 2026-10-08)
+
+Cut from `main`, which now holds the session host (S1 to S3), the tab shell and the localization rule (#28),
+the scrolling-screens convention (testing-strategy §2.5 to §2.6) and F11's editing rules. The first slice of
+the workout a lifter can see: starting or resuming a workout opens a full-screen cover with a header (minimize,
+the elapsed time, finish) over an otherwise empty body. Logging sets comes in S5. The plan's S4 row lists the
+files; "Inputs the implementer needs › S4 — cover and header", "What the cover needs from the shell", and the
+"Inputs for S4" sections of S2 and S3 give the calls. About 580 product lines planned. Accepted when:
+
+1. **Start** (criterion 1). From the app's root, asking for a workout of a program's day through the launcher
+   runs `StartWorkoutUseCase`, and the cover appears over the tabs showing that workout: its name, "0:00"
+   counting up, and the progress segments of criterion 13 with none done.
+2. **Resume.** With a live workout, asking for the same day shows that workout as it is, with its real elapsed
+   time. Minimize closes the cover and leaves the workout live; asking again shows it again. After the app is
+   killed and relaunched with a live workout, the launcher can show it (recovery is S2's; this slice only
+   reads the session).
+3. **Resume never goes through the start refusal** (F11's finding): a live workout is shown from the session's
+   own state even when its day was since deleted or emptied in the program; `StartWorkoutUseCase.start` is
+   called only when no workout is live or the day asked for differs.
+4. **The conflict** (criterion 2). Asking for another day while a workout is live shows the dialog of the
+   brief with its exact texts and its choices (resume the live one; discard it and start the new one; cancel),
+   and each choice does what it says, in that order, with nothing started when the discard fails.
+5. **Finish, for now.** "Finish" opens a dialog with "Discard" and "Keep lifting" only (the save and the
+   receipt are S7). Discard ends the workout through the session, closes the cover and leaves nothing live;
+   a discard that fails is shown and the workout stays.
+6. **The elapsed time** is drawn from the workout's start with `Text(timerInterval:)` (one `WorkoutTimeline`
+   value gives views their time, fixed in previews and tests), is "1:01:05" past an hour, and what VoiceOver
+   says for it does not carry a frozen time (F09 S4's ruling: a label without the time).
+7. **The store** (`WorkoutStore`, a skeleton here) follows the M1 conventions: `@MainActor @Observable`,
+   synchronous intents, its work run from the root's task, `Loadable` state, no unstructured task; it follows
+   `WorkoutSessionClient.updates()` and never plays haptics twice (this slice plays none).
+8. **The presentation of the header** is pure and holds every string, resolved in `WorkoutCopy` from
+   `FeatureWorkout`'s own String Catalog under standards §7; the module's source test forbids ambient clock,
+   calendar, locale and zone, as `FeatureToday`'s and `FeatureProgram`'s do.
+9. **The shell.** `LedgerAppKit` presents the cover from the launcher above the tabs (`MainRoot`'s `body`, as
+   the conventions reserve it), maps `WorkoutRoute`, and the Debug menu gains "Start sample workout" so the
+   cover can be reached before Today is wired. No other screen changes.
+10. **Tests.** The store against `FakeWorkoutSessionClient` and the in-memory stores (start, resume, conflict
+    with each choice, discard, failures, a session update arriving while the dialog shows); the presentation
+    word for word; snapshots of the header as the plan lists; one pinned VoiceOver tree for the cover; one UI
+    test in the PR lane that starts the sample workout from the Debug menu, sees "0:00" advance, minimizes,
+    resumes and discards.
+11. **Wiring of the module** as `FeatureToday` and `FeatureProgram` have it: the target's `resources`, the
+    coverage thresholds, the snapshot and preview registrations; the gate's catalog and preview steps pass.
