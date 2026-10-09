@@ -24,6 +24,9 @@
         case progressSegments = "ProgressSegments"
         case sheetChrome = "SheetChrome"
         case emptyState = "EmptyState"
+        case stepperField = "StepperField"
+        case ledgerToggleStyle = "LedgerToggleStyle"
+        case wrapLayout = "WrapLayout"
         case watchPrimaryButton = "WatchPrimaryButton"
         case watchRestRing = "WatchRestRing"
         case watchStatBlock = "WatchStatBlock"
@@ -50,6 +53,9 @@
             case .progressSegments: ProgressSegmentsGallery().ledgerGalleryPage()
             case .sheetChrome: SheetChromeGallery().ledgerGalleryPage()
             case .emptyState: EmptyStateGallery().ledgerGalleryPage()
+            case .stepperField: StepperFieldGallery().ledgerGalleryPage()
+            case .ledgerToggleStyle: LedgerToggleGallery().ledgerGalleryPage()
+            case .wrapLayout: WrapLayoutGallery().ledgerGalleryPage()
             case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
             case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
             case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
@@ -166,6 +172,18 @@
 
     #Preview("EmptyState") {
         DesignPreview.emptyState.content
+    }
+
+    #Preview("StepperField") {
+        DesignPreview.stepperField.content
+    }
+
+    #Preview("LedgerToggleStyle") {
+        DesignPreview.ledgerToggleStyle.content
+    }
+
+    #Preview("WrapLayout") {
+        DesignPreview.wrapLayout.content
     }
 
     #Preview("WatchPrimaryButton") {

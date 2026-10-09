@@ -97,6 +97,7 @@ nonisolated extension AdvDay {
         case let .setSuperset(isOn, slot): DayEditing.setSuperset(isOn, slot: slot, in: day)
         case let .move(direction, slot): DayEditing.move(day, slot: slot, direction)
         case let .remove(slot): DayEditing.removeSlot(day, slot: slot)
+        case let .add(slots): DayEditing.addSlots(day, slots)
         }
     }
 

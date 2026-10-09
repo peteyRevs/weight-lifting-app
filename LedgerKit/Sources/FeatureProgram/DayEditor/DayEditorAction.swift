@@ -69,10 +69,14 @@ nonisolated enum SlotEdit: Hashable, Sendable {
     case setSuperset(Bool, slot: SlotID)
     case move(MoveDirection, slot: SlotID)
     case remove(slot: SlotID)
+    /// The exercise library's picks, as the slots `DayEditing.newSlot` built for them when "Add" was
+    /// tapped, in the order picked: they go to the day's end. Each carries its id, so a slot the day
+    /// already holds is left out and a second application adds nothing.
+    case add([Slot])
 
     var isRelative: Bool {
         switch self {
-        case .set, .setProgression, .setDropSet, .setSuperset: false
+        case .set, .setProgression, .setDropSet, .setSuperset, .add: false
         case .move, .remove: true
         }
     }
@@ -92,6 +96,8 @@ nonisolated enum SlotEdit: Hashable, Sendable {
             DayEditing.move(day, slot: slot, direction)
         case let .remove(slot):
             DayEditing.removeSlot(day, slot: slot)
+        case let .add(slots):
+            DayEditing.addSlots(day, slots)
         }
     }
 }

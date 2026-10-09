@@ -13,7 +13,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "\(count) sets a week",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Every training day's sets together, after the number of training days"
         )
     }
@@ -29,7 +29,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "\(count) exercises",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "On a day's card: the number of exercises the day has"
         )
     }
@@ -38,14 +38,19 @@ nonisolated extension ProgramCopy {
         String(
             localized: "\(count) sets",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "On a day's card: the day's sets, its drop sets among them"
         )
     }
 
     /// "~39 min": how long a day is expected to take.
     static func estimate(minutes: Int, locale: Locale) -> String {
-        String(localized: "~\(minutes) min", bundle: .module, locale: locale, comment: "A day's estimated length")
+        String(
+            localized: "~\(minutes) min",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "A day's estimated length"
+        )
     }
 
     static var noExercisesYet: String {

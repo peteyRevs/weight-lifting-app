@@ -231,12 +231,14 @@ nonisolated extension SlotEditorModel {
 }
 
 nonisolated extension SlotEdit {
-    /// The slot the edit names.
-    var slot: SlotID {
+    /// The slot the edit names; nil for the library's picks, which name the slots they bring.
+    var slot: SlotID? {
         switch self {
         case let .set(_, slot), let .setProgression(_, slot), let .setDropSet(_, slot), let .setSuperset(_, slot),
              let .move(_, slot), let .remove(slot):
             slot
+        case .add:
+            nil
         }
     }
 }

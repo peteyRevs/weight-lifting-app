@@ -78,7 +78,11 @@
                 GallerySection("EmptyState") { EmptyStateGallery() },
                 GallerySection("WatchPrimaryButton") { WatchPrimaryButtonGallery().galleryWatchScreen() },
                 GallerySection("WatchRestRing") { WatchRestRingGallery().galleryWatchScreen() },
-                GallerySection("WatchStatBlock") { WatchStatBlockGallery().galleryWatchScreen() }
+                GallerySection("WatchStatBlock") { WatchStatBlockGallery().galleryWatchScreen() },
+                // The form controls (F11 S8) come last: the pages above stand where they stood.
+                GallerySection("StepperField") { StepperFieldGallery() },
+                GallerySection("LedgerToggleStyle") { LedgerToggleGallery() },
+                GallerySection("WrapLayout") { WrapLayoutGallery() }
             ]
         }
     }

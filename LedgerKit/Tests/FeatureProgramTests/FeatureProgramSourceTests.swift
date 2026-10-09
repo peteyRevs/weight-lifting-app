@@ -85,7 +85,11 @@ nonisolated struct FeatureProgramSourceTests {
             "DayEditorAction.swift",
             "SlotEditorPresentation.swift",
             "SlotEditorPresentation+Fields.swift",
-            "SlotEditorPresentation+Preview.swift"
+            "SlotEditorPresentation+Preview.swift",
+            // The exercise library's (F11 S8 criterion 13).
+            "ExercisePickerPresentation.swift",
+            "ExercisePickerAction.swift",
+            "ExercisePickerInput.swift"
         ] {
             #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")
         }
@@ -96,6 +100,10 @@ nonisolated struct FeatureProgramSourceTests {
         #expect(try Self.uses(of: Self.inexact, inFiles: Self.printsWhatIsDrawn) == [])
         let read = try CopyAudit.sources(ofModule: "FeatureProgram").keys.filter(Self.printsWhatIsDrawn)
         #expect(read.count >= 6, "the presentation, copy and model files were not found: \(read.sorted())")
+        // The exercise library's files (F11 S8) are read too, the model and the copy among them.
+        for name in ["ExercisePickerPresentation.swift", "ExercisePickerModel.swift", "ProgramCopy+Picker.swift"] {
+            #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")
+        }
     }
 
     @Test("The check reads code and the code of an interpolation, not comments or text, and finds what is there")

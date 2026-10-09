@@ -28,7 +28,7 @@ nonisolated enum ProgramCopy {
         String(
             localized: "BLOCK · \(weeks) WEEKS",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Eyebrow of the block's weeks, with the number of weeks in the block"
         )
     }
@@ -46,7 +46,7 @@ nonisolated enum ProgramCopy {
         String(
             localized: "\(count) weeks",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Spoken value of the block's length"
         )
     }
@@ -66,7 +66,7 @@ nonisolated enum ProgramCopy {
         String(
             localized: "\(count) DAYS",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Under a week's chip: the number of days that week trains"
         )
     }
@@ -87,7 +87,12 @@ nonisolated enum ProgramCopy {
 
     /// "4 days": the program's training days in the summary, and a week's training days as VoiceOver reads them.
     static func days(_ count: Int, locale: Locale) -> String {
-        String(localized: "\(count) days", bundle: .module, locale: locale, comment: "A number of training days")
+        String(
+            localized: "\(count) days",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "A number of training days"
+        )
     }
 
     // MARK: The selected week
@@ -158,5 +163,35 @@ nonisolated enum ProgramCopy {
             bundle: .module,
             comment: "Button that makes the selected week a deload week; also a deload week's spoken value"
         )
+    }
+}
+
+// MARK: - Counted texts
+
+nonisolated extension Locale {
+    /// The locale every counted text of the module is looked up with, and the one place that decides it:
+    /// this locale with its language replaced by the language the catalog answers in. A lookup picks a text's
+    /// plural form by its locale's language, so with the lifter's own locale an English text would take
+    /// another language's form: "Add 1 exercises" in Japanese, which has no singular, "Add 21 exercise" in
+    /// Russian.
+    ///
+    /// It reads two things and nothing of the device: the languages this module's catalog holds
+    /// (`Bundle.module.localizations`), and this locale, the one the copy member was handed. Of those
+    /// languages it takes the one that fits this locale best, which is English while the catalog holds only
+    /// English. The region and the numbering system stay this locale's, so the number is still written as the
+    /// lifter writes numbers: its digits, and its region's grouping.
+    var forCountedText: Locale {
+        let fitting = Bundle.preferredLocalizations(
+            from: Bundle.module.localizations,
+            forPreferences: [identifier(.bcp47)]
+        )
+        var components = Locale.Components(locale: self)
+        if let resolved = fitting.first {
+            var language = Locale.Language.Components(identifier: resolved)
+            language.region = language.region ?? region
+            components.languageComponents = language
+        }
+        components.numberingSystem = numberingSystem
+        return Locale(components: components)
     }
 }
