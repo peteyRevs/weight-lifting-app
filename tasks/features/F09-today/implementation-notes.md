@@ -4014,3 +4014,120 @@ The clock argument is now 56 lines (45 and 11), over the "about 40" of the rulin
 
 Not run: the nightly audit tests (red until the tester's round 2, by the ruling), the rest of the nightly
 plan, a Release build, the device.
+
+## Slice S5 — adversarial testing, round 2 (G2 tester, 2026-10-09)
+
+Against 6d6f351 (the fix round). No product code changed. **No finding, and no test of mine is left failing,
+in the PR lane or the nightly.** The seven audit tests are green with four exclusions; criteria 14, 15 and
+16 held under attack.
+
+### Criterion 19: the audit's exclusions
+
+`Apps/LedgerUITests/TodayAuditExclusionsAdversarial.swift` (new): `TodayAuditExclusions.isKnownFalsePositive`,
+used by `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` (on the Today tab alone) and by
+`TodayAuditAdversarial`'s `audit`. An issue is excluded by the system's own words for it *and* the element's
+label, each case with a comment naming the element, the measurement and the reason:
+
+| The system's words | Excluded on | Measured in round 1 |
+|---|---|---|
+| "Contrast nearly passed" | the orange button: "Set up program", "Start workout", "Resume · …" | white on (255, 91, 34) is 3.10:1; 16 pt bold is large text (3:1) |
+| "Dynamic Type font sizes are partially unsupported" | the eyebrows "RECENT", "UP NEXT", "SCHEDULED REST" | Caption 2's curve is flat below the default size; the eyebrow grows at every size above it |
+| "Text clipped" | the orange button's labels, the header's date (by its shape, "Wednesday, September 16"), "Week n of n · ~n min", "Lower A — Squat focus", "SCHEDULED REST", "No session today" | the frame is the role's line (1.0 or 1.08 of the size), Archivo's ascent plus descent is 1.088; nothing is cut on screen |
+| "Contrast failed" | "RECENT" and "No sessions yet. Your first workout lands here.", and only while the element's frame meets the tab bar's | the floating tab bar is drawn over the page's end at rest; scrolled, it stands clear |
+
+No radar is named: none is filed, since these are the audit's rules met by the design's own choices.
+Each state's excluded issues are kept with the result as a text attachment ("…: excluded"); the green run
+excluded 40 issues over the eight audits, every one of the four kinds above on the elements above (read from
+the attachments).
+
+**One deliberate break** (scratch mutation of two views, restored from scratchpad copies; `git status` clean
+for `Sources` afterwards): the orange button's label drawn in `accentText`, the message card's body in
+`hairlineStrong`, and its title held to one line 70 pt wide. `test_noProgram_light_passesTheAudit` and
+`TabsAdversarial`'s audit both failed, with exactly: "Contrast failed" on "Set up program" (another issue on
+an excluded element), "Contrast failed" on "Set up a program to see your next session here." and "Text
+clipped" on "No program yet" (the excluded kinds on other elements). **What a label cannot tell:** a text
+that is really cut on one of the excluded labels is reported in the same words as its false positive; that
+stays with the layout tests and the references.
+
+### Criterion 14: the root across the scene's phases
+
+`FeatureTodayTests/Adversarial/TodayRootPhaseAdversarialTests` (+`Background`), six hosted tests, the root
+under a phase the test moves (the implementer's way, with a wait that ends):
+
+- **A launch that starts inactive** loads Today while still inactive; becoming active starts nothing more
+  (one observation, one read, no publication).
+- **A launch in the background** (the system starts the app there for the watch or a notification) runs
+  nothing: the store stays idle, nothing is observed. The first step forward, to inactive, loads it, once.
+- **Five trips to inactive and back, a setting saved during each:** every change is shown by the one run;
+  one observation in all; the screen showed nothing but models.
+- **A trip to the background on the rest day,** a setting saved and a workout stored while there: the store
+  follows nothing in the background (the model stays, no publication, no run started on the way there); back,
+  both changes are shown, the off-schedule list is equal to the one that was on screen and the state never
+  left `loaded`, so a sheet open across the trip keeps its list; two observations in all.
+- **Back in a new week** (Sunday 23:50, back Monday 00:10): Monday's date, "0" sessions, "−100% from last
+  week", and the last read is Monday to Monday.
+- **A route** asked for in the same turn as the phase leaves active, one asked for in the background and one
+  asked for as it comes back: each handed on once, in order.
+
+**The first launch in the running app** is covered by the existing UI tests, and needs no new one: every
+audit test launches the app and waits for Today's loaded screen (all green in `r2audit`), as `Smoke` and
+`Today` do (the implementer's run on the fixed tree). What no test shows: which phase SwiftUI reports first on
+a device. By the rule it does not matter: from inactive or active the task runs at once, and from the
+background it runs on the first change away from it.
+
+### Criterion 15: the walks across midnight and a week's end
+
+The walk's clock step now leaves the task running half the time (`moveClock`, "no restart"): the clock moves
+by 1, 7, 24, 31, 72 or 168 hours and one change follows that rebuilds the model without making the reads
+stale by itself (a workout started, or a set logged in the live one). The oracle is unchanged. 1,000 walks
+(`LEDGER_PROPERTY_SEED_COUNT=20000`, 71 s): every burst ends at the oracle's model.
+
+- **N4 is gone, and the walk would see it come back.** With the kept reads used whatever they were read for
+  (`history(for:)` returning the kept read without comparing ranges; restored from a copy), the walk fails
+  at seed 467238 (Auckland): after "clock +168 h, no restart" and a set logged, "0 lb moved this week, −100%
+  from last week" where the oracle has no change, the last read still the old stretch. The implementer's
+  `rebuild_acrossTheWeeksEnd_readsTheNewWeeks` fails under it too.
+- **N1 to N3 are as they were** (the walk still steps around them the same way; by reading, the fix does not
+  touch what the store takes as a sign of change or what it keeps of the session). One difference in degree
+  for N1: a rebuild that asks for other weeks reads again, so a workout deleted or arrived behind the five
+  most recent is also seen at the first rebuild in a new week, not only at the next run.
+- The seeds named in the walk's comments (55450, 269263, 380129, 475157) are round 1's sequences; the new
+  step changed what each seed draws.
+
+### Criterion 16: the clock argument
+
+My nine tests of round 1 pass unedited on 6d6f351 (host and simulator), `offset_valueThatIsNoRealInstant_isRefused`
+with its eight cases among them. Added in `UITestClockAdversarialTests+Exact.swift` (the round-1 file's four
+helpers lost `private` for it, nothing else): fractional seconds, an offset of hours alone, a lower-case or
+missing zone, an offset with one digit or with seconds, a month or minute of one digit and a year of five
+digits are refused (12 cases); 29 February 2028, 23:59:59 and offsets of −12:00 and +14:00 are read, and 29
+February 2026 is refused. The pure functions still compile in Release because these tests name them: left
+as it is, as ruled.
+
+### Edits to round 1's files
+
+- `TodayAuditAdversarial.swift`: `audit` consults the exclusions and attaches what it excluded; the header
+  comment says so.
+- `TabsAdversarial.swift`: the audit test's handler, on the Today tab.
+- `TodayStoreWalkAdversarialSupport+Steps.swift`: `moveClock`.
+- `UITestClockAdversarialTests.swift`: four `private` removed.
+
+### Not attacked
+
+A real scene (the hosted phase is an environment value the test sets); the audit beyond round 1's states and
+sizes; a Release build; the device; the watch.
+
+### The runs (final tree)
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --lint-only` | exit 0 |
+| Host, `swift test --filter 'FeatureTodayTests\|LedgerAppKitTests'` | 255 and 284 tests, 0 failed |
+| Host, 1,000 walks (`LEDGER_PROPERTY_SEED_COUNT=20000`) | passed, 71 s |
+| Simulator (iPhone 17, iOS 27.0, through the lock), Nightly plan, `LedgerUITests/TodayAuditAdversarial` (7) and `TabsAdversarial/test_everyTabRoot_…` (`r2audit`) | 8 of 8 passed, 184 s |
+| The same two audit tests under the deliberate break (`r2break`) | 2 of 2 failed, as above |
+| Simulator, PR plan, twelve suites: the phase tests, `TodayRootTests`, and round 1's ten (`r2sim`) | 64 tests, 64 passed |
+| Simulator, PR plan, `TodayRootPhaseAdversarialTests` and `UITestClockAdversarialTests` after their files were split for the linter (`r2sim2`) | 17 tests, 17 passed |
+
+Not run: the full gate (the orchestrator's next step), `Smoke` and `Today` (the implementer's run on the fixed
+tree: 6 of 6), the watch, CI.

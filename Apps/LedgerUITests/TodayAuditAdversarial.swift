@@ -9,10 +9,10 @@ import XCTest
 /// Each issue is recorded with the element's type, label and frame, and a picture of the element is kept
 /// with the result, so that a "text clipped" can be looked at. Nightly only.
 ///
-/// **FINDING F09-S5-1 to F09-S5-4.** In round 1 nothing is excluded: every issue the system reports fails
-/// its test, real or not. The verdict on each is in the notes ("Slice S5 — adversarial testing, round 1");
-/// the exclusions of the false positives come in round 2, after the fix round, with the comment
-/// testing-strategy §2.7 asks for.
+/// **Round 2 (criterion 19).** Round 1 excluded nothing and judged the four issues the system reports false
+/// positives (FINDING F09-S5-1 to 4, in the notes). They are now excluded, by the system's words for the
+/// issue and the element's label, in `TodayAuditExclusions`, which holds the measurement and the reason of
+/// each. Anything else the system reports fails its test.
 final class TodayAuditAdversarial: XCTestCase {
     /// Thursday of week 5 of the seed program: nothing is scheduled.
     private static let restDay = "2026-09-17T12:00:00Z"
@@ -113,13 +113,16 @@ final class TodayAuditAdversarial: XCTestCase {
 }
 
 private extension TodayAuditAdversarial {
-    /// The system's audit of what is on screen, every type, nothing excluded. One line per issue: the state,
+    /// The system's audit of what is on screen, every type, less `TodayAuditExclusions`' four. One line per issue: the
+    /// state,
     /// the issue, the element's type, label and frame. A picture of the screen and of each element is kept.
     @MainActor
     func audit(_ app: XCUIApplication, state: String) throws -> [String] {
         attach(app.screenshot(), named: "\(state): screen")
         var issues: [String] = []
+        var excluded: [String] = []
         var elements: [(String, XCUIElement)] = []
+        let tabBar = app.tabBars.firstMatch.frame
         try app.performAccessibilityAudit { issue in
             var line = "\(state): \(issue.compactDescription)"
             if let element = issue.element {
@@ -130,9 +133,23 @@ private extension TodayAuditAdversarial {
             } else {
                 line += " [no element]"
             }
-            issues.append(line)
+            let isKnown = issue.element.map { element in
+                TodayAuditExclusions.isKnownFalsePositive(
+                    issue: issue.compactDescription, label: element.label, frame: element.frame, tabBar: tabBar
+                )
+            } ?? false
+            if isKnown {
+                excluded.append(line)
+            } else {
+                issues.append(line)
+            }
             return true
         }
+        // Kept with the result: what was excluded in this state, so a run shows it is still only these.
+        let list = XCTAttachment(string: excluded.joined(separator: "\n"))
+        list.name = "\(state): excluded"
+        list.lifetime = .keepAlways
+        add(list)
         for (name, element) in elements where element.exists {
             attach(element.screenshot(), named: name)
         }

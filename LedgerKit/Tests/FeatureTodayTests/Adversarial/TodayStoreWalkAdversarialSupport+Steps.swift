@@ -42,7 +42,7 @@ extension TodayWalk {
         case 10, 11: try await startOrLog()
         case 12: try await endSession()
         case 13: restart()
-        default: moveClock()
+        default: try await moveClock()
         }
     }
 
@@ -177,10 +177,24 @@ extension TodayWalk {
 
     /// The clock moves on by some hours or days. The store keeps no time, so the root's task restarts with
     /// it: that is how Today meets a new day.
-    func moveClock() {
+    ///
+    /// Round 2 (criterion 15): half the time the task does not restart, as when the app stays in front
+    /// across midnight or a week's end. The store does not tick, so the walk then makes one change that
+    /// rebuilds the model without making the reads stale by itself: a workout started, or a set logged in the
+    /// live one. The model must be the new moment's, with the weeks of the new moment read (round 1's N4).
+    func moveClock() async throws {
         let hours = [1, 7, 24, 31, 72, 168][pick(6)]
         scene.clock.value = scene.clock.value.addingTimeInterval(Double(hours) * 3600)
-        trace.append("clock +\(hours) h")
-        restart()
+        guard pick(2) == 0 else {
+            trace.append("clock +\(hours) h")
+            restart()
+            return
+        }
+        trace.append("clock +\(hours) h, no restart")
+        if live?.exercises[0].sets.contains(where: { !$0.isDone }) ?? true {
+            try await startOrLog()
+        } else {
+            try await endSession()
+        }
     }
 }
