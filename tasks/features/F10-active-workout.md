@@ -349,3 +349,81 @@ sheet is S8).
 
 Not in S3: the swap event's payload (O10 is decided when S8 starts), anything History edits or deletes (F13), any
 screen.
+
+## Plan amendments — slice S4, the cover and the header (orchestrator, 2026-10-08)
+
+Cut from `main`, which now holds the session host (S1 to S3), the tab shell and the localization rule (#28),
+the scrolling-screens convention (testing-strategy §2.5 to §2.6) and F11's editing rules. The first slice of
+the workout a lifter can see: starting or resuming a workout opens a full-screen cover with a header (minimize,
+the elapsed time, finish) over an otherwise empty body. Logging sets comes in S5. The plan's S4 row lists the
+files; "Inputs the implementer needs › S4 — cover and header", "What the cover needs from the shell", and the
+"Inputs for S4" sections of S2 and S3 give the calls. About 580 product lines planned. Accepted when:
+
+1. **Start** (criterion 1). From the app's root, asking for a workout of a program's day through the launcher
+   runs `StartWorkoutUseCase`, and the cover appears over the tabs showing that workout: its name, "0:00"
+   counting up, and the progress segments of criterion 13 with none done.
+2. **Resume.** With a live workout, asking for the same day shows that workout as it is, with its real elapsed
+   time. Minimize closes the cover and leaves the workout live; asking again shows it again. After the app is
+   killed and relaunched with a live workout, the launcher can show it (recovery is S2's; this slice only
+   reads the session).
+3. **Resume never goes through the start refusal** (F11's finding): a live workout is shown from the session's
+   own state even when its day was since deleted or emptied in the program; `StartWorkoutUseCase.start` is
+   called only when no workout is live or the day asked for differs.
+4. **The conflict** (criterion 2). Asking for another day while a workout is live shows the dialog of the
+   brief with its exact texts and its choices (resume the live one; discard it and start the new one; cancel),
+   and each choice does what it says, in that order, with nothing started when the discard fails.
+5. **Finish, for now.** "Finish" opens a dialog with "Discard" and "Keep lifting" only (the save and the
+   receipt are S7). Discard ends the workout through the session, closes the cover and leaves nothing live;
+   a discard that fails is shown and the workout stays.
+6. **The elapsed time** is drawn from the workout's start with `Text(timerInterval:)` (one `WorkoutTimeline`
+   value gives views their time, fixed in previews and tests), is "1:01:05" past an hour, and what VoiceOver
+   says for it does not carry a frozen time (F09 S4's ruling: a label without the time).
+7. **The store** (`WorkoutStore`, a skeleton here) follows the M1 conventions: `@MainActor @Observable`,
+   synchronous intents, its work run from the root's task, `Loadable` state, no unstructured task; it follows
+   `WorkoutSessionClient.updates()` and never plays haptics twice (this slice plays none).
+8. **The presentation of the header** is pure and holds every string, resolved in `WorkoutCopy` from
+   `FeatureWorkout`'s own String Catalog under standards §7; the module's source test forbids ambient clock,
+   calendar, locale and zone, as `FeatureToday`'s and `FeatureProgram`'s do.
+9. **The shell.** `LedgerAppKit` presents the cover from the launcher above the tabs (`MainRoot`'s `body`, as
+   the conventions reserve it), maps `WorkoutRoute`, and the Debug menu gains "Start sample workout" so the
+   cover can be reached before Today is wired. No other screen changes.
+10. **Tests.** The store against `FakeWorkoutSessionClient` and the in-memory stores (start, resume, conflict
+    with each choice, discard, failures, a session update arriving while the dialog shows); the presentation
+    word for word; snapshots of the header as the plan lists; one pinned VoiceOver tree for the cover; one UI
+    test in the PR lane that starts the sample workout from the Debug menu, sees "0:00" advance, minimizes,
+    resumes and discards.
+11. **Wiring of the module** as `FeatureToday` and `FeatureProgram` have it: the target's `resources`, the
+    coverage thresholds, the snapshot and preview registrations; the gate's catalog and preview steps pass.
+
+## Plan amendments — slice S4 after round 1 (orchestrator, 2026-10-08)
+
+The tester's lifecycle table held over the fake and the real host and under 80 seeded fault sequences (81
+tests; two left red on findings); the reviewer approved with five should-fix items and found no path to two
+live workouts or a lost one. Rulings, which add to S4's eleven criteria:
+
+12. **The conflict dialog shows its way out** (review SF1, F10-S4-4): three visible choices, "Resume it",
+    "Discard and start new" and "Cancel", the last drawn as an ordinary button as "Keep lifting" is.
+    (Default until Pete answers; an alert is the other form.)
+13. **When every set is logged, every segment reads done** (F10-S4-1): no segment is current.
+14. **The elapsed time never traps** (F10-S4-2): a start that is not a finite time reads "0:00".
+15. **A start that fails says why, also after a discard** (F10-S4-3): the same reasons as a plain start (the
+    day has no exercise; the day is gone; the block has ended).
+16. **A failure line claims only what is known** (review SF3): when the session could not be read again after
+    a failed call, the text does not say that nothing was changed.
+17. **The UI test proves what it says** (review SF2): it reads "0:00", then a later time, by the label's
+    value; no check in it can pass without the thing it names. **No unstructured task** in the module is
+    pinned by the source test (SF4). The translator's comment on "Exercise %lld of %lld" names each number
+    (SF5).
+18. **The conflict can be reached in the app** (F10-S4-5): the Debug menu gains a second row that asks for a
+    sample workout of another day, and one UI test starts one, asks for the other, and takes each of the
+    three choices in turn. If this would take the slice past 1,000 product lines, it moves to S5 and the
+    implementer says so. Kill and relaunch with a live workout stays with F15, which needs a UI-test launch
+    that keeps its database.
+19. **Rulings on round 2** (F10-S4-7 to -9). A refused replacement keeps its reason also when the session
+    could not be read again. A workout that ended elsewhere while the conflict dialog showed is reported as
+    ended, not as discarded (one neutral text). While any set is not logged exactly one segment is current:
+    the cursor's exercise if it still has a set to log, otherwise the first exercise that has one.
+20. **Deferred to F17, with the product owner's wording** (F10-S4-8): a workout that ended elsewhere while the
+    conflict dialog showed is still reported with the "discarded" text. It cannot happen on one phone; it can
+    once the watch syncs. Proposed wording: "Your workout in progress has ended." A cursor that names no row
+    leaves no segment current, as the tester pins.

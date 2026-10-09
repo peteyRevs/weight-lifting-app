@@ -1,7 +1,9 @@
 import XCTest
 
 /// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1: the app
-/// launches on a fresh database (`-LEDGER_UITEST`) to Today.
+/// launches on a fresh database (`-LEDGER_UITEST`) to Today. F10 S4 criterion 10: the workout's cover in the
+/// running app, and criterion 18: the conflict with a workout that is running; both reached through the Debug
+/// menu's sample rows until Today starts workouts (F09).
 final class Smoke: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -15,5 +17,139 @@ final class Smoke: XCTestCase {
         let title = app.staticTexts["today.title"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertEqual(title.label, "Today")
+    }
+
+    /// The sample workout starts and its cover goes up over the tabs with no more than a second or two on
+    /// its clock; the time then reads later; Minimize takes the cover down and leaves the workout running;
+    /// asking for the same day again shows that workout; Finish, then Discard, ends it and takes the cover
+    /// down. The time is read from the text the system's timer draws, in seconds. That a start reads
+    /// exactly "0:00", and an hour "1:01:05", is a reference's to show (`WorkoutSnapshotTests`): by the time
+    /// a UI test can read the cover, its first second may have passed.
+    @MainActor
+    func test_sampleWorkout_startsCountsMinimizesResumesDiscards() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launch()
+        let today = app.staticTexts["today.title"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10))
+
+        startSampleWorkout(in: app)
+        let minimize = app.buttons["workout.header.minimize"]
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        let atStart = try elapsedSeconds(in: app)
+        XCTAssertLessThanOrEqual(atStart, 2, "a workout just started")
+        XCTAssertEqual(app.staticTexts["workout.header.title"].label, "Upper A — Push focus")
+        XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 1 of 5")
+        XCTAssertFalse(today.isHittable, "the cover is over the tabs")
+        XCTAssertEqual(app.otherElements["workout.header.elapsed"].label, "Elapsed time")
+        attachScreenshot(of: app, named: "Workout, just started")
+        let counted = XCTNSPredicateExpectation(
+            predicate: NSPredicate { [self] _, _ in (try? elapsedSeconds(in: app)).map { $0 > atStart } ?? false },
+            object: nil
+        )
+        wait(for: [counted], timeout: 10)
+
+        minimize.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(becomesHittable(today), "the tabs are back")
+
+        startSampleWorkout(in: app)
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10), "the same day again shows the workout that is running")
+        XCTAssertGreaterThan(try elapsedSeconds(in: app), atStart, "it kept counting while it was minimized")
+        app.buttons["workout.header.finish"].tap()
+        let discard = app.buttons["workout.finish.discard"].firstMatch
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["End workout?"].exists)
+        XCTAssertTrue(app.buttons["workout.finish.keep"].firstMatch.exists)
+        attachScreenshot(of: app, named: "End workout?")
+        discard.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(becomesHittable(today), "the tabs are back")
+    }
+
+    /// F10 S4 criterion 18: with the first day's sample workout running, asking for another day's raises
+    /// "You have a workout in progress" with its three choices drawn, and each does what it says: "Cancel"
+    /// shows nothing and changes nothing; "Resume it" shows the workout that was running; "Discard and
+    /// start new" shows the other day's workout, newly started.
+    @MainActor
+    func test_sampleWorkout_anotherDay_cancelResumeAndReplace() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launch()
+        let today = app.staticTexts["today.title"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10))
+        let minimize = app.buttons["workout.header.minimize"]
+        let title = app.staticTexts["workout.header.title"]
+        let choices = ["resume", "replace", "cancel"].map { app.buttons["workout.conflict.\($0)"].firstMatch }
+
+        startSampleWorkout(in: app)
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        minimize.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
+
+        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
+        XCTAssertTrue(choices[2].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["You have a workout in progress"].exists)
+        XCTAssertEqual(choices.map(\.label), ["Resume it", "Discard and start new", "Cancel"])
+        XCTAssertEqual(choices.map(\.isHittable), [true, true, true], "all three are drawn")
+        attachScreenshot(of: app, named: "Workout in progress")
+        choices[2].tap()
+        XCTAssertTrue(choices[2].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(becomesHittable(today), "Cancel shows nothing")
+        XCTAssertFalse(minimize.exists)
+
+        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
+        XCTAssertTrue(choices[0].waitForExistence(timeout: 10), "Cancel discarded nothing: it asks again")
+        choices[0].tap()
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        XCTAssertEqual(title.label, "Upper A — Push focus", "Resume it shows the workout that was running")
+        let ran = try elapsedSeconds(in: app)
+        XCTAssertGreaterThan(ran, 5, "with the time it has run")
+        minimize.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 5))
+
+        startSampleWorkout(in: app, row: "debug.menu.startOtherSampleWorkout")
+        XCTAssertTrue(choices[1].waitForExistence(timeout: 10))
+        choices[1].tap()
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        XCTAssertEqual(title.label, "Lower A — Squat focus", "Discard and start new shows the other day's workout")
+        XCTAssertLessThan(try elapsedSeconds(in: app), ran, "newly started")
+    }
+
+    /// The seconds the cover's elapsed time reads now: the text the system's timer draws inside the
+    /// element VoiceOver knows as "Elapsed time" ("0:07", "1:01:05").
+    @MainActor
+    private func elapsedSeconds(in app: XCUIApplication) throws -> Int {
+        let drawn = app.otherElements["workout.header.elapsed"].staticTexts.firstMatch.label
+        let parts = try drawn.split(separator: ":").map { try XCTUnwrap(Int($0), "not a time: \(drawn)") }
+        XCTAssertTrue((2 ... 3).contains(parts.count), "not a time: \(drawn)")
+        return parts.reduce(0) { $0 * 60 + $1 }
+    }
+
+    /// Whether `element` can be tapped within a few seconds: it exists under the cover all along, so only
+    /// this says that the cover is down.
+    @MainActor
+    private func becomesHittable(_ element: XCUIElement) -> Bool {
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: element)
+        return XCTWaiter().wait(for: [hittable], timeout: 5) == .completed
+    }
+
+    /// Opens the Debug menu from Today's title and taps one of its sample rows: the first day's, or the
+    /// other day's.
+    @MainActor
+    private func startSampleWorkout(in app: XCUIApplication, row identifier: String = "debug.menu.startSampleWorkout") {
+        app.staticTexts["today.title"].press(forDuration: 1)
+        let row = app.buttons[identifier]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+    }
+
+    /// Kept with the result, so a run shows the screens it checked.
+    @MainActor
+    private func attachScreenshot(of app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

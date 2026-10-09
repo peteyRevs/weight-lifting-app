@@ -104,6 +104,18 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
             .reduce(Volume.zero) { $0 + Volume(weight: $1.weight, reps: $1.reps) }
     }
 
+    /// `cursor` when it names a row that exists, else nil (F04 review N7): a `started` snapshot's cursor is not
+    /// validated, and the engine keeps whatever cursor it has. A screen indexes `exercises` with this one,
+    /// never with the raw cursor.
+    public var checkedCursor: Cursor? {
+        guard let cursor, exercises.indices.contains(cursor.exerciseIndex),
+              exercises[cursor.exerciseIndex].sets.indices.contains(cursor.setIndex)
+        else {
+            return nil
+        }
+        return cursor
+    }
+
     /// Rule 24: time since `startedAt`, frozen at `endedAt` once the workout ends; never negative.
     /// It saturates at 2^63 s (`Double(Int64.max)`; NaN gives zero), because both dates can come from a
     /// peer's envelope and `Duration.seconds` traps on a non-finite or out-of-range interval (F04 fix

@@ -54,7 +54,10 @@
             case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
             case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
             case .designGallery: DesignGallery()
-            case .debugMenu: DebugMenu { Self.diagnostics }
+            case .debugMenu:
+                DebugMenu(actions: [DebugMenu.Action("Start sample workout", identifier: "debug.menu.sample") {}]) {
+                    Self.diagnostics
+                }
             case .diagnosticsPage: NavigationStack { DiagnosticsPage(sections: Self.diagnostics) }
             }
         }
