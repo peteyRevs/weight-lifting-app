@@ -189,6 +189,8 @@ extension TodayStore {
             mark.yield()
         }
         if !Task.isCancelled {
+            // Logged here, once, and not by each rebuild that then finds it ended.
+            logger.log.error("A store's observation ended while Today was on screen")
             sources.hasEnded = true
             mark.yield()
         }
@@ -202,7 +204,6 @@ extension TodayStore {
     /// history first when it is not known. A model equal to the one on screen is not published again.
     private func rebuild() async {
         guard !sources.hasEnded else {
-            logger.log.error("A store's observation ended while Today was on screen")
             state = .failed(TodayStoreError.observationEnded)
             return
         }
@@ -220,21 +221,22 @@ extension TodayStore {
         state = .loaded(model)
     }
 
-    /// The plain reads for `known` at `now`: as last made, or made now. Nil when the read failed, which is
+    /// The plain reads for `known` at `now`: as last made for the same stretches of time, or made now. Nil
+    /// when the read failed, which is
     /// logged and shown, and when the run's task was cancelled meanwhile, which shows nothing: the root went
     /// away, or a new run has taken over.
     private func history(for known: TodaySources.Known, at now: Date) async -> TodayHistory? {
-        if let kept = sources.history {
+        let ranges = TodayHistory.ranges(program: known.program, settings: known.settings, now: now, calendar: calendar)
+        if let kept = sources.history(for: ranges) {
             return kept
         }
         let staleCount = sources.staleCount
-        let ranges = TodayHistory.ranges(program: known.program, settings: known.settings, now: now, calendar: calendar)
         do {
             let read = try await TodayHistory.read(ranges, workouts: workouts, stats: stats)
             guard !Task.isCancelled else {
                 return nil
             }
-            sources.keep(read, readSince: staleCount)
+            sources.keep(read, for: ranges, readSince: staleCount)
             return read
         } catch {
             guard !Task.isCancelled else {

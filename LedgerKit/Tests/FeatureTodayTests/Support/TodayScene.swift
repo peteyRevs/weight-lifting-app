@@ -101,6 +101,7 @@ final nonisolated class ProbedWorkouts: WorkoutRepository {
 
     private struct State {
         var ranges: [Range<Date>] = []
+        var observations = 0
         var isFailing = false
         var gate: ReadGate?
     }
@@ -115,6 +116,11 @@ final nonisolated class ProbedWorkouts: WorkoutRepository {
     /// The stretches of time read so far, in order.
     var ranges: [Range<Date>] {
         state.withLock { $0.ranges }
+    }
+
+    /// How many times the workouts finished last were asked to be observed: once by each run of the store.
+    var observations: Int {
+        state.withLock { $0.observations }
     }
 
     /// While true, a read of a stretch of time throws `Refused`.
@@ -163,7 +169,8 @@ final nonisolated class ProbedWorkouts: WorkoutRepository {
     }
 
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
-        base.observeRecent(limit: limit)
+        state.withLock { $0.observations += 1 }
+        return base.observeRecent(limit: limit)
     }
 }
 

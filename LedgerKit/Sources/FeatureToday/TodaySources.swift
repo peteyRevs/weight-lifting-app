@@ -14,22 +14,30 @@ nonisolated struct TodaySources {
     /// A store's observation ended by itself: the model can no longer follow it.
     var hasEnded = false
 
-    /// The plain reads as they were last made; nil when a source they depend on has changed since.
-    private(set) var history: TodayHistory?
+    /// The plain reads as they were last made, with the stretches of time they were made for; nil when a
+    /// source they depend on has changed since.
+    private var kept: (ranges: TodayHistory.Ranges?, read: TodayHistory)?
     /// Counts the changes that made `history` stale, so that a read one of them overtook is not kept.
     private(set) var staleCount = 0
 
     /// A source the plain reads depend on has changed: they are made again before the next model.
     mutating func forgetHistory() {
-        history = nil
+        kept = nil
         staleCount += 1
     }
 
-    /// Keeps `read`, unless a change has made it stale since `count` was taken, before the read began. That
-    /// change has marked the store's channel too, so its next turn reads again.
-    mutating func keep(_ read: TodayHistory, readSince count: Int) {
+    /// The kept reads, when they were made for `ranges`. A read is used only for the days it was read for:
+    /// past midnight on the week's last day the moment asks for other weeks, and the reads are made again
+    /// although no source has changed.
+    func history(for ranges: TodayHistory.Ranges?) -> TodayHistory? {
+        kept.flatMap { $0.ranges == ranges ? $0.read : nil }
+    }
+
+    /// Keeps `read`, made for `ranges`, unless a change has made it stale since `count` was taken, before
+    /// the read began. That change has marked the store's channel too, so its next turn reads again.
+    mutating func keep(_ read: TodayHistory, for ranges: TodayHistory.Ranges?, readSince count: Int) {
         if staleCount == count {
-            history = read
+            kept = (ranges, read)
         }
     }
 

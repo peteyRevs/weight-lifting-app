@@ -66,6 +66,66 @@ struct TodayStoreLiveTests {
         task.cancel()
     }
 
+    // MARK: Criterion 15
+
+    /// Logs the first set of `live` in the scene's session: a change that makes no read stale by itself.
+    private static func logASet(of live: WorkoutState, in scene: Scene) async throws {
+        let set = live.exercises[0].sets[0]
+        try await scene.fake.apply(.setLogged(
+            exerciseIndex: 0, setID: set.id, weight: set.weight, reps: set.reps, doneAt: scene.clock.value
+        ))
+    }
+
+    @Test("15. A rebuild past midnight inside the week shows the new day over the same reads, which are still right")
+    func rebuild_acrossMidnight_showsTheNewDay() async throws {
+        let live = try Scene.liveLowerA()
+        let scene = try Scene(live: live)
+        let task = await scene.running()
+        #expect(scene.store.model?.header.date == "Wednesday, September 16")
+        scene.clock.value = Fixtures.date(2026, 9, 17, hour: 0, minute: 10)
+        try await Self.logASet(of: live, in: scene)
+        await eventually { scene.store.model?.header.date == "Thursday, September 17" }
+        #expect(scene.store.model?.header.title == "Rest day")
+        #expect(scene.workouts.ranges.count == 1, "Thursday asks for the same two weeks: nothing to read again")
+        task.cancel()
+    }
+
+    @Test("15. A rebuild past the week's end reads the new weeks, though no source made the reads stale")
+    func rebuild_acrossTheWeeksEnd_readsTheNewWeeks() async throws {
+        // Sunday night of week 1, with Wednesday's 1,000 lb stored and a workout begun at 23:40 still running.
+        let program = try TodayFixtures.program()
+        let wednesday = try TodayFixtures.workout(63, pounds: 1000, startedAt: Fixtures.date(2026, 9, 16, hour: 7))
+        let live = try TodayFixtures.liveWorkout(
+            50, of: program, weekIndex: 0, dayIndex: TodayFixtures.DayIndex.lowerA,
+            startedAt: Fixtures.date(2026, 9, 20, hour: 23, minute: 40)
+        )
+        let scene = try Scene(finished: [wednesday], live: live, now: Fixtures.date(2026, 9, 20, hour: 23, minute: 50))
+        let task = await scene.running()
+        #expect(scene.workouts.ranges == [Fixtures.date(2026, 9, 14) ..< Fixtures.date(2026, 9, 21)])
+        #expect(scene.store.model?.stats.sessions.value == "1")
+        #expect(scene.store.model?.stats.volume.accessibilitySummary == "1,000 lb moved this week")
+
+        // Ten past midnight a set is logged under the cover: the update of a live workout forgets no read.
+        scene.clock.value = Fixtures.date(2026, 9, 21, hour: 0, minute: 10)
+        try await Self.logASet(of: live, in: scene)
+        await eventually { scene.store.model?.header.date == "Monday, September 21" }
+        #expect(scene.workouts.ranges.last == Fixtures.date(2026, 9, 21) ..< Fixtures.date(2026, 9, 28))
+        #expect(scene.workouts.ranges.count == 2)
+        #expect(scene.store.model?.stats.sessions.value == "0", "Wednesday's workout is last week's now")
+        let summary = scene.store.model?.stats.volume.accessibilitySummary
+        #expect(summary == "0 lb moved this week, \u{2212}100% from last week", "against the week that just ended")
+
+        // The new reads are kept for the new weeks: the next set reads nothing.
+        let next = live.exercises[0].sets[1]
+        try await scene.fake.apply(.setLogged(
+            exerciseIndex: 0, setID: next.id, weight: next.weight, reps: next.reps, doneAt: scene.clock.value
+        ))
+        try await scene.fake.discard(endedAt: scene.clock.value)
+        await eventually { scene.store.model?.card.upNext?.action.action.title == "Start workout" }
+        #expect(scene.workouts.ranges.count == 3, "the two sets read nothing; the update that ended the workout did")
+        task.cancel()
+    }
+
     // MARK: Criterion 7
 
     private nonisolated static let routes: [TodayRoute] = [
