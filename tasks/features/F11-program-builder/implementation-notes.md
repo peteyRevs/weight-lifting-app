@@ -4679,3 +4679,102 @@ previews 111.
   tester's lists pin the views' numbers and bans; in `LedgerDesign` it could be plainer.
 - The cell's `.lineLimit(1)` can no longer cut a word in a page (a cell is never narrower than its words);
   it stays for a cell wider than the whole strip, and because the tester's list of numbers names it.
+
+## Slice S9 — adversarial testing, round 2 (G2 tester, 2026-10-09)
+
+Tested at `e46279e`, no product file changed. Two new files (`ProgramViewsStripAdversarialTests.swift`,
+`ProgramViewsRoomAdversarialTests.swift`: 8 tests in one suite) and two more tests in
+`ProgramViewsSourceAdversarialTests.swift`. **One test is left failing on purpose** (F11-S9-4, minor and
+latent). The six that failed in round 1 pass, unedited.
+
+### Verdict: criteria 10, 11 and 12 hold; one minor, latent fault in the new layout
+
+| # | Severity | What | Failing test |
+|---|---|---|---|
+| **F11-S9-4** | Minor, latent (no screen meets it today) | `EqualCells` with no width proposed reports one row of cells at the widest word's width, then places its cells by the rule for that width, which wants `tightRoom` more for each cell and so wraps: four cells whose widest is 59 pt are read 118, 118, 29 and 118 pt wide on three tops, in the room of one row. Any parent that asks the strip for its own size meets it (`fixedSize`, `ViewThatFits`, a sideways scroll view); the page proposes a width and does not. The layout's comment ("with no width proposed, everything stands on one row") is not what it places. The fix is one term: report the widest word's width **and `tightRoom`** for each cell when no width is proposed. | `ProgramViewsStripAdversarialTests.proposals_nil_placesWhatItReports` |
+
+**For the orchestrator:** this test is red in the full gate until the fix or a ruling. It does not touch
+criterion 10 as written (375 and 402 pt pages); if the gate must be green first, the one-term fix is the
+short way, not disabling the test.
+
+### What I attacked
+
+1. **`EqualCells`, through the strip** (the layout is private). Rules written from criterion 10 and the
+   layout's comment, measured on the hosted strip (`StripRules`): one width for all cells (a point of grace:
+   a third of 331 pt lands on pixels as 110.0 and 110.67); no cell narrower than the widest word; one row
+   exactly when every cell has `xs` beside its word, else rows with `xl` beside it; full rows hold as many
+   and are as long as the width; a last row starts where the first does; order, left to right and right to
+   left; no cell over another; the view under the strip starts where the last row ends (the size reported
+   is the room taken). **80 seeded strips** (one to seven cells, words of one to ten wide and narrow
+   letters, nine widths from 8 to 394 pt, any text size, either direction): all hold.
+2. **The phones**: seed tags, ten days ("D10") and a long tag ("PUSH DAY") × twelve sizes × 375 and 402 pt
+   × plain, Bold Text, right to left: the rules hold, **no word is cut, every target is at least 44 pt**.
+   The long tag's strip by the pixels too: whole in all 24 cases.
+3. **Proposals**: a width narrower than a word (12, 16, 28 pt given): every cell is the whole width on its
+   own row, and the size reported fits. One cell takes the whole width. No cell: no height. No width:
+   F11-S9-4. A proposal of exactly zero and an infinite one cannot be made through the strip; by reading,
+   infinite gives one row at the widest word's width, and zero gives cells of no width at one origin with
+   one row's height reported (unreachable in a page).
+4. **Under 375 pt** (a note, pinned as measured in `narrowPhones_whereTargetsFallShort`): the cell no longer
+   carries a 44 pt least width, and a seventh of a page under 352 pt is less. With the seed program the
+   targets are 42.7 pt wide on a 344 pt page and 39.3 pt on 320 pt, at `.xSmall`, `.small` and `.medium`
+   only; from `.large` up the strip has wrapped there. On 352 and 360 pt every size holds 44 pt. No word is
+   cut at any of these widths.
+5. **Criterion 11**, measured: a week chip is at least `2 × m` higher than its two lines at every size
+   (`weekChip_keepsItsRoom`); a wrapped cell has `xl` beside its word (the rules above); the search field
+   (round 1's test).
+6. **Six mutations**, restored from copies and compared (`diff -rq`: identical):
+
+   | Change | Existing tests | Mine |
+   |---|---|---|
+   | The search field's `s` above and below removed | caught: the library's `.accessibility3` references | caught: `searchField_textStandsInsideItsPill` |
+   | The query guard removed | missed | caught: `searchField_focusAndBlur_sendNothing` |
+   | `wrappedRoom` `xl` → `xs` | caught: builder references | caught: the strip's rules |
+   | Week chip `m` → `s` | caught: every builder reference | caught: `weekChip_keepsItsRoom` (12 of 12) |
+   | `tightRoom` → 0 | caught: `scheduleStrip_wraps_intoRowsOfEqualCells`, references | caught |
+   | Wrapped cells do not share the width | caught: references | caught: "a full row is 324 pt long in 331" |
+
+   Criteria 11 and 12 can fail: each has a test that does. (The first four ran as one batch; the builder
+   references that failed in it belong to the chip and the wrapped room together.)
+
+### The source pins (item 3)
+
+Loosened, for layout types only. `views_reachForNothing` no longer bans `.count`, `.first`, `.last`,
+`.reduce(`, `.min(` and `.max(` everywhere; a new test, `views_countNothing_outsideALayout`, bans them (and
+the free `min(` and `max(`) in every view **but inside a type declared `struct X: Layout`**, found by its
+braces (`scan_findsTheLayout` pins that the scan knows `EqualCells` from the views around it). A layout is
+arithmetic on its children's sizes and reads no model; the ban protected nothing there and made `EqualCells`
+add up in loops. `EqualCells` may now be written with `subviews.count` and `max`; I did not rewrite it. Not
+loosened: the numbers pin (a layout's measures are tokens, and `CGFloat(subviews.count)` needs no numeral),
+the literals, the state, the environment and the `send` lists.
+
+### The new references, by eye (item 4; five of the 26, and three pictures of my own at 375 pt, not kept)
+
+- `builder-dark-xLarge.png`: one row of seven, "REST" whole in all three cells, about 2 pt from the outline
+  on each side: tight, as the implementer says, and no "…". Chips three to a row with room around both lines.
+- `builder-dark-accessibility3.png`: the strip is three, three and one, equal cells, words whole with clear
+  room; "W8 / DELOAD" clears its outline; nothing over anything.
+- `sixteenWeeks-dark-large.png`: four rows of four chips, 8 pt higher each; nothing crowded or pushed off;
+  the page is 1,181 pt high (it scrolls, as before). The long name ends in "…" (deviation 3, accepted).
+- `library-dark-accessibility3.png`: the search text has room above and below; one rule above the foot.
+- No reference is drawn at 375 pt. My pictures: at `.large` one row, "REST" whole and close to the outline
+  (about a point and a half each side); at `.xLarge` four and three, roomy; the long tag at 402 pt three,
+  three and one.
+
+### Notes
+
+1. "REST" at `.large` on 375 pt and at `.xLarge` on 402 pt is whole but nearly touches its outline. That is
+   the ruling's choice (keep the week on one row); the product owner may want to see it.
+2. A hosted read of a strip under `fixedSize` gives odd frames (F11-S9-4); `ProgramViewsProbe.cut` measures
+   single cells alone, where the fault does not show (one cell fits its own width).
+
+### The runs (in the worktree, every simulator command through the lock; iPhone 17, iOS 27.0)
+
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests…`, five times: the new suite
+  twice (the first did not compile), two mutation batches, and the whole target on the untouched sources:
+  **425 tests in 48 suites, one failed with 2 issues: `proposals_nil_placesWhatItReports`** (415 in 47 after
+  round 1).
+- Host: `swift test --filter FeatureProgramTests`: 350 tests in 35 suites passed.
+  **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 126 s.**
+- **Not run:** the full gate, the watch, the nightly lane. Not attacked: a device, VoiceOver, other
+  languages, the light theme for the pixel check.

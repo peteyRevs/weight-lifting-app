@@ -15,12 +15,37 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             .map { (String($0.key.dropFirst("Views/".count)), SwiftSource($0.value)) }
     }
 
-    /// Each match of `pattern` in the views' code, as "File.swift: match".
-    static func matches(_ pattern: String) throws -> [String] {
+    /// Which lines of a file's code stand inside a `Layout` type (`struct EqualCells: Layout { … }`), by its
+    /// braces. A layout is arithmetic on its children's sizes: it may count them and take the largest, which
+    /// a view that draws a model may not (round 2: the bans below made `EqualCells` add up in loops what
+    /// `count` and `max` say plainly, and protected nothing there).
+    static func isInsideALayout(_ code: [String]) -> [Bool] {
+        var depth = 0
+        var isInside = false
+        return code.map { line in
+            if !isInside, line.range(of: #"\bstruct \w+: Layout \{"#, options: .regularExpression) != nil {
+                isInside = true
+                depth = 0
+            }
+            let wasInside = isInside
+            if isInside {
+                depth += line.count(where: { $0 == "{" }) - line.count(where: { $0 == "}" })
+                isInside = depth > 0
+            }
+            return wasInside
+        }
+    }
+
+    /// Each match of `pattern` in the views' code, as "File.swift: match"; `outsideLayouts` leaves the lines
+    /// of a `Layout` type out.
+    static func matches(_ pattern: String, outsideLayouts: Bool = false) throws -> [String] {
         let regex = try NSRegularExpression(pattern: pattern)
         return try views().flatMap { name, source in
-            source.code.flatMap { line in
-                regex.matches(in: line, range: NSRange(line.startIndex..., in: line)).compactMap { match in
+            zip(source.code, isInsideALayout(source.code)).flatMap { line, isLayout -> [String] in
+                guard !(outsideLayouts && isLayout) else {
+                    return []
+                }
+                return regex.matches(in: line, range: NSRange(line.startIndex..., in: line)).compactMap { match in
                     Range(match.range, in: line).map { "\(name): \(line[$0])" }
                 }
             }
@@ -95,8 +120,8 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         #"\bUserDefaults\b"#, #"\bBundle\b"#, #"\bProcessInfo\b"#, #"\bUIScreen\b"#, #"\bUIDevice\b"#,
         #"\bGeometryReader\b"#, #"\bwithAnimation\b"#, #"\.animation\("#, #"\.transition\("#,
         #"\.(uppercased|lowercased|capitalized|localizedUppercase|localizedCapitalized)\b"#, #"\.rawValue\b"#,
-        #"\bString\("#, #"\bInt\("#, #"\.(count|first|last|prefix|suffix|dropFirst|dropLast|reversed|joined)\b"#,
-        #"\.(contains|allSatisfy|reduce|compactMap|flatMap|min|max)\("#, #"\b(NumberFormatter|Measurement)\b"#,
+        #"\bString\("#, #"\bInt\("#, #"\.(prefix|suffix|dropFirst|dropLast|reversed|joined)\b"#,
+        #"\.(contains|allSatisfy|compactMap|flatMap)\("#, #"\b(NumberFormatter|Measurement)\b"#,
         #"\b(UIColor|UIFont)\b"#, #"\bColor\("#, #"\.(font|system|opacity|fontWeight|tracking|kerning)\("#,
         #"\.minimumScaleFactor\("#, #"\.(white|black|gray|red|orange|primary|secondary)\b"#
     ]
@@ -133,5 +158,40 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         #expect(code.first == "#if DEBUG" && code.last == "#endif")
         #expect(code.count { $0.hasPrefix("#if") || $0.hasPrefix("#else") } == 1)
         #expect(!code.contains { $0.contains("ProgramCopy.") && !$0.contains("ProgramCopy.newDay") })
+    }
+}
+
+// MARK: - Layout types (round 2)
+
+nonisolated extension ProgramViewsSourceAdversarialTests {
+    /// What a view may not do to a list of its model, and a layout may do to its children's sizes.
+    static let countedOrPicked = [#"\.(count|first|last)\b"#, #"\.(reduce|min|max)\("#, #"\b(min|max)\("#]
+
+    @Test(
+        "No view counts a list of its model or picks from one; a layout type may, of its children",
+        arguments: countedOrPicked
+    )
+    func views_countNothing_outsideALayout(_ pattern: String) throws {
+        let found = try Self.matches(pattern, outsideLayouts: true)
+        #expect(found == [], "\(found)")
+    }
+
+    @Test("The scan knows the strip's layout from the views around it")
+    func scan_findsTheLayout() throws {
+        let strip = try #require(Self.views().first { $0.name == "ScheduleStrip.swift" }).source.code
+        let inside = Self.isInsideALayout(strip)
+        let first = try #require(inside.firstIndex(of: true))
+        #expect(strip[first].contains("struct EqualCells: Layout"))
+        #expect(inside.count { $0 } > 40 && !inside[..<first].contains(true))
+        let sample = [
+            "struct Row: View {",
+            "    let rows = model.count",
+            "}",
+            "struct Grid: Layout {",
+            "    func f() { g { 1 } }",
+            "}",
+            "let x = 1"
+        ]
+        #expect(Self.isInsideALayout(sample) == [false, false, false, true, true, true, false])
     }
 }
