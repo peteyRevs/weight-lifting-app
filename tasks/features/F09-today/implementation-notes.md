@@ -3918,3 +3918,99 @@ watch, the rest of the Nightly plan, CI. Logs and the audit's pictures are in th
 **Failing on purpose at this commit:** `UITestClockAdversarialTests.offset_valueThatIsNoRealInstant_isRefused`
 (PR lane; F09-S5-5), and the six audit tests of `TodayAuditAdversarial` with `TabsAdversarial`'s (nightly;
 F09-S5-1 to 4, until round 2's exclusions).
+
+## Slice S5 — fix round 1 (G1 implementer, 2026-10-09)
+
+Criteria 14 to 17 of "Plan amendments — slice S5 after round 1", on d717529. Commits 32e9ef0 (`fix(today)`) and
+e888667 (`fix(app)`). No file of the tester's was edited, and none of the tester's tests changed its result
+except the one finding, which now passes.
+
+### By item
+
+- **14 (review S-1, S-2). The store runs again only when the app comes back.** `TodayRoot.swift`: the task's
+  id is `scenePhase == .background`, and it runs nothing while that is true. So one run per return from the
+  background, none on the way there, none for `inactive` (Control Centre, the app switcher, an alert).
+  `TodayRootTests.root_backFromTheBackground_runsTheStoreAgain` hosts the root under a scene phase the test
+  moves (active, inactive, active, inactive, background, the clock moved to the next day, inactive, active)
+  and waits, after each move, until SwiftUI has shown the root that phase: the next day is on screen, and the
+  workout store was asked to observe exactly twice (`ProbedWorkouts.observations`, new, in my test support).
+  **Found on the way:** a view hosted with no scene, as every package test's window is, is told its phase is
+  the background, so the root runs nothing there. My two older root tests timed out on the first simulator
+  run for that reason; their helper now hosts in an active scene. The doc comment on `TodayRoot` says so. In
+  the running app the `Today` and `Smoke` UI tests pass on the fixed tree (below).
+- **15 (review S-3; tester's N4). A read is used only for the days it was read for.** `TodaySources` keeps
+  the reads with the `TodayHistory.Ranges` they were made for; `TodayStore.history(for:at:)` finds the
+  moment's ranges first and uses the kept reads only when they are equal. `forgetHistory()` stays where it
+  was (the program, the settings, the finished workouts, an update that ends the session's workout): the
+  reviewer's further step, dropping it for the program and the settings, would change how many reads the
+  tester's tests count, and is not needed for the criterion. Tests, in `TodayStoreLiveTests`:
+  `rebuild_acrossMidnight_showsTheNewDay` (Wednesday to Thursday with a workout live: the new date and "Rest
+  day" over one read, which is still the right one) and `rebuild_acrossTheWeeksEnd_readsTheNewWeeks` (Sunday
+  23:50 to Monday 00:10 with a workout live and one set logged: a second read, of Mon 21 to Mon 28; "0" sessions
+  and "0 lb moved this week, −100% from last week" against the week that just ended; the next set reads
+  nothing).
+- **16 (review S-4; F09-S5-5). The clock argument is strict, and read only in Debug builds.**
+  - *Strict.* `UITestClock.instant(written:)`: what Foundation read is written out again in the offset the
+    text gave and must be the text. Accepted: `yyyy-MM-ddTHH:mm:ss` and then `Z`, `±HH:MM` or `±HHMM`
+    (`+00:00` and `+0000` for no offset). Refused now: a date that does not exist, hour 25, second 60, and
+    anything after the instant. **Also refused now, which round 0 read:** fractional seconds and an offset
+    of hours alone (`+02`); the tester called those "reasonable", the criterion says "written exactly", and
+    no test uses them. The tester's `offset_valueThatIsNoRealInstant_isRefused` (8 cases) passes unedited,
+    with its eight other tests.
+  - *Debug only.* The body of `UITestClock.liveOffset(arguments:)`, the one place the launch reads the
+    argument and the one `fatalError`, is inside `#if DEBUG`; otherwise it returns nil. **Not the whole
+    type:** `offset(arguments:launch:)` and `instant(written:)` (pure, with no caller in a Release build)
+    still compile in Release, because the tester's `UITestClockAdversarialTests` names them outside any
+    `#if DEBUG` and would stop compiling in a Release test build. If "compiled only into Debug" must hold
+    for the type, that file needs a guard: the tester's edit.
+  - *The builds, checked:* the `Ledger` and `LedgerWatch` schemes' `TestAction` is `buildConfiguration =
+    "Debug"`; `scripts/check.sh` and the workflows pass no `-configuration` to a test build (the one
+    `-configuration Release` in the repository is a script test of the Xcode Cloud post-clone step). So the
+    gate's and CI's UI tests keep the argument; an archive (Release) loses it, which is the point.
+  - `ModuleCopyTests`' exemptions for `UITestClock.swift` gained `"Z"`.
+- **17 (review N-2). An ended observation is logged once**, where `follow` sets `hasEnded`, and no longer by
+  each rebuild that finds it. No test: the logger is not observable. The tester's
+  `loggerExemption_coversThreeLinesOfTheStore` still counts three logger lines in `TodayStore.swift`, and
+  passes.
+
+Not done, by the rulings: N-1 (a cancellation check at the top of `rebuild()`), N-4 and N-5. **A correction
+to my round-0 notes (review N-3):** a set logged under the cover does not give "a model equal to the one on
+screen"; the model carries "Resume · m:ss" made from the moment, so it is equal only within the same second.
+What holds, and what the test pins, is that it reads nothing.
+
+### Broken on purpose
+
+| Mutant | Result |
+|---|---|
+| R1 the kept reads used whatever they were read for | `rebuild_acrossTheWeeksEnd_readsTheNewWeeks` failed |
+| R2 the instant read by Foundation alone | the tester's `offset_valueThatIsNoRealInstant_isRefused` failed |
+| R3 the root's task never restarts (`.task { }`) | `root_backFromTheBackground_runsTheStoreAgain` failed (the next day never came; the time limit) |
+| R4 the root's task restarts on every phase (round 0's rule) | the same test failed: 7 observations for 2. Its first form counted reads and passed under this mutant; it counts observations since |
+
+### Product lines now: 383 (356 after round 0)
+
+| File | Lines |
+|---|---|
+| `FeatureToday/TodayStore.swift` | 165 |
+| `FeatureToday/TodaySources.swift` | 57 |
+| `FeatureToday/TodayHistory.swift` | 36 |
+| `FeatureToday/TodayRoot.swift` | 34 |
+| `LedgerAppKit/UITestClock.swift` | 45 |
+| `LedgerAppKit/Routes+Today.swift` | 21 |
+| `LedgerAppKit/AppComposition.swift` | 11 |
+| `LedgerAppKit/MainRoot.swift` | 11 |
+| `LedgerAppKit/AppTabs.swift` | 3 |
+
+The clock argument is now 56 lines (45 and 11), over the "about 40" of the ruling that approved it at 20: the
+21 added are the strict reading criterion 16 asks for.
+
+### The runs (on e888667; only this section was written afterwards)
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh` (full, through the lock) | exit 0 in 748 s. iOS 3,597 tests: 3,569 passed, 15 skipped, 13 expected failures, 0 failed (419 s). watchOS 2,263: 2,243 passed, 15 skipped, 5 expected, 0 failed (233 s). `FeatureToday` coverage 98.99 % (1,668 / 1,685) |
+| `scripts/check.sh --fast` | exit 0 in 148 s. It does not run `FeatureTodayTests` or `LedgerAppKitTests` (its counts, 1,223 and 553, did not move with them); those ran on the host by `swift test --filter` during the work and on the simulator in the full gate |
+| Nightly plan, `LedgerUITests/Today` and `Smoke` | 6 of 6 passed (Today 34.4 s, 29.4 s, 18.6 s) |
+
+Not run: the nightly audit tests (red until the tester's round 2, by the ruling), the rest of the nightly
+plan, a Release build, the device.
