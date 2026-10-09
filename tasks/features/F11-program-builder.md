@@ -551,3 +551,37 @@ accepted when:
 
 **Not in this slice:** the Day editor's views (S10, S11), any store (S13, S14), `LedgerAppKit`, the project
 file or a test plan, and any change to a presentation beyond a field a view provably needs (listed).
+
+## Plan amendments — slice S9 after round 1 (orchestrator, 2026-10-09)
+
+The reviewer asked for changes (one blocking fault, five should-fix items) and the tester found the same
+fault wider, plus two minor ones (46 tests, six left failing; fifteen mutations). Rulings, which add to S9's
+nine criteria:
+
+10. **The schedule strip never cuts a word** (review B-1, F11-S9-1): at every text size, at 375 and 402 pt,
+    with Bold Text and right to left, with the seed's tags and with ten days ("D10"), each cell draws its
+    word whole. The strip is one row of seven equal cells while every cell's word fits its share, and wraps
+    into rows of equal cells otherwise. At the default size on a 375 pt phone it stays one row if trimming
+    the cells' inner spacing by a point or two achieves that (the miss is one point); if not, it wraps there
+    and the existing test `scheduleStrip_defaultSize_isOneRowOfEqualTargets` is changed to say so. The
+    tester's four tests pass unedited; the two references that pinned "RE…" are recorded again.
+11. **Room at the largest sizes** (review S-2, S-3; F11-S9-2): the search field's text stands inside its
+    pill at every size; a wrapped "REST" and a week chip's second line clear their outlines at
+    `.accessibility3`.
+12. **The search field sends only a changed query** (F11-S9-3), as the name field already does.
+13. **Housekeeping** (review S-1, N-1 to N-3, N-6): the comment on the model's name says where the draft
+    lives now; the day row's chevron and the section line align as Today's do; one rule above the sheet's
+    foot; the unneeded hint helper goes.
+14. **Accepted as built:** all views in `Views/`; the name's draft as view state (last writer wins); a
+    library row on `HairlineRow`; no `EmptyState` for one sentence; `DayCard`'s tag measure stays in the
+    feature until S10.
+
+**For S13** (review S-1; tester's mutations 2, 3, 6): the UI test of the builder types a name and reads it
+back, taps the drawn "−" and "+" and checks which way the block moved, and reads both fields' labels; the
+store knows that a name changed from outside under an open draft is overwritten by the next keystroke.
+**For S14** (review deviation 8): the model's `detail`, `inDayMark` and `pickMark` are drawn or removed
+before F11 ends; the product owner chooses. **Chores, not this slice:** the hosted reader fails on (or
+records) a text field, with testing-strategy §2.5 saying so (review S-4); icons that must not mirror right
+to left, the check mark first, in `LedgerDesign` (review S-5; the set row has it too); `SectionLine` and a
+public press style in `LedgerDesign` before S10; the reference precision on long pages (tester's note 1:
+three visible mutations passed every reference at 0.995).
