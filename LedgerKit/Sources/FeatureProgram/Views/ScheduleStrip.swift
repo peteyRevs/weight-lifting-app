@@ -10,6 +10,9 @@ import SwiftUI
 /// a long tag). The targets touch, and what is drawn stands `xs` inside each, so the strip is set `xs` out
 /// on both sides to keep the drawn cells on the page's edges. A cell's target is then at least 44 pt wide on
 /// every iPhone: a seventh of the narrowest, 375 pt, is 47 pt, and a wrapped cell is wider than a seventh.
+/// Measured by the tester (round 2): on a page under 352 pt the one row's targets fall short, 42.7 pt wide at
+/// 344 pt and 39.3 pt at 320 pt, at the three smallest text sizes only (from the default size up the strip
+/// has wrapped there). No iPhone that runs this app is that narrow.
 ///
 /// VoiceOver reads a cell as "Tuesday, Rest" with the model's hint. In a program with no training day a cell
 /// offers nothing and is read as text.
@@ -80,7 +83,9 @@ private struct ScheduleCell: View {
 /// squeezed: in one row while that leaves each child at least `tightRoom` beside its content, and otherwise
 /// in rows of as many cells as fit with `wrappedRoom` each. Either way the cells share the whole width; a
 /// last row that is not full starts at the leading edge. Every row is as high as the highest child. With no
-/// width proposed, everything stands on one row at the widest child's width.
+/// width proposed, everything stands on one row, each cell at the widest child's width and its `tightRoom`:
+/// the least that row is given when there is a width, so the size reported is one the placing keeps. (One
+/// child alone has its own width.)
 ///
 /// The one row is kept as long as it can be: a strip of seven reads as a week, and two rows do not.
 private nonisolated struct EqualCells: Layout {
@@ -136,16 +141,19 @@ private nonisolated struct EqualCells: Layout {
 
     /// The cells' width: the same share of `width` for all, in the one row or in rows of as many as fit.
     private func cellWidth(for subviews: Subviews, widest: CGFloat, in width: CGFloat?) -> CGFloat {
-        guard let width, width.isFinite, widest > 0 else {
-            return widest
-        }
-        // The one row, when every cell has its tight room in it: the width over the number of cells, which
-        // is the row's least width over one cell's.
+        // The one row's least width: every cell with its tight room in it.
         let tight = widest + Self.tightRoom
         var row: CGFloat = 0
         for _ in subviews {
             row += tight
         }
+        guard let width, width.isFinite, widest > 0 else {
+            // No width to share: the cells have the least width at which the placing keeps them on one
+            // row, so the size reported is one it keeps. A cell by itself is the whole width whatever the
+            // width, and needs no room for that: it has its child's.
+            return row > tight ? tight : widest
+        }
+        // The one row: the width over the number of cells, which is the row's least width over one cell's.
         if row <= width {
             return width * tight / row
         }

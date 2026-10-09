@@ -4778,3 +4778,33 @@ the literals, the state, the environment and the `send` lists.
   **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 126 s.**
 - **Not run:** the full gate, the watch, the nightly lane. Not attacked: a device, VoiceOver, other
   languages, the light theme for the pixel check.
+
+## Slice S9 — fix round 2 (G1 implementer, 2026-10-09)
+
+On `e2c89ab`. One file changed, `Views/ScheduleStrip.swift`; no tester's file, no reference.
+
+1. **F11-S9-4, fixed.** With no width proposed `EqualCells` now reports the one row at the least width its
+   placing keeps on one row: the widest child's width and `tightRoom`, for each cell.
+   `proposals_nil_placesWhatItReports` passes unedited. **One exception the tester's proposal did not name:**
+   a child alone reports its own width, with no room. The placing gives a lone cell the whole width whatever
+   the width, so that size is one it keeps too; and the tester's rules measure each word "alone" as a strip
+   of one cell under `fixedSize`. With the room added there as well, every "alone" width grew by `xs` and the
+   tester's own rules failed (the seed strip at `.large` on 375 pt and at `.xLarge` on 402 pt: "one row where
+   each cell has less than xs beside its word"). Measured in a run between, not kept.
+2. **The plain rewrite: tried and not kept.** With `subviews.count` and a rounded quotient the two adding
+   loops go, but the gain was not clear: the module's own `FeatureProgramSourceTests` still finds a clamp by
+   the spelling `max(` (so the maxima stay written out); "one cell a row when not even one fits" needs a
+   literal 1, and the numbers pin gives the file exactly one, the cell's `lineLimit(1)`; dropping that line
+   limit to free it changed how a cell narrower than its word is drawn (eight of the tester's seeded strips
+   failed, and one reference). `EqualCells` is as it was in round 1 but for item 1. If it moves to
+   `LedgerDesign` it can be written plainly there.
+3. **The doc comment** of `ScheduleStrip` carries the tester's measured note: under 352 pt the one row's
+   targets fall short of 44 pt (42.7 pt at 344 pt, 39.3 pt at 320 pt) at the three smallest text sizes; no
+   iPhone that runs this app is that narrow.
+
+Product lines: `ScheduleStrip` 115 (114); `Views/` 671.
+
+**The runs.** Simulator through the lock, `-only-testing:FeatureProgramTests` (PR plan), three times: the
+rewrite (failed, above); the one-term fix alone (the tester's rules failed, above); **the final sources: exit 0, 425 tests in 48 suites passed, no reference
+changed** (`git status`: one source file). **`scripts/check.sh --fast`: exit 0.** The full gate was not run
+by me this round; the orchestrator runs it.
