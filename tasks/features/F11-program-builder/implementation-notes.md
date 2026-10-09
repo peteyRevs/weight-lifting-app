@@ -3381,3 +3381,141 @@ this section was written after them.
 Screenshots for Pete, copies of the references: `tasks/features/F11-program-builder/screenshots/s8/`, each
 control dark and light at the default size and at accessibility3, the three together under Increase
 Contrast in both themes, and the layout right to left.
+
+## Slice S8 — adversarial testing, round 1 (G2 tester, 2026-10-08)
+
+Tested `96f4187` in the worktree; the tests are commits `53a857f` (`test(program)`) and `f74a6b6`
+(`test(design)`). No product code was changed. Paths under `LedgerKit/`.
+
+**Result: two findings with a failing test each, one test gap, no other defect found.** 43 new tests in 8
+files; 41 pass, 2 fail knowingly and stay in the tree.
+
+### What was attacked, and with what
+
+| Part | File (`Tests/…/Adversarial/`) | Tests | How |
+|---|---|---|---|
+| The library's model | `FeatureProgramTests/…/ExercisePickerAdversarialSupport.swift`, `ExercisePickerModelAdversarialTests.swift` | 9 | The tester's own reading of the sheet (`AdvPicker.lines`: words, filter, order, picks, actions, written from criteria 6 to 13) against `make`, line for line: 200 seeds × 4 inputs over exercises of the tester's making (names with diacritics, full width, emoji, Arabic, Hebrew, empty, blank, format text; picks repeated and not stored; day exercises not stored; equipment without a chip); 200 seeded chains of ten taps, each action applied as documented and then once more (absolute); the bundled catalog under all 6 × 8 chip pairs and five queries; blank queries of seven kinds; "Clear filters"; no exercise stored; 10,000 exercises with 1,000 picks; an exercise stored twice |
+| The library's words | `ExercisePickerWordsAdversarialTests.swift` | 7 | The foot in eleven locales; the count in Arabic and Devanagari digits; names as data; the five sources of `Picker/` read for ambient reads, for text outside the copy file and for lookups; each of the copy file's 24 lookups against the catalog's keys |
+| The picks as slots | `ExercisePickerAddAdversarialTests.swift` | 4 | Rule 7's defaults for all 224 catalog exercises in lb and kg; 60 seeds of picks tapped, added to a day of the seed program (order, the day's other slots, the other days and the weeks untouched, safe twice); an empty list, slots the day holds, one id three times; the same exercise added twice over |
+| `WrapLayout`, arithmetic | `LedgerDesignTests/…/WrapLayoutAdversarialTests.swift` | 5 (host too) | The tester's model of a wrapping row against `arrangement(of:in:)`: 300 seeds × 11 widths (none, 0, 1, 44, 100, 137.5, 402, 100,000, unbounded, −1, −100), none to forty children, six spacings; nothing outside the reported size and the size no bigger than used; rows greedy and in order; arranged again in its own reported width; children of no size, spacing wider than the row, a width that is no number; 5,000 children |
+| `WrapLayout`, drawn | `WrapLayoutDrawnAdversarialTests.swift` | 4 | Fifteen pills at four widths (120 to 402) and four text sizes (to accessibility5), read by their VoiceOver frames: inside the row, above the view under the layout, 44 pt, none overlapping, in reading order; right to left the exact mirror; the layout padded, under and beside other views; a long text at four widths |
+| `StepperField` | `StepperFieldAdversarialTests.swift` | 8 | Eight cells (the six, xxxLarge, accessibility5) × both directions: both buttons drawn 44 pt, the gap, long texts leaving the buttons whole, one adjustable 44 pt element, each swipe its closure once; Bold Text; a switched-off step in both themes with and without Increase Contrast; a field with no step or disabled |
+| `.toggleStyle(.ledger)` | `LedgerToggleAdversarialTests.swift` | 6 | From pixels: the knob against what it stands on and the on track against the ground, both themes, with and without Increase Contrast; four states as four drawings; the track in eight cells with a short and a long label; right to left; VoiceOver against the system's switch in eight cells; a binding that counts its sets |
+| The gallery | `DesignGalleryAdversarialTests.publicViews` | (existing test) | The three new names added to the list |
+
+### Findings
+
+- **F11-S8-1 (bug, medium): the foot takes another language's plural form.** `ProgramCopy.addExercises` gives
+  "Add 1 exercises" with a locale whose language has no singular (ja_JP, zh_CN, ko_KR) and "Add 21 exercise",
+  "Add 101 exercise" with ru_RU: the catalog is English only and `String(localized:locale:)` chooses the
+  plural form by the injected locale's rules. Criterion 10 asks for "Add 1 exercise" and "Add %lld
+  exercises". en_US, en_GB, en_JP, de_DE, fr_FR, pl_PL, he_IL, ar_AE and ar_EG read right for the counts
+  tried. *Test (fails):* `ExercisePickerWordsAdversarialTests.foot_pluralForms_areEnglishInEveryLocale`, 5
+  issues in 4 of its 11 cases. The same cause is on `main`: measured with a throwaway test,
+  `ProgramCopy.exercises(1, locale: ja_JP)` is "1 exercises" and `ProgramCopy.weeks(1, locale: ja_JP)` is
+  "1 weeks" (S5 and S6; `FeatureToday` has six counted keys and was not measured). Not established here:
+  which locale the app injects on a device whose language the app has no localization for. The seeded
+  suites leave ja_JP out of their locales for this reason, and say so (`AdvPicker.locales`).
+- **F11-S8-2 (defect against criterion 1 as written, low today): one switched-off step is not spoken.**
+  With "−" or "+" switched off, VoiceOver is handed exactly what it is handed with both on: label "Sets",
+  value "5", traits 4096 (adjustable), no hint, no custom action. Criterion 1: "a switched-off step is drawn
+  and spoken as such". With both off the field is dimmed, which is spoken. *Test (fails):*
+  `StepperFieldAdversarialTests.oneStepOff_isSpokenAsSuch`. See deviation 2 below.
+- **F11-S8-3 (test gap, confirmed by mutation): the visible buttons can do nothing and every test passes.**
+  With `StepButton`'s tap made empty and the switch's `configuration.isOn.toggle()` removed (both at once),
+  the whole of `LedgerDesignTests` gives the same result as without them: 374 tests, the one failure of
+  F11-S8-2. VoiceOver's paths are tested (the adjustable action; the system switch of the representation);
+  a finger's are not, and a hosted test has no tap. This is the implementer's open question 7, now measured;
+  my suites do not close it. *No test.* The nightly UI test of S14 is the first thing that would notice.
+
+### Deviations 2, 3 and 5
+
+- **Deviation 2 (a switched-off step to VoiceOver): a defect against criterion 1's wording** for one step
+  off, F11-S8-2. The reason given ("the control looks up no text") does not hold it up: the control takes
+  `String`s, as `spokenValue` shows, so a caller can hand it the words. It costs nothing today, since no
+  caller switches one step off (deviation 3). Either the control gains the words (the notes' own
+  `limitHint`) or criterion 1 is amended; the G3 review proposes the amendment. The failing test goes or
+  is turned round with whichever is ruled.
+- **Deviation 3 (S6's model never switches a step off): not a defect of this slice.** Criterion 1 asks that
+  the control can, and it does, drawn and tested. The consequence is S11's: at a limit the Day editor will
+  draw a live "+" that changes nothing, and the switched-off look is drawn nowhere in the app until a model
+  hands over a nil closure.
+- **Deviation 5 (the switch): not a defect.** Measured from the drawn pixels, not from `LedgerToggleLook`:
+  the knob has 3:1 against what it stands on and the filled track 3:1 against the ground, light and dark,
+  with and without Increase Contrast; the four states are four drawings; the track keeps its size and its
+  place in eight cells; VoiceOver finds the system switch's label, value and traits in eight cells, and one
+  double-tap sets the binding once. Criterion 12 is not touched: the value is the system's, no text of
+  ours. Not measured: the off track's outline against the ground (a hairline, as every outlined pill).
+
+### The implementer's tests, checked by breaking the code
+
+Each change made in place, the tests run, the file restored from a copy kept outside the tree (compared
+byte for byte afterwards). The simulator runs each held several changes at once, in different controls or
+failing different tests; a cell says which tests failed in that run. "Theirs" are the implementer's tests without the snapshot references.
+
+| Change | Caught by theirs | By references | By mine |
+|---|---|---|---|
+| `WrapLayout`: `>` to `>=`; no centring; the widest row read from a row's first child; line spacing after the last row; spacing dropped (five runs on the host) | yes, each | not run | yes, each |
+| `WrapLayout`: a non-finite width not read as none | no | not run | no (the same result for every width tried: equivalent) |
+| `WrapLayout`: a wide child not held to the row's width | yes | yes | yes |
+| `WrapLayout`: `bounds.minY` dropped; `bounds.minX` dropped | no; yes (right to left) | yes | yes |
+| `WrapLayout`: children placed with no proposal | no | yes | yes |
+| `StepperField`: the two swipes exchanged | yes | no | yes |
+| `StepperField`: not disabled with both steps off | yes | yes | yes |
+| `StepperField`: a switched-off button drawn live | yes | yes | yes |
+| `StepperField`: `guard isEnabled` removed from the adjustable action | **no** | no | **no** |
+| `StepperField`: the spoken value ignored; never stacked; the buttons' 44 pt target removed; children combined | yes, each | yes | yes |
+| The switch: `accessibilityRepresentation` removed | **no** | no | **no** |
+| The switch: the knob's colour not following the state; the knob always leading; the 44 pt target removed | yes, each | yes | yes |
+| The switch: the off track filled (in one run with the 44 pt change, which fails the same test of theirs first) | not told apart | yes | yes |
+| **The buttons' taps and the switch's tap emptied** | **no** | **no** | **no** (F11-S8-3) |
+
+`guard isEnabled` survives because a disabled element is handed no adjustable action in the first place:
+the guard is not what keeps a disabled field still. A note, not a finding.
+
+The switch without its `accessibilityRepresentation` reads and acts the same in every test, mine included:
+one stop, the system switch's label, value and traits in eight cells, and a double-tap that sets the binding
+once. So no test shows what the representation adds, and with it in place VoiceOver's double-tap goes to the
+representation's switch and never through the visible button's action (which is why emptying that action
+goes unseen). A note for the implementer: either it can go, and the tap closure is then covered by the
+double-tap test, or the notes say what needs it.
+
+### Questions
+
+- **F11-S8-Q1.** An exercise stored twice under one id gives two rows of one `id` (`Identifiable`), both
+  picked together, and is added once (`exerciseStoredTwice_isAddedOnce` pins only the last). The stored
+  exercises have one row per id by the schema, so this is unreachable today. Is "ignored, not trapped on"
+  (criterion 13) meant to cover it for S12's `ForEach`?
+- **F11-S8-Q2.** A blank or empty name is a row whose name and spoken label are empty ("", "   "); the Day
+  editor writes "—" for a missing name. Custom exercises come with F12: whose rule is a blank name?
+
+### Notes
+
+- 10,000 exercises with 1,000 picks are one right model; the test allows two seconds and the whole suite of
+  nine ran in 1.4 s on the host. The plan's 10 ms budget at 224 exercises was not measured.
+- A text or pill whose own smallest width is more than the row (a 44 pt pill in a 30 pt row) is reported at
+  the row's width and drawn wider; no phone row is that narrow. Not tested.
+- `SlotEdit.add([])` and `.add` of slots the day holds leave each of the seed program's days as they were.
+
+### Not attacked
+
+A finger's tap on any of the controls (F11-S8-3). What VoiceOver says at a switched-off step, and where its
+double-tap lands on a `StepperField` (the element has no activation of its own); VoiceOver on a device. The
+controls on a watch simulator. The pressed look and Reduce Motion. Whether a long value is ever cut short
+with "…". The plain texts' dependence on the process's language (`String(localized:bundle:)` without a
+locale; the catalog is English only). `ExerciseSearch`'s folding itself (the Domain's; my reading uses the
+same Foundation call). The 2,000-seed nightly lane.
+
+### The runs
+
+All on 2026-10-08 in the worktree; every simulator command through the lock (iPhone 17, 27.0).
+
+- Host, `swift test --only-use-versions-from-resolved-file --filter 'FeatureProgramTests|WrapLayout'` in
+  `LedgerKit`: `FeatureProgramTests` 314 tests in 30 suites, 1 failed with 5 issues (F11-S8-1);
+  `WrapLayout` 14 tests in 2 suites passed.
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:LedgerDesignTests`: 374 tests, 366 passed,
+  1 failed (F11-S8-2), 1 skipped, 6 known issues; about a minute. Before my files it was 351.
+- Five more such runs with the changes of the table above, each ending with the sources restored; six
+  host runs for the layout's arithmetic. No reference was recorded or changed.
+- `scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 113 s. `scripts/check.sh --lint-only` clean.
+- **Not run:** the full gate, the watch plan, the nightly lane.
