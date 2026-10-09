@@ -48,7 +48,7 @@ nonisolated struct ExercisePickerModelAdversarialTests {
         var input = AdvPicker.input(using: &generator)
         for step in 0 ..< 10 {
             let offered = AdvPicker.actions(of: ExercisePickerPresentation.make(input))
-            let typed = ExercisePickerAction.search(AdvPicker.queries.randomElement(using: &generator) ?? "")
+            let typed = ExercisePickerAction.setQuery(AdvPicker.queries.randomElement(using: &generator) ?? "")
             guard let action = (offered + [typed]).randomElement(using: &generator) else {
                 continue
             }

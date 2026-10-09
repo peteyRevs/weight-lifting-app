@@ -56,7 +56,7 @@ nonisolated struct ExercisePickerWordsAdversarialTests {
                 picks: [exercise.id], locale: Locale(identifier: "he_IL")
             )
             let row = ExercisePickerPresentation.make(input).rows.first
-            #expect(row?.name == name && row?.spokenLabel == name)
+            #expect(row?.name == name)
             #expect(row?.line == "Band · Core · already in this day")
             #expect(row?.pickMark == "1")
         }

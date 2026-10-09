@@ -67,9 +67,9 @@ nonisolated extension ProgramCopy {
         }
     }
 
-    /// The name of an exercise's primary muscle, on its row; three of them are filter chips too. One lookup
-    /// for each of the eleven groups (standards §7), which is one branch more than the lint's ten.
-    static func muscle(_ group: MuscleGroup) -> String { // swiftlint:disable:this cyclomatic_complexity
+    /// The name of an exercise's primary muscle, on its row; three of them are filter chips too. The lint's
+    /// limit of ten branches is waived on the line: the eleven groups each have their lookup.
+    static func muscle(_ group: MuscleGroup) -> String { // swiftlint:disable:this cyclomatic_complexity - §7 lookups
         switch group {
         case .chest: String(localized: "Chest", bundle: .module, comment: "Muscle group, also a filter chip")
         case .back: String(localized: "Back", bundle: .module, comment: "Muscle group, also a filter chip")
@@ -98,7 +98,11 @@ nonisolated extension ProgramCopy {
     // MARK: Nothing matches
 
     static var nothingMatches: String {
-        String(localized: "Nothing matches that filter.", bundle: .module)
+        String(
+            localized: "Nothing matches that filter.",
+            bundle: .module,
+            comment: "Shown in the exercise library when the search and the two chip rows leave no exercise"
+        )
     }
 
     static var clearFilters: String {
@@ -124,7 +128,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "Add \(count) exercises",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "The exercise library's button: adds the picked exercises to the day"
         )
     }

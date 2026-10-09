@@ -4,7 +4,7 @@ import LedgerDomain
 /// action says what becomes true, not what changes, so one drawn or applied twice gives what one
 /// application gives.
 nonisolated enum ExercisePickerAction: Hashable, Sendable {
-    /// The search field holds this text.
+    /// The search field holds this text, as the lifter typed it: the one action a view makes itself.
     case setQuery(String)
     /// The muscle chip chosen is this one; nil is "All".
     case setMuscle(ExerciseSearch.MuscleFilter?)
@@ -21,9 +21,4 @@ nonisolated enum ExercisePickerAction: Hashable, Sendable {
     /// "Cancel": close the sheet and add nothing; empty the query and the picks and keep the two chips, as
     /// after "Add" (the prototype closes the sheet the same way for both).
     case cancel
-
-    /// The search field's text as the lifter typed it: the one action a view makes itself.
-    static func search(_ text: String) -> ExercisePickerAction {
-        .setQuery(text)
-    }
 }

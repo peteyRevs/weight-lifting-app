@@ -83,7 +83,57 @@ nonisolated struct ProgramCopyTests {
         let german = Locale(identifier: "de_DE")
         #expect(ProgramCopy.setsAWeek(1234, locale: german) == "1.234 sets a week")
         #expect(ProgramCopy.setsAWeek(1234, locale: Self.english) == "1,234 sets a week")
-        // French counts none as one.
-        #expect(ProgramCopy.days(0, locale: Locale(identifier: "fr_FR")) == "0 day")
+        // The words are English, so the form is English's: French would count none as one.
+        #expect(ProgramCopy.days(0, locale: Locale(identifier: "fr_FR")) == "0 days")
+    }
+
+    /// Locales whose languages count otherwise than English: no singular (ja, zh, ko), one for none and one
+    /// (fr), one, few and many (ru, pl), a dual (he, ar).
+    static let otherPluralRules = ["ja_JP", "zh_CN", "ko_KR", "fr_FR", "ru_RU", "pl_PL", "he_IL", "ar_AE", "de_DE"]
+
+    @Test(
+        "A counted text takes English's form while the words are English, whatever the locale (F11 S8 criterion 14)",
+        arguments: otherPluralRules
+    )
+    func countedTexts_takeTheCatalogsPluralForm(identifier: String) {
+        let locale = Locale(identifier: identifier)
+        #expect(ProgramCopy.exercises(1, locale: locale) == "1 exercise")
+        #expect(ProgramCopy.weeks(1, locale: locale) == "1 week")
+        for count in [0, 2, 5, 11, 21, 22, 101] {
+            #expect(ProgramCopy.exercises(count, locale: locale) == "\(count) exercises")
+            #expect(ProgramCopy.weeks(count, locale: locale) == "\(count) weeks")
+        }
+        // Every other counted text of the module goes through the same place.
+        #expect([
+            ProgramCopy.block(weeks: 1, locale: locale), ProgramCopy.scheduledDays(1, locale: locale),
+            ProgramCopy.days(1, locale: locale), ProgramCopy.setsAWeek(1, locale: locale),
+            ProgramCopy.sets(1, locale: locale), ProgramCopy.estimate(minutes: 1, locale: locale),
+            ProgramCopy.backToBack(1, locale: locale), ProgramCopy.scheduledInWeeks(1, locale: locale),
+            ProgramCopy.addExercises(1, locale: locale)
+        ] == [
+            "BLOCK · 1 WEEK", "1 DAY", "1 day", "1 set a week", "1 set", "~1 min", "1 exercise back to back",
+            "It's scheduled in 1 week. Those days become rest.", "Add 1 exercise"
+        ])
+        #expect(ProgramCopy.setsAWeek(21, locale: locale) == "21 sets a week")
+    }
+
+    @Test("The locale a counted text is looked up with keeps the lifter's region and digits, in the catalog's language")
+    func counting_keepsRegionAndDigits() {
+        let pairs = [
+            ("en_US", "en_US"), ("ja_JP", "en_JP"), ("ru_RU", "en_RU"), ("ar_EG", "en_EG"), ("fr_FR", "en_FR"),
+            ("zh_Hans_CN", "en_CN")
+        ]
+        for (given, expected) in pairs {
+            let locale = Locale(identifier: given).forCountedText.identifier(.icu)
+            #expect(locale.hasPrefix(expected), "\(given): \(locale)")
+            let numbers = Locale(identifier: given).forCountedText.numberingSystem.identifier
+            #expect(numbers == Locale(identifier: given).numberingSystem.identifier, "\(given)")
+        }
+        // The same locale in, the same locale out: nothing of the device is read.
+        let japanese = Locale(identifier: "ja_JP")
+        #expect(japanese.forCountedText == japanese.forCountedText)
+        // The digits and the grouping are still the lifter's.
+        #expect(ProgramCopy.setsAWeek(1234, locale: Locale(identifier: "ar_EG")) == "١٬٢٣٤ sets a week")
+        #expect(ProgramCopy.setsAWeek(1234, locale: Locale(identifier: "hi_IN@numbers=deva")) == "१,२३४ sets a week")
     }
 }

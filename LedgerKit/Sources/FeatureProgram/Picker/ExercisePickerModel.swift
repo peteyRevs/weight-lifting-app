@@ -25,7 +25,7 @@ nonisolated struct ExercisePickerModel: Equatable, Sendable {
     struct Search: Equatable, Sendable {
         /// "Search exercises": the field's placeholder and its spoken label.
         let placeholder: String
-        /// The field's text, as the input holds it. A view sends `ExercisePickerAction.search(_:)` with
+        /// The field's text, as the input holds it. A view sends `ExercisePickerAction.setQuery(_:)` with
         /// the text as it is typed.
         let query: String
     }
@@ -80,7 +80,8 @@ nonisolated extension ExercisePickerModel {
 // MARK: - The exercises
 
 nonisolated extension ExercisePickerModel {
-    /// One exercise that passes the filter.
+    /// One exercise that passes the filter. To VoiceOver its label is `name` and its value `line`; that it is
+    /// picked is said by the selected state, which the view sets from `isPicked`.
     struct Row: Equatable, Sendable, Identifiable {
         let id: ExerciseID
         /// The exercise's name, as stored.
@@ -95,10 +96,6 @@ nonisolated extension ExercisePickerModel {
         let isPicked: Bool
         /// "2": the exercise's place among the picks, counted from 1. Nil when it is not picked.
         let pickMark: String?
-        /// The exercise's name.
-        let spokenLabel: String
-        /// `line`. That the row is picked is said by its selected state, which the view sets from `isPicked`.
-        let spokenValue: String
         /// Picks the exercise, or takes it out of the picks when it is picked.
         let action: ExercisePickerAction
     }

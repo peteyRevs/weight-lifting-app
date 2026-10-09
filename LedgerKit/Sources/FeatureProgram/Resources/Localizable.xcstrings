@@ -953,6 +953,7 @@
       }
     },
     "Nothing matches that filter." : {
+      "comment" : "Shown in the exercise library when the search and the two chip rows leave no exercise",
       "localizations" : {
         "en" : {
           "stringUnit" : {

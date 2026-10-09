@@ -147,8 +147,8 @@ nonisolated extension AdvPicker {
             lines += rows.map { row in
                 [
                     "exercise \(row.id.rawValue.uuidString)", row.name, row.detail, row.inDayMark ?? "nil",
-                    row.line, "\(row.isPicked)", row.pickMark ?? "nil", "says \(row.spokenLabel)",
-                    "value \(row.spokenValue)", "\(row.action)"
+                    row.line, "\(row.isPicked)", row.pickMark ?? "nil", "says \(row.name)",
+                    "value \(row.line)", "\(row.action)"
                 ].joined(separator: " | ")
             }
         }

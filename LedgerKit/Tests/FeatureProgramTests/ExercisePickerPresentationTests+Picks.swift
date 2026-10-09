@@ -17,13 +17,10 @@ nonisolated extension ExercisePickerPresentationTests {
         #expect(inDay.detail == "Barbell · Quads")
         #expect(inDay.inDayMark == "already in this day")
         #expect(inDay.line == "Barbell · Quads · already in this day")
-        #expect(inDay.spokenLabel == "Back Squat")
-        #expect(inDay.spokenValue == "Barbell · Quads · already in this day")
         let other = try model.row("Lat Pulldown")
         #expect(other.detail == "Cable · Back")
         #expect(other.inDayMark == nil)
         #expect(other.line == "Cable · Back")
-        #expect(other.spokenValue == "Cable · Back")
         #expect(model.rows.count { $0.inDayMark != nil } == 1)
     }
 
@@ -109,7 +106,7 @@ nonisolated extension ExercisePickerPresentationTests {
         try screen.tapChip("Back", in: \.muscles)
         #expect(screen.model.pickLine == "3 Lat Pulldown", "the place is the pick's, not the listed row's")
         #expect(screen.model.foot == ExercisePickerModel.Foot(title: "Add 3 exercises", action: .add(picks)))
-        try screen.tap(.search("zzz"))
+        try screen.tap(.setQuery("zzz"))
         #expect(screen.model.empty != nil)
         #expect(screen.model.foot.action == .add(picks))
     }

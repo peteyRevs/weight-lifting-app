@@ -52,7 +52,6 @@ nonisolated extension ExercisePickerPresentationPropertyTests {
             #expect(!row.detail.isEmpty && row.detail.components(separatedBy: " · ").count == 2)
             #expect((row.inDayMark != nil) == input.dayExercises.contains(row.id))
             #expect(row.line == [row.detail, row.inDayMark].compactMap(\.self).joined(separator: " · "))
-            #expect(row.spokenLabel == row.name && row.spokenValue == row.line)
             let place = picks.firstIndex(of: row.id)
             #expect(row.isPicked == (place != nil))
             #expect(row.pickMark == place.map { ($0 + 1).formatted(.number.locale(input.locale)) })

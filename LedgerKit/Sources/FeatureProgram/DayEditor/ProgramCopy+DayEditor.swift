@@ -48,7 +48,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "\(count) exercises back to back",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Under SUPERSET: how many exercises the superset has"
         )
     }
@@ -195,7 +195,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "It's scheduled in \(count) weeks. Those days become rest.",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Under the confirmation's title: how many weeks of the block train the day"
         )
     }

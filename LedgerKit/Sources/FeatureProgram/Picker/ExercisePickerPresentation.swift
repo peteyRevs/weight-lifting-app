@@ -119,8 +119,6 @@ nonisolated enum ExercisePickerPresentation {
             line: line,
             isPicked: place != nil,
             pickMark: place.map { ($0 + 1).formatted(.number.locale(input.locale)) },
-            spokenLabel: exercise.name,
-            spokenValue: line,
             action: .setPicked(place == nil, exercise: exercise.id)
         )
     }

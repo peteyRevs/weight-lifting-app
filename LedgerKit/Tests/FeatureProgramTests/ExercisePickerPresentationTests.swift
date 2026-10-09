@@ -29,7 +29,7 @@ nonisolated struct ExercisePickerPresentationTests {
     @Test("Typing \"row\" with Back and Machine chosen lists exactly Chest-Supported Row (the brief's criterion 12)")
     func rowBackMachine_isExactlyChestSupportedRow() throws {
         var screen = try PickerScreen(Fixture.input())
-        try screen.tap(.search("row"))
+        try screen.tap(.setQuery("row"))
         try screen.tapChip("Back", in: \.muscles)
         try screen.tapChip("Machine", in: \.equipment)
         let model = screen.model
@@ -117,8 +117,11 @@ nonisolated struct ExercisePickerPresentationTests {
         #expect(try arabic.row("Leg Press").pickMark == "٢")
     }
 
-    @Test("The search field's action is the query as typed")
-    func search_isTheQueryAsTyped() {
-        #expect(ExercisePickerAction.search(" Row ") == .setQuery(" Row "))
+    @Test("The search field's action stores the query as typed, and the model hands it back")
+    func setQuery_keepsTheQueryAsTyped() throws {
+        var screen = try PickerScreen(Fixture.input())
+        try screen.tap(.setQuery(" Row "))
+        #expect(screen.model.search.query == " Row ")
+        #expect(screen.model.names.contains("Chest-Supported Row"), "the filter trims; the field does not")
     }
 }
