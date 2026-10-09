@@ -952,6 +952,16 @@
         }
       }
     },
+    "Nothing matches that filter." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing matches that filter."
+          }
+        }
+      }
+    },
     "One extra set at −15% after the last working set." : {
       "localizations" : {
         "en" : {

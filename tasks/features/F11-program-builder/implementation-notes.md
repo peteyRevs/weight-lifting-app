@@ -2973,3 +2973,411 @@ Counted before the round (1,007) and after (1,013): six lines, under the 1,050 a
   target on the simulator, the coverage gate script, the nightly seeds, and on the host any target but the
   three named. `FeatureToday` calls `TimeEstimate.minutes`, whose body changed: its host tests were run for
   that reason, `--filter FeatureTodayTests`, 216 tests in 19 suites passed.
+
+## Slice S8 — the form controls and the library's presentation (G1 implementer, 2026-10-08)
+
+Branch `feat/F11-s8-controls-library`, on the specification commit `48794bd`. The plan's S4 and S8 as one
+slice; the brief's "Plan amendments — slice S8" (criteria 1 to 13) is the specification. Committed by the
+implementer in three commits (the library's presentation, the controls, these notes). "The runs" was filled
+in after the runs; nothing else of the tree changed after them.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+**Part one, `Sources/LedgerDesign/`.**
+
+- `Components/StepperField.swift`: `StepperField(_ label:, value:, spokenValue: = nil, onDecrement:,
+  onIncrement:)`, each closure optional; the private `StepButton`; `StepperFieldGallery`.
+- `Components/LedgerToggleStyle.swift`: `LedgerToggleStyle`, `ToggleStyle.ledger`; the private `LedgerToggle`
+  and `LedgerToggleTrack`; `LedgerToggleLook` (the switch's colours, internal, read by the contrast test);
+  `LedgerToggleGallery`.
+- `Components/WrapLayout.swift`: `WrapLayout(spacing:lineSpacing:)`, a `Layout`; its arithmetic is the
+  internal `arrangement(of:in:)`, which both entry points call; `WrapLayoutGallery`.
+- `Components/Components+Previews.swift`: three cases of `DesignPreview` and their `#Preview`s.
+  `Gallery/DesignGallery.swift`: three sections, appended last.
+- Tests, in `Tests/LedgerDesignTests/`: new `StepperFieldTests.swift` (8 tests),
+  `LedgerToggleStyleTests.swift` (6), `WrapLayoutTests.swift` (9 of the arithmetic, which also run on the
+  host, and 5 drawn), `AccessibilityTreeFormTables.swift` (19 rows of `AccessibilityTreeTests`' table).
+  Extended: `ComponentSnapshotTests.swift` (the suite `FormControlSnapshots`, 7 tests, 23 references),
+  `ComponentAccessibilityTests.swift` (3 tests, each at two sizes), `AccessibilityTreeTests.swift` (the table
+  gains `forms`), `DesignGalleryTests.swift` (the three names). `PreviewTests` needed no edit: it reads the
+  registry.
+- References: 23 new files in `__Snapshots__/ComponentSnapshotTests/` (each control at the six cells; the
+  layout right to left; the three controls together under Increase Contrast in both themes, pressed, and at
+  accessibility5). One existing reference recorded again: the gallery's (see "The gallery's reference").
+
+**Part two, `Sources/FeatureProgram/`.**
+
+- `Picker/` (new folder): `ExercisePickerInput.swift`, `ExercisePickerModel.swift`,
+  `ExercisePickerAction.swift`, `ExercisePickerPresentation.swift`, `ProgramCopy+Picker.swift`.
+- `DayEditor/DayEditorAction.swift`: `SlotEdit.add([Slot])`, applied by `DayEditing.addSlots`; not relative.
+- `DayEditor/ProgramCopy+DayEditor.swift` and the catalog: the comment of "Cancel" names its second use.
+- `Resources/Localizable.xcstrings`: 25 new keys (table below), one of them counted; 125 in all.
+- Tests, in `Tests/FeatureProgramTests/`: new `ExercisePickerPresentationTests.swift` with `+Chips` and
+  `+Picks` (26 tests), `ExercisePickerPresentationPropertyTests.swift` with `+Checks` (4 seeded tests),
+  `ProgramCopyTests+Picker.swift` (4), `Support/ExercisePickerTesting.swift` (fixtures, and `PickerScreen`,
+  which applies an action exactly as `ExercisePickerAction`'s comments say a store does). Edited:
+  `FeatureProgramSourceTests.swift` (the library's three files are seen to be among those the source checks
+  read), `Support/DayEditorTesting.swift` (`SlotEdit.slot` is optional: `.add` names no slot).
+
+No view of a screen, no store, no change to `LedgerAppKit`, the project file, a test plan or the set row.
+
+### The models and the actions
+
+`ExercisePickerPresentation.make(_ input: ExercisePickerInput) -> ExercisePickerModel`, `nonisolated`,
+internal to the module.
+
+**The input:** `exercises: [Exercise]` (the stored ones, any order); `dayExercises: Set<ExerciseID>`; `query`;
+`muscle: ExerciseSearch.MuscleFilter?` and `equipment: Equipment?` (nil is "All"); `picks: [ExerciseID]` in
+the order picked; `locale`.
+
+**The model** (`Equatable`, every string final):
+
+| Part | Fields |
+|---|---|
+| `title`, `cancel` | "Exercise library"; "Cancel" with `.cancel` |
+| `search` | `placeholder` "Search exercises" (also the spoken label), `query` (the input's) |
+| `muscles`, `equipment` | `spokenLabel` "Muscle" / "Equipment"; `chips`: `id` (place, 0 is "All"), `title`, `spokenLabel` "Muscle: Chest", `isSelected`, `action` |
+| `content` | `.rows([Row])` (never empty) or `.nothingMatches(Empty)`: `message` "Nothing matches that filter.", `clear` "Clear filters" with `.clearFilters` |
+| `Row` | `id` (the exercise's), `name`, `detail` "Machine · Back", `inDayMark` "already in this day" or nil, `line` (the two joined), `isPicked`, `pickMark` "2" or nil, `spokenLabel` (the name), `spokenValue` (the line), `action` |
+| `foot` | `title` "Select exercises to add" / "Add 1 exercise" / "Add 3 exercises"; `action` `.add(ids)` or nil (disabled) |
+
+**The actions** (`ExercisePickerAction`, `Hashable`, `Sendable`; each says what becomes true):
+
+| Case | What the store does |
+|---|---|
+| `.setQuery(String)` | The query is this text. A view sends it through `ExercisePickerAction.search(_:)`. |
+| `.setMuscle(MuscleFilter?)`, `.setEquipment(Equipment?)` | The chip chosen is this one. |
+| `.setPicked(Bool, exercise:)` | True: the exercise goes to the end of the picks unless it is among them. False: it leaves them. |
+| `.clearFilters` | The query is emptied and both chips are "All". The picks stay. |
+| `.add([ExerciseID])` | For each id in order: draw a `SlotID`, build a slot with `DayEditing.newSlot` (the settings' units and default rest); queue the Day editor's `.edit(.slot(.add(slots), day:))`; empty the query and the picks, keep the chips, close the sheet. |
+| `.cancel` | Close the sheet, add nothing; empty the query and the picks, keep the chips (the prototype closes the same way for both, `Ledger.dc.html:1395`, `:1427`). |
+
+### Decisions and deviations
+
+1. **`StepperField` takes two optional closures, not `onStep: (Direction) -> Void`** as "Inputs", S4, sketched
+   it. Criterion 1 asks for one closure per step and for a step that can be switched off; an absent closure
+   is the switch, so there is no flag that could disagree with the closure, and S6's field model
+   (`decrement`, `increment`) maps onto it one to one.
+2. **How a switched-off step is spoken.** VoiceOver has no "this direction is off" for an adjustable element.
+   The swipe towards the step does nothing, so VoiceOver repeats the value, which is how a system stepper at
+   its limit sounds; with both steps off, or the field disabled, the element is dimmed (`.notEnabled`).
+   Nothing more is said, because the control looks up no text. Open question 1.
+3. **Behaviour 11 against criterion 1.** S6's model offers both directions at a limit (the plan's behaviour
+   11), so the Day editor's steppers never switch a step off; the control can, for whoever wants it
+   (Settings, or S11 if the model changes).
+4. **The stepper's buttons are round**, 44 pt, outlined, as `IconPillButton` is; the prototype's are squares
+   of 12 pt corners in the old light design. The label is the `label` role in muted ink (decision 1: "the
+   small grey label style"), the value `numeralM`.
+5. **The toggle.** On: a track filled with ink and a knob of the ground's colour. Off: an outlined track
+   (`hairlineStrong`) and a knob of muted ink. Disabled: fainter steps of the same inks. The prototype's
+   52 × 32 pt track and 26 pt knob are kept and do not grow with the text size. The whole row is the tap
+   target. To VoiceOver the style is represented by a system `Toggle` with `.switch` and the same label and
+   binding (`accessibilityRepresentation`), so the label, the value ("0", "1"), the traits and the
+   double-tap are SwiftUI's own; `LedgerToggleStyleTests.toggle_accessibility_isSwiftUIsSwitch` compares the
+   two.
+6. **`WrapLayout` mirrors nothing itself**: SwiftUI mirrors a layout's placements under a right-to-left
+   layout direction (`WrapLayoutRenderingTests.rightToLeft_runsFromTheRight`, and a reference). Children of a
+   row are centred on the row's height. A child wider than the row is asked again for its size at the row's
+   width, so a pill whose title wraps reports the height it then needs.
+7. **A narrow pill stands in the middle of its 44 pt target**, so a short first chip ("All") starts a few
+   points inside the row's edge; that is `PillButton`'s own behaviour (`flush:` exists for it) and is left to
+   S12, which draws the chips.
+8. **The gallery sections come last**, after the watch components, so that the pages above stay where they
+   were (see "The gallery's reference").
+9. **The input holds the day's exercise ids**, not the program and the day's id as S6's open question 8
+   recommended: criterion 6 lists "the exercises already in the day", and the sheet reads nothing else of the
+   program.
+10. **Equipment that has no chip is read as "All"** (an input holding `.kettlebell` or `.band`): otherwise the
+    list would be narrowed with no chip selected. One chip is selected in each row, always.
+11. **A row's muscle is the exercise's primary muscle group**, eleven names ("Barbell · Quads"), not the
+    chip it falls under ("Legs"): the Domain's groups are finer than the chips (decision #12), and core,
+    which has no chip, needs a word anyway.
+12. **The chips' lists.** Equipment: `ExercisePickerPresentation.equipmentChips`, five entries; "Kettlebell"
+    and "Band" are two more entries there and nothing else (their names are in the catalog since S6).
+    Muscles: `ExerciseSearch.MuscleFilter.allCases`, the Domain's list; "Core" is one more case there, with
+    its `groups`, and one more line in `ProgramCopy.muscleFilter` (the compiler asks for it). So decision A is
+    "three more entries" in the sense of criterion 7 for equipment, and one Domain case for the muscle.
+13. **The selected chip carries its action too.** Criterion 7 says each chip is an action that names the
+    filter it sets; the selected one's changes nothing. (S6's selected progression chip has none; there the
+    criterion asked that nothing be offered that does nothing.)
+14. **Picked is said by the selected state, not by a word.** A row's `spokenValue` is its line; the view
+    sets the selected trait from `isPicked`, as `PillButton` does for a filled pill, and VoiceOver says
+    "selected" in the system's words. Criterion 12 lists "a row with its line and whether it is picked" among
+    the spoken texts; no text was written for it. Open question 2.
+15. **A pick's place is a string** (`pickMark`, "2"), formatted in the injected locale as S6's stepper
+    numbers are, not a catalog entry. The place is among all the picks, also those the filter hides.
+16. **Picks: each exercise once.** An id that comes twice in the input counts once, at its first place; an
+    id that is not stored is ignored; the foot counts what is left. Picks the filter hides are still counted
+    and added.
+17. **"Cancel" empties the query and the picks**, as "Add" does. The brief says so only for "Add"; the
+    prototype does both the same way.
+18. **`.add` is a case of `SlotEdit`** (criterion 11) and is not marked relative: the slots carry their ids,
+    and `addSlots` leaves out a slot the day holds (`addEdit_isAddSlots_andSafeTwice`).
+19. **One lint rule is switched off on one function**: `ProgramCopy.muscle(_:)` has one lookup for each of
+    the eleven muscle groups (standards §7: each case its own lookup), which is one branch more than
+    `cyclomatic_complexity` allows. `// swiftlint:disable:this`, as `SessionBuilder.build` does for its rule.
+20. **Size.** 580 product lines against about 480 planned (table below); under the 800 at which the slice
+    stops.
+
+### Sanctioned edits to the tester's files
+
+Ruled by the orchestrator on 2026-10-08, before the edit.
+
+| File:line | Edit |
+|---|---|
+| `Tests/FeatureProgramTests/Adversarial/DayEditorAdversarialSupport.swift:100` | One line added to the exhaustive switch of `AdvDay.edited(_:_:)`: `case let .add(slots): DayEditing.addSlots(day, slots)`. Nothing else in the file. |
+
+Not edited, for the tester: `DesignGalleryAdversarialTests.publicViews` (`Tests/LedgerDesignTests/Adversarial/`)
+lists the public views of `Components/` as of 2026-09-30; `StepperField` is a new one and has its heading.
+
+### The gallery's reference
+
+`__Snapshots__/DesignGalleryTests/designGallery_dark_matchesReference.dark-large.png` was recorded again (the
+only existing reference that changed; ruled by the orchestrator, twice, on 2026-10-08). The old file is
+402 × 7010, the new one 402 × 8176: three sections at the end.
+
+The old image is **not** the top of the new one row for row: its content stands one pixel row lower.
+Measured with two scripts written for this (CoreGraphics, both files decoded to 8-bit sRGB; they are not in
+the tree):
+
+- `swift gallery-top.swift <old> <new>`: "rows of the old image that differ in the new one: 3758".
+- `swift gallery-shift.swift <old> <new>`, old row r against new row r − shift: shift −2: 4,207 of 7,010 rows
+  differ; −1: 3,989; 0: 3,758; **1: 15 of 7,009**; 2: 3,758 of 7,008. So every old row but the first is the
+  new image's row one higher; the old image began with one more row of ground.
+- The 15 rows that still differ hold 28 pixels in all, each one level of 255 apart in its largest channel
+  ("largest channel difference after the shift: 1"). Old rows 3083 (the label of `PrimaryButton`'s "Start
+  workout"), 3369, 3525, 3618, 3628, 3632, 3635, 3645, 3646 (`PillButton`'s and `IconPillButton`'s outlines
+  and labels), 4972 (`WeekStrip`'s dots), 5383 (`SheetChrome`'s edge), 6072, 6073 (`WatchPrimaryButton`'s
+  first button), 6409, 6411 (`WatchRestRing`'s arc). Edge blending; no glyph, colour or element changed.
+
+The cause is a reading, **not proven**: the gallery is drawn at its own height; the old total was probably
+not a whole number of points, the host rounded it up and the spare part of a point stood above the content;
+with three more sections the total rounds another way. No section above the new ones was edited, and every
+other existing reference of the target passes unchanged.
+
+### Criteria → tests
+
+Suites, part one: `StepperFieldTests` (SF), `LedgerToggleStyleTests` (TS), `WrapLayoutTests` (WL, the
+arithmetic), `WrapLayoutRenderingTests` (WR), `AccessibilityTreeTests` with `TreeTables.forms` (Tree),
+`ComponentAccessibilityTests` (CA), `FormControlSnapshotTests` (Snap), `DesignGalleryTests` (DG),
+`PreviewTests` (PT). Part two: `ExercisePickerPresentationTests` (PK), `ExercisePickerPresentationPropertyTests`
+(PP), `ProgramCopyTests` (CT), `FeatureProgramSourceTests` (SrcT).
+
+| Criterion | Tests |
+|---|---|
+| 1 `StepperField` | SF `field_accessibility_isOneAdjustableElement`, `field_adjust_callsTheMatchingClosure`, `field_oneStepOff_onlyTheOtherSteps`, `field_bothStepsOffOrDisabled_isDimmedAndInert`, `field_adjustedAtItsLimits_announcesTheValue`, `buttons_areFortyFourPointTargets`, `switchedOffStep_isDrawnAsSuch`, `buttons_atAccessibilitySizes_standUnderTheText`; Tree, 8 rows; CA `stepperField_accessibility_adjustableWithTarget` |
+| 2 `LedgerToggleStyle` | TS `toggle_accessibility_isSwiftUIsSwitch` (on and off, enabled and disabled, against a system switch), `toggle_activated_flipsTheBinding`, `toggle_disabled_doesNotFlip`, `toggle_onAndOff_differByFillAndSide`, `toggle_drawsNoAccent`, `knob_contrast_meetsThreeToOne` (both themes, with and without Increase Contrast); Tree, 5 rows; CA `ledgerToggle_accessibility_switchWithTarget`; Snap `formControls_increasedContrast_matchesReference` |
+| 3 `WrapLayout` | WL `noChild_takesNoRoom`, `oneChild_standsAtTheStart`, `childrenThatFit_runAlongOneRow`, `childThatDoesNotFit_startsTheNextRow`, `childEndingAtTheEdge_stays`, `childAsWideAsTheRow_hasARowToItself`, `noWidth_isOneRow`, `rowOfMixedHeights_isCentred`, `reportedSize_isTheRoomTheChildrenTake` (6 widths); WR `drawnSize_isTheSizeOfItsRows`, `rightToLeft_runsFromTheRight`, `childWiderThanTheRow_getsTheRowsWidth`, `longPill_wrapsInsideTheRow`, `noChildAndOneChild_draw`; Snap `wrapLayout_rightToLeft_matchesReference` |
+| 4 Registered and shown | PT `registry_listsEveryPreview`, `preview_renders` (the three new cases); DG `sections_names_coverEveryComponentAndTokenType`, `gallery_accessibilityTree_namesEverySectionAndToken`, `designGallery_dark_matchesReference`; Snap `stepperField_`, `ledgerToggleStyle_`, `wrapLayout_appearance_matchesReference` (six cells each), `formControls_pressed_`, `formControls_accessibility5_matchesReference`; Tree, 19 rows (the layout's 6 with pill buttons); CA `wrapLayout_pills_keepTheirTargets`. watchOS: the gate's watch build compiles `LedgerDesign` |
+| 5 The set row is not touched | `git diff 48794bd -- LedgerKit/Sources/LedgerDesign/Components/SetRow*.swift` is empty; its references pass unchanged |
+| 6 One input, one model | PK `noFilter_listsTheCatalogInNameOrder`, `list_isExerciseSearchFiltered` (20 cases × 6 equipment values), `exercisesInAnyOrder_giveTheSameList`, `search_isTheQueryAsTyped`; PP `make_randomInput_keepsTheInvariants` (`checkList`) |
+| 7 The chips | PK `chips_areTheBriefs`, `chips_actionsNameTheirFilter`, `chips_areSpokenWithTheirRow`, `chips_tapped_selectAndFilter`, `chips_areBuiltFromOneListEach`, `equipmentWithNoChip_isReadAsAll`; PP `checkChips` |
+| 8 The rows (the brief's criterion 12) | PK `rowBackMachine_isExactlyChestSupportedRow`, `customExercise_isARowLikeAnyOther`, `row_readsEquipmentMuscleAndTheDaysMark`, `rows_nameEveryEquipmentAndMuscle`, `rowInTheDay_canBePicked`, `picks_carryTheirPlace_andUnpick`, `pickAction_appliedTwice_isOnePick`; PP `checkRows` |
+| 9 Nothing matches | PK `nothingMatches_offersClearFilters`, `noExercises_givesTheEmptyState`; PP `clearFilters_randomInput_showsEveryStoredExercise` |
+| 10 The foot | PK `foot_readsTheBriefsTexts`, `foot_carriesThePicksInOrder`, `picks_twiceOrNotStored_areReadOnce`, `noFilter_listsTheCatalogInNameOrder` (title, "Cancel", placeholder); PP `checkFoot`, `taps_randomInput_keepThePicksInOrder` |
+| 11 The picks become slots | PK `add_appendsRuleSevenSlotsInPickOrder`, `addEdit_isAddSlots_andSafeTwice`, `cancel_closesAndAddsNothing` |
+| 12 Words | CT `picker_plainTexts_areTheBriefs`, `picker_addExercises_hasOneAndOther`, `picker_writtenTexts_areTheNotes`, `picker_chipAndRow_shareTheGroupsName`; `ModuleCopyTests` (`LedgerAppKitTests`) and the gate's string-catalog step for the catalog |
+| 13 Pure and total | SrcT `sources_neverReadTheClockOrTheCurrentCalendar`, `storesAndPresentations_neverClamp` (now seen to read the library's files), `presentationsCopyAndModels_neverNameDouble`; PK `sameInput_givesTheSameModel`, `picks_twiceOrNotStored_areReadOnce`, `noExercises_givesTheEmptyState`; PP all four, `actions_randomInput_areSafeTwice` among them |
+
+The brief's criterion 12, second half ("keeping the muscle/equipment filters but clearing query and
+selection") is what `PickerScreen` does on `.add`, by the action's comment; the store that really does it is
+S14's (`add_appendsInPickOrder_andKeepsTheFilters`, the plan's behaviour 14).
+
+Checked by breaking the code (each change made in `ExercisePickerPresentation.swift`, the library's suites
+run on the host, the change undone; every one made tests fail): the picks not read once; picks that are not
+stored kept; equipment with no chip left to filter; a row that never unpicks; a muscle chip that sets "All";
+the day's mark on the wrong rows; the foot's picks reversed; the query ignored. The controls' tests were not
+checked this way.
+
+**The pinned VoiceOver trees** (`AccessibilityTreeFormTables.swift`; each row is exact: count, order, label,
+value, traits, no container):
+
+| Control | State | Tree |
+|---|---|---|
+| `StepperField` | both steps on; at accessibility3 | adjustable "Sets", value "5" |
+| | a spoken value | adjustable "Rest", value "2 minutes 30 seconds" (drawn "2:30") |
+| | no "−"; no "+" | adjustable, the label and the value; not dimmed |
+| | both off; disabled | adjustable and dimmed |
+| | the gallery | five adjustable stops; the rules are none |
+| `.toggleStyle(.ledger)` | off; on; at accessibility3 | button with the switch's trait, "Drop set", value "0" or "1" |
+| | disabled | the same, dimmed |
+| | a label of two texts | one stop, "Drop set, One extra set at −15%, straight after the last working set." |
+| `WrapLayout` | no child | nothing |
+| | pills on one row; right to left | "All" (selected), "Chest", "Back", in this order |
+| | thirteen pills over three rows; at accessibility3 | the pills in their order, row by row |
+| | a pill longer than the row | "Legs" (selected), the long title, "Arms" |
+
+### The catalog's new keys
+
+From the brief's "Copy (exact)" (brief:60) unless marked.
+
+| Key | Used for |
+|---|---|
+| `Exercise library` | the sheet's title |
+| `Search exercises` | the field's placeholder and spoken label |
+| `All` | the first chip of each row |
+| `Chest`, `Back`, `Shoulders` | a muscle chip, and the muscle on a row |
+| `Legs`, `Arms` | a muscle chip |
+| `already in this day` | a row's mark |
+| `Nothing matches that filter.`, `Clear filters` | the empty state |
+| `Select exercises to add` | the foot with no pick |
+| `Add %lld exercises` (counted; `one`: `Add %lld exercise`) | the foot |
+
+"Cancel" and the seven equipment names were in the catalog; "Cancel"'s comment now names both uses.
+
+**Texts the brief does not give, written here (for Pete):**
+
+| Key | Where it is seen or heard | Why this wording |
+|---|---|---|
+| `Quads`, `Hamstrings`, `Glutes`, `Calves`, `Biceps`, `Triceps`, `Forearms`, `Core` | on a row, after the equipment: "Barbell · Quads" | the catalog has eleven muscle groups; the brief names the three that are chips (deviation 11) |
+| `Muscle`, `Equipment` | VoiceOver only: the name of a row of chips | the brief's own words for the two filters (criterion 12 of the brief) |
+| `%@: %@` | VoiceOver only: a chip, "Muscle: Chest", "Equipment: All" | both rows have an "All"; criterion 12 asks for the chip with its row's name |
+
+Not keys: an exercise's name (data); a pick's place, "2", formatted in the injected locale.
+
+In the design gallery and the previews only (debug builds; `LedgerDesign` has no catalog): "Sets", "Rest",
+"Target RPE", "Start load for the first week", "Top of range", "Drop set", "Keep the screen awake" and the
+chips' words, as sample text.
+
+### Product lines per file
+
+Non-blank, non-comment lines.
+
+| File | Planned | Lines |
+|---|---|---|
+| `LedgerDesign/Components/StepperField.swift` | 75 | 95 |
+| `LedgerToggleStyle.swift` | 50 | 96 |
+| `WrapLayout.swift` | 50 | 75 |
+| `Components+Previews.swift` | 45 with the gallery | 157 → 172 |
+| `Gallery/DesignGallery.swift` | | 71 → 74 |
+| **Part one** | **220** | **284** |
+| `FeatureProgram/Picker/ExercisePickerInput.swift` | (in the model's) | 11 |
+| `ExercisePickerModel.swift` | 50 | 57 |
+| `ExercisePickerAction.swift` | not planned | 13 |
+| `ExercisePickerPresentation.swift` | 90 | 109 |
+| `ProgramCopy+Picker.swift` | 120 | 99 |
+| `DayEditor/DayEditorAction.swift` (`.add`) | | 61 → 64 |
+| `DayEditor/ProgramCopy+DayEditor.swift` ("Cancel" over five lines) | | 160 → 164 |
+| **Part two** | **260** | **296** |
+| **The slice** | **about 480** | **580** |
+
+Where the excess is: each control's file holds its gallery (17, 23 and 20 lines), which the plan counted
+with the previews; the toggle has a view for the environment, one for the track and the colours apart for
+the contrast test. Tests: about 1,680 added lines in 21 files, not counted.
+
+### Open questions, each with a recommendation
+
+1. **A switched-off step to VoiceOver** (deviation 2): silent but for the repeated value. *Recommendation:*
+   keep; it is what the system's stepper does. If Pete wants words ("At minimum"), the control gains an
+   optional `limitHint: String` the feature fills from its catalog; nothing uses a switched-off step yet.
+2. **A picked row to VoiceOver** (deviation 14): the selected trait, no word, and the place among the picks
+   is not spoken. *Recommendation:* keep, and decide with S12's VoiceOver table; a spoken "2 of 3" is one
+   counted key and one field of `Row`.
+3. **"Muscle: Chest"** for a chip is new wording. *Recommendation:* show Pete with S12's table. The
+   alternative that needs no row name is "All muscles" and "All equipment" for the two first chips and the
+   bare title for the others: two keys in place of three.
+4. **Decision 3, A** (Core, Kettlebell, Band): the muscle chip needs `ExerciseSearch.MuscleFilter.core` in the
+   Domain (deviation 12). *Recommendation:* if Pete chooses A, S12 or F12's Domain slice adds the case; here
+   it is one line of copy.
+5. **The toggle's track does not grow with the text size** (deviation 5); the label does.
+   *Recommendation:* keep, as the system's switch does; the row is the target.
+6. **One stepper for the design system** (criterion 5): `SetRowSteppers`' private pill and `StepperField`
+   are two looks of one idea (the pill shows the step between its buttons, the field a label and a value
+   beside them) and share the adjustable behaviour. *Recommendation:* a later chore, after S11 has drawn a
+   screen with `StepperField`; nothing forces it.
+7. **The controls' taps are tested through VoiceOver's actions only** (increment, decrement, activate):
+   the host reader cannot tap a button that is not an accessibility stop of its own. *Recommendation:* the
+   nightly UI test of the Day editor (S14) taps "+" and the switch.
+8. **The gallery's reference moved by a pixel row** (above): accepted by the orchestrator; the cause is
+   unproven. *Recommendation:* if it matters, give `DesignGalleryContent` a whole-point height in a chore
+   and record once more; every later addition to the gallery risks the same.
+
+### Inputs for S12 (the library's views)
+
+The model table above is the contract. Beyond it:
+
+- A view takes a part of the model and `(ExercisePickerAction) -> Void`; it builds no action but the search
+  field's, `ExercisePickerAction.search(text)`. The field can be bound to `search.query` through that action
+  (the query is stored as typed, unlike a name), or to a draft the store keeps; `search.placeholder` is its
+  placeholder and its spoken label.
+- The sheet scrolls: the title, the search field and the chips above (or in) `ScrollView {
+  ExercisePickerPage(model:) }`, the foot pinned below; trees and references from an `ExercisePickerParts`
+  view (testing-strategy §2.6). Which of the top parts are pinned is S12's to decide and say.
+- Chips: `WrapLayout { ForEach(row.chips) { PillButton($0.title, style: $0.isSelected ? .filled : .outline) … } }`
+  with `.accessibilityLabel($0.spokenLabel)`; a filled pill already says "selected". `row.spokenLabel` is for
+  a container or a heading if the table wants one. A short first chip stands inside its 44 pt target
+  (deviation 7): `flush: .leading` on the first of a row is not knowable from outside the layout, so S12
+  either accepts it or the pill gains a minimum-width option.
+- Rows: `ForEach(rows)` by `id`. Draw `name`, then `detail` and, when not nil, `inDayMark` after " · " in its
+  own style (decision 1 draws it in ink or grey, not orange), or `line` whole. `isPicked` picks the mark's
+  look and the selected trait; `pickMark` may be drawn in the mark ("2") or ignored. VoiceOver: label
+  `spokenLabel`, value `spokenValue`.
+- `content` is `.rows` or `.nothingMatches`: `EmptyState` fits the second (`message` as its title or body,
+  `clear` as its action); `LedgerDesign`'s tree for that already exists.
+- The foot: `PrimaryButton(foot.title)`, disabled when `foot.action == nil`. It is the screen's one orange
+  thing (decision 1).
+- Previews and snapshots build models with `ExercisePickerPresentation.make` from `ExerciseCatalog.seed()`:
+  no filter; "row" + Back + Machine (one row); three picks with one exercise in the day; "zzz" (nothing
+  matches); no exercise at all.
+
+### Inputs for S14 (the library's store)
+
+- **Fills:** `exercises` = `observeAll()` as it comes (the presentation sorts through `ExerciseSearch`);
+  `dayExercises` = the exercise ids of the day on screen, with the Day editor's waiting edits applied;
+  `query`, `muscle`, `equipment`, `picks` = its own state; `locale` from the dependencies.
+- **Applies an action** exactly as the action table says; `Tests/FeatureProgramTests/Support/ExercisePickerTesting.swift`
+  (`PickerScreen.tap`) is that table as code. The two chips are kept for as long as the Day editor stays
+  open (the plan's behaviour 14), so they live with the Day editor's store or root, not with a sheet that is
+  made anew each time it opens.
+- **`.add(ids)`:** for each id in order, the exercise from the stored ones (skip one that has gone meanwhile),
+  a `SlotID` from `@Dependency(\.uuid)`, `try DayEditing.newSlot(id:exercise:units:defaultRest:)` with the
+  settings' units and default rest; then the Day editor's `.edit(.slot(.add(slots), day: day))`, once. The
+  slots are built at the tap and travel in the edit, so the edit applied to show the day and applied again
+  inside the save gives the same day. `newSlot` throws only for an exercise whose start load is below zero
+  (S1's open question 4): log it and leave that exercise out. `ExercisePickerPresentationTests.edit(adding:…)`
+  is this paragraph as a test helper.
+- **Typing:** no debounce ("Brief vs main" row 26). `make` runs `ExerciseSearch.filtered` over the whole
+  list on every keystroke; the plan's nightly timing test of the 10 ms budget belongs to this slice's store
+  test, with 224 exercises.
+- **Stale state needs no repair:** a pick or a day exercise that is no longer stored is ignored by the
+  presentation, and equipment without a chip reads as "All".
+
+### The runs
+
+All on 2026-10-08, in the worktree; every simulator command through the lock (iPhone 17 and Apple Watch
+Series 12 46 mm, both 27.0). The sources were not edited after the last full gate and the last fast gate;
+this section was written after them.
+
+- Host, `swift test --only-use-versions-from-resolved-file --filter 'FeatureProgramTests|ModuleCopyTests|WrapLayout'`
+  in `LedgerKit`: exit 0. `FeatureProgramTests`: 294 tests in 27 suites passed (the tester's suites among
+  them, with the one sanctioned line); `ModuleCopyTests` 6; `WrapLayoutTests` 9.
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:LedgerDesignTests`, four times. First: the build
+  failed (a gallery list read from a nonisolated table; fixed). Second: 351 tests, 10 failed: 7 that recorded
+  their 23 missing references, the gallery's (402 × 8176 against the reference's 402 × 7010), and two
+  expectations of mine in `WrapLayoutRenderingTests` that were wrong (a wrapped pill is 8 pt higher than a
+  one-line pill, not 10; `ImageRenderer` gives no image for an empty padded view), corrected. Third, with the
+  old gallery reference deleted: 1 failed, the gallery's, recorded. Fourth: exit 0, 351 tests, 344 passed,
+  none failed, 1 skipped, 6 known issues. No reference other than the gallery's changed (`git status` after
+  the fourth run).
+- `scripts/check.sh`, the full gate, three times. First: exit 1 after 77 s at the string-catalog step, "the
+  code looks up "Nothing matches that filter." …, which is not a key of the catalog" (the key was missing;
+  added). Second: exit 0 in 719 s. Its coverage table showed `ExercisePickerInput.swift` at 0 of 3 lines,
+  three default values no test used; the defaults were removed (the store fills every field). **Third, on
+  the final sources: exit 0, "check.sh OK", 688 s** (lint 71 s, iOS build 17 s, iOS tests 338 s, watchOS
+  build 15 s, watchOS tests 244 s). iOS: 3,293 tests, 3,266 passed, none failed, 14 skipped, 13 known
+  issues. watchOS: 2,255 tests, 2,236 passed, none failed, 14 skipped, 5 known issues. String catalogs:
+  `FeatureProgram` 125 keys, `FeatureToday` 58, `LedgerAppKit` 7. Coverage: `FeatureProgram` 1,523 / 1,523
+  lines; `LedgerDesign` 2,634 / 2,731 (96.44 %). Of the new files, from the second gate's bundle:
+  `ExercisePickerPresentation.swift` 114 / 114, `ProgramCopy+Picker.swift` 95 / 95, `DayEditorAction.swift`
+  44 / 44, `WrapLayout.swift` 104 / 105, `LedgerToggleStyle.swift` 127 / 135, `StepperField.swift` 133 / 145:
+  the lines not run are the buttons' tap closures and `@unknown default` (open question 7).
+- `scripts/check.sh --fast` on the final sources: exit 0, "check.sh (--fast) OK", 119 s
+  (`LedgerDomainTests` 1,222 tests passed; `LedgerPersistenceTests` 552 passed with 1 known issue).
+- **Not run:** the nightly lane (2,000 seeds, UI tests); a device; the controls on a watch simulator beyond
+  the gate's watch build and its test plan (no watch test draws them).
+
+Screenshots for Pete, copies of the references: `tasks/features/F11-program-builder/screenshots/s8/`, each
+control dark and light at the default size and at accessibility3, the three together under Increase
+Contrast in both themes, and the layout right to left.
