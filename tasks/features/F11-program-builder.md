@@ -469,3 +469,39 @@ going on. The slice is accepted when:
 
 **Not in this slice:** the library's views (S12, with the builder's views next), its store (S14), any change
 to `LedgerAppKit`, the project file or a test plan.
+
+## Plan amendments — slice S8 after round 1 (orchestrator, 2026-10-08)
+
+The tester found one bug, one defect against a criterion's wording and one test gap (43 tests, two left
+failing); the reviewer approved with three should-fix items and recommends one pull request at about 590
+lines. Rulings, which add to S8's thirteen criteria:
+
+14. **The plural form is English's while the catalog is English** (F11-S8-1). A text with a plural takes its
+    form by the rules of the language the catalog resolves to, not by the lifter's locale: "Add 1 exercise"
+    under ja_JP, "Add 21 exercises" under ru_RU. The fix is one place in `ProgramCopy` that every plural of
+    the module goes through, so `exercises` and `weeks` (on `main` since S5) are right too; the tester's
+    test passes unedited. The other modules' copy files have the same cause and are a chore of their own,
+    not this slice. If the fix needs more than one helper of about thirty lines, or a change outside
+    `FeatureProgram`, the implementer stops and reports.
+15. **Criterion 1 is amended** (F11-S8-2, review): a switched-off step is drawn as off; it is spoken only
+    when both steps are off or the field is disabled (the element is then dimmed). There is no trait for one
+    direction and no caller switches one step off. The tester replaces its failing test with one that pins
+    this.
+16. **A disabled stepper field looks disabled** (review S-2): its label and value take the faint ink
+    `PillButton` gives disabled text; the slice's own references are recorded again (none of them is on
+    `main`).
+17. **The lint waiver stays, with its reason on the line** (review S-1), as an exception to standards §12
+    that the pull request names for the product owner, with the reviewer's alternative (the rule ignoring
+    case lists) as his option. The lint configuration is not changed here.
+18. **Housekeeping** (review N-1 to N-5): the missing translator's comment; `Row`'s two spoken fields that
+    only repeat `name` and `line` go, as does the action that is an alias of `setQuery`; the source test's
+    list names the two new files; `WrapLayout`'s comment says what it asks of an over-wide child, and a
+    zero-width proposal with children is tested.
+19. **Accepted as built**: `StepperField`'s two optional closures; a picked row spoken through the selected
+    trait (S12's VoiceOver table pins the trait); the other decisions of the implementer's notes.
+
+**For S14** (F11-S8-3): no hosted test can tap, so a finger's tap on "−", "+" and the switch is covered by
+nothing until the nightly UI test of the Day editor taps all three. **For S12**: whether VoiceOver says a
+pick's place is the product owner's question, asked with S12's VoiceOver table. **Not covered by criterion
+13** (tester's Q1, Q2): two stored exercises under one id (the schema forbids it) and a blank name (F12's
+rule for custom exercises).

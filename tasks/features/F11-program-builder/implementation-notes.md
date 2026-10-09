@@ -3382,6 +3382,177 @@ Screenshots for Pete, copies of the references: `tasks/features/F11-program-buil
 control dark and light at the default size and at accessibility3, the three together under Increase
 Contrast in both themes, and the layout right to left.
 
+## Slice S8 — review, round 1 (G3 reviewer, 2026-10-08)
+
+Reviewed `git diff main...96f4187` (commits `449cb9c`, `07bc713`, `96f4187`) by reading only: no build, no
+test, no simulator. Paths under `LedgerKit/` unless said otherwise.
+
+**Verdict: approve with should-fix.** No blocking item. Twelve of thirteen criteria are met; criterion 1 is
+met in part (a switched-off step is drawn but not spoken), which I accept as a recorded amendment and not as
+a code change. Three should-fix items, all small.
+
+### Blocking
+
+None.
+
+### Should-fix
+
+- **S-1. A new lint suppression against the Definition of Done.**
+  `Sources/FeatureProgram/Picker/ProgramCopy+Picker.swift:72` switches `cyclomatic_complexity` off. Standards
+  §12 says "No new lint suppressions"; §11 allows one only with its reason. The function is right as it is
+  (§7 asks for one lookup per case, and eleven flat cases are not complex); what is wrong is that the rule
+  counts them. *Proposed:* in `.swiftlint.yml` add `cyclomatic_complexity: { ignores_case_statements: true }`
+  and delete the inline waiver: every later "one lookup per case" member over ten cases would need the same
+  waiver otherwise. This is a change of the lint configuration, so it is the orchestrator's ruling. If it is
+  refused, keep the waiver, put the reason on the line as `SessionBuilder.swift:16` does
+  (`// swiftlint:disable:this cyclomatic_complexity - standards §7: one lookup per case`) and record the
+  exception to §12 in the pull request. Splitting the switch in two to get under ten would be worse than
+  either.
+- **S-2. A disabled field does not look disabled, only its buttons do.**
+  `Sources/LedgerDesign/Components/StepperField.swift:45-50`: the label stays `inkMuted` and the value `ink`
+  when `isEnabled` is false (reference `stepperField_appearance…dark-large`, last field "Top of range 12": the
+  text is as strong as on the live fields). `PillButton.swift:72-75` sets the house rule ("Disabled, it looks
+  disabled": `inkFaint`). *Proposed:* `.foregroundStyle(isEnabled ? LedgerColor.ink : LedgerColor.inkFaint)`
+  on the value and `inkMuted`/`inkFaint` on the label; record the six `stepperField` references and the four
+  `formControls` ones again (all new in this slice). The same holds for the toggle
+  (`LedgerToggleStyle.swift:41`), but there the label is the caller's view; see "For Pete", 1.
+- **S-3. The pull request is over the 500-line target and its third commit is misnamed.** I count 592 added
+  non-blank, non-comment lines under `Sources/` without the catalog (the notes say 580; the same within a
+  few). Standards §10: the description says so in one line and names the split considered (the natural seam
+  is part one, `LedgerDesign`, against part two, `FeatureProgram`; one pull request is right, both parts are
+  small and neither is used yet). Commit `96f4187` is `docs(program)` and carries a catalog key
+  (`Localizable.xcstrings`, "Nothing matches that filter.") and a source change
+  (`ExercisePickerInput.swift`); `449cb9c` therefore did not pass the string-catalog step alone. With a
+  squash merge only the title survives: *proposed:* no rewrite of history; the squash title is
+  `feat(program): …` or `feat(design): …`, never `docs`.
+
+### Nits
+
+- **N-1.** `Sources/FeatureProgram/Picker/ProgramCopy+Picker.swift:100-102`, `nothingMatches` has no
+  translator's comment, alone among the 25 new keys. §7 allows that ("where a translator needs one"); "that
+  filter" means the search text and both chip rows together, which a translator cannot know. Add
+  `comment: "Shown in the exercise library when the search and the two chip rows leave no exercise"` in the
+  code and the catalog.
+- **N-2.** `ExercisePickerModel.swift:98-101`: `Row.spokenLabel` is always `name` and `Row.spokenValue` is
+  always `line`; four fields for two values. Keep them only if S12's table is expected to make them differ
+  (it will if open question 2 is answered with a spoken place); otherwise cut both.
+- **N-3.** `ExercisePickerAction.swift:26-28`: `search(_:)` is a second name for `.setQuery`. S6's `rename`
+  builds a nested edit; this builds nothing. Cut it, or keep it for symmetry; no behaviour depends on it.
+- **N-4.** `Tests/FeatureProgramTests/FeatureProgramSourceTests.swift:88-92` names three of the five new
+  files as "seen to be read"; add `ExercisePickerModel.swift` and `ProgramCopy+Picker.swift`.
+- **N-5.** `WrapLayout.swift:37-46` and `:25-26`: placement asks an over-wide child for its size again at
+  `bounds.width`, which is the width the layout reported (the child's fitted width), not the width it was
+  first asked at. It agrees as long as a child asked at its own fitted width answers the same; `Text` does,
+  and `longPill_wrapsInsideTheRow` and the references show it. Say so in the comment. A zero width
+  (`ProposedViewSize.zero`, SwiftUI's minimum probe) gives width 0 and one child per row, which is a sane
+  minimum; no test names it (`noChild_takesNoRoom` has the only zero).
+- **N-6.** A long pill at accessibility3 and 5 (`wrapLayout…accessibility3`,
+  `formControls_accessibility5…`): the wrapped title's first and last lines come close to the capsule's
+  round ends. It is `PillButton`'s shape, not the layout's, and no real chip is a sentence. No change here.
+
+### The criteria
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | `StepperField` | **partly** | Strings and one optional closure per step, no lookup: `StepperField.swift:25-37`. One adjustable element, label and value, spoken value apart: `:58-70`; tree rows `AccessibilityTreeFormTables.swift:12-50`. 44 pt buttons: `:90`, `StepperFieldTests.buttons_areFortyFourPointTargets`. Stacks: `:40-42`, reference at accessibility3. A switched-off step is drawn (`:83-93`, `switchedOffStep_isDrawnAsSuch`, which also pins that the left button follows `onDecrement`) but **not spoken** (deviation 2). |
+| 2 | `LedgerToggleStyle` | met | Ink track on, no accent token anywhere: `LedgerToggleStyle.swift:87-102`; `toggle_drawsNoAccent`. Knob 3:1 in four settings and the on-track 3:1 on the ground: `knob_contrast_meetsThreeToOne`. VoiceOver is a system switch by `accessibilityRepresentation` (`:48-51`), compared trait for trait with `.switch` in `toggle_accessibility_isSwiftUIsSwitch`. |
+| 3 | `WrapLayout` | met | Both entry points call `arrangement` (`WrapLayout.swift:21-33`); I checked by hand that arranging in the reported width gives the arrangement of the proposed width (no row ends past `widest`, and a child that did not fit in the wider row does not fit in the narrower). nil and infinite give one row (`:53`); no child gives zero (`:77`). Right to left is SwiftUI's mirroring, pinned by `rightToLeft_runsFromTheRight` and a reference I looked at. No cache, and none is needed for a dozen chips. |
+| 4 | Registered and shown | met (watchOS not checked by me) | `Components+Previews.swift:27-29, 56-58, 174-184`; `DesignGallery.swift:82-85`; 18 matrix references plus 5; 19 tree rows; `ComponentAccessibilityTests` three tests. The watch compile is the implementer's gate run; I ran nothing. Nothing in the three files is iOS-only by reading (`AnyLayout`, `accessibilityRepresentation`, `.toggleStyle(.switch)`, `accessibilityAdjustableAction` all exist on watchOS). |
+| 5 | The set row is not touched | met | No `SetRow*` file in `git diff --stat main...96f4187`. |
+| 6 | One input, one model | met | `ExercisePickerPresentation.swift:22-61`; the only list is `ExerciseSearch.filtered`'s (`:25-30`), mapped, never sorted or filtered again. `list_isExerciseSearchFiltered`. |
+| 7 | The chips | met | `:17-20`, `:37-52`, `:86-104`; actions absolute (`.setMuscle($0)`, `.setEquipment($0)`). Equipment is one list; the muscle list is the Domain's (deviation 12). |
+| 8 | The rows | met | `:108-126`; mark apart (`inDayMark`) and joined (`line`); `isPicked`, `pickMark`; `.setPicked(place == nil, …)` is absolute. |
+| 9 | Nothing matches | met | `:53-58`; `noExercises_givesTheEmptyState`. |
+| 10 | The foot | met | `:65-69` (once each, stored only), `:129-137`; counted key with `one` and `other` in the catalog. |
+| 11 | Slots through the Domain | met | `DayEditorAction.swift` `SlotEdit.add([Slot])` → `DayEditing.addSlots`; the presentation names ids only. The two product switches over `SlotEdit` (`isRelative`, `applied`) both have the case; no other product code switches on it (`DayEditorPresentation.swift:150-158` passes it through). |
+| 12 | Words | met, with the two spoken gaps of deviation 14 | Every lookup is in `ProgramCopy+Picker.swift`; 25 keys, all `translated`, keys are the English text, comments equal the code's, `Add %lld exercises` has `one`/`other`; equipment names not added again. A picked row has no spoken text and the place is not spoken. |
+| 13 | Pure and total | met | No clock, calendar or ambient locale in the five files (read); locale is the input's. Unstored picks and day ids are ignored (`:65-69`, `:111`). |
+
+### The deviations
+
+| # | Judgement |
+|---|---|
+| 1 Two optional closures | **Accept.** It is the criterion's own wording ("one closure per step"), there is no flag that could disagree with a closure, and it maps onto S6's field model. Better than `onStep`. |
+| 2 A switched-off step is not spoken | **Accept, as an amendment of criterion 1** (orchestrator to record). There is no system trait for one direction; a hint needs a text the control may not look up; and no caller switches a step off (deviation 3). The claim that a system stepper at its limit sounds the same is not something I verified. |
+| 3 Behaviour 11 against criterion 1 | Accept. Consequence to keep in mind: the off state is unused code until Settings or S11 uses it. |
+| 4 Round buttons, label in the small grey role | Accept; it follows `IconPillButton`. For Pete, 2. |
+| 5 The toggle | Accept the build (`accessibilityRepresentation` is the right tool). For Pete, 1, on how off and disabled look. |
+| 6 `WrapLayout` mirrors nothing itself | Accept; correct for a `Layout`. |
+| 7 A narrow pill inside its target | Accept; S12's to settle. Visible in the references: "All" starts about 3 pt inside the edge. |
+| 8 Gallery sections last | Accept. |
+| 9 The input holds the day's exercise ids | Accept; it is what criterion 6 lists. |
+| 10 Equipment without a chip reads as "All" | Accept. It is a normalising of the filter's value, not a second filter. |
+| 11 A row's muscle is the primary group | Accept; for Pete, 3 (eight new words). |
+| 12 The chips' lists | Accept. Criterion 7's "three more entries" is two entries and one Domain case; said plainly in the notes. |
+| 13 The selected chip carries its action | Accept. |
+| 14 Picked said by the selected trait; the place unspoken | **Accept for this slice, on a condition:** S12's VoiceOver table must pin `.isSelected` on a picked row, since nothing in the model forces it. The place decides the order of the added slots and a VoiceOver user cannot hear it: Pete decides (For Pete, 4). |
+| 15 A pick's place is a formatted number | Accept. |
+| 16 Picks once each | Accept. |
+| 17 "Cancel" empties the query and the picks | Accept; For Pete, 5. |
+| 18 `.add` is not relative | Accept; `addSlots` leaves out an id the day holds (`DayEditing.swift:79-85`). |
+| 19 The lint waiver | **Should-fix, S-1.** |
+| 20 Size | Accept; S-3 for the description line. |
+
+(The task named ten deviations; the notes list twenty decisions. All twenty are judged.)
+
+### The open questions
+
+1. A switched-off step to VoiceOver: keep; amend criterion 1.
+2. A picked row to VoiceOver: keep now; Pete decides on the spoken place before S12's table is written.
+3. "Muscle: Chest": keep for now; Pete sees it with S12.
+4. Decision 3 A needs a Domain case: agreed, nothing to do here.
+5. The track does not grow with the text: keep; the row is the target (references at accessibility3 and 5
+   show no clipping).
+6. One stepper for the design system: a later chore, agreed.
+7. Taps tested only through VoiceOver's actions: **a real gap, accepted until S14.** The sighted path of the
+   toggle (`LedgerToggleStyle.swift:35-39`) runs in no test: an empty button action would pass every test of
+   this slice. The stepper's buttons are better off: the same optional closure drives the faint look and the
+   tap, and the look is pinned per side. S14's UI test must tap "+", "−" and the switch.
+8. The gallery's reference: see below; accept.
+
+### The gallery's reference
+
+I decoded both PNGs myself (a short script, pure Python, in the scratchpad) and compared every row: old row
+r equals new row r − 1 for all but 15 of 7,009 rows, and in those the largest channel difference is 1 of 255;
+with no shift 3,758 rows differ. That confirms the implementer's numbers and row list exactly. By eye, on
+old and new strips side by side (rows 0–700, 2900–3700, 6400–7010): the same content, one pixel row higher;
+no glyph, colour, spacing or element above "StepperField" changed. The cause stays unproven; the effect is
+harmless.
+
+### Tests
+
+They pin the criteria. The picker's tests compare whole values and exact strings, tap the model's own
+actions through `PickerScreen`, and the eight mutations the implementer lists are the ones I would have
+tried. `WrapLayout`'s arithmetic is tested as a function and again as drawn pixels. What could pass with the
+code broken: the toggle's sighted tap (question 7); a disabled look of the texts (S-2, nothing asserts it);
+`sizes(of:)` at a zero width (N-5). The controls' tests were not mutation-checked by the implementer and I
+ran nothing.
+
+### For Pete, in plain words
+
+1. **The switch.** On is clear in both themes: a filled ink track, no orange. Off is a grey knob in a very
+   faint outline, and a switched-off-and-disabled one is only a shade darker, with its label still in full
+   ink. Look at `screenshots/s8/ledgerToggleStyle-dark-large.png`: rows 1 and 4 are "off" and "off,
+   disabled". If they read too alike, the off knob can be a stronger ink and a disabled label can dim.
+2. **The stepper.** Round "−" and "+" (the prototype had rounded squares), a small grey label over a bold
+   value. A step at its limit is faint. A disabled field keeps its text at full strength (S-2 proposes to dim
+   it).
+3. **Eight new words** on an exercise's row: Quads, Hamstrings, Glutes, Calves, Biceps, Triceps, Forearms,
+   Core ("Barbell · Quads"), and for VoiceOver "Muscle", "Equipment" and "Muscle: Chest".
+4. **VoiceOver and the order of picks.** A picked exercise is announced as "selected"; that it is the second
+   of three is drawn ("2") but not said. The order is the order the exercises are added in. Say whether it
+   should be spoken.
+5. **"Cancel" forgets the search text and the picks** and keeps the two chips, as "Add" does.
+
+### Not checked
+
+No build, test, lint or simulator run (by instruction). The watchOS compile, the test counts and the
+coverage are the implementer's. VoiceOver on a device. The tester's `Adversarial` files. Of the images I
+opened eight of the fifteen screenshots (the toggle dark and light at large and dark at accessibility3; the
+stepper light at large and dark at accessibility3; the layout right to left and dark at accessibility3; the
+three under Increase Contrast, dark), the accessibility5 reference and the gallery's new sections; not the
+xLarge references, the pressed sheet, or the other seven screenshots. `ExercisePickerPresentationPropertyTests` and `+Chips` I did not read line by line.
+
 ## Slice S8 — adversarial testing, round 1 (G2 tester, 2026-10-08)
 
 Tested `96f4187` in the worktree; the tests are commits `53a857f` (`test(program)`) and `f74a6b6`
