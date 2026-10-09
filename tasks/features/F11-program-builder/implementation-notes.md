@@ -3861,3 +3861,100 @@ Runs, through the lock: `xcodebuild test … -testPlan PR -only-testing:LedgerDe
 the reference deleted: 377 tests, 2 failed, the gallery's (recorded) and the tester's
 `oneStepOff_isSpokenAsSuch`. Second: 377 tests, 369 passed, 1 failed, the tester's. No gate was run after
 this commit, as ruled.
+
+## Slice S8 — adversarial testing, round 2 (G2 tester, 2026-10-08)
+
+Tested `7e0440a` in the worktree. No product code changed. **No test is left failing.** Six new tests, one
+replaced; no new defect; two notes on criterion 14's fix that are not defects today. Paths under `LedgerKit/`.
+
+### What was done
+
+1. **Criterion 15.** `StepperFieldAdversarialTests.oneStepOff_isSpokenAsSuch` is replaced by
+   `switchedOffSteps_areDrawn_andSpokenOnlyWhenTheFieldIsOff`: with one step off the field is handed to
+   VoiceOver exactly as with both on (label, value, the adjustable trait alone, no hint, no custom action),
+   is drawn unlike it, and its text is as strong; with no step, or disabled, the traits are adjustable and
+   not enabled and the two are one drawing, unlike the live one.
+2. **The three mechanical edits to my files: none weakened a check.** `Row.spokenLabel` and `.spokenValue`
+   no longer exist, so there is nothing left to hold them to; `name` and `line` were and are compared on the
+   same line. The two columns the edit left printing `name` and `line` a second time are taken out of both
+   sides of `AdvPicker`'s reading (they compared a field with itself). `.setQuery` for `.search` is the same
+   action. `ExercisePickerWordsAdversarialTests.swift:59` keeps the name's check.
+3. **Criterion 14**, new suite `ProgramCountedTextAdversarialTests` (5 tests, host):
+   - 37 locales (no identifier, `und`, unknown languages, scripts, `@numbers=`, `@calendar=`, `@rg=`,
+     `@currency=`, POSIX, Arabic, Persian, Devanagari, Burmese and Thai digits, Welsh, Irish, Slovenian and
+     Lithuanian plural rules): `addExercises` and `sets` at 1, 2, 3, 5, 11, 21, 101 and 999, and `days(0)`,
+     `weeks(0)`, are English's form with the count in the locale's own digits; the locale used is English with
+     the lifter's region, numbering system and calendar, and the same locale in gives the same out.
+   - A region's grouping is kept: en_IN and hi_IN "12,34,567", de_DE, de_CH, fr_FR, ar_EG, fa_IR.
+   - `countedLookups_allGoThroughTheOnePlace` reads every `ProgramCopy*.swift` of the module (over 100
+     lookups): each lookup of one of the catalog's 11 counted keys passes `locale: locale.forCountedText`,
+     no other lookup does, and each counted key is looked up.
+   - `forCountedText_readsNothingAmbient`: the helper's body names no current locale, preferred languages,
+     defaults or main bundle, and its preferences are its own locale alone; there is one such helper.
+4. **Criterion 16**, `StepperFieldAdversarialTests.disabledField_labelAndValue_areEachFaint`: the label alone
+   and the value alone, light and dark, with and without Increase Contrast: disabled is under 0.8 of the live
+   text's contrast against the ground, still at least 1.5:1, and equal to a field with no step.
+
+### Can the tests fail
+
+Each change made in place, the tests run, the file restored from a copy outside the tree and compared.
+
+| Change | Fails theirs | Fails mine |
+|---|---|---|
+| One counted lookup (`sets`) with the lifter's locale again | `ProgramCopyTests` | counted texts |
+| The numbering system not carried over | `ProgramCopyTests`, `ExercisePickerPresentation` (+ properties) | counted texts, the library's model and words |
+| The region not given to the language | `ProgramCopyTests` | counted texts, the library's words |
+| The helper returns the locale it was given | `ProgramCopyTests` | counted texts, the library's words |
+| A lookup that is not counted sent through the helper | no | counted texts (the source scan) |
+| A disabled field's label and value both at full strength | `disabledField_drawsItsTextFaint`, one reference | `disabledField_labelAndValue_areEachFaint` |
+| Only the value left strong; only the label left strong (two runs) | yes, each | yes, each |
+| A field with no step not dimmed (`isLive = isEnabled`) | yes | both of my two tests |
+
+So criterion 16's test can fail, for the label and for the value each.
+
+### The two consequences the implementer names
+
+- **`days(0)` under fr_FR is "0 days": not a defect.** The words are English, and English counts none as
+  many; it is criterion 14 as ruled. "0 day" was the bug's other face.
+- **fr_CA groups four-digit counts the English way: not a defect in use, and wider than stated.** Up to 999
+  every one of the 37 locales writes the count exactly as the lifter's own locale does. From 1,000 on, these
+  differ from the lifter's own writing (measured at 1,234, 12,345 and 1,234,567): fr_CA ("1 234" becomes
+  "1,234"); es_ES, it_IT, pl_PL, pt_PT, hu_HU, bg_BG (their own "1234" becomes grouped, and pl_PL's "12 345"
+  becomes "12.345"); `und`, unknown languages and en_US_POSIX (ungrouped becomes "1,234"). Grouping that is
+  the language's and not the region's is lost with the language. No count of the module reaches four digits
+  (weeks, days, sets, exercises, a day's minutes), so nothing is seen. A note for the chore that takes the
+  helper to the other modules: a count that can pass 999 would show it.
+
+### Notes on the helper, by reading and by its arithmetic
+
+- **F11-S8-N1 (latent, not reachable while the catalog holds one language).** The helper answers "the
+  catalog's language that fits the injected locale"; the words come from the language the bundle chose from
+  the device's languages. With two languages in the catalog the two can part (an injected fr_FR on a device
+  the bundle answers in English: English words, French plural rule, the bug of F11-S8-1 again). The
+  implementer's "known limit" says the same; the helper's comment ("the language the catalog answers in")
+  says more than it does. To settle when a second language is added.
+- **F11-S8-N2 (not established).** `Bundle.preferredLocalizations(from:forPreferences:)` with no match (a
+  Russian preference) answered "en" for the lists ["en", …], ["fr", "en"] and ["de", "en", "fr"], and the
+  list's first, "fr", for ["fr", "ja"]. Whether "en" is chosen there by a rule or because the host runs in
+  English could not be told on this machine; if the latter, the helper reads the device after all in that
+  one case. With one language in the catalog the answer is that language either way.
+- en_US_POSIX applied twice comes back spelled another way (`va=posix` as a keyword); its texts are right.
+
+### Not attacked
+
+A catalog with a second language, run (read only, above). `FeatureToday`'s and `LedgerAppKit`'s counted
+texts (the ruled chore). The gallery's re-recorded reference beyond its test passing. A finger's tap
+(F11-S8-3, for S14). The watch.
+
+### The runs
+
+All on 2026-10-08 in the worktree; simulator commands through the lock (iPhone 17, 27.0).
+
+- Host, `swift test --only-use-versions-from-resolved-file --filter 'FeatureProgramTests|WrapLayout'`:
+  `FeatureProgramTests` 321 tests in 31 suites passed; `WrapLayout` 15 tests in 2 suites passed.
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:LedgerDesignTests`: exit 0, 378 tests, 371
+  passed, none failed, 1 skipped, 6 known issues.
+- Four more such runs and five host runs with the changes of the table, each restored. No reference
+  recorded or changed.
+- `scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 115 s; lint clean.
+- **Not run:** the full gate, the watch plan, the nightly lane.

@@ -126,8 +126,7 @@ nonisolated extension AdvPicker {
         let action = ExercisePickerAction.setPicked(place == nil, exercise: exercise.id)
         return [
             "exercise \(exercise.id.rawValue.uuidString)", exercise.name, detail,
-            isInDay ? "already in this day" : "nil", line, "\(place != nil)", mark ?? "nil",
-            "says \(exercise.name)", "value \(line)", "\(action)"
+            isInDay ? "already in this day" : "nil", line, "\(place != nil)", mark ?? "nil", "\(action)"
         ].joined(separator: " | ")
     }
 
@@ -147,8 +146,7 @@ nonisolated extension AdvPicker {
             lines += rows.map { row in
                 [
                     "exercise \(row.id.rawValue.uuidString)", row.name, row.detail, row.inDayMark ?? "nil",
-                    row.line, "\(row.isPicked)", row.pickMark ?? "nil", "says \(row.name)",
-                    "value \(row.line)", "\(row.action)"
+                    row.line, "\(row.isPicked)", row.pickMark ?? "nil", "\(row.action)"
                 ].joined(separator: " | ")
             }
         }

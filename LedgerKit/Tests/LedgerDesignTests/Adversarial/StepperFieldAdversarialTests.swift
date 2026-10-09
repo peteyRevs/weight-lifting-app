@@ -156,28 +156,85 @@
     }
 
     extension RenderingSuites.StepperFieldAdversarialTests {
-        /// FINDING F11-S8-2 (fails): criterion 1 asks that a switched-off step be "drawn and spoken as
-        /// such". With one step off VoiceOver is handed exactly what it is handed with both on: the same
-        /// label, value, traits and hint. Deviation 2 of the notes; a ruling is needed.
-        @Test("A field with one step switched off is spoken differently from one with both steps on")
-        func oneStepOff_isSpokenAsSuch() {
-            func spoken(decrement: (() -> Void)?, increment: (() -> Void)?) -> [String] {
-                StepperField("Sets", value: "5", onDecrement: decrement, onIncrement: increment)
-                    .withAccessibilityElements { elements in
-                        elements.map { element in
-                            let actions = (element.accessibilityCustomActions ?? []).map(\.name)
-                                .joined(separator: ",")
-                            return [
-                                element.accessibilityLabel ?? "", element.accessibilityValue ?? "",
-                                "\(element.accessibilityTraits.rawValue)", element.accessibilityHint ?? "", actions
-                            ].joined(separator: " | ")
-                        }
-                    }
+        /// What VoiceOver is handed for a field: label, value, traits, hint and custom actions, as one line.
+        private static func spoken(_ field: some View) -> [String] {
+            field.withAccessibilityElements { elements in
+                elements.map { element in
+                    let actions = (element.accessibilityCustomActions ?? []).map(\.name).joined(separator: ",")
+                    return [
+                        element.accessibilityLabel ?? "", element.accessibilityValue ?? "",
+                        "\(element.accessibilityTraits.rawValue)", element.accessibilityHint ?? "", actions
+                    ].joined(separator: " | ")
+                }
             }
-            let both = spoken(decrement: {}, increment: {})
-            #expect(both.count == 1)
-            #expect(spoken(decrement: nil, increment: {}) != both, "no − is spoken as both steps on: \(both)")
-            #expect(spoken(decrement: {}, increment: nil) != both, "no + is spoken as both steps on: \(both)")
+        }
+
+        /// The strongest contrast against the ground among the columns left of the buttons: the text's ink.
+        private static func textContrast(_ buffer: PixelBuffer) -> Double {
+            let ground = AdvForm.color(buffer.pixel(column: buffer.width - 1, row: 0))
+            var strongest = 1.0
+            for row in 0 ..< buffer.height {
+                for column in 0 ..< buffer.width - 110 {
+                    strongest = max(
+                        strongest,
+                        AdvForm.color(buffer.pixel(column: column, row: row)).contrast(on: ground)
+                    )
+                }
+            }
+            return strongest
+        }
+
+        /// Criterion 15 (criterion 1 as amended after round 1; it replaces the test of finding F11-S8-2): one
+        /// step off is drawn as off and spoken as with both on; both off, or disabled, is dimmed and spoken so.
+        @Test("One step off is drawn as off and spoken as with both on; no step, or disabled, is dimmed and spoken so")
+        func switchedOffSteps_areDrawn_andSpokenOnlyWhenTheFieldIsOff() throws {
+            func field(_ decrement: (() -> Void)?, _ increment: (() -> Void)?) -> StepperField {
+                StepperField("Sets", value: "5", onDecrement: decrement, onIncrement: increment)
+            }
+            let live = Self.spoken(field({}, {}))
+            let adjustable = UIAccessibilityTraits.adjustable.rawValue
+            #expect(live == ["Sets | 5 | \(adjustable) |  | "], "\(live)")
+            let liveDrawing = try AdvForm.drawn(field({}, {}))
+            for (name, oneOff) in [("no −", field(nil) {}), ("no +", field({}, nil))] {
+                #expect(Self.spoken(oneOff) == live, "\(name) is spoken as both on")
+                let drawing = try AdvForm.drawn(oneOff)
+                let isDrawnAsOff = drawing != liveDrawing
+                #expect(isDrawnAsOff, "\(name) is drawn as both on")
+                #expect(Self.textContrast(drawing) == Self.textContrast(liveDrawing), "\(name) dims the text")
+            }
+            let dimmed = (UIAccessibilityTraits.adjustable.union(.notEnabled)).rawValue
+            let offDrawing = try AdvForm.drawn(field(nil, nil))
+            for (name, off) in [
+                ("no step", AnyView(field(nil, nil))),
+                ("disabled", AnyView(field({}, {}).disabled(true)))
+            ] {
+                #expect(Self.spoken(off) == ["Sets | 5 | \(dimmed) |  | "], "\(name): \(Self.spoken(off))")
+                let isDrawnOff = try AdvForm.drawn(off) == offDrawing
+                #expect(isDrawnOff, "\(name) is not drawn as a field with no step")
+            }
+            let differs = offDrawing != liveDrawing
+            #expect(differs)
+        }
+
+        /// Criterion 16: the label and the value each, since the value's ink would hide a label left strong.
+        @Test(
+            "A disabled field's label and value are each drawn fainter, and still drawn, in every theme and contrast",
+            arguments: [ColorScheme.light, .dark]
+        )
+        func disabledField_labelAndValue_areEachFaint(_ scheme: ColorScheme) throws {
+            let cell = SnapshotAppearance(scheme, .large)
+            for contrast in [ColorSchemeContrast.standard, .increased] {
+                for (part, label, value) in [("label", "Top of range", ""), ("value", "", "12")] {
+                    let field = StepperField(label, value: value, onDecrement: {}, onIncrement: {})
+                    let live = try Self.textContrast(AdvForm.drawn(field, cell, contrast: contrast))
+                    let faint = try Self.textContrast(AdvForm.drawn(field.disabled(true), cell, contrast: contrast))
+                    let noStep = StepperField(label, value: value, onDecrement: nil, onIncrement: nil)
+                    let off = try Self.textContrast(AdvForm.drawn(noStep, cell, contrast: contrast))
+                    #expect(faint < live * 0.8, "\(part) \(scheme) \(contrast): \(faint) against \(live)")
+                    #expect(faint >= 1.5, "\(part) \(scheme) \(contrast): \(faint), the text is gone")
+                    #expect(off == faint, "\(part) \(scheme) \(contrast): no step \(off), disabled \(faint)")
+                }
+            }
         }
 
         @Test("With Bold Text the label and the value lay down more ink, in a row and stacked")
