@@ -3470,3 +3470,261 @@ on screen" and "Today could not be read: …" (category `today`), and the `fatal
 - **F11 / F24.** `.editWeek(program:weekIndex:)` and `.openProgram` select the Program tab and drop their
   payload.
 - **F15.** The clock argument, the Debug-menu seeding and the identifiers (open questions 3 to 5).
+
+## Slice S5 — adversarial testing, round 1 (G2 tester, 2026-10-09)
+
+Against `feat/F09-s5-store-wiring` at cc0b690. No product code changed. One real defect, in the test-only
+clock argument (F09-S5-5, low); the four issues of the system's audit are judged below (all four are false
+positives, each with what makes the system say so); the store held against an oracle over 1,000 seeded walks
+once three known limits were stepped around (notes N1 to N3). Four questions.
+
+### What was attacked, and with what
+
+| Area | Tests (new unless marked) | Result |
+|---|---|---|
+| The system's audit on every reachable state of Today (UI, nightly) | `Apps/LedgerUITests/TodayAuditAdversarial.swift`, 7 tests: no program in light, in dark and at Accessibility Large; a session day (up next, then Resume); the session day in dark; a rest day and its off-schedule sheet; the page scrolled to its end | 6 fail by design in round 1 (nothing is excluded yet: "The audit" below); the scroll test passes |
+| The store over sources driven by hand | `FeatureTodayTests/Adversarial/TodayStoreStreamsAdversarialTests` (7 tests, 16 cases), `TodayStoreRestartAdversarialTests` (6 tests, 7 cases), with `TodayStoreAdversarialSupport.swift` and `TodayStoreAdversarialScene.swift` | pass |
+| The store against an oracle | `TodayStoreWalkAdversarialTests` (2 tests), with `TodayStoreWalkAdversarialSupport.swift` and `+Steps.swift` | pass, around N1 to N3 |
+| Today wired to the router and the launcher, with no view | `LedgerAppKitTests/Adversarial/TodayWiringAdversarialTests` (+`Refusals`, `Support`): 6 tests, 13 cases | pass |
+| The clock argument | `LedgerAppKitTests/Adversarial/UITestClockAdversarialTests`, 9 tests | 1 fails (8 cases): F09-S5-5 |
+| The sanctioned edits | `TodayPurityAdversarialTests.loggerExemption_coversThreeLinesOfTheStore` (added), `AppRootAdversarialTests.root_idleAndReady_readToVoiceOver` (strengthened), `AppTabsRootAdversarialTests` (new, 10 seeds) | pass |
+| The eyebrow's Dynamic Type curve | `LedgerDesignTests/Adversarial/EyebrowDynamicTypeAdversarialTests`, 2 tests (iOS) | pass |
+
+**The store over scripted sources** (`ScriptedScene`: five feeds the test yields into and ends, and a workout
+store whose reads each wait until the test lets that one go):
+
+- the five sources first speaking in each of the 120 orders: nothing is read and nothing shown before the
+  fifth, then one read and the model;
+- each source saying the same thing three times: nothing is published; the exercises cause no read;
+- each store's observation ending over a loaded model: `failed(observationEnded)`, which no other source's
+  change lifts, and a new run goes from `failed` to `loaded` with no `loading` between;
+- the session's stream ending over a loaded model: still loaded, still following the stores;
+- ten restarts in a row with the old run not waited for (as SwiftUI restarts a task): one stream of each
+  source is listened to afterwards, eleven were opened, the screen showed nothing but the model, and the next
+  change costs one read and one publication; a root that went away listens to nothing;
+- a read the old run began, let go after the new run's model, failing or not: nothing changes;
+- three program changes while a read waits: the last is the one shown, in at most three reads; a workout
+  stored and reported while a read of the empty week waits: the week is read again and the workout counted;
+- routes asked for with no run, during a read (a double tap), after the task was cancelled and after the run
+  ended: each handed on once; a route sent from inside the app's handler is dropped, not delivered twice.
+
+**The store against an oracle.** A walk is 24 bursts of one to four steps taken without waiting for the store:
+a setting saved (any of the seven week starts, the units, the same value again), the program renamed, re-dated
+(a block that began on any weekday, up to ten weeks ago so that it is over, or up to two weeks ahead), deleted
+and saved again, a workout stored (the last sixteen days, of the program or ad hoc) or deleted, a workout
+started, logged in, finished (and stored, as the host does) or discarded in the fake session, the task
+restarted without waiting, and the clock moved on by an hour to a week with a restart. After each burst the
+store must show exactly `TodayPresentation.make` over the stores as they stand, with the week's stretch found
+from `Calendar` alone and not from `TodayHistory.ranges`, and must never have shown `loading` or `failed`. In
+UTC, Los Angeles, Auckland (clocks change on 2026-09-27, inside the walks) and Kolkata. The PR lane runs 10
+walks, the nightly 100; I ran 1,000 once (`LEDGER_PROPERTY_SEED_COUNT=20000`, 78 s): all end at the oracle's
+model. A second test compares `TodayHistory.ranges` with the calendar's two weeks for 200 (nightly 2,000)
+random moments, week starts, block starts and zones: equal in every case. Criterion 2 holds for a Sunday and a
+Monday start and for a block that starts mid-week.
+
+**The wiring.** For each of the five cards a test can make (no program, up next, rest day, logged, block
+complete), every route the model's controls carry is tapped alone on a fresh app: `send`, `deliverRoute`,
+`AppRouter.resolve`, `WorkoutLauncher.run()`. A start route ends with the cover up over Today and the
+session's workout the control's own week and day (all four rows of the off-schedule list); every other route
+moves a tab or pushes a screen and starts nothing; no control is dead. "Start workout" twice in one turn, a
+third time before the launcher answered and a fourth with the cover up: one request, one `started` in the
+session, and Today's card then offers Resume, which starts nothing. Another day picked while a workout is
+live: the launcher's `conflict`, the live workout untouched, no tab moved. A start for a day whose program
+was deleted after Today drew its button: `failed(.notStarted(.dayNotInProgram))`, nothing live, and the next
+tap is answered again. Resume with nothing live: idle, and the launcher free. From every tab, with stacks on
+two other tabs, each of the seven routes changes only what its mapping names.
+
+### Findings
+
+| # | Severity | What | Reproducing test |
+|---|---|---|---|
+| F09-S5-1 | false positive (a question for Pete, Q2) | Audit: "Contrast nearly passed" on the orange button ("Set up program", "Start workout", "Resume · …") | `TodayAuditAdversarial` (5 of its tests), `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` |
+| F09-S5-2 | false positive | Audit: "Dynamic Type font sizes are partially unsupported" on every eyebrow ("RECENT", "UP NEXT", "SCHEDULED REST") | the same; the cause is pinned by `EyebrowDynamicTypeAdversarialTests` |
+| F09-S5-3 | false positive | Audit: "Text clipped" on the orange button's label | the same |
+| F09-S5-4 | false positive | Audit: "Text clipped" on the header's date, and on four more texts in other states | the same |
+| F09-S5-5 | low, a defect (test-only code) | `-LEDGER_UITEST_NOW` accepts a date that does not exist and text after the instant | `UITestClockAdversarialTests.offset_valueThatIsNoRealInstant_isRefused` (8 cases, failing) |
+
+**F09-S5-5.** `UITestClock` promises that "a value that cannot be read stops the launch: a UI test set up
+wrongly must not run on the real date and pass or fail by the weekday". `Date(_:strategy: .iso8601)` reads
+more than instants: `2026-02-30T12:00:00Z` is 2 March, `2026-09-31T12:00:00Z` is 1 October,
+`2026-09-17T25:00:00Z` is 01:00 on the 18th, `…T12:00:60Z` is 12:01, and `…Z trailing`, `…ZZ`, `…Z\n` and
+`…Z;2026-09-18T12:00:00Z` are read as the instant before the extra text. A UI test with a mistyped day so
+runs on a day its author did not write, which is what the `fatalError` exists to stop. A fix: format the date
+read back with the same style and require the text to match, or check the fields against the calendar. (Also
+read, and reasonable: fractional seconds, `+0200`, `+02`.) The other 17 malformed values I tried are refused;
+the same moment written with nine zone offsets is one instant; the repeated hour of a clock change is told
+apart by the offset written; the offset is one number, so a run that crosses a real clock change keeps real
+seconds; given twice, the first is used; without `-LEDGER_UITEST` (or with it in another spelling) nothing
+moves, in `offset` and in `Environment.live`.
+
+### The audit: a verdict on each issue
+
+`TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` fails with the four issues the
+implementer listed; I ran it again (`audit1`) and the same four came back. `TodayAuditAdversarial` then ran the
+audit on the other states. What the system reports, with each element's frame (iPhone 17, iOS 27.0):
+
+| State | Issues |
+|---|---|
+| No program, light and dark | Contrast nearly passed: button "Set up program" (26, 363, 350 × 54). Dynamic Type partially unsupported: "RECENT" (52 × 10). Text clipped: the header's date (142 × 12); "Set up program" |
+| No program, Accessibility Large | Text clipped: the date (283 × 24), "Set up program". Contrast failed: "RECENT" (y 816) and "No sessions yet. Your first workout lands here." (y 859). No Dynamic Type issue, and no contrast issue on the button |
+| Up next, light | The no-program four on "Start workout", "RECENT" and the date, and: Dynamic Type on "UP NEXT"; Text clipped on "Week 5 of 8 · ~38 min" (113 × 12) and "Lower A — Squat focus" (264 × 29); Contrast failed on "No sessions yet…" (y 804) |
+| Up next, dark | The same without "Contrast failed" |
+| Resume | As up next, on "Resume · 555:29:47" (the moved clock's wart, deviation 1) |
+| Rest day | Dynamic Type on "RECENT" and "SCHEDULED REST"; Text clipped on "SCHEDULED REST" (116 × 10), "No session today" (197 × 29) and the date. No contrast issue: "Train off-schedule" is not the orange button |
+| Off-schedule sheet | none |
+
+1. **Contrast nearly passed, the orange button: a false positive by the rule the design chose, and the
+   thinnest pass in the app.** Measured from the pixels of the element's picture in the run (light and dark,
+   both buttons): the fill is (255, 91, 34), the label (255, 255, 255), a ratio of **3.10:1**. The label is
+   16 pt at weight 700; WCAG 2.1 counts bold text from 14 pt as large text, whose AA minimum is 3:1, and
+   `LedgerFont` says so where the role is defined ("bold: white on accent is 3.1:1"). At Accessibility Large
+   the system does not report the button, which fits a threshold by size on its side. Nothing to fix by the
+   project's rule; the margin is 0.10, so it is Q2 for Pete. **Exclude:** `.contrast` on the orange button.
+2. **Dynamic Type partially unsupported, the eyebrows: a false positive.** The eyebrow is 10 pt on the
+   system's Caption 2 curve, and that curve is flat below the default text size (the system's own Caption 2
+   is 11 pt from Extra Small to Large). So the eyebrow does not shrink below the default and grows at every
+   size above it: 10 pt up to Large, larger at each of the eight sizes above, at least 20 pt at the largest
+   (`EyebrowDynamicTypeAdversarialTests`, which also shows that the caption, which the audit does not report,
+   does shrink below the default). In the run the same "RECENT" is 10 pt tall at the default and 22 pt at
+   Accessibility Large, where the system no longer reports it. **Exclude:** `.dynamicType` on the eyebrows.
+3. **Text clipped, the orange button, and 4. Text clipped, the header's date: false positives; nothing is
+   cut on screen.** The pictures of the screen show every letter whole, descenders and the comma included
+   (`att1`: "Wednesday, September 16", "Set up program", "Lower A — Squat focus"). What the system measures
+   is the text's frame, and for these roles the frame is shorter than the font: `.ledgerFont` sets the line
+   height to the role's multiple of the size (1.0 for the caption, the button, the eyebrow and the title; 1.08
+   for the heading), and Archivo's own ascent plus descent is 1.088 of the size (0.878 and 0.210, read from the
+   font file with Core Text), so the frame of a 12 pt date is 12 pt tall and its descenders are drawn below it. The picture of the element alone, cropped
+   to that frame, shows them cut; the screen does not, because SwiftUI does not clip a text to its frame. It
+   is F06's native line height (Pete, 2026-09-29, decision 1), whose own tests note ink outside the frame
+   (`LedgerFontSizingAdversarialTests`). The roles with a taller line (body 1.2, bodyLight 1.6) are never
+   reported, which fits; but the system does not report every text with a short frame either (the 32 pt title
+   and the eyebrows "RECENT" and "UP NEXT" are not, "SCHEDULED REST" is), and I do not know its rule. **Exclude:** `.textClipped` on Today's texts in those roles. A fix at the root (a
+   frame as tall as the font where the role's line is shorter) would move every screen's layout and
+   references; not for this slice.
+5. **Also reported, on other states: "Contrast failed" on the page's last lines. A false positive.** While
+   the page rests at its top the floating tab bar is drawn over its end ("RECENT" and the line under it),
+   and the system measures the bar's glass. `TodayAuditAdversarial.test_sessionDay_theLastLineScrollsClearOfTheTabBar`
+   scrolls to the end at the default size and at Accessibility Large: the last line then stands whole above
+   the bar. **Exclude:** `.contrast` on an element whose frame meets the tab bar's.
+
+**For the fix round:** nothing in the views. **For round 2** (the exclusions, in `TabsAdversarial` and
+`TodayAuditAdversarial`, each with the comment testing-strategy §2.7 asks for): the four kinds above. Today
+has no identifiers but `today.title` (deviation 9), so an exclusion can only name an element by its label or
+its frame; `today.*` identifiers on the button and the eyebrows would make them exact (Q4).
+
+### The sanctioned edits
+
+- **`TodayPurityAdversarialTests` (A).** `isLoggerCall` leaves a whole line out of both scans, so a second
+  literal on a logger's line, or a fourth logger line anywhere in the module, would pass unseen. Added
+  `loggerExemption_coversThreeLinesOfTheStore`: the exempt lines are exactly three, all in `TodayStore.swift`
+  (the category `"today"` and two `logger.log.error` messages), each holds one literal, and a message prints
+  nothing but `String(describing: error)` marked public. The two scans are otherwise as strong as before (the
+  implementer's M9 stands).
+- **`AppRootAdversarialTests.root_idleAndReady_readToVoiceOver` (B).** It should pin what tells a ready root
+  from an idle one, which its elements no longer do. It now also hosts both in a window and counts SwiftUI's
+  page scroll views: none in the idle root, one in the ready root over the composition's own stores. What
+  Today reads to VoiceOver stays with `TodayAccessibilityTests` (the page) and the `Today` UI tests.
+- **`AppTabsAdversarialTests` (B).** No check was removed, but four tests now expect "no header" on Today,
+  which an empty screen would satisfy too. `AppTabsRootAdversarialTests` restores it: over ten seeded walks
+  of selections, opens and resets, the shell shows one page scroll view exactly when Today is selected with
+  an empty stack, and none on a placeholder tab or under a pushed Settings. The edited file is unchanged.
+
+### Mutation
+
+Each alone, host `swift test --filter 'FeatureTodayTests|LedgerAppKitTests'`, restored from a scratchpad copy.
+
+| Mutant | Tests that failed |
+|---|---|
+| A1 a store's value is kept after its run was cancelled (`follow` without its guard) | **none** |
+| A2 a read that ends after cancellation is used and kept | the implementer's `cancelledWhileReading_showsNothing`; `routes_whateverTheRunDoes_areHandedOnOnce` |
+| A3 a read that a change overtook is kept (`keep` without its count) | first run: **none**; then `readOvertakenByAFinish_isMadeAgain`, written for it |
+| A4 the update that ends the session's workout reads nothing | the implementer's `liveWorkout_showsResume_withoutReadingPerSet` |
+| A5 an equal model is published again | `sameValueTwice_publishesNothing`, `restarts_leaveOneObservationPerSource` |
+| A6 a new run keeps what the sources said in the old one | `oldRunsRead_endingLate_changesNothing`, `storeStreamEnds_overALoadedModel_failsUntilANewRun` |
+| A7 a change of the finished workouts reads nothing | the implementer's `workoutMaterialised_showsLogged`; `sameValueTwice_publishesNothing`, `readFails_overTheRestDay_…`, `walks_endAtTheOraclesModel` |
+| A8 the program week is not joined to the stats week | `run_overlappingWeeks_readsEachWorkoutOnce` and four of `TodayHistoryTests` (the implementer's); `ranges_areTheCalendarsWeeks` |
+| A9 before the block, the program week is the negative one | one of `TodayHistoryTests`; `ranges_areTheCalendarsWeeks` |
+| A10 "Set up program" goes nowhere | the implementer's `programRoutes_selectProgram`; `everyControl_ofEveryState_doesSomething`, `routes_changeOnlyWhatTheyName` |
+| A11 the clock argument given twice uses the last | `offset_givenTwice_usesTheFirst`, `offset_malformedValue_isRefused` |
+| A12 the route is forgotten before the handler runs | `route_sentFromInsideTheHandler_isKeptForTheNextDelivery` |
+| A13 a session whose updates end is a failure | the implementer's `run_sessionWithoutUpdates_stillShowsToday`; `sessionStreamEnds_overALoadedModel_staysLoaded`, `sessionStreamEnds_whileLive_keepsResume` |
+| A14 the exercises make the reads stale | `sameValueTwice_publishesNothing` |
+| A15 a failed read after cancellation is shown | the implementer's `cancelledWhileReading_showsNothing` |
+
+Before this round's tests, A1, A3, A5, A6, A11, A12 and A14 passed every test (read from which tests failed:
+none of the implementer's). **A1 is still missed**, and I could not make it show: a value an old run's stream
+still holds when the run is cancelled is taken in before the new run empties what the sources said, so the
+guard in `follow` is a second line of defence with nothing observable behind it in these tests. A2 and A15,
+its neighbours in the reads, are caught. (`UITestClockAdversarialTests`' finding fails in every run, mutant or
+not, and is left out of the table.)
+
+### Notes (limits the walks found; no failing test)
+
+- **N1. The store's sign that the history changed is the five workouts finished last.** A delete (or, later,
+  an edit) of a workout behind them is seen by a new run only: the implementer's "Inputs for F13" says so.
+  Seed 269263 found it (the sixth workout of the week, deleted, stayed counted: 6 sessions for 5). New here:
+  the same holds for a workout that *arrives* behind them. Seed 380129: stored with a start in last week
+  behind five newer ones, it left "−86% from last week" where −90% was true. The app stores a workout when it
+  ends, which makes it the newest, so nothing reaches this today; a workout that arrives late will (the
+  watch's, in M2). The union stretch is up to thirteen days, and before the block's first day it runs to the
+  end of week 1, so more than five workouts in it is ordinary.
+- **N2. The session's ended workout stays in the store's input until the task restarts** (also in "Inputs
+  for F13"): finished, stored and then deleted in the same sitting, it still counts as today's (seed 55450).
+- **N3. A finished session's workout is counted whenever it started.** `TodayPresentation.withFinishedSession`
+  adds it without asking whether it started in the two weeks, while the history's read holds only those. Seed
+  475157: a workout left live for eleven days, its program re-dated under it, then finished, is marked
+  "Logged" in the off-schedule list until the next run and not after it. `TodayInput.weekWorkouts` says "a
+  workout outside both weeks is not counted anywhere". S3's code, reached through S5's store; it takes a
+  re-dated program to see.
+- **N4. A rebuild after midnight mixes the new day with the old reads** (by reading, no test). The store reads
+  `date.now` on every rebuild and keeps the two reads until a source they depend on changes. With the app in
+  front across midnight, a set logged under the cover gives a model with the new date and the old week's
+  reads; on a Monday the volume's change is then against the week before last. It lasts until the next change
+  of the history or the next run, and needs the phone unlocked across midnight.
+
+### Questions
+
+- **Q1 (Pete; the implementer's open question 2).** Deviation 5 shows a failed read over a loaded model.
+  `TodayScreen` closes the off-schedule sheet when the state stops offering the list, so one failed read
+  closes the sheet under the lifter's finger, which is what criterion 3 kept `loading` away for. Pinned as
+  built: `TodayStoreStreamsAdversarialTests.readFails_overTheRestDay_takesTheListAway_untilTheNextChange`
+  (it also shows that the failure recovers with the next change of any source, the exercises included).
+  Keep, or keep the last model while a read fails?
+- **Q2 (Pete).** White on the accent is 3.10:1, AA for bold text of 14 pt and more and 0.10 above the line.
+  Accept and exclude, or darken the fill for the button?
+- **Q3 (orchestrator).** A session whose updates end while its workout is live keeps "Resume" until a new
+  run (`sessionStreamEnds_whileLive_keepsResume`, as built). The app's host never ends its stream. Leave?
+- **Q4 (orchestrator).** Identifiers on Today's button and eyebrows now (for exact exclusions in round 2), or
+  exclusions by label until F15?
+
+### Not attacked
+
+- `TodayRoot` hosted: the restart on a change of the scene's phase and SwiftUI's restart of a tab's task
+  (the store's side of a restart is attacked; the view's is not), and a double tap through the real
+  `.task(id:)`. The implementer's `TodayRootTests` are the only hosted tests of the root.
+- The store over GRDB (the in-memory stores and scripted sources only); the timing test.
+- The UI tests in a zone beyond UTC±11, on a device, with VoiceOver by hand.
+- The audit at text sizes other than the default and Accessibility Large, with Bold Text or Increase
+  Contrast, and on the logged and block-complete cards (no UI test can reach them without a seed argument).
+- `MainRoot` and `AppComposition.opened`'s binding of the moved `date` (the app only).
+- watchOS: nothing of this slice builds there.
+
+### The runs
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --lint-only` (final tree) | exit 0 |
+| `scripts/check.sh --fast` (final tree) | exit 0: 553 and 1,223 tests, 0 failed |
+| Host, `swift test --filter 'FeatureTodayTests\|LedgerAppKitTests'` | every test passes but the 8 cases of F09-S5-5 |
+| Host, the walks at `LEDGER_PROPERTY_SEED_COUNT=20000` (1,000 walks) with the scripted suites | 12 tests passed in 78 s (before `readOvertakenByAFinish_isMadeAgain` was added) |
+| Simulator (iPhone 17, iOS 27.0, through the lock), PR plan, the ten suites this round wrote or edited (`sim2`) | 53 tests: 52 passed, 1 failed (F09-S5-5). Among them the iOS-only ones: `AppTabsAdversarialTests`, `AppTabsRootAdversarialTests`, `AppRootAdversarialTests`, `EyebrowDynamicTypeAdversarialTests` |
+| Simulator, Nightly plan, `LedgerUITests/TodayAuditAdversarial` (6 tests) and `TabsAdversarial/test_everyTabRoot_…` (`audit1`) | 7 of 7 failed, as "The audit" lists; 121 s |
+| Simulator, Nightly plan, `TodayAuditAdversarial/test_sessionDay_theLastLineScrollsClearOfTheTabBar` (`scroll1`) | passed, 45.6 s |
+
+The UI file was formatted after its runs (line wrapping only) and not run again. Not run: the full gate, the
+watch, the rest of the Nightly plan, CI. Logs and the audit's pictures are in the session's scratchpad
+(`f09s5-g2/`), not in the repository.
+
+**Failing on purpose at this commit:** `UITestClockAdversarialTests.offset_valueThatIsNoRealInstant_isRefused`
+(PR lane; F09-S5-5), and the six audit tests of `TodayAuditAdversarial` with `TabsAdversarial`'s (nightly;
+F09-S5-1 to 4, until round 2's exclusions).

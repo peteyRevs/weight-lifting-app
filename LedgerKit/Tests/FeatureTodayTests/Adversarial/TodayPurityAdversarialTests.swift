@@ -112,6 +112,36 @@ nonisolated struct TodayPurityAdversarialTests {
         #expect(literals == [])
     }
 
+    /// F09 S5 adversarial round 1, the audit of the sanctioned edit above. `isLoggerCall` leaves a whole line
+    /// out of the two scans, so it is held to exactly what it was approved for: the store's category and its
+    /// two messages. A fourth logger line, one in another file, a second literal on such a line, or a message
+    /// that prints anything but an error's description fails here and is looked at.
+    @Test("The logger exemption covers the store's category and its two messages, and nothing else")
+    func loggerExemption_coversThreeLinesOfTheStore() throws {
+        let exempt = try Self.sources().filter(Self.holdsNoCopy).flatMap { source in
+            source.lines.filter { $0.contains("\"") && Self.isLoggerCall($0) }.map { (source.name, $0) }
+        }
+        #expect(exempt.map(\.0) == ["TodayStore.swift", "TodayStore.swift", "TodayStore.swift"])
+        let lines = exempt.map { $0.1.trimmingCharacters(in: .whitespaces) }
+        #expect(lines.count { $0.hasPrefix("injectedLogger.category(\"today\")") } == 1)
+        #expect(lines.count { $0.hasPrefix("logger.log.error(\"") } == 2)
+        for line in lines {
+            // One literal a line: an opening and a closing quote, and no escaped one.
+            #expect(line.count { $0 == "\"" } == 2, "\(line)")
+            // What a message prints: nothing, or the description of the error, marked public.
+            let interpolations = line.components(separatedBy: "\\(").dropFirst()
+            #expect(
+                interpolations.allSatisfy { $0.hasPrefix("String(describing: error), privacy: .public)") },
+                "\(line)"
+            )
+        }
+        // The pattern itself: a call on a logger at the start of the line, and no other line.
+        #expect(Self.isLoggerCall("        logger.log.error(\"x\")"))
+        #expect(!Self.isLoggerCall("        let title = \"Rest day\""))
+        #expect(!Self.isLoggerCall("        title = \"Rest day\"; logger.log.error(\"x\")"))
+        #expect(!Self.isLoggerCall("        Text(\"Rest day\") // logger.log.error(\"x\")"))
+    }
+
     /// The text of every `String(localized: …)` call in `text`, from its opening parenthesis to the one that
     /// closes it.
     static func lookups(in text: String) -> [String] {
