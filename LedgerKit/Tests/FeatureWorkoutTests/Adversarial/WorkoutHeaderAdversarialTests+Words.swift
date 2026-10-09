@@ -40,14 +40,26 @@ extension WorkoutHeaderAdversarialTests {
     @Test("The screen's three states")
     func screen_states() {
         let state = EventBuilders.session(specs([3]))
-        #expect(WorkoutPresentation.screen(.idle, isBusy: false, locale: Fixtures.locale) == .loading)
-        #expect(WorkoutPresentation.screen(.loading, isBusy: false, locale: Fixtures.locale) == .loading)
-        let loaded = WorkoutPresentation.screen(.loaded(state), isBusy: false, locale: Fixtures.locale)
+        #expect(WorkoutPresentation
+            .screen(.idle, isBusy: false, locale: Fixtures.locale, calendar: Fixtures.calendar) == .loading)
+        #expect(WorkoutPresentation.screen(
+            .loading,
+            isBusy: false,
+            locale: Fixtures.locale,
+            calendar: Fixtures.calendar
+        ) == .loading)
+        let loaded = WorkoutPresentation.screen(
+            .loaded(state),
+            isBusy: false,
+            locale: Fixtures.locale,
+            calendar: Fixtures.calendar
+        )
         #expect(loaded.drawnHeader?.title == state.name)
         guard case let .failed(failed) = WorkoutPresentation.screen(
             .failed(WorkoutStoreError.updatesEnded),
             isBusy: false,
-            locale: Fixtures.locale
+            locale: Fixtures.locale,
+            calendar: Fixtures.calendar
         ) else {
             Issue.record("a failed load is not drawn as failed")
             return

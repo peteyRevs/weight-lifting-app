@@ -125,23 +125,35 @@ struct WorkoutPresentationTests {
         #expect(Self.header(state, isBusy: true) == expected)
     }
 
-    @Test("The screen is loading until a workout arrives, shows its header, and says when it cannot")
+    @Test("The screen is loading until a workout arrives, shows its header and its page, and says when it cannot")
     func screen_followsTheLoadState() throws {
         struct Broken: Error {}
         let state = try Fixtures.seedSession()
-        #expect(WorkoutPresentation.screen(.idle, isBusy: false, locale: Self.locale) == .loading)
-        #expect(WorkoutPresentation.screen(.loading, isBusy: false, locale: Self.locale) == .loading)
+        func screen(_ workout: Loadable<WorkoutState>, isBusy: Bool = false) -> WorkoutScreenModel {
+            WorkoutPresentation.screen(workout, isBusy: isBusy, locale: Self.locale, calendar: Fixtures.calendar)
+        }
+        #expect(screen(.idle) == .loading)
+        #expect(screen(.loading) == .loading)
+        guard case let .workout(shown) = screen(.loaded(state)) else {
+            Issue.record("a loaded workout is not drawn as one")
+            return
+        }
+        let isTheHeader = shown.header == Self.header(state)
+        #expect(isTheHeader)
+        #expect(shown.page.card?.eyebrow == "Exercise 1 of 5")
+        #expect(shown.page.isEnabled)
+        guard case let .workout(busy) = screen(.loaded(state), isBusy: true) else {
+            Issue.record("a loaded workout is not drawn as one")
+            return
+        }
+        #expect(!busy.header.isEnabled)
+        #expect(!busy.page.isEnabled)
         #expect(
-            WorkoutPresentation.screen(.loaded(state), isBusy: false, locale: Self.locale)
-                == .workout(WorkoutModel(header: Self.header(state)))
-        )
-        #expect(
-            WorkoutPresentation.screen(.failed(Broken()), isBusy: false, locale: Self.locale)
-                == .failed(WorkoutFailedModel(
-                    title: "Couldn't open this workout",
-                    message: "Close this screen and try again.",
-                    close: "Close"
-                ))
+            screen(.failed(Broken())) == .failed(WorkoutFailedModel(
+                title: "Couldn't open this workout",
+                message: "Close this screen and try again.",
+                close: "Close"
+            ))
         )
     }
 }

@@ -5,13 +5,22 @@ import LedgerDomain
 nonisolated extension WorkoutPresentation {
     /// The header of a live workout.
     ///
-    /// The cursor is read through `checkedCursor`: one that names no row marks no segment, and the progress
-    /// then has no value to speak. The words name the current segment's exercise, so the orange bar and
-    /// "Exercise 2 of 5" never disagree; with every set logged they name the exercise the cursor rests on.
-    /// S5 passes the row the lifter selected in the cursor's place.
-    static func header(_ state: WorkoutState, isBusy: Bool, locale: Locale) -> WorkoutHeaderModel {
+    /// Its current segment and its words name the exercise on screen (`shownExercise`): the one the lifter
+    /// chose, otherwise the cursor's while it has a set to log, otherwise the first that has one, so the
+    /// orange bar, "Exercise 2 of 5" and the card under them never disagree. The cursor is read through
+    /// `checkedCursor`: one that names no row marks no segment, and the progress then has no value to speak.
+    /// With every set logged the words name the exercise the cursor rests on, and no segment is current.
+    static func header(
+        _ state: WorkoutState,
+        isBusy: Bool,
+        locale: Locale,
+        selection: WorkoutSelection? = nil
+    ) -> WorkoutHeaderModel {
+        let shown = shownExercise(of: state, selection: selection)
         let cursor = state.checkedCursor?.exerciseIndex
-        let current = currentExercise(of: state.exercises, cursor: cursor)
+        // Without a choice of the lifter's the current segment is S4's: none once every set is logged.
+        let chosen = selection.map(\.exerciseIndex).flatMap { state.exercises.indices.contains($0) ? $0 : nil }
+        let current = chosen ?? currentExercise(of: state.exercises, cursor: cursor)
         return WorkoutHeaderModel(
             minimize: WorkoutCopy.minimize,
             finish: WorkoutCopy.finish,
@@ -21,7 +30,7 @@ nonisolated extension WorkoutPresentation {
             title: state.name,
             segments: segments(of: state.exercises, current: current),
             progressLabel: WorkoutCopy.workoutProgress,
-            progressValue: (current ?? cursor).map {
+            progressValue: shown.map {
                 WorkoutCopy.exercise($0 + 1, of: state.exercises.count, locale: locale)
             } ?? ""
         )

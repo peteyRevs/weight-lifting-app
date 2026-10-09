@@ -10,10 +10,10 @@ nonisolated enum WorkoutScreenModel: Equatable, Sendable {
     case failed(WorkoutFailedModel)
 }
 
-/// A live workout on screen. S4 draws its header; the page under it (the exercise card, the remaining
-/// exercises) joins it here in S5.
+/// A live workout on screen: the pinned header, and the page that scrolls under it.
 nonisolated struct WorkoutModel: Equatable, Sendable {
     let header: WorkoutHeaderModel
+    let page: WorkoutPageModel
 }
 
 /// The cover's pinned header (v2 "Active workout"): Minimize, the elapsed time, Finish, the workout's name and

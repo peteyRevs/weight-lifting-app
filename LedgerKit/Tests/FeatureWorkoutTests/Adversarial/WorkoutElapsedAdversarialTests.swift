@@ -54,9 +54,19 @@
         func header_anyStart(seconds: Double) {
             var state = EventBuilders.seedSession()
             state.startedAt = Date(timeIntervalSinceReferenceDate: seconds)
-            let model = WorkoutPresentation.screen(.loaded(state), isBusy: false, locale: Fixtures.locale)
+            let model = WorkoutPresentation.screen(
+                .loaded(state),
+                isBusy: false,
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
+            )
+            // F10 S5 (sanctioned edit): the header alone; the screen now holds the page under it.
+            guard let header = model.drawnHeader else {
+                Issue.record("a live workout is not drawn as one")
+                return
+            }
             for timeline in [WorkoutTimeline.live, .fixed(at: Self.now)] {
-                let labels = WorkoutScreen(model: model) { _ in }
+                let labels = WorkoutHeader(model: header) { _ in }
                     .environment(\.workoutTimeline, timeline)
                     .frame(height: 400)
                     .accessibilityElements()

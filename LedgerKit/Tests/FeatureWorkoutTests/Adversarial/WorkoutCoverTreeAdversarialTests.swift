@@ -26,7 +26,12 @@
         private func model(isBusy: Bool = false) -> WorkoutScreenModel {
             var state = EventBuilders.seedSession()
             state.name = "Upper A — Push focus"
-            return WorkoutPresentation.screen(.loaded(state), isBusy: isBusy, locale: Fixtures.locale)
+            return WorkoutPresentation.screen(
+                .loaded(state),
+                isBusy: isBusy,
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
+            )
         }
 
         private func screen(
@@ -34,9 +39,17 @@
             after seconds: TimeInterval = 0,
             send: @escaping (WorkoutAction) -> Void = { _ in }
         ) -> some View {
-            WorkoutScreen(model: model, send: send)
-                .environment(\.workoutTimeline, .fixed(at: Self.start.addingTimeInterval(seconds)))
-                .frame(height: 400)
+            // F10 S5 (sanctioned edit): a live workout's header alone. The screen now holds the page under
+            // it, in a scroll view; the page's tree is pinned from `WorkoutParts`.
+            Group {
+                if case let .workout(workout) = model {
+                    WorkoutHeader(model: workout.header, send: send)
+                } else {
+                    WorkoutScreen(model: model, send: send)
+                }
+            }
+            .environment(\.workoutTimeline, .fixed(at: Self.start.addingTimeInterval(seconds)))
+            .frame(height: 400)
         }
 
         private func rows(_ elements: [AccessibilityElementSnapshot]) -> [String] {
@@ -121,7 +134,8 @@
             let failed = WorkoutPresentation.screen(
                 .failed(WorkoutStoreError.updatesEnded),
                 isBusy: false,
-                locale: Fixtures.locale
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
             )
             var sent: [WorkoutAction] = []
             let view = screen(failed) { sent.append($0) }

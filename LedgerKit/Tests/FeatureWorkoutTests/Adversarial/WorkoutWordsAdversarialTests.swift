@@ -63,7 +63,13 @@ struct WorkoutWordsAdversarialTests {
             "Your program's block has ended.", "Nothing was changed. Try again.", "Couldn't start the new workout",
             "Your workout in progress was kept.", "Your workout in progress was discarded.",
             "Couldn't open this workout", "Close this screen and try again.", "Couldn't discard this workout",
-            "It's still in progress. Try again."
+            "It's still in progress. Try again.",
+            // F10 S5 (sanctioned edit): the keys of the exercise card, the remaining exercises and a change
+            // that was not saved.
+            "TARGET", "%lld × %lld @ %@ lb · RPE %@", "%lld × %lld @ %@ kg · RPE %@", "Last", "No history yet",
+            "Repeat", "#", "reps", "lb", "kg", "D", "%@ LB", "%@ KG", "1 REP", "+ Add set", "REMAINING",
+            "%lld × %lld", "Set %lld", "Drop set", "%@ pounds", "%@ kilograms", "%lld reps", "Log set %lld",
+            "Undo set %lld", "Log drop set", "Undo drop set", "Couldn't save that change"
         ]
         #expect(catalog.keys.subtracting(expected).sorted() == [])
         #expect(expected.subtracting(catalog.keys).sorted() == [])
@@ -111,7 +117,8 @@ struct WorkoutWordsAdversarialTests {
         "Calendar.autoupdatingCurrent", "Calendar(identifier", "Locale.current", "Locale.autoupdatingCurrent",
         "Locale(identifier", "TimeZone.current", "TimeZone.autoupdatingCurrent", "TimeZone(", "Timer", "DispatchQueue",
         "Task {", "Task(", "Task.detached", "Task.sleep", "ContinuousClock()", "SuspendingClock()", "UUID()",
-        "TimelineView", ".formatted(", "DateFormatter", "String(localized", "NSLocalizedString", "LocalizedStringKey"
+        "TimelineView", ".formatted()", ".formatted(.", "DateFormatter", "String(localized", "NSLocalizedString",
+        "LocalizedStringKey"
     ]
 
     @Test("No source file reads an ambient clock, calendar, locale or zone, or starts a task")
