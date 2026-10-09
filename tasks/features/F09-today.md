@@ -360,3 +360,42 @@ notes, "Inputs for F09 S5: how Today calls the launcher" and "Inputs for F09 S6"
 
 **Not in this slice:** onboarding's gate (F08, parked), Settings (F14), History's screens (F13), any change to
 `FeatureWorkout` beyond what criterion 9 needs to call the launcher, the project file or a test plan.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-09)
+
+The reviewer approved with five should-fix items; the tester found one low bug in the test-only clock, judged
+the system audit's four issues on Today false positives (measured), and its 1,000 seeded walks of the store
+agree with its own model once three known limits are stepped around. Rulings, which add to S5's thirteen
+criteria:
+
+14. **The store runs again only when the app comes back** (review S-1, S-2): the root's task restarts on a
+    return from the background, not on every change of the scene's phase, and a hosted test that changes
+    the phase pins that a new run happens (it fails without the restart).
+15. **A read is used only for the days it was read for** (review S-3; tester's N4): the kept history reads
+    carry the ranges they were made for and are made again when a rebuild needs other ranges, so a change
+    after midnight shows the new day's and the new week's numbers. A test pins a rebuild across midnight and
+    across a week's end.
+16. **The clock argument is strict and Debug-only** (review S-4; F09-S5-5): it is compiled only into Debug
+    builds, and a value that is not one real instant written exactly (a date that does not exist, an hour
+    25, a second 60, any text after the instant) stops the launch. The tester's test passes unedited.
+17. **An ended observation is logged once** (review N-2).
+18. **Kept as built:** a failed read shows the failure state even over a loaded day, and recovers on the
+    next change or run (deviation 5; criterion 3 is about loading, criterion 6 about failure; the other
+    answer, keeping the last good day, is the product owner's and is asked in the pull request); the
+    routes to screens not built yet; the pending-route guard; three UI tests; the Debug sample row as the
+    UI tests' way to a program until F08 lands; a session stream that ends keeps "Resume" until the next
+    run (the app's host never ends it).
+19. **The audit's four issues are false positives** (F09-S5-1 to 4, measured): white on the accent is
+    3.10:1 for 16 pt bold, which is large text (3:1); the eyebrow follows Caption 2, flat below the default
+    size; the "clipped" texts draw descenders outside a line box of the role's size and nothing is cut on
+    screen; contrast under the floating tab bar at rest. The tester excludes exactly these, by label, with a
+    comment each (testing-strategy §2.7), in round 2. The orange's 0.10 of margin is listed for the product
+    owner.
+
+**For F13** (tester's N1 to N3; review N-8): the store learns that history changed from the five most recent
+workouts, so a workout deleted, edited or arriving behind them is not seen until the next run; a finished
+session's workout stays in the store's input until the task restarts; `.openWorkout` as a push needs the
+"once" guard. **For M2's sync** (N1): a workout that arrives late from the watch behind the five most recent.
+**For F15:** `today.*` identifiers; the failed state has no title, so the Debug menu cannot open from it;
+the UI tests' fixed dates in zones UTC+12 to +14. **Not decided, for the product owner:** Today does not
+notice midnight while it is open and in front with nothing changing.

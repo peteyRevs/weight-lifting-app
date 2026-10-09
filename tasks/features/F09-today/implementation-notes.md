@@ -3471,6 +3471,196 @@ on screen" and "Today could not be read: …" (category `today`), and the `fatal
   payload.
 - **F15.** The clock argument, the Debug-menu seeding and the identifiers (open questions 3 to 5).
 
+## Slice S5 — review, round 1 (G3 reviewer, 2026-10-09)
+
+Read only: `git diff main...cc0b690`, the files at `cc0b690`, the brief's S5 criteria, the implementer's
+section above, standards §4/§7/§8, the M1 conventions, `WorkoutStore`/`WorkoutRoot`/`WorkoutLauncher`/
+`Routes+Workout`, and all 12 screenshots. Nothing was built, run or linted by me; every "passes" below is the
+implementer's report, not mine. The tester's uncommitted files were not read.
+
+**Verdict: approve with should-fix.** No blocking finding. The store's concurrency is sound by reading; the
+should-fixes are one wasteful restart rule, one cache that is not keyed by what it was read for, one test gap,
+and a Debug gate on the clock argument. Two things are the product owner's (at the end). The orchestrator's
+ruling that the slice does not merge while the audit UI test fails stands outside this verdict.
+
+### Blocking
+
+None.
+
+### Should-fix
+
+- **S-1 The store's task restarts four times per trip to the background, and reads while the app is being
+  suspended** (`TodayRoot.swift:41`, deviation 6). `active → inactive → background → inactive → active` is
+  four changes of `scenePhase`; each cancels five observations, opens five and makes two reads. Control
+  Centre, the app switcher and a system alert each cost two more. Nothing is lost by it (the model stays, an
+  equal model is not published, `pendingRoute` is the store's and `isPickingDay` is `TodayScreen`'s `@State`,
+  so neither the route nor the sheet goes), so this is cost, not a bug. It still needs no state of the
+  root's own to do it once:
+  ```swift
+  .task(id: scenePhase == .background) {
+      guard scenePhase != .background else { return }
+      await store.run()
+  }
+  ```
+  One run per return from the background, none on the way out, none for `inactive`. The failure text ("Open
+  the app again to try once more") stays true.
+- **S-2 No test pins that the root starts a new run at all** (`TodayRootTests.swift`). With `id:` deleted
+  from `TodayRoot.swift:41` every test in the diff still passes: `newRun_onTheNextDay_showsThatDay` calls
+  `run()` by hand. "A new day arrives" is then pinned in the store and not in the app. Proposed: host
+  `TodayRoot` under `.environment(\.scenePhase, …)`, move the scene's clock to the next day, set the phase to
+  background and back, expect "Rest day".
+- **S-3 The kept reads are not tied to the moment they were read for** (`TodayStore.swift:227-229`,
+  `TodaySources.swift:18-34`). `history(for:at:)` returns `sources.history` whenever nothing called
+  `forgetHistory()`, whatever `now` is. A rebuild caused by a source that does not forget (the exercises, a
+  set logged in a live workout) after midnight builds the new day's model over the old day's reads; across a
+  week boundary the "previous week" volume is the week before last until the workout ends or the scene's
+  phase changes. Narrow (a workout running over Sunday midnight, seen after Minimize), but it is a wrong
+  number on screen. Proposed: keep the `Ranges` beside the read and reuse it only when
+  `ranges == kept.ranges`; `followProgram` and `followSettings` then need no `forgetHistory()`, since the
+  ranges derive from both. A test: live workout, clock moved past the week's end, one set logged, expect a
+  second read.
+- **S-4 The clock argument is compiled into release builds** (`UITestClock.swift:38-44`,
+  `AppComposition.swift:195-216`). It is honoured only beside `-LEDGER_UITEST` (pinned by
+  `offset_withoutTheUITestArgument_isNil`), and a lifter cannot pass launch arguments to an installed app,
+  so nothing is reachable in practice. But a shipped binary then carries a path that moves its clock and the
+  only `fatalError` in product sources. The `Today` UI tests need a Debug build anyway (they seed through
+  the Debug menu), so: `#if DEBUG` around `liveOffset`'s use, `nil` otherwise. With that the `fatalError`
+  is acceptable: standards are silent on it, and stopping a mis-set-up test is the right behaviour.
+- **S-5 (tester's files) Two edited tests can no longer tell Today from a blank tab.**
+  `AppRootAdversarialTests.root_idleAndReady_readToVoiceOver` now expects `[]` for both the idle and the
+  ready root, and `AppTabsAdversarialTests` expects `[]` for Today in four tests; `[] == []` holds for an
+  empty view too. The implementer said so himself. Proposed for the tester: in the ready half, count the
+  hosted scroll views as `AppTabsTests.todayTab_isTodaysScrollingRoot` does (1 ready, 0 idle). The stale
+  name `launch_showsTodaysPlaceholderAlone` goes with it.
+
+### Nits
+
+- **N-1** `TodayStore.swift:203`: `rebuild()` has no cancellation check before it writes; the old run's loop
+  can run one more turn after SwiftUI cancelled it. I traced it as harmless (it builds from the old run's
+  own sources, or finds `known == nil`), but the two runs share `sources` and are kept apart only by five
+  `Task.isCancelled` checks (`:162, :185, :191, :234, :240`). `guard !Task.isCancelled else { return }` at
+  the top of `rebuild()` makes it true by construction.
+- **N-2** `TodayStore.swift:204-207`: once an observation has ended, every later mark logs the same error
+  again (each logged set, under a cover). Log when `hasEnded` is set, not on each rebuild.
+- **N-3** The notes say a set logged under the cover gives "a model equal to the one on screen, which is not
+  published again". The model carries the elapsed title ("Resume · 3:00", from `now`), so it is equal only
+  within the same second; in use each logged set publishes. Harmless (Today is under the cover), and
+  `liveWorkout_showsResume_withoutReadingPerSet` asserts only that nothing was read. Correct the sentence.
+- **N-4** The pending-route machinery (`TodayStore.swift:14-19, 49-51, 77-92`, `TodayRoot.swift:44-46`,
+  about 20 lines) drops a second tap only within one turn of the main actor, as deviation 7 says. Passing
+  `onRoute` straight to `TodayScreen` would be "exactly once per tap" with none of it. The plan asked for
+  `.task(id:)`, so it is the orchestrator's to keep or cut; I would cut it. If the root leaves the screen
+  between `send` and the task, the route is delivered when it comes back; I found no way to reach that.
+- **N-5** `AppComposition.swift:53-58`: binding `$0.date = DateGenerator(environment.now)` always, not only
+  under an offset, makes one clock for the app and removes `Environment.clockOffset`.
+- **N-6** The failed state draws no title (`TodayPage.swift:37-38`), so in a Debug build the Debug menu and
+  its Diagnostics cannot be opened exactly when a read has failed.
+- **N-7** `Today.swift:16-18`: noon UTC is another calendar day in UTC+12 to +14 (New Zealand); the texts
+  are English only. Both stated by the implementer; say so in the file's header for whoever runs it abroad.
+- **N-8 (for F13)** Every route's destination is idempotent today (a tab selection, the launcher, Settings
+  once). When `.openWorkout` becomes a push it needs the same "once" as Settings (`Routes+Today.swift`):
+  nothing upstream makes a double tap one push.
+
+### Criteria
+
+| # | Verdict | Evidence |
+|---|---|---|
+| 1 | met | `TodayStore.swift:45-46` (`@MainActor @Observable`), `:47` (`Loadable<TodayModel>`), `:108-117` (one task group, no `Task {`, no stored task), `:77, :86` (synchronous intents), `:61-63` (date, calendar, locale injected; the zone is the calendar's) |
+| 2 | met | `TodayHistory.swift:36-41` (one stretch from the earlier start to the later end), `:53-56` (one read); `run_overlappingWeeks_readsEachWorkoutOnce` asserts one range and 2 sessions / 2,000 lb; comment at `TodayInput.swift:18-21` |
+| 3 | met in the store; see deviation 5 | `TodayStore.swift:104-106`; `loaded_neverReturnsToLoading` holds a read at a gate during a change and during a new run. It pins the model's list, not a presented sheet; `TodayScreen.swift:24-33` derives the sheet from that list, so I accept it |
+| 4 | met | `workoutMaterialised_showsLogged`, `programSaved_rebuildsTheModel`, `settingsChange_rebuildsTheModel`; waits are `Observations`, no sleep (`TodayScene.swift:282-286`) |
+| 5 | met | `TodayStore.swift:160-175`; three tests in `TodayStoreLiveTests`; no timer in the store |
+| 6 | met | `TodayStore.swift:204-208, 239-246`; `TodayStoreFailureTests` (three tests, recovery by a change and by a new run) |
+| 7 | met | once per tap: `TodayStore.swift:86-92` and `root_handsARouteOnOnce`. One workout per double tap is the **launcher's** guarantee (`WorkoutLauncher.swift:84-90`), pinned by `startWorkout_twice_isOneRequest`; not luck, and not the store (N-4) |
+| 8 | met | `TodayRoot.swift:20-25, 39-47`; the sheet is `TodayScreen`'s; the long press is passed through (`:40`) |
+| 9 | met, with deviation 4 | `Routes+Today.swift` maps all seven; `AppTabs.swift` draws `TodayRoot`; the placeholder, its preview case and references are deleted |
+| 10 | met | no alert in `FeatureToday` or `Routes+Today.swift` |
+| 11 | met as three tests (not run by me) | `Apps/LedgerUITests/Today.swift`; fixed dates, `waitForExistence` throughout, no sleep |
+| 12 | met by the report (not run by me) | `TodayQueriesPerformanceTests.swift`; six reads, p95 of 20, 50 ms |
+| 13 | met | no catalog change; two log lines and one `fatalError` text, for developers |
+
+### The store's concurrency
+
+- **Observed and combined correctly.** Each child writes `sources` on the main actor and then yields a mark;
+  the marks' stream keeps the newest one (`:107`), and one loop rebuilds (`:114-116`). A change during a
+  rebuild leaves a mark, so no update is lost; marks coalesce, so none is duplicated. All writes are on the
+  main actor: there is no data race to have.
+- **The stale-reads rule holds.** `staleCount` is taken before the read (`:230`) and the read is kept only if
+  no `forgetHistory()` came meanwhile (`TodaySources.swift:30-34`). An overtaken read is still used once,
+  with the snapshot taken before it (`known`), so one model from just before the change can be published
+  and is replaced on the next turn. Acceptable. Its hole is S-3: "stale" does not include the clock.
+- **Cancellation.** The loop and the five children end with the task (AsyncStream iteration ends on cancel);
+  nothing outlives `run()`. See N-1 for the one unguarded turn.
+- **`Sendable`.** `TodaySources` is not `Sendable` and never leaves the main actor; `TodayHistory`, `Ranges`
+  and `TodayPendingRoute` are; the group's closures capture the main-actor store and a continuation.
+  Nothing unchecked. Not compiled by me.
+- **Three files.** `TodayHistory` earns its file (a pure function of six tested cases and one read).
+  `TodaySources` is the lint-driven one, but it gives the stale rule a place and a private setter. I would
+  keep the shape.
+
+### Deviations
+
+| # | Judgement |
+|---|---|
+| 1 clock argument | accept, with S-4 and N-5. Stored data is consistent under an offset: the stores, the session's host and the `date` key all read the moved clock (`AppComposition.swift:44-58, 200`). Only what the system draws itself is unmoved (`Text(timerInterval:)` in `TodayCopy+Cards.swift:60`, `WorkoutTimeline.swift:29`, `PrimaryButton.swift:107`): display only, nothing written |
+| 2 Debug row as seeding | accept until F08; it ties three nightly tests to a row F10 meant to remove. F15 input, as written |
+| 3 three UI tests | accept |
+| 4 unbuilt screens | accept; no button is dead. See "For the product owner" |
+| 5 failure over a loaded model | accept as built, but it needs the orchestrator's ruling in the brief: criterion 3's words ("a later change of any input goes from one loaded model to the next") do not allow it, criterion 6's do. What the lifter sees is under "For the product owner" |
+| 6 restart on every phase | should-fix, S-1 and S-2 |
+| 7 route by `.task(id:)` | accept; honest about where the guarantee is. N-4 |
+| 8 first load not timed | accept |
+| 9 no identifiers | accept; F15 |
+| 10 size | accept. I counted 356 added product lines the same way. One pull request is right: the store has no use without the wiring, and it is under the 1,000-line rule only because tests are not counted (1,919 lines added in all) |
+| 11 two git slips | noted; no trace in the tree |
+
+Sanctioned edits: (A) the logger exemption is narrow (a line that starts with a logger call) and M9 shows a
+planted literal still fails; accept. (B) lost strength, S-5.
+
+Open questions: 1 the tester's (my reading below); 2 see deviation 5; 3, 4, 5 agree; 6 agree, S-5.
+
+### Screenshots (all 12 opened)
+
+- Dates and weeks are right: Friday October 9 is week 8 of 8; Thursday September 17 is week 5; the sheet
+  says "Pick a day from week 5" with four days.
+- `today-up-next-*` and `today-resume-*`: "RECENT" and its line sit under the floating tab bar at rest and
+  show through it. It scrolls clear; S4's layout, not this slice's.
+- `today-up-next-*`: week 8 shows three scheduled days and "0/3" where week 5 shows four. I take it the
+  deload week drops Saturday; I did not check the seed program.
+- `cover-from-start-workout-*`: the cover is a header over an empty page. That is F10's present state.
+- Nothing clipped, no dead-looking button, at the default text size. No accessibility size was captured.
+
+**The four audit issues, from the code and the images (not from a run):**
+1. Contrast, "Set up program": white on the accent. By eye from the image about 3.1 : 1, which is the
+   large-text line, hence "nearly". The same pill is "Start workout" everywhere. Real and borderline; a
+   colour decision in `LedgerDesign`, not this slice.
+2. Dynamic Type, "RECENT": `Eyebrow` is 10 pt scaled with `.caption2` (`LedgerFont.swift:90`), which hardly
+   moves below the accessibility sizes. It does scale; I read it as the audit's usual complaint about
+   `caption2`. Exclude with the comment, or raise the question of a 10 pt label.
+3. Clipped, "Set up program": `PrimaryButton` has a minimum height, not a fixed one, and its label wraps
+   (`PrimaryButton.swift:62-70`); not clipped in either image. Likely a false positive.
+4. Clipped, "Friday, October 9": a caption with no fixed frame (`TodayHeader.swift:17-19`); not clipped in
+   either image. Likely a false positive.
+
+### For the product owner, in plain words
+
+1. **"Set up program" opens an empty Program tab, and a recent workout opens an empty History tab**, until
+   onboarding (F08, parked) and History (F13) exist. In the running app the only way to get a program today
+   is the Debug menu.
+2. **If the phone fails to read the database while Today is open, the whole screen is replaced by "Can't
+   show today right now"**, the Resume button with it, and the off-schedule sheet closes if it was open. It
+   comes back when the app is left and reopened. The alternative is to keep showing the last good day, which
+   may be out of date. The implementer chose the first; it should be your choice.
+3. **Today does not notice midnight while it is open and in front.** The new day shows when the app or the
+   tab comes back. Nobody decided this; say if it matters.
+4. **The orange button's white text is at the edge of the contrast rule** (audit issue 1).
+
+### Not checked
+
+Any build, test, lint or simulator run; SwiftUI's restart of a tab's task; the four conditions the
+orchestrator set on the clock argument (not in what I read); the seed program's week 8; the watch target;
+the tester's uncommitted work.
+
 ## Slice S5 — adversarial testing, round 1 (G2 tester, 2026-10-09)
 
 Against `feat/F09-s5-store-wiring` at cc0b690. No product code changed. One real defect, in the test-only
