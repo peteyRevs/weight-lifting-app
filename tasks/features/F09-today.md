@@ -313,3 +313,50 @@ when the state passes through it. **For F15** (F9-S4-5): how VoiceOver pronounce
 checked on a device.
 14. **A blank spoken label is no label** (F9-S4-6, round 2): `PrimaryButton` given an empty or white-space-only
     spoken label speaks its drawn label.
+
+## Plan amendments — slice S5, the store, the wiring and the live workout (orchestrator, 2026-10-09)
+
+The plan's S5 and S6 as one pull request (larger batches; the number S6 is not used). Cut from `main`, which
+holds Today's presentation and views (S3, S4) and F10's cover with its `WorkoutLauncher` (#45). This slice
+puts Today on screen in the app. About 280 product lines planned; past about 700 the implementer stops and
+reports. The inputs are in the notes: "Inputs for S5" (three sections of this feature's notes) and, in F10's
+notes, "Inputs for F09 S5: how Today calls the launcher" and "Inputs for F09 S6". The slice is accepted when:
+
+1. **`TodayStore`** (`@MainActor @Observable`, standards §4): it observes the active program, the settings,
+   the finished workouts it needs, the exercises and the live workout session from the root's task, holds
+   `Loadable<TodayModel>` made by `TodayPresentation.make`, and owns no unstructured task. Intents are
+   synchronous. The clock, calendar, locale and zone are injected.
+2. **Each workout is handed in once** (S3 criterion 19): the store reads the finished workouts of the stats
+   week and of the program week as one set (one read over the union, or a merge by id); a test pins a week
+   in which the two overlap. The comment on `TodayInput.weekWorkouts` says so.
+3. **Never back to loading** (S4's "For S5"): once the store has loaded, a later change of any input goes
+   from one loaded model to the next; a test pins it with the off-schedule sheet open.
+4. **It follows what changes** (plan row S5): a finished workout, a saved program, a changed setting (week
+   start, units: criterion 11 and 9 of the brief) each give a new model within one stream update, with no
+   sleep in the tests.
+5. **The live workout** (criterion 3 of the brief): with a workout live, the card offers Resume from its
+   start time; when it finishes or is discarded elsewhere the card changes within one update of the
+   session's stream; the store does not tick.
+6. **A read that fails** gives the failure state S4 drew ("Can't show today right now"), not a blank
+   screen, and a later good value recovers it.
+7. **Routes, once each** (criteria 2, 5, 8, 10, 13): every `TodayRoute` the model's actions carry is emitted
+   through `onRoute` exactly once per tap; a double tap on "Start workout" starts one workout.
+8. **`TodayRoot`** (`init(onRoute:onTitleLongPress:)`) owns the store, runs it from its task, draws
+   `TodayScreen`, and presents the off-schedule sheet; the Debug menu still opens from the long press on the
+   title.
+9. **Wiring in `LedgerAppKit`**: `Routes+Today.swift` maps every `TodayRoute`. Start and resume call the
+   `WorkoutLauncher` the main root already holds; a screen that is not built yet (settings, a past
+   workout, the week editor, program set-up) goes to the placeholder the shell has for it, and no button is
+   dead. The Today tab draws `TodayRoot`; `TodayPlaceholder`, its preview case and its two references are
+   deleted.
+10. **A start that is refused** (a workout already live, a day that is gone) is shown by F10's cover as it
+    already does; Today adds no alert of its own.
+11. **One nightly UI test** (testing-strategy §2.6; S4's "For S5"): on the seeded app, Today shows, the
+    off-schedule sheet opens, a day is picked and cancelled, and "Start workout" opens the cover. The
+    existing smoke and adversarial UI tests still pass, edited only where they named the placeholder (the
+    tester's files: ask first, list each edit).
+12. **The nightly timing test** of Today's queries holds the brief's budget on the seeded database.
+13. **No new text** is expected. If one is needed it goes through `TodayCopy` and is listed for Pete.
+
+**Not in this slice:** onboarding's gate (F08, parked), Settings (F14), History's screens (F13), any change to
+`FeatureWorkout` beyond what criterion 9 needs to call the launcher, the project file or a test plan.
