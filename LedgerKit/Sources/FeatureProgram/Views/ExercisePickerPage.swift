@@ -16,7 +16,8 @@ struct ExercisePickerPage: View {
             }
             switch model.content {
             case let .rows(rows):
-                HairlineList {
+                // Each row stands under its own rule; the rule that closes the list is the foot's, pinned.
+                VStack(spacing: 0) {
                     ForEach(rows) { ExercisePickerRow(row: $0, send: send) }
                 }
             case let .nothingMatches(empty):

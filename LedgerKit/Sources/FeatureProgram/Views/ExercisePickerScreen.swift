@@ -30,8 +30,9 @@ struct ExercisePickerScreen: View {
     }
 }
 
-/// The search field, pinned under the sheet's title: an outlined pill, 44 pt high, that holds the model's
-/// query and sends each change as typed. Its placeholder is its spoken label too. A tap anywhere on the pill
+/// The search field, pinned under the sheet's title: an outlined pill, at least 44 pt high and with `s`
+/// above and below its line of text at every size, that holds the model's query and sends each change as
+/// typed. Its placeholder is its spoken label too. A tap anywhere on the pill
 /// puts the cursor in the field, which by itself is only as high as its line of text.
 struct ExerciseSearchField: View {
     let model: ExercisePickerModel.Search
@@ -39,13 +40,14 @@ struct ExerciseSearchField: View {
     @FocusState private var isEditing: Bool
 
     var body: some View {
-        TextField(model.placeholder, text: Binding { model.query } set: { send(.setQuery($0)) })
+        TextField(model.placeholder, text: query)
             .ledgerFont(.body)
             .foregroundStyle(LedgerColor.ink)
             .autocorrectionDisabled()
             .submitLabel(.search)
             .focused($isEditing)
             .padding(.horizontal, LedgerSpacing.l)
+            .padding(.vertical, LedgerSpacing.s)
             .ledgerHitTarget(alignment: .leading)
             .onTapGesture { isEditing = true }
             .background {
@@ -53,9 +55,21 @@ struct ExerciseSearchField: View {
             }
             .accessibilityLabel(model.placeholder)
     }
+
+    /// The model's query, and a text that differs from it sent as typed. The field writes its text back
+    /// unchanged when it takes the focus and when it loses it; that is no change of the query and sends
+    /// nothing, as the name field sends nothing for the stored name.
+    private var query: Binding<String> {
+        Binding { model.query } set: {
+            if $0 != model.query {
+                send(.setQuery($0))
+            }
+        }
+    }
 }
 
-/// The sheet's foot, pinned under the list: a rule, and the orange button, the sheet's one use of the accent
+/// The sheet's foot, pinned under the list: a rule (the one that closes the list, which draws none of its
+/// own here), and the orange button, the sheet's one use of the accent
 /// (Pete's decision 1, A). With no exercise picked it reads "Select exercises to add" and is disabled.
 struct ExercisePickerFoot: View {
     let model: ExercisePickerModel.Foot

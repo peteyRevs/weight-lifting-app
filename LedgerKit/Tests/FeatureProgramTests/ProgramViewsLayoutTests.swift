@@ -141,14 +141,21 @@
             }
         }
 
-        @Test("At an accessibility size the seven weekdays wrap onto more rows, in their order")
-        func scheduleStrip_accessibilitySize_wraps() {
-            let cells = Self.cells(.builder, at: .accessibility3)
-            let rows = Self.rows(of: cells)
-            #expect(rows.count > 1 && rows.map(\.count).reduce(0, +) == 7, "\(rows.map(\.count))")
-            #expect(cells.map(\.stop.label) == [
-                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
-            ])
+        @Test("When a seventh is too narrow for a cell's word the weekdays wrap into rows of equal cells, in order")
+        func scheduleStrip_wraps_intoRowsOfEqualCells() {
+            // One step above the default the row still holds on an iPhone 17; two steps above it does not.
+            #expect(Self.rows(of: Self.cells(.builder, at: .xLarge)).map(\.count) == [7])
+            for (size, width) in [(DynamicTypeSize.xxLarge, nil), (.xLarge, CGFloat(375)), (.accessibility3, nil)] {
+                let cells = Self.cells(.builder, at: size, width: width)
+                let rows = Self.rows(of: cells).map(\.count)
+                #expect(rows.count > 1 && rows.reduce(0, +) == 7, "\(size): \(rows)")
+                #expect(rows.dropLast().allSatisfy { $0 == rows[0] }, "every full row holds as many: \(rows)")
+                let widths = cells.map(\.frame.width)
+                #expect((widths.max() ?? 0) - (widths.min() ?? 0) < 1, "\(size): the cells are equal: \(widths)")
+                #expect(cells.map(\.stop.label) == [
+                    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+                ])
+            }
         }
 
         @Test("The library's chips wrap: five and one at the default size, more rows at an accessibility size")

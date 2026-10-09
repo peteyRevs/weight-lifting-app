@@ -15,9 +15,9 @@ nonisolated struct ProgramBuilderModel: Equatable, Sendable {
         /// "MY PROGRAM".
         let eyebrow: String
         /// The program's name as stored. It seeds the name field and is not what the field shows while the
-        /// lifter types: a view binds the field to a draft the store keeps, and sends
-        /// `ProgramBuilderAction.rename(_:)` with the draft's text. The stored name is the cleaned one, so a
-        /// field bound to it would lose a trailing space and could not be emptied.
+        /// lifter types: the field shows a draft that the view itself keeps (`ProgramHeader`; the store keeps
+        /// none), and sends `ProgramBuilderAction.rename(_:)` with the draft's text. The stored name is the
+        /// cleaned one, so a field bound to it would lose a trailing space and could not be emptied.
         let name: String
         /// "Program name": the field's placeholder and its spoken label.
         let namePlaceholder: String

@@ -31,33 +31,44 @@ struct DayCard: View {
         let layout = isLargeText
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.s))
             : AnyLayout(HStackLayout(alignment: .top, spacing: LedgerSpacing.m))
-        return layout {
-            Text(model.tag)
-                .ledgerFont(.caption)
-                .foregroundStyle(LedgerColor.ink)
-                .padding(.horizontal, LedgerSpacing.s)
-                .padding(.vertical, LedgerSpacing.xs)
-                .frame(minWidth: LedgerFont.scaledSize(.caption, dynamicTypeSize: dynamicTypeSize) * Self.tagEms)
-                .background(LedgerColor.hairline, in: .ledgerPill)
-            VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
-                Text(model.name)
-                    .ledgerFont(.body)
-                    .foregroundStyle(LedgerColor.ink)
-                Text(model.meta)
-                    .ledgerFont(.label)
-                    .foregroundStyle(LedgerColor.inkMuted)
-                if !model.chips.isEmpty {
-                    chips.padding(.top, LedgerSpacing.xs)
-                }
+        return HStack(spacing: LedgerSpacing.m) {
+            layout {
+                tag
+                texts
             }
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Centred on the row, as the chevron of Today's rows.
             if !isLargeText {
                 LedgerIconView(.chevron, sizedAs: .body).foregroundStyle(LedgerColor.inkMuted)
             }
         }
         .padding(.vertical, LedgerSpacing.l)
         .contentShape(Rectangle())
+    }
+
+    private var tag: some View {
+        Text(model.tag)
+            .ledgerFont(.caption)
+            .foregroundStyle(LedgerColor.ink)
+            .padding(.horizontal, LedgerSpacing.s)
+            .padding(.vertical, LedgerSpacing.xs)
+            .frame(minWidth: LedgerFont.scaledSize(.caption, dynamicTypeSize: dynamicTypeSize) * Self.tagEms)
+            .background(LedgerColor.hairline, in: .ledgerPill)
+    }
+
+    private var texts: some View {
+        VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
+            Text(model.name)
+                .ledgerFont(.body)
+                .foregroundStyle(LedgerColor.ink)
+            Text(model.meta)
+                .ledgerFont(.label)
+                .foregroundStyle(LedgerColor.inkMuted)
+            if !model.chips.isEmpty {
+                chips.padding(.top, LedgerSpacing.xs)
+            }
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var chips: some View {

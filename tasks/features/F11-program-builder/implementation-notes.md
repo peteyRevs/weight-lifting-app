@@ -4597,3 +4597,85 @@ only); the first frame's time with 224 rows (a hosted read of all 239 stops took
 - **Not run:** the full gate (`scripts/check.sh`), the watch, the nightly lane. `Views/` was restored from
   copies after each mutation batch and compared with them (`diff -rq`: identical); `git status` shows only
   the new test files and these notes.
+
+## Slice S9 — fix round 1 (G1 implementer, 2026-10-09)
+
+On `68dba83`. Criteria 10 to 13 of "Plan amendments — slice S9 after round 1". No tester's file was edited;
+the tester's six failing tests pass as written. No presentation, action or copy changed; one comment in
+`ProgramBuilderModel.swift` did (criterion 13).
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| **10** the strip never cuts a word (B-1, F11-S9-1) | `Views/ScheduleStrip.swift`: `ViewThatFits` over a row and a `WrapLayout` is gone. The cells stand in `EqualCells`, a private `Layout` of the file: every cell has one width, never less than the widest cell's own; one row while each cell then has at least `xs` beside its words (both sides together), else rows of as many cells as fit with `xl` each; the cells always share the whole width. A cell no longer carries the 44 pt least width itself (`ledgerHitTarget` is gone from it; `contentShape` stays): a cell that is 44 pt wide "for its target" could not be told from one that is so for its words, and that was the missing point on 375 pt. Its width is at least 44 pt by arithmetic on every iPhone (a seventh of 375 pt less nothing is 47 pt; a wrapped cell is wider), which the tester's and my frame tests measure at twelve sizes and both widths; its height is its two lines and their padding. |
+| **11** room at the largest sizes (S-2, S-3, F11-S9-2) | The search field has `s` above and below its line (`ExercisePickerScreen.swift`). A wrapped strip cell has at least `xl` beside its word (above). A week chip has `m` above and below at every size, where it had `s` (`WeekChips.swift`): the views may read the text size in two places only (the tester's pin), so the room is not switched on by size. |
+| **12** the search field sends only a changed query (F11-S9-3) | `ExerciseSearchField.query`: `if $0 != model.query { send(.setQuery($0)) }`. |
+| **13** S-1 (a) | `ProgramBuilderModel.Header.name`'s comment says the view keeps the draft and the store none. |
+| **13** N-1 | `DayCard`: the chevron is centred on the row, as `HairlineRow`'s; the tag and the texts still stand top-aligned beside each other. |
+| **13** N-2 | `SectionLine` takes its alignment: the first baseline by default (a note beside an eyebrow, as Today's cards), `.center` from `BlockSection` for "−" and "+". |
+| **13** N-3 | The library's rows stand in a plain stack, each under its own rule; the list draws no closing rule, and the foot's pinned rule is the one above the button. |
+| **13** N-6 | `spokenHint(_:)` is gone: an actionable cell reads the model's hint, or none when the model gives none. |
+
+Not done, as ruled (criterion 14 and the chores): N-4, N-5, N-7, N-8, S-4, S-5.
+
+### The strip's look, for the product owner
+
+Seed program (tags of two letters, "REST"); what is pinned by a test or drawn in a reference:
+
+| Width | Text size | Look |
+|---|---|---|
+| 402 pt (iPhone 17) | default (`.large`) | one row of seven equal cells (`builder-*-large.png`) |
+| 402 pt | one step up (`.xLarge`) | one row; "REST" whole, with about 2 pt beside it on each side (`builder-*-xLarge.png`): tight, and the price of keeping the week on one row there |
+| 402 pt | two steps up (`.xxLarge`) and above | rows of equal cells |
+| 402 pt | `.accessibility3` | three, three and one, each cell a third of the width (`builder-*-accessibility3.png`) |
+| 375 pt | default | one row of seven, 47 pt each; "REST" whole with about 3.5 pt beside it |
+| 375 pt | one step up and above | rows of equal cells |
+
+A last row that is not full starts at the leading edge and its cells are as wide as the others (a lone
+"S / REST" under two rows of three at `.accessibility3`). With ten days ("D10") the same rule holds; the
+tester's sweep over twelve sizes and both widths finds no cut. Not measured by me: how many cells a row holds
+at each size between those above.
+
+Also new to look at: the week chips are 8 pt higher at every size (at `.xLarge` they stand three to a row,
+as before this round); the library's list ends in one rule, not two.
+
+### Tests
+
+- The tester's six pass unedited: `strip_seedWeek_noCellIsCut`, `strip_tenDays_noCellIsCut`,
+  `strip_seedWeek_drawsItsWordsWhole`, `strip_tenDays_drawsItsWordsWhole`,
+  `searchField_textStandsInsideItsPill`, `searchField_focusAndBlur_sendNothing`; so do the tester's source
+  pins (fourteen files, sixteen `send`s, three kept states, two environment reads, the two numbers).
+- Mine: `scheduleStrip_defaultSize_isOneRowOfEqualTargets` stands unchanged (one row at 375 pt).
+  `scheduleStrip_accessibilitySize_wraps` is replaced by `scheduleStrip_wraps_intoRowsOfEqualCells`: one row
+  at `.xLarge` on 402 pt; wrapped, in order, every full row as long and every cell as wide, at `.xxLarge` on
+  402 pt, at `.xLarge` on 375 pt and at `.accessibility3`.
+- **References:** 26 of this slice's 28 were recorded again (none is on `main`): every builder reference
+  (the chips' height; the strip at `.xLarge` and `.accessibility3`; the chevron; the baseline of the notes),
+  and the library's with rows (one rule above the foot; the search field's height at `.accessibility3`).
+  Unchanged: `libraryNothing` light and dark. `screenshots/s9/` holds the new copies.
+
+### Product lines now
+
+`Views/`: 670 (609 before): `ScheduleStrip` 114 (70; the layout), `DayCard` 73 (65),
+`ExercisePickerScreen` 63 (55), `SectionLine` 32 (31); the others as they were. Builder 425, library 134,
+previews 111.
+
+### The runs
+
+- Simulator through the lock, `-only-testing:FeatureProgramTests`, three times: one with the first form of
+  the layout (my own 375 pt test failed: the cell's 44 pt least width made the row wrap four and three);
+  two recording runs. The comparing run is the gate's.
+- **`scripts/check.sh`, the full gate, on the final sources: exit 0, "check.sh OK", 960 s** (iOS tests
+  599 s, watchOS tests 261 s). iOS: 3,614 tests, 3,587 passed, none failed, 14 skipped, 13 known issues.
+  watchOS: 2,262 tests, 2,243 passed, none failed. `FeatureProgram` 2,320 / 2,329 lines (99.61 %).
+- **`scripts/check.sh --fast`: exit 0, 124 s.**
+- **Not run:** the nightly lane, a device, VoiceOver. No mutation was made this round.
+
+### For the orchestrator
+
+- `EqualCells` is a second layout beside `WrapLayout` and lives in the feature; if S10 or F14 wants equal
+  cells it belongs in `LedgerDesign`. It is written without a numeral, a `count` or a `max`, because the
+  tester's lists pin the views' numbers and bans; in `LedgerDesign` it could be plainer.
+- The cell's `.lineLimit(1)` can no longer cut a word in a page (a cell is never narrower than its words);
+  it stays for a cell wider than the whole strip, and because the tester's list of numbers names it.

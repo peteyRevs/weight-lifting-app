@@ -14,7 +14,7 @@ struct BlockSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.m) {
-            SectionLine(eyebrow: model.title) { lengthStepper }
+            SectionLine(eyebrow: model.title, alignment: .center) { lengthStepper }
             WeekChips(chips: model.chips, send: send)
             if let notice {
                 Text(notice)

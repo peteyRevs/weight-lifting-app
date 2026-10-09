@@ -37,7 +37,7 @@ struct WeekChips: View {
                 .foregroundStyle(subtitleColor(chip))
         }
         .padding(.horizontal, LedgerSpacing.l)
-        .padding(.vertical, LedgerSpacing.s)
+        .padding(.vertical, LedgerSpacing.m)
         .background {
             if chip.isSelected {
                 Capsule.ledgerPill.fill(LedgerColor.ink)
