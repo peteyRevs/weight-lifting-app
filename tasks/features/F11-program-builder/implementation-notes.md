@@ -3690,3 +3690,155 @@ All on 2026-10-08 in the worktree; every simulator command through the lock (iPh
   host runs for the layout's arithmetic. No reference was recorded or changed.
 - `scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 113 s. `scripts/check.sh --lint-only` clean.
 - **Not run:** the full gate, the watch plan, the nightly lane.
+
+## Slice S8 — fix round 1 (G1 implementer, 2026-10-08)
+
+On `7770a27` (the slice, the tester's suites and notes, the review, the rulings). The brief's "Plan amendments
+— slice S8 after round 1" is the specification: criteria 14 and 16 to 18 are this round's. Two commits,
+`764a165` (`fix(design)`) and `d33b71b` (`fix(program)`), then these notes. Paths under `LedgerKit/`.
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| **14** F11-S8-1, the plural form | One computed property, `Locale.forCountedText`, in an extension at the foot of `Sources/FeatureProgram/ProgramCopy.swift` (17 code lines). Each of the module's eleven counted lookups now passes `locale: locale.forCountedText`: `block(weeks:)`, `weeks`, `scheduledDays`, `days` (`ProgramCopy.swift`); `setsAWeek`, `exercises`, `sets`, `estimate(minutes:)` (`ProgramCopy+Days.swift`); `backToBack`, `scheduledInWeeks` (`ProgramCopy+DayEditor.swift`); `addExercises` (`ProgramCopy+Picker.swift`). No lookup that is not counted changed. Details below. |
+| **16** S-2, a disabled field | `StepperField.swift`: the label and the value are drawn in `inkFaint` when the field is disabled or has no step to take (both closures nil: the field disables itself then, so it is drawn as it is spoken). One step off dims that button only. Pinned by the new suite `StepperFieldDisabledTests.disabledField_drawsItsTextFaint` (both themes: the text less than half as strong as a live field's, still there, the same drawing for "disabled" and "no step", full strength with one step off). |
+| **17** S-1, the lint waiver | Kept, on the function's line with its reason: `// swiftlint:disable:this cyclomatic_complexity - §7 lookups`; the doc comment above says the rest (eleven groups, one lookup each, one branch over the limit). The longer reason the reviewer worded does not fit the line: with it the line passes 120 columns and the formatter breaks the declaration, after which the waiver no longer stands on the line the rule reports. `disable:next` cannot be used either: above the doc comment it does not reach the function, under it the lint reports an orphaned doc comment. The lint configuration is untouched. **For the pull request:** this is the one exception to standards §12 ("no new lint suppressions"); the reviewer's alternative is `cyclomatic_complexity: { ignores_case_statements: true }` in `.swiftlint.yml`. |
+| **18** N-1 | "Nothing matches that filter." has its translator's comment, in the code and the catalog: "Shown in the exercise library when the search and the two chip rows leave no exercise". |
+| N-2 | `ExercisePickerModel.Row.spokenLabel` and `.spokenValue` are gone: the label is `name`, the value `line`, and `Row`'s comment says so. A chip's and a chip row's `spokenLabel` stay (they are texts of their own). |
+| N-3 | `ExercisePickerAction.search(_:)` is gone; a view sends `.setQuery(text)`. My test of the alias became `setQuery_keepsTheQueryAsTyped` (the field keeps the text as typed while the filter trims it). |
+| N-4 | `FeatureProgramSourceTests.presentationsCopyAndModels_neverNameDouble` now sees `ExercisePickerPresentation.swift`, `ExercisePickerModel.swift` and `ProgramCopy+Picker.swift` among the files it reads. The other list (`storesAndPresentations_neverClamp`) reads the files that can hold logic, which a model and a copy file are not by that suite's own rule, so the two names went where those files are read. |
+| N-5 | `WrapLayout.sizes(of:in:)`'s comment says that the layout measures at the proposed width and places at the width it reported, that the two agree while a child asked again at its own fitted width answers the same (as `Text` does), and what a width of zero gives. Two tests: `WrapLayoutTests.zeroWidth_isOneChildARow` (the arithmetic) and `WrapLayoutRenderingTests.zeroProposal_withChildren_isOneChildARow` (a probe layout asks the real layout for its size at `ProposedViewSize.zero`: no width, one row a child). |
+
+Not done, as ruled: criterion 15's test (`StepperFieldAdversarialTests.oneStepOff_isSpokenAsSuch`) is the
+tester's to replace and still fails. `StepperField`'s comment no longer claims that VoiceOver repeats the
+value at a switched-off step (the reviewer could not verify it, nor can I): it says one step off is not
+spoken.
+
+### Criterion 14, exactly
+
+`Locale.forCountedText` is this locale with its language replaced by the language the catalog answers in.
+
+- **What it reads:** `Bundle.module.localizations` (the languages this module's built catalog holds; "en"
+  today) and the locale it is called on, which is the one the copy member was handed. It calls
+  `Bundle.preferredLocalizations(from:forPreferences:)` with exactly those two, a pure function of its
+  arguments. It reads no current locale, no preferred languages of the device and no user defaults; the
+  module's source test (`sources_neverReadTheClockOrTheCurrentCalendar`) reads the file as before.
+- **What it decides:** the language, and with it the plural rule. While the catalog holds only English that
+  is English for every locale: "Add 1 exercise" under ja_JP, zh_CN, ko_KR; "Add 21 exercises" under ru_RU.
+  When a translation is added to the catalog, a locale of that language takes that language's forms with no
+  change here (tried on the function's arithmetic with the lists ["en"] and ["en", "fr", "ja"]: fr_FR then
+  resolves to fr, ja_JP to ja, ru_RU to en).
+- **What still follows the lifter's locale:** the digits (the numbering system is carried over: "Add ٣
+  exercises" under ar_EG, "१,२३४ sets a week" under hi_IN with Devanagari digits) and the region, and so the
+  grouping of the region ("1.234 sets a week" under de_DE, "12 345" with a narrow space under fr_FR).
+- **What does not, and did before:** a grouping that belongs to the language and not to the region. One
+  case found: fr_CA writes "1 234 567", and English in Canada (which is what the lookup now sees) "1,234,567".
+  No count of this module reaches four digits in use (weeks, days, sets, exercises, minutes).
+- **Known limit, unchanged by this round:** which catalog language the *words* come from is the bundle's
+  choice, made from the device's languages, not from the injected locale; that was so before and is the
+  same for every lookup of every module. With one language in the catalog the two cannot differ.
+- **Where it stands:** the criterion asks for "one place in `ProgramCopy`". It is one place, in
+  `ProgramCopy.swift`, but an extension of `Locale`, not a member of the `ProgramCopy` enum. The reason is
+  the checks that read the copy files as text, all outside this slice's reach: the tester's two suites on
+  `main` require the text `locale: locale` in every lookup with a value
+  (`ProgramWordsAdversarialTests.swift:181`, `DayEditorWordsAdversarialTests`), so `locale:
+  counted(locale)` fails them; and `CopyAudit` (`LedgerTestSupport`) reports a lookup that stands after
+  `return` or inside a closure as "not `String(localized: "…"`", so a member cannot resolve the locale in a
+  statement of its own first. `locale: locale.forCountedText` passes all of them with no edit to any. Both
+  other forms were built and seen to fail before this one was chosen.
+- **Tests:** the tester's `foot_pluralForms_areEnglishInEveryLocale` passes unedited (11 locales), as do its
+  digit test and the three source scans. Mine: `ProgramCopyTests.countedTexts_takeTheCatalogsPluralForm` (nine
+  locales with other plural rules; `exercises` and `weeks` at 0, 1, 2, 5, 11, 21, 22 and 101, and each of
+  the other nine counted texts at one) and `counting_keepsRegionAndDigits`. One test of S5 changed its
+  expectation: `values_followTheLocaleHandedIn` expected "0 day" under fr_FR ("French counts none as one");
+  it is "0 days" now, which is the ruling.
+- **Not here:** `FeatureToday`'s and `LedgerAppKit`'s copy files have the same cause (the tester's note);
+  standards §7 still describes the old behaviour ("`fr_FR` gives "0 fixture set"", pinned in `LedgerAppKit`
+  by `CatalogBuildAdversarialTests`). Both belong to the chore the ruling names.
+
+### The references
+
+Recorded again, all this slice's own and none on `main`: the six of
+`stepperField_appearance_matchesReference` (light and dark at large, xLarge and accessibility3) and the four
+that hold the three controls together (`formControls_increasedContrast…` light and dark,
+`formControls_pressed…`, `formControls_accessibility5…`). Only the stepper's last field differs in them: "Top
+of range 12" is faint. Compared against the old references before recording, one cell failed
+(`stepperField` dark-accessibility3); the other nine were within the tolerance and were recorded all the
+same, so that no reference shows the old look. The six screenshots in `screenshots/s8/` that show the stepper
+were copied again.
+
+**Not recorded again: the design gallery's reference.** It is on `main` in its older form and was recorded
+once by this slice; its `StepperField` section holds the same disabled field, now faint, and the test still
+passes against the reference within the tolerance. The round's instruction allows only references that are
+not on `main`, so it is left: it shows the old look of one field's text until the gallery is next recorded.
+For the orchestrator to rule.
+
+### Mechanical edits to the tester's files
+
+For the two removed names (N-2, N-3), the smallest edit each; no expectation of the tester's reading changed.
+
+| File:line | Edit |
+|---|---|
+| `Tests/FeatureProgramTests/Adversarial/ExercisePickerAdversarialSupport.swift:150-151` | `row.spokenLabel` → `row.name`, `row.spokenValue` → `row.line` in the line the model is printed as (the tester's own reading at `:130` prints the name and the line there) |
+| `ExercisePickerModelAdversarialTests.swift:51` | `ExercisePickerAction.search(…)` → `ExercisePickerAction.setQuery(…)` |
+| `ExercisePickerWordsAdversarialTests.swift:59` | `#expect(row?.name == name && row?.spokenLabel == name)` → `#expect(row?.name == name)` |
+
+For the tester: its notes on the changes that survived every test still hold (`guard isEnabled` in the
+adjustable action; the switch's `accessibilityRepresentation`; a finger's tap). None was changed in this
+round: they were not among the rulings.
+
+### Product lines now
+
+| File | After the slice | Now |
+|---|---|---|
+| `LedgerDesign/Components/StepperField.swift` | 95 | 96 |
+| `LedgerToggleStyle.swift` | 96 | 96 |
+| `WrapLayout.swift` | 84 | 84 |
+| `Components+Previews.swift`, `Gallery/DesignGallery.swift` (added) | 18 | 18 |
+| **Part one** | **293** | **294** |
+| `FeatureProgram/Picker/ExercisePickerInput.swift` | 11 | 11 |
+| `ExercisePickerModel.swift` | 57 | 55 |
+| `ExercisePickerAction.swift` | 13 | 10 |
+| `ExercisePickerPresentation.swift` | 109 | 107 |
+| `ProgramCopy+Picker.swift` | 99 | 103 |
+| `DayEditor/DayEditorAction.swift`, `ProgramCopy+DayEditor.swift` (added) | 7 | 7 |
+| `ProgramCopy.swift` (the helper; four lookups) | 123 → | 144 (+21) |
+| `ProgramCopy+Days.swift` (one lookup over six lines) | 73 → | 78 (+5) |
+| **Part two** | **296** | **319** |
+| **The slice** | **589** | **613** |
+
+`WrapLayout.swift` reads 84 where the slice's table said 75: the formatter put the gallery's lists over more
+lines when they became `nonisolated`, before the slice's last commit; the table was not counted again then.
+The reviewer's 592 is the same tree counted from the diff.
+
+### The runs
+
+All on 2026-10-08, in the worktree; simulator commands through the lock.
+
+- Host, `swift test --only-use-versions-from-resolved-file --filter 'FeatureProgramTests|ModuleCopyTests'` in
+  `LedgerKit`, on the final sources: `FeatureProgramTests` 316 tests in 30 suites passed, the tester's plural
+  test among them, unedited; `ModuleCopyTests` 6 passed. Before the last form of the helper the same run
+  failed twice, which is how the two other forms were ruled out (see "Where it stands").
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:LedgerDesignTests`, four times. First: the build
+  failed (the probe layout of the new zero-proposal test was main-actor isolated; fixed). Second, against
+  the old references: 377 tests, 2 failed: the tester's `oneStepOff_isSpokenAsSuch` and `stepperField` at
+  dark-accessibility3. Third, with the ten references deleted: they were recorded. Fourth: 377 tests, 369
+  passed, 1 failed (`oneStepOff_isSpokenAsSuch`), 1 skipped, 6 known issues. `git status` then showed the ten
+  references and nothing else among the images.
+- `scripts/check.sh`, the full gate, on the two commits: **exit 65 after 418 s, at the iOS test plan, by the
+  one test criterion 15 leaves to the tester.** Lint, the iOS build and the string catalogs passed
+  (`FeatureProgram` 125 keys). iOS: 3,341 tests, 3,313 passed, 1 failed
+  (`StepperFieldAdversarialTests.oneStepOff_isSpokenAsSuch`), 14 skipped, 13 known issues. The gate stops
+  there, so its watchOS and coverage steps did not run.
+- Those two steps by hand, with the gate's own commands (`build-for-testing` and `test-without-building` of
+  scheme `LedgerWatch`, plan `PR-Watch`; `scripts/check-test-results.sh`; `scripts/coverage-gate.sh` on both
+  bundles), 248 s: watch build exit 0; watchOS 2,261 tests, 2,242 passed, none failed, 14 skipped, 5 known
+  issues; the results check exit 0; the coverage gate exit 0 (`FeatureProgram` 1,547 / 1,547 lines,
+  `LedgerDesign` 2,638 / 2,735, 96.45 %; overall 98.58 %). So the full gate is not green as one run: it
+  will be once the tester's test is replaced.
+- `scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 118 s (`LedgerDomainTests` 1,222 passed,
+  `LedgerPersistenceTests` 552 passed with 1 known issue).
+- No source was edited after these runs; this section was written after them.
+- **Not run:** the nightly lane; a device. The round's changes were not checked by breaking the code, bar
+  criterion 14, whose test failed before the change (the tester's run) and passes after it.
