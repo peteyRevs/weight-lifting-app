@@ -11,6 +11,8 @@ extension Tag {
     @Tag static var feature: Self
     /// Seeded property-style tests; the case count comes from `LEDGER_PROPERTY_SEED_COUNT`.
     @Tag static var property: Self
+    /// Suites that compare against committed reference images.
+    @Tag static var snapshot: Self
 }
 
 /// Deterministic SplitMix64 generator for property tests (testing-strategy §3 rule 5).
