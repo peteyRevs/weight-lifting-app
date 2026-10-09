@@ -51,8 +51,10 @@ nonisolated struct ModuleCopyTests {
                 "AppComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"],
                 // A UI test's own date (F09 S5): the two launch arguments, and what stops a launch whose
                 // instant cannot be read. Read by the launch or by the test's author, never drawn.
+                // "Z" is how an instant spells "no offset", which the argument's reader compares with.
                 "UITestClock.swift": [
-                    "-LEDGER_UITEST_NOW", "-LEDGER_UITEST", " needs an ISO 8601 instant such as 2026-09-17T12:00:00Z: "
+                    "-LEDGER_UITEST_NOW", "-LEDGER_UITEST", " needs an ISO 8601 instant such as 2026-09-17T12:00:00Z: ",
+                    "Z"
                 ]
             ],
             // The Debug menu's Diagnostics sections.
