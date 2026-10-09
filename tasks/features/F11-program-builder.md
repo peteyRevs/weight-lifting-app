@@ -505,3 +505,49 @@ nothing until the nightly UI test of the Day editor taps all three. **For S12**:
 pick's place is the product owner's question, asked with S12's VoiceOver table. **Not covered by criterion
 13** (tester's Q1, Q2): two stored exercises under one id (the schema forbids it) and a blank name (F12's
 rule for custom exercises).
+
+## Plan amendments — slice S9, the builder's and the exercise library's views (orchestrator, 2026-10-09)
+
+The plan's S9 and S12 as one pull request (larger batches; the number S12 is not used again). Cut from `main`,
+which holds the builder's and the library's presentations and the three form controls. Views drawn from a
+model only: no store, nothing in the app (the Program tab keeps its placeholder until S14). About 670
+product lines planned (the plan's S9 and S12 rows list the files); views have landed close to plan; past
+about 850 the implementer stops and reports. Pete's decision 1 is taken at its default A (the dark design's
+language; orange only on "DELOAD" in the builder and on the library's "Add n exercises" button). The slice is
+accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `ProgramBuilderModel` or `ExercisePickerModel`
+   and closures over the model's action values; no view decides what is shown, formats a number, filters a
+   list or reads a clock, calendar or locale. Every text on screen is a string of the model or a lookup the
+   model does not carry (none is expected; any is listed for Pete).
+2. **Both screens scroll as the convention says** (testing-strategy §2.5–§2.6): `ProgramScreen` and
+   `ExercisePickerScreen` are their pinned parts plus a `ScrollView` around one page view
+   (`ProgramPage(model:)`, `ExercisePickerPage(model:)`); snapshots and VoiceOver trees are taken from the
+   pages; no page holds a scroll view.
+3. **The builder** (criteria 1–6 of the brief, drawn): the header with the program's name as a field, "BLOCK
+   · 8 WEEKS" with "−" and "+", the week chips in `WrapLayout` (eight weeks make two rows), the selected
+   week's schedule strip of seven cells that wraps at accessibility sizes, the week's actions, "TRAINING
+   DAYS" with its helper, one card per day, "+ Add training day", and the validation message where the
+   model carries one.
+4. **The library sheet** (criterion 12 of the brief, drawn): `SheetChrome` with "Exercise library" and
+   "Cancel", the search field, the two chip rows in `WrapLayout`, the rows with their line and the "already
+   in this day" mark, a picked row shown as picked, "Nothing matches that filter." with "Clear filters", and
+   the pinned foot button, disabled with "Select exercises to add".
+5. **States have previews and snapshots** (the notes' snapshot table): builder: default at six cells; deload
+   week selected, a day with no exercise, the two-weeks message at two each. Library: results at six cells;
+   three picked, nothing matches at two each. One preview registry for the module; `Package.swift`'s
+   snapshot targets and `PreviewScan.registeredModules` gain `FeatureProgram`.
+6. **VoiceOver** (the notes' tables for S9 and S12): the pinned trees match them: a week chip "Week 3, 4
+   days", a cell "Tuesday, rest" with its hint, the chips' short names hidden on a day card, chip rows as
+   one-selected groups, a library row as a button with its line as value and the selected trait when picked
+   (S8 criterion 19), the foot. Headings are headings. Every target is 44 pt.
+7. **Sizes and settings**: nothing clips or overlaps at `.accessibility3`, with Bold Text, Increase
+   Contrast and right-to-left; sixteen weeks and a long program name lay out.
+8. **The orange audit** (decision 1 A): a test or a pinned list shows where the accent is used on each
+   screen.
+9. **No rule of its own**: the views use `LedgerDesign`'s components and tokens (`StepperField` is not
+   needed here; `PillButton`, `WrapLayout`, `SheetChrome`, `HairlineRow`, `PrimaryButton`); a new shared
+   component is proposed in the report, not added quietly.
+
+**Not in this slice:** the Day editor's views (S10, S11), any store (S13, S14), `LedgerAppKit`, the project
+file or a test plan, and any change to a presentation beyond a field a view provably needs (listed).
