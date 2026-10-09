@@ -39,14 +39,18 @@ struct MainRoot: View {
 
     /// The tabs, with the Debug menu's sheet on them (the UI tests open it from `today.title`).
     private var tabs: some View {
-        AppTabs(router: router) { isDebugMenuShown = true }
+        AppTabs(
+            router: router,
+            onTodayRoute: { router.resolve($0, workout: workout) },
+            onTodayTitleLongPress: { isDebugMenuShown = true }
+        )
         #if DEBUG
-            .sheet(isPresented: $isDebugMenuShown, onDismiss: startSampleWorkoutIfAsked) {
-                DebugMenu(actions: DebugMenu.Action.sampleWorkouts { day in
-                    sampleDay = day
-                    isDebugMenuShown = false
-                }) { await composition.diagnostics() }
-            }
+        .sheet(isPresented: $isDebugMenuShown, onDismiss: startSampleWorkoutIfAsked) {
+            DebugMenu(actions: DebugMenu.Action.sampleWorkouts { day in
+                sampleDay = day
+                isDebugMenuShown = false
+            }) { await composition.diagnostics() }
+        }
         #endif
     }
 

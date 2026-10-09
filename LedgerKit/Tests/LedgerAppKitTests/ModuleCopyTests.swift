@@ -47,7 +47,14 @@ nonisolated struct ModuleCopyTests {
         "FeatureWorkout": CopyAudit.Exemptions(debugOnly: ["WorkoutLauncher+Sample.swift"]),
         "LedgerAppKit": CopyAudit.Exemptions(
             // The UI-test launch argument (twice) and the temporary database's path: read by the launch, never drawn.
-            literals: ["AppComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"]],
+            literals: [
+                "AppComposition.swift": ["-LEDGER_UITEST", "LedgerUITest-/ledger.sqlite"],
+                // A UI test's own date (F09 S5): the two launch arguments, and what stops a launch whose
+                // instant cannot be read. Read by the launch or by the test's author, never drawn.
+                "UITestClock.swift": [
+                    "-LEDGER_UITEST_NOW", "-LEDGER_UITEST", " needs an ISO 8601 instant such as 2026-09-17T12:00:00Z: "
+                ]
+            ],
             // The Debug menu's Diagnostics sections.
             debugOnly: ["AppComposition+Diagnostics.swift"]
         )

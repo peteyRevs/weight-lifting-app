@@ -1,7 +1,9 @@
 #if os(iOS)
+    import Dependencies
     import Foundation
     @testable import LedgerAppKit
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -17,37 +19,55 @@
             (.today, "Today"), (.program, "Program"), (.library, "Library"), (.history, "History")
         ]
 
+        /// The headers of `tab`'s root, read outside scroll views. Sanctioned edit of F09 S5 (orchestrator,
+        /// 2026-10-09): Today's root is `FeatureToday`'s, all of it inside one scroll view, so the shell pins no
+        /// element there: no heading of its own and no navigation bar. A placeholder tab's root is still the
+        /// one heading that names it.
+        static func rootHeaders(of tab: AppTab) -> [String] {
+            tab == .today ? [] : roots.filter { $0.tab == tab }.map(\.title)
+        }
+
         /// The labels of the headers VoiceOver finds, top to bottom: one per screen that is on screen.
         static func headers(_ elements: [NSObject]) -> [String] {
             elements.filter { $0.accessibilityTraits.contains(.header) }.map { $0.accessibilityLabel ?? "" }
         }
 
         /// Hosts the shell over `router` with UIKit's animations off, so a push or a pop is done when it returns.
+        /// Sanctioned edit of F09 S5: Today's root reads the stores and the session, so the shell is hosted on
+        /// empty in-memory stores and a session with nothing live, and read outside scroll views.
         static func hosting<Result>(_ router: AppRouter, _ body: (_ read: () -> [NSObject]) -> Result) -> Result {
             let animated = UIView.areAnimationsEnabled
             UIView.setAnimationsEnabled(false)
             defer { UIView.setAnimationsEnabled(animated) }
-            return AppTabs(router: router).withLiveAccessibilityElements(SnapshotAppearance(.light, .large), body)
-        }
-
-        @Test("At launch the shell shows Today's placeholder and nothing else: one element, the title, a header")
-        func launch_showsTodaysPlaceholderAlone() {
-            Self.hosting(AppRouter()) { read in
-                let elements = read()
-                #expect(elements.map(\.accessibilityLabel) == ["Today"])
-                #expect(Self.headers(elements) == ["Today"])
+            return withTestDependencies {
+                $0.inMemoryStores()
+                $0.workoutSession = FakeWorkoutSessionClient()
+            } operation: {
+                AppTabs(router: router).withLiveAccessibilityElements(
+                    SnapshotAppearance(.light, .large), outsideScrollViews: true, body
+                )
             }
         }
 
-        @Test("Each tab's root is the placeholder that names it, a header, whichever way the lifter goes round")
+        @Test("At launch the shell shows Today's root and nothing of its own: no element outside Today's scroll view")
+        func launch_showsTodaysPlaceholderAlone() {
+            Self.hosting(AppRouter()) { read in
+                // Was: one element, the placeholder's title "Today", a header (F09 S5 replaced the placeholder).
+                let elements = read()
+                #expect(elements.map(\.accessibilityLabel) == [])
+                #expect(Self.headers(elements) == Self.rootHeaders(of: .today))
+            }
+        }
+
+        @Test("Each placeholder tab's root is the header that names it, and Today's root pins none, either way round")
         func eachTab_showsThePlaceholderThatNamesIt() {
             let router = AppRouter()
             Self.hosting(router) { read in
                 for root in Self.roots + Self.roots.reversed() {
                     router.selectedTab = root.tab
                     let elements = read()
-                    #expect(elements.map(\.accessibilityLabel) == [root.title], "\(root.tab)")
-                    #expect(Self.headers(elements) == [root.title], "\(root.tab)")
+                    #expect(elements.map(\.accessibilityLabel) == Self.rootHeaders(of: root.tab), "\(root.tab)")
+                    #expect(Self.headers(elements) == Self.rootHeaders(of: root.tab), "\(root.tab)")
                 }
             }
         }
@@ -56,12 +76,15 @@
         func open_inAnotherTab_showsItThere_andKeepsBothStacks() {
             let router = AppRouter()
             Self.hosting(router) { read in
+                // Was read on Today's root, which now pins no element: History's root is as far from the top.
+                router.selectedTab = .history
                 let rootTop = read().first?.accessibilityFrame.minY ?? 0
+                router.selectedTab = .today
                 router.open(.settings, in: .history)
                 #expect(Self.headers(read()) == ["Settings"])
                 #expect((read().first?.accessibilityFrame.minY ?? 0) > rootTop, "a pushed screen keeps its bar")
                 router.selectedTab = .today
-                #expect(Self.headers(read()) == ["Today"], "Today is where the lifter left it")
+                #expect(Self.headers(read()) == Self.rootHeaders(of: .today), "Today is where the lifter left it")
                 router.selectedTab = .history
                 #expect(Self.headers(read()) == ["Settings"], "and so is History: its stack survived")
                 router.open(.settings, in: .history)
@@ -101,9 +124,8 @@
                         router[path: root.tab] = []
                         depths[root.tab] = 0
                     }
-                    let title = Self.roots.first { $0.tab == selected }?.title ?? ""
-                    let expected = depths[selected, default: 0] > 0 ? "Settings" : title
-                    #expect(Self.headers(read()) == [expected], "seed \(seed) step \(step)")
+                    let expected = depths[selected, default: 0] > 0 ? ["Settings"] : Self.rootHeaders(of: selected)
+                    #expect(Self.headers(read()) == expected, "seed \(seed) step \(step)")
                 }
             }
         }

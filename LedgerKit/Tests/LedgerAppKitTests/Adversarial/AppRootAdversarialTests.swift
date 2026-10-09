@@ -2,6 +2,7 @@ import Foundation
 @testable import LedgerAppKit
 import LedgerDesign
 import LedgerSnapshotTesting
+import LedgerTestSupport
 import SwiftUI
 import Testing
 
@@ -102,9 +103,18 @@ struct AppRootAdversarialTests {
             #expect(AppRoot(composition: harness.composition()).accessibilityElements().isEmpty)
             let composition = harness.booted()
             await composition.resume(in: .active)
-            let elements = AppRoot(composition: composition).accessibilityElements()
-            #expect(elements.map(\.label) == ["Today"])
-            #expect(elements.first?.traits.contains(.header) == true)
+            // Sanctioned edit of F09 S5 (orchestrator, 2026-10-09). Was: the ready root read as the one header
+            // "Today", the placeholder's. The shell's Today is now `FeatureToday`'s root over the composition's
+            // own stores and session, all inside one scroll view, so the ready root pins no element outside
+            // it. By its elements a ready root no longer differs from an idle one: the state is what tells
+            // them apart here, and the `Today` UI test reads the ready root in the running app.
+            #expect(composition.state == .ready)
+            let elements = withTestDependencies {
+                composition.bind(&$0)
+            } operation: {
+                AppRoot(composition: composition).accessibilityElements(outsideScrollViews: true)
+            }
+            #expect(elements.map(\.label) == [])
         }
     #endif
 }

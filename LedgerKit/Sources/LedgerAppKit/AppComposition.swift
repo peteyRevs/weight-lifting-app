@@ -50,7 +50,13 @@ public final class AppComposition {
             now: environment.now
         )
         if environment.preparesDependencies {
-            prepareDependencies { bind(&$0) }
+            prepareDependencies {
+                bind(&$0)
+                if environment.clockOffset != nil {
+                    // A UI test's date (`UITestClock`): the stores' clock is the launch's.
+                    $0.date = DateGenerator(environment.now)
+                }
+            }
         }
     }
 
@@ -175,6 +181,8 @@ extension AppComposition {
         var preparesDependencies: Bool
         /// When this process started (`ProcessStart`), where launch-to-first-frame begins.
         var processStart: Date?
+        /// The seconds `now` and `processStart` are moved by, when a UI test asked for a date (`UITestClock`).
+        var clockOffset: TimeInterval?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -184,11 +192,12 @@ extension AppComposition {
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
             #endif
+            let offset = UITestClock.liveOffset(arguments: arguments)
             return Environment(
                 databaseURL: arguments.contains("-LEDGER_UITEST")
                     ? URL.temporaryDirectory.appending(path: "LedgerUITest-\(UUID().uuidString)/ledger.sqlite")
                     : LedgerStores.defaultURL,
-                now: { Date() },
+                now: { Date().addingTimeInterval(offset ?? 0) },
                 newID: { UUID() },
                 logger: launchLogger,
                 record: { event in launchLogger.log.debug("Launch: \(String(describing: event), privacy: .public)") },
@@ -203,7 +212,8 @@ extension AppComposition {
                     #endif
                 },
                 preparesDependencies: true,
-                processStart: ProcessStart.date()
+                processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
+                clockOffset: offset
             )
         }
     }
