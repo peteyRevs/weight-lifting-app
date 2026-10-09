@@ -49,6 +49,14 @@ nonisolated struct TodayPurityAdversarialTests {
         !source.name.hasPrefix("TodayCopy") && !source.name.hasSuffix("+Previews.swift")
     }
 
+    /// Whether `line` is itself a call on a logger: the message of a level call (`logger.log.error(`) or the
+    /// category a logger is given (`injectedLogger.category(`). Sanctioned edit of F09 S5 (orchestrator,
+    /// 2026-10-09): a log line is no text a lifter reads, and standards §7's audit leaves it out the same way.
+    /// A literal on any other line still fails the two tests below.
+    static func isLoggerCall(_ line: String) -> Bool {
+        line.range(of: #"^\s*\w*[Ll]ogger(\.log)?\.\w+\(""#, options: .regularExpression) != nil
+    }
+
     static func hits(_ pattern: String, in sources: [Source]) -> [String] {
         sources.flatMap { source in
             source.lines.enumerated().compactMap { index, line in
@@ -83,7 +91,7 @@ nonisolated struct TodayPurityAdversarialTests {
             source.lines.enumerated().compactMap { index, line -> String? in
                 let bare = line.replacingOccurrences(of: #"\\\([^"]*?\)"#, with: "", options: .regularExpression)
                 let hasWords = bare.range(of: #""[^"]*[A-Za-z][^"]*""#, options: .regularExpression) != nil
-                return hasWords ? "\(source.name):\(index + 1)" : nil
+                return hasWords && !Self.isLoggerCall(line) ? "\(source.name):\(index + 1)" : nil
             }
         }
         #expect(worded == [])
@@ -98,7 +106,7 @@ nonisolated struct TodayPurityAdversarialTests {
         let literals = other.flatMap { source in
             source.lines.enumerated().compactMap { index, line -> String? in
                 let rest = line.replacingOccurrences(of: "\" · \"", with: "").replacingOccurrences(of: "\"\"", with: "")
-                return rest.contains("\"") ? "\(source.name):\(index + 1)" : nil
+                return rest.contains("\"") && !Self.isLoggerCall(line) ? "\(source.name):\(index + 1)" : nil
             }
         }
         #expect(literals == [])
