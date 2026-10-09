@@ -34,6 +34,12 @@ public nonisolated struct WrapLayout: Layout {
 
     /// Each child's own size; a child wider than `width` is asked again for its size at that width, so a
     /// label that wraps reports the height it then needs.
+    ///
+    /// The layout is measured at the width it is proposed and places at the width it reported, which for a
+    /// row of one over-wide child is that child's fitted width, not the proposed one. The two agree as long
+    /// as a child asked again at its own fitted width answers with the same size, as `Text` does; a child
+    /// that answers otherwise would be placed at a size the layout did not report. A width of zero, SwiftUI's
+    /// probe for the smallest size, gives every child a row to itself and no width.
     private func sizes(of subviews: Subviews, in width: CGFloat?) -> [CGSize] {
         subviews.map { subview in
             let own = subview.sizeThatFits(.unspecified)

@@ -77,6 +77,13 @@ nonisolated struct WrapLayoutTests {
         }
     }
 
+    @Test("In a row of no width each child has a row to itself, at its own size: nothing is dropped")
+    func zeroWidth_isOneChildARow() {
+        let arrangement = Self.layout.arrangement(of: Self.sizes(40, 30, 0), in: 0)
+        #expect(arrangement.frames == [Self.rect(0, 0, 40), Self.rect(0, 26, 30), Self.rect(0, 52, 0)])
+        #expect(arrangement.size == CGSize(width: 40, height: 72))
+    }
+
     @Test("A row is as high as its highest child, and the others are centred on it")
     func rowOfMixedHeights_isCentred() {
         let sizes = [CGSize(width: 30, height: 10), CGSize(width: 30, height: 40), CGSize(width: 60, height: 20)]
@@ -220,6 +227,17 @@ nonisolated struct WrapLayoutTests {
                 #expect(buffer.height > oneLine.height, "\(buffer.height) against \(oneLine.height)")
             }
 
+            @Test("Asked for its smallest size (a proposal of zero) with children, it has no width and a row a child")
+            func zeroProposal_withChildren_isOneChildARow() throws {
+                let probe = ZeroProbe()
+                let wrap = WrapLayout(spacing: 8, lineSpacing: 6) {
+                    Self.block(Self.redFill, 30)
+                    Self.block(Self.blueFill, 40, 20)
+                }
+                _ = try Self.drawn(ZeroProbeLayout(probe: probe) { wrap })
+                #expect(probe.sizes == [CGSize(width: 0, height: 10 + 6 + 20)], "\(probe.sizes)")
+            }
+
             @Test("No child and one child draw: nothing, and the child alone")
             func noChildAndOneChild_draw() throws {
                 let one = try Self.drawn(WrapLayout { Self.block(Self.redFill, 30) })
@@ -230,6 +248,27 @@ nonisolated struct WrapLayoutTests {
                 let padded = try Self.drawn(WrapLayout {}.padding(5).background(Self.redFill))
                 #expect(padded.width == 10 && padded.height == 10, "an empty layout takes no room of its own")
             }
+        }
+    }
+
+    /// What `ZeroProbeLayout` was answered. A layout's methods are nonisolated; SwiftUI calls them on the main
+    /// actor, where the test reads the answer afterwards.
+    final nonisolated class ZeroProbe: @unchecked Sendable {
+        nonisolated(unsafe) var sizes: [CGSize] = []
+    }
+
+    /// Asks its one child for its size at a proposal of zero, as SwiftUI does for a smallest size, and keeps
+    /// the answer; otherwise it is its child.
+    nonisolated struct ZeroProbeLayout: Layout {
+        let probe: ZeroProbe
+
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+            probe.sizes = subviews.map { $0.sizeThatFits(.zero) }
+            return subviews.first?.sizeThatFits(proposal) ?? .zero
+        }
+
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+            subviews.first?.place(at: bounds.origin, proposal: proposal)
         }
     }
 #endif

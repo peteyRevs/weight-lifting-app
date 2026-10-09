@@ -8,9 +8,10 @@ import SwiftUI
 ///
 /// VoiceOver reads the field as one adjustable element, the label with the value (`spokenValue` when the drawn
 /// value is not what should be heard, "2:30" against "2 minutes 30 seconds"): swipe up for "+", down for "−",
-/// and it announces the value the caller passes back. A swipe towards a switched-off step changes nothing, so
-/// VoiceOver repeats the value, as it does for a system stepper at its limit; with both steps off, or the
-/// field disabled, the element is dimmed.
+/// and it announces the value the caller passes back. A swipe towards a switched-off step changes nothing,
+/// and one step off is not spoken: there is no trait for one direction. With both steps off, or the field
+/// disabled, the element is dimmed, and the label and the value are drawn in the faint ink a disabled pill's
+/// text takes.
 ///
 /// At accessibility text sizes the buttons stand under the label and the value.
 public struct StepperField: View {
@@ -40,14 +41,16 @@ public struct StepperField: View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.s))
             : AnyLayout(HStackLayout(spacing: LedgerSpacing.m))
+        // With no step to take the field is disabled, whoever switched it off: the modifier below.
+        let isLive = isEnabled && (onDecrement != nil || onIncrement != nil)
         layout {
             VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
                 Text(label)
                     .ledgerFont(.label)
-                    .foregroundStyle(LedgerColor.inkMuted)
+                    .foregroundStyle(isLive ? LedgerColor.inkMuted : LedgerColor.inkFaint)
                 Text(value)
                     .ledgerFont(.numeralM)
-                    .foregroundStyle(LedgerColor.ink)
+                    .foregroundStyle(isLive ? LedgerColor.ink : LedgerColor.inkFaint)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: LedgerSpacing.s) {

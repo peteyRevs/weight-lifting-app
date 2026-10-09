@@ -155,6 +155,62 @@
                 }
             }
         }
+
+        /// F11 S8 criterion 16: a field that cannot be stepped looks so, text and all.
+        @Suite("StepperField, disabled", .tags(.design))
+        struct StepperFieldDisabledTests {
+            /// A field with texts, drawn at the phone's width.
+            private static func drawn(_ field: some View, _ scheme: ColorScheme) throws -> PixelBuffer {
+                let image = RenderedImage.render(
+                    field.background(LedgerColor.ground), width: SnapshotConfig.phoneWidth, colorScheme: scheme
+                )
+                return try #require(image.flatMap(PixelBuffer.init))
+            }
+
+            /// How far the strongest pixel of the text's columns (left of the buttons) stands from the ground.
+            private static func textStrength(_ buffer: PixelBuffer) -> Int {
+                let ground = buffer.pixel(column: buffer.width - 1, row: 0)
+                var strongest = 0
+                for row in 0 ..< buffer.height {
+                    for column in 0 ..< buffer.width - 110 {
+                        let pixel = buffer.pixel(column: column, row: row)
+                        strongest = max(strongest, abs(Int(pixel.red) - Int(ground.red)))
+                    }
+                }
+                return strongest
+            }
+
+            @Test("A disabled field's label and value are drawn faint, as are those of a field with no step to take")
+            func disabledField_drawsItsTextFaint() throws {
+                for scheme in [ColorScheme.light, .dark] {
+                    let live = try Self.drawn(
+                        StepperField("Sets", value: "5", onDecrement: {}, onIncrement: {}),
+                        scheme
+                    )
+                    let disabled = try Self.drawn(
+                        StepperField("Sets", value: "5", onDecrement: {}, onIncrement: {}).disabled(true), scheme
+                    )
+                    let noStep = try Self.drawn(
+                        StepperField("Sets", value: "5", onDecrement: nil, onIncrement: nil),
+                        scheme
+                    )
+                    let isSameSize = live.width == disabled.width && live.height == disabled.height
+                    #expect(isSameSize, "\(scheme)")
+                    let strong = Self.textStrength(live)
+                    #expect(strong > 150, "\(scheme): control, the value is drawn in full ink (\(strong))")
+                    #expect(Self.textStrength(disabled) < strong / 2, "\(scheme): \(Self.textStrength(disabled))")
+                    #expect(Self.textStrength(disabled) > 20, "\(scheme): the text is still there")
+                    let isSameAsDisabled = noStep == disabled
+                    #expect(isSameAsDisabled, "\(scheme): no step to take is drawn as disabled")
+                    // One step off dims that button only: the text stays at full strength.
+                    let oneOff = try Self.drawn(
+                        StepperField("Sets", value: "5", onDecrement: nil, onIncrement: {}),
+                        scheme
+                    )
+                    #expect(Self.textStrength(oneOff) == strong, "\(scheme)")
+                }
+            }
+        }
     }
 
     /// A field wired to a value from 1 to 3, as a feature wires one whose model leaves a step out at a limit.
