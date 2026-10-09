@@ -6,15 +6,15 @@ import Testing
 /// hand types, twice, in odd places, and in zones where the day is not 24 hours long.
 @Suite("Adversarial F09 S5 · UITestClock")
 struct UITestClockAdversarialTests {
-    private static let launch = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    static let launch = Date(timeIntervalSinceReferenceDate: 800_000_000)
     /// Thursday 2026-09-17 12:00 UTC.
-    private static let thursdayNoon = Date(timeIntervalSince1970: 1_789_646_400)
+    static let thursdayNoon = Date(timeIntervalSince1970: 1_789_646_400)
 
-    private static func arguments(_ extra: String...) -> [String] {
+    static func arguments(_ extra: String...) -> [String] {
         ["Ledger", "-LEDGER_UITEST", "1"] + extra
     }
 
-    private static func instant(_ value: String) throws -> Date? {
+    static func instant(_ value: String) throws -> Date? {
         try UITestClock.offset(arguments: arguments("-LEDGER_UITEST_NOW", value), launch: launch)
             .map { launch.addingTimeInterval($0) }
     }
