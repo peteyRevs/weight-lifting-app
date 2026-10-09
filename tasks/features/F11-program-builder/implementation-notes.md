@@ -3842,3 +3842,22 @@ All on 2026-10-08, in the worktree; simulator commands through the lock.
 - No source was edited after these runs; this section was written after them.
 - **Not run:** the nightly lane; a device. The round's changes were not checked by breaking the code, bar
   criterion 14, whose test failed before the change (the tester's run) and passes after it.
+
+### Fix round 1, addendum: the gallery's reference (orchestrator's ruling, 2026-10-08)
+
+Ruled after the round's report: the design gallery's reference is recorded again, so that it shows the
+disabled field as it is now drawn. Only `__Snapshots__/DesignGalleryTests/designGallery_dark_matchesReference.dark-large.png`
+changed (`git status` after the runs: that one file).
+
+Against the reference of commit `96f4187`, measured with a script written for this (CoreGraphics, both files
+decoded to 8-bit sRGB, compared pixel for pixel at the same place; not in the tree), `swift gallery-rows.swift
+<96f4187's> <new>`: "old 402 × 8176, new 402 × 8176 … rows that differ: 30 of 8176, in runs [7345...7357,
+7368...7384]; columns 26…92; pixels 643; largest channel difference 167". The same size and no shift. The two
+runs of rows are, by eye on a crop of rows 7230 to 7410, the label "Top of range" and the value "12" of the
+`StepperField` section's last, disabled field, which stand at the content's leading edge (column 26); they
+are faint now. Nothing else in the image differs, not by one level.
+
+Runs, through the lock: `xcodebuild test … -testPlan PR -only-testing:LedgerDesignTests`, twice. First, with
+the reference deleted: 377 tests, 2 failed, the gallery's (recorded) and the tester's
+`oneStepOff_isSpokenAsSuch`. Second: 377 tests, 369 passed, 1 failed, the tester's. No gate was run after
+this commit, as ruled.
