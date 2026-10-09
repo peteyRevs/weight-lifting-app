@@ -3922,3 +3922,360 @@ The tester's three red tests pass unedited (`refusedReplacement_sessionUnreadabl
 my tests were moved, unchanged, into a new suite (`WorkoutPresentationDialogTests`; the old one was five lines
 over the lint's type length): that move was run on the Mac host only (150 tests in 23 suites passed).
 `LedgerAppKitTests`, `LedgerDesignTests` and the tester's nightly UI tests were not run in this round.
+
+## Slice S5 — logging the sets of a solo exercise (G1 implementer, 2026-10-09)
+
+Built on `fc8a38f` (`main` `0d4a156` plus the specification), in the worktree `F10-s5`, on
+`feat/F10-s5-solo-logging`. Criteria 1 to 12 are the brief's "Plan amendments — slice S5". Paths are under
+`LedgerKit/` unless they start with `Apps/` or `tasks/`. **"The runs" at the end says what was run and what was
+not.**
+
+### What landed
+
+- **`Sources/FeatureWorkout`**
+  - `WorkoutEdit.swift` (new): `WorkoutEdit` (the page's eight taps: select, log, un-log, step weight, step reps,
+    repeat, add set, jump), `WorkoutSelection` (the row the lifter chose, where it is not the engine's cursor) and
+    `WorkoutEditPlan.make`, a pure function from a tap, the workout, the selection, the time and a new set's id to
+    the events to apply and the selection afterwards.
+  - `WorkoutPageModel.swift` (new): `WorkoutPageModel`, `ExerciseCardModel`, `SetRowModel`, `SteppersModel`,
+    `RemainingModel`. `WorkoutModel` gains `page`.
+  - `WorkoutPresentation+Card.swift` (new): `shownExercise`, `activeSet`, `page`, `card`. `WorkoutPresentation.screen`
+    takes `selection:` and `calendar:`; `header` takes `selection:` (defaulted) and names the shown exercise.
+  - `WorkoutCopy+Card.swift` (new): 27 lookups and the module's `Locale.forCountedText`; the catalog has 54 keys
+    (27 before).
+  - `WorkoutStore.swift`: the pump (`pump()`, `drain()`, the queue), `selection`, the dialog `editFailed`.
+    `WorkoutAction.swift` (new) holds `WorkoutAction` (now with `.edit`), `WorkoutExit`, `WorkoutStoreError` and
+    `WorkoutDialog`, moved out of the store's file for the lint's file length; `WorkoutStore.Dialog` remains as a
+    type alias.
+  - `Views/WorkoutPage.swift`, `Views/ExerciseCard.swift` (with `FactLine`), `Views/SetRowList.swift`,
+    `Views/RemainingList.swift` (new); `Views/WorkoutScreen.swift` puts the page in a scroll view under the pinned
+    header; `WorkoutRoot.swift` runs the pump from a second `.task` and shows the alert of a refused change.
+  - `Workout+Previews.swift`: two new states, "Logging a set" and "A drop set, in kilograms".
+- **Tests** (`Tests/FeatureWorkoutTests`): `WorkoutEditPlanTests`, `WorkoutEditPlanMoveTests`,
+  `WorkoutPresentationCardTests`, `WorkoutPresentationPageTests`, `WorkoutStorePumpTests`, `WorkoutStoreEditTests`,
+  `WorkoutScreenTests`, `WorkoutPageLayoutTests` with `Support/WorkoutLayoutProbe.swift`,
+  `WorkoutAccessibilityTrees.swift` (new); `WorkoutAccessibilityTests`, `WorkoutSnapshotTests`, `WorkoutCopyTests`,
+  `PreviewTests`, `WorkoutPresentationTests`, `Support/WorkoutParts.swift` (changed); ten new references.
+- **UI test**: `Apps/LedgerUITests/WorkoutLogging.swift` (new; nightly: the `PR` plan selects `Smoke` only).
+- **Not touched**: `LedgerDomain`, `LedgerSync`, `LedgerDesign`, `LedgerAppKit` (the Debug rows needed nothing),
+  `Package.swift`, the project file, the test plans, the coverage thresholds.
+
+### The rules of the page (what the engine does not decide)
+
+| Question | Rule | Where |
+|---|---|---|
+| Which exercise is on screen | the one the lifter chose (a row tapped, a stepper, a jump) while it is in the workout; otherwise S4's current exercise (the cursor's while it has a set to log, else the first that has one); with every set logged, the cursor's. The header's orange segment and "Exercise 2 of 5" name the same one | `WorkoutPresentation.shownExercise` |
+| Which row is the shown row | the row chosen, else the cursor's row when it is in this exercise, else the exercise's first row; each only while it is not logged. A logged row is never the shown row (v2: `active = i === activeSet && !x.done`), so with every set logged there are no steppers | `activeSet` |
+| When the choice ends | when a set is logged: the engine's cursor then says which row is next (rule 20). Un-logging moves nothing (rule 22). The choice lives with one presentation of the cover; after Minimize the engine's cursor decides, and a choice of a row that is not logged was also sent to the engine (`exerciseSelected`), so it survives | `WorkoutEditPlan` |
+| A tap on a logged row's body | nothing (it cannot be the shown row; its check un-logs it) | `select` |
+| A stepper on a logged row | nothing (it has no steppers on screen; a tap that was queued before the row was logged is dropped) | `step` |
+| Weight and reps limits | `Weight.advanced(bySteps:of:)` with `WorkoutExercise.step` (the Domain's step for the equipment and unit, copied at build time, rule 16), held at zero; `Reps(clamping:)`. A step that would change nothing sends no event | `WorkoutEditPlan.make` |
+| "+ Add set" on an exercise with no row | 0 × 8 (spec §3.7) | `repsOfAFirstSet` |
+| "REMAINING" | the exercises after the shown one, whatever is logged in them (spec §3.7: "only later ones are listed"), each "{rows} × {reps of the first row}" (rule 26: the scheme follows an added set); with no card, every exercise | `page` |
+
+### The pump
+
+`send(.edit)` only appends to a queue and wakes the pump. `WorkoutRoot` runs `pump()` in a `.task`: it makes a
+one-slot `AsyncStream<Void>` as its wake signal and calls `drain()` for each wake. `drain()` takes the taps oldest
+first; each is planned on **the session's answer to the tap before it** (`ahead`), or on what the stream shows when
+nothing is ahead, and its events are applied one by one. A tap stays at the front of the queue until it is done.
+
+- The page draws what the stream publishes, never `ahead`. `ahead` is dropped when the stream shows that state, or
+  when an answer is already what the stream shows (an event the engine ignored).
+- Why not a stream of the taps themselves: an `AsyncStream` ends for good when its consumer's task is cancelled, so
+  a cover whose view went away and came back would have a dead pump. With a queue and a signal, a tap made with no
+  pump running waits for the next one (`pump_drainsAsTapsAreMade`).
+- Why not `.task(id:)`, as the discard has: a new id cancels the call in flight.
+- **A refused change drops the taps queued behind it.** They were made on a page that never came to be ("+", "+",
+  check: logging at a weight the first "+" did not reach would be wrong). The alert says "Couldn't save that
+  change" / "Try again." / "OK". This is the one case where a tap is lost; criterion 7's "none is lost" is read as
+  holding while calls succeed. See open question 2.
+- `noLiveWorkout` and a cancellation are no failures, as for the discard. A tap made while a discard runs, or
+  after the cover began to close, is not queued; taps still queued when "Discard" is tapped are dropped.
+- No unstructured task: the source test's `unstructured` list still passes.
+
+### Decisions and deviations (every look the prototypes do not settle)
+
+1. **No card behind the exercise.** v2 draws the exercise on the ground; v1 on a white card. v2 is followed.
+2. **The TARGET line is v1's, drawn in v2's manner.** v2 has no target line; the criterion asks for one. It is a
+   label and a value on one line, like "Last", with no pill and **no orange** (v1's "TARGET" is orange; criterion
+   9 allows one accent). Both labels are `.label` in muted ink, both values `.caption` in secondary ink. At
+   accessibility sizes the value goes under its label.
+3. **The eyebrow "Exercise 2 of 5" is sentence case in muted ink** (v2), not `Eyebrow`'s capitals.
+4. **Orange.** The card adds none of its own. What is orange on the page is `LedgerDesign.SetRow`'s: the shown
+   row's number, its rule and its check's ring, and **the filled disc of every logged row** (v2: "orange fill when
+   done"). So criterion 9's "the page's one accent" holds for what calls for a tap, and the logged discs are a
+   second use of the colour, as v2 and the design system draw them. See open question 3.
+5. **"REMAINING" has no small number before each name** (v2 draws "2", "3", …): `HairlineRow` has no leading
+   column, and the header's segments place the exercise. Each row is one button, read "Incline DB Press, 3 × 11".
+6. **No swap button, no rest panel, no plate line**: S8, S6 and F25. No dead control is drawn.
+7. **"Repeat" is the outline `PillButton`** beside "Last"; without a last workout the line reads "No history yet"
+   and the button is not drawn.
+8. **"+ Add set" is the ghost `PillButton`, flush left** (v2: left-aligned text button), 44 pt high.
+9. **While a discard runs the whole page is disabled with one modifier**, so VoiceOver reads every stop of it as
+   dimmed, the texts too (the tree's table says so). The header disables its two buttons only, as in S4.
+10. **The set label and the reps are plain digits** (`String(n)`), as the Domain writes the weight beside them; they
+    are not catalog entries. A drop set's "D" is.
+11. **A row's number counts the rows that are not drop sets**, so a set added after a drop set reads "4" after "D",
+    not "5".
+12. **Units are the workout's** (`WorkoutState.units`, snapshotted at build time), for the column, the target, the
+    step and the spoken weight.
+13. **`WorkoutPresentation.screen` gained `calendar:`**: "Last" is `LastPerformance.line(units:calendar:)`, whose day
+    depends on the time zone, and an ambient calendar is forbidden. The store reads `@Dependency(\.calendar)`.
+14. **A double tap on a check** logs once because the view sends `.log` for a row drawn open and `.unlog` for one
+    drawn logged: a second tap made before the first was drawn finds the set logged and does nothing. A second tap
+    made after the row was redrawn is an un-log, as in the prototype; no time-based guard exists or is wanted.
+15. **Deviation from the plan's file list**: `SetRowList` and `RemainingList` exist as listed; `WorkoutPage`,
+    `WorkoutEdit`, `WorkoutPageModel`, `WorkoutAction` and `WorkoutCopy+Card` are additional files (sizes and the
+    lint's limits).
+
+### What a day with a superset draws
+
+The engine already runs rounds, so nothing logs wrongly; what is drawn is not yet a superset. Each member is drawn
+as its own card ("Exercise 4 of 5", rows "1", "2", "3", its own target and "Last"). Logging A's set moves the
+engine's cursor to B's (rule 20), so **the card switches to the other member after every set**, and the header's
+current segment with it; the group's rest is the engine's (it starts after B). "Repeat", "+ Add set" and the
+steppers act on the member shown. Not drawn: "Superset · block 2 of 4", "Round 2 of 3", the legend, "Rest 1:15
+after B", the labels "A1"/"B1"/"AD". The Debug sample (Upper A) ends with such a pair: Lat Pulldown and Cable
+Lateral Raise. S9 replaces the two cards with the block.
+
+### The page's VoiceOver tree
+
+Pinned by `WorkoutAccessibilityTests.tree_isExactlyTheTable` for the eight preview states at light `.large` and
+dark `.accessibility3`, from `WorkoutParts` (the header over the page, no scroll view). After the header's five
+stops (S4's table):
+
+| # | Stop | Label | Value | Traits |
+|---|---|---|---|---|
+| 6 | the place | "Exercise 1 of 5" | | static text |
+| 7 | the name | "Barbell Bench Press" | | header, static text |
+| 8 | the target, one stop | "TARGET, 5 × 5 @ 200 lb · RPE 8" | | static text |
+| 9 | the last workout, one stop | "Last, Sep 9 · 5×5 @ 195 lb" or "Last, No history yet" | | static text |
+| 10 | Repeat (only with a last workout) | "Repeat" | | button |
+| 11 | the column headings, one stop | "#, lb, reps" | | static text |
+| per set | the row | "Set 1, 200 pounds, 5 reps" ("Drop set, 8.75 kilograms, 16 reps") | "Done", "Current set" or "Pending" | button |
+| per set | its check | "Log set 1" / "Undo set 1" ("Log drop set" / "Undo drop set") | "Done" once logged | button, selected once logged |
+| after the shown row | the weight stepper | "5 LB" | "200 pounds" | adjustable |
+| after the shown row | the reps stepper | "1 REP" | "5 reps" | adjustable |
+| | add | "+ Add set" | | button |
+| | the list's heading | "REMAINING" | | header, static text |
+| per remaining exercise | its row | "Incline DB Press, 3 × 11" | | button |
+
+While a discard runs every stop of the page also carries "not enabled". The row and its check are the design
+system's two stops (`SetRow`); the brief's older "Set 2, 185 pounds, 5 reps, not done" is read as that row with
+its state as the value.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 1 the page | `WorkoutScreenTests` (one scroll view under the header; the header's tree and buttons in place with `outsideScrollViews: true`; the page scrolls at `.accessibility3`; loading and failed hold none); trees and references from `WorkoutParts`; UI `WorkoutLogging` |
+| 2 the card | `WorkoutPresentationCardTests` (word for word; no history; the calendar's zone; rows; steppers; drop set; kilograms; RPE 8.5); `WorkoutCopyTests.cardsTexts_areWordForWord` |
+| 3 logging | `WorkoutEditPlanTests.log_…`, `unlog_…`; `WorkoutStorePumpTests.doubleTapOnACheck_logsOnce`; `WorkoutStoreEditTests.log_sendsNoRestEvent`, `log_clearsTheChoice_unlogKeepsIt` |
+| 4 steppers | `WorkoutEditPlanTests.stepWeight_movesByTheDomainsStep` (8 equipment and unit pairs), `stepWeight_neverUnderZero`, `stepReps_movesByOne_neverUnderOne`, `step_onTheShownRow_…`, `step_onAnotherRow_selectsItFirst`, `step_onAnotherExercise_…`, `step_onALoggedRow_…`; `WorkoutStorePumpTests.stepOnAnotherRow_selectsItFirst`; `WorkoutAccessibilityTests.steppers_adjustTheShownRow` |
+| 5 repeat and add | `WorkoutEditPlanMoveTests.repeatLast_…`, `addSet_copiesTheLastRow`, `addSet_noRow_addsZeroByEight`; `WorkoutStoreEditTests.repeatLast_writesEverySet_keepsDoneFlags`, `addSet_appendsACopy_andTheSegmentWidens` |
+| 6 remaining | `WorkoutPresentationPageTests.remaining_…`; `WorkoutEditPlanMoveTests.jump_…`; `mixedTaps_areAppliedInOrder` (the jump); the UI test |
+| 7 in order, each once | `WorkoutStorePumpTests.twoQuickSteps_areTwoSteps`, `doubleTapOnACheck_logsOnce`, `mixedTaps_areAppliedInOrder`, `heldApply_laterTapsWaitTheirTurn` (the real host, an append held in the store), `pump_drainsAsTapsAreMade`; `FeatureWorkoutSourceTests.sources_startNoTaskOfTheirOwn` |
+| 8 a failed apply | `WorkoutStoreEditTests.refusedApply_isShown_andThePageStays` (the real host, an append refused), `applyAfterTheWorkoutEnded_isNoFailure`, `busyOrClosing_tapsDoNothing`; `WorkoutAccessibilityTests.discarding_sendsNothing`; `WorkoutPresentationCardTests`… `page_busy_isNotEnabled` |
+| 9 orange, labels, stops | the tree table; `buttons_sendTheirActions`, `steppers_adjustTheShownRow`; the references for the colour |
+| 10 sizes and settings | `WorkoutPageLayoutTests` (cut, inside the phone, no overlap, 44 pt; five text sizes × 375 and 402 pt × Bold Text × right to left; a long-words page; the two self-checks); `controls_haveA44PointTarget`; the `.accessibility3` and Increase Contrast references |
+| 11 words | `WorkoutCopyTests` (the card's texts, the spoken texts, `reps_takeTheCatalogsPluralForm` in nine locale cases, 54 keys); the gate's catalog step; the module audit |
+| 12 pure and total | `WorkoutPresentationPageTests.page_noExercise_isEmpty`, `card_noSet_hasNoRow`, `page_cursorNamesNoRow_listsEveryExercise` (five cursors), `page_choiceNamesNothing_fallsBack`, `card_exerciseNotStored_…`; `WorkoutEditPlanMoveTests.edit_namingNothing_comesToNothing` (twelve edits, two workouts); `FeatureWorkoutSourceTests` |
+
+**The cut-word check** (criterion 10; the idea of `ProgramViewsCutAdversarialTests`, which is not on `main`: read
+from commit `6ea83da`). `WorkoutLayoutProbe.cut` measures a part by itself with all the width it wants and on the
+page: narrower on the page and no taller means words were lost. It covers what this module lays out (the place,
+the name, the two facts, "Repeat", "+ Add set", each remaining row); a part it cannot find on the page is reported,
+not skipped. **Not covered**: the set rows' numerals and the steppers, which are `LedgerDesign`'s (a numeral too
+long for its column shrinks to half size by design before it would be cut).
+
+### Tests checked by breaking the code
+
+Each mutant was applied to the product code, `swift test --filter FeatureWorkoutTests` run on the Mac host, and the
+code restored; every one was caught.
+
+| Mutant | Tests that failed |
+|---|---|
+| the next tap is planned on what the stream shows, not on the last answer | `twoQuickSteps_areTwoSteps`, `doubleTapOnACheck_logsOnce`, `mixedTaps_areAppliedInOrder` |
+| a logged row can be logged again | `log_rowAlreadyLogged_comesToNothing`, `doubleTapOnACheck_logsOnce`, `heldApply_laterTapsWaitTheirTurn` |
+| a stepper never selects its row | `step_onAnotherRow_selectsItFirst`, `step_onAnotherExercise_selectsItFirst`, `stepOnAnotherRow_selectsItFirst` (store) |
+| a refusal keeps the taps behind it | `refusedApply_isShown_andThePageStays` |
+| the weight is not held at zero | `stepWeight_neverUnderZero` |
+| a count takes the lifter's plural rule | `reps_takeTheCatalogsPluralForm` |
+| "REMAINING" lists the shown exercise too | five, among them `remaining_listsTheLaterExercises`, `remaining_lastExercise_isNil` |
+| logging keeps the lifter's choice | `log_openRow_logsWhatTheRowReads`, `log_clearsTheChoice_unlogKeepsIt` |
+| a failed change shows no alert | `refusedApply_isShown_andThePageStays` |
+
+### Sanctioned edits to the tester's files
+
+Ruled by the orchestrator on 2026-10-09 before any was made; this slice's tester audits them. All in
+`Tests/FeatureWorkoutTests/Adversarial/`. `swiftformat` wrapped the lines that grew past 120 columns.
+
+| # | File and test | Old | New |
+|---|---|---|---|
+| 1 | `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` | `expected` ends `"It's still in progress. Try again."` | the same 27, then S5's 27 keys under a comment: `"TARGET"`, `"%lld × %lld @ %@ lb · RPE %@"`, `"%lld × %lld @ %@ kg · RPE %@"`, `"Last"`, `"No history yet"`, `"Repeat"`, `"#"`, `"reps"`, `"lb"`, `"kg"`, `"D"`, `"%@ LB"`, `"%@ KG"`, `"1 REP"`, `"+ Add set"`, `"REMAINING"`, `"%lld × %lld"`, `"Set %lld"`, `"Drop set"`, `"%@ pounds"`, `"%@ kilograms"`, `"%lld reps"`, `"Log set %lld"`, `"Undo set %lld"`, `"Log drop set"`, `"Undo drop set"`, `"Couldn't save that change"`. The test's name still says 27 |
+| 2 | `WorkoutWordsAdversarialTests.forbidden` | `".formatted(",` | `".formatted()", ".formatted(.",` |
+| 3 | `WorkoutCoverTreeAdversarialTests.screen(_:after:send:)` (used by `tree_liveWorkout`, `tree_fitsAtEverySize`, `tree_busy_buttonsAreDisabled`, `tree_activation`) | `WorkoutScreen(model: model, send: send)` | a `Group`: `WorkoutHeader(model: workout.header, send: send)` when the model is a workout, else the same `WorkoutScreen`; the environment and the 400 pt frame as before. Expectations unchanged |
+| 3 | `WorkoutElapsedAdversarialTests.header_anyStart` | `WorkoutScreen(model: model) { _ in }` | `WorkoutHeader(model: header) { _ in }`, with `guard let header = model.drawnHeader` (recording an issue) before the loop. Expectations unchanged |
+| 4 | `WorkoutPresentation.screen(…, locale: Fixtures.locale)` at **seven** call sites (I had counted six): `WorkoutCoverTreeAdversarialTests` 2, `WorkoutElapsedAdversarialTests` 1, `WorkoutHeaderAdversarialTests+Words` 4 | three arguments | `calendar: Fixtures.calendar` added |
+
+**Edit 2, shown.** With a file planted in `Sources/FeatureWorkout` holding `moment.formatted()` (a `Date`) and
+`count.formatted(.number)`, `sources_readNothingAmbient` failed with exactly
+`["TmpPlanted.swift:5: .formatted()", "TmpPlanted.swift:9: .formatted(."]`; with the file removed it passed, over
+sources that hold `Weight.formatted(in:)` six times. (`Date().formatted()` itself is also caught by the token
+`Date()`.)
+
+**The header in place** (the ruling's condition on edit 3): `WorkoutScreenTests.screen_headerInPlace_isItsTree`
+reads the header's five stops from the real `WorkoutScreen`, above its scroll view, with
+`outsideScrollViews: true`, for the six workout states at both appearances, and
+`screen_headerButtons_sendTheirActions` activates them there.
+
+### References
+
+Ten new, recorded by the library's default mode on the `PR` plan's iPhone 17 (iOS 27.0): the first run wrote them
+and failed, the next compared and passed. **No existing reference changed**: the five header references of S4 are
+still drawn from the header alone (`WorkoutParts(headerOnly: true)`) and passed unre-recorded.
+
+| File (`__Snapshots__/WorkoutSnapshotTests/`) | Shows |
+|---|---|
+| `cover_logging_matchesReferences.{light,dark}-{large,xLarge}.png` (4) | two rows logged, the shown row with its steppers, "Last" with "Repeat", "REMAINING" |
+| `cover_logging_accessibility3_matchesReference.dark-accessibility3.png` | the same at the largest size of the matrix: the facts and the steppers stacked |
+| `cover_logging_increasedContrast_matchesReference.light-large-increasedContrast.png` | the same with Increase Contrast |
+| `cover_dropSet_matchesReferences.{light,dark}-large.png` (2) | the last exercise in kilograms with a drop set "D"; nothing remains |
+| `cover_noHistory_matchesReferences.{light,dark}-large.png` (2) | "No history yet", no "Repeat" |
+
+The plan listed nine (it had `ExerciseCard` alone at `.xLarge`; the whole cover is drawn instead, and one with
+Increase Contrast is added for criterion 10). 744 kB in the folder, fifteen files.
+
+### Screenshots for the product owner
+
+`tasks/features/F10-active-workout/screenshots/s5/` (fifteen files). From the running app, the Debug sample
+workout, taken by the UI test's attachments on the final build, light and then dark (the simulator's appearance
+set to dark for one run and set back): `app-started-*`, `app-one-set-logged-*` (a logged row at 190 × 4 after two
+"+" and one "−", the shown row with its steppers), `app-after-jump-*` (Lat Pulldown, reached from "REMAINING"),
+`app-accessibility3-*` and `app-accessibility3-last-exercise-*` (the `AccessibilityXL` text size). The app's
+screenshots were scaled to 1310 px high. Copies of five references: `reference-logging-{light,dark}.png`,
+`reference-logging-accessibility3-dark.png`, `reference-drop-set-kg-light.png`, `reference-no-history-dark.png`.
+"Repeat" is only in the references: the sample runs on a fresh database, where no exercise has a last workout.
+
+### Every text not given by the brief
+
+The brief's, word for word (15 keys): "TARGET", "%lld × %lld @ %@ lb · RPE %@", "Last", "No history yet", "Repeat",
+"#", "lb", "kg", "reps", "D", "%@ LB", "%@ KG", "1 REP", "+ Add set", "REMAINING", "%lld × %lld" (16 with the last).
+
+Mine, for the product owner's copy review (11 keys):
+
+| Text | When it shows |
+|---|---|
+| "%lld × %lld @ %@ kg · RPE %@" | the target line in kilograms (the brief writes the pounds form only) |
+| "Set %lld" | spoken only: the start of a row's name, "Set 2, 185 pounds, 5 reps" |
+| "Drop set" | spoken only: the same for a drop set, which has no number |
+| "%@ pounds" / "%@ kilograms" | spoken only: a row's weight, and the weight stepper's value |
+| "%lld reps" (one: "%lld rep") | spoken only: a row's reps, and the reps stepper's value |
+| "Log set %lld" / "Undo set %lld" | spoken only: a row's check (the brief's non-functional section and the S1 amendment give these words) |
+| "Log drop set" / "Undo drop set" | spoken only: a drop set's check (`LedgerDesign`'s gallery uses the first) |
+| "Couldn't save that change" | alert title: the session refused a tap's change. Its message is the existing "Try again.", its button the existing "OK" |
+
+The spoken join ", " between a row's three parts is not a catalog entry.
+
+### Product lines per file
+
+877 in total (plan 485; the orchestrator ruled one pull request on 2026-10-09, with the split presentation +
+store / views taken if a fix round passes about 1,000). Non-blank, non-comment lines, against `fc8a38f`.
+
+| File | Lines | Change |
+|---|---|---|
+| `FeatureWorkout/WorkoutCopy+Card.swift` | 167 | new |
+| `FeatureWorkout/WorkoutEdit.swift` | 162 | new |
+| `FeatureWorkout/WorkoutPresentation+Card.swift` | 153 | new |
+| `FeatureWorkout/WorkoutStore.swift` | 201 | +80 |
+| `FeatureWorkout/Views/ExerciseCard.swift` | 62 | new |
+| `FeatureWorkout/WorkoutPageModel.swift` | 56 | new |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 140 | +54 |
+| `FeatureWorkout/Views/SetRowList.swift` | 35 | new |
+| `FeatureWorkout/WorkoutAction.swift` | 21 | new (moved out of the store) |
+| `FeatureWorkout/Views/RemainingList.swift` | 21 | new |
+| `FeatureWorkout/Views/WorkoutPage.swift` | 21 | new |
+| `FeatureWorkout/WorkoutPresentation.swift` | 85 | +21 |
+| `FeatureWorkout/WorkoutRoot.swift` | 61 | +9 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 30 | +7 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 48 | +7 |
+| `FeatureWorkout/WorkoutModel.swift` | 43 | +1 |
+| **Total** | | **+877** |
+
+Where the overrun is: the copy file is 167 lines where the plan counted none (every key that carries a value needs
+its own member with its locale and its translator's comment); the pump with the planning of each tap is about 240
+where the plan had "handlers"; the previews are 54.
+
+### Open questions
+
+1. **A member of a superset is drawn as a solo card that switches after every set** (above). Recommendation:
+   accept until S9; the alternative, drawing no rows for a superset day, would make the Debug sample's last two
+   exercises impossible to log.
+2. **A refused change drops the taps queued behind it.** Recommendation: keep. The other reading of "none is
+   lost" would log a set at a weight the lifter did not see.
+3. **The logged rows' discs are orange** (decision 4). Recommendation: keep v2's look; if "orange once" is meant
+   strictly, the change is in `LedgerDesign.SetRowCheck`, not in this module.
+4. **Eleven texts are mine** (the table). "1 pounds" is possible in speech for a weight of exactly one: the weight
+   is a formatted text ("52.5"), which cannot pick a plural form. Recommendation: accept; no seed load is 1.
+5. **The un-logged row does not become the shown row** (rule 22, the prototype). After un-logging, the lifter taps
+   the row to bring the steppers to it. Recommendation: keep.
+6. **An exercise before the shown one cannot be reached from the page** while a later one is shown and has sets
+   left (spec: only later exercises are listed); it becomes the shown one again once the cursor's exercise is
+   finished. Recommendation: put it to Pete with S9, where the legend adds another way to jump.
+7. **`FeatureToday`'s counted texts** still take the lifter's plural rule (the brief's "separate chore"): not
+   touched.
+
+### Inputs for S6 (rest), S7 (finish), S9 (supersets)
+
+- **S6.** The rest panel floats over the page (v2): put it in `WorkoutScreen`'s `.workout` case as an overlay or
+  `safeAreaInset(edge: .bottom)` of the scroll view, and give `WorkoutPage` bottom room for it. The engine already
+  starts the rest on a log (`WorkoutState.rest` is set in the store's state today; nothing draws it). "+30s" and
+  "Skip rest" are two more `WorkoutEdit` cases whose plan is one event each; `restExtended` needs the tap's time,
+  which `WorkoutEditPlan.make` is already handed as `now`. Haptics go in `WorkoutStore.follow()`'s loop, as S4
+  said. The "next" line needs the shown row: `WorkoutPresentation.activeSet`.
+- **S7.** `WorkoutDialog` is where the finish sheet's state goes; the save follows the discard's shape
+  (`discardAttempt`, a `.task(id:)`), not the pump. Taps still queued when a save starts should be dropped, as
+  `startDiscard()` does. The line "%lld of %lld sets logged · %@ lb moved" has two numbers: one is the count that
+  picks the form, the other is passed as text (standards §7), and it takes `locale.forCountedText`, which is in
+  `WorkoutCopy+Card.swift` as a private extension: move it to `WorkoutCopy.swift` when a second file needs it.
+- **S9.** `WorkoutPresentation.page` is the one place that decides what a block draws: where
+  `SupersetRounds.blocks(in:)` gives a block of more than one member, build the block's model in place of `card`.
+  `shownExercise` should then name the block's current member for the header's segment. The plan of a tap needs no
+  change (rows are named by exercise index and set id); "REMAINING" should list blocks, not members. Swap (S8)
+  adds its button beside the title in `ExerciseCard`: the eleven whole-cover references change then, as the plan
+  says.
+- **The layout probe** (`Support/WorkoutLayoutProbe.swift`) takes any view and any list of parts: a new panel or
+  sheet adds its parts and one test.
+- **The UI test** `WorkoutLogging` leaves no workout running (it discards); S6 will see the rest panel over the
+  rows it taps, and should skip the rest or tap through it.
+
+### The runs
+
+2026-10-09, on the final code (commit `c490067`; only this file and the screenshots were added after it).
+Simulator runs through the lock, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 122 s (lint 74 s; host Domain and Persistence tests 1,223 in 186 suites) |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 209 tests in 29 suites passed (5 s). The snapshot, tree, layout and screen suites draw on iOS only |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 242 tests in 34 suites passed (54 s): mine and the tester's, with the four sanctioned edits |
+| `LedgerUITests/WorkoutLogging` by itself (`Nightly` plan, `-only-testing`) | 2 of 2 passed, twice (light 50 s, dark 50 s): the logging flow 33 s, the accessibility-size order 17 s |
+| `scripts/check.sh` (the full gate) | exit 0 in 827 s: lint 70 s, iOS build 10 s, catalogs (FeatureWorkout: 54 keys match the code), iOS tests 453 s, watchOS build 47 s, watchOS tests 243 s, coverage 2 s. FeatureWorkout 1,708 of 1,730 lines, 98.72 % (threshold 70 %) |
+| The nine mutants, the planted `.formatted()` file | Mac host, each caught (tables above) |
+
+Earlier red runs in this slice were of my tests, not of the code: a stop's traits while the page is disabled (the
+texts are dimmed too; the table was corrected), two self-checks of the layout probe, the pinned header's place
+(the reader's window is taller than the phone and centres the screen), and the UI test waiting for "Undo set 6"
+after the last set, when the card has already moved to the next exercise.
+
+### Not verified
+
+- The rest of the `Nightly` plan (the tester's `WorkoutAdversarial` and `WorkoutConflictAdversarial` UI tests, the
+  performance lanes) was not run; both tap identifiers this slice did not change, but both now meet a page under
+  the header.
+- CI: nothing is pushed.
+- VoiceOver on a device, text sizes above the two the UI test and the references use (the layout check goes to
+  `.accessibility5`), a refused change in the running app (no Debug row fails a store), kill and relaunch (F15).
+- Right to left and Bold Text are measured (frames), not looked at: no reference draws them.
+- "Repeat" in the running app: the sample has no history. It is covered by the store test and the references.
