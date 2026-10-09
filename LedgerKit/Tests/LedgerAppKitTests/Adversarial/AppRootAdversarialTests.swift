@@ -5,6 +5,9 @@ import LedgerSnapshotTesting
 import LedgerTestSupport
 import SwiftUI
 import Testing
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// F09 S1 adversarial round 1, criterion 6: the database-unavailable and idle states of the root are what they were
 /// on `main` (a526874), apart from criterion 4's sentence. The screen `main` drew is rebuilt here from
@@ -115,6 +118,38 @@ struct AppRootAdversarialTests {
                 AppRoot(composition: composition).accessibilityElements(outsideScrollViews: true)
             }
             #expect(elements.map(\.label) == [])
+
+            // F09 S5 adversarial round 1: what tells a ready root from an idle one now that neither has an
+            // element outside a scroll view. The ready root holds one page that scrolls, Today's, over the
+            // composition's own stores; the idle root holds none. (What Today then reads to VoiceOver is
+            // `TodayAccessibilityTests`' from the page, and the `Today` UI tests' in the running app.)
+            #expect(Self.pageScrollViews(in: AppRoot(composition: harness.composition())) == 0, "idle")
+            let ready = withTestDependencies {
+                composition.bind(&$0)
+            } operation: {
+                Self.pageScrollViews(in: AppRoot(composition: composition))
+            }
+            #expect(ready == 1, "ready: the shell on Today's root")
+        }
+
+        /// How many of SwiftUI's page scroll views `view` holds, hosted in a window of the phone's size. The
+        /// tab bar's own scroll views are not SwiftUI's hosting ones.
+        @MainActor
+        static func pageScrollViews(in view: some View) -> Int {
+            func count(_ view: UIView) -> Int {
+                let own = view is UIScrollView && String(describing: type(of: view)).contains("HostingScrollView")
+                return (own ? 1 : 0) + view.subviews.map(count).reduce(0, +)
+            }
+            let host = UIHostingController(rootView: view)
+            let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+            window.rootViewController = host
+            window.isHidden = false
+            defer {
+                window.isHidden = true
+                window.rootViewController = nil
+            }
+            host.view.layoutIfNeeded()
+            return count(host.view)
         }
     #endif
 }
