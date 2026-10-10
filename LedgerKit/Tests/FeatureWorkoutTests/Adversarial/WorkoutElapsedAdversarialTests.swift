@@ -60,16 +60,12 @@
                 locale: Fixtures.locale,
                 calendar: Fixtures.calendar
             )
-            // F10 S5 (sanctioned edit): the header alone; the screen now holds the page under it.
-            guard let header = model.drawnHeader else {
-                Issue.record("a live workout is not drawn as one")
-                return
-            }
+            // F10 S5: the real screen again (G2, round 1), read outside its scroll view: the pinned header.
             for timeline in [WorkoutTimeline.live, .fixed(at: Self.now)] {
-                let labels = WorkoutHeader(model: header) { _ in }
+                let labels = WorkoutScreen(model: model) { _ in }
                     .environment(\.workoutTimeline, timeline)
                     .frame(height: 400)
-                    .accessibilityElements()
+                    .accessibilityElements(outsideScrollViews: true)
                     .map(\.label)
                 #expect(labels.count == 5)
                 #expect(labels.dropFirst().first == "Elapsed time")

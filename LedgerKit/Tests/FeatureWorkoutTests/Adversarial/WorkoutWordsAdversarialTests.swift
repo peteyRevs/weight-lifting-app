@@ -117,9 +117,30 @@ struct WorkoutWordsAdversarialTests {
         "Calendar.autoupdatingCurrent", "Calendar(identifier", "Locale.current", "Locale.autoupdatingCurrent",
         "Locale(identifier", "TimeZone.current", "TimeZone.autoupdatingCurrent", "TimeZone(", "Timer", "DispatchQueue",
         "Task {", "Task(", "Task.detached", "Task.sleep", "ContinuousClock()", "SuspendingClock()", "UUID()",
-        "TimelineView", ".formatted()", ".formatted(.", "DateFormatter", "String(localized", "NSLocalizedString",
-        "LocalizedStringKey"
+        "TimelineView", ".formatted(", "DateFormatter", "String(localized", "NSLocalizedString", "LocalizedStringKey"
     ]
+
+    /// What a line of code is scanned as: its comment dropped, and the two injected spellings blanked.
+    /// `date.now` is the injected date (`@Dependency(\\.date)`), and `.formatted(in:` is the Domain's own
+    /// `Weight.formatted(in:)`, which reads nothing ambient. Every other `.formatted(` is forbidden again (G2,
+    /// F10 S5, the reviewer's S-4): `date.formatted(date:time:)` and `.formatted(style)` read the lifter's
+    /// locale, calendar and zone, and the two tokens of sanctioned edit 2 let both through.
+    nonisolated static func scanned(_ line: Substring) -> String {
+        (line.components(separatedBy: "//").first ?? "")
+            .replacingOccurrences(of: "date.now", with: "injected")
+            .replacingOccurrences(of: ".formatted(in:", with: ".domainFormat(in:")
+    }
+
+    @Test("The scan sees every ambient format, and passes the Domain's own", arguments: [
+        ("moment.formatted()", true), ("count.formatted(.number)", true),
+        ("moment.formatted(date: .abbreviated, time: .omitted)", true), ("moment.formatted(style)", true),
+        ("moment.formatted(Date.FormatStyle(date: .long))", true), ("set.weight.formatted(in: units)", false),
+        ("exercise.step.formatted(in: units) // .formatted()", false)
+    ])
+    func scan_seesAmbientFormats(line: String, isCaught: Bool) {
+        let code = Self.scanned(Substring(line))
+        #expect(Self.forbidden.contains { code.contains($0) } == isCaught)
+    }
 
     @Test("No source file reads an ambient clock, calendar, locale or zone, or starts a task")
     func sources_readNothingAmbient() throws {
@@ -128,11 +149,7 @@ struct WorkoutWordsAdversarialTests {
         var hits: [String] = []
         for (file, text) in sources.sorted(by: { $0.key < $1.key }) {
             for (number, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-                // `date.now` is the injected date (`@Dependency(\\.date)`), not the ambient one.
-                let code = (line.components(separatedBy: "//").first ?? "").replacingOccurrences(
-                    of: "date.now",
-                    with: "injected"
-                )
+                let code = Self.scanned(line)
                 for token in Self.forbidden where code.contains(token) {
                     if CopyAudit.isCopyFile(file), token == "String(localized" {
                         continue

@@ -4279,3 +4279,130 @@ after the last set, when the card has already moved to the next exercise.
   `.accessibility5`), a refused change in the running app (no Debug row fails a store), kill and relaunch (F15).
 - Right to left and Bold Text are measured (frames), not looked at: no reference draws them.
 - "Repeat" in the running app: the sample has no history. It is covered by the store test and the references.
+
+## Slice S5 — adversarial testing, round 1 (G2 tester, 2026-10-09)
+
+On `f0318dd`, in the worktree `F10-s5`. No product code was changed. New files carry `Adversarial` in their names;
+three of the S4 tester's files were edited (below). The round was interrupted once by a network outage; the state
+was read again from disk and every run listed under "The runs" was seen to its end afterwards. Paths are under
+`LedgerKit/Tests/FeatureWorkoutTests/Adversarial/` unless they start with `Apps/`.
+
+### What was attacked, and how
+
+| # | Attack | Where | Result |
+|---|---|---|---|
+| 1 | The pump | `WorkoutPumpAdversarialSession.swift` (`PumpSession`: the real engine behind gates; every call can wait before the engine or after it, a numbered call is refused, the stream is kept behind the answers and let on one update at a time, another hand changes the workout in between; `PumpBench`), `WorkoutPumpAdversarialTests.swift`, `…+Lifecycle.swift` | 16 seeded storms of 36 taps each (every kind, one in eight naming a row the workout does not hold) come to the same events, the same workout and the same choice as the same taps made one at a time; a change from elsewhere while a call waits, behind a lagging stream, and with nothing behind; an answer that returns after the page showed it; a refusal in the middle; a refused discard; a workout ended elsewhere before the page heard; a pump cancelled while a call waits. **Findings 1, 2, 3** |
+| 2 | The rules are the Domain's | `WorkoutRulesAdversarialLoggingTests.swift`, `WorkoutWalkAdversarialTests.swift` | the brief's table of steps written out, for 7 kinds of equipment × 2 units, against the event and the stepper's label; the floors through the engine (7.5 lb → 2.5 → 0, reps 2 → 1, five more taps send nothing); the workout's own step, not the equipment's of today; "+ Add set" after a drop set; "Repeat" over a drop set and a logged row, and without history; five solo exercises logged from the first check to the last by tapping only what the page shows (18 sets in rule 20's order, then no steppers, no list, no current segment); un-log after the end. All pass. **Finding 4** |
+| 3 | The presentation | `WorkoutPageAdversarialTests.swift` | kilograms, twelve rows, a drop set as the fifth (rows "1"–"4", "D", "5"–"11"), RPE 8.5, every text character for character; the day of "Last" under four calendars with the machine's zone moved under it; reps 1, 2, 5, 21 and 0 under en, ja, ru, pl, fr, ar and cy; 400 seeded broken workouts (no exercise, no set, cursor and choice anywhere from −2 to 6) give a page that does not trap and does not contradict itself (one shown row at most, the steppers on it and never on a logged row, the header's words equal to the card's place, the list exactly the later exercises); every tap on 200 of them comes to a plan. All pass |
+| 4 | A day with a superset | `WorkoutWalkAdversarialTests.swift` | Upper A's last two exercises walked round by round from the page: A1, B1, A2, B2, A3, B3; before every tap the card's place, name, target and rows, the header's words and current segment and the list name the same exercise, and every check logs the set its card showed at the weight its row read; a stepper, "+ Add set" and a jump to the second member change that member only. Nothing logs wrongly. What misleads is the reviewer's point and the implementer's question 1: the card changes after every set |
+| 5 | The views | `WorkoutPageViewsAdversarialTests.swift` (simulator) | my own trees for two states no preview draws (every set logged; a cursor that names no row), both appearances; each stop sends its own tap once; busy: all seven controls dimmed, none sends; the set rows' numerals at five sizes × 375 and 402 pt × Bold × right to left ("187.5"/"12", "102.5"/"10", "315"/"5", "47.5"/"15": none needs less than half its size, so none is cut; the check is shown to see a cut); orange by pixels in three states × two appearances: only inside the shown row and the logged rows. **Finding 5** |
+| 6 | The sanctioned edits | the S4 tester's files | below |
+| 7 | The nightly UI tests | `Apps/LedgerUITests` | `WorkoutAdversarial` and `WorkoutConflictAdversarial` pass on this tree unchanged. New: `Apps/LedgerUITests/WorkoutLoggingAdversarial.swift`. **Findings 5, 6** |
+| 8 | Mutation | 16 source changes | below |
+
+### Findings
+
+| # | Severity | What | Reproducing test (fails by design) |
+|---|---|---|---|
+| F10-S5-1 | bug, low to medium | **"Minimize" drops the taps that were still waiting**, without a word. `WorkoutStore.leave` empties the queue for every exit; the workout goes on after a Minimize, so a check tapped just before it is a set that is never logged. The store's own text says nothing is dropped but behind a refusal. It needs a call still under way when Minimize is tapped (a slow write), so it is rare; when it happens it is a lost set | `WorkoutPumpAdversarialTests.minimize_keepsTheTapsMadeBeforeIt` |
+| F10-S5-2 | bug, latent | **A tap that waited for the next pump is planned on the workout as the cover last drew it.** When the cover's tasks start again the pump drains before the session's first update has arrived: the test's waiting check logs the set over the watch's log of it (300 lb × 1 becomes 185 × 5). No screen takes the cover's view away and brings it back with the same store today, so no lifter can reach it yet; the queue is kept across pumps for exactly that case, and it is the wrong thing to keep. Either drop the queue when a pump ends, or let a new pump wait for the stream's first update | `…pumpRestarted_plansOnTheNewestWorkout` (the same over 5 runs) |
+| F10-S5-3 | bug, latent | **The kept answer (`ahead`) outlives a follow that starts again.** It is given up only when the stream shows that very workout; a new stream starts with the session's newest workout, and after a change from elsewhere the kept one is never shown. Every later tap is then planned on it: "+" on a row the page reads 300 lb sends 195. Same precondition as finding 2. One line: forget `ahead` when `follow()` starts | `…followRestarted_forgetsTheOldAnswer` |
+| F10-S5-4 | bug, medium (the reviewer's S-1) | **A row of "REMAINING" can lead to a page with nothing to log and no way on.** The last exercise done first; the page returns to the first and still lists the last; a tap on it shows a card with every row done, no steppers and no list, with thirteen sets left | `WorkoutWalkAdversarialTests.jump_toAFinishedExercise_isNoDeadEnd` |
+| F10-S5-5 | bug, medium (the reviewer's S-2) | **The page keeps its scroll position when the shown exercise changes.** Hosted: the real screen at `.accessibility3` scrolled 250 pt stays at 250 after a jump (and, rightly, after a change within the exercise). In the app at the `AccessibilityXL` size: after a tap on the last row of "REMAINING" the name's top is at y 114, the scroll view's at 219; neither the name nor "Exercise 5 of 5" can be touched | `WorkoutPageViewsAdversarialTests.scroll_returnsToTheTop_whenTheExerciseChanges` (PR lane); `Apps/…/WorkoutLoggingAdversarial.test_jumpFromRemaining_showsTheNewExercisesName` (nightly) |
+| F10-S5-6 | question for the product owner (the reviewer's S-3, decision 14) | **A second touch on a check after the row was redrawn un-logs the set.** The system's double tap (`doubleTap()`) logs once in the running app: its second touch comes before the redraw, and that test passes. Two separate touches on the same spot 0.78 s apart leave the set not logged, with the shown row already on the next. Where between the two a person's accidental second touch falls was not measured; the reviewer proposes a guard of about 0.6 s | `Apps/…/WorkoutLoggingAdversarial.test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (nightly) |
+
+Notes, with no failing test:
+
+- **N-a. A two-change tap is not stopped by Discard.** A stepper on a row that is not shown is two events; when
+  "Discard" is tapped between them the second is still sent. With a host that takes its calls in order it lands
+  before the discard or is answered `noLiveWorkout`; harmless.
+- **N-b. A tap can be lost if a discard is refused while an older call is still out** (`queue.dropFirst()` after
+  the queue was emptied and filled again). Not reachable on a session that takes its calls one at a time, as the
+  protocol says a client does; `PumpSession` could show it, and I did not write it.
+- **N-c. After a refusal of a tap's second change the lifter's earlier choice stands** while the engine's cursor
+  has moved to the row the tap named. The next log names its own row, so nothing is logged wrongly.
+- **N-d. Digits.** "Exercise 2 of 5" and "5 × 5" take the injected locale's digits (S4's ruling), the weight,
+  the RPE, the row labels and the reps are plain digits, so under `ar_EG` one target line would mix both. Read
+  in the code, not run. English is the only language shipped.
+- **N-e. The list's "3 × 15" counts rows, drop sets included**, so an exercise prescribed 3 × 15 with a drop set
+  reads "4 × 15" in "REMAINING" and "3 × 15 @ …" on its card. The notes say rule 26; the brief's "5 × 5" does not
+  say which.
+
+### The sanctioned edits
+
+| # | Verdict | What I did |
+|---|---|---|
+| 1 catalog keys | not weaker: still exactly the 54 keys | nothing (the test's title still says 27) |
+| 2 `forbidden` | **weaker**: `date.formatted(date:time:)`, `.formatted(style)` passed (the reviewer's S-4) | `WorkoutWordsAdversarialTests`: `".formatted("` is back; the scan blanks the Domain's `.formatted(in:` as it blanks `date.now` (`scanned(_:)`); new `scan_seesAmbientFormats` with seven lines, five caught and two passed. The module's sources pass |
+| 3 the header alone | **weaker**: the header was drawn without the screen's insets, 32 pt wider than the cover draws it, so `tree_fitsAtEverySize` measured an easier layout, and four tests no longer met the real screen | `WorkoutCoverTreeAdversarialTests.screen(_:after:send:)` and `WorkoutElapsedAdversarialTests.header_anyStart` draw `WorkoutScreen` again and read it with `outsideScrollViews: true`: the pinned header in place. Expectations unchanged; all pass |
+| 4 `calendar:` | not weaker | nothing |
+
+### Mutation
+
+Each change applied to the product code, `swift test --filter FeatureWorkoutTests` on the Mac host, the file
+restored from a scratchpad copy. "Existing" is every test that was on the branch before this round.
+
+| # | Mutant | Existing tests | This round's tests |
+|---|---|---|---|
+| M1 | the stream never clears the kept answer | **missed** | `changeElsewhere_shownBeforeTheNextTap` |
+| M2 | every answer is kept, shown or not | **missed** | `answerAfterThePageShowedIt_isNotKept` (written for it) |
+| M3 | "Discard" keeps the waiting taps | **missed** | `refusedDiscard_thePageAnswersAgain` (strengthened for it) |
+| M4 | a workout ended elsewhere is shown as a failed change | **missed** | `endedElsewhere_beforeThePageHeard` (written for it) |
+| M5 | a cancelled call is shown as a failed change | **missed** | `pumpCancelled_whileACallWaits` |
+| M6 | un-logging gives up the lifter's choice | caught (1) | – |
+| M7 | "+ Add set" copies the first row | caught (1) | caught |
+| M8 | "Repeat" takes the last workout's set count as reps | caught (2) | caught |
+| M9 | a jump lands on the first row, logged or not | caught (2) | – |
+| M10 | the shown row ignores the lifter's choice | caught (1) | – |
+| M11 | a drop set takes a number | caught (1) | caught (2) |
+| M12 | "REMAINING" counts the prescribed sets | caught (2) | – |
+| M13 | the weight moves by the equipment's step of today | **missed** | `stepWeight_isTheWorkoutsOwnStep` |
+| M14 | the header's current segment ignores the choice | caught (1) | – |
+| M15 | a set is logged at the prescribed load | caught (2) | caught |
+| M16 | a tap never changes the lifter's choice | caught (2) | – |
+
+Six of sixteen were missed by the existing tests, five of them in `WorkoutStore`'s handling of `ahead`, of an end
+and of a cancellation (the reviewer's S-6); all sixteen are caught now. M6, M9, M10, M12, M14 and M16 are caught
+by the implementer's tests alone. No view was mutated: a view's mutant needs a simulator run each.
+
+### Questions
+
+1. Finding 6: is a guard wanted, and how long?
+2. Finding 1: should the taps waiting at a Minimize be applied before the cover closes, or after it by a task
+   that outlives the view (the source rule forbids one today)?
+3. Findings 2 and 3 share one precondition that no screen meets yet. Fix now (two small changes), or record for
+   the slice that first covers the cover?
+4. N-e: rows or prescribed sets in "REMAINING"?
+
+### What I did not attack
+
+- VoiceOver on a device; Increase Contrast beyond the implementer's reference; text sizes between the five of
+  the sweep; a watch.
+- The stepper pills' two halves one by one: VoiceOver sees a pill as one stop, and the halves cannot be measured
+  through it. `ledgerHitTarget` gives each a 44 pt minimum by construction, and the implementer's sweep holds the
+  pills inside the phone and apart for "5 LB" and "1.25 KG".
+- A numeral longer than five characters ("1247.5") at the accessibility sizes: `SetRow` would cut it; no load
+  of the seed reaches it.
+- The real host under the storms: `PumpSession` wraps the engine, not `LocalWorkoutSessionActor`. The
+  implementer's `heldApply_laterTapsWaitTheirTurn` and `refusedApply_isShown_andThePageStays` run on the host.
+- A refused change in the running app (no Debug row fails a store), kill and relaunch (F15).
+- View mutants; `LedgerDesign`'s own components beyond what the page draws with them.
+- The scroll test spins the run loop for 0.1 s to let SwiftUI settle; it is the one place this round reads a
+  clock.
+
+### The runs
+
+On the final tests, product code as at `f0318dd`. Simulator runs through the lock, iPhone 17 (iOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | OK in 130 s (lint 76 s, host tests 54 s) |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 240 tests in 33 suites; **4 tests fail, 5 issues**: findings 1, 2 (two issues), 3 and 4. Before this round: 209 in 29, all passing. The pump and walk suites repeated 5 times: the same 4 each time |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 280 tests in 39 suites; **5 tests fail, 6 issues**: the four above and finding 5's hosted test. The S4 tester's suites pass with sanctioned edits 2 and 3 restored |
+| `LedgerUITests` `WorkoutAdversarial`, `WorkoutConflictAdversarial`, `WorkoutLogging` (`Nightly` plan) | 4 of 4 pass, the first two unchanged on this tree (33 s and 55 s) |
+| `LedgerUITests/WorkoutLoggingAdversarial` (`Nightly` plan) | 3 tests; `test_doubleTapOnACheck_logsTheSetOnce` passes; **2 fail**: `test_jumpFromRemaining_showsTheNewExercisesName` (finding 5) and `test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (finding 6) |
+| 16 mutants (Mac host) | table above; every product file restored, `git status` shows none changed |
+
+An earlier red run of mine was the test's, not the code's: the orange check compared the image's lines with
+frames the reader had placed elsewhere in its window (a marker over the page now gives its top), and the second
+touch of finding 6's test was first aimed at an element that no longer existed.
