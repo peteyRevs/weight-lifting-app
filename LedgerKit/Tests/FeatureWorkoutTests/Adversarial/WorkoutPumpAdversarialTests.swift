@@ -68,8 +68,12 @@ struct WorkoutPumpAdversarialTests {
 
     /// The same taps in bursts: every call waits, more taps arrive while it does, and the stream is let on
     /// some updates at a time, so the page is behind the answers for most of them.
-    static func inAStorm(_ taps: [WorkoutEdit], seed: UInt64) async throws -> Outcome {
-        let bench = try await Bench.make(ticking: seed)
+    static func inAStorm(
+        _ taps: [WorkoutEdit],
+        seed: UInt64,
+        by steps: ClosedRange<Double> = 0 ... 0.4
+    ) async throws -> Outcome {
+        let bench = try await Bench.make(ticking: seed, by: steps)
         await bench.session.holdEveryApply()
         await bench.session.keepStreamsBehind()
         var generator = SplitMix64(seed: seed ^ 0xA5A5)

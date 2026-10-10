@@ -77,7 +77,16 @@ final class WorkoutLoggingAdversarial: XCTestCase {
         )
         XCTAssertEqual(XCTWaiter().wait(for: [reads], timeout: 5), .completed)
         attachScreenshot(of: app, named: "After a jump at an accessibility size")
-        let scroll = app.scrollViews.firstMatch.frame
+        // The cover's own page: Today's scroll view is still in the tree under the cover (since F09 S5), and
+        // comes first in it, so `scrollViews.firstMatch` was Today's (G2, F10 S6).
+        let pages = app.scrollViews.containing(.staticText, identifier: "workout.card.title")
+        XCTAssertEqual(pages.count, 1, "the cover's page is one scroll view")
+        let scroll = pages.firstMatch.frame
+        XCTAssertLessThanOrEqual(
+            app.buttons["workout.header.finish"].frame.maxY,
+            scroll.minY,
+            "the page is under the header"
+        )
         XCTAssertGreaterThanOrEqual(title.frame.minY, scroll.minY, "the name is above the page's top edge")
         XCTAssertTrue(title.isHittable, "the name of the exercise jumped to is not on screen")
         XCTAssertTrue(app.staticTexts["Exercise 5 of 5"].isHittable, "nor is its place")
