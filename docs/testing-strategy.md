@@ -52,7 +52,7 @@ Goals, in priority order:
   the row.
 - **Property-style tests** for `WorkoutEngine` (ADR-004) use a seeded RNG
   (`SeededGenerator` in `LedgerTestSupport`) and run `LEDGER_PROPERTY_SEED_COUNT`
-  seeds (PR: 200, nightly: 2,000): shuffle → same state (commutativity),
+  seeds (PR: 200, and the hosted `Check` job its first 40, `docs/ci-cd.md`; nightly: 2,000): shuffle → same state (commutativity),
   apply twice → same state (idempotence), `replay(log) == fold(reduce)`.
 - **Exit tests** (`#expect(processExitsWith:)`) run only on macOS, not on iOS
   simulators (R3 §2). Domain validates at construction with failable or
@@ -442,7 +442,10 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   matrix that multiplies its seeds by set-ups is cut the same way (F10 S3):
   the PR lane and `swift test` run a fixed list of seeds that a test of the
   suite shows to reach every case, on every set-up; the nightly lane runs
-  every seed of the lane, and never fewer than the fixed list. A test target
+  every seed of the lane, and never fewer than the fixed list. A test that
+  asks what its seeds reach (a control, "the property has teeth") must pass
+  on the first 40 seeds: PR CI gives every seeded test that many
+  (`TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT`, `docs/ci-cd.md`). A test target
   spells the check once (`TestLane.runsSlowTests`; `TestLane.isNightly` in
   LedgerSyncTests).
 

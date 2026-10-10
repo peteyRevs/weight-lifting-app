@@ -65,8 +65,22 @@ authoritative; the plan differs:
     PR's second run there.
   - *No `main` warm-up job.* One would cost about as much per merge as it saves on each PR's first run
     (notes). Revisit if most PRs get one run only.
-  - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 2,400 s; the step's timeout is 42 min and the job's 47.
-    A slow runner's cold iOS build took 1,104 s, and one run hit the old 1,500 s deadline only for that.
+  - *Seeds on the runner (2026-10-09; `tasks/chores/2026-10-09-pr-lane-time.md`).* `Check` sets
+    `TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT=40`. `xcodebuild` hands a `TEST_RUNNER_` variable to the test
+    runner without the prefix, and there it replaces the PR plan's `LEDGER_PROPERTY_SEED_COUNT` (200): every
+    seeded property runs its first 40 seeds on the runner. No test, test plan or tester's file changed. The
+    full local gate (§4) runs the plan's 200, the nightly its 2,000; to run what `Check` runs, export the
+    variable before `scripts/check.sh`. Why: the iOS test step took 855–1,497 s there on 2026-10-09 (419 s
+    on a developer Mac), tests run one at a time, and the 200-seed cases were about a fifth of it. Expected
+    after: 670–940 s on `main`, by each test's measured runner time and its new case count. 20 seeds fail
+    one control (`HLCConvergenceAdversarialTests.rawClocks_loseActions`, which looks for a lost action in
+    the seeds it is given); 30, 40 and 50 pass. The rest of the step is many small hosted-view and
+    text-size cases and the UI tests, which the seed count does not reach (the chore file lists them).
+  - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 2,520 s; the step's timeout is 44 min and the job's 49.
+    A PR's first run restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after
+    about 125 s of script tests. With 940 s of tests that is about 2,225 s, which leaves about 5 min. At
+    2,400 s two first runs of 2026-10-09 were interrupted in their tests with no test failing (builds of
+    1,140 and 1,145 s; the tests then needed 855 s and 1,497 s on the re-runs).
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
