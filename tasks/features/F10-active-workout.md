@@ -427,3 +427,97 @@ live workouts or a lost one. Rulings, which add to S4's eleven criteria:
     conflict dialog showed is still reported with the "discarded" text. It cannot happen on one phone; it can
     once the watch syncs. Proposed wording: "Your workout in progress has ended." A cursor that names no row
     leaves no segment current, as the tester pins.
+
+## Plan amendments — slice S5, logging the sets of a solo exercise (orchestrator, 2026-10-09)
+
+The plan's S5 alone (about 485 product lines planned; a presentation, views and a store in one slice have
+landed 40–60 % over plan, so past about 800 the implementer stops and reports, with the seam presentation +
+store / views as the split). Cut from `main`, which holds the cover, its header and the store that follows the
+session (S4). After this slice a lifter can log a workout of solo exercises set by set under the cover; rest,
+finish, swap and supersets come later and their buttons are not drawn yet (no dead button). The inputs are in
+the notes ("Inputs for S5", after S4's sections). The slice is accepted when:
+
+1. **The page** (convention of testing-strategy §2.5–§2.6): the header stays pinned and the body is
+   `ScrollView { WorkoutPage(model:) }`; trees and snapshots come from the page; the screen keeps its one
+   nightly UI test, which now logs sets.
+2. **The current exercise's card** (brief, "Copy (exact)"): the eyebrow "Exercise 2 of 5", the title, the
+   TARGET line "5 × 5 @ 185 lb · RPE 8", "Last" with the date and the scheme or "No history yet" (then no
+   "Repeat"), the column header "#", "lb" or "kg", "reps", one row per set ("1"…, "D" for a drop set), and
+   "+ Add set". Every string is final in the model (`WorkoutPresentation+Card`); pounds and kilograms.
+3. **Logging** (criterion 3 of the brief, without rest): the check on the shown row applies `setLogged`; the
+   row is drawn done; the cursor moves by rule 20 as the engine says; a done row's check un-logs it. The
+   store sends no rest event; the rest panel is S6's and nothing of it is drawn.
+4. **Steppers** (criterion 5): "+" and "−" on weight apply `setTargetChanged` by the Domain's step for the
+   exercise's equipment and the lifter's unit, never under 0; reps never under 1; a stepper on a row that is
+   not shown selects it first. The steps and limits are the Domain's; the presentation and the store add no
+   rule.
+5. **Repeat and add** (criterion 9): "Repeat" gives every set of the exercise the last workout's weight and
+   reps (done flags unchanged); "+ Add set" appends a copy of the last row with no drop flag, and the header's
+   segment for that exercise widens.
+6. **Remaining**: the list "REMAINING" of the exercises still to do with "5 × 5"; a tap jumps there.
+   Supersets are S9's: a workout that holds one draws its members as solo exercises would not be right, so
+   say in the report what this slice draws for such a day, and draw nothing that logs wrongly.
+7. **Taps are applied in order, each once** (the plan's pump): intents are synchronous; one task of the root
+   drains them; two quick "+" give two steps; a double tap on a check logs once; while an intent's work
+   awaits, later taps wait their turn and none is lost or applied to a stale workout. No unstructured task.
+8. **A failed apply** shows through the failure path S4 built (its alert and texts); the page stays as the
+   session last said. `isBusy` disables the page's controls as it does the header's.
+9. **Orange once** (criterion 13): the check on the shown row is the page's one accent; every icon-only
+   control has a spoken label; each set row is read as one stop with its controls as the design system's
+   set row does it; steppers are adjustable.
+10. **Sizes and settings**: nothing cut or overlapping at `.accessibility3`, Bold Text, Increase Contrast,
+    right to left, 375 and 402 pt; every target 44 pt. A check that can see a word cut inside its frame is
+    used (F11 S9's tester wrote one: `ProgramViewsCutAdversarialTests`; copy its idea).
+11. **Words**: `WorkoutCopy` and the module's catalog under standards §7; counted texts take their plural
+    form by the catalog's language, as `ProgramCopy`'s `Locale.forCountedText` does (bring the same fix to
+    this module's counted texts; `FeatureToday`'s is a separate chore). Texts the brief does not give are
+    listed for the product owner.
+12. **Pure and total**: the presentation reads no ambient clock, calendar, locale or zone; a workout with no
+    exercise, an exercise with no set, a slot whose exercise is not stored, a cursor at the end all give a
+    model and do not trap.
+
+**Not in this slice:** rest and haptics (S6), finish and the receipt (S7), swap (S8), supersets (S9), any
+change to the session engine's rules, `LedgerAppKit` beyond what the Debug rows need, the project file or a
+test plan.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer approved with six should-fix items; the tester found five bugs (two of them the reviewer's, two
+latent) and one question, left seven tests failing, and its 16 seeded storms of taps agree with the same taps
+made one at a time. Rulings, which add to S5's twelve criteria:
+
+13. **Criterion 7 is reworded.** Taps are applied in order, each once, planned at their turn on the newest
+    workout. A refused change drops the taps waiting behind it and says so through the alert (a set is never
+    logged at a weight the lifter did not see); nothing else drops a tap.
+14. **Minimize keeps the taps made before it** (F10-S5-1): taps still waiting when "Minimize" is tapped are
+    applied; the workout goes on and loses no set.
+15. **A restart plans on the newest workout** (F10-S5-2, -3): after the cover's tasks start again, a waiting
+    tap is planned on the session's current workout, not on the one last drawn, and an answer kept from
+    before the restart is forgotten.
+16. **"REMAINING" lists only what can be logged** (F10-S5-4, review S-1; criterion 6's own words): a later
+    exercise with no set left is not listed, so no jump leads to a page with nothing to do. Its "n × m"
+    counts the working sets, as the card's target line does, not the drop set (review N-9).
+17. **The page starts at the top when the shown exercise changes** (F10-S5-5, review S-2): after a jump or
+    the cursor's move to another exercise the eyebrow and the name are on screen at every text size.
+18. **A second touch does not undo a set just logged** (F10-S5-6, review S-3): an un-log within one second
+    of the set's `doneAt` is ignored, as a pure rule in the edit's plan using the moment `make` already
+    receives; no timer. After that second, the check un-logs as before. (One second and the rule itself are
+    listed for the product owner; the prototype has no guard.)
+19. **Room between the two facts** (review S-5, N-8): at every size "Last" stands nearer its own value than
+    the target's.
+20. **Housekeeping** (review N-2, N-4, N-10): the comments that contradict the code; the test name that
+    still says 27 keys.
+21. **Accepted as built:** the queue with a wake signal; a day with a superset as switching solo cards until
+    S9; "1 pounds" in speech; the look decisions; an un-logged row does not become the shown row.
+
+The tester's seven failing tests pass unedited. **For the product owner, with S9:** how a lifter goes back
+to an earlier or a finished exercise (the spec lists later ones only); whether orange on every logged row's
+disc and on the shown row's ring is the "once per surface" he wants (the design system's set row draws
+both). **For S7:** a refused change while the finish dialog is open (review N-1). **Chore:** the
+counted-text helper moves to a shared place with `FeatureToday`'s fix.
+
+**Criterion 13, amended after round 2** (orchestrator, 2026-10-10; F10-S5-7): two things drop waiting taps and
+no other: a refused change, and the session's updates ending (the failed screen, whose "Close" closes the
+cover). A call that never returns under "Minimize" is accepted as a hung discard is: no timeout. **For S9**
+(implementer's question): once the watch syncs, a chosen exercise whose every set is then logged elsewhere
+stays on screen with nothing to log; the choice should give way.

@@ -33,12 +33,21 @@
                 case let .workout(workout): kinds.append(workout.header.isEnabled ? "workout" : "busy")
                 }
             }
-            #expect(kinds == ["workout", "workout", "workout", "busy", "loading", "failed"])
+            #expect(kinds == ["workout", "workout", "workout", "workout", "workout", "busy", "loading", "failed"])
             // The time each case's header counts to, as the one formatter writes it.
             let elapsed = try [WorkoutPreview.started, .minutes, .hour].map { preview in
                 try ClockText.elapsed(preview.workout().elapsed(at: preview.now))
             }
             #expect(elapsed == ["0:00", "24:22", "1:01:05"])
+            // What the two states of the page are named for (F10 S5).
+            let logging = try #require(WorkoutPreview.logging.model.page?.card)
+            #expect(logging.rows.map(\.state) == [.done, .done, .active, .pending, .pending])
+            #expect(logging.repeatLast == "Repeat")
+            let dropSet = try #require(WorkoutPreview.dropSet.model.page)
+            #expect(dropSet.card?.rows.map(\.label) == ["1", "2", "3", "D"])
+            #expect(dropSet.card?.columns.weight == "kg")
+            #expect(dropSet.remaining == nil)
+            #expect(WorkoutPreview.started.model.page?.card?.last == "No history yet")
         }
     }
 #endif

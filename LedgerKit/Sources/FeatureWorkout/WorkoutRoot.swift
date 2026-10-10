@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The cover's content (F10 S4): the live workout as the session shows it, with the finish dialog and the
-/// alert of a discard that failed. It owns the store and runs its work: following the session for as long
-/// as the cover is up, and the discard, each from a `.task`, so both end with the view.
+/// The cover's content (F10 S4, S5): the live workout as the session shows it, with the finish dialog and the
+/// alerts of a discard and of a change that failed. It owns the store and runs its work: following the
+/// session and applying the page's taps for as long as the cover is up, and the discard, each from a
+/// `.task`, so all end with the view.
 ///
 /// It closes nothing itself. When the store says the cover is done (`WorkoutStore.exit`), `onExit` tells
 /// the launcher, which takes the cover down and hands the app its route.
@@ -24,6 +25,7 @@ struct WorkoutRoot: View {
     var body: some View {
         let finish = WorkoutPresentation.finishDialog
         let failure = WorkoutPresentation.discardFailedAlert
+        let refusal = WorkoutPresentation.editFailedAlert
         WorkoutScreen(model: store.model, send: store.send)
             .confirmationDialog(
                 finish.title,
@@ -42,8 +44,16 @@ struct WorkoutRoot: View {
             } message: {
                 Text(failure.message)
             }
+            .alert(refusal.title, isPresented: shows(.editFailed, else: .dismissFailure)) {
+                Button(refusal.dismiss) { store.send(.dismissFailure) }
+            } message: {
+                Text(refusal.message)
+            }
             .task {
                 await store.follow()
+            }
+            .task {
+                await store.pump()
             }
             .task(id: store.discardAttempt) {
                 await store.discard()

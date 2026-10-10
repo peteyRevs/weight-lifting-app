@@ -1,6 +1,139 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "#" : {
+      "comment" : "Heading of the column of set numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#"
+          }
+        }
+      }
+    },
+    "%@ KG" : {
+      "comment" : "The weight stepper's step, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ KG"
+          }
+        }
+      }
+    },
+    "%@ LB" : {
+      "comment" : "The weight stepper's step, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ LB"
+          }
+        }
+      }
+    },
+    "%@ kilograms" : {
+      "comment" : "Spoken weight, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kilograms"
+          }
+        }
+      }
+    },
+    "%@ pounds" : {
+      "comment" : "Spoken weight, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ pounds"
+          }
+        }
+      }
+    },
+    "%lld reps" : {
+      "comment" : "Spoken number of repetitions",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rep"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reps"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld × %lld" : {
+      "comment" : "An exercise's number of sets, then its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ kg · RPE %@" : {
+      "comment" : "What the program prescribes: sets, reps, the load in kilograms, then the effort from 5 to 10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ kg · RPE %@"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ lb · RPE %@" : {
+      "comment" : "What the program prescribes: sets, reps, the load in pounds, then the effort from 5 to 10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ lb · RPE %@"
+          }
+        }
+      }
+    },
+    "+ Add set" : {
+      "comment" : "Button that adds a set to the exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Add set"
+          }
+        }
+      }
+    },
+    "1 REP" : {
+      "comment" : "The reps stepper's step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 REP"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -52,6 +185,17 @@
         }
       }
     },
+    "Couldn't save that change" : {
+      "comment" : "Title of the alert shown when a tap on the workout could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save that change"
+          }
+        }
+      }
+    },
     "Couldn't start the new workout" : {
       "localizations" : {
         "en" : {
@@ -68,6 +212,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't start this workout"
+          }
+        }
+      }
+    },
+    "D" : {
+      "comment" : "A drop set's label in the column of set numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "D"
           }
         }
       }
@@ -90,6 +245,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Discard and start new"
+          }
+        }
+      }
+    },
+    "Drop set" : {
+      "comment" : "Spoken name of a drop set's row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set"
           }
         }
       }
@@ -159,6 +325,39 @@
         }
       }
     },
+    "Last" : {
+      "comment" : "Label before what was done in the last workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last"
+          }
+        }
+      }
+    },
+    "Log drop set" : {
+      "comment" : "Spoken label of the button that logs a drop set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log drop set"
+          }
+        }
+      }
+    },
+    "Log set %lld" : {
+      "comment" : "Spoken label of the button that logs a set: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log set %lld"
+          }
+        }
+      }
+    },
     "Minimize" : {
       "comment" : "Button that closes the workout screen and keeps the workout running",
       "localizations" : {
@@ -166,6 +365,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Minimize"
+          }
+        }
+      }
+    },
+    "No history yet" : {
+      "comment" : "Shown after Last for an exercise never logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No history yet"
           }
         }
       }
@@ -190,6 +400,28 @@
         }
       }
     },
+    "REMAINING" : {
+      "comment" : "Heading of the exercises still to come",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REMAINING"
+          }
+        }
+      }
+    },
+    "Repeat" : {
+      "comment" : "Button that gives every set the last workout's weight and reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeat"
+          }
+        }
+      }
+    },
     "Resume it" : {
       "comment" : "Opens the workout that is already running",
       "localizations" : {
@@ -197,6 +429,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Resume it"
+          }
+        }
+      }
+    },
+    "Set %lld" : {
+      "comment" : "Spoken name of a set's row: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld"
+          }
+        }
+      }
+    },
+    "TARGET" : {
+      "comment" : "Label before what the program prescribes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TARGET"
           }
         }
       }
@@ -227,6 +481,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Try again."
+          }
+        }
+      }
+    },
+    "Undo drop set" : {
+      "comment" : "Spoken label of the button that un-logs a drop set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo drop set"
+          }
+        }
+      }
+    },
+    "Undo set %lld" : {
+      "comment" : "Spoken label of the button that un-logs a set: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo set %lld"
           }
         }
       }
@@ -279,6 +555,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your workout in progress was kept."
+          }
+        }
+      }
+    },
+    "kg" : {
+      "comment" : "Kilograms, as a column heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kg"
+          }
+        }
+      }
+    },
+    "lb" : {
+      "comment" : "Pounds, as a column heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lb"
+          }
+        }
+      }
+    },
+    "reps" : {
+      "comment" : "Heading of the column of repetitions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reps"
           }
         }
       }

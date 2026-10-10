@@ -54,12 +54,18 @@
         func header_anyStart(seconds: Double) {
             var state = EventBuilders.seedSession()
             state.startedAt = Date(timeIntervalSinceReferenceDate: seconds)
-            let model = WorkoutPresentation.screen(.loaded(state), isBusy: false, locale: Fixtures.locale)
+            let model = WorkoutPresentation.screen(
+                .loaded(state),
+                isBusy: false,
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
+            )
+            // F10 S5: the real screen again (G2, round 1), read outside its scroll view: the pinned header.
             for timeline in [WorkoutTimeline.live, .fixed(at: Self.now)] {
                 let labels = WorkoutScreen(model: model) { _ in }
                     .environment(\.workoutTimeline, timeline)
                     .frame(height: 400)
-                    .accessibilityElements()
+                    .accessibilityElements(outsideScrollViews: true)
                     .map(\.label)
                 #expect(labels.count == 5)
                 #expect(labels.dropFirst().first == "Elapsed time")

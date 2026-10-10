@@ -17,8 +17,9 @@
             self.traits = traits.rawValue
         }
 
-        var isButton: Bool {
-            traits & UIAccessibilityTraits.button.rawValue != 0
+        /// A button or an adjustable stop: what must be a 44 pt target.
+        var isControl: Bool {
+            traits & (UIAccessibilityTraits.button.rawValue | UIAccessibilityTraits.adjustable.rawValue) != 0
         }
 
         var description: String {
@@ -39,10 +40,12 @@
         return "found \(found.count) stops, expected \(expected.count); the first one more is \(extra)"
     }
 
-    /// F10 S4, criteria 6 and 10: the cover's intended VoiceOver tree, as the implementation notes write it,
-    /// pinned exactly (the stops, their order, labels, values and traits), and what each control sends. Read
-    /// from the cover itself (`WorkoutScreen`, which holds no scroll view yet), through UIKit's accessibility
-    /// tree, as VoiceOver reads it, at the default text size and at the largest of the snapshot matrix.
+    /// F10 S4 criteria 6 and 10, S5 criteria 1, 9 and 10: the cover's intended VoiceOver tree, as the
+    /// implementation notes write it (`WorkoutTrees`), pinned exactly (the stops, their order, labels, values
+    /// and traits), and what each control sends. A live workout is read from its parts, the header over the
+    /// page without the scroll view (`WorkoutParts`); loading and the failed screen, which hold no scroll
+    /// view, from the screen itself. Read through UIKit's accessibility tree, as VoiceOver reads it, at the
+    /// default text size and at the largest of the snapshot matrix.
     @Suite("Workout accessibility", .serialized, .tags(.feature))
     struct WorkoutAccessibilityTests {
         nonisolated static let appearances = [
@@ -50,39 +53,16 @@
             SnapshotAppearance(.dark, .accessibility3)
         ]
 
-        /// The cover's tree with a workout on it: the header's row, left to right, then the workout's name
-        /// and its progress. The elapsed time is its name alone, with no time for VoiceOver to read stale.
-        static func workout(progress: String, isEnabled: Bool = true) -> [Stop] {
-            let button: UIAccessibilityTraits = isEnabled ? .button : [.button, .notEnabled]
-            return [
-                Stop("Minimize", button),
-                Stop("Elapsed time", []),
-                Stop("Finish", button),
-                Stop("Upper A — Push focus", [.header, .staticText]),
-                Stop("Workout progress", value: progress, [])
-            ]
-        }
-
-        static let trees: [WorkoutPreview: [Stop]] = [
-            .started: workout(progress: "Exercise 1 of 5"),
-            .minutes: workout(progress: "Exercise 2 of 5"),
-            .hour: workout(progress: "Exercise 5 of 5"),
-            .discarding: workout(progress: "Exercise 2 of 5", isEnabled: false),
-            .loading: [],
-            .failed: [
-                Stop("Couldn't open this workout", [.header, .staticText]),
-                Stop("Close this screen and try again.", .staticText),
-                Stop("Close", .button)
-            ]
-        ]
-
-        private static func screen(
+        @ViewBuilder
+        static func cover(
             _ preview: WorkoutPreview,
             send: @escaping (WorkoutAction) -> Void = { _ in }
         ) -> some View {
-            WorkoutScreen(model: preview.model, send: send)
-                .environment(\.workoutTimeline, .fixed(at: preview.now))
-                .frame(height: 874)
+            if case .workout = preview.model {
+                WorkoutParts(preview: preview, send: send)
+            } else {
+                WorkoutScreen(model: preview.model, send: send).frame(height: 874)
+            }
         }
 
         @Test(
@@ -91,29 +71,30 @@
         )
         func tree_isExactlyTheTable(_ preview: WorkoutPreview) throws {
             for appearance in Self.appearances {
-                let found = Self.screen(preview).accessibilityElements(appearance).map {
+                let found = Self.cover(preview).accessibilityElements(appearance).map {
                     Stop($0.label, value: $0.value, $0.traits)
                 }
-                let expected = try #require(Self.trees[preview], "no tree is written for this state")
+                let expected = try #require(WorkoutTrees.all[preview], "no tree is written for this state")
                 let difference = firstDifference(found: found, expected: expected)
                 #expect(difference == nil, "\(preview.rawValue) at \(appearance)")
             }
         }
 
         @Test(
-            "Every button's target is at least 44 by 44 points, and the header's row stays inside the screen",
+            "Every button and every stepper is a target of at least 44 by 44 points, inside the screen",
             arguments: WorkoutPreview.allCases
         )
-        func buttons_haveA44PointTarget(_ preview: WorkoutPreview) throws {
+        func controls_haveA44PointTarget(_ preview: WorkoutPreview) throws {
             for appearance in Self.appearances {
-                let elements = Self.screen(preview).accessibilityElements(appearance)
-                let buttons = elements.filter { $0.traits.contains(.button) }
-                #expect(try buttons.count == #require(Self.trees[preview]).count(where: \.isButton))
-                for button in buttons {
+                let elements = Self.cover(preview).accessibilityElements(appearance)
+                let controls = elements.filter { !$0.traits.isDisjoint(with: [.button, .adjustable]) }
+                let expected = try #require(WorkoutTrees.all[preview]).count(where: \.isControl)
+                #expect(controls.count == expected)
+                for control in controls {
                     // UIKit's conversion to window coordinates can report 44 pt as 43.999999999999886.
                     #expect(
-                        button.frame.width >= 44 - 0.001 && button.frame.height >= 44 - 0.001,
-                        "\(button.label) at \(appearance): \(button.frame.size)"
+                        control.frame.width >= 44 - 0.001 && control.frame.height >= 44 - 0.001,
+                        "\(control.label) at \(appearance): \(control.frame.size)"
                     )
                 }
                 for element in elements {
@@ -126,9 +107,9 @@
         }
 
         /// What activating every button of `preview`, in reading order, sends.
-        private static func sent(by preview: WorkoutPreview) -> [WorkoutAction] {
+        static func sent(by preview: WorkoutPreview) -> [WorkoutAction] {
             var sent: [WorkoutAction] = []
-            screen(preview) { sent.append($0) }.withAccessibilityElements { elements in
+            cover(preview) { sent.append($0) }.withAccessibilityElements { elements in
                 for element in elements where element.accessibilityTraits.contains(.button) {
                     _ = element.accessibilityActivate()
                 }
@@ -136,14 +117,55 @@
             return sent
         }
 
-        @Test("Minimize and Finish each send their own action, once")
-        func header_buttons_sendTheirActions() {
-            #expect(Self.sent(by: .minutes) == [.minimize, .finish])
+        @Test("Minimize and Finish each send their own action, once, and every control of the page sends its own edit")
+        func buttons_sendTheirActions() throws {
+            let workout = try WorkoutPreview.logging.workout()
+            let bench = workout.exercises[0].sets.map(\.id)
+            var expected: [WorkoutAction] = [.minimize, .finish, .edit(.repeatLast(exerciseIndex: 0))]
+            for (index, id) in bench.enumerated() {
+                expected.append(.edit(.select(exerciseIndex: 0, setID: id)))
+                expected.append(.edit(
+                    index < 2 ? .unlog(exerciseIndex: 0, setID: id) : .log(exerciseIndex: 0, setID: id)
+                ))
+            }
+            expected.append(.edit(.addSet(exerciseIndex: 0)))
+            expected += (1 ... 4).map { .edit(.jump(exerciseIndex: $0)) }
+            let sent = Self.sent(by: .logging)
+            #expect(sent.count == expected.count)
+            for (index, pair) in zip(sent, expected).enumerated() {
+                #expect(pair.0 == pair.1, "button \(index + 1) in reading order")
+            }
         }
 
-        @Test("While a discard runs neither button sends anything")
-        func header_discarding_sendsNothing() {
-            #expect(Self.sent(by: .discarding) == [])
+        @Test("Each stepper is adjustable: up adds a step to the shown row, down takes one away")
+        func steppers_adjustTheShownRow() throws {
+            let shown = try WorkoutPreview.logging.workout().exercises[0].sets[2].id
+            var sent: [WorkoutAction] = []
+            Self.cover(.logging) { sent.append($0) }.withAccessibilityElements { elements in
+                for element in elements where element.accessibilityTraits.contains(.adjustable) {
+                    element.accessibilityIncrement()
+                    element.accessibilityDecrement()
+                }
+            }
+            #expect(sent == [
+                .edit(.stepWeight(exerciseIndex: 0, setID: shown, .increment)),
+                .edit(.stepWeight(exerciseIndex: 0, setID: shown, .decrement)),
+                .edit(.stepReps(exerciseIndex: 0, setID: shown, .increment)),
+                .edit(.stepReps(exerciseIndex: 0, setID: shown, .decrement))
+            ])
+        }
+
+        @Test("While a discard runs no control of the header or of the page sends anything")
+        func discarding_sendsNothing() {
+            var sent: [WorkoutAction] = []
+            Self.cover(.discarding) { sent.append($0) }.withAccessibilityElements { elements in
+                for element in elements {
+                    _ = element.accessibilityActivate()
+                    element.accessibilityIncrement()
+                    element.accessibilityDecrement()
+                }
+            }
+            #expect(sent == [])
         }
 
         @Test("The failed screen's Close minimizes: the cover closes and the session is left alone")

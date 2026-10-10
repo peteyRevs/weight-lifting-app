@@ -26,7 +26,12 @@
         private func model(isBusy: Bool = false) -> WorkoutScreenModel {
             var state = EventBuilders.seedSession()
             state.name = "Upper A — Push focus"
-            return WorkoutPresentation.screen(.loaded(state), isBusy: isBusy, locale: Fixtures.locale)
+            return WorkoutPresentation.screen(
+                .loaded(state),
+                isBusy: isBusy,
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
+            )
         }
 
         private func screen(
@@ -34,6 +39,9 @@
             after seconds: TimeInterval = 0,
             send: @escaping (WorkoutAction) -> Void = { _ in }
         ) -> some View {
+            // F10 S5: the real screen again (G2, round 1). The sanctioned edit drew the header alone, without
+            // the screen's insets, so `tree_fitsAtEverySize` measured it 32 pt wider than the cover draws it.
+            // Every test here reads the stops outside the scroll view (`outside`): the pinned header, in place.
             WorkoutScreen(model: model, send: send)
                 .environment(\.workoutTimeline, .fixed(at: Self.start.addingTimeInterval(seconds)))
                 .frame(height: 400)
@@ -48,7 +56,7 @@
             arguments: [0.0, 1462, 3665]
         )
         func tree_liveWorkout(seconds: TimeInterval) {
-            let elements = screen(model(), after: seconds).accessibilityElements()
+            let elements = screen(model(), after: seconds).accessibilityElements(outsideScrollViews: true)
             #expect(rows(elements) == [
                 "Minimize||button",
                 "Elapsed time||-",
@@ -64,7 +72,10 @@
             DynamicTypeSize.large, .xxxLarge, .accessibility3, .accessibility5
         ])
         func tree_fitsAtEverySize(size: DynamicTypeSize) {
-            let elements = screen(model(), after: 3665).accessibilityElements(SnapshotAppearance(.light, size))
+            let elements = screen(model(), after: 3665).accessibilityElements(
+                SnapshotAppearance(.light, size),
+                outsideScrollViews: true
+            )
             #expect(elements.count == 5)
             let width = SnapshotConfig.phoneWidth
             for element in elements {
@@ -90,9 +101,10 @@
         func tree_busy_buttonsAreDisabled() {
             var sent: [WorkoutAction] = []
             let view = screen(model(isBusy: true)) { sent.append($0) }
-            let disabled = view.accessibilityElements().filter { $0.traits.contains(.notEnabled) }.map(\.label)
+            let disabled = view.accessibilityElements(outsideScrollViews: true)
+                .filter { $0.traits.contains(.notEnabled) }.map(\.label)
             #expect(disabled == ["Minimize", "Finish"])
-            view.withAccessibilityElements { elements in
+            view.withAccessibilityElements(outsideScrollViews: true) { elements in
                 for element in elements {
                     _ = element.accessibilityActivate()
                 }
@@ -103,7 +115,7 @@
         @Test("Activating Minimize and Finish sends exactly those")
         func tree_activation() {
             var sent: [WorkoutAction] = []
-            screen(model()) { sent.append($0) }.withAccessibilityElements { elements in
+            screen(model()) { sent.append($0) }.withAccessibilityElements(outsideScrollViews: true) { elements in
                 for element in elements where element.accessibilityTraits.contains(.button) {
                     _ = element.accessibilityActivate()
                 }
@@ -113,7 +125,7 @@
 
         @Test("While the session has not said, the cover reads nothing")
         func tree_loading() {
-            #expect(screen(.loading).accessibilityElements().isEmpty)
+            #expect(screen(.loading).accessibilityElements(outsideScrollViews: true).isEmpty)
         }
 
         @Test("A cover that cannot show the workout says so and has one button, which closes it")
@@ -121,17 +133,18 @@
             let failed = WorkoutPresentation.screen(
                 .failed(WorkoutStoreError.updatesEnded),
                 isBusy: false,
-                locale: Fixtures.locale
+                locale: Fixtures.locale,
+                calendar: Fixtures.calendar
             )
             var sent: [WorkoutAction] = []
             let view = screen(failed) { sent.append($0) }
-            let elements = view.accessibilityElements()
+            let elements = view.accessibilityElements(outsideScrollViews: true)
             let spoken = elements.map(\.label).joined(separator: " ")
             #expect(spoken.contains("Couldn't open this workout"))
             #expect(spoken.contains("Close this screen and try again."))
             let buttons = elements.filter { $0.traits.contains(.button) }.map(\.label)
             #expect(buttons == ["Close"])
-            view.withAccessibilityElements { elements in
+            view.withAccessibilityElements(outsideScrollViews: true) { elements in
                 for element in elements where element.accessibilityTraits.contains(.button) {
                     _ = element.accessibilityActivate()
                 }
@@ -142,7 +155,7 @@
         /// The time alone, hosted without the header's label over it: what the timeline draws.
         private func drawn(start: Date, at moment: Date) -> String {
             let text = WorkoutTimeline.fixed(at: moment).elapsed(since: start)
-            return text.accessibilityElements().map(\.label).joined(separator: "¦")
+            return text.accessibilityElements(outsideScrollViews: true).map(\.label).joined(separator: "¦")
         }
 
         @Test("The elapsed time is drawn as the brief writes it", arguments: [

@@ -51,10 +51,65 @@ nonisolated struct WorkoutCopyTests {
         #expect(WorkoutCopy.exercise(2, of: 5, locale: Locale(identifier: "ar_EG")) == "Exercise ٢ of ٥")
     }
 
+    @Test("The card's texts are the brief's, word for word (F10 S5)")
+    func cardsTexts_areWordForWord() {
+        let locale = Fixtures.locale
+        #expect(WorkoutCopy.target == "TARGET")
+        #expect(WorkoutCopy
+            .targetPounds(sets: 5, reps: 5, load: "185", rpe: "8", locale: locale) == "5 × 5 @ 185 lb · RPE 8")
+        #expect(
+            WorkoutCopy.targetKilograms(sets: 3, reps: 12, load: "42.5", rpe: "8.5", locale: locale)
+                == "3 × 12 @ 42.5 kg · RPE 8.5"
+        )
+        #expect(WorkoutCopy.last == "Last")
+        #expect(WorkoutCopy.noHistoryYet == "No history yet")
+        #expect(WorkoutCopy.repeatLast == "Repeat")
+        #expect(WorkoutCopy.numberColumn == "#")
+        #expect(WorkoutCopy.repsColumn == "reps")
+        #expect(WorkoutCopy.unit(.lb) == "lb")
+        #expect(WorkoutCopy.unit(.kg) == "kg")
+        #expect(WorkoutCopy.dropSetLabel == "D")
+        #expect(WorkoutCopy.weightStep("5", units: .lb, locale: locale) == "5 LB")
+        #expect(WorkoutCopy.weightStep("1.25", units: .kg, locale: locale) == "1.25 KG")
+        #expect(WorkoutCopy.repStep == "1 REP")
+        #expect(WorkoutCopy.addSet == "+ Add set")
+        #expect(WorkoutCopy.remaining == "REMAINING")
+        #expect(WorkoutCopy.scheme(sets: 5, reps: 5, locale: locale) == "5 × 5")
+    }
+
+    @Test("The spoken texts and the failed change read as the notes list them (F10 S5)")
+    func spokenTexts_areTheNotes() {
+        let locale = Fixtures.locale
+        #expect(WorkoutCopy.spokenSet(2, locale: locale) == "Set 2")
+        #expect(WorkoutCopy.spokenDropSet == "Drop set")
+        #expect(WorkoutCopy.spokenWeight("185", units: .lb, locale: locale) == "185 pounds")
+        #expect(WorkoutCopy.spokenWeight("52.5", units: .kg, locale: locale) == "52.5 kilograms")
+        #expect(WorkoutCopy.logSet(2, locale: locale) == "Log set 2")
+        #expect(WorkoutCopy.undoSet(2, locale: locale) == "Undo set 2")
+        #expect(WorkoutCopy.logDropSet == "Log drop set")
+        #expect(WorkoutCopy.undoDropSet == "Undo drop set")
+        #expect(WorkoutCopy.couldNotSaveChange == "Couldn't save that change")
+    }
+
+    /// Criterion 11. The words are the catalog's, which holds English, so the form is English's whatever the
+    /// lifter's language: French counts 0 as one and Japanese has no singular, and with the lifter's own
+    /// locale the lookup gave "0 rep" and "1 reps". The digits stay the lifter's.
+    @Test(
+        "A count of reps takes its plural form by the catalog's language, and its digits by the lifter's",
+        arguments: [
+            ("en_US", 1, "1 rep"), ("en_US", 0, "0 reps"), ("en_US", 5, "5 reps"),
+            ("fr_FR", 0, "0 reps"), ("fr_FR", 1, "1 rep"), ("ja_JP", 1, "1 rep"), ("ru_RU", 21, "21 reps"),
+            ("ar_EG", 2, "٢ reps"), ("ar_EG", 1, "١ rep")
+        ]
+    )
+    func reps_takeTheCatalogsPluralForm(identifier: String, count: Int, wanted: String) {
+        #expect(WorkoutCopy.spokenReps(count, locale: Locale(identifier: identifier)) == wanted)
+    }
+
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 27)
+        #expect(catalog.keys.count == 54)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

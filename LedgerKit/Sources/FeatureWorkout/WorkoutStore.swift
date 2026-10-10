@@ -4,42 +4,26 @@ import LedgerDependencies
 import LedgerDomain
 import Observation
 
-/// What a tap on the cover asks for. The views send one of these and decide nothing; `WorkoutStore.send` is
-/// the one place that decides what it changes.
-nonisolated enum WorkoutAction: Equatable, Sendable {
-    /// "Minimize", and the failed screen's "Close".
-    case minimize
-    /// "Finish": asks, with the finish dialog.
-    case finish
-    /// The finish dialog's "Keep lifting", and the dialog going away by any other means.
-    case keepLifting
-    /// The finish dialog's "Discard".
-    case discard
-    /// The "OK" of a discard that failed.
-    case dismissFailure
-}
-
-/// Why the cover closes. Set once; `WorkoutRoot` hands it to the launcher.
-nonisolated enum WorkoutExit: Equatable, Sendable {
-    /// The app is told why (`WorkoutRoute`).
-    case route(WorkoutRoute)
-    /// The cover opened and no workout was live: there is nothing to tell the app.
-    case nothingToShow
-}
-
-/// Why the store cannot show the workout.
-nonisolated enum WorkoutStoreError: Error, Equatable {
-    /// The session's updates ended while the cover was up. A host never ends a stream; the key's stub does.
-    case updatesEnded
-}
-
 /// The store of the workout's cover (M1 store convention): the workout as the session last published it, the
-/// two dialogs the cover can show over itself, and the one piece of work it starts, the discard.
+/// row the lifter chose, the dialogs the cover can show over itself, and the work it starts: the discard, and
+/// the changes the page's taps ask for.
 ///
 /// It keeps no workout of its own. `follow()` listens to `WorkoutSessionClient.updates()` for as long as the
 /// cover is up, and every state it shows is one the session published; a workout that ends, by this cover's
 /// discard or by any other hand, closes the cover through `exit`. Intents are synchronous and only change
-/// state; `WorkoutRoot` runs `follow()` and `discard()` from its `.task`s, so nothing here outlives the view.
+/// state; `WorkoutRoot` runs `follow()`, `pump()` and `discard()` from its `.task`s, so nothing here outlives
+/// the view.
+///
+/// **The pump** (F10 S5 criteria 7 and 13 to 15). A tap on the page is queued by `send` and applied by
+/// `pump()`, one at a time and in the order the taps were made: each is planned at its turn on the newest
+/// workout (the session's answer to the tap before it, which can be ahead of what the stream has shown), so
+/// two quick "+" are two steps, and a second tap on a check finds the set logged and does nothing. Nothing is
+/// applied twice. Two things drop a tap: when the session refuses a change, the taps queued behind it are
+/// dropped with it and the alert says so, because they were made on a page that never came to be; and when
+/// the session's updates end, the taps still waiting go with the workout the failed screen replaces.
+/// "Discard" drops the taps of the workout it ends. "Minimize" drops none: the cover closes once the taps made before
+/// it are applied. Taps wait while the store is not following the session (the cover's tasks have not
+/// started, or are starting again), so none is planned on a workout older than the session's.
 ///
 /// **Making one does nothing.** `WorkoutRoot` makes a store each time SwiftUI evaluates the cover's content
 /// and `@State` keeps the first, so the initializer must stay empty.
@@ -49,75 +33,124 @@ nonisolated enum WorkoutStoreError: Error, Equatable {
 /// call's return as well, and not by Today, which reads the same stream.
 @MainActor @Observable
 final class WorkoutStore {
-    nonisolated enum Dialog: Equatable, Sendable {
-        /// "End workout?".
-        case finish
-        /// The discard was refused: the workout is still live.
-        case discardFailed
-    }
+    typealias Dialog = WorkoutDialog
 
     /// The live workout: `loading` until the session's first update, `failed` when its updates end.
     private(set) var workout = Loadable<WorkoutState>.idle
-    private(set) var dialog: Dialog?
+    /// (Set by the store alone; not `private(set)` because the pump is the store's extension in its own file.)
+    var dialog: Dialog?
     /// True from the tap on "Discard" until the session refuses it; once it succeeds the cover closes.
     private(set) var isDiscarding = false
     /// The discard the root's `.task(id:)` runs: each accepted tap on "Discard" makes the next.
     private(set) var discardAttempt = 0
     private(set) var exit: WorkoutExit?
+    /// "Minimize" was tapped while taps were still waiting: the cover closes with this once they are applied.
+    /// Until then nothing answers, as while a discard runs.
+    var exitWhenDrained: WorkoutExit?
+    /// The row the lifter chose, where it is not the engine's cursor; nil leaves the choice to the cursor.
+    var selection: WorkoutSelection?
     @ObservationIgnored private var isDiscardRunning = false
+    /// The taps waiting for the pump, oldest first. The one being applied stays at the front until it is done.
+    @ObservationIgnored var queue: [WorkoutEdit] = []
+    @ObservationIgnored var isDraining = false
+    /// Counts the times the queue was emptied as a whole, so a tap that was being applied meanwhile is not
+    /// taken off a queue that has since been filled with other taps.
+    @ObservationIgnored var queueEpoch = 0
+    /// True from the first update of the stream being followed until that stream is left: only then is the
+    /// workout on screen the session's, and only then are taps planned.
+    @ObservationIgnored var isHearingTheSession = false
+    /// Wakes `pump()` when a tap is queued; nil while no pump runs, and the tap then waits for the next.
+    @ObservationIgnored var wake: AsyncStream<Void>.Continuation?
+    /// The session's answer to the last change, until the stream has shown it: the workout the next tap is
+    /// planned on. A stream is not behind a call's return for long, but a second tap can come in between.
+    @ObservationIgnored var ahead: WorkoutState?
 
-    @ObservationIgnored @Dependency(\.workoutSession) private var session
-    @ObservationIgnored @Dependency(\.date) private var date
+    @ObservationIgnored @Dependency(\.workoutSession) var session
+    @ObservationIgnored @Dependency(\.date) var date
     @ObservationIgnored @Dependency(\.locale) private var locale
+    @ObservationIgnored @Dependency(\.calendar) private var calendar
+    @ObservationIgnored @Dependency(\.uuid) var uuid
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
 
     /// The injected logger under the module's own category (standards §8); a disabled logger stays disabled.
-    private var logger: LedgerLogger {
+    var logger: LedgerLogger {
         injectedLogger.category("workout")
     }
 
     /// What the screen draws.
     var model: WorkoutScreenModel {
-        WorkoutPresentation.screen(workout, isBusy: isDiscarding || exit != nil, locale: locale)
+        WorkoutPresentation.screen(
+            workout,
+            selection: selection,
+            isBusy: isDiscarding || exit != nil || exitWhenDrained != nil,
+            locale: locale,
+            calendar: calendar
+        )
     }
 
     // MARK: Intents
 
     func send(_ action: WorkoutAction) {
         // Nothing answers once the cover is closing, or while a discard runs.
-        guard exit == nil, !isDiscarding else {
+        guard exit == nil, exitWhenDrained == nil, !isDiscarding else {
             return
         }
         switch action {
         case .minimize:
-            leave(.route(.minimized))
+            minimize()
         case .finish:
-            if case .loaded = workout {
-                dialog = .finish
-            }
+            show(.finish)
         case .keepLifting:
-            if dialog == .finish {
-                dialog = nil
-            }
+            dismiss([.finish])
         case .discard:
-            // Not tied to the dialog's flag: its dismissal and its button's action arrive in either order.
-            if case .loaded = workout {
-                dialog = nil
-                isDiscarding = true
-                discardAttempt += 1
-            }
+            startDiscard()
         case .dismissFailure:
-            if dialog == .discardFailed {
-                dialog = nil
-            }
+            dismiss([.discardFailed, .editFailed])
+        case let .edit(edit):
+            enqueue(edit)
         }
     }
 
-    private func leave(_ reason: WorkoutExit) {
+    /// Whether a workout is on screen: only then is there something to finish, discard or change.
+    var isShowingWorkout: Bool {
+        if case .loaded = workout {
+            return true
+        }
+        return false
+    }
+
+    private func show(_ asked: Dialog) {
+        if isShowingWorkout {
+            dialog = asked
+        }
+    }
+
+    /// Takes the dialog down when it is one of `dialogs`.
+    private func dismiss(_ dialogs: [Dialog]) {
+        if let shown = dialog, dialogs.contains(shown) {
+            dialog = nil
+        }
+    }
+
+    /// Not tied to the dialog's flag: its dismissal and its button's action arrive in either order.
+    private func startDiscard() {
+        guard isShowingWorkout else {
+            return
+        }
+        dialog = nil
+        // A tap that was still waiting is not applied to a workout that is being discarded.
+        emptyQueue()
+        isDiscarding = true
+        discardAttempt += 1
+    }
+
+    func leave(_ reason: WorkoutExit) {
         guard exit == nil else {
             return
         }
         dialog = nil
+        emptyQueue()
+        exitWhenDrained = nil
         exit = reason
     }
 
@@ -131,21 +164,40 @@ final class WorkoutStore {
     /// The stream ends when the task is cancelled, because the cover went away: that is no failure. If it
     /// ends otherwise the store has lost its source and says so (`failed`), rather than leave a workout on
     /// screen that no longer follows the session.
+    ///
+    /// A follow that starts again starts from the session's workout as it stands (criterion 15): an answer
+    /// kept from before is forgotten, and the taps that waited are planned only once this stream's first
+    /// update has arrived.
     func follow() async {
         if case .idle = workout {
             workout = .loading
         }
+        ahead = nil
+        isHearingTheSession = false
+        defer { isHearingTheSession = false }
         for await update in await session.updates() {
             guard let live = update.live else {
                 leave(Self.exit(for: update.state))
                 return
             }
+            if live == ahead {
+                // The stream has caught up with the last change: from here it is the newest again.
+                ahead = nil
+            }
             workout = .loaded(live)
+            if !isHearingTheSession {
+                isHearingTheSession = true
+                wake?.yield()
+            }
         }
         guard !Task.isCancelled, exit == nil else {
             return
         }
         logger.log.error("The session's updates ended while the workout's cover was up")
+        // The store has lost its source: the taps still waiting are given up with it, and so is a "Minimize"
+        // that waited for them, so that the failed screen's "Close" closes the cover (F10-S5-7).
+        emptyQueue()
+        exitWhenDrained = nil
         workout = .failed(WorkoutStoreError.updatesEnded)
     }
 
