@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.9.0...v0.10.0) (2026-10-10)
+
+
+### Features
+
+* **program:** the views of the program builder and of the exercise library sheet (F11 S9) ([#49](https://github.com/peteyRevs/weight-lifting-app/issues/49)) ([abcf852](https://github.com/peteyRevs/weight-lifting-app/commit/abcf85269b8b21300a106973f3fb96da0cf1bccf))
+* **today:** Today is on screen in the app, with its store and wiring (F09 S5) ([#50](https://github.com/peteyRevs/weight-lifting-app/issues/50)) ([b4b5821](https://github.com/peteyRevs/weight-lifting-app/commit/b4b582162ba2d175c74e50f54d1e16640258b3c8))
+* **workout:** logging the sets of a solo exercise under the cover (F10 S5) ([#52](https://github.com/peteyRevs/weight-lifting-app/issues/52)) ([5e427ca](https://github.com/peteyRevs/weight-lifting-app/commit/5e427ca8610b0e43f45a90da7146d40a64ffb9ce))
+
 ## [0.9.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.8.0...v0.9.0) (2026-10-09)
 
 
