@@ -4998,7 +4998,7 @@ left, the set that comes next, "+30s" and "Skip rest"; at zero the phone plays `
 
 Product lines (Swift lines that are not blank or comment, under `LedgerKit/Sources` and `Apps/` product code,
 without `LedgerFakes` and `LedgerTestSupport`): **74** after the Domain, stubs, host and `LiveHaptics`; **372**
-after the store, the presentation, the copy and the panel; **402** at the end (the splits the lint's length limits asked for add file headers). The plan said about 385.
+after the store, the presentation, the copy and the panel; **394** at the end (the splits the lint's length limits asked for add file headers). The plan said about 385.
 
 ### How the time is kept (criterion 3 as amended)
 
