@@ -27,10 +27,15 @@ struct WorkoutEditPlanTests {
     }
 
     /// `state` with the rows `rows` of exercise `exercise` logged.
-    static func logged(_ rows: [Int], of exercise: Int, in state: WorkoutState = seed) -> WorkoutState {
+    static func logged(
+        _ rows: [Int],
+        of exercise: Int,
+        in state: WorkoutState = seed,
+        secondsAgo: TimeInterval = 0
+    ) -> WorkoutState {
         var state = state
         for row in rows {
-            state.exercises[exercise].sets[row].doneAt = Fixtures.now
+            state.exercises[exercise].sets[row].doneAt = Fixtures.now.addingTimeInterval(-secondsAgo)
         }
         return state
     }
@@ -74,16 +79,6 @@ struct WorkoutEditPlanTests {
         )
         #expect(plan.events == [])
         #expect(plan.selection == chosen)
-    }
-
-    @Test("The check of a logged row un-logs it and moves nothing")
-    func unlog_loggedRow_unlogsAndKeepsTheSelection() {
-        let chosen = WorkoutSelection(exerciseIndex: 0, setID: Self.set(0, 3))
-        let state = Self.logged([0, 1], of: 0)
-        let plan = Self.plan(.unlog(exerciseIndex: 0, setID: Self.set(0, 1)), in: state, selection: chosen)
-        #expect(plan.events == [.setUnlogged(exerciseIndex: 0, setID: Self.set(0, 1))])
-        #expect(plan.selection == chosen)
-        #expect(Self.plan(.unlog(exerciseIndex: 0, setID: Self.set(0, 2)), in: state).events == [])
     }
 
     // MARK: Criterion 4: steppers

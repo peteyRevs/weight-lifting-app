@@ -110,7 +110,10 @@ struct WorkoutStoreEditTests {
 
     @Test("Logging hands the shown row back to the engine's cursor; un-logging moves nothing")
     func log_clearsTheChoice_unlogKeepsIt() async throws {
-        let running = try Fixtures.seedSession()
+        var running = try Fixtures.seedSession()
+        // The first set was logged a minute ago; the engine's cursor is on the second.
+        running.exercises[0].sets[0].doneAt = Fixtures.now.addingTimeInterval(-60)
+        running.cursor = Cursor(exerciseIndex: 0, setIndex: 1)
         let bench = Pump.sets(0, of: running)
         let scene = try Scene.onFake(live: running)
         let (store, task) = await scene.following()
@@ -125,9 +128,9 @@ struct WorkoutStoreEditTests {
         // Rule 20: the next row that is not logged after the fourth is the fifth.
         await eventually { store.model.page?.card?.rows[4].state == .active }
 
-        store.send(.edit(.unlog(exerciseIndex: 0, setID: bench[3])))
+        store.send(.edit(.unlog(exerciseIndex: 0, setID: bench[0])))
         await store.drain()
-        await eventually { store.model.page?.card?.rows[3].state == .pending }
+        await eventually { store.model.page?.card?.rows[0].state == .pending }
         #expect(store.model.page?.card?.rows[4].state == .active, "rule 22")
         task.cancel()
     }

@@ -98,7 +98,7 @@ struct WorkoutStorePumpTests {
             .setTargetChanged(exerciseIndex: 0, setID: bench[2], weight: lighter, reps: nil),
             .setTargetChanged(exerciseIndex: 0, setID: bench[2], weight: nil, reps: more),
             .setLogged(exerciseIndex: 0, setID: bench[2], weight: lighter, reps: more, doneAt: Fixtures.now),
-            .setUnlogged(exerciseIndex: 0, setID: bench[2]),
+            // The un-log came in the same moment as the log: a second touch, which undoes nothing (criterion 18).
             .exerciseSelected(exerciseIndex: 3, setIndex: 0)
         ])
         #expect(store.selection == WorkoutSelection(exerciseIndex: 3, setID: Self.sets(3, of: running)[0]))

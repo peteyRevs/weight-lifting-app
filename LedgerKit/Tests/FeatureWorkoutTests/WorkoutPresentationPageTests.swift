@@ -71,33 +71,6 @@ struct WorkoutPresentationPageTests {
         #expect(try #require(Cards.page(state, selection: chosen).card).rows.map(\.state) == [.active, .done, .pending])
     }
 
-    // MARK: Criterion 6: remaining
-
-    @Test("REMAINING lists the exercises after the shown one, each with its rows and the reps of its first")
-    func remaining_listsTheLaterExercises() throws {
-        var state = EventBuilders.seedSession()
-        state.exercises[3].sets.append(
-            LoggedSet(
-                id: SetID(EventBuilders.uuid(0xADD)),
-                weight: .pounds(100),
-                reps: Reps(clamping: 12),
-                kind: .added
-            )
-        )
-        let chosen = WorkoutSelection(exerciseIndex: 1, setID: nil)
-        let remaining = try #require(Cards.page(state, selection: chosen).remaining)
-        #expect(remaining.title == "REMAINING")
-        #expect(remaining.rows.map(\.name) == ["Chest-Supported Row", "Lat Pulldown", "Cable Lateral Raise"])
-        #expect(remaining.rows.map(\.scheme) == ["4 × 8", "4 × 12", "3 × 15"])
-        #expect(remaining.rows.map(\.exerciseIndex) == [2, 3, 4])
-    }
-
-    @Test("On the last exercise nothing remains")
-    func remaining_lastExercise_isNil() {
-        let last = WorkoutSelection(exerciseIndex: 4, setID: nil)
-        #expect(Cards.page(EventBuilders.seedSession(), selection: last).remaining == nil)
-    }
-
     @Test("While a discard runs the page's controls are off, as the header's are")
     func page_busy_isNotEnabled() {
         #expect(Cards.page(EventBuilders.seedSession(), isBusy: true).isEnabled == false)
@@ -122,8 +95,8 @@ struct WorkoutPresentationPageTests {
         #expect(card.target == "3 × 10 @ 55 lb · RPE 8")
         #expect(card.rows.isEmpty)
         #expect(card.steppers == nil)
-        // In the list of those still to come it reads its target's reps, having no first set.
-        #expect(Cards.page(state).remaining?.rows.first?.scheme == "0 × 10")
+        // It has nothing to log, so the list of those still to come leaves it out.
+        #expect(Cards.page(state).remaining?.rows.map(\.exerciseIndex) == [2, 3, 4])
     }
 
     @Test(

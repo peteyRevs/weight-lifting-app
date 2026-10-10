@@ -40,12 +40,14 @@ final class WorkoutLogging: XCTestCase {
         // The last row logged, nothing of the bench press is left: the engine's cursor is on the next exercise.
         app.buttons["Log set 6"].tap()
         wait(for: title, toBe: "Incline DB Press")
+        XCTAssertTrue(title.isHittable, "the next exercise's name is on screen")
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 2 of 5")
         XCTAssertTrue(app.staticTexts["Exercise 2 of 5"].exists)
 
-        // A row of "REMAINING" jumps to its exercise.
+        // A row of "REMAINING" jumps to its exercise, whose name is on screen.
         app.buttons["workout.remaining.row.3"].tap()
         wait(for: title, toBe: "Lat Pulldown")
+        XCTAssertTrue(title.isHittable, "the name of the exercise jumped to is on screen")
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 4 of 5")
         XCTAssertTrue(app.buttons["Log set 1"].exists)
         attachScreenshot(of: app, named: "Workout page, after a jump")
@@ -80,11 +82,16 @@ final class WorkoutLogging: XCTestCase {
         wait(for: weight, toRead: "\(startWeight) pounds")
     }
 
-    /// A logged row's check un-logs it; logging it again logs it.
+    /// A logged row's check un-logs it; logging it again logs it. In the first second after a set is logged
+    /// its check ignores an un-log (a second touch must not take the set back), so the undo is tapped once
+    /// more if the first tap came inside that second.
     @MainActor
     private func undoAndLogAgain(in app: XCUIApplication) {
         let undo = app.buttons["Undo set 1"]
         undo.tap()
+        if !app.buttons["Log set 1"].waitForExistence(timeout: 2) {
+            undo.tap()
+        }
         XCTAssertTrue(app.buttons["Log set 1"].waitForExistence(timeout: 5))
         XCTAssertFalse(undo.exists)
         app.buttons["Log set 1"].tap()
@@ -126,6 +133,8 @@ final class WorkoutLogging: XCTestCase {
         // The last exercise's row is off screen: tapping it scrolls to it and jumps.
         app.buttons["workout.remaining.row.4"].tap()
         wait(for: app.staticTexts["workout.card.title"], toBe: "Cable Lateral Raise")
+        XCTAssertTrue(app.staticTexts["workout.card.title"].isHittable, "the page stands at its top after the jump")
+        XCTAssertTrue(app.staticTexts["Exercise 5 of 5"].isHittable)
         XCTAssertFalse(app.staticTexts["REMAINING"].exists, "nothing remains after the last exercise")
         XCTAssertTrue(app.buttons["workout.header.minimize"].isHittable, "the header stayed where it was")
         attachScreenshot(of: app, named: "Workout page, accessibility size, last exercise")

@@ -100,6 +100,24 @@
             }
         }
 
+        /// Criterion 19: the two facts are further from each other than a fact's label is from its own value
+        /// (`LedgerSpacing.xs`, where they stack), so "Last" is never read with the target's value above it.
+        @Test("Between the two facts there is more room than inside one, at every size and setting", arguments: sizes)
+        func facts_standApart(_ size: DynamicTypeSize) throws {
+            for preview in [WorkoutPreview.started, .logging] {
+                let model = try Self.page(preview)
+                let card = try #require(model.card)
+                let page = WorkoutPage(model: model) { _ in }
+                for setting in LayoutSetting.sweep(size) {
+                    let stops = setting.elements(of: page)
+                    let target = try #require(stops.first { $0.label == "\(card.targetLabel), \(card.target)" })
+                    let last = try #require(stops.first { $0.label == "\(card.lastLabel), \(card.last)" })
+                    let gap = last.frame.minY - target.frame.maxY
+                    #expect(gap >= LedgerSpacing.m - 0.5, "\(preview.rawValue), \(setting.testDescription): \(gap) pt")
+                }
+            }
+        }
+
         @Test("The check sees a fact that is cut, and passes one that wraps onto more lines")
         func check_seesACut() {
             let label = "Last"

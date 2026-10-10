@@ -11,6 +11,9 @@ import SwiftUI
 struct WorkoutScreen: View {
     let model: WorkoutScreenModel
     let send: (WorkoutAction) -> Void
+    /// Where the page stands. It moves only to return to the top when the shown exercise changes; a change
+    /// within an exercise leaves the page where the lifter scrolled it.
+    @State private var position = ScrollPosition(edge: .top)
 
     var body: some View {
         content
@@ -31,6 +34,11 @@ struct WorkoutScreen: View {
                     WorkoutPage(model: workout.page, send: send)
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .scrollPosition($position)
+                .onChange(of: workout.page.card?.exerciseIndex) {
+                    // Another exercise is shown: its place and name are at the page's top (criterion 17).
+                    position.scrollTo(edge: .top)
+                }
             }
         case let .failed(failed):
             EmptyState(failed.title, body: failed.message, actionTitle: failed.close) { send(.minimize) }

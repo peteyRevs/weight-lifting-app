@@ -12,7 +12,7 @@ nonisolated enum WorkoutEdit: Equatable, Sendable {
     /// The check of a row that was drawn not done. A second tap that was made before the first was drawn
     /// finds the row done and does nothing, so a double tap logs once.
     case log(exerciseIndex: Int, setID: SetID)
-    /// The check of a row that was drawn done.
+    /// The check of a row that was drawn done. Within a second of the set's logging it does nothing.
     case unlog(exerciseIndex: Int, setID: SetID)
     /// "−" or "+" on the weight, by the exercise's step.
     case stepWeight(exerciseIndex: Int, setID: SetID, SetRowSteppers.Direction)
@@ -48,8 +48,9 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
     /// to nothing: no event, and the selection as it was.
     ///
     /// The steps and their floors are the Domain's: a weight moves by the exercise's own step
-    /// (`Weight.advanced(bySteps:of:)`) and the engine holds it at zero; reps move by one through
-    /// `Reps(clamping:)`. A step that would change nothing sends nothing.
+    /// (`Weight.advanced(bySteps:of:)`) and is never under zero; reps move by one through `Reps(clamping:)`.
+    /// The engine holds a weight at zero too; the plan floors it as well so that it can see a step that
+    /// would change nothing, which sends nothing.
     static func make(
         _ edit: WorkoutEdit,
         in state: WorkoutState,
@@ -64,7 +65,7 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
         case let .log(exerciseIndex, setID):
             plan.log(setID, of: exerciseIndex, in: state, at: now)
         case let .unlog(exerciseIndex, setID):
-            plan.unlog(setID, of: exerciseIndex, in: state)
+            plan.unlog(setID, of: exerciseIndex, in: state, at: now)
         case let .stepWeight(exerciseIndex, setID, direction):
             plan.step(setID, of: exerciseIndex, in: state) { row in
                 let target = max(row.set.weight.advanced(bySteps: direction.steps, of: row.exercise.step), .zero)
@@ -102,11 +103,24 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
     }
 
     /// Rule 22: un-logging moves nothing, the selection included.
-    private mutating func unlog(_ setID: SetID, of exerciseIndex: Int, in state: WorkoutState) {
-        if let row = Row(setID, of: exerciseIndex, in: state), row.set.isDone {
-            events.append(.setUnlogged(exerciseIndex: exerciseIndex, setID: setID))
+    ///
+    /// A second touch does not undo a set that was only just logged (criterion 18): an un-log less than
+    /// `undoGuard` after the set's `doneAt` comes to nothing. The row is redrawn as logged between the two
+    /// touches of a slow double tap, and the second would otherwise take back the set the first logged,
+    /// with the shown row already moved on. The rule is of the two moments alone; nothing counts time.
+    private mutating func unlog(_ setID: SetID, of exerciseIndex: Int, in state: WorkoutState, at now: Date) {
+        guard let row = Row(setID, of: exerciseIndex, in: state), let doneAt = row.set.doneAt else {
+            return
         }
+        let sinceLogged = now.timeIntervalSince(doneAt)
+        if sinceLogged >= 0, sinceLogged < Self.undoGuard {
+            return
+        }
+        events.append(.setUnlogged(exerciseIndex: exerciseIndex, setID: setID))
     }
+
+    /// How long after a set is logged its check ignores an un-log: one second.
+    static let undoGuard: TimeInterval = 1
 
     /// Rule 25: every set takes the last workout's weight and reps. Without a last workout there is no
     /// "Repeat" to tap.
@@ -174,8 +188,9 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
         }
     }
 
-    /// The exercise becomes the shown one, at its first set that is not logged; with none left, it is shown
-    /// with no row selected, and the engine's cursor stays where it is.
+    /// The exercise becomes the shown one, at its first set that is not logged. With none left it is shown
+    /// with no row selected, and the engine's cursor stays where it is: "REMAINING" lists such an exercise
+    /// only when the page shows no exercise at all (criterion 16), and its card then offers "+ Add set".
     private mutating func jump(to exerciseIndex: Int, in state: WorkoutState) {
         guard state.exercises.indices.contains(exerciseIndex) else {
             return

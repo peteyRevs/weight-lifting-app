@@ -17,10 +17,9 @@ nonisolated extension WorkoutPresentation {
         selection: WorkoutSelection? = nil
     ) -> WorkoutHeaderModel {
         let shown = shownExercise(of: state, selection: selection)
-        let cursor = state.checkedCursor?.exerciseIndex
-        // Without a choice of the lifter's the current segment is S4's: none once every set is logged.
-        let chosen = selection.map(\.exerciseIndex).flatMap { state.exercises.indices.contains($0) ? $0 : nil }
-        let current = chosen ?? currentExercise(of: state.exercises, cursor: cursor)
+        // The shown exercise is the current one while it has a set to log: none is current once every set is
+        // logged, or when no exercise is shown.
+        let current = shown.flatMap { hasASetToLog(state.exercises[$0]) ? $0 : nil }
         return WorkoutHeaderModel(
             minimize: WorkoutCopy.minimize,
             finish: WorkoutCopy.finish,

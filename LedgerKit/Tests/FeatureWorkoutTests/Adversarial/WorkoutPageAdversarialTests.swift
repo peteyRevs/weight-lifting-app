@@ -72,7 +72,7 @@ struct WorkoutPageAdversarialTests {
         #expect("\(steppers.weight) / \(steppers.reps)" == "82.5 kilograms / 7 reps")
         #expect(card.addSet == "+ Add set")
         #expect(page.remaining?.title == "REMAINING")
-        #expect(page.remaining?.rows.map { "\($0.name), \($0.scheme)" } == ["Incline DB Press, 3 × 10"])
+        #expect(page.remaining?.rows.map { "\($0.name), \($0.scheme)" } == ["Incline DB Press, 2 × 10"])
     }
 
     @Test("The day of \"Last\" is the handed calendar's, whatever zone the machine is in", arguments: [
@@ -153,7 +153,11 @@ struct WorkoutPageAdversarialTests {
                 (card.steppers == nil) == exercise.sets.allSatisfy(\.isDone),
                 "seed \(seed): an open row, no steppers"
             )
-            #expect(listed == Array(state.exercises.indices.filter { $0 > card.exerciseIndex }), "seed \(seed)")
+            // F10 S5 fix round 1 (sanctioned edit, criterion 16): only the later exercises with a set not done.
+            let stillToDo = state.exercises.indices.filter { index in
+                index > card.exerciseIndex && state.exercises[index].sets.contains { !$0.isDone }
+            }
+            #expect(listed == Array(stillToDo), "seed \(seed)")
             #expect(header.progressValue == card.eyebrow, "seed \(seed)")
             #expect(zip(card.rows, exercise.sets).allSatisfy { ($0.state == .done) == $1.isDone }, "seed \(seed)")
         }

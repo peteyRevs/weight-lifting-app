@@ -8,7 +8,7 @@ nonisolated struct WorkoutPageModel: Equatable, Sendable {
     /// Nil when the workout shows no exercise: it has none, or its cursor names no row and nothing was
     /// chosen. "REMAINING" then lists every exercise, so each can still be reached.
     let card: ExerciseCardModel?
-    /// Nil when no exercise comes after the shown one.
+    /// Nil when no exercise after the shown one has a set left to log.
     let remaining: RemainingModel?
     /// False while a discard runs or the cover is closing: no control of the page answers.
     let isEnabled: Bool
@@ -80,7 +80,8 @@ nonisolated struct SteppersModel: Equatable, Sendable {
     let reps: String
 }
 
-/// "REMAINING": the exercises after the shown one, each a way to jump to it.
+/// "REMAINING": the exercises after the shown one that still have a set to log, each a way to jump to it;
+/// every exercise when none is shown.
 nonisolated struct RemainingModel: Equatable, Sendable {
     let title: String
     let rows: [Row]
@@ -89,7 +90,7 @@ nonisolated struct RemainingModel: Equatable, Sendable {
         /// The exercise's place in the workout.
         let exerciseIndex: Int
         let name: String
-        /// "3 × 10": its rows, and the reps of the first.
+        /// "3 × 10": its sets without a drop set, and the reps of the first.
         let scheme: String
 
         var id: Int {

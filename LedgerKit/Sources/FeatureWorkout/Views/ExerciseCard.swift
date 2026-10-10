@@ -22,9 +22,10 @@ struct ExerciseCard: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("workout.card.title")
             }
-            VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
+            // More room between the two facts than inside one (`FactLine` stacks with `xs`), so that at every
+            // size "Last" stands nearer its own value than the target's.
+            VStack(alignment: .leading, spacing: LedgerSpacing.m) {
                 FactLine(label: model.targetLabel, value: model.target)
-                    .ledgerHitTarget(alignment: .leading)
                 last
             }
             VStack(alignment: .leading, spacing: 0) {
@@ -48,7 +49,6 @@ struct ExerciseCard: View {
                     .accessibilityIdentifier("workout.card.repeat")
             }
         }
-        .ledgerHitTarget(alignment: .leading)
     }
 }
 

@@ -97,7 +97,11 @@ struct WorkoutWalkAdversarialTests {
 
     @Test("An un-logged set of a finished workout can be logged again from the page")
     func unlog_afterTheEnd_canBeLoggedAgain() async throws {
-        let bench = try await Bench.make()
+        // F10 S5 fix round 1 (sanctioned edit, criterion 18): the set that is un-logged was logged a minute
+        // before, so the un-log is not a second touch.
+        let bench = try await Bench.make {
+            $0.exercises[1].sets[2].doneAt = Fixtures.now.addingTimeInterval(-60)
+        }
         _ = try await Self.logWhatIsShown(on: bench)
         bench.tap(.unlog(exerciseIndex: 1, setID: bench.set(1, 2)))
         await bench.store.drain()

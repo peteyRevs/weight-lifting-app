@@ -23,6 +23,10 @@ nonisolated extension WorkoutPresentation {
         return currentExercise(of: state.exercises, cursor: cursor) ?? cursor
     }
 
+    static func hasASetToLog(_ exercise: WorkoutExercise) -> Bool {
+        exercise.sets.contains { !$0.isDone }
+    }
+
     /// The shown row of the exercise at `index`: the row the lifter chose, else the engine's cursor when it
     /// is in this exercise, else the exercise's first row, each only while it is not logged. A logged row is
     /// never the shown row, so with every set logged there is none.
@@ -51,13 +55,18 @@ nonisolated extension WorkoutPresentation {
         _ context: Context
     ) -> WorkoutPageModel {
         let shown = shownExercise(of: state, selection: selection)
-        let later = state.exercises.enumerated().filter { $0.offset > shown ?? -1 }
+        // Criterion 16: after the shown exercise, only what can still be logged, so that no row leads to a
+        // page with nothing to do; each with its sets without the drop set, as a target line counts them.
+        // With no exercise shown every exercise is listed, so that each can be reached.
+        let later = state.exercises.enumerated().filter { index, exercise in
+            shown.map { index > $0 && hasASetToLog(exercise) } ?? true
+        }
         let rows = later.map { index, exercise in
             RemainingModel.Row(
                 exerciseIndex: index,
                 name: exercise.name,
                 scheme: WorkoutCopy.scheme(
-                    sets: exercise.sets.count,
+                    sets: exercise.sets.count { $0.kind != .drop },
                     reps: exercise.sets.first?.reps.value ?? exercise.targetReps,
                     locale: context.locale
                 )
