@@ -179,6 +179,11 @@ nonisolated extension DayEditorModel.Content {
         groups.flatMap(\.rows)
     }
 
+    /// The row whose panel is open, or nil.
+    var openRow: DayEditorModel.Row? {
+        rows.first(where: \.isOpen)
+    }
+
     /// "1 Barbell Bench Press · 2 Incline DB Press · 3A Lat Pulldown · …": the day's order as it is drawn.
     var order: String {
         rows.map { "\($0.index) \($0.name)" }.joined(separator: " · ")
@@ -196,6 +201,16 @@ nonisolated extension DayEditorModel.Content {
     /// The superset headers' notes, in order.
     var supersetNotes: [String] {
         groups.compactMap(\.header?.note)
+    }
+}
+
+nonisolated extension DayEditorModel.Row {
+    /// The row with no panel under it, open or closed as it was: what a test draws to look at a row alone.
+    var withoutItsPanel: DayEditorModel.Row {
+        DayEditorModel.Row(
+            id: id, index: index, name: name, sub: sub, scheme: scheme, load: load, hasDropSet: hasDropSet,
+            isOpen: isOpen, spokenLabel: spokenLabel, spokenValue: spokenValue, action: action, panel: nil
+        )
     }
 }
 

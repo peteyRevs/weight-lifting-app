@@ -585,3 +585,64 @@ records) a text field, with testing-strategy §2.5 saying so (review S-4); icons
 to left, the check mark first, in `LedgerDesign` (review S-5; the set row has it too); `SectionLine` and a
 public press style in `LedgerDesign` before S10; the reference precision on long pages (tester's note 1:
 three visible mutations passed every reference at 0.995).
+
+## Plan amendments — slice S10, the Day editor's and the slot editor's views (orchestrator, 2026-10-10)
+
+The plan's S10 and S11 as one pull request (larger batches; the number S11 is not used again). Cut from
+`main` at release 0.10.0, which holds the Day editor's presentation (S6), the form controls (S8) and the
+builder's views (S9). Views drawn from a model only: no store, nothing in the app (S14 puts it there).
+About 580 product lines planned (the plan's S10 and S11 rows list the files); views have landed close to
+plan; past about 800 the implementer stops and reports. Pete's decision 1 stays at its default A. The
+notes' "Inputs for the views (S10, S11)" and "Inputs for S10 and S11" are part of this contract. The slice
+is accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `DayEditorModel.Content` and
+   `(DayEditorAction) -> Void`; it builds no action but the name field's `rename`, decides nothing that is
+   shown, formats no number and reads no clock, calendar or locale. Every text on screen is a string of the
+   model; a lookup the model does not carry is not expected, and any is listed for Pete.
+2. **The screen scrolls as the convention says** (testing-strategy §2.5–§2.6): `DayEditorScreen` is its
+   pinned header plus a `ScrollView` around `DayEditorPage(model:send:)`; snapshots and VoiceOver trees are
+   taken from the page and the header; the page holds no scroll view.
+3. **The files live in `FeatureProgram/Views/`** (S9's deviation 1 is the rule now); the folder scans of
+   earlier testers (`DayEditorWordsAdversarialTests` reads `DayEditor/`, `ProgramViewsSourceTests` reads
+   `Views/`) pass unedited except for adding the new screen file to `screens`.
+4. **The header**: the back control, `header.position` ("DAY 1 OF 4"), "Done", the day's name as a text
+   field bound to a draft (S9's `ProgramHeader` rule: seeded from `header.name`, sends `rename` with the
+   text as typed, does not take the stored name back while focused), `header.tag` drawn, the summary line.
+5. **The page, closed**: per `Group`, the superset header once above its rows where it is not nil, the rows
+   as one visual block; a row with its code, name, scheme, load where not nil, and a caret by `isOpen`;
+   "+ Add exercise"; "Delete day" presenting the confirmation from `deleteDay.confirmation`, whose "Cancel"
+   sends nothing.
+6. **The panel, open** (drawn from `row.panel` and nothing else, inside the row's block): the week line;
+   one `StepperField` per field; "PROGRESSION" with its chips in `WrapLayout`, the selected one not a
+   button, and its note; the drop set as `.toggleStyle(.ledger)` with its note; the superset actions; "Move
+   up", "Move down", "Remove"; the week strip. A control the model does not carry is not drawn (`details ==
+   nil`, an empty `supersetActions`, a nil move).
+7. **A stepper is drawn with `label` and `value`** and is one adjustable element to VoiceOver with
+   `spokenLabel` and `value` (the plan's default; the other reading of decision 1 is listed for Pete with
+   a screenshot, not built).
+8. **Colour**: only the facts the notes name pick the accent (`WeekLine.isDeload`/`isHeld`,
+   `Entry.isDeload`/`isHeld`/`isShown`, `DropSet.isOn`, `Row.isOpen`); no view splits `week.eyebrow` or
+   `strip.text`. An orange audit, as S9's, pins where the accent is on this screen, and its list is given
+   to Pete.
+9. **States have previews and snapshots** (the notes' snapshot table, rows S10 and S11): all closed at six
+   cells; a day with a superset, open double, drop set on at two each; open linear at six; plus the deload
+   week once. `ProgramPreview` gains `.dayEditors`; one registry for the module.
+10. **VoiceOver** (the plan's tree, notes line 571 on): `header.position` a heading; the name field
+    labelled `header.nameLabel` (pinned as `ProgramTextFieldTests` does, since the hosted reader does not
+    see a text field); a superset header a heading with label `spokenLabel` and value `note`; a row a
+    button with `spokenLabel`, `spokenValue` and its open or closed state; each stepper adjustable, its
+    two actions sent by decrement and increment; the chips a one-selected group; the drop set a switch
+    with `note` as hint. Every target is 44 pt.
+11. **Sizes and settings**: no word is cut and nothing overlaps at the twelve text sizes on 375 and 402 pt,
+    with Bold Text, Increase Contrast and right to left; a long exercise name and a long day name lay out.
+    Truncation is checked by measurement (S9's cut-word checks), not by a reference image alone.
+12. **Each control sends exactly its model's action, once**: pinned by a test that walks the page.
+13. **No rule of its own**: `LedgerDesign`'s components and tokens, the feature's `SectionLine` and
+    `ControlPill` (generalised if the Day editor's control type needs it, not copied). A new shared
+    component is proposed in the report, not added quietly.
+
+**Not in this slice:** any store (S13, S14), the exercise library sheet's presentation from the Day editor,
+`LedgerAppKit`, the project file or a test plan, the chores queued after S9 (`SectionLine` into
+`LedgerDesign`, the reader and a text field), and any change to a presentation beyond a field a view
+provably needs (listed).

@@ -160,11 +160,11 @@
             .dimmedButton("Select exercises to add")
         ]
 
-        /// The tree of each state of the preview registry.
+        /// The tree of each state of the preview registry; the Day editor's are `DayEditorTrees`'.
         static let byState: [ProgramPreview: [ViewStop]] = [
             .builder: builder, .deloadWeek: deloadWeekSelected, .emptyDay: emptyDay, .twoWeeks: twoWeeks,
             .sixteenWeeks: sixteenWeeks, .library: library, .libraryPicked: libraryPicked,
             .libraryNothing: libraryNothing
-        ]
+        ].merging(DayEditorTrees.byState) { builder, _ in builder }
     }
 #endif

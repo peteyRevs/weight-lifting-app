@@ -7,10 +7,12 @@
     import Testing
     import UIKit
 
-    /// F11 S9, criterion 6: the intended VoiceOver tree of each state of the two screens, pinned exactly (the
-    /// stops, their order, labels, values, hints, and which are headings, selected or dimmed), the 44 pt
-    /// targets, and what each control sends. Read through UIKit's accessibility tree, as VoiceOver reads it,
-    /// at the default text size and at the largest of the snapshot matrix.
+    /// F11 S9, criterion 6, and S10, criterion 10: the intended VoiceOver tree of each state of the three
+    /// screens, pinned exactly (the stops, their order, labels, values, hints, and which are headings,
+    /// selected, dimmed, expanded or collapsed), the 44 pt targets, and what each control of the builder and
+    /// of the library sends (the Day editor's: `DayEditorAccessibilityTests`). Read through UIKit's
+    /// accessibility tree, as VoiceOver reads it, at the default text size and at the largest of the snapshot
+    /// matrix.
     ///
     /// The trees are read from the parts (`ProgramParts`), not from the screens: a screen puts its page in a
     /// scroll view, which the hosted reader cannot see inside (testing-strategy §2.6). The same stops inside

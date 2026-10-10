@@ -128,11 +128,15 @@
             #expect(inked > 2000, "\(inked) pixels differ from the ground")
         }
 
-        @Test("The registry holds the eight states the criteria name, and no other")
+        @Test("The registry holds the eight states S9's criteria name and the seven of S10's, and no other")
         func registry_holdsTheNamedStates() {
             #expect(ProgramPreview.allCases.map(\.rawValue) == [
                 "Program builder", "Deload week selected", "A day with no exercise", "Two weeks, minus refused",
-                "Sixteen weeks and a long name", "Exercise library", "Three exercises picked", "Nothing matches"
+                "Sixteen weeks and a long name", "Exercise library", "Three exercises picked", "Nothing matches",
+                // S10, criterion 9: the Day editor's states.
+                "Day editor", "A superset, its second exercise open", "An exercise open, linear",
+                "An exercise open, double", "Drop set on", "Deload week, an exercise open",
+                "Long day and exercise names"
             ])
         }
     }

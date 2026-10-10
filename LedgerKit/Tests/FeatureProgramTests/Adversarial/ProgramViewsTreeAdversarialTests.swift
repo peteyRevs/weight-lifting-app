@@ -17,7 +17,7 @@
 
         @Test(
             "The implementer's eight tables are the trees the oracle writes from the models",
-            arguments: ProgramPreview.allCases
+            arguments: ProgramPreview.builders + ProgramPreview.libraries
         )
         func tables_areTheOraclesTrees(_ preview: ProgramPreview) throws {
             let table = try #require(ProgramTrees.byState[preview])
@@ -25,6 +25,9 @@
                 switch try preview.subject() {
                 case let .builder(model): ProgramViewsOracle.builder(model).map(\.stop)
                 case let .library(model): ProgramViewsOracle.library(model).map(\.stop)
+                // S10: this oracle writes the builder's and the library's trees; the Day editor's states
+                // are not among this test's arguments.
+                case .dayEditor: throw ProgramPreview.NotThatScreen()
                 }
             let difference = firstDifference(found: table, expected: written)
             #expect(difference == nil, "\(difference ?? "")")

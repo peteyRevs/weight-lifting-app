@@ -3,11 +3,11 @@
     import LedgerFakes
     import SwiftUI
 
-    /// Every preview in FeatureProgram, one case each: the states of the builder and of the exercise library
-    /// sheet. Each is drawn from the model its presentation makes of a fixed input, so a preview shows the
-    /// words the app would. `PreviewTests` render every case and fail on a `#Preview` that is not a case here;
-    /// the snapshot and accessibility tests draw the same states' pages. None runs a task: the screens only
-    /// draw.
+    /// Every preview in FeatureProgram, one case each: the states of the builder, of the exercise library
+    /// sheet and of the Day editor. Each is drawn from the model its presentation makes of a fixed input, so
+    /// a preview shows the words the app would. `PreviewTests` render every case and fail on a `#Preview`
+    /// that is not a case here; the snapshot and accessibility tests draw the same states' pages. None runs
+    /// a task: the screens only draw.
     ///
     /// The program is spec §6.4's (`Fixtures.seedProgram()`), the exercises the bundled catalog's.
     enum ProgramPreview: String, CaseIterable {
@@ -22,11 +22,23 @@
         case library = "Exercise library"
         case libraryPicked = "Three exercises picked"
         case libraryNothing = "Nothing matches"
+        /// Upper A in week 1, every exercise closed; the last two are a superset.
+        case dayEditor = "Day editor"
+        /// Lower A with the second exercise of its superset open: "Break out", and a fixed progression.
+        case daySuperset = "A superset, its second exercise open"
+        case dayOpenLinear = "An exercise open, linear"
+        case dayOpenDouble = "An exercise open, double"
+        /// Upper B's curl, which ends on a drop set.
+        case dayDropSet = "Drop set on"
+        /// Upper A in week 8, the bench press open: the week's line is the orange one.
+        case dayDeload = "Deload week, an exercise open"
+        case dayLongNames = "Long day and exercise names"
 
-        /// What a case draws: one of the two screens, with its model.
+        /// What a case draws: one of the three screens, with its model.
         enum Subject {
             case builder(ProgramBuilderModel)
             case library(ExercisePickerModel)
+            case dayEditor(DayEditorModel.Content)
         }
 
         /// The model of the case, on its screen.
@@ -36,6 +48,8 @@
                 try .builder(ProgramPresentation.make(ProgramPreviewData.builderInput(for: self)))
             case .library, .libraryPicked, .libraryNothing:
                 try .library(ExercisePickerPresentation.make(ProgramPreviewData.libraryInput(for: self)))
+            case .dayEditor, .daySuperset, .dayOpenLinear, .dayOpenDouble, .dayDropSet, .dayDeload, .dayLongNames:
+                try .dayEditor(ProgramPreviewData.dayEditorContent(for: self))
             }
         }
 
@@ -46,6 +60,7 @@
             switch try? subject() {
             case let .builder(model): ProgramScreen(model: model) { _ in }
             case let .library(model): ExercisePickerScreen(model: model) { _ in }
+            case let .dayEditor(model): DayEditorScreen(model: model) { _ in }
             case nil: EmptyView()
             }
         }
@@ -81,7 +96,7 @@
                 try apply((0 ..< 8).map { .addWeek(WeekID(Fixtures.uuid(900 + $0))) }, to: &input)
                 try apply([.renameProgram(longName)], to: &input)
                 input.selectedWeek = 11
-            case .builder, .library, .libraryPicked, .libraryNothing:
+            default:
                 break
             }
             return input

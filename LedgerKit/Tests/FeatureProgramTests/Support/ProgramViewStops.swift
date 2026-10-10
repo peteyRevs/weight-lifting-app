@@ -4,11 +4,13 @@
     import UIKit
 
     /// One VoiceOver stop of a hosted view, as the views' tests compare it: what kind of stop it is, what is
-    /// read, its value and its hint, and whether it is selected or dimmed. Printed on one line, so a failure
-    /// shows a line and never a tree.
+    /// read, its value and its hint, whether it is selected or dimmed, and whether it says that it is expanded
+    /// or collapsed. Printed on one line, so a failure shows a line and never a tree.
     nonisolated struct ViewStop: Equatable, Sendable, CustomStringConvertible {
         enum Kind: String, Sendable {
             case text, heading, button, adjustable
+            /// A switch: its value is "1" when on and "0" when off.
+            case toggle
             /// A text field: neither a button nor static text.
             case field
         }
@@ -19,13 +21,19 @@
         var hint = ""
         var isSelected = false
         var isEnabled = true
+        /// What a disclosure says of itself; `none` for every other stop.
+        var disclosure = Disclosure.none
+
+        enum Disclosure: Sendable {
+            case none, expanded, collapsed
+        }
 
         static func text(_ label: String, value: String = "") -> Self {
             Self(kind: .text, label: label, value: value)
         }
 
-        static func heading(_ label: String) -> Self {
-            Self(kind: .heading, label: label)
+        static func heading(_ label: String, value: String = "") -> Self {
+            Self(kind: .heading, label: label, value: value)
         }
 
         static func button(_ label: String, value: String = "", hint: String = "", selected: Bool = false) -> Self {
@@ -44,16 +52,30 @@
             Self(kind: .field, label: label, value: value)
         }
 
+        /// A row that opens a panel under itself: a button that says whether it is expanded.
+        static func row(_ label: String, value: String, isOpen: Bool = false) -> Self {
+            Self(kind: .button, label: label, value: value, disclosure: isOpen ? .expanded : .collapsed)
+        }
+
+        /// The chosen one of a row of chips, where the model gives it no action: selected, and no button.
+        static func chosen(_ label: String) -> Self {
+            Self(kind: .text, label: label, isSelected: true)
+        }
+
+        static func toggle(_ label: String, isOn: Bool, hint: String) -> Self {
+            Self(kind: .toggle, label: label, value: isOn ? "1" : "0", hint: hint)
+        }
+
         var description: String {
             "\(kind.rawValue) \"\(label)\"" + (value.isEmpty ? "" : " = \"\(value)\"")
                 + (hint.isEmpty ? "" : " hint \"\(hint)\"") + (isSelected ? " (selected)" : "")
-                + (isEnabled ? "" : " (dimmed)")
+                + (isEnabled ? "" : " (dimmed)") + (disclosure == .none ? "" : " (\(disclosure))")
         }
     }
 
     extension ViewStop {
-        /// The stop UIKit hands VoiceOver for `element`. A stop that is a heading, a button or adjustable is
-        /// that; of the rest, static text is text and anything else a field.
+        /// The stop UIKit hands VoiceOver for `element`. A stop that is a heading, a switch, a button or
+        /// adjustable is that; of the rest, static text is text and anything else a field.
         init(reading element: NSObject) {
             let traits = element.accessibilityTraits
             let kind: Kind =
@@ -61,6 +83,8 @@
                     .heading
                 } else if traits.contains(.adjustable) {
                     .adjustable
+                } else if traits.contains(.toggleButton) {
+                    .toggle
                 } else if traits.contains(.button) {
                     .button
                 } else if traits.contains(.staticText) {
@@ -74,8 +98,19 @@
                 value: element.accessibilityValue ?? "",
                 hint: element.accessibilityHint ?? "",
                 isSelected: traits.contains(.selected),
-                isEnabled: !traits.contains(.notEnabled)
+                isEnabled: !traits.contains(.notEnabled),
+                disclosure: Self.disclosure(of: element)
             )
+        }
+    }
+
+    extension ViewStop {
+        private static func disclosure(of element: NSObject) -> Disclosure {
+            switch element.accessibilityExpandedStatus {
+            case .expanded: .expanded
+            case .collapsed: .collapsed
+            default: .none
+            }
         }
     }
 
