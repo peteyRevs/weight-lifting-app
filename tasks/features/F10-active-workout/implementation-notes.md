@@ -4667,3 +4667,180 @@ On the final tests, product code as at `f0318dd`. Simulator runs through the loc
 An earlier red run of mine was the test's, not the code's: the orange check compared the image's lines with
 frames the reader had placed elsewhere in its window (a marker over the page now gives its top), and the second
 touch of finding 6's test was first aimed at an element that no longer existed.
+
+## Slice S5 — fix round 1 (G1 implementer, 2026-10-10)
+
+On `2ff8d7c` (the slice, the tester's round and the rulings), in the worktree `F10-s5`. Criteria 13 to 21 are the
+brief's "Plan amendments — slice S5 after round 1". Code, tests and references are commit `f1719d6`; this section
+and the screenshots follow it. Paths are under `LedgerKit/` unless they start with `Apps/` or `tasks/`.
+
+### What changed, per criterion
+
+| Criterion | Change | Where |
+|---|---|---|
+| 13 reworded | The store's text now says what drops a tap: a refusal (with the alert), and "Discard" for the workout it ends; nothing else. | `WorkoutStore`'s type comment |
+| 14 Minimize keeps the taps before it (F10-S5-1) | With no tap waiting, "Minimize" closes the cover at once, as before. With taps waiting it sets `exitWhenDrained`; nothing answers meanwhile (the header and the page are disabled, as while a discard runs); the pump applies the taps and then closes the cover. **When one of them is refused the cover stays up** with the alert, so the lifter sees that a set was not saved; "Minimize" can be tapped again. No task outlives the view: the cover is still up while the taps are applied (each is one local write). | `WorkoutStore+Pump.swift` `minimize()`, `drain()` |
+| 15 a restart plans on the newest workout (F10-S5-2, -3) | `follow()` forgets `ahead` when it starts. The store knows whether it is hearing the session (`isHearingTheSession`: from the first update of the stream being followed until that stream is left); `drain()` applies nothing while it is not, and the first update wakes the pump. So a tap that waited is planned on the session's workout, in either order of the root's two tasks. | `WorkoutStore.follow()`, `drain()` |
+| 16 "REMAINING" lists only what can be logged (F10-S5-4, S-1) | After the shown exercise, only exercises with a set not logged; "n × m" counts the rows that are not drop sets (an added set still counts, rule 26). **With no exercise shown** (the cursor names no row and nothing was chosen) every exercise is still listed, so that one with no set can be reached for "+ Add set": the orchestrator's ruling on the tester's line 142. | `WorkoutPresentation.page` |
+| 17 the page starts at the top (F10-S5-5, S-2) | `WorkoutScreen` holds a `ScrollPosition`; when `page.card?.exerciseIndex` changes it scrolls to the top edge. A change within the exercise leaves the page where it is. The scroll view is the same view before and after (no `.id`), so VoiceOver's place is not thrown away with it. | `Views/WorkoutScreen.swift` |
+| 18 a second touch does not undo a set just logged (F10-S5-6, S-3) | In the plan: an un-log whose moment is at or after the set's `doneAt` and less than `WorkoutEditPlan.undoGuard` (one second) after it comes to nothing. A set logged by a clock ahead of this one (a peer's) is not guarded. Two moments are compared; nothing counts time. | `WorkoutEdit.swift` `unlog` |
+| 19 room between the two facts (S-5, N-9) | The two `FactLine`s stand `LedgerSpacing.m` apart at every size (`xs` inside one, where they stack). The 44 pt frames on the TARGET line and on the whole "Last" line are gone: neither is a control, and "Repeat" keeps its own 44 pt. | `Views/ExerciseCard.swift` |
+| 20 housekeeping | The plan's comment on the weight's floor says that the engine and the plan both hold it and why the plan must (N-4). The store's comments on the queue say what happens on a cancellation (N-2, below). The tester's test title reads 54 (sanctioned edit 4). | `WorkoutEdit.swift`, `WorkoutStore+Pump.swift` |
+
+Also changed, because the rulings touch it:
+
+- **A call cancelled with the cover counts as sent** (the orchestrator's ruling on my question; N-2): the tap in
+  flight is taken off the queue and is not sent again by the next pump, the drain stops there, and **the taps
+  behind it stay queued** for the next pump. The session's host completes a call in a task of its own, so the tap
+  is not lost on the app's host. Pinned by the tester's `pumpCancelled_whileACallWaits` (no alert, nothing
+  applied twice, the new pump carries on) and by mutant R9 below.
+- **A tap is not taken off a queue that was emptied and refilled while it was being applied** (the tester's note
+  N-b): the queue counts the times it was emptied as a whole (`queueEpoch`).
+- **The header's current segment** is the shown exercise while it has a set to log (one rule, with or without a
+  choice); no existing expectation changed.
+- **The pump is in `WorkoutStore+Pump.swift`** (the store's file passed the lint's 300 lines). For that, the
+  store's `dialog`, `selection`, `exitWhenDrained`, its queue fields, `leave`, `isShowingWorkout`, the logger and
+  three dependencies are no longer `private`: they are the store's own, used from its extension in another file,
+  and a comment says so. No other file writes them.
+
+**Not changed:** the reviewer's N-1 (a refusal over the finish dialog: S7's), N-5 and N-6 (where the rules live:
+when the watch needs them), N-7 and N-8 (the defaulted `selection:` and the `Dialog` alias: both are used by the
+tester's files), N-12 (accepted by the reviewer); the tester's notes N-a, N-c, N-d.
+
+### The tester's seven tests
+
+All pass unedited: `minimize_keepsTheTapsMadeBeforeIt`, `pumpRestarted_plansOnTheNewestWorkout`,
+`followRestarted_forgetsTheOldAnswer`, `jump_toAFinishedExercise_isNoDeadEnd`,
+`scroll_returnsToTheTop_whenTheExerciseChanges` (PR lane); `test_jumpFromRemaining_showsTheNewExercisesName`,
+`test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (nightly). The UI test's two touches were inside the one-second
+guard on this run.
+
+### Sanctioned edits to the tester's files
+
+Three of the tester's green tests pinned what criteria 16 and 18 reverse, and one title named the old count. I
+reported each before touching it; the orchestrator ruled all four on 2026-10-10; the tester audits them in round
+2. In `Tests/FeatureWorkoutTests/Adversarial/`:
+
+| # | File and test | Old | New |
+|---|---|---|---|
+| 1 | `WorkoutPageAdversarialTests.page_isTotal` (line 156) | `#expect(listed == Array(state.exercises.indices.filter { $0 > card.exerciseIndex }), "seed \(seed)")` | under a comment, `let stillToDo = state.exercises.indices.filter { index in index > card.exerciseIndex && state.exercises[index].sets.contains { !$0.isDone } }` and `#expect(listed == Array(stillToDo), "seed \(seed)")`. Line 142 ("with no card every exercise is listed") is unchanged and passes |
+| 2 | `WorkoutPageAdversarialTests`, "Kilograms, twelve rows and a drop set in the middle…" (line 75) | `== ["Incline DB Press, 3 × 10"]` | `== ["Incline DB Press, 2 × 10"]` (two working sets and a drop set) |
+| 3 | `WorkoutWalkAdversarialTests.unlog_afterTheEnd_canBeLoggedAgain` (line 100) | `let bench = try await Bench.make()` | under a comment, `let bench = try await Bench.make { $0.exercises[1].sets[2].doneAt = Fixtures.now.addingTimeInterval(-60) }`: the set the test un-logs was logged a minute before, so the un-log is not a second touch. What the test checks is unchanged |
+| 4 | `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` | `@Test("The catalog holds the 27 texts and no other")` | `@Test("The catalog holds the 54 texts and no other")` |
+
+No special case for 0 s exists in the product code. The tester's seeded storms also send un-logs at 0 s; they
+compare two runs under the same rule and stay green.
+
+### New tests
+
+| Criterion | Tests |
+|---|---|
+| 14 | `WorkoutStoreMinimizeTests.minimize_whileATapIsRefused_staysAndShowsIt` (the real host, an append refused: the cover stays, the alert shows, a tap made after Minimize was not queued, and with nothing waiting Minimize closes at once); the tester's `minimize_keepsTheTapsMadeBeforeIt` |
+| 15 | the tester's two |
+| 16 | `WorkoutPresentationRemainingTests.remaining_listsOnlyWhatCanBeLogged` (a later exercise with every set logged and one with no set are left out; with nothing left there is no list), `remaining_countsWithoutTheDropSet` (three sets and a drop read "3 × 12", as the card's target; an added set makes it "4 × 12"); `card_noSet_hasNoRow` changed to the new list |
+| 17 | the tester's hosted test; UI `WorkoutLogging` now asserts the title **hittable** after the cursor's move to the next exercise, after a jump, and at the accessibility size with "Exercise 5 of 5" |
+| 18 | `WorkoutUndoTests.unlog_withinASecondOfTheLog_comesToNothing` (pure, nine moments: 0, 0.001, 0.78 and 0.999 s do nothing; 1, 1.001 and 60 s un-log; a set logged 0.5 s and an hour ahead of this clock un-logs), `unlogRightAfterTheLog_keepsTheSet` (through the store, with the injected date); `mixedTaps_areAppliedInOrder` now expects the un-log made in the log's own moment to send nothing; `log_clearsTheChoice_unlogKeepsIt` un-logs a set logged a minute before |
+| 19 | `WorkoutPageLayoutTests.facts_standApart` (five sizes × both widths × Bold Text × right to left, with and without "Repeat": at least `m` between the two facts) |
+
+Moved, unchanged, for the lint's type length: the "REMAINING" tests into `WorkoutPresentationRemainingTests`, the
+un-log's plan test into `WorkoutUndoTests`.
+
+**Checked by breaking the code** (Mac host, each restored; all caught):
+
+| Mutant | Tests that failed |
+|---|---|
+| R1 an un-log always un-logs | `unlog_withinASecondOfTheLog_…`, `unlogRightAfterTheLog_keepsTheSet`, `mixedTaps_areAppliedInOrder` |
+| R2 the guard also holds for a set logged ahead of this clock | `unlog_withinASecondOfTheLog_…` |
+| R3 "REMAINING" lists finished exercises | `remaining_listsOnlyWhatCanBeLogged`, `card_noSet_hasNoRow`, the tester's `jump_toAFinishedExercise_isNoDeadEnd` and `page_isTotal` |
+| R4 "REMAINING" counts the drop set | `remaining_countsWithoutTheDropSet`, the tester's kilograms test |
+| R5 Minimize closes at once | `minimize_whileATapIsRefused_…`, the tester's `minimize_keepsTheTapsMadeBeforeIt` |
+| R6 the kept answer survives a new follow | the tester's `followRestarted_forgetsTheOldAnswer` |
+| R7 taps are planned before the stream is heard | the tester's `pumpRestarted_plansOnTheNewestWorkout` |
+| R8 a refusal under Minimize still closes the cover | `minimize_whileATapIsRefused_…` |
+| R9 a cancelled call is sent again | the tester's `pumpCancelled_whileACallWaits` |
+
+Not mutated: the scroll reset and the facts' spacing (a simulator run each); the tester's hosted scroll test and
+`facts_standApart` failed before the change and pass after it.
+
+### References and screenshots
+
+**Re-recorded: the ten references of this slice**, all of `__Snapshots__/WorkoutSnapshotTests/cover_*`, by deleting
+them and running `WorkoutSnapshotTests` once in the library's default mode (it wrote them and failed), then the
+whole module's suite (passed). Cause: criterion 19 (the gap between the two facts, and no 44 pt frame on them),
+which moves everything under the facts; nothing else in them changed. Looked at: at `.accessibility3` "Last" now
+stands 12 pt under the target's value and 4 pt over its own.
+
+- `cover_logging_matchesReferences.{light,dark}-{large,xLarge}.png` (4)
+- `cover_logging_accessibility3_matchesReference.dark-accessibility3.png`
+- `cover_logging_increasedContrast_matchesReference.light-large-increasedContrast.png`
+- `cover_dropSet_matchesReferences.{light,dark}-large.png` (2)
+- `cover_noHistory_matchesReferences.{light,dark}-large.png` (2)
+
+S4's five header references are unchanged and pass.
+
+`screenshots/s5/`: all fifteen refreshed from the final build (the ten of the running app from the UI test's
+attachments, light and dark; the five reference copies). `app-accessibility3-last-exercise-*` now shows
+"Exercise 5 of 5" and "Cable Lateral Raise" at the top of the page after the jump.
+
+### For the product owner
+
+- **The one-second guard** (criterion 18). The check of a set logged less than a second ago ignores a touch. The
+  prototype has no guard. Nothing is drawn differently during that second: a deliberate undo made that fast simply
+  does nothing, and works on the next touch.
+- **"Minimize" with a change still being saved** waits for it (the buttons dim for that moment), and stays on the
+  workout with "Couldn't save that change" if it fails.
+- No new text. No key was added to the catalog (54).
+
+### Product lines per file
+
+932 in total (877 before; the split is taken past about 1,000). Against `fc8a38f`; the change is this round's.
+
+| File | Lines | This round |
+|---|---|---|
+| `FeatureWorkout/WorkoutStore+Pump.swift` | 95 | new (the pump, moved and grown) |
+| `FeatureWorkout/WorkoutStore.swift` | 149 | −52 |
+| `FeatureWorkout/WorkoutEdit.swift` | 168 | +6 |
+| `FeatureWorkout/WorkoutPresentation+Card.swift` | 158 | +5 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 35 | +5 |
+| `FeatureWorkout/Views/ExerciseCard.swift` | 60 | −2 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 46 | −2 |
+| **This round** | | **+55** |
+
+The reviewer expected about +20. The difference is criteria 14 and 15, which the review had as notes: the waiting
+Minimize, the "hearing" flag, the three-way outcome of a tap and the queue's count are about 40 lines.
+
+### Open questions
+
+1. **A stuck page is still possible from outside the page**: the lifter chooses a row of an exercise, and the
+   watch (F17) logs every set of that exercise. The choice stands until a set is logged here, the card shows that
+   exercise with nothing to log, and "REMAINING" lists only later exercises. One phone cannot reach it.
+   Recommendation: with S9 and the question of going back, let a choice give way when its exercise has nothing
+   left to log; I tried it in this round and withdrew it, because the tester's `noSet_addSet` pins that a chosen
+   exercise with no set shows its card.
+2. **"Minimize" waits on a call that never returns.** A host's apply is one local write; if one hung, the cover
+   would stay with its buttons dimmed, as a hung discard already does (S4's decision 12). Recommendation: accept.
+3. **The guard is one second from the set's `doneAt`, which is this device's clock at the log.** A set logged on
+   the watch less than a second ago is guarded here too when the clocks agree. Recommendation: accept.
+
+### The runs
+
+2026-10-10, on the code of `f1719d6` (only this file and the screenshots were added after it). Simulator runs
+through the lock, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 138 s |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 245 tests in 36 suites passed (6 s) |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 286 tests in 42 suites passed (69 s), the tester's five PR-lane tests among them |
+| `LedgerUITests` `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` (`Nightly` plan, `-only-testing`, one run) | 7 of 7 passed in 193 s: 2, 3, 1 and 1. `WorkoutLogging` once more in dark for the screenshots: 2 of 2 |
+| `scripts/check.sh` (the full gate) | exit 0 in 842 s, no failing test: lint 86 s, iOS tests 480 s, watchOS tests 250 s, coverage (FeatureWorkout 1,776 of 1,796 lines, 98.88 %) |
+| Nine mutants (Mac host) | each caught (table above) |
+
+Red runs on the way were mine: the first form of `facts_standApart` had an upper bound that "Repeat"'s 44 pt row
+breaks by design (removed); the ten references before they were re-recorded.
+
+### Not verified
+
+- The rest of the `Nightly` plan; CI (nothing is pushed); VoiceOver on a device, in particular where its focus
+  goes when the page returns to its top; a refused change and a waiting Minimize in the running app (no Debug row
+  slows or fails a store); the one-second guard by hand.
