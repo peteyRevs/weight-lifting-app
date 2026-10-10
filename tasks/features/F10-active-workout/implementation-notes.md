@@ -4944,3 +4944,27 @@ Seen in passing, not this slice's: `swift test --filter Adversarial` over the wh
 runs `LedgerDesign`'s font suites (`BoldTextAdversarialTests`, `LedgerFontRenderingAdversarialTests`,
 `ArchivoFontAdversarialTests`, `WatchTypeFloorAdversarialTests`), which fail there (53 issues). `check.sh --fast`
 does not run them on the host and is green; I did not look into them.
+
+## Slice S5 — fix round 2 (G1 implementer, 2026-10-10)
+
+On `321193d`. One change, for the tester's finding F10-S5-7 (latent): when the session's updates end while
+"Minimize" waits for a tap, the cover could never be closed.
+
+- **The change** (`Sources/FeatureWorkout/WorkoutStore.swift`, `follow()`): when the stream ends and the store
+  shows the failed screen, it empties the queue and gives up the waiting exit. The failed screen's "Close" then
+  sends `.minimize` to a store with nothing waiting, which closes the cover at once.
+- **What happens to the taps that were waiting: they are dropped with the failed screen.** The store has lost its
+  source and no longer knows the workout they were made on. The call that was already under way is not taken
+  back: the session completes or refuses it as it would have. This is one more case in which a tap is dropped,
+  beside a refusal (criterion 13's wording is the orchestrator's to amend); the store's type comment now names
+  both. No alert is shown for it: the failed screen itself says the workout cannot be shown. No host ends a
+  stream (the key's stub does), so no lifter meets it today.
+- **Accepted, not changed:** a call that never returns while "Minimize" waits leaves the cover dimmed with no way
+  out, as a hung discard already does (S4's decision 12). No timeout was added.
+- **The tester's test** `WorkoutMinimizeAdversarialTests.streamEnds_whileMinimizeWaits_closeStillCloses` passes
+  unedited. No tester's file was touched, no test of mine was added or changed, no reference changed.
+- **Product lines:** 934 (932 before; `WorkoutStore.swift` 149 → 151).
+- **Runs** (2026-10-10): `swift test --filter FeatureWorkoutTests` on the Mac host, 255 tests in 38 suites passed;
+  `FeatureWorkoutTests` on the simulator through the lock (`PR` plan, iPhone 17, iOS 27.0), 296 tests in 44 suites
+  passed, `git status` showing no reference changed; `scripts/check.sh --fast` exit 0 in 130 s. The full gate and
+  the nightly UI tests were not run in this round: the orchestrator runs the gate.

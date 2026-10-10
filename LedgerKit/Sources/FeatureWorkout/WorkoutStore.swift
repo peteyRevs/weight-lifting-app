@@ -18,9 +18,10 @@ import Observation
 /// `pump()`, one at a time and in the order the taps were made: each is planned at its turn on the newest
 /// workout (the session's answer to the tap before it, which can be ahead of what the stream has shown), so
 /// two quick "+" are two steps, and a second tap on a check finds the set logged and does nothing. Nothing is
-/// applied twice. One thing drops a tap: when the session refuses a change, the taps queued behind it are
-/// dropped with it and the alert says so, because they were made on a page that never came to be. "Discard"
-/// drops the taps of the workout it ends. "Minimize" drops none: the cover closes once the taps made before
+/// applied twice. Two things drop a tap: when the session refuses a change, the taps queued behind it are
+/// dropped with it and the alert says so, because they were made on a page that never came to be; and when
+/// the session's updates end, the taps still waiting go with the workout the failed screen replaces.
+/// "Discard" drops the taps of the workout it ends. "Minimize" drops none: the cover closes once the taps made before
 /// it are applied. Taps wait while the store is not following the session (the cover's tasks have not
 /// started, or are starting again), so none is planned on a workout older than the session's.
 ///
@@ -193,6 +194,10 @@ final class WorkoutStore {
             return
         }
         logger.log.error("The session's updates ended while the workout's cover was up")
+        // The store has lost its source: the taps still waiting are given up with it, and so is a "Minimize"
+        // that waited for them, so that the failed screen's "Close" closes the cover (F10-S5-7).
+        emptyQueue()
+        exitWhenDrained = nil
         workout = .failed(WorkoutStoreError.updatesEnded)
     }
 
