@@ -4968,3 +4968,316 @@ On `321193d`. One change, for the tester's finding F10-S5-7 (latent): when the s
   `FeatureWorkoutTests` on the simulator through the lock (`PR` plan, iPhone 17, iOS 27.0), 296 tests in 44 suites
   passed, `git status` showing no reference changed; `scripts/check.sh --fast` exit 0 in 130 s. The full gate and
   the nightly UI tests were not run in this round: the orchestrator runs the gate.
+
+## S6 — rest and haptics, as built (G1 implementer, 2026-10-10)
+
+Branch `feat/F10-s6-rest`, cut from `main` at release 0.10.0 (`89cfbcb`). The contract is the brief's "Plan
+amendments — slice S6" (criteria 1 to 15) and "Plan amendments — slice S6, rulings during G1", which amends
+criterion 3. After this slice a logged set brings up the rest panel under the cover: the ring and the time
+left, the set that comes next, "+30s" and "Skip rest"; at zero the phone plays `.restOver` and the panel reads
+"0:00" and "Rest over" until "+30s", "Skip rest" or the next logged set.
+
+### What was built
+
+| Where | What |
+|---|---|
+| `LedgerDomain/Protocols/Clients.swift` | `HapticsClient.play(_:)`; `NotificationsClient.scheduleRestOver(at:)` and `cancelRestOver()`. None can throw |
+| `LedgerDomain/Model/WorkoutState.swift` | `shownRest`: the rest a screen shows. It reads no clock |
+| `LedgerDomain/Model/RestTimer.swift` | `nextTick(after:)`: how long until the countdown's text next changes (the rest's next whole second), nil when no time is left |
+| `LedgerDomain/Units/ClockText.swift` | `remaining(_:)`: a countdown's text, by the whole second, rounded up, so "0:00" is read only at zero |
+| `LedgerDependencies/Unimplemented/UnimplementedDevices.swift` | the two stubs log at fault level and return |
+| `LedgerFakes/DeviceFakes.swift` | `FakeHaptics` (`played`) and `FakeNotifications` (`calls`, `restOverAt`), actors that record |
+| `LedgerSync/LocalWorkoutSessionActor.swift`, `+Notifications.swift` | `init(… notifications: (any NotificationsClient)? = nil …)`; `notify(_:)` runs the two notification effects once the envelope is stored and the update is out |
+| `LedgerAppKit/LiveHaptics.swift`, `AppComposition.swift` | the iPhone's haptics, bound with the session in `bind(_:)` |
+| `LedgerDesign/Components/PillButton.swift` | `fillsWidth:`; two rows more in `PillButtonStatesGallery` |
+| `FeatureWorkout/WorkoutEdit.swift`, `WorkoutEdit+Rest.swift` | `.extendRest` and `.skipRest`, one event each |
+| `FeatureWorkout/RestPanelModel.swift`, `WorkoutPresentation+Rest.swift`, `WorkoutCopy+Rest.swift` | the panel's model at one moment, every string final |
+| `FeatureWorkout/Views/RestPanel.swift` (`RestPanel`, `RestReading`), `Views/WorkoutScreen.swift` | the panel, as the scroll view's bottom inset |
+| `FeatureWorkout/WorkoutStore.swift`, `WorkoutStore+Rest.swift`, `WorkoutStore+Pump.swift`, `WorkoutRoot.swift` | haptics from the stream; `moment`; `keepRestTime()`, run by `.task(id: store.shownRest)` |
+| `LedgerTestSupport/WithTestDependencies.swift` | **shared test support changed**: `haptics = FakeHaptics()` among the defaults, a new fake for each call (ruling 4) |
+
+Product lines (Swift lines that are not blank or comment, under `LedgerKit/Sources` and `Apps/` product code,
+without `LedgerFakes` and `LedgerTestSupport`): **74** after the Domain, stubs, host and `LiveHaptics`; **372**
+after the store, the presentation, the copy and the panel; **402** at the end (the splits the lint's length limits asked for add file headers). The plan said about 385.
+
+### How the time is kept (criterion 3 as amended)
+
+- **No `TimelineView`, no `Timer`, no stored countdown.** The ruling pointed at "the cover's existing tick"; there
+  is none. S4's header is SwiftUI's own `Text(timerInterval:pauseTime:countsDown:)`
+  (`Views/WorkoutTimeline.swift:28`), which the system draws from the device's clock and which can drive neither
+  a ring nor the change to "Rest over". So the tick is new, and it is the store's, on the injected clock and the
+  injected date.
+- `WorkoutStore.moment` is the injected date as it was last read. It is read in two places and no other: once for
+  each tap the pump plans (`WorkoutStore+Pump.swift`, the same reading that is the tap's `doneAt` or `tappedAt`,
+  so a rest is first drawn at its own start), and by `keepRestTime()`.
+- `keepRestTime()` (`WorkoutStore+Rest.swift`), run by `WorkoutRoot`'s `.task(id: store.shownRest)`: read the date
+  into `moment`; ask the Domain how long until the text next changes (`RestTimer.nextTick(after:)`); wait that
+  long on `@Dependency(\.continuousClock)`; read the date again. It never adds a second. After any time away the
+  first wait to end reads the wall clock, so the panel is right at once. It ends when the rest is over.
+- The model is `WorkoutPresentation.rest(_:at:…)` of `moment`: `RestTimer.remaining(at:)` and `fraction(at:)`,
+  written by `ClockText.remaining`. The view (`RestPanel`) draws strings and one number and reads no clock, so
+  every state of it can be drawn at a chosen instant, and under a UI test's `-LEDGER_UITEST_NOW` the panel moves
+  with the app's date (the header's elapsed time does not: `UITestClock`'s own note).
+- The date is **not** read at an update of the session. I did that first, and the tester's storm
+  (`WorkoutPumpAdversarialTests.storm_isTheSameAsOneAtATime`, whose date moves on at every reading) showed why
+  not: the readings then depend on how updates and taps interleave, and so would every `doneAt`.
+- A date that stands still while the clock runs (a test's or a preview's fixed date with an immediate clock)
+  ends the task instead of spinning: `keepRestTime()` returns when the date it reads after a wait is the one it
+  read before it.
+- **Cost, against the brief's non-functional line** ("no per-second store updates"): the store changes `moment`
+  once a second while a rest runs, and the cover's model is rebuilt then. Nothing changes once the rest is over,
+  or with no rest.
+
+### Criteria → tests
+
+Host unless marked: *sim* runs on the iPhone 17 simulator only, *UI* is the nightly UI test.
+
+| # | Criterion | Tests |
+|---|---|---|
+| 1 | the panel while a rest is shown; room under the page; none with auto rest off | `WorkoutPresentationRestTests.resting`, `noPanel`, `screen_needsAMoment`, `nextSet`, `nextSet_isTheNextExercises`; `WorkoutStoreRestTests.log_showsThePanel`, `autoRestOff_noPanel`; *sim* `RestPanelPlaceTests.screen_keepsRoomForThePanel` (the scroll view's bottom inset is at least the panel's height at `.large`, AX3 and AX5; its frame and its content are unchanged), `WorkoutScreenTests` (the panel's three stops stand outside the scroll view, in every state that rests); *UI* `WorkoutRest` (the last row scrolled clear of the panel at Accessibility XL, and tapped) |
+| 2 | `WorkoutState.shownRest` | `ShownRestTests` (12, through the engine): fresh, a logged set and after its end, auto rest off, skip, the next set, "+30s" both ways, un-log, a superset's member that starts no rest (during, after, at the end), an ended workout, a rest of no length and dates that are no dates |
+| 3 | the clock rule, as amended | `ShownRestTests.nextTick`, `remainingText`; `WorkoutPresentationRestTests.wallClock`; `WorkoutStoreRestTimeTests.keepsTime_bySeconds` (nothing is read between two seconds), `background_fortySeconds`, `endedInTheBackground_playsNothing` ("0:00" and "Rest over" on return), `fixedDate_ends`, `noRest_doesNothing`; the tester's `sources_readNothingAmbient` passes with `TimelineView` and `Timer` still forbidden; `FeatureWorkoutSourceTests.testersScan_stillCatchesATimer` (the control of ruling 1) |
+| 4 | "Rest over" stays until "+30s", "Skip rest" or the next set | `WorkoutPresentationRestTests.over`; `WorkoutStoreRestTimeTests.zero_playsRestOverOnce` (still there 600 s on); `WorkoutStoreRestTests.extend_atRestOver_thenSkip`, `nextSet_replaces_unlogKeeps` |
+| 5 | two `WorkoutEdit` cases through the one queue | `WorkoutRestPlanTests` (6); `WorkoutStoreRestTests.extend_whileResting`, `extend_atRestOver_thenSkip`, `quickTaps_inOrder_eachOnce`, `refused_dropsTheLaterTaps` (the host over a store that refuses), `minimize_waits`; *UI* `WorkoutRest` |
+| 6 | un-logging never cancels a rest; the guard unchanged | `ShownRestTests.unlog_keepsTheRest`; `WorkoutRestPlanTests.unlog_sendsNoRestEvent`; `WorkoutStoreRestTests.nextSet_replaces_unlogKeeps`; S5's `WorkoutUndoTests` and the tester's `WorkoutUndoGuardAdversarialTests` pass unedited |
+| 7 | haptics | `DeviceClientTests.deviceClients_returnFromEveryCall`, `deviceFakes_record`, `haptics_defaultsToAFreshFake`; `WorkoutDevicesWiringTests.boot_bindsTheLiveHaptics` (fails if the composition leaves the key unbound); `WorkoutStoreHapticsTests` (3: played once, not again after a restart or by a second cover, a change made elsewhere); `WorkoutStoreRestTimeTests.zero_playsRestOverOnce`; `WorkoutStoreRestOverTests` (`lateness` × 4, `reopenedAfterTheEnd_playsNothing`, `extendedOrSkipped_isNotPlayed`, `staleWait_playsNothing`) |
+| 8 | notifications run by the host; nothing traps without a live client | `HostRestNotificationTests` (9 cases in 8 tests); `WorkoutDevicesWiringTests.rest_runsWithoutANotificationsClient` (the app's own composition) |
+| 9 | a full-width `PillButton` | *sim* `PillButtonStateTests.fullWidthPill_fillsItsRow`, `fullWidthPill_isAButton`; the six re-recorded references (below) |
+| 10 | orange once on the panel | the list below; *sim* the references |
+| 11 | texts | `WorkoutCopyTests.restTexts`; the catalog's 63 keys (`WorkoutCopyTests`, the tester's pinned list, the gate's catalog check) |
+| 12 | VoiceOver | *sim* `RestPanelTests.tree_isExactlyTheTable`, `timeLeft_isSpokenAsADuration`, `buttons_sendTheirEdits`, `panel_nothingLeavesOrOverlaps` (44 pt); `WorkoutScreenTests.screen_headerInPlace_isItsTree` (the panel after the page); `WorkoutPresentationRestTests.spokenTime_takesTheLocale` |
+| 13 | sizes and settings | *sim* `RestPanelTests.panel_noWordIsCut`, `panel_nothingLeavesOrOverlaps` (five sizes × 375 and 402 pt × Bold Text × right to left, three models), `check_seesACut`; `RestPanelPlaceTests`; `RestPanelSnapshotTests` (the 11 references) |
+| 14 | Reduce Motion | *sim* `RestPanelTests.ring_reduceMotion` (the one decision, as a function); not looked at in motion |
+| 15 | the UI tests | *UI* `WorkoutRest` (two tests); `WorkoutLogging` skips each rest; the testers' three pass unedited |
+
+### `shownRest`, and what it cannot tell
+
+`rest` is what the engine keeps: a skip clears it, "+30s" replaces it, a logged set that starts a rest replaces
+it. One case is left over, and only a superset has it: a member logged after the rest's end that starts no rest
+of its own, after which the engine still holds the ended rest. `shownRest` tells it by the sets: nil when a set's
+`doneAt` is not before the rest's end. Two consequences, both for S9:
+
+- Un-logging that very set brings "Rest over" back (rule 22 forbids cancelling a rest; nothing forbids this).
+- A member logged while the rest still runs does not hide it, so "Rest over" then stands until the round's last
+  member is logged. If S9 wants otherwise, the engine has to say so in the state.
+
+With `autoRest` off no rest starts, so none is shown; `shownRest` does not look at `autoRest` itself. A rest
+that a peer started on a workout whose auto rest is off would be shown (F17's to rule; no path in M1 makes one).
+
+### The notification client (criterion 8)
+
+**Chosen: the host takes an optional client, and the app gives it none until F23.**
+`LocalWorkoutSessionActor.init(… notifications: (any NotificationsClient)? = nil …)`; with nil, `notify(_:)`
+returns at once. `AppComposition.opened` builds the host without one, and says so. F23 passes its client there,
+and nothing else changes. Why this and not the alternatives:
+
+- Binding the `notifications` key's stub would log a fault at every logged set ("a wiring bug: loud in the log"),
+  which is false: nothing is mis-wired. The stub now has the two methods (they log and return), and nobody calls it.
+- A do-nothing client type in the app would be a fake with a product name.
+- The default also keeps every existing construction of the host, the testers' ten among them, as it was.
+
+The effects run once the envelope is stored and the update is out, in the engine's order, inside the host's
+turn: `.scheduleRestNotification` on a logged set, on "+30s" and on a `start` whose snapshot holds a rest;
+`.cancelRestNotification` on a skip, a finish and a discard, also when the end then fails to save (the workout
+has ended in its log). A refused append runs none. **Recovery runs none**: a notification the system holds
+outlives the process, so a resumed rest keeps the one it had. For F23: the client is awaited in the host's turn,
+so a client that hangs holds the next change; and a workout that recovery ends (killed between the stored end
+and its cancel) leaves its notification scheduled, which F23 can drop at launch when no workout is live.
+
+### Haptics (criterion 7)
+
+- **One subscriber plays: `WorkoutStore.follow()`**, each update's `haptics` once, after the update is on screen,
+  the ending update's included (S7's `.workoutFinished` needs nothing more). A stream's first element carries
+  none, so a follow that starts again, and a second cover, play nothing old. Today plays nothing.
+- **`.restOver`** is `keepRestTime()`'s, at zero, when all of these hold: it saw the rest running; its last wait
+  ended less than `restOverWindow` (1 s) after the rest's end; it has not been played for this rest. So not on a
+  redraw, not for a rest that had ended when the task began (a reopened cover, the tasks starting again), and
+  not for a rest that ended while the app was suspended and whose wait ends on the return.
+- `LiveHaptics`: `.setLogged` is `UIImpactFeedbackGenerator(style: .rigid)`; `.restOver` the notification
+  generator's `.warning`; `.personalRecord` and `.workoutFinished` its `.success`. Generators are made at the
+  moment and not kept prepared.
+
+### Texts, for the product owner
+
+In the catalog (63 keys, 9 new), through `WorkoutCopy+Rest.swift`.
+
+| Text | Source |
+|---|---|
+| "+30s", "Skip rest", "Rest over", "Set %lld · %@ lb × %lld" | the brief and the prototype, word for word |
+| **"Resting"** | the prototype reads "Resting · watch buzzes at zero". There is no watch until F17 and F18, so the promise is left out. Decide: this, or another line, until then |
+| **"Add 30 seconds"** | what VoiceOver reads for "+30s" |
+| **"Set %lld · %@ kg × %lld"** | the kilogram form |
+| **"Drop set · %@ lb × %lld"**, **"Drop set · %@ kg × %lld"** | a drop set has no number |
+| the time left, spoken: "1 minute, 15 seconds" | Foundation's duration words in the lifter's locale; not in the catalog |
+
+**Not used: "Set %lld · next exercise".** In the prototype it shows when the logged set was its exercise's last.
+Here the engine has already moved its cursor to the next exercise's first set when the rest begins (rule 20), and
+the card with it, so the line names that set ("Set 1 · 55 lb × 10"). With every set of the shown exercise logged
+the panel names no set. Say if the line should say "next exercise" in words instead.
+
+No counted text was added ("× 5" is no word form), so `forCountedText` stays where it is.
+
+### Look decisions, for the product owner
+
+1. **The card is opaque**: `surface` with a `hairlineStrong` border, radius 26. The prototype's is 82 % with a
+   blur and a shadow; a blur cannot be pinned by a reference and reads badly over rows of numbers.
+2. **"+30s" is a full-width `PillButton`, as tall as "Skip rest" (54 pt) and in the button's label size**
+   (16 pt bold), so the two read as a pair. The prototype draws both 42 px tall at 14 px.
+3. **The ring is the design system's 64 pt `RestRing`**; its arc moves to its new place over each second, and
+   steps there with Reduce Motion. It is a second behind at most; at zero it empties as "0:00" arrives.
+4. **At the accessibility sizes** the two lines stand under the ring and the buttons one over the other. The
+   panel is then about half the screen (about 400 pt of 874 at Accessibility XL in the running app), and the
+   shown row is under it until the page is scrolled. It can be scrolled clear (the UI test does), but it is a
+   lot of screen: a smaller ring or one row of buttons at those sizes is the product owner's call.
+5. **Margins**: 16 pt from the cover's sides, 8 pt from the end of the safe area, 16 pt inside.
+6. **The time is rounded up** to the whole second, so a 2:30 rest reads "2:30" for its first second and "0:00"
+   comes with "Rest over".
+7. **The window for the buzz at zero is one second** (see Haptics). And which pattern each haptic is.
+8. **No VoiceOver announcement at zero.** The brief's accessibility line asks for "Rest, 1:30 remaining" on
+   appear and "Rest over" at zero; the criteria do not, and nothing announces. The stop is there to be read, with
+   the time in words. Recommendation: with S7, when the store has other things to say aloud.
+
+### What is orange while the panel is up (criterion 10)
+
+On the panel: **"Skip rest"** (the one accent fill) and **the ring's arc** (`RestRing`, the design system's).
+"+30s", the two lines and the border are ink. On the rest of the cover, as S5 left it: the header's dot beside
+the elapsed time, the current progress segment, the shown row's number, rule and check ring, and the disc of
+every logged row. So with a rest up there are two orange buttons' worth on screen: "Skip rest" and the shown
+row's check ring. This goes to Pete with S5's open question (orange "once per surface").
+
+### Re-recorded and new references
+
+**Re-recorded: 6**, `LedgerDesignTests/__Snapshots__/PillButtonStateTests/` (the states gallery gained the
+full-width pill beside a primary button, and one alone and disabled). `PillButtonGallery`, the design gallery
+and the composite sheets do not hold it, and none of their references changed.
+
+| Reference | Before | After | What changed |
+|---|---|---|---|
+| light and dark × `large`, `xLarge` (4) | 402 × 218 | 402 × 342 | rows 0 to 199 are the same pixel for pixel; from row 200 (the old image's bottom margin, 18 rows) the two new rows: +124 pt |
+| light and dark × `accessibility3` (2) | 402 × 281 | 402 × 445 | rows 0 to 262 the same; from row 263 the two new rows: +164 pt |
+
+**New: 11**, `FeatureWorkoutTests/__Snapshots__/RestPanelTests/`: the panel resting and at "Rest over", light
+and dark × `large` and `xLarge` (8); the panel resting, dark, `accessibility3` (1); the whole screen resting,
+light and dark (2). None of S4's and S5's 21 references changed: they are drawn from `WorkoutParts`, the header
+over the page, which holds no panel.
+
+### Deviations
+
+1. **Criterion 3 was amended during G1** (the brief's rulings section): no `TimelineView`; the tick is the
+   store's. And there was no existing tick to use (above).
+2. **`.extendRest` at "Rest over" needs a shown rest.** With none shown (no panel), "+30s" and "Skip rest" send
+   nothing, so a double "Skip rest" skips once and a "+30s" queued behind a skip does not start a rest out of
+   nothing.
+3. **The panel is the scroll view's `safeAreaInset(edge: .bottom)`** (`WorkoutScreen`): it floats over the
+   page's end, the page shows through beside and under its corners, and the scroll view keeps the panel's
+   height as room under its content with nothing measured. The body stays `ScrollView { WorkoutPage(model:) }`.
+   A drag that starts on the panel does not scroll the page; the page is dragged where it shows. At
+   Accessibility XL that is about 240 pt between the header and the panel.
+4. **`WorkoutPresentation.screen` takes `now: Date? = nil`**, and draws no panel without it. The presentation
+   reads no clock, so the moment is an argument; every existing caller (the testers' among them) passes none and
+   gets the screen it got before.
+5. **Every preview with a set logged now shows a panel** (`minutes`, `hour`, `logging`, `discarding` at "Rest
+   over"), because that is what the app shows then. Two cases are new: `resting` and `restOver`.
+6. **`WorkoutLogging` (S5's UI test, mine) skips each rest** it starts, as criterion 15 allows: "+ Add set" and
+   the lower rows stand under the panel at the default size. **And it had a check that fails on `main`**
+   (the nightly plan is not in the gate, so nobody saw): `app.scrollViews.count == 1`. Since F09 S5 put Today on
+   screen, Today's own scroll view is still counted under the cover, with no panel and no rest involved. The
+   check now counts the scroll views that hold the card's title (one) and the cover's addition to what was
+   there before it (one), and reads the page's frame from that scroll view. The tester's
+   `WorkoutLoggingAdversarial` reads `app.scrollViews.firstMatch.frame`, which may be Today's; it passes, and
+   is the tester's to look at.
+7. **`DependencyKeysTests`** (F07's, not a tester's): `haptics` left the list of keys that fail unconfigured
+   inside `withTestDependencies`; `haptics_defaultsToAFreshFake` pins the new default and that the key still
+   fails outside it.
+8. **The brief's announcement at zero is not built** (look decision 8).
+9. **Files split for the lint's length limits**, nothing compressed: `WorkoutStore+Rest.swift`,
+   `WorkoutEdit+Rest.swift`, `LocalWorkoutSessionActor+Notifications.swift`; and in the tests
+   `Support/RestBench.swift`, three suites of store tests in two files, three suites in `RestPanelTests.swift`,
+   `DeviceClientTests.swift`, `WorkoutDevicesWiringTests.swift`. Three members of the store lost `private` for
+   it (`haptics`, `clock`, `restPlayedOver`), as the pump's did in S5.
+
+### Edits to the testers' files
+
+One file, two edits, both sanctioned:
+`Tests/FeatureWorkoutTests/Adversarial/WorkoutWordsAdversarialTests.swift`.
+
+| Where | Edit | Reason |
+|---|---|---|
+| `catalog_holdsExactlyTheSlicesTexts` | the nine keys of the rest panel added to the pinned set; the test's name says 63 | criterion 11 adds the keys |
+| `scanned(_:)` | blanks the exact spelling `RestTimer` before the forbidden spellings are looked for | ruling 1: criterion 2 makes the shown rest a `RestTimer`. `forbidden` is unchanged; `FeatureWorkoutSourceTests.testersScan_stillCatchesATimer` shows `Timer.scheduledTimer`, `Timer.publish`, `var timer: Timer?` and `TimelineView` are still caught |
+
+No other tester's file was touched, and none of their checks was weakened. Their UI tests pass unedited.
+
+### Inputs for S7, S8, S9 and F23
+
+- **S7.** The ending update's haptics are already played (`follow()`); `.personalRecord` needs a way in, since
+  the engine never emits it. `keepRestTime()` ends with the workout (no rest is shown once it is not live). The
+  finish sheet goes up over the panel; `isBusy` disables the panel's buttons as it does the page's. A VoiceOver
+  announcement at zero, if wanted, belongs where `.restOver` is played.
+- **S8.** The swap button's 11 whole-cover references become 13: the two whole screens resting.
+- **S9.** `shownRest`'s two consequences above. The next-set line reads the shown row (`activeSet`); a block
+  should name its next member's row ("A2"), which needs a text.
+- **F23.** Pass the live client to `LocalWorkoutSessionActor` in `AppComposition.opened`; the three notes under
+  "The notification client". The `notifications` key itself has no reader yet.
+- **F17/F18.** "Resting · watch buzzes at zero" can come back when the watch buzzes. A change made elsewhere
+  is drawn at the store's last `moment` until the next tick (under a second while a rest runs; until the next
+  tap or tick otherwise): fine on one phone, worth a reading of the date at an update once a peer exists, by a
+  rule that does not break the storm test.
+- **Chore.** `PrimaryButton.minimumHeight` is read by `PillButton` (same module); if a third control wants it,
+  it is a token.
+
+### Screenshots
+
+`tasks/features/F10-active-workout/screenshots/s6/`. From the running app (the nightly UI test `WorkoutRest`,
+iPhone 17 simulator, light): `app-resting-light`, `app-after-30s-light`, `app-accessibility-xl-resting-light`,
+`app-accessibility-xl-page-end-light` (the page's last row scrolled clear of the panel). From the references,
+because the app's rest lasts 150 s and no UI test waits it out, and no dark run of the app was made:
+`reference-panel-rest-over-light` and `-dark`, `reference-panel-resting-dark`,
+`reference-panel-resting-accessibility3-dark`, `reference-screen-resting-light` and `-dark`.
+
+### The runs
+
+2026-10-10, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0); every simulator run through
+the lock. The gate and the UI tests ran on the working tree that commit `bf452eb` then recorded unchanged; only
+this section and the screenshots came after.
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 130 s: format, lint, the package graph, 1,235 host tests in 187 suites |
+| `swift test --filter "FeatureWorkoutTests\|LedgerDependenciesTests\|LedgerSyncTests\|LedgerAppKitTests"` (Mac host), three times | exit 0 each (21 to 25 s): FeatureWorkout 293 tests in 44 suites; Sync 284 in 49; Dependencies 66 in 12; AppKit 257 in 41 |
+| `PR` plan, `-only-testing` FeatureWorkoutTests, LedgerDesignTests, LedgerAppKitTests, LedgerSyncTests, LedgerDependenciesTests, on the simulator | exit 0 in 178 s, on the code before the files were split for the lint; the full gate below ran the same targets on the final code |
+| `scripts/check.sh` (the full gate) | **exit 0 in 1,061 s**: lint 75 s, iOS build 28 s, catalogs (FeatureWorkout: 63 keys match the code), iOS tests 685 s, watchOS build 35 s, watchOS tests 234 s, coverage 2 s. FeatureWorkout 2,074 of 2,094 lines, 99.04 % (threshold 70 %); LedgerSync 99.00 %; LedgerDomain 99.35 %; overall 98.73 % |
+| `Nightly` plan, `-only-testing:LedgerUITests/` `WorkoutRest`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` | **exit 0 in 266 s: 9 of 9** (`WorkoutRest` 2, `WorkoutLogging` 2, the testers' 5, unedited) |
+
+Red runs on the way, and what they were:
+
+- The first host run after the store read `@Dependency(\.haptics)`: about 25 store tests failed on the unbound
+  key (ruling 4), and the tester's scan on `RestTimer`, `TimelineView` and `.formatted(` (rulings 1 to 3).
+- The tester's storm, 16 seeds, when the store read the date at each update (above): fixed in the store, not in
+  the test.
+- My timing tests hung once: they advanced a test clock before the store's task had begun its sleep. `RestBench`
+  now counts sleeps and waits for one before it moves time; no test waits on real time.
+- Three UI rounds: "+ Add set" tapped under the panel (`WorkoutLogging` now skips each rest); Today's scroll
+  view counted under the cover (deviation 6); a swipe that began on the panel and scrolled nothing (the test now
+  drags the page where it shows).
+- The fast gate's lint, three times, on lengths: files and suites were split (deviation 9).
+
+### Not verified
+
+- **On a device: nothing.** The haptics' patterns are chosen from the documentation and were never felt; the
+  simulator has no Taptic Engine. Whether a buzz at zero is felt with the phone in a pocket and the cover up is a
+  device question.
+- **The 40 s in the background in the running app.** It is shown by the store's tests with a clock they step
+  (the wait pending while the date moves on), and by the presentation at the later moment. No UI test puts the
+  app in the background, and none waits for a rest's end: "Rest over" and `.restOver` are shown by the store's
+  tests and the references only.
+- **Reduce Motion in motion.** The decision is a function with a test; nobody looked at the ring move, with it
+  on or off, beyond the screenshots, which show the digits changing without a fade.
+- **VoiceOver itself.** The stops, their words and their traits are pinned from the accessibility tree; how often
+  VoiceOver speaks a stop marked as updating often was not listened to.
+- **Dark and Increase Contrast in the running app**; right to left and Bold Text are measured (frames), not
+  looked at. No reference draws the panel with Increase Contrast.
+- **A superset with a rest** on screen: `shownRest`'s cases are tested in the Domain; the cover draws members as
+  solo cards until S9, and no test draws the panel over one.
+- The rest of the `Nightly` plan (Today's, the tabs', the performance lanes) was not run. CI: nothing is pushed.
+- A refused "+30s" in the running app (no Debug row fails a store); kill and relaunch with a rest running (F15).
