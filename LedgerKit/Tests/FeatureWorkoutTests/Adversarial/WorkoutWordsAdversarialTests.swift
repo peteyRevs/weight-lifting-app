@@ -52,7 +52,7 @@ struct WorkoutWordsAdversarialTests {
         #expect(texts.count == expected.count)
     }
 
-    @Test("The catalog holds the 54 texts and no other")
+    @Test("The catalog holds the 63 texts and no other")
     func catalog_holdsExactlyTheSlicesTexts() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
         let expected: Set = [
@@ -69,7 +69,10 @@ struct WorkoutWordsAdversarialTests {
             "TARGET", "%lld × %lld @ %@ lb · RPE %@", "%lld × %lld @ %@ kg · RPE %@", "Last", "No history yet",
             "Repeat", "#", "reps", "lb", "kg", "D", "%@ LB", "%@ KG", "1 REP", "+ Add set", "REMAINING",
             "%lld × %lld", "Set %lld", "Drop set", "%@ pounds", "%@ kilograms", "%lld reps", "Log set %lld",
-            "Undo set %lld", "Log drop set", "Undo drop set", "Couldn't save that change"
+            "Undo set %lld", "Log drop set", "Undo drop set", "Couldn't save that change",
+            // F10 S6 (sanctioned edit): the keys of the rest panel.
+            "Resting", "Rest over", "+30s", "Add 30 seconds", "Skip rest", "Set %lld · %@ lb × %lld",
+            "Set %lld · %@ kg × %lld", "Drop set · %@ lb × %lld", "Drop set · %@ kg × %lld"
         ]
         #expect(catalog.keys.subtracting(expected).sorted() == [])
         #expect(expected.subtracting(catalog.keys).sorted() == [])
@@ -129,6 +132,9 @@ struct WorkoutWordsAdversarialTests {
         (line.components(separatedBy: "//").first ?? "")
             .replacingOccurrences(of: "date.now", with: "injected")
             .replacingOccurrences(of: ".formatted(in:", with: ".domainFormat(in:")
+            // F10 S6 (sanctioned edit, the orchestrator's ruling during G1): the Domain's type `RestTimer`,
+            // which criterion 2 makes the shown rest. Foundation's `Timer` is still caught.
+            .replacingOccurrences(of: "RestTimer", with: "RestCountdown")
     }
 
     @Test("The scan sees every ambient format, and passes the Domain's own", arguments: [

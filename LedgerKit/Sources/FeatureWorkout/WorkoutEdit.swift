@@ -2,7 +2,8 @@ import Foundation
 import LedgerDesign
 import LedgerDomain
 
-/// One tap on the workout's page that changes the workout (F10 S5). A row is named by its exercise's place
+/// One tap on the workout's page or on its rest panel that changes the workout (F10 S5, S6). A row is named by its
+/// exercise's place
 /// and its set's id, as the engine's events name it, so a tap means the same row however many taps are
 /// waiting before it. The views send these inside `WorkoutAction.edit`; `WorkoutStore` queues them and its
 /// pump applies them one at a time, in the order they were made.
@@ -24,6 +25,11 @@ nonisolated enum WorkoutEdit: Equatable, Sendable {
     case addSet(exerciseIndex: Int)
     /// A row of "REMAINING": that exercise becomes the shown one.
     case jump(exerciseIndex: Int)
+    /// "+30s" on the rest panel: the rest that is running ends 30 s later; at "Rest over" a rest of 30 s
+    /// starts.
+    case extendRest
+    /// "Skip rest": the rest ends, and its panel goes.
+    case skipRest
 }
 
 /// The row the lifter chose, where it is not the engine's cursor: the engine moves its cursor only onto a
@@ -82,6 +88,10 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
             plan.addSet(to: exerciseIndex, in: state, id: newSetID)
         case let .jump(exerciseIndex):
             plan.jump(to: exerciseIndex, in: state)
+        case .extendRest:
+            plan.extendRest(in: state, at: now)
+        case .skipRest:
+            plan.skipRest(in: state)
         }
         return plan
     }

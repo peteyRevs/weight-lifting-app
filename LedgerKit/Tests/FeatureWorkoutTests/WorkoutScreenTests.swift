@@ -14,7 +14,9 @@
     struct WorkoutScreenTests {
         /// An iPhone 17's screen, the phone the references are drawn for.
         nonisolated static let phone = CGSize(width: SnapshotConfig.phoneWidth, height: 874)
-        nonisolated static let workouts: [WorkoutPreview] = [.started, .minutes, .hour, .logging, .dropSet, .discarding]
+        nonisolated static let workouts: [WorkoutPreview] = [
+            .started, .minutes, .hour, .logging, .resting, .restOver, .dropSet, .discarding
+        ]
 
         static func screen(_ preview: WorkoutPreview, send: @escaping (WorkoutAction) -> Void = { _ in }) -> some View {
             WorkoutScreen(model: preview.model, send: send)
@@ -54,8 +56,10 @@
             // The header's five stops are outside the scroll view, and take no more height than the screen
             // has above it: the header is pinned over the page. (The reader's window is taller than the
             // phone and centres the screen, so the stops' own span is measured, not their place.)
-            let header = Self.screen(preview).accessibilityElements(outsideScrollViews: true)
-            #expect(header.count == 5)
+            // (After them, outside the scroll view too, stand the rest panel's three, in a state that rests.)
+            let outside = Self.screen(preview).accessibilityElements(outsideScrollViews: true)
+            #expect(outside.count == 5 + (WorkoutTrees.rests[preview]?.count ?? 0))
+            let header = outside.prefix(5)
             let top = try #require(header.map(\.frame.minY).min())
             let bottom = try #require(header.map(\.frame.maxY).max())
             #expect(bottom - top <= scroll.frame.minY, "the header spans \(bottom - top) pt above \(scroll.frame)")
@@ -63,7 +67,7 @@
         }
 
         @Test(
-            "The header pinned above the page reads as its table writes it, in place on the real screen",
+            "The header pinned above the page, and the rest panel under it, read as their tables write them, in place",
             arguments: workouts
         )
         func screen_headerInPlace_isItsTree(_ preview: WorkoutPreview) throws {
@@ -72,12 +76,13 @@
                     Stop($0.label, value: $0.value, $0.traits)
                 }
                 let expected = try Array(#require(WorkoutTrees.all[preview]).prefix(5))
+                    + (WorkoutTrees.rests[preview] ?? [])
                 let difference = firstDifference(found: found, expected: expected)
                 #expect(difference == nil, "\(preview.rawValue) at \(appearance)")
             }
         }
 
-        @Test("The header's buttons answer in place, above the scroll view")
+        @Test("The header's buttons answer in place, above the scroll view, and the rest panel's under it")
         func screen_headerButtons_sendTheirActions() {
             var sent: [WorkoutAction] = []
             Self.screen(.logging) { sent.append($0) }.withAccessibilityElements(outsideScrollViews: true) { elements in
@@ -85,7 +90,8 @@
                     _ = element.accessibilityActivate()
                 }
             }
-            #expect(sent == [.minimize, .finish])
+            // `logging` stands at "Rest over": the panel's two buttons answer too.
+            #expect(sent == [.minimize, .finish, .edit(.extendRest), .edit(.skipRest)])
         }
 
         @Test("At the largest text size of the matrix the page is longer than the screen, and scrolls")

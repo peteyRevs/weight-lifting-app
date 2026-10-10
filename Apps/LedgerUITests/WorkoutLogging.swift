@@ -29,6 +29,9 @@ final class WorkoutLogging: XCTestCase {
         try stepAndLogTheFirstSet(in: app)
         attachScreenshot(of: app, named: "Workout page, one set logged")
         undoAndLogAgain(in: app)
+        // A logged set starts a rest, whose panel floats over the page's end (F10 S6; `WorkoutRest` tests
+        // it). This test is of the page: it skips each rest, so that no control it taps is under the panel.
+        skipRest(in: app)
 
         // "+ Add set" appends a sixth row; logging every row moves the card to the next exercise.
         app.buttons["workout.card.addSet"].tap()
@@ -36,10 +39,12 @@ final class WorkoutLogging: XCTestCase {
         for set in 2 ... 5 {
             app.buttons["Log set \(set)"].tap()
             XCTAssertTrue(app.buttons["Undo set \(set)"].waitForExistence(timeout: 5), "set \(set)")
+            skipRest(in: app)
         }
         // The last row logged, nothing of the bench press is left: the engine's cursor is on the next exercise.
         app.buttons["Log set 6"].tap()
         wait(for: title, toBe: "Incline DB Press")
+        skipRest(in: app)
         XCTAssertTrue(title.isHittable, "the next exercise's name is on screen")
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 2 of 5")
         XCTAssertTrue(app.staticTexts["Exercise 2 of 5"].exists)
@@ -104,9 +109,13 @@ final class WorkoutLogging: XCTestCase {
     @MainActor
     func test_sampleWorkout_atAnAccessibilitySize_readsItsStopsInOrder() {
         let app = launch(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXL"])
+        // Today's own page is a scroll view, and it is still counted under the cover: the cover adds one.
+        let underTheCover = app.scrollViews.count
         startSampleWorkout(in: app)
         XCTAssertTrue(app.staticTexts["workout.card.title"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.scrollViews.count, 1, "the page is one scroll view under the header")
+        let pages = app.scrollViews.containing(.staticText, identifier: "workout.card.title")
+        XCTAssertEqual(pages.count, 1, "the page is one scroll view under the header")
+        XCTAssertEqual(app.scrollViews.count, underTheCover + 1, "and the cover holds no other")
         attachScreenshot(of: app, named: "Workout page, accessibility size")
 
         let stops = pageStops(in: app)
@@ -115,7 +124,7 @@ final class WorkoutLogging: XCTestCase {
         }
         let tops = stops.map(\.frame.minY)
         XCTAssertEqual(tops, tops.sorted(), "the order on the page is the order of the table")
-        let scroll = app.scrollViews.firstMatch.frame
+        let scroll = pages.firstMatch.frame
         XCTAssertGreaterThan(stops[stops.count - 1].frame.maxY, scroll.maxY, "the page is longer than the screen")
         XCTAssertGreaterThanOrEqual(stops[0].frame.minY, scroll.minY, "the page starts under the header")
         XCTAssertLessThanOrEqual(app.buttons["workout.header.finish"].frame.maxY, scroll.minY, "the header is pinned")
@@ -129,6 +138,7 @@ final class WorkoutLogging: XCTestCase {
         XCTAssertTrue(app.buttons["Undo set 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Undo set 1"].isSelected)
         XCTAssertEqual(stops[7].value as? String, "Current set")
+        skipRest(in: app)
 
         // The last exercise's row is off screen: tapping it scrolls to it and jumps.
         app.buttons["workout.remaining.row.4"].tap()
@@ -178,6 +188,15 @@ private extension WorkoutLogging {
         let row = app.buttons["debug.menu.startSampleWorkout"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
+    }
+
+    /// "Skip rest" on the rest panel a logged set brought up; the panel goes.
+    @MainActor
+    private func skipRest(in app: XCUIApplication) {
+        let skip = app.buttons["workout.rest.skip"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 5), "a logged set starts a rest")
+        skip.tap()
+        XCTAssertTrue(skip.waitForNonExistence(timeout: 5))
     }
 
     /// "Finish", then "Discard": the cover goes down and nothing is left running for the next test.

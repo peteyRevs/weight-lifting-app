@@ -17,6 +17,13 @@ public enum ClockText {
         return "\(hours):\(twoDigits(minute)):\(twoDigits(second))"
     }
 
+    /// Time left, as a countdown writes it: whole seconds, rounded up, so "1:30" stands for the whole first
+    /// second of a 90 s rest and "0:00" is read only when nothing is left. Otherwise as `elapsed(_:)`.
+    public static func remaining(_ duration: Duration) -> String {
+        let (seconds, attoseconds) = duration.components
+        return elapsed(.seconds(attoseconds > 0 && seconds < .max ? seconds + 1 : seconds))
+    }
+
     private static func twoDigits(_ value: Int128) -> String {
         value < 10 ? "0\(value)" : "\(value)"
     }

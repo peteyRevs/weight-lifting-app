@@ -521,3 +521,90 @@ no other: a refused change, and the session's updates ending (the failed screen,
 cover). A call that never returns under "Minimize" is accepted as a hung discard is: no timeout. **For S9**
 (implementer's question): once the watch syncs, a chosen exercise whose every set is then logged elsewhere
 stays on screen with nothing to log; the choice should give way.
+
+## Plan amendments — slice S6, rest and haptics (orchestrator, 2026-10-10)
+
+The plan's S6. Cut from `main` at release 0.10.0, which holds solo logging (S5). About 385 product lines
+planned; slices with a store in them have landed far over plan, so the implementer reports the count at
+each stage and stops past about 800 with a proposed split (the natural one: the two client protocols with
+their fakes and `LiveHaptics`, against the panel). The notes' "S6 — rest and effects" and "Inputs for S6"
+are part of this contract. The slice is accepted when:
+
+1. **The rest panel is drawn while a rest is shown** (brief criteria 3 and 6): `RestRing` with the time
+   left as m:ss, the line naming the next set (from `WorkoutPresentation.activeSet`), "+30s" and "Skip
+   rest". It floats over the page at the bottom of the cover (v2); the page keeps bottom room so its last
+   row and "+ Add set" can be scrolled clear of it. With `autoRest` off no panel ever shows.
+2. **What is shown is `WorkoutState.shownRest`**, a Domain addition: the running rest; after it has ended,
+   the same rest until a set is logged, the rest is skipped or it is extended; otherwise nil. The view and
+   the presentation decide nothing about when a rest exists.
+3. **The clock rule (ADR-004)**: the time left and the ring's fraction are `RestTimer.remaining(at:)` and
+   `fraction(at:)` of the injected date, drawn on a timeline; nothing counts down in a stored property.
+   After 40 s in the background the panel shows the wall-clock time left; a rest that ended meanwhile
+   shows "0:00" and "Rest over".
+4. **"Rest over"** stays until "+30s" (a new 30 s rest, decision #7), "Skip rest" or the next logged set.
+5. **"+30s" and "Skip rest" are two `WorkoutEdit` cases through the one tap queue**, one event each:
+   `restExtended(amount: .seconds(30), extendsShownRest: remaining > .zero, tappedAt: now)` with both
+   read from the tap's injected date, and `restSkipped`. S5's rules hold for them: applied in order, each
+   once; a refused change drops the later taps; "Minimize" waits.
+6. **Un-logging a set never cancels a rest** (rule 22); the one-second undo guard is unchanged.
+7. **Haptics**: `HapticsClient.play(_:)` in the Domain; a recording fake; the unimplemented stub;
+   `LiveHaptics` in `LedgerAppKit`, bound in `AppComposition`. Exactly one subscriber, the workout store's
+   `follow()` loop, plays each update's `haptics`, each once, also across the cover's tasks restarting.
+   `.restOver` is played once when the shown rest reaches zero while the cover is up, not again on a
+   redraw, a return from the background or a reopened cover whose rest had already ended.
+8. **Notifications**: `NotificationsClient.scheduleRestOver(at:)` (replacing any scheduled one) and
+   `cancelRestOver()` in the Domain, with a recording fake and the stub. The host, not the store, runs
+   `.scheduleRestNotification` and `.cancelRestNotification`, so that they run with no cover up. The live
+   client stays unimplemented in the app until F23: no permission prompt and no system notification in
+   this slice, and the app must not trap on the unimplemented client when a rest starts (how is the
+   implementer's proposal, stated in the notes).
+9. **A full-width `PillButton`** in `LedgerDesign`; its gallery references are recorded again and the
+   change in every re-recorded image is accounted for.
+10. **Orange once on the panel**: "Skip rest" (brief criterion 13), pinned by a test or a list. While the
+    panel is up, say in the notes what else on the cover is orange, for Pete.
+11. **Texts**: only the brief's and the prototype's ("+30s", "Skip rest", "Rest over", the next-set
+    line); each in the module's catalog through a `WorkoutCopy` file; any text they do not give is listed
+    for Pete. A counted text takes its form by the catalog's language (`forCountedText`, moved to
+    `WorkoutCopy.swift` if a second file needs it).
+12. **VoiceOver**: the panel is reachable after the card; the time left is read as a duration, not as
+    digits and a colon, and is not announced every second; "+30s" has a spoken label that says what it
+    does; every target is 44 pt.
+13. **Sizes and settings**: nothing is cut or overlaps at `.accessibility3` on 375 and 402 pt, light and
+    dark, with Bold Text and right to left; the panel never covers the shown row's check in a way that
+    cannot be scrolled clear. Snapshots as the plan's table (the panel resting and rest over, the whole
+    screen resting).
+14. **Reduce Motion**: the ring does not animate between ticks when it is on.
+15. **The UI tests** `WorkoutLogging` and the testers' pass with the panel present (skipping the rest or
+    tapping through it); one UI test taps "+30s" and "Skip rest".
+
+**Not in this slice:** the system notification itself and its permission (F23), the watch, finish and the
+receipt (S7), swap (S8), supersets (S9), the project file or a test plan.
+
+## Plan amendments — slice S6, rulings during G1 (orchestrator, 2026-10-10)
+
+The implementer stopped on one point and asked: the tester's `sources_readNothingAmbient`
+(`WorkoutWordsAdversarialTests`) forbids the spellings "Timer" and "TimelineView" anywhere in
+`FeatureWorkout`, against criterion 2 (the shown rest is a `RestTimer`) and criterion 3 ("drawn on a
+timeline"). The rulings, as given:
+
+1. **"Timer" against `RestTimer`: the criterion wins.** The check's `scanned(_:)` blanks the exact spelling
+   `RestTimer` and nothing wider, so Foundation's `Timer` (`Timer.publish`, `Timer.scheduledTimer`) is still
+   caught. A control in the implementer's own tests, not in the tester's file, shows that a planted
+   `Timer.scheduledTimer` still fails the check. The edit is listed in the notes.
+2. **"TimelineView": the tester's check stands, and criterion 3 is amended.** `TimelineView`'s date is the
+   system's clock, not the injected one: the ambient read the check exists to stop, and a panel drawn from it
+   cannot be tested at a chosen instant. **Criterion 3, as amended:** the time left and the ring's fraction
+   are `RestTimer.remaining(at:)` and `fraction(at:)` of the injected date, computed at every tick of a
+   clock-driven tick; no `TimelineView`, no `Timer`, no stored countdown. A stored "now" that the injected
+   clock advances is not a countdown in a stored property: what is forbidden is a stored remaining value that
+   is decremented. What stays: the right time left at once on a return from the background (the tick reads
+   the date again; it does not add a second), "0:00" and "Rest over" for a rest that ended meanwhile, and
+   `.restOver` once (criterion 7). `forbidden` is not edited for this. If the ring wants a smoother motion
+   than a step a second, that is a look question: it is drawn stepped at each tick, with an implicit
+   animation between ticks unless Reduce Motion is on (criterion 14), and noted for the product owner.
+3. **".formatted(" on the spoken time** is removed the implementer's way (the format style's `format(_:)`
+   with the injected locale); no edit to the check.
+4. **`haptics = FakeHaptics()` as a default of `withTestDependencies`** is approved on two conditions: a
+   fresh recording fake for each call, never one shared between tests; and the app's composition still binds
+   the live client itself, with a test that fails if `AppComposition` leaves `haptics` unbound. It is
+   recorded in the notes as a change to shared test support.

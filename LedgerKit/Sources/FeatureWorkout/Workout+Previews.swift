@@ -14,11 +14,18 @@
     /// still at each case's moment. Upper A is built with no history, so its cards read "No history yet";
     /// `logging` gives every exercise a last workout, and `dropSet` shows the last exercise in kilograms
     /// with a drop set, where nothing remains after it.
+    ///
+    /// The engine starts a rest at each logged set, so every case with a set logged shows the rest panel
+    /// (F10 S6): at "Rest over" where its moment is past the rest's end, as in `logging`, whose second set
+    /// was logged four minutes earlier. `resting` is `logging` 75 s into the 150 s rest of that set, and
+    /// `restOver` is the same workout five seconds after the rest's end.
     enum WorkoutPreview: String, CaseIterable {
         case started = "Just started"
         case minutes = "After some minutes"
         case hour = "Past an hour"
         case logging = "Logging a set"
+        case resting = "Resting"
+        case restOver = "Rest over"
         case dropSet = "A drop set, in kilograms"
         case discarding = "Discarding"
         case loading = "Loading"
@@ -32,6 +39,8 @@
             switch self {
             case .started, .loading, .failed: (0, 0)
             case .logging: (2, 6 * 60 + 5)
+            case .resting: (2, 2 * 60 + 75)
+            case .restOver: (2, 2 * 60 + 155)
             case .dropSet: (0, 41 * 60 + 12)
             case .minutes, .discarding: (6, 24 * 60 + 22)
             case .hour: (15, 3600 + 65)
@@ -47,7 +56,7 @@
         func workout() throws -> WorkoutState {
             var workout = try Fixtures.seedSession()
             switch self {
-            case .logging: Self.giveHistory(to: &workout)
+            case .logging, .resting, .restOver: Self.giveHistory(to: &workout)
             case .dropSet: Self.endWithADropSetInKilograms(&workout)
             default: break
             }
@@ -72,6 +81,7 @@
             return WorkoutPresentation.screen(
                 state,
                 selection: selection,
+                now: now,
                 isBusy: self == .discarding,
                 locale: Fixtures.locale,
                 calendar: Fixtures.calendar
@@ -164,6 +174,14 @@
 
     #Preview("Logging a set") {
         WorkoutPreview.logging.content
+    }
+
+    #Preview("Resting") {
+        WorkoutPreview.resting.content
+    }
+
+    #Preview("Rest over") {
+        WorkoutPreview.restOver.content
     }
 
     #Preview("A drop set, in kilograms") {

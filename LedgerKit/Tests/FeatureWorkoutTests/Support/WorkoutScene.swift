@@ -100,9 +100,11 @@ struct WorkoutScene {
     }
 
     /// A cover's store on the scene's session, as `WorkoutRoot` makes one each time the cover goes up.
-    func store() -> WorkoutStore {
+    /// `configure` binds what a test wants of its own: a date that moves, a clock it steps, haptics it reads.
+    func store(_ configure: (inout DependencyValues) -> Void = { _ in }) -> WorkoutStore {
         withTestDependencies {
             Self.bind(&$0, stores: stores, programs: programs, session: session)
+            configure(&$0)
         } operation: {
             WorkoutStore()
         }

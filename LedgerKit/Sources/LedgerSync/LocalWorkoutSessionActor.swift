@@ -5,7 +5,13 @@ import os
 /// The live workout's host on one device: the real `WorkoutSessionClient` (F10 S2; ADR-004, "The host loop").
 /// It stamps each call's event with this device's next `seq` and its hybrid logical clock, reduces it with
 /// `WorkoutEngine`, stores it, and only then lets anyone see the result. F17 adds the peer's envelopes and
-/// the transport; S6 the rest notification.
+/// the transport.
+///
+/// **The rest notification** (F10 S6). The host runs the engine's `.scheduleRestNotification` and
+/// `.cancelRestNotification` itself, through the `NotificationsClient` it was given, once the envelope that
+/// asked for them is stored: a rest also starts, and a workout also ends, with no screen up. A host that
+/// was given no client runs neither, which is the app's case until F23 builds one. Recovery schedules
+/// nothing: a notification the system holds outlives the process, and a resumed rest keeps its own.
 ///
 /// **One operation at a time.** An actor is re-entrant at every `await`, and this one awaits its store. So
 /// every call that changes the workout, and recovery, is an operation in a queue (`inTurn(_:)`): it starts
@@ -31,6 +37,7 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
     let workouts: any WorkoutRepository
     let programs: any ProgramRepository
     let device: DeviceID
+    let notifications: (any NotificationsClient)?
     let logger = Logger(subsystem: "com.petearevalo.Ledger", category: "sync")
     private let now: @Sendable () -> Date
 
@@ -54,14 +61,17 @@ public actor LocalWorkoutSessionActor: WorkoutSessionClient {
 
     /// - Parameters:
     ///   - device: this install's device, which every envelope the host creates names.
+    ///   - notifications: what schedules and cancels the rest-over notification; nil runs neither.
     ///   - now: the injected date, read once for each envelope's stamp.
     public init(
         events: any WorkoutEventStore,
         workouts: any WorkoutRepository,
         programs: any ProgramRepository,
         device: DeviceID,
+        notifications: (any NotificationsClient)? = nil,
         now: @escaping @Sendable () -> Date
     ) {
+        self.notifications = notifications
         self.events = events
         self.workouts = workouts
         self.programs = programs
@@ -188,12 +198,15 @@ private extension LocalWorkoutSessionActor {
         }
         (seq, live) = (envelope.seq, started)
         publish(started, WorkoutSessionUpdate.haptics(from: effects))
+        await notify(effects)
     }
 
     /// An event on the live workout: stamped, reduced, and its effects run in the engine's order.
     /// `.persist` comes first, and a store that refuses it leaves everything as it was. `.materialize` and
-    /// `.discardLog` are the end's (`settle()`); the haptics go out with the update; `.transmit`, the rest
-    /// notification and the Live Activity have no one to run them yet (F17, S6, F21).
+    /// `.discardLog` are the end's (`settle()`); the haptics go out with the update; the rest notification
+    /// is scheduled or cancelled once the envelope is stored and the update is out (`notify(_:)`), also for
+    /// an end that then fails to complete: the workout has ended in its log. `.transmit` and the Live
+    /// Activity have no one to run them yet (F17, F21).
     ///
     /// An event the engine ignores has no effects: nothing is stored, and no `seq` or stamp is used.
     func perform(_ event: WorkoutEvent) async throws -> WorkoutState {
@@ -217,11 +230,13 @@ private extension LocalWorkoutSessionActor {
         let haptics = WorkoutSessionUpdate.haptics(from: effects)
         guard next.phase == .live else {
             ending = Ending(state: next, haptics: haptics)
+            await notify(effects)
             try await settle()
             return next
         }
         live = next
         publish(next, haptics)
+        await notify(effects)
         return next
     }
 

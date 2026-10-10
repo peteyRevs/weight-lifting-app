@@ -8,6 +8,11 @@ import SwiftUI
 /// that scrolls is its pinned parts plus its page), and that is its one layout at every text size. The
 /// VoiceOver trees and the references are taken from the header and the page stacked without the scroll
 /// view (`WorkoutParts`, in the tests).
+///
+/// While the workout shows a rest, the rest panel floats over the page's end (F10 S6; v2). It is the
+/// scroll view's bottom inset, so the page keeps as much room under its last row as the panel is tall, at
+/// every text size: "+ Add set" and every row can be scrolled clear of it, and VoiceOver reaches it after
+/// the page. Nothing is measured and no height is kept.
 struct WorkoutScreen: View {
     let model: WorkoutScreenModel
     let send: (WorkoutAction) -> Void
@@ -35,6 +40,13 @@ struct WorkoutScreen: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if let rest = workout.rest {
+                        RestPanel(model: rest, send: send)
+                            .padding(.horizontal, LedgerSpacing.l)
+                            .padding(.bottom, LedgerSpacing.s)
+                    }
+                }
                 .onChange(of: workout.page.card?.exerciseIndex) {
                     // Another exercise is shown: its place and name are at the page's top (criterion 17).
                     position.scrollTo(edge: .top)

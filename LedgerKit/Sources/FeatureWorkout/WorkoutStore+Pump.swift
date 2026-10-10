@@ -96,7 +96,10 @@ extension WorkoutStore {
         guard case let .loaded(shown) = workout else {
             return .interrupted
         }
-        let plan = WorkoutEditPlan.make(edit, in: ahead ?? shown, selection: selection, now: date.now) {
+        // The date is read once for a tap: the plan's moment, and the one its change is first drawn at.
+        let now = date.now
+        moment = now
+        let plan = WorkoutEditPlan.make(edit, in: ahead ?? shown, selection: selection, now: now) {
             SetID(uuid())
         }
         do {

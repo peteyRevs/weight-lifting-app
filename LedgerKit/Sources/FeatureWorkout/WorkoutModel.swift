@@ -10,10 +10,13 @@ nonisolated enum WorkoutScreenModel: Equatable, Sendable {
     case failed(WorkoutFailedModel)
 }
 
-/// A live workout on screen: the pinned header, and the page that scrolls under it.
+/// A live workout on screen: the pinned header, the page that scrolls under it, and the rest panel that
+/// floats over the page's end while a rest is shown.
 nonisolated struct WorkoutModel: Equatable, Sendable {
     let header: WorkoutHeaderModel
     let page: WorkoutPageModel
+    /// Nil when the workout shows no rest (`WorkoutState.shownRest`).
+    let rest: RestPanelModel?
 }
 
 /// The cover's pinned header (v2 "Active workout"): Minimize, the elapsed time, Finish, the workout's name and
