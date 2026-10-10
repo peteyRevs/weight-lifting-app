@@ -1640,3 +1640,227 @@ resumable live workout before validating the program.
 - The catalog was not diffed key by key against the copy file: the gate's catalog step does that and passed.
 - Coverage, lint, the Release build, watchOS (`DebugMenu` builds there too), and the line count of 952.
 - The tester's files, by instruction.
+
+## S6 — review, round 1 (G3 reviewer, 2026-10-10)
+
+Range `main..9dadbe0` on `feat/F10-s6-rest` (one code commit, `bf452eb`, holds everything; three notes
+commits follow. Noted, no action). Read: the S6 amendments and the G1 rulings, the brief's criteria 3, 6, 7,
+13 and its non-functional section, the notes' "S6 — rest and haptics, as built" and O5, ADR-004's clock
+rule, architecture §13's line on the rest timer, every product file of the diff in full, the store's and
+the root's files whole, and the tests named below. Nothing was built or run.
+
+**Verdict: changes requested.** One blocking item, and it is the question the orchestrator asked: the
+tick. Everything else the slice promises is there and is tested by checks that are real: the Domain's
+`shownRest`, the two edits through the one queue, the haptics played once, `.restOver` and its window, the
+host's notification effects, the full-width pill. If the orchestrator rules that the tick stays as built,
+nothing else blocks.
+
+### Blocking
+
+- **S6-B1. A tick each second rebuilds the whole cover, against the brief's non-functional line; confine
+  what reads `moment` to the panel.** `WorkoutStore.swift:57` (`moment`), `:92-101` (`model` reads it),
+  `WorkoutRoot.swift:29` (`store.model` read in the root's body), `WorkoutModel.swift:19`,
+  `WorkoutPresentation.swift:17,34`. The brief (`F10-active-workout.md:81`) says "no per-second store
+  updates"; `docs/architecture.md:320-321` says views render the rest with `TimelineView`. As built,
+  `keepRestTime()` writes `moment` each second, `model` reads it, so the root's body runs each second,
+  `WorkoutPresentation.screen` rebuilds header, page and panel, and because `send: store.send` is a new
+  closure each time SwiftUI cannot skip `WorkoutHeader` or `WorkoutPage` and evaluates every body under
+  them. A rest runs for most of a workout, so this is the cover's normal state, and S7 to S9 would build
+  their sheets and the block on a root that is invalidated at 1 Hz.
+  **Proposed change (option c below):** keep `moment`, `keepRestTime()` and every store test as they are;
+  take `rest` out of `WorkoutModel` and `now:` out of `WorkoutPresentation.screen` (it returns to S5's
+  signature, and deviation 4 goes with it); give the store `var restPanel: RestPanelModel?` (the one
+  reader of `moment`, calling `WorkoutPresentation.rest(_:at:…)` with a date that is not optional); give
+  `WorkoutScreen` a slot for the bottom inset, filled by the root with a small view whose body reads
+  `store.restPanel`, and by previews and tests with `RestPanel(model:)`. Observation then invalidates that
+  one view at a tick and nothing else. Pin it on the host:
+  `withObservationTracking { _ = store.model } onChange: { … }` must not fire when a second goes by, and
+  must fire for `store.restPanel`. About 25 product lines moved, none added to the count that matters;
+  `RestBench.panel` reads `store.restPanel`; `screen_needsAMoment` and `withoutThePanel` go.
+  Then amend the brief's line and architecture §13 to what is true: "the rest's time is the store's
+  reading of the injected date once a second; only the rest panel reads it".
+
+### The tick: the three ways
+
+| | (a) as built | (b) `TimelineView` in `RestPanel.swift` | (c) `moment` read by the panel only |
+|---|---|---|---|
+| Code | done; 75 lines in the store | the view computes the model from the timeline's date, so the presentation is called from a view body and the model is no longer "every string final"; the store still needs a task for `.restOver` (one wait to the end); `WorkoutTimeline` gains the timeline's date or an offset | (a) with the reader moved: about 25 lines moved |
+| Clocks | one, injected | two for one fact: the view says "Rest over" by the system's clock, the store buzzes and "+30s" judges `extendsShownRest` by the injected one. They agree in the app and part under `-LEDGER_UITEST_NOW` (the rest's `endsAt` is in injected time), unless the offset is carried into the view too | one, injected |
+| Tests | every instant is chosen; stepped clock | the inner panel can be pinned through `workoutTimeline.pausedAt`, as S4's header is; the wrapper and the flip to "Rest over" cannot, and the tester's check takes a one-file exemption, which is a precedent | as (a), plus the observation test |
+| Each second | root body, whole presentation, every view body under the screen | the panel only; SwiftUI stops the timeline off screen | the panel only |
+| Ring | stepped, eased over the second | could be smooth, at the cost of redrawing at the display's rate for minutes | as (a) |
+
+S4's `Text(timerInterval:)` lives with the ambient clock because it is given two injected dates and draws
+only digits, with no event at a boundary; `UITestClock`'s comment already records what that costs (the
+header reads the offset). The rest panel has a boundary (zero) and two things that must agree with it (the
+haptic and "+30s"), which is why (b) is the worse fit here even though the brief named it. **I recommend
+(c).** It keeps the ruling's reasons (the injected date, a panel drawn at a chosen instant, the tester's
+check unedited) and meets what the brief's line was written to prevent. Taken to the letter the store
+still changes once a second; the letter should be amended, not the design.
+
+**Does a tick, as built, disturb anything else?** By reading, no. The steppers are plain buttons with no
+held state (`SetRowSteppers`, `StepperField`: no `@State`, no gesture); a button's pressed state, the
+scroll position (`@State position`, moved only by `onChange` of the exercise index) and the dialogs'
+bindings survive a body evaluation; the tick touches no part of the pump (`queue`, `ahead`, `selection`),
+and `moment` written by a tap and by a tick is in both cases the newest reading. The implicit animation is
+scoped to `RestReading` by its value (`RestPanel.swift:39`). What I could not see is motion: a dialog up
+over a ticking root is exercised only by the nightly `WorkoutRest` (its discard), and nobody watched it.
+So (a) is wasteful and fragile for later slices, not wrong today.
+
+**`.restOver` and its one-second window.** Under (a) and (c) it is the code as built, and it is sound: the
+wait is on the continuous clock, the date is read again after it, `sawItRun` keeps a reopened cover
+silent, `rest == shownRest` after the wait keeps a stale task silent with no suspension point between that
+check and the play, and `restPlayedOver` is set before the `await`. A return from the background within a
+second of the end still buzzes, half a second late, which is right. Under (b) the store keeps a task
+anyway (a view cannot play a haptic without sending an action from its body); one wait to `endsAt` with
+the same window would do, so (b) saves the loop and not the task.
+
+### Should fix
+
+- **S6-SF1. Nothing in the PR gate fails if `WorkoutRoot` stops running `keepRestTime()`.**
+  `WorkoutRoot.swift:61-63`. Every timing test calls `store.keepRestTime()` itself; only the nightly
+  `WorkoutRest` ("counts down by itself") sees the `.task(id:)`. Delete the three lines and the gate is
+  green with a panel that never moves. Proposed: one simulator test that hosts `WorkoutRoot(store:)` on
+  `RestBench`'s clock, logs a set and expects `clock.sleeps` to rise, then "+30s" and expects it to rise
+  again (the id changed).
+- **S6-SF2. How much page is left at the largest sizes is not measured.** `RestPanelTests.swift:205`
+  (`screen_keepsRoomForThePanel`) shows the inset is at least the panel's height at `.accessibility5`; it
+  does not show that anything of the page is visible between the header and the panel. At Accessibility XL
+  on 402 × 874 the screenshot shows about 240 pt; the panel grows with the text and a drag that starts on
+  it does not scroll (deviation 3), so on 375 pt at `.accessibility5` the lifter may be left with no page
+  to drag and only "Skip rest" to get it back. Proposed: measure `scroll.frame.height − panel height` at
+  `.accessibility3` and `.accessibility5` on 375 and 402 pt and require at least two rows' worth (say
+  120 pt); if it fails, the panel needs a compact form at those sizes (lines beside the ring, or one row
+  of buttons), which is look decision 4 and goes to Pete with the number.
+- **S6-SF3. The documents still describe the other design.** `docs/architecture.md:320-321`
+  ("Views render with `TimelineView`/`Text(timerInterval:)`") and the brief's non-functional line 81 were
+  not touched; the diff edits only §11. Whichever way B1 is ruled, both say what is built before merge.
+- **S6-SF4. The phone's buzz at zero does not consult `Settings.watchBuzz`.** Spec §4.5: "a WatchKit
+  haptic at zero, plus the phone's own haptic; both should honour `watchBuzz`"; `testing-strategy.md:345`
+  (D11) expects it. `WorkoutStore+Rest.swift:59-62` plays regardless. The setting has no screen yet and
+  defaults to on, so nothing is wrong on screen today. Proposed: no code in this slice; record in the
+  notes' inputs which slice owns the gate (the settings feature or F18), so that it is not found by a
+  tester later.
+- **S6-SF5. The ring is still draining for a second after "0:00" and the buzz.** `RestPanel.swift:27-29,
+  39`: every change of `fraction` is eased over one second, the last one too, so the arc's last step
+  (12° of a 30 s rest) empties during the second after "Rest over" appears; the notes say it "empties as
+  0:00 arrives". Proposed: no animation when `model.isOver`
+  (`ringAnimation(reduceMotion: reduceMotion || model.isOver)` or a third case), and the test at
+  `RestPanelTests.swift:152` gains that case. Not seen in motion by anyone; say so if it is left.
+
+### Notes
+
+- **S6-N1.** `WorkoutStore+Rest.swift:65`: `date.now != now` is a branch of product code that only a test's
+  fixed date with an immediate clock can take. It is the cheapest way not to spin, and its comment is
+  honest; leave it.
+- **S6-N2.** `WorkoutStore.swift:193,205`: `follow()` now awaits the haptics client before it takes the
+  next update. `LiveHaptics` returns at once; a client that waits (the watch's, later) would hold the page.
+  Write that on `HapticsClient.play` ("returns promptly") for F18.
+- **S6-N3.** `AppComposition.swift:159`: the haptics are bound inside `if let session`. Harmless (no cover
+  without a session); it reads as if haptics depended on the host.
+- **S6-N4.** `LocalWorkoutSessionActor.swift:195-198`: a `start` onto a kept log goes through recovery and
+  so schedules nothing for a snapshot that holds a rest. Rare, and inert while the client is nil; for F23.
+- **S6-N5.** Criterion 14's test (`RestPanelTests.swift:152`) checks the function, not that the view uses
+  it; the use is one line and read (`RestPanel.swift:39`). Reduce Motion in motion is unverified, as the
+  notes say.
+- **S6-N6.** `WorkoutCopy+Rest.swift:33`: in a locale with its own digits the line mixes them
+  ("Set ٣ · 185 lb × ٥"), because the weight is the Domain's text. S5's rows do the same; one decision for
+  all of them when a second language is real.
+- **S6-N7.** `LiveHaptics.swift`: generators made at the moment, on the main actor, never prepared. Right
+  for sets minutes apart. `.restOver` as `.warning` and `.setLogged` as `.rigid` were never felt.
+- **S6-N8.** Standards: no lint waiver, no unstructured task in product code, no `try!`, sizes within the
+  limits, nothing compressed. The comments are long but each says a why.
+
+### Criteria
+
+| # | Verdict | On what evidence |
+|---|---|---|
+| 1 | met | presentation and store tests; `RestPanelPlaceTests`; the four app screenshots |
+| 2 | met | `ShownRestTests` through the engine; `shownRest` reads no clock and is total (a rest of no length, dates that are no dates) |
+| 3 | met as amended; B1 | `WorkoutStoreRestTimeTests` are real: nothing is read between two seconds, 40 s away, the end while away |
+| 4 | met | `zero_playsRestOverOnce` (600 s on), `extend_atRestOver_thenSkip` |
+| 5 | met | `WorkoutRestPlanTests`, the store's five |
+| 6 | met | Domain, plan and store each pin it; S5's guard tests untouched |
+| 7 | met; SF4 | once per update, per rest, across restarts; never felt on a device |
+| 8 | met | `HostRestNotificationTests`; the app's own composition runs a rest with no client |
+| 9 | met | the six re-recorded references (one opened: light, accessibility3) |
+| 10 | met, by the list | no test pins it; the criterion allows a list |
+| 11 | met | the catalog's 63 keys; four texts for Pete, one of the brief's unused |
+| 12 | met from the tree | `tree_isExactlyTheTable`, 44 pt; VoiceOver not listened to |
+| 13 | met at the sizes it names; SF2 | probe sweeps; AX XL screenshots |
+| 14 | met by reading; N5 | |
+| 15 | met on the implementer's run | not run by me |
+
+### The deviations and the edits
+
+The notes list nine numbered deviations; the orchestrator's message counts eleven. I rule by subject.
+
+| Subject | Ruling |
+|---|---|
+| Criterion 3 amended, the store ticks (notes 1) | B1: keep the tick, narrow its reader |
+| The host takes an optional `NotificationsClient`, nil in the app | **Accept.** A stub that logs a fault at each set would cry wolf. F23 must flip `rest_runsWithoutANotificationsClient` into a test that fails when the client is missing: a default of nil will not tell it |
+| Effects run once the envelope is stored and the update is out | **Accept.** Right order. They run inside the host's turn, so F23's client must be quick or the tap's round trip (30 ms budget) pays for it |
+| Recovery schedules nothing | **Accept for now.** A pending system notification does outlive the process, so a relaunch mid-rest keeps it. One window stays: killed between the stored envelope and `notify`. F23 should make recovery assert what the recovered state says (schedule when a rest is running, cancel when no workout is live); `scheduleRestOver` replaces, so it is idempotent |
+| "+30s" and "Skip rest" send nothing with no rest shown (notes 2) | **Accept.** It is ADR-004's "what the screen showed" |
+| The panel is the scroll view's bottom inset; a drag on it does not scroll (notes 3) | **Accept**; SF2 measures its cost |
+| `screen(… now: Date? = nil …)` (notes 4) | **Reject the default.** It is exactly an optional that hides a missing argument: a caller that forgets it draws no panel and no test of that caller fails. B1's change removes the parameter; if (a) stays, make it required |
+| The date is read per tap and per tick, not at an update | **Accept.** The storm test's reason is sound. The cost (a change from elsewhere drawn at the last reading; one frame with no panel when a cover opens on a rest) is nothing on one phone; F17 must revisit |
+| Previews with a logged set show a panel (notes 5) | **Accept** |
+| `WorkoutLogging` skips each rest; the scroll-view count (notes 6) | **Accept.** The new check is stronger than the old (one scroll view holds the title, and the cover adds exactly one). That the old one fails on `main` is plausible and **not verified**: no nightly has run since #50, and I ran none. The tester should look at `WorkoutLoggingAdversarial.swift:80` (`scrollViews.firstMatch` may be Today's) |
+| `haptics` left `DependencyKeysTests`' list; `withTestDependencies` gives a fresh `FakeHaptics` (notes 7) | **Accept.** `haptics_defaultsToAFreshFake` shows two calls get two fakes and that the key still fails outside; `boot_bindsTheLiveHaptics` starts from the live values and fails on an unbound key. Lost: a store test no longer fails on a haptic nobody expected. Small |
+| The brief's VoiceOver announcements not built (notes 8) | **Accept for S6, and write it into S7's criteria** rather than "if wanted": "Rest over" spoken at zero is the only non-visual word a VoiceOver user gets besides the buzz. It needs an injected announcer (posting is ambient), which is its own 30 lines |
+| Files split for length; `haptics`, `clock`, `restPlayedOver` lost `private` (notes 9) | **Accept.** The split follows the pump's. `play(_:)` sits in the rest's file though it is the stream's; the file's header says so |
+| The tester's file: nine keys added; `scanned` blanks `RestTimer` | **Accept both.** The blanking is the exact spelling, and `testersScan_stillCatchesATimer` is a real control. Under (c) no further exemption is needed |
+
+### By eye
+
+Opened: the four app screenshots, four of the references (panel rest over light, panel resting dark, panel
+resting accessibility3 dark, whole screen resting dark), one re-recorded pill gallery (light,
+accessibility3), and the v2 prototype's rest card (`design/prototype/Ledger v2.dc.html:219-239`).
+
+- The panel matches the prototype's structure: ring, muted line over the next set, two buttons of equal
+  width. The prototype's ring and its "Skip rest" are both `#FF5B22` too, so two oranges on the card is the
+  design's. By the brief's criterion 13 the rule is one orange *action* per surface, and it names the rest
+  card as a surface of its own: met. With the panel up the cover shows two orange actions (the shown row's
+  check ring and "Skip rest"); that is the open S5 question, unchanged.
+- In light the check disc and the progress segment are `accentText` (`#B2390E`) and the ring and "Skip
+  rest" are `accent`: two different oranges an inch apart. Both are the design system's choices; Pete
+  should see them side by side (`app-resting-light.png`).
+- "+30s" at 54 pt and 16 pt bold reads as a second primary button more than as the prototype's quiet
+  42 px outline. It works; it is heavier than drawn.
+- At the default size the panel covers rows 4 and 5 and "+ Add set". With a history line and the fifth
+  row shown, the row's check is clear and its steppers are partly under the panel; a sixth row is under
+  it. Since "Rest over" stays until dismissed, the panel is always up when the lifter comes back to log.
+- At the accessibility sizes: half the screen, the ring alone on its row with empty space beside it, and
+  page content showing in the strip under the panel (a cut "1 REP" in
+  `app-accessibility-xl-resting-light.png`). "+30s" sits a few points low in its pill beside "Skip rest";
+  the other pills do the same at those sizes, so it is the component's, more visible at this height.
+
+### For the product owner
+
+1. The tick (B1), if the orchestrator wants Pete's word on amending the brief's line.
+2. Texts the brief does not give: "Resting" (the watch's promise left out), "Add 30 seconds", the kilogram
+   line, "Drop set · %@ lb × %lld" and its kilogram form. "Set %lld · next exercise" is unused: the line
+   names the next exercise's first set instead. And "Skip rest" is still the button's word at "Rest over",
+   where nothing is left to skip.
+3. The panel over the rows (above): should the page scroll the shown row clear of the panel when a rest
+   begins? I recommend yes, as a follow-up, once Pete has used it.
+4. The panel at accessibility sizes (look decision 4), with SF2's number.
+5. The two oranges in light; "+30s" as heavy as "Skip rest"; the opaque card with no blur or shadow.
+6. Until F23 nothing tells the lifter a rest has ended when the phone is locked, the app is in the
+   background or the cover is minimized: the buzz is the cover's alone.
+7. `watchBuzz` (SF4), and the haptic patterns, which nobody has felt.
+
+### What I did not check
+
+- **I ran nothing**: no build, no test, no simulator; the tester had the build directory. Every claim is
+  from reading and from the committed images.
+- That `app.scrollViews.count == 1` fails on `main`; the nightly UI tests; the implementer's run table.
+- Motion of any kind: the ring's easing, Reduce Motion, the panel arriving, a dialog over a ticking root.
+- The per-second cost in numbers: B1 is argued from how Observation and SwiftUI compare views, not from
+  a profile.
+- The visible page at `.accessibility5` (SF2) is a concern from arithmetic, not a measurement.
+- Seven of the eleven new references and five of the six re-recorded ones were not opened;
+  `WorkoutRestPlanTests`, `HostRestNotificationTests`, `WorkoutStoreRestTests` and most of
+  `ShownRestTests` were read by their names and first cases only.
+- Coverage, lint, the line count of 394, watchOS, and the tester's new files.
