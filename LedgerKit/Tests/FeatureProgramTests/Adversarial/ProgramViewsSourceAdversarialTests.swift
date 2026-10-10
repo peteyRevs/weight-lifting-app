@@ -99,9 +99,12 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             "WeekSection.swift: send(action)",
             "WeekSection.swift: send(model.deload.action)"
         ], "\(sent)")
-        // The three bare `action`s are unwrapped from the model in the line that sends them.
-        let unwrapped = try Self.matches(#"if let action( = (cell|control|model)\.action)? \{"#)
-        #expect(unwrapped.count == 3, "\(unwrapped)")
+        // The bare `action`s are unwrapped from the model in the line that sends them. S10, gate G2: four,
+        // not three. `ProgressionChips` sends a fourth bare `action`, which the pattern did not count while
+        // the count stayed at 3: its unwrapping, from the chip of the model, is pinned with the others.
+        let unwrapped = try Self.matches(#"if let action( = (cell|chip|control|model)\.action)? \{"#)
+        #expect(unwrapped.count == 4, "\(unwrapped)")
+        #expect(sent.count { $0.hasSuffix(": send(action)") } == unwrapped.count, "a bare action, not unwrapped")
     }
 
     @Test("The only state a view keeps is the name field's draft and the two fields' focus")

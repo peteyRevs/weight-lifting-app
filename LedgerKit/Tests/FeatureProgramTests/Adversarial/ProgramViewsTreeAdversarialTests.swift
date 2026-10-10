@@ -15,9 +15,12 @@
             SnapshotAppearance(.dark, .accessibility5)
         ]
 
+        /// S10, gate G2: the arguments are every state again. The implementer had narrowed them to the
+        /// builder's and the library's when the Day editor's seven joined the registry; `DayViewsOracle`
+        /// writes those from the notes' tables, as `ProgramViewsOracle` writes the first eight.
         @Test(
-            "The implementer's eight tables are the trees the oracle writes from the models",
-            arguments: ProgramPreview.builders + ProgramPreview.libraries
+            "The implementer's fifteen tables are the trees the oracles write from the models",
+            arguments: ProgramPreview.allCases
         )
         func tables_areTheOraclesTrees(_ preview: ProgramPreview) throws {
             let table = try #require(ProgramTrees.byState[preview])
@@ -25,9 +28,7 @@
                 switch try preview.subject() {
                 case let .builder(model): ProgramViewsOracle.builder(model).map(\.stop)
                 case let .library(model): ProgramViewsOracle.library(model).map(\.stop)
-                // S10: this oracle writes the builder's and the library's trees; the Day editor's states
-                // are not among this test's arguments.
-                case .dayEditor: throw ProgramPreview.NotThatScreen()
+                case let .dayEditor(model): DayViewsOracle.tree(model).map(\.stop)
                 }
             let difference = firstDifference(found: table, expected: written)
             #expect(difference == nil, "\(difference ?? "")")
