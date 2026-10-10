@@ -505,3 +505,83 @@ nothing until the nightly UI test of the Day editor taps all three. **For S12**:
 pick's place is the product owner's question, asked with S12's VoiceOver table. **Not covered by criterion
 13** (tester's Q1, Q2): two stored exercises under one id (the schema forbids it) and a blank name (F12's
 rule for custom exercises).
+
+## Plan amendments — slice S9, the builder's and the exercise library's views (orchestrator, 2026-10-09)
+
+The plan's S9 and S12 as one pull request (larger batches; the number S12 is not used again). Cut from `main`,
+which holds the builder's and the library's presentations and the three form controls. Views drawn from a
+model only: no store, nothing in the app (the Program tab keeps its placeholder until S14). About 670
+product lines planned (the plan's S9 and S12 rows list the files); views have landed close to plan; past
+about 850 the implementer stops and reports. Pete's decision 1 is taken at its default A (the dark design's
+language; orange only on "DELOAD" in the builder and on the library's "Add n exercises" button). The slice is
+accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `ProgramBuilderModel` or `ExercisePickerModel`
+   and closures over the model's action values; no view decides what is shown, formats a number, filters a
+   list or reads a clock, calendar or locale. Every text on screen is a string of the model or a lookup the
+   model does not carry (none is expected; any is listed for Pete).
+2. **Both screens scroll as the convention says** (testing-strategy §2.5–§2.6): `ProgramScreen` and
+   `ExercisePickerScreen` are their pinned parts plus a `ScrollView` around one page view
+   (`ProgramPage(model:)`, `ExercisePickerPage(model:)`); snapshots and VoiceOver trees are taken from the
+   pages; no page holds a scroll view.
+3. **The builder** (criteria 1–6 of the brief, drawn): the header with the program's name as a field, "BLOCK
+   · 8 WEEKS" with "−" and "+", the week chips in `WrapLayout` (eight weeks make two rows), the selected
+   week's schedule strip of seven cells that wraps at accessibility sizes, the week's actions, "TRAINING
+   DAYS" with its helper, one card per day, "+ Add training day", and the validation message where the
+   model carries one.
+4. **The library sheet** (criterion 12 of the brief, drawn): `SheetChrome` with "Exercise library" and
+   "Cancel", the search field, the two chip rows in `WrapLayout`, the rows with their line and the "already
+   in this day" mark, a picked row shown as picked, "Nothing matches that filter." with "Clear filters", and
+   the pinned foot button, disabled with "Select exercises to add".
+5. **States have previews and snapshots** (the notes' snapshot table): builder: default at six cells; deload
+   week selected, a day with no exercise, the two-weeks message at two each. Library: results at six cells;
+   three picked, nothing matches at two each. One preview registry for the module; `Package.swift`'s
+   snapshot targets and `PreviewScan.registeredModules` gain `FeatureProgram`.
+6. **VoiceOver** (the notes' tables for S9 and S12): the pinned trees match them: a week chip "Week 3, 4
+   days", a cell "Tuesday, rest" with its hint, the chips' short names hidden on a day card, chip rows as
+   one-selected groups, a library row as a button with its line as value and the selected trait when picked
+   (S8 criterion 19), the foot. Headings are headings. Every target is 44 pt.
+7. **Sizes and settings**: nothing clips or overlaps at `.accessibility3`, with Bold Text, Increase
+   Contrast and right-to-left; sixteen weeks and a long program name lay out.
+8. **The orange audit** (decision 1 A): a test or a pinned list shows where the accent is used on each
+   screen.
+9. **No rule of its own**: the views use `LedgerDesign`'s components and tokens (`StepperField` is not
+   needed here; `PillButton`, `WrapLayout`, `SheetChrome`, `HairlineRow`, `PrimaryButton`); a new shared
+   component is proposed in the report, not added quietly.
+
+**Not in this slice:** the Day editor's views (S10, S11), any store (S13, S14), `LedgerAppKit`, the project
+file or a test plan, and any change to a presentation beyond a field a view provably needs (listed).
+
+## Plan amendments — slice S9 after round 1 (orchestrator, 2026-10-09)
+
+The reviewer asked for changes (one blocking fault, five should-fix items) and the tester found the same
+fault wider, plus two minor ones (46 tests, six left failing; fifteen mutations). Rulings, which add to S9's
+nine criteria:
+
+10. **The schedule strip never cuts a word** (review B-1, F11-S9-1): at every text size, at 375 and 402 pt,
+    with Bold Text and right to left, with the seed's tags and with ten days ("D10"), each cell draws its
+    word whole. The strip is one row of seven equal cells while every cell's word fits its share, and wraps
+    into rows of equal cells otherwise. At the default size on a 375 pt phone it stays one row if trimming
+    the cells' inner spacing by a point or two achieves that (the miss is one point); if not, it wraps there
+    and the existing test `scheduleStrip_defaultSize_isOneRowOfEqualTargets` is changed to say so. The
+    tester's four tests pass unedited; the two references that pinned "RE…" are recorded again.
+11. **Room at the largest sizes** (review S-2, S-3; F11-S9-2): the search field's text stands inside its
+    pill at every size; a wrapped "REST" and a week chip's second line clear their outlines at
+    `.accessibility3`.
+12. **The search field sends only a changed query** (F11-S9-3), as the name field already does.
+13. **Housekeeping** (review S-1, N-1 to N-3, N-6): the comment on the model's name says where the draft
+    lives now; the day row's chevron and the section line align as Today's do; one rule above the sheet's
+    foot; the unneeded hint helper goes.
+14. **Accepted as built:** all views in `Views/`; the name's draft as view state (last writer wins); a
+    library row on `HairlineRow`; no `EmptyState` for one sentence; `DayCard`'s tag measure stays in the
+    feature until S10.
+
+**For S13** (review S-1; tester's mutations 2, 3, 6): the UI test of the builder types a name and reads it
+back, taps the drawn "−" and "+" and checks which way the block moved, and reads both fields' labels; the
+store knows that a name changed from outside under an open draft is overwritten by the next keystroke.
+**For S14** (review deviation 8): the model's `detail`, `inDayMark` and `pickMark` are drawn or removed
+before F11 ends; the product owner chooses. **Chores, not this slice:** the hosted reader fails on (or
+records) a text field, with testing-strategy §2.5 saying so (review S-4); icons that must not mirror right
+to left, the check mark first, in `LedgerDesign` (review S-5; the set row has it too); `SectionLine` and a
+public press style in `LedgerDesign` before S10; the reference precision on long pages (tester's note 1:
+three visible mutations passed every reference at 0.995).

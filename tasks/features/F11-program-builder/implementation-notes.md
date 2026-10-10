@@ -3958,3 +3958,853 @@ All on 2026-10-08 in the worktree; simulator commands through the lock (iPhone 1
   recorded or changed.
 - `scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 115 s; lint clean.
 - **Not run:** the full gate, the watch plan, the nightly lane.
+
+## Slice S9 — the builder's and the library's views (G1 implementer, 2026-10-09)
+
+Branch `feat/F11-s9-builder-library-views`, cut from `main` at `407c99a`. The plan's S9 and S12 as one slice:
+the views of the Program builder and of the exercise library sheet, drawn from the two models that are on
+`main`. No store, nothing in the app, no change to `LedgerAppKit`, the project file or a test plan. **No
+presentation, model, action or copy file was changed, and no key was added to the catalog.**
+
+### What landed
+
+Product, all in `LedgerKit/Sources/FeatureProgram/Views/` (why there: deviation 1):
+
+| File | What it is |
+|---|---|
+| `ProgramScreen.swift` | The builder: `ScrollView { ProgramPage }` on the ground. Nothing pinned. |
+| `ProgramPage.swift` | Everything the builder scrolls: header, block, selected week, training days, `xxl` apart. |
+| `ProgramHeader.swift` | "MY PROGRAM" over the name as a one-line field in the title's type, with its draft. |
+| `SectionLine.swift` | A section's first line: the eyebrow (a heading) and a trailing part (a muted note, or "−" "+"); stacked at accessibility sizes. |
+| `BlockSection.swift` | "BLOCK · 8 WEEKS", "−" and "+" as one adjustable element, the chips, the notice. |
+| `WeekChips.swift` | One two-line pill per week in `WrapLayout`. |
+| `WeekSection.swift` | The week's title and "Tap to assign", the strip, the three actions in `WrapLayout`; `ControlPill` (a `Control` as an outlined pill, disabled without an action). |
+| `ScheduleStrip.swift` | Seven cells in one row while they fit, wrapped when they do not. |
+| `TrainingDaysSection.swift` | "TRAINING DAYS" with the summary, the helper, the rows, "+ Add training day". |
+| `DayCard.swift` | One day: a hairline row that is one button. |
+| `ExercisePickerScreen.swift` | The sheet: `SheetChrome`, the pinned `ExerciseSearchField`, `ScrollView { ExercisePickerPage }`, the pinned `ExercisePickerFoot`. |
+| `ExercisePickerPage.swift` | What the sheet scrolls: the two chip rows, then the rows or "Nothing matches that filter." with "Clear filters". |
+| `FilterChips.swift` | One row of `PillButton`s in `WrapLayout`. |
+| `ExercisePickerRow.swift` | `HairlineRow` as one button, with the pick mark as its accessory. |
+| `Program+Previews.swift` | `ProgramPreview`, the module's one registry: eight cases, eight `#Preview`s, the fixed inputs. |
+
+Two one-line registrations: `LedgerKit/Package.swift` (`snapshotTestTargets` gains `FeatureProgram`) and
+`LedgerTestSupport/Previews/PreviewScan.swift` (`registeredModules` gains it).
+
+Tests, in `LedgerKit/Tests/FeatureProgramTests/`: `ProgramSnapshotTests.swift`,
+`ProgramAccessibilityTests.swift` with `ProgramAccessibilityTrees.swift`, `ProgramTextFieldTests.swift`,
+`ProgramScreenTests.swift`, `ProgramViewsLayoutTests.swift`, `ProgramOrangeAuditTests.swift`,
+`ProgramViewsSourceTests.swift`, `PreviewTests.swift`; support in `Support/ProgramParts.swift`,
+`Support/ProgramViewStops.swift`, `Support/ProgramDrawing.swift`; `Support/ProgramTesting.swift` gains the
+`snapshot` tag. 28 references in `__Snapshots__/ProgramSnapshotTests/`. Copies for Pete in
+`tasks/features/F11-program-builder/screenshots/s9/` (28 files, named state-theme-size).
+
+### The VoiceOver trees (confirmed; `ProgramTrees` pins them)
+
+- **Builder.** "MY PROGRAM", heading. *(The name field: see "Text fields" below.)* "BLOCK · 8 WEEKS", heading.
+  "Block length", adjustable, value "8 weeks". One button per week: "Week 1", value "4 days" or "Deload",
+  selected when it is. The notice, when there is one, as text, here. "WEEK 1" or "WEEK 8 · DELOAD", heading.
+  "Tap to assign", text. Seven buttons: "Monday", value "Upper A" or "Rest", hint "Double-tap to assign".
+  "First week" (dimmed) or "Copy week 7"; "Apply to later weeks" (absent on the last week); "Deload",
+  selected when on. "TRAINING DAYS", heading; "4 days · 58 sets a week"; the helper line. One button per
+  day: "Upper A — Push focus", value "5 exercises · 18 sets · ~39 min"; the short names and the tag are not
+  read. "+ Add training day". In a program with no training day a weekday is text ("Tuesday", value "Rest"),
+  with no hint, and "Tap to assign" is absent.
+- **Exercise library.** "Exercise library", heading. "Cancel". *(The search field.)* Six buttons "Muscle: All"
+  … "Muscle: Arms", one selected; six "Equipment: All" … "Equipment: Bodyweight", one selected. One button
+  per exercise: "Lat Pulldown", value "Cable · Back · already in this day", selected when picked. Or
+  "Nothing matches that filter." as text and "Clear filters". Then the foot: "Add 3 exercises", or
+  "Select exercises to add", dimmed. VoiceOver's escape gesture cancels (`SheetChrome`'s).
+
+The same trees at `.large` and at `.accessibility3`, with Bold Text and right to left.
+
+**Text fields: a limit of the hosted reader, new with this slice.** In a package test process UIKit does not
+make a `UITextField` an accessibility element (measured on iOS 27.0: `isAccessibilityElement` is false with
+the automation switch on), so `accessibilityElements` passes a one-line `TextField` **in silence**: unlike a
+scroll view, nothing is recorded. The two fields are therefore in no pinned tree. What is pinned instead,
+through UIKit (`ProgramTextFieldTests`): each screen has exactly one field, with its placeholder ("Program
+name", "Search exercises") and its text; and `fields_areNotReadByTheHostedReader` fails when the reader
+learns to read one. A hosted field also takes no typing from a test (text set on it is put back; no key
+reaches it). So two things wait for the UI tests of S13 and S14: that VoiceOver reads the fields by their
+labels, and that typing sends `.rename` and `.setQuery`. *For the orchestrator:* the reader's silence here is
+worth a line in testing-strategy §2.6 beside the multi-line limit; I did not edit the docs.
+
+### Decisions and deviations
+
+1. **Every view file is in `Views/`, the sheet's and the previews file too**, not in `Picker/` and at the top
+   level as the plan's rows have them. Two testers' scans collide with those places and I may not edit them
+   unasked: `ExercisePickerWordsAdversarialTests.sources_readNothingAmbient` pins the files of `Picker/` to
+   S8's five, and `ProgramWordsAdversarialTests.sources_holdNoCopyOutsideTheCopyFiles` allows no string
+   literal in a top-level file (a previews file's names are literals). Both read one folder and not its
+   subfolders. FeatureToday keeps its sheet's views in `Views/` as well. The orchestrator was told by
+   message. The plan's places need two mechanical edits to those tests (four names in the list;
+   `+Previews.swift` skipped). **S10/S11 meet the same** with `DayEditorWordsAdversarialTests` (it reads
+   `DayEditor/`).
+2. **The name field keeps its draft in the view** (`@State` in `ProgramHeader`), where S5's notes have the
+   store keep it. The page then takes only `model` and `send`, as criterion 2 writes it. The rule: the draft
+   starts as the stored name; a change that leaves it other than the stored name sends `.rename(text)`; when
+   the field loses focus, or the stored name changes while it has none, the draft takes the stored name. S13
+   may lift the draft into the store by giving `ProgramHeader` a binding: one parameter.
+3. **The name field is one line**, so a name longer than the line ends in "…" while it is not being edited
+   (the reference `sixteenWeeks`). A field of several lines is a text view, which the reader cannot host
+   (F8-S2-8). Open question 1.
+4. **The search field is bound to the model's query through `.setQuery`** (S8's first option): no draft.
+5. **The strip changes from one row to wrapped rows by fit** (`ViewThatFits`), not by the text size's class.
+   A program with long tags wraps earlier instead of cutting them. Pinned, with the seed program: one row
+   at `.large` (402 and 375 pt), wrapped at `.accessibility3`; no fault at `.xxxLarge` or `.accessibility5`.
+6. **The strip's targets touch** (`HStack(spacing: 0)`), and what is drawn stands `xs` inside each, with the
+   strip set `xs` out on both sides. With a gap between targets a cell would be 42.7 pt wide on a 375 pt
+   phone.
+7. **"Nothing matches" is not `EmptyState`** (S8's notes suggest it): that component needs a title and a
+   body and makes the title a heading; the model has one sentence. It is that sentence in `bodyLight` over
+   an outlined pill.
+8. **A library row is `HairlineRow`**, with the label, value and selected trait set from outside it. The
+   whole `line` is drawn in the row's detail grey, so "already in this day" is grey and not apart;
+   `detail`, `inDayMark` and `pickMark` are not used by any view.
+9. **Criterion 1's "takes its part of the model":** `ExercisePickerPage` takes the whole model, as the
+   criterion's own `ExercisePickerPage(model:)`, and reads `muscles`, `equipment` and `content`.
+10. **No shared component was added.** Proposed, not built: (a) `SectionLine` is FeatureToday's
+    `CardEyebrowLine` with any trailing view; one of them could move to `LedgerDesign`. (b) A two-line pill
+    (the week chip) and (c) a small non-interactive tag pill (the day's tag, the short names) are
+    feature-local here; S10/S11 may want (c). (d) `LedgerPressStyle` is internal to `LedgerDesign`, so the
+    three buttons a feature draws itself (week chip, strip cell, day row) use `.buttonStyle(.plain)`; making
+    the press style public would give them the components' pressed look.
+
+### Looks the prototypes do not settle (for Pete; all in the screenshots)
+
+Decision 1 A says "the dark design's language"; the dark design never drew these screens. Each choice:
+
+1. **No cards.** The builder is flat on the ground; the days are hairline rows, as Today's "RECENT".
+2. **The program's name** is the screen's title (the 32 pt title role), editable in place. The old design's
+   gear button beside it is not drawn: the model carries no Settings route for it (Today has the gear).
+3. **"−" and "+"** are F06's round outlined 44 pt buttons, at the trailing edge of "BLOCK · 8 WEEKS".
+4. **A week chip** is a two-line pill, "W3" over "4 DAYS"; the selected one is filled with ink, as a selected
+   filter. Eight make two rows of four and leave room at the trailing edge; they do not stretch.
+5. **Orange in the builder** is one thing at a time: "DELOAD" under the deload week's chip while another week
+   is selected; while the deload week is selected its chip is ink (orange on the ink fill is 2.8:1 and
+   3.0:1, below AA) and the title "WEEK 8 · DELOAD" is orange, whole. The title is one string of the model
+   and is not split. If only the word should be orange there, the model needs the mark as a second field.
+6. **A strip cell** is a tall pill: a training day's has the quiet fill (the disabled button's) and its tag in
+   ink; a rest day's is an outline with "REST" in grey. No cell is ink-filled: four white blocks in a row
+   read as four selected things.
+7. **The week's actions** are three outlined pills that wrap; "Deload" is filled with ink while on, not
+   orange. "First week" is the disabled pill.
+8. **The notice** stands under the week chips in ink (not orange, not red), for all three notices.
+9. **A day's row**: the tag in a small quiet-fill pill (the strip's look for that day), the name, the meta
+   line, the short names as small outlined chips, a chevron (none at accessibility sizes, as Today).
+10. **"+ Add training day"** is an outlined pill at the leading edge, not the old full-width dashed box.
+11. **The sheet**: the search field is an outlined 44 pt pill; both chip rows use the same pill (the old
+    design drew the equipment row smaller); "Arms" and "Bodyweight" wrap to a second line on an iPhone 17.
+12. **A library row's mark**: a plus in an outlined circle; picked, a check on an ink-filled circle. The
+    pick's number ("2") is in the model and is not drawn (open question 3). A picked row has no other mark.
+13. **The foot** is a rule over the orange button; disabled it is the grey `PrimaryButton`.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 1 Drawn from the model only | `ProgramViewsSourceTests.views_decideNothing`, `views_importOnlySwiftUIAndTheDesignSystem`; `ProgramAccessibilityTests.builder_buttons_sendTheirModelsActions` (5 states), `builder_seedProgram_sendsTheBriefsActions`, `blockStepper_adjusts`, `noDays_cellsAreText`, `library_buttons_sendTheirModelsActions` (3 states), `library_picked_sendsTheBriefsActions`; the copy audit (`LedgerAppKitTests.ModuleCopyTests`) reads the views for literals. |
+| 2 Both screens scroll as the convention says | `ProgramScreenTests` (4): one scroll view per screen in every state, none in the parts, nothing pinned on the builder, the sheet's list between its pinned parts; `ProgramViewsSourceTests.onlyTheScreens_holdAScrollView`. |
+| 3 The builder, 4 the sheet | The trees and the references below; `ProgramViewsLayoutTests.weekChips_wrapIntoRows`, `scheduleStrip_defaultSize_isOneRowOfEqualTargets`, `scheduleStrip_accessibilitySize_wraps`, `filterChips_wrap`; `ProgramTextFieldTests.builder_nameField_holdsTheName`, `library_searchField_holdsTheQuery`, `nameField_withoutFocus_followsTheStoredName`, `nameField_withFocus_keepsItsDraft`. |
+| 5 Previews and snapshots | `PreviewTests` (5); `ProgramSnapshotTests`: builder 6, deload week 2, empty day 2, two-weeks message 2; library 6, three picked 2, nothing matches 2 (the table's 22), plus sixteen weeks 2, right to left 2, Increase Contrast 2. |
+| 6 VoiceOver | `ProgramAccessibilityTests.tree_isExactlyTheTable` (8 states × 2 sizes), `targets_areAtLeast44Points`, `headings_areTheSectionTitles`; `ProgramTextFieldTests.fields_areNotReadByTheHostedReader`. |
+| 7 Sizes and settings | `ProgramViewsLayoutTests.parts_layOutSanely` (8 states × 16 settings: `.large`, `.xxxLarge`, `.accessibility3`, `.accessibility5`, each plain, bold, right to left, both), `parts_everySetting_readTheSameStops`; the references at `.accessibility3`, of sixteen weeks, right to left and under Increase Contrast, which I looked at. A word cut inside its own frame is visible only there. |
+| 8 The orange audit | `ProgramOrangeAuditTests` (5, both themes): by the hue of the pixels each part draws. |
+| 9 No rule of its own | `ProgramViewsSourceTests`; the lint (`ledger_raw_*`); deviation 10. |
+
+**Checked by breaking the code** (six changes, each made and undone): a week chip without its spoken value
+(`tree_isExactlyTheTable` fails in all five builder states); the deload chip's "DELOAD" in grey
+(`builder_orangeIsTheDeloadChip`, both themes, and the builder's references); the strip inside a sideways
+scroll view (`onlyTheScreens_holdAScrollView`, the trees, the 44 pt and row tests; it also showed
+`builder_seedProgram_sendsTheBriefsActions` trapping on a short list, which now requires the count first); a
+library row without the selected trait (`tree_isExactlyTheTable`, three picked); a gap between the strip's
+targets (`scheduleStrip_defaultSize_isOneRowOfEqualTargets` on 375 pt, and the references); the name field
+not following the stored name (`nameField_withoutFocus_followsTheStoredName`).
+
+### Product lines per file
+
+Non-blank, non-comment: `BlockSection` 34, `DayCard` 65, `ProgramHeader` 41, `ProgramPage` 16,
+`ProgramScreen` 14, `ScheduleStrip` 70, `SectionLine` 31, `TrainingDaysSection` 22, `WeekChips` 46,
+`WeekSection` 33 (**builder 372**); `ExercisePickerPage` 28, `ExercisePickerRow` 29, `ExercisePickerScreen`
+55, `FilterChips` 14 (**library 126**); `Program+Previews` 111. **609 in `Views/`**, plus one changed line in
+each of `Package.swift` and `PreviewScan.swift`. Planned about 670.
+
+### Text not given by the brief
+
+None is drawn or spoken: every text on both screens is a string of a model. The preview names and the
+previews' long program name ("Upper / Lower with an accessory day, autumn block before the meet") are
+Debug-only.
+
+### Open questions, each with a recommendation
+
+1. **A program name longer than one line is cut with "…"** while it is not being edited. *Recommendation:*
+   accept for M1; names are short, and the whole name shows while editing. The alternative is a field of
+   several lines, which needs the reader's limit F8-S2-8 lifted first.
+2. **"WEEK 8 · DELOAD" orange as a whole, or only its last word** (look 5). *Recommendation:* whole, as built
+   and as the Day editor's week line is planned; one model field if Pete prefers the word alone.
+3. **The pick's number on a picked row, and whether VoiceOver says a pick's place** (S8's question for this
+   table). *Recommendation:* neither: the check and the selected trait, as built. The exercises are added
+   in the order picked and can be moved in the Day editor. Drawing "2" in the mark is a three-line change.
+4. **"Deload" for a deload week's chip and "Double-tap to assign"** (S5's two questions for this table) are
+   read as the model has them. *Recommendation:* keep both.
+5. **The helper line at accessibility sizes** takes four lines. *Recommendation:* keep; it is the only
+   explanation of how days and weeks relate.
+6. **File places** (deviation 1): orchestrator's call.
+
+### Inputs for S10 and S11 (the Day editor's views)
+
+- The form to follow is this slice's: `XScreen` = pinned parts + `ScrollView { XPage(model:send:) }`; a
+  `Parts` view in the tests; `ProgramPreview` gains the Day editor's cases (one registry for the module) and
+  `ProgramParts`/`Subject` a third screen. `ProgramPreview.builders` and `.libraries` are the lists the
+  parameterised tests take; add `.dayEditors`.
+- Reuse: `SectionLine` (eyebrow + trailing), `ControlPill` (it takes the builder's `Control`; the Day
+  editor's control type needs its own or a shared shape), `ViewStop`/`firstDifference`/`placedStops`
+  (`Support/ProgramViewStops.swift`), `ProgramViewsLayoutTests.faults(in:)` and `rows(of:)`,
+  `ProgramDrawing.orangePixels` (it renders the layer; `ImageRenderer` draws a text field as a yellow
+  placeholder and `drawHierarchy` draws nothing without a host app).
+- **The day's name is a text field**: it is not in the hosted tree (above); pin it as
+  `ProgramTextFieldTests` does, and copy `ProgramHeader`'s draft rule.
+- `HairlineRow` takes `.accessibilityLabel`, `.accessibilityValue` and `.accessibilityAddTraits` from
+  outside and stays one button (measured here).
+- A `PillButton` narrower than 44 pt stands inside its target, so the first pill of a wrapped row starts a
+  few points inside the content's edge (`flush` cannot know which pill is first).
+- `ProgramViewsSourceTests` reads every file of `Views/` but the previews: a Day editor view that spells
+  `ScrollView` outside its screen file, or reaches for the copy, fails it. Add the new screen file to
+  `screens`.
+- Put the files in `Views/` unless the orchestrator rules otherwise (deviation 1).
+
+### Inputs for S13 and S14 (the stores)
+
+- `ProgramScreen(model:send:)` and `ExercisePickerScreen(model:send:)` are all a root needs: `send` is the
+  store's one intent. Neither screen holds state but the name field's draft and the two fields' focus.
+- **S13, the name:** the view sends `.rename(text)` on every change of the draft that differs from the stored
+  name, a blank one too (the Domain ignores it). The store applies it at once, so `model.header.name`
+  follows; the field does not take it back while it has focus. Nothing else is needed from the store.
+- **S13, empty and failed states:** `ProgramScreen` takes a model, not a `Loadable`; the root draws
+  `EmptyState` for "No program yet" and for the failed read (decision 6's texts are not in the catalog yet).
+- **S13, the notice** is drawn under the chips and is not announced to VoiceOver when it appears; an
+  announcement (`AccessibilityNotification.Announcement`) belongs with the store's change of `notice`.
+- **S14:** the Day editor presents `ExercisePickerScreen` with `.sheet`; `SheetChrome` sets the sheet's
+  background and corners. The search field's binding reads `model.search.query` and writes `.setQuery`, so
+  the store must apply `.setQuery` synchronously or typing will lag. All rows are built at once (a `VStack`
+  in `HairlineList`): 224 rows on open; S14's timing test should measure the first frame too.
+- **The nightly UI tests** owe: the two fields' spoken labels; typing a name and a query; the stops inside
+  the real scroll views at an accessibility size; a finger's tap on "−", "+", a chip, a cell and a row.
+
+### The runs
+
+All on 2026-10-09, in the worktree; every simulator command through the lock (iPhone 17 and Apple Watch
+Series 12 46 mm, both 27.0). No source or test was edited after the full gate and the fast gate below;
+these notes and the screenshots' copies were written while and after they ran.
+
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests` (and, earlier, two suites
+  alone), nine times: two to record the references and read the trees as built; three probes of how a hosted
+  text field is seen (the limit above); two that did not compile (iOS-only test code the host build does not
+  read: an isolation error, a slice compared with an array); the run that compared the new references and
+  left one failure, a spelling of my own source test that also matched `ExerciseSearchField`; and two with
+  the code broken on purpose (above). The references were recorded once in their final form, in the
+  library's missing-reference mode, and compared by the next run and by the gate. No reference that was on
+  `main` changed (`git status`: only new files under `FeatureProgramTests/__Snapshots__/`).
+- **`scripts/check.sh`, the full gate, once, on the final sources: exit 0, "check.sh OK", 912 s** (lint 124 s,
+  iOS build 24 s, iOS tests 455 s, watchOS build 47 s, watchOS tests 257 s). iOS: 3,568 tests, 3,541 passed,
+  none failed, 14 skipped, 13 known issues. watchOS: 2,262 tests, 2,243 passed, none failed, 14 skipped, 5
+  known issues. String catalogs: `FeatureProgram` 125 keys, as before. Coverage: `FeatureProgram` 2,265 /
+  2,277 lines (99.47 %); overall 98.55 %.
+- **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 152 s.**
+- `FeatureProgramTests` on the simulator: 369 tests in 39 suites (294 in 27 before this slice); this slice
+  adds 48 test functions in 8 suites.
+- **Not run:** the nightly lane (2,000 seeds, UI tests); a device; VoiceOver itself; the two screens in the
+  app (they are in none). The twelve lines of `FeatureProgram` the coverage does not reach were not listed
+  per file; by reading, they are the closures a hosted test cannot run (the two fields' tap-to-focus and the
+  search field's binding setter, `@unknown default`).
+
+## Slice S9 — review, round 1 (G3 reviewer, 2026-10-09)
+
+Read: `git diff main...2f15f75` (the fifteen files of `Views/`, the eight test files and four support files,
+the two registrations), the two models, the `LedgerDesign` components the views use, FeatureToday's
+`CardEyebrowLine`, `RecentList`, `TodayScreen`, `OffScheduleSheet`, testing-strategy §2.5–§2.6, and 18 of
+the 28 screenshots (list at the end). **Nothing was built or run** (the brief forbids it): every statement
+about behaviour is from reading the code and the committed images; the implementer's gate figures are
+taken as reported.
+
+### Verdict: request changes — one blocking fault, small; the rest is approve with should-fix
+
+The shape is right: two screens that are a scroll view around a page, parts that take a piece of the model
+and `send`, no task, no ambient read, every text from the model, trees that match the tables. One thing on
+screen is wrong and is pinned as a reference.
+
+### Blocking
+
+**B-1. "REST" is cut to "RE…" in the schedule strip at `.xLarge`, in both themes, and the references pin
+it.** `screenshots/s9/builder-dark-xLarge.png` and `builder-light-xLarge.png` (the same files as
+`__Snapshots__/ProgramSnapshotTests/builder_matchesReferences.{dark,light}-xLarge.png`): the three rest
+cells read "RE…". Cause, `Views/ScheduleStrip.swift:20-27` with `:64` and `:67`: `ViewThatFits` takes the
+one-row candidate when the **sum** of the cells' ideal widths fits, but the row then gives every cell an
+**equal share** (`maxWidth: .infinity`), and the texts may shrink (`lineLimit(1)`); a cell whose ideal is
+wider than a seventh is cut although the row "fits". Deviation 5's sentence "wraps earlier instead of
+cutting them" is therefore not true between `.xLarge` and the first size at which the sum overflows, and
+it will be worse on a 375 pt phone and in a language whose "REST" is longer. No test can see it:
+`ProgramViewsLayoutTests.faults(in:)` reads frames, and `scheduleStrip_defaultSize_isOneRowOfEqualTargets`
+runs at `.large` only. Proposed change (one of):
+  - simplest: `.fixedSize(horizontal: true, vertical: false)` on the two `Text`s of `ScheduleCell.label`
+    (`:57-62`). A cell's least width is then its ideal, the row hands a wide cell what it needs and shares
+    the rest, and the row is chosen exactly when nothing is cut. Cells stay equal at `.large` (the existing
+    test holds) and differ by a few points above it;
+  - or, to keep the cells equal: a ten-line `Layout` for the first candidate whose ideal width is seven
+    times the widest cell's, so `ViewThatFits` falls to the wrapped rows as soon as one cell would be cut.
+  Either way add a test that fails today: at `.xLarge`, `.xxLarge`, `.xxxLarge` × 402 and 375 pt, each
+  cell's frame in the strip is at least as wide as the same cell's in a strip given unlimited width; and
+  re-record the two `.xLarge` builder references with the cause stated.
+
+### Should-fix
+
+- **S-1. The name field's rule is logic in a view, and its one sending path has no test.**
+  `Views/ProgramHeader.swift:41-55`: three `onChange`s decide when a draft is sent and when it is thrown
+  away. `ProgramTextFieldTests` pins two of the three (follows the stored name unfocused; keeps the draft
+  focused, takes the stored name on blur); `if text != model.name { send(.rename(text)) }` (`:42-44`) is run
+  by nothing, because a hosted field takes no typing. Accept the draft as view state for this slice (see
+  deviation 2), but: (a) `ProgramBuilderModel.swift:17-20` still says "a view binds the field to a draft the
+  store keeps"; correct the comment in this PR (a comment, not a presentation change) so S13 does not build
+  the second draft; (b) write the debt into S13's criteria by name: "Upper Lower" typed letter by letter
+  stores "Upper Lower" (S5 review S-3), a blank draft sends and is ignored, blur restores the stored name;
+  as a UI test, since no hosted test can.
+- **S-2. Crowding at accessibility sizes in the two pills this slice draws itself.**
+  `builder-dark-accessibility3.png`: in the wrapped strip "REST" spans its outline edge to edge
+  (`ScheduleStrip.swift:65`, 4 pt of side padding inside a capsule), and a week chip's second line ("4
+  DAYS", "DELOAD") sits on the capsule's lower curve (`WeekChips.swift:39-40`). Nothing is cut, so criterion
+  7 holds by the letter, but both read as tight beside `PillButton`. Proposed: in the wrapped branch give
+  the cell `LedgerSpacing.m` at the sides (`fillsItsShare == false`); give the week chip `LedgerSpacing.m`
+  vertically at accessibility sizes, or a rounded rectangle there instead of a capsule.
+- **S-3. The search field has no vertical padding.** `Views/ExercisePickerScreen.swift:47-52`: the pill is
+  `ledgerHitTarget`'s 44 pt and nothing more; in `library-dark-accessibility3.png` the text all but fills
+  it, and at `.accessibility5` the line is taller than 44 pt and will touch the outline. Add
+  `.padding(.vertical, LedgerSpacing.s)` before `ledgerHitTarget`. No test sees this (the field is in no
+  tree and `faults` has no field to measure, see N-5).
+- **S-4. The hosted reader should be loud about a text field, in `LedgerSnapshotTesting`, not per
+  feature.** The UIKit pin is sound for what it claims (one `UITextField` per screen, its placeholder and
+  text, and a canary that fails when the reader learns to read one), and it is honest about what it does
+  not claim (the spoken label, typing). But §2.6's principle is "the reader is loud", and a field is passed
+  in silence: S10/S11 (the day's name) and F12 will each need to remember the canary. For the orchestrator,
+  as a chore before S10: the reader's walk fails on a `UITextField` unless the caller opts in (as
+  `outsideScrollViews:`), or records a `.field` stop from its placeholder and text; and testing-strategy
+  §2.5 gains the sentence beside the scroll-view limit: "A one-line `TextField` is no accessibility element
+  in a package test process (measured iOS 27.0, F11 S9): pin it through UIKit (`ProgramTextFieldTests`);
+  its spoken label and typing are the nightly UI test's." Not this PR's to fix; the sentence is.
+- **S-5. The check mark is mirrored right to left.** `rightToLeft-library-dark-large.png`: a picked row's
+  mark has its short arm on the right. `LedgerIconShape` is a `Shape`, which SwiftUI mirrors with the
+  layout; right for the chevron, wrong for a check (and for `SetRow`'s, `LedgerDesign/Components/
+  SetRow.swift:175`). A `LedgerDesign` fault this slice's reference now pins: fix it there in its own
+  chore (`LedgerIconView` un-mirrors `.check`), then re-record; do not fix it in `PickMark`.
+
+### Nits
+
+- **N-1.** `Views/DayCard.swift:33,56`: the chevron stands at the row's top (`alignment: .top`); Today's
+  rows centre it (`HairlineRow`). Deliberate for a row with chips, or not? Say so in the comment, or centre
+  the chevron alone (`.frame(maxHeight: .infinity)` is not needed: `alignmentGuide` on the chevron).
+- **N-2.** `Views/SectionLine.swift:16`: `.center`, where `CardEyebrowLine` uses `.firstTextBaseline`. With a
+  note the two texts should share a baseline as on Today; with the stepper, centre. Take the alignment as a
+  parameter defaulting to the baseline, `.center` from `BlockSection`.
+- **N-3.** `Views/ExercisePickerScreen.swift:65-66` with `HairlineList`'s closing rule: two rules 8 pt apart
+  above the foot whenever the list is at its end (`library-dark-large.png`, bottom). Drop the foot's rule
+  or the list's closing one on this sheet.
+- **N-4.** `Views/FilterChips.swift:12`: "All" (narrower than 44 pt) starts 3 pt inside the edge that
+  "Arms" and "Bodyweight" stand on in the next line, and a chip row's own second line is as far from its
+  first as the other row is. The two rows are hard to tell apart once each wraps (`library-dark-large.png`).
+  Raise the gap between the rows to `l`; the 3 pt is `PillButton`'s to solve (a `flush` that the layout
+  sets), later.
+- **N-5.** `ProgramViewsLayoutTests.swift:54` counts `.field` as a target, but no field is ever read, so the
+  44 pt of the two fields is pinned nowhere. Either measure the SwiftUI frame around the `UITextField` in
+  `ProgramTextFieldTests` (its superview's height) or delete `.field` from the check and say so.
+- **N-6.** `Views/ScheduleStrip.swift:80-90`: `spokenHint` switches the view's branch on an optional. The
+  model gives a hint exactly when it gives an action (`ProgramPresentation+Weeks.swift:99`), and the button
+  branch is the only caller: `accessibilityHint(cell.spokenHint ?? "")` or a non-optional hint on an
+  actionable cell would remove the helper. Small; a model change, so later.
+- **N-7.** `ControlPill` lives in `WeekSection.swift:32` and is used by `TrainingDaysSection.swift:23` and
+  promised to S10; give it its own file when S10 touches it.
+- **N-8.** `ExercisePickerScreen.cancel` (`:27-30`) is copied in the tests' `ExercisePickerParts`
+  (`Support/ProgramParts.swift:45-47`); the real one is activated by no test. The convention allows the
+  copy (onboarding's does the same); one hosted test with `outsideScrollViews: true` that activates
+  "Cancel" and the foot on the real `ExercisePickerScreen` would close it.
+
+### Criteria
+
+| # | Verdict | Evidence |
+|---|---|---|
+| 1 Drawn from the model only | **Met**, with S-1 | Parts take a model piece and `send` (`ProgramPage.swift:16-19`, `ExercisePickerPage.swift:14-27`). No format, filter, count, clock or locale in `Views/` (read; `ProgramViewsSourceTests.views_decideNothing`). Every `Text`/title is a model string. The decisions a view does make: the draft's rule (S-1), `model.deload.isOn ? .accent : .muted` (`WeekSection.swift:16`), `cards.isEmpty`/`chips.isEmpty` (drawing nothing for nothing), the tag's least width in ems (`DayCard.swift:17,40`): layout, acceptable. Actions pass through unchanged (`builder_buttons_sendTheirModelsActions`, `library_buttons_sendTheirModelsActions`). No `Task`. |
+| 2 Scroll convention | **Met** | `ProgramScreen.swift:15-17`, `ExercisePickerScreen.swift:16-23`; `ProgramScreenTests` (one `UIScrollView` per screen, none in the parts); `onlyTheScreens_holdAScrollView`. Trees and references from `ProgramParts`. |
+| 3 The builder | **Met** | Header field, "BLOCK · 8 WEEKS" with "−" "+", chips two rows of four, strip of seven, three actions, "TRAINING DAYS", helper, cards, add, notice: `builder-dark-large.png`, `emptyDay-dark-large.png`, `twoWeeks-dark-large.png`; `weekChips_wrapIntoRows`. |
+| 4 The library sheet | **Met**, loosely on the mark | `library-dark-large.png`, `libraryPicked-light-large.png`, `libraryNothing-dark-large.png`. "already in this day" is drawn inside the grey line, not as a mark apart (deviation 8, for Pete). |
+| 5 Previews and snapshots | **Met** | Eight cases, eight `#Preview`s, one registry; 28 references (22 of the table + 6); `Package.swift` and `PreviewScan` registered; `PreviewTests`. |
+| 6 VoiceOver | **Met**, fields excepted | `ProgramTrees` read line by line against the S9/S12 table above: chip "Week 3" value "4 days" selected; cell "Tuesday" value "Rest" with the hint; a day's short names hidden (`DayCard.swift:77`); one selected chip per row; row = button, line as value, selected when picked; foot dimmed. Headings: `headings_areTheSectionTitles`. 44 pt: `targets_areAtLeast44Points` at both sizes. Not pinned: the two fields' spoken labels and targets (S-4, N-5). |
+| 7 Sizes and settings | **Partly** | At `.accessibility3` nothing is cut (opened), but tight (S-2). At `.xLarge` "REST" is cut (**B-1**). Right to left lays out (S-5 the check). Sixteen weeks and the long name lay out; the name ends in "…" (deviation 3). Bold Text: by `parts_layOutSanely` only; no image, not seen. |
+| 8 Orange audit | **Met** | `ProgramOrangeAuditTests`, by hue, both themes, with a control (`count_seesTheAccentAndNoInk`). By eye: "DELOAD" under W8, or the title "WEEK 8 · DELOAD"; the foot's button. Nothing else orange in any image opened. |
+| 9 No rule of its own | **Met** | Tokens and components throughout; three self-drawn pills (week chip, strip cell, tag/short-name chip) are declared and proposed, not added to `LedgerDesign`. |
+
+### The deviations
+
+1. **Everything in `Views/`: accept.** It is FeatureToday's form, and it is the better answer than editing
+   two testers' pins. The module stays readable at 15 files; at S10/S11 it will hold about 30, and then
+   `Views/Builder`, `Views/Library`, `Views/DayEditor` are worth it (`ProgramViewsSourceTests.isView` reads
+   by the `Views/` prefix, so only its `screens` list changes). **Coverage of `Views/` by the scans:** the
+   two adversarial scans read one folder each and do not read `Views/`, and should not be widened (their
+   rule, no literal and no `Text(`, cannot hold for a view). What does cover it: `FeatureProgramSourceTests`
+   reads every Swift file of the module through `CopyAudit.sources(ofModule:)`, which walks subfolders, so
+   the ambient list applies to `Views/`; `LedgerAppKitTests.ModuleCopyTests` audits the whole module for
+   stray literals and lookups; `ProgramViewsSourceTests` adds the view-only bans. That is enough. Nothing
+   needs editing for S9; the testers' file lists need no change either.
+2. **The draft as view state: accept for S9, with S-1.** Can a store edit and a typed draft fight? Not as
+   written: while the field has focus the stored name is never written into it (`:51-55`), so a cleaned or
+   late echo of the lifter's own typing cannot move the cursor or eat a trailing space; a programmatic
+   `draft = model.name` re-enters `onChange(of: draft)` with equal values and sends nothing, so there is no
+   loop. With a store that applies `.rename` late, blur shows the old name for a frame and then the new one
+   (`:46-50` then `:51-55`); harmless, and S13's store applies it at once. When the name changes under an
+   open draft from elsewhere (a sync, an undo): the draft stays, the next keystroke overwrites the outside
+   change, and with no further keystroke blur shows the outside name: last writer wins, without notice.
+   Acceptable for M1 (one device edits a program); S13 should know it.
+3. **One-line name field: accept** for M1 (open question 1).
+4. **Search bound through `.setQuery`: accept.** S14's store must apply it synchronously (already noted).
+5. **`ViewThatFits` for the strip: accept the mechanism, fix B-1.** Choosing by fit is right; the first
+   candidate must not be able to cut.
+6. **Touching targets in the strip: accept.** Measured need (42.7 pt on 375 pt), pinned at 375 pt.
+7. **"Nothing matches" not `EmptyState`: accept.** One sentence and a pill; a heading there would be wrong.
+8. **A row on `HairlineRow`, three model fields unused: accept the view; the fields are Pete's to settle,
+   not this PR's.** Reusing `HairlineRow` is right. But "already in this day" in the same grey as "Cable ·
+   Back" is easy to miss in a long list (`library-dark-large.png`, second row), and it was planned as a
+   mark apart. Two honest ends: draw it apart (needs `HairlineRow` to take a second detail, or the row to
+   stop being `HairlineRow`), or drop `detail` and `inDayMark` from the model with their tests once Pete
+   says the grey line is enough; `pickMark` goes or is drawn with open question 3. Do not leave three
+   tested, undrawn fields past F11.
+9. **`ExercisePickerPage(model:)` takes the whole model: accept**; the criterion writes it so.
+10. **No shared component added: accept.** On the four proposed: **(a) `SectionLine` → `LedgerDesign`: now,
+    as its own chore before S10**, replacing `CardEyebrowLine` (two features hold the same view today, and
+    S10 would be the third); with N-2's alignment. **(d) `LedgerPressStyle` public: in the same chore**; three
+    buttons here have `.plain`'s pressed look and every other control has the design's. **(c) the small tag
+    pill: at S10**, when the Day editor's header draws the same tag. **(b) the two-line week pill: never**,
+    unless a second screen wants one.
+
+### Open questions
+
+1. Long name cut: accept for M1. 2. Title orange as a whole: accept; the eyebrow is one string, and a
+second model field for one word is not worth it. 3. The pick's number: agree with "neither" for the spoken
+side; drawing it is Pete's call (the order picked is the order added, and nothing on screen says so).
+4. "Deload" as the chip's value and "Double-tap to assign": keep. 5. Helper line at accessibility sizes:
+keep. 6. File places: `Views/` (deviation 1).
+
+### Tests, size, simplicity
+
+- **Tests pin the criteria** where a hosted test can. The trees are exact and ordered, the action tests
+  compare whole sequences, the audit has a control. Holes: truncation inside a frame (B-1; the notes say so
+  and then missed one in a reference they "looked at"), the rename path (S-1), the fields' labels and
+  targets (S-4, N-5), the real sheet's "Cancel" (N-8).
+- **Size:** 609 non-blank, non-comment lines in `Views/` recounted file by file; matches the claim. One
+  pull request is right.
+- **What a staff engineer would cut:** little. `SectionLine`'s `SectionNote?` initialiser and
+  `ScheduleStrip`'s `spokenHint` are the only indirections that do not pay yet (N-2, N-6). `DayCard`
+  repeats `HairlineRow`'s frame (rule, button, padding, layout switch) because it needs a leading tag and
+  chips; fine until a second such row appears.
+
+### For Pete, in plain words
+
+1. **A bug to see fixed:** with text one step larger than default, the rest days in the week strip read
+   "RE…". It goes back for a fix.
+2. **Look at `builder-dark-large.png`:** a rest day (outlined, grey "REST") is tappable, and sits one row
+   above "First week", which is greyed out because it is switched off. Are the two different enough?
+3. **Look at `library-dark-large.png`, second row:** "already in this day" is small grey text in the same
+   line as "Cable · Back". Enough, or should it stand out? And picked rows show a check, not "1, 2, 3".
+4. **Look at the two rows of filter chips:** with "Arms" and "Bodyweight" wrapping, it is not obvious which
+   row is muscles and which equipment; neither row has a title.
+5. **`deloadWeek-dark-large.png`:** the whole of "WEEK 8 · DELOAD" is orange, and the "Deload" pill is
+   white, not orange. Matches decision 1 A as you meant it?
+6. **`builder-dark-accessibility3.png`:** at the largest text the week pills and rest cells are tight.
+
+**Screenshots opened (18 of 28):** builder dark `large`, `xLarge`, `accessibility3`; builder light `large`,
+`xLarge`; deloadWeek dark; emptyDay dark; twoWeeks dark; sixteenWeeks dark `large`; library dark `large`,
+`xLarge`, `accessibility3`; libraryPicked light; libraryNothing dark; rightToLeft builder and library;
+increaseContrast builder and library. **Not opened:** the light `accessibility3` pair, sixteenWeeks
+`accessibility3`, deloadWeek/emptyDay/twoWeeks light, library light `large`/`xLarge`, libraryPicked dark,
+libraryNothing light. **Not checked:** anything that needs a run (the gate, the trees as read, coverage, the
+six mutations), VoiceOver itself, a device, Bold Text by eye, whether a tap inside the field's text still
+places the cursor under `.onTapGesture`, and the 375 pt width by eye.
+
+## Slice S9 — adversarial testing, round 1 (G2 tester, 2026-10-09)
+
+Tested at `6c3bebd` (branch `feat/F11-s9-builder-library-views`), no product file changed. Nine new files in
+`LedgerKit/Tests/FeatureProgramTests/Adversarial/`, all named `ProgramViews…Adversarial…`: 46 tests in 8
+suites, and two support files. **Six tests fail on purpose** (21 issues); each is a finding below. No
+reference image was recorded or changed; every check is a measurement of the hosted view or a read of the
+sources.
+
+### Verdict: one bug, wider than the review saw it; two minor findings; the rest held
+
+**The review's B-1 is also there at the default text size on a 375 pt phone.** Everything else I attacked
+held: the trees of ten states no preview draws, every stop's action, the pages with a store in the loop,
+the frames at all twelve text sizes on both widths, and the orange audit taken from the other side.
+
+### Findings
+
+| # | Severity | What | Failing test(s) |
+|---|---|---|---|
+| **F11-S9-1** | **Bug, blocking** (B-1, widened) | The schedule strip cuts a cell's words: "REST" is drawn "RE…" at `.xLarge` and `.xxLarge` on an iPhone 17 (402 pt), **and at `.large`, the default, on a 375 pt phone** (a cell gets 47.3 pt and takes 48.3). With ten days, "D10" is drawn "D…" at `.xxxLarge` on 375 pt, at `.accessibility1` on both widths and at `.accessibility2` on 402 pt. Plain, with Bold Text and right to left alike. | `ProgramViewsCutAdversarialTests.strip_seedWeek_noCellIsCut` (3 of 12 sizes), `strip_tenDays_noCellIsCut` (3 of 12), `strip_seedWeek_drawsItsWordsWhole` (3 of 24 cases, 6 issues), `strip_tenDays_drawsItsWordsWhole` (4 of 24) |
+| **F11-S9-2** | Minor (S-3, measured) | The search field's line of text has no room in its pill at the largest sizes: pill 44 pt and line 40.7 at `.accessibility3`; 47 and 46.7 at `.accessibility4`; 54 and 54 at `.accessibility5`, where a "q"'s tail stands on the outline. | `ProgramViewsCutAdversarialTests.searchField_textStandsInsideItsPill` (3 of 12 sizes) |
+| **F11-S9-3** | Minor, and a question for S14 | The search field sends `.setQuery` with the query unchanged, twice when it takes the focus and twice when it loses it (hosted, iOS 27.0). The action may be applied twice, so nothing breaks by itself; but a blur is how the keyboard goes when the sheet closes, and the store empties the query on closing. The name field guards its send (`text != model.name`); the same guard here is one line. | `ProgramViewsFieldAdversarialTests.searchField_focusAndBlur_sendNothing` |
+
+**F11-S9-1 in detail.** Two independent checks, neither with a reference image:
+
+- *By frames* (`ProgramViewsProbe.cut`): each part whose words stand on one line is hosted alone and in the
+  page; a part the page gives less width than it takes alone, and that is no taller for it, has lost words.
+  Seed week: cells of 51.3 pt for 54.3 (`.xLarge`, 402) and for 58.3 (`.xxLarge`, 402); 47.3 for 48.3
+  (`.large`, 375). Ten days: 47.3 for 48.0 (`.xxxLarge`, 375); 51.0 for 53.3 and 47.3 for 53.3
+  (`.accessibility1`); 51.0 for 60.0 (`.accessibility2`, 402).
+- *By pixels* (`ProgramViewsProbe.wordInk`): how much word the strip draws against its seven cells drawn
+  alone. Whole strips give 96 to 104 hundredths; the cut ones 81 to 89 (three "RE…") and 86 to 94 (one
+  "D…"). The band and the measured numbers are in the test's comment.
+- I looked at four of the cases once as pictures (not kept): "RE…" three times at `.large` on 375 pt;
+  "D…" on Sunday at `.accessibility1` on 402 pt and at `.xxxLarge` on 375 pt.
+- At 375 pt the strip wraps from `.xLarge` up with the seed program, so on that phone the one size that cuts
+  is the default one.
+- **For the fix:** `ProgramViewsLayoutTests.scheduleStrip_defaultSize_isOneRowOfEqualTargets` pins the cut
+  layout: one row of seven equal cells at `.large` on 375 pt, where an equal seventh is a point too narrow
+  for "REST". Either the cells stop being equal there (the review's first proposal: the cells would be 44
+  and 48.3 pt, and that test's "within 1 pt" must go) or the row is not taken (its second proposal: the
+  strip wraps at the default size on a 375 pt phone, and that test's `[7]` must go). The existing test and
+  the fix cannot both stand. Pete or the orchestrator should say which look is wanted on a 375 pt phone.
+
+### What I attacked
+
+1. **Words cut inside a frame** (criterion 7; `ProgramViewsCutAdversarialTests`, 10 tests). Every heading,
+   note, pill, week chip and strip cell of the five builder previews, of five builder states of mine and of
+   the three library previews, at all twelve text sizes × 402 and 375 pt × plain, Bold Text, right to left.
+   Only the strip's cells are cut. A check that the check sees a cut pill and passes a wrapped one.
+2. **Frames** (criteria 6, 7; `ProgramViewsLayoutAdversarialTests`, 5 tests). No stop without a size,
+   outside the page, under 44 pt or over another: the eight previews and my five builder states at twelve
+   sizes, my five library states at five sizes, each × two widths × plain, bold, right to left. All hold,
+   with half a point of grace (note 1).
+3. **Trees written first** (criterion 6; `ProgramViewsTreeAdversarialTests`, 10 tests). An oracle
+   (`ProgramViewsOracle`) writes the tree from the notes' tables and the model, never from a view. The
+   implementer's eight tables equal it. Ten states of mine read exactly their trees at `.large` and
+   `.accessibility5` (the builder's right to left too): no training day; a day of twelve exercises under a
+   75-letter name beside a day with none; ten days ("D10"); sixteen weeks all deload with the last selected
+   under a 97-letter program name; the logged-week notice; the whole catalog (224 rows); all 224 picked and
+   all in the day; an empty library; two custom exercises with names of 95 letters and more; a 78-letter query.
+4. **Views decide nothing, by behaviour** (criterion 1). Every stop of those states and of the builder
+   previews is activated: each sends exactly its model's action, once; a heading, a text, a dimmed pill, a
+   weekday of a program with no day, and the stepper's own activation send nothing; all 224 rows send
+   their own. The stepper's swipes in every state. On the **real** `ExercisePickerScreen` (the review's N-8)
+   "Cancel", the foot and the escape gesture send the model's actions.
+5. **A store in the loop** (`ProgramViewsLoopAdversarialTests`, 2 tests). The hosted page is drawn from an
+   observed store that applies each action as `BuilderScreen`/`PickerScreen` do; at each of 18 reads of the
+   builder and 12 of the library the tree is the next model's, and the next tap sends the new model's action
+   (no view keeps an action of the model before). Week 8, deload off, two assignments, copy, plus, apply to
+   later, minus, a new day, a dimmed pill; picks in and out, both chip rows, a query with no match, clear,
+   add.
+6. **The orange audit from the other side** (criterion 8; `ProgramViewsOrangeAdversarialTests`, 5 tests).
+   The one thing that may be orange is taken out of the model (no chip marked deload and no week title; a
+   foot that offers nothing) and the **whole page** must hold no orange pixel: ten builder states and six
+   library states, both themes, the builder at `.accessibility3` too. With it left in, a page is orange
+   exactly when the model says so. All hold.
+7. **Previews** (criterion 5; 2 tests). Every registered preview draws more than a ground (the existing
+   `preview_renders` compares only the image's size, which an empty view passes); the registry is the
+   eight states the criteria name.
+8. **The sources** (criteria 1, 9; `ProgramViewsSourceAdversarialTests`, 9 tests, host-only). Not a ban
+   list but the lists themselves: no string literal in a view; the sixteen `send(…)` calls, each a value of
+   the model but `.rename(text)` and `.setQuery($0)`; the only state (`draft`, two `isEditing`), the only
+   `onChange`s (three, in `ProgramHeader`), the only environment read (`dynamicTypeSize`, twice), the only
+   two questions asked of a list (`cards.isEmpty`, `chips.isEmpty`), the only two numbers (`3.5`, `1`); 26
+   spellings of counting, picking, joining, casing, raw colours and fonts, tasks and animations: none.
+9. **The two fields** (`ProgramViewsFieldAdversarialTests`, 3 tests; two in the cut suite). Each is a 44 pt
+   target at every size (the review's N-5: measured from the drawing, 44 pt at `.large`, 57 at
+   `.accessibility5` for the name's row). The name field sends nothing for a focus, a blur or a stored name
+   that changes under either, with an ordinary, an empty, a white-space and a 97-letter name; the search
+   field shows the model's query, never a draft. **Typing cannot be attacked from a hosted test**: I tried
+   `insertText` with focus, setting the text and sending `.editingChanged`, and the text-did-change
+   notification; the `UITextField`'s own text changes and the view's draft does not (nothing is sent). The
+   implementer's statement stands, and the review's S-1 debt with it.
+
+### Mutations (15, each made in a copy-restored source; existing S9 tests and mine run on each batch)
+
+| # | Change | Existing tests | Mine |
+|---|---|---|---|
+| 1 | The adjustable action's up and down swapped | caught: `blockStepper_adjusts` | caught |
+| 2 | The **drawn** "−" sends plus and "+" sends minus | **missed** | **missed** (no hosted test can tap them; a UI test's) |
+| 3 | The name field sends without the `text != model.name` guard | caught: `nameField_withoutFocus_followsTheStoredName` | — |
+| 4 | The search field's binding sends nothing | **missed** | caught, by the source list only |
+| 5 | The real sheet's `cancel()` emptied | **missed** | caught: `realSheet_pinnedParts_sendTheModelsActions` |
+| 6 | Both fields' `accessibilityLabel` removed | **missed** | **missed** (a field is in no hosted tree) |
+| 7 | The day list drawn for a program with no day (`if !model.cards.isEmpty` removed) | **missed** | caught, by the source list only |
+| 8 | An orange capsule behind "Deload" while it is on | **missed**: the audit passes (it asks only that the week section has *some* orange and builds its own pill) and both `deloadWeek` references pass | caught: `builder_withoutItsOrange_drawsNone` |
+| 9 | `ControlPill` never disabled | caught: the trees (three states); **the `.large` and `.xLarge` references pass** | caught |
+| 10 | A day row's chevron drawn at accessibility sizes | caught: three `.accessibility3` references | — |
+| 11 | An unpicked row's mark is a check, not a plus | **missed**: all library references pass | **missed** |
+| 12 | The strip not set `xs` out | caught: every builder reference | — |
+| 13 | A selected deload chip's word orange | caught: `deloadWeek_orangeIsTheWeeksTitle` | caught |
+| 14 | A filter chip's spoken label removed | caught: the trees, `filterChips_wrap` | caught |
+| 15 | The foot's rule removed | caught: every library reference | — |
+
+Existing tests catch 8 of 15; mine add 4; 3 are caught by nothing (2, 6, 11). "—": no test of mine fails for
+it. Batches: 1 to 7; 8 to 11; 12 to 15, each change in a state or a test of its own so that a failure names it.
+
+### Notes (no failing test)
+
+1. **Two targets are one pixel short of 44 pt** on a 375 pt phone: the strip's "Wednesday" in the
+   `emptyDay` state at `.accessibility1` (43.67 pt wide) and the block's stepper in `sixteenWeeks` at
+   `.large` (43.67 pt high). My frame check, like the implementer's, gives half a point; with none these
+   two fail.
+2. **The references do not see a small change on a long page.** `SnapshotConfig.precision` is 0.995, and the
+   builder's `.large` reference is 402 × 1,043 pixels, so some 2,000 pixels may differ: mutations 8, 9 and 11 (an orange capsule, a dimmed pill drawn
+   live, eight check marks for eight plus marks) all pass every reference. It is how B-1 could sit in a
+   reference that was "looked at". For these screens the trees, the audits and the cut checks carry what
+   the references cannot.
+3. **The existing orange audit can pass with orange elsewhere** (mutation 8): in the deload state it asserts
+   `> 0` for the week section and `== 0` for parts it builds itself. The whole-page tests close that.
+4. **Letter-spaced headings measure a few points narrower in the page than alone** (right to left at every
+   size, up to 5 pt; left to right at `.accessibility4`, 350 pt for 354 to 356). `cut` gives a heading a
+   quarter of its height in slack for this. I could not settle it by pixels (10 pt text at 1× moves the
+   count by ±17 %), so it rests on reasoning: an `Eyebrow` has no line limit and wraps, which makes it
+   taller.
+5. **The long program name**: the field is 350 pt wide and the preview's name 888 pt (deviation 3, accepted
+   by the review). Unchanged; no test of mine fails on it.
+6. **An empty library reads "Nothing matches that filter." with "Clear filters"** although no filter is
+   set. That is S8's presentation, not a view's doing; the view draws what it is given.
+7. Bold Text does change the widths measured here (the "D10" cell alone, 53.7 pt against 53.3 at
+   `.accessibility1`), so the bold sweeps are not empty.
+
+### Questions
+
+1. **Is a 375 pt phone in M1's range?** If so, F11-S9-1 is on screen at the default text size there.
+2. Which look fixes the strip on 375 pt: unequal cells in one row, or wrapped rows (see "For the fix")?
+3. F11-S9-3: guard the search field's send in this slice, or leave it to S14 with the store's rule?
+4. `DayCard.tagEms` (3.5) is a measure of the feature's own (criterion 9 is "no rule of its own"): keep it
+   with the feature-local tag pill, or move both to `LedgerDesign` at S10 (deviation 10 c)?
+5. Should a long page's reference be compared more strictly, or cut into parts, given note 2? Not this
+   slice's to change (§2.5: tests never override the precision).
+
+### What I did not attack
+
+A device; VoiceOver itself; typing, the cursor under `.onTapGesture`, the keyboard and its dismissal; a
+finger's tap on "−", "+", a chip, a cell or a row; the pressed look; the stops inside the real scroll views;
+Increase Contrast beyond what the two references draw; a width under 375 pt; another language (a longer
+"REST" makes F11-S9-1 worse); the light theme and right to left for the pixel check (dark, left to right
+only); the first frame's time with 224 rows (a hosted read of all 239 stops took 0.17 s); the watch.
+
+### The runs (2026-10-09, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests…`, eleven times: two probes
+  (the first did not compile), five runs of the new suites while they were written, three mutation batches,
+  and the final run of the whole target on the untouched sources: **415 tests in 47 suites, 6 failed with
+  21 issues, all six the findings above** (369 tests in 39 suites before; this round adds 46 in 8).
+- Host: `swift test --filter FeatureProgramTests`: 348 tests in 35 suites passed.
+  **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 135 s.**
+- **Not run:** the full gate (`scripts/check.sh`), the watch, the nightly lane. `Views/` was restored from
+  copies after each mutation batch and compared with them (`diff -rq`: identical); `git status` shows only
+  the new test files and these notes.
+
+## Slice S9 — fix round 1 (G1 implementer, 2026-10-09)
+
+On `68dba83`. Criteria 10 to 13 of "Plan amendments — slice S9 after round 1". No tester's file was edited;
+the tester's six failing tests pass as written. No presentation, action or copy changed; one comment in
+`ProgramBuilderModel.swift` did (criterion 13).
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| **10** the strip never cuts a word (B-1, F11-S9-1) | `Views/ScheduleStrip.swift`: `ViewThatFits` over a row and a `WrapLayout` is gone. The cells stand in `EqualCells`, a private `Layout` of the file: every cell has one width, never less than the widest cell's own; one row while each cell then has at least `xs` beside its words (both sides together), else rows of as many cells as fit with `xl` each; the cells always share the whole width. A cell no longer carries the 44 pt least width itself (`ledgerHitTarget` is gone from it; `contentShape` stays): a cell that is 44 pt wide "for its target" could not be told from one that is so for its words, and that was the missing point on 375 pt. Its width is at least 44 pt by arithmetic on every iPhone (a seventh of 375 pt less nothing is 47 pt; a wrapped cell is wider), which the tester's and my frame tests measure at twelve sizes and both widths; its height is its two lines and their padding. |
+| **11** room at the largest sizes (S-2, S-3, F11-S9-2) | The search field has `s` above and below its line (`ExercisePickerScreen.swift`). A wrapped strip cell has at least `xl` beside its word (above). A week chip has `m` above and below at every size, where it had `s` (`WeekChips.swift`): the views may read the text size in two places only (the tester's pin), so the room is not switched on by size. |
+| **12** the search field sends only a changed query (F11-S9-3) | `ExerciseSearchField.query`: `if $0 != model.query { send(.setQuery($0)) }`. |
+| **13** S-1 (a) | `ProgramBuilderModel.Header.name`'s comment says the view keeps the draft and the store none. |
+| **13** N-1 | `DayCard`: the chevron is centred on the row, as `HairlineRow`'s; the tag and the texts still stand top-aligned beside each other. |
+| **13** N-2 | `SectionLine` takes its alignment: the first baseline by default (a note beside an eyebrow, as Today's cards), `.center` from `BlockSection` for "−" and "+". |
+| **13** N-3 | The library's rows stand in a plain stack, each under its own rule; the list draws no closing rule, and the foot's pinned rule is the one above the button. |
+| **13** N-6 | `spokenHint(_:)` is gone: an actionable cell reads the model's hint, or none when the model gives none. |
+
+Not done, as ruled (criterion 14 and the chores): N-4, N-5, N-7, N-8, S-4, S-5.
+
+### The strip's look, for the product owner
+
+Seed program (tags of two letters, "REST"); what is pinned by a test or drawn in a reference:
+
+| Width | Text size | Look |
+|---|---|---|
+| 402 pt (iPhone 17) | default (`.large`) | one row of seven equal cells (`builder-*-large.png`) |
+| 402 pt | one step up (`.xLarge`) | one row; "REST" whole, with about 2 pt beside it on each side (`builder-*-xLarge.png`): tight, and the price of keeping the week on one row there |
+| 402 pt | two steps up (`.xxLarge`) and above | rows of equal cells |
+| 402 pt | `.accessibility3` | three, three and one, each cell a third of the width (`builder-*-accessibility3.png`) |
+| 375 pt | default | one row of seven, 47 pt each; "REST" whole with about 3.5 pt beside it |
+| 375 pt | one step up and above | rows of equal cells |
+
+A last row that is not full starts at the leading edge and its cells are as wide as the others (a lone
+"S / REST" under two rows of three at `.accessibility3`). With ten days ("D10") the same rule holds; the
+tester's sweep over twelve sizes and both widths finds no cut. Not measured by me: how many cells a row holds
+at each size between those above.
+
+Also new to look at: the week chips are 8 pt higher at every size (at `.xLarge` they stand three to a row,
+as before this round); the library's list ends in one rule, not two.
+
+### Tests
+
+- The tester's six pass unedited: `strip_seedWeek_noCellIsCut`, `strip_tenDays_noCellIsCut`,
+  `strip_seedWeek_drawsItsWordsWhole`, `strip_tenDays_drawsItsWordsWhole`,
+  `searchField_textStandsInsideItsPill`, `searchField_focusAndBlur_sendNothing`; so do the tester's source
+  pins (fourteen files, sixteen `send`s, three kept states, two environment reads, the two numbers).
+- Mine: `scheduleStrip_defaultSize_isOneRowOfEqualTargets` stands unchanged (one row at 375 pt).
+  `scheduleStrip_accessibilitySize_wraps` is replaced by `scheduleStrip_wraps_intoRowsOfEqualCells`: one row
+  at `.xLarge` on 402 pt; wrapped, in order, every full row as long and every cell as wide, at `.xxLarge` on
+  402 pt, at `.xLarge` on 375 pt and at `.accessibility3`.
+- **References:** 26 of this slice's 28 were recorded again (none is on `main`): every builder reference
+  (the chips' height; the strip at `.xLarge` and `.accessibility3`; the chevron; the baseline of the notes),
+  and the library's with rows (one rule above the foot; the search field's height at `.accessibility3`).
+  Unchanged: `libraryNothing` light and dark. `screenshots/s9/` holds the new copies.
+
+### Product lines now
+
+`Views/`: 670 (609 before): `ScheduleStrip` 114 (70; the layout), `DayCard` 73 (65),
+`ExercisePickerScreen` 63 (55), `SectionLine` 32 (31); the others as they were. Builder 425, library 134,
+previews 111.
+
+### The runs
+
+- Simulator through the lock, `-only-testing:FeatureProgramTests`, three times: one with the first form of
+  the layout (my own 375 pt test failed: the cell's 44 pt least width made the row wrap four and three);
+  two recording runs. The comparing run is the gate's.
+- **`scripts/check.sh`, the full gate, on the final sources: exit 0, "check.sh OK", 960 s** (iOS tests
+  599 s, watchOS tests 261 s). iOS: 3,614 tests, 3,587 passed, none failed, 14 skipped, 13 known issues.
+  watchOS: 2,262 tests, 2,243 passed, none failed. `FeatureProgram` 2,320 / 2,329 lines (99.61 %).
+- **`scripts/check.sh --fast`: exit 0, 124 s.**
+- **Not run:** the nightly lane, a device, VoiceOver. No mutation was made this round.
+
+### For the orchestrator
+
+- `EqualCells` is a second layout beside `WrapLayout` and lives in the feature; if S10 or F14 wants equal
+  cells it belongs in `LedgerDesign`. It is written without a numeral, a `count` or a `max`, because the
+  tester's lists pin the views' numbers and bans; in `LedgerDesign` it could be plainer.
+- The cell's `.lineLimit(1)` can no longer cut a word in a page (a cell is never narrower than its words);
+  it stays for a cell wider than the whole strip, and because the tester's list of numbers names it.
+
+## Slice S9 — adversarial testing, round 2 (G2 tester, 2026-10-09)
+
+Tested at `e46279e`, no product file changed. Two new files (`ProgramViewsStripAdversarialTests.swift`,
+`ProgramViewsRoomAdversarialTests.swift`: 8 tests in one suite) and two more tests in
+`ProgramViewsSourceAdversarialTests.swift`. **One test is left failing on purpose** (F11-S9-4, minor and
+latent). The six that failed in round 1 pass, unedited.
+
+### Verdict: criteria 10, 11 and 12 hold; one minor, latent fault in the new layout
+
+| # | Severity | What | Failing test |
+|---|---|---|---|
+| **F11-S9-4** | Minor, latent (no screen meets it today) | `EqualCells` with no width proposed reports one row of cells at the widest word's width, then places its cells by the rule for that width, which wants `tightRoom` more for each cell and so wraps: four cells whose widest is 59 pt are read 118, 118, 29 and 118 pt wide on three tops, in the room of one row. Any parent that asks the strip for its own size meets it (`fixedSize`, `ViewThatFits`, a sideways scroll view); the page proposes a width and does not. The layout's comment ("with no width proposed, everything stands on one row") is not what it places. The fix is one term: report the widest word's width **and `tightRoom`** for each cell when no width is proposed. | `ProgramViewsStripAdversarialTests.proposals_nil_placesWhatItReports` |
+
+**For the orchestrator:** this test is red in the full gate until the fix or a ruling. It does not touch
+criterion 10 as written (375 and 402 pt pages); if the gate must be green first, the one-term fix is the
+short way, not disabling the test.
+
+### What I attacked
+
+1. **`EqualCells`, through the strip** (the layout is private). Rules written from criterion 10 and the
+   layout's comment, measured on the hosted strip (`StripRules`): one width for all cells (a point of grace:
+   a third of 331 pt lands on pixels as 110.0 and 110.67); no cell narrower than the widest word; one row
+   exactly when every cell has `xs` beside its word, else rows with `xl` beside it; full rows hold as many
+   and are as long as the width; a last row starts where the first does; order, left to right and right to
+   left; no cell over another; the view under the strip starts where the last row ends (the size reported
+   is the room taken). **80 seeded strips** (one to seven cells, words of one to ten wide and narrow
+   letters, nine widths from 8 to 394 pt, any text size, either direction): all hold.
+2. **The phones**: seed tags, ten days ("D10") and a long tag ("PUSH DAY") × twelve sizes × 375 and 402 pt
+   × plain, Bold Text, right to left: the rules hold, **no word is cut, every target is at least 44 pt**.
+   The long tag's strip by the pixels too: whole in all 24 cases.
+3. **Proposals**: a width narrower than a word (12, 16, 28 pt given): every cell is the whole width on its
+   own row, and the size reported fits. One cell takes the whole width. No cell: no height. No width:
+   F11-S9-4. A proposal of exactly zero and an infinite one cannot be made through the strip; by reading,
+   infinite gives one row at the widest word's width, and zero gives cells of no width at one origin with
+   one row's height reported (unreachable in a page).
+4. **Under 375 pt** (a note, pinned as measured in `narrowPhones_whereTargetsFallShort`): the cell no longer
+   carries a 44 pt least width, and a seventh of a page under 352 pt is less. With the seed program the
+   targets are 42.7 pt wide on a 344 pt page and 39.3 pt on 320 pt, at `.xSmall`, `.small` and `.medium`
+   only; from `.large` up the strip has wrapped there. On 352 and 360 pt every size holds 44 pt. No word is
+   cut at any of these widths.
+5. **Criterion 11**, measured: a week chip is at least `2 × m` higher than its two lines at every size
+   (`weekChip_keepsItsRoom`); a wrapped cell has `xl` beside its word (the rules above); the search field
+   (round 1's test).
+6. **Six mutations**, restored from copies and compared (`diff -rq`: identical):
+
+   | Change | Existing tests | Mine |
+   |---|---|---|
+   | The search field's `s` above and below removed | caught: the library's `.accessibility3` references | caught: `searchField_textStandsInsideItsPill` |
+   | The query guard removed | missed | caught: `searchField_focusAndBlur_sendNothing` |
+   | `wrappedRoom` `xl` → `xs` | caught: builder references | caught: the strip's rules |
+   | Week chip `m` → `s` | caught: every builder reference | caught: `weekChip_keepsItsRoom` (12 of 12) |
+   | `tightRoom` → 0 | caught: `scheduleStrip_wraps_intoRowsOfEqualCells`, references | caught |
+   | Wrapped cells do not share the width | caught: references | caught: "a full row is 324 pt long in 331" |
+
+   Criteria 11 and 12 can fail: each has a test that does. (The first four ran as one batch; the builder
+   references that failed in it belong to the chip and the wrapped room together.)
+
+### The source pins (item 3)
+
+Loosened, for layout types only. `views_reachForNothing` no longer bans `.count`, `.first`, `.last`,
+`.reduce(`, `.min(` and `.max(` everywhere; a new test, `views_countNothing_outsideALayout`, bans them (and
+the free `min(` and `max(`) in every view **but inside a type declared `struct X: Layout`**, found by its
+braces (`scan_findsTheLayout` pins that the scan knows `EqualCells` from the views around it). A layout is
+arithmetic on its children's sizes and reads no model; the ban protected nothing there and made `EqualCells`
+add up in loops. `EqualCells` may now be written with `subviews.count` and `max`; I did not rewrite it. Not
+loosened: the numbers pin (a layout's measures are tokens, and `CGFloat(subviews.count)` needs no numeral),
+the literals, the state, the environment and the `send` lists.
+
+### The new references, by eye (item 4; five of the 26, and three pictures of my own at 375 pt, not kept)
+
+- `builder-dark-xLarge.png`: one row of seven, "REST" whole in all three cells, about 2 pt from the outline
+  on each side: tight, as the implementer says, and no "…". Chips three to a row with room around both lines.
+- `builder-dark-accessibility3.png`: the strip is three, three and one, equal cells, words whole with clear
+  room; "W8 / DELOAD" clears its outline; nothing over anything.
+- `sixteenWeeks-dark-large.png`: four rows of four chips, 8 pt higher each; nothing crowded or pushed off;
+  the page is 1,181 pt high (it scrolls, as before). The long name ends in "…" (deviation 3, accepted).
+- `library-dark-accessibility3.png`: the search text has room above and below; one rule above the foot.
+- No reference is drawn at 375 pt. My pictures: at `.large` one row, "REST" whole and close to the outline
+  (about a point and a half each side); at `.xLarge` four and three, roomy; the long tag at 402 pt three,
+  three and one.
+
+### Notes
+
+1. "REST" at `.large` on 375 pt and at `.xLarge` on 402 pt is whole but nearly touches its outline. That is
+   the ruling's choice (keep the week on one row); the product owner may want to see it.
+2. A hosted read of a strip under `fixedSize` gives odd frames (F11-S9-4); `ProgramViewsProbe.cut` measures
+   single cells alone, where the fault does not show (one cell fits its own width).
+
+### The runs (in the worktree, every simulator command through the lock; iPhone 17, iOS 27.0)
+
+- Simulator, `xcodebuild test … -testPlan PR -only-testing:FeatureProgramTests…`, five times: the new suite
+  twice (the first did not compile), two mutation batches, and the whole target on the untouched sources:
+  **425 tests in 48 suites, one failed with 2 issues: `proposals_nil_placesWhatItReports`** (415 in 47 after
+  round 1).
+- Host: `swift test --filter FeatureProgramTests`: 350 tests in 35 suites passed.
+  **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 126 s.**
+- **Not run:** the full gate, the watch, the nightly lane. Not attacked: a device, VoiceOver, other
+  languages, the light theme for the pixel check.
+
+## Slice S9 — fix round 2 (G1 implementer, 2026-10-09)
+
+On `e2c89ab`. One file changed, `Views/ScheduleStrip.swift`; no tester's file, no reference.
+
+1. **F11-S9-4, fixed.** With no width proposed `EqualCells` now reports the one row at the least width its
+   placing keeps on one row: the widest child's width and `tightRoom`, for each cell.
+   `proposals_nil_placesWhatItReports` passes unedited. **One exception the tester's proposal did not name:**
+   a child alone reports its own width, with no room. The placing gives a lone cell the whole width whatever
+   the width, so that size is one it keeps too; and the tester's rules measure each word "alone" as a strip
+   of one cell under `fixedSize`. With the room added there as well, every "alone" width grew by `xs` and the
+   tester's own rules failed (the seed strip at `.large` on 375 pt and at `.xLarge` on 402 pt: "one row where
+   each cell has less than xs beside its word"). Measured in a run between, not kept.
+2. **The plain rewrite: tried and not kept.** With `subviews.count` and a rounded quotient the two adding
+   loops go, but the gain was not clear: the module's own `FeatureProgramSourceTests` still finds a clamp by
+   the spelling `max(` (so the maxima stay written out); "one cell a row when not even one fits" needs a
+   literal 1, and the numbers pin gives the file exactly one, the cell's `lineLimit(1)`; dropping that line
+   limit to free it changed how a cell narrower than its word is drawn (eight of the tester's seeded strips
+   failed, and one reference). `EqualCells` is as it was in round 1 but for item 1. If it moves to
+   `LedgerDesign` it can be written plainly there.
+3. **The doc comment** of `ScheduleStrip` carries the tester's measured note: under 352 pt the one row's
+   targets fall short of 44 pt (42.7 pt at 344 pt, 39.3 pt at 320 pt) at the three smallest text sizes; no
+   iPhone that runs this app is that narrow.
+
+Product lines: `ScheduleStrip` 115 (114); `Views/` 671.
+
+**The runs.** Simulator through the lock, `-only-testing:FeatureProgramTests` (PR plan), three times: the
+rewrite (failed, above); the one-term fix alone (the tester's rules failed, above); **the final sources: exit 0, 425 tests in 48 suites passed, no reference
+changed** (`git status`: one source file). **`scripts/check.sh --fast`: exit 0.** The full gate was not run
+by me this round; the orchestrator runs it.
