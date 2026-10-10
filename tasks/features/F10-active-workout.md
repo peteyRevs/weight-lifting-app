@@ -515,3 +515,9 @@ to an earlier or a finished exercise (the spec lists later ones only); whether o
 disc and on the shown row's ring is the "once per surface" he wants (the design system's set row draws
 both). **For S7:** a refused change while the finish dialog is open (review N-1). **Chore:** the
 counted-text helper moves to a shared place with `FeatureToday`'s fix.
+
+**Criterion 13, amended after round 2** (orchestrator, 2026-10-10; F10-S5-7): two things drop waiting taps and
+no other: a refused change, and the session's updates ending (the failed screen, whose "Close" closes the
+cover). A call that never returns under "Minimize" is accepted as a hung discard is: no timeout. **For S9**
+(implementer's question): once the watch syncs, a chosen exercise whose every set is then logged elsewhere
+stays on screen with nothing to log; the choice should give way.
