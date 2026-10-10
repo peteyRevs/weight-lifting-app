@@ -5238,8 +5238,8 @@ because the app's rest lasts 150 s and no UI test waits it out, and no dark run 
 ### The runs
 
 2026-10-10, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0); every simulator run through
-the lock. The gate and the UI tests ran on the working tree that commit `bf452eb` then recorded unchanged; only
-this section and the screenshots came after.
+the lock. The gate and the UI tests ran on the working tree that commit `bf452eb` then recorded unchanged, the
+screenshots with it; only this section came after (`45d05cb`).
 
 | Run | Result |
 |---|---|
