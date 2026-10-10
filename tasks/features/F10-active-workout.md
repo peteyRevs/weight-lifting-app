@@ -479,3 +479,39 @@ the notes ("Inputs for S5", after S4's sections). The slice is accepted when:
 **Not in this slice:** rest and haptics (S6), finish and the receipt (S7), swap (S8), supersets (S9), any
 change to the session engine's rules, `LedgerAppKit` beyond what the Debug rows need, the project file or a
 test plan.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer approved with six should-fix items; the tester found five bugs (two of them the reviewer's, two
+latent) and one question, left seven tests failing, and its 16 seeded storms of taps agree with the same taps
+made one at a time. Rulings, which add to S5's twelve criteria:
+
+13. **Criterion 7 is reworded.** Taps are applied in order, each once, planned at their turn on the newest
+    workout. A refused change drops the taps waiting behind it and says so through the alert (a set is never
+    logged at a weight the lifter did not see); nothing else drops a tap.
+14. **Minimize keeps the taps made before it** (F10-S5-1): taps still waiting when "Minimize" is tapped are
+    applied; the workout goes on and loses no set.
+15. **A restart plans on the newest workout** (F10-S5-2, -3): after the cover's tasks start again, a waiting
+    tap is planned on the session's current workout, not on the one last drawn, and an answer kept from
+    before the restart is forgotten.
+16. **"REMAINING" lists only what can be logged** (F10-S5-4, review S-1; criterion 6's own words): a later
+    exercise with no set left is not listed, so no jump leads to a page with nothing to do. Its "n × m"
+    counts the working sets, as the card's target line does, not the drop set (review N-9).
+17. **The page starts at the top when the shown exercise changes** (F10-S5-5, review S-2): after a jump or
+    the cursor's move to another exercise the eyebrow and the name are on screen at every text size.
+18. **A second touch does not undo a set just logged** (F10-S5-6, review S-3): an un-log within one second
+    of the set's `doneAt` is ignored, as a pure rule in the edit's plan using the moment `make` already
+    receives; no timer. After that second, the check un-logs as before. (One second and the rule itself are
+    listed for the product owner; the prototype has no guard.)
+19. **Room between the two facts** (review S-5, N-8): at every size "Last" stands nearer its own value than
+    the target's.
+20. **Housekeeping** (review N-2, N-4, N-10): the comments that contradict the code; the test name that
+    still says 27 keys.
+21. **Accepted as built:** the queue with a wake signal; a day with a superset as switching solo cards until
+    S9; "1 pounds" in speech; the look decisions; an un-logged row does not become the shown row.
+
+The tester's seven failing tests pass unedited. **For the product owner, with S9:** how a lifter goes back
+to an earlier or a finished exercise (the spec lists later ones only); whether orange on every logged row's
+disc and on the shown row's ring is the "once per surface" he wants (the design system's set row draws
+both). **For S7:** a refused change while the finish dialog is open (review N-1). **Chore:** the
+counted-text helper moves to a shared place with `FeatureToday`'s fix.

@@ -4280,6 +4280,267 @@ after the last set, when the card has already moved to the next exercise.
 - Right to left and Bold Text are measured (frames), not looked at: no reference draws them.
 - "Repeat" in the running app: the sample has no history. It is covered by the store test and the references.
 
+## Slice S5 — review, round 1 (G3 reviewer, 2026-10-09)
+
+Reviewed `git diff main...f0318dd` (commits `c490067`, `f0318dd`) by reading only: nothing was built or run, so
+every "met" below rests on the code as read and on the implementer's reported runs. Line numbers are those of the
+files at `f0318dd`, under `LedgerKit/Sources/FeatureWorkout/` unless a path says otherwise. "Not checked" is at the
+end.
+
+**Verdict: approve with should-fix.** No blocking finding. S-1 and S-2 are defects a lifter would meet and each is
+a few lines; S-3 is a product decision with a three-line cost; S-4 restores a check that a sanctioned edit
+weakened. The pump is correct for what the session's contract promises and is close to the smallest shape that
+can be.
+
+### Blocking
+
+None.
+
+### Should fix
+
+- **S-1. A jump to an exercise with nothing left to log holds the page there.** `WorkoutEdit.swift:184-186`
+  sets `WorkoutSelection(exerciseIndex:, setID: nil)` and sends no event; `WorkoutPresentation+Card.swift:19-21`
+  then shows that exercise for as long as the selection stands, and only a logged set clears it
+  (`WorkoutEdit.swift:101`). "REMAINING" lists the later exercises whatever is logged in them
+  (`WorkoutPresentation+Card.swift:54`). So: do the last exercise first (jump, log its sets; the page returns to
+  exercise 1), then tap it in "REMAINING" again. The card shows it with every row done, no steppers, no
+  "REMAINING", and a tap on a done row's body does nothing (`WorkoutEdit.swift:146`). The only ways back to the
+  exercises that still have sets are to un-log and re-log a set, to add a set and log it, or to Minimize and
+  reopen. `jump_nothingToLog_showsTheExercise` pins the selection; no test asks what the page then offers.
+  **Proposed:** list in "REMAINING" only the later exercises that have a set to log, which is what criterion 6
+  says ("the exercises still to do"). `jump`'s `nil` branch, the optional `WorkoutSelection.setID` and the
+  "with every set logged" arm of `shownExercise`'s comment then go away: less code. Looking back at a finished
+  exercise is the same question as open question 6 (an earlier exercise cannot be reached either) and belongs
+  to Pete with S9.
+- **S-2. The page keeps its scroll position when the shown exercise changes**, so the new exercise can appear
+  with its name off screen. `Views/WorkoutScreen.swift:30-33` has no scroll position. Evidence:
+  `screenshots/s5/app-accessibility3-last-exercise-{dark,light}.png` start at "TARGET 3 × 15 @ 12.5 lb": neither
+  "Exercise 5 of 5" nor "Cable Lateral Raise" is on screen, and the pinned header names the day, not the
+  exercise. The same happens when the last set of an exercise is logged from a scrolled page and the card moves
+  on. The UI test passes because it reads the title's label, which exists off screen
+  (`Apps/LedgerUITests/WorkoutLogging.swift:128`). **Proposed:** reset to the top when
+  `page.card?.exerciseIndex` changes (`.scrollPosition` bound to the top, or `.id(exerciseIndex)` on the scroll
+  view if VoiceOver focus survives it; try the first), and make the UI test assert
+  `app.staticTexts["workout.card.title"].isHittable` after each jump.
+- **S-3. An accidental second tap on a check un-logs the set** (decision 14). A person's double tap is 100 to
+  300 ms apart; the row is redrawn as soon as the stream answers (a local write), so the second tap of a real
+  double tap will usually land on a row already drawn done and be sent as `.unlog`. The "logs once" case
+  (`doubleTapOnACheck_logsOnce`) covers only two taps inside one redraw. What the lifter then has: the set not
+  logged, the cursor already on the next row (rule 22 moves nothing back), the rest still running from S6 on,
+  and an empty ring one row up that is easy to miss. **Cost of a guard:** in `WorkoutEditPlan.unlog`
+  (`WorkoutEdit.swift:105-109`), handed `now` as `log` is (`make` already has it), ignore an
+  un-log within about 0.6 s after the set's `doneAt` (and only when `doneAt <= now`). Three lines and one test,
+  pure, no timer, no sleep. **For the product owner to decide**; my recommendation is to add it, because the
+  cost of a lost set is higher than that of a deliberate undo that must wait half a second.
+- **S-4. Sanctioned edit 2 weakened the ambient-format check.**
+  `Tests/FeatureWorkoutTests/Adversarial/WorkoutWordsAdversarialTests.swift:120` replaced `".formatted("` by
+  `".formatted()"` and `".formatted(."`. The commonest ambient call, `date.formatted(date: .abbreviated, time:
+  .omitted)`, matches neither, nor does `.formatted(style)` or `.formatted(Date.FormatStyle…)`. **Proposed:**
+  put `".formatted("` back and blank the Domain's own call before the scan, as line 133 already does for
+  `date.now`: `.replacingOccurrences(of: ".formatted(in:", with: "domainFormat")`. The other three edits lost
+  nothing (below).
+- **S-5. At accessibility sizes the two facts are grouped wrongly.** In `reference-logging-accessibility3-dark.png`
+  and `app-accessibility3-*.png`, "Last" stands closer to the target's value above it than to its own value
+  below. `Views/ExerciseCard.swift:25` and `:65` use the same `LedgerSpacing.xs` between the facts and inside
+  one. **Proposed:** a larger gap between the two `FactLine`s than inside them at accessibility sizes
+  (`LedgerSpacing.m` outside).
+- **S-6. Three behaviours of the pump have no test.** (a) A change from elsewhere between two of the lifter's
+  taps: the second must be planned on the newest workout (`follow()`'s `live == ahead` and `isShown`,
+  `WorkoutStore.swift:170-173, 270, 291-296`); the mutant list has none for those lines. (b) A pump cancelled
+  while a call waits: see N-2. (c) Whatever S-1 and S-2 become.
+
+### Nits
+
+- **N-1.** `WorkoutStore.swift:283-285`: a refused change sets `dialog = .editFailed` over an open finish dialog
+  (taps keep draining under it). Harmless today; say in the comment that the refusal wins, or keep the finish
+  dialog and show the refusal after it. S7 should decide with its sheet.
+- **N-2.** `WorkoutStore.swift:249` empties the queue for any `false`, cancellation included (`:279-281`), while
+  the type's comment (`:226-227`) and the notes say a tap with no pump waits for the next one. A pump cancelled
+  mid-call drops the taps behind it silently. Either keep the queue on cancellation
+  (`apply` returning a three-case result) or say so in the comment. Reaching it needs the view to go and return
+  with the same store, which the cover does not do today.
+- **N-3.** `leave()` (`WorkoutStore.swift:147`) drops queued taps on Minimize. Right for Discard; for Minimize it
+  is a tap lost without a word (criterion 7). At a hand's speed the queue is empty by then (each apply is one
+  local write), so accept, but list it beside the refusal as the second case where a tap can be lost.
+- **N-4.** `WorkoutEdit.swift:70` clamps at zero itself while the doc comment (`:50-52`) says the engine holds it.
+  Both do (`WorkoutEngine+Reduce.swift` `changeTarget`); the plan needs its own to see "would change nothing".
+  Say that in the comment. Better home later: a Domain `Weight` helper that steps and floors.
+- **N-5.** `WorkoutEdit.swift:141` `repsOfAFirstSet = 8` (spec §3.7) and "a new set copies the last row" (rule 26,
+  `:131-137`) are product rules in the feature because `setAdded` takes a whole set. The watch will need the
+  same two. Not for this slice (the engine is out of scope); record as an input for the watch's logging feature:
+  move `WorkoutEditPlan`'s rule parts to the Domain when a second caller exists.
+- **N-6.** `WorkoutEdit.swift:163-164`: the plan asks `WorkoutPresentation` which row is shown. It is the one
+  place the rule lives, so it is right to share it; it reads oddly that the store's planning depends on the
+  presentation. A neutral home (`WorkoutSelection` static functions) would cost nothing.
+- **N-7.** `WorkoutPresentation.swift:12` and `WorkoutPresentation+Header.swift:17`: `selection` is defaulted to
+  nil. A caller that forgets it compiles and draws the cursor's exercise. The only product caller passes it;
+  drop the defaults when the tester's files are next touched.
+- **N-8.** `WorkoutStore.swift:32`: `typealias Dialog = WorkoutDialog` exists for old call sites; rename them and
+  drop it.
+- **N-9.** `Views/ExerciseCard.swift:27, 51`: `ledgerHitTarget` on the TARGET line, which is not a control, and on
+  the whole "Last" line. At the standard size it puts about 48 pt between "TARGET" and "Last" and makes the two
+  facts read as unrelated lines (`app-started-*.png`); v2 sets them tight. Keep 44 pt for "Repeat" alone.
+- **N-10.** "REMAINING" counts a drop set as a row: three sets and a drop read "4 × 16" beside a target of
+  "3 × 16" (`WorkoutPresentation+Card.swift:60`). It follows rule 26's `sets.length`; mention to Pete.
+- **N-11.** `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts`: its name still says 27 keys.
+- **N-12.** A stale `ahead` is possible in theory: if the stream showed the answer and then a later change from
+  elsewhere before the call's return resumed on the main actor, `isShown(answer)` is false and `ahead` stays old
+  until the next answer. It needs the main actor to run two stream turns before one resumption, and the next
+  plan would be wrong only for the same row. Accept; S-6 (a) would document the intended behaviour.
+
+### Criteria
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | the page | met | `Views/WorkoutScreen.swift:26-33` (pinned header over `ScrollView { WorkoutPage }`); `Apps/LedgerUITests/WorkoutLogging.swift` logs sets. See S-2 |
+| 2 | the card | met | `WorkoutPresentation+Card.swift:78-135`, strings final in the model; kg and lb; `WorkoutPresentationCardTests` |
+| 3 | logging | met, with S-3 | `WorkoutEdit.swift:90-109`; no rest event sent (`log_sendsNoRestEvent`); nothing of rest drawn |
+| 4 | steppers | met | `WorkoutEdit.swift:68-77, 154-175`; the step is `WorkoutExercise.step`, reps through `Reps(clamping:)`. N-4 |
+| 5 | repeat and add | met | `WorkoutEdit.swift:113-138`; `repeatLast_writesEverySet_keepsDoneFlags`, `addSet_appendsACopy_andTheSegmentWidens` |
+| 6 | remaining | partly | lists later exercises whether or not they are still to do (`WorkoutPresentation+Card.swift:54`); S-1. The superset report is given |
+| 7 | in order, each once | partly | order and once: `WorkoutStore.swift:239-251, 264-272`; no unstructured task (`WorkoutRoot.swift:52-60`). "None is lost" does not hold on a refusal (accepted), on Minimize (N-3) or on a cancelled pump (N-2) |
+| 8 | a failed apply | met | `WorkoutStore.swift:277-286`, `WorkoutRoot.swift:47-51`, `WorkoutPage.swift:26`; `refusedApply_isShown_andThePageStays` on the real host |
+| 9 | orange once; labels; stops | partly | labels and stops as the tree table says (not run by me). Orange on the surface, by eye: the header's dot and current segment, the shown row's number, rule and ring, and every logged row's filled disc |
+| 10 | sizes and settings | met as reported | `WorkoutPageLayoutTests` with a cut check that reports a part it cannot find. By eye nothing is cut or overlapping in the 15 images; S-5 |
+| 11 | words | met | `WorkoutCopy+Card.swift`; 54 keys, each new one with a translator's comment, "%lld reps" with one/other; `forCountedText` on the one counted text |
+| 12 | pure and total | met | no ambient read in the new files as read; `checkedCursor` and index guards at `WorkoutPresentation+Card.swift:30, 38`, `WorkoutEdit.swift:199` |
+
+### The pump
+
+- **Correct against the contract.** `WorkoutSessionClient.updates()` is unbounded and in order, and `apply`
+  returns the state its update carries, so "plan on the last answer until the stream shows it" cannot miss.
+  Each tap is taken from the front, planned when its turn comes on the newest workout (not the one the lifter
+  saw), and removed when done. A row is named by set id, so a plan on a newer workout still means the same row,
+  and `.log` logs what the row reads then.
+- **Why not plan at tap time and apply events serially:** `setTargetChanged` carries an absolute weight, so two
+  quick "+" planned on the drawn page would both say 205. Planning at the turn is needed while events are
+  absolute. Why not show the answer directly and drop `ahead`: an older update still in the stream would draw
+  the page backwards. So `ahead` earns its place. The queue and wake signal are about 25 lines; `isDraining`
+  only matters for two overlapping pumps and is cheap. I would not ask for a smaller design.
+- **Across events.** Restart: the queue survives, the new pump's first signal drains it (N-2 for a call in
+  flight). Discard: queue emptied, taps refused while it runs, the call in flight is completed by the host.
+  Finish dialog: taps keep draining under it (N-1). Minimize: queue dropped, store gone, the choice of row
+  with it; the engine's cursor carries a choice of an open row. An update from elsewhere: shown as it comes;
+  the next tap plans on it unless `ahead` is newer (N-12).
+- **Isolation.** `@MainActor` store, value types `Sendable`, both dependencies injected, no `Task {}`.
+- **263 lines:** about 80 added to the store and 162 of planning, of which the planning is a pure function with
+  its own two test suites. Justified.
+
+### A refused change drops the taps behind it
+
+Right call. The taps behind were made on a page that assumed the refused one; applying them would log a weight
+the lifter never saw. The alert ("Couldn't save that change" / "Try again." / "OK") is honest and claims nothing
+about a first event of a two-event tap that may have gone through. Afterwards the page is what the stream says,
+`ahead` is cleared, and the selection is unchanged, which `activeSet` reconciles with the cursor. Keep, and
+reword criterion 7 in the brief to say so.
+
+### A day with a superset
+
+Nothing logs wrongly: every event names its row by set id and the engine runs the rounds and the group's rest.
+Each member reads "Exercise n of m" with its own target, "Last" and rows; "REMAINING" under member A lists B.
+What misleads is the card changing after every set with no word about why, which S-2 makes worse when the name
+is scrolled away. With S-2 fixed it is acceptable on `main` for an app that is not released. S9 must come before
+any release.
+
+### Deviations and open questions
+
+| Item | Judgement |
+|---|---|
+| Deviations 1, 2, 3, 5, 6, 7, 8 (the looks) | accept. 2 with N-9 |
+| 4 orange | for Pete. Note: v2 draws the shown row's ring in 50 % ink, not orange (`x.done ? ORANGE : active ? 'rgba(244,242,237,.5)'`); the orange ring is `LedgerDesign.SetRow`'s, outside this slice |
+| 9 the whole page disabled | accept |
+| 10, 11, 12 digits, numbering after "D", the workout's units | accept |
+| 13 `calendar:` | accept; required by "no ambient calendar" |
+| 14 double tap | S-3 |
+| 15 extra files | accept; each is under the lint's limits and has one job |
+| Q1 superset as solo cards | accept until S9 |
+| Q2 refusal drops the queue | accept |
+| Q3 orange discs | for Pete; a change would be in `LedgerDesign` |
+| Q4 eleven texts; "1 pounds" | accept. Also "1 kilograms". A fix needs a number, not a text, to pick a form; not worth it now |
+| Q5 un-logged row is not the shown row | accept (rule 22) |
+| Q6 earlier exercises unreachable | for Pete with S9; S-1 is its sharp end and should not wait |
+| Q7 Today's counted texts | accept. Move `forCountedText` to a shared place (taking the bundle) with the Today chore, when the third module needs it; within this module to `WorkoutCopy.swift` in S7 as the notes say |
+
+### The four sanctioned edits
+
+1. The catalog's list: still an exact two-way set comparison, now of 54. No loss. N-11.
+2. `forbidden`: weakened. S-4.
+3. The tree and elapsed tests on the header alone: the same expectations on the same header view; the header
+   in place in the real screen is covered by `WorkoutScreenTests.screen_headerInPlace_isItsTree` and
+   `screen_headerButtons_sendTheirActions` (as the notes say; I read their names, not their bodies). The failed
+   and loading states still go through `WorkoutScreen`. No loss.
+4. `calendar:` at seven call sites: mechanical. No loss.
+
+### Tests
+
+- The plan's tests pin events exactly (`==` on the event list), so they cannot pass with a wrong weight, order or
+  selection. The pump's tests wait on `Observations`, not on time; `heldApply_laterTapsWaitTheirTurn` and
+  `refusedApply_isShown_andThePageStays` use the real host with a probed store. No sleep found in the new tests;
+  the UI test waits on predicates with timeouts.
+- Could pass with the code broken: `doubleTapOnACheck_logsOnce` says nothing about a tap after the redraw (S-3);
+  nothing covers S-1's page, S-2's scroll, or S-6 (a) and (b).
+- The UI test: sound. It taps the steppers by position (0.9 and 0.1 of the width), which right to left would
+  swap; it runs left to right only. It reads off-screen labels as present (S-2).
+
+### The look, by eye
+
+Opened all fifteen images in `screenshots/s5/`: `app-started-{dark,light}`, `app-one-set-logged-{dark,light}`,
+`app-after-jump-{dark,light}`, `app-accessibility3-{dark,light}`, `app-accessibility3-last-exercise-{dark,light}`,
+`reference-logging-{dark,light}`, `reference-logging-accessibility3-dark`, `reference-drop-set-kg-light`,
+`reference-no-history-dark`. The prototype was read as source (its set row's colours), not rendered.
+
+- Nothing clipped, nothing overlapping. Logged rows are dimmed with a filled disc; the shown row is clear.
+- "+ Add set" in muted ink reads as a caption more than a control at the standard size. It is v2's look; fine,
+  but the weakest affordance on the page.
+- Standard size: the facts are spread out (N-9). Accessibility size: the facts are misgrouped (S-5); the
+  steppers stack well; "Sep 9 · 5×5 @ 195 lb" wraps beside "Repeat" without loss.
+- After a jump at the accessibility size the exercise's name is off screen (S-2).
+- Orange: see criterion 9.
+
+### Simplicity
+
+- S-1's fix removes a branch and an optional.
+- N-6, N-7, N-8 are small removals.
+- `WorkoutPresentation.Context` (two fields, one caller) could be two parameters; leave it if S6 adds a third.
+- Nothing else I would cut. The copy file is long because standards §7 asks one member per key.
+
+### Size
+
+877 product lines, of which 167 are copy members and 54 previews; about 650 carry logic, in files of one job
+each. Reviewable as one pull request and inside the agreed range for larger slices. The fixes above are about
++20 lines net (S-1 removes some). Split only if the fix round passes 1,000.
+
+### For the product owner, in plain words
+
+1. **A second tap on a check takes the set back.** Do you want the app to ignore an undo in the first half
+   second after a set is logged? (S-3)
+2. **Jumping to an exercise you already finished can leave you stuck on it** until you minimize. The proposed
+   fix lists only exercises that still have sets. Going back to look at or correct a finished exercise, and
+   going back to an earlier one at all, is not possible from this page: how should that work? (S-1, Q6)
+3. **Orange.** It is on the header's dot and bar, on the shown row (number, line, ring) and on every logged
+   row's disc. The prototype has the logged discs orange and the shown row's ring grey. Is this what you want?
+4. **A superset day** switches the card between the two exercises after every set, with no superset label, until
+   S9.
+5. **"REMAINING" counts a drop set**: "4 × 16" for three sets and a drop. And VoiceOver says "1 pounds" for a
+   weight of exactly one.
+6. Look at `app-started-dark.png` (spacing of TARGET and Last) and `app-accessibility3-last-exercise-dark.png`
+   (the name scrolled away).
+
+### Not checked
+
+- No build, test, lint or simulator run; no mutant re-run. Green claims are the implementer's.
+- Read in full: the store, the plan, the action and model files, both presentation extensions, the root, the
+  five views, the copy file, the pump and store-edit tests, the plan's move tests, the layout probe, the UI test,
+  the four sanctioned diffs. Read by name or in part only: `WorkoutEditPlanTests`,
+  `WorkoutPresentationCardTests`, `WorkoutPresentationPageTests`, `WorkoutPageLayoutTests`,
+  `WorkoutScreenTests`, `WorkoutAccessibilityTests`/`Trees`, `WorkoutSnapshotTests`, `WorkoutCopyTests`,
+  `Workout+Previews.swift`, `Support/WorkoutParts.swift`.
+- The ten references under `__Snapshots__` beyond the five copied to `screenshots/s5/`. Right to left and Bold
+  Text were not seen (no image draws them). VoiceOver was not heard.
+- `LedgerDesign.SetRow` and `SetRowSteppers` were not read; the session host only for how it treats
+  cancellation (`LocalWorkoutSessionActor.swift:124`, a task of its own).
+- The tester's concurrent changes in the worktree were ignored.
+
 ## Slice S5 — adversarial testing, round 1 (G2 tester, 2026-10-09)
 
 On `f0318dd`, in the worktree `F10-s5`. No product code was changed. New files carry `Adversarial` in their names;
