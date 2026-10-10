@@ -313,3 +313,89 @@ when the state passes through it. **For F15** (F9-S4-5): how VoiceOver pronounce
 checked on a device.
 14. **A blank spoken label is no label** (F9-S4-6, round 2): `PrimaryButton` given an empty or white-space-only
     spoken label speaks its drawn label.
+
+## Plan amendments — slice S5, the store, the wiring and the live workout (orchestrator, 2026-10-09)
+
+The plan's S5 and S6 as one pull request (larger batches; the number S6 is not used). Cut from `main`, which
+holds Today's presentation and views (S3, S4) and F10's cover with its `WorkoutLauncher` (#45). This slice
+puts Today on screen in the app. About 280 product lines planned; past about 700 the implementer stops and
+reports. The inputs are in the notes: "Inputs for S5" (three sections of this feature's notes) and, in F10's
+notes, "Inputs for F09 S5: how Today calls the launcher" and "Inputs for F09 S6". The slice is accepted when:
+
+1. **`TodayStore`** (`@MainActor @Observable`, standards §4): it observes the active program, the settings,
+   the finished workouts it needs, the exercises and the live workout session from the root's task, holds
+   `Loadable<TodayModel>` made by `TodayPresentation.make`, and owns no unstructured task. Intents are
+   synchronous. The clock, calendar, locale and zone are injected.
+2. **Each workout is handed in once** (S3 criterion 19): the store reads the finished workouts of the stats
+   week and of the program week as one set (one read over the union, or a merge by id); a test pins a week
+   in which the two overlap. The comment on `TodayInput.weekWorkouts` says so.
+3. **Never back to loading** (S4's "For S5"): once the store has loaded, a later change of any input goes
+   from one loaded model to the next; a test pins it with the off-schedule sheet open.
+4. **It follows what changes** (plan row S5): a finished workout, a saved program, a changed setting (week
+   start, units: criterion 11 and 9 of the brief) each give a new model within one stream update, with no
+   sleep in the tests.
+5. **The live workout** (criterion 3 of the brief): with a workout live, the card offers Resume from its
+   start time; when it finishes or is discarded elsewhere the card changes within one update of the
+   session's stream; the store does not tick.
+6. **A read that fails** gives the failure state S4 drew ("Can't show today right now"), not a blank
+   screen, and a later good value recovers it.
+7. **Routes, once each** (criteria 2, 5, 8, 10, 13): every `TodayRoute` the model's actions carry is emitted
+   through `onRoute` exactly once per tap; a double tap on "Start workout" starts one workout.
+8. **`TodayRoot`** (`init(onRoute:onTitleLongPress:)`) owns the store, runs it from its task, draws
+   `TodayScreen`, and presents the off-schedule sheet; the Debug menu still opens from the long press on the
+   title.
+9. **Wiring in `LedgerAppKit`**: `Routes+Today.swift` maps every `TodayRoute`. Start and resume call the
+   `WorkoutLauncher` the main root already holds; a screen that is not built yet (settings, a past
+   workout, the week editor, program set-up) goes to the placeholder the shell has for it, and no button is
+   dead. The Today tab draws `TodayRoot`; `TodayPlaceholder`, its preview case and its two references are
+   deleted.
+10. **A start that is refused** (a workout already live, a day that is gone) is shown by F10's cover as it
+    already does; Today adds no alert of its own.
+11. **One nightly UI test** (testing-strategy §2.6; S4's "For S5"): on the seeded app, Today shows, the
+    off-schedule sheet opens, a day is picked and cancelled, and "Start workout" opens the cover. The
+    existing smoke and adversarial UI tests still pass, edited only where they named the placeholder (the
+    tester's files: ask first, list each edit).
+12. **The nightly timing test** of Today's queries holds the brief's budget on the seeded database.
+13. **No new text** is expected. If one is needed it goes through `TodayCopy` and is listed for Pete.
+
+**Not in this slice:** onboarding's gate (F08, parked), Settings (F14), History's screens (F13), any change to
+`FeatureWorkout` beyond what criterion 9 needs to call the launcher, the project file or a test plan.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-09)
+
+The reviewer approved with five should-fix items; the tester found one low bug in the test-only clock, judged
+the system audit's four issues on Today false positives (measured), and its 1,000 seeded walks of the store
+agree with its own model once three known limits are stepped around. Rulings, which add to S5's thirteen
+criteria:
+
+14. **The store runs again only when the app comes back** (review S-1, S-2): the root's task restarts on a
+    return from the background, not on every change of the scene's phase, and a hosted test that changes
+    the phase pins that a new run happens (it fails without the restart).
+15. **A read is used only for the days it was read for** (review S-3; tester's N4): the kept history reads
+    carry the ranges they were made for and are made again when a rebuild needs other ranges, so a change
+    after midnight shows the new day's and the new week's numbers. A test pins a rebuild across midnight and
+    across a week's end.
+16. **The clock argument is strict and Debug-only** (review S-4; F09-S5-5): it is compiled only into Debug
+    builds, and a value that is not one real instant written exactly (a date that does not exist, an hour
+    25, a second 60, any text after the instant) stops the launch. The tester's test passes unedited.
+17. **An ended observation is logged once** (review N-2).
+18. **Kept as built:** a failed read shows the failure state even over a loaded day, and recovers on the
+    next change or run (deviation 5; criterion 3 is about loading, criterion 6 about failure; the other
+    answer, keeping the last good day, is the product owner's and is asked in the pull request); the
+    routes to screens not built yet; the pending-route guard; three UI tests; the Debug sample row as the
+    UI tests' way to a program until F08 lands; a session stream that ends keeps "Resume" until the next
+    run (the app's host never ends it).
+19. **The audit's four issues are false positives** (F09-S5-1 to 4, measured): white on the accent is
+    3.10:1 for 16 pt bold, which is large text (3:1); the eyebrow follows Caption 2, flat below the default
+    size; the "clipped" texts draw descenders outside a line box of the role's size and nothing is cut on
+    screen; contrast under the floating tab bar at rest. The tester excludes exactly these, by label, with a
+    comment each (testing-strategy §2.7), in round 2. The orange's 0.10 of margin is listed for the product
+    owner.
+
+**For F13** (tester's N1 to N3; review N-8): the store learns that history changed from the five most recent
+workouts, so a workout deleted, edited or arriving behind them is not seen until the next run; a finished
+session's workout stays in the store's input until the task restarts; `.openWorkout` as a push needs the
+"once" guard. **For M2's sync** (N1): a workout that arrives late from the watch behind the five most recent.
+**For F15:** `today.*` identifiers; the failed state has no title, so the Debug menu cannot open from it;
+the UI tests' fixed dates in zones UTC+12 to +14. **Not decided, for the product owner:** Today does not
+notice midnight while it is open and in front with nothing changing.

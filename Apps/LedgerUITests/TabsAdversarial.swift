@@ -132,11 +132,23 @@ final class TabsAdversarial: XCTestCase {
     func test_everyTabRoot_passesTheSystemsAccessibilityAudit() throws {
         let app = launch()
         var issues: [String] = []
+        let tabBar = app.tabBars.firstMatch.frame
         for tab in Self.tabs {
             app.tabBars.buttons[tab].tap()
             try app.performAccessibilityAudit { issue in
-                let element = issue.element.map { "\($0.elementType.rawValue) \"\($0.label)\"" } ?? "no element"
-                issues.append("\(tab): \(issue.compactDescription) [\(element)]")
+                // F09 S5 round 2 (criterion 19): Today's root is now the real screen, on which the system
+                // reports four issues that were measured and judged false positives (F09-S5-1 to 4). They
+                // are excluded on the Today tab alone, by the issue's words and the element's label;
+                // `TodayAuditExclusions` holds the element, the measurement and the reason of each.
+                let isKnown = tab == "Today" && issue.element.map { element in
+                    TodayAuditExclusions.isKnownFalsePositive(
+                        issue: issue.compactDescription, label: element.label, frame: element.frame, tabBar: tabBar
+                    )
+                } ?? false
+                if !isKnown {
+                    let element = issue.element.map { "\($0.elementType.rawValue) \"\($0.label)\"" } ?? "no element"
+                    issues.append("\(tab): \(issue.compactDescription) [\(element)]")
+                }
                 return true
             }
         }

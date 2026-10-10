@@ -15,6 +15,10 @@ nonisolated struct TodayInput: Sendable {
     /// done marks, the Logged card, both tiles and the off-schedule list's "Logged" marks; one read, so those
     /// cannot disagree. A workout outside both weeks is not counted anywhere. Any order is accepted: the
     /// presentation orders them itself, so the same workouts give the same model however they are handed in.
+    ///
+    /// **Each workout is handed in once** (S3 criterion 19): the tiles count what they are given. The store
+    /// fills this from one read over the two weeks as one stretch of time (`TodayHistory.Ranges.week`), never
+    /// from a read of each week put end to end, which would hand in twice a workout of the days they share.
     var weekWorkouts: [WorkoutState] = []
     /// The finished workouts that started last, newest first. The first five are shown.
     var recentWorkouts: [WorkoutState] = []

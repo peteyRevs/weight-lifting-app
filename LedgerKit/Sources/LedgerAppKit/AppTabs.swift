@@ -1,3 +1,4 @@
+import FeatureToday
 import LedgerDesign
 import SwiftUI
 
@@ -7,17 +8,19 @@ import SwiftUI
 /// contrast in both themes, and each stack sets the tint back to the system's, so that nothing a tab draws is
 /// tinted unless the screen tints it (product decision #17: the accent once per screen).
 ///
-/// Today hosts its placeholder until F09 S5 draws `FeatureToday`'s screen; the other three show a
+/// Today draws `FeatureToday`'s root, which is handed where its routes go; the other three show a
 /// `PlaceholderScreen` until F11–F13 replace them, one line each.
 struct AppTabs: View {
     @Bindable var router: AppRouter
+    /// Where Today's routes go: `MainRoot` resolves them with the router and the workout's presenter.
+    var onTodayRoute: @MainActor (TodayRoute) -> Void = { _ in }
     /// Debug builds: opens the debug menu (F07 criterion 7).
     var onTodayTitleLongPress: () -> Void = {}
 
     var body: some View {
         TabView(selection: $router.selectedTab) {
             Tab(AppCopy.title(of: .today), systemImage: "chart.bar", value: AppTab.today) {
-                stack(.today) { TodayPlaceholder(onTitleLongPress: onTodayTitleLongPress) }
+                stack(.today) { TodayRoot(onRoute: onTodayRoute, onTitleLongPress: onTodayTitleLongPress) }
             }
             Tab(AppCopy.title(of: .program), systemImage: "calendar", value: AppTab.program) {
                 stack(.program) { PlaceholderScreen(AppCopy.title(of: .program), identifier: "program.title") }
