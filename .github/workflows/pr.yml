@@ -82,7 +82,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 47 # the step's 42, plus checkout, Xcode, mise, both caches and the failure upload
+    timeout-minutes: 49 # the step's 44, plus checkout, Xcode, mise, both caches and the failure upload
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,12 +120,19 @@ jobs:
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
       - name: iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
-        timeout-minutes: 42 # fails the step before the job times out, so the bundles still upload
+        timeout-minutes: 44 # fails the step before the job times out, so the bundles still upload
         env:
-          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 2400, not
-          # 1500: a slow runner's cold build took 1,104 s, and one run hit 1,500 s only for that.
-          LEDGER_XCODEBUILD_DEADLINE: 2400
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 2520: a
+          # PR's first run builds cold (1,140-1,221 s measured) after 125 s of script tests, and the tests
+          # below are expected to take up to about 940 s, which leaves about 5 min (docs/ci-cd.md, "Deadline").
+          LEDGER_XCODEBUILD_DEADLINE: 2520
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
+          # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
+          # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.
+          # This runner takes two to three times a developer Mac's time per case, and 200 seeds were a
+          # fifth of the test step. The full local gate, green before every merge, runs the plan's 200,
+          # and the nightly its 2,000 (docs/ci-cd.md, "Seeds on the runner").
+          TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT: 40
         run: scripts/check.sh --ios-only --skip-static
       - name: Upload result bundles and snapshot diffs
         if: failure()

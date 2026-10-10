@@ -333,9 +333,15 @@ check "WF53 [F32] every nightly test run passes -collect-test-diagnostics never 
 check "WF49 Check interrupts xcodebuild 1-5 min before its step's timeout, so its bundle is finalized" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | ."timeout-minutes" * 60 - .env.LEDGER_XCODEBUILD_DEADLINE
         | . >= 60 and . <= 300')" true
-check "WF65 the deadline is 2400 s (a slow runner's cold build took 1,104 s), and the job outlasts the step" \
+check "WF65 the deadline is 2520 s (a cold build of up to 1,221 s, then the tests), and the job outlasts the step's 44 min" \
     is "$(q pr '.jobs.check | (.steps[] | select(.run // "" | test("check.sh"))) as $step
-        | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \(."timeout-minutes" > $step."timeout-minutes")"')" "2400 true"
+        | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes" > $step."timeout-minutes")"')" "2520 44 true"
+# Seeds on the runner (tasks/chores/2026-10-09-pr-lane-time.md): Check alone cuts the seeded properties, by the
+# plan's own variable under xcodebuild's TEST_RUNNER_ prefix. The plans keep their counts, and the nightly sets none.
+check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job, and no nightly step, sets a count" \
+    is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT') \
+$(jq -r '.defaultOptions.environmentVariableEntries[] | select(.key == "LEDGER_PROPERTY_SEED_COUNT") | .value | tonumber > 40' "$ROOT/TestPlans/PR.xctestplan") \
+$(cat "$WF/pr.yml" "$WF/nightly.yml" | grep -c 'LEDGER_PROPERTY_SEED_COUNT:')" "40 true 1"
 
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \
