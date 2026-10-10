@@ -194,6 +194,10 @@ nonisolated extension DayViewsText {
         if path.hasPrefix("confirm.") || path == "header.nameLabel" {
             return (false, false)
         }
+        // Fix round 1, ruling 17: a stepper draws its spoken label, and its `label` is drawn nowhere.
+        if path.hasPrefix("panel.field."), ["label", "spokenLabel"].contains(leaf) {
+            return (leaf == "spokenLabel", leaf == "spokenLabel")
+        }
         if ["spokenLabel", "spokenValue"].contains(leaf) || path == "panel.strip.text" {
             return (false, true)
         }

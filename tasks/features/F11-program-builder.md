@@ -646,3 +646,39 @@ is accepted when:
 `LedgerAppKit`, the project file or a test plan, the chores queued after S9 (`SectionLine` into
 `LedgerDesign`, the reader and a text field), and any change to a presentation beyond a field a view
 provably needs (listed).
+
+## Plan amendments — slice S10 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer asked for changes (one blocking item, four should-fix) and the tester left one test failing
+(`smallPhone_headerIsNotSqueezed`) and two questions as known issues. Rulings, which add to S10's thirteen
+criteria:
+
+14. **Only the bar is pinned.** `DayEditorScreen` pins the row "Program … Done" alone; the title block
+    (`header.position`, the name field, `header.tag`, the summary line) is the first thing in
+    `DayEditorPage` and scrolls with it. Criteria 2 and 4 and the plan tree's "Pinned:" list are amended to
+    this. The pinned bar keeps its own height on every screen: it is never squeezed (review B-1 step 2,
+    tester F11-S10-2).
+15. **The day's name is drawn whole at every text size** on 375 and 402 pt, plain and bold, for the four
+    seed day names and the long name: it wraps onto further lines while it is not being edited. The
+    one-line `TextField` is kept (a field with a vertical axis is a `UITextView`, which the hosted reader
+    refuses and the source test bans); a wrapping `Text` of the draft is drawn while the field has no
+    focus, hidden from accessibility and from hit testing. The layout must not jump the keyboard's target
+    off screen at the moment focus arrives.
+16. **One `NameField` in `Views/`** holds the draft rule and this wrapping, used by the Day editor's title
+    block and by `ProgramHeader`, so that a long program name wraps too. Of S9's references only those
+    whose name wraps may change; if any other changes by a pixel, `ProgramHeader` stays as it is and the
+    implementer reports.
+17. **Stepper labels are "Sets", "Reps", … in the small grey label style** (decision 1 A's own words win
+    over criterion 7): `spokenLabel` is drawn, and the then redundant `.accessibilityLabel` goes (review
+    S-1). The tree stays one adjustable element with that label and `value`.
+18. **The week's eyebrow uses `Eyebrow`** with its tint (review S-4).
+19. **The cut-word sweep is thinned** (review S-2): the wide drawing once per part, size, weight and
+    direction; right to left at four sizes; in `words_otherStates_areDrawnWhole` only the open row and its
+    panel's parts. The title is swept under the four seed day names and the long name, not "Arms";
+    `dayName_isCutInItsOneLineField` goes. Target: `DayEditorLayoutTests` under about 50 s on the simulator.
+20. **Not changed, recorded for the product owner or later slices:** a one-word exercise name breaking
+    across lines at `.accessibility4` and above (tester F11-S10-4); `.alert` against F10's dialog for
+    destructive questions; "Remove" looking like "Move down"; "Program" and "Done" sending the same action;
+    the empty band between two exercises; `row.hasDropSet` removed in S14; for S14: `.id(model.id)` or a
+    new screen per day (the draft, the focus and `isConfirming` are keyed by place), and `rename` applied
+    synchronously by the store.

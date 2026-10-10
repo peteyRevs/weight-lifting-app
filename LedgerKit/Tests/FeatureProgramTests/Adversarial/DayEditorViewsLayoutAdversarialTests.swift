@@ -255,7 +255,8 @@
             let isTheSpoken = try stepper == drawn(
                 StepperField(field.spokenLabel, value: field.value, onDecrement: {}, onIncrement: {})
             )
-            #expect(isTheLabel && !isTheSpoken)
+            // Fix round 1, ruling 17 (decision 1 A's words): the spoken label is the one drawn.
+            #expect(!isTheLabel && isTheSpoken)
         }
     }
 #endif

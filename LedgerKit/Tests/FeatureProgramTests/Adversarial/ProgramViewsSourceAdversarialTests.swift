@@ -52,11 +52,12 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         }
     }
 
-    @Test("The scan reads the twenty-two view files")
+    @Test("The scan reads the twenty-four view files")
     func scan_readsEveryView() throws {
-        // S10 added the Day editor's eight: fourteen before.
+        // S10 added the Day editor's eight: fourteen before. Its fix round 1 added `DayEditorBar` (ruling 14)
+        // and `NameField` (ruling 16).
         let names = try Self.views().map(\.name)
-        #expect(names.count == 22, "\(names)")
+        #expect(names.count == 24, "\(names)")
     }
 
     @Test("No view holds a string literal: every text on screen is a string of a model")
@@ -78,9 +79,11 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             "BlockSection.swift: send(model.removeWeek)",
             "DayCard.swift: send(model.action)",
             // S10, the Day editor: the name field's `rename` is the one action a view of it makes.
-            "DayEditorHeader.swift: send(.rename(text, day: model.id))",
-            "DayEditorHeader.swift: send(header.back.action)",
-            "DayEditorHeader.swift: send(header.done.action)",
+            // Fix round 1: the two buttons are `DayEditorBar`'s (ruling 14), and the name's text reaches the
+            // header as `NameField`'s argument (ruling 16).
+            "DayEditorBar.swift: send(model.back.action)",
+            "DayEditorBar.swift: send(model.done.action)",
+            "DayEditorHeader.swift: send(.rename($0, day: model.id))",
             "DayEditorPage.swift: send(confirmation.confirm.action)",
             "ExercisePickerPage.swift: send(empty.clear.action)",
             "ExercisePickerRow.swift: send(row.action)",
@@ -112,16 +115,18 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         let kept = try Self.matches(#"@(State|FocusState|Binding|Bindable|StateObject|ObservedObject|AppStorage)\b.*"#)
         #expect(kept == [
             // S10: the day's name has its draft and focus as the program's has, and "Delete day" its alert.
-            "DayEditorHeader.swift: @State private var draft: String",
-            "DayEditorHeader.swift: @FocusState private var isEditing: Bool",
+            // Fix round 1 (ruling 16): the day's draft and focus are `NameField`'s.
             "DayEditorPage.swift: @State private var isConfirming = false",
             "ExercisePickerScreen.swift: @FocusState private var isEditing: Bool",
+            "NameField.swift: @State private var draft: String",
+            "NameField.swift: @FocusState private var isEditing: Bool",
             "ProgramHeader.swift: @State private var draft: String",
             "ProgramHeader.swift: @FocusState private var isEditing: Bool"
         ], "\(kept)")
         let watched = try Self.matches(#"\.(onChange|onReceive|onAppear|onDisappear|onSubmit|task|refreshable)\b"#)
         // S10: the day's name field watches what the program's does.
-        let headers = ["DayEditorHeader.swift", "ProgramHeader.swift"]
+        // Fix round 1 (ruling 16): `NameField` watches for the day's name.
+        let headers = ["NameField.swift", "ProgramHeader.swift"]
         #expect(watched == headers.flatMap { Array(repeating: "\($0): .onChange", count: 3) }, "\(watched)")
     }
 

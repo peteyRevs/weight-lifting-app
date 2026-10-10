@@ -104,7 +104,9 @@
         func page_showsAtLeastTwoRows(_ phone: Phone, _ size: DynamicTypeSize) throws {
             let hosted = try Self.hosted(width: phone.size.width, height: phone.size.height - phone.topInset, at: size)
             let rows = try hosted.page / Self.rowHeight(at: size, width: phone.size.width)
-            let isShort = size >= .accessibility4 || (size == .accessibility3 && phone.name == Phone.small.name)
+            // Fix round 1 (ruling 14, the orchestrator's ruling on this line): with the bar alone pinned, the
+            // cells that still show under two rows are the small phone's at the two largest sizes.
+            let isShort = size >= .accessibility4 && phone.name == Phone.small.name
             withKnownIssue("The implementer's finding 2: the pinned header at the largest sizes") {
                 #expect(rows >= 2, "\(rows) rows under a header of \(hosted.header) pt")
             } when: {

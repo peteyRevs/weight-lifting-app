@@ -9,7 +9,7 @@
     ///
     /// The builder has no pinned part, so its parts are its page alone, on the screen's ground. The exercise
     /// library's are `SheetChrome`'s title and "Cancel", the search field, the page, and the foot, as
-    /// `ExercisePickerScreen` stacks them; the Day editor's are its header over its page, as `DayEditorScreen`
+    /// `ExercisePickerScreen` stacks them; the Day editor's are its bar over its page, as `DayEditorScreen`
     /// stacks them. A fixture that does not build draws nothing; `PreviewTests` fail on it.
     struct ProgramParts: View {
         let preview: ProgramPreview
@@ -51,14 +51,14 @@
         }
     }
 
-    /// The Day editor's pinned header over its page, without the scroll view, on the screen's ground.
+    /// The Day editor's pinned bar over its page, without the scroll view, on the screen's ground.
     struct DayEditorParts: View {
         let model: DayEditorModel.Content
         var send: (DayEditorAction) -> Void = { _ in }
 
         var body: some View {
             VStack(spacing: 0) {
-                DayEditorHeader(model: model, send: send)
+                DayEditorBar(model: model.header, send: send)
                 DayEditorPage(model: model, send: send)
             }
             .background(LedgerColor.ground)

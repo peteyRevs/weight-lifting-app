@@ -31,9 +31,7 @@ struct WeekPrescription: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
-            Text(week.eyebrow)
-                .ledgerFont(.eyebrow)
-                .foregroundStyle(week.isDeload || week.isHeld ? LedgerColor.accentText : LedgerColor.inkMuted)
+            Eyebrow(week.eyebrow, tint: week.isDeload || week.isHeld ? .accent : .muted)
             Text(week.line)
                 .ledgerFont(.numeralS)
                 .foregroundStyle(LedgerColor.ink)
@@ -45,21 +43,21 @@ struct WeekPrescription: View {
     }
 }
 
-/// One field of the slot as the design system's stepper, drawn with the field's label and value ("SETS" over
-/// "5"). To VoiceOver it is one adjustable element, "Sets, 5", whose swipes send the field's two actions.
-/// Both steps are always offered: at a field's limit the Domain holds the value.
+/// One field of the slot as the design system's stepper, drawn with the field's spoken label and its value
+/// ("Sets" over "5": Pete's decision 1, A, has the six field labels in the small grey label style, not in
+/// capitals). To VoiceOver it is one adjustable element, "Sets, 5", whose swipes send the field's two
+/// actions. Both steps are always offered: at a field's limit the Domain holds the value.
 struct SlotStepper: View {
     let field: SlotEditorModel.Field
     let send: (DayEditorAction) -> Void
 
     var body: some View {
         StepperField(
-            field.label,
+            field.spokenLabel,
             value: field.value,
             onDecrement: { send(field.decrement) },
             onIncrement: { send(field.increment) }
         )
-        .accessibilityLabel(field.spokenLabel)
     }
 }
 

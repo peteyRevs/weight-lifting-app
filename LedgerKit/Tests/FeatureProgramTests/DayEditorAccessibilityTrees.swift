@@ -3,14 +3,14 @@
 
     /// The intended VoiceOver tree of every state of the Day editor, as the implementation notes write it
     /// ("S10 — the Day editor's views", "The VoiceOver tree"). `ProgramAccessibilityTests` reads each from the
-    /// state's parts, the pinned header over the page, and compares it exactly. Decorative parts (the rules,
+    /// state's parts, the pinned bar over the page, and compares it exactly. Decorative parts (the rules,
     /// a row's caret, the day's tag) are no stop and appear in no table.
     ///
     /// **The day's name is in no table**, as the program's is in none: the hosted reader passes a text field
     /// in silence. `DayEditorTextFieldTests` reads it through UIKit and keeps the limit known.
     nonisolated enum DayEditorTrees {
-        /// The pinned header without its field, as it is drawn: "Program" and "Done", the day's place, and
-        /// the summary line.
+        /// The pinned bar, "Program" and "Done", and the page's header without its field: the day's place
+        /// and the summary line.
         static func header(_ position: String, meta: String) -> [ViewStop] {
             [.button("Program"), .button("Done"), .heading(position), .text(meta)]
         }

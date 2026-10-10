@@ -2,23 +2,28 @@ import LedgerDesign
 import SwiftUI
 
 /// Everything the Day editor scrolls, and never a scroll view (the M1 convention): what the VoiceOver trees
-/// and the snapshot references are taken from, under the header. Top to bottom: the day's exercises, one
-/// block per superset or per exercise on its own, `l` apart; "+ Add exercise from library" as an outlined
-/// pill; and "Delete day". A day with no exercise draws the two buttons alone.
+/// and the snapshot references are taken from, under the pinned bar. Top to bottom: the header, with the
+/// day's name; the day's exercises, one block per superset or per exercise on its own, `l` apart; "+ Add
+/// exercise from library" as an outlined pill; and "Delete day". A day with no exercise draws the header
+/// and the two buttons alone.
 struct DayEditorPage: View {
     let model: DayEditorModel.Content
     let send: (DayEditorAction) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.l) {
-            ForEach(model.groups) { ExerciseGroup(group: $0, send: send) }
-            VStack(alignment: .leading, spacing: LedgerSpacing.s) {
-                ControlPill(control: model.addExercise, send: send)
-                DeleteDayButton(model: model.deleteDay, send: send)
+            // The header pads itself, as the builder's page pads its own.
+            DayEditorHeader(model: model, send: send)
+            VStack(alignment: .leading, spacing: LedgerSpacing.l) {
+                ForEach(model.groups) { ExerciseGroup(group: $0, send: send) }
+                VStack(alignment: .leading, spacing: LedgerSpacing.s) {
+                    ControlPill(control: model.addExercise, send: send)
+                    DeleteDayButton(model: model.deleteDay, send: send)
+                }
             }
+            .padding(.horizontal, LedgerSpacing.screen)
         }
-        .padding(.horizontal, LedgerSpacing.screen)
-        .padding(.top, LedgerSpacing.s)
+        .padding(.top, LedgerSpacing.xs)
         .padding(.bottom, LedgerSpacing.screen)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

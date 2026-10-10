@@ -7,7 +7,7 @@
 
     /// F11 S9, criterion 2, and S10, criterion 2: what exists only because the three screens scroll. Each
     /// screen, hosted at an iPhone 17's size, is one scroll view around its page; the builder pins nothing, the
-    /// sheet pins its title, its search field and its foot around it, the Day editor its header above it; and
+    /// sheet pins its title, its search field and its foot around it, the Day editor its bar above it; and
     /// no page holds a scroll view of its own. What the pages say is
     /// `ProgramAccessibilityTests`'; the stops inside the real scroll views are the nightly UI tests of S13 and
     /// S14. (`SceneLessWindow` is internal to `LedgerSnapshotTesting`, hence the `@testable` import.)
@@ -72,13 +72,15 @@
             #expect(scroll.contentSize.height > Self.phone.height, "the seed program is longer than the screen")
         }
 
-        @Test("The Day editor's header is pinned above its page, which scrolls under it")
-        func dayEditor_headerIsPinnedAboveItsPage() throws {
-            for size in [DynamicTypeSize.large, .accessibility3] {
+        @Test("The Day editor pins its bar alone: the page, with the day's name, scrolls under it")
+        func dayEditor_barIsPinnedAboveItsPage() throws {
+            for size in [DynamicTypeSize.large, .accessibility5] {
                 let scroll = try #require(Self.scrollViews(in: ProgramPreview.dayOpenLinear.content, at: size).first)
-                #expect(scroll.frame.minY > 150, "the header stands above the page at \(size): \(scroll.frame)")
+                // The bar is its two buttons: 44 pt and its padding at the default size, and no more than a
+                // line of the largest text. The simulator's window keeps 62 pt above the screen.
+                let bar = scroll.frame.minY - 62
+                #expect(bar >= 44 && bar <= 110, "the bar is \(bar) pt high at \(size): \(scroll.frame)")
                 #expect(scroll.frame.width == Self.phone.width && scroll.frame.minX == 0)
-                #expect(scroll.frame.height > Self.phone.height / 3, "the page keeps a third of the screen at \(size)")
                 #expect(scroll.contentSize.height > scroll.frame.height, "an open exercise is longer than the screen")
             }
         }

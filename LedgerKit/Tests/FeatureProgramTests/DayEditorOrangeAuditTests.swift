@@ -55,6 +55,7 @@
             let details = try Self.details(of: model)
             #expect(details.week.isDeload)
             #expect(try Self.orange(ProgramParts(preview: .dayDeload), theme) > 0)
+            #expect(try Self.orange(DayEditorBar(model: model.header) { _ in }, theme) == 0)
             #expect(try Self.orange(DayEditorHeader(model: model) { _ in }, theme) == 0)
             for row in model.rows {
                 let alone = ExerciseRow(row: row.withoutItsPanel) { _ in }
