@@ -28,9 +28,9 @@ struct WorkoutPumpAdversarialTests {
             let direction: SetRowSteppers.Direction = Bool.random(using: &generator) ? .increment : .decrement
             switch Int.random(in: 0 ..< 20, using: &generator) {
             case 0 ..< 2: return .select(exerciseIndex: exercise, setID: set)
-            case 2 ..< 8: return .log(exerciseIndex: exercise, setID: set)
-            case 8 ..< 10: return .unlog(exerciseIndex: exercise, setID: set)
-            case 10 ..< 14: return .stepWeight(exerciseIndex: exercise, setID: set, direction)
+            case 2 ..< 7: return .log(exerciseIndex: exercise, setID: set)
+            case 7 ..< 11: return .unlog(exerciseIndex: exercise, setID: set)
+            case 11 ..< 14: return .stepWeight(exerciseIndex: exercise, setID: set, direction)
             case 14 ..< 16: return .stepReps(exerciseIndex: exercise, setID: set, direction)
             case 16: return .repeatLast(exerciseIndex: exercise)
             case 17: return .addSet(exerciseIndex: exercise)
@@ -47,8 +47,12 @@ struct WorkoutPumpAdversarialTests {
     }
 
     /// Each tap made, applied and shown before the next: the page the lifter saw is the session's workout.
-    static func oneAtATime(_ taps: [WorkoutEdit]) async throws -> Outcome {
-        let bench = try await Bench.make()
+    static func oneAtATime(
+        _ taps: [WorkoutEdit],
+        ticking seed: UInt64? = nil,
+        by steps: ClosedRange<Double> = 0 ... 0.4
+    ) async throws -> Outcome {
+        let bench = try await Bench.make(ticking: seed, by: steps)
         for tap in taps {
             bench.tap(tap)
             await bench.store.drain()
@@ -65,7 +69,7 @@ struct WorkoutPumpAdversarialTests {
     /// The same taps in bursts: every call waits, more taps arrive while it does, and the stream is let on
     /// some updates at a time, so the page is behind the answers for most of them.
     static func inAStorm(_ taps: [WorkoutEdit], seed: UInt64) async throws -> Outcome {
-        let bench = try await Bench.make()
+        let bench = try await Bench.make(ticking: seed)
         await bench.session.holdEveryApply()
         await bench.session.keepStreamsBehind()
         var generator = SplitMix64(seed: seed ^ 0xA5A5)
@@ -96,7 +100,7 @@ struct WorkoutPumpAdversarialTests {
     )
     func storm_isTheSameAsOneAtATime(seed: UInt64) async throws {
         let taps = Self.taps(seed: seed, in: EventBuilders.seedSession())
-        let calm = try await Self.oneAtATime(taps)
+        let calm = try await Self.oneAtATime(taps, ticking: seed)
         let storm = try await Self.inAStorm(taps, seed: seed)
         #expect(calm.applied.count >= 10, "the taps of this seed did too little to tell")
         let firstDifference = zip(calm.applied, storm.applied).enumerated().first { $0.element.0 != $0.element.1 }?

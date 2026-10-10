@@ -4844,3 +4844,103 @@ breaks by design (removed); the ten references before they were re-recorded.
 - The rest of the `Nightly` plan; CI (nothing is pushed); VoiceOver on a device, in particular where its focus
   goes when the page returns to its top; a refused change and a waiting Minimize in the running app (no Debug row
   slows or fails a store); the one-second guard by hand.
+
+## Slice S5 — adversarial testing, round 2 (G2 tester, 2026-10-10)
+
+On `8bbc91c` (the fix round), in the worktree `F10-s5`. No product code was changed. Paths are under
+`LedgerKit/Tests/FeatureWorkoutTests/Adversarial/` unless they start with `Apps/`. Round 1's seven tests pass, as
+the implementer says. **One test is left failing, for one new finding (F10-S5-7, latent).**
+
+### The fix round's four sanctioned edits
+
+| # | Verdict | What I did |
+|---|---|---|
+| 1 `page_isTotal`, the list's filter | not weaker: still my own model of the list, now criterion 16's (later exercises with a set left); the mutant "lists finished exercises" fails it | nothing |
+| 2 "Incline DB Press, 2 × 10" | not weaker: the fixture's second exercise is two working rows and a drop set; the mutant "counts the drop set" fails it | nothing |
+| 3 `unlog_afterTheEnd_canBeLoggedAgain` | **a little weaker**: the set it un-logs was logged by the fixture, a minute before, not through the page | restored: `PumpBench` has a clock the test moves; all 18 sets are logged through the page again, a minute passes, then the un-log |
+| 4 the title's 54 | not weaker | nothing |
+
+### What was attacked
+
+| Criterion | Attack | Result |
+|---|---|---|
+| 14 Minimize | `WorkoutMinimizeAdversarialTests.swift` on `PumpSession`: while Minimize waits, Minimize again, a further tap, Finish and Discard (nothing answers, header and page dimmed, no dialog, no discard); the two taps made before it applied once each, nothing after the cover closed; a call held under the real `pump()` and released one at a time (the cover stays up until the last); Minimize while a discard is under way (ignored, the discard ends the workout, the tap before Discard not applied); the pump's task cancelled while Minimize waits, then a new pump (each check once, the cover closes); the cover asked for again through the launcher while Minimize waits (`resume()` and `start` of the same day: one cover, one route, the tap once) | all pass but one: **finding 7** |
+| 15 the pump waits for the stream | read in `drain()` and `follow()`; round 1's two tests | it waits for as long as the stream is silent. `WorkoutSessionClient.updates()` promises a first element at once, with no workout a nil state, which closes the cover (`nothingToShow`); only a broken session leaves it waiting. What the lifter then sees: on a first presentation the loading screen, which draws nothing (S4's); after a restart the old page, enabled, whose taps wait without a word. No test: nothing reachable to pin |
+| 18 the guard | `WorkoutUndoGuardAdversarialTests.swift`, with a clock the test moves: a set logged, another row chosen, then the un-log at 0, 0.5 and 0.999 s: no event, the workout unchanged field for field, the choice, the dialog and the exit untouched; a tap queued behind a guarded un-log is still applied (it is no refusal); at exactly 1 s the check un-logs and moves neither the cursor, the rest nor the choice. A set logged elsewhere, at six moments: 0.3 and 0.999 s ago kept, 1 s and 90 s ago un-logged, 0.001 s and 5 s ahead of this clock un-logged | all pass |
+| 18 and the storms | the storms' clock stood still, so **every un-log they sent fell in the moment of its set's log and none was applied** (`storms_exerciseTheUnlog` counts 0). The bench's clock now moves by a seeded 0 to 0.4 s for each tap the store plans (`PumpBench.make(ticking:)`; the same moments for the same taps in both runs), and one tap in five is an un-log (was one in ten) | 16 storms still equal the same taps one at a time; they apply 15 un-logs and hold 2 by the guard (17 with ten seconds between taps) |
+| 16, 17, 19 | a mutation each, below. Criterion 17: `scroll_returnsToTheTop_whenTheExerciseChanges` now also logs the shown row's set in the same exercise: the page stays at 250 pt | pass; the mutants are caught |
+| the pump's move | `storesMembers_areUsedByTheStoreAlone`: no file of the module but `WorkoutStore.swift` and `WorkoutStore+Pump.swift` spells one of the eighteen members that lost `private`, and no view names `WorkoutStore` (`WorkoutRoot` reads `store.dialog` and writes nothing) | passes. The compiler no longer keeps a view from `store.selection = …`; this scan does, by spelling |
+
+### Finding
+
+| # | Severity | What | Reproducing test (fails by design) |
+|---|---|---|---|
+| F10-S5-7 | bug, latent, low | **When the session's updates end while "Minimize" waits for a tap, the cover can never be closed.** The store shows the failed screen ("Couldn't open this workout"), whose one button, "Close", sends `.minimize`; `send` answers nothing while `exitWhenDrained` is set, and the drain that would clear it applies nothing once the store no longer hears the session. Nothing else on the cover answers either. No host ends a stream (the key's stub does), and it needs a tap still waiting at that instant, so no lifter meets it today. The same lock holds for as long as a call never returns under Minimize: the cover is dimmed with no way out; with local writes that is not expected. A fix: when `follow()` ends in `failed`, give up `exitWhenDrained` and the queue (or let `.minimize` through while the workout is not shown) | `WorkoutMinimizeAdversarialTests.streamEnds_whileMinimizeWaits_closeStillCloses` |
+
+Notes:
+
+- **N-f.** `Apps/LedgerUITests/WorkoutLoggingAdversarial.test_secondTouchOnTheSameCheck_doesNotLoseTheSet` depended
+  on XCUITest's two taps being under a second apart (0.78 s in round 1). It now reads the page, discards, and is
+  **skipped** when the two taps took a second or more, where the run says nothing about the guard. It passed on
+  this run. The implementer's `WorkoutLogging` taps "Undo" a second time when the first came inside the guard.
+- **N-g.** The implementer's `minimize_whileATapIsRefused_staysAndShowsIt` does not see mutant H7 (taps still
+  queued while Minimize waits): its second tap names a set whose log was refused together with the queue.
+  `minimizeWaiting_nothingElseAnswers` sees it.
+- **N-h.** Round 1's doc comments still read "FINDING F10-S5-n" on tests that now pass: they name what each test
+  reproduces.
+
+### Mutation (each restored from a scratchpad copy)
+
+| # | Mutant | Implementer's tests | Tester's tests |
+|---|---|---|---|
+| H1 | "REMAINING" lists finished exercises (16) | 2 | `jump_toAFinishedExercise_isNoDeadEnd`, `page_isTotal` |
+| H2 | "REMAINING" counts the drop set (16) | 1 | the kilograms card |
+| H3 | the guard is two seconds (18) | 1 | `secondTouch_insideAndAfterTheSecond`, `setLoggedElsewhere` |
+| H4 | the guard also holds a set logged ahead of this clock (18) | 1 | `setLoggedElsewhere` |
+| H5 | a guarded un-log gives up the lifter's choice (18) | 1 | `secondTouch_insideAndAfterTheSecond` |
+| H6 | Minimize does not dim the cover while it waits (14) | 1 | 2 |
+| H7 | taps are still queued while Minimize waits (14) | **missed** | `minimizeWaiting_nothingElseAnswers` |
+| H8 | a cancelled call leaves its tap in the queue (the ruling on N-2) | **missed** (the implementer names the tester's test for it) | `pumpCancelled_whileACallWaits` |
+| V1 | the page never returns to the top (17; simulator) | – | `scroll_returnsToTheTop_whenTheExerciseChanges` |
+| V2 | the page returns to the top on any change of the page (17; simulator) | – | the same test, at "a change within the exercise" and at "a set logged" |
+| V3 | the two facts stand `xs` apart (19; simulator) | `facts_standApart` | – |
+
+### Four references, by eye
+
+- `cover_logging…light-large`: two logged rows with filled orange discs, row 3 shown with an orange number and
+  ring and the steppers under it; "TARGET 5 × 5 @ 200 lb · RPE 8" and, clearly lower, "Last Sep 9 · 5×5 @ 195 lb"
+  with "Repeat" at the right; "REMAINING" with four rows. The line over the shown row reads as a dark hairline in
+  light, as orange in dark.
+- `cover_logging_accessibility3…dark`: the title on two lines, both facts stacked label over value, the steppers
+  one over the other, the list's schemes under the names; nothing cut. The four lines of the two facts look
+  almost evenly spaced to the eye: the extra room of criterion 19 is there by measurement (`facts_standApart`)
+  but is small beside the lines' own height at this size. For the product owner's eye, not a defect I can pin.
+- `cover_dropSet…light-large`: "Exercise 5 of 5", kilograms, rows 1, 2, 3 and "D" at 8.75, "1.25 KG", no
+  "REMAINING", the last segment current.
+- `cover_noHistory…dark-large`: "Last No history yet" with no "Repeat", directly under the target with the new
+  room; row 1 shown.
+
+### What I did not attack
+
+- A watch; VoiceOver on a device; the finish dialog over a refused change (S7's).
+- Whether VoiceOver's focus survives the scroll to the top.
+- The full gate: the orchestrator runs it next.
+
+### The runs
+
+On the final tests, product code as at `8bbc91c`. Simulator runs through the lock, iPhone 17 (iOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | OK in 122 s |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 255 tests in 38 suites; **1 fails**: `streamEnds_whileMinimizeWaits_closeStillCloses` (finding 7). This module's adversarial suites repeated 5 times (119 tests): the same 1 each time |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 296 tests in 44 suites; the same **1 fails** |
+| `LedgerUITests` `WorkoutLogging` and `WorkoutLoggingAdversarial` (`Nightly` plan) | 5 of 5 pass, none skipped |
+| 8 host mutants, 3 view mutants on the simulator | table above; every product file restored, and the two view suites pass again on the restored build (15 tests) |
+
+`WorkoutAdversarial` and `WorkoutConflictAdversarial` were not run again in this round.
+
+Seen in passing, not this slice's: `swift test --filter Adversarial` over the whole package on the Mac host also
+runs `LedgerDesign`'s font suites (`BoldTextAdversarialTests`, `LedgerFontRenderingAdversarialTests`,
+`ArchivoFontAdversarialTests`, `WatchTypeFloorAdversarialTests`), which fail there (53 issues). `check.sh --fast`
+does not run them on the host and is green; I did not look into them.

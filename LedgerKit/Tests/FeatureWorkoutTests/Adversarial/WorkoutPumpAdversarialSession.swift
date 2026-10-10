@@ -23,6 +23,8 @@ actor PumpSession: WorkoutSessionClient {
 
     /// The events the store asked for that reached the engine, in order.
     private(set) var applied: [WorkoutEvent] = []
+    /// How many streams were opened.
+    private(set) var streamsOpened = 0
     /// How many `apply` calls are waiting to be released: read from the main actor without a hop.
     nonisolated let waiting = LockIsolated(0)
 
@@ -89,6 +91,14 @@ actor PumpSession: WorkoutSessionClient {
         }
     }
 
+    /// Ends every open stream, as no host does and the key's stub does.
+    func endStreams() {
+        for subscriber in subscribers {
+            subscriber.continuation.finish()
+        }
+        subscribers = []
+    }
+
     /// An `apply` whose task was cancelled while it waited throws `CancellationError` and changes nothing.
     func throwWhenCancelled() {
         throwsWhenCancelled = true
@@ -108,6 +118,7 @@ actor PumpSession: WorkoutSessionClient {
 
     func updates() -> AsyncStream<WorkoutSessionUpdate> {
         let (stream, continuation) = AsyncStream<WorkoutSessionUpdate>.makeStream(bufferingPolicy: .unbounded)
+        streamsOpened += 1
         continuation.yield(WorkoutSessionUpdate(state: live))
         subscribers.append(Subscriber(continuation: continuation))
         return stream
@@ -190,10 +201,20 @@ struct PumpBench {
     let store: WorkoutStore
     let following: Task<Void, Never>
     let running: WorkoutState
+    /// The store's injected date: `Fixtures.now` until the test moves it.
+    let clock: LockIsolated<Date>
 
     /// The spec's five straight exercises (`EventBuilders.seedSession`), the first and the third with a last
     /// workout, so "Repeat" does something.
-    static func make(_ change: (inout WorkoutState) -> Void = { _ in }) async throws -> PumpBench {
+    ///
+    /// With `ticking`, every reading of the store's date moves the clock on by a seeded step of 0 to 0.4 s.
+    /// The store reads it once for each tap it plans, so the same taps meet the same moments however they
+    /// arrive, and some un-logs fall inside the one-second guard of criterion 18 and some after it.
+    static func make(
+        ticking seed: UInt64? = nil,
+        by steps: ClosedRange<Double> = 0 ... 0.4,
+        _ change: (inout WorkoutState) -> Void = { _ in }
+    ) async throws -> PumpBench {
         var workout = EventBuilders.seedSession()
         for index in [0, 2] {
             workout.exercises[index].lastPerformance = LastPerformance(
@@ -202,8 +223,26 @@ struct PumpBench {
         }
         change(&workout)
         let client = PumpSession(live: workout)
-        let (cover, task) = try await WorkoutScene.on(client).following()
-        return PumpBench(session: client, store: cover, following: task, running: workout)
+        let time = LockIsolated(Fixtures.now)
+        let generator = LockIsolated(SplitMix64(seed: seed ?? 0))
+        let cover = withTestDependencies {
+            $0.workoutSession = client
+            $0.date = DateGenerator {
+                guard seed != nil else {
+                    return time.value
+                }
+                let step = generator.withValue { Double.random(in: steps, using: &$0) }
+                return time.withValue {
+                    $0 += step
+                    return $0
+                }
+            }
+        } operation: {
+            WorkoutStore()
+        }
+        let task = Task { await cover.follow() }
+        await eventually("the session's first update") { cover.shown != nil }
+        return PumpBench(session: client, store: cover, following: task, running: workout, clock: time)
     }
 
     func set(_ exercise: Int, _ row: Int) -> SetID {

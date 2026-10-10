@@ -131,4 +131,28 @@ extension WorkoutPumpAdversarialTests {
         #expect(await bench.weight(0, 0) == "305", "one step from what the page showed")
         following.cancel()
     }
+
+    /// Round 2: with the store's date standing still every un-log falls in the very moment of its set's log,
+    /// inside criterion 18's guard, and the storms would send none. Their clock moves (`Bench.make(ticking:)`)
+    /// by 0 to 0.4 s for each tap, so some un-logs are second touches and some are not.
+    @Test("The storms un-log sets when their clock moves: some un-logs pass the guard and some are held by it")
+    func storms_exerciseTheUnlog() async throws {
+        var (standing, moving, far) = (0, 0, 0)
+        let isUnlog = { (event: WorkoutEvent) in
+            if case .setUnlogged = event {
+                return true
+            }
+            return false
+        }
+        for seed in UInt64(1) ... 16 {
+            let taps = Self.taps(seed: seed, in: EventBuilders.seedSession())
+            standing += try await Self.oneAtATime(taps).applied.count(where: isUnlog)
+            moving += try await Self.oneAtATime(taps, ticking: seed).applied.count(where: isUnlog)
+            far += try await Self.oneAtATime(taps, ticking: seed, by: 10 ... 10).applied.count(where: isUnlog)
+        }
+        print("un-logs in 16 storms: \(standing) standing, \(moving) moving, \(far) ten seconds apart")
+        #expect(standing == 0, "an un-log in the moment of the log is a second touch")
+        #expect(moving >= 8, "\(moving) un-logs in 16 storms")
+        #expect(far > moving, "no un-log of the storms fell inside the guard")
+    }
 }

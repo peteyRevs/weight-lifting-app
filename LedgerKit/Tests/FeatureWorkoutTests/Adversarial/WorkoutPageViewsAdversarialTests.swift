@@ -268,6 +268,14 @@
             settle()
             let offset = try #require(Self.scrollView(in: host.view)).contentOffset.y
             #expect(abs(offset - 250) < 1, "a change within the exercise moved the page to \(offset)")
+            // The shown row's check: a set logged in the same exercise does not move the page either, though
+            // the steppers go down a row (criterion 17, round 2).
+            state.exercises[0].sets[0].doneAt = Fixtures.now
+            state.cursor = Cursor(exerciseIndex: 0, setIndex: 1)
+            host.rootView = Self.screen(state, nil)
+            settle()
+            let afterALog = try #require(Self.scrollView(in: host.view)).contentOffset.y
+            #expect(abs(afterALog - 250) < 1, "a set logged in the exercise moved the page to \(afterALog)")
             // A tap on the fourth exercise in "REMAINING".
             let jump = WorkoutSelection(exerciseIndex: 3, setID: state.exercises[3].sets[0].id)
             host.rootView = Self.screen(state, jump)

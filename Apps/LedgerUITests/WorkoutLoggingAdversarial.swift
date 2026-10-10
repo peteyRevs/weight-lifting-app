@@ -27,13 +27,17 @@ final class WorkoutLoggingAdversarial: XCTestCase {
         discard(in: app)
     }
 
-    /// FINDING F10-S5-6 (a question for the product owner; the reviewer's S-3, decision 14 of the
-    /// implementer's notes): a second touch on the same spot that comes after the row was redrawn un-logs
-    /// the set. Two separate taps, as fast as XCUITest makes them, stand for a slow or nervous double tap:
-    /// the first logs, the row is drawn done, the second lands on "Undo set 1". The set is then not logged,
-    /// the shown row has already moved on to the second (rule 22 moves nothing back), and nothing says so.
+    /// F10-S5-6 (round 1's question; criterion 18 since): a second touch on the same spot that comes after
+    /// the row was redrawn, less than a second after the first, does not take the set back. Two separate
+    /// taps, as fast as XCUITest makes them, stand for a slow or nervous double tap: the first logs, the row
+    /// is drawn done, the second lands on "Undo set 1" and is ignored.
+    ///
+    /// Round 2: the guard is one second and XCUITest's two taps have been 0.78 s apart, so on a slow runner
+    /// the second can fall outside it and rightly un-log. The time from before the first tap to after the
+    /// second is longer than the time between the touches: under a second, the touches were inside the guard
+    /// and the set must be logged; otherwise the run says nothing about the guard and the test is skipped.
     @MainActor
-    func test_secondTouchOnTheSameCheck_doesNotLoseTheSet() {
+    func test_secondTouchOnTheSameCheck_doesNotLoseTheSet() throws {
         let app = launch()
         startSampleWorkout(in: app)
         let log = app.buttons["Log set 1"]
@@ -48,11 +52,13 @@ final class WorkoutLoggingAdversarial: XCTestCase {
         // Let whatever the two touches came to be drawn, then read the page.
         _ = app.buttons["Undo set 2"].waitForExistence(timeout: 2)
         attachScreenshot(of: app, named: "After two touches on the first check")
+        let isLogged = app.buttons["Undo set 1"].exists
+        discard(in: app)
+        try XCTSkipIf(apart >= 1, "the two taps took \(String(format: "%.2f", apart)) s: not a second touch")
         XCTAssertTrue(
-            app.buttons["Undo set 1"].exists,
+            isLogged,
             "two touches on the first check within \(String(format: "%.2f", apart)) s left its set not logged"
         )
-        discard(in: app)
     }
 
     /// FINDING F10-S5-5 (the reviewer's S-2): after a jump from "REMAINING" at an accessibility text size

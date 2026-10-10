@@ -66,7 +66,7 @@ struct WorkoutWalkAdversarialTests {
             await bench.store.drain()
             let expected = WorkoutEvent.setLogged(
                 exerciseIndex: card.exerciseIndex, setID: row.id, weight: set.weight, reps: set.reps,
-                doneAt: Fixtures.now
+                doneAt: bench.clock.value
             )
             #expect(await bench.session.applied.last == expected, "tap \(steps.count + 1)")
             steps.append(Step(exercise: card.exerciseIndex, row: row.label))
@@ -97,12 +97,11 @@ struct WorkoutWalkAdversarialTests {
 
     @Test("An un-logged set of a finished workout can be logged again from the page")
     func unlog_afterTheEnd_canBeLoggedAgain() async throws {
-        // F10 S5 fix round 1 (sanctioned edit, criterion 18): the set that is un-logged was logged a minute
-        // before, so the un-log is not a second touch.
-        let bench = try await Bench.make {
-            $0.exercises[1].sets[2].doneAt = Fixtures.now.addingTimeInterval(-60)
-        }
+        // Round 2: every set is logged through the page again (the fix round's sanctioned edit had logged
+        // this one in the fixture); a minute then passes, so the un-log is not a second touch (criterion 18).
+        let bench = try await Bench.make()
         _ = try await Self.logWhatIsShown(on: bench)
+        bench.clock.withValue { $0 += 60 }
         bench.tap(.unlog(exerciseIndex: 1, setID: bench.set(1, 2)))
         await bench.store.drain()
         let again = try await Self.logWhatIsShown(on: bench)
