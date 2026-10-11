@@ -236,10 +236,11 @@
             #expect(shown > 200 && other < 190 && other > 90, "shown \(shown), another week \(other)")
         }
 
-        /// Criterion 7: a stepper is drawn with `label` and `value`. Its spoken label is another string of
-        /// the model, and the tree cannot tell which of the two is drawn.
-        @Test("A stepper draws the field's label, not its spoken label")
-        func stepper_drawsTheLabel() throws {
+        /// Ruling 17 (decision 1 A's words over criterion 7): a stepper is drawn with `spokenLabel` ("Rep
+        /// floor") and `value`. Its `label` ("REP FLOOR") is another string of the model, and the tree
+        /// cannot tell which of the two is drawn.
+        @Test("A stepper draws the field's spoken label, not its capital label")
+        func stepper_drawsTheSpokenLabel() throws {
             let field = try #require(ProgramPreview.dayOpenDouble.dayEditorModel().openRow?.panel?.details?.fields[1])
             #expect(field.label == "REP FLOOR" && field.spokenLabel == "Rep floor")
             func drawn(_ view: some View) throws -> PixelBuffer {
@@ -255,7 +256,6 @@
             let isTheSpoken = try stepper == drawn(
                 StepperField(field.spokenLabel, value: field.value, onDecrement: {}, onIncrement: {})
             )
-            // Fix round 1, ruling 17 (decision 1 A's words): the spoken label is the one drawn.
             #expect(!isTheLabel && isTheSpoken)
         }
     }

@@ -157,76 +157,8 @@
             #expect(room >= 44 + 2 * LedgerSpacing.xs - 1, "\(room) pt between the heading and the line")
         }
 
-        /// How wide the field draws `text`, and the room it has for it. The width is the field's own
-        /// attributed text's, which carries the title's tracking: the font alone measures 4 % too wide
-        /// (checked against four pictures: at `.large` on 375 pt "Lower A — Squat focus" is drawn whole, 310.5
-        /// of 323 pt, and at `.xLarge` it reads "Lower A — Squat foc…", 325.8 of 323).
-        static func room(for text: String, _ setting: ViewsSetting) throws -> (needs: CGFloat, has: CGFloat) {
-            let header = try Self.header(text) { _ in }
-                .frame(width: setting.width)
-                .environment(\.dynamicTypeSize, setting.size)
-                .environment(\.legibilityWeight, setting.isBold ? .bold : .regular)
-            let hosted = Hosted(header)
-            defer { hosted.close() }
-            hosted.settle()
-            let field = try #require(hosted.fields.first)
-            let needs = try #require(field.attributedText).size().width
-            return (needs, field.textRect(forBounds: field.bounds).width)
-        }
-
         nonisolated static let seedNames = [
             "Upper A — Push focus", "Lower A — Squat focus", "Upper B — Pull focus", "Lower B — Hinge focus"
         ]
-
-        /// The seed names wider than the field at `size`, on both widths, plain and with Bold Text; a line each.
-        static func seedNamesCut(at size: DynamicTypeSize) throws -> [String] {
-            var lines: [String] = []
-            for name in seedNames {
-                for width in ViewsSetting.widths {
-                    for isBold in [false, true] {
-                        let setting = ViewsSetting(size: size, width: width, isBold: isBold)
-                        let room = try Self.room(for: name, setting)
-                        if room.needs > room.has + 0.5 {
-                            lines
-                                .append(
-                                    "\(setting.testDescription): \(name) needs \(Int(room.needs)) of \(Int(room.has))"
-                                )
-                        }
-                    }
-                }
-            }
-            return lines
-        }
-
-        /// A guard for the finding below: up to the default text size the four seed names fit their line.
-        @Test(
-            "Up to the default text size no seed day's name is cut in its field, on either width",
-            arguments: [DynamicTypeSize.xSmall, .large]
-        )
-        func seedNames_upToTheDefaultSize_areDrawnWhole(_ size: DynamicTypeSize) throws {
-            let cut = try Self.seedNamesCut(at: size)
-            #expect(cut.isEmpty, "\(cut.count) cut: \(cut.prefix(4).joined(separator: "; "))")
-        }
-
-        /// **FINDING F11-S10-1** (should fix, or the product owner's to accept: open question 2 of the S10
-        /// notes, with the facts corrected). Criterion 11 asks that no word is cut at the twelve sizes on 375
-        /// and 402 pt. The implementer's finding 1 says the seed's name "fits at the default size and ends in
-        /// '…' at `.accessibility3`". Measured from the field's own attributed text and its text rectangle,
-        /// the cut starts one step above the default size. On a 375 pt phone "Lower A — Squat focus" and
-        /// "Lower B — Hinge focus" read "Lower A — Squat foc…" from `.xLarge` (325 pt of text in 323),
-        /// "Upper A — Push focus" from `.xxLarge` and "Upper B — Pull focus" from `.xxxLarge`; on an iPhone 17
-        /// the two Lower days are cut at `.xxLarge` with Bold Text, and they and Upper A from `.xxxLarge`. A
-        /// known issue until the product owner decides; it fails, and is then to be removed, when the names
-        /// are drawn whole.
-        @Test(
-            "Above the default text size no seed day's name is cut in its field",
-            arguments: [DynamicTypeSize.xLarge, .xxLarge, .xxxLarge, .accessibility3]
-        )
-        func seedNames_aboveTheDefaultSize_areDrawnWhole(_ size: DynamicTypeSize) throws {
-            let cut = try Self.seedNamesCut(at: size)
-            withKnownIssue("Open question 2 of the S10 notes: the day's name in a one-line field") {
-                #expect(cut.isEmpty, "\(cut.count) cut: \(cut.prefix(4).joined(separator: "; "))")
-            }
-        }
     }
 #endif

@@ -110,8 +110,8 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         #expect(sent.count { $0.hasSuffix(": send(action)") } == unwrapped.count, "a bare action, not unwrapped")
     }
 
-    @Test("The only state a view keeps is the name field's draft and the two fields' focus")
-    func views_keepNoStateButTheDraft() throws {
+    @Test("The only state a view keeps: the two names' drafts, the three fields' focus, the delete alert's flag")
+    func views_keepNoStateButDraftsFocusAndTheAlert() throws {
         let kept = try Self.matches(#"@(State|FocusState|Binding|Bindable|StateObject|ObservedObject|AppStorage)\b.*"#)
         #expect(kept == [
             // S10: the day's name has its draft and focus as the program's has, and "Delete day" its alert.
@@ -171,8 +171,8 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
     /// token: the least width of a day's tag in ems (`DayCard.tagEms`, 3.5) and the strip cell's one line.
     /// Pinned here so that a third is a changed list; whether 3.5 belongs in `LedgerDesign` is a question in
     /// the notes.
-    @Test("The only numbers but 0 in the views are the tag's width in ems and the strip cell's one line")
-    func views_numbers_areTheTwo() throws {
+    @Test("The only numbers but 0 in the views: the tag's ems, the caret's quarter turn twice, the strip cell's line")
+    func views_numbers_areThePinnedFour() throws {
         let numbers = try Self.matches(#"(?<![\w.])(?!0\b)\d+(\.\d+)?\b"#)
         // S10: a row's caret is the design system's chevron turned a quarter, down or up.
         #expect(
@@ -228,5 +228,26 @@ nonisolated extension ProgramViewsSourceAdversarialTests {
             "let x = 1"
         ]
         #expect(Self.isInsideALayout(sample) == [false, false, false, true, true, true, false])
+    }
+}
+
+// MARK: - S10, gate G2, round 2: the name field
+
+nonisolated extension ProgramViewsSourceAdversarialTests {
+    /// The day's `rename` is built in `DayEditorHeader` from what `NameField` hands it, so the one place
+    /// `NameField` hands a name over is pinned too: once, with the text as typed.
+    @Test("The name field hands a name over in one place, as typed")
+    func nameField_handsTheNameOverOnce() throws {
+        let handed = try Self.matches(#"\bonRename\([^)]*\)"#)
+        #expect(handed == ["NameField.swift: onRename(text)"], "\(handed)")
+    }
+
+    /// `NameField` hides whichever of its two texts is not shown with `Color.clear`, a colour that is no
+    /// token and that the bans of `reachedFor` do not name. Pinned so that a third is a changed list: one
+    /// for the text, one for the field.
+    @Test("The only colour a view spells outside the tokens is clear, twice, in the name field")
+    func views_spellNoColourButClear() throws {
+        let spelled = try Self.matches(#"\bColor\.\w+"#)
+        #expect(spelled == ["NameField.swift: Color.clear", "NameField.swift: Color.clear"], "\(spelled)")
     }
 }
