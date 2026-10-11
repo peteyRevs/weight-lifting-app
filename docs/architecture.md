@@ -317,8 +317,12 @@ rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed e
   two callers never start from the same state and a cancelled caller loses nothing; its memory changes only
   once the store has taken the envelope. F17 adds the envelopes it receives (`replay`, then
   `effects(from:to:)`) and the transport.
-- The rest timer is `RestTimer(endsAt: Date, total: Duration)`. Views render
-  with `TimelineView`/`Text(timerInterval:)`; no tick events cross devices.
+- The rest timer is `RestTimer(endsAt: Date, total: Duration)`; no tick events cross devices. On the
+  phone the workout's store reads the injected date once a second while a rest is shown, on the injected
+  clock (`WorkoutStore.keepRestTime()`), and the rest panel is the presentation's reading of the rest at that
+  moment (`RestTimer.remaining(at:)`, `fraction(at:)`). Only the panel's view observes that moment
+  (`WorkoutStore.restPanel`); the root, the header and the page are not drawn again at a tick. No view of
+  the rest reads a clock: there is no `TimelineView`. (The header's elapsed time is `Text(timerInterval:)`.)
 - On `finished`, the host stores the envelope, then saves the workout in one transaction
   (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`, F10 S3): the rows, the records it detects, the
   slots' misses from `MissTracking` on the program as stored then (when it is the active one), the program

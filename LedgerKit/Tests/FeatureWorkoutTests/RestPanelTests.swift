@@ -18,7 +18,7 @@
         nonisolated static let states: [WorkoutPreview] = [.resting, .restOver]
 
         static func model(_ preview: WorkoutPreview) throws -> RestPanelModel {
-            try #require(preview.model.rest, "\(preview.rawValue) shows no rest")
+            try #require(preview.restPanel, "\(preview.rawValue) shows no rest")
         }
 
         static func panel(_ preview: WorkoutPreview, send: @escaping (WorkoutAction) -> Void = { _ in
@@ -84,7 +84,7 @@
             }
             #expect(sent == [.edit(.extendRest), .edit(.skipRest)])
             sent = []
-            let busy = try #require(WorkoutPreview.discarding.model.rest)
+            let busy = try #require(WorkoutPreview.discarding.restPanel)
             #expect(!busy.isEnabled)
             RestPanel(model: busy) { sent.append($0) }.withAccessibilityElements { elements in
                 for element in elements {
@@ -150,8 +150,11 @@
 
         @Test("With Reduce Motion the ring is not animated between two seconds; without, it moves over the second")
         func ring_reduceMotion() {
-            #expect(RestPanel.ringAnimation(reduceMotion: true) == nil)
-            #expect(RestPanel.ringAnimation(reduceMotion: false) == .linear(duration: 1))
+            #expect(RestPanel.ringAnimation(reduceMotion: true, isOver: false) == nil)
+            #expect(RestPanel.ringAnimation(reduceMotion: false, isOver: false) == .linear(duration: 1))
+            // At zero the arc is gone with "0:00": its last step is not eased over the second after it.
+            #expect(RestPanel.ringAnimation(reduceMotion: false, isOver: true) == nil)
+            #expect(RestPanel.ringAnimation(reduceMotion: true, isOver: true) == nil)
         }
     }
 
@@ -168,9 +171,9 @@
         }
 
         /// The real screen's scroll view, hosted at an iPhone 17's size at `textSize`.
-        private static func scroll(_ model: WorkoutScreenModel, at textSize: DynamicTypeSize) throws -> Scroll {
+        private static func scroll(_ cover: some View, at textSize: DynamicTypeSize) throws -> Scroll {
             let phone = WorkoutScreenTests.phone
-            let screen = WorkoutScreen(model: model) { _ in }
+            let screen = cover
                 .frame(height: phone.height)
                 .environment(\.dynamicTypeSize, textSize)
             let host = UIHostingController(rootView: screen)
@@ -190,21 +193,15 @@
             )
         }
 
-        /// The same workout with no moment to read its rest at: the same page, and no panel.
-        private static func withoutThePanel(_ preview: WorkoutPreview) throws -> WorkoutScreenModel {
-            try WorkoutPresentation.screen(
-                .loaded(preview.workout()), selection: preview.selection, now: nil, isBusy: false,
-                locale: Fixtures.locale, calendar: Fixtures.calendar
-            )
-        }
-
         @Test(
             "On the screen the panel is the scroll view's bottom inset: the page's end scrolls clear of it",
             arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
         )
         func screen_keepsRoomForThePanel(_ size: DynamicTypeSize) throws {
-            let resting = try Self.scroll(WorkoutPreview.resting.model, at: size)
-            let without = try Self.scroll(Self.withoutThePanel(.resting), at: size)
+            let preview = WorkoutPreview.resting
+            let withThePanel = WorkoutScreen(model: preview.model, rest: preview.restPanel) { _ in }
+            let resting = try Self.scroll(withThePanel, at: size)
+            let without = try Self.scroll(WorkoutScreen(model: preview.model) { _ in }, at: size)
             #expect(resting.frame == without.frame, "the panel floats: it takes nothing from the scroll view's frame")
             #expect(resting.content == without.content, "the page is the same page")
             // The panel's three stops, outside the scroll view, in the window's coordinates.
@@ -242,7 +239,9 @@
             try assertLedgerSnapshot(of: alone(.restOver), devices: [.phone], typeSizes: [.large, .xLarge])
         }
 
-        @Test("The panel at the largest text size of the matrix: the lines under the ring, the buttons stacked")
+        @Test(
+            "The panel at the largest text size of the matrix is compact: no ring, the time left as text"
+        )
         func panel_resting_accessibility3_matchesReference() throws {
             try assertLedgerSnapshot(
                 of: alone(.resting),

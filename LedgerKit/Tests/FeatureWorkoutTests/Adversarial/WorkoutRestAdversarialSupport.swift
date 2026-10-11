@@ -211,7 +211,7 @@ final class RestCover {
     }
 
     var panel: RestPanelModel? {
-        store.model.rest
+        store.restPanel
     }
 }
 

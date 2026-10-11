@@ -78,7 +78,7 @@ DI key `workoutSession` (F07 list gains it). `LocalWorkoutSessionActor` executes
 - UI (LedgerUITests): F15 flow `onboard_start_log_finish_history` (log 3 sets incl. a superset round, rest, swap, finish, receipt).
 
 ## Non-functional
-- Performance budget: tap → row state change < 16 ms (one frame); `apply` round-trip incl. persist < 30 ms; rest ring animates via `TimelineView(.animation)` with no per-second store updates; cover presentation < 200 ms.
+- Performance budget: tap → row state change < 16 ms (one frame); `apply` round-trip incl. persist < 30 ms; the rest's time is the store's reading of the injected date once a second, on the injected clock, and only the rest panel observes it: no `TimelineView`, and nothing else of the cover is drawn again at a tick (S6, criteria 3 as amended and 16; the line read "rest ring animates via `TimelineView(.animation)` with no per-second store updates" until then); cover presentation < 200 ms.
 - Accessibility: set rows read "Set 2, 185 pounds, 5 reps, not done"; check button label "Log set 2" / "Unlog set 2"; steppers are `.adjustable` with the step in the value; rest card announces "Rest, 1:30 remaining" on appear and "Rest over" at zero; Reduce Motion disables ring animation; Dynamic Type to AX5 (numbers wrap to two lines, never truncate).
 - Offline behaviour: fully local; no transport in M1.
 
@@ -608,3 +608,52 @@ timeline"). The rulings, as given:
    fresh recording fake for each call, never one shared between tests; and the app's composition still binds
    the live client itself, with a test that fails if `AppComposition` leaves `haptics` unbound. It is
    recorded in the notes as a change to shared test support.
+
+## Plan amendments — slice S6 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer requested changes (one blocking item, five should-fix); the tester left four tests red and put
+seven questions. The rulings, which add to S6's fifteen criteria:
+
+16. **A tick redraws the rest panel and nothing else** (review S6-B1, its option c). The store keeps
+    `moment` and `keepRestTime()`. `rest` leaves `WorkoutModel` and `now:` leaves
+    `WorkoutPresentation.screen`; `store.restPanel` is the only reader of `moment`; `WorkoutScreen` has a
+    bottom-inset slot, filled by a small view that reads `store.restPanel`. Pinned on the host: reading
+    `store.model` under `withObservationTracking` does not fire on a tick, and reading `store.restPanel`
+    does. The brief's non-functional line and `docs/architecture.md` §13 say what is built: the store ticks
+    once a second from the injected clock; only the panel observes it; no `TimelineView`.
+17. **The panel leaves the page room at every text size** (tester F10-S6-4, review S6-SF2). At least 120 pt
+    of the page show between the header and the panel on the 375 pt home-button phone, the 375 pt notch
+    phone and the iPhone 17, at every size to `.accessibility5`. The way: a compact panel at the
+    accessibility sizes, in the cheapest form that reaches it and no further: no ring (the time as text,
+    the state line, the next-set line); then the two buttons side by side where their words fit whole; then
+    dropping the next-set line. Nothing may be cut and targets stay 44 pt. The tester's
+    `screen_leavesThePageRoom_beyondTheCriterion` passes unedited (its threshold is 44 pt).
+18. **The time of a tap is the time it was tapped** (the tester's question 1; criterion 5's own words).
+    "+30s" and "Skip rest" carry the injected date read when `send` is called, not when the queue reaches
+    them: behind a held save, "+30s" tapped with 2 s left extends the shown rest. The same for a log's
+    `doneAt` and the other edits where it is the same small change.
+19. **The ring does not ease after zero** (review S6-SF5): no animation when the rest is over.
+20. **The tester's three notes with red tests**: F10-S6-2 (a rest already skipped in the session is buzzed
+    if the page has not heard) and F10-S6-3 (a haptic lost when `follow()` starts again between a change
+    and its update) are fixed. **F10-S6-1** (the wall clock set back at "Rest over", then a tap) is left
+    red and not fixed: a wall clock set backwards under "Rest over" is rare, and the tester rated it a
+    note. The notes say what happens, why the harness's shape rules out a local fix, and what a real fix
+    would take; the tester pins it as built in round 2, and it is recorded for F17 with the other clock
+    cases.
+21. **Recorded, not built** (the notes' inputs): `Settings.watchBuzz` gating the phone's buzz at zero belongs
+    to the slice that builds Settings' effect on the workout (F14; spec §4.5, testing-strategy D11); the
+    brief's VoiceOver announcements ("Rest, 1:30 remaining", "Rest over") go into S7's criteria; F23:
+    recovery re-asserts the notification, `rest_runsWithoutANotificationsClient` becomes a test that fails
+    when the client is missing, a `start` onto a kept log schedules; F18: `follow()` awaits the haptics
+    client before the next update; F17: the two peer cases in the tester's question 7; S9: the superset
+    cases in the tester's question 2.
+
+**Two rulings during the fix round**, on tester's expectations that a ruling inverts; both edits are listed
+for the tester's audit in round 2:
+
+- `screen_roomIsMeasured`'s last assertion (55 to 75 pt of page on the iPhone 17 at `.accessibility5`, the
+  old panel's) becomes the compact panel's measured value ± 10 pt, with a comment naming ruling 17 and the old
+  range; nothing else in that test changes. The notes say what the app itself shows there now.
+- `eachSecond_oneChange_thePageUntouched` watches both: `store.model` changes 0 times in the 10 s and
+  `store.restPanel` 10 times; `restPanel`'s clock reads "2:20"; 0 changes of either after the rest's end.
+  Ruling 16 inverts exactly that expectation.

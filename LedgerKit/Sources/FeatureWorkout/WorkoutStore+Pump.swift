@@ -5,6 +5,11 @@ import LedgerDomain
 /// the queue of the page's taps, and the work that applies them. In a file of its own for its length; the
 /// members of the store it uses are the store's alone.
 extension WorkoutStore {
+    /// While a discard runs or the cover is closing no control answers.
+    var isBusy: Bool {
+        isDiscarding || exit != nil || exitWhenDrained != nil
+    }
+
     /// The workout goes on after a Minimize, so the taps made before it are applied first (criterion 14):
     /// with none waiting the cover closes at once, otherwise when the pump has applied them. A change that
     /// is refused meanwhile keeps the cover up, so that its alert is seen.
@@ -18,12 +23,14 @@ extension WorkoutStore {
         wake?.yield()
     }
 
-    /// Queues a tap of the page and wakes the pump.
+    /// Queues a tap of the page with the moment it is made at, and wakes the pump. The injected date is
+    /// read here, once for a tap, and not when the tap's turn comes: the time of a tap is the time it was
+    /// tapped, however long the taps before it take (F10 S6, criterion 18).
     func enqueue(_ edit: WorkoutEdit) {
         guard isShowingWorkout else {
             return
         }
-        queue.append(edit)
+        queue.append(WorkoutTap(edit: edit, tappedAt: date.now))
         wake?.yield()
     }
 
@@ -54,9 +61,9 @@ extension WorkoutStore {
         }
         isDraining = true
         defer { isDraining = false }
-        while let edit = queue.first, isHearingTheSession, exit == nil, !isDiscarding {
+        while let tap = queue.first, isHearingTheSession, exit == nil, !isDiscarding {
             let epoch = queueEpoch
-            let outcome = await apply(edit)
+            let outcome = await apply(tap)
             if outcome == .refused {
                 // The taps behind a refused change were made on a page that never came to be.
                 emptyQueue()
@@ -92,14 +99,14 @@ extension WorkoutStore {
     ///   closes the cover.
     /// - A call cancelled because the cover went away is no failure either: the session's host completes
     ///   a call in a task of its own, so the tap counts as sent.
-    private func apply(_ edit: WorkoutEdit) async -> Outcome {
+    private func apply(_ tap: WorkoutTap) async -> Outcome {
         guard case let .loaded(shown) = workout else {
             return .interrupted
         }
-        // The date is read once for a tap: the plan's moment, and the one its change is first drawn at.
-        let now = date.now
-        moment = now
-        let plan = WorkoutEditPlan.make(edit, in: ahead ?? shown, selection: selection, now: now) {
+        // The tap's moment is the plan's, and the one its change is first drawn at. A tap that waited
+        // behind a slow change is older than the rest's last tick: the panel's moment never goes back for it.
+        moment = moment.map { max($0, tap.tappedAt) } ?? tap.tappedAt
+        let plan = WorkoutEditPlan.make(tap.edit, in: ahead ?? shown, selection: selection, now: tap.tappedAt) {
             SetID(uuid())
         }
         do {

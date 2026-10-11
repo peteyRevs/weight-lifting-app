@@ -32,6 +32,12 @@ nonisolated enum WorkoutEdit: Equatable, Sendable {
     case skipRest
 }
 
+/// A tap as it waits for the pump: the edit, and the injected date when it was made.
+nonisolated struct WorkoutTap: Equatable, Sendable {
+    let edit: WorkoutEdit
+    let tappedAt: Date
+}
+
 /// The row the lifter chose, where it is not the engine's cursor: the engine moves its cursor only onto a
 /// row that is not done (rule 11), and the cover can also show an exercise whose every set is logged. It
 /// belongs to one presentation of the cover; a set that is logged hands the choice back to the engine's

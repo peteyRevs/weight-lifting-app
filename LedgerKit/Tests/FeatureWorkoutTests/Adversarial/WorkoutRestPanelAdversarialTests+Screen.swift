@@ -49,7 +49,7 @@
             at size: DynamicTypeSize,
             _ preview: WorkoutPreview = .resting
         ) throws -> Room {
-            let screen = WorkoutScreen(model: preview.model) { _ in }
+            let screen = WorkoutScreen(model: preview.model, rest: preview.restPanel) { _ in }
                 .environment(\.workoutTimeline, .fixed(at: preview.now))
             let host = UIHostingController(rootView: screen.environment(\.dynamicTypeSize, size))
             let window = SceneLessWindow.make(frame: CGRect(origin: .zero, size: phone))
@@ -105,8 +105,11 @@
             }
             // The running app at Accessibility 5 on the iPhone 17 shows 64 pt of page over the panel
             // (the UI test's screenshot, `WorkoutRestAdversarial`): the model agrees.
+            // F10 S6 fix round 1 (sanctioned edit, ruling 17): the panel is compact at the accessibility
+            // sizes, and the page showing here was measured at 313.7 pt. The range was 55 ... 75, the old
+            // panel's.
             let largest = try Self.room(on: Self.phones[2].size, at: .accessibility5)
-            #expect((55 ... 75).contains(largest.page), "\(largest.page)")
+            #expect((304 ... 324).contains(largest.page), "\(largest.page)")
         }
 
         @Test(
@@ -188,7 +191,7 @@
                     let sleeps = clock.sleeps.value
                     await clock.base.advance(by: .seconds(1))
                     _ = await turning("a second of the rest") {
-                        clock.sleeps.value > sleeps || store.model.rest?.isOver == true
+                        clock.sleeps.value > sleeps || store.restPanel?.isOver == true
                     }
                     host.view.layoutIfNeeded()
                 }
@@ -211,18 +214,18 @@
             }) else {
                 return
             }
-            #expect(store.model.rest?.clock == "2:30")
+            #expect(store.restPanel?.clock == "2:30")
             hosted.host.view.layoutIfNeeded()
             let scroll = try #require(WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view))
             scroll.setContentOffset(CGPoint(x: 0, y: 30), animated: false)
             await hosted.seconds(3)
-            #expect(store.model.rest?.clock == "2:27")
+            #expect(store.restPanel?.clock == "2:27")
             #expect(scroll.contentOffset.y == 30, "a second going by moves the page")
             let isTheSameView = WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view) === scroll
             #expect(isTheSameView, "the scroll view was made again")
             // The rest reaches its end with the cover up: felt once.
             await hosted.seconds(147)
-            #expect(store.model.rest?.status == "Rest over")
+            #expect(store.restPanel?.status == "Rest over")
             for _ in 0 ..< 200 {
                 Self.turnTheRunLoop()
                 await Task.yield()

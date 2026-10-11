@@ -126,7 +126,7 @@ struct RestBench {
     }
 
     var panel: RestPanelModel? {
-        store.model.rest
+        store.restPanel
     }
 }
 
@@ -136,15 +136,5 @@ struct RestBench {
 func eventuallyPlayed(_ haptics: FakeHaptics, _ wanted: [Haptic]) async {
     while await haptics.played != wanted {
         await Task.yield()
-    }
-}
-
-extension WorkoutScreenModel {
-    /// The rest panel, when a workout is on screen and shows a rest.
-    var rest: RestPanelModel? {
-        guard case let .workout(workout) = self else {
-            return nil
-        }
-        return workout.rest
     }
 }

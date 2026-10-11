@@ -3,7 +3,8 @@ import Foundation
 /// The rest panel (F10 S6; v2 "Active workout", the floating card) at one moment: the time the shown rest
 /// has left, the set that comes next, and its two buttons. Every string is final. The moment is the one
 /// the presentation was handed (`WorkoutPresentation.rest`); the model holds no clock and no rest, and the
-/// view decides nothing.
+/// view decides nothing. It is no part of the screen's model: it changes each second of a rest, and only
+/// the panel is drawn again then (`WorkoutStore.restPanel`).
 nonisolated struct RestPanelModel: Equatable, Sendable {
     /// "1:15", by the whole second, rounded up; "0:00" once the rest is over.
     let clock: String

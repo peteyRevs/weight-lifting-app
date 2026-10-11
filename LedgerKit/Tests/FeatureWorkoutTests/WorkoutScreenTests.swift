@@ -19,7 +19,7 @@
         ]
 
         static func screen(_ preview: WorkoutPreview, send: @escaping (WorkoutAction) -> Void = { _ in }) -> some View {
-            WorkoutScreen(model: preview.model, send: send)
+            WorkoutScreen(model: preview.model, rest: preview.restPanel, send: send)
                 .environment(\.workoutTimeline, .fixed(at: preview.now))
                 .frame(height: phone.height)
         }

@@ -29,8 +29,24 @@ extension WorkoutRestAdversarialTests {
         await cover.close()
     }
 
+    /// Counts the changes of what `read` reads, until its task is cancelled (F10 S6 fix round 1, for the
+    /// sanctioned edit below).
+    static func counting(
+        _ read: @escaping @MainActor @Sendable () -> some Equatable & Sendable
+    ) -> (count: LockIsolated<Int>, task: Task<Void, Never>) {
+        let count = LockIsolated(0)
+        let task = Task {
+            for await _ in Observations({ read() }) {
+                count.withValue { $0 += 1 }
+            }
+        }
+        return (count, task)
+    }
+
+    /// F10 S6 fix round 1 (sanctioned edit, ruling 16, which inverts this expectation): the test watches
+    /// both the screen's model, which a tick no longer changes, and the rest panel, which it changes once.
     @Test(
-        "A second of a rest is one change of the screen's model, and neither the header nor the page is another value"
+        "A second of a rest is one change of the rest panel and none of the screen's model"
     )
     func eachSecond_oneChange_thePageUntouched() async throws {
         let (cover, _) = try await Self.resting()
@@ -38,32 +54,33 @@ extension WorkoutRestAdversarialTests {
             Issue.record("no workout on screen")
             return
         }
-        let changes = LockIsolated(0)
-        let watching = Task { [store = cover.store] in
-            for await _ in Observations({ store.model }) {
-                changes.withValue { $0 += 1 }
-            }
-        }
+        let (changes, watching) = Self.counting { [store = cover.store] in store.model }
+        let (panelChanges, watchingThePanel) = Self.counting { [store = cover.store] in store.restPanel }
         await giveWay()
         changes.setValue(0)
+        panelChanges.setValue(0)
         await cover.run(10)
         await giveWay()
-        #expect(changes.value == 10)
+        #expect(changes.value == 0)
+        #expect(panelChanges.value == 10)
         guard case let .workout(after) = cover.store.model else {
             Issue.record("no workout on screen")
             return
         }
         #expect(after.page == before.page)
         #expect(after.header == before.header)
-        #expect(after.rest?.clock == "2:20")
+        #expect(cover.store.restPanel?.clock == "2:20")
         // Once the rest is over nothing changes any more.
         await cover.run(140)
         await giveWay()
         changes.setValue(0)
+        panelChanges.setValue(0)
         await cover.run(60)
         await giveWay()
         #expect(changes.value == 0)
+        #expect(panelChanges.value == 0)
         watching.cancel()
+        watchingThePanel.cancel()
         await cover.close()
     }
 

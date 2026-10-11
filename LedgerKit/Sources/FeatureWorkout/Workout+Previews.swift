@@ -81,16 +81,24 @@
             return WorkoutPresentation.screen(
                 state,
                 selection: selection,
-                now: now,
                 isBusy: self == .discarding,
                 locale: Fixtures.locale,
                 calendar: Fixtures.calendar
             )
         }
 
+        /// The rest panel at the case's moment, as the store reads it; nil in a case that shows no rest.
+        var restPanel: RestPanelModel? {
+            (try? workout()).flatMap { state in
+                WorkoutPresentation.rest(
+                    state, at: now, selection: selection, isBusy: self == .discarding, locale: Fixtures.locale
+                )
+            }
+        }
+
         /// The cover in this state, its time standing still at the case's moment.
         var content: some View {
-            WorkoutScreen(model: model) { _ in }
+            WorkoutScreen(model: model, rest: restPanel) { _ in }
                 .environment(\.workoutTimeline, .fixed(at: now))
         }
 

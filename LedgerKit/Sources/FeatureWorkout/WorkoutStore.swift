@@ -53,11 +53,13 @@ final class WorkoutStore {
     /// The row the lifter chose, where it is not the engine's cursor; nil leaves the choice to the cursor.
     var selection: WorkoutSelection?
     /// The injected date as it was last read: what the rest panel's time left is read at. Nil until it is
-    /// first read, and no panel is drawn until then. (Set by the store alone; the pump is in its own file.)
+    /// first read, and no panel is drawn until then. Only `restPanel` reads it, so that a tick of a rest
+    /// draws the panel again and nothing else. (Set by the store alone; the pump is in its own file.)
     var moment: Date?
     @ObservationIgnored private var isDiscardRunning = false
-    /// The taps waiting for the pump, oldest first. The one being applied stays at the front until it is done.
-    @ObservationIgnored var queue: [WorkoutEdit] = []
+    /// The taps waiting for the pump, oldest first, each with the moment it was made at. The one being
+    /// applied stays at the front until it is done.
+    @ObservationIgnored var queue: [WorkoutTap] = []
     @ObservationIgnored var isDraining = false
     /// Counts the times the queue was emptied as a whole, so a tap that was being applied meanwhile is not
     /// taken off a queue that has since been filled with other taps.
@@ -76,7 +78,7 @@ final class WorkoutStore {
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.date) var date
-    @ObservationIgnored @Dependency(\.locale) private var locale
+    @ObservationIgnored @Dependency(\.locale) var locale
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.uuid) var uuid
     @ObservationIgnored @Dependency(\.haptics) var haptics
@@ -88,13 +90,12 @@ final class WorkoutStore {
         injectedLogger.category("workout")
     }
 
-    /// What the screen draws.
+    /// What the screen draws, but for the rest panel (`restPanel`).
     var model: WorkoutScreenModel {
         WorkoutPresentation.screen(
             workout,
             selection: selection,
-            now: moment,
-            isBusy: isDiscarding || exit != nil || exitWhenDrained != nil,
+            isBusy: isBusy,
             locale: locale,
             calendar: calendar
         )
@@ -179,7 +180,9 @@ final class WorkoutStore {
     ///
     /// A follow that starts again starts from the session's workout as it stands (criterion 15): an answer
     /// kept from before is forgotten, and the taps that waited are planned only once this stream's first
-    /// update has arrived.
+    /// update has arrived. That first update carries no haptics, so what changed on the page between the
+    /// follow before and this one is played here, as the engine says a change between two states is felt
+    /// (`missedHaptics`): a set logged just before the cover's tasks started again is felt, once.
     func follow() async {
         if case .idle = workout {
             workout = .loading
@@ -197,12 +200,13 @@ final class WorkoutStore {
                 // The stream has caught up with the last change: from here it is the newest again.
                 ahead = nil
             }
+            let missed = isHearingTheSession ? [] : missedHaptics(before: live)
             workout = .loaded(live)
             if !isHearingTheSession {
                 isHearingTheSession = true
                 wake?.yield()
             }
-            await play(update.haptics)
+            await play(missed + update.haptics)
         }
         guard !Task.isCancelled, exit == nil else {
             return

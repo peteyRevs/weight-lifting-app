@@ -154,10 +154,10 @@ struct WorkoutStoreRestOverTests {
         }
         let following = Task { await reopened.follow() }
         await eventually { reopened.shownRest != nil }
-        #expect(reopened.model.rest == nil, "no moment was read yet: no panel is drawn before the first one")
+        #expect(reopened.restPanel == nil, "no moment was read yet: no panel is drawn before the first one")
         await reopened.keepRestTime()
-        #expect(reopened.model.rest?.status == "Rest over")
-        #expect(reopened.model.rest?.clock == "0:00")
+        #expect(reopened.restPanel?.status == "Rest over")
+        #expect(reopened.restPanel?.clock == "0:00")
         #expect(await haptics.played == [])
         following.cancel()
         bench.following.cancel()

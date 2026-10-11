@@ -7,14 +7,9 @@ import LedgerDomain
 nonisolated enum WorkoutPresentation {
     /// The cover's state. `isBusy` disables the header's buttons and the page's controls; `selection` is the
     /// row the lifter chose, where it is not the engine's cursor.
-    ///
-    /// `now` is the moment the rest panel is read at (F10 S6), handed in by whoever holds the injected
-    /// date: the store, at each update and each tick of a rest. With none, no time left can be read, and
-    /// no panel is drawn.
     static func screen(
         _ workout: Loadable<WorkoutState>,
         selection: WorkoutSelection? = nil,
-        now: Date? = nil,
         isBusy: Bool,
         locale: Locale,
         calendar: Calendar
@@ -30,8 +25,7 @@ nonisolated enum WorkoutPresentation {
                     selection: selection,
                     isBusy: isBusy,
                     Context(locale: locale, calendar: calendar)
-                ),
-                rest: now.flatMap { rest(state, at: $0, selection: selection, isBusy: isBusy, locale: locale) }
+                )
             ))
         case .failed:
             .failed(WorkoutFailedModel(

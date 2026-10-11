@@ -73,22 +73,11 @@ struct WorkoutPresentationRestTests {
         #expect(Self.panel(stale) == nil)
     }
 
-    @Test("The screen draws a panel only when it is handed a moment; busy disables its buttons")
-    func screen_needsAMoment() {
+    @Test("Busy disables the panel's buttons, as it does the page's")
+    func busy() {
         let state = Plans.resting(secondsLeft: 75)
-        func rest(now: Date?, isBusy: Bool = false) -> RestPanelModel? {
-            let screen = WorkoutPresentation.screen(
-                .loaded(state), now: now, isBusy: isBusy, locale: Fixtures.locale, calendar: Fixtures.calendar
-            )
-            guard case let .workout(model) = screen else {
-                return nil
-            }
-            return model.rest
-        }
-        #expect(rest(now: nil) == nil)
-        #expect(rest(now: Fixtures.now)?.clock == "1:15")
-        #expect(rest(now: Fixtures.now)?.isEnabled == true)
-        #expect(rest(now: Fixtures.now, isBusy: true)?.isEnabled == false)
+        #expect(Self.panel(state)?.isEnabled == true)
+        #expect(Self.panel(state, isBusy: true)?.isEnabled == false)
     }
 
     @Test("The next set is the shown row: the lifter's choice, kilograms, a drop set, and none when none is left")
