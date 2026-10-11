@@ -5100,3 +5100,180 @@ Series 12 46 mm, both 27.0).
   typing into the name field. The twelve lines of `FeatureProgram` the coverage does not reach were not
   listed per file.
 
+## S10 — fix round 1 (G1 implementer, 2026-10-10 and 2026-10-11)
+
+Answers the review's round 1 (`review.md`, "S10 — review, round 1": B-1, S-1 to S-4), the tester's round 1
+(`test-findings.md`, "Slice S10 — round 1": F11-S10-1 to -4) and the orchestrator's rulings 14 to 20 (the
+brief, "Plan amendments — slice S10 after round 1"), on the same branch at `454bcc4`. No presentation, model,
+action or copy file was changed; no key was added to the catalog.
+
+### What changed, per ruling
+
+| Ruling | Done | What |
+|---|---|---|
+| **14** Only the bar is pinned | Yes | New `DayEditorBar(model: Header, send:)`: "Program" and "Done", `s` above and below. `DayEditorScreen` pins it with `.fixedSize(horizontal: false, vertical: true)`, so the page gives way and never the bar. `DayEditorHeader` is now the title block alone ("DAY 1 OF 4", the name, the tag and the summary line) and is the first thing in `DayEditorPage`, as `ProgramHeader` is in the builder's page; it still pads itself and still takes the whole `Content`. The bar is 60 pt high up to `.accessibility2`, 61.3 at `.accessibility3`, 65 at `.accessibility4`, 70.3 at `.accessibility5` (it was the whole header: 154, 270 and 362 pt). The tester's `smallPhone_headerIsNotSqueezed` passes unedited: its subject, what stands above the scroll view, still exists. |
+| **15** The day's name is drawn whole | Yes | In `NameField`, below. Swept under the four seed day names and the long one at the twelve sizes, on both widths, plain and bold: all whole. |
+| **16** One `NameField` | **Half: the Day editor uses it; `ProgramHeader` does not**, by the ruling's own fallback | Below, "ProgramHeader". |
+| **17** Stepper labels | Yes | `SlotStepper` draws `field.spokenLabel` ("Sets", "Rep floor", "Top of range"); the `.accessibilityLabel` went. The tree is unchanged: one adjustable element, "Sets", value "5". `Field.label` is now drawn nowhere and joins `hasDropSet` on the list to remove in S14. |
+| **18** `Eyebrow` for the week's eyebrow | Yes | `Eyebrow(week.eyebrow, tint: week.isDeload || week.isHeld ? .accent : .muted)`; the group around it still makes the two lines one text for VoiceOver, not a heading. `dayEditorViews_tintOneThing` pins that line. |
+| **19** The sweep thinned and pointed at real names | Yes | Below, "The cut-word sweep". `DayEditorLayoutTests`: 127 s → 44 s. |
+| **20** Recorded, not built | Yes | Below, "For the product owner and for S14". |
+
+### `NameField` (rulings 15 and 16)
+
+`Views/NameField.swift`, 50 lines: `NameField(label:name:onRename:)` holds the draft, the focus, the three
+`onChange` of the rule, and the wrapping.
+
+- **How it is drawn.** The base is a `Text` of the draft in the title's type, which wraps; over its first
+  line, top on top, stands the one-line `TextField`. Without the focus the text is ink and the field's own
+  text is clear; with the focus it is the other way round and the text keeps to one line (it is not drawn
+  then, and a line longer than the page runs out of a frame that keeps the page's width). An empty draft
+  draws no text and the field shows its placeholder. The whole is at least 44 pt high with the name at its
+  top, and a tap anywhere on it, further lines too, focuses the field. The field is the one accessibility
+  element and the one `UITextField`; the text is hidden from VoiceOver and from hit testing.
+- **The reviewer's sketch, changed in two ways, both measured.** (1) Alignment: with the two on a common
+  first baseline (my first attempt) the drawn text stood 4 pt above the field's at `.large`: a `TextField`
+  does not report its text's baseline. Centred on each other: 1.3 pt. Top on top: **0.7 pt at `.large`
+  and 1.0 pt at `.accessibility3`, vertical only; nothing moves sideways** (the field draws its line that
+  much higher than the text). That is what is left; closing it needs a number of points in a view. (2) The
+  44 pt target holds the name at its top, not in its middle, so that a name of one line and a name of two
+  start at the same height and nothing shifts when a wrapped name becomes one line. A one-line name
+  therefore stands about 4 pt nearer to "DAY 1 OF 4" than in round 0.
+- **At the moment of focus** (`DayEditorTextFieldTests.nameField_keepsItsPlaceWhenTheFocusComes`, the long
+  name at `.large`, `.xxLarge`, `.accessibility3`): the field's frame is the same before the focus, with it
+  and after it, to the point, and as wide as the page. A name of two or more lines becomes one line; what
+  stands under the name (the tag and the summary line, then the exercises) moves up by the lines that went,
+  and back when the focus leaves. The keyboard's target does not move. Not seen on a device or with a real
+  keyboard: the hosted test moves the first responder, nothing more.
+- **A clear colour in a view:** `Color.clear` is the one spelling of a colour outside the tokens. It is no
+  colour, the lint passes it, and the alternatives are worse (`.opacity` would hide the placeholder too).
+  For the reviewer.
+
+**`ProgramHeader` is as on `main`, byte for byte.** With `NameField` the builder's header changed in every
+reference, not only the two whose name wraps: measured against S9's header in the same process, the same
+size but about 3,300 differing pixels at `.large` (SwiftUI's `Text` does not sit exactly where `UITextField`
+drew, and the name moved to the top of its target), 1 px higher at `.xLarge`, 7 px at `.accessibility3`, 3 px
+with an empty name. By ruling 16 that part stopped. **Queued chore:** `ProgramHeader`'s body becomes
+`Eyebrow` over `NameField(label:name:) { send(.rename($0)) }` (three lines; tried here and passing S9's field
+tests) and all 20 builder references are recorded again. **For the product owner:** until then a long
+program name still ends in "…" while a long day name wraps.
+
+### The cut-word sweep (ruling 19)
+
+- The wide drawing is made once per part, size, weight and direction, and is 1,200 pt wide below the
+  accessibility sizes (2,400 from there).
+- Right to left at four sizes (`.xSmall`, `.large`, `.xxxLarge`, `.accessibility5`), for the page with the
+  most parts only; plain and Bold Text at all twelve.
+- `words_otherStates_areDrawnWhole` measures the open row and its panel's parts only.
+- **The title is swept under real names**: `NameField` alone under "Upper A — Push focus", "Lower A — Squat
+  focus", "Upper B — Pull focus", "Lower B — Hinge focus" and the long name, twelve sizes, two widths, plain
+  and bold. A name alone is the right part: in round 0 the name was weighed inside the whole header, where
+  two lost letters stayed under the band (the tester's finding 1). `measure_seesACut` now proves the band on
+  that very case: "Lower A — Squat focus" on one line at `.xLarge` on 375 pt weighs 10 % less (measured;
+  the band is 6 %; the same name wrapped is within 3.7 %).
+- `dayName_isCutInItsOneLineField` is deleted.
+
+### Tester-file edits (for the tester's audit)
+
+| File and test | Edit | Why |
+|---|---|---|
+| `DayEditorViewsRoomAdversarialTests.page_showsAtLeastTwoRows` | `isShort` narrowed to the small phone at `.accessibility4` and above (one line, with a comment); the wrapper and the expectation untouched | The orchestrator's ruling on my question. Three of its five cells now show two rows and failed with "known issue was not recorded"; two still fall short. The table is below. |
+| `DayEditorViewsLayoutAdversarialTests.stepper_drawsTheLabel` | `#expect(isTheLabel && !isTheSpoken)` → `#expect(!isTheLabel && isTheSpoken)` | Ruling 17. The test's title and comment still say "the label"; left for the tester. |
+| `DayEditorViewsAdversarialModels.DayViewsText.place(of:)` | Three lines: a stepper's `label` is drawn and spoken nowhere, its `spokenLabel` drawn and spoken | Ruling 17: `everyString_isDrawnAndSpokenWhereTheNotesSay` reads its expectation here; it is the same expectation as the line above, in the oracle. |
+| `ProgramViewsSourceAdversarialTests.scan_readsEveryView` | 22 → 24 | `DayEditorBar.swift`, `NameField.swift`. |
+| `…views_sendOnlyTheModelsActions` | The header's three lines become `DayEditorBar.swift: send(model.back.action)`, `…send(model.done.action)` and `DayEditorHeader.swift: send(.rename($0, day: model.id))` | The same three sends, in the files rulings 14 and 16 put them in. |
+| `…views_keepNoStateButTheDraft` | `DayEditorHeader.swift`'s draft, focus and three `.onChange` are `NameField.swift`'s | Ruling 16; the lines themselves are unchanged. |
+
+**Not edited:** `seedNames_aboveTheDefaultSize_areDrawnWhole` keeps its wrapper and still records its known
+issue at all four sizes. **It measures the hidden field**: the one-line `UITextField`'s own text against its
+rectangle, and by ruling 15 that text is not drawn while the field has no focus. For the tester to re-point
+or delete. `smallPhone_headerIsNotSqueezed` passes unedited. The tester's oracle and trees needed no
+change: `DayEditorParts` reads the same stops in the same order, the first two from the bar and the next two
+from the page.
+
+**`page_showsAtLeastTwoRows`, every cell, in closed rows of the seed program** (before: the tester's round 1;
+after: measured with the tester's own `hosted` and `rowHeight`, in a probe that is not kept):
+
+| Size | iPhone 17 before | after | 375 × 667 before | after |
+|---|--:|--:|--:|--:|
+| `.xSmall` | n/a | 11.4 | n/a | 8.9 |
+| `.large` | 9.4 | 10.7 | 7.0 | 8.4 |
+| `.xxxLarge` | 7.6 | 9.3 | 4.5 | 5.8 |
+| `.accessibility1` | 4.1 | 5.0 | 2.4 | 3.4 |
+| `.accessibility2` | 3.0 | 3.9 | 2.1 | 3.1 |
+| `.accessibility3` | 2.1 | 2.9 | **1.5** | 2.3 |
+| `.accessibility4` | **1.8** | 2.5 | **1.2** | **1.99** |
+| `.accessibility5` | **1.5** | 2.3 | **0.8** | **1.36** |
+
+("n/a": the tester's table does not give the cell. `.small`, `.medium`, `.xLarge` and `.xxLarge` after: 11.2,
+11.1, 10.2, 9.8 and 8.8, 8.6, 7.9, 7.6.) The two cells still under two rows are not the bar's doing: at
+`.accessibility5` on 375 pt one closed row is 424 pt of a 647 pt screen. They stay a known issue for the
+product owner.
+
+### Images
+
+- **`__Snapshots__/DayEditorSnapshotTests/`: all 24 recorded again**, and every one must change: the name
+  stands 4 pt higher in its target and is drawn by `Text` (all 24), the stepper labels changed (the 15 with
+  an open exercise), the name wraps (`longNames` 2, `openLinear` and `closed` at `.accessibility3` 4), and
+  the bar's padding and the gap under the title changed by a few points (all 24). Recorded in the
+  library's missing-reference mode after deleting the folder; the next run compared them.
+- **`__Snapshots__/ProgramSnapshotTests/`: none changed** (`git status`: no file of S9's).
+- `screenshots/s10/`: the 24 `day-*.png` copied again; the two `alternative-stepper-labels-*.png` removed;
+  one added at no cost from round 0's reference, `before-round1-capital-labels-pinned-header-dark-large.png`
+  (capitals, the whole header pinned, the superset's note as round 0 had it).
+
+### For the product owner and for S14 (ruling 20; nothing built)
+
+- A one-word exercise name ("Hyperextension") is broken across two lines at `.accessibility4` on 375 pt and
+  at `.accessibility5` on both widths (tester F11-S10-4).
+- "Delete day" asks in an `.alert`; F10's destructive questions are confirmation dialogs.
+- "Remove" looks like "Move down" beside it.
+- "Program" and "Done" send the same action.
+- The band between two exercises is empty: two rules and 16 pt.
+- At the two largest sizes a 375 × 667 phone shows under two closed rows (above).
+- A long program name ends in "…" while a long day name wraps, until `ProgramHeader` takes `NameField`.
+- The name's first line moves up by 0.7 to 1 pt when it takes the focus.
+- **S14:** `row.hasDropSet` and `Field.label` are drawn nowhere: remove them or draw them. `.id(model.id)`
+  on `DayEditorScreen`, or a new screen per day: the draft, the focus and `isConfirming` are keyed by place.
+  The store applies `rename` synchronously. The bar is the screen's own: hide the navigation bar, keep the
+  swipe back sending what "Program" sends.
+
+### Product lines now
+
+`DayEditorScreen` 18, `DayEditorBar` 15, `DayEditorHeader` 22, `DayEditorPage` 39, `NameField` 50,
+`ExerciseGroup` 23, `ExerciseRow` 81, `SlotPanel` 45, `SlotDetails` 63, `ProgressionChips` 26 (**views
+382**); previews 87; `WeekSection` +11, `DayCard` +4. **484 added under `LedgerKit/Sources`** (455 in
+round 0).
+
+### The runs
+
+The work was cut off once by a usage limit, after the commit `fe10b4b` and while a full gate was running;
+the closing runs below were all made again afterwards, on `fe10b4b`, and nothing from the run in flight is
+counted. Every simulator command through the lock (iPhone 17 and Apple Watch Series 12 46 mm, both 27.0).
+
+- Simulator, `sim-test.sh … -only-testing:FeatureProgramTests[/…]` (the PR plan, as in round 0), eleven
+  times before the commit: six probes (the name against S9's header, pixel by pixel; the name's weight
+  however it wraps; the field's frame through a focus, three ways of standing the field on the text; the
+  rows table), one of which did not compile; three whole-bundle runs that recorded the Day editor's
+  references (the third in their final form, after the field went top on top) and showed the two tester
+  tests the orchestrator then ruled on; one that did not compile (a `try` in a view builder); one that
+  compared the references.
+- **`FeatureProgramTests`, the whole bundle, on `fe10b4b`: exit 0, 494 tests in 58 suites, 493 passed, none
+  failed, 6 known issues in the tester's two tests** (`seedNames_aboveTheDefaultSize_areDrawnWhole` at its
+  four sizes, which measures the hidden field; `page_showsAtLeastTwoRows` at the small phone's two largest
+  sizes). **372 s of tests, 414 s with the build.** Before this round: 428 s (the tester's count, 494
+  tests). `DayEditorLayoutTests`: **47 s** (44 and 45 s in the two runs before the cut-off; 127 s before
+  this round).
+- **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 157 s.**
+- **`scripts/check.sh`, the full gate, on `fe10b4b`: exit 0, "check.sh OK", 1,171 s** (lint 78 s, iOS
+  build 6 s, iOS tests 826 s, watchOS build 11 s, watchOS tests 246 s). iOS: 3,905 tests, 3,876 passed, none
+  failed, 15 skipped, 14 known issues. watchOS: 2,263 tests, 2,243 passed, none failed, 15 skipped, 5 known
+  issues. Coverage: `FeatureProgram` 2,953 / 2,966 lines (99.56 %); overall 98.74 %.
+- **The iOS step is 826 s, as in round 0 (832 s)**, although `FeatureProgramTests` lost about 55 s: the
+  step is run-to-run noise of that size on this machine (another lane was building), and I did not time
+  the step twice.
+- **Not verified:** typing into the name field, and the name's wrap and its one line with a real keyboard
+  on a device (the hosted test moves the first responder only); VoiceOver itself; a finger on the name's
+  second line; the screen in the app, under a navigation bar or a tab bar; Increase Contrast beyond the one
+  reference; the nightly lane.
+
