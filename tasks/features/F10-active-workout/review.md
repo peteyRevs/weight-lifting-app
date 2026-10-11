@@ -1864,3 +1864,145 @@ accessibility3), and the v2 prototype's rest card (`design/prototype/Ledger v2.d
   `WorkoutRestPlanTests`, `HostRestNotificationTests`, `WorkoutStoreRestTests` and most of
   `ShownRestTests` were read by their names and first cases only.
 - Coverage, lint, the line count of 394, watchOS, and the tester's new files.
+
+## S6 — review, round 2 (G3 reviewer, 2026-10-11)
+
+Range `306c1cd..91d9bbb` (one commit, `91d9bbb`), against round 1's items and rulings 16 to 21. Read: the
+rulings, the notes' "S6 — fix round 1", the whole product diff, `WorkoutStoreTickAndTapTimeTests`,
+`RestPanelRoomTests`, the diff of the tester's three files, and `WorkoutEngine.effects(from:to:)`. Nothing
+was built or run.
+
+**Verdict: approved.** S6-B1 is built as meant, every should-fix is resolved or recorded where the ruling
+put it, and the two fixes under ruling 20 are small and sound. What stays open is not the implementer's:
+the gate is red by ruling 20 until the tester pins F10-S6-1, and because it stops there **the watchOS
+build, the watchOS tests and the coverage step have not run on this code**. A full green gate after the
+tester's pin is the condition for merge. Six notes follow; none needs a round.
+
+### Round 1's items
+
+| Item | State |
+|---|---|
+| S6-B1, the tick | **Resolved.** `WorkoutStore+Rest.swift:34-39` (`restPanel`) is the only reader of `moment`; `model` (`WorkoutStore.swift:94-102`) reads `workout`, `selection` and the three busy flags; the root's body (`WorkoutRoot.swift:25-70`) reads `model`, `dialog`, `discardAttempt`, `shownRest` and `exit`, none of which a tick writes. `StoreRestPanel.body` (`WorkoutRoot.swift:89-97`) is the one view that reads `restPanel`. `send: store.send` is made again only when the root's body runs, which is now at a change of the workout and not at a tick; inside the panel it is made each second, which is the panel's own redraw |
+| The default argument `now: Date? = nil` | **Gone** with the parameter |
+| S6-SF1, the root's task not in the gate | **Resolved by the tester's test**: `WorkoutRestPanelAdversarialTests+Screen.swift:174` hosts `WorkoutRoot(store:)`, steps the clock and reads the countdown, on the PR plan's simulator |
+| S6-SF2, the page's room | **Resolved**: the compact panel, below |
+| S6-SF3, the documents | **Resolved.** Brief line 81 and `docs/architecture.md:320-325` say what is built, and both are accurate |
+| S6-SF4, `watchBuzz` | **Recorded** for F14 (ruling 21, the notes' inputs) |
+| S6-SF5, the ring after zero | **Resolved**: `RestPanel.swift:42-44,56`; the test has the case. Still seen in motion by nobody |
+| N2, N4 and the announcements | **Recorded** for F18, F23 and S7 |
+
+### The slot (ruling 16)
+
+It is an honest shape and I would leave it. Less machinery exists: a screen that is not generic and takes
+`rest: () -> RestPanelModel?`, called in the body of one private view in the inset, would drop
+`StoreRestPanel`, the constrained initializer and the type parameter, about ten lines. It would also
+make the rule ("this closure may be called in that one body only") invisible, where the generic slot
+shows it in the root. Not worth a change.
+
+**Does `tick_firesForThePanelOnly` prove what matters?** It proves that a tick does not touch anything
+`model` depends on and does touch `restPanel`, with a control that a change of the workout does fire. It
+does not show that the root's body reads only `model`; that is five reads, checked above by eye. With the
+tester's hosted root (the same scroll view instance and the same offset across three seconds) and the
+tester's ten-second count, the claim is covered at the level a host test can reach. Nobody counts view
+bodies, and the notes say so.
+
+### The compact panel (ruling 17)
+
+Correct, and as simple as it can be: one flag from the text size, `ViewThatFits` for the buttons, and one
+comparison for the largest size (`RestPanel.swift:50,68-77,131-143`). Nothing is measured. The condition
+being the text size and not the phone means an iPhone 17 at the largest size loses the next-set line with
+313 pt to spare; the alternative is a view that knows the screen's height, and that is worse.
+
+**The line that is spoken and not drawn.** Right by both. The stop's name still contains everything that
+is drawn ("Resting"), which is what the accessibility rule about names asks; saying more than is shown
+harms nobody, and what a sighted lifter loses is a copy of the shown row, which stands in the page above
+the panel. The brief's ruling names dropping the line as the third step.
+
+**By eye** (`app-compact-accessibility-xl-resting-light`, `-page-end-light`,
+`app-compact-accessibility5-resting-light`, and the re-recorded dark reference):
+
+- Nothing is cut and nothing overlaps. The time and "Resting" share a baseline; the next set is under
+  them; at Accessibility XL the buttons are side by side, at the largest size one over the other.
+- **"+30s" is shorter than "Skip rest" when they stand side by side** (about 53 pt against 63 in the
+  reference): the pill's 54 pt floor does not grow with the text and the primary button does. It reads as
+  two unrelated controls. A design-system change (`PillButton.swift:55-58`), so for Pete and a later
+  chore, with the pill's text sitting a few points low, which is plainer here than in round 1.
+- Page content shows in the strip under the panel; at the largest size that is half of a row of large
+  digits and a check (`…accessibility5…`, bottom). Same remark as round 1, larger.
+- What the lifter with large text loses: the ring, so progress is digits only; at the largest size the
+  next-set line. The header breaking "Minimi/ze" and "Finis/h" is S4's and already noted.
+
+### A tap's own time (ruling 18)
+
+Done for every edit: `enqueue` reads the date (`WorkoutStore+Pump.swift:33`) and `apply` plans with the
+tap's (`:108-109`). The only other reads of the date in the module are `keepRestTime()` (two), the
+discard, which is not queued (`WorkoutStore.swift:244`), and the launcher's host. Nothing reads it at the
+pump's turn.
+
+- `moment = max(moment, tappedAt)` (`:108`) is right: a tap that waited must not set the panel back, and
+  a log's rest is still first drawn at its own start when no tick is running.
+- **The undo guard is better for it.** It now measures the interval between two touches, not between two
+  turns of the pump: a double tap behind a slow save is still a double tap, where before a save of more
+  than a second turned the second touch into an undo.
+- **`doneAt`** stays in tap order, since taps are stamped in the order they are queued; a payload time
+  earlier than its envelope's stamp is what ADR-004's clock rule describes. "+30s" is judged at its tap's
+  time against the newest workout at its turn, so behind a queued log it extends that log's rest.
+
+### Ruling 20
+
+- **`newestRest`** (`WorkoutStore+Rest.swift:54-56,86`): the right place and four lines.
+  `ahead.map(\.shownRest) ?? shownRest` gives the session's answer when there is one, nil included, and
+  there is still no suspension point between the check and the play.
+- **`missedHaptics`** (`:45-50`, `WorkoutStore.swift:203,209`): sound. `WorkoutEngine.effects(from:to:)`
+  is not an addition; it is F04's, written for F17's rebuild, and gives one `.setLogged` however many
+  sets are newly done, so there is no burst. No double play: a follow that showed the update has
+  `shown == live` and plays nothing; one that was cancelled between showing and playing loses the haptic
+  and does not repeat it. Nothing for a first follow or a failed page. A peer's set buzzing once on the
+  view's return is what that function's own comment promises F17, so it is consistent, and recorded.
+
+### F10-S6-1, left as built
+
+I agree with leaving it, for one of the two reasons given. A wall clock set backwards while "Rest over"
+stands is rare, the remainder after ruling 18 is "Rest over" shown early (no frozen countdown), and
+"+30s" or the next set rights it; 15 to 20 lines for that is poor value now. I do not accept the other
+reason, that the tester's harness mirrors the root's task id: a harness follows the product. When F17
+takes the clock cases, option (b) in the notes is the smaller one.
+
+### The edits to the tester's files
+
+All four accepted. The field that moved (five places) and the screen handed its panel are mechanical.
+The range `304 ... 324` and the inverted `eachSecond_oneChange_thePageUntouched` are the two rulings made
+during the round, each with a comment that names the ruling and the old value; the test now watches both
+values and is stronger than it was. `counting(_:)` is a plain extraction with no logic of its own.
+
+### Size
+
+483 product lines, 89 more: the slot and its two views about 25, the compact form about 30, the tap's
+time about 10, `restPanel`, `newestRest` and `missedHaptics` about 22. Proportionate to five rulings.
+The only cut on offer is the closure form of the slot, which I advise against above.
+
+### Notes (none blocks)
+
+- **S6-R2-N1.** `WorkoutStore+Rest.swift:86`: ruling 18 stops at the queue. A "Skip rest" or "+30s" tapped
+  before zero and still waiting behind a held save is buzzed at the old end, because `newestRest` knows
+  only answered changes. If wanted: also require that no `.skipRest`, `.extendRest` or `.log` waits in
+  `queue`. A slow store only; record it with F10-S6-1.
+- **S6-R2-N2.** The unequal buttons at the accessibility sizes (above): for Pete, then `PillButton`.
+- **S6-R2-N3.** `RestPanel.swift:56`: the one-second animation is still attached in the compact form,
+  which has no ring. Harmless, since `numeralS` has tabular digits; `isCompact` could switch it off.
+- **S6-R2-N4.** `WorkoutStore+Pump.swift:9-11`: `isBusy` is the store's, not the pump's; it sits in the
+  pump's file.
+- **S6-R2-N5.** A source pin that `moment` is read in `restPanel` alone would hold ruling 16 against a
+  later slice; the observation test catches the same mistake only if it lands in `model`.
+- **S6-R2-N6.** The merge condition: the full gate green, watchOS and coverage included, once the tester
+  has pinned F10-S6-1.
+
+### What I did not check
+
+- **I ran nothing.** The run table is the implementer's, and it reports the gate red as ruled.
+- The room table's numbers; the compact panel on a 375 pt phone (no screenshot exists; the three I opened
+  are the iPhone 17).
+- Motion of any kind, again; VoiceOver heard; dark in the running app.
+- The tester's new files beyond the four edits and the one line that hosts the root.
+- `RestBench`, `WorkoutPresentationRestTests` and `WorkoutScreenTests` edits were read from the stat and
+  the notes only; the previews' edit was read.
