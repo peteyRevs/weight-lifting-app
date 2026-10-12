@@ -146,6 +146,22 @@
                 field = try #require(hosted.fields.first)
             }
 
+            /// Any view with one text field in it, hosted as the name field is, without the marker.
+            init(hosting view: some View, at size: DynamicTypeSize) throws {
+                let page = VStack(spacing: 0) {
+                    view.frame(width: 323)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .background(LedgerColor.ground)
+                .environment(\.dynamicTypeSize, size)
+                .environment(\.colorScheme, .dark)
+                hosted = Hosted(page)
+                hosted.host.overrideUserInterfaceStyle = .dark
+                hosted.settle()
+                field = try #require(hosted.fields.first)
+            }
+
             static func view(
                 _ name: String, _ size: DynamicTypeSize, _ isRightToLeft: Bool, isMarked: Bool = true
             ) -> some View {

@@ -29,23 +29,66 @@
             #expect(after == before, "after the focus \(after), before it \(before)")
         }
 
-        /// **FINDING F11-S10-5** (should fix; seen in the hosted drawing, not on a device). With the focus the
-        /// field draws the name itself, and its editor clips at the field's own frame, which is the title's
-        /// tight line: 33.7 pt for a 32 pt type at `.large`. The tails of "y", "p" and "g" are cut flat, by
-        /// 3.3 pt of 27.7 at `.large` (looked at once as a picture: "Upper A — Gyp" with the three tails
-        /// gone). Without the focus the name is a text and is whole. Fails at both sizes.
-        @Test("With the focus the name's descenders are drawn whole, as without it", arguments: [
-            DynamicTypeSize.large, .accessibility3
-        ])
-        func focus_doesNotCutTheDescenders(_ size: DynamicTypeSize) throws {
-            let shown = try Shown("Gyp", at: size)
+        /// How high the letters of "Gyp" are in the one text field of `view`, without the focus and with it.
+        static func lettersOfGyp(
+            in view: some View,
+            at size: DynamicTypeSize
+        ) throws -> (whole: CGFloat, focused: CGFloat) {
+            let shown = try Shown(hosting: view, at: size)
             defer { shown.close() }
             let before = try shown.letters()
             try shown.focus(true)
-            let with = try shown.letters()
+            return try (before.height, shown.letters().height)
+        }
+
+        nonisolated static let clippedField: Comment = """
+        Ruling 22 (S10, after round 2): a focused field in the title role clips its descenders, because the \
+        field is as high as the role's line. The queued LedgerDesign chore gives the title role a field \
+        variant and has ProgramHeader adopt NameField; it removes this wrapper, which fails once the tails \
+        are whole.
+        """
+
+        /// **FINDING F11-S10-5**, ruled out of this slice (ruling 22) and kept as a known issue for the
+        /// queued `LedgerDesign` chore. With the focus the field draws the name itself, and its editor clips
+        /// at the field's own frame, which is the title role's line: the tails of "y", "p" and "g" are cut
+        /// flat. Measured, the letters of "Gyp" without the focus and with it: 28.0 and 24.7 pt at `.large`,
+        /// 42.0 and 36.3 at `.accessibility3`, 48.0 and 41.3 at `.accessibility5`. Not a known issue that
+        /// may come and go: when the clipping stops this test fails, and the chore removes the wrapper.
+        @Test(
+            "With the focus the day's name keeps its descenders (known: the title role's field clips them)",
+            arguments: [
+                DynamicTypeSize.large, .accessibility3, .accessibility5
+            ]
+        )
+        func focus_doesNotCutTheDescenders(_ size: DynamicTypeSize) throws {
+            let letters = try Self.lettersOfGyp(in: Self.field("Gyp"), at: size)
+            withKnownIssue(Self.clippedField) {
+                #expect(letters.focused > letters.whole - 1, "\(size): \(letters.whole) pt, \(letters.focused) focused")
+            }
+        }
+
+        /// The same measure on the builder's `ProgramHeader`, which is as on `main` and holds its own
+        /// one-line field in the same role: it clips by the same amounts (28.0 and 24.7, 42.0 and 36.3, 48.0
+        /// and 41.3 pt). So the cut is the role's and not `NameField`'s, and the chore has a test for both.
+        @Test(
+            "With the focus the program's name keeps its descenders (known: the same clipping, on main too)",
+            arguments: [
+                DynamicTypeSize.large, .accessibility3, .accessibility5
+            ]
+        )
+        func focus_programHeader_doesNotCutTheDescenders(_ size: DynamicTypeSize) throws {
+            let model = ProgramBuilderModel.Header(eyebrow: "", name: "Gyp", namePlaceholder: "Program name")
+            let builders = try Self.lettersOfGyp(in: ProgramHeader(model: model) { _ in }, at: size)
+            let days = try Self.lettersOfGyp(in: Self.field("Gyp"), at: size)
+            withKnownIssue(Self.clippedField) {
+                #expect(
+                    builders.focused > builders.whole - 1,
+                    "\(size): \(builders.whole) pt, \(builders.focused) focused"
+                )
+            }
             #expect(
-                with.height > before.height - 1,
-                "\(size): \(before.height) pt of letters, \(with.height) with the focus"
+                abs(builders.focused - days.focused) < 0.5 && abs(builders.whole - days.whole) < 0.5,
+                "the two fields clip alike"
             )
         }
 

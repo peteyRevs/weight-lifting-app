@@ -68,24 +68,26 @@
 
         struct NotDrawn: Error {}
 
-        /// **FINDING F11-S10-6** (should fix; the review's B-2, confirmed and wider than it reads). The name
-        /// keeps the title's tight line and stands `xs` above the tag, so a tail on its last line reaches
-        /// into the tag's pill. Measured, the name's lowest ink against the pill's first row: a wrapped
-        /// "Lower B — Hinge focus" 2.0 pt into the pill's rows from `.xLarge` on 375 pt and "Lower A — Squat
-        /// focus" 1.3 pt from `.xxLarge`, with ink inside the pill's own box; both 3.0 to 6.3 pt from
-        /// `.accessibility1` on both widths; and a name of one line with a tail ("Gyp") 2.0 pt from
-        /// `.accessibility2`, 4.0 at `.accessibility3`, 6.0 at `.accessibility5`. Up to `.large` the gap is
-        /// 11 pt and more. All twelve sizes were measured once, plain and bold; four are kept. Fails at three.
+        /// Round 2's finding F11-S10-6 (the review's B-2), closed by ruling 21: the name kept the title's tight
+        /// line and stood `xs` above the tag, so a tail on its last line reached into the tag's pill, from
+        /// `.xLarge` for a wrapped seed name and from `.accessibility2` for a name of one line. Now `s` more
+        /// stands under the name. Measured again at the twelve sizes on both widths, plain and bold, for
+        /// two wrapped seed names, "Gyp" and a long name that ends on a tail: the least room between the
+        /// name's lowest ink and the pill is 1.3 pt (the long name, Bold Text, `.accessibility5`, 375 pt) and
+        /// 1.7 pt for the seed names and "Gyp" (Bold Text, `.accessibility5`); no ink in the pill anywhere.
+        /// Five sizes are kept, the largest with Bold Text, and a point of room is asked for.
         @Test(
             "A name's lowest ink stands above the tag's pill, wrapped or not",
-            arguments: [DynamicTypeSize.large, .xLarge, .xxxLarge, .accessibility3]
+            arguments: [DynamicTypeSize.large, .xLarge, .xxxLarge, .accessibility3, .accessibility5]
         )
         func name_standsAboveTheTag(_ size: DynamicTypeSize) throws {
             var lines: [String] = []
             for name in ["Lower A — Squat focus", "Lower B — Hinge focus", "Gyp"] {
                 for width in ViewsSetting.widths {
-                    let found = try Self.nameOverTag(name, ViewsSetting(size: size, width: width))
-                    if found.gap < 0 || found.inkInThePill > 0 {
+                    // Bold Text at the largest size is the tightest cell measured: 1.7 pt clear.
+                    let setting = ViewsSetting(size: size, width: width, isBold: size == .accessibility5)
+                    let found = try Self.nameOverTag(name, setting)
+                    if found.gap < 1 || found.inkInThePill > 0 {
                         lines.append("\(Int(width)) pt, \(name): \(found.gap) pt, \(found.inkInThePill) px in the pill")
                     }
                 }

@@ -1208,3 +1208,62 @@ keyboard dismissal.
 21, orange 13, layout 12, room 3, the draft rule under 1); they were 41 s in round 1.
 
 Free disk stayed at 12 GB.
+
+---
+
+## Slice S10 — round 3 (G2 tester, 2026-10-11)
+
+Tested at `412033e` (fix round 2, `92a66af`, and its notes), under rulings 21 to 26; no product file
+changed. Edits to three of my files; one test added. **Nothing is left red.**
+
+### Verdict: ruling 21 holds with 1.3 pt to spare at the tightest cell; nothing else moved
+
+### Findings
+
+| # | Status | What | Test |
+|---|---|---|---|
+| F11-S10-6 | **closed** (ruling 21) | The name stands clear of the tag. Measured again at the twelve sizes on both widths, plain and bold, for two wrapped seed names, one-line "Gyp" and a long name that ends on a tail: **the least room between the name's lowest ink and the pill is 1.3 pt** (the long name, Bold Text, `.accessibility5`, 375 pt); for the seed names and "Gyp" 1.7 pt (Bold Text, `.accessibility5`, both widths); 2.0 pt at `.accessibility4` and at `.accessibility5` plain. No ink inside the pill in any cell. No cell is within 1 pt, but the tightest was not among the four kept sizes, so the kept test now also runs `.accessibility5` with Bold Text and asks for a point of room. | `name_standsAboveTheTag` (passes at five sizes) |
+| F11-S10-5 | **known issue, for the queued `LedgerDesign` chore** (ruling 22) | Under the focus the descenders are cut. Checked with my own measure that the builder's `ProgramHeader`, which is as on `main`, clips identically: the letters of "Gyp" without the focus and with it are 28.0 and 24.7 pt at `.large`, 42.0 and 36.3 at `.accessibility3`, 48.0 and 41.3 at `.accessibility5`, in both fields, to a third of a point. So the cut is the title role's line, not `NameField`'s. Both tests carry a known issue that names ruling 22 and the chore, and are not intermittent: each fails when the clipping stops, so the chore must remove the wrapper. | `focus_doesNotCutTheDescenders`, `focus_programHeader_doesNotCutTheDescenders` (new; it also expects the two fields to clip alike) |
+| F11-S10-9 | note, for the design-system chore | **The word sits low in `PillButton`'s outline at accessibility sizes, and it is `PillButton` itself.** "Done" alone, in the bar and "+30s" alone measure the same. Room above the word's ink and under it, inside the outline: 11.7 and 8.0 pt at `.large` (outline 28 pt), **17.3 and 7.6 pt at `.accessibility3`** (45.3 pt), **20.0 and 7.6 pt at `.accessibility5`** (54.3 pt): the word's middle is 1.8, 4.8 and 6.2 pt under the outline's. The room under the word is the pill's padding; the caption role's line puts all its extra height above the letters. Not this slice's bar. | measured, no test |
+| F11-S10-10 | note, for the snapshot harness (not this slice) | **The outline 2 pt from the top of `day-closed-dark-accessibility3.png` is the reference's crop.** On the hosted screen, in the bar alone and in `DayEditorParts` drawn by `ProgramDrawing`, the outline is 8.0 pt from the bar's top at `.accessibility3` and `.accessibility5` (16.0 at `.large`): the bar's padding. Drawn through the snapshot library's own path (`.image(layout: .sizeThatFits)`, 1×), the parts are 402 × 1873 and the outline is at 2 pt (3 pt at `.accessibility5`, 16 at `.large`); the bar alone and the bar over a plain block are at 8; the bar over the title block at 7; and **a bar with `.fixedSize` over the page is at 2 all the same**. So the bar is not squeezed (round 2's verdict on S-5 stands): on that path a long page at an accessibility size is drawn about 12 pt higher than the size the image is given, and the image loses 5 to 6 pt at its top (and, I take it, at its bottom: not measured). Every long accessibility reference of the module is cut that way. | measured, no test |
+
+### Nothing else moved
+
+- **The name's own place and the whole-name pictures**: `seedNames_areDrawnWhole` (twelve sizes, both
+  widths, plain and bold), `otherNames_areDrawnWhole`, right to left and light, `oneOfTheTwo_isDrawn`,
+  `focus_doesNotMoveTheName`, `target_holdsEveryLine`, `focus_longName_isOneLine`,
+  `storedName_changes_theDrawnNameFollows`, `emptyDraft_keepsALine`: all pass unedited.
+- **The trees and actions** in fifteen states, the 91 strings, the orange audit: pass unedited.
+- **The room table**: the same two cells are short (375 × 667 at `.accessibility4` and `.accessibility5`),
+  the known issue recorded at exactly those.
+- **The bar without the screen's `.fixedSize`** (ruling 23): `bar_isNeverSqueezed` passes on both phones at
+  the twelve sizes, also hosted 150 pt high; the outline stands 8.0 pt under the bar's top on the hosted
+  screen at `.accessibility3` and `.accessibility5`.
+
+### Mutations, round 3 (4, on the round's two changes; sources put back, `git status` clean)
+
+| | Mutant | Existing tests | Mine |
+|---|---|---|---|
+| p | no room under the name | references only | `name_standsAboveTheTag` |
+| q | `xs` under the name, not `s` | references only | `name_standsAboveTheTag` |
+| r | the room above the name, not under it | references only | `name_standsAboveTheTag` |
+| t | the bar made to give way (30 pt at most) | references, `parts_layOutSanely`, the S9 sweep, `ProgramScreenTests` | `bar_isNeverSqueezed`, `parts_barIsTheScreensBar`, `states_layOutSoundly` |
+
+The baseline recorded no issue.
+
+### Not verified
+
+- The clipping, and its end, on a device; `ProgramHeader` beyond that one measure.
+- Why the snapshot path draws a long page higher than it sizes it (finding 10): I measured the effect, not
+  the cause, and not the bottom edge.
+- A finger, typing, Increase Contrast: as in round 2.
+
+### Runs (2026-10-11, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `sim-test.sh … -only-testing:FeatureProgramTests`, final sources | **0: 511 tests in 59 suites, all passed, 8 known issues** (the two descender tests at three sizes each; the room table's two cells); 370 s of tests, 391 s with the build |
+| `scripts/check.sh --fast` | 0: 1,223 tests, lint clean |
+| five probe runs of the name suite; one of the mutation driver (0; 230 cases) | — |
+
+Free disk: 10 GB at the end.
