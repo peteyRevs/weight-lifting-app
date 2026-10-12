@@ -1683,3 +1683,55 @@ set, superset and Increase Contrast images, and the 24 files under `__Snapshots_
 - The focus itself: the caret, the one line scrolling, a real keyboard, a tap on a wrapped line, VoiceOver.
 - The notes' timings and gate figures (47 s, 372 s, 826 s) and the rows-under-the-bar table.
 - That `__Snapshots__` and `screenshots/s10/` hold the same pictures.
+
+## S10 — review, round 3 (G3 reviewer, 2026-10-11)
+
+Reviewed: `git diff b4f1ce0..412033e` (the tester's round 2 `89e878b`, the fix `92a66af`, the notes
+`412033e`) against round 2's items and rulings 21 to 26. The product change is seven lines in three files.
+Nothing was built or run; the images were read from the commit and two of them measured by row.
+
+### Verdict: approved
+
+| Round 2 item | Verdict |
+|---|---|
+| **B-2** the name's tails on the tag | **Closed.** `DayEditorHeader.swift:22-24`: `s` under the name, a token, outside the field. Measured in the re-recorded images: at `.accessibility3` the last baseline is row 186 and the pill starts at row 199, twelve rows of ground against a tail of eight (it was four); for the long name at `.large`, baseline 173 and pill 186, twelve against five. The placement outside `NameField` is the better one, not only the one that kept the tester's tests green: the field's frame stays the name's own, and the room is the title block's to give. At `.accessibility5` 12 pt against the tester's 10.3 pt tail is 1.7 pt clear: enough, and `name_standsAboveTheTag` holds it at twelve sizes, plain and bold. When `ProgramHeader` takes `NameField` it needs the same room over whatever stands under it. |
+| **S-5** the bar squeezed | **Withdrawn; I misread the image.** The bar is 61 pt in the reference too: "DAY 1 OF 4" starts where a 61 pt bar puts it. Removing the screen's `.fixedSize` is right. What I saw is still in `day-closed-dark-accessibility3.png` and is something else; note 1. |
+| **S-6** an emptied name | **Closed, refuted by measurement** (2.3 to 2.7 pt, inside the gap). My premise that an empty text has no height was wrong. |
+| Stale comments (ruling 25) | Closed: the four places read true now. |
+
+### On the deferral of F11-S10-5 (ruling 22): agreed
+
+Under the focus the field cuts the tails of its one line. It is not this slice's doing and not this slice's
+to mend: `ProgramHeader` on `main` cuts the same way, the frame is the title role's line height, and a view
+cannot raise it without a number of its own. One chore then carries three things that must land together:
+the role's variant for a field, `ProgramHeader` on `NameField` (with the room B-2 needed), and S9's twenty
+references. Two conditions: the tester's known issue names that chore, and the chore lands before S14 puts
+the Day editor in the app, since that is when a lifter first types in this field.
+
+### Notes (none blocks)
+
+1. **"Done" at `.accessibility3`.** In `day-closed-dark-accessibility3.png` the pill's outline is at rows 2
+   and 47 while its word's ink is rows 19 to 38: the outline stands 2 pt from the top of the picture, where
+   the bar's padding is 8, and about 6 pt high of its word. At `.large` it is centred. The bar's height is
+   not in doubt (above); this is how `PillButton` draws at an accessibility size, or how the reference crops,
+   and I could not tell which by reading. One measurement by the tester (the pill's outline against the
+   bar's frame at `.accessibility3`) would say; if it is the pill, it belongs in the same design-system
+   chore as the title's line height.
+2. **The default size is looser under the name now**: a one-line name has its 12 pt of slack in the target
+   and the new 8 pt, so the tag stands about 20 pt under the baseline's tails, against 4 pt between
+   "DAY 1 OF 4" and the name. By eye it reads as intended spacing, not as a fault; for the product owner
+   with the other looks.
+
+### By eye
+
+From `412033e`: closed dark `.accessibility3` (top), superset light `.large` ("Lower A — Squat focus", one
+line, the q well clear of "LA"), right to left dark `.large` (top), long names dark `.large` (three lines,
+clear of "UA"). No committed image holds "Squat focus" or "Hinge focus" wrapped; that case rests on the
+tester's `name_standsAboveTheTag`. Nothing cut, nothing overlapping, nothing odd from the 8 pt move but
+note 2.
+
+### Not verified
+
+Nothing compiled or run; the tester's figures (the bar's heights, the tails, the emptied draft) are taken
+from `test-findings.md`, not re-measured; the tester's new test files were read by their names and
+findings only; the cause of note 1.
