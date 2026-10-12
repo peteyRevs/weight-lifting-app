@@ -190,30 +190,3 @@ nonisolated extension WorkoutCopy {
         )
     }
 }
-
-private nonisolated extension Locale {
-    /// This locale with its language replaced by the one this module's catalog answers in, for a text whose
-    /// words depend on a count (F10 S5 criterion 11; `ProgramCopy` has the same for its catalog).
-    ///
-    /// A lookup takes its words from the catalog and its plural form from the locale's language, so with the
-    /// lifter's own locale an English text would take another language's form: "0 rep" in French, "1 reps"
-    /// in Japanese, which has no singular. It reads two things and nothing of the device: the languages this
-    /// module's catalog holds (`Bundle.module.localizations`), and this locale, the one the copy member was
-    /// handed. Of those languages it takes the one that fits this locale best, which is English while the
-    /// catalog holds only English. The region and the numbering system stay this locale's, so the number is
-    /// still written as the lifter writes numbers.
-    var forCountedText: Locale {
-        let fitting = Bundle.preferredLocalizations(
-            from: Bundle.module.localizations,
-            forPreferences: [identifier(.bcp47)]
-        )
-        var components = Locale.Components(locale: self)
-        if let resolved = fitting.first {
-            var language = Locale.Language.Components(identifier: resolved)
-            language.region = language.region ?? region
-            components.languageComponents = language
-        }
-        components.numberingSystem = numberingSystem
-        return Locale(components: components)
-    }
-}

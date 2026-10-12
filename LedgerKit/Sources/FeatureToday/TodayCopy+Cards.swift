@@ -25,7 +25,12 @@ nonisolated extension TodayCopy {
 
     /// "~38 min": how long a session is expected to take.
     static func estimate(minutes: Int, locale: Locale) -> String {
-        String(localized: "~\(minutes) min", bundle: .module, locale: locale, comment: "A session's estimated length")
+        String(
+            localized: "~\(minutes) min",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "A session's estimated length"
+        )
     }
 
     /// "5 × 5 @ 250": sets, reps and the load, which the caller formats in the lifter's units.
@@ -78,7 +83,7 @@ nonisolated extension TodayCopy {
         String(
             localized: "\(done) of \(total) sets",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "The sets done in a workout, then all its sets"
         )
     }
@@ -179,7 +184,7 @@ nonisolated extension TodayCopy {
 
     /// "4 exercises".
     static func exercises(_ count: Int, locale: Locale) -> String {
-        String(localized: "\(count) exercises", bundle: .module, locale: locale)
+        String(localized: "\(count) exercises", bundle: .module, locale: locale.forCountedText)
     }
 
     static var logged: String {
@@ -213,7 +218,7 @@ nonisolated extension TodayCopy {
         String(
             localized: "\(weeks) weeks done. Start the next block from Program.",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Program is the name of the app's Program tab"
         )
     }

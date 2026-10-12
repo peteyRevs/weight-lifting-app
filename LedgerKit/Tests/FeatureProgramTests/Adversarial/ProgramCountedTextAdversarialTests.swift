@@ -115,7 +115,17 @@ nonisolated struct ProgramCountedTextAdversarialTests {
     @Test("The one place reads its locale and the module's catalog, and nothing of the device")
     func forCountedText_readsNothingAmbient() throws {
         let file = try #require(Self.copyFiles().first { $0.name == "ProgramCopy.swift" })
-        let body = try #require(file.text.components(separatedBy: "var forCountedText: Locale {").last)
+        // Chore of 2026-10-12, item 1: the one place is now the Domain's `forCountedText(in:)`, which every
+        // feature's member of this name hands its own catalog; its body is read there.
+        let shared = try String(
+            contentsOf: ExercisePickerWordsAdversarialTests.folder("Sources/LedgerDomain/Units/CountedText.swift"),
+            encoding: .utf8
+        )
+        let body = try #require(
+            shared.components(separatedBy: "func forCountedText(in catalog: Bundle) -> Locale {").last
+        )
+        #expect(shared.components(separatedBy: "func forCountedText(in catalog: Bundle) -> Locale {").count == 2)
+        #expect(file.text.contains("forCountedText(in: .module)"), "the module's member hands it another catalog")
         let code = body.split(separator: "\n").map { line in
             line.range(of: "//").map { String(line[..<$0.lowerBound]) } ?? String(line)
         }.joined(separator: "\n")

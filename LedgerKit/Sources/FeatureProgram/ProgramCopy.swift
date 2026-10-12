@@ -1,4 +1,5 @@
 import Foundation
+import LedgerDomain
 
 /// FeatureProgram's copy (standards §7): every text the Program screens show or speak is looked up here, in
 /// this module's `Resources/Localizable.xcstrings`, whose keys are the English text. No other file of the
@@ -169,29 +170,10 @@ nonisolated enum ProgramCopy {
 // MARK: - Counted texts
 
 nonisolated extension Locale {
-    /// The locale every counted text of the module is looked up with, and the one place that decides it:
-    /// this locale with its language replaced by the language the catalog answers in. A lookup picks a text's
-    /// plural form by its locale's language, so with the lifter's own locale an English text would take
-    /// another language's form: "Add 1 exercises" in Japanese, which has no singular, "Add 21 exercise" in
-    /// Russian.
-    ///
-    /// It reads two things and nothing of the device: the languages this module's catalog holds
-    /// (`Bundle.module.localizations`), and this locale, the one the copy member was handed. Of those
-    /// languages it takes the one that fits this locale best, which is English while the catalog holds only
-    /// English. The region and the numbering system stay this locale's, so the number is still written as the
-    /// lifter writes numbers: its digits, and its region's grouping.
+    /// The locale every counted text of the module is looked up with: the Domain's `forCountedText(in:)`,
+    /// the one place that decides it, with this module's catalog. The plural form is the catalog's
+    /// language's; the digits and their grouping stay the lifter's.
     var forCountedText: Locale {
-        let fitting = Bundle.preferredLocalizations(
-            from: Bundle.module.localizations,
-            forPreferences: [identifier(.bcp47)]
-        )
-        var components = Locale.Components(locale: self)
-        if let resolved = fitting.first {
-            var language = Locale.Language.Components(identifier: resolved)
-            language.region = language.region ?? region
-            components.languageComponents = language
-        }
-        components.numberingSystem = numberingSystem
-        return Locale(components: components)
+        forCountedText(in: .module)
     }
 }
