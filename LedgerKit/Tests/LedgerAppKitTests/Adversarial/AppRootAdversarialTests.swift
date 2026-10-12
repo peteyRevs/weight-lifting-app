@@ -47,8 +47,11 @@ struct AppRootAdversarialTests {
         let now = try #require(Self.pixels(DatabaseUnavailableView(), appearance))
         let onMain = try #require(Self.pixels(Self.unavailableOnMain, appearance))
         let ground = try #require(Self.pixels(LedgerColor.ground, appearance))
-        #expect(now == onMain)
-        #expect(now != ground, "control: the screen draws its text")
+        // Compared to a `Bool` first: inside `#expect` a failure would write both buffers into the result.
+        let isAsOnMain = now == onMain
+        #expect(isAsOnMain)
+        let drawsItsText = now != ground
+        #expect(drawsItsText, "control: the screen draws its text")
     }
 
     @Test("The root of a composition whose database did not open draws that screen, and nothing of the tabs")
@@ -62,7 +65,8 @@ struct AppRootAdversarialTests {
         let appearance = SnapshotAppearance(.dark, .large)
         let root = try #require(Self.pixels(AppRoot(composition: composition), appearance))
         let onMain = try #require(Self.pixels(Self.unavailableOnMain, appearance))
-        #expect(root == onMain)
+        let isAsOnMain = root == onMain
+        #expect(isAsOnMain)
     }
 
     @Test("The root of a composition that has not booted draws the ground alone", arguments: [ColorScheme.light, .dark])
@@ -74,7 +78,8 @@ struct AppRootAdversarialTests {
         let appearance = SnapshotAppearance(scheme, .large)
         let root = try #require(Self.pixels(AppRoot(composition: composition), appearance))
         let ground = try #require(Self.pixels(LedgerColor.ground.ignoresSafeArea(), appearance))
-        #expect(root == ground)
+        let isTheGround = root == ground
+        #expect(isTheGround)
         #expect(composition.state == .idle, "drawing the root opens nothing")
     }
 

@@ -73,7 +73,7 @@ nonisolated enum TodayCopy {
         String(
             localized: "\(done) of \(planned) sessions this week",
             bundle: .module,
-            locale: locale,
+            locale: locale.forCountedText,
             comment: "Spoken text of the sessions tile: the sessions done, then the sessions planned"
         )
     }
@@ -163,7 +163,12 @@ nonisolated enum TodayCopy {
 
     /// "58 min": how long a finished workout took.
     static func duration(minutes: Int, locale: Locale) -> String {
-        String(localized: "\(minutes) min", bundle: .module, locale: locale, comment: "A workout's length in minutes")
+        String(
+            localized: "\(minutes) min",
+            bundle: .module,
+            locale: locale.forCountedText,
+            comment: "A workout's length in minutes"
+        )
     }
 
     /// "24,180 lb": a finished workout's volume.
@@ -176,5 +181,16 @@ nonisolated enum TodayCopy {
 
     static var noSessionsYet: String {
         String(localized: "No sessions yet. Your first workout lands here.", bundle: .module)
+    }
+}
+
+// MARK: - Counted texts
+
+nonisolated extension Locale {
+    /// The locale every counted text of the module is looked up with: the Domain's `forCountedText(in:)`,
+    /// the one place that decides it, with this module's catalog. The plural form is the catalog's
+    /// language's; the digits and their grouping stay the lifter's.
+    var forCountedText: Locale {
+        forCountedText(in: .module)
     }
 }

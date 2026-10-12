@@ -1,4 +1,5 @@
 import Foundation
+import LedgerDomain
 
 /// FeatureWorkout's copy (standards §7): every string the workout shows or speaks is looked up here, in this
 /// module's `Resources/Localizable.xcstrings`, whose keys are the English text. No other file in the module
@@ -144,5 +145,16 @@ nonisolated enum WorkoutCopy {
 
     static var stillInProgress: String {
         String(localized: "It's still in progress. Try again.", bundle: .module)
+    }
+}
+
+// MARK: - Counted texts
+
+nonisolated extension Locale {
+    /// The locale every counted text of the module is looked up with: the Domain's `forCountedText(in:)`,
+    /// the one place that decides it, with this module's catalog. The plural form is the catalog's
+    /// language's; the digits and their grouping stay the lifter's.
+    var forCountedText: Locale {
+        forCountedText(in: .module)
     }
 }

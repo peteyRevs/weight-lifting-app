@@ -100,8 +100,13 @@ enum ArchivoFile {
         let roots = (Bundle.allBundles + Bundle.allFrameworks).flatMap { bundle in
             [bundle.bundleURL, bundle.resourceURL, bundle.bundleURL.deletingLastPathComponent()].compactMap(\.self)
         }
+        // The resource bundle is flat on iOS and watchOS; on the Mac host it keeps its files under
+        // `Contents/Resources`, where these suites did not look and so failed under `swift test` (chore of
+        // 2026-10-12, item 6).
         return roots.lazy
-            .map { $0.appending(path: bundleName).appending(path: fileName) }
+            .map { $0.appending(path: bundleName) }
+            .flatMap { [$0, $0.appending(path: "Contents/Resources")] }
+            .map { $0.appending(path: fileName) }
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }()
 
