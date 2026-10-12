@@ -41,6 +41,10 @@ public final class AppComposition {
 
     /// The database is open, and `state` is not yet `.ready`: builds the live workout's host over its stores
     /// and, in the app, binds the keys process-wide.
+    ///
+    /// The host is given no `NotificationsClient` (F10 S6): the rest-over notification and its permission are
+    /// F23's, which passes its client here. Until then a rest that starts schedules nothing, and nothing
+    /// calls the `notifications` key's stub.
     private func opened(_ stores: LedgerStores) {
         session = LocalWorkoutSessionActor(
             events: stores.events,
@@ -142,15 +146,17 @@ public final class AppComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores, this device's id and the live workout's host; binds nothing until the database is
-    /// open. The app binds once, process-wide, through `prepareDependencies`; the logger and the device keys keep
-    /// their live values (the device ones are stubs until F16–F23).
+    /// Binds the six stores, this device's id, the live workout's host and the haptics its cover plays (F10 S6);
+    /// binds nothing until the database is open. The app binds once, process-wide, through
+    /// `prepareDependencies`; the logger and the other device keys keep their live values (the device ones are
+    /// stubs until F16–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
         }
         if let session {
             values.workoutSession = session
+            values.haptics = LiveHaptics()
         }
     }
 

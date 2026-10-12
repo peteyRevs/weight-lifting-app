@@ -106,10 +106,34 @@ nonisolated struct WorkoutCopyTests {
         #expect(WorkoutCopy.spokenReps(count, locale: Locale(identifier: identifier)) == wanted)
     }
 
+    @Test("The rest panel's texts: the brief's word for word, and those it does not give as the notes list them")
+    func restTexts() {
+        let locale = Fixtures.locale
+        #expect(WorkoutCopy.extendRest == "+30s")
+        #expect(WorkoutCopy.skipRest == "Skip rest")
+        #expect(WorkoutCopy.restOver == "Rest over")
+        #expect(WorkoutCopy
+            .nextSet(number: 3, weight: "185", reps: 5, units: .lb, locale: locale) == "Set 3 · 185 lb × 5")
+        // Not given by the brief: the prototype's line without the watch, the spoken "+30s", kilograms and
+        // a drop set.
+        #expect(WorkoutCopy.resting == "Resting")
+        #expect(WorkoutCopy.extendRestLabel == "Add 30 seconds")
+        let kilograms = WorkoutCopy.nextSet(number: 3, weight: "82.5", reps: 5, units: .kg, locale: locale)
+        #expect(kilograms == "Set 3 · 82.5 kg × 5")
+        let drop = WorkoutCopy.nextSet(number: nil, weight: "150", reps: 8, units: .lb, locale: locale)
+        #expect(drop == "Drop set · 150 lb × 8")
+        let dropInKilograms = WorkoutCopy.nextSet(number: nil, weight: "70", reps: 8, units: .kg, locale: locale)
+        #expect(dropInKilograms == "Drop set · 70 kg × 8")
+        // The digits are the locale's, which the caller injects.
+        let arabic = Locale(identifier: "ar_EG")
+        #expect(WorkoutCopy
+            .nextSet(number: 3, weight: "185", reps: 5, units: .lb, locale: arabic) == "Set ٣ · 185 lb × ٥")
+    }
+
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 54)
+        #expect(catalog.keys.count == 63)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

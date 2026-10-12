@@ -101,4 +101,19 @@ nonisolated struct FeatureWorkoutSourceTests {
             #expect(Self.lines(of: spelling, in: SwiftSource("let value = call(\(spelling)")) == [1], "\(spelling)")
         }
     }
+
+    /// F10 S6, the orchestrator's ruling during G1: the tester's scan (`WorkoutWordsAdversarialTests`) now
+    /// passes the Domain's type `RestTimer`, and nothing wider. This is the control: a timer of
+    /// Foundation's planted beside it is still caught, and so is a `TimelineView`.
+    @Test("The tester's scan passes RestTimer and still catches a planted Timer and a TimelineView", arguments: [
+        ("let rest: RestTimer? = state.shownRest", false),
+        ("Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in }", true),
+        ("let rest: RestTimer? = nil; Timer.publish(every: 1, on: .main, in: .common)", true),
+        ("var timer: Timer?", true),
+        ("TimelineView(.periodic(from: start, by: 1)) { _ in }", true)
+    ])
+    func testersScan_stillCatchesATimer(line: String, isCaught: Bool) {
+        let code = WorkoutWordsAdversarialTests.scanned(Substring(line))
+        #expect(WorkoutWordsAdversarialTests.forbidden.contains { code.contains($0) } == isCaught)
+    }
 }

@@ -56,6 +56,33 @@
                 #expect(traits.count == 1 && traits.allSatisfy { $0.contains(.notEnabled) })
             }
 
+            /// F10 S6, criterion 9: the full-width pill, a row's second action beside a `PrimaryButton`.
+            @Test("A full-width pill takes the width it is offered and a primary button's height; a plain one neither")
+            func fullWidthPill_fillsItsRow() throws {
+                let offered = 180
+                let full = try Self.drawn(PillButton("+30s", fillsWidth: true) {}.frame(width: CGFloat(offered)))
+                let primary = try Self.drawn(PrimaryButton("Skip rest") {}.frame(width: CGFloat(offered)))
+                #expect(full.width == offered && full.height == primary.height)
+                // Its outline reaches both edges of the width: ink in the first and the last columns.
+                let ground = full.pixel(column: 0, row: 0)
+                let inked = try #require(full.inkedColumns(differingFrom: ground))
+                #expect(inked.lowerBound <= 1 && inked.upperBound >= offered - 2, "\(inked)")
+                let plain = try Self.drawn(PillButton("+30s") {}.frame(width: CGFloat(offered)))
+                let plainInk = try #require(plain.inkedColumns(differingFrom: plain.pixel(column: 0, row: 0)))
+                #expect(plainInk.count < offered / 2, "a pill that does not fill keeps its text's width")
+                #expect(plain.height < full.height)
+            }
+
+            @Test("A full-width pill is one button, read by its title, and looks disabled when it is")
+            func fullWidthPill_isAButton() throws {
+                let pill = PillButton("+30s", fillsWidth: true) {}.frame(width: 180)
+                let stops = pill.accessibilityElements(SnapshotAppearance(.light, .large))
+                #expect(stops.map(\.label) == ["+30s"])
+                #expect(stops.first?.traits.contains(.button) == true)
+                let isSame = try Self.drawn(pill) == Self.drawn(pill.disabled(true))
+                #expect(!isSame)
+            }
+
             @Test("A short ghost pill stands in the middle of its target; flush, its word starts or ends at the edge")
             func flushGhostPill_standsAtTheEdgeOfItsTarget() throws {
                 let centred = try Self.ink(of: PillButton("Back", style: .ghost) {})

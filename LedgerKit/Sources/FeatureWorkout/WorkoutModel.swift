@@ -10,7 +10,8 @@ nonisolated enum WorkoutScreenModel: Equatable, Sendable {
     case failed(WorkoutFailedModel)
 }
 
-/// A live workout on screen: the pinned header, and the page that scrolls under it.
+/// A live workout on screen: the pinned header, and the page that scrolls under it. The rest panel is not
+/// of this model: it changes each second of a rest, and is the store's `restPanel` (`RestPanelModel`).
 nonisolated struct WorkoutModel: Equatable, Sendable {
     let header: WorkoutHeaderModel
     let page: WorkoutPageModel

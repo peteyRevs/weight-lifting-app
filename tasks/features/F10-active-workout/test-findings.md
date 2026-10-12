@@ -1365,3 +1365,376 @@ snapshot references the implementer re-recorded (they pass; I did not judge the 
 | `scripts/check.sh --lint-only` | 0 | OK |
 
 The result bundle was read and deleted; `run3.log` is in the scratch folder. The full gate was not run.
+
+## S6, round 1 (G2 tester, 2026-10-10)
+
+On `9dadbe0` (`feat/F10-s6-rest`). The contract is the brief's "Plan amendments — slice S6, rest and haptics"
+(criteria 1 to 15) with the rulings during G1 (criterion 3 amended). No product code, implementer's test,
+project file or test plan was edited. (This file held no S5 section when the round began; S5's rounds are
+in the testers' files and the notes.)
+
+### Result
+
+The slice holds where it was aimed. On a phone whose wall clock runs forward, the panel reads the Domain's
+time left for the session's rest at every step of 40 seeded walks (time by quarter seconds to 40 s, the app
+away for up to 200 s, taps, the cover's tasks starting again, the cover down and up), and every haptic is
+played exactly once. "+30s" and "Skip rest" in S5's storm come to the engine's one event each. The host
+keeps the scheduled notification equal to the workout's rest. Criterion 13 holds at every text size up to
+Accessibility 3 on three phone heights. **34 tests added (24 that also run on the Mac host, 8 simulator-only, 2 UI).
+Four stay red, each a finding; none is blocking.** Seven questions go to the product owner or to later slices.
+
+### Findings
+
+**F10-S6-4 · should fix, or the product owner's call · the brief's accessibility line (Dynamic Type to
+AX5); beyond criterion 13 · at Accessibility 4 and 5 on a 375 pt phone the panel leaves no page.**
+Measured on the simulator, the screen hosted at each phone's height between its safe areas (the model
+agrees with the running app: 61 pt against the 64 pt of the UI test's screenshot on the iPhone 17 at AX5):
+
+| Page showing over the panel (pt) | AX1 | AX2 | AX3 | AX4 | AX5 |
+|---|---|---|---|---|---|
+| 375 pt, home button (647 pt between the safe areas) | 186 | 136 | 57 | **5** | **0** |
+| 375 pt, notch (728 pt) | 267 | 217 | 138 | 83 | **11** |
+| iPhone 17 (778 pt) | 317 | 267 | 217 | 133 | 61 |
+
+The panel is 339, 363, 403, 441 and 492 pt tall at those sizes (174 pt at the default size). With no page
+showing, the next set's row can be neither seen nor reached, and the page cannot be dragged (a drag that
+starts on the panel scrolls nothing, the implementer's deviation 3); "Rest over" stays until the next
+logged set, so the lifter must tap "Skip rest" before every set. On the home-button phone at AX5 the panel
+(492 pt) is taller than the 423 pt under the header: 69 pt of the cover do not fit, and where they go was
+not looked at. Up to AX3, the criterion's size, the least is 57 pt.
+- Red: `WorkoutRestPanelAdversarialTests.screen_leavesThePageRoom_beyondTheCriterion` (2 cases; the
+  threshold is one 44 pt target). Green beside it: `screen_leavesThePageRoom` (10 sizes up to AX3),
+  `screen_roomIsMeasured` (pins the simulator's safe area and the agreement with the app), and the UI test
+  `WorkoutRestAdversarial.test_rest_atTheLargestTextSize_leavesSomeOfThePage` (iPhone 17).
+- The implementer's look decision 4 already puts the panel's size at these sizes to the product owner (a
+  smaller ring, one row of buttons). Whether a 375 pt phone with a home button is supported at all decides
+  how much this matters.
+- Seen in the same screenshot, not S6's: at AX5 the header wraps "Minimi/ze" and "Finis/h" inside a word.
+
+**F10-S6-1 · note · criterion 3 · the wall clock set back under "Rest over", then any tap: a countdown that
+never moves.** Once a rest is over `keepRestTime()` has ended and only a tap reads the date. With the clock
+set back (by the lifter, or a correction) the panel goes on saying "Rest over" while time is left; the next
+tap of any kind (a stepper) writes the earlier date into `moment`, and the panel shows "1:00 · Resting"
+with no task to count it: it stands still, never reaches zero and never buzzes, until the workout's rest
+changes. With the clock set back while the rest still runs, all is right
+(`clockSetBack_whileResting`, green).
+- Repro: log a set; 150 s; clock back 60 s; "+" on reps; wait.
+- Red: `WorkoutRestAdversarialTests.clockSetBack_atRestOver_thenATap`.
+
+**F10-S6-2 · note · criterion 7 · a rest the session has skipped is still felt at zero if the page has not
+heard.** `keepRestTime()` asks the page (`shownRest`), not the session, whether its rest is still the one
+shown. Between the session taking "Skip rest" and the stream showing it, a rest that reaches zero is
+played and reads "Rest over". The window is the stream's lag: microseconds on one phone.
+- Red: `WorkoutRestAdversarialTests.skipped_withThePageBehind_isNotFelt`.
+
+**F10-S6-3 · note · criterion 7 ("each once, also across the cover's tasks restarting") · a haptic is lost
+when the follow starts again between a change and its update.** An update's haptics reach only the stream
+that was open when it was published; a new stream's first element carries none. A set logged, the follow
+cancelled before it read the update, the follow started again: the set is on the page and was never felt.
+In the app the tasks start again only when the cover's view goes and comes back.
+- Red: `WorkoutRestAdversarialTests.followStartedAgain_withAnUpdateBehind`.
+
+### Questions (reported, not asserted)
+
+1. **"+30s" and a logged set carry the date of the pump's turn, not of the tap** (criterion 5: "both read
+   from the tap's injected date"; ADR-004: a payload time is "the device's clock at the action"). The date
+   is read when a tap is planned. Behind a slow save the two differ: "+30s" tapped with 2 s left, applied
+   5 s later behind a held stepper, sent `extendsShownRest: false, tappedAt: +153 s`; the rest ends at
+   183 s, not 180 s, and its ring is of 30 s, not 180 s. S5's `doneAt` is read the same way. On a host that
+   answers in milliseconds they are the same moment. Measured in a scratch test, not kept.
+2. **A superset member un-logged brings "Rest over" back** (the implementer's own note; deviation "what
+   `shownRest` cannot tell"). Logged after a rest's end it takes "Rest over" away; un-logged, the ended
+   rest is on screen again, however long ago it ended. And a member logged while the rest runs leaves
+   "Rest over" standing at its end. By the brief "Rest over" stays "until the next logged set": the first is
+   against its spirit, the second against its letter. Solo exercises have neither (property, 200 seeds).
+   The cover draws a superset's members as solo cards today, so both are reachable before S9. Pinned as
+   built: `ShownRestAdversarialTests.supersetMember_unlogged_asBuilt`, `…loggedDuringTheRest_asBuilt`.
+3. **Recovery asks the notification client for nothing** (brief criterion 12 is silent). Right after a
+   kill; not after notifications were turned off and on, or a restore. For F23. Pinned as built:
+   `HostRestNotificationAdversarialTests.relaunch_midRest_asBuilt`.
+4. **Until F23 a rest that ends with the app in the background gives no sign at all**: no buzz by design
+   (the one-second window), and no notification client. A lifter with the phone locked hears nothing.
+5. **"+30s" at "Rest over" buzzes again at the new rest's end.** As built, and right by the brief as I read
+   it (decision #7 makes it a new rest; criterion 6 plays `.restOver` at zero). Said because it was asked.
+6. **The brief's spoken announcements** ("Rest, 1:30 remaining" on appear, "Rest over" at zero) are not
+   built (the implementer's look decision 8).
+7. **For F17:** a peer's second `setLogged` of a done row after a rest's end hides "Rest over"; a wall clock
+   set back by more than a rest between two logs hides a running rest (`shownRest` compares `doneAt` with
+   the rest's end). The second is read from the code, not run.
+
+### Audits
+
+| What | Verdict |
+|---|---|
+| The two edits to `WorkoutWordsAdversarialTests` | **Sound.** The nine keys are the panel's and no other; `scanned(_:)` blanks the exact spelling `RestTimer`, `forbidden` is unchanged, and a planted `Timer.scheduledTimer` is still caught (the implementer's control). What it gives up: an identifier that contains "RestTimer" hides that one word |
+| Deviation 6, `app.scrollViews.count == 1` | **The implementer is right**: Today's scroll view is in the tree under the cover. `WorkoutLoggingAdversarial.test_jumpFromRemaining…` read `scrollViews.firstMatch`; it now reads the scroll view that holds the card's title, asserts there is one, and that it starts under the header. Whether `firstMatch` was Today's was not checked; the new query cannot be |
+| Deviation 7, `DependencyKeysTests` | Sound: `haptics_defaultsToAFreshFake` pins a fresh fake per call and that the key still fails outside `withTestDependencies` |
+| The six re-recorded `PillButton` references | **Verified pixel for pixel**: rows 0 to 199 (0 to 262 at `accessibility3`) are identical to `main`'s; the first differing row is 200 (263), inside the old image's 26 plain rows. No other existing reference changed |
+| Orange (criterion 10) | Pinned by pixel, light and dark, resting and over: only "Skip rest" and the ring's arc; "+30s" has none; at "Rest over" the ring has none (`orange_isSkipRestAndTheArc`) |
+| The app's wiring | `AppComposition.bind` binds `LiveHaptics` with the session (read, and the implementer's `boot_bindsTheLiveHaptics`); the UI tests ran the real composition without a trap. Generators are made per play and never prepared: latency of the first buzz is a device question |
+| Per-second store updates | One change of `store.model` a second while a rest runs, none after its end; the header's and the page's models are equal values across it; in the hosted `WorkoutRoot` the scroll view is the same view at the same offset after three seconds. Building the whole screen's model takes 0.49 ms (Mac host, debug, mean of 2,000; measured in a scratch test, not asserted) |
+
+### Mutations (25; every file restored from the copy read before the change, `git status` clean of product files)
+
+| # | Change | Existing tests | This round's |
+|---|---|---|---|
+| M1 | `.restOver` played without the "already played" check | **missed** | `twoWaits_oneBuzz`, `twoWaits_aSlowHaptic_oneBuzz` |
+| M2 | played without having seen the rest run | **missed** (their reopen is 1,000 s late) | `startedJustAfterTheEnd_playsNothing` |
+| M3 | the window is 2 s | caught | |
+| M4 | no "is it still the shown rest" after a wait | caught | |
+| M5 | `moment` written once only | caught (9) | walk |
+| M6 | the pump does not write `moment` | caught | |
+| M7 | `extendsShownRest` true at zero left | caught | storm |
+| M8 | "Skip rest" sent with no rest shown | caught | storm |
+| M9 | "+30s" guarded by `rest`, not `shownRest` | caught | |
+| M10 | haptics played twice while an answer is ahead of the page | **missed** | `laggingUpdates_eachFeltOnce` |
+| M11 | `>` for `>=` in `shownRest` | caught | |
+| M12 | "Rest over" from one second left | caught | |
+| M13 | `nextTick` always a second | caught | walk |
+| M14 | no notification call on an end | caught | property |
+| M15 | "+30s" reads the date a second time | **missed** | storm (one reading a tap) |
+| M16 | "already played" recorded after the haptic returns | **missed** | `twoWaits_aSlowHaptic_oneBuzz` |
+| M17 | the ring's share inverted | caught | walk |
+| M18 | the notification client called before the update is out | **missed** | `slowClient_doesNotHoldTheUpdate` |
+| M19 | the ending update's haptics not played | **missed** | `endingUpdate_isFelt` |
+| M20 | the countdown's text rounded down | caught | walk |
+| S1 | `WorkoutRoot` without `.task(id: store.shownRest)` | **missed** in the PR lane (UI test only) | `root_keepsTheRestsTime` |
+| S2 | the ring animated whatever Reduce Motion says | **missed** | **missed too**: the setting cannot be set in a hosted view; only the function is tested |
+| S3 | "+30s" drawn filled | caught (references, trees) | |
+| S4 | the panel an overlay, not the scroll view's inset | caught | `screen_roomIsMeasured` |
+| S5 | no "updates frequently" trait | caught | `screen_panelComesLast` |
+
+### What held
+
+- `shownRest` on solo exercises against an oracle from the brief, 200 seeds × 60 events; un-logging changes
+  neither `rest` nor `shownRest`.
+- The walk (40 seeds × 70 steps over the real host): panel text, "Rest over", the ring within a second,
+  never a panel without a rest or a rest without a panel; `.setLogged` once a logged set, `.restOver` once
+  for each rest that ended within a second of a wait's end and never otherwise (late returns, reopened
+  covers, restarted tasks, skipped, extended and replaced rests).
+- The storm (40 seeds × 48 taps, saves held, updates lagging, up to 40 s between readings): the same events
+  and the same workout as one at a time; each panel tap is the engine's one event for what the session
+  showed at the tap's one reading; nothing with no rest shown.
+- The host: scheduled equals the workout's rest after every one of 50 events (80 walks, auto rest on and
+  off), nothing left at a finish or a discard; no client, same workout, no trap.
+- The panel at all twelve text sizes × two widths × Bold Text × right to left × five models: no word cut,
+  nothing outside or overlapping, both buttons 44 pt. VoiceOver meets it last, with the time in words.
+- In the app (iPhone 17): two quick "+30s" are a minute; no panel on Today; a cover opened again after 3 s
+  and an app back from 6 s in the background read the wall clock's time left and go on; "Skip rest".
+
+### Not tested
+
+- A rest's end in the running app ("Rest over", the buzz): the sample rests 150 s, each launch has its own
+  database and the app's date moves only at launch. Shown by the store's tests and the hosted root only.
+- Anything on a device: haptics felt, VoiceOver heard, Reduce Motion seen.
+- Dark, Increase Contrast, Bold Text and right to left in the running app; 40 s in the background (6 s were).
+- A refused "+30s" and a "Minimize" behind a rest tap beyond the implementer's two tests.
+- The panel over a superset; two covers alive at once over one session (not reachable).
+- The rest of the `Nightly` plan, watchOS, the full gate.
+
+### Corrected while testing
+
+My first measure of the panel's room hosted each phone at its height between the safe areas, and the
+simulator's window keeps the iPhone 17's 62 pt top safe area as well: every strip came out 62 pt short, and
+Accessibility 3 on the shortest phone read as a failure of criterion 13. The UI test at the largest size
+passed where that model said it could not, and its screenshot showed why. The windows are now 62 pt taller,
+`screen_roomIsMeasured` pins that inset, and the table above is from the corrected model.
+
+### Edits to earlier testers' files
+
+- `WorkoutPumpAdversarialTests.inAStorm` takes `by steps:` (default as it was), so the storm can move the
+  date as far as the calm run does.
+- `WorkoutLoggingAdversarial.test_jumpFromRemaining_showsTheNewExercisesName`: the scroll view (audit above).
+
+### Commands and exit statuses (2026-10-10; iPhone 17, iOS 27.0; every simulator run through the lock)
+
+| Command | Exit | Result |
+|---|---|---|
+| `scripts/check.sh --fast` | 0 | format, lint, package graph; 1,239 host tests in 188 suites |
+| `swift test --filter "FeatureWorkoutTests\|LedgerSyncTests\|ShownRest"` (Mac host), three times | 1 each | FeatureWorkout 308 tests in 45 suites, **3 red** (F10-S6-1 to -3; F10-S6-4 is simulator-only); Sync 289 in 50; `shownRest` 16 in 2 |
+| `PR` plan, `-only-testing:FeatureWorkoutTests`, `LedgerSyncTests/HostRestNotificationAdversarialTests`, `LedgerDomainTests/ShownRestAdversarialTests` | 65 | FeatureWorkout **369 tests in 55 suites, 4 red** (6 issues): the four findings; the other two suites 5 and 4, green |
+| `Nightly` plan, `-only-testing:LedgerUITests/WorkoutRestAdversarial`, `…/WorkoutLoggingAdversarial` | 0 | 5 of 5 (2 and 3). Before the last edits (a comment and 16 pt in one assertion) `WorkoutRest` ran with them: 7 of 7 |
+| Host mutants M1 to M20, simulator mutants S1 to S5 | | the table above; `git status --short -- LedgerKit/Sources Apps/Ledger` empty after |
+
+The full gate, watchOS and the rest of `Nightly` were not run.
+
+## S6, round 2 (G2 tester, 2026-10-11)
+
+On `7903cc6` (the implementer's fix round 1, `91d9bbb`, and the reviewer's round 2 over it). The contract adds rulings 16 to 21 ("Plan amendments — slice
+S6 after round 1") and the two rulings made during the fix round. No product code, implementer's test,
+project file or test plan was edited.
+
+### Result
+
+The rulings hold. A tick changes the rest panel and nothing else the cover reads (16); the compact panel
+leaves at least 128 pt of page on three phones at every size, also with Bold Text and the longest next-set
+line (17); a tap carries the instant it was tapped, in a storm whose time goes by while saves wait (18);
+F10-S6-2 and -3 are fixed and their tests pass unedited (20). **Nothing is left red.** F10-S6-1 is pinned
+as built. 23 tests added (17 that also run on the Mac host, 6 simulator-only) and three assertions in a UI test. Six things are recorded for later slices, none a defect of this one; one mutant is
+still not caught by any test.
+
+### Round 1's findings
+
+| Finding | Now |
+|---|---|
+| F10-S6-1 the clock set back at "Rest over" | **As built, by ruling 20**, verified, not taken on trust: `clockSetBack_atRestOver_thenATap` and `clockSetBack_atRestOver_thenPlusThirty` (below). For F17 |
+| F10-S6-2 a skipped rest felt while the page is behind | **Closed.** `skipped_withThePageBehind_isNotFelt` passes unedited |
+| F10-S6-3 a haptic lost when the follow starts again | **Closed.** `followStartedAgain_withAnUpdateBehind` passes unedited |
+| F10-S6-4 no page left at Accessibility 4 and 5 | **Closed** (ruling 17). `screen_leavesThePageRoom_beyondTheCriterion` passes unedited; table below |
+| Question 1, the time of a tap | **Closed** (ruling 18) |
+
+### F10-S6-1 as built (what I saw, against what the notes say)
+
+The notes are right, and one consequence is not in them. Rest over; the clock set back 60 s; a stepper:
+the panel still reads "0:00 · Rest over" (the frozen "1:00 · Resting" of round 1 is gone, because the
+panel's moment no longer goes back for a tap). Ten and seventy seconds on: still "Rest over", and nothing
+is felt at the true end. A reopened cover reads the date and shows the rest running. **"+30s" on that "Rest
+over" does not start a rest of 30 s**: it is judged at the tap's own, earlier, date, finds the rest still
+running, and extends it; the lifter who saw "Rest over" and asked for half a minute gets what the clock
+says was left and 30 s (90 s in the test, on a ring of 180 s). So since ruling 18 `extendsShownRest` says
+what the clock says, not what the panel showed; the two differ only under a clock set back.
+
+### For later slices (pinned as built where a test is named; none is left red)
+
+1. **F17, clocks.** F10-S6-1 with the "+30s" case above (`WorkoutRestAdversarialTests`, two tests); a
+   running rest hidden when the clock goes back by more than the rest between two logs
+   (`ShownRestClockAdversarialTests`, run this round; round 1 only read it).
+2. **F17, an answer older than the page.** `newestRest` asks S5's `ahead`. On one phone `ahead` is never
+   older than the page. With a second hand it can be: an answer that comes back after the page has shown a
+   later change by the peer is kept as "the newest". While it is, the buzz at zero is judged against it: a
+   rest the peer extended ends without a buzz (`staleAnswer_takesThePeersBuzz_asBuilt`). The fault is in
+   what `ahead` keeps (S5's), which also plans the next tap on the older workout.
+3. **F18, a haptics client that is slow.** `follow()` does not stop when its task is cancelled: it takes
+   what its stream had buffered, and at its end marks the store as not hearing the session. The phone's
+   client returns at once and nothing shows. With one that does not (the notes already say the watch's
+   must): a follow cancelled inside `play` overlaps the next one; a set is felt twice (the new follow's
+   `missedHaptics`, then the old follow's own update), and when the old one ends the taps wait until the
+   follow starts yet again (`followCancelled_duringASlowHaptic_asBuilt`). A check of `Task.isCancelled` in
+   the loop ends all three.
+4. **`missedHaptics`, what it is and is not** (the coordinator's questions). Twice: only as in 3. For the
+   lifter's own, already felt, change: no (`followAgain_nothingChanged_playsNothing`). A burst: one buzz
+   for any number of sets logged while the follow was away, none for an un-log
+   (`followAgain_afterABurstElsewhere_oneBuzz`); the notes ask F17 whether a peer's set should be felt on
+   return at all. A rest's end, a finish, a record missed the same way: not felt (the engine's account of
+   a change between two states knows a logged set only), as the notes say. On the test's session a finish
+   missed that way closed the cover with nothing to tell rather than as saved; I did not check that on the
+   real host, and it is S4's path, not this round's.
+5. **The reviewer's note S6-R2-N1, seen.** A tap carries its own instant (ruling 18), but a rest's end is
+   felt by what the session holds when it comes. "+30s" tapped 2 s before zero and still behind a slow
+   save at zero: "Rest over" and the buzz; then the tap is applied at its instant, the rest is extended to
+   180 s and counts again; its new end is felt too: two buzzes for one rest
+   (`extendTappedBeforeZero_appliedAfter_asBuilt`). "Skip rest" the same way is felt, then the panel goes.
+   It takes a save slower than the time left. Reported, not ruled.
+6. **For the product owner, looks.** Side by side at Accessibility 3 and 4 the two buttons are not the same
+   height: "+30s" 54 and 56 pt, "Skip rest" 59 and 64 pt (round 1's look decision 2 made them a pair). And
+   the header breaks its two words inside the word, measured: on a 375 pt phone "Minimize" from
+   Accessibility 3 and "Finish" from Accessibility 4; on the iPhone 17 "Minimize" from Accessibility 4 and
+   "Finish" from Accessibility 5 (from Accessibility 4 with Bold Text). S4's code; a chore.
+
+### Audit of the implementer's edits to my files
+
+| Edit | Verdict |
+|---|---|
+| `store.model.rest` → `store.restPanel` (5 sites), `WorkoutScreen(model:rest:)` (1) | Sound: the field moved, nothing else changed |
+| `screen_roomIsMeasured`, `55 ... 75` → `304 ... 324` | **Sound, and the app agrees.** My model gives 313 pt again; the UI test now asserts the running app's strip within 15 pt of 314 (`test_rest_atTheLargestTextSize_leavesSomeOfThePage`), and that the next set is not drawn and still read |
+| `eachSecond_oneChange_thePageUntouched`, `counting(_:)` | Sound as ruled; no strength lost. Added beside it: `tick_changesNothingTheRootReads` (everything the root's body, the header, the page and the dialogs read, by `withObservationTracking`, through ten seconds, 40 s away and the rest's end, with controls both ways) and `sources_onlyThePanelReadsTheMoment` |
+| The notes' room table | **Out of date in three columns** (not an edit to my files): it gives, for the iPhone 17, 427, 395 and 328 pt at AX2, AX3 and AX4; the committed code gives 457, 430 and 368 by the same function. The least, 173 pt, is right. Measured table below |
+
+### The compact panel (ruling 17), measured
+
+Page showing over the panel, in pt, the preview's panel, plain text:
+
+| | AX1 | AX2 | AX3 | AX4 | AX5 |
+|---|---|---|---|---|---|
+| 375 pt, home button | 360 | 326 | 269 | 173 | 182 |
+| 375 pt, notch | 441 | 407 | 350 | 254 | 263 |
+| iPhone 17 | 491 | 457 | 430 | 368 | 313 |
+
+With Bold Text the buttons go one over the other a size sooner (207 pt on the home-button phone at AX3, 304
+on the iPhone 17 at AX4); with the longest next-set line, or a drop set in kilograms, the line wraps (128 pt
+on the home-button phone at AX4, the least of all 216 measures). `room_withBoldTextAndLongerWords` asserts
+120 pt for all of them.
+
+The buttons stand side by side exactly where "+30s", 8 pt and "Skip rest" fit the panel's width, and one
+over the other elsewhere (`buttons_sideBySide_exactlyWhereTheWordsFit`, 40 settings): on a 375 pt phone up
+to AX3 (AX2 with Bold Text), on the iPhone 17 up to AX4 (AX3 with Bold Text), stacked at AX5 everywhere.
+"+30s" is never cut (round 1's check did not look at it). At AX5 the next set is in the stop's label, the
+panel is exactly as tall as one that has no next set, and two things take a tap. Orange is "Skip rest"
+alone at AX1, AX3 and AX5, both themes, resting and over.
+
+### Ruling 18, the storm re-derived
+
+Round 1's storm moved the date at each reading, which cannot tell a reading at the tap from one at the
+tap's turn (mutant R2 passed it in my head before I ran it; it would have). `storm_eachTapAtItsOwnInstant`
+moves the date before each tap and while each call waits (up to 20 s each), records when each tap was
+made, and makes the same taps one at a time at those instants: same events, same workout, 40 seeds; and in
+the calm run a logged set is done at its tap, "+30s" says what was running at its tap, an un-log within a
+second of its set's tap sends nothing. The undo guard behind a held save is of the two taps (0.5 and
+0.999 s: held; 1.0 and 1.5 s: applied, however late). A tap earlier than the event before it is taken at
+its own date. "`moment` takes a tap's instant only if later": I found no sequence with a clock that runs
+forward where the panel is stale for it (the rest's task reads the date at once when a rest changes; the
+walk's 40 seeds still pass); with a clock set back it is F10-S6-1.
+
+### Mutations (19 new; every file restored, product tree clean after)
+
+| # | Change | Existing tests | This round's |
+|---|---|---|---|
+| R1 | `moment` takes every tap's instant | caught | `clockSetBack_atRestOver_thenATap` |
+| R2 | the plan reads the date at the tap's turn | caught (3 of his, S5's storm) | `storm_eachTapAtItsOwnInstant`, `undoGuard_behindAHeldSave` |
+| R3 | `model` reads `moment` | caught | `tick_changesNothingTheRootReads`, `sources_…` |
+| R4 | zero does not ask `newestRest` | my round 1 test only | `extended_withThePageBehind_feltAtTheNewEnd` |
+| R5 | `newestRest` prefers the page | my round 1 test only | the same |
+| R6 | no `missedHaptics` | my round 1 test only | `followAgain_afterABurstElsewhere_oneBuzz` |
+| R7 | `missedHaptics` at every update | caught (26; three tests hang until their time limit) | |
+| R8 | a queued tap takes the time of the tap before it | caught | storm |
+| R9 | the store's panel is never disabled | **missed** | `panel_isDisabledWhileTheCoverCloses` |
+| R10 | `missedHaptics` compares with nothing | caught | |
+| R11 | `moment` set by the first tap only | caught | storm |
+| T1 | the view passes `isOver: false` to the ring's animation | **missed** | **missed too** (as S2 in round 1: only the function is tested) |
+| T2 | the next set drawn at AX5 | caught (his room test) | `largest_nextSetIsSpokenNotDrawn`, room |
+| T3 | "Skip rest" not at its own width | caught (the reference) | `buttons_sideBySide_…` |
+| T4 | compact buttons from AX3 only | **missed** | `buttons_sideBySide_…` |
+| T5 | the store's panel sends its taps nowhere | **missed** in the PR lane | `storePanel_sendsToTheStore` |
+| T6 | the root draws no panel | **missed** in the PR lane | `root_keepsTheRestsTime` (the panel's room under the page, against the same root with no rest) |
+| T7 | the compact time not at its own width | **missed** | **missed too**: nothing changed at any size I measure; likely an equivalent mutant |
+| T8 | the buttons always one over the other | caught | `buttons_sideBySide_…` |
+
+### A test run that did not end
+
+During the mutants two test processes of this worktree were left spinning for hours, and the coordinator
+killed them. What I found: under R7 and R10 (haptics that are played too often) tests that wait without a
+bound for an exact list of haptics never see it, and a suite's time limit does not end a loop that only
+yields; my first mutant driver had no time limit of its own and did not kill the test helper. Mine were
+three such waits (`twoWaits_aSlowHaptic_oneBuzz`, `drainSlowly`, `slowClient_doesNotHoldTheUpdate`): each
+is now a bounded number of steps and then a failure. The driver now ends a run after 300 s, and every host
+run of mine has a limit and kills this worktree's helpers after it. **Still unbounded, the implementer's**:
+`eventuallyPlayed` and `RestBench.settled` (`Support/RestBench.swift`), which hang three of his tests under
+those mutants; not mine to edit. No test hangs on the code as it is.
+
+### What held from round 1
+
+Everything: the walk (40 seeds), both storms, the host's notification property, `shownRest`'s property, the
+panel at twelve sizes, the hosted root (now ten ticks, and the panel's room under the page), orange, the
+VoiceOver order, and the UI tests.
+
+### Not tested
+
+- As in round 1: a rest's end in the running app; anything on a device; the ring in motion.
+- The compact panel on a real 375 pt phone, or in the running app with Bold Text, dark or right to left.
+- How many times SwiftUI evaluates the page's body at a tick: no cheap count without a hook in product
+  code. What is pinned is what each view reads (observation and sources) and, in the hosted root, that the
+  scroll view is the same view at the same offset after ten ticks.
+- A finish missed by a follow on the real host (4 above).
+- The rest of `Nightly`, watchOS, the full gate.
+
+### Commands and exit statuses (2026-10-11; iPhone 17, iOS 27.0; every simulator run through the lock)
+
+| Command | Exit | Result |
+|---|---|---|
+| `scripts/check.sh --fast` | 0 | format, lint, package graph; 1,241 host tests in 189 suites |
+| `swift test --filter "FeatureWorkoutTests\|LedgerSyncTests\|ShownRest"` (Mac host, 8-minute limit) | 0 | FeatureWorkout 329 tests in 46 suites; Sync 289 in 50; `shownRest` 18 in 3 |
+| `PR` plan, `-only-testing:FeatureWorkoutTests`, `LedgerSyncTests/HostRestNotificationAdversarialTests`, `LedgerDomainTests/ShownRestAdversarialTests`, `…/ShownRestClockAdversarialTests` | 0 | FeatureWorkout **398 tests in 57 suites**; 5 in 1; 6 in 2 |
+| `Nightly` plan, `-only-testing:LedgerUITests/` `WorkoutRestAdversarial`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` | 0 | **7 of 7** (2, 3, 1, 1) |
+| Host mutants R1 to R11, simulator mutants T1 to T8 | | the table above; `git diff --stat -- LedgerKit/Sources Apps/Ledger` empty after; no test helper left running |
+
+The full gate, watchOS and the rest of `Nightly` were not run.

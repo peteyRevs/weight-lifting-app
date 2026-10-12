@@ -82,13 +82,16 @@
             return stores
         }
 
-        /// The fixed date, UUIDs, clock, calendar and locale of `withTestDependencies`.
+        /// The fixed date, UUIDs, clock, calendar and locale of `withTestDependencies`, and haptics that play
+        /// nothing: a store that plays one (F10 S6) does so on every logged set, whatever the test is about. A
+        /// test that reads what was played binds a `FakeHaptics` of its own.
         fileprivate mutating func useTestDefaults() {
             date = .constant(Fixtures.now)
             uuid = .incrementing
             continuousClock = ImmediateClock()
             calendar = Fixtures.calendar
             locale = Fixtures.locale
+            haptics = FakeHaptics()
         }
     }
 

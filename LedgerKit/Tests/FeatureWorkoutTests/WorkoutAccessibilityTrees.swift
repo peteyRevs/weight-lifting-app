@@ -175,6 +175,36 @@
             steppers: Steppers("1.25 KG", "10 kilograms", "16 reps")
         )
 
+        /// The page of `logging`, which `resting` and `restOver` show at other moments.
+        static let loggingPage = page(bench(
+            ["Done", "Done", "Current set", "Pending", "Pending"],
+            last: "Sep 9 · 5×5 @ 195 lb",
+            canRepeat: true
+        ))
+
+        /// The rest panel's three stops (F10 S6), which the screen holds after the page, outside its scroll
+        /// view: the ring and its two lines as one stop, whose value is the time left in words and which
+        /// is marked as updating often while the rest runs; then "+30s", by its spoken name, and "Skip rest".
+        static func rest(_ status: String, timeLeft: String, next: String, isEnabled: Bool = true) -> [Stop] {
+            let off: UIAccessibilityTraits = isEnabled ? [] : .notEnabled
+            return [
+                Stop("\(status), \(next)", value: timeLeft, timeLeft.isEmpty ? [] : .updatesFrequently),
+                Stop("Add 30 seconds", UIAccessibilityTraits.button.union(off)),
+                Stop("Skip rest", UIAccessibilityTraits.button.union(off))
+            ]
+        }
+
+        /// The panel of each state that shows a rest; a state that is not listed shows none. Every state
+        /// with a set logged shows one: the engine starts a rest at each logged set.
+        static let rests: [WorkoutPreview: [Stop]] = [
+            .resting: rest("Resting", timeLeft: "1 minute, 15 seconds", next: "Set 3, 200 pounds, 5 reps"),
+            .restOver: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
+            .logging: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
+            .minutes: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps"),
+            .hour: rest("Rest over", timeLeft: "", next: "Set 2, 15 pounds, 16 reps"),
+            .discarding: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps", isEnabled: false)
+        ]
+
         static let all: [WorkoutPreview: [Stop]] = [
             .started: header(progress: "Exercise 1 of 5") + page(bench(
                 ["Current set", "Pending", "Pending", "Pending", "Pending"],
@@ -188,6 +218,8 @@
                 last: "Sep 9 · 5×5 @ 195 lb",
                 canRepeat: true
             )),
+            .resting: header(progress: "Exercise 1 of 5") + loggingPage,
+            .restOver: header(progress: "Exercise 1 of 5") + loggingPage,
             .dropSet: header(progress: "Exercise 5 of 5") + page(raiseInKilograms),
             .discarding: header(progress: "Exercise 2 of 5", isEnabled: false) + page(incline, isEnabled: false),
             .loading: [],

@@ -33,7 +33,18 @@
                 case let .workout(workout): kinds.append(workout.header.isEnabled ? "workout" : "busy")
                 }
             }
-            #expect(kinds == ["workout", "workout", "workout", "workout", "workout", "busy", "loading", "failed"])
+            #expect(kinds == [
+                "workout",
+                "workout",
+                "workout",
+                "workout",
+                "workout",
+                "workout",
+                "workout",
+                "busy",
+                "loading",
+                "failed"
+            ])
             // The time each case's header counts to, as the one formatter writes it.
             let elapsed = try [WorkoutPreview.started, .minutes, .hour].map { preview in
                 try ClockText.elapsed(preview.workout().elapsed(at: preview.now))

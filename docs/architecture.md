@@ -317,8 +317,12 @@ rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed e
   two callers never start from the same state and a cancelled caller loses nothing; its memory changes only
   once the store has taken the envelope. F17 adds the envelopes it receives (`replay`, then
   `effects(from:to:)`) and the transport.
-- The rest timer is `RestTimer(endsAt: Date, total: Duration)`. Views render
-  with `TimelineView`/`Text(timerInterval:)`; no tick events cross devices.
+- The rest timer is `RestTimer(endsAt: Date, total: Duration)`; no tick events cross devices. On the
+  phone the workout's store reads the injected date once a second while a rest is shown, on the injected
+  clock (`WorkoutStore.keepRestTime()`), and the rest panel is the presentation's reading of the rest at that
+  moment (`RestTimer.remaining(at:)`, `fraction(at:)`). Only the panel's view observes that moment
+  (`WorkoutStore.restPanel`); the root, the header and the page are not drawn again at a tick. No view of
+  the rest reads a clock: there is no `TimelineView`. (The header's elapsed time is `Text(timerInterval:)`.)
 - On `finished`, the host stores the envelope, then saves the workout in one transaction
   (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`, F10 S3): the rows, the records it detects, the
   slots' misses from `MissTracking` on the program as stored then (when it is the active one), the program
@@ -468,7 +472,8 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 - `LedgerColor` — semantic tokens (`ground`, `surface`, `ink` at fixed alphas, `hairline`, `accent`, `accentText`, `watch…`) with light + dark values from §8.1–8.3, nudged where needed so every text token meets WCAG AA (F06 notes, decision 7). Adaptive colours are a dynamic `UIColor` on iOS, with stronger ink alphas under Increase Contrast; watchOS has one (dark) appearance. Accent usage rule: once per screen, on the primary action.
 - `LedgerFont` — 21 roles (`display` … `numeralS`, `watch…`) with the v2 prototype's size, `wght`, `wdth`, line height and tracking. The Archivo variable font ships once, as a `LedgerDesign` resource; the apps' `UIAppFonts` point into that resource bundle (`LedgerKit_LedgerDesign.bundle/…`), and previews and package tests register it on first use (`FontRegistration`). Axes are set with a `CTFontDescriptor` carrying `kCTFontVariationAttribute` (`'wght'` 2003265652, `'wdth'` 2003072104), wrapped as `Font(ctFont)`. Views use `.ledgerFont(.role)`, which reads Dynamic Type and Bold Text from the environment (size on SwiftUI's custom-font curve for the role's text style; Bold Text = one weight step up) and applies tracking, case and `lineHeight`. The `Font` entry points take the text size explicitly (`LedgerFont.font(_:dynamicTypeSize:)`), because a Core Text instance cannot follow the environment by itself. Tabular figures for every numeral role; watch roles never go below 11 pt.
 - `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`, `LedgerMotion` (`snappy`, `ledgerBuzz(trigger:)` with a Reduce Motion opacity variant).
-- Components: `PrimaryButton`, `PillButton`, `IconPillButton`, `HairlineList/Row`,
+- Components: `PrimaryButton`, `PillButton` (with a full-width form that stands beside a primary
+  button), `IconPillButton`, `HairlineList/Row`,
   `SetRow` (with `SetRowHeader` and `SetRowSteppers`), `RestRing`, `WeekStrip`, `StatTile`,
   `ProgressSegments`, `Eyebrow`, `SheetChrome` (the swap sheet's frame), `EmptyState`, and for the
   watch `WatchPrimaryButton`, `WatchRestRing` (the phone ring's geometry at the watch's

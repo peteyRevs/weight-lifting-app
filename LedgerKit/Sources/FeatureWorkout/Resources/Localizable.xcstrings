@@ -123,6 +123,17 @@
         }
       }
     },
+    "+30s" : {
+      "comment" : "Button that adds 30 seconds to the rest timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+30s"
+          }
+        }
+      }
+    },
     "1 REP" : {
       "comment" : "The reps stepper's step",
       "localizations" : {
@@ -130,6 +141,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 REP"
+          }
+        }
+      }
+    },
+    "Add 30 seconds" : {
+      "comment" : "Spoken label of the +30s button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add 30 seconds"
           }
         }
       }
@@ -256,6 +278,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Drop set"
+          }
+        }
+      }
+    },
+    "Drop set · %@ kg × %lld" : {
+      "comment" : "The drop set that comes after the rest: its weight in kilograms, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set · %@ kg × %lld"
+          }
+        }
+      }
+    },
+    "Drop set · %@ lb × %lld" : {
+      "comment" : "The drop set that comes after the rest: its weight in pounds, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set · %@ lb × %lld"
           }
         }
       }
@@ -422,6 +466,28 @@
         }
       }
     },
+    "Rest over" : {
+      "comment" : "Shown on the rest timer when it has reached zero",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest over"
+          }
+        }
+      }
+    },
+    "Resting" : {
+      "comment" : "Shown on the rest timer while time is left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resting"
+          }
+        }
+      }
+    },
     "Resume it" : {
       "comment" : "Opens the workout that is already running",
       "localizations" : {
@@ -440,6 +506,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Set %lld"
+          }
+        }
+      }
+    },
+    "Set %lld · %@ kg × %lld" : {
+      "comment" : "The set that comes after the rest: its number, its weight in kilograms, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld · %@ kg × %lld"
+          }
+        }
+      }
+    },
+    "Set %lld · %@ lb × %lld" : {
+      "comment" : "The set that comes after the rest: its number, its weight in pounds, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld · %@ lb × %lld"
+          }
+        }
+      }
+    },
+    "Skip rest" : {
+      "comment" : "Button that ends the rest timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip rest"
           }
         }
       }
