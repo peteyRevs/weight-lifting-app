@@ -5277,3 +5277,127 @@ counted. Every simulator command through the lock (iPhone 17 and Apple Watch Ser
   second line; the screen in the app, under a navigation bar or a tab bar; Increase Contrast beyond the one
   reference; the nightly lane.
 
+## S10 — fix round 2 (G1 implementer, 2026-10-11)
+
+Answers the review's second pass (`review.md`, "S10 — review, round 2": B-2, S-5, S-6), the tester's second
+round (`test-findings.md`, "Slice S10 — round 2": F11-S10-5 to -8) and the orchestrator's rulings 21 to 26
+(the brief, "Plan amendments — slice S10 after round 2"), on the same branch at `89e878b`. **No tester file
+was edited.** No presentation, model, action or copy file was changed.
+
+### What changed, per ruling
+
+| Ruling | Done | What |
+|---|---|---|
+| **21** The name clear of the tag | Yes | `DayEditorHeader` gives the `NameField` `.padding(.bottom, LedgerSpacing.s)`: `xs` and `s`, 12 pt, between the name's frame and the tag, against a tail that hangs at most 10.3 pt under the frame (`.accessibility5`). `name_standsAboveTheTag` passes unedited. **The name does not move at any size; the tag, the summary line and every row under them stand 8 pt lower at every size.** The token is outside the field and not inside it, as the review sketched: inside, four of the tester's other tests went red (their whole-name pictures compare `NameField` with a text at the top of a 44 pt target and found "76, not 68" rows; `emptyDraft_keepsALine` found a jump of 5.7 pt against `xs`). It is room for the tails, a token; it is not the type's real line box, which is ruling 22's question. |
+| **22** The descenders under the focus | **No: not fixable in a view. `focus_doesNotCutTheDescenders` is red**, left as it is by the ruling | The chore's input is below. |
+| **23** The screen's `.fixedSize` on the bar | Removed | `bar_isNeverSqueezed` (both phones, twelve sizes, the screen hosted 150 pt high too) passes without it: the bar's two buttons are rigid. |
+| **24** An emptied draft | Nothing built | `emptyDraft_keepsALine` passes as before. |
+| **25** Stale comments | Done | `DayEditorAccessibilityTests` and `DayEditorSnapshotTests` say "the pinned bar"; `DayEditorLayoutTests.wide(at:)` says that the long day name, about 1,050 pt at `.large`, wraps in its wide drawing too; `NameField` says it serves the Day editor and that the builder takes it in a queued chore. |
+| **26** Recorded, not built | Below | |
+
+### The queued chore's input: a name field that does not cut its descenders (ruling 22)
+
+**What is wrong.** While it is being edited, a one-line field in the title's type draws the tails of g, j, p,
+q and y cut flat. Measured on "Gyp", the letters' box at 3× without the focus and with it:
+
+| Size | `NameField` | `ProgramHeader` (as on `main`) | The field's frame | The font's own line; its descender |
+|---|---|---|---|---|
+| `.large` | 28.0 → 24.7 pt | 28.0 → 24.7 pt | 33.7 pt | 34.8; 6.7 |
+| `.accessibility3` | 42.0 → 36.3 pt | 42.0 → 36.3 pt | 49.3 pt | 51.8; 10.0 |
+| `.accessibility5` | 48.0 → 41.3 pt | 48.0 → 41.3 pt | 56.3 pt | 59.4; 11.5 |
+
+So it is S9's too, on `main` today, in the builder's name.
+
+**The cause.** `ledgerFont` sets `.lineHeight(.multiple(factor:))` with the role's line, and the title's is 1.
+SwiftUI sizes the `UITextField` to that line (33.7 pt for a 32 pt type), which is lower than the font's own
+ascent and descent. UIKit's editor clips at the field's bounds while editing; the same field, not being
+edited, draws the tails whole.
+
+**What does not help** (each measured; the field stayed 33.7 / 49.3 / 56.3 pt high and the tails cut):
+`.frame(height: 80)`; `.frame(maxHeight: .infinity)` in a taller frame; `.padding(.vertical, s)`;
+`ledgerHitTarget`; `.controlSize(.extraLarge)`. A SwiftUI `TextField` takes no height from its layout.
+
+**What helps: a looser line, set closer to the field than the role's** (in a test, where the lint does not
+reach; a feature view may not spell `.lineHeight(`, rule `ledger_raw_font`):
+
+| Line height | Field's frame at `.large`, `.accessibility3`, `.accessibility5` | Tails | The field's letters stand lower by |
+|---|---|---|---|
+| the role's (1) | 33.7, 49.3, 56.3 pt | cut by 3.3, 5.7, 6.7 pt | — |
+| `.normal` | 40.3, 59.0, 67.3 pt | whole, 1.0 short, 1.3 short | 3.3, 5.0, 5.7 pt |
+| `.loose` | 49.7, 73.3, 83.7 pt | whole at all three | 8.0, 12.0, 13.7 pt |
+
+With `.normal` the tester's test would still fail at `.accessibility3` (41.0 pt of letters where it asks
+for more than 41.0). The same modifier set outside `ledgerFont` changes nothing.
+
+**What follows for the alignment.** A higher field draws its line lower, so the field can no longer stand
+top on top of the drawn text's first line; it has to be centred on that line (a hidden one-line copy of
+the name under it, as round 1 tried). Centred, round 1 measured the name moving 1.33 pt at `.large` and
+1.0 pt at `.accessibility3` when the focus comes, against the tester's bound of 1.34 pt
+(`focus_doesNotMoveTheName`): inside it by 0.01 pt at `.large`. As built now, top on top, this round's probe
+measured 0.67 pt at `.large`, 1.33 at `.accessibility3` and 1.67 at `.accessibility5` (round 1's notes
+give 1.0 at `.accessibility3`: measured then with a lower ink threshold; the tester's own measure passes
+its bound at both sizes). Whoever does the chore measures the centred field against that bound first.
+
+**Proposed API, in `LedgerDesign`** (not built): `ledgerFieldFont(_ role:)`, or a parameter
+`ledgerFont(_:lineHeight:)`: the role's font, tracking and case with a line that holds the font's descent
+(to be chosen by measuring: `.loose` is the one that held at all three sizes). About ten lines in
+`LedgerFont.swift`, a case in the gallery and one test that a focused field in it draws "Gyp" whole.
+`NameField` then uses it for the field alone (the drawn text keeps `.title`, so the tester's whole-name
+pictures hold) and centres the field on the first line; `ProgramHeader` takes `NameField` in the same
+chore, with its twenty references and the Day editor's recorded once. The 8 pt of ruling 21 can then be
+looked at again: with a real line box under the text it may not be needed.
+
+### Images
+
+- **`__Snapshots__/DayEditorSnapshotTests/`: all 24 recorded again**, and every one must change: everything
+  under the name stands 8 pt lower. Recorded in the missing-reference mode after deleting the folder; the
+  closing run compared them.
+- **`__Snapshots__/ProgramSnapshotTests/`: none changed.**
+- `screenshots/s10/`: the 24 `day-*.png` copied again.
+
+### For the product owner and for S14 (rulings 21 and 26; nothing built)
+
+- **The title block is 8 pt higher** than in round 1: the room for the name's tails.
+- **Room under the bar is unchanged**: the tester's count is the room under the pinned bar, and the bar did
+  not change. `page_showsAtLeastTwoRows` records its known issue at the same two cells (375 × 667 at
+  `.accessibility4` and `.accessibility5`: 1.99 and 1.36 rows) and no cell that had two rows lost them.
+- While it is being edited the name's tails are cut (above), in the builder too.
+- A draft of only spaces shows neither letters nor the placeholder (tester F11-S10-8). Only a draft can be
+  spaces; the store cleans the name. S14 decides what the field shows then.
+- While it is being edited a name is one line, and from `.xLarge` on a 375 pt phone a seed day's name is
+  longer than that line and runs under the caret.
+- **S14's UI tests** owe, beside round 0's list: that a tap on the name, on its second line too, gives the
+  field the focus (the tester's mutant m), and that the name on screen follows the draft while typing
+  (mutant o).
+
+### Product lines now
+
+`DayEditorScreen` 17 (18), `DayEditorHeader` 23 (22); the rest as in round 1. **484 added under
+`LedgerKit/Sources`**, as in round 1.
+
+### The runs
+
+All on 2026-10-11, in the worktree; every simulator command through the lock (iPhone 17 and Apple Watch
+Series 12 46 mm, both 27.0).
+
+- Simulator, `sim-test.sh … -only-testing:FeatureProgramTests[/…]`, four times: two probes, not kept (what
+  makes the field's frame higher, with both fields under the focus; the looser lines, with the tester's
+  name and title suites run against the review's padding inside the field, which is how the four red tests
+  above were seen); the run that recorded the 24 references; and the closing run.
+- **`FeatureProgramTests`, the whole bundle, on `92a66af`: exit 65, as ruled: 510 tests in 59 suites, 509
+  passed, 1 failed, 2 known issues.** The one red test is the tester's
+  `DayEditorViewsNameAdversarialTests.focus_doesNotCutTheDescenders` (ruling 22; ".large: 28.0 pt of
+  letters, 24.7 with the focus"). The two known issues are `page_showsAtLeastTwoRows` at its two cells.
+  `name_standsAboveTheTag` and `bar_isNeverSqueezed` pass. 408 s of tests, 420 s with the build
+  (`DayEditorLayoutTests` 51 s; the bundle has the tester's fifteen new tests since round 1's 372 s).
+- **`scripts/check.sh --fast`: exit 0, "check.sh (--fast) OK", 175 s.**
+- **`scripts/check.sh`, the full gate, on `92a66af`: exit 65, "check.sh FAILED", at the iOS test plan, on
+  that one test and nothing else**: iOS 3,921 tests, 3,892 passed, **1 failed**, 15 skipped, 13 known
+  issues. Lint, the iOS build and the string catalogs passed before it (980 s in all). **The gate stops at
+  its first failing step, so the watchOS build and tests and the coverage gate did not run in this round**;
+  no watch file changed (round 1's gate on `fe10b4b` passed them). The full gate is green again once the
+  tester marks that test a known issue; I did not run it in that state.
+- **Not verified:** the name's tails under the focus on a device (the hosted drawing shows them cut);
+  typing; VoiceOver itself; the screen in the app; the watchOS plan and the coverage gate on this commit;
+  the nightly lane.
+
