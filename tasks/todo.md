@@ -96,44 +96,73 @@ project is committed the working gate is `scripts/check.sh --fast` plus a
 | F14 | Settings: units, rest, plates, toggles, CSV export, Health row | F07 |
 | F15 | iOS UI tests for critical flows, accessibility audit, Dynamic Type pass | F08–F14 |
 
-- [~] F08 · [~] F09 · [~] F10 · [ ] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15
+- [~] F08 · [~] F09 · [~] F10 · [~] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15
 - [ ] M1 exit: a new user can onboard, run a full workout on the phone, see it in history and in the exercise chart; all flows pass the accessibility audit.
 
-### Status — 2026-10-05: M1 opened with three lanes (Pete approved 2026-10-04)
+### Status — 2026-10-12: M1 after release 0.10.0 (#53); two slices in review
 
-Each feature is delivered as slices, one PR each. Slice plans, rulings and each slice's specification are in the
-feature's brief ("Plan amendments") and notes. "Built" means implemented, adversarially tested, reviewed and
-gated locally, on a branch pushed for safe keeping with no PR yet.
+M1 opened with three lanes (Pete approved 2026-10-04); F11 joined as a fourth on 2026-10-05. Each feature is
+delivered as slices, one PR each, batched since 2026-10-08 into larger PRs (700 to 900 lines of code, under
+1,000). Slice plans, rulings and each slice's specification are in the feature's brief ("Plan amendments") and
+notes. "Built" means implemented, adversarially tested, reviewed and gated locally, on a branch pushed for safe
+keeping with no PR yet.
 
 | Slice | What it is | State |
 |---|---|---|
-| F08 S1 | Program generator (goal and days per week to an 8-week program) | Built (`feat/F08-s1-templates`); **waits for Pete:** do our 3, 5 and 6-day programs ship as defaults; should "Get stronger" accessories use reps-first progression |
-| F08 S2 | The three-step onboarding screen | Built (`feat/F08-s2-onboarding-ui`); PR after #28 and S1 |
-| F08 S3 | A fresh install opens on onboarding; the root follows the active program | Built (`feat/F08-s3-root-gate`); PR after S2 |
-| F09 S1 | Four-tab shell, navigation, the first String Catalog and the localization checks | **PR #28, CI green, waits for Pete's review** (architecture §4, standards §7, a reworded sentence, tab colour and icons) |
-| F09 S2 | Domain additions for Today (next scheduled day, volume change, load state) | Built (`feat/F09-s2-domain`); PR after #28 |
-| F09 S3 | Today's presentation: which card, every word | In progress |
-| F09 S4–S6 | Today's views, store and wiring, live session | Not started |
+| F08 S1 | Program generator (goal and days per week to an 8-week program) | Built (`feat/F08-s1-templates`), not on `main`; as of 2026-10-05 it waited for Pete: do our 3, 5 and 6-day programs ship as defaults; should "Get stronger" accessories use reps-first progression |
+| F08 S2 | The three-step onboarding screen | Built (`feat/F08-s2-onboarding-ui`), not on `main` |
+| F08 S3 | A fresh install opens on onboarding; the root follows the active program | Built (`feat/F08-s3-root-gate`), not on `main` |
+| F09 S1 | Four-tab shell, navigation, the first String Catalog and the localization checks | **On `main`** (#28) |
+| F09 S2 | Domain additions for Today (next scheduled day, volume change, load state) | **On `main`** (#37) |
+| F09 S3 | Today's presentation: which card, every word | **On `main`** (#38) |
+| F09 S4 | The views of the Today screen | **On `main`** (#43) |
+| F09 S5 | Today on screen in the app, with its store, its wiring and the live workout (the plan's S5 and S6 as one PR; the number S6 is not used) | **On `main`** (#50) |
 | F10 S1 | The workout session interface, its test double and shared contract | **On `main`** (#27) |
 | F10 S2 | The real session host, recovery after a kill, the start use case | **On `main`** (#29) |
 | F10 S3 | A swap's program change lands with the saved workout; the log goes in the same transaction | **On `main`** (#30) |
-| F10 S4–S9 | The workout screens: cover, logging, rest, finish and receipt, swap, supersets | Not started; S4 needs #28 |
+| F10 S4 | Starting or resuming a workout opens its cover | **On `main`** (#45) |
+| F10 S5 | Logging the sets of a solo exercise under the cover | **On `main`** (#52) |
+| F10 S6 | The rest panel under the cover, with haptics | **PR #54 open** (`feat/F10-s6-rest`) |
+| F10 S7–S9 | Finish and receipt, swap, supersets | Not started |
+| F11 S1 | Program and day editing rules in the Domain (the plan's S1 and S2; the number S2 is not used) | **On `main`** (#34) |
+| F11 S3 | A program is changed where it is stored, in one step | **On `main`** (#36) |
+| F11 S5 | The presentation of the program builder | **On `main`** (#40) |
+| F11 S6 | The presentation of the day editor and its slot panel | **On `main`** (#44) |
+| F11 S8 | The form controls and the presentation of the exercise library sheet | **On `main`** (#47) |
+| F11 S9 | The views of the program builder and of the exercise library sheet | **On `main`** (#49) |
+| F11 S10 | The views of the Day editor and of its slot panel | **PR #55 open** (`feat/F11-s10-day-editor-views`) |
+| F11, the rest | The stores, the wiring into the Program tab and the UI tests (the plan's S13 and S14; the brief names the numbers that larger batches took in) | Not started |
 
-- **Waiting on Pete:** PR #28; the two questions on F08 S1's program tables; the open product questions asked on
-  2026-10-04 (defaults are built: elapsed time past an hour as "1:01:05"; units and week start from the stored
-  settings; a live workout takes over Today's card; a session done on another day is offered again; "Also update
-  program" lands with the saved workout; a swap keeps the original's load) and one new one: may a lifter abandon a
-  finished workout that cannot be saved. An ADR-004 / ADR-008 amendment is owed to him before F17 is planned.
+- **On `main` through #53:** releases v0.5.0 to v0.10.0. The app opens on four tabs; Today is on screen with its
+  store and wiring and starts or resumes a workout, whose cover logs the sets of a solo exercise. The program
+  builder and the exercise library sheet are drawn and tested as views and are not in the app yet (their store
+  is a later slice). Also merged: the ADR-004 and ADR-008 amendments (#32), the convention for screens that
+  scroll with the reader that refuses a scroll view (#41), a fix to a racy sync test (#39), and the PR lane's
+  40 seeds and 2,520 s deadline (#51).
+- **Waiting on Pete (carried over from 2026-10-05, not re-checked here):** the two questions on F08 S1's
+  program tables; the product questions asked on 2026-10-04 whose defaults are built (elapsed time past an hour
+  as "1:01:05"; units and week start from the stored settings; a live workout takes over Today's card; a session
+  done on another day is offered again; "Also update program" lands with the saved workout; a swap keeps the
+  original's load); may a lifter abandon a finished workout that cannot be saved. Pete is told before any F12
+  work starts (2026-10-06).
 - **Conventions settled in M1 so far:** one String Catalog and one copy file per module, checked by the gate
-  against the compiler's keys (standards §7, in #28); a screen that scrolls is its pinned parts plus a scroll view
-  around one page view, and its VoiceOver tree is pinned on the page (testing-strategy, with F08 S2); stores take
-  synchronous intents and run their work from the view's task; a feature exposes a route and never presents
-  another feature.
-- **CI:** a new branch's first run is cold (#29 took 38 minutes); the session suites' seeded matrices now run in
-  full only in the nightly lane (#30: 17 minutes). A branch pushed without a PR starts no run.
-- **Chores queued:** package targets do not yet build with warnings as errors in `check.sh`; `LedgerDesign`'s and
-  the watch's strings are not in catalogs yet; a recording seam for the logger; tests that compare large values
-  inside an expectation (a red run can fill the disk); three tests that fail in the nightly lane on one thread.
+  against the compiler's keys (standards §7, #28); a counted text takes its plural form by the catalog's
+  language and its digits by the lifter's locale (`Locale.forCountedText`, one place for every feature since
+  chore batch B); a screen that scrolls is its pinned parts plus a scroll view around one page view, and its
+  VoiceOver tree is pinned on the page (testing-strategy §2.6, #41); stores take synchronous intents and run
+  their work from the view's task; a feature exposes a route and never presents another feature.
+- **CI:** Actions is paid, with a $60 monthly limit; a PR is pushed once, after a green local gate. Since #51
+  the hosted run takes the first 40 seeds of every seeded test and has a 2,520 s deadline; the local gate runs
+  the plan's 200 (`tasks/chores/2026-10-09-pr-lane-time.md`). A branch pushed without a PR starts no run.
+- **Chores.** Done in chore batch B (`chore/m1-batch-b`, 2026-10-12; `tasks/chores/2026-10-12-m1-batch-b.md`):
+  counted texts in every feature; the check mark right to left; `AppRootAdversarialTests`' comparisons of large
+  values; the font suites on the Mac host. Queued from it: the hosted reader fails on a text field (designed,
+  to build after #55); phone references are drawn a few points cut on long pages and their precision lets a
+  44 to 74 pt change pass (proposal in the record: one harness change and a `chore(snapshots):` PR). Still
+  queued from before: package targets do not yet build with warnings as errors in `check.sh`; `LedgerDesign`'s
+  and the watch's strings are not in catalogs yet; a recording seam for the logger; three tests that fail in the
+  nightly lane on one thread; the hosted run's text-size matrices and build time (the PR-lane record's "Not
+  done").
 
 ## M2 — Apple Watch (target: 3 weeks; real devices required)
 
