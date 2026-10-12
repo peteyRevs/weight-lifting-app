@@ -682,3 +682,35 @@ criteria:
     the empty band between two exercises; `row.hasDropSet` removed in S14; for S14: `.id(model.id)` or a
     new screen per day (the draft, the focus and `isConfirming` are keyed by place), and `rename` applied
     synchronously by the store.
+
+## Plan amendments — slice S10 after round 2 (orchestrator, 2026-10-11)
+
+The reviewer's second pass found one blocking item (B-2) and two smaller ones (S-5, S-6); the tester's second
+round closed round 1's two findings, left two tests red on purpose (F11-S10-5, F11-S10-6) and refuted S-5
+and S-6 by measurement. Rulings, which add to the twenty before:
+
+21. **The name stands clear of the tag at every text size** (tester F11-S10-6, review B-2): no descender of
+    the name's last line, wrapped or one line, reaches the tag's pill, at all twelve sizes on 375 and 402 pt,
+    plain and bold; `name_standsAboveTheTag` passes unedited. The gap under the name is a spacing token, no
+    literal points. *As built and accepted:* the token stands outside the field, in `DayEditorHeader` (`xs`
+    and `s` under the name), because room inside `NameField` turned four of the tester's other tests red;
+    the name does not move, everything under it moves down 8 pt.
+22. **Under the focus the name's descenders are cut, and that is not fixed in this slice.** The field's frame
+    is the title role's line height, which is `LedgerDesign`'s; no change of a view makes it higher
+    (measured), and `ProgramHeader` on `main` clips the same way. The fix is a design-system change and
+    belongs to the queued chore, with `ProgramHeader` adopting `NameField` and the re-recording of its
+    references. `focus_doesNotCutTheDescenders` is left as it is, red, until the tester marks it a known
+    issue that names the chore. The notes hold the chore's input in full.
+23. **Review S-5 is refuted by measurement** (the bar is rigid: 60.0 / 61.3 / 70.3 pt alone, in the parts and
+    on screen). The screen's `.fixedSize(vertical:)` on the bar goes if `bar_isNeverSqueezed` stays green
+    without it.
+24. **Review S-6 is refuted as written** (an emptied draft moves the rows below by 2.3 to 2.7 pt at
+    accessibility sizes, inside the gap; nothing overlaps). Nothing is built for it.
+25. **Stale comments are corrected:** `DayEditorAccessibilityTests.swift:15`, `DayEditorSnapshotTests.swift:8`,
+    `DayEditorLayoutTests.swift:40-41`, and `NameField.swift:4-5`, which said it serves the builder.
+26. **Recorded for S14 and the product owner, not built:** a draft of only spaces shows neither letters nor
+    the placeholder; while being edited a name is one line and runs out of the field from `.xLarge` on 375
+    pt; that a tap on the name gives it the focus, and that the drawn text follows the draft while typing,
+    are for S14's UI tests.
+
+No tester file is edited in this round.

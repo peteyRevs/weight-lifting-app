@@ -19,6 +19,9 @@ struct DayEditorHeader: View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xs) {
             Eyebrow(header.position)
             NameField(label: header.nameLabel, name: header.name) { send(.rename($0, day: model.id)) }
+                // The title's lines are as high as its type is large, so the tails of the name's last line
+                // hang under its frame: this is their room, clear of the tag.
+                .padding(.bottom, LedgerSpacing.s)
             WrapLayout {
                 DayTag(text: header.tag)
                     .accessibilityHidden(true)

@@ -1,8 +1,8 @@
 import LedgerDesign
 import SwiftUI
 
-/// A name the lifter edits in place, in the screen title's type: the program's name on the builder, the
-/// day's on the Day editor.
+/// A name the lifter edits in place, in the screen title's type: the day's name on the Day editor. (The
+/// builder's `ProgramHeader` still holds its own one-line field; it takes this one in a queued chore.)
 ///
 /// **A draft, not the stored name.** The stored name is the cleaned one, so a field bound to it would lose a
 /// trailing space while the lifter types and could not be emptied. The draft starts as the stored name; each

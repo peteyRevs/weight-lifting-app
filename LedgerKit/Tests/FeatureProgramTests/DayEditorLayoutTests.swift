@@ -37,8 +37,9 @@
         /// The sizes at which a part is drawn right to left as well, and the other states are measured.
         nonisolated static let fewSizes: Set<DynamicTypeSize> = [.xSmall, .large, .xxxLarge, .accessibility5]
 
-        /// Far wider than any part's words at `size`: the longest line, the long exercise name's, is under
-        /// 900 pt at the largest size that is no accessibility size and under 1,700 pt at the largest of all.
+        /// Wide enough for every part's words but the long day name's to stand on one line at `size`. That
+        /// name, the longest line (about 1,050 pt at `.large`), wraps in its wide drawing too at the larger
+        /// sizes, which loses nothing: both drawings hold every letter.
         nonisolated static func wide(at size: DynamicTypeSize) -> CGFloat {
             size.isAccessibilitySize ? 2400 : 1200
         }

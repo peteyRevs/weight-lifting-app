@@ -4,7 +4,7 @@ import SwiftUI
 /// The Day editor, drawn from its model and nothing else: its bar, "Program" and "Done", pinned over a
 /// scroll view around `DayEditorPage`, on the ground. That is its one layout at every text size (the M1
 /// convention for a screen that scrolls). The bar keeps its own height however little room the screen has:
-/// the page is what gives way.
+/// its two buttons do not give way, the page does.
 ///
 /// The screen is given the editor's content only: when the program no longer holds the day there is nothing
 /// to draw, and the store closes the screen. It decides nothing and runs no task: every control sends the
@@ -17,7 +17,6 @@ struct DayEditorScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             DayEditorBar(model: model.header, send: send)
-                .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 DayEditorPage(model: model, send: send)
             }

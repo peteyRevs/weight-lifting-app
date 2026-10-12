@@ -5,7 +5,7 @@
     import Testing
 
     /// F11 S10, criterion 9: the Day editor's states against their references. Each is the state's parts
-    /// (`ProgramParts`: the pinned header over the page) at the iPhone 17 width and their own height, since
+    /// (`ProgramParts`: the pinned bar over the page) at the iPhone 17 width and their own height, since
     /// the screen puts its page in a scroll view, which has no height of its own (testing-strategy §2.6). The
     /// states are the preview registry's.
     ///

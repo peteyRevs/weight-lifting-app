@@ -12,7 +12,7 @@
     /// `ProgramAccessibilityTests.tree_isExactlyTheTable`, and the 44 pt targets by its
     /// `targets_areAtLeast44Points`, which run over every state of the preview registry.
     ///
-    /// Read from the parts (`DayEditorParts`: the pinned header over the page), not from the screen, whose
+    /// Read from the parts (`DayEditorParts`: the pinned bar over the page), not from the screen, whose
     /// scroll view the hosted reader cannot see inside (testing-strategy §2.6).
     @Suite("Day editor accessibility", .serialized, .tags(.feature))
     struct DayEditorAccessibilityTests {
