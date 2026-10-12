@@ -2,15 +2,26 @@ import Foundation
 import LedgerTestSupport
 import Testing
 
-/// F11 S9, criteria 1, 2 and 9, read from the sources: a view draws its model and decides nothing, only the
-/// two screens hold a scroll view, and the views draw with `LedgerDesign` alone.
+/// F11 S9, criteria 1, 2 and 9, and S10, criteria 1 to 3, 8 and 13, read from the sources: a view draws its
+/// model and decides nothing, only the three screens hold a scroll view, the views draw with `LedgerDesign`
+/// alone, and the Day editor's stand in `Views/` and tint one thing.
 ///
 /// The check reads spellings in code, as `FeatureProgramSourceTests` does: a rule reached through a name of
 /// the module's own is for review to find.
 @Suite("FeatureProgram view sources", .tags(.feature))
 nonisolated struct ProgramViewsSourceTests {
-    /// The two files that put a page in a scroll view.
-    static let screens = ["Views/ProgramScreen.swift", "Views/ExercisePickerScreen.swift"]
+    /// The three files that put a page in a scroll view.
+    static let screens = [
+        "Views/ProgramScreen.swift", "Views/ExercisePickerScreen.swift", "Views/DayEditorScreen.swift"
+    ]
+
+    /// The Day editor's view files (S10, criterion 3: all in `Views/`).
+    static let dayEditorViews = [
+        "Views/DayEditorScreen.swift", "Views/DayEditorBar.swift", "Views/DayEditorHeader.swift",
+        "Views/DayEditorPage.swift",
+        "Views/ExerciseGroup.swift", "Views/ExerciseRow.swift", "Views/SlotPanel.swift", "Views/SlotDetails.swift",
+        "Views/ProgressionChips.swift"
+    ]
 
     /// What a view must not reach for: the copy and the presentations (a text or a decision of its own), a
     /// format, a filter or an order of its own, and the clock, the calendar and the locale.
@@ -32,8 +43,8 @@ nonisolated struct ProgramViewsSourceTests {
     static func views() throws -> [(path: String, source: SwiftSource)] {
         let sources = try CopyAudit.sources(ofModule: "FeatureProgram")
         let views = sources.filter { isView($0.key) }.sorted { $0.key < $1.key }
-        try #require(views.count >= 13, "the view files were not found: \(views.map(\.key))")
-        for path in screens + ["Views/ProgramPage.swift", "Views/ExercisePickerPage.swift"] {
+        try #require(views.count >= 24, "the view files were not found: \(views.map(\.key))")
+        for path in screens + dayEditorViews + ["Views/ProgramPage.swift", "Views/ExercisePickerPage.swift"] {
             try #require(sources[path] != nil, "\(path) is not among the module's files")
         }
         return views.map { ($0.key, SwiftSource($0.value)) }
@@ -54,7 +65,7 @@ nonisolated struct ProgramViewsSourceTests {
         #expect(found.isEmpty, "\(found.prefix(5))")
     }
 
-    @Test("Only the two screens hold a scroll view; no page, and no part of one, holds anything that scrolls")
+    @Test("Only the three screens hold a scroll view; no page, and no part of one, holds anything that scrolls")
     func onlyTheScreens_holdAScrollView() throws {
         let found = try Self.uses(of: Self.scrolling) { !Self.screens.contains($0) }
         #expect(found.isEmpty, "\(found.prefix(5))")
@@ -70,6 +81,32 @@ nonisolated struct ProgramViewsSourceTests {
             let imports = source.code.map { $0.trimmingCharacters(in: .whitespaces) }.filter { $0.hasPrefix("import ") }
             #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
         }
+    }
+
+    @Test("The Day editor's views are the nine files of Views/, and its model's folder holds no view")
+    func dayEditorViews_standInViews() throws {
+        let sources = try CopyAudit.sources(ofModule: "FeatureProgram")
+        let inTheModelsFolder = sources.filter { $0.key.hasPrefix("DayEditor/") && $0.value.contains("import SwiftUI") }
+        #expect(inTheModelsFolder.keys.sorted() == [])
+        let named = sources.keys.filter { path in
+            Self.isView(path) && sources[path]
+                .map { $0.contains("DayEditorModel") || $0.contains("SlotEditorModel") } == true
+        }
+        // `WeekSection.swift` holds `ControlPill`, which both screens' controls are drawn with.
+        #expect(named.sorted() == (Self.dayEditorViews + ["Views/WeekSection.swift"]).sorted())
+    }
+
+    @Test("The Day editor tints one thing, the week's eyebrow, by the model's two flags; no view takes a text apart")
+    func dayEditorViews_tintOneThing() throws {
+        let accent = try Self.uses(of: ["LedgerColor.accent", ".accent"]) { Self.dayEditorViews.contains($0) }
+        #expect(accent.count == 1 && accent.first?.hasPrefix("Views/SlotDetails.swift:") == true, "\(accent)")
+        let source = try #require(Self.views().first { $0.path == "Views/SlotDetails.swift" }).source
+        let tinted = source.code.filter { $0.contains(".accent") }.map { $0.trimmingCharacters(in: .whitespaces) }
+        #expect(tinted == ["Eyebrow(week.eyebrow, tint: week.isDeload || week.isHeld ? .accent : .muted)"])
+        let takenApart = try Self.uses(
+            of: [".split(", ".components(", ".range(of", ".replacing", ".hasPrefix(", ".hasSuffix("]
+        )
+        #expect(takenApart.isEmpty, "\(takenApart.prefix(5))")
     }
 
     @Test("The check finds what is there")

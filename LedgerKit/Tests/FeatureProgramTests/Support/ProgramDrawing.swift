@@ -10,9 +10,14 @@
     /// a text field as a yellow placeholder, and `drawHierarchy` draws nothing in a process with no host app.
     /// (`SceneLessWindow` is internal to `LedgerSnapshotTesting`, hence the `@testable` import.)
     enum ProgramDrawing {
-        /// `view` at the iPhone 17 width and its own height, on the ground, at 1×.
-        static func pixels(of view: some View, _ colorScheme: ColorScheme) throws -> PixelBuffer {
-            let width = SnapshotConfig.phoneWidth
+        /// `view` at the iPhone 17 width, or at `width`, and its own height, on the ground, at 1× or at
+        /// `scale`.
+        static func pixels(
+            of view: some View,
+            _ colorScheme: ColorScheme,
+            width: CGFloat = SnapshotConfig.phoneWidth,
+            scale: CGFloat = SnapshotConfig.scale
+        ) throws -> PixelBuffer {
             let content = view
                 .frame(width: width)
                 .fixedSize(horizontal: false, vertical: true)
@@ -31,7 +36,7 @@
             }
             host.view.layoutIfNeeded()
             let format = UIGraphicsImageRendererFormat()
-            format.scale = SnapshotConfig.scale
+            format.scale = scale
             let image = UIGraphicsImageRenderer(bounds: host.view.bounds, format: format).image {
                 host.view.layer.render(in: $0.cgContext)
             }

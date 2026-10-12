@@ -33,7 +33,7 @@ struct DayCard: View {
             : AnyLayout(HStackLayout(alignment: .top, spacing: LedgerSpacing.m))
         return HStack(spacing: LedgerSpacing.m) {
             layout {
-                tag
+                DayTag(text: model.tag)
                 texts
             }
             // Centred on the row, as the chevron of Today's rows.
@@ -43,16 +43,6 @@ struct DayCard: View {
         }
         .padding(.vertical, LedgerSpacing.l)
         .contentShape(Rectangle())
-    }
-
-    private var tag: some View {
-        Text(model.tag)
-            .ledgerFont(.caption)
-            .foregroundStyle(LedgerColor.ink)
-            .padding(.horizontal, LedgerSpacing.s)
-            .padding(.vertical, LedgerSpacing.xs)
-            .frame(minWidth: LedgerFont.scaledSize(.caption, dynamicTypeSize: dynamicTypeSize) * Self.tagEms)
-            .background(LedgerColor.hairline, in: .ledgerPill)
     }
 
     private var texts: some View {
@@ -86,5 +76,23 @@ struct DayCard: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// A day's tag ("UA") in a small pill with the quiet fill, as the schedule strip draws a training day's cell:
+/// on the day's row here and beside the day's line in the Day editor's header. The pill is at least
+/// `DayCard.tagEms` wide.
+struct DayTag: View {
+    let text: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Text(text)
+            .ledgerFont(.caption)
+            .foregroundStyle(LedgerColor.ink)
+            .padding(.horizontal, LedgerSpacing.s)
+            .padding(.vertical, LedgerSpacing.xs)
+            .frame(minWidth: LedgerFont.scaledSize(.caption, dynamicTypeSize: dynamicTypeSize) * DayCard.tagEms)
+            .background(LedgerColor.hairline, in: .ledgerPill)
     }
 }

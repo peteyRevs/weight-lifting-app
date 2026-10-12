@@ -5,9 +5,10 @@
     import Testing
     import UIKit
 
-    /// F11 S9, criterion 2: what exists only because the two screens scroll. Each screen, hosted at an iPhone
-    /// 17's size, is one scroll view around its page; the builder pins nothing, the sheet pins its title, its
-    /// search field and its foot around it; and no page holds a scroll view of its own. What the pages say is
+    /// F11 S9, criterion 2, and S10, criterion 2: what exists only because the three screens scroll. Each
+    /// screen, hosted at an iPhone 17's size, is one scroll view around its page; the builder pins nothing, the
+    /// sheet pins its title, its search field and its foot around it, the Day editor its bar above it; and
+    /// no page holds a scroll view of its own. What the pages say is
     /// `ProgramAccessibilityTests`'; the stops inside the real scroll views are the nightly UI tests of S13 and
     /// S14. (`SceneLessWindow` is internal to `LedgerSnapshotTesting`, hence the `@testable` import.)
     @Suite("Program screens", .serialized, .tags(.feature))
@@ -69,6 +70,19 @@
             #expect(scroll.frame.width == Self.phone.width && scroll.frame.minX == 0)
             #expect(scroll.frame.height >= Self.phone.height - 100, "all but the safe areas: \(scroll.frame)")
             #expect(scroll.contentSize.height > Self.phone.height, "the seed program is longer than the screen")
+        }
+
+        @Test("The Day editor pins its bar alone: the page, with the day's name, scrolls under it")
+        func dayEditor_barIsPinnedAboveItsPage() throws {
+            for size in [DynamicTypeSize.large, .accessibility5] {
+                let scroll = try #require(Self.scrollViews(in: ProgramPreview.dayOpenLinear.content, at: size).first)
+                // The bar is its two buttons: 44 pt and its padding at the default size, and no more than a
+                // line of the largest text. The simulator's window keeps 62 pt above the screen.
+                let bar = scroll.frame.minY - 62
+                #expect(bar >= 44 && bar <= 110, "the bar is \(bar) pt high at \(size): \(scroll.frame)")
+                #expect(scroll.frame.width == Self.phone.width && scroll.frame.minX == 0)
+                #expect(scroll.contentSize.height > scroll.frame.height, "an open exercise is longer than the screen")
+            }
         }
 
         @Test("The sheet's list scrolls between its pinned search field and its pinned foot")

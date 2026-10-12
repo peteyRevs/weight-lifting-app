@@ -585,3 +585,132 @@ records) a text field, with testing-strategy §2.5 saying so (review S-4); icons
 to left, the check mark first, in `LedgerDesign` (review S-5; the set row has it too); `SectionLine` and a
 public press style in `LedgerDesign` before S10; the reference precision on long pages (tester's note 1:
 three visible mutations passed every reference at 0.995).
+
+## Plan amendments — slice S10, the Day editor's and the slot editor's views (orchestrator, 2026-10-10)
+
+The plan's S10 and S11 as one pull request (larger batches; the number S11 is not used again). Cut from
+`main` at release 0.10.0, which holds the Day editor's presentation (S6), the form controls (S8) and the
+builder's views (S9). Views drawn from a model only: no store, nothing in the app (S14 puts it there).
+About 580 product lines planned (the plan's S10 and S11 rows list the files); views have landed close to
+plan; past about 800 the implementer stops and reports. Pete's decision 1 stays at its default A. The
+notes' "Inputs for the views (S10, S11)" and "Inputs for S10 and S11" are part of this contract. The slice
+is accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `DayEditorModel.Content` and
+   `(DayEditorAction) -> Void`; it builds no action but the name field's `rename`, decides nothing that is
+   shown, formats no number and reads no clock, calendar or locale. Every text on screen is a string of the
+   model; a lookup the model does not carry is not expected, and any is listed for Pete.
+2. **The screen scrolls as the convention says** (testing-strategy §2.5–§2.6): `DayEditorScreen` is its
+   pinned header plus a `ScrollView` around `DayEditorPage(model:send:)`; snapshots and VoiceOver trees are
+   taken from the page and the header; the page holds no scroll view.
+3. **The files live in `FeatureProgram/Views/`** (S9's deviation 1 is the rule now); the folder scans of
+   earlier testers (`DayEditorWordsAdversarialTests` reads `DayEditor/`, `ProgramViewsSourceTests` reads
+   `Views/`) pass unedited except for adding the new screen file to `screens`.
+4. **The header**: the back control, `header.position` ("DAY 1 OF 4"), "Done", the day's name as a text
+   field bound to a draft (S9's `ProgramHeader` rule: seeded from `header.name`, sends `rename` with the
+   text as typed, does not take the stored name back while focused), `header.tag` drawn, the summary line.
+5. **The page, closed**: per `Group`, the superset header once above its rows where it is not nil, the rows
+   as one visual block; a row with its code, name, scheme, load where not nil, and a caret by `isOpen`;
+   "+ Add exercise"; "Delete day" presenting the confirmation from `deleteDay.confirmation`, whose "Cancel"
+   sends nothing.
+6. **The panel, open** (drawn from `row.panel` and nothing else, inside the row's block): the week line;
+   one `StepperField` per field; "PROGRESSION" with its chips in `WrapLayout`, the selected one not a
+   button, and its note; the drop set as `.toggleStyle(.ledger)` with its note; the superset actions; "Move
+   up", "Move down", "Remove"; the week strip. A control the model does not carry is not drawn (`details ==
+   nil`, an empty `supersetActions`, a nil move).
+7. **A stepper is drawn with `label` and `value`** and is one adjustable element to VoiceOver with
+   `spokenLabel` and `value` (the plan's default; the other reading of decision 1 is listed for Pete with
+   a screenshot, not built).
+8. **Colour**: only the facts the notes name pick the accent (`WeekLine.isDeload`/`isHeld`,
+   `Entry.isDeload`/`isHeld`/`isShown`, `DropSet.isOn`, `Row.isOpen`); no view splits `week.eyebrow` or
+   `strip.text`. An orange audit, as S9's, pins where the accent is on this screen, and its list is given
+   to Pete.
+9. **States have previews and snapshots** (the notes' snapshot table, rows S10 and S11): all closed at six
+   cells; a day with a superset, open double, drop set on at two each; open linear at six; plus the deload
+   week once. `ProgramPreview` gains `.dayEditors`; one registry for the module.
+10. **VoiceOver** (the plan's tree, notes line 571 on): `header.position` a heading; the name field
+    labelled `header.nameLabel` (pinned as `ProgramTextFieldTests` does, since the hosted reader does not
+    see a text field); a superset header a heading with label `spokenLabel` and value `note`; a row a
+    button with `spokenLabel`, `spokenValue` and its open or closed state; each stepper adjustable, its
+    two actions sent by decrement and increment; the chips a one-selected group; the drop set a switch
+    with `note` as hint. Every target is 44 pt.
+11. **Sizes and settings**: no word is cut and nothing overlaps at the twelve text sizes on 375 and 402 pt,
+    with Bold Text, Increase Contrast and right to left; a long exercise name and a long day name lay out.
+    Truncation is checked by measurement (S9's cut-word checks), not by a reference image alone.
+12. **Each control sends exactly its model's action, once**: pinned by a test that walks the page.
+13. **No rule of its own**: `LedgerDesign`'s components and tokens, the feature's `SectionLine` and
+    `ControlPill` (generalised if the Day editor's control type needs it, not copied). A new shared
+    component is proposed in the report, not added quietly.
+
+**Not in this slice:** any store (S13, S14), the exercise library sheet's presentation from the Day editor,
+`LedgerAppKit`, the project file or a test plan, the chores queued after S9 (`SectionLine` into
+`LedgerDesign`, the reader and a text field), and any change to a presentation beyond a field a view
+provably needs (listed).
+
+## Plan amendments — slice S10 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer asked for changes (one blocking item, four should-fix) and the tester left one test failing
+(`smallPhone_headerIsNotSqueezed`) and two questions as known issues. Rulings, which add to S10's thirteen
+criteria:
+
+14. **Only the bar is pinned.** `DayEditorScreen` pins the row "Program … Done" alone; the title block
+    (`header.position`, the name field, `header.tag`, the summary line) is the first thing in
+    `DayEditorPage` and scrolls with it. Criteria 2 and 4 and the plan tree's "Pinned:" list are amended to
+    this. The pinned bar keeps its own height on every screen: it is never squeezed (review B-1 step 2,
+    tester F11-S10-2).
+15. **The day's name is drawn whole at every text size** on 375 and 402 pt, plain and bold, for the four
+    seed day names and the long name: it wraps onto further lines while it is not being edited. The
+    one-line `TextField` is kept (a field with a vertical axis is a `UITextView`, which the hosted reader
+    refuses and the source test bans); a wrapping `Text` of the draft is drawn while the field has no
+    focus, hidden from accessibility and from hit testing. The layout must not jump the keyboard's target
+    off screen at the moment focus arrives.
+16. **One `NameField` in `Views/`** holds the draft rule and this wrapping, used by the Day editor's title
+    block and by `ProgramHeader`, so that a long program name wraps too. Of S9's references only those
+    whose name wraps may change; if any other changes by a pixel, `ProgramHeader` stays as it is and the
+    implementer reports.
+17. **Stepper labels are "Sets", "Reps", … in the small grey label style** (decision 1 A's own words win
+    over criterion 7): `spokenLabel` is drawn, and the then redundant `.accessibilityLabel` goes (review
+    S-1). The tree stays one adjustable element with that label and `value`.
+18. **The week's eyebrow uses `Eyebrow`** with its tint (review S-4).
+19. **The cut-word sweep is thinned** (review S-2): the wide drawing once per part, size, weight and
+    direction; right to left at four sizes; in `words_otherStates_areDrawnWhole` only the open row and its
+    panel's parts. The title is swept under the four seed day names and the long name, not "Arms";
+    `dayName_isCutInItsOneLineField` goes. Target: `DayEditorLayoutTests` under about 50 s on the simulator.
+20. **Not changed, recorded for the product owner or later slices:** a one-word exercise name breaking
+    across lines at `.accessibility4` and above (tester F11-S10-4); `.alert` against F10's dialog for
+    destructive questions; "Remove" looking like "Move down"; "Program" and "Done" sending the same action;
+    the empty band between two exercises; `row.hasDropSet` removed in S14; for S14: `.id(model.id)` or a
+    new screen per day (the draft, the focus and `isConfirming` are keyed by place), and `rename` applied
+    synchronously by the store.
+
+## Plan amendments — slice S10 after round 2 (orchestrator, 2026-10-11)
+
+The reviewer's second pass found one blocking item (B-2) and two smaller ones (S-5, S-6); the tester's second
+round closed round 1's two findings, left two tests red on purpose (F11-S10-5, F11-S10-6) and refuted S-5
+and S-6 by measurement. Rulings, which add to the twenty before:
+
+21. **The name stands clear of the tag at every text size** (tester F11-S10-6, review B-2): no descender of
+    the name's last line, wrapped or one line, reaches the tag's pill, at all twelve sizes on 375 and 402 pt,
+    plain and bold; `name_standsAboveTheTag` passes unedited. The gap under the name is a spacing token, no
+    literal points. *As built and accepted:* the token stands outside the field, in `DayEditorHeader` (`xs`
+    and `s` under the name), because room inside `NameField` turned four of the tester's other tests red;
+    the name does not move, everything under it moves down 8 pt.
+22. **Under the focus the name's descenders are cut, and that is not fixed in this slice.** The field's frame
+    is the title role's line height, which is `LedgerDesign`'s; no change of a view makes it higher
+    (measured), and `ProgramHeader` on `main` clips the same way. The fix is a design-system change and
+    belongs to the queued chore, with `ProgramHeader` adopting `NameField` and the re-recording of its
+    references. `focus_doesNotCutTheDescenders` is left as it is, red, until the tester marks it a known
+    issue that names the chore. The notes hold the chore's input in full.
+23. **Review S-5 is refuted by measurement** (the bar is rigid: 60.0 / 61.3 / 70.3 pt alone, in the parts and
+    on screen). The screen's `.fixedSize(vertical:)` on the bar goes if `bar_isNeverSqueezed` stays green
+    without it.
+24. **Review S-6 is refuted as written** (an emptied draft moves the rows below by 2.3 to 2.7 pt at
+    accessibility sizes, inside the gap; nothing overlaps). Nothing is built for it.
+25. **Stale comments are corrected:** `DayEditorAccessibilityTests.swift:15`, `DayEditorSnapshotTests.swift:8`,
+    `DayEditorLayoutTests.swift:40-41`, and `NameField.swift:4-5`, which said it serves the builder.
+26. **Recorded for S14 and the product owner, not built:** a draft of only spaces shows neither letters nor
+    the placeholder; while being edited a name is one line and runs out of the field from `.xLarge` on 375
+    pt; that a tap on the name gives it the focus, and that the drawn text follows the draft while typing,
+    are for S14's UI tests.
+
+No tester file is edited in this round.

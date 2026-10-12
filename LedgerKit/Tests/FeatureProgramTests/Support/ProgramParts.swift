@@ -9,11 +9,13 @@
     ///
     /// The builder has no pinned part, so its parts are its page alone, on the screen's ground. The exercise
     /// library's are `SheetChrome`'s title and "Cancel", the search field, the page, and the foot, as
-    /// `ExercisePickerScreen` stacks them. A fixture that does not build draws nothing; `PreviewTests` fail on it.
+    /// `ExercisePickerScreen` stacks them; the Day editor's are its bar over its page, as `DayEditorScreen`
+    /// stacks them. A fixture that does not build draws nothing; `PreviewTests` fail on it.
     struct ProgramParts: View {
         let preview: ProgramPreview
         var sendBuilder: (ProgramBuilderAction) -> Void = { _ in }
         var sendLibrary: (ExercisePickerAction) -> Void = { _ in }
+        var sendDay: (DayEditorAction) -> Void = { _ in }
 
         var body: some View {
             // `try?`: the fixture's error is `PreviewTests`' to report.
@@ -23,6 +25,8 @@
                     .background(LedgerColor.ground)
             case let .library(model):
                 ExercisePickerParts(model: model, send: sendLibrary)
+            case let .dayEditor(model):
+                DayEditorParts(model: model, send: sendDay)
             case nil:
                 EmptyView()
             }
@@ -47,11 +51,30 @@
         }
     }
 
+    /// The Day editor's pinned bar over its page, without the scroll view, on the screen's ground.
+    struct DayEditorParts: View {
+        let model: DayEditorModel.Content
+        var send: (DayEditorAction) -> Void = { _ in }
+
+        var body: some View {
+            VStack(spacing: 0) {
+                DayEditorBar(model: model.header, send: send)
+                DayEditorPage(model: model, send: send)
+            }
+            .background(LedgerColor.ground)
+        }
+    }
+
     extension ProgramPreview {
         /// The builder's states.
         nonisolated static let builders: [ProgramPreview] = [.builder, .deloadWeek, .emptyDay, .twoWeeks, .sixteenWeeks]
         /// The exercise library's states.
         nonisolated static let libraries: [ProgramPreview] = [.library, .libraryPicked, .libraryNothing]
+
+        /// The Day editor's states.
+        nonisolated static let dayEditors: [ProgramPreview] = [
+            .dayEditor, .daySuperset, .dayOpenLinear, .dayOpenDouble, .dayDropSet, .dayDeload, .dayLongNames
+        ]
 
         /// The builder's model of a builder state.
         func builderModel() throws -> ProgramBuilderModel {
@@ -64,6 +87,14 @@
         /// The library's model of a library state.
         func libraryModel() throws -> ExercisePickerModel {
             guard case let .library(model) = try subject() else {
+                throw NotThatScreen()
+            }
+            return model
+        }
+
+        /// The Day editor's content of a Day editor state.
+        func dayEditorModel() throws -> DayEditorModel.Content {
+            guard case let .dayEditor(model) = try subject() else {
                 throw NotThatScreen()
             }
             return model

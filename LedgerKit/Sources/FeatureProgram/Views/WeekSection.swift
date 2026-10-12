@@ -28,17 +28,31 @@ struct WeekSection: View {
     }
 }
 
-/// A button of the model as an outlined pill; one that carries no action is drawn disabled.
-struct ControlPill: View {
-    let control: ProgramBuilderModel.Control
-    let send: (ProgramBuilderAction) -> Void
+/// A button of a model as an outlined pill, on either screen; one that carries no action is drawn disabled.
+struct ControlPill<Action>: View {
+    let title: String
+    let action: Action?
+    let send: (Action) -> Void
 
     var body: some View {
-        PillButton(control.title) {
-            if let action = control.action {
+        PillButton(title) {
+            if let action {
                 send(action)
             }
         }
-        .disabled(control.action == nil)
+        .disabled(action == nil)
+    }
+}
+
+extension ControlPill where Action == ProgramBuilderAction {
+    init(control: ProgramBuilderModel.Control, send: @escaping (ProgramBuilderAction) -> Void) {
+        self.init(title: control.title, action: control.action, send: send)
+    }
+}
+
+extension ControlPill where Action == DayEditorAction {
+    /// A control of the Day editor always carries its action.
+    init(control: DayEditorModel.Control, send: @escaping (DayEditorAction) -> Void) {
+        self.init(title: control.title, action: control.action, send: send)
     }
 }

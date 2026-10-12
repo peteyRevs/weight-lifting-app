@@ -934,3 +934,336 @@ All seven failed for this one reason and no other; each passes after the edit. F
 Free disk stayed between 7.0 and 8.2 GB.
 
 Round 2 complete.
+
+---
+
+## Slice S10 — round 1 (G2 tester, 2026-10-10)
+
+Tested at `de60be7` (branch `feat/F11-s10-day-editor-views`); no product file changed. Six new files in
+`LedgerKit/Tests/FeatureProgramTests/Adversarial/`, all named `DayEditorViews…Adversarial…`: 29 tests in 5
+suites and two support files; two earlier tester files strengthened. **One test fails on purpose** (finding
+2); two more record a product-owner question as a known issue (findings 1 and 3). No reference image was
+recorded or changed: every check is a measurement of the hosted view.
+
+### Verdict: one layout defect on small phones; the day's name is cut from one step above the default size, not from `.accessibility3`; the rest held
+
+Criteria 5, 6, 7, 8, 10 and 12 held in the previews' seven states and in eight of my own. Criterion 11 is
+not met in two places (findings 1 and 2).
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S10-1 | **should fix, or Pete accepts** (open question 2 of the notes, with its facts corrected) | **The day's name is cut from `.xLarge`, not from `.accessibility3`.** The notes' finding 1 says the seed's name "fits at the default size and ends in '…' at `.accessibility3`". Measured from the field's own attributed text against its text rectangle, and looked at once as pictures: on a 375 pt phone "Lower A — Squat focus" and "Lower B — Hinge focus" read "Lower A — Squat foc…" from `.xLarge` (325 pt of text in 323), "Upper A — Push focus" from `.xxLarge`, "Upper B — Pull focus" from `.xxxLarge`; on an iPhone 17 the two Lower days at `.xxLarge` with Bold Text, and they and Upper A from `.xxxLarge`. Up to `.large` all four fit on both widths, plain and bold (Lower A with Bold Text by 3 pt on 375). The implementer's ink measure weighs the whole header, in which two lost letters are under its 6 % band: that is why his sweep saw the cut only at `.accessibility3`. | `DayEditorViewsFieldAdversarialTests.seedNames_aboveTheDefaultSize_areDrawnWhole` (known issue at `.xLarge`, `.xxLarge`, `.xxxLarge`, `.accessibility3`); `seedNames_upToTheDefaultSize_areDrawnWhole` passes and guards the default |
+| F11-S10-2 | **should fix** (a defect; one line) | **On a short screen the pinned header is squeezed and its text cut.** `DayEditorScreen` is `VStack { header; ScrollView }` with nothing that keeps the header at its own height, so the stack offers the header half of the screen and a header that needs more gives in. Upper A's header needs 325 pt at `.accessibility5` on 375 pt. Hosted with the 647 pt an iPhone SE leaves under its status bar it is given 320 pt; with 603 pt (a 44 pt bar above it) 302 pt, a line of text less. Nothing squeezes at `.accessibility3` and `.accessibility4`, nor on an iPhone 17. No test of the implementer's hosts the screen at that height. Fix: the header at its ideal height (`.fixedSize(horizontal: false, vertical: true)` or a layout priority). | `DayEditorViewsRoomAdversarialTests.smallPhone_headerIsNotSqueezed` — **fails at `.accessibility5`**, left failing |
+| F11-S10-3 | note, for Pete (the notes' finding 2, measured) | **What the pinned header leaves the page**, on the hosted screen, in closed rows of the seed program. 375 × 667 (20 pt status bar): 7.0 rows at `.large`, 4.5 at `.xxxLarge`, 2.4 at `.accessibility1`, 2.1 at `.accessibility2`, **1.5 at `.accessibility3`, 1.2 at `.accessibility4`, 0.8 at `.accessibility5`** (header 320 of 647 pt, one row is 424 pt). iPhone 17: 9.4, 7.6, 4.1, 3.0, 2.1 at `.accessibility3`, **1.8 and 1.5** at the two largest. Under two rows from `.accessibility3` on the small phone and from `.accessibility4` on an iPhone 17; a tab bar or navigation bar is not counted. On 375 pt the header is also 26 pt higher than on 402 pt at `.xxLarge` (190 against 164: the summary line wraps). | `DayEditorViewsRoomAdversarialTests.page_showsAtLeastTwoRows` (known issue at those five cells) |
+| F11-S10-4 | note | **A one-word exercise name is broken in two at the two largest sizes.** "Hyperextension" (the catalog's longest word) stands whole up to `.accessibility3` on both widths, and is drawn on two lines at `.accessibility4` on 375 pt and at `.accessibility5` on both. Every letter is drawn, so no weight of ink shows it. No line holds the word at those sizes; listed, not failed. | `DayEditorViewsLayoutAdversarialTests.oneWordName_besideItsNumbers_isNotBroken`, `oneWordName_overItsNumbers_isNotBroken` (pass, up to `.accessibility3`) |
+
+### Audit of the implementer's edits to earlier testers' files (`git diff main..de60be7 -- '*Adversarial*'`)
+
+| File and test | Edit | Verdict |
+|---|---|---|
+| `ProgramViewsSourceAdversarialTests.scan_readsEveryView` | 14 → 22 | **Kept**: `Views/` holds 22 files that are no preview. |
+| `…views_sendOnlyTheModelsActions` | ten lines added | **Lost a little, restored.** The list is exact. But `ProgressionChips` sends a fourth bare `send(action)`, and the pin that each bare `action` is unwrapped from the model still counted 3 with a pattern that does not know `chip`: the fourth was unpinned. Now `(cell|chip|control|model)`, 4, and the count of bare sends must equal it. |
+| `…views_keepNoStateButTheDraft` | three states, three `.onChange` | **Kept**: the contract gives the alert's flag to the view. (The test's title still says "the draft and the two fields' focus".) |
+| `…views_readOnlyTheTextSize` | 2 → 4 | **Kept**: the set is still the text size alone. |
+| `…views_numbers_areTheTwo` | two `90`s | **Kept** (the caret's quarter turn; deviation 9a). |
+| `ProgramViewsPreviewAdversarialTests.registry_holdsTheNamedStates` | seven names | **Kept.** |
+| `ProgramViewsTreeAdversarialTests.tables_areTheOraclesTrees` | `allCases` → builders and libraries, `throw` for `.dayEditor` | **Lost, restored.** The Day editor's seven tables were checked against no tree but the implementer's own. `DayViewsOracle` writes them from the plan's tree and "Inputs for the views"; the test takes `allCases` again. All seven tables match. |
+
+### Attacked and held
+
+- **Trees (criteria 5, 6, 10)**: eight states of mine (`DayViewsState`: no exercise; a held week; an unstored
+  exercise open; the deload week with a superset's first exercise open; the last exercise of the day open;
+  twelve exercises with a superset of three, its last open, both superset actions; loads of "12,345.5 lb";
+  a long day name, one-word and long exercise names, a superset note of three lines) read exactly the
+  oracle's tree at `.large` light, `.accessibility5` dark and right to left. An absent control is an absent
+  stop.
+- **Actions (criterion 12)**: every stop of the fifteen states sends exactly the oracle's actions (a
+  stepper swiped down, up, up); the previews at `.accessibility5` too. With a store in the loop every
+  exercise of three days opens under its own row and closes again, the tree exact after each tap.
+- **Criterion 1 from outside** (`everyString_isDrawnAndSpokenWhereTheNotesSay`): each of the open double
+  day's 91 strings is changed in turn; the drawing changes exactly when the notes draw it and the tree
+  exactly when they speak it. With every string empty no stop says a word. The placeholder and the alert's
+  four texts are the model's; "Cancel" sends nothing, the confirming button the model's action once.
+- **Colour (criterion 8)**: with the two facts cleared, no state of the fifteen draws an orange pixel in
+  either theme; a page is orange exactly in the three states whose model says so; the orange disappears
+  with the eyebrow's words and stays under other words; the same at `.accessibility5` with Bold Text.
+- **Layout (criteria 10, 11)**: the eight states at `.xxxLarge`, `.accessibility1`, `.accessibility5` on
+  both widths, plain, bold and right to left: no stop empty, outside the page, under 44 pt or over another.
+  No chip, slot action or "Add exercise" is cut in three states. A stepper's two round buttons, which are
+  no stops, are 44 pt each by their pixels (96 × 44 at `.xSmall` and `.large`). The name field's row is
+  44 pt. The caret points down closed and up open, right to left too. The strip's shown week is ink (213
+  against 113). A stepper draws `label`, not `spokenLabel`.
+- **The name field**: four stored names (one empty, one of spaces) through focus, blur and changes of the
+  stored name: the field shows what the rule says and sends nothing; after three changes under the focus a
+  blur takes the last.
+- **The screen**: a drag on the page dismisses the keyboard (`UIScrollView.keyboardDismissMode`).
+
+### Mutations (23, switched at run time in the views; the sources put back, `git status` clean)
+
+Each mutant ran against 17 groups of existing tests and 16 of mine in one process; the baseline with no
+mutant recorded no issue. **The three size sweeps among the existing tests (`words_areDrawnWhole`,
+`longExerciseName_isDrawnWhole`, the S9 `previews_layOutSoundly`) ran at `.large` and `.accessibility5`
+only, and the source scans not at all** (the switch itself changes the sources): a miss below is a miss of
+the hosted tests at those sizes.
+
+| | Mutant | Existing tests | Mine |
+|---|---|---|---|
+| A | the caret never turns | **missed** (the references too) | `caret_pointsDownWhenClosed_upWhenOpen` |
+| B | the strip's shown week grey, the others ink | references only | `strip_shownWeekIsInk` |
+| C | a stepper draws `spokenLabel` ("Sets") | **missed** (the references too) | `stepper_drawsTheLabel`, `everyString…` |
+| D | a row's place ("4A") not drawn | references only | `everyString…` |
+| E | the header's tag not drawn | references only | `everyString…` |
+| F | no keyboard dismissal on drag | **missed** | `screen_dragDismissesTheKeyboard` |
+| G | `rename` sent for a name that came from the store | caught | caught |
+| H | "Cancel" sends the delete | caught | caught |
+| I | the chosen chip stays a button | caught | caught |
+| J | "Move up" and "Move down" swapped | caught | caught |
+| K | a held week's eyebrow grey | caught | caught |
+| L | a stepper's "−" sends increment | caught | caught |
+| M | a row's numbers not kept at their own width | **missed** | **missed**: the row lays out the same in every state tried (the numbers are the less flexible part and are sized first); it would differ only for numbers wider than half a row |
+| N | the summary line on one line | caught | not caught |
+| O | "Delete day" above "+ Add exercise" | caught | caught |
+| P | a row never stacks at accessibility sizes | references only (`row_accessibilitySize_stacks` passes) | `oneWordName_overItsNumbers_isNotBroken` |
+| Q | a deload week's strip entry orange | caught | caught |
+| S | the chips in a row that does not wrap | caught | not caught |
+| T | a superset's note on one line | caught | not caught |
+| U | "Program" and "Done" exchanged | caught | caught |
+| V | the name field's row not 44 pt | references only | `nameField_is44PointsHigh` |
+| W | a row's sub line on one line | caught | not caught |
+| X | the drop set's note not drawn (still the hint) | references only | `everyString…` |
+
+Three were missed by every existing test and are caught now; six were caught by a reference image alone and
+have a measurement now; one (M) changes nothing that can be seen.
+
+### Gate time
+
+`FeatureProgramTests` alone, on the same simulator and options: **212 s on `main`'s tests** (S9's last
+whole-bundle run, `f11s9/fix2.log`: 425 tests; `main` has not changed the target since), **388 s at
+`de60be7`** (the implementer's `run3.log`: 465 tests), **428 s with my additions** (494 tests). The whole
+iOS step was 732 s on `main` earlier today (another lane's gate) and 832 s on this branch. Of the 176 s the
+slice adds: `DayEditorLayoutTests` 127 s (the ink sweep: 12 sizes × 6 settings × 19 parts, each drawn
+twice, one of them 2,400 pt wide), `previews_layOutSoundly` +26 s and `ProgramViewsLayoutTests` +11 s (seven
+more states). My five suites cost 41 s (trees 17, orange 11, layout 11, name 1, room 1). Cheapest saving,
+if the hosted deadline is near: `words_areDrawnWhole` at four sizes instead of twelve, about 85 s.
+
+### Not tested, and why
+
+- **Typing** into the name field: a hosted `UITextField` passes no text to SwiftUI. So that a typed name is
+  sent as `rename` with the day's id, a blank draft, a trailing space, and what the field shows when the
+  store cleans the name under the caret are S14's UI tests.
+- **A finger** on "−" and "+", on a row, a chip, the switch and the alert's buttons: activated through
+  accessibility or UIKit's handler here, never tapped. A pressed control's look.
+- **Increase Contrast**: only the implementer's one reference; I measured nothing under it.
+- **The existing sweeps under each mutant at all twelve sizes**, and the source scans under a mutant.
+- A device, VoiceOver itself, the screen in the app (it is in none), a tab or navigation bar above it.
+
+### Commands and exit statuses (2026-10-10, in the worktree, every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `sim-test.sh … -only-testing:FeatureProgramTests`, final sources | 65, as intended: 494 tests, 492 passed, **1 failed** (`smallPhone_headerIsNotSqueezed`), 9 known issues, 428 s |
+| `scripts/check.sh --fast` | 0: 1,223 tests, lint clean, 135 s |
+| seven probe runs of my suites; three runs of the mutation driver (0 each, 264 cases each) | — |
+
+Free disk stayed at 12 GB.
+
+---
+
+## Slice S10 — round 2 (G2 tester, 2026-10-11)
+
+Tested at `4d22ec9` (the fix round `fe10b4b` and its notes), with the review's second pass (`b4f1ce0`) read;
+no product file changed. Three new files in `LedgerKit/Tests/FeatureProgramTests/Adversarial/`
+(`DayEditorViewsName…`, `…Focus…`, `…Title…`: one new suite, 15 tests) and edits to four of my own.
+**Two tests fail on purpose** (findings 5 and 6). One known issue is left, at two cells (finding 3's
+remainder). No reference image was recorded or changed.
+
+### Verdict: rulings 14, 15, 17, 18 and 19 hold; two new defects around the name, both small and both about the title's tight line
+
+Round 1's F11-S10-1 (the name cut) and F11-S10-2 (the header squeezed) are **closed**. The name is drawn
+whole at all twelve sizes; the bar is never squeezed. What is new: with the focus the field cuts the name's
+descenders, and a name's descender reaches into the tag's pill from `.xLarge`.
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S10-5 | **should fix** (seen in the hosted drawing and in one picture of it, not on a device) | **With the focus the name's descenders are cut.** The field then draws the name itself, and its editor clips at the field's frame, which is the title's tight line: 33.7 pt for the 32 pt type at `.large`. The letters' box is 28.0 pt high without the focus and 24.7 with it at `.large`: the tails of "y", "p", "g" end flat ("Upper A — Gyp", looked at as a picture). Without the focus the name is a `Text` and whole. The builder's `ProgramHeader` has the same one-line field in the same type; I did not measure it. Cause is the same tight line as finding 6: the field needs the type's own line height, or room under it. | `DayEditorViewsNameAdversarialTests.focus_doesNotCutTheDescenders` — **fails** at `.large` and `.accessibility3` |
+| F11-S10-6 | **should fix** (the review's B-2, confirmed and wider) | **A name's descender reaches into the tag's pill.** Lowest ink of the name against the pill's first row, at 3×: a wrapped "Lower B — Hinge focus" is 2.0 pt into the pill's rows from `.xLarge` on 375 pt, "Lower A — Squat focus" 1.3 pt from `.xxLarge` (0.3 pt clear at `.xLarge`), with ink inside the pill's own box; on an iPhone 17 from `.xxLarge` with Bold Text and `.xxxLarge` plain; both names 3.0 to 6.3 pt from `.accessibility1` on both widths. **A name of one line does it too** from `.accessibility2` ("Gyp": 2.0, 4.0, 5.3, 6.0 pt; 0.3 pt clear at `.accessibility1`), which the review does not say. Up to `.large` the gap is 11 pt and more. | `DayEditorViewsNameAdversarialTests.name_standsAboveTheTag` — **fails** at `.xLarge`, `.xxxLarge`, `.accessibility3` (all twelve sizes, plain and bold, were measured once; four are kept, plain) |
+| F11-S10-3 | note, for Pete (unchanged in kind) | Under the pinned bar a 375 × 667 phone has room for **1.99** closed rows at `.accessibility4` and **1.36** at `.accessibility5`: the implementer's two figures, confirmed (my measure: 1.986 and 1.360). Every other cell has two and more (small phone 8.4 at `.large`, 2.3 at `.accessibility3`; iPhone 17 10.7, 2.9, 2.5, 2.3). The count is the room under the bar; the title block is now the first thing in it, and is not taken off. | `DayEditorViewsRoomAdversarialTests.page_showsAtLeastTwoRows` (known issue at those two cells) |
+| F11-S10-7 | note | **An emptied draft** (the review's S-6, refuted as it reads): the placeholder does not hang over the tag or the summary. With the focus and an empty draft the field is 2.0 pt (`.accessibility3`) and 2.7 pt (`.accessibility5`) higher than the name's target, inside the 4 pt that part it from the tag, and the target is 2.3 and 2.7 pt higher than under one letter (50.0 against 47.7; 57.3 against 54.7): the rows under the name move by that at the first letter. Nothing at `.large` (44 and 44). | `…emptyDraft_keepsALine` (passes: both under 4 pt) |
+| F11-S10-8 | note | **A draft of spaces shows nothing**: no letters and no placeholder, focus or not (UIKit keeps the placeholder back for a field that is not empty). Only a draft can be spaces; the stored name is cleaned. | `…emptyName_showsThePlaceholderOnce` (pins it) |
+
+**The review's S-5 is refuted.** The bar in `DayEditorParts`, which the references draw, is as high as on
+the screen: 60.0, 61.3 and 70.3 pt at `.large`, `.accessibility3` and `.accessibility5`, the same alone, in
+the parts and on the hosted screen; its two buttons are 44 pt and stand above the heading
+(`parts_barIsTheScreensBar`). The bar's parts are rigid, so `.fixedSize` in the screen changes nothing
+(mutant h below). No 49 pt bar exists.
+
+### Audit of the implementer's edits to my files
+
+| File and test | Edit | Verdict |
+|---|---|---|
+| `DayEditorViewsRoomAdversarialTests.page_showsAtLeastTwoRows` | `isShort` narrowed to the small phone at `.accessibility4` and above | **Kept.** A known issue that is not recorded fails the test, so the narrowing is exact; the two cells are confirmed. Title and comment brought up to date. |
+| `DayEditorViewsLayoutAdversarialTests.stepper_drawsTheLabel` | the expectation flipped | **Kept** (ruling 17). Renamed `stepper_drawsTheSpokenLabel`; title and comment say what it checks. |
+| `DayViewsText.place(of:)` | a stepper's `label` drawn and spoken nowhere, `spokenLabel` both | **Kept**: `everyString…` still asks all 91 strings, and `label` must now change nothing. |
+| `ProgramViewsSourceAdversarialTests.scan_readsEveryView` | 22 → 24 | **Kept.** |
+| `…views_sendOnlyTheModelsActions` | the three sends named in `DayEditorBar` and `DayEditorHeader` | **Lost a little, restored.** `rename` is now built from what `NameField` hands over, and the place where it hands a name over was pinned nowhere. New: `nameField_handsTheNameOverOnce` (`onRename(text)`, once). |
+| `…views_keepNoStateButTheDraft` | the draft, focus and three `.onChange` are `NameField`'s | **Kept.** Renamed `views_keepNoStateButDraftsFocusAndTheAlert`, with a title that lists what it pins. |
+| (not edited, but stale) `…views_numbers_areTheTwo` | — | Renamed `views_numbers_areThePinnedFour`. |
+| (new) | — | `views_spellNoColourButClear`: `Color.clear` is a colour outside the tokens that the S9 bans do not name; pinned at its two uses in `NameField`. |
+
+`seedNames_aboveTheDefaultSize_areDrawnWhole` and its helpers are **deleted** (they measured the hidden
+field). In their place, with no known-issue wrapper: `seedNames_areDrawnWhole` (twelve sizes, both widths,
+plain and bold) and `otherNames_areDrawnWhole`. The measure is my own and not ink weight: the name field
+without the focus must draw, pixel for pixel, what a text of mine draws (the name in the title's type with
+no limit of lines, at the top of a 44 pt target). `measure_seesACutAndADouble` proves it on the round-1
+case. `smallPhone_headerIsNotSqueezed` became `bar_isNeverSqueezed` (both phones, twelve sizes, the screen
+also hosted 150 pt high).
+
+### `NameField`, attacked
+
+- **Drawn whole**: the four seed names at all twelve sizes on both widths, plain and bold; a long name, a
+  name of one long word and one letter at four sizes; right to left and in the light theme. All identical
+  to the whole text.
+- **One of the two, never both, never neither** (found by hiding the `UITextField` and drawing again):
+  without the focus the drawing is the same with the field hidden, and has letters; with the focus the text
+  draws no letter and the field does; twice round, for a short and a long name, right to left too. An
+  empty name: the text draws nothing, the placeholder is drawn once, by the field, with the focus and
+  without.
+- **The shift on focus** (letters' box at 3×, a one-line name): 0 pt sideways, **0.67 pt up** at `.large`,
+  and inside the test's 1.34 pt at `.accessibility3` (not read more finely); back exactly when the focus leaves. The implementer's 0 and −0.7 to
+  −1.0 pt stand.
+- **The target**: the name field's frame holds every line of a three-line name, is 323 pt wide and at
+  least 44 pt high; the `UITextField` stands on the first line (UIKit's `hitTest` finds it there and finds
+  no text field on the last line, where the tap is the view's own gesture).
+- **At the moment of focus**: a long name's target goes from three lines to one (44 pt at least), its top
+  does not move, and is as before when the focus leaves; the one line ends at the page's edge.
+- **The stored name changing**: without the focus the drawn name is the new one, whole; with the focus the
+  field keeps its draft and the text stays hidden; the blur draws the stored name on its lines again.
+- **While edited** (one line, accepted by ruling 15): the four seed names are whole up to `.large` on both
+  widths; at `.xLarge` the two Lower days run out of the field on 375 pt (the field scrolls under the
+  caret); at `.accessibility3` all four on both.
+- VoiceOver: the trees of fifteen states still match my oracle exactly, so the drawn text is no stop.
+
+### Mutations, round 2 (19, switched at run time; sources put back, `git status` clean)
+
+The existing sweeps ran at **all their sizes** this time; only the S9 `previews_layOutSoundly` at two. The
+baseline recorded my two failing tests and nothing else.
+
+| | Mutant | Existing tests | Mine |
+|---|---|---|---|
+| N | the summary line on one line | references, the sweep | — |
+| S | the chips in a row that does not wrap | the sweep, `chipsAndActions_wrap` | — |
+| T | a superset's note on one line | references, the sweep (`words_areDrawnWhole`; `words_otherStates` no longer) | — |
+| W | a row's sub line on one line | references, the sweep | — |
+| a | the text stays ink under the focus (both drawn) | **missed** | `oneOfTheTwo_isDrawn`, `storedName…` |
+| b | the field's text stays ink without the focus | references, the sweep | caught |
+| c | the name on one line again | references, the sweep | caught |
+| d | the drawn text read by VoiceOver | the trees | the trees |
+| e | the field on the name's last line | `nameField_keepsItsPlaceWhenTheFocusComes` | caught |
+| f | the name's target not 44 pt | references only | `nameField_is44PointsHigh` |
+| g | under the focus the hidden text still wraps (the block keeps its lines) | **missed** | `focus_longName_isOneLine` |
+| h | no `.fixedSize` on the bar in the screen | **missed** | **missed**: nothing changes, the bar is rigid |
+| i | the title block pinned again | caught | caught |
+| j | the tag after the summary line | references only | `name_standsAboveTheTag` (by its place) |
+| k | the week's eyebrow never orange | the orange audit | caught |
+| l | a stepper draws `label` again | the trees | caught |
+| m | a tap on the name does not focus the field | **missed** | **missed**: no hosted test has a finger |
+| n | the bar without its padding | references only | `bar_isNeverSqueezed` (60 pt) |
+| o | the text draws the stored name, not the draft | **missed** | **missed**: differs only while typing |
+
+**The thinned sweep lost no catch**: N, S, T and W are caught as in round 1. Two mutants are now caught
+only by my tests (a, g); two need a finger or a keyboard and are S14's UI tests (m, o); one is no change
+(h).
+
+### Held from round 1
+
+The trees and every stop's action in fifteen states against my oracle (unchanged: the bar's two stops,
+then the page's); the 91 strings drawn and spoken where the rulings put them; the orange audit over whole
+pages; frames, pills, the steppers' round buttons, the caret, the strip; the name field's draft rule; the
+keyboard dismissal.
+
+### Not verified
+
+- A finger: a tap on the name's second or third line giving the focus (mutant m), a tap on "−" and "+".
+- Typing: `rename` as typed, the drawn text following the draft (mutant o), the caret's place in a long
+  one-line name.
+- Finding 5 on a device: the cut descenders are measured in the hosted drawing of the focused field.
+- Increase Contrast: nothing measured under it (the hosted drawing here sets no contrast trait).
+- `ProgramHeader`, which is as on `main`.
+
+### Time and runs (2026-10-11, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `sim-test.sh … -only-testing:FeatureProgramTests`, final sources | 65, as intended: **510 tests in 59 suites, 508 passed, 2 failed** (`focus_doesNotCutTheDescenders`, `name_standsAboveTheTag`), 2 known issues; **426 s of tests**, 443 s with the build |
+| `scripts/check.sh --fast` | 0: 1,223 tests, lint clean |
+| five runs of my suites while writing them; three of the mutation driver (0 each; 322, 322 and 276 cases) | — |
+
+`FeatureProgramTests`: 428 s at the end of round 1, 372 s in the implementer's run on `fe10b4b`, 426 s here
+(a run before I thinned two tests took 442 s; the machine's runs differ by tens of seconds).
+`DayEditorLayoutTests`: 127 s → 52 s here (47 s in his run). My six suites together: 70 s (trees 20, name
+21, orange 13, layout 12, room 3, the draft rule under 1); they were 41 s in round 1.
+
+Free disk stayed at 12 GB.
+
+---
+
+## Slice S10 — round 3 (G2 tester, 2026-10-11)
+
+Tested at `412033e` (fix round 2, `92a66af`, and its notes), under rulings 21 to 26; no product file
+changed. Edits to three of my files; one test added. **Nothing is left red.**
+
+### Verdict: ruling 21 holds with 1.3 pt to spare at the tightest cell; nothing else moved
+
+### Findings
+
+| # | Status | What | Test |
+|---|---|---|---|
+| F11-S10-6 | **closed** (ruling 21) | The name stands clear of the tag. Measured again at the twelve sizes on both widths, plain and bold, for two wrapped seed names, one-line "Gyp" and a long name that ends on a tail: **the least room between the name's lowest ink and the pill is 1.3 pt** (the long name, Bold Text, `.accessibility5`, 375 pt); for the seed names and "Gyp" 1.7 pt (Bold Text, `.accessibility5`, both widths); 2.0 pt at `.accessibility4` and at `.accessibility5` plain. No ink inside the pill in any cell. No cell is within 1 pt, but the tightest was not among the four kept sizes, so the kept test now also runs `.accessibility5` with Bold Text and asks for a point of room. | `name_standsAboveTheTag` (passes at five sizes) |
+| F11-S10-5 | **known issue, for the queued `LedgerDesign` chore** (ruling 22) | Under the focus the descenders are cut. Checked with my own measure that the builder's `ProgramHeader`, which is as on `main`, clips identically: the letters of "Gyp" without the focus and with it are 28.0 and 24.7 pt at `.large`, 42.0 and 36.3 at `.accessibility3`, 48.0 and 41.3 at `.accessibility5`, in both fields, to a third of a point. So the cut is the title role's line, not `NameField`'s. Both tests carry a known issue that names ruling 22 and the chore, and are not intermittent: each fails when the clipping stops, so the chore must remove the wrapper. | `focus_doesNotCutTheDescenders`, `focus_programHeader_doesNotCutTheDescenders` (new; it also expects the two fields to clip alike) |
+| F11-S10-9 | note, for the design-system chore | **The word sits low in `PillButton`'s outline at accessibility sizes, and it is `PillButton` itself.** "Done" alone, in the bar and "+30s" alone measure the same. Room above the word's ink and under it, inside the outline: 11.7 and 8.0 pt at `.large` (outline 28 pt), **17.3 and 7.6 pt at `.accessibility3`** (45.3 pt), **20.0 and 7.6 pt at `.accessibility5`** (54.3 pt): the word's middle is 1.8, 4.8 and 6.2 pt under the outline's. The room under the word is the pill's padding; the caption role's line puts all its extra height above the letters. Not this slice's bar. | measured, no test |
+| F11-S10-10 | note, for the snapshot harness (not this slice) | **The outline 2 pt from the top of `day-closed-dark-accessibility3.png` is the reference's crop.** On the hosted screen, in the bar alone and in `DayEditorParts` drawn by `ProgramDrawing`, the outline is 8.0 pt from the bar's top at `.accessibility3` and `.accessibility5` (16.0 at `.large`): the bar's padding. Drawn through the snapshot library's own path (`.image(layout: .sizeThatFits)`, 1×), the parts are 402 × 1873 and the outline is at 2 pt (3 pt at `.accessibility5`, 16 at `.large`); the bar alone and the bar over a plain block are at 8; the bar over the title block at 7; and **a bar with `.fixedSize` over the page is at 2 all the same**. So the bar is not squeezed (round 2's verdict on S-5 stands): on that path a long page at an accessibility size is drawn about 12 pt higher than the size the image is given, and the image loses 5 to 6 pt at its top (and, I take it, at its bottom: not measured). Every long accessibility reference of the module is cut that way. | measured, no test |
+
+### Nothing else moved
+
+- **The name's own place and the whole-name pictures**: `seedNames_areDrawnWhole` (twelve sizes, both
+  widths, plain and bold), `otherNames_areDrawnWhole`, right to left and light, `oneOfTheTwo_isDrawn`,
+  `focus_doesNotMoveTheName`, `target_holdsEveryLine`, `focus_longName_isOneLine`,
+  `storedName_changes_theDrawnNameFollows`, `emptyDraft_keepsALine`: all pass unedited.
+- **The trees and actions** in fifteen states, the 91 strings, the orange audit: pass unedited.
+- **The room table**: the same two cells are short (375 × 667 at `.accessibility4` and `.accessibility5`),
+  the known issue recorded at exactly those.
+- **The bar without the screen's `.fixedSize`** (ruling 23): `bar_isNeverSqueezed` passes on both phones at
+  the twelve sizes, also hosted 150 pt high; the outline stands 8.0 pt under the bar's top on the hosted
+  screen at `.accessibility3` and `.accessibility5`.
+
+### Mutations, round 3 (4, on the round's two changes; sources put back, `git status` clean)
+
+| | Mutant | Existing tests | Mine |
+|---|---|---|---|
+| p | no room under the name | references only | `name_standsAboveTheTag` |
+| q | `xs` under the name, not `s` | references only | `name_standsAboveTheTag` |
+| r | the room above the name, not under it | references only | `name_standsAboveTheTag` |
+| t | the bar made to give way (30 pt at most) | references, `parts_layOutSanely`, the S9 sweep, `ProgramScreenTests` | `bar_isNeverSqueezed`, `parts_barIsTheScreensBar`, `states_layOutSoundly` |
+
+The baseline recorded no issue.
+
+### Not verified
+
+- The clipping, and its end, on a device; `ProgramHeader` beyond that one measure.
+- Why the snapshot path draws a long page higher than it sizes it (finding 10): I measured the effect, not
+  the cause, and not the bottom edge.
+- A finger, typing, Increase Contrast: as in round 2.
+
+### Runs (2026-10-11, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `sim-test.sh … -only-testing:FeatureProgramTests`, final sources | **0: 511 tests in 59 suites, all passed, 8 known issues** (the two descender tests at three sizes each; the room table's two cells); 370 s of tests, 391 s with the build |
+| `scripts/check.sh --fast` | 0: 1,223 tests, lint clean |
+| five probe runs of the name suite; one of the mutation driver (0; 230 cases) | — |
+
+Free disk: 10 GB at the end.

@@ -6,7 +6,8 @@
     import Testing
 
     /// Every `#Preview` in FeatureProgram is a case of `ProgramPreview`, and every case renders (the convention
-    /// F07's criterion 8 set for each module with previews). The cases are the states of S9's criterion 5.
+    /// F07's criterion 8 set for each module with previews). The cases are the states of S9's criterion 5 and of
+    /// S10's criterion 9.
     @Suite("Previews (FeatureProgram)", .serialized, .tags(.feature))
     struct PreviewTests {
         @Test("Every #Preview in FeatureProgram is a ProgramPreview case, by name, and every case has one")
@@ -23,14 +24,18 @@
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
         }
 
-        @Test("Every case is a state of the builder or of the library, and the two lists hold every case once")
-        func cases_areSplitBetweenTheTwoScreens() throws {
-            #expect(ProgramPreview.builders + ProgramPreview.libraries == ProgramPreview.allCases)
+        @Test("Every case is a state of one of the three screens, and the three lists hold every case once")
+        func cases_areSplitBetweenTheThreeScreens() throws {
+            let lists = ProgramPreview.builders + ProgramPreview.libraries + ProgramPreview.dayEditors
+            #expect(lists == ProgramPreview.allCases)
             for preview in ProgramPreview.builders {
                 _ = try preview.builderModel()
             }
             for preview in ProgramPreview.libraries {
                 _ = try preview.libraryModel()
+            }
+            for preview in ProgramPreview.dayEditors {
+                _ = try preview.dayEditorModel()
             }
         }
 
@@ -59,6 +64,43 @@
             let sixteen = try ProgramPreview.sixteenWeeks.builderModel()
             #expect(sixteen.block.chips.count == 16)
             #expect(sixteen.header.name == ProgramPreviewData.longName)
+        }
+
+        @Test("Every Day editor preview shows the state it is named for")
+        func dayEditorPreviews_showTheirStates() throws {
+            let closed = try ProgramPreview.dayEditor.dayEditorModel()
+            #expect(closed.header.position == "DAY 1 OF 4" && closed.header.tag == "UA")
+            #expect(closed.rows.count == 5 && !closed.rows.contains(where: \.isOpen))
+            #expect(closed.supersetNotes == ["2 exercises back to back · rest after B"])
+
+            let superset = try ProgramPreview.daySuperset.dayEditorModel()
+            let second = try #require(superset.openRow)
+            #expect(second.index == "3B" && second.panel?.actionLine == "Break out · Move up · Remove")
+            #expect(second.panel?.details?.selectedProgressions == ["Fixed"])
+
+            let linear = try ProgramPreview.dayOpenLinear.dayEditorModel()
+            let bench = try #require(linear.openRow?.panel)
+            #expect(bench.details?.selectedProgressions == ["Linear"])
+            #expect(bench.details?.fieldLine == "SETS 5 · REPS 5 · START LOAD 180 lb · TARGET RPE 8 · REST 2:30")
+            #expect(bench.moveUp == nil, "the first exercise of the day has no Move up")
+
+            let double = try ProgramPreview.dayOpenDouble.dayEditorModel()
+            let incline = try #require(double.openRow?.panel?.details)
+            #expect(incline.selectedProgressions == ["Double"])
+            #expect(incline.fields.map(\.label).contains("TOP OF RANGE"))
+
+            let drop = try ProgramPreview.dayDropSet.dayEditorModel()
+            let curl = try #require(drop.openRow)
+            #expect(curl.hasDropSet && curl.panel?.details?.dropSet.isOn == true)
+            #expect(curl.panel?.supersetActions.isEmpty == true, "the last exercise, on its own")
+
+            let deload = try ProgramPreview.dayDeload.dayEditorModel()
+            #expect(deload.openRow?.panel?.details?.week.eyebrow == "WEEK 8 · DELOAD")
+            #expect(deload.header.meta == "Week 8 · 5 exercises · 13 sets · ~29 min")
+
+            let long = try ProgramPreview.dayLongNames.dayEditorModel()
+            #expect(long.header.name == ProgramPreviewData.longDayName)
+            #expect(long.rows.map(\.name).filter { $0 == ProgramPreviewData.longExerciseName }.count == 2)
         }
 
         @Test("Every library preview shows the state it is named for")

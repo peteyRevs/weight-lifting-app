@@ -1248,3 +1248,490 @@ what would settle it is the same `build-for-testing` on a quiet machine with the
 - The catalog's layout and order against `xcstringstool`: left to the gate's string-catalog step, which the
   orchestrator's run passed.
 - The plural rule and word order in any language but English: by reasoning only.
+
+## S10 — review, round 1 (G3 reviewer, 2026-10-10)
+
+Reviewed: `git diff main..de60be7` on `feat/F11-s10-day-editor-views` (`b367052` the views, `de60be7` the
+notes), the committed range only; the tester's uncommitted files were not read. Product paths are under
+`LedgerKit/Sources/FeatureProgram/Views/`, test paths under `LedgerKit/Tests/FeatureProgramTests/`; line
+numbers are those of `de60be7`. "The notes" is the implementer's section "S10 — the Day editor's views".
+Nothing was built or run: every statement about behaviour is from reading the sources and the tests, and
+every statement about the look is from the committed images, which I opened.
+
+### Verdict: changes requested — one blocking item, small in code; the rest is approve with should-fix
+
+The views are simple, read like the builder's, and hold no rule of their own. Criteria 1 to 10, 12 and 13
+are met on the evidence. **Criterion 11 is not met, and by more than the notes say**: the day's name is cut
+well below the accessibility sizes (B-1). The fix I recommend also answers the pinned header's height
+(the notes' finding 2), and needs one line of ruling from the orchestrator because it changes what is
+pinned. The stepper labels need a ruling too (S-1): the slice's criterion 7 and decision 1 A's own text say
+different things.
+
+### Blocking
+
+**B-1. The day's name is cut from about `.xxLarge` on a 375 pt phone, not only "at accessibility sizes";
+criterion 11 is not met.** `DayEditorHeader.swift:43-50`; the test that keeps it "known" is
+`DayEditorLayoutTests.swift:147-160`.
+
+- *Evidence, from the committed screenshots.* The ink of the name is 297 pt wide for "Upper A — Push focus"
+  (`day-closed-dark-large.png`), 307 pt for "Lower A — Squat focus" (`day-superset-dark-large.png`), and
+  312 pt for Upper A at `.xLarge` (`day-closed-dark-xLarge.png`: 1.05 times, as `.largeTitle` scales). The
+  field's line is 375 − 2 × 26 = 323 pt on a 375 pt phone and 350 pt on an iPhone 17. So, **computed, not
+  run**: "Lower A — Squat focus" is at the line's edge at `.xLarge` on 375 pt (322 to 323 pt) and cut at
+  `.xxLarge`; "Upper A — Push focus" is cut at `.xxLarge` on 375 pt (about 328 pt) and at `.xxxLarge` or
+  `.accessibility1` on an iPhone 17; Bold Text is wider still. These are the seed program's own names at
+  ordinary text sizes. `day-openLinear-dark-accessibility3.png` shows the end state: "Upper A — Pus…".
+- *Why the tests pass.* `words_areDrawnWhole` measures the header under the name "Arms"
+  (`DayEditorLayoutTests.swift:59-61`), and `dayName_isCutInItsOneLineField` looks at two sizes only and
+  expects the cut. The sweep that would have found the sizes in between was never pointed at a real name.
+- *Why it blocks.* Criterion 11: "no word is cut … at the twelve text sizes on 375 and 402 pt". S9 accepted
+  an ellipsis for an unusually long program name; here it is every seeded day's title on the screen whose
+  purpose is to edit that day. It is the same class of defect as S9's "RE…".
+- *The fix I recommend, one answer for B-1 and for the notes' finding 2.*
+  1. **The name wraps while it is not being edited.** Keep the one-line `TextField` (a field with a vertical
+     axis is a `UITextView`, which the hosted reader refuses: testing-strategy §2.6, F8-S2-8, and
+     `ProgramViewsSourceTests` bans the spelling), and draw the name over it as a `Text` that wraps while the
+     field has no focus. A sketch, not compiled:
+     ```swift
+     ZStack(alignment: .topLeading) {
+         TextField(label, text: $draft)
+             .ledgerFont(.title)
+             .foregroundStyle(isEditing ? LedgerColor.ink : .clear)   // the Text below shows the name
+             .submitLabel(.done)
+             .focused($isEditing)
+             .ledgerHitTarget(alignment: .leading)
+             .onTapGesture { isEditing = true }
+             .accessibilityLabel(label)
+         if !isEditing {
+             Text(draft)
+                 .ledgerFont(.title)
+                 .foregroundStyle(LedgerColor.ink)
+                 .multilineTextAlignment(.leading)
+                 .ledgerHitTarget(alignment: .leading)   // one line sits where the field's line sits
+                 .allowsHitTesting(false)
+                 .accessibilityHidden(true)
+         }
+     }
+     ```
+     The field stays the one accessibility element and the one `UITextField` (`DayEditorTextFieldTests`
+     keep passing); an empty draft shows the placeholder as today; while editing, the name is one line that
+     scrolls sideways, as every field. About ten lines more than today. No number, no new state.
+  2. **Pin the row "Program … Done" only; the title block scrolls.** With a name that wraps, a header pinned
+     whole grows: by my estimate one more title line from `.xxLarge` (about +40 pt), about 330 pt of 812 at
+     `.accessibility3` and about 500 pt at `.accessibility5` (the notes measure 270 and 362 today with the
+     name cut). That is too much to pin. So: `DayEditorBar(header:send:)`, pinned, is the two buttons;
+     `DayEditorTitle` ("DAY 1 OF 4", the name, the tag and the summary line) is the first thing in
+     `DayEditorPage`. The pinned part becomes about 68 pt at the default size and stays under about 100 pt
+     at the largest (estimated from `PillButton`'s target and the `m` padding; to be measured). This is how
+     the builder already stands: `ProgramHeader` scrolls with its page. Side effects, all good: the
+     VoiceOver order on screen and in the plan agree without argument (bar: "Program", "Done"; page: the
+     heading, the field, the line), `DayEditorParts` and the seven trees do not change, and the bar takes
+     `Header` alone (deviation 3 shrinks to the title).
+     **This changes the wording of criteria 2 and 4 ("pinned header") and the plan tree's "Pinned:" list,
+     so the orchestrator rules before it is built.** If the ruling is to keep everything pinned, do step 1
+     alone and move the summary line into the page (the notes' own option for finding 2); I do not
+     recommend pinning a wrapped title with nothing moved.
+  3. **Tests.** Delete `dayName_isCutInItsOneLineField`. Make `words_areDrawnWhole` measure the real title
+     under each of the four seed day names (twelve sizes, two widths, plain and Bold Text), and the long day
+     name with them; `ProgramScreenTests.dayEditor_headerIsPinnedAboveItsPage` then pins the bar's height
+     (`scroll.frame.minY` between 44 and about 110 at `.large` and `.accessibility5`) in place of
+     `> 150`. Re-record the references; add the title at `.accessibility3` to the screenshots.
+- *Rejected alternatives.* A cap on the name's text size or a `minimumScaleFactor`: the name must shrink
+  below the default size's ratio already at `.xxLarge` on 375 pt, so the cap would sit under the lifter's
+  chosen size at ordinary settings. Lifting the reader's limit for a vertical field: a chore of its own
+  (testing-strategy §2.6), not this slice's.
+
+### Should fix
+
+**S-1. The stepper labels: "Sets", not "SETS" (needs the orchestrator's one-line ruling).**
+`SlotDetails.swift:56-62`. Decision 1 A, which the contract says "stays at its default A", reads
+(implementation-notes, "Decisions for Pete", 1 A, *Labels*): "With one exercise open the old design shows ten
+all-caps labels; the dark design allows six a screen. **The six field labels become "Sets", "Reps", "Top of
+range", "Start load", "Target RPE", "Rest" in the small grey label style.**" Criterion 7 of this slice says
+"drawn with `label`", which is the capitals. The two disagree; A's text is the product owner's decision and
+`docs/product-decisions.md` #17 (at most six all-caps eyebrows a screen) is the rule behind it. As built,
+an open double exercise shows ten lines in capitals ("DAY 1 OF 4", "WEEK 1", six fields, "PROGRESSION",
+"SUPERSET"); with `spokenLabel` it shows four. By eye (`alternative-stepper-labels-dark-large.png` against
+`day-openDouble-dark-large.png`) the capitals are also the wrong capitals: untracked `label` type, not the
+eyebrow's. *Change:* `StepperField(field.spokenLabel, …)` and delete the then redundant
+`.accessibilityLabel(field.spokenLabel)` (`:62`); re-record. `Field.label` then joins `hasDropSet` on the
+list of fields to remove before F11 ends.
+
+**S-2. The cut-word sweep is where the gate's time went; thin it without losing a check.**
+`DayEditorLayoutTests.swift:103-136`. Counted from the parameters: `words_areDrawnWhole` is 12 sizes × 6
+settings × 19 parts × 2 drawings = 2,736 hostings; `words_otherStates_areDrawnWhole` is 3 states × 4 sizes ×
+6 settings × about 17 parts × 2 ≈ 2,450; `longExerciseName_isDrawnWhole` 12 × 6 × 5 × 2 = 720. About
+5,900 hostings, twice the notes' "about 2,900", and half of them 2,400 pt wide. Beside that, the seven new
+states add 84 cases to the S9 tester's `previews_layOutSoundly` and 7 × the settings to
+`parts_layOutSanely`, which is the registry doing its job. In order:
+  1. *No check lost:* the wide drawing does not depend on `setting.width`, yet `cut` draws it once per width
+     (`:109-110`). Draw `whole` once per part, size, weight and direction: a quarter of all hostings gone.
+  2. *No check lost in practice:* right to left mirrors a layout and breaks no line differently; sweep it at
+     the four sizes of `words_otherStates…` and keep plain and Bold Text at all twelve.
+  3. `words_otherStates_areDrawnWhole`: measure the open row and its panel's parts only; the closed rows of
+     those days are the same view with other words of the same length, already swept twelve ways.
+  Together about half. I did not time anything; the implementer's 832 s against 508 s on another lane is
+  the only measurement, and the difference (about 320 s) is the size this count predicts at 50 ms a hosting.
+
+**S-3. The name field's rule should be one view once B-1 lands.** `DayEditorHeader.swift:22-29, 43-50,
+62-76` is `ProgramHeader.swift:19-27, 32-39, 41-56` with two names changed. Twenty copied lines were
+defensible (deviation 2, below). With B-1's overlay it is about thirty-five lines of subtle behaviour, and
+the builder's name has the same cut for a long name. *Change:* `NameField(label:name:onRename:)` in
+`Views/NameField.swift`, holding the draft, the focus, the three `onChange` and the wrap; the Day editor's
+title uses it now with `onRename: { send(.rename($0, day: model.id)) }`. `ProgramHeader` adopts it in the
+same round only if the orchestrator accepts re-recording S9's long-name references; otherwise queue it. The
+tester's pinned lists (`views_keepNoStateButTheDraft`, `views_sendOnlyTheModelsActions`) change by the
+file's name only.
+
+**S-4. The week's eyebrow re-spells the design system's `Eyebrow`.** `SlotDetails.swift:34-36` is
+`Eyebrow.swift:22-24` written out (the `eyebrow` role, `accentText` or `inkMuted`). Criterion 13.
+*Change:* `Eyebrow(week.eyebrow, tint: week.isDeload || week.isHeld ? .accent : .muted)`; the group's
+`.accessibilityElement(children: .ignore)` (`:41`) already keeps `Eyebrow`'s heading trait out of the tree,
+which `tree_isExactlyTheTable` confirms. `ProgramViewsSourceTests.dayEditorViews_tintOneThing` pins the new
+line instead of the old.
+
+### Notes (no change asked, or a line each)
+
+- **N-1. `ControlPill` is both screens' now and still lives in `WeekSection.swift`**
+  (`WeekSection.swift:31-58`); `dayEditorViews_standInViews` has to name that file as an exception. Its own
+  file, `Views/ControlPill.swift`, when the tester's count of files is next touched. Same for `DayTag` in
+  `DayCard.swift:82-98`, which reads `DayCard.tagEms`.
+- **N-2. A draft or a flag that outlives its day.** `DayEditorHeader`'s `draft` and focus and
+  `DeleteDayButton.isConfirming` are keyed by the view's place, not by the day. Nothing in this slice can
+  show a second day in the same screen; S14 must either push a new screen per route or put
+  `.id(model.id)` on `DayEditorScreen`. With the field focused and the model swapped under it, the next
+  keystroke would rename the new day with the old draft. For S14's inputs.
+- **N-3. The draft rule loses a keystroke under an asynchronous store** (same as S9's): type "X", delete it
+  before the store has answered, and the second change equals the stale `header.name` and is not sent
+  (`DayEditorHeader.swift:62-66`). The notes already require the store to apply `rename` synchronously;
+  keep that sentence in S14's contract.
+- **N-4. `ExerciseDisclosure` gates the panel twice** (`ExerciseRow.swift:21-23` and `:98-100`); harmless,
+  `isOpen` and `panel != nil` are one fact. Leave.
+- **N-5. The chosen progression chip** (`ProgressionChips.swift:16-23`): three modifiers to make a
+  `PillButton` not a button. Correct and tested (the stop is text, selected, sends nothing). To VoiceOver a
+  selected text among two buttons is less usual than "selected, button" on all three, which is what the
+  plan's tree had; criterion 6 chose this. For the nightly UI test to hear, not to change.
+- **N-6. `Program+Previews.swift:99`** replaces a list of cases by `default:`; the compiler no longer says
+  when a builder case is added without its input. Debug only; leave or restore the list.
+- **N-7. The caret** (`ExerciseRow.swift:41-43`): the chevron is not mirrored right to left
+  (`LedgerIcon.swift:37`), so the quarter turn points down and up in both directions; the right-to-left
+  reference shows it. Fine.
+- **N-8. Standards.** No lint waiver, no `try!`, no `as!`, no unchecked sendability in the diff. Largest new
+  product file 103 lines (`ExerciseRow.swift`), largest type 68. Comments are as dense as `ProgramHeader`'s
+  and `DayCard`'s. No literal text in a view; the two `90`s are the only numbers. Names are plain, though
+  `ExerciseGroup` and `ExerciseRow` say less than `DayExerciseRow` would beside `ExercisePickerRow`; leave.
+- **N-9. Identity.** `ForEach` over `groups`, `rows`, `fields` and `chips` uses the model's ids, as the
+  inputs say; the strip's entries and the superset actions use their place (`SlotPanel.swift:21, 51`), which
+  the inputs allow for the strip and which is safe for two stateless pills.
+
+### Criteria
+
+| # | Verdict | Evidence, and whether the test is a real check |
+|---|---|---|
+| 1 | Met | No view imports more than SwiftUI and `LedgerDesign`; the only action built is `send(.rename(text, day: model.id))` (`DayEditorHeader.swift:64`); no literal, format, clock or locale. The source scans read the new files; `everyControl_sendsItsModelsAction_once` compares what each stop sends with the model, stop by stop: real. |
+| 2 | Met as written | `DayEditorScreen.swift:17-25`. `screen_isOneScrollView`, `parts_holdNoScrollView`: real. `dayEditor_headerIsPinnedAboveItsPage` pins a third of the screen at `.accessibility3` on an iPhone 17 only; at `.accessibility5` on 375 pt the notes' own 362 of 812 is unpinned. B-1's second step replaces it. |
+| 3 | Met | Eight files in `Views/`; `dayEditorViews_standInViews`. The scans were edited beyond "adding the new screen file" by their pinned counts and lists, each ruled below. |
+| 4 | Met but for the name's cut (B-1) | Back, position, "Done", the field with the draft rule, the tag, the line. The two draft tests host the header and drive the real `UITextField`'s focus: real. Typing sends `rename`: not tested by any hosted test, pinned as a spelling only; owed by S14's UI test (accepted, as S9). |
+| 5 | Met | Trees; `superset_rowsShareOneBlock`; `deleteDay_asksFirst` reads the presented `UIAlertController` and calls each button's handler: real, though through UIKit's private `handler` key, which an SDK may rename (the test would fail loudly, not pass). |
+| 6 | Met | Drawn from `row.panel` alone (`ExerciseRow.swift:21-23`, `SlotPanel.swift`). `unstoredExercise_panelIsItsActions`, `oneExercise_andNone`: real. |
+| 7 | Met as the criterion is written; see S-1 | One adjustable element, "Sets", "5"; down then up sends `decrement`, `increment`. |
+| 8 | Met | One use of the accent in the eight files (`SlotDetails.swift:36`), by the two flags. The audit counts orange pixels per part in both themes and swaps the flags against the words: real, and the best test of the slice. |
+| 9 | Met | Seven previews in the one registry; 24 references = 6 + 2 + 6 + 2 + 2 + 2, plus long names 2, right to left 1, Increase Contrast 1. |
+| 10 | Met, within the reader's limit | Tree exact at two sizes for seven states; the row's state is UIKit's expanded status read in the test; targets 44 pt. The trees are a hand-written table, not a second derivation: the S10 tester's oracle is the independent check (below). Not heard in VoiceOver. |
+| 11 | **Not met** | B-1. The rest of the sweep is real and well calibrated (`measure_seesACut` proves the measure both ways); it was aimed around the one element that fails. |
+| 12 | Met | `everyControl_sendsItsModelsAction_once` over seven states and `seedDay_sendsTheBriefsActions` with literal expected edits: real. The name field and the alert's buttons are outside the walk and covered by their own tests. |
+| 13 | Met but for S-4 | `ControlPill` generalised, not copied; `SectionNote` reused; nothing added to `LedgerDesign`. |
+
+### The deviations (numbered as in the notes; the orchestrator's numbers in brackets where they differ)
+
+1. **[3] The row and its panel are a `DisclosureGroup` with a style of its own: accept.** I know of no
+   SwiftUI modifier that sets the expanded status; the honest alternatives are a word in the row's value
+   ("expanded"), which the model does not carry and review S6 said would need two new keys, or UIKit. The
+   claim that it holds no state is true: `isExpanded` is a binding built in `body` from `row.isOpen` whose
+   setter ignores its argument and sends `row.action` (`ExerciseRow.swift:20`), so the group cannot open
+   without the model. What it rests on is undocumented (a `Button` inside a `DisclosureGroupStyle` inherits
+   the status); `rows_sayWhetherTheyAreOpen` and the trees fail the day that stops, which is the right
+   guard. The nightly UI test must hear "expanded" once.
+2. **[4] The draft rule copied from `ProgramHeader`, not shared: accept as committed; share it with B-1's
+   fix (S-3).** The reason given (S13 may move the draft) argues for one place to change, not two.
+3. **[5] `DayEditorHeader` takes the whole `Content`: accept.** Someone must hold the day's id and a view
+   cannot spell its type. With B-1's split only the title needs it.
+4. **[6] An alert, not a confirmation dialog: accept, with a note for the orchestrator.** Criterion 5 asks
+   for "the confirmation", not for a dialog; the alert shows "Cancel", gives both buttons their roles, and
+   the test reads both. But F10 met the same iOS 26 behaviour and kept its dialogs, with a cancelling button
+   that has no role (`FeatureWorkout/WorkoutCover.swift:53-68`). The app now has two answers to one
+   problem; choose one before M1 ends. I would keep the alert for "Delete …?" questions.
+5. **[7] The superset's note under "SUPERSET", `SectionLine` unused: accept.** I looked:
+   `alternative-stepper-labels-dark-large.png` has the note beside the eyebrow and it breaks after "· rest"
+   at the default size on an iPhone 17. Under the eyebrow it is one line and the same at every size.
+   Criterion 13 names `SectionLine` as available, not as required; `SectionNote` is reused.
+6. **The strip drawn entry by entry: accept.** Each entry is a whole string; the spoken text is the
+   model's; nothing is joined (`SlotPanel.swift:49-59`).
+7. **[8] `row.sub` drawn, `row.hasDropSet` unused: accept; `hasDropSet` is a dead field, not a missing
+   mark.** The prototype's row has no drop-set mark: its second line carries "· drop"
+   (`design/prototype/Ledger.dc.html:1370`), which is `sub`, and `sub` is on the prototype's row
+   (`:248-249`), so drawing it is criterion 5's omission, not an addition. Review S6 (N-5) already asked
+   what `hasDropSet` is for. Remove it from the model in S14's clean-up; this slice may not change a
+   presentation.
+8. **Blocks `l` apart: accept; the look is Pete's.** By eye, the closing rule of one block and the opening
+   rule of the next, 16 pt apart with nothing between, read as an empty row (`day-closed-dark-large.png`).
+9. **No shared component added; the caret is the chevron turned: accept.** `chevronDown` in `LedgerDesign`
+   is the right follow-up and removes both `90`s; queue it with `SectionLine`'s move.
+
+The three differences from the plan's tree: (1) "Done" before the heading: accept, and it stops being a
+difference with B-1's split; (2) the chosen chip is no button: accept, criterion 6 says so (N-5); (3) the
+expanded status: deviation 1.
+
+### The implementer's edits to earlier testers' files
+
+| Edit | Verdict |
+|---|---|
+| `scan_readsEveryView` 14 → 22 | Mechanical. |
+| `views_sendOnlyTheModelsActions`, ten lines added | Mechanical; each new line is a model's action or the one `rename`. The check is as strict as before. |
+| `views_keepNoStateButTheDraft`: the header's draft and focus, `isConfirming`, three more `.onChange` | Accept. `isConfirming` is a new kind of state, which the inputs ask for ("whether it is showing is the view's own flag"). The test's name, "no state but the draft", is now untrue: rename it. |
+| `views_readOnlyTheTextSize` 2 → 4 | Mechanical; the set is still the text size alone. |
+| `views_numbers_areTheTwo`: `ExerciseRow.swift: 90` twice | Accept, not mechanical: it admits a new number. It is an angle, not layout arithmetic, and the regular expression still catches any other. The title ("the tag's width … and the strip cell's one line") is stale: say three things, and drop the `90`s when `chevronDown` exists. |
+| `registry_holdsTheNamedStates`, seven names | Mechanical. |
+| `tables_areTheOraclesTrees`: `allCases` → `builders + libraries`, and `throw` for `.dayEditor` | Accept; it does not weaken S9's check. The eight states are still compared, `PreviewTests.cases_areSplitBetweenTheThreeScreens` forces a new builder or library state into those lists, and the `throw` fails the test if a Day editor state ever reaches it. What it leaves open is the Day editor: its trees have no second derivation. **For the S10 tester:** write the oracle's `.dayEditor` arm from the model and put `allCases` back. |
+
+### For the product owner
+
+1. **The day's name** (B-1): today it ends in "…" from two sizes above the default on a small phone. The
+   proposal: the name breaks onto a second line instead, and only the "Program" and "Done" row stays fixed
+   while the name and the summary scroll away with the exercises.
+2. **"SETS" or "Sets"** (S-1): your decision 1 A says "Sets". The slice drew "SETS". Both are in the
+   screenshots (`alternative-stepper-labels-*.png`). I recommend "Sets".
+3. **The looks the notes list** (ten, all in `screenshots/s10/`). Two I would look at first: the empty band
+   between two exercises (deviation 8), and "Remove" looking exactly like "Move down" beside it.
+4. **"Program" and "Done" do the same thing** (both close the day; the model's since S6). If "Done" is to
+   stay, it is one control more than the screen needs.
+5. **Alert or dialog** for a destructive question, app-wide (deviation 4).
+
+### What I looked at by eye
+
+All of `screenshots/s10/` at the level of the whole page for: closed dark large, open linear light large,
+superset dark large, open linear dark accessibility3 (whole page and the header enlarged), long names dark
+large and accessibility3 (header and last rows enlarged), right to left (both halves enlarged), deload week
+light (top enlarged), drop set dark (panel enlarged), Increase Contrast (top enlarged), both
+`alternative-stepper-labels` images in part. Found by eye: the cut name (and from it, by measuring the
+images, the sizes in B-1); the capitals' weight (S-1); the empty band (deviation 8); nothing overlapping,
+nothing else cut, the carets right in both directions, the orange only on "WEEK 8 · DELOAD". The references
+under `__Snapshots__/DayEditorSnapshotTests/` were not opened one by one: the notes say the screenshots are
+copies of them, and I did not compare the bytes.
+
+### What I did not verify
+
+- Nothing was compiled or run: no host build, no simulator, no gate. The sketch in B-1 is not compiled.
+- B-1's sizes are computed from three screenshots and `.largeTitle`'s scale, not measured in a hosted test;
+  the first cut may be one size earlier or later than stated, and Bold Text was not measured at all.
+- The header heights after the fix are estimates.
+- S-2's count is of hostings, from the parameters; no time was measured.
+- That VoiceOver says "expanded" and "collapsed", and how it reads a selected text among buttons.
+- The 375 pt width by eye: every image is 402 pt wide.
+- The coverage figure, the lint run and the string catalogs: the notes' figures stand.
+- The tester's uncommitted files and findings: not read.
+
+## S10 — review, round 2 (G3 reviewer, 2026-10-11)
+
+Reviewed: `git diff 454bcc4..4d22ec9` (`fe10b4b` the code, `4d22ec9` the notes) against round 1's items and
+rulings 14 to 20. The committed range only; the tester's working files were not read. Line numbers are those
+of `4d22ec9`. Nothing was built or run. The images were read from the commit (`git archive`), opened, and
+three of them measured row by row; the numbers below are pixel rows of 1× images, so points.
+
+### Verdict: changes requested — one blocking item of one line; two should-fix of one line each
+
+Every round-1 item is resolved as ruled. `NameField` is correct in its rule, its accessibility and its
+focus behaviour, and close to as simple as it can be. What is left is where the new, taller name meets the
+row under it (B-2), found by measuring the references, and two smaller things the references show or the
+code implies (S-5, S-6).
+
+### Round 1's items
+
+| Item | Verdict |
+|---|---|
+| **B-1** the name cut | **Resolved.** The name wraps (`NameField.swift:42-50`); by eye at `.large`, `.xLarge`, `.accessibility3` and for the long name at both sizes. The sweep now weighs `NameField` alone under the four seed names and the long one at twelve sizes, two widths, plain and bold (`DayEditorLayoutTests.swift:89-97, 168-176`). The pinned bar is 60 to 70 pt. |
+| **S-1** "Sets" | **Resolved** (`SlotDetails.swift:54-59`); the redundant label went; by eye in five images. |
+| **S-2** the sweep | **Resolved**; below. |
+| **S-3** one `NameField` | **Resolved for the Day editor; the builder queued, as ruled.** I see no reason against the chore: the ruling's own fallback fired on evidence (every S9 reference moves). Two conditions: do it before S13 touches `ProgramHeader`, so the rule is not edited in two places, and after B-2 and S-6 below, so S9's twenty references are recorded once. Until then `NameField.swift:4-5` ("the program's name on the builder") says more than is true; one clause. |
+| **S-4** `Eyebrow` | **Resolved** (`SlotDetails.swift:33`); the source test pins the new line and now looks for any `.accent`. |
+
+### Blocking
+
+**B-2. A wrapped name's descender reaches into the tag's pill under it.** `NameField.swift:42-59` with
+`DayEditorHeader.swift:19` (the `xs` spacing).
+
+- *Measured in the committed images.* The title's lines are about 0.98 of its size apart, so the text's
+  frame ends above its descenders. In `day-closed-dark-accessibility3.png` the first line's baseline is row
+  138 and the "pp" of "Upper" hangs to row 146: eight rows. The last line's baseline is row 186 and the
+  "UA" pill starts at row 191: four rows of ground. In `day-longNames-dark-large.png` the last baseline is
+  row 173 and the pill starts at row 178, with a descender of five rows at that size (rows 110 to 114 under
+  baseline 109 in `day-closed-dark-large.png`).
+- *So, from those numbers, not seen:* any name whose last line holds a g, j, p, q or y puts that letter's
+  tail on the pill: by about 4 pt at `.accessibility3`, and touching it at the default size once the name
+  has two lines. "Lower A — Squat focus" and "Lower B — Hinge focus" are two of the four seed days, and
+  they wrap as Upper A does ("… —" over "Squat focus"), from `.xxLarge` on a 375 pt phone. No reference
+  shows it only because the registry's wrapped names end in "Push focus" and "block".
+- *Why no test sees it.* The frames do not overlap (the ink leaves its frame); both views are hidden from
+  the reader; and the ink measure weighs the same with a tail on a pill.
+- *Why it did not exist in round 0.* One line of 31 pt stood in the middle of a 44 pt target, 6 pt clear
+  either side. Top-aligned and wrapped, a name taller than 44 pt has only the stack's 4 pt under it.
+- *Fix, one line:* `.padding(.bottom, LedgerSpacing.s)` on the `Text`, before `.overlay`
+  (`NameField.swift:50`). Inside the 44 pt target it costs a one-line name nothing at the default size
+  (31 + 8 < 44), so only the wrapped references move; a wrapped name gets 12 pt to the pill against a tail
+  of 8 at `.accessibility3` and 9 at `.accessibility5`. *Check:* draw `DayEditorHeader` under "Lower A —
+  Squat focus" at `.xxLarge` on 375 pt and at `.accessibility3`, and expect no row to hold both the name's
+  ink and the pill's fill; or add that day at `.accessibility3` to the references and look.
+
+### Should fix
+
+**S-5. The references draw the bar squeezed at `.accessibility3`; the screen does not.**
+`Support/ProgramParts.swift:59-62` against `DayEditorScreen.swift:19-20`. In
+`day-closed-dark-accessibility3.png` the "Done" pill's outline is at rows 2 and 47: 2 pt above it and 2
+under, a bar of 49 pt, where the notes measure 61.3 pt on the screen and the padding is 8. `DayEditorParts`
+stacks the bar without the `.fixedSize(horizontal: false, vertical: true)` the screen gives it, so the six
+references and the trees' frames at accessibility sizes are of a bar the app never draws. *Change:* move the
+modifier from the screen into `DayEditorBar.body` (`DayEditorBar.swift:18`), so that the bar keeps its
+height wherever it stands, and record the accessibility references again. I did not measure whether the
+squeeze is the stack's or the snapshot host's; the image is the evidence.
+
+**S-6. An emptied name at accessibility sizes (by reading; not run).** `NameField.swift:42-59`. With the
+draft empty the base `Text` has no line, so the view is its 44 pt minimum, while the field over it is one
+title line: about 59 pt at `.accessibility3` and 70 pt at `.accessibility5`. The lifter who clears the name
+to type another has the placeholder and the caret hanging 15 to 26 pt over the tag and the summary line, and
+the rows under it jump up and back at the first letter. Below `.accessibility1` the line is under 44 pt and
+nothing shows. *Change:* let the base text be the placeholder when the draft is empty, in clear:
+`Text(draft.isEmpty ? label : draft)` with `.foregroundStyle(isEditing || draft.isEmpty ? .clear : ink)`.
+One line of the title's height is then always there. *Check:* host `NameField(label:name: "")` at
+`.accessibility3` over a spacer and expect the field's frame inside the view's. If the hosted measurement
+says an empty `Text` keeps a line's height, drop this item.
+
+### `NameField`, the questions asked
+
+- **Correct and simple?** Yes, with B-2 and S-6. Twenty lines of body, no number, the two pieces of state
+  round 0 had. `fixedSize(horizontal: isEditing, …)` with `frame(minWidth: 0, …)` (`:48-49`) is the least
+  obvious part; `lineLimit` would say it more plainly but brings a number into a view. Keep.
+- **Accessibility.** One element: the `UITextField`, labelled, its value the draft whatever colour it is
+  drawn in. The text is hidden (`:50`), and `nameField_isNotReadByTheHostedReader` now also expects no stop
+  holding "Upper A", which is the right guard against the name being read twice.
+- **Hit testing.** Ruling 15 says the text is "hidden from hit testing"; the code does not disable it, and
+  should not: the text has no gesture, the field covers its first line, and the further lines fall to the
+  container's tap (`:59-61`), which is what focuses the field from there. The notes' sentence is loose, the
+  behaviour right. A finger on the second line is unverified, as the notes say.
+- **The placeholder** is the field's own and is not affected by the clear foreground; reached only while
+  focused (the store keeps no blank name). See S-6 for its room.
+- **The draft rule** is round 0's, line for line (`:62-76` against `ProgramHeader.swift:41-56`), with
+  `onRename` for `send`. The two draft tests pass on it unedited, by the notes.
+- **The 0.7 to 1.0 pt rise on focus: acceptable.** Two or three device pixels, vertical only, at the moment
+  a caret appears and the lines under the name move anyway. Closing it takes a literal in a view. I checked
+  the other direction in the images: the name's ink is 297 and 307 pt wide, exactly round 0's field, so the
+  tracking is the same in both drawings and nothing shifts sideways.
+- **Top-aligned in its target: acceptable**, and the cause of B-2. By eye the title sits a little closer to
+  "DAY 1 OF 4" and reads as one block with it.
+- **`Color.clear`:** accept. It is the absence of a colour, not a rule of the feature's own.
+
+### The split
+
+Clean. `DayEditorBar` takes `Header` alone; `DayEditorHeader` is the title block and still takes `Content`
+for the id. Left over from the old shape, all comments: "the pinned header over the page" in
+`DayEditorAccessibilityTests.swift:15` and `DayEditorSnapshotTests.swift:8` (the implementer's files), and
+the tester's own titles. `DayEditorPage.swift:16-24`: the header pads itself and an inner stack exists only
+to pad the rest; one padding on the page and none on the header would be three lines fewer, but the tests
+host the header alone at the screen's inset. Leave. The trees did not change (the first two stops from the
+bar, the next two from the page); `dayEditor_barIsPinnedAboveItsPage` pins 44 to 110 pt at `.large` and
+`.accessibility5` with a literal 62 for the window's inset, commented.
+
+### The tester's files
+
+All ruling-forced and no wider: `page_showsAtLeastTwoRows`' known-issue cells narrowed (ruling 14, the
+expectation untouched); `stepper_drawsTheLabel` and `DayViewsText.place(of:)` flipped to the spoken label
+(ruling 17); in `ProgramViewsSourceAdversarialTests` the count 22 → 24 and the same sends, state and
+`onChange` lines under their new file names. The notes count these as six edits in four files; that is
+what the diff holds. Stale titles ("draws the label", "the pinned header") are the tester's to change.
+`seedNames_aboveTheDefaultSize_areDrawnWhole` now measures a field whose text is not drawn: the tester
+re-points or deletes it, as the notes say.
+
+### The thinned sweep
+
+No check is lost. The wide drawing once per part, size, weight and direction; right to left at four sizes
+on the fullest page; the other states' open parts only; the closed rows of those states were the same view.
+The 1,200 pt wide drawing is narrower than the long day name at the larger ordinary sizes (about 1,050 pt
+at `.large`), so that name wraps in its "whole" drawing too; harmless, since both drawings hold every
+letter, but the comment at `:40-41` names the wrong longest line.
+
+`measure_seesACut` (`:199-211`) is a real proof for round 1's case: "Lower A — Squat focus" on one line at
+`.xLarge` on 375 pt must fail the band, and the same name at `.xSmall` must pass. It is made with a `Text`
+of one line, not with the old field, which draws the same ellipsis. Its limit, to keep known: the band is
+6 % and a seed name is twenty letters, so one lost letter would pass. Nothing in the new view can lose
+one (the text has no line limit), so I ask for no change.
+
+### By eye
+
+Enlarged, from the commit: closed dark `.large` beside `before-round1-capital-labels-pinned-header`; closed
+dark `.accessibility3` (top); long names dark `.large` and `.accessibility3` (top); right to left (top
+half); open linear light `.accessibility3` (top and the steppers); open double dark `.large` (the panel);
+closed light `.xLarge` (top). Good: the title block in the page, the name whole on two, three and six
+lines, "Sets", "Rep floor", "Top of range" in the small grey style, the mirror image. Odd: the wrapped
+name's last line stands close on the pill (B-2); the "Done" pill touches the top of the picture at
+`.accessibility3` (S-5). Nothing cut, nothing else overlapping. Not opened this round: the deload, drop
+set, superset and Increase Contrast images, and the 24 files under `__Snapshots__` one by one.
+
+### Not verified
+
+- Nothing compiled or run. B-2's overlap is arithmetic on measured rows, not a picture of "Squat focus"
+  wrapped; S-6 rests on an empty `Text` having no height, which I did not measure; S-5's cause is not
+  established, only its effect in the image.
+- The focus itself: the caret, the one line scrolling, a real keyboard, a tap on a wrapped line, VoiceOver.
+- The notes' timings and gate figures (47 s, 372 s, 826 s) and the rows-under-the-bar table.
+- That `__Snapshots__` and `screenshots/s10/` hold the same pictures.
+
+## S10 — review, round 3 (G3 reviewer, 2026-10-11)
+
+Reviewed: `git diff b4f1ce0..412033e` (the tester's round 2 `89e878b`, the fix `92a66af`, the notes
+`412033e`) against round 2's items and rulings 21 to 26. The product change is seven lines in three files.
+Nothing was built or run; the images were read from the commit and two of them measured by row.
+
+### Verdict: approved
+
+| Round 2 item | Verdict |
+|---|---|
+| **B-2** the name's tails on the tag | **Closed.** `DayEditorHeader.swift:22-24`: `s` under the name, a token, outside the field. Measured in the re-recorded images: at `.accessibility3` the last baseline is row 186 and the pill starts at row 199, twelve rows of ground against a tail of eight (it was four); for the long name at `.large`, baseline 173 and pill 186, twelve against five. The placement outside `NameField` is the better one, not only the one that kept the tester's tests green: the field's frame stays the name's own, and the room is the title block's to give. At `.accessibility5` 12 pt against the tester's 10.3 pt tail is 1.7 pt clear: enough, and `name_standsAboveTheTag` holds it at twelve sizes, plain and bold. When `ProgramHeader` takes `NameField` it needs the same room over whatever stands under it. |
+| **S-5** the bar squeezed | **Withdrawn; I misread the image.** The bar is 61 pt in the reference too: "DAY 1 OF 4" starts where a 61 pt bar puts it. Removing the screen's `.fixedSize` is right. What I saw is still in `day-closed-dark-accessibility3.png` and is something else; note 1. |
+| **S-6** an emptied name | **Closed, refuted by measurement** (2.3 to 2.7 pt, inside the gap). My premise that an empty text has no height was wrong. |
+| Stale comments (ruling 25) | Closed: the four places read true now. |
+
+### On the deferral of F11-S10-5 (ruling 22): agreed
+
+Under the focus the field cuts the tails of its one line. It is not this slice's doing and not this slice's
+to mend: `ProgramHeader` on `main` cuts the same way, the frame is the title role's line height, and a view
+cannot raise it without a number of its own. One chore then carries three things that must land together:
+the role's variant for a field, `ProgramHeader` on `NameField` (with the room B-2 needed), and S9's twenty
+references. Two conditions: the tester's known issue names that chore, and the chore lands before S14 puts
+the Day editor in the app, since that is when a lifter first types in this field.
+
+### Notes (none blocks)
+
+1. **"Done" at `.accessibility3`.** In `day-closed-dark-accessibility3.png` the pill's outline is at rows 2
+   and 47 while its word's ink is rows 19 to 38: the outline stands 2 pt from the top of the picture, where
+   the bar's padding is 8, and about 6 pt high of its word. At `.large` it is centred. The bar's height is
+   not in doubt (above); this is how `PillButton` draws at an accessibility size, or how the reference crops,
+   and I could not tell which by reading. One measurement by the tester (the pill's outline against the
+   bar's frame at `.accessibility3`) would say; if it is the pill, it belongs in the same design-system
+   chore as the title's line height.
+2. **The default size is looser under the name now**: a one-line name has its 12 pt of slack in the target
+   and the new 8 pt, so the tag stands about 20 pt under the baseline's tails, against 4 pt between
+   "DAY 1 OF 4" and the name. By eye it reads as intended spacing, not as a fault; for the product owner
+   with the other looks.
+
+### By eye
+
+From `412033e`: closed dark `.accessibility3` (top), superset light `.large` ("Lower A — Squat focus", one
+line, the q well clear of "LA"), right to left dark `.large` (top), long names dark `.large` (three lines,
+clear of "UA"). No committed image holds "Squat focus" or "Hinge focus" wrapped; that case rests on the
+tester's `name_standsAboveTheTag`. Nothing cut, nothing overlapping, nothing odd from the 8 pt move but
+note 2.
+
+### Not verified
+
+Nothing compiled or run; the tester's figures (the bar's heights, the tails, the emptied draft) are taken
+from `test-findings.md`, not re-measured; the tester's new test files were read by their names and
+findings only; the cause of note 1.
