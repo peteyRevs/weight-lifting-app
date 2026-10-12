@@ -155,8 +155,13 @@ struct HostRestNotificationAdversarialTests {
         var updates = await host.updates().makeAsyncIterator()
         _ = await updates.next()
         let applying = Task { try await host.apply(Sample.logged(0, 0, at: 60)) }
-        while await client.waiting == 0 {
+        for _ in 0 ..< 20000 where await client.waiting == 0 {
             await Task.yield()
+        }
+        guard await client.waiting > 0 else {
+            Issue.record("the notification's client was never asked")
+            applying.cancel()
+            return
         }
         // The client has been asked and has not answered. The update is already in the stream.
         let heard = Mutex(false)

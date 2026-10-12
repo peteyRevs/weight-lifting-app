@@ -30,11 +30,13 @@ extension WorkoutRestAdversarialTests {
     /// What the calm run came to, and the first tap on the panel that sent something other than the
     /// engine's one event for what the lifter saw.
     struct Calm {
-        let outcome: Pump.Outcome
+        var outcome: Pump.Outcome
         var fault: String?
         var extended = (running: 0, over: 0)
         var skipped = 0
         var nothing = 0
+        var logged = 0
+        var unlogged = (held: 0, applied: 0)
 
         /// The events the brief owes a tap on the panel, counted by case.
         mutating func owed(for tap: WorkoutEdit, showing shown: RestTimer?, readAt read: Date) -> [WorkoutEvent] {

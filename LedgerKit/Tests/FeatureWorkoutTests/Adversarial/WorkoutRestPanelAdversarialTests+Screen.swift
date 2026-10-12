@@ -208,6 +208,8 @@
                 return
             }
             #expect(store.moment == nil)
+            hosted.host.view.layoutIfNeeded()
+            let bare = WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view)?.adjustedContentInset.bottom
             store.send(.edit(.log(exerciseIndex: 0, setID: hosted.running.exercises[0].sets[0].id)))
             guard await Self.turning("the root's tasks to log the set and read the date", until: {
                 store.moment != nil && clock.sleeps.value > 0
@@ -217,20 +219,41 @@
             #expect(store.restPanel?.clock == "2:30")
             hosted.host.view.layoutIfNeeded()
             let scroll = try #require(WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view))
+            let room = scroll.adjustedContentInset.bottom - (bare ?? 0)
+            #expect(room > 100, "the root draws the store's panel under the page: \(room) pt more than with no rest")
             scroll.setContentOffset(CGPoint(x: 0, y: 30), animated: false)
-            await hosted.seconds(3)
-            #expect(store.restPanel?.clock == "2:27")
+            await hosted.seconds(10)
+            #expect(store.restPanel?.clock == "2:20")
             #expect(scroll.contentOffset.y == 30, "a second going by moves the page")
             let isTheSameView = WorkoutPageViewsAdversarialTests.scrollView(in: hosted.host.view) === scroll
             #expect(isTheSameView, "the scroll view was made again")
             // The rest reaches its end with the cover up: felt once.
-            await hosted.seconds(147)
+            await hosted.seconds(140)
             #expect(store.restPanel?.status == "Rest over")
             for _ in 0 ..< 200 {
                 Self.turnTheRunLoop()
                 await Task.yield()
             }
             #expect(await hosted.haptics.played == [.setLogged, .restOver])
+        }
+
+        @Test("The view that draws the store's panel sends its two taps to the store, and draws nothing with no rest")
+        func storePanel_sendsToTheStore() async throws {
+            let running = try Fixtures.seedSession()
+            let scene = try WorkoutScene.onFake(live: running)
+            let (store, following) = await scene.following()
+            #expect(StoreRestPanel(store: store).accessibilityElements().isEmpty)
+            store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
+            await store.drain()
+            await eventually { store.shownRest != nil }
+            StoreRestPanel(store: store).withAccessibilityElements { elements in
+                #expect(elements.count == 3)
+                for element in elements {
+                    _ = element.accessibilityActivate()
+                }
+            }
+            #expect(store.queue.map(\.edit) == [.extendRest, .skipRest])
+            following.cancel()
         }
     }
 #endif

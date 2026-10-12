@@ -51,9 +51,9 @@ final class WorkoutRestAdversarial: XCTestCase {
     }
 
     /// At the largest text size (the brief asks for Dynamic Type to AX5) on the plan's iPhone 17 the panel
-    /// takes nearly all the room under the header: its buttons are on screen, and a strip of the page is
-    /// left over it, 64 pt in the screenshot. The hosted test `screen_leavesThePageRoom_beyondTheCriterion`
-    /// measures the smaller phones, where it is not (finding F10-S6-4).
+    /// is compact (ruling 17 after round 1: no ring, no next-set line): its buttons are on screen and about
+    /// 314 pt of the page show over it, as the hosted model says (`screen_roomIsMeasured`: 304 to 324 pt).
+    /// Before the compact panel it was 64 pt.
     @MainActor
     func test_rest_atTheLargestTextSize_leavesSomeOfThePage() {
         let app = launch(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
@@ -76,6 +76,10 @@ final class WorkoutRestAdversarial: XCTestCase {
         XCTAssertTrue(app.buttons["workout.rest.extend"].isHittable, "+30s is not on screen")
         XCTAssertLessThanOrEqual(skip.frame.maxY, app.frame.maxY, "Skip rest ends below the screen")
         XCTAssertGreaterThanOrEqual(strip, 44, "the page shows \(Int(strip)) pt over the rest panel")
+        // The hosted model's 313.7 pt, to the few points a status bar or a margin can differ by.
+        XCTAssertEqual(strip, 314, accuracy: 15, "the app and the hosted model disagree about the page's room")
+        XCTAssertFalse(app.staticTexts["Set 2 · 180 lb × 5"].exists, "the next set is drawn at the largest size")
+        XCTAssertTrue(status.label.hasPrefix("Resting, Set 2, "), "and VoiceOver still reads it: \(status.label)")
         skip.tap()
         XCTAssertTrue(skip.waitForNonExistence(timeout: 5))
         discard(in: app)

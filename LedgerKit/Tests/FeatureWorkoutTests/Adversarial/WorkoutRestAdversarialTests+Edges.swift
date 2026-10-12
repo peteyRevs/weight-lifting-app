@@ -6,8 +6,8 @@ import LedgerTestSupport
 import Observation
 import Testing
 
-/// G2, F10 S6: single cases the seeded walk does not reach. The first four hold. The last three are
-/// findings (test-findings.md, "S6, round 1": F10-S6-1 to -3) and fail until they are fixed or ruled.
+/// G2, F10 S6: single cases the seeded walk does not reach. Round 1's three findings are at the end:
+/// F10-S6-1 is pinned as built (ruling 20), F10-S6-2 and -3 were fixed in fix round 1 and hold.
 extension WorkoutRestAdversarialTests {
     static func resting() async throws -> (cover: RestCover, rows: [LoggedSet]) {
         let running = try Fixtures.seedSession()
@@ -29,22 +29,7 @@ extension WorkoutRestAdversarialTests {
         await cover.close()
     }
 
-    /// Counts the changes of what `read` reads, until its task is cancelled (F10 S6 fix round 1, for the
-    /// sanctioned edit below).
-    static func counting(
-        _ read: @escaping @MainActor @Sendable () -> some Equatable & Sendable
-    ) -> (count: LockIsolated<Int>, task: Task<Void, Never>) {
-        let count = LockIsolated(0)
-        let task = Task {
-            for await _ in Observations({ read() }) {
-                count.withValue { $0 += 1 }
-            }
-        }
-        return (count, task)
-    }
-
-    /// F10 S6 fix round 1 (sanctioned edit, ruling 16, which inverts this expectation): the test watches
-    /// both the screen's model, which a tick no longer changes, and the rest panel, which it changes once.
+    /// Fix round 1 (sanctioned edit; ruling 16 inverts the expectation): a tick changes the panel alone.
     @Test(
         "A second of a rest is one change of the rest panel and none of the screen's model"
     )
@@ -156,9 +141,10 @@ extension WorkoutRestAdversarialTests {
         store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
         await store.drain()
         await eventually("the rest on the page") { store.shownRest != nil }
-        while await haptics.played != [.setLogged] {
+        for _ in 0 ..< 20000 where await haptics.played != [.setLogged] {
             await Task.yield()
         }
+        try #require(await haptics.played == [.setLogged], "the logged set was never felt")
         await haptics.hold()
         let waits = [Task { await store.keepRestTime() }, Task { await store.keepRestTime() }]
         await eventually("both waits asleep") { clock.sleeps.value == 2 }
@@ -208,25 +194,53 @@ extension WorkoutRestAdversarialTests {
         await cover.close()
     }
 
-    // MARK: Findings
+    // MARK: Round 1's findings
 
-    /// F10-S6-1. Once a rest is over nothing reads the date any more, except a tap. With the wall clock
-    /// set back under "Rest over" (the lifter changes the time, or the network corrects it), the panel
-    /// goes on saying "Rest over" while time is left; the next tap of any kind then reads the earlier
-    /// date, and the panel shows a countdown that never moves and never ends.
-    @Test("F10-S6-1: the wall clock set back at Rest over, then any tap: the countdown shown is running")
+    /// F10-S6-1, **as built by ruling 20** ("Plan amendments — slice S6 after round 1": not fixed, pinned
+    /// here, recorded for F17 with the other clock cases). Once a rest is over nothing reads the date
+    /// until the rest's task runs again. With the wall clock set back under "Rest over", the panel goes on
+    /// saying "Rest over" although time is left by the clock; a tap of another kind does not change that
+    /// (the panel's moment never goes back for a tap, ruling 18), and nothing is felt at the rest's true
+    /// end. "+30s" is judged at the tap's own, earlier, date: it finds the rest still running and extends
+    /// it, so the lifter who saw "Rest over" gets what was left plus 30 s, not 30 s. A reopened cover
+    /// reads the date and shows the rest running. When F17 rules, this test changes with it.
+    @Test(
+        "F10-S6-1, as built (ruling 20): the wall clock set back at Rest over leaves Rest over until the rest changes"
+    )
     func clockSetBack_atRestOver_thenATap() async throws {
         let (cover, rows) = try await Self.resting()
         await cover.run(150)
         #expect(cover.panel?.status == "Rest over")
         await cover.back(60)
         await cover.tap(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment))
-        #expect(cover.panel?.clock == "1:00", "the tap read the date: a minute of the rest is left again")
+        #expect(cover.panel?.clock == "0:00", "a tap of another kind leaves the panel as it was")
+        #expect(cover.panel?.status == "Rest over")
         await cover.run(10)
-        let fault = await cover.panelFault()
-        #expect(fault == nil, "ten seconds on")
+        #expect(cover.panel?.status == "Rest over", "ten seconds on, with 50 s left by the clock")
         await cover.run(60)
-        #expect(cover.panel?.status == "Rest over", "and past its end")
+        #expect(cover.panel?.status == "Rest over", "and past its true end")
+        #expect(await cover.played() == [.setLogged, .restOver], "nothing is felt at the true end")
+        // The clock set back again, a minute before the rest's end: a reopened cover shows it running.
+        await cover.back(70)
+        await cover.reopen()
+        #expect(cover.panel?.clock == "1:00")
+        #expect(await cover.panelFault() == nil)
+        await cover.close()
+    }
+
+    @Test("F10-S6-1, as built (ruling 20): +30s on that Rest over extends the rest the clock says is running")
+    func clockSetBack_atRestOver_thenPlusThirty() async throws {
+        let (cover, _) = try await Self.resting()
+        await cover.run(150)
+        await cover.back(60)
+        #expect(cover.panel?.status == "Rest over")
+        await cover.tap(.extendRest)
+        let rest = await cover.truth()?.shownRest
+        #expect(rest?.total == .seconds(180), "the 150 s rest grown, not a rest of 30 s")
+        #expect(cover.panel?.clock == "1:30", "what the clock said was left, and 30 s")
+        await cover.run(5)
+        #expect(cover.panel?.clock == "1:25", "and it counts down again")
+        #expect(await cover.panelFault() == nil)
         await cover.close()
     }
 
