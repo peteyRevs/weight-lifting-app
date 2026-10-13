@@ -657,3 +657,345 @@ for the tester's audit in round 2:
 - `eachSecond_oneChange_thePageUntouched` watches both: `store.model` changes 0 times in the 10 s and
   `store.restPanel` 10 times; `restPanel`'s clock reads "2:20"; 0 changes of either after the rest's end.
   Ruling 16 inverts exactly that expectation.
+
+## Plan amendments — slice S7, finish and receipt (specification, 2026-10-13)
+
+**A split is proposed: S7a finish and save, then S7b the receipt.** The plan gave S7 about 490 product
+lines. Counted honestly with what has since been put on it (the rest announcements and their client, the
+refusal under the sheet, the wait for queued taps, the failed save, the live records) it is about 1,230
+planned lines (560 + 670, "Estimate" below), and slices with a store have landed 25 % (S6) to 90 % (S5) over
+plan. One pull request would pass 1,000 (standards §10). The seam leaves no dead button: after S7a "Save
+workout" stores the workout and the cover closes onto Today's Logged card (what v2 does, spec rule 33);
+S7b keeps the cover up for the receipt. S7a merges before S7b is cut (no stacked PRs). Until the
+orchestrator rules (R1), criteria 1 to 24 are S7a's, 25 to 37 are S7b's, and 38 to 40 hold in each part
+for its own views.
+
+Cut from `main` at `77b33ec`, which holds the cover, solo logging and the rest panel (S4 to S6). After
+S7a a lifter can end a workout and have it in history, and VoiceOver is told when a rest starts and ends.
+After S7b the saved workout shows its receipt (time, sets, volume, new records, logged against prescribed)
+before "Done" returns to Today. The notes' "S7 — finish and receipt" and the "Inputs for S7" of S2, S3, S5
+and S6 are part of this contract; where they and this section disagree it is listed under "For the
+orchestrator to rule".
+
+### S7a — finish and save
+
+**The sheet**
+
+1. **"Finish" opens a sheet, not the system dialog** (R2). `dialog == .finish` presents `FinishSheet` on
+   `SheetChrome` with the title "End workout?" (a VoiceOver heading), "Keep lifting" as the chrome's
+   cancel, the line of criterion 2, "Save workout" (`PrimaryButton`) and "Discard" (`PillButton`,
+   outline, `fillsWidth`) under it. The `confirmationDialog` leaves `WorkoutRoot`. "Keep lifting", a
+   swipe down and VoiceOver's escape each send `.keepLifting` and leave the workout untouched.
+2. **The line** is two lookups joined with " · " in the presentation (R4): "23 of 25 sets logged" and
+   "24,180 lb moved" ("kg moved" in a kilogram workout). The numbers are `WorkoutState.doneSets`,
+   `totalSets` and `volume.formatted(in: state.units)` of the workout the store shows. The total picks the
+   plural form, with `locale.forCountedText`; the done count and the volume are passed as text.
+3. **The sheet follows the workout.** A change that arrives while it is up (a queued tap landing, a set
+   logged elsewhere) redraws the line and the state of "Save workout"; the sheet stays (S4's table, row
+   S8).
+4. **Zero sets.** With `doneSets == 0` "Save workout" is disabled and looks disabled; "Discard" and "Keep
+   lifting" answer. `send(.save)` with no done set changes nothing and calls nothing: the guard is the
+   store's, not only the button's.
+5. **The model is pure and final**: `WorkoutPresentation.finishSheet(_:isSaving:locale:) ->
+   WorkoutFinishModel` holds every string, `canSave` and `isEnabled`; the view decides nothing. A workout
+   with no exercise gives "0 of 0 sets logged · 0 lb moved" and does not trap.
+6. **Orange once**: "Save workout" is the sheet's one accent, pinned as S6's criterion 10 is. "Discard"
+   is not drawn in a destructive colour (the brief gives it none; O1).
+7. **Identifiers**: `workout.finish.save`, `workout.finish.discard`, `workout.finish.keep` (the last two
+   unchanged, so the UI tests that discard keep passing unedited).
+
+**The save**
+
+8. **"Save workout" saves once.** `send(.save)` sets `isSaving`, reads the injected date once (the end
+   of the workout is the time of the tap, S6 ruling 18) and makes the next `saveAttempt`; the root's
+   `.task(id: store.saveAttempt)` runs `store.save()`, which calls `session.finish(endedAt:)` with that
+   date. No unstructured task. A second tap, and every other intent, does nothing while `isSaving`.
+9. **No logged set is lost** (input 3; R3). Taps queued before "Save workout" are applied first, in
+   order, each once, planned on the newest workout; `finish` is called only when the queue is empty and
+   the last `apply` has answered. So a tap queued before "Finish" is in the saved workout, and the `Asked`
+   log reads every change, then `.finished(endedAt)`. A call that never returns is waited for, as under
+   "Minimize": no timeout.
+10. **While it saves** the sheet stays up with its three controls disabled and its interactive dismissal
+    off; the header, the page and the rest panel are disabled by `isBusy`.
+11. **If the queue leaves no done set** (the last logged set's un-log was waiting), `finish` is not
+    called: `isSaving` is false again and the sheet shows criterion 4's state.
+12. **A change refused under the sheet wins** (S5 review N-1). Whether the sheet is waiting for an answer
+    or for a save: the taps behind the refused one are dropped (S5 ruling 13), a waiting save is withdrawn
+    (`isSaving` false, `finish` not called), the sheet goes down and `dialog == .editFailed` shows S5's
+    alert over the cover. A workout is never saved without a change the lifter believes was made. After
+    "OK" the cover is as the session last said, and "Finish" opens the sheet again.
+13. **Saved.** When `finish` returns a state whose phase is `.finished`, or the stream's ending update
+    carries one, whichever comes first: `exit == .route(.saved(id))`, once; the cover closes; the app
+    selects Today, which shows the Logged card (F09's, from the same ending update). `.workoutFinished`
+    is played once, by `follow()`, in either order of the two.
+14. **Discard is unchanged**: one tap, the queued taps are dropped, S4's rows S5 to S7 and its
+    `discardFailed` alert hold, now from the sheet's button.
+
+**Error paths**
+
+15. **A save that fails is shown, and nothing is lost.** Any error of `finish` other than
+    `noLiveWorkout` and a cancellation with the cover (`invalidEndDate`, `incompleteLog`, what the store
+    threw), and a returned state that is not finished: logged (never as a cancellation), `isSaving`
+    false, the sheet down, `dialog == .saveFailed`, the cover up. The alert reads "Couldn't save this
+    workout" / "It's still on this iPhone. Try again." with "Try again" and "Close" (R7). It offers no
+    "Discard": after a failed save a discard would store the workout (tester's note on S2).
+16. **"Try again"** runs `finish` again with the same `endedAt` as the first attempt (the host keeps the
+    first end anyway). **"Close"** takes the alert down and leaves the cover as the session shows it. The
+    store keeps no knowledge of a waiting end beyond that (R10): what the lifter does next meets the rules
+    already built (a tap whose `apply` completes the save ends through criterion 13; one that is refused
+    shows S5's alert; "Minimize" closes).
+17. **`noLiveWorkout` is no failure**: the workout ended by another hand first. `isSaving` stays until
+    the ending update says how: finished closes as `.saved(id)`, discarded as `.discarded`.
+18. **The cover's tasks starting again mid-save.** A cancelled `save()` shows nothing (the host
+    completes the call in a task of its own). The task that starts again runs the same attempt with the
+    same `endedAt`. Every outcome is one of: the finished state is returned; `noLiveWorkout` and the
+    stream says finished; `noLiveWorkout` and a new stream's first element is nil. All three end in
+    `exit == .route(.saved(id))` with the id of the workout being saved: never `.nothingToShow`, never
+    the failure alert, and history holds the workout once. A pump that starts again while the save
+    waits plans the waiting taps on the session's workout (S5 ruling 15) and the save follows them.
+19. **A workout ended elsewhere while the sheet shows** closes the cover as S4's rows S9 and S10 say,
+    sheet included.
+
+**Rest announcements** (deferred from S6, ruling 21; brief, "Accessibility")
+
+20. **A client.** `AnnouncementsClient.announce(_:) async` in `LedgerDomain/Protocols/Clients.swift`; the
+    key `announcements`, its unimplemented stub, a recording fake in `LedgerFakes` (a fresh one per
+    `withTestDependencies` call, as `FakeHaptics` is); `LiveAnnouncements` in `LedgerAppKit`, bound in
+    `AppComposition`, with a test that fails when the composition leaves it unbound. Posting is ambient,
+    so no file of `FeatureWorkout` posts one itself (the source test pins it).
+21. **"Rest, 1 minute, 30 seconds remaining"** is announced once for each shown rest that has time left,
+    from `keepRestTime()`'s first pass for it: when a set's log starts a rest, when "+30s" makes a new
+    one (O8), and when the cover opens on a running rest. The time is `RestTimer.remaining(at:)` of the
+    injected date, rounded up to the second and put in words by the formatter the panel's `spokenTime`
+    uses (R8). Not again at a tick, on a redraw, on a return from the background, or when the cover's
+    tasks start again with the same rest.
+22. **"Rest over"** is announced exactly where and when `.restOver` is played (S6 criterion 7 and ruling
+    20: once for a rest, only when it was seen running and ended on time), after the haptic. A rest that
+    was skipped, replaced by the next set's, or already over when the cover opened announces nothing.
+23. Both texts are `WorkoutCopy` lookups. Whether VoiceOver speaks the announcement over its own reading
+    of the row just activated cannot be seen in a test process: the notes say what a device does.
+
+**Words and conventions**
+
+24. Lookups only in `WorkoutCopy+Finish.swift` (and `+Rest` for criterion 21), English text as the key,
+    every key in the catalog as `translated`; the views in `FeatureWorkout/Views/`; no `Timer`,
+    `TimelineView` or `.formatted(`; the module's source tests pass unedited. `docs/architecture.md` §13
+    gains the key.
+
+### S7b — the receipt
+
+25. **A workout this cover saved shows its receipt; the cover stays up.** Criterion 13 changes for a
+    save the lifter asked for in this cover (`send(.save)` was accepted): the finished state, from
+    `finish`'s return or from the ending update, whichever comes first, sets the store's receipt once and
+    `store.model == .receipt(ReceiptScreenModel)`; no exit yet. A workout finished by another hand still
+    closes the cover as `.saved(id)` with no receipt (S4's row S10), and so does criterion 18's third
+    outcome, where no finished state reached the store (O7).
+26. **"Done"** sets `exit == .route(.saved(id))`; the app selects Today, which already shows the Logged
+    card. `WorkoutRoute` gains no case (R5). Identifier `workout.receipt.done`.
+27. **The screen** (convention §2.5–§2.6) is a pinned header and `ScrollView { ReceiptPage(model:) }`:
+    the header holds the date, the workout's name (a heading) and "Done"; the page is
+    `LedgerDesign`'s `ReceiptLayout`. Trees and references come from `ReceiptParts`.
+28. **The date** is the day the workout started (decision #26), as the brief writes it: "Wednesday,
+    September 16", from the injected calendar and locale, with a format style's `format(_:)`. The name is
+    the workout's, as stored.
+29. **Three tiles**: "TIME" with `ClockText.elapsed(summary.elapsed)` ("24:22", "1:01:05"); "SETS" with
+    "23/25"; "LB MOVED" or "KG MOVED" with `summary.volume.formatted(in:)` ("24,180"). `summary` is
+    `WorkoutEngine.summary(finished, prs:)`; the presentation adds no arithmetic.
+30. **The records line** shows only when `summary.prs` is not empty: "1 new PR this session" / "3 new
+    PRs this session", by `locale.forCountedText`. The records are `PersonalRecords.detect(workout:
+    against: bests, now: startedAt)` over `StatsQueries.bests(before:for:)` for the workout's exercises
+    (brief, Inputs from F05, item 3). The store passes nothing to the save: F05 stores its own (R6). A
+    deload workout has none.
+31. **Bests that cannot be read** leave the line out; the failure is logged; the receipt shows with the
+    tiles and rows; nothing is retried. The receipt never waits for the bests more than their one read:
+    until it answers, the receipt shows without the line.
+32. **The rows**: "LOGGED" (a heading) and "Prescribed on the right"; then one row for each exercise in
+    the workout's order with `ReceiptRow.name`, `target` and one chip for each entry of `actual` ("5 ×
+    185×5", "185×4", "—"), shown as the Domain gives them (not catalog entries). Chips wrap.
+33. **`ReceiptLayout` is string-only** (`LedgerDesign/Components`): a model of final strings, no
+    `LedgerDomain` type, no lookup, tokens only; it is in the gallery and the component previews. F13
+    reuses it. `docs/architecture.md` §11 lists it.
+34. **Pure and total**: `WorkoutPresentation.receipt(_:records:locale:calendar:) -> ReceiptScreenModel`
+    reads nothing ambient; a workout with no exercise, an exercise with no done set ("—"), a start that
+    is not finite and a zero volume all give a model.
+35. **No orange control on the receipt**: "Done" is ink. Orange is the "TIME" label and the records
+    line (prototype); listed in the notes for the product owner.
+36. **The live record** (brief, Inputs from F05, item 3). The bests are read once when the cover shows
+    the workout. When a logged set makes a record that the workout did not hold before, the store plays
+    `.personalRecord` once for that record (exercise and kind) in the store's life; the records the
+    workout already holds when the cover opens are not played; an un-log and a second log of the same set
+    do not play it twice. Nothing is drawn for it (O10). **This is the first thing to leave the slice**
+    if S7b passes about 800 lines: it then goes with S8, which reads bests for a swapped exercise anyway.
+37. **Nothing of the live workout remains** on the receipt: no rest panel, no rest tick, no announcement;
+    `keepRestTime()` has ended with the workout.
+
+### Accessibility (both parts)
+
+38. **Sizes**: nothing cut, overlapping or out of reach from `.large` to `.accessibility5` on 375 pt
+    (home-button and notch phones) and on the iPhone 17 (402 pt), light and dark, checked by a cut check
+    of `ProgramViewsCutAdversarialTests`' kind; every target 44 pt. At the accessibility sizes: the sheet
+    is its pinned title and cancel over `ScrollView { FinishSheetPage }` (a sheet whose content scrolls,
+    §2.6) with both buttons full width; the receipt's tiles stand one per row, a row's target stands
+    under its name, "Done" stands under the title. Numerals shrink before they wrap and never truncate
+    ("1,234,567").
+39. **Bold Text and right to left**: the same checks pass with Bold Text, and with the layout mirrored
+    (the sheet's cancel and the receipt's "Done" at the other edge, a row's target at the other edge). A
+    Domain-formatted line ("5 × 185×5", "24:22") keeps its characters in the same order.
+40. **VoiceOver**, pinned as trees from the parts:
+    - Sheet: "End workout?" (heading); "Keep lifting" (button); the line as one stop, "23 of 25 sets
+      logged, 24,180 lb moved"; "Save workout" (button; dimmed at zero sets and while saving); "Discard"
+      (button). The escape gesture is "Keep lifting".
+    - Receipt: the date; the name (heading); "Done" (button); three tiles, each one stop: "TIME, 24
+      minutes, 22 seconds" (the duration in words, never "24:22"), "23 of 25 sets logged", "24,180 lb
+      moved" (the sheet's two lookups); the records line; "LOGGED" (heading); then each exercise as one
+      stop: its name, "Prescribed 5 × 5 @ 185 lb", "Logged 5 × 185×5, 185×4" or "Nothing logged".
+      "Prescribed on the right" is hidden from VoiceOver: it describes the picture.
+    - The announcements of criteria 21 and 22.
+
+### Texts
+
+From the brief ("Copy (exact)", line 55) and the spec, word for word:
+
+| Text | Where | Source |
+|---|---|---|
+| "End workout?", "Save workout", "Discard", "Keep lifting" | sheet | brief :55; spec :452–453 (the watch's overlay) |
+| "%@ of %lld sets logged" (one: "%@ of %lld set logged") · "%@ lb moved" / "%@ kg moved" | sheet; spoken tiles | brief :55 "%lld of %lld sets logged · %@ lb moved", as two keys (R4) |
+| "Rest, %@ remaining", "Rest over" | announcements | brief :82 ("Rest, 1:30 remaining"), with the time in words (R8); "Rest over" is S6's key |
+| "Done", "TIME", "SETS", "LB MOVED", "KG MOVED" | receipt | brief :55; spec :291–292 |
+| "%lld new PRs this session" (one: "%lld new PR this session") | receipt | brief :55; spec :293 |
+| "LOGGED", "Prescribed on the right" | receipt | brief :55; spec :294 |
+| "Close", "OK", "Couldn't save that change", "Try again." | alerts | already in the catalog (S4, S5) |
+
+The date, the elapsed time, "23/25", the volume, the targets and the chips are formatted values, not
+catalog entries.
+
+**Invented — for the product owner** (none is in the brief or a prototype):
+
+| Text | Where | Note |
+|---|---|---|
+| "Couldn't save this workout" | failed save, title | from the planner's draft (notes, "Decisions for Pete" 5), whose default holds |
+| "It's still on this iPhone. Try again." | failed save, message | the draft read "…and Ledger will try again."; no product name (standards §7), no promise (R7) |
+| "Try again" | failed save, button | the draft's |
+| "Prescribed %@" | receipt row, spoken only | so a listener can tell the target from what was logged |
+| "Logged %@" | receipt row, spoken only | the same |
+| "Nothing logged" | receipt row, spoken only | what "—" is read as |
+
+"Close" on the failed save reuses the existing key; its translator's comment is widened to cover both
+uses.
+
+### Snapshot references
+
+From `FinishSheetParts`, `ReceiptParts` and the gallery, on the pinned simulators; none of the whole
+cover (a presented sheet is not a part of the hosted screen).
+
+| Part | New references | Count |
+|---|---|---|
+| S7a | `FinishSheet` {withSets, zeroSets} × {light, dark} at `.large`; withSets × {light, dark} at `.xLarge`; withSets dark at `.accessibility3` | 7 |
+| S7b | `ReceiptView` {withPRs, noPRs, kg} × {light, dark} × {`.large`, `.xLarge`}; withPRs dark at `.accessibility3` | 13 |
+| S7b | `ReceiptLayout` in `LedgerDesignTests`, the phone matrix | 6 |
+
+26 new (the plan's budget row says 25: it had one `.accessibility3` for both views). Changed: the
+`DesignGallery` reference and the composites that include it (up to 5), all in S7b; S7a changes none.
+Each PR stays under 20 changed.
+
+### Tests the criteria ask for
+
+Store tests against `FakeWorkoutSessionClient`, the host over the in-memory stores (`WorkoutScene.onHost`)
+and the test target's session doubles (`GatedSession`, `FlakySession`) for a held and a failing
+`finish`; the fake gains no failure switch (R9). The presentation word for word, pounds and kilograms.
+The trees of criterion 40. One PR-lane UI test in S7a: start the sample workout, log a set, "Finish",
+"Save workout", Today shows the Logged card; in S7b it reads the receipt's "1/…" tile and taps "Done"
+first. The nightly `WorkoutLogging` passes.
+
+### Not in this slice
+
+Swap (S8) and supersets (S9), a receipt row for a superset's letters included; the system notification
+and its permission (F23); the watch, `Settings.watchBuzz` and "Resting · watch buzzes at zero" (F14, F17
+to F19); history screens and Today's "View session" opening a receipt (F12, F13); the spec's empty
+receipt ("Nothing logged yet…": a receipt here always has a workout); "Still lifting?" (F23); HealthKit;
+telling a reader that an end is waiting (R10); a failure switch on `FakeWorkoutSessionClient` and the
+waiting-end contract clauses; any change to the engine, the host, the Day editor's destructive question,
+the project file or a test plan.
+
+### Estimate (product lines: Swift, not blank, not comment)
+
+| S7a | Lines | S7b | Lines |
+|---|---|---|---|
+| `Views/FinishSheet.swift` (with its page) | 85 | `LedgerDesign/Components/ReceiptLayout.swift` (model, tiles, rows, gallery entry) | 165 |
+| `WorkoutFinishModel.swift` | 30 | `Views/ReceiptScreen.swift`, `Views/ReceiptHeader.swift` | 80 |
+| `WorkoutPresentation+Finish.swift` | 55 | `ReceiptScreenModel.swift` | 30 |
+| `WorkoutCopy+Finish.swift`, `+Rest` | 100 | `WorkoutPresentation+Receipt.swift` | 85 |
+| `WorkoutStore+Finish.swift` | 105 | `WorkoutCopy+Receipt.swift` | 115 |
+| `WorkoutStore.swift`, `+Pump`, `+Rest` | 55 | `WorkoutStore+Receipt.swift` (receipt, bests, "Done") | 60 |
+| `WorkoutAction.swift`, `WorkoutModel.swift` | 20 | the live record (criterion 36) | 60 |
+| `WorkoutRoot.swift` | 30 | `WorkoutStore.swift`, `WorkoutModel.swift`, `WorkoutScreen.swift`, `WorkoutRoot.swift` | 40 |
+| `Workout+Previews.swift` | 25 | `Workout+Previews.swift` | 35 |
+| `Clients.swift`, the key and its stub | 30 | | |
+| `LedgerAppKit/LiveAnnouncements.swift`, `AppComposition.swift` | 25 | | |
+| **Planned** | **560** (+ about 25 in `LedgerFakes`) | **Planned** | **670** |
+| **Expected, at the overrun seen** | **700–900** | **Expected** | **750–950** |
+
+Each implementer reports the count at each stage and stops past about 800 with what leaves: in S7a the
+announcements (criteria 20 to 23, about 110 lines, a pull request of their own); in S7b the live record
+(criterion 36).
+
+### For the orchestrator to rule
+
+- **R1. One slice or two.** The plan: one, about 490 lines, on `feat/F10-s7-finish-receipt`. This count:
+  about 1,230. Recommended: S7a on `feat/F10-s7-finish` (this branch), S7b on `feat/F10-s7b-receipt` cut
+  after S7a merges.
+- **R2. Dialog or sheet.** The brief says "finish dialog" and `Views/FinishDialog.swift`; the plan and
+  the default of decision 6 say `Views/FinishSheet` on `SheetChrome`; `main` has a `confirmationDialog`;
+  neither phone prototype asks at all (v1 goes to the receipt, v2 to Today), and "End workout?" is the
+  watch's overlay. Recommended: the sheet, with "Keep lifting" as the chrome's cancel (O1).
+- **R3. Queued taps at a save.** The notes' "Inputs for S7" (S5) say they "should be dropped, as
+  `startDiscard()` does"; S5's ruling 14 and this task's inputs say none is lost. Recommended: applied
+  first (criterion 9); the notes' sentence is superseded.
+- **R4. The line's key.** The brief writes one key with two `%lld`; standards §7 allows one count in a
+  key and joins two facts with " · ". Recommended: two keys, the total picking the form.
+- **R5. Names the code has replaced.** The brief's criterion 10 calls `finishAndMaterialise()` and its
+  `WorkoutRoute` is `.live` / `.receipt(WorkoutSummary)`; `main` has `finish(endedAt:)` and
+  `.minimized` / `.saved(WorkoutID)` / `.discarded`. Recommended: the receipt is drawn inside the cover,
+  the route is unchanged, and `.saved` goes on selecting Today (S4's open question 6).
+- **R6. Who computes what at finish.** The brief's criterion 10 has F10 compute "PRs/misses"; the
+  inputs from F05 (item 2) and S2 (criterion 4) give the stored records to F05 and the misses to the
+  host. Recommended: the store computes records only to draw them and to play the haptic.
+- **R7. The failure line must not overclaim** (S4 ruling 16). The draft says the app "will try again".
+  The store cannot tell a save that failed (true: an end waits) from an end the store refused to
+  append, `invalidEndDate` or `incompleteLog` (false: nothing waits). Recommended: one alert and the
+  neutral line "It's still on this iPhone. Try again.".
+- **R8. The announced time.** The brief writes "Rest, 1:30 remaining"; S6's criterion 12 has the time
+  read as a duration, never as digits and a colon. Recommended: "Rest, %@ remaining" with the words.
+- **R9. The fake and the contract.** The notes say that when the fake gains a scriptable save failure
+  the waiting end's rules become contract clauses. Recommended: S7 does not give it one (the test
+  target's doubles and the host over the in-memory stores cover the store), so the clauses stay recorded.
+- **R10. A waiting end is still not told to readers** (S2's SF2; the ADR-004 paragraph due before
+  F17). S7 is written without it: after "Close" the cover may show a workout that accepts no change, and
+  Today shows "Resume" for it, until a retry succeeds. Recommended: accept for M1; a failing save needs a
+  full disk.
+- **R11. The brief's test plan.** Its snapshot matrix (`FinishDialog`, `ReceiptView` × {light, dark} ×
+  {default, XL}) and test names are replaced by the table above and testing-strategy §6.
+
+### Open questions for the product owner (the default holds until answered)
+
+- **O1. How "End workout?" asks.** A sheet with an orange "Save workout" and a plain "Discard", the
+  system's dialog, or an alert: part of the app-wide question on destructive questions. Default: the
+  sheet (decision 6's default). The Day editor is not touched.
+- **O2. "Discard" is one tap** in the sheet, with no second question, as in the brief and on the watch.
+  Default: one tap.
+- **O3. May a workout that cannot be saved be abandoned?** Default: no; the failed save offers "Try
+  again" and "Close" only.
+- **O4. The failed save's wording** (the three invented texts). Default: as listed.
+- **O5. What "1 new PR" counts.** One lift can set two records (best estimated 1RM, best weight at
+  those reps). Default: the number of records, `summary.prs.count`, the number F05 stores for the
+  workout; the other reading is the number of exercises with a record.
+- **O6. The receipt's date and header.** "Wednesday, September 16" (brief) or the prototype's
+  "WEDNESDAY, AUG 19"; the header pinned with "Done" always in reach, or scrolling with the page as in
+  the prototype. Default: the brief's date; pinned.
+- **O7. No receipt for a workout the cover did not see finish** (ended elsewhere, or saved while the
+  cover's tasks restarted). Default: the cover closes onto Today's Logged card.
+- **O8. "+30s" is announced** as a new rest ("Rest, 45 seconds remaining"). Default: yes.
+- **O9. "Prescribed on the right" when the layout is mirrored** (the target is then on the left).
+  Default: the brief's words; the translator's comment says the target stands at the trailing edge.
+- **O10. A record made during the workout is felt, not shown** (a buzz; no "PR!" mark, which no
+  prototype draws). Default: the buzz alone.
