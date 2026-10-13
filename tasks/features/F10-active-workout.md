@@ -999,3 +999,25 @@ announcements (criteria 20 to 23, about 110 lines, a pull request of their own);
   Default: the brief's words; the translator's comment says the target stands at the trailing edge.
 - **O10. A record made during the workout is felt, not shown** (a buzz; no "PR!" mark, which no
   prototype draws). Default: the buzz alone.
+
+### Rulings before G1 — slice S7 (orchestrator, 2026-10-13)
+
+- **R1.** Two slices, S7a then S7b, as drafted. Criteria 1 to 24 are S7a's, 25 to 37 are S7b's, and 38 to 40
+  hold in each part for its own views.
+- **R2.** "End workout?" is a sheet on `SheetChrome` with "Keep lifting" as its cancel, replacing the cover's
+  `confirmationDialog` for this question. The Day editor is not touched. Listed for the product owner.
+- **R3.** Taps queued before "Save workout" are kept and applied before `finish`; none is dropped. The notes'
+  sentence in "Inputs for S7" (S5) is superseded.
+- **R4.** Two keys joined with " · ", per standards §7.
+- **R5.** Follow `main`: no `finishAndMaterialise()`, no `.receipt` route; the cover sends `.saved`.
+- **R6.** Records and misses are computed by F05 and the host; the workout store computes nothing of its own
+  in S7a.
+- **R7.** One neutral alert for a save that did not go through; no promise that the app "will try again".
+- **R8.** Rest announcements say the time in words, as S6's criterion 12 does; the brief's "1:30" form is not
+  used.
+- **R9, R10, R11.** Accepted as drafted.
+- **Product defaults.** O1 to O4 and O8 hold as drafted until the product owner answers; each is one small,
+  named place in the code, so that changing it is cheap. The invented texts are used as drafted and listed in
+  the notes for the product owner.
+- **Stop rule.** If S7a's product lines pass about 800, the rest announcements and their client (criteria 20
+  to 23) leave for a later slice and the implementer says so; never more than 1,000.
