@@ -134,7 +134,9 @@
                 empty.close()
                 letter.close()
             }
+            let unfocused = try letter.target()
             try empty.focus(true)
+            try letter.focus(true)
             let field = empty.field.convert(empty.field.bounds, to: empty.hosted.host.view)
             let (target, lettered) = try (empty.target(), letter.target())
             // Measured: the field is 2.0 and 2.7 pt higher than its target at the two accessibility sizes,
@@ -142,8 +144,15 @@
             // letter. Nothing is covered; the rows under the name move by that much at the first letter.
             let hang = field.maxY - target.maxY
             #expect(hang < LedgerSpacing.xs, "the field hangs \(hang) pt under its target and reaches the tag")
+            // The chore of 2026-10-13: the marker is measured by its blue, and the caret is blue. The caret
+            // is as high as the field's line, which is `LedgerFont.fieldLineHeight` now, so with the focus
+            // the measure reaches 9.0 and 10.3 pt under a one-letter name without it at the two
+            // accessibility sizes. The jump at the first letter is therefore measured between the two with
+            // the focus, and the caret is held inside the room `DayEditorHeader` keeps over the tag.
             let jump = abs(target.height - lettered.height)
             #expect(jump < LedgerSpacing.xs, "empty \(target.height) pt, one letter \(lettered.height)")
+            let reach = target.maxY - unfocused.maxY
+            #expect(reach < LedgerSpacing.xs + LedgerSpacing.s, "the caret reaches \(reach) pt down, to the tag")
         }
     }
 #endif

@@ -1,8 +1,8 @@
 import LedgerDesign
 import SwiftUI
 
-/// A name the lifter edits in place, in the screen title's type: the day's name on the Day editor. (The
-/// builder's `ProgramHeader` still holds its own one-line field; it takes this one in a queued chore.)
+/// A name the lifter edits in place, in the screen title's type: the program's name on the builder and the
+/// day's name on the Day editor.
 ///
 /// **A draft, not the stored name.** The stored name is the cleaned one, so a field bound to it would lose a
 /// trailing space while the lifter types and could not be emptied. The draft starts as the stored name; each
@@ -14,10 +14,13 @@ import SwiftUI
 /// accessibility reader cannot read (testing-strategy §2.6, the known limit). A one-line field cuts a name
 /// longer than its line, and at larger text sizes a day's ordinary name is longer. So while the field has no
 /// focus its own text is not drawn, and the draft is drawn as text that wraps onto as many lines as it
-/// needs. The field stands over that text's first line, top on top, so that the name stays where it is when
-/// the focus comes or goes (measured: the field draws its line 0.7 pt higher than the text at the default
-/// size and 1 pt higher at `.accessibility3`, and nothing moves sideways). With the focus the field draws its text
-/// itself, on its one line, which scrolls
+/// needs. The field stands over that text's first line, top on top by the guide `ledgerFieldFont` gives it,
+/// so that the name stays where it is when the focus comes or goes (measured: the field draws its line 0.3
+/// pt higher than the text at the default size, 1 pt at `.accessibility3` and 1.7 pt at `.accessibility5`,
+/// and nothing moves sideways). The field's line is higher than the title's, so that its editor does not cut
+/// the tails of g, j, p, q and y: its frame stands out of the name's first line by 4.7 pt above and 6.3 pt
+/// below at the default size, and by 8.3 and 10.3 pt at `.accessibility5`, inside the room the two headers
+/// keep around the name. With the focus the field draws its text itself, on its one line, which scrolls
 /// sideways under the caret as every field's does, and what stands under the name moves up to that line.
 /// An empty draft shows the field's placeholder.
 ///
@@ -50,7 +53,7 @@ struct NameField: View {
             .accessibilityHidden(true)
             .overlay(alignment: .topLeading) {
                 TextField(label, text: $draft)
-                    .ledgerFont(.title)
+                    .ledgerFieldFont(.title)
                     .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
                     .submitLabel(.done)
                     .focused($isEditing)

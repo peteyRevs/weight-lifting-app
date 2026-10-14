@@ -41,37 +41,27 @@
             return try (before.height, shown.letters().height)
         }
 
-        nonisolated static let clippedField: Comment = """
-        Ruling 22 (S10, after round 2): a focused field in the title role clips its descenders, because the \
-        field is as high as the role's line. The queued LedgerDesign chore gives the title role a field \
-        variant and has ProgramHeader adopt NameField; it removes this wrapper, which fails once the tails \
-        are whole.
-        """
-
-        /// **FINDING F11-S10-5**, ruled out of this slice (ruling 22) and kept as a known issue for the
-        /// queued `LedgerDesign` chore. With the focus the field draws the name itself, and its editor clips
-        /// at the field's own frame, which is the title role's line: the tails of "y", "p" and "g" are cut
-        /// flat. Measured, the letters of "Gyp" without the focus and with it: 28.0 and 24.7 pt at `.large`,
-        /// 42.0 and 36.3 at `.accessibility3`, 48.0 and 41.3 at `.accessibility5`. Not a known issue that
-        /// may come and go: when the clipping stops this test fails, and the chore removes the wrapper.
+        /// **FINDING F11-S10-5**, ruled out of that slice (ruling 22), a known issue until the chore of
+        /// 2026-10-13 (`tasks/chores/2026-10-13-name-field-line-height.md`) closed it. With the focus the
+        /// field draws the name itself, and its editor clipped at the title role's line: the tails of "y",
+        /// "p" and "g" were cut flat. Measured then, the letters of "Gyp" without the focus and with it: 28.0
+        /// and 24.7 pt at `.large`, 42.0 and 36.3 at `.accessibility3`, 48.0 and 41.3 at `.accessibility5`.
+        /// The field is set with `ledgerFieldFont` now, and the known-issue wrapper is gone.
         @Test(
-            "With the focus the day's name keeps its descenders (known: the title role's field clips them)",
+            "With the focus the day's name keeps its descenders",
             arguments: [
                 DynamicTypeSize.large, .accessibility3, .accessibility5
             ]
         )
         func focus_doesNotCutTheDescenders(_ size: DynamicTypeSize) throws {
             let letters = try Self.lettersOfGyp(in: Self.field("Gyp"), at: size)
-            withKnownIssue(Self.clippedField) {
-                #expect(letters.focused > letters.whole - 1, "\(size): \(letters.whole) pt, \(letters.focused) focused")
-            }
+            #expect(letters.focused > letters.whole - 1, "\(size): \(letters.whole) pt, \(letters.focused) focused")
         }
 
-        /// The same measure on the builder's `ProgramHeader`, which is as on `main` and holds its own
-        /// one-line field in the same role: it clips by the same amounts (28.0 and 24.7, 42.0 and 36.3, 48.0
-        /// and 41.3 pt). So the cut is the role's and not `NameField`'s, and the chore has a test for both.
+        /// The same measure on the builder's `ProgramHeader`, which held its own one-line field in the same
+        /// role and clipped by the same amounts. It holds a `NameField` now (the same chore).
         @Test(
-            "With the focus the program's name keeps its descenders (known: the same clipping, on main too)",
+            "With the focus the program's name keeps its descenders",
             arguments: [
                 DynamicTypeSize.large, .accessibility3, .accessibility5
             ]
@@ -80,21 +70,23 @@
             let model = ProgramBuilderModel.Header(eyebrow: "", name: "Gyp", namePlaceholder: "Program name")
             let builders = try Self.lettersOfGyp(in: ProgramHeader(model: model) { _ in }, at: size)
             let days = try Self.lettersOfGyp(in: Self.field("Gyp"), at: size)
-            withKnownIssue(Self.clippedField) {
-                #expect(
-                    builders.focused > builders.whole - 1,
-                    "\(size): \(builders.whole) pt, \(builders.focused) focused"
-                )
-            }
+            #expect(
+                builders.focused > builders.whole - 1,
+                "\(size): \(builders.whole) pt, \(builders.focused) focused"
+            )
             #expect(
                 abs(builders.focused - days.focused) < 0.5 && abs(builders.whole - days.whole) < 0.5,
-                "the two fields clip alike"
+                "the two fields draw alike"
             )
         }
 
         /// The target is the blue marker behind the field. It holds every line of the drawn name, is 44 pt
         /// high at least, and UIKit finds the text field under a point of the first line and no text field
         /// under a point of the last: there the tap is the name field's own gesture.
+        ///
+        /// The chore of 2026-10-13: the field's line is `LedgerFont.fieldLineHeight` and no longer the
+        /// title's, so its frame starts above the target, by half of what its line is higher (4.8 pt at
+        /// `.large`, 7.1 at `.accessibility3`), where it started on the target's top.
         @Test("The name's target holds all its lines; the field itself stands on the first", arguments: [
             DynamicTypeSize.large, .accessibility3
         ])
@@ -106,7 +98,12 @@
             #expect(target.insetBy(dx: -0.5, dy: -0.5).contains(letters), "the name \(letters) in \(target)")
             let field = shown.field.convert(shown.field.bounds, to: shown.hosted.host.view)
             #expect(letters.height > field.height * 1.8, "the name wraps: \(letters.height) pt, a line \(field.height)")
-            #expect(abs(field.minY - target.minY) < 1 && abs(field.minX - target.minX) < 1, "\(field) in \(target)")
+            let higher = LedgerFont.fieldLineHeight - LedgerFont.Role.title.spec.lineHeight
+            let above = higher * LedgerFont.scaledSize(.title, dynamicTypeSize: size) / 2
+            #expect(
+                abs(field.minY - (target.minY - above)) < 1 && abs(field.minX - target.minX) < 1,
+                "\(field) in \(target), \(above) pt above it"
+            )
             let view: UIView = shown.hosted.host.view
             let onTheFirstLine = view.hitTest(CGPoint(x: field.midX, y: field.midY), with: nil)
             let onTheLastLine = view.hitTest(CGPoint(x: letters.minX + 10, y: letters.maxY - 6), with: nil)
