@@ -5769,3 +5769,79 @@ dark for about a minute after 21:16, until I set it to light by hand; a run of t
 - **Bold Text, right to left and the sizes above Accessibility XL in the running app**: by measurement on
   hosted parts only.
 - **The watch.** Nothing of this slice builds for it but the Domain protocol.
+
+### Fix round 1 (G1 implementer, 2026-10-13 and -14)
+
+On G3's three should-fix items, the tester's S7a-1 to S7a-7 and the orchestrator's rulings 1 to 8 of fix round 1.
+The commits are `7f3613a` (code and tests) and `6a00551` (the catalog's comment).
+
+| Ruling | What changed | Test |
+|---|---|---|
+| 1 (G3-1) | `drain()` wakes a waiting save only when it applied a tap. Before, a drain that could apply nothing (the session not heard yet, after the cover's tasks restarted) woke the save, which drained again at once: a spin on the main actor. Now the save waits for `follow()`'s first update | `WorkoutStoreSaveRoundOneTests.waitingSave_whileNotHeard_doesNotSpin` (at most 4 drains in 2,000 turns, then none; `WorkoutStore.drainPasses` counts them) |
+| 2 (G3-2, S7a-2) | The failed save's alert is one view, `SaveFailedAlert`, carried in the root's background with `.id(store.saveAttempt)`: each attempt's failure is a new presentation. The two alternating modifiers are gone. **Seam:** `-LEDGER_UITEST_FAIL_FINISH <count>` beside `-LEDGER_UITEST` (`LedgerAppKit/UITestSaveFailures.swift`), read as `UITestClock` reads `-LEDGER_UITEST_NOW`: in `AppComposition.Environment.live`, Debug only (`liveCount` returns nil in Release, and the wrapper `UITestFailingFinishSession` is compiled out). The session's first `count` saves are refused before they reach the host; then it saves | `UITestSaveFailuresTests` (4); *UI, nightly* `WorkoutSaveFailure.test_tryAgain_eachFailureShowsTheAlertAgain_thenSaves` (three failures, the alert back each time, then saved onto Today) and `test_close_thenTheSheetOffersNoDiscard_andSaveSaves`: 2 of 2 passed |
+| 3 (G3-3) | Under "For the product owner" below | — |
+| 4 (S7a-1) | Cause found: at half height the system draws the presented sheet at about 96 % (Keep lifting 42.25 pt, content 339 pt wide). At full height everything is drawn at full size: margins 24 pt, Keep lifting 44 pt, Save and Discard 54 pt (the tester's `G2-SHEET` lines, 7 sizes). `SheetChrome` is not the cause. `FinishSheet.detents` is now `[.large]`. **Open, see below** | tester's `WorkoutFinishAdversarial` with its wrapper removed |
+| 5 (S7a-3) | **The host cannot withdraw a waiting end**: the finished envelope is already in its log, and the engine has no event that undoes it. So once this store has asked the session to finish (`hasAskedToFinish`, never set back), the sheet draws no "Discard" (`WorkoutFinishModel.discard` is nil) and `send(.discard)` does nothing; the sheet then shows "Save workout" and "Keep lifting". Limit: this is the store's knowledge only. A cover opened again after "Minimize" offers "Discard" again, and a tap there still saves (R10's reader question) | `WorkoutStoreSaveRoundOneTests.afterAFailedSave_noDiscard`, `saveNeverSent_keepsDiscard`; the tester's test rewritten (below); *UI* `WorkoutSaveFailure.test_close_…` |
+| 6 | S7a-7: "Couldn't save this workout" has its translator's comment. S7a-6 is in the product owner's list; S7a-4 and S7a-5 are under F17 below | the gate's catalog check |
+| 7 | The system's own dismissal of an alert now sends `.dismissed(dialog)`, which takes down that dialog alone; the buttons still send `.dismissFailure`. (`.dismissFailure` keeps its name and meaning because the testers' suites send it in about 30 places.) `SheetChrome(cancelIdentifier:)` is `String?`, and nil applies no identifier; no reference moved. `isAnnounced` is now `shouldAnnounce` | `WorkoutStoreSaveRoundOneTests.dismissed_takesDownItsOwnDialogOnly`; `FeatureWorkoutSourceTests.root_presentsASheet` (no binding sends `.dismissFailure`) |
+| 8 | Dark screenshots: not retaken (the full-height question is open, and the sheet's look depends on it) | — |
+
+**Edits to the testers' files, for the audit**
+
+- `Adversarial/WorkoutSaveAdversarialTests+Failures.swift` (the orchestrator's ruling (a)). The test
+  `close_thenDiscard_savesTheWorkout_asBuilt` ("After Close, the sheet's Discard saves the workout") is now
+  `close_thenNoDiscard_saveSavesAtTheFirstEnd`. Old: after a failed save and "Close", "Finish" offers
+  "Discard", the discard closes the cover as `.saved` and the workout is in history. New: no "Discard" is
+  offered; a sent `.discard` ends nothing (no exit, the sheet still the dialog, the workout live); then
+  "Save workout" saves once more (two `materialize` calls in all), at the first tap's end, and closes as
+  saved. Every wait is bounded: the old test's `await following.value` hung for ever once the cover no
+  longer closed. The follow is now cancelled by `defer`, and `eventually` returns false instead of waiting.
+- `Apps/LedgerUITests/WorkoutFinishAdversarial.swift:100`: the `XCTExpectFailure` wrapper around "Keep lifting
+  is at least 44 pt" is removed (ruling 4). Nothing else changed.
+- Shared test support: `LedgerAppKitTests/Support/Harness.swift` (`composition(failedFinishes:)`) and
+  `ModuleCopyTests.exemptions` (the new file's two launch arguments and its launch-stopping text, as for
+  `UITestClock.swift`).
+
+**Waits in the testers' new files that would hang rather than fail if the cover never closed** (not edited):
+- `WorkoutSaveAdversarialTests+Deviations.swift:69`, `await work.value` on a discard held in the store.
+- `WorkoutAnnouncementAdversarialTests.swift:198`, `await keeper.value`.
+- `WorkoutSaveAdversarialCover.swift:91` and `:112`, `await task?.value` for the cover's four tasks in
+  `restart` and `close`. A follow that never hears an end never returns from these.
+
+**Open after this round: S7a-1 against three of the testers' tests.** With the sheet at full height, three
+tests fail:
+1. `WorkoutRootSaveAdversarialTests.swift:96` pins two detents.
+2. S4's `WorkoutAdversarial.swift:41` taps outside the sheet to dismiss it; at full height there is no
+   outside.
+3. `WorkoutFinishAdversarial.swift:100`: at Accessibility M "Keep lifting" measures 43.999999999999986 pt.
+   That is floating-point error, and the assertion has no tolerance. The testers' hosted checks allow 0.001.
+
+Reported to the orchestrator with two options: full height, with those three tests updated; or half height
+with the expected-failure wrapper put back, and S7a-1 open. The alternative fix, a taller cancel in
+`SheetChrome`, would move the other sheets.
+
+**For the product owner (added this round)**
+- O3/S7a-3: once a save has been tried, "Discard" leaves the sheet for as long as the cover is up. A cover
+  opened again still offers it, and it would save the workout.
+- The sheet now stands at full height, if the open point above goes that way (it was half height).
+- S7a-6: outside en_US the line mixes number styles. The counts follow the region ("1.234 of 1.250"); the
+  volume follows the Domain's rule 34 ("617,000").
+- G3-3: this slice adds a Domain protocol (`AnnouncementsClient`) and a key in `docs/architecture.md` §13
+  (`announcements`). That is an architecture addition beyond the feature's own module.
+- A Debug-only launch argument, `-LEDGER_UITEST_FAIL_FINISH`, is now in the app for UI tests. It is
+  compiled out of Release.
+
+**For F17**: S7a-4 (a workout discarded by another hand while this cover's save went unheard closes as
+saved, which needs a session that throws `CancellationError` to a cancelled caller) and S7a-5 (an end the
+engine will not take is never saved by "Try again"; "Close" and a new "Save workout" save it).
+
+**Product lines**: 472 against `77b33ec`, up from 379. Most of the rise is `UITestSaveFailures.swift`
+(+62); the rest is spread across the store, the copy and the root.
+
+**Runs (2026-10-13/14, through the lock)**
+| Run | Result |
+|---|---|
+| host `FeatureWorkoutTests`, `LedgerAppKitTests`, `LedgerDependenciesTests` | 413, 262, 70: passed |
+| `PR` plan, `-only-testing` FeatureWorkoutTests, LedgerDesignTests, LedgerAppKitTests on `7f3613a` | 1 failure, `WorkoutRootSaveAdversarialTests` (two detents, the open point); LedgerDesign 385 and LedgerAppKit 276 passed. The catalog check failed for the missing comment, fixed in `6a00551` |
+| `Nightly`, `WorkoutSaveFailure`, `WorkoutFinishAdversarial`, `WorkoutAdversarial`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutRest`, `WorkoutRestAdversarial`, `WorkoutConflictAdversarial`, `Smoke` | 22 of 24 passed. The two failures are open points 2 and 3 |
+| full `scripts/check.sh` | not run: it would fail on open point 1 |
