@@ -555,3 +555,84 @@ alignment shows only with the focus.
 - For a later chore: the library's search field in `.body` (its line 1.2 cut the title's tails), right to
   left on a device, and NF-5 is closed here but was `main`'s.
 - Not verified: a device, typing (so NF-1's and NF-3's behaviour while typing is inferred), the watch.
+
+### G2, round 2 (on fix round 1, `64c7c30` to `8bfc5f9`)
+
+The coordinator's ruling on NF-1 is option B. The field keeps the line of 1.3 and the guide. A name that holds
+a glyph from another font still moves on focus, and it stays a known issue for the product owner. The
+whole-glyph bound is unchanged. Everything is measured as in round 1.
+
+**Can G2 close? Yes.** NF-2 to NF-5 are fixed, and each test whose wrapper was removed still fails when its
+fault comes back. The new pieces hold under attack. NF-1 is the one finding left open, as ruled: 20 known
+issues in `focus_doesNotMoveANameWithAnEmoji`.
+
+**NF-1, as the product owner's list should state it.** A name moves up by 3.7, 6.0 and 7.3 pt on focus (at
+`.large`, `.accessibility3`, `.accessibility5`) and back on blur when it holds:
+- an emoji;
+- one of Å É Ç Ł ï ą ỵ;
+- **any Vietnamese**, including ordinary names ("Tiếng Việt", "Ngày tập chân": every name measured);
+- Thai, Devanagari or Arabic.
+
+These do not move it: é í ñ ü ß Æ, Hebrew, or "—", "’", "½", "×".
+
+Every one of these names is drawn whole while edited, in both fields, plain and bold. That includes the
+Vietnamese stacked marks ("ấ ầ ẩ ẫ ậ ế ồ", "Ấ Ầ Ẩ Ẫ Ậ Ế Ồ", "Ặ Ẵ Ỗ Ữ ỹ") at the three sizes: no glyph loses
+more than a pixel.
+
+**The removed wrappers, each confirmed by a mutant.** Mutant MA put back the old guide arithmetic, emptied
+the unseen label and removed `.layoutBased`, all in one build. Mutant MB took away the label's zero width.
+
+| Wrapper | Test, now plain | Under the mutant |
+|---|---|---|
+| `lowerField` (NF-4) | `looseRole_fieldStandsOnTheText` | MA: fails for `.body`, `.label` and `.bodyLight` |
+| `caretOnTheTag` (NF-2) | `emptyDraft_caretStaysAboveTheTag` | MA: fails at `.accessibility3` and `.accessibility5` |
+| `jumpsAcross` (NF-3) | `focus_doesNotJumpAcross` | MA: fails in all 4 cases |
+| `emptyTarget` ×2 (NF-2, NF-5) | `emptyDraft_keepsALine` | MA: the hang fails at `.accessibility3` and `.accessibility5`; the jump fails at `.accessibility5` |
+
+**The guide `(line − 1) × size / 2`.** It was checked for every phone role at three sizes, plain and bold.
+The tails are whole, and the field's letters stand within 2 pt of the text's. That covers `.body` and
+`.label`, which were 2.7 pt off, and `.bodyLight`, which was 8.7 pt off. One cell sits exactly on the bound:
+`.display` at `.accessibility5` stands 2.0 pt high, plain and bold, where the old arithmetic gave 0.0. No
+screen uses it. The test now allows ≤ 2 and says why.
+
+**`.multilineTextAlignment(strategy: .layoutBased)`.**
+- **Order of words.** Names that mix scripts ("Upper עליון", "עליון Upper", "Day 1 יום", "يوم Push 2") keep
+  the order of their words under focus. This was checked on both layouts, at the three sizes, in both
+  fields. The measure is the ink of each column, and its control is two Latin words in the other order.
+- **Edges.** The line's edges stay within 2 pt. An Arabic name's ink ends 1.7 pt short at the trailing end;
+  its leading edge stays put.
+- **Accessibility sizes.** At `.accessibility3` and `.accessibility5`, a name written against the layout
+  moves at most 1.3 pt sideways.
+- **Not measured: typing.** A hosted field takes no typed text, so the order while a mixed name is being
+  typed is inferred, not measured.
+
+**The unseen label.**
+- **Width and position.** With a label longer than the screen, the picture and the field's frame are the
+  same pixel for pixel as with a label of one letter. This holds for "A" and for the long name, on both
+  layouts, at `.large` and `.accessibility5`. Mutant MB fails this test, and also
+  `longProgramName_isDrawnWhole` at `.accessibility5`.
+- **VoiceOver.** It never reads the label as text: the builder's header reads only `heading "MY PROGRAM"`,
+  and `NameField` reads nothing.
+- **Taps.** UIKit finds no text field under points outside the field's column.
+- **Empty name in the builder.** The builder's header with an empty name is as high as under one letter
+  (within 1 pt) at the three sizes.
+
+**Added:** `NameFieldRound2AdversarialTests.swift`, which covers the mixed scripts, the accessibility
+sizes, the long label and the builder's empty name. Also added: `focus_keepsVietnameseWhole`; "Tiếng Việt"
+in the NF-1 test; `FieldFontAdversarialTests.everyRole_fieldStandsOnTheText`.
+
+**Commands**, all through the lock:
+
+| Run | Exit | Result |
+|---|---|---|
+| Probe of this round (temporary, deleted) | 65 | measurements; a `.display` cell on the bound |
+| First clean pass | 65 | my own faults: a control that could not tell the order of words apart (the paragraph takes the direction of its first letter), and edge bounds tighter than Arabic's 1.7 pt; fixed |
+| MA, MB | 65, 65 | as audited above; sources restored with `git checkout -- LedgerKit/Sources` |
+| **All of `FeatureProgramTests`, with `FieldFontTests` and `FieldFontAdversarialTests`, clean tree** | **0** | 529 tests (22 known issues: 20 for NF-1, 2 from `main`) and 6 tests |
+| `swiftlint --strict`, `swiftformat` | 0 | |
+
+`sim-lock.py` had been purged from `/tmp` again. It was restored from the copy in memory, and the
+coordinator was told.
+
+**Not checked:** a device; typing; the watch; the full `scripts/check.sh` (the implementer reports it green
+on `8bfc5f9`, and nothing in the product has changed since).
