@@ -93,7 +93,9 @@
                 return
             }
             let sheet = try #require(hosted.sheet)
-            #expect(sheet.sheetPresentationController?.detents.count == 2, "half height and full height")
+            // F10 S7a fix round 1 (ruling on S7a-1; edited by the implementer): full height only.
+            #expect(sheet.sheetPresentationController?.detents.count == 1, "full height only")
+            #expect(sheet.sheetPresentationController?.detents.first?.identifier == .large)
             #expect(!sheet.isModalInPresentation, "a swipe down is Keep lifting")
             await hosted.session.holdEveryEnd()
             store.send(.save)
