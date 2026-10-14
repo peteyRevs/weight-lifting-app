@@ -147,7 +147,9 @@ extension SaveCover {
 
     /// Everything under way lands: for "nothing more happened".
     func rest() async {
-        await giveWay()
+        for _ in 0 ..< 400 {
+            await Task.yield()
+        }
         sync()
     }
 
@@ -162,12 +164,17 @@ extension SaveCover {
             await session.releaseEnd()
             await Task.yield()
         }
-        let truth = await session.current()
-        await until("the page to show the session's workout, or the cover to close") {
-            self.store.exit != nil || (self.store.shown == truth && self.store.queue.isEmpty && !self.store.isDraining)
-                || self.store.shown == nil
+        // The taps that waited change the session's workout as they land: it is asked again each round.
+        for _ in 0 ..< 400 {
+            await rest()
+            let truth = await session.current()
+            let isQuiet = store.queue.isEmpty && !store.isDraining
+            if store.exit != nil || store.shown == nil || (store.shown == truth && isQuiet) {
+                return
+            }
         }
-        await rest()
+        let state = "queue \(store.queue.count), draining \(store.isDraining), hearing \(store.isHearingTheSession)"
+        Issue.record("the cover never came to rest: \(state), saving \(store.isSaving)")
     }
 
     /// What must hold of a cover at rest, whatever was done to it (criteria 8, 13, 14, 17 and 18): nil

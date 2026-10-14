@@ -1738,3 +1738,118 @@ VoiceOver order, and the UI tests.
 | Host mutants R1 to R11, simulator mutants T1 to T8 | | the table above; `git diff --stat -- LedgerKit/Sources Apps/Ledger` empty after; no test helper left running |
 
 The full gate, watchOS and the rest of `Nightly` were not run.
+
+## S7a — round 1 (G2 tester, 2026-10-13)
+
+On `f43c4d4` (range `77b33ec..f43c4d4`), against criteria 1 to 24 and 38 to 40 of "Plan amendments — slice
+S7" and "Rulings before G1 — slice S7". No product code, implementer's test, project file or test plan was
+edited; the UI test class is a new file the synchronized group picks up.
+
+### Result
+
+The store holds everywhere I attacked it. No logged set is lost, a workout ends once, every failure is shown
+and loses nothing, and the announcements are said once each. **Nothing is left red.** Two findings are
+measured in the running app (S7a-1, S7a-2), the rest are as built and recorded for the product owner or for
+F17. The dark-appearance question is answered: **the simulator** (below).
+
+### Findings
+
+| Id | Severity | Finding |
+|---|---|---|
+| S7a-1 | P3 | **"Keep lifting" is 42.2 pt tall in the running app** (criterion 38: every target 44 pt). Measured by XCUITest on the iPhone 17 at half height: L, XXXL and AX1 give 42.25 pt (56×42, 80×42, 95×42), AX3 43, AX5 52; mirrored the same. "Save workout" and "Discard" are 51 pt. The hosted reader the implementer used measures the same button at ≥ 44 pt: in the app the sheet's content is 339 pt wide on a 402 pt phone (31 pt margins, not 24), so the presented sheet draws its content about 4 % smaller than the hosted parts. Pinned with `XCTExpectFailure` (non-strict) in `WorkoutFinishAdversarial`. Reproduce: run any `test_sheet_*` and read `G2-SHEET`/the expected failure. Whether it is the system's own sizing of a sheet at its half height (and so not the frame's to fix) I did not establish |
+| S7a-2 | P3 | **The failed save's alert coming back after "Try again" is still not pinned by a committed test.** There is no committed hook to make a save fail in the app, so no UI test can. A hosted test cannot either: in a package test's window (no scene) a presentation's dismissal never completes, measured: after the store took the sheet down and said `.saveFailed`, `presentedViewController` was still the sheet's `PresentationHostingController` and no `UIAlertController` was ever presented (round's first runs of `WorkoutRootSaveAdversarialTests`, removed). Adding a Debug launch argument that fails `finish` would be product code: reported, not added. The two-alerts-by-parity spelling stays pinned only by `FeatureWorkoutSourceTests.root_presentsASheet` |
+| S7a-3 | P4, as built (O3, R10) | **After a failed save and "Close", the sheet's "Discard" saves the workout** and the cover closes as `.saved`: the alert offers no Discard, but "Finish" opens the sheet with one, and the host completes the waiting end first (contract). `close_thenDiscard_savesTheWorkout_asBuilt`. For the product owner: the lifter tapped Discard |
+| S7a-4 | P4, as built (F17) | **Closed as saved on a workout another hand discarded**, unheard: the notes' F17 input, reproduced (`discardedElsewhere_unheard_closesAsSaved_asBuilt`). The notes' "one phone cannot do it" holds on the real host, verified: a discard whose task is cancelled is not let go before its call ends, so no Save can be tapped over it (`host_cancelledDiscard_staysADiscard`). A session client that throws `CancellationError` to a cancelled caller (as the test target's `HeldFinishSession` does, and as a watch proxy might) would make it reachable on one phone: the discard sets `isDiscarding` false, Save is taken, and the new stream's first `nil` reads as saved |
+| S7a-5 | P4, as built | **An end the engine will not take can never be saved by "Try again"** (same non-finite end each time); "Close" then a new "Save workout" saves. Unreachable from a system clock. `invalidEnd_tryAgainNeverSaves_asBuilt` |
+| S7a-6 | P4, for the product owner | **One line, two ways of writing numbers** outside en_US: "1.234 of 1.250 sets logged · 617,000 lb moved" (de_DE), "١٬٢٣٤ of ١٬٢٥٠ sets logged · 617,000 lb moved" (ar_EG): the counts are the lifter's, the volume the Domain's (rule 34). `numbers_inAnotherLocale_asBuilt` |
+| S7a-7 | P4 | "Couldn't save this workout" is the only one of the eight new catalog keys with no translator's comment |
+
+Not findings, recorded: a rest equal by value to the one announced before (same end, same length, which
+needs two logs at one instant) is not announced again; and the rest's task is not stopped by `exit`, so a
+rest that ends during a held save, or in the instant the cover is going, is still felt and said.
+
+### The dark appearance (item 10): the simulator
+
+With no test harness at all (`simctl` alone, `scratchpad/s7a-g2/dark-probe.sh`): `simctl ui appearance
+dark` reads back "dark" and the device's `com.apple.uikitservices.userInterfaceStyleMode` holds
+`UserInterfaceStyleMode = 2`, yet **the system's own Settings app draws light**, and so does Ledger launched
+by `simctl launch` and Ledger running when the switch is made (three screenshots). So it is neither the app
+nor the test: the iPhone 17 simulator (iOS 27.0, C67249F5…) has stopped applying its appearance.
+`TabsAdversarial.test_selectedTab_…lightAndDark` fails in its dark half on this tree the same way ("Today is
+not in the accent", accent share 0.0). I did not build `main` in a second worktree: 5–6 GB free, a build
+needs about 4 GB, and the Settings app settles the question without it. Likely fix (not done; the simulator
+is shared): shut down and boot the device, or erase it. The appearance was set back to light after every run.
+
+### Audit of the implementer's two edits to `WorkoutWordsAdversarialTests`
+
+Both sound, no strength lost: the 71-key list still compares both directions plus `catalog.problems`, and
+`dialogs_areTheBriefs` compares the same three strings. What the old finish-dialog check covered and the new
+model no longer did by itself (the whole sheet model, "Save workout", the line) is now pinned word for word
+by `WorkoutFinishWordsAdversarialTests.model_isTheCriterias` (every count, both units, saving or not) and
+`texts_areTheSpecifications` (the eight keys, the three invented texts exactly, "Try again" against S4's
+"Try again.").
+
+### What held, with numbers
+
+- **No logged set is lost** (`storm_savesWhatTheCalmRunSaves`, 40 seeds by default, 200 run on the host and
+  the simulator): up to 40 taps of every kind in bursts, every call held, the page behind, the date moving,
+  "Save workout" at a seeded point; then late taps and every control. Same calls, same finished workout,
+  same exit as the calm run; ended at the tap, asked once. First 40 seeds: 35 saves, **415 taps still waiting
+  at the tap on Save**, 109 sets saved, 681 calls. Taps after "Save workout" are dropped, as criterion 8 says.
+- **Exactly once**: double tap and every control while saving; Discard then Save; restart mid-finish in both
+  answer orders and with the new stream's first update held back; the updates ending mid-finish and while
+  the save waits for a tap; the cover gone for good. And a seeded walk of 90 steps (taps, sheet, alert,
+  restarts, held and failing calls, ends elsewhere), 200 seeds: never two ends, two exits, a finish asked for
+  an end no tap gave, or a cover at rest still ending. First 40: 60 saves, 17 retries, 116 restarts.
+- **Failures**: "Try again" failing 1, 2, 3 and 8 times in a row (four kinds of error, a `CancellationError`
+  from an uncancelled task among them): the alert each time on its own attempt, the workout untouched, the
+  first end every time. Close on the real host: live, not in history, Minimize answers; **a relaunched host
+  saves it, ended at the tap**. Refusals under the open sheet and under a waiting save; a queue that leaves no
+  set; deviation 2's "nothing to show".
+- **Announcements**: a walk of logs, un-logs, +30s, skips, time, time away, restarts, reopens and redraws on
+  the real host, 200 seeds: each new rest said once in words written independently, "Rest over" exactly as
+  often as it is felt (first 40: 587 rests said, 32 Rest over, 87 reopens); said after the haptic, once; ten
+  times in words with singular forms, three English locales.
+- **Words**: the model for nine counts × two units × saving; English plural forms under twelve locales whose
+  rules differ.
+- **Accessibility**: VoiceOver order, traits, dimming, on-phone and no-overlap at all twelve text sizes × two
+  widths × Bold × RTL × eight models; orange is Save's fill alone at four sizes × 16 settings × both themes
+  (a one-pixel row 1.3 pt under its frame at AX5 is the fill); in the app at half height **both buttons show
+  without scrolling at every size measured** (iPhone 17: Discard's bottom at 627 pt at L, 817 pt at AX5, of
+  874); mirrored, Keep lifting at the left; a swipe down keeps the workout; two quick taps on Save save once,
+  one Logged card, no alert. In the root: two detents, and no swipe while saving.
+
+### Mutations (15; product tree clean after)
+
+Host, `scratchpad/s7a-g2/mutants.py`, each caught: M1 a second tap answers while saving; M2 Try again ends at
+the retry; M3 finish without waiting for the taps; M4 a refusal does not withdraw the save; M5 saved on any
+empty first update; M6 `noLiveWorkout` shown as a failure; M7 every pass announces; M8 Rest over said before
+it is felt; M9 Save answers while saving; M10 updates ending keep the save; M11 Try again answers any dialog;
+M12 a cancelled save is a failure; M13 zero sets saved; M14 a queue left with no set still finishes.
+Simulator: T1 no `interactiveDismissDisabled` (caught by `sheet_isPresented_andHeldWhileSaving`). Not
+mutated: the two alerts' parity (no test can see it, S7a-2).
+
+### Tests added
+
+`FeatureWorkoutTests/Adversarial/`: `WorkoutSaveAdversarialSession`, `…Cover` (doubles),
+`WorkoutSaveAdversarialTests` (+`Once`, `Walk`, `Failures`, `Deviations`), `WorkoutAnnouncementAdversarialTests`,
+`WorkoutFinishWordsAdversarialTests` (host and simulator: 42 tests), `FinishSheetAdversarialTests`,
+`WorkoutRootSaveAdversarialTests` (simulator only: 4). `Apps/LedgerUITests/WorkoutFinishAdversarial` (7, nightly).
+
+### Not checked
+
+VoiceOver on a device; a save that really fails in the app (S7a-2); the 375 pt phones and dark in the
+running app (only one simulator; dark broken); Bold Text in the app; the watch; `main` built.
+
+### Commands and exit statuses (2026-10-13; iPhone 17, iOS 27.0; every simulator run through the lock)
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --filter "WorkoutSaveAdversarialTests\|WorkoutAnnouncementAdversarialTests\|WorkoutFinishWordsAdversarialTests"` (host, 3 runs) | 0 | 35 tests in 3 suites each run |
+| the same, `LEDGER_PROPERTY_SEED_COUNT=200` | 0 | after fixing my own `settle()` (it read the session once) |
+| host mutants M1–M14 | 1 each | all caught |
+| `PR` plan, `-only-testing:FeatureWorkoutTests` | 65 | 499 tests in 71 suites; the only failures were in my two new simulator suites (the AX5 orange row, the scene-less presentation), since fixed or removed |
+| `PR` plan, `FinishSheetAdversarialTests`, `WorkoutRootSaveAdversarialTests` | 0 | 4 tests in 2 suites |
+| `Nightly` plan, `LedgerUITests/WorkoutFinishAdversarial` | 0 | 7 of 7 (S7a-1 as an expected failure) |
+| `Nightly` plan, `TabsAdversarial/test_selectedTab_…lightAndDark` | 65 | dark half fails: the simulator |
+| simulator mutant T1 | 65 | caught |
