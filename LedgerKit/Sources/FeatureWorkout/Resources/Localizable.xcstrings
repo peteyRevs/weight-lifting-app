@@ -264,6 +264,7 @@
       }
     },
     "Couldn't save this workout" : {
+      "comment" : "Title of the alert shown when a finished workout could not be saved",
       "localizations" : {
         "en" : {
           "stringUnit" : {
