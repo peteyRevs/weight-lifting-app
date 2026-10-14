@@ -5,9 +5,9 @@ import LedgerDomain
 /// the queue of the page's taps, and the work that applies them. In a file of its own for its length; the
 /// members of the store it uses are the store's alone.
 extension WorkoutStore {
-    /// While a discard runs or the cover is closing no control answers.
+    /// While a discard or a save runs, or the cover is closing, no control answers.
     var isBusy: Bool {
-        isDiscarding || exit != nil || exitWhenDrained != nil
+        isDiscarding || isSaving || exit != nil || exitWhenDrained != nil
     }
 
     /// The workout goes on after a Minimize, so the taps made before it are applied first (criterion 14):
@@ -60,14 +60,20 @@ extension WorkoutStore {
             return
         }
         isDraining = true
-        defer { isDraining = false }
+        defer {
+            isDraining = false
+            settled?.wake.yield()
+        }
         while let tap = queue.first, isHearingTheSession, exit == nil, !isDiscarding {
             let epoch = queueEpoch
             let outcome = await apply(tap)
             if outcome == .refused {
-                // The taps behind a refused change were made on a page that never came to be.
+                // The taps behind a refused change were made on a page that never came to be, and a save
+                // that waited for them is withdrawn: no workout is saved without a change the lifter
+                // believes was made (F10 S7, criterion 12).
                 emptyQueue()
                 exitWhenDrained = nil
+                isSaving = false
             } else if epoch == queueEpoch {
                 // The tap is done, or was sent and its call cancelled with the cover: it is not sent again.
                 queue.removeFirst()

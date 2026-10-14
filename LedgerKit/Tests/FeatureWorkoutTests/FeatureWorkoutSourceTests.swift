@@ -116,4 +116,50 @@ nonisolated struct FeatureWorkoutSourceTests {
         let code = WorkoutWordsAdversarialTests.scanned(Substring(line))
         #expect(WorkoutWordsAdversarialTests.forbidden.contains { code.contains($0) } == isCaught)
     }
+
+    // MARK: F10 S7a
+
+    /// Criterion 20: posting an announcement is ambient, as a clock is. The store hands its texts to the
+    /// injected `AnnouncementsClient`; the system's own calls are `LedgerAppKit`'s.
+    static let announcing = ["UIAccessibility.post", "UIAccessibilityPostNotification", "AccessibilityNotification"]
+
+    @Test("No file of FeatureWorkout posts an accessibility announcement itself")
+    func sources_postNoAnnouncement() throws {
+        #expect(try Self.uses(of: Self.announcing) == [])
+        for spelling in Self.announcing {
+            #expect(Self.lines(of: spelling, in: SwiftSource("call(\(spelling)")) == [1], "\(spelling)")
+        }
+    }
+
+    /// Criterion 24: the texts this slice adds are looked up in `WorkoutCopy+Finish.swift`, and the rest's
+    /// announcement in `WorkoutCopy+Rest.swift`; no other file holds one of their keys.
+    @Test("The slice's lookups are in WorkoutCopy+Finish, and the announcement's in WorkoutCopy+Rest")
+    func finishLookups_areInTheirCopyFiles() throws {
+        let sources = try CopyAudit.sources(ofModule: "FeatureWorkout")
+        let finish = [
+            "End workout?", "Save workout", "Keep lifting", "sets logged", " lb moved", " kg moved",
+            "Couldn't save this workout", "It's still on this iPhone. Try again.", "\"Try again\""
+        ]
+        for text in finish + ["remaining\""] {
+            let home = text == "remaining\"" ? "WorkoutCopy+Rest.swift" : "WorkoutCopy+Finish.swift"
+            let holders = sources.filter { $0.value.contains("localized: \"") && Self.looksUp(text, in: $0.value) }
+            #expect(holders.keys.sorted() == [home], "\(text)")
+        }
+    }
+
+    /// Whether a line of `source` that makes a lookup holds `text`.
+    static func looksUp(_ text: String, in source: String) -> Bool {
+        source.split(separator: "\n").contains { $0.contains("localized:") && $0.contains(text) }
+    }
+
+    /// Criterion 1 and ruling R2: "End workout?" is a sheet. The system's dialog is gone from the cover's
+    /// content; the conflict dialog, which is the launcher's, is not this slice's.
+    @Test("The cover's content presents End workout? as a sheet, and no system dialog")
+    func root_presentsASheet() throws {
+        let root = try #require(CopyAudit.sources(ofModule: "FeatureWorkout")["WorkoutRoot.swift"])
+        let source = SwiftSource(root)
+        #expect(Self.lines(of: "confirmationDialog", in: source) == [])
+        #expect(Self.lines(of: ".sheet(isPresented:shows(.finish,else:.keepLifting))", in: source).count == 1)
+        #expect(Self.lines(of: ".task(id:store.saveAttempt)", in: source).count == 1)
+    }
 }

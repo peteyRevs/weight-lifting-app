@@ -34,6 +34,17 @@
         }
       }
     },
+    "%@ kg moved" : {
+      "comment" : "The total weight lifted in the workout so far, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved"
+          }
+        }
+      }
+    },
     "%@ kilograms" : {
       "comment" : "Spoken weight, in kilograms",
       "localizations" : {
@@ -41,6 +52,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ kilograms"
+          }
+        }
+      }
+    },
+    "%@ lb moved" : {
+      "comment" : "The total weight lifted in the workout so far, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved"
+          }
+        }
+      }
+    },
+    "%@ of %lld sets logged" : {
+      "comment" : "The sets logged in the workout so far, then all its sets",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld set logged"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld sets logged"
+                }
+              }
+            }
           }
         }
       }
@@ -167,7 +212,7 @@
       }
     },
     "Close" : {
-      "comment" : "Closes the workout screen when the workout cannot be shown",
+      "comment" : "Closes the workout screen when the workout cannot be shown, or the alert of a failed save",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -214,6 +259,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't save that change"
+          }
+        }
+      }
+    },
+    "Couldn't save this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save this workout"
           }
         }
       }
@@ -316,7 +371,7 @@
       }
     },
     "End workout?" : {
-      "comment" : "Title of the dialog the Finish button opens",
+      "comment" : "Title of the sheet the Finish button opens",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -358,8 +413,19 @@
         }
       }
     },
+    "It's still on this iPhone. Try again." : {
+      "comment" : "Shown when a finished workout could not be saved: nothing of it is lost",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It's still on this iPhone. Try again."
+          }
+        }
+      }
+    },
     "Keep lifting" : {
-      "comment" : "Closes the dialog and returns to the workout",
+      "comment" : "Closes the sheet and returns to the workout",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -477,6 +543,17 @@
         }
       }
     },
+    "Rest, %@ remaining" : {
+      "comment" : "Spoken when a rest begins: the time left, in words, as in 1 minute, 30 seconds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest, %@ remaining"
+          }
+        }
+      }
+    },
     "Resting" : {
       "comment" : "Shown on the rest timer while time is left",
       "localizations" : {
@@ -495,6 +572,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Resume it"
+          }
+        }
+      }
+    },
+    "Save workout" : {
+      "comment" : "Ends the workout and keeps it in history",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save workout"
           }
         }
       }
@@ -570,6 +658,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This day is no longer in your program."
+          }
+        }
+      }
+    },
+    "Try again" : {
+      "comment" : "Button that saves the workout again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
           }
         }
       }

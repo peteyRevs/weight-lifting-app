@@ -22,7 +22,7 @@ nonisolated struct WorkoutModel: Equatable, Sendable {
 nonisolated struct WorkoutHeaderModel: Equatable, Sendable {
     let minimize: String
     let finish: String
-    /// False while a discard runs or the cover is closing: neither button answers.
+    /// False while a discard or a save runs, or the cover is closing: neither button answers.
     let isEnabled: Bool
     /// When the workout started: the elapsed time counts from here (`WorkoutTimeline`).
     let startedAt: Date
@@ -49,13 +49,6 @@ nonisolated struct WorkoutConflictDialogModel: Equatable, Sendable {
     let resume: String
     let replace: String
     let cancel: String
-}
-
-/// "End workout?". Until S7 adds "Save workout", it can only discard.
-nonisolated struct WorkoutFinishDialogModel: Equatable, Sendable {
-    let title: String
-    let discard: String
-    let keepLifting: String
 }
 
 /// Something failed: what, what that leaves, and the one button that closes the alert.

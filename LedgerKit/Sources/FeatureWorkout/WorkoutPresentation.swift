@@ -45,14 +45,6 @@ nonisolated enum WorkoutPresentation {
         )
     }
 
-    static var finishDialog: WorkoutFinishDialogModel {
-        WorkoutFinishDialogModel(
-            title: WorkoutCopy.endWorkout,
-            discard: WorkoutCopy.discard,
-            keepLifting: WorkoutCopy.keepLifting
-        )
-    }
-
     /// The discard was refused: the workout is still live.
     static var discardFailedAlert: WorkoutAlertModel {
         WorkoutAlertModel(

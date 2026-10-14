@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The cover's content (F10 S4, S5): the live workout as the session shows it, with the finish dialog and the
-/// alerts of a discard and of a change that failed. It owns the store and runs its work: following the
-/// session and applying the page's taps for as long as the cover is up, the discard, and the shown rest's
-/// time (F10 S6), each from a `.task`, so all end with the view.
+/// The cover's content (F10 S4, S5): the live workout as the session shows it, with the "End workout?" sheet
+/// (F10 S7) and the alerts of a discard, a change and a save that failed. It owns the store and runs its
+/// work: following the session and applying the page's taps for as long as the cover is up, the discard,
+/// the save, and the shown rest's time (F10 S6), each from a `.task`, so all end with the view.
 ///
 /// It closes nothing itself. When the store says the cover is done (`WorkoutStore.exit`), `onExit` tells
 /// the launcher, which takes the cover down and hands the app its route.
@@ -23,23 +23,16 @@ struct WorkoutRoot: View {
     }
 
     var body: some View {
-        let finish = WorkoutPresentation.finishDialog
         let failure = WorkoutPresentation.discardFailedAlert
         let refusal = WorkoutPresentation.editFailedAlert
+        let unsaved = WorkoutPresentation.saveFailedAlert
         WorkoutScreen(model: store.model, send: store.send) {
             StoreRestPanel(store: store)
         }
-        .confirmationDialog(
-            finish.title,
-            isPresented: shows(.finish, else: .keepLifting),
-            titleVisibility: .visible
-        ) {
-            Button(finish.discard, role: .destructive) { store.send(.discard) }
-                .accessibilityIdentifier("workout.finish.discard")
-            // No cancel role: the system draws no cancelling button in a dialog (iOS 26 on), and the brief
-            // asks for this one. Tapping outside the dialog still returns to the workout.
-            Button(finish.keepLifting) { store.send(.keepLifting) }
-                .accessibilityIdentifier("workout.finish.keep")
+        // Product default O1: "End workout?" asks in a sheet. A swipe down, a tap outside it and
+        // VoiceOver's escape are "Keep lifting".
+        .sheet(isPresented: shows(.finish, else: .keepLifting)) {
+            StoreFinishSheet(store: store)
         }
         .alert(failure.title, isPresented: shows(.discardFailed, else: .dismissFailure)) {
             Button(failure.dismiss) { store.send(.dismissFailure) }
@@ -51,6 +44,12 @@ struct WorkoutRoot: View {
         } message: {
             Text(refusal.message)
         }
+        .alert(unsaved.title, isPresented: shows(.saveFailed, else: .dismissFailure)) {
+            Button(unsaved.retry) { store.send(.retrySave) }
+            Button(unsaved.close, role: .cancel) { store.send(.dismissFailure) }
+        } message: {
+            Text(unsaved.message)
+        }
         .task {
             await store.follow()
         }
@@ -59,6 +58,9 @@ struct WorkoutRoot: View {
         }
         .task(id: store.discardAttempt) {
             await store.discard()
+        }
+        .task(id: store.saveAttempt) {
+            await store.save()
         }
         .task(id: store.shownRest) {
             await store.keepRestTime()
@@ -92,6 +94,18 @@ struct StoreRestPanel: View {
     var body: some View {
         if let rest = store.restPanel {
             PlacedRestPanel(model: rest, send: store.send)
+        }
+    }
+}
+
+/// The "End workout?" sheet of the store's workout. Its body reads `WorkoutStore.finishSheet`, so the sheet
+/// follows the workout while it is up: a tap that lands, a set logged elsewhere, a save that starts.
+struct StoreFinishSheet: View {
+    let store: WorkoutStore
+
+    var body: some View {
+        if let model = store.finishSheet {
+            FinishSheet(model: model, send: store.send)
         }
     }
 }

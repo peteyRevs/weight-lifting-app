@@ -130,10 +130,28 @@ nonisolated struct WorkoutCopyTests {
             .nextSet(number: 3, weight: "185", reps: 5, units: .lb, locale: arabic) == "Set ٣ · 185 lb × ٥")
     }
 
+    @Test("The sheet's, the failed save's and the announcement's texts, word for word (F10 S7a)")
+    func finishTexts_areWordForWord() {
+        let locale = Fixtures.locale
+        #expect(WorkoutCopy.saveWorkout == "Save workout")
+        #expect(WorkoutCopy.setsLogged(done: "23", of: 25, locale: locale) == "23 of 25 sets logged")
+        #expect(WorkoutCopy.setsLogged(done: "0", of: 1, locale: locale) == "0 of 1 set logged")
+        #expect(WorkoutCopy.setsLogged(done: "0", of: 0, locale: locale) == "0 of 0 sets logged")
+        #expect(WorkoutCopy.moved("24,180", units: .lb, locale: locale) == "24,180 lb moved")
+        #expect(WorkoutCopy.moved("10,968", units: .kg, locale: locale) == "10,968 kg moved")
+        #expect(WorkoutCopy.couldNotSaveWorkout == "Couldn't save this workout")
+        #expect(WorkoutCopy.stillOnThisPhone == "It's still on this iPhone. Try again.")
+        #expect(WorkoutCopy.tryAgainButton == "Try again")
+        #expect(WorkoutCopy.restRemaining("1 minute, 30 seconds", locale: locale)
+            == "Rest, 1 minute, 30 seconds remaining")
+        // A language with other plural rules takes the catalog's form, not its own (the catalog is English).
+        #expect(WorkoutCopy.setsLogged(done: "1", of: 1, locale: Locale(identifier: "ar_EG")).hasSuffix("set logged"))
+    }
+
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 63)
+        #expect(catalog.keys.count == 71)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

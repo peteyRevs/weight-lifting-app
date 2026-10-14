@@ -24,14 +24,11 @@ nonisolated extension WorkoutPresentation {
         }
         let left = rest.remaining(at: now)
         let isOver = left <= .zero
-        let words = Duration.UnitsFormatStyle(
-            allowedUnits: [.minutes, .seconds], width: .wide, fractionalPart: .hide(rounded: .up)
-        ).locale(locale)
         return RestPanelModel(
             clock: ClockText.remaining(left),
             fraction: rest.fraction(at: now),
             status: isOver ? WorkoutCopy.restOver : WorkoutCopy.resting,
-            spokenTime: isOver ? "" : words.format(left),
+            spokenTime: isOver ? "" : spokenRestTime(left, locale: locale),
             isOver: isOver,
             next: nextSet(of: state, selection: selection, locale: locale),
             extend: WorkoutCopy.extendRest,
@@ -39,6 +36,20 @@ nonisolated extension WorkoutPresentation {
             skip: WorkoutCopy.skipRest,
             isEnabled: !isBusy
         )
+    }
+
+    /// "1 minute, 15 seconds": time left in words, by the whole second, rounded up, in `locale`.
+    static func spokenRestTime(_ left: Duration, locale: Locale) -> String {
+        Duration.UnitsFormatStyle(allowedUnits: [.minutes, .seconds], width: .wide, fractionalPart: .hide(rounded: .up))
+            .locale(locale)
+            .format(left)
+    }
+
+    /// "Rest, 1 minute, 30 seconds remaining": what VoiceOver is asked to say when `rest` is first shown
+    /// at `now` (F10 S7); nil for a rest with no time left, which is not announced.
+    static func restAnnouncement(_ rest: RestTimer, at now: Date, locale: Locale) -> String? {
+        let left = rest.remaining(at: now)
+        return left > .zero ? WorkoutCopy.restRemaining(spokenRestTime(left, locale: locale), locale: locale) : nil
     }
 
     /// The shown row of the shown exercise, as the panel names it: its number among the rows that are not
