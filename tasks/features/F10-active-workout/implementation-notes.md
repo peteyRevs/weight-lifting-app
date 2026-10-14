@@ -5434,3 +5434,338 @@ Only `FeatureWorkout` product code changed in this round (and two documents), so
 - `missedHaptics` beyond a logged set: the engine's account of a change between two states knows that haptic
   only, so an end that was missed the same way is not felt (it closes the cover).
 - The rest of the `Nightly` plan was not run. Nothing is pushed.
+
+## S7a — as built (G1 implementer, 2026-10-13)
+
+Branch `feat/F10-s7-finish`, cut from `main` at `77b33ec`; the specification is `2005eb4`, the rulings
+`ccbc1e9`. The contract is the brief's "Plan amendments — slice S7", criteria 1 to 24 and 38 to 40 for what
+S7a draws, with "Rulings before G1 — slice S7". After this slice "Finish" opens "End workout?" as a sheet;
+"Save workout" stores the workout and the cover closes onto Today's Logged card; a save that does not go
+through is shown and loses nothing; VoiceOver is told when a rest begins and ends. No receipt is drawn (S7b).
+
+### What was built
+
+| Where | What |
+|---|---|
+| `LedgerDomain/Protocols/Clients.swift` | `AnnouncementsClient.announce(_:) async`. It cannot throw |
+| `LedgerDependencies/Keys/DeviceKeys.swift`, `Unimplemented/UnimplementedDevices.swift` | the key `announcements`; its stub logs at fault level and returns; a preview gets the fake |
+| `LedgerFakes/DeviceFakes.swift` | `FakeAnnouncements` (`announced`), an actor that records |
+| `LedgerTestSupport/WithTestDependencies.swift` | **shared test support changed**: `announcements = FakeAnnouncements()` among the defaults, a new fake for each call, as S6's ruling 4 set for `haptics` |
+| `LedgerAppKit/LiveAnnouncements.swift`, `AppComposition.swift` | `AccessibilityNotification.Announcement(text).post()` on the main actor, bound with the session in `bind(_:)` |
+| `LedgerDesign/Components/SheetChrome.swift` | `cancelIdentifier:` (default none), so a UI test can name a sheet's cancel (deviation 1) |
+| `FeatureWorkout/WorkoutFinishModel.swift`, `WorkoutPresentation+Finish.swift`, `WorkoutCopy+Finish.swift` | the sheet's model and the failed save's, every string final; `WorkoutPresentation.finishSheet(_:isSaving:locale:)`, `saveFailedAlert` |
+| `FeatureWorkout/Views/FinishSheet.swift` | `FinishSheet` (the sheet: its frame around `ScrollView { FinishSheetPage }`), `FinishSheetFrame` (the pinned part: `SheetChrome` with "Keep lifting"), `FinishSheetPage` (the line and the two buttons) |
+| `FeatureWorkout/WorkoutStore+Finish.swift`, `WorkoutStore.swift`, `+Pump`, `WorkoutAction.swift` | `.save`, `.retrySave`, `Dialog.saveFailed`; `isSaving`, `saveAttempt`, `save()`; `finishSheet` |
+| `FeatureWorkout/WorkoutStore+Rest.swift`, `WorkoutPresentation+Rest.swift`, `WorkoutCopy+Rest.swift` | the two announcements, from `keepRestTime()` |
+| `FeatureWorkout/WorkoutRoot.swift` | `.sheet` in place of the `confirmationDialog`; the failed save's alert, as two alerts that take turns ("The alert and its dismissal"); `.task(id: store.saveAttempt)`; `StoreFinishSheet`, the one view that reads `store.finishSheet` |
+| `FeatureWorkout/FinishSheet+Previews.swift` | `FinishSheetPreview`: with sets, nothing logged, in kilograms, saving |
+| `docs/architecture.md` §13 | the key `announcements` |
+
+Removed: `WorkoutFinishDialogModel` and `WorkoutPresentation.finishDialog`. The three lookups "End workout?",
+"Discard" and "Keep lifting" moved from `WorkoutCopy.swift` to `WorkoutCopy+Finish.swift`, word for word.
+
+### How the save works
+
+- `send(.save)` is accepted when a workout with a logged set is on screen. It reads the injected date once
+  into `pendingSave` (the workout's id, its end, and whether the session was asked yet), sets `isSaving`, makes
+  the next `saveAttempt` and leaves the sheet up. While `isSaving`, `send` answers nothing, and `isBusy`
+  disables the header, the page and the rest panel.
+- `save()` first waits until every tap made before it is applied (`tapsAreApplied`): it calls `drain()` itself,
+  and where the root's pump is already draining it waits on a wake signal that `drain()`'s end, `follow()`'s
+  first update and `leave` send. It is the pump's own queue and rules (one queue, each tap's time read in
+  `enqueue`); the save adds no second way of applying a tap. No timeout.
+- Then, on the newest workout the store knows (the session's answer where the stream is behind): with no set
+  logged, `isSaving` is false again and nothing is asked. Otherwise `session.finish(endedAt:)` with the tap's
+  date.
+- A refused tap (`drain()`'s refused branch) empties the queue as before and sets `isSaving` false; `apply`
+  has already put `editFailed` in place of the sheet. The waiting `save()` sees the save withdrawn and returns.
+- Outcomes of `finish`: a finished state → `leave(.route(.saved(id)))`; `noLiveWorkout` → nothing, `isSaving`
+  stays, and `follow()` closes the cover on the ending update; a cancellation with the task → nothing, and
+  `isSaving` stays so that the task that starts again runs the same `pendingSave`; anything else, and an answer
+  that is not finished (`WorkoutStoreError.notFinished`) → logged, `isSaving` false, `dialog = .saveFailed`.
+- **Criterion 18's third outcome.** A stream's first update with no workout closes the cover as
+  `.saved(pendingSave.id)` only while `isSaving` and only when this store had already asked the session to
+  finish (`PendingSave.wasSent`); otherwise it is `nothingToShow` as before. So the cover never reports as
+  saved a workout it did not ask to save.
+- **Two runs of `save()` at once** (the cover's tasks start again while the first call is still in the host):
+  each run takes a number (`saveRun`); a run that a later one has replaced shows no failure. A finished state
+  returned to either closes the cover. `finish` may then be asked twice with the same end; the host ends the
+  workout once and answers the other `noLiveWorkout`.
+- **"Try again"** (`.retrySave`) runs the failed `pendingSave` again, with its first end. It answers only
+  while the failed save's alert is the dialog; after "Close" the store keeps nothing of a waiting end (R10).
+
+### The alert and its dismissal (found in the running app)
+
+The first build passed the system's own word that an alert went (the binding's `set(false)`) on to the store
+as `.dismissFailure`, as S4's alerts do. In the running app, with a save made to fail at once, "Try again"
+then failed again and **no second alert showed**: the first alert's dismissal arrived after the second
+failure and closed it. No store test could see it; the temporary UI run for the screenshots did. The fix:
+the failed save's alert is taken down by its two buttons alone (`shows(.saveFailed, else: nil)` in
+`WorkoutRoot`; an alert has no other way out on iOS, and VoiceOver's escape activates "Close"). With that,
+"Try again" no longer has to answer in either order with a dismissal, and the store lost the rule it had for
+it.
+
+That was not enough: with one alert, "Try again" failing at once still lost the second alert in one run of
+two. One alert asked to go and to come back in the same moment does not always come back. So the root holds
+the alert twice, and consecutive failures take turns between the two by the attempt's number
+(`store.saveAttempt` is even or odd): the alert that goes and the alert that comes are never the same one.
+After that, 56 "Try again" in four runs each failed again and was shown again.
+`FeatureWorkoutSourceTests.root_presentsASheet` pins the three spellings; the behaviour itself is checked only
+by those temporary runs ("Not verified").
+
+### Criteria → tests
+
+Host unless marked: *sim* runs on the iPhone 17 simulator only, *UI* is a UI test.
+
+| # | Criterion | Tests |
+|---|---|---|
+| 1 | "Finish" opens a sheet; the dialog leaves the root; three ways out send `.keepLifting` | `WorkoutStoreSaveTests.finish_opensTheSheet_keepLiftingReturns`; `FeatureWorkoutSourceTests.root_presentsASheet`; *sim* `FinishSheetTests.controls_sendTheirActions` (the button and VoiceOver's escape), `sheet_isOneScrollViewUnderItsTitle`; *UI* `Smoke.test_sampleWorkout_logASet_saveWorkout_todayShowsItLogged` ("Keep lifting"), the tester's `WorkoutAdversarial` unedited (a tap outside the sheet) |
+| 2 | the line: two lookups joined with " · " | `WorkoutPresentationFinishTests.sheet_isTheBriefs`, `sheet_inKilograms`, `sheet_countsByTheTotal`, `sheet_inAnotherLocale`, `sheet_largeVolume`; `WorkoutCopyTests.finishTexts_areWordForWord` |
+| 3 | the sheet follows the workout | `WorkoutStoreSaveTests.sheet_followsTheWorkout` (a queued tap landing; a set logged elsewhere) |
+| 4 | zero sets: the store's guard | `WorkoutStoreSaveTests.save_zeroSets_doesNothing`; `WorkoutPresentationFinishTests.sheet_zeroSets_cannotSave`; *sim* `FinishSheetTests.zeroSets_saveSendsNothing`; *UI* `Smoke…todayShowsItLogged` (the button is not enabled) |
+| 5 | the model is pure and final; no exercise | `WorkoutPresentationFinishTests.sheet_isTheBriefs` (the whole model), `sheet_noExercise_isTotal`, `sheet_saving_isDisabled` |
+| 6 | orange once | *sim* `FinishSheetLayoutTests.orange_isSaveWorkoutAlone` (by pixel, light and dark: every orange pixel is inside "Save workout"; none at zero sets or while saving) |
+| 7 | identifiers | *UI* `Smoke` (both tests) and every UI test that discards, unedited |
+| 8 | saves once, ended at the tap; nothing answers while saving | `WorkoutStoreSaveTests.save_savesOnce_endedAtTheTap`, `save_onTheHost_isInHistory`; `FeatureWorkoutSourceTests.root_presentsASheet` (`.task(id: store.saveAttempt)`), `sources_startNoTaskOfTheirOwn` |
+| 9 | no logged set is lost | `WorkoutStoreSaveQueueTests.save_appliesTheQueuedTapsFirst` (`Asked`: every change, then `.finished`), `save_waitsForTheLastAnswer` (the host, an `apply` held in its store) |
+| 10 | while it saves | `WorkoutStoreSaveTests.save_savesOnce_endedAtTheTap` (sheet up, model disabled, header and page disabled); *sim* `FinishSheetTests.saving_buttonsSendNothing`, `tree_isExactlyTheTable(.saving)`. The interactive dismissal being off is one modifier and is not tested |
+| 11 | the queue leaves no done set | `WorkoutStoreSaveQueueTests.save_queueLeavesNoSet_isNotSaved` |
+| 12 | a refused change wins | `WorkoutStoreSaveQueueTests.refusedUnderTheSave_withdrawsIt`, `refusedUnderTheSheet_showsTheAlert` (the host over a store that refuses) |
+| 13 | saved: `.saved(id)` once; `.workoutFinished` once | `WorkoutStoreSaveTests.save_savesOnce_endedAtTheTap`, `save_playsWorkoutFinishedOnce` (both orders); *UI* `Smoke…todayShowsItLogged` ("LOGGED · WEEK 1", "View session", no "Resume workout") |
+| 14 | discard unchanged | `WorkoutStoreSaveQueueTests.discard_fromTheSheet_isOneTap`; S4's `WorkoutStoreDiscardTests` and the testers' pass unedited |
+| 15 | a failed save is shown; nothing lost; no "Discard" | `WorkoutStoreSaveFailureTests.save_refused_isShown_tryAgainSaves` (the host, `materialize` refused), `save_otherFailures_areShown` (`invalidEndDate`, `incompleteLog`, an answer that is not finished); `WorkoutPresentationFinishTests.saveFailedAlert_isTheSpecifications` |
+| 16 | "Try again" with the same end; "Close" | `…SaveFailureTests.tryAgain_asksForTheFirstEnd`, `tryAgain_failsAgain_showsItAgain`, `close_leavesTheCover_andForgetsTheSave`, `close_thenATap_completesTheSave` |
+| 17 | `noLiveWorkout` is no failure | `WorkoutStoreSaveEndedElsewhereTests.save_alreadyEnded_isNoFailure`, `save_endedElsewhereFirst_closesAsTheSessionSays` (saved, discarded) |
+| 18 | the cover's tasks starting again mid-save | `WorkoutStoreSaveRestartTests.save_cancelledAndStartedAgain_savesOnce` (the host: one `materialize`, the first end), `save_answerLost_closesAsSaved`, `noWorkout_withoutASave_isNothingToShow`, `restartWhileTheSaveWaits_followsTheTaps` |
+| 19 | ended elsewhere while the sheet shows | `WorkoutStoreSaveEndedElsewhereTests.endedElsewhere_underTheSheet_closes`; the tester's `endedUnderTheFinishDialog_lateTapsDoNothing` unedited |
+| 20 | the client | `AnnouncementsClientTests` (4: stub, fake, preview, a fresh fake for each `withTestDependencies`); `WorkoutDevicesWiringTests.boot_bindsTheLiveAnnouncements` (fails if the composition leaves the key unbound); `FeatureWorkoutSourceTests.sources_postNoAnnouncement` |
+| 21 | "Rest, … remaining", once for each shown rest | `WorkoutRestAnnouncementTests.restStart_isAnnouncedOnce` (not at a tick, a restart or a return), `extendedRest_isAnnounced` (O8), `coverOpensOnARest`; `WorkoutPresentationFinishTests.restAnnouncement_saysTheTimeInWords` |
+| 22 | "Rest over" where `.restOver` is played | `WorkoutRestAnnouncementTests.restOver_isAnnouncedWithTheHaptic`, `skippedOrLate_announcesNoRestOver`, `coverOpensOnARest` |
+| 23 | both texts are lookups; what a device does | `WorkoutCopyTests.finishTexts_areWordForWord`; the device: **not verified**, below |
+| 24 | words and conventions | `FeatureWorkoutSourceTests.finishLookups_areInTheirCopyFiles`; the catalog's 71 keys (`WorkoutCopyTests`, the tester's list, the gate's catalog check); the tester's `sources_readNothingAmbient` and `sources_holdNoCopyOutsideTheCopyFile` unedited |
+| 38 | sizes | *sim* `FinishSheetLayoutTests.sheet_noWordIsCut`, `sheet_nothingLeavesOrOverlaps` (five sizes to `.accessibility5` × 375 and 402 pt × Bold Text × right to left, five models, one with "1,234 of 1,250 sets logged · 1,234,000 lb moved"; three buttons, each 44 pt), `buttons_areFullWidth`, `check_seesACut`; `FinishSheetTests.sheet_isOneScrollViewUnderItsTitle` |
+| 39 | Bold Text and right to left | the same sweep; `FinishSheetLayoutTests.rightToLeft_isMirrored` |
+| 40 | VoiceOver | *sim* `FinishSheetTests.tree_isExactlyTheTable` (four states, light `.large` and dark `.accessibility3`), `line_isOneStop`, `controls_sendTheirActions` (the escape); the announcements: 21 and 22 |
+
+Fifteen changes made to the store and the presentation one at a time (a second tap answering while saving,
+`finish` without waiting for the taps, a refusal that does not withdraw the save, and so on;
+`scratchpad/s7a/mutants.py`) each failed a test. One survived at first, "Try again ends at the retry's time":
+the host keeps the first end by itself. `tryAgain_asksForTheFirstEnd` was written for it, over a session that
+keeps nothing.
+
+### The sheet's VoiceOver tree (criterion 40)
+
+| Stop | Traits |
+|---|---|
+| "End workout?" | heading |
+| "Keep lifting" | button |
+| "6 of 18 sets logged, 5,578 lb moved" | text, one stop (the eye sees " · ") |
+| "Save workout" | button; dimmed with no set logged and while saving |
+| "Discard" | button |
+
+While a save runs every stop is dimmed, the title and the line included: the sheet's frame is disabled as a
+whole, which is the only way to reach `SheetChrome`'s cancel from outside it.
+
+### Edits to the testers' files (for the audit)
+
+| File, test | Old | New | Strength |
+|---|---|---|---|
+| `Adversarial/WorkoutWordsAdversarialTests.swift`, `catalog_holdsExactlyTheSlicesTexts` | the catalog's keys are exactly a list of 63; the name says 63 | the same list with eight more, under a comment naming this slice: "Save workout", "%@ of %lld sets logged", "%@ lb moved", "%@ kg moved", "Couldn't save this workout", "It's still on this iPhone. Try again.", "Try again", "Rest, %@ remaining"; the name says 71 | the same: both directions of the set difference, and `catalog.problems` |
+| the same file, `dialogs_areTheBriefs` | reads `WorkoutPresentation.finishDialog`'s title, discard and keepLifting | reads the same three members of `WorkoutPresentation.finishSheet(seedSession, isSaving: false, …)`, since the dialog's model is gone; the test `throws` for the fixture | the same three strings, compared the same way |
+
+No other tester's file is touched. `Apps/LedgerUITests/WorkoutAdversarial.swift` passes unedited: its "tap
+outside the dialog" lands above the sheet, which the system takes as a dismissal.
+
+The implementer's own earlier tests that changed: `WorkoutPresentationDialogTests.dialogs_areTheBriefs` (the
+finish dialog's model left; the sheet's is `WorkoutPresentationFinishTests`'), `WorkoutCopyTests` (63 → 71
+keys), `PreviewTests.registry_listsEveryPreview` (a `#Preview` is a case of `WorkoutPreview` or of
+`FinishSheetPreview`), `Support/RestBench.swift` (binds a `FakeAnnouncements` the tests read),
+`FeatureWorkoutSourceTests` (three tests more, none changed), `WorkoutDevicesWiringTests` (one test more).
+
+### Texts
+
+Catalog keys added (8), each `translated`: "Save workout"; "%@ of %lld sets logged" (one: "%@ of %lld set
+logged"); "%@ lb moved"; "%@ kg moved"; "Rest, %@ remaining"; and the three invented ones below. The
+translator's comments of "End workout?" and "Keep lifting" now say sheet, and "Close" covers both its uses.
+
+**Invented, for the product owner** (none is in the brief or a prototype; used as the specification drafted
+them):
+
+| Text | Where |
+|---|---|
+| "Couldn't save this workout" | the failed save's alert, title |
+| "It's still on this iPhone. Try again." | the alert's message |
+| "Try again" | the alert's first button (the second is the existing "Close") |
+
+### For the product owner
+
+Each default is one small place, named here, so that another answer is cheap.
+
+1. **O1 / R2: "End workout?" is a sheet**, with an orange "Save workout" over a plain outlined "Discard",
+   and "Keep lifting" as its cancel at the top. Place: `WorkoutRoot`'s `.sheet` and `Views/FinishSheet.swift`.
+   "Discard" has no destructive colour. Screenshots `sheet-*`.
+2. **The sheet's height** is not in the specification: it stands half-high (the system's medium detent) and
+   can be pulled to full height; at large text its content scrolls. Place: `FinishSheet.detents`.
+3. **O2: "Discard" is one tap**, with no second question. Place: `WorkoutStore.send`'s `.discard`.
+4. **O3: a workout that cannot be saved cannot be abandoned**: the alert offers "Try again" and "Close" only.
+   Place: `WorkoutSaveFailedModel` and the alert in `WorkoutRoot`. Screenshots `save-failed-*`.
+5. **O4: the three invented texts** above. Place: `WorkoutCopy+Finish.swift`, under their own mark.
+6. **O8: "+30s" is announced** as a new rest ("Rest, 45 seconds remaining"). Place:
+   `WorkoutStore.isAnnounced(_:)` in `WorkoutStore+Rest.swift`.
+7. **With nothing logged "Save workout" is grey** and does not answer; the sheet still opens, so that
+   "Discard" can be reached. Screenshots `zero-sets-*`.
+8. **At the largest text sizes the line wraps where it must**, which can part a number from its unit ("5,578"
+   / "lb moved" in the `.accessibility3` reference). Nothing is cut. Keeping each fact on a line of its own
+   at those sizes would be a small change to the page.
+9. **After "Try again" the sheet does not come back**: the cover is dimmed until the answer, which closes it
+   or shows the alert again.
+10. **While it saves**, VoiceOver reads the sheet's title and line as dimmed, with its buttons.
+
+### Product lines
+
+Swift lines that are not blank or comment, against `77b33ec`, without `LedgerFakes` and `LedgerTestSupport`
+(`scratchpad/s7a/lines.py`): **379**. The specification planned 560 and expected 700 to 900. Nothing
+left the slice: the rest announcements and their client are in.
+
+| File | Change | Now |
+|---|---|---|
+| `FeatureWorkout/WorkoutStore+Finish.swift` | +91 | 91 |
+| `FeatureWorkout/WorkoutCopy+Finish.swift` | +55 | 55 |
+| `FeatureWorkout/Views/FinishSheet.swift` | +54 | 54 |
+| `FeatureWorkout/FinishSheet+Previews.swift` | +40 | 40 |
+| `FeatureWorkout/WorkoutPresentation+Finish.swift` | +32 | 32 |
+| `FeatureWorkout/WorkoutRoot.swift` | +27 | 101 |
+| `FeatureWorkout/WorkoutStore.swift` | +21 | 179 |
+| `FeatureWorkout/WorkoutFinishModel.swift` | +17 | 17 |
+| `FeatureWorkout/WorkoutCopy+Rest.swift` | +8 | 59 |
+| `FeatureWorkout/WorkoutStore+Rest.swift` | +8 | 63 |
+| `FeatureWorkout/WorkoutPresentation+Rest.swift` | +6 | 67 |
+| `FeatureWorkout/WorkoutAction.swift` | +4 | 25 |
+| `FeatureWorkout/WorkoutStore+Pump.swift` | +4 | 103 |
+| `FeatureWorkout/WorkoutModel.swift` | −5 | 38 |
+| `FeatureWorkout/WorkoutPresentation.swift` | −7 | 78 |
+| `FeatureWorkout/WorkoutCopy.swift` | −9 | 102 |
+| `LedgerDependencies/Keys/DeviceKeys.swift` | +10 | 99 |
+| `LedgerAppKit/LiveAnnouncements.swift` | +9 | 9 |
+| `LedgerDependencies/Unimplemented/UnimplementedDevices.swift` | +6 | 27 |
+| `LedgerDesign/Components/SheetChrome.swift` | +4 | 73 |
+| `LedgerDomain/Protocols/Clients.swift` | +3 | 12 |
+| `LedgerAppKit/AppComposition.swift` | +1 | 168 |
+
+Not counted, as before: `LedgerFakes/DeviceFakes.swift` +7, `LedgerTestSupport/WithTestDependencies.swift` +1. The
+count was 365 before the fix of the failed save's alert, which added 14 to `WorkoutRoot.swift` and the store.
+
+### Deviations
+
+1. **`SheetChrome` gained `cancelIdentifier:`** (`LedgerDesign`, four lines; the estimate lists no design file
+   for S7a). Criterion 7 keeps `workout.finish.keep`, which `Smoke` (PR lane) and the tester's
+   `WorkoutAdversarial` look up, and criterion 1 makes "Keep lifting" the frame's cancel, which the frame
+   draws itself. The other two sheets pass nothing and are unchanged; no reference changed.
+2. **Criterion 18's third outcome is narrower than its sentence**: `.saved(id)` on a first update with no
+   workout only when this store had asked the session to finish (above). All three outcomes the criterion
+   lists have asked.
+3. **The failed save's alert does not pass the system's dismissal on to the store** ("The alert and its
+   dismissal", above). S4's and S5's alerts still do; they have one button each and no retry.
+4. **`send(.save)` with the sheet not up puts it up** (the save needs somewhere to show that it runs). The
+   sheet's button is the only sender in the app.
+5. **`WorkoutStoreError.notFinished`**: an answer of `finish` that is not a finished workout is logged under
+   this name.
+6. **The previews are a second enum**, `FinishSheetPreview`, not cases of `WorkoutPreview`: every table the
+   testers key by `WorkoutPreview` (trees, references, layout sweeps) stays as it is.
+7. **Three lookups moved** to `WorkoutCopy+Finish.swift`, as criterion 24 puts the sheet's lookups there.
+8. **File splits the lint asked for**: `WorkoutStore`'s task work is an extension in the same file; the UI
+   test is in an extension of `Smoke`; the store's tests are four suites in three files.
+
+### References
+
+Seven new, in `FeatureWorkoutTests/__Snapshots__/FinishSheetTests/`, recorded on the iPhone 17 (iOS 27.0)
+from `FinishSheetParts`: `sheet_withSets_matchesReferences.{light,dark}-{large,xLarge}`,
+`sheet_zeroSets_matchesReferences.{light,dark}-large`,
+`sheet_withSets_accessibility3_matchesReference.dark-accessibility3`. None changed. Looked at: light large,
+dark zero sets, dark `.accessibility3`.
+
+### Screenshots
+
+`tasks/features/F10-active-workout/screenshots/s7a/` (nine files).
+
+From the running app (iPhone 17 simulator, the Debug sample workout, a temporary UI test; scaled to 1310 px
+high), **light only**, at the default text size and at Accessibility XL:
+
+- `app-sheet-default-light`, `app-sheet-accessibility-xl-light`: "End workout?" with one set logged.
+- `app-zero-sets-default-light`, `app-zero-sets-accessibility-xl-light`: nothing logged, "Save workout" grey.
+- `app-save-failed-default-light`, `app-save-failed-accessibility-xl-light`: the failed save's alert. The save
+  was made to fail by one temporary line in `WorkoutStore.save()` behind a launch argument; neither the line
+  nor the UI test is committed.
+
+**Dark, from the references**, because the running app stayed light in every dark run (below):
+`reference-sheet-dark`, `reference-sheet-zero-sets-dark`, `reference-sheet-accessibility3-dark`. **The failed
+save's alert in dark was not captured**: it is the system's alert and has no reference.
+
+**The app did not go dark.** Three ways were tried in three runs: `xcrun simctl ui <device> appearance dark`
+before the run (read back as "dark" before and after it), the same in a run of its own, and
+`XCUIDevice.shared.appearance = .dark` in the test (the log says "Setting appearance mode to Dark" before
+each launch). Every screenshot shows the cover in light. S5's dark screenshots were taken the first way on
+this simulator. I did not find the cause, and did not run `TabsAdversarial`'s light-and-dark test, which
+would say whether it is this slice, `main` or the simulator. For the orchestrator.
+
+### Inputs for S7b and later
+
+- **S7b.** Criterion 13's `leave(.route(.saved))` in `save()` and `exit(for:)` in `follow()` are the two
+  places a finished state reaches the store: the receipt is set there for a save `pendingSave` asked for.
+  `FinishSheetFrame` and the layout probe's parts are reusable for the receipt's checks.
+  `WorkoutPresentation.spokenRestTime` is the duration-in-words formatter the receipt's "TIME" tile needs.
+- **F17.** A workout discarded by another hand while this cover's own save was in flight and unheard (its
+  tasks restarting) closes as `.saved(id)`: the store asked to finish, was answered `noLiveWorkout`, and a new
+  stream says only that nothing is live. One phone cannot do it. Telling the two apart needs the reader to be
+  told how the workout ended (R10's paragraph).
+- **F18.** `follow()` awaits the announcements client as it does the haptics client: the watch's must return
+  at once.
+
+### The runs
+
+2026-10-13, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0); every simulator command went
+through the lock. The code is `a317436`; only this section and the screenshots came after it.
+
+| Run | Result | Time |
+|---|---|---|
+| **`scripts/check.sh`** (the full gate) on `a317436` | **exit 0**: format, lint and script suites; the iOS build and the 4 string catalogs (FeatureWorkout: 71 keys); the `PR` plan, 17 test targets, `Smoke` with its new test among them; the watchOS build and the `PR-Watch` plan, 8 targets; coverage (FeatureWorkout 99.05 %, LedgerDependencies 96.88 %, overall 98.77 %) | 1680 s (iOS tests 1198 s, watchOS tests 291 s, lint 76 s) |
+| `scripts/check.sh --fast` (host) on `a317436` | exit 0: 1245 tests in 190 suites | 125 s |
+| `swift test --filter FeatureWorkoutTests` (host) | exit 0: 374 tests in 53 suites; the four save suites and the announcements' six times more in a row, 29 of 29 each | 13 s |
+| `FeatureWorkoutTests`, `LedgerAppKitTests`, `LedgerDependenciesTests`, `LedgerUITests/Smoke` (`PR` plan, `-only-testing`) on the tree that became `3e9312b` | exit 0: 457, 272, 70 and 4 of 4 | 395 s |
+| `LedgerUITests` `WorkoutAdversarial`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutRest`, `WorkoutRestAdversarial`, `WorkoutConflictAdversarial`, `Today`, `TodayAuditAdversarial` (`Nightly` plan, `-only-testing`) on `3e9312b` | exit 0: 21 of 21, all unedited | 563 s |
+| The temporary UI test with the temporary failing save, after the fix: four runs | every step passed: the sheet, the alert after it, 56 "Try again" in all, each failing again and shown again, "Close", "Discard". Two of the runs are reported failed for passing their 60 s allowance with 16 retries each, with no failed assertion | 100 to 134 s each |
+| The same before the fix | as first built (the alert's dismissal passed on to the store): the alert did not come back after "Try again" in either of 2 runs. With the dismissal no longer passed on, but one alert: it came back in one run and not in the other | |
+| `TabsAdversarial.test_selectedTab_isDrawnInTheAccent_andNoOtherIs_lightAndDark` (`Nightly`, one test, as a check of the dark appearance) | **failed** in its dark half: "Today is not in the accent" | 54 s |
+| Fifteen mutants of the store and the presentation (host) | 15 of 15 fail a test, one only after `tryAgain_asksForTheFirstEnd` was added; one ("a second tap answers while saving") by a test that then never ends | about 7 min |
+
+The first simulator run of `FeatureWorkoutTests` failed as intended: it recorded the seven references, and
+three tests held numbers I had worked out wrongly for the preview's workout (5,203 lb for 5,578; 20 sets for
+18), corrected from the Domain's values.
+
+**The dark appearance.** `TabsAdversarial`'s test, which this slice does not touch, fails in dark on this
+tree and simulator, and the cover stayed light in every dark run. Whether `main` at `77b33ec` does the same
+was not run. That test's `defer` did not put the appearance back after its failure: the simulator stood in
+dark for about a minute after 21:16, until I set it to light by hand; a run of the other worktree began at
+21:16:48.
+
+### Not verified
+
+- **VoiceOver on a device**: nothing was heard. Whether the two announcements are spoken, and whether "Rest,
+  … remaining" is spoken over VoiceOver's own reading of the row just activated (criterion 23), is not known.
+  `LiveAnnouncements` posts the system's announcement with default priority; a test shows only that it does
+  not trap.
+- **A save that really fails in the app.** The alert, "Try again" (56 retries, each failing again and shown
+  again), "Close" and the cover answering afterwards were seen only with the temporary failing line, where
+  the failure is immediate. A failure that takes its time in the host's store was not produced in the app.
+  Nothing committed tests that the alert is presented again.
+- **Dark in the running app**, and the failed save's alert in dark ("Screenshots").
+- **A change refused under the sheet, in the app**: the sheet going down for S5's alert is tested through
+  state; a store that refuses cannot be produced in the app.
+- **`.workoutFinished` in the app when `finish`'s answer wins the race**: the cover then closes at once, and a
+  `follow()` cancelled before it takes the ending update plays nothing. In every test the update is taken.
+  In the app the host publishes the update before it answers.
+- **The sheet's interactive dismissal being off while it saves**, and its medium detent, are one modifier each
+  and are not tested; the UI test saves too fast to try a swipe.
+- **Bold Text, right to left and the sizes above Accessibility XL in the running app**: by measurement on
+  hosted parts only.
+- **The watch.** Nothing of this slice builds for it but the Domain protocol.
