@@ -90,6 +90,30 @@
             }
         }
 
+        /// Round 2 of G2: Vietnamese stacks a tone mark over a vowel mark ("ấ", "Ậ"), the case option A of
+        /// NF-1 would have cut. Measured: whole under the focus in both fields, plain and bold, at the three
+        /// sizes (the name of three words wraps at `.accessibility5` without the focus and is not measured
+        /// there); and every one of these names is lifted as NF-1 says, 3.7, 6.0 and 7.3 pt.
+        @Test(
+            "With the focus Vietnamese stacked marks are drawn whole, small and capital, plain and bold",
+            arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
+        )
+        func focus_keepsVietnameseWhole(_ size: DynamicTypeSize) throws {
+            var cut: [String] = []
+            for place in Place.allCases {
+                for weight in [LegibilityWeight.regular, .bold] {
+                    for name in ["ấ ầ ẩ ẫ ậ ế ồ", "Ấ Ầ Ẩ Ẫ Ậ Ế Ồ", "Ặ Ẵ Ỗ Ữ ỹ", "Tiếng Việt"] {
+                        let view = place.view(name).environment(\.legibilityWeight, weight)
+                        let (idle, focused) = try Self.drawn(view, at: size)
+                        if focused.height < idle.height - 0.5 || idle.isNull {
+                            cut.append("\(place) \(weight) \(name): \(idle.height) pt, \(focused.height) focused")
+                        }
+                    }
+                }
+            }
+            #expect(cut.isEmpty, "\(cut.count) are cut: \(cut.prefix(3).joined(separator: "; "))")
+        }
+
         nonisolated static let liftedName: Comment = """
         NF-1: a name with an emoji, or with one of Å É Ç Ł ï ą ỵ, or in Thai, Devanagari or Arabic, is lifted \
         3.7 pt at .large and 6.0 pt at .accessibility3 when the focus comes (7.3 at .accessibility5), where \
@@ -104,7 +128,7 @@
             arguments: Place.allCases, [DynamicTypeSize.large, .accessibility3]
         )
         func focus_doesNotMoveANameWithAnEmoji(_ place: Place, _ size: DynamicTypeSize) throws {
-            for name in ["Push 💪", "naïve", "Łódź", "ÅÉÇ"] {
+            for name in ["Push 💪", "naïve", "Łódź", "ÅÉÇ", "Tiếng Việt"] {
                 let (idle, focused) = try Self.drawn(place.view(name), at: size)
                 let down = focused.minY - idle.minY
                 withKnownIssue(Self.liftedName) {
