@@ -262,3 +262,170 @@ The two closing gates ran on the tree of `a5b271b`, before this record and the p
 - The watch: `ledgerFieldFont` compiles there with the full gate's watch build; no watch view uses it and no
   watch test draws a field.
 - The hosted runner: no CI run was started from this branch; nothing was pushed.
+
+## G2 — adversarial testing
+
+Range `77b33ec..c77c5cd`, iOS 27.0 on the PR plan's iPhone 17, every run through the lock. Everything below
+is measured in a hosted window at 3×, 323 pt wide (a 375 pt phone's page) unless a width is named. "On
+`main`" means `main`'s `NameField` and `ProgramHeader` (`git show 77b33ec:…`) built into a temporary test
+beside the new ones and measured in the same run; no product file was changed and the temporary tests are
+gone. Five findings; none loses a letter or an action. Each has a test that is wrapped as a known issue
+under its id, so the gate stays green, and that fails when the fault is gone.
+
+### Findings
+
+| Id | Severity | What | New with this chore? |
+|---|---|---|---|
+| NF-1 | Medium | A name with an emoji or certain letters jumps 3.7 to 7.3 pt up when the focus comes | Yes |
+| NF-2 | Minor | With the draft emptied the caret stands in the tag's pill at the two largest sizes measured | Worse: 0 → 0.7 pt, 1.3 → 8.7 pt |
+| NF-3 | Minor | A name whose script runs against the layout jumps across the field on focus | In the builder, yes; the Day editor's on `main` |
+| NF-4 | Minor (API) | `ledgerFieldFont`'s guide is right only for a role whose line is 1 | Yes (no screen uses it) |
+| NF-5 | Minor | The first letter typed into an empty name moves the page 10.7 pt at `.accessibility5` | No; the test that should have seen it measured the caret |
+
+**NF-1. The guide lifts the names UIKit does not centre.** The `.top` guide assumes UIKit centres the
+letters in the field's higher line. It does for most names. For a name that holds an emoji, one of Å É Ç Ł ï
+ą ỵ (measured: "ÅÉÇ", "Ł", "Łódź", "naïve", "ąỵgj", "Ǻ Ṩ ự"), Thai, Devanagari or Arabic, it does not, and
+the guide lifts the name all the same. How far the name's ink moves down when the focus comes, both fields
+alike, plain and bold alike:
+
+| Name | `.large` | `.accessibility3` | `.accessibility5` | `main`, the same three |
+|---|---|---|---|---|
+| "Gyp", "Upper A", "Día", "é", "ñu", "Ü", "ß", "Æ", "A — B", "Pete’s", "½ rep", "10 × 3", Hebrew | −0.33 | −1.00 | −1.67 | −0.67, −1.33, −1.67 |
+| "Push 💪", "naïve", "Ł", "ÅÉÇ", "ąỵgj", Thai, Devanagari, Arabic | **−3.67** | **−6.00** | **−7.33** | −0.67, −1.33, −1.67 |
+
+Hebrew and Arabic were measured at `.large` only. So "the name moves by no more than it did" holds for the first row only; the second is 3 to 5 times the
+tester's bound of 1.34 pt. It is the same jump back at the blur, and by inference (a hosted field takes no
+typing) the line jumps 3.3 to 5.7 pt under the caret when the first such character is typed or the last
+deleted. Which characters do it was found by trial, not explained ("é" and "ñ" do not, "ï" and "Ł" do);
+with the guide removed (mutant M2) none of them moves by more than the bound, and on `main`'s line neither.
+Reproduce: `NameFieldLineAdversarialTests.focus_doesNotMoveANameWithAnEmoji` without its wrapper.
+
+**NF-2. An emptied draft: the caret in the tag.** With no letter the wrapping text has no line, so the
+name's target is 44 pt at every size and the tag comes up under it, while the field keeps its line. In the
+real `DayEditorHeader`, the caret's foot against the top of the tag's pill:
+
+| | `.large` | `.accessibility1` | `.accessibility3` | `.accessibility5` |
+|---|---|---|---|---|
+| Now | 17.3 pt clear | 7.3 clear | **0.7 pt in the pill** | **8.7 pt in the pill** |
+| `main` (`NameField` alone, the tag 12 pt under its target) | clear | clear | 6.0 clear | 1.3 in the pill |
+
+The placeholder's own ink reaches 0.3 pt into the pill at `.accessibility5` (1.3 on `main`). Nothing is
+covered that can be tapped. Reproduce: `emptyDraft_caretStaysAboveTheTag`, and `emptyDraft_keepsALine`
+(below). The root is NF-5's: an empty text with no line.
+
+**NF-3. Across the field, and what is new.** The text that wraps starts at the layout's leading edge; the
+field with the focus starts where the name's own script starts. Sideways move of the ink on focus, `.large`:
+
+| | Day editor, `main` | Day editor, now | Builder, `main` | Builder, now |
+|---|---|---|---|---|
+| "Upper A", layout right to left | −213.7 | −213.7 | 0 (drawn at the left, idle and edited) | **−213.7** |
+| Hebrew name, layout left to right | +181.7 | +181.7 | 0 (drawn at the right, idle and edited) | **+181.7** |
+| Arabic name, layout left to right | +175.0 | +175.3 | +0.7 | **+175.3** |
+| Hebrew name, layout right to left | 0 | 0 | 0 | 0 |
+
+New with this chore, exactly: the builder has both jumps, and without the focus it now draws a Latin name at
+the right edge on a right-to-left layout and a Hebrew or Arabic name at the left edge on a left-to-right
+one, where its old field drew each at its script's own edge. The Day editor is unchanged. The second and
+third rows need no right-to-left language in the app: a program named in Hebrew or Arabic on today's
+English app is enough, which the record's "the app ships no such language" does not cover. Forcing UIKit's
+own direction too (`traitOverrides.layoutDirection`, the field's `semanticContentAttribute`) changes no
+number, so the hosted measure is not only SwiftUI's environment; a device is still not measured. Reproduce:
+`focus_doesNotJumpAcross`.
+
+**NF-4. The guide's arithmetic, on the other roles.** The doc comment promises of every role that "a field
+laid top on top over such a text draws its letters where the text draws them". A text keeps its letters at
+the top of its line whatever the line, so the shift wanted is half of (field line − 1), not of (field line
+− role line). Field under text, at `.large`, `.accessibility3`, `.accessibility5`: title −0.3, −1.0, −1.7;
+caption, button and the numerals (line 1) within 1.7; display 0.3, 0.3, 0.0; heading 0.7; subheading 1.0,
+1.3, 1.3; **body 2.0, 2.7, 3.3; label 1.7, 2.7, 3.0; bodyLight (line 1.6, so no guide) 4.3, 8.7, 11.0**.
+The tails are whole in every role. No view lays a body field over a text today, and the record's own
+candidate (the search field) has no text under it; the comment or the arithmetic should change before one
+does. Reproduce: `FieldFontAdversarialTests.looseRole_fieldStandsOnTheText`.
+
+**NF-5. The first letter moves the page (on `main` too).** The name's target, measured with the field
+hidden so that no caret counts, empty and under one letter: 44.0 and 44.0 pt at `.large`, 44.0 and 47.7 at
+`.accessibility3`, 44.0 and 54.7 at `.accessibility5`. S10's round 2 read 2.3 and 2.7 pt because its
+target was the marker's blue and the caret is blue. Reproduce: `emptyDraft_keepsALine`.
+
+### What held
+
+- **Whole under focus (item 2).** "ÅÉÇ", "ąỵgj", "Ǻ Ṩ ự", Thai, Devanagari and emoji, at `.large`,
+  `.accessibility3`, `.accessibility5`, plain and bold, in both fields: nothing cut; the least is one pixel
+  (0.33 pt) on "Ǻ Ṩ ự" with Bold Text at `.large`. The field draws Thai 4.0 to 6.7 pt higher than the text
+  does. On `main` Thai lost 0.7 to 2.0 pt in the Day editor and 6.7 to 12.0 pt in the builder.
+- **The caret under a name (item 3).** Room between the caret's foot (which is the field's frame's) and the
+  tag's pill, name of one line: 17.3, 7.3, 3.0, 2.0 pt at `.large`, `.accessibility1`, `.accessibility3`,
+  `.accessibility5`, the same with Bold Text. UIKit finds no text field under a point of the eyebrow's last
+  row, of the tag's first row or of its middle. Under the program's name the next thing drawn is 45 pt
+  under the caret at `.large` and 35 pt at `.accessibility3`; at `.accessibility5` it is derived (30 pt),
+  not measured.
+- **The program's name under focus (item 4).** 0.00 pt sideways and −0.33, −1.00 pt down at `.large`,
+  `.accessibility3`, plain and bold, also for "Día — é" and "Pete’s ½ × 3". A long name, a word of 34
+  letters and "g" are, without the focus, pixel for pixel a text that cannot lose a word, at three sizes ×
+  402 and 375 pt × plain and bold (36 drawings); with the focus one line, and the same picture after.
+- **A text size changed under the focus (item 7)** leaves the letters and the field's frame exactly where a
+  field first drawn at that size has them (three changes).
+- **VoiceOver (item 6).** Old and new header, hosted side by side at `.large` and `.accessibility5`: the
+  same stops (`heading "MY PROGRAM"`; none for the day's field alone), the same placeholder and text on the
+  one `UITextField`. Its frame is 43.3 pt high where it was 33.7 (73.0 and 56.3).
+- **Nothing else moved (item 6).** See the closing run under "Commands".
+
+### The four edits to testers' files, audited
+
+| Edit | Verdict | By what |
+|---|---|---|
+| `focus_doesNotCutTheDescenders`, `focus_programHeader_…` unwrapped | As strong as meant | Mutant M1 (`NameField` back on `ledgerFont(.title)`): both fail at all three sizes |
+| `target_holdsEveryLine`: the field starts `above` over the target | As strong, with one dependence | M1 and M2 (the guide returns 0) fail it at both sizes. It reads `fieldLineHeight` from the product, so M3 (1.5) passes it; `caret_staysAboveTheTag` is what fails M3 (16 expectations) |
+| `emptyDraft_keepsALine` | **Weaker than declared, and wrong before** | See below; rewritten |
+| `ProgramViewsSourceAdversarialTests`, both | As strong; stricter | M1 with one `@State` added to `ProgramHeader`: `views_keepNoStateButDraftsFocusAndTheAlert` fails |
+
+`emptyDraft_keepsALine`: `hang` compared the field's foot with a "target" that was the caret's foot, so it
+was 0 by construction; the new `jump` compared two carets; the new `reach` measured the caret against a
+one-letter name's target, which is not where the tag stands under an empty name (NF-2). Rewritten on the
+target with the field hidden: the field's foot stays inside the 12 pt over the tag (known issue from
+`.accessibility3`, NF-2), and the target is as high as one letter's to `xs` (known issue at
+`.accessibility5`, NF-5). What the implementer's `reach` did guard, a line of 1.5, is now
+`caret_staysAboveTheTag`'s.
+
+One more, not in the list: `ProgramViewsCutAdversarialTests.fields_are44PointTargets` passed unedited but
+had lost 8 pt, since the header's new `s` under the name counted as target. It subtracts it now.
+
+Mutants (each applied, run, and restored with `git checkout -- LedgerKit/Sources`): M1 as above, 85
+issues; M2, 131 issues; M3, 16 issues, all `caret_staysAboveTheTag`'s. Under M1 and M2 the known issue of
+NF-1 is *not* recorded, which is the evidence that NF-1 is the guide's and new.
+
+### Tests added
+
+- `FeatureProgramTests/Adversarial/NameFieldLineAdversarialTests.swift` and
+  `NameFieldRoomAdversarialTests.swift` (one suite): the glyphs; the name's place under focus in both
+  fields; NF-1; the long program name whole and one line; the caret over the tag; NF-2; NF-3 and its
+  control; the text size changed under the focus.
+- `LedgerDesignTests/Adversarial/FieldFontAdversarialTests.swift`: every phone role's tails whole; roles on
+  a line of 1 stand on their text; NF-4.
+
+Known issues recorded by a green run: 16 (NF-1), 2 + 2 (NF-2), 4 (NF-3), 3 (NF-4), 1 (NF-5).
+
+### Not checked
+
+A device, a finger, typing (so NF-1's jump while typing is inferred); a device set to a right-to-left
+language; the caret under the program's name at `.accessibility5` (derived); glyphs at the nine sizes other
+than the three; the watch; the hosted CI runner; the full `scripts/check.sh` (targeted suites only, as
+briefed; format and lint were run on the changed files).
+
+### Commands
+
+Each is `sim-lock.py <script> <name> PR build -only-testing:…` (build-for-testing, then
+test-without-building, on the PR plan).
+
+| Run | Exit | Result |
+|---|---|---|
+| Two probe runs (temporary suites, `main`'s views beside the new) | 0, 0 | the measurements above |
+| The new suites and the edited ones, first run | 65 | one test of mine, whose oracle cut the ink out of two drawings and compared the cuts; replaced by a header of the tester's own text, compared whole |
+| Mutants M1, M2, M3, the same suites with `NameFieldLineTests` and `FieldFontTests` | 65, 65, 65 | as audited above |
+| **Closing run, clean tree:** all of `LedgerDesignTests`, `FeatureTodayTests`, `FeatureProgramTests` | **0** in 667 s | 390 tests in 94 suites (30 known issues, 3 of them new: NF-4), 366 in 39, 524 in 61 (27 known issues, 25 of them new) |
+| `swiftformat --lint` on `LedgerKit` and `Apps`, `swiftlint --strict` | 0, 0 | |
+
+The closing run is the confirmation of "nothing else moved": the Day editor's 24 references, the library's
+12, Today's (the one other user of `ledgerFont(.title)`) and every reference of `LedgerDesignTests` compare
+equal to what is committed, and `ProgramAccessibilityTests`, `DayEditorAccessibilityTests` and the two
+adversarial tree suites pass unedited. No reference was written.
