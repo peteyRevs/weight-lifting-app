@@ -53,13 +53,6 @@
                 }
             }
 
-            nonisolated static let lowerField: Comment = """
-            NF-4: the .top guide of ledgerFieldFont is half of (the field's line − the role's line), which is \
-            right for a role whose line is 1 only. A text keeps its letters at the top of its line whatever \
-            the line, so a field of .body or .label stands 2.7 pt under its text at .accessibility3 and one \
-            of .bodyLight (line 1.6, no guide at all) 8.7 pt. No view uses these today.
-            """
-
             /// **FINDING NF-4** (the API's promise, no screen yet). `.display`, `.heading` and `.subheading`
             /// (lines of 1.06 to 1.1) are 0.3 to 1.3 pt under their text and pass the title's bound.
             @Test(
@@ -68,9 +61,7 @@
             )
             func looseRole_fieldStandsOnTheText(_ role: LedgerFont.Role) throws {
                 let (text, field) = try Self.inks(role, at: .accessibility3)
-                withKnownIssue(Self.lowerField) {
-                    #expect(abs(field.minY - text.minY) < 2, "text \(text), field \(field)")
-                }
+                #expect(abs(field.minY - text.minY) < 2, "text \(text), field \(field)")
             }
         }
     }

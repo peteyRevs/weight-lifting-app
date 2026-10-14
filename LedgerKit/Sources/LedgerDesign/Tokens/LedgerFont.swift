@@ -149,11 +149,16 @@ public extension View {
     ///
     /// A field is as high as its line, and while it is edited UIKit clips its text to that line. On a
     /// line tighter than the font's own ascent and descent (the title's is 1) the tails of g, j, p, q
-    /// and y are cut flat (F11 S10, ruling 22). UIKit centres the letters in the looser line, so they
-    /// stand lower in the field than in a text of the role: the field's `.top` guide is moved down by
-    /// that much. A field laid top on top over such a text draws its letters where the text draws
-    /// them, and its frame stands out above and below the text's line. The guide is the field's own:
-    /// a stack or a branch around the field has a top of its own.
+    /// and y are cut flat (F11 S10, ruling 22). UIKit centres the letters in the looser line, while a
+    /// text keeps them at the top of its line whatever the line, so the field's `.top` guide is moved
+    /// down by half of what the field's line is higher than the size, for every role. A field laid top
+    /// on top over a text of the role draws its letters where the text draws them, and its frame stands
+    /// out above and below the text's line. The guide is the field's own: a stack or a branch around
+    /// the field has a top of its own.
+    ///
+    /// **Known limit** (the chore of 2026-10-13, NF-1): a line that also holds a glyph of another font
+    /// (an emoji, "Ł", "ï", Thai) UIKit does not centre; it sets it 3.3 to 5.7 pt higher, and the
+    /// guide lifts it all the same.
     func ledgerFieldFont(_ role: LedgerFont.Role) -> some View {
         modifier(LedgerFieldStyle(role: role))
     }
@@ -163,7 +168,8 @@ public extension LedgerFont {
     /// The line of a text field, as a multiple of the size: the lowest tenth that draws the tails
     /// whole at all twelve text sizes, plain and bold (measured on the title role, iOS 27.0). 1.2,
     /// SwiftUI's `.normal`, cuts them by a point from `.accessibility3`; 1.5, its `.loose`, holds them
-    /// too, but the caret is as high as the line and then hangs 14 to 16 pt under the name there.
+    /// too, but the caret is as high as the line and then hangs 13.7 and 15.3 pt under the name at
+    /// `.accessibility3` and `.accessibility5`.
     static let fieldLineHeight: CGFloat = 1.3
 }
 
@@ -193,7 +199,8 @@ struct LedgerFieldStyle: ViewModifier {
         let size = LedgerFont.scaledSize(role, dynamicTypeSize: dynamicTypeSize)
         content
             .modifier(LedgerTextStyle(role: role, lineHeight: line))
-            // Half of what the field's line is higher than the role's: where UIKit puts the letters.
-            .alignmentGuide(.top) { _ in (line - role.spec.lineHeight) * size / 2 }
+            // A text keeps its letters at the top of its line whatever the line; UIKit puts them half of
+            // what the field's line is higher than the size lower.
+            .alignmentGuide(.top) { _ in (line - 1) * size / 2 }
     }
 }

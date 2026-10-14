@@ -12,13 +12,18 @@
         /// to `LedgerSnapshotTesting`, hence the `@testable` import.
         @Suite("FieldFont", .tags(.design))
         struct FieldFontTests {
-            /// "Gyp" as a text of the role with a field laid over it, top on top; one of the two is drawn, in
-            /// white on black. The field is set by `style`, applied to it directly: the `.top` guide is the
+            /// "Gyp" as a text of the role with a field of the role laid over it, top on top; one of the two is
+            /// drawn, in white on black.
+            static func pair(_ role: LedgerFont.Role, drawsField: Bool) -> some View {
+                pair(role, drawsField: drawsField) { $0.ledgerFieldFont(role) }
+            }
+
+            /// The same, with the field set by `style`, applied to it directly: the `.top` guide is the
             /// field's own, and a branch or a stack around it would have a top of its own.
             static func pair(
                 _ role: LedgerFont.Role,
                 drawsField: Bool,
-                style: (TextField<Text>) -> some View = { $0.ledgerFieldFont(.title) }
+                style: (TextField<Text>) -> some View
             ) -> some View {
                 Text("Gyp")
                     .ledgerFont(role)
@@ -79,20 +84,21 @@
                 (view as? UITextField) ?? view.subviews.lazy.compactMap(field(in:)).first
             }
 
+            /// The title (line 1) and the body (line 1.2, so its field's line is 0.1 higher than its own).
             @Test(
-                "A field in the title role draws its tails whole while it is edited, where a text of the role does",
-                arguments: [DynamicTypeSize.xSmall, .large, .accessibility3, .accessibility5],
-                [LegibilityWeight.regular, .bold]
+                "A field draws its tails whole while it is edited, where a text of its role does",
+                arguments: [LedgerFont.Role.title, .body],
+                [DynamicTypeSize.xSmall, .large, .accessibility3, .accessibility5]
             )
-            func titleField_edited_drawsItsTailsWhole(_ size: DynamicTypeSize, _ weight: LegibilityWeight) throws {
-                let text = try Self.ink(Self.pair(.title, drawsField: false), at: size, weight, isEdited: false)
-                let field = try Self.ink(Self.pair(.title, drawsField: true), at: size, weight, isEdited: true)
-                // A pixel of the drawing at 3× is a third of a point.
-                #expect(field.height > text.height - 0.34, "the tails are cut: text \(text), field \(field)")
-                #expect(
-                    abs(field.minY - text.minY) < 2 && abs(field.minX - text.minX) < 1,
-                    "text \(text), field \(field)"
-                )
+            func field_edited_drawsItsTailsWhole(_ role: LedgerFont.Role, _ size: DynamicTypeSize) throws {
+                for weight in [LegibilityWeight.regular, .bold] {
+                    let text = try Self.ink(Self.pair(role, drawsField: false), at: size, weight, isEdited: false)
+                    let field = try Self.ink(Self.pair(role, drawsField: true), at: size, weight, isEdited: true)
+                    let found = "\(weight): text \(text), field \(field)"
+                    // A pixel of the drawing at 3× is a third of a point.
+                    #expect(field.height > text.height - 0.34, "the tails are cut: \(found)")
+                    #expect(abs(field.minY - text.minY) < 2 && abs(field.minX - text.minX) < 1, "\(found)")
+                }
             }
 
             /// The fault the variant is for, so that the test above cannot pass by measuring nothing: the
