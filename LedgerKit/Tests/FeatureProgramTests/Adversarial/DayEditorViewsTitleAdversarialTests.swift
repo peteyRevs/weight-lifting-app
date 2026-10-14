@@ -118,12 +118,33 @@
             #expect(buttons.allSatisfy { $0.maxY <= (stops.last?.frame.minY ?? 0) }, "a button over the heading")
         }
 
-        /// The review's S-6, refuted as it reads, with a remainder: with the draft emptied the text under the field has
-        /// no line, so at large sizes
+        nonisolated static let emptyTarget: Comment = """
+        NF-2 and NF-5 (the chore of 2026-10-13, gate G2): with the draft emptied the name's text has no line \
+        and its target falls to 44 pt. The field, on its line of 1.3, hangs 12.7 pt under it at \
+        .accessibility3 and 20.7 pt at .accessibility5, across the 12 pt over the tag (main: 8.0 and 16.0 \
+        pt); and the first letter typed moves what is under the name by 10.7 pt at .accessibility5 (main the \
+        same).
+        """
+
+        /// The review's S-6: with the draft emptied the text under the field has no line, so at large sizes
         /// the field, with its placeholder and caret, would be higher than the 44 pt the name field keeps,
         /// hang over the tag and the summary, and the page would jump at the first letter typed.
+        ///
+        /// **Measured again at gate G2 of the chore of 2026-10-13, and the claim holds** (findings NF-2 and
+        /// NF-5 of `tasks/chores/2026-10-13-name-field-line-height.md`). Round 2 of S10 refuted it with a
+        /// target measured by the marker's blue; the caret is blue too and stands out under the marker, so
+        /// that target was the caret's foot and both expectations compared the field with itself. The chore
+        /// then measured the caret against a one-letter name's target, which is not where the tag stands
+        /// under an empty name. Here the target is measured with the field hidden, caret and all:
+        ///
+        /// | | `.large` | `.accessibility3` | `.accessibility5` |
+        /// |---|---|---|---|
+        /// | the target, empty and one letter | 44.0, 44.0 | 44.0, 47.7 | 44.0, 54.7 |
+        /// | the field under the empty target, `main` → now | −9.0 → −5.3 | 8.0 → 12.7 | 16.0 → 20.7 |
+        ///
+        /// The tag stands `xs` + `s` = 12 pt under the target. The two known issues fail when they are gone.
         @Test(
-            "With an empty draft the field stays inside the name's target, which is as high as one letter's",
+            "With an empty draft the field stays over the tag's room, and the target is as high as one letter's",
             arguments: [
                 DynamicTypeSize.large, .accessibility3, .accessibility5
             ]
@@ -134,25 +155,27 @@
                 empty.close()
                 letter.close()
             }
-            let unfocused = try letter.target()
+            /// The name field's own frame: the marker with the field hidden, so that no caret counts.
+            func frame(of shown: Shown) throws -> CGRect {
+                try shown.box(hidingTheField: true) { $0.blue > 60 }
+            }
+            let lettered = try frame(of: letter)
             try empty.focus(true)
-            try letter.focus(true)
             let field = empty.field.convert(empty.field.bounds, to: empty.hosted.host.view)
-            let (target, lettered) = try (empty.target(), letter.target())
-            // Measured: the field is 2.0 and 2.7 pt higher than its target at the two accessibility sizes,
-            // inside the `xs` that parts it from the tag, and the target 2.3 and 2.7 pt higher than under one
-            // letter. Nothing is covered; the rows under the name move by that much at the first letter.
+            let target = try frame(of: empty)
+            #expect(target.height >= 44 && lettered.height >= 44, "\(target), \(lettered)")
             let hang = field.maxY - target.maxY
-            #expect(hang < LedgerSpacing.xs, "the field hangs \(hang) pt under its target and reaches the tag")
-            // The chore of 2026-10-13: the marker is measured by its blue, and the caret is blue. The caret
-            // is as high as the field's line, which is `LedgerFont.fieldLineHeight` now, so with the focus
-            // the measure reaches 9.0 and 10.3 pt under a one-letter name without it at the two
-            // accessibility sizes. The jump at the first letter is therefore measured between the two with
-            // the focus, and the caret is held inside the room `DayEditorHeader` keeps over the tag.
+            withKnownIssue(Self.emptyTarget) {
+                #expect(hang < LedgerSpacing.xs + LedgerSpacing.s, "the field hangs \(hang) pt under its target")
+            } when: {
+                size >= .accessibility3
+            }
             let jump = abs(target.height - lettered.height)
-            #expect(jump < LedgerSpacing.xs, "empty \(target.height) pt, one letter \(lettered.height)")
-            let reach = target.maxY - unfocused.maxY
-            #expect(reach < LedgerSpacing.xs + LedgerSpacing.s, "the caret reaches \(reach) pt down, to the tag")
+            withKnownIssue(Self.emptyTarget) {
+                #expect(jump < LedgerSpacing.xs, "empty \(target.height) pt, one letter \(lettered.height)")
+            } when: {
+                size == .accessibility5
+            }
         }
     }
 #endif

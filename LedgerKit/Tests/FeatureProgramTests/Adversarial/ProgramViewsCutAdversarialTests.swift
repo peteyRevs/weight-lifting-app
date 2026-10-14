@@ -203,7 +203,10 @@
             let whole = try Self.height(of: ProgramHeader(model: header) { _ in }, at: size)
             let eyebrow = try Self.height(of: Eyebrow(header.eyebrow), at: size)
             // A pixel of grace: the two heights are whole pixels of a drawing at 1×.
-            #expect(whole - eyebrow - LedgerSpacing.xs >= 43, "\(whole) pt with an eyebrow of \(eyebrow) pt")
+            // The chore of 2026-10-13, gate G2: the header keeps `s` under the name for its tails now, which
+            // is no part of the target; left in, a target of 36 pt would pass.
+            let target = whole - eyebrow - LedgerSpacing.xs - LedgerSpacing.s
+            #expect(target >= 43, "\(whole) pt with an eyebrow of \(eyebrow) pt")
         }
     }
 #endif
