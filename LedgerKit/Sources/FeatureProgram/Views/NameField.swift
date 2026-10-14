@@ -46,10 +46,12 @@ struct NameField: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // The label on one line, unseen: an empty draft keeps the name's one line, under the placeholder.
+            // The label on one line, unseen and of no width: an empty draft keeps the name's one line, under
+            // the placeholder, and a long label widens nothing the name wraps in.
             Text(label)
                 .ledgerFont(.title)
                 .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 0, alignment: .leading)
                 .hidden()
             Text(draft)
                 .ledgerFont(.title)
