@@ -5784,7 +5784,7 @@ The commits are `7f3613a` (code and tests) and `6a00551` (the catalog's comment)
 | 5 (S7a-3) | **The host cannot withdraw a waiting end**: the finished envelope is already in its log, and the engine has no event that undoes it. So once this store has asked the session to finish (`hasAskedToFinish`, never set back), the sheet draws no "Discard" (`WorkoutFinishModel.discard` is nil) and `send(.discard)` does nothing; the sheet then shows "Save workout" and "Keep lifting". Limit: this is the store's knowledge only. A cover opened again after "Minimize" offers "Discard" again, and a tap there still saves (R10's reader question) | `WorkoutStoreSaveRoundOneTests.afterAFailedSave_noDiscard`, `saveNeverSent_keepsDiscard`; the tester's test rewritten (below); *UI* `WorkoutSaveFailure.test_close_…` |
 | 6 | S7a-7: "Couldn't save this workout" has its translator's comment. S7a-6 is in the product owner's list; S7a-4 and S7a-5 are under F17 below | the gate's catalog check |
 | 7 | The system's own dismissal of an alert now sends `.dismissed(dialog)`, which takes down that dialog alone; the buttons still send `.dismissFailure`. (`.dismissFailure` keeps its name and meaning because the testers' suites send it in about 30 places.) `SheetChrome(cancelIdentifier:)` is `String?`, and nil applies no identifier; no reference moved. `isAnnounced` is now `shouldAnnounce` | `WorkoutStoreSaveRoundOneTests.dismissed_takesDownItsOwnDialogOnly`; `FeatureWorkoutSourceTests.root_presentsASheet` (no binding sends `.dismissFailure`) |
-| 8 | Dark screenshots: not retaken (the full-height question is open, and the sheet's look depends on it) | — |
+| 8 | Dark app screenshots: not retaken. The dark copies are still the references' | — |
 
 **Edits to the testers' files, for the audit**
 
@@ -5808,22 +5808,28 @@ The commits are `7f3613a` (code and tests) and `6a00551` (the catalog's comment)
 - `WorkoutSaveAdversarialCover.swift:91` and `:112`, `await task?.value` for the cover's four tasks in
   `restart` and `close`. A follow that never hears an end never returns from these.
 
-**Open after this round: S7a-1 against three of the testers' tests.** With the sheet at full height, three
-tests fail:
-1. `WorkoutRootSaveAdversarialTests.swift:96` pins two detents.
-2. S4's `WorkoutAdversarial.swift:41` taps outside the sheet to dismiss it; at full height there is no
-   outside.
-3. `WorkoutFinishAdversarial.swift:100`: at Accessibility M "Keep lifting" measures 43.999999999999986 pt.
-   That is floating-point error, and the assertion has no tolerance. The testers' hosted checks allow 0.001.
+**S7a-1, settled by the orchestrator's ruling (a): full height.** Three of the testers' checks pinned the half-height
+sheet. I edited them, and they are listed here for the audit (`247e40c`):
 
-Reported to the orchestrator with two options: full height, with those three tests updated; or half height
-with the expected-failure wrapper put back, and S7a-1 open. The alternative fix, a taller cancel in
-`SheetChrome`, would move the other sheets.
+1. `WorkoutRootSaveAdversarialTests.swift:96`. Old: `detents.count == 2` ("half height and full height").
+   New: `detents.count == 1` and its identifier is `.large`. The same strength, on the new value.
+2. `Apps/LedgerUITests/WorkoutAdversarial.swift:41` (S4's tester). Old: a tap well away from the dialog's
+   buttons leaves it. New: a swipe down from its title leaves it, the same gesture as
+   `WorkoutFinishAdversarial.test_swipeDown_…`. The assertions of what dismissal leaves behind are unchanged
+   (`discard` gone, `minimize` exists and is hittable). Only the gesture changed, because at full height
+   there is no outside to tap.
+3. `Apps/LedgerUITests/WorkoutFinishAdversarial.swift:100`. Old: `keep.frame.height >= 44`. New:
+   `>= 44 - 0.001`, as the hosted checks allow. At full height, Accessibility M measures
+   43.999999999999986 pt. Slightly weaker, by floating-point error only.
 
 **For the product owner (added this round)**
 - O3/S7a-3: once a save has been tried, "Discard" leaves the sheet for as long as the cover is up. A cover
   opened again still offers it, and it would save the workout.
-- The sheet now stands at full height, if the open point above goes that way (it was half height).
+- **"End workout?" is a full-height sheet** (at half height the system drew it at about 96 %, and "Keep
+  lifting" at 42.25 pt). Before: `screenshots/s7a/app-sheet-default-light.png` and
+  `app-sheet-accessibility-xl-light.png`. After: `app-sheet-full-height-default-light.png` and
+  `app-sheet-full-height-accessibility-xl-light.png`. The sheet now covers the workout and has a lot of
+  empty space under its buttons. Place: `FinishSheet.detents`.
 - S7a-6: outside en_US the line mixes number styles. The counts follow the region ("1.234 of 1.250"); the
   volume follows the Domain's rule 34 ("617,000").
 - G3-3: this slice adds a Domain protocol (`AnnouncementsClient`) and a key in `docs/architecture.md` §13
@@ -5841,7 +5847,10 @@ engine will not take is never saved by "Try again"; "Close" and a new "Save work
 **Runs (2026-10-13/14, through the lock)**
 | Run | Result |
 |---|---|
-| host `FeatureWorkoutTests`, `LedgerAppKitTests`, `LedgerDependenciesTests` | 413, 262, 70: passed |
-| `PR` plan, `-only-testing` FeatureWorkoutTests, LedgerDesignTests, LedgerAppKitTests on `7f3613a` | 1 failure, `WorkoutRootSaveAdversarialTests` (two detents, the open point); LedgerDesign 385 and LedgerAppKit 276 passed. The catalog check failed for the missing comment, fixed in `6a00551` |
-| `Nightly`, `WorkoutSaveFailure`, `WorkoutFinishAdversarial`, `WorkoutAdversarial`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutRest`, `WorkoutRestAdversarial`, `WorkoutConflictAdversarial`, `Smoke` | 22 of 24 passed. The two failures are open points 2 and 3 |
-| full `scripts/check.sh` | not run: it would fail on open point 1 |
+| host `FeatureWorkoutTests`, `LedgerAppKitTests`, `LedgerDependenciesTests` on `7f3613a` | 413, 262 and 70 passed |
+| `PR` plan, `-only-testing` FeatureWorkoutTests, LedgerDesignTests and LedgerAppKitTests on `7f3613a` | LedgerDesign 385 and LedgerAppKit 276 passed. FeatureWorkout had 1 failure: the two-detents check, edited afterwards. The catalog check failed on the missing comment, fixed in `6a00551` |
+| `Nightly` on `7f3613a`: WorkoutSaveFailure, WorkoutFinishAdversarial, WorkoutAdversarial, WorkoutLogging, WorkoutLoggingAdversarial, WorkoutRest, WorkoutRestAdversarial, WorkoutConflictAdversarial, Smoke | 22 of 24 passed. The 2 failures were the half-height checks, edited afterwards |
+| `Nightly` on `247e40c`: WorkoutAdversarial, WorkoutFinishAdversarial, WorkoutSaveFailure | 10 of 10 passed, 247 s |
+| **full `scripts/check.sh` on `247e40c`** | **exit 0, 1550 s**; FeatureWorkout coverage 99.10 % |
+
+The code is `247e40c`; only this section and two screenshots came after it.
