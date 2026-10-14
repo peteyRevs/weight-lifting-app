@@ -45,43 +45,49 @@ struct NameField: View {
     }
 
     var body: some View {
-        // An empty draft is drawn as the label, unseen: it keeps the name's one line, under the placeholder.
-        Text(draft.isEmpty ? label : draft)
-            .ledgerFont(.title)
-            .foregroundStyle(isEditing || draft.isEmpty ? Color.clear : LedgerColor.ink)
-            .multilineTextAlignment(.leading)
-            // With the focus the text keeps to one line, as the field over it does, and is not drawn; a line
-            // longer than the screen runs out of the frame, which keeps the width it is given.
-            .fixedSize(horizontal: isEditing || draft.isEmpty, vertical: false)
-            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            .accessibilityHidden(true)
-            .overlay(alignment: .topLeading) {
-                TextField(label, text: $draft)
-                    .ledgerFieldFont(.title)
-                    // Where the text starts: at the layout's leading edge, whatever the name's script.
-                    .multilineTextAlignment(strategy: .layoutBased)
-                    .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
-                    .submitLabel(.done)
-                    .focused($isEditing)
-                    .accessibilityLabel(label)
+        ZStack(alignment: .topLeading) {
+            // The label on one line, unseen: an empty draft keeps the name's one line, under the placeholder.
+            Text(label)
+                .ledgerFont(.title)
+                .fixedSize(horizontal: true, vertical: false)
+                .hidden()
+            Text(draft)
+                .ledgerFont(.title)
+                .foregroundStyle(isEditing ? Color.clear : LedgerColor.ink)
+                .multilineTextAlignment(.leading)
+                // With the focus the text keeps to one line, as the field over it does, and is not drawn; a
+                // line longer than the screen runs out of the frame, which keeps the width it is given.
+                .fixedSize(horizontal: isEditing, vertical: false)
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        .accessibilityHidden(true)
+        .overlay(alignment: .topLeading) {
+            TextField(label, text: $draft)
+                .ledgerFieldFont(.title)
+                // Where the text starts: at the layout's leading edge, whatever the name's script.
+                .multilineTextAlignment(strategy: .layoutBased)
+                .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
+                .submitLabel(.done)
+                .focused($isEditing)
+                .accessibilityLabel(label)
+        }
+        .ledgerHitTarget(alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture { isEditing = true }
+        .onChange(of: draft) { _, text in
+            if text != name {
+                onRename(text)
             }
-            .ledgerHitTarget(alignment: .topLeading)
-            .contentShape(Rectangle())
-            .onTapGesture { isEditing = true }
-            .onChange(of: draft) { _, text in
-                if text != name {
-                    onRename(text)
-                }
+        }
+        .onChange(of: isEditing) { _, isEditing in
+            if !isEditing {
+                draft = name
             }
-            .onChange(of: isEditing) { _, isEditing in
-                if !isEditing {
-                    draft = name
-                }
+        }
+        .onChange(of: name) { _, name in
+            if !isEditing {
+                draft = name
             }
-            .onChange(of: name) { _, name in
-                if !isEditing {
-                    draft = name
-                }
-            }
+        }
     }
 }
