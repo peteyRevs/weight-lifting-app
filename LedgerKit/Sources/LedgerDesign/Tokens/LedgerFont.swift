@@ -156,9 +156,10 @@ public extension View {
     /// out above and below the text's line. The guide is the field's own: a stack or a branch around
     /// the field has a top of its own.
     ///
-    /// **Known limit** (the chore of 2026-10-13, NF-1): a line that also holds a glyph of another font
-    /// (an emoji, "Ł", "ï", Thai) UIKit does not centre; it sets it 3.3 to 5.7 pt higher, and the
-    /// guide lifts it all the same.
+    /// **Known limit** (the chore of 2026-10-13, NF-1): a line that holds a glyph drawn from another
+    /// font (an emoji, Thai, Devanagari, Arabic, any Vietnamese, or Latin letters such as Å É Ç Ł ï ą
+    /// ỵ) UIKit does not centre, and the guide lifts it all the same: such a name moves 3.7, 6.0 and
+    /// 7.3 pt up when the focus comes, at `.large`, `.accessibility3` and `.accessibility5`.
     func ledgerFieldFont(_ role: LedgerFont.Role) -> some View {
         modifier(LedgerFieldStyle(role: role))
     }

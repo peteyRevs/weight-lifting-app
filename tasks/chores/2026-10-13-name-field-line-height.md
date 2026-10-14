@@ -13,9 +13,10 @@ implementation notes, "The queued chore's input").
 | 5 | The two known-issue wrappers | Removed; both tests pass as plain tests | `f52748e` |
 | 6 | Tests | `FieldFontTests` (design), `NameFieldLineTests` (program) | `aa009f1`, `f52748e` |
 
-Product lines changed (non-blank, non-comment lines under `LedgerKit/Sources`): 23 added, 33 removed, in
-`LedgerFont.swift`, `NameField.swift` (one line) and `ProgramHeader.swift`; one word of a comment in
-`ProgramBuilderModel.swift`. No user-facing text, no catalog, no `PillButton`, no project file, test plan,
+Product lines changed, the whole branch `77b33ec..HEAD` (non-blank, non-comment lines under
+`LedgerKit/Sources`): 60 added, 62 removed, in `LedgerFont.swift`, `NameField.swift` (its body re-indented
+into a stack in fix round 1, most of the count) and `ProgramHeader.swift`; one word of a comment in
+`ProgramBuilderModel.swift`. (The first round alone was 23 added, 33 removed.) No user-facing text, no catalog, no `PillButton`, no project file, test plan,
 workflow or `docs/` file was touched.
 
 ## The fault, measured again
@@ -221,13 +222,10 @@ Pictures, before beside after (dark, 2×), in `tasks/chores/screenshots/name-fie
    eyebrow) and the page under it 8 pt down. `program-header-large-idle` shows it.
 2. **The caret is higher than it was** (as high as a line of 1.3) and reaches up to 10 pt under the name at
    the largest sizes, inside the 12 pt over the day's tag. `day-editor-header-accessibility3-editing`.
-3. **Right to left, in a hosted test, the name jumps to the left edge when the focus comes** (the idle text
-   starts at the right edge, the field draws a Latin name at the left). This is `NameField`'s since S10 on the
-   Day editor (measured on `main`: 281 → 42 pt at `.large`); the builder's old field drew at the left idle
-   and edited, so the builder has the jump as of this chore. `.multilineTextAlignment(.leading)` on the field
-   was tried and changes nothing in the hosted window. Whether a device set to a right-to-left language does
-   the same is not known (the hosted test sets SwiftUI's layout direction only), and the app ships no such
-   language. Not fixed here.
+3. **A name whose script runs against the layout no longer jumps across when the focus comes** (fix round 1,
+   NF-3): the field aligns its text by the layout, as the idle text does. This also cures the Day editor,
+   which jumped on `main` (281 → 42 pt at `.large`). Idle, a Latin name on a right-to-left layout stands at
+   the right edge in the builder, where its old field drew it at the left. Measured in a hosted window only.
 4. **The library's search field is a field in `.body`, whose line is 1.2**, the line that cut the title's
    tails by a point from `.accessibility3`. Not measured, not changed (it would move the library's
    references). A candidate for `ledgerFieldFont(.body)`.
@@ -236,7 +234,12 @@ Pictures, before beside after (dark, 2×), in `tasks/chores/screenshots/name-fie
    while it is edited, and a role's line may be tighter than the font.* And for the notes of F11, ruling 21's
    "the 8 pt … can then be looked at again": looked at; kept, in both headers, since the idle text's frame is
    still the title's line of 1 and its tails still hang under it.
-6. `DesignGallery` has no specimen of the field variant: one would change the gallery's references, and the
+6. **NF-1, as ruled: option B.** A name holding a glyph drawn from another font (an emoji, Thai,
+   Devanagari, Arabic, any Vietnamese, Å É Ç Ł ï ą ỵ) moves 3.7, 6.0 and 7.3 pt up when the focus comes, at
+   `.large`, `.accessibility3` and `.accessibility5`, and back at the blur; every letter stays whole. The
+   alternative, the font's own line on the first baseline, kept every name in place but clipped stacked
+   accents ("Ǻ", "Ṩ") by 0.7 to 2.0 pt at the top while edited. Fix round 1 has both measured.
+7. `DesignGallery` has no specimen of the field variant: one would change the gallery's references, and the
    variant has its own test. `tasks/todo.md` is not edited here (another lane is open on it).
 
 ## Verified
@@ -636,3 +639,11 @@ coordinator was told.
 
 **Not checked:** a device; typing; the watch; the full `scripts/check.sh` (the implementer reports it green
 on `8bfc5f9`, and nothing in the product has changed since).
+
+## Text touch-up (2026-10-14)
+
+Comments and this record only; no code. `ledgerFieldFont`'s known-limit comment gives G2 round 2's figures
+and glyphs; the product-line count covers the whole branch; "For Pete" carries NF-1 as ruled and the
+right-to-left fix. **Tester-file edit:** `LedgerDesignTests/Adversarial/FieldFontAdversarialTests.swift`,
+the doc comment of `looseRole_fieldStandsOnTheText` only, which described the fault as open ("0.3 to 1.3 pt
+under") and now says what the test pins; the test's code and title are unchanged.

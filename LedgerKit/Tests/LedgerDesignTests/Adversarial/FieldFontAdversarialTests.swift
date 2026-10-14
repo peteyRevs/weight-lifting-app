@@ -74,8 +74,9 @@
                 }
             }
 
-            /// **FINDING NF-4** (the API's promise, no screen yet). `.display`, `.heading` and `.subheading`
-            /// (lines of 1.06 to 1.1) are 0.3 to 1.3 pt under their text and pass the title's bound.
+            /// **FINDING NF-4**, fixed in the chore's fix round 1 (the guide is half of the field's line
+            /// less 1): a field of `.body`, `.label` or `.bodyLight` (lines of 1.2 to 1.6) draws its letters
+            /// within 2 pt of its text at `.accessibility3`, where it stood 2.7 to 8.7 pt under it.
             @Test(
                 "A field of a role on a looser line draws its letters where a text of the role does (known: NF-4)",
                 arguments: [LedgerFont.Role.body, .label, .bodyLight]
