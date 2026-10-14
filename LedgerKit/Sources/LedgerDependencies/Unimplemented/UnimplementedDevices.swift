@@ -4,8 +4,8 @@ import LedgerDomain
 // The device protocols' live values until their briefs bind real ones: HealthKit (F16), the live and companion
 // transports (F17, F19), haptics (F10), notifications (F23) and Live Activities (F21). A protocol with no
 // method yet has nothing to log; the brief that adds a method adds it here too, logging and throwing (or
-// doing nothing) as the store stubs do. The haptics and notifications clients cannot throw, so their stubs
-// log at fault level and do nothing.
+// doing nothing) as the store stubs do. The haptics, notifications and announcements clients cannot throw,
+// so their stubs log at fault level and do nothing.
 
 struct UnimplementedHealthStore: HealthStore {}
 
@@ -29,6 +29,14 @@ struct UnimplementedNotifications: NotificationsClient {
     }
 
     func cancelRestOver() async {
+        stub.log(#function)
+    }
+}
+
+struct UnimplementedAnnouncements: AnnouncementsClient {
+    let stub = Unimplemented(key: "announcements")
+
+    func announce(_: String) async {
         stub.log(#function)
     }
 }

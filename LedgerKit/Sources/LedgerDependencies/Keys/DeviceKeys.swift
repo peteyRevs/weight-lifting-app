@@ -36,6 +36,11 @@ public extension DependencyValues {
         set { self[NotificationsKey.self] = newValue }
     }
 
+    var announcements: any AnnouncementsClient {
+        get { self[AnnouncementsKey.self] }
+        set { self[AnnouncementsKey.self] = newValue }
+    }
+
     var liveActivities: any LiveActivitiesClient {
         get { self[LiveActivitiesKey.self] }
         set { self[LiveActivitiesKey.self] = newValue }
@@ -86,6 +91,13 @@ enum NotificationsKey: DependencyKey {
     static let liveValue: any NotificationsClient = UnimplementedNotifications()
     #if DEBUG
         static let previewValue: any NotificationsClient = FakeNotifications()
+    #endif
+}
+
+enum AnnouncementsKey: DependencyKey {
+    static let liveValue: any AnnouncementsClient = UnimplementedAnnouncements()
+    #if DEBUG
+        static let previewValue: any AnnouncementsClient = FakeAnnouncements()
     #endif
 }
 

@@ -20,5 +20,13 @@ public protocol NotificationsClient: Sendable {
     func cancelRestOver() async
 }
 
+/// What VoiceOver is asked to say aloud about something that happened by itself: a rest that began, a rest
+/// that ended (F10 S7). Posting one is ambient, so a store reaches it here and no feature posts its own.
+public protocol AnnouncementsClient: Sendable {
+    /// Asks the system to speak `text` once. It cannot fail: with no assistive technology running nothing
+    /// is said.
+    func announce(_ text: String) async
+}
+
 /// The Live Activity for elapsed and rest time on the Lock Screen and Dynamic Island (F21).
 public protocol LiveActivitiesClient: Sendable {}
