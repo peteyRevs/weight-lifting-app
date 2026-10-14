@@ -44,12 +44,12 @@ struct WorkoutRoot: View {
         } message: {
             Text(refusal.message)
         }
-        .alert(unsaved.title, isPresented: shows(.saveFailed, else: .dismissFailure)) {
-            Button(unsaved.retry) { store.send(.retrySave) }
-            Button(unsaved.close, role: .cancel) { store.send(.dismissFailure) }
-        } message: {
-            Text(unsaved.message)
-        }
+        // A save that failed, in two alerts that take turns by the attempt's number: "Try again" can fail
+        // again before the alert it was tapped on has gone, and one alert asked to go and come back at once
+        // may not come back. Only its two buttons take either down: the system's own word that it went
+        // is not passed on, since it can arrive after the next failure and would close that one's alert.
+        .saveFailedAlert(unsaved, isPresented: shows(.saveFailed, else: nil, when: isEvenAttempt), send: store.send)
+        .saveFailedAlert(unsaved, isPresented: shows(.saveFailed, else: nil, when: !isEvenAttempt), send: store.send)
         .task {
             await store.follow()
         }
@@ -72,15 +72,40 @@ struct WorkoutRoot: View {
         }
     }
 
-    /// Whether `dialog` is the one showing. When the system takes it down by itself, the store is sent
-    /// `dismissal`, which is what its cancelling button sends.
-    private func shows(_ dialog: WorkoutStore.Dialog, else dismissal: WorkoutAction) -> Binding<Bool> {
+    private var isEvenAttempt: Bool {
+        store.saveAttempt.isMultiple(of: 2)
+    }
+
+    /// Whether `dialog` is the one showing, and `isTurn` holds. When the system takes it down by itself,
+    /// the store is sent `dismissal`, which is what its cancelling button sends; with none, only the store
+    /// takes it down.
+    private func shows(
+        _ dialog: WorkoutStore.Dialog,
+        else dismissal: WorkoutAction?,
+        when isTurn: Bool = true
+    ) -> Binding<Bool> {
         Binding {
-            store.dialog == dialog
+            store.dialog == dialog && isTurn
         } set: { isShown in
-            if !isShown {
+            if !isShown, let dismissal {
                 store.send(dismissal)
             }
+        }
+    }
+}
+
+private extension View {
+    /// "Couldn't save this workout", with "Try again" and "Close" (and no "Discard": product default O3).
+    func saveFailedAlert(
+        _ model: WorkoutSaveFailedModel,
+        isPresented: Binding<Bool>,
+        send: @escaping (WorkoutAction) -> Void
+    ) -> some View {
+        alert(model.title, isPresented: isPresented) {
+            Button(model.retry) { send(.retrySave) }
+            Button(model.close, role: .cancel) { send(.dismissFailure) }
+        } message: {
+            Text(model.message)
         }
     }
 }

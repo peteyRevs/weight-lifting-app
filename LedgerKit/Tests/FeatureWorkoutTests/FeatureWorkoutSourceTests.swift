@@ -161,5 +161,9 @@ nonisolated struct FeatureWorkoutSourceTests {
         #expect(Self.lines(of: "confirmationDialog", in: source) == [])
         #expect(Self.lines(of: ".sheet(isPresented:shows(.finish,else:.keepLifting))", in: source).count == 1)
         #expect(Self.lines(of: ".task(id:store.saveAttempt)", in: source).count == 1)
+        // The failed save's alert is taken down by its two buttons alone, and consecutive failures take
+        // turns between two alerts (the notes, "The alert and its dismissal").
+        #expect(Self.lines(of: "shows(.saveFailed,else:nil,when:isEvenAttempt)", in: source).count == 1)
+        #expect(Self.lines(of: "shows(.saveFailed,else:nil,when:!isEvenAttempt)", in: source).count == 1)
     }
 }

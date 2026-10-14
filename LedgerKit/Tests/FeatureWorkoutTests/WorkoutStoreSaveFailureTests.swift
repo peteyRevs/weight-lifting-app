@@ -52,11 +52,10 @@ struct WorkoutStoreSaveFailureTests {
         #expect(try await scene.stores.workouts.workout(id: running.id) == nil, "nothing reached history")
         #expect(try await scene.session.current()?.phase == .live)
 
-        // The alert's dismissal and its button arrive in either order; the clock has moved on.
+        // The clock has moved on before "Try again".
         date.withValue { $0 += 120 }
-        store.send(.dismissFailure)
-        #expect(store.dialog == nil)
         store.send(.retrySave)
+        #expect(store.dialog == nil)
         #expect(store.isSaving)
         #expect(store.saveAttempt == 2)
         #expect(store.model.header?.isEnabled == false)
@@ -107,7 +106,7 @@ struct WorkoutStoreSaveFailureTests {
         await task.value
     }
 
-    @Test("Close leaves the cover as the session shows it; Try again then answers nothing once the lifter moved on")
+    @Test("Close leaves the cover as the session shows it; Try again then answers nothing: the save is forgotten")
     func close_leavesTheCover_andForgetsTheSave() async throws {
         let running = try Save.logged(1)
         let scene = try await Scene.onHost(live: running)
@@ -119,10 +118,10 @@ struct WorkoutStoreSaveFailureTests {
         #expect(store.exit == nil)
         #expect(store.model.header?.isEnabled == true)
 
-        // "Finish" opens the sheet again; the save that failed is forgotten.
+        // The alert is closed: nothing of the failed save answers any more, also under the sheet.
+        store.send(.retrySave)
         store.send(.finish)
         #expect(store.dialog == .finish)
-        store.send(.keepLifting)
         store.send(.retrySave)
         #expect(!store.isSaving)
         #expect(store.saveAttempt == 1)

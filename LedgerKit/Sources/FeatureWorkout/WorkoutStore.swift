@@ -82,7 +82,7 @@ final class WorkoutStore {
     @ObservationIgnored var restPlayedOver: RestTimer?
     /// The rest that was announced when it was first shown, so that no second wait announces it again.
     @ObservationIgnored var restAnnounced: RestTimer?
-    /// The save that is running, or the one that last failed until the lifter does something else.
+    /// The save that is running, or the one that last failed, which "Try again" runs again.
     @ObservationIgnored var pendingSave: PendingSave?
     /// Counts the runs of `save()`, so that one a later run has replaced decides nothing.
     @ObservationIgnored var saveRun = 0
@@ -121,11 +121,6 @@ final class WorkoutStore {
         // Nothing answers once the cover is closing, or while a discard or a save runs.
         guard exit == nil, exitWhenDrained == nil, !isDiscarding, !isSaving else {
             return
-        }
-        // "Try again" answers a failed save's alert, before or after the alert's own dismissal, and
-        // nothing later: whatever the lifter does next, the store forgets the save that failed.
-        if dialog != .saveFailed, ![.retrySave, .dismissFailure, .keepLifting].contains(action) {
-            pendingSave = nil
         }
         switch action {
         case .minimize:

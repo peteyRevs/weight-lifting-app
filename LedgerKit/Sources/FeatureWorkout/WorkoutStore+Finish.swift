@@ -39,9 +39,10 @@ extension WorkoutStore {
         begin(PendingSave(id: state.id, endedAt: date.now))
     }
 
-    /// "Try again": the save that failed, again, ended when the first attempt said.
+    /// "Try again": the save that failed, again, ended when the first attempt said. It answers the failed
+    /// save's alert and nothing else: once the alert is closed the store keeps nothing of a waiting end.
     func retrySave() {
-        guard let failed = pendingSave, isShowingWorkout, dialog == nil || dialog == .saveFailed else {
+        guard dialog == .saveFailed, let failed = pendingSave else {
             return
         }
         dialog = nil
