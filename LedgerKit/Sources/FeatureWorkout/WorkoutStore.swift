@@ -86,6 +86,12 @@ final class WorkoutStore {
     @ObservationIgnored var pendingSave: PendingSave?
     /// Counts the runs of `save()`, so that one a later run has replaced decides nothing.
     @ObservationIgnored var saveRun = 0
+    /// Whether this store has asked the session to finish the workout. From then on "Discard" is not
+    /// offered: the host keeps an end it could not save and completes it before any discard, so a discard
+    /// would save the workout (F10 S7a, fix round 1). Never set back.
+    var hasAskedToFinish = false
+    /// How many times `drain()` was entered: for the tests that bound the save's wait.
+    @ObservationIgnored var drainPasses = 0
     /// Wakes the run of `save()` that waits for the taps made before it; nil while none waits.
     @ObservationIgnored var settled: (run: Int, wake: AsyncStream<Void>.Continuation)?
 
@@ -137,6 +143,8 @@ final class WorkoutStore {
             retrySave()
         case .dismissFailure:
             dismiss([.discardFailed, .editFailed, .saveFailed])
+        case let .dismissed(dialog):
+            dismiss([dialog])
         case let .edit(edit):
             enqueue(edit)
         }
@@ -165,7 +173,7 @@ final class WorkoutStore {
 
     /// Not tied to the dialog's flag: its dismissal and its button's action arrive in either order.
     private func startDiscard() {
-        guard isShowingWorkout else {
+        guard isShowingWorkout, canDiscard else {
             return
         }
         dialog = nil

@@ -41,7 +41,7 @@ final class Harness {
 
     /// A composition over `databaseURL`, not yet booted. Its new device ids are `deviceUUID`; its process started at
     /// `processStart`.
-    func composition(now: Date = Harness.now, processStart: Date? = nil) -> AppComposition {
+    func composition(now: Date = Harness.now, processStart: Date? = nil, failedFinishes: Int? = nil) -> AppComposition {
         AppComposition(
             AppComposition.Environment(
                 databaseURL: databaseURL,
@@ -55,7 +55,8 @@ final class Harness {
                 assignMirroringHandler: { [weak self] in self?.log.append(.handlerAssigned) },
                 activateCompanionSession: { [weak self] in self?.log.append(.companionActivated) },
                 preparesDependencies: false,
-                processStart: processStart
+                processStart: processStart,
+                failedFinishes: failedFinishes
             )
         )
     }

@@ -17,6 +17,8 @@ nonisolated enum WorkoutAction: Equatable, Sendable {
     case retrySave
     /// The "OK" of a discard, or of a change, that failed; the "Close" of a save that did.
     case dismissFailure
+    /// The system took this dialog's presentation down by itself: it goes, and no other dialog with it.
+    case dismissed(WorkoutDialog)
     /// A tap on the page that changes the workout: queued, and applied in its turn by the store's pump.
     case edit(WorkoutEdit)
 }

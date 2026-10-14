@@ -97,9 +97,7 @@ final class WorkoutFinishAdversarial: XCTestCase {
         XCTAssertTrue(title.isHittable, "the title is pinned")
         XCTAssertTrue(keep.isHittable, "Keep lifting is pinned")
         // S7a-1: in the running app the sheet's cancel is 42.2 pt tall at the default size, XXXL and AX1.
-        XCTExpectFailure("S7a-1: Keep lifting is under 44 pt tall in the running app", strict: false) {
-            XCTAssertGreaterThanOrEqual(keep.frame.height, 44)
-        }
+        XCTAssertGreaterThanOrEqual(keep.frame.height, 44)
         XCTAssertGreaterThanOrEqual(keep.frame.minX, window.minX)
         XCTAssertLessThanOrEqual(keep.frame.maxX, window.maxX)
         // A button out of reach is reached by pulling the sheet up, or by scrolling what is under its title.

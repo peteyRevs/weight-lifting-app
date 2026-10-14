@@ -34,22 +34,24 @@ struct WorkoutRoot: View {
         .sheet(isPresented: shows(.finish, else: .keepLifting)) {
             StoreFinishSheet(store: store)
         }
-        .alert(failure.title, isPresented: shows(.discardFailed, else: .dismissFailure)) {
+        // The failed save's alert, carried by a view whose identity is the save's attempt: after "Try
+        // again" the alert of the next failure is a new presentation, never the one that is still going.
+        // Only its two buttons take it down; the system's own word that it went is not passed on, since it
+        // can arrive after the next failure.
+        .background {
+            SaveFailedAlert(store: store, model: unsaved)
+                .id(store.saveAttempt)
+        }
+        .alert(failure.title, isPresented: shows(.discardFailed, else: .dismissed(.discardFailed))) {
             Button(failure.dismiss) { store.send(.dismissFailure) }
         } message: {
             Text(failure.message)
         }
-        .alert(refusal.title, isPresented: shows(.editFailed, else: .dismissFailure)) {
+        .alert(refusal.title, isPresented: shows(.editFailed, else: .dismissed(.editFailed))) {
             Button(refusal.dismiss) { store.send(.dismissFailure) }
         } message: {
             Text(refusal.message)
         }
-        // A save that failed, in two alerts that take turns by the attempt's number: "Try again" can fail
-        // again before the alert it was tapped on has gone, and one alert asked to go and come back at once
-        // may not come back. Only its two buttons take either down: the system's own word that it went
-        // is not passed on, since it can arrive after the next failure and would close that one's alert.
-        .saveFailedAlert(unsaved, isPresented: shows(.saveFailed, else: nil, when: isEvenAttempt), send: store.send)
-        .saveFailedAlert(unsaved, isPresented: shows(.saveFailed, else: nil, when: !isEvenAttempt), send: store.send)
         .task {
             await store.follow()
         }
@@ -72,41 +74,34 @@ struct WorkoutRoot: View {
         }
     }
 
-    private var isEvenAttempt: Bool {
-        store.saveAttempt.isMultiple(of: 2)
-    }
-
-    /// Whether `dialog` is the one showing, and `isTurn` holds. When the system takes it down by itself,
-    /// the store is sent `dismissal`, which is what its cancelling button sends; with none, only the store
-    /// takes it down.
-    private func shows(
-        _ dialog: WorkoutStore.Dialog,
-        else dismissal: WorkoutAction?,
-        when isTurn: Bool = true
-    ) -> Binding<Bool> {
+    /// Whether `dialog` is the one showing. When the system takes it down by itself, the store is sent
+    /// `dismissal`, which takes down that dialog and no other.
+    private func shows(_ dialog: WorkoutStore.Dialog, else dismissal: WorkoutAction) -> Binding<Bool> {
         Binding {
-            store.dialog == dialog && isTurn
+            store.dialog == dialog
         } set: { isShown in
-            if !isShown, let dismissal {
+            if !isShown {
                 store.send(dismissal)
             }
         }
     }
 }
 
-private extension View {
-    /// "Couldn't save this workout", with "Try again" and "Close" (and no "Discard": product default O3).
-    func saveFailedAlert(
-        _ model: WorkoutSaveFailedModel,
-        isPresented: Binding<Bool>,
-        send: @escaping (WorkoutAction) -> Void
-    ) -> some View {
-        alert(model.title, isPresented: isPresented) {
-            Button(model.retry) { send(.retrySave) }
-            Button(model.close, role: .cancel) { send(.dismissFailure) }
-        } message: {
-            Text(model.message)
-        }
+/// "Couldn't save this workout", with "Try again" and "Close" (and no "Discard": product default O3), shown
+/// while the store's dialog is the failed save. `WorkoutRoot` gives it the identity of the save's attempt.
+struct SaveFailedAlert: View {
+    let store: WorkoutStore
+    let model: WorkoutSaveFailedModel
+
+    var body: some View {
+        let isShown = store.dialog == .saveFailed
+        Color.clear
+            .alert(model.title, isPresented: .constant(isShown)) {
+                Button(model.retry) { store.send(.retrySave) }
+                Button(model.close, role: .cancel) { store.send(.dismissFailure) }
+            } message: {
+                Text(model.message)
+            }
     }
 }
 

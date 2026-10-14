@@ -156,6 +156,12 @@ public final class AppComposition {
         }
         if let session {
             values.workoutSession = session
+            #if DEBUG
+                if let failures = environment.failedFinishes {
+                    // A UI test's failing save (`UITestSaveFailures`).
+                    values.workoutSession = UITestFailingFinishSession(base: session, failures: failures)
+                }
+            #endif
             values.haptics = LiveHaptics()
             values.announcements = LiveAnnouncements()
         }
@@ -190,6 +196,8 @@ extension AppComposition {
         var processStart: Date?
         /// The seconds `now` and `processStart` are moved by, when a UI test asked for a date (`UITestClock`).
         var clockOffset: TimeInterval?
+        /// How many calls of the session's `finish` fail, when a UI test asked for that (`UITestSaveFailures`).
+        var failedFinishes: Int?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -220,7 +228,8 @@ extension AppComposition {
                 },
                 preparesDependencies: true,
                 processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
-                clockOffset: offset
+                clockOffset: offset,
+                failedFinishes: UITestSaveFailures.liveCount(arguments: arguments)
             )
         }
     }

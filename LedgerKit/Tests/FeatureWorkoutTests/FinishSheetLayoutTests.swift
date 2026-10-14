@@ -24,9 +24,10 @@
                 LayoutPart(model.spokenSummary) {
                     Text(model.summary).ledgerFont(.bodyLight).accessibilityLabel(Text(verbatim: model.spokenSummary))
                 },
-                LayoutPart(model.save) { PrimaryButton(model.save) {} },
-                LayoutPart(model.discard) { PillButton(model.discard, fillsWidth: true) {} }
-            ]
+                LayoutPart(model.save) { PrimaryButton(model.save) {} }
+            ] + (model.discard.map { discard in
+                [LayoutPart(discard) { PillButton(discard, fillsWidth: true) {} }]
+            } ?? [])
         }
 
         @Test("No word of the sheet is cut, in any setting", arguments: sizes)

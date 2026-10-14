@@ -25,7 +25,13 @@ extension WorkoutStore {
         guard case let .loaded(state) = workout else {
             return nil
         }
-        return WorkoutPresentation.finishSheet(state, isSaving: isSaving, locale: locale)
+        return WorkoutPresentation.finishSheet(state, isSaving: isSaving, canDiscard: canDiscard, locale: locale)
+    }
+
+    /// "Discard" is offered until this store has asked the session to finish the workout
+    /// (`hasAskedToFinish`): a tap on "Discard" never ends as saved.
+    var canDiscard: Bool {
+        !hasAskedToFinish
     }
 
     /// "Save workout". With no set logged it does nothing, whatever the button looked like. The end of the
@@ -83,6 +89,7 @@ extension WorkoutStore {
             return
         }
         pendingSave?.wasSent = true
+        hasAskedToFinish = true
         do {
             let ended = try await session.finish(endedAt: save.endedAt)
             guard ended.phase == .finished else {

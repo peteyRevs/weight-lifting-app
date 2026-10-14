@@ -14,7 +14,7 @@ import SwiftUI
 public struct SheetChrome<Content: View>: View {
     private let title: String
     private let cancel: String
-    private let cancelIdentifier: String
+    private let cancelIdentifier: String?
     private let onCancel: () -> Void
     private let content: Content
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -22,7 +22,7 @@ public struct SheetChrome<Content: View>: View {
     public init(
         _ title: String,
         cancel: String,
-        cancelIdentifier: String = "",
+        cancelIdentifier: String? = nil,
         onCancel: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
@@ -52,8 +52,12 @@ public struct SheetChrome<Content: View>: View {
                     .fixedSize(horizontal: false, vertical: true) // a sheet's height must never cut it short
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
-                PillButton(cancel, style: .ghost, action: onCancel)
-                    .accessibilityIdentifier(cancelIdentifier)
+                if let cancelIdentifier {
+                    PillButton(cancel, style: .ghost, action: onCancel)
+                        .accessibilityIdentifier(cancelIdentifier)
+                } else {
+                    PillButton(cancel, style: .ghost, action: onCancel)
+                }
             }
             content
         }

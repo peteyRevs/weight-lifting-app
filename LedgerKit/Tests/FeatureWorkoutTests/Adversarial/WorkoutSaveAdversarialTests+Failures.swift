@@ -99,23 +99,37 @@ extension WorkoutSaveAdversarialTests {
         #expect(stored.doneSets == 3)
     }
 
-    @Test("After Close, the sheet's Discard saves the workout: as built (the session completes a waiting end first)")
-    func close_thenDiscard_savesTheWorkout_asBuilt() async throws {
+    /// F10 S7a fix round 1 (the orchestrator's ruling (a) on ruling 5; edited by the implementer, for the
+    /// tester's audit): this test pinned "After Close, the sheet's Discard saves the workout: as built". The
+    /// host cannot withdraw a waiting end, so "Discard" is no longer offered once a save was asked for.
+    @Test("After a failed save and Close: no Discard, a sent one changes nothing, Save saves at the first end")
+    func close_thenNoDiscard_saveSavesAtTheFirstEnd() async throws {
         let running = try WorkoutStoreSaveTests.logged(2)
         let scene = try await Scene.onHost(live: running)
         let (store, following) = await WorkoutStoreSaveFailureTests.saving(scene)
+        defer { following.cancel() }
         await scene.probe.fail(.materialize)
         await store.save()
         store.send(.dismissFailure)
         store.send(.finish)
-        #expect(store.finishSheet?.discard == "Discard", "the alert offers none; the sheet behind it still does")
+        #expect(store.finishSheet?.discard == nil, "the sheet offers no Discard once a save was asked for")
         store.send(.discard)
         await store.discard()
-        await eventually("the cover to close") { store.exit != nil }
-        #expect(store.exit == .route(.saved(running.id)), "the lifter tapped Discard")
-        #expect(try await scene.stores.workouts.workout(id: running.id)?.doneSets == 2)
-        #expect(store.dialog == nil)
-        await following.value
+        await giveWay()
+        #expect(store.exit == nil, "a sent Discard ends nothing")
+        #expect(store.dialog == .finish, "and leaves the sheet as it was")
+        #expect(!store.isDiscarding)
+        #expect(try await scene.session.current()?.phase == .live)
+        store.send(.save)
+        await store.save()
+        guard await eventually("the cover to close", { store.exit != nil }) else {
+            return
+        }
+        #expect(store.exit == .route(.saved(running.id)))
+        let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
+        #expect(stored.doneSets == 2)
+        #expect(stored.endedAt == Fixtures.now, "the end of the first tap on Save workout")
+        #expect(await scene.probe.calls.count { $0 == .materialize } == 2, "saved once after the one refusal")
     }
 
     @Test("An end the engine will not take: Try again can never save it; Close, then a new Save workout, does")

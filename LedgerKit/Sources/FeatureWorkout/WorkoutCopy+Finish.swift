@@ -54,7 +54,11 @@ nonisolated extension WorkoutCopy {
     // MARK: A save that did not go through (the three texts are the product owner's to confirm, O4)
 
     static var couldNotSaveWorkout: String {
-        String(localized: "Couldn't save this workout", bundle: .module)
+        String(
+            localized: "Couldn't save this workout",
+            bundle: .module,
+            comment: "Title of the alert shown when a finished workout could not be saved"
+        )
     }
 
     static var stillOnThisPhone: String {

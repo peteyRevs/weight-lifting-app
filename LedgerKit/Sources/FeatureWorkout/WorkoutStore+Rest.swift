@@ -94,7 +94,7 @@ extension WorkoutStore {
                 }
                 return
             }
-            if isAnnounced(rest), let text = WorkoutPresentation.restAnnouncement(rest, at: now, locale: locale) {
+            if shouldAnnounce(rest), let text = WorkoutPresentation.restAnnouncement(rest, at: now, locale: locale) {
                 restAnnounced = rest
                 await announcements.announce(text)
             }
@@ -105,12 +105,12 @@ extension WorkoutStore {
         }
     }
 
-    /// Whether `rest` is announced when it is first shown with time left: once for each rest, so not at
+    /// Whether `rest` should be announced when it is first shown with time left: once for each rest, so not at
     /// a tick, and not when the cover's tasks start again on the same rest.
     ///
     /// Product default O8: "+30s" makes a new rest, and a new rest is announced like any other ("Rest, 45
     /// seconds remaining"). This is the one place to change that.
-    private func isAnnounced(_ rest: RestTimer) -> Bool {
+    private func shouldAnnounce(_ rest: RestTimer) -> Bool {
         rest != restAnnounced
     }
 

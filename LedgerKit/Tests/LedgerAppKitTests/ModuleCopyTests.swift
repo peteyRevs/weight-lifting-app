@@ -55,6 +55,13 @@ nonisolated struct ModuleCopyTests {
                 "UITestClock.swift": [
                     "-LEDGER_UITEST_NOW", "-LEDGER_UITEST", " needs an ISO 8601 instant such as 2026-09-17T12:00:00Z: ",
                     "Z"
+                ],
+                // A UI test's failing save (F10 S7a): the two launch arguments and what stops a launch whose
+                // count cannot be read. Read by the launch or by the test's author, never drawn.
+                "UITestSaveFailures.swift": [
+                    "-LEDGER_UITEST_FAIL_FINISH",
+                    "-LEDGER_UITEST",
+                    " needs a count from 1 up: "
                 ]
             ],
             // The Debug menu's Diagnostics sections.

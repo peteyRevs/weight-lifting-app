@@ -56,15 +56,22 @@ extension WorkoutStore {
     /// running returns at once, and the first applies its taps too. Nothing is applied while the store is
     /// not hearing the session, while a discard runs, or once the cover is closing.
     func drain() async {
+        drainPasses += 1
         guard !isDraining else {
             return
         }
         isDraining = true
+        // A save that waits for the taps is woken only when this drain applied one: a drain that could
+        // apply none (the session is not heard yet) wakes it for nothing, and it would ask again at once.
+        var hasApplied = false
         defer {
             isDraining = false
-            settled?.wake.yield()
+            if hasApplied {
+                settled?.wake.yield()
+            }
         }
         while let tap = queue.first, isHearingTheSession, exit == nil, !isDiscarding {
+            hasApplied = true
             let epoch = queueEpoch
             let outcome = await apply(tap)
             if outcome == .refused {

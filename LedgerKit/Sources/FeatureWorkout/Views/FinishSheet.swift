@@ -11,9 +11,9 @@ struct FinishSheet: View {
     let model: WorkoutFinishModel
     let send: (WorkoutAction) -> Void
 
-    /// The sheet stands half-high, over the workout it asks about, and can be pulled to full height
-    /// where large text needs the room.
-    static let detents: Set<PresentationDetent> = [.medium, .large]
+    /// The sheet stands at full height. At half height the system draws a sheet inset and smaller (about
+    /// 96 % in the app, iOS 27), which takes the frame's 44 pt cancel under 44 pt (F10 S7a, fix round 1).
+    static let detents: Set<PresentationDetent> = [.large]
 
     var body: some View {
         FinishSheetFrame(model: model, send: send) {
@@ -48,7 +48,7 @@ struct FinishSheetFrame<Content: View>: View {
 
 /// What the sheet scrolls: what the workout holds so far, then its two ways to end. "Save workout" is the
 /// sheet's one orange control; "Discard" is an outline of the same width, not a destructive colour
-/// (product default O1), and one tap (O2).
+/// (product default O1), and one tap (O2). Once a save was asked for "Discard" is not drawn.
 struct FinishSheetPage: View {
     let model: WorkoutFinishModel
     let send: (WorkoutAction) -> Void
@@ -65,8 +65,10 @@ struct FinishSheetPage: View {
                 PrimaryButton(model.save) { send(.save) }
                     .disabled(!model.canSave)
                     .accessibilityIdentifier("workout.finish.save")
-                PillButton(model.discard, fillsWidth: true) { send(.discard) }
-                    .accessibilityIdentifier("workout.finish.discard")
+                if let discard = model.discard {
+                    PillButton(discard, fillsWidth: true) { send(.discard) }
+                        .accessibilityIdentifier("workout.finish.discard")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

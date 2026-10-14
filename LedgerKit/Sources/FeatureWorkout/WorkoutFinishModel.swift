@@ -11,7 +11,9 @@ nonisolated struct WorkoutFinishModel: Equatable, Sendable {
     /// The same two facts as VoiceOver reads them, in one stop: "23 of 25 sets logged, 24,180 lb moved".
     let spokenSummary: String
     let save: String
-    let discard: String
+    /// "Discard"; nil once a save was asked for, when it is not drawn: the session would then save the
+    /// workout it is asked to discard (F10 S7a, fix round 1).
+    let discard: String?
     /// Whether "Save workout" answers: a set is logged, and no save is running.
     let canSave: Bool
     /// False while a save runs: no control of the sheet answers, and it cannot be swiped away.
