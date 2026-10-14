@@ -429,3 +429,129 @@ The closing run is the confirmation of "nothing else moved": the Day editor's 24
 12, Today's (the one other user of `ledgerFont(.title)`) and every reference of `LedgerDesignTests` compare
 equal to what is committed, and `ProgramAccessibilityTests`, `DayEditorAccessibilityTests` and the two
 adversarial tree suites pass unedited. No reference was written.
+
+## Fix round 1
+
+Rulings of the coordinator on G2's five findings and G3's two should-fixes. Commits `64c7c30`, `27ba6d8`,
+`fe97463`, `8bfc5f9`. Measured as before: hosted at 3×, 323 pt wide, iOS 27.0, the PR plan's iPhone 17.
+
+| Finding | Outcome | How |
+|---|---|---|
+| NF-1, a name with an emoji or Å Ł ï, Thai… jumps | **Not fixed: options below, for a ruling** | — |
+| NF-2, an emptied draft's caret in the day's tag | Fixed | an empty name keeps one line (below) |
+| NF-3, a name against the layout's direction jumps across | Fixed, in the builder **and** the Day editor | the field aligns by the layout |
+| NF-4, the guide wrong for a looser role | Fixed for every role | the guide's arithmetic |
+| NF-5, the first letter moves the page (on `main`) | Fixed with NF-2, the same cause | as NF-2 |
+| Review 1 and 2, `pair(_:)` ignored its role | Fixed; `.body` covered | `FieldFontTests` |
+| `fieldLineHeight`'s comment, "14 to 16 pt" | Fixed: 13.7 and 15.3 pt | — |
+
+**NF-4.** A text keeps its letters at the top of its line whatever the line (G2's measure, and the
+first round's for the title); UIKit puts a field's half of the extra line above them. So the guide is
+`(line − 1) × size / 2`, not `(line − role line) × size / 2`. For the title, whose line is 1, nothing
+changes. `FieldFontAdversarialTests.looseRole_fieldStandsOnTheText` (`.body`, `.label`, `.bodyLight`, within
+2 pt at `.accessibility3`) now passes; it measured 2.7, 2.7 and 8.7 pt before. `FieldFontTests`' `pair(_:drawsField:)`
+sets the field in its own role (an overload; the one with `style:` stays for the control and the tester's
+file), and its first test runs `.title` and `.body` at four sizes, plain and bold.
+
+**NF-3.** The field takes `.multilineTextAlignment(strategy: .layoutBased)` (SwiftUI, iOS 26): it starts its
+text at the layout's leading edge, as the wrapping text does, whatever the name's script. Measured first,
+on a probe of `NameField`, at `.large`, the sideways move on focus: Latin on a right-to-left layout −213.7 →
+0.0 pt; Hebrew on a left-to-right layout +181.7 → 0.0; Hebrew right to left and Latin left to right 0 before
+and after. `.writingDirection(strategy: .layoutBased)` gives the same numbers; `.multilineTextAlignment(.leading)`
+and `.multilineTextAlignment(strategy: .writingDirectionBased)` change nothing, nor does setting either
+strategy on the text instead. The builder's 0 is restored by moving the field to the text, not the text to
+the script: idle, a Latin name on a right-to-left layout stays at the right edge, as in the first round's
+references. With the focus it now stays there. **The Day editor is cured too** (it is the same view).
+`focus_doesNotJumpAcross` passes at its four cases and `focus_ownDirection_doesNotJump` still passes.
+
+**NF-2 and NF-5.** The cause of both was an empty text, which has no line: the target fell to 44 pt and the
+tag came up under the field. `NameField` now stacks, under the name, its label on one line, unseen and of no
+width (`ZStack` with `Text(label)…fixedSize(horizontal:).frame(width: 0).hidden()`), so an empty draft keeps
+one line's height. Two dead ends, each found by a tester's test: `draft.isEmpty` is a spelling the views'
+source scan pins (`views_conditionsOnLists_areTheTwo`); and the label at its own width, wider than a 375 pt
+column at `.accessibility5`, widened the stack and broke a long name's lines elsewhere
+(`longProgramName_isDrawnWhole`, 4 drawings), hence the zero width. Not changed: the look at any size of a
+name that is not empty (every `whole` comparison passes unedited), and an empty name below the
+accessibility sizes (one line of the title is under 44 pt there). `emptyDraft_caretStaysAboveTheTag` passes
+at all four sizes (it measured 0.7 and 8.7 pt into the pill); `emptyDraft_keepsALine` passes its field's
+hang and its one-letter jump at all three (12.7 and 20.7 pt; 10.7 pt at `.accessibility5`).
+
+### NF-1: no sound mechanism found inside `ledgerFieldFont`; the options
+
+What UIKit does, measured on a probe of `NameField` with the field set as each row says (the name's ink,
+how far it moves down when the focus comes, `.large` / `.accessibility3`):
+
+| The field | "Gyp", "Upper A" | "naïve", "Łódź", "ÅÉÇ", "Push 💪", Thai |
+|---|---|---|
+| line 1.3, top on top, no guide | +4.33 / +6.00 | +1.00 / +1.00 |
+| line 1.3 + the guide (as built) | −0.33 / −1.00 | −3.67 / −6.00 |
+| line 1.3, first baseline on first baseline | +4.00 / +6.00 | +0.67 / +1.00 |
+| `.exact(points: 1.3 × size)` or `.leading(increase: 0.3 × size)`, top | +4.33 / +6.00 | +1.00 / +1.00 |
+| line 1.5, top | +7.33 / +10.67 | +1.00 / +1.00 |
+| line 1 (`main`), top | −0.67 / −1.33, tails cut | −0.67 / −1.33 |
+| **no line (the font's own), first baseline on first baseline** | **0.00 / 0.00** | **0.00 / 0.00 (emoji −0.33)** |
+
+Every explicit line looser than the font is centred by UIKit for a line of Archivo alone and not for a line
+that holds a glyph of another font, so no constant guide serves both, and there is no public way to read
+which a line is short of asking per glyph. `Font.leading(.loose)` on the field changes nothing. The one
+glyph-independent placement found is the last row: the field keeps the font's own line (36.7 / 53.7 / 61.3 pt,
+which holds Archivo's ascent and descent) and the view lines it up with the text by **first baseline**. More of
+it, `.large` / `.accessibility3` / `.accessibility5`:
+
+| Name | Moves down | Ink, idle → edited (pt) |
+|---|---|---|
+| "Gyp", "naïve", "ÅÉÇ", Hebrew, Devanagari | 0.00 at all three | the same |
+| "Push 💪", "🏋️💪 Gy" | −0.33, −0.33, 0.00 | the same, or a pixel more |
+| Arabic | 0.00 | 0.7 to 1.3 pt more under the line (not cut) |
+| Thai "ก้ำปู่ ฏู" | +2.00, +3.67, +4.33 | 2.7 to 3.0 pt more (not cut; drawn lower) |
+| "Ǻ Ṩ ự" | +0.67, +1.67, +2.00 | **cut at the top by 0.7, 1.7, 2.0 pt** |
+
+So the options:
+
+- **A. The font's own line, laid on the text's first baseline.** No guide; `ledgerFieldFont` sets no line at
+  all, and `NameField`'s overlay is `Alignment(horizontal: .leading, vertical: .firstTextBaseline)`. NF-1 goes
+  for every name but Thai (which moves less than as built: 2.0 to 4.3 pt down against 3.7 to 7.3 up). The
+  field is lower (36.7 pt at `.large`), so the caret is shorter. NF-4 goes by construction (no guide). **Cost:**
+  capitals stacked with two accents ("Ǻ", "Ṩ") lose 0.7 to 2.0 pt at the top while edited, which fails the
+  tester's `focus_keepsAccentsMarksAndEmojiWhole` (bound 0.5 pt); `main`'s line of 1 does not cut them.
+- **B. As built:** everything whole; NF-1 stays a known issue, documented in `ledgerFieldFont`'s comment.
+- Rejected: a per-glyph guide (ruled out), and a `UIViewRepresentable` field (outside this chore's size).
+
+My recommendation is A, with the tester's bound for stacked accents ruled on: a jump of the whole name for
+an emoji or "ï" is seen at every focus, a top accent shaved by 1 to 2 pt only on rare names while typing.
+NF-1's 16 known issues stand until then.
+
+### Tester-file edits of this round
+
+Only wrappers whose fault is fixed, each with its `Comment` constant (now unused); each test passes as
+written.
+
+| File | Wrapper removed | Finding |
+|---|---|---|
+| `LedgerDesignTests/Adversarial/FieldFontAdversarialTests.swift` | `lowerField`, in `looseRole_fieldStandsOnTheText` | NF-4 |
+| `FeatureProgramTests/Adversarial/NameFieldRoomAdversarialTests.swift` | `caretOnTheTag`, in `emptyDraft_caretStaysAboveTheTag` | NF-2 |
+| the same | `jumpsAcross`, in `focus_doesNotJumpAcross` | NF-3 |
+| `FeatureProgramTests/Adversarial/DayEditorViewsTitleAdversarialTests.swift` | `emptyTarget`, both uses in `emptyDraft_keepsALine` | NF-2, NF-5 |
+
+Test titles and doc comments that still say "(known: …)" were left as the tester wrote them. Formatting
+removed the blank line each constant left.
+
+### References
+
+None changed: the full gate compares all of them (the builder's 16, the library's 12, the Day editor's 24
+with its right-to-left one, Today's, `LedgerDesignTests`'). The unseen label draws nothing, and the field's
+alignment shows only with the focus.
+
+### Gates (on `8bfc5f9`)
+
+| Command | Exit | Duration |
+|---|---|---|
+| `sim-lock.py sim.sh … -testPlan PR -only-testing:LedgerDesignTests -only-testing:FeatureProgramTests` | 0 | 627 s: 390 tests (27 known issues, none new) and 524 tests (18 known: 2 of `main`, 16 of NF-1) |
+| `sim-lock.py scripts/check.sh` | 0, `check.sh OK` | 1,552 s (iOS tests 1,165 s, watchOS tests 241 s), plus the wait for the lock |
+
+### Still open
+
+- NF-1 (16 known issues), for a ruling between A and B.
+- For a later chore: the library's search field in `.body` (its line 1.2 cut the title's tails), right to
+  left on a device, and NF-5 is closed here but was `main`'s.
+- Not verified: a device, typing (so NF-1's and NF-3's behaviour while typing is inferred), the watch.
