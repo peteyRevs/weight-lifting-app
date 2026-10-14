@@ -76,12 +76,6 @@
             }
         }
 
-        nonisolated static let caretOnTheTag: Comment = """
-        NF-2: with the draft emptied the name's text has no line, the target falls to 44 pt and the tag \
-        comes up, while the field keeps its line of 1.3: the caret stands 0.7 pt into the tag's pill at \
-        .accessibility3 and 8.7 pt at .accessibility5 (main: clear, and 1.3 pt).
-        """
-
         /// **FINDING NF-2** (on `main` at `.accessibility5` by 1.3 pt; new at `.accessibility3`, and 8.7 pt
         /// at `.accessibility5`, with this chore). Up to `.accessibility1` the caret is clear by 7.3 pt.
         @Test(
@@ -91,11 +85,7 @@
         func emptyDraft_caretStaysAboveTheTag(_ size: DynamicTypeSize) throws {
             let found = try Self.reach(under: "", at: size, .regular)
             try #require(!found.caret.isNull, "no caret is drawn")
-            withKnownIssue(Self.caretOnTheTag) {
-                #expect(found.caret.maxY <= found.tagTop, "the caret ends at \(found.caret.maxY), \(found)")
-            } when: {
-                size >= .accessibility3
-            }
+            #expect(found.caret.maxY <= found.tagTop, "the caret ends at \(found.caret.maxY), \(found)")
         }
 
         /// How far the name's ink moves sideways when the focus comes.
@@ -108,14 +98,6 @@
             return try shown.letters().minX - idle.minX
         }
 
-        nonisolated static let jumpsAcross: Comment = """
-        NF-3: the text that wraps starts at the layout's leading edge, and the field with the focus where \
-        the name's own script starts. A Latin name on a right-to-left layout jumps 213.7 pt to the left when \
-        the focus comes, and a Hebrew name on a left-to-right layout 181.7 pt to the right. The Day editor \
-        does so on main; the builder, whose old field drew the name itself with the focus and without, does \
-        so with this chore.
-        """
-
         /// **FINDING NF-3.** New in the builder with this chore; the Day editor's since S10. The second case
         /// needs no right-to-left language in the app: a program named in Hebrew or Arabic is enough.
         @Test(
@@ -125,9 +107,7 @@
         func focus_doesNotJumpAcross(_ place: Place, _ isRightToLeft: Bool) throws {
             let name = isRightToLeft ? "Upper A" : "תוכנית עליון"
             let across = try Self.sideways(place.view(name), isRightToLeft: isRightToLeft)
-            withKnownIssue(Self.jumpsAcross) {
-                #expect(abs(across) < 0.34, "\(name): \(across) pt")
-            }
+            #expect(abs(across) < 0.34, "\(name): \(across) pt")
         }
 
         @Test("A name in the layout's own direction stays where it is when the focus comes", arguments: Place.allCases)

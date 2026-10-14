@@ -22,7 +22,10 @@ import SwiftUI
 /// below at the default size, and by 8.3 and 10.3 pt at `.accessibility5`, inside the room the two headers
 /// keep around the name. With the focus the field draws its text itself, on its one line, which scrolls
 /// sideways under the caret as every field's does, and what stands under the name moves up to that line.
-/// An empty draft shows the field's placeholder.
+/// An empty draft shows the field's placeholder, over an unseen line of the label, so that the name keeps one
+/// line's height and nothing under it moves at the first letter typed. The field lines its text up by the
+/// layout's direction, as the text that wraps does, so a name whose script runs against the layout does not
+/// jump across when the focus comes.
 ///
 /// The field is the one thing VoiceOver reads, under `label`, which is its placeholder too; the drawn text
 /// is hidden from it. The name's target is at least 44 pt high, with the name at its top whether it is one
@@ -42,18 +45,21 @@ struct NameField: View {
     }
 
     var body: some View {
-        Text(draft)
+        // An empty draft is drawn as the label, unseen: it keeps the name's one line, under the placeholder.
+        Text(draft.isEmpty ? label : draft)
             .ledgerFont(.title)
-            .foregroundStyle(isEditing ? Color.clear : LedgerColor.ink)
+            .foregroundStyle(isEditing || draft.isEmpty ? Color.clear : LedgerColor.ink)
             .multilineTextAlignment(.leading)
             // With the focus the text keeps to one line, as the field over it does, and is not drawn; a line
             // longer than the screen runs out of the frame, which keeps the width it is given.
-            .fixedSize(horizontal: isEditing, vertical: false)
+            .fixedSize(horizontal: isEditing || draft.isEmpty, vertical: false)
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .accessibilityHidden(true)
             .overlay(alignment: .topLeading) {
                 TextField(label, text: $draft)
                     .ledgerFieldFont(.title)
+                    // Where the text starts: at the layout's leading edge, whatever the name's script.
+                    .multilineTextAlignment(strategy: .layoutBased)
                     .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
                     .submitLabel(.done)
                     .focused($isEditing)

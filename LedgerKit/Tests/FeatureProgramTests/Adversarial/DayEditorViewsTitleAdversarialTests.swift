@@ -118,14 +118,6 @@
             #expect(buttons.allSatisfy { $0.maxY <= (stops.last?.frame.minY ?? 0) }, "a button over the heading")
         }
 
-        nonisolated static let emptyTarget: Comment = """
-        NF-2 and NF-5 (the chore of 2026-10-13, gate G2): with the draft emptied the name's text has no line \
-        and its target falls to 44 pt. The field, on its line of 1.3, hangs 12.7 pt under it at \
-        .accessibility3 and 20.7 pt at .accessibility5, across the 12 pt over the tag (main: 8.0 and 16.0 \
-        pt); and the first letter typed moves what is under the name by 10.7 pt at .accessibility5 (main the \
-        same).
-        """
-
         /// The review's S-6: with the draft emptied the text under the field has no line, so at large sizes
         /// the field, with its placeholder and caret, would be higher than the 44 pt the name field keeps,
         /// hang over the tag and the summary, and the page would jump at the first letter typed.
@@ -165,17 +157,9 @@
             let target = try frame(of: empty)
             #expect(target.height >= 44 && lettered.height >= 44, "\(target), \(lettered)")
             let hang = field.maxY - target.maxY
-            withKnownIssue(Self.emptyTarget) {
-                #expect(hang < LedgerSpacing.xs + LedgerSpacing.s, "the field hangs \(hang) pt under its target")
-            } when: {
-                size >= .accessibility3
-            }
+            #expect(hang < LedgerSpacing.xs + LedgerSpacing.s, "the field hangs \(hang) pt under its target")
             let jump = abs(target.height - lettered.height)
-            withKnownIssue(Self.emptyTarget) {
-                #expect(jump < LedgerSpacing.xs, "empty \(target.height) pt, one letter \(lettered.height)")
-            } when: {
-                size == .accessibility5
-            }
+            #expect(jump < LedgerSpacing.xs, "empty \(target.height) pt, one letter \(lettered.height)")
         }
     }
 #endif
