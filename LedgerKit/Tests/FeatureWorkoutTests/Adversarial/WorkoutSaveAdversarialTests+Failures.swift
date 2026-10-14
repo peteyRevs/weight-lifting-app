@@ -106,7 +106,8 @@ extension WorkoutSaveAdversarialTests {
     func close_thenNoDiscard_saveSavesAtTheFirstEnd() async throws {
         let running = try WorkoutStoreSaveTests.logged(2)
         let scene = try await Scene.onHost(live: running)
-        let (store, following) = await WorkoutStoreSaveFailureTests.saving(scene)
+        let date = LockIsolated(Fixtures.now)
+        let (store, following) = await WorkoutStoreSaveFailureTests.saving(scene, at: date)
         defer { following.cancel() }
         await scene.probe.fail(.materialize)
         await store.save()
@@ -120,6 +121,8 @@ extension WorkoutSaveAdversarialTests {
         #expect(store.dialog == .finish, "and leaves the sheet as it was")
         #expect(!store.isDiscarding)
         #expect(try await scene.session.current()?.phase == .live)
+        // G2 round 2: the clock moves before the second tap, so "the first tap's end" is told from its own.
+        date.withValue { $0 += 240 }
         store.send(.save)
         await store.save()
         guard await eventually("the cover to close", { store.exit != nil }) else {

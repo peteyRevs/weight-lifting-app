@@ -195,7 +195,7 @@ extension WorkoutAnnouncementAdversarialTests {
         #expect(await haptics.played.suffix(1) == [.restOver])
         #expect(await said.announced.count == 1, "the words came before the haptic had been played")
         await haptics.release()
-        await keeper.value
+        await SaveCover.ended([keeper], "the rest's task")
         #expect(await said.announced == ["Rest, 2 minutes, 30 seconds remaining", "Rest over"])
         // A second task on the same, ended, rest says nothing more.
         await store.keepRestTime()

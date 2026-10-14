@@ -1853,3 +1853,53 @@ running app (only one simulator; dark broken); Bold Text in the app; the watch; 
 | `Nightly` plan, `LedgerUITests/WorkoutFinishAdversarial` | 0 | 7 of 7 (S7a-1 as an expected failure) |
 | `Nightly` plan, `TabsAdversarial/test_selectedTab_…lightAndDark` | 65 | dark half fails: the simulator |
 | simulator mutant T1 | 65 | caught |
+
+## S7a — round 2 (G2 tester, 2026-10-14)
+
+On `d16a5ba` (the fix round: `7f3613a`, `6a00551`, `247e40c`, notes `be42271`, `d16a5ba`). No product code edited.
+
+### Result
+
+**G2 can close.** Every ruling of the fix round holds under attack. One finding remains: **S7a-8**, which is the limit the notes state, now measured on the real host. It is pinned as a known issue, so the gate stays green, and it needs the orchestrator's ruling (R10). Nothing else is left red.
+
+| Id | Severity | Finding |
+|---|---|---|
+| S7a-8 | P3 | **A tap on "Discard" ends as saved.** Sequence: a failed save (the host's store refuses it, so its end waits in the log), then "Close", "Minimize" and the workout opened again. The new cover does not know an end is waiting, so its sheet offers "Discard". A tap on it makes the host complete the waiting end, after which the discard finds no live workout: the cover closes as `.saved`, and history holds the workout ended at the first tap on "Save workout". `reopened_afterAFailedSave_discardSaves` pins it as built, inside `withKnownIssue("S7a-8")`. Only telling a reader that an end is waiting (R10) can close it. Within one cover it cannot happen: `sameCover_afterAFailedSave_noDiscard_acrossARestart` |
+
+### Audit of the edits to testers' files
+
+| Edit | Verdict |
+|---|---|
+| `close_thenNoDiscard_saveSavesAtTheFirstEnd` | The ruling is sound. **One check had lost its strength:** the date never moved, so "at the first tap's end" could not be told from the second tap's. Restored: the clock now moves 240 s before the second tap |
+| detents `count == 1`, `.large` | Sound |
+| `WorkoutAdversarial:41` swipe in place of a tap outside | Sound: at full height there is no outside. What the dismissal leaves behind is still asserted |
+| `44 - 0.001` | Sound: measured 43.99999… at AX M, 44 at L, XXXL and mirrored |
+| `Harness.swift`, `ModuleCopyTests` exemptions | Sound: a pass-through parameter, plus the seam's two arguments and its launch-stopping text |
+
+### Asked items
+
+- **The four waits are bounded.** `SaveCover.ended(_:_:)` waits a bounded number of turns and then records an issue. It now covers `restartTasks`, `close`, `+Deviations` (the discard) and the announcement test's keeper.
+- **The spin fix holds.** With the save waiting, the session not heard and its first update held back, there are at most 8 drains in 5,000 turns; once the session is heard, all three taps are saved (`waitingSave_notHeard_drainsBounded`).
+- **The keyed alert comes back.** In the store, the alert outlives the cover's tasks restarting, and each failure is a new attempt. In the app (`WorkoutSaveFailureAdversarial`, new), three failures span a cover closed and opened again; each alert comes up and answers, and then the workout saves onto Today.
+- **The seam is compiled out of Release.** `UITestSaveFailures.liveCount`, the wrapper and its binding are all inside `#if DEBUG`, and `DEBUG` is defined only in `Config/Debug.xcconfig`. Without `-LEDGER_UITEST` the seam reads nothing (`UITestSaveFailuresTests`).
+- **44 pt and the full-height sheet hold.** In the app on the iPhone 17 at full height: margins 24 pt, "Keep lifting" 44 pt at L, XXXL and mirrored, 43.999… at AX M, 45–54 pt above that; Save and Discard 53–70 pt. Hosted parts at 375 and 402 pt, all twelve sizes, Bold Text and right to left (`FinishSheetAdversarialTests`): pass.
+- **Dark appearance:** after the reboot, `TabsAdversarial…lightAndDark` **passes**. The simulator was set back to light.
+
+### Mutants (3; product tree clean after)
+
+All three were caught:
+- R1: every drain wakes the save.
+- R2: Discard is allowed after a finish was asked.
+- R3: `hasAskedToFinish` is never set.
+
+### Commands (every simulator run through the lock)
+
+| Command | Exit | Result |
+|---|---|---|
+| host: `swift test --filter` the three adversarial suites | 0 | 38 tests, 2 known issues (S7a-8) |
+| host mutants R1–R3 | 1 each | caught |
+| `PR`, `-only-testing:FeatureWorkoutTests` | 0 | 504 tests in 72 suites, 2 known issues |
+| `Nightly`: `WorkoutFinishAdversarial`, `WorkoutSaveFailureAdversarial`, `WorkoutSaveFailure`, `WorkoutAdversarial` | 0 | 11 of 11 |
+| `Nightly`: `TabsAdversarial/test_selectedTab_…lightAndDark` | 0 | passes |
+
+Not checked: a Release build itself (read, not built; 3–5 GB free), the 375 pt phone in the running app, and VoiceOver on a device.

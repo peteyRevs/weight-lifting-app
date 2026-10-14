@@ -87,9 +87,7 @@ final class SaveCover {
             task?.cancel()
         }
         if wait {
-            for task in old {
-                await task?.value
-            }
+            await Self.ended(old, "the cover's old tasks")
         }
         startTasks()
     }
@@ -108,9 +106,20 @@ final class SaveCover {
             await session.releaseEnd()
         }
         await session.keepStreamsBehind(false)
-        for task in all {
-            await task?.value
+        await Self.ended(all, "the cover's tasks")
+    }
+
+    /// Waits for `tasks` to end, by giving way a bounded number of times: a task that never ends (a follow
+    /// that never hears an end) records an issue instead of holding the test until its time limit.
+    static func ended(_ tasks: [Task<Void, Never>?], _ what: String) async {
+        let done = LockIsolated(0)
+        for task in tasks {
+            Task {
+                await task?.value
+                done.withValue { $0 += 1 }
+            }
         }
+        await eventually("\(what) to end") { done.value == tasks.count }
     }
 
     // MARK: Taps

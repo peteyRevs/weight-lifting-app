@@ -66,7 +66,7 @@ extension WorkoutSaveAdversarialTests {
         store.send(.save)
         #expect(!store.isSaving, "so no save can be tapped over a discard that is still running")
         await scene.probe.release()
-        await work.value
+        await SaveCover.ended([work], "the discard")
         #expect(store.exit == .route(.discarded))
         #expect(try await scene.session.current() == nil)
         #expect(try await scene.stores.workouts.workout(id: running.id) == nil)
