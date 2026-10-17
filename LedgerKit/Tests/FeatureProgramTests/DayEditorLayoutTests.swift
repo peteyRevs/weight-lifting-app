@@ -32,7 +32,8 @@
     /// changes colours and no size: the snapshot suite draws it once.
     @Suite("Day editor layout", .serialized, .tags(.feature))
     struct DayEditorLayoutTests {
-        nonisolated static let sizes = DynamicTypeSize.allCases
+        /// Every text size; on the hosted PR runner (`TestSweep`) the four of `fewSizes`.
+        nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
 
         /// The sizes at which a part is drawn right to left as well, and the other states are measured.
         nonisolated static let fewSizes: Set<DynamicTypeSize> = [.xSmall, .large, .xxxLarge, .accessibility5]

@@ -1,6 +1,7 @@
 #if os(iOS) && DEBUG
     @testable import FeatureProgram
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -22,13 +23,14 @@
                 "\(size)" + (isBold ? ", Bold Text" : "") + (isRightToLeft ? ", right to left" : "")
             }
 
-            static let all: [Setting] = [DynamicTypeSize.large, .xxxLarge, .accessibility3, .accessibility5]
+            /// On the hosted PR runner (`TestSweep`) three sizes, each plain and bold right to left.
+            static let all: [Setting] = TestSweep.sizes([.large, .xxxLarge, .accessibility3, .accessibility5])
                 .flatMap { size in
-                    [
+                    TestSweep.subset([
                         Setting(size: size), Setting(size: size, isBold: true),
                         Setting(size: size, isRightToLeft: true),
                         Setting(size: size, isBold: true, isRightToLeft: true)
-                    ]
+                    ]) { $0.isBold == $0.isRightToLeft }
                 }
         }
 

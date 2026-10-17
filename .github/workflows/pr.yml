@@ -124,7 +124,8 @@ jobs:
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 2520: a
           # PR's first run builds cold (1,140-1,221 s measured) after 125 s of script tests, and the tests
-          # below are expected to take up to about 940 s, which leaves about 5 min (docs/ci-cd.md, "Deadline").
+          # below, seeds and sweeps cut, are expected to take 1,040-1,150 s, which leaves 12-198 s
+          # (docs/ci-cd.md, "Deadline").
           LEDGER_XCODEBUILD_DEADLINE: 2520
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
@@ -133,6 +134,12 @@ jobs:
           # fifth of the test step. The full local gate, green before every merge, runs the plan's 200,
           # and the nightly its 2,000 (docs/ci-cd.md, "Seeds on the runner").
           TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT: 40
+          # The text-size and setting sweeps of hosted views keep their representatives here (TestSweep in
+          # LedgerTestSupport): the smallest, default, largest non-accessibility and largest text sizes, and
+          # the iPhone 17 plain beside the 375 pt phone with Bold Text and right to left. Those sweeps were
+          # most of the test step. The full local gate, green before every merge, and the nightly set no
+          # LEDGER_SWEEP and run every size and setting (docs/ci-cd.md, "Sweeps on the runner").
+          TEST_RUNNER_LEDGER_SWEEP: pr
         run: scripts/check.sh --ios-only --skip-static
       - name: Upload result bundles and snapshot diffs
         if: failure()

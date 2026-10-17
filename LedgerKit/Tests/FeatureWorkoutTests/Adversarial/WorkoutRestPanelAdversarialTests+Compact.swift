@@ -34,7 +34,10 @@
 
         // MARK: "+30s" is whole too
 
-        @Test("+30s is drawn whole at every text size, in both arrangements", arguments: everySize)
+        @Test(
+            "+30s is drawn whole at every text size, in both arrangements",
+            arguments: TestSweep.sizes(everySize)
+        )
         func extend_isNeverCut(_ size: DynamicTypeSize) throws {
             for (name, model) in try Self.models() {
                 let panel = RestPanel(model: model) { _ in }

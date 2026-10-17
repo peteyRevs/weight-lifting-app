@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -21,14 +22,20 @@
             "\(size), \(Int(width)) pt" + (isBold ? ", Bold Text" : "") + (isRightToLeft ? ", right to left" : "")
         }
 
-        /// A size on both widths, each plain, with Bold Text, and right to left.
+        /// A size on both widths, each plain, with Bold Text, and right to left. On the hosted PR runner
+        /// (`TestSweep`) three of the six: the iPhone 17 plain, and the 375 pt phone with Bold Text and right
+        /// to left.
         static func sweep(_ size: DynamicTypeSize) -> [ViewsSetting] {
-            widths.flatMap { width in
+            let all = widths.flatMap { width in
                 [
                     ViewsSetting(size: size, width: width),
                     ViewsSetting(size: size, width: width, isBold: true),
                     ViewsSetting(size: size, width: width, isRightToLeft: true)
                 ]
+            }
+            return TestSweep.subset(all) { setting in
+                setting.width == widths.min() ? setting.isBold || setting.isRightToLeft
+                    : !setting.isBold && !setting.isRightToLeft
             }
         }
     }

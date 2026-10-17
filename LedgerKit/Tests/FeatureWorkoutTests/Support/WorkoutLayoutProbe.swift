@@ -2,6 +2,7 @@
     @testable import FeatureWorkout
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
 
@@ -16,12 +17,18 @@
         /// An iPhone 17 and a 375 pt phone.
         static let widths: [CGFloat] = [375, SnapshotConfig.phoneWidth]
 
-        /// Every setting of `size`: both widths, plain and bold, both directions.
+        /// Every setting of `size`: both widths, plain and bold, both directions. On the hosted PR runner
+        /// (`TestSweep`) two of the eight: the iPhone 17 plain, left to right, and the hardest of them, the
+        /// 375 pt phone with Bold Text, right to left; mirroring breaks no line differently.
         static func sweep(_ size: DynamicTypeSize) -> [LayoutSetting] {
-            widths.flatMap { width in
+            let all = widths.flatMap { width in
                 [false, true].flatMap { isBold in
                     [false, true].map { LayoutSetting(size: size, width: width, isBold: isBold, isRightToLeft: $0) }
                 }
+            }
+            return TestSweep.subset(all) { setting in
+                setting.width == SnapshotConfig.phoneWidth && !setting.isBold && !setting.isRightToLeft
+                    || setting.width == widths.min() && setting.isBold && setting.isRightToLeft
             }
         }
 

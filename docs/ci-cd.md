@@ -76,11 +76,28 @@ authoritative; the plan differs:
     one control (`HLCConvergenceAdversarialTests.rawClocks_loseActions`, which looks for a lost action in
     the seeds it is given); 30, 40 and 50 pass. The rest of the step is many small hosted-view and
     text-size cases and the UI tests, which the seed count does not reach (the chore file lists them).
+  - *Sweeps on the runner (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `Check` sets
+    `TEST_RUNNER_LEDGER_SWEEP=pr`, which the test runner reads as `LEDGER_SWEEP` through one helper,
+    `TestSweep` in `LedgerTestSupport`. There a hosted view's sweep over text sizes keeps the smallest,
+    `.large`, `.xxxLarge` and the largest of its list (and its own ends), and the two setting sweeps
+    (`LayoutSetting` in FeatureWorkoutTests, `ViewsSetting` in FeatureProgramTests) keep the iPhone 17 plain
+    beside the 375 pt phone with Bold Text and right to left. Every reduced list is a subset of the full one.
+    Unset, as in the full local gate (§4), the nightly and `swift test`, every sweep runs whole; to run what
+    `Check` runs, export both `TEST_RUNNER_` variables before `scripts/check.sh`. Checks over all sizes at
+    once (the least room, a switch between arrangements, a control) keep their lists. Why: on `main` the
+    iOS test step took about 1,255–1,293 s on a developer Mac at the plan's seeds, so a PR's first run (cold
+    build) reached the deadline whatever its code; the sweeps were the largest part. Measured on the Mac
+    with 40 seeds: 903 s with every sweep, 576 s under `pr` (FeatureProgramTests 374 → 196 s of cases,
+    FeatureWorkoutTests 185 → 64 s). The rest is the UI smoke (65 s), launches, the seeded suites and
+    single-case hosted tests, which no sweep reaches.
   - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 2,520 s; the step's timeout is 44 min and the job's 49.
     A PR's first run restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after
-    about 125 s of script tests. With 940 s of tests that is about 2,225 s, which leaves about 5 min. At
-    2,400 s two first runs of 2026-10-09 were interrupted in their tests with no test failing (builds of
-    1,140 and 1,145 s; the tests then needed 855 s and 1,497 s on the re-runs).
+    about 125 s of script tests and before 10 s of catalogs and boot. Under both runner variables the
+    tests take 576 s on the Mac, about 1,040–1,150 s on a runner 1.8–2× slower, so a cold run ends at
+    2,322–2,508 s: 12–198 s inside the deadline, short of the 5 min wanted (the chore lists the options).
+    A warm run (570–750 s build) has about 10 min. At 2,400 s two first runs of 2026-10-09 were
+    interrupted in their tests with no test failing (builds of 1,140 and 1,145 s; the tests then needed
+    855 s and 1,497 s on the re-runs).
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`

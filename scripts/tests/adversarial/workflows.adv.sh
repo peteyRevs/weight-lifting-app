@@ -342,6 +342,12 @@ check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT') \
 $(jq -r '.defaultOptions.environmentVariableEntries[] | select(.key == "LEDGER_PROPERTY_SEED_COUNT") | .value | tonumber > 40' "$ROOT/TestPlans/PR.xctestplan") \
 $(cat "$WF/pr.yml" "$WF/nightly.yml" | grep -c 'LEDGER_PROPERTY_SEED_COUNT:')" "40 true 1"
+# Sweeps on the runner (tasks/chores/2026-10-17-pr-sweeps.md): Check alone keeps the sweeps' representatives. No
+# plan sets LEDGER_SWEEP, and the nightly and every other job leave it unset, so they sweep in full.
+check "WF67 Check sets LEDGER_SWEEP=pr for the test runner; no plan, no other job and no nightly step sets it" \
+    is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_SWEEP') \
+$(cat "$WF/pr.yml" "$WF/nightly.yml" | grep -c 'LEDGER_SWEEP:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_SWEEP')" \
+    "pr 1 0"
 
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \
