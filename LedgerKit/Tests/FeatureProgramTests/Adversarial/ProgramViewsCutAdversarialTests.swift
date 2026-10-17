@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -13,7 +14,21 @@
     /// words. Swept over every text size, an iPhone 17's width and 375 pt, Bold Text and right to left.
     @Suite("Adversarial F11 S9 · words cut inside a frame", .serialized, .tags(.feature))
     struct ProgramViewsCutAdversarialTests {
-        nonisolated static let sizes = DynamicTypeSize.allCases
+        /// Every text size; on the hosted PR runner (`TestSweep`) the four representatives.
+        nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
+
+        /// The strip's sizes: those, and on the runner too the four FINDING F11-S9-1 was seen at in the middle.
+        nonisolated static let stripSizes = TestSweep.sizes(
+            DynamicTypeSize.allCases,
+            also: [.xLarge, .xxLarge, .accessibility1, .accessibility2]
+        )
+
+        /// The search field's sizes: those, and on the runner too the two besides the largest that FINDING
+        /// F11-S9-2 was seen at.
+        nonisolated static let searchFieldSizes = TestSweep.sizes(
+            DynamicTypeSize.allCases,
+            also: [.accessibility3, .accessibility4]
+        )
 
         /// The lines of `cut` for a builder's page in every setting of `size`: the strip's cells, or the rest.
         static func cutInBuilder(_ model: ProgramBuilderModel, at size: DynamicTypeSize, cells: Bool) -> [String] {
@@ -34,7 +49,7 @@
         /// With the seed program "REST" is drawn "RE…" at `.xLarge` and `.xxLarge` on an iPhone 17 (51.3 pt
         /// for a cell that takes 54.3 and 58.3), **and at the default size, `.large`, on a 375 pt phone**
         /// (47.3 pt for 48.3). Fails at those three sizes.
-        @Test("In the seed program's week no weekday's cell is cut, at any text size or width", arguments: sizes)
+        @Test("In the seed program's week no weekday's cell is cut, at any text size or width", arguments: stripSizes)
         func strip_seedWeek_noCellIsCut(_ size: DynamicTypeSize) throws {
             let cut = try Self.cutInBuilder(ProgramPreview.builder.builderModel(), at: size, cells: true)
             #expect(cut.isEmpty, "\(cut.count) cut: \(cut.prefix(3).joined(separator: "; "))")
@@ -43,7 +58,7 @@
         /// **FINDING F11-S9-1**, a sibling: ten days, so the tag "D10" and no rest day. "D10" is drawn "D…" at
         /// `.xxxLarge` on a 375 pt phone, at `.accessibility1` on both widths and at `.accessibility2` on an
         /// iPhone 17. Fails at those three sizes.
-        @Test("With ten days, a tag of three letters, no weekday's cell is cut", arguments: sizes)
+        @Test("With ten days, a tag of three letters, no weekday's cell is cut", arguments: stripSizes)
         func strip_tenDays_noCellIsCut(_ size: DynamicTypeSize) throws {
             let cut = try Self.cutInBuilder(BuilderState.tenDays.model(), at: size, cells: true)
             #expect(cut.isEmpty, "\(cut.count) cut: \(cut.prefix(3).joined(separator: "; "))")
@@ -133,7 +148,7 @@
         /// `.xxLarge` on 402 pt, plain and with Bold Text; 96 to 104 everywhere else. Fails in those six cases.
         @Test(
             "The seed week's strip draws all the words of its seven cells, at every text size and both widths",
-            arguments: sizes, ViewsSetting.widths
+            arguments: stripSizes, ViewsSetting.widths
         )
         func strip_seedWeek_drawsItsWordsWhole(_ size: DynamicTypeSize, _ width: CGFloat) throws {
             let cells = try ProgramPreview.builder.builderModel().week.cells
@@ -149,7 +164,7 @@
         /// those four cases.
         @Test(
             "With ten days the strip draws all the words of its seven cells, at every text size and both widths",
-            arguments: sizes, ViewsSetting.widths
+            arguments: stripSizes, ViewsSetting.widths
         )
         func strip_tenDays_drawsItsWordsWhole(_ size: DynamicTypeSize, _ width: CGFloat) throws {
             let cells = try BuilderState.tenDays.model().week.cells
@@ -185,7 +200,10 @@
         /// a "q"'s tail stands on the outline (looked at once as a picture). `PillButton` keeps
         /// `LedgerSpacing.s` above and below its words; this asks for `LedgerSpacing.xs`. Fails at those
         /// three sizes.
-        @Test("The search field's text stands at least 4 pt inside its pill, above and below", arguments: sizes)
+        @Test(
+            "The search field's text stands at least 4 pt inside its pill, above and below",
+            arguments: searchFieldSizes
+        )
         func searchField_textStandsInsideItsPill(_ size: DynamicTypeSize) throws {
             let pill = try Self.height(of: Self.searchField(), at: size)
             let line = try Self.lineHeight(of: Self.searchField(), at: size)

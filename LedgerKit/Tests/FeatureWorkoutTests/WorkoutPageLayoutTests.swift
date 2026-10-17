@@ -13,7 +13,8 @@
     /// references' (`WorkoutSnapshotTests`), Increase Contrast included.
     @Suite("Workout page layout", .serialized, .tags(.feature))
     struct WorkoutPageLayoutTests {
-        nonisolated static let sizes: [DynamicTypeSize] = [.large, .xLarge, .xxxLarge, .accessibility3, .accessibility5]
+        /// On the hosted PR runner (`TestSweep`) `.large`, `.xxxLarge` and `.accessibility5`.
+        nonisolated static let sizes = TestSweep.sizes([.large, .xLarge, .xxxLarge, .accessibility3, .accessibility5])
         nonisolated static let workouts: [WorkoutPreview] = [.started, .minutes, .logging, .dropSet]
 
         static func page(_ preview: WorkoutPreview) throws -> WorkoutPageModel {

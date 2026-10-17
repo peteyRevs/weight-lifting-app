@@ -2,6 +2,7 @@
     @testable import FeatureWorkout
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
 
@@ -14,14 +15,28 @@
         var isRightToLeft = false
 
         /// An iPhone 17 and a 375 pt phone.
-        static let widths: [CGFloat] = [375, SnapshotConfig.phoneWidth]
+        static let widths: [CGFloat] = [narrowWidth, SnapshotConfig.phoneWidth]
 
-        /// Every setting of `size`: both widths, plain and bold, both directions.
-        static func sweep(_ size: DynamicTypeSize) -> [LayoutSetting] {
+        /// The narrower of the two phones.
+        static let narrowWidth: CGFloat = 375
+
+        /// Every setting of `size`: both widths, plain and bold, both directions, on every runner. For a test
+        /// of a boundary between two arrangements, which a setting left out could move.
+        static func everySetting(_ size: DynamicTypeSize) -> [LayoutSetting] {
             widths.flatMap { width in
                 [false, true].flatMap { isBold in
                     [false, true].map { LayoutSetting(size: size, width: width, isBold: isBold, isRightToLeft: $0) }
                 }
+            }
+        }
+
+        /// `everySetting(size)`. On the hosted PR runner (`TestSweep`) two of the eight: the iPhone 17 plain,
+        /// left to right, and the hardest of them, the 375 pt phone with Bold Text, right to left; mirroring
+        /// breaks no line differently.
+        static func sweep(_ size: DynamicTypeSize) -> [LayoutSetting] {
+            TestSweep.subset(everySetting(size)) { setting in
+                (setting.width == SnapshotConfig.phoneWidth && !setting.isBold && !setting.isRightToLeft)
+                    || (setting.width == narrowWidth && setting.isBold && setting.isRightToLeft)
             }
         }
 
