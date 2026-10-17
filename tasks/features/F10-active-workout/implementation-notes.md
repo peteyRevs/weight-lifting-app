@@ -623,6 +623,9 @@ public extension WorkoutState { var checkedCursor: Cursor? { get } }   // Ledger
 
 - A segment is one exercise: length its set count; done when every set is done, current when it holds the
   shown row, upcoming otherwise.
+- *Corrected after S4 (review S4-N6):* the surface above is stale in two places. `WorkoutLauncher.start(_:)` is a
+  synchronous intent, as `resume()` is (the rulings below), and `WorkoutRoot` is internal: the app uses
+  `WorkoutLauncher`, `View.workoutCover(_:onRoute:)` and `WorkoutRoute` only.
 
 ### S5 — solo exercise
 
@@ -1710,3 +1713,3724 @@ measurement on a simulator.
   asks for exactly one complaining clause). Accepted.
 - The overlap clauses keep their ten tries. Accepted.
 - The orchestrator's full gate on the touch-up's tree exited 0. The tester's files are unchanged since `92eb79c`.
+
+## Slice S2 — orchestrator's brief (2026-10-05)
+
+S1 merged as #27 (`95b0837`). S2's specification is the brief's last section, "Plan amendments — slice S2". What it
+adds to the plan's S2 row, from S1's rounds:
+
+- The host prunes ended subscribers when a `yield` reports `.terminated`, as the fake does.
+- Recovery is started by the first protocol call if the launch step has not run.
+- The ending update is published after the save; the host's own stamp is never the caller's fault.
+- The contract's pair-by-pair overlap clauses are joined by a seeded script of calls made at once, checked as one
+  history (criterion 11), and the host is run against the contract over stores that suspend, several times over.
+- `update.haptics` is `[Haptic]`; exactly one subscriber plays them, on the workout side (decided in S6).
+- The fake has no scriptable failures yet: S2 tests a failing store through the real stores (a SQLite trigger) or
+  a store wrapper of its own in test support.
+
+## Slice S2 — host and start use case (G1 implementer, 2026-10-05)
+
+On `48403f5`, in the worktree `F10-s2`, on `feat/F10-s2-session-host`. Nothing is committed and no PR is open.
+Paths are under `LedgerKit/` unless they start with `docs/`, `tasks/` or `scripts/`. Scratch files are in
+`scratchpad/f10s2/` (written `f10s2/…` below).
+
+### The stop, and the ruling
+
+The first hand-back of this slice was a stop. One existing test failed because of the slice, in a tester's file
+under `Tests/*/Adversarial/`, which I may not edit: `LaunchAdversarialTests.randomPhases_matchTheModel` (F07's
+tester, 60 seeds), whose hand-written model of the iPhone launch had no `resumeWorkout` step. The plan's list of
+tests that break (this file, lines 358-364) names `LaunchOrderTests` and `DatabaseLaunchTests` only. The
+orchestrator ruled that the launch gaining a step is a change of specification, sanctioned one edit to that
+model, and asked for the slice to be finished. The edit is under "Sanctioned test edits".
+
+### What landed
+
+| File | Contents |
+|---|---|
+| `Sources/LedgerDomain/Engine/HybridLogicalClock.swift` (new) | `HybridLogicalClock`: `newest`, `observe(_:)`, `stamp(now:) -> Date?`, `tick` |
+| `Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift` (new) | `StartWorkoutUseCase`, its `Outcome`, `StartWorkoutError` |
+| `Sources/LedgerSync/LocalWorkoutSessionActor.swift` (new) | the host: state, the six protocol calls, the queue (`inTurn`), own actions, publishing |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` (new) | `resumeFromStore()`, `needsRecovery`, the recovery pass, completing an end, the misses |
+| `Sources/LedgerSync/LedgerSyncError.swift` (new) | `LedgerSyncError.noFiniteStamp` |
+| `Sources/LedgerPersistence/DatabaseLaunch.swift` | `LaunchStep.resumeWorkout` (`:14`); `run(_:retrying:_:)` (`:129`) |
+| `Sources/LedgerAppKit/AppComposition.swift` | builds the host when the database opens (`:44`), binds `workoutSession` (`:147`), runs the step (`:115-120`) |
+| `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` | doc comments only: what a failed save leaves (criterion 4) |
+| `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+ConcurrentScripts.swift`, `+ConcurrentHistory.swift` (new) | criterion 11: the seeded script of calls made at once, and its judge |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` (new) | `StoreProbe`, `ProbedStores`: stores that give way, wait, throw and record |
+| `Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+Model.swift` | `Model.init(standing:)`, three lines |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActor{,Clock,Contract,End,Miss,Performance,Recovery,Serial}Tests.swift`, `WorkoutSessionConcurrentScriptTests.swift`, `Support/HostSupport.swift` (new) | the host's suites: 61 test functions |
+| `Tests/LedgerDomainTests/Engine/HybridLogicalClockTests.swift`, `UseCases/StartWorkoutUseCaseTests.swift` (new) | 8 and 10 |
+| `Tests/LedgerPersistenceTests/DatabaseLaunchStepTests.swift` (new) | `run(_:retrying:_:)`, 3 |
+| `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift`, `WorkoutSessionWiringTests.swift` (new) | criteria 7 and 9: 5 and 6 |
+| `docs/architecture.md` §6, and one clause in §4 | the host, recovery, the use case |
+
+Outside the slice's list, and why:
+- `LedgerSyncError.swift`: standards §8, a module's own error, for the stamp.
+- `StoreProbe.swift`: the brief's "a store wrapper of its own in test support".
+- `…Contract+Model.swift`: the judge needs the rules from a given state.
+- `Tests/LedgerSyncTests/Support/Tags.swift`: `.performance` and `.slow`, for criterion 12's suite.
+- `docs/architecture.md` §4: its launch sentence would otherwise be stale.
+- `WorkoutSessionClient.swift`: criterion 4 asks for the documentation.
+
+Unchanged: `Package.swift`, `package-graph.expected.txt`, `project.pbxproj`, the test plans,
+`scripts/coverage-thresholds.json`, the watch app. `tasks/todo.md` is not written: the slice's file list excludes
+it and the orchestrator owns it across lanes.
+
+### Decisions and deviations
+
+`Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its `+Recovery.swift`.
+
+1. **Re-entrancy: a queue of tasks the actor owns** (`Actor:108-124`). `start`, `apply`, `finish`, `discard` and
+   recovery each call `inTurn`, which, before it suspends, takes the place after the operation queued last and
+   starts a `Task` that waits for that one and then runs.
+   - *No interleaving:* an operation starts only when the one before has ended, so none reads state another has
+     not committed.
+   - *No reordering:* the place is taken in the turn the call reaches the actor, so operations, and their
+     updates, run in arrival order.
+   - *No deadlock:* an operation waits only for the one before it and awaits only the stores. No operation calls a
+     method that queues: `begin`, `perform`, `end` (`Actor:162-227`), `recover` and `ready` (`Recovery:34-49`) are
+     the unqueued bodies.
+   - *No starvation:* first in, first out; nothing can overtake. A store that never returns stops the queue, as a
+     held database lock would.
+   - *Cancellation:* the task is the actor's, so a caller cancelled at any point still has its event stored, and
+     only waits (the plan's risk "A cancelled caller"). GRDB refuses a cancelled task's write, which
+     `cancelledCaller_isStoredInTheDatabase` shows on the real store.
+   - *Rejected:* a continuation-based gate with the work in the caller's task (mutant M2: a cancelled caller's
+     write throws, so a set ticked before Minimize is lost); `withTaskCancellationShield`, which would do it with
+     no unstructured task, but is iOS 27 / watchOS 27 only (Apple's documentation, checked today) and the minimum
+     is 26.
+   - `current()` and `updates()` (`Actor:70-87`) do not queue once recovery has run: decision 2 makes that safe.
+2. **`live` changes only in the actor turn that publishes the change** (`Actor:137-140`, `:174-175`,
+   `:208-209`; `Recovery:97-100`). A reader at any turn sees the last update's state, with no suspension between
+   a commit and its publication (clauses 22 to 24).
+3. **Criterion 4's open point: until a finished workout is stored, every reader still sees it as it stood.**
+   `current()` returns the workout as before the finish, open and new streams show it, and no update is published
+   (`ending`, `Actor:40-42`; `settle()`, `Recovery:124-130`).
+   - *Why, from what a screen needs:* (a) Today's Resume and the cover agree, so the lifter can go back in and
+     finish; (b) `start` answers `workoutInProgress`, so no second workout of the day can be started over one that
+     is not yet in history, which the other choice (`current()` nil) invites; (c) it is the rule the protocol
+     already has for a refused append: a call that throws changes nothing a reader can see.
+   - *What follows:* a second `finish` retries and returns the state ended at the first call's date
+     (`Actor:215-220`); `apply` and `discard` complete the pending end first (`Actor:186`), then throw
+     `noLiveWorkout`, or what the save throws; the launch step completes it on the next foreground and publishes
+     without a haptic (`Recovery:66-75`, `:106-112`).
+   - *After a relaunch* nothing is live while the save keeps failing (only the finished state can be rebuilt), so
+     another workout can start: `unsavedWorkout_afterARelaunch_leavesNothingLive`. Open question 2.
+   - Written on the protocol: `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, the type's doc and
+     `current`, `apply`, `finish`, `discard`, `incompleteLog`.
+4. **A log that cannot be dropped after the save is treated as a failed save** (`complete(_:)`,
+   `Recovery:138-150`): one rule, "an end is complete when its log is gone", for finish, discard, retries and
+   recovery. The cost: `finish` can throw although the workout is in history. Open question 3.
+5. **When an append throws, the next call reads the store before it acts** (`persist`, `Actor:247-254`;
+   `ready()`, `Recovery:44-49`). A store that refused leaves nothing changed; one that stored the envelope and
+   then threw is picked up, and streams get the corrected state without a haptic. GRDB rolls back on a throw, so
+   this is for a store that lies, not for M1's.
+6. **Recovery is one idempotent pass** (`reconcile()`, `Recovery:53-80`), used by the launch, by the first
+   protocol call when the launch has not run it, by the call after a failed append, and by the foreground retry.
+   - A store it cannot read throws and leaves the host knowing no more than before: calls throw until a pass reads
+     through, and a stream opened meanwhile starts with what is known and hears the workout a later pass resumes.
+   - A save that throws is collected, the other logs are dealt with, and the first failure is thrown at the end.
+   - Two live logs: the one that started last is resumed, the other kept, a fault logged (`Recovery:85-101`).
+7. **The clock and `seq`.** `HybridLogicalClock` is a value in the actor; `seq` is the highest stored for the live
+   workout from this device, in memory. An own action stamps a copy and keeps it only once the envelope is stored
+   (`Actor:164-174`, `:190-201`). Recovery observes `newestWallClock()` and reads `highestSeq`
+   (`Recovery:54-56`, `:95-96`). A system clock that steps back gives `newest + 1 ms`. One that is not finite
+   gives no stamp: the host logs a fault and throws `LedgerSyncError.noFiniteStamp` before `reduce`
+   (`Actor:232-243`), so never `notStartable` and never "ignored".
+   - **Deviation:** `stamp(now:)` returns `Date?`, not the plan's `Date`
+     (`Sources/LedgerDomain/Engine/HybridLogicalClock.swift:46`). The plan's type cannot say "no stamp", and
+     criterion 3 needs it said before `reduce`.
+8. **"Reports an issue" is a fault-level log and a typed throw; it is not `reportIssue`.** The orchestrator asked
+   for the mechanism the fakes use unless a standard forbids it.
+   - That mechanism is swift-issue-reporting's `reportIssue` (`Sources/LedgerFakes/InMemoryStores.swift:73`).
+     `LedgerFakes` links it by ADR-008's amendment (`docs/adr/ADR-008-ledger-fakes-module.md:69-72`), and all of
+     `LedgerFakes` is `#if DEBUG`.
+   - `LedgerSync` links `LedgerDomain` only (`package-graph.expected.txt`, "library LedgerSync: LedgerDomain").
+     Calling `reportIssue` from the host needs a new edge in `Package.swift`. **The rule is standards §2**
+     (`docs/engineering-standards.md:62-63`): "Adding a dependency edge in `Package.swift` that violates this
+     diagram requires an ADR." `scripts/check-package-graph.sh` fails the gate on it, and architecture §1 allows
+     product code two third-party dependencies, "nothing else without an ADR". So I kept the log.
+   - *What a test sees:* the typed error, asserted in six cases
+     (`Tests/LedgerSyncTests/LocalWorkoutSessionActorClockTests.swift:67`, `:87-93`: two tests, each for NaN, +∞
+     and −∞).
+   - *What a developer sees:* a fault in the log, as for every other "cannot happen" in product code
+     (`Sources/LedgerDependencies/Unimplemented/Unimplemented.swift:23-27`, `DatabaseLaunch.fail`).
+   - What `reportIssue` would add: a test that reaches it without expecting to fails by itself, and Xcode shows a
+     runtime issue in a Debug run. Open question 1 says what it costs.
+9. **`start` stamps seq 1** and does not ask the store (`Actor:165`). S1's open question 4 (a start with the id of
+   an ended workout) stays as the fake has it: accepted. Open question 4.
+10. **A log with rows this version cannot read:** `finish` is refused before anything is stored (`incompleteLog`,
+    the workout stays live; `Actor:196-199`); `discard` ends the workout and keeps the log; recovery keeps an ended
+    one (`Recovery:138-145`, `:113-115`). So the lifter is never stuck with a workout that can neither be finished
+    nor dropped.
+11. **Deviation: `needsRecovery` on the actor** (`Recovery:28-30`), beyond the plan's signature. The composition
+    retries the step on a foreground only while it is true (`Sources/LedgerAppKit/AppComposition.swift:116-117`).
+    That is how a finish whose save failed is retried by the launch (criterion 4) while
+    `LaunchOrderTests.resume_again_runsNothingTwice` still holds. Mutants M13 and M17 pin both halves.
+12. **Deviation: `AppComposition.database` is a `lazy var`** (`AppComposition.swift:25-33`), so that `onOpen` can
+    hand the stores back to the composition (`opened`, `:44-55`); `self` cannot be captured in `init` before
+    `database` exists. `DatabaseLaunchTests.Subject` already builds its launch this way. The import of
+    `LedgerSync` is no longer conditional (`:12`): the module exists on every platform.
+13. **Deviation: the use case reads `exercise(id:)` per slot**, not the plan's `all()`
+    (`Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift:102-108`): it needs the day's exercises, not the
+    catalog. It builds the session before it discards a live workout (`:92-95`), so a build that fails leaves that
+    workout alone. A live workout of the same source is resumed whatever `replacingLive` says (`:85-87`).
+14. **Misses** (`slotUpdates`, `Recovery:155-173`) use `workout.isDeload` (what the lifter was prescribed), the
+    slot as stored now, and nothing when the active program is not the workout's or the workout is ad hoc. The id
+    check is the ruling's rule (O9); real stores already keep a slot in one program, so only a stand-in store can
+    tell the difference (`finish_judgesTheProgramByItsID`, mutant M11).
+15. **The effects are not run by a loop over `[Effect]`.** `perform` runs them in the engine's order as
+    straight-line code: `.persist`, then the end (`.materialize` or `.discardLog`), then the haptics with the
+    update (`Actor:178-211`). An end is completed from the state's phase, as recovery and a retry must do anyway
+    (they have a state, not effects), so there is one way to complete an end, not two. The list still decides what
+    it alone knows: whether the event was ignored, and the haptics. S6 adds the notification cases.
+
+### Criteria → tests
+
+| # | Tests |
+|---|---|
+| 1 | `LocalWorkoutSessionActorContractTests`: `host_keepsTheClause` (24 clauses × 6 set-ups: in-memory, GRDB, suspending; recovered at launch or not), `violations_ofTheHost_areNone` (× 6), `sessionScripts_fakeAndActorPublishTheSame` (200 seeds × 6) |
+| 2 | `LocalWorkoutSessionActorTests`: `apply_assignsNextSeq`, `apply_storesBeforePublishing`, `apply_ignoredEvent_storesNothing`, `apply_storeRefuses_changesNothing`, `start_storeRefuses_startsNothing`, `append_lostAcknowledgement_isRecovered`, `start_afterAnEnd_startsItsSeqAtOne` |
+| 3 | `LocalWorkoutSessionActorClockTests`: `stamps_surviveAStepBack`, `relaunch_continuesTheClock` (× 2), `start_clockNotFinite_isTheHostsFault` (× 3), `apply_clockNotFinite_isTheHostsFault` (× 3), `recovery_skipsNonFiniteStamps`; `HybridLogicalClockTests` (8) |
+| 4 | `LocalWorkoutSessionActorEndTests`: `finish_storesThenSavesThenDrops`, `finish_publishesAfterTheSave` (× 2), `endingUpdate_arrivesAfterTheStoreIsDone`, `finish_saveFails_secondFinishRetries`, `finish_compactFails_waitsAndRetries`, `pendingEnd_isCompletedBeforeAnyChange`, `pendingEnd_isCompletedByTheLaunchStep`, `finish_storeRefusesTheEnd_nothingEnds`, `finish_lostAcknowledgement_isCompletedFromTheStore`, `finish_incompleteLog_staysLive`; `LocalWorkoutSessionActorMissTests` (6) |
+| 5 | `LocalWorkoutSessionActorEndTests`: `discard_dropsTheLog`, `discard_compactFails_secondDiscardCompletes` |
+| 6 | `LocalWorkoutSessionActorRecoveryTests` (13: one per row of the table, twice, two live logs, each read failing, a stream opened meanwhile); `LocalWorkoutSessionActorSerialTests`: `callsDuringRecovery_waitForIt`, `firstProtocolCall_startsRecovery` (× 4); `WorkoutSessionWiringTests.cancelledCaller_neverCancelsTheStep`; `DatabaseLaunchStepTests.run_cancelledCaller_neverCancelsTheStep` |
+| 7 | `WorkoutRelaunchTests`: `killedAfterTheStart_resumes`, `killedMidWorkout_resumesTheSameState`, `killedBeforeTheSave_isSavedAtLaunch`, `killedBeforeTheDrop_isSavedAgainUnchanged`, `killedAfterTheDiscard_dropsTheLog`: a real file, a second composition booted on it, the workout started through `StartWorkoutUseCase` |
+| 8 | `StartWorkoutUseCaseTests` (10) |
+| 9 | `WorkoutSessionWiringTests` (6); `DatabaseLaunchStepTests` (3); `LaunchOrderTests.launch_runsTheStepsInOrder`; `DatabaseLaunchTests.steps_inOrder` |
+| 10 | `LocalWorkoutSessionActorTests`: `effects_forwardHapticsOnly`, `endedStreams_disturbNoOne`; the contract's clause 17 |
+| 11 | `WorkoutSessionConcurrentScriptTests`: `fake_isOneHistory` (200 seeds), `host_isOneHistory` (200 × 6), `noFault_isOneHistory`, `overlapFault_breaksAScript` (9 faults), `script_dependsOnItsSeedAlone`, `scripts_holdEveryKindOfAction` |
+| 12 | `LocalWorkoutSessionActorPerformanceTests.apply_withItsAppend_isUnderBudget`, nightly lane only, as `ReplayPerformanceTests` is |
+
+Also: `LocalWorkoutSessionActorSerialTests`: `laterCallers_startFromWhatTheFirstStored`, `cancelledCaller_stillStores`,
+`cancelledCaller_isStoredInTheDatabase`, `cancelledCaller_keepsItsTurn` (the design point on re-entrancy).
+
+### The failure table
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event (`apply_storeRefuses_changesNothing`, `start_storeRefuses_startsNothing`, `finish_storeRefusesTheEnd_nothingEnds`) | unchanged; marked unrecovered | GRDB: nothing (rolled back) | the store's error | nothing | reads the store first; the same `seq` and stamp when nothing was stored | replay |
+| append that stored and then threw (`append_lostAcknowledgement_isRecovered`, `finish_lostAcknowledgement_…`) | unchanged; marked unrecovered | the envelope | the store's error | nothing, until the next call | the next call adopts what is stored and publishes it without a haptic; an end is completed | replay |
+| the clock is not finite (`…ClockTests`) | unchanged | nothing | `noFiniteStamp`, a fault logged | nothing | works once the clock reads a time | — |
+| `materialize`, after `.finished` is stored (`finish_saveFails_secondFinishRetries`, `pendingEnd_…`) | `live` as before the finish; the end pending; clock and `seq` advanced | the log with its `finished`; no history row | the store's error | nothing; `current()` still the workout | `finish`: saves, compacts, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| `compact`, after the save (`finish_compactFails_waitsAndRetries`) | the same | the log, and the history row | the store's error | nothing | saves again (no change), compacts, publishes once | saved again unchanged, compacted (`killedBeforeTheDrop_…`) |
+| `compact`, after `.discarded` (`discard_compactFails_secondDiscardCompletes`) | the same, a discard pending | the log | the store's error | nothing | `discard`: compacts, publishes. `finish`: completes it, then `noLiveWorkout` | compacted |
+| a read during recovery (`storeUnreadable_theNextCallRetries` × 4) | as before the pass | untouched | the store's error, from every call | a stream starts with what is known | the next call or foreground runs the pass again | — |
+| a save during recovery (`saveThatThrows_keepsItsLog_andCarriesOn`) | the other logs dealt with; the live one resumed | that log kept | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+### Sanctioned test edits (for the tester's and the reviewer's audit)
+
+**`Tests/LedgerAppKitTests/Adversarial/LaunchAdversarialTests.swift`** (F07's tester). Ten lines added, none
+removed or changed (`git diff --numstat`: `10 0`). Line numbers are the file's now.
+
+| Lines | Edit |
+|---|---|
+| 98-99 | in `Model`, after `var hasLoadedSettings = false`: a doc comment naming this ruling, and `var hasResumedWorkout = false` |
+| 139-142 | in `Model.resume(_:)`, inside `if isOpen { … }`, after the settings block: a four-line comment saying what follows and why the step never fails here |
+| 143-146 | `if !hasResumedWorkout { log.append("began resumeWorkout"); hasResumedWorkout = true }` |
+
+What the model now says of the step:
+- *Its place:* after `loadSettings`, before `activateCompanionSession`, as `AppComposition.resume(in:)` runs it.
+- *When it runs:* in the first `resume` that finds the database open, whatever the phase. For a database that
+  failed to open at boot, that is the foreground call that opens it, which is the only call that can.
+- *Done or failed:* it begins once and succeeds. Neither fault the test injects reaches it (a file that is not a
+  database; a trigger on `exercise`): it only reads an empty event log.
+- *Retried:* never here, because a step that succeeded has no work left (`needsRecovery` is false).
+
+No second change was needed. The test's assertions, seeds, faults, `spelled` and every other test in the file are
+as they were. The step's failure and its retry need a fault this test does not inject; they are in
+`WorkoutSessionWiringTests` (`stepFailure_isRecorded_andRetriedInTheForeground`,
+`failedFinish_isRetriedOnTheNextForeground`). All 60 seeds pass. Mutant M17, which retries the step on every
+foreground, fails this test among others, so the model does constrain the step.
+
+The two pinned step lists, as the brief told me to update:
+
+| File | Lines | Edit |
+|---|---|---|
+| `Tests/LedgerAppKitTests/LaunchOrderTests.swift` | 34, 38-41 | `.event(.began(.resumeWorkout))` between the settings and the companion session; `.resumeWorkout` in `LaunchStep.allCases` |
+| `Tests/LedgerPersistenceTests/DatabaseLaunchTests.swift` | 114-117 | `.resumeWorkout` in `LaunchStep.allCases` |
+
+No other existing test file is edited. `git status --short | grep Adversarial` prints that one file.
+`Tests/LedgerSyncTests/Support/Tags.swift` gains two tags and is not a test.
+
+### Code lines
+
+`f10s2/count-lines.py` (S1's, with this base): added lines of `git diff -U0 48403f5`, new files whole, blank and
+whole-line comment lines excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `Sources/LedgerSync/LocalWorkoutSessionActor.swift` | 170 | 0 |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | 123 | 0 |
+| `Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift` | 85 | 0 |
+| `Sources/LedgerAppKit/AppComposition.swift` | 31 | 17 |
+| `Sources/LedgerDomain/Engine/HybridLogicalClock.swift` | 24 | 0 |
+| `Sources/LedgerPersistence/DatabaseLaunch.swift` | 12 | 1 |
+| `Sources/LedgerSync/LedgerSyncError.swift` | 3 | 0 |
+| `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift` | 0 | 0 |
+| **Product** (plan: about 390; stop at about 550) | **448** | 18 |
+| `LedgerTestSupport` (4 files) | 423 | 0 |
+| Tests (20 files) | 1,934 | 2 |
+
+Product is 15 % over the estimate, mostly recovery and the pending end. Nothing was compressed to fit; the actor's
+own actions are a `private extension` in the same file because of the 150-line type limit.
+
+### The repeated contract runs
+
+`f10s2/stress.py`: `swift test --skip-build --filter 'LocalWorkoutSessionActorContractTests|WorkoutSessionConcurrentScriptTests|LocalWorkoutSessionActorSerialTests'`,
+each run a process of its own. One run is 144 clause cases, 6 `violations` passes of 24 clauses, 1,200 sequential
+scripts and 1,200 concurrent scripts on the host (a third of each over the stores that give way inside every
+call), 200 concurrent scripts on the fake, and the serial suite. Load average between 3 and 6.
+
+| Pool | Runs | Green | Time |
+|---|--:|--:|--:|
+| default | 60 | **60** | 674 s |
+| one thread (`LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`) | 60 | **60** | 1,462 s |
+
+So 8,640 clause cases, 72,000 sequential and 72,000 concurrent scripts on the host per pool, none failing.
+The host's sources did not change after these runs (the mutants below were each put back and compared byte for
+byte); three tests were added afterwards and are in the gate's run, not in these.
+
+It stays a measurement on one Mac. What makes it more than that is mutant M1: the same suites fail at once on a
+host without the queue.
+
+### Criterion 11: the script, and the faults that break it
+
+`WorkoutSessionClientContract.concurrentScriptViolation(seed:on:)` uses the protocol alone. A script is an
+optional opening start, six tasks of six actions run at once (starts, adds, repeats, rests, finishes, discards,
+streams opened in flight, calls that must be refused or ignored), and a subscriber on a stream opened first that,
+on the update telling it of a workout, reads `current()` and logs a set. It is judged as one history
+(`…Contract+ConcurrentHistory.swift`): the five rules of the brief, each a function there.
+
+How many of the twenty fixed seeds report each fault of `FaultyWorkoutSession`, measured with a throwaway test
+(added, run, deleted; `f10s2/faultcounts-*.log`):
+
+| Fault that needs two calls inside the client | Default pool | One thread |
+|---|--:|--:|
+| `losesAnEditBetweenCallers`, `endsTwiceAtOnce`, `appliesAfterTheEnd`, `registersAfterASuspension`, `publishesTheStartLate`, `commitsTheStartLate` | 20 each | 20 each |
+| `startsTwiceAtOnce` | 19 | 19 |
+| `dropsHapticsUnderOverlap` | 10 | 7 |
+| `judgesAnIgnoredEndLater` | 6 | 8 |
+
+All nine are reported on both pools. `overlapFault_breaksAScript` asks for one seed in twenty.
+
+Of the 22 faults that need no overlap, the concurrent script reports 16 by a violation and 2 by throwing from
+its last change (`keepsTheEndedWorkoutCurrent`, `refusesAStartAfterAnEnd`; the sequential script's `markEnd`
+throws the same way). It never reports four, by construction: `cancellationEndsEveryStream` (no subscriber is
+cancelled), `judgesSnapshotsByPhaseAlone` (its refused snapshot is a finished one), `movesTheEndThroughApply` and
+`terminalThroughApplyStaysLive` (it ends workouts by `finish` and `discard` only). The clauses and the sequential
+scripts cover those. Open question 6.
+
+### Mutants
+
+`f10s2/mutants.py`, logs `mutants1.log` and `mutants2.log`: each applied alone to the source, the suites run, the
+file put back and compared byte for byte. **17 of 17 fail at least one test.**
+
+| Mutant | Failing tests (first) |
+|---|---|
+| M1 `inTurn` runs the operation at once, no queue | `host_keepsTheClause`, `violations_ofTheHost_areNone`, `host_isOneHistory`, `laterCallers_…`, `cancelledCaller_keepsItsTurn` |
+| M2 the operation runs in the caller's task (queued, cancellable) | `cancelledCaller_isStoredInTheDatabase`, `cancelledCaller_keepsItsTurn` |
+| M3 an event is published before it is stored | `apply_storesBeforePublishing`, `apply_storeRefuses_changesNothing`, 2 more |
+| M4 clock and `seq` kept although the append was refused | `apply_storeRefuses_changesNothing` |
+| M5 the ending update is published before the save | `finish_publishesAfterTheSave`, `finish_saveFails_…`, `host_isOneHistory`, 4 more |
+| M6 a save that fails leaves no workout current | `finish_saveFails_…`, `pendingEnd_…` (2), 4 more |
+| M7 recovery does not restore the clock | `relaunch_continuesTheClock`, `recovery_skipsNonFiniteStamps`, `liveLog_isResumed` |
+| M8 recovery does not restore `seq` | `liveLog_isResumed`, `firstProtocolCall_startsRecovery`, 4 more |
+| M9 the stamp is the raw system clock | `stamps_surviveAStepBack`, `HybridLogicalClockTests` (3), 7 more |
+| M10 an incomplete log is completed | `finish_incompleteLog_staysLive`, `unreadableRows_resumeOrKeep` |
+| M11 misses written whatever program is active | `finish_judgesTheProgramByItsID` |
+| M12 a failed append is trusted to have stored nothing | `append_lostAcknowledgement_isRecovered`, `finish_lostAcknowledgement_…` |
+| M13 the host never says it has work left | `failedFinish_isRetriedOnTheNextForeground`, `stepFailure_…`, 4 more |
+| M14 the launch runs the step in the caller's task | `run_cancelledCaller_neverCancelsTheStep` |
+| M15 a start is not judged against the session | `host_keepsTheClause`, `sessionScripts_…`, `host_isOneHistory`, 4 more |
+| M16 recovery drops a log that replays to nothing | `logWithoutAStart_isKept`, `unreadableRows_resumeOrKeep` |
+| M17 the composition retries the step on every foreground | `resume_again_runsNothingTwice`, `randomPhases_matchTheModel`, 3 more |
+
+Two findings of the first round, both fixed with a test:
+- **M11 survived.** With real stores a slot belongs to one program, so "the active program is the workout's" and
+  "the active program holds the workout's slots" cannot differ, and no test could tell. I kept the check (it is
+  the ruling's rule, O9, and does not lean on another module's invariant) and added
+  `finish_judgesTheProgramByItsID`, over a stand-in program store.
+- **M2 was caught for a weak reason** (a cancelled `for await`). The in-memory stores ignore cancellation, so
+  `cancelledCaller_stillStores` could not see it. `cancelledCaller_isStoredInTheDatabase` runs the same on GRDB,
+  whose async write throws in a cancelled task.
+
+### Gate and coverage
+
+**Full gate.** `/usr/bin/python3 <sim-lock> scripts/check.sh` from the worktree root, in the background, the
+shell appending the status to `f10s2/gate2.log`. Started 05:25:59, waited 460 s for the lock (F08's gate), then
+**`check.sh OK`, `GATE_EXIT=0`, 725 s**: lint 62 s, iOS build 24 s, iOS tests 323 s, watchOS build 27 s, watchOS
+tests 287 s, coverage 2 s. 17 test targets ran and passed (PR), 8 (PR-Watch). iOS: 1,822 tests, 1,800 passed, 0
+failed, 13 skipped, 9 expected failures; watchOS: 1,630, 1,612 passed, 0 failed, 13 skipped, 5 expected failures.
+Against S1's last gate that is one more skipped on each (this slice's timing suite, nightly only) and the same
+expected failures. 8.4 GB were free before it, 8.2 GB after.
+
+**It is the final tree.** Only this notes file changed after it started. The iOS result bundle holds this
+slice's suites, all passed: the contract on the host (1,350 cases), the concurrent scripts (1,412), kill and
+relaunch (5), the wiring (8 cases), `Adversarial F07 S2 · iPhone launch` with its 60 seeds, `Launch order`, and
+the rest of the table under "Criteria → tests"; the timing suite is skipped there, as intended. The watchOS
+bundle holds `LedgerSyncTests` and `LedgerDomainTests` too: the host's suites passed on the watch simulator.
+
+**An earlier run, on a tree I then changed** (`f10s2/gate1.log`): started 05:07:09, 240 s for the lock,
+`check.sh OK`, `GATE_EXIT=0`, 739 s, the build cold. Its build output showed five compiler warnings in a test
+file of mine ("no calls to throwing functions occur within 'try'", `StartWorkoutUseCaseTests`), which I had missed
+on the host because I searched my build logs for errors only. I removed the five `try`, recompiled every file I
+touched on the host (the one warning left is `PayloadVersionAdversarialTests.swift:29`, as before the slice), and
+ran the gate again. The coverage is the same in both.
+
+| Module | Lines | Coverage | Threshold | |
+|---|--:|--:|--:|:-:|
+| LedgerDependencies | 228 / 237 | 96.20 % | 90 % | ✓ |
+| LedgerDesign | 2113 / 2175 | 97.14 % | 60 % | ✓ |
+| LedgerDomain | 2122 / 2140 | 99.15 % | 95 % | ✓ |
+| LedgerFakes | 1415 / 1428 | 99.08 % | 90 % | ✓ |
+| LedgerHealth | 47 / 48 | 97.91 % | 80 % | ✓ |
+| LedgerPersistence | 2498 / 2516 | 99.28 % | 90 % | ✓ |
+| LedgerSync | 338 / 341 | 99.12 % | 90 % | ✓ |
+| Overall | 8761 / 8885 | 98.60 % | 80 % | ✓ |
+
+Per file, in the iOS bundle (`xccov`): `LocalWorkoutSessionActor.swift` 155 / 155, `+Recovery.swift` 152 / 152,
+`HybridLogicalClock.swift` 22 / 22, `StartWorkoutUseCase.swift` 57 / 57, `WorkoutSessionClient.swift` 21 / 21.
+`LedgerSync`'s three uncovered lines are `CompanionSessionActivator.swift`'s, as before (31 / 34). The lines not
+covered in `LedgerDomain` and `LedgerPersistence` are 18 each, as at S1's gate, so every line this slice added to
+them is covered. `AppComposition.swift` is 134 / 135 (`LedgerAppKit` is not gated).
+
+**Warnings.** None in this slice's files. The cold build printed the three it printed before the slice
+(`PayloadVersionAdversarialTests.swift:29`, a `@Test` expansion beside it, `LedgerDesignTests/PreviewTests.swift:90`),
+with xcbeautify's "exit code 0 but produced no further output" lines beside them.
+
+**Format and lint**, on the final tree: `swiftformat --lint` 0 of 635 files, exit 0; `swiftlint --strict` exit 0;
+no new suppression. The gate runs both again.
+
+**Host**, on the final tree (`f10s2/host4.log`): `LedgerDomainTests` 814 tests, `LedgerPersistenceTests` 452,
+`LedgerSyncTests` 147, `LedgerDependenciesTests` 63, `LedgerAppKitTests` 49, `LedgerWatchAppKitTests` 35, all
+passed, exit 0. Every S1 test passes unedited; the tester's files are untouched but for the sanctioned ten lines.
+
+**Release build.** `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`:
+**exit 0**, 50 s, no warning (`f10s2/release1.log`). No Release object names `FakeWorkoutSessionClient`,
+`InMemoryStores`, `InMemoryWorkoutEventStore`, `SplitMix64`, `FakeLinkBus` or `Fixtures` (0 symbols each; Debug:
+740, 539, 241, 125, 1139, 2638), and `Release/LedgerFakes.o` is 1,176 bytes with one symbol, as at S1. The host,
+the clock and the use case are in it (818, 119 and 186 symbols). Only test files changed after this build.
+
+**Criterion 12, by hand on the host:** `LEDGER_TEST_LANE=nightly swift test … --filter
+LocalWorkoutSessionActorPerformanceTests`: passed; 20 applies on a real file, on a log of 200 events: 95th
+percentile 98 µs, median 74 µs, against 30 ms (`f10s2/attachments/session-apply.txt`).
+
+**Tree.** `git status --short` shows the files under "What landed", the sanctioned edit and this file, and nothing
+else; HEAD is `48403f5`; nothing is staged or committed.
+
+**Shared state, as the orchestrator asked.** Nothing odd. The lock was held by F08's gates each time I looked
+(05:07 and 05:26), by live processes a few minutes old, and was released to mine both times; at 04:12 its file
+was empty. Of the `swift-test` processes I saw that were not mine, the one at 02:40 ran in the `F09-s1` worktree
+(its working directory); the two at 04:12 and 05:07 filtered other lanes' suites (`FeatureOnboardingTests`,
+`LoadableAdv…`) and were seconds old. I left all three. No test helper of this worktree is running.
+
+**Housekeeping.** Builds of mine that failed to compile left `*.cstemp` files in this worktree's
+`LedgerKit/.build`, which then failed code signing; I deleted them each time. Before the second gate 6.6 GB were
+free, under the 8 GB line, so I deleted this worktree's `LedgerKit/.build` (2.3 GB, ignored build output of
+mine); the host commands above therefore start with a cold build. `swiftformat` was run over the files I touched
+only.
+
+### How to verify by hand
+
+From the worktree root:
+
+1. The host: `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter LedgerSyncTests`.
+   Expect 147 tests in 25 suites, with 13 known issues (S1's, on purpose); the timing suite is skipped outside
+   the nightly lane.
+2. Kill and relaunch, the wiring and the launch: `--filter 'WorkoutRelaunchTests|WorkoutSessionWiringTests|LaunchOrderTests|LaunchAdversarialTests|DatabaseLaunch'`.
+3. The contract biting on the host: in `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, replace the body of
+   `inTurn` (`:117-123`) by `return try await operation()` and run step 1. `host_keepsTheClause` fails, among
+   others. Undo it. (`python3 f10s2/mutants.py M1` does this and puts the file back.)
+4. Many times over: `python3 f10s2/stress.py 60 '<the filter above>'`, then the same with
+   `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` as a last argument.
+5. Criterion 12 on the host: `LEDGER_TEST_LANE=nightly swift test … --filter LocalWorkoutSessionActorPerformanceTests --attachments-path <folder>`.
+6. Release: `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file`, then,
+   in `.build/out`,
+   `find Intermediates.noindex/LedgerKit.build/Release Products/Release -name '*.o' -print0 | xargs -0 nm 2>/dev/null | grep -v ':$' | grep -c FakeWorkoutSessionClient`
+   prints 0.
+7. The gate: `/usr/bin/python3 <sim-lock> scripts/check.sh`.
+
+### Open questions
+
+1. **`reportIssue` for the stamp** (decision 8). It needs `IssueReporting` on the `LedgerSync` target (one line in
+   `Package.swift`, one in `package-graph.expected.txt`), an amendment like ADR-008's, `import IssueReporting`
+   and one call beside the log; the six clock cases then expect the issue (`withKnownIssue`). The library is
+   already linked through Dependencies. Recommendation: do it as a follow-up once the amendment is agreed; I did
+   not add a dependency edge to a product module on my own.
+2. **After a relaunch a workout that still cannot be saved leaves the slot free**, so the same day can be started
+   again. Recommendation: accept for M1 (it needs a save that fails across a relaunch); S7's copy already says the
+   app will try again.
+3. **`finish` throws when only the compaction failed**, though the workout is in history. Recommendation: keep the
+   one rule. The alternative announces the end and leaves a finished log that a later launch saves again, over any
+   edit made in History meanwhile (F17 "Inputs from F05", S3).
+4. **A start with the id of a workout already in history** would overwrite it at finish. Recommendation: leave; the
+   use case always makes a new id. F17 should decide before a peer can start a workout.
+5. **A pending end that the launch step completes while another workout is live** (only after a relaunch) is saved
+   without an update, because an ended update for another workout would hide Resume. Today then learns of it at
+   its next history read. Recommendation: F09 re-reads history on a return to the foreground.
+6. **The concurrent script ends workouts by `finish` and `discard` only**, and cancels no subscriber. Adding
+   terminal events through `apply` and a live but malformed snapshot is about six lines in its writer.
+   Recommendation: leave to the tester, whose brief is further overlap shapes.
+7. **Criterion 12 is measured on the host only.** Recommendation: read the first nightly run's
+   `session-apply.txt`; the budget is 300 times the host's figure.
+
+### Inputs for S3 and S4, and for F09 S6
+
+Corrected in place in fix round 1 (2026-10-05), as S1's inputs were: S3's transaction (review SF5), S4's replace
+and its Debug row, what a waiting end means for callers (SF2), S7's two open questions and F17's list are new, and
+the line numbers are that round's. `Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its
+`+Recovery.swift`, `Protocol` `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`.
+
+- **S3:** `materialize` is called from one place, `complete(_:)` (`Recovery:142-154`), for a finish, its retries
+  and recovery, so `programUpdates` applied there reach all three. A second materialise of the same workout must
+  still change nothing: `killedBeforeTheDrop_isSavedAgainUnchanged` compares every row of six tables.
+  **Drop the workout's log inside `materialize`'s transaction** (SF5, the orchestrator's ruling): a parameter on
+  `materialize`, a contract clause, the fake following. "Saved but not compacted" then cannot exist over GRDB:
+  `finish` no longer throws for a workout that is already in history, `complete(_:)` no longer compacts after a
+  save (`Recovery:150-153`), and the failure table's row "`compact` after the save" is left for stores that are
+  not one database. The tests of that row (`killedBeforeTheDrop_…` among them) then need such a store, or go.
+- **S4:** build `StartWorkoutUseCase` from the keys (`workoutSession`, the four stores, `deviceID`, `date`,
+  `uuid`). `.conflict(live:)`, then `start(_:replacingLive: true)`. A workout that ended between the two is no
+  longer an error: the new one starts (F10-S2-2). A cancelled `.task` loses no tapped event. When `finish`
+  throws, the workout is still current: show the failure over the screen as it is, and "Try again" is `finish`
+  again. `emptyDay`, `programNotActive` and the builder's `weekOutOfRange` need a state each.
+  **The Debug "Start sample workout" row (O15) makes a new workout id for every start.** With a fixed fixture id
+  the second finish throws `duplicateIdentifier` every time, which is the third consequence below, and a start
+  under an id whose log was kept now continues that log (F10-S2-4) and shows what it replays to.
+  The start itself is fast: 9 ms at the 95th percentile over 20,000 sets on the Mac host (fix round 1, N7), so
+  the cover's loading state is for a slow disk, not for the usual case. Not measured on a phone.
+- **A waiting end, for S4, S7 and F09 S6** (written on `finish`, `Protocol:69-89`). Between a save that failed and
+  its completion, `current()` and every stream show the workout as it stood, with a phase of `.live`. Nothing
+  tells a reader that its end is stored. Three things follow:
+  1. **A `discard` then completes the save.** It saves the waiting finish and throws `noLiveWorkout`; so does an
+     `apply`. A lifter who answers a failed save with "Discard" gets the workout in history.
+  2. **`StartWorkoutUseCase` resumes it or reports a conflict on it,** as for any live workout. For the same day
+     it answers `.resumed`, and the cover opens a workout that accepts no change. For another day it answers
+     `.conflict`; replacing it then saves it and starts the new one, or throws the store's error and starts
+     nothing.
+  3. **A save that can never succeed leaves no exit in this process.** `finish`, `apply` and `discard` throw the
+     store's error each time, `start` answers `workoutInProgress`, and every return to the foreground runs the
+     failing step again and logs a fault. Only a relaunch frees the workout's place. The tester's
+     `HostUnsavableAdversarialTests` pin this (F10-S2-1); M1's screens cannot produce such a workout as long as
+     every start makes a new id.
+- **S6:** the notification effects go where `perform` commits (`Actor:215-225`) and in `conclude`; recovery runs
+  none, so decide whether a resumed rest reschedules its notification. `EndEffectsTests` (LedgerDomainTests) pins
+  what the host relies on when it completes an end from the state's phase: `.materialize(state)` for the finish,
+  `.discardLog` for the discard, neither for any other envelope. It fails if S6's effects change that.
+- **S7:** "Try again" after a failed save is `finish` again, and it keeps the first call's end date. **Two
+  questions are open and are not decided in S2** (the orchestrator's ruling after G2 and G3):
+  1. whether a lifter may abandon a workout that cannot be saved: Pete's to decide;
+  2. how a reader is told that an end is waiting: the orchestrator's, with an ADR-004 paragraph before F17 is
+     planned. ADR-004 is not changed in this slice.
+
+  **When the fake gains a scriptable save failure, the rules of a waiting end become contract clauses:** the
+  three consequences above, "the first save that succeeds publishes the one ending update", "a retried `finish`
+  returns the state ended when the first call said", and "after a relaunch the unsaved workout is not shown".
+  Today only the host's own tests and the tester's hold them (`LocalWorkoutSessionActorEndTests`,
+  `HostEndFailureAdversarialTests`, `HostUnsavableAdversarialTests`), because the fake cannot fail a save.
+- **F09 S6:** the stream's first element arrives only after recovery, so read history when it arrives, not before:
+  a launch that saves a workout the app was killed in publishes nothing, because no stream was open. Re-read
+  history whenever an update's state is not live, the first element included. Until a finished workout is stored
+  Today still shows Resume; that is intended, and it includes a workout whose save failed: Resume then opens a
+  workout that accepts no change (consequence 2), until S7 decides the two questions. `workoutSession` is now the
+  host in the app, not the stub.
+- **F17:**
+  - `discard(endedAt:)` names no workout (S1's protocol), so `StartWorkoutUseCase` discards whatever is live at
+    that moment, not the workout the lifter agreed to replace (review N8). One phone cannot put an end and a
+    start by another caller in between; a peer can.
+  - `start` continues a kept log from this device's highest `seq` (`Actor:173`). A kept log that holds only a
+    peer's envelopes has none, so the start takes `seq` 1 and the host then shows what the whole log replays to.
+    If that log already holds an end the engine accepts after the new `started`, the start returns, the pass
+    completes that end, and nothing is live. Only damage plus a reused id reaches this today; untested.
+  - `seq + 1` traps at `UInt64.max` (`Actor:175`, `:206`). No device writes that many events; a peer's envelope
+    cannot raise this device's `seq`, which is read per device.
+  - An operation added to the host's queue must not call a method that queues: `inTurn` now asserts it in Debug
+    (`Actor:122`), which stops the test instead of the host.
+  - When memory shows a workout and the store holds no log that replays to it, recovery logs a fault and leaves
+    the workout shown (`Recovery:90-93`, review N3). What the host should do then is not decided.
+
+### Not verified
+
+- **Criterion 12 on a simulator or a device.** The timing suite is skipped in the PR lane and I did not run the
+  nightly plan; the 98 µs is a Mac's.
+- **The repeated runs on a simulator.** Sixty runs per pool are the host's; each gate ran the contract once on
+  the iOS simulator and once on the watch's.
+- **Anything on a device,** and the app launched by hand. No screen reads the host yet. The gate's UI smoke
+  tests passed; they launch the app through this `AppComposition`, but assert nothing about the host or the step.
+- **A kill by the system.** The five kill points drop a composition and boot another on the same file, with the
+  step that "died" refused by a SQLite trigger. No process was killed.
+- **`reportIssue`:** not adopted (decision 8, open question 1), so nothing shows that a test reaching the fault
+  by accident fails by itself.
+- The three tests added after the repeated runs have each passed on the host and in both gates, not sixty times.
+
+### S2 — orchestrator rulings after G1 (2026-10-05)
+
+- The edit to F07's tester model (`LaunchAdversarialTests`, ten lines: the `resumeWorkout` step) is the sanctioned
+  one; S2's tester and reviewer audit it.
+- **Decision 8 accepted:** the host's "cannot stamp a finite time" is a typed throw and a fault-level log. No new
+  dependency edge for `reportIssue` (standards §2 puts one behind an ADR, and this does not earn it).
+- 448 product lines against a plan of 390: under the 500 target; nothing to declare.
+- The other deviations (the task queue the actor owns; what readers see between a failed save and its retry;
+  `stamp(now:)` optional; `needsRecovery`; the lazy database; `exercise(id:)`; straight-line effects) go to the
+  reviewer and the tester to judge.
+- The orchestrator's full gate on the tree exited 0 before this entry was written.
+
+### S2 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 10 nits; it found no way to lose, duplicate or corrupt a workout over the
+GRDB stores, and judged that the actor-owned task queue fits standards §4 as written (F07 S2's precedent). G2 round
+1: 128 tests, no way found to lose or double a workout; four findings, five tests failing on purpose.
+
+For fix round 1:
+- **SF1 accepted:** the protocol's and architecture §6's wording is corrected as the review writes it.
+- **SF2, documented now, decided before S7.** Between a failed save and its completion the workout is shown as it
+  stood, and three consequences are written on `finish`'s documentation and in the inputs for S4, S7 and F09 S6:
+  a `discard` then completes the save; `StartWorkoutUseCase` resumes or reports a conflict on it; and a save that
+  can never succeed leaves no exit in this process. The behaviour does not change in S2 (nothing is lost, and no
+  path through M1's screens produces a workout the store refuses). Two questions stay open and are recorded as
+  inputs for S7: whether a lifter may abandon a workout that cannot be saved (Pete), and how a reader is told that
+  an end is waiting (the orchestrator, with an ADR-004 paragraph before F17 is planned; an ADR change is Pete's to
+  review, so it is not made in this slice). The tester's two pinning tests for F10-S2-1 stay as they are.
+- **SF3 accepted** (no polling loop in the wiring test).
+- **SF4 and F10-S2-3 accepted:** the concurrent script's judge accepts `noLiveWorkout` only where the history allows
+  it, and the acting subscriber's stream is read to the end.
+- **SF5 goes to S3:** the log is dropped inside `materialize`'s transaction, so "saved but not compacted" cannot
+  exist; S3's inputs say so.
+- **F10-S2-2 accepted:** with `replacingLive`, a live workout that has ended by the time of the discard is not an
+  error; the new workout is started.
+- **F10-S2-4 accepted:** `start` reads the store's highest `seq` for the workout and device, so memory follows the
+  store when a log of that id is kept.
+- **Nits:** taken as the review writes them unless one costs more than a few lines; any not taken is listed with
+  its reason.
+- For S4: the Debug "Start sample workout" row makes a new workout id for every start. For S7: when the fake gains a
+  scriptable save failure, the rules of a waiting end become contract clauses.
+
+### S2 fix round 1 (G1 implementer, 2026-10-05)
+
+On `677fc49`, tree clean at the start. Nothing is committed. Paths are under `LedgerKit/` unless they start with
+`docs/` or `tasks/`. `Actor` is `Sources/LedgerSync/LocalWorkoutSessionActor.swift`, `Recovery` its
+`+Recovery.swift`, `Protocol` `Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, `UseCase`
+`Sources/LedgerDomain/UseCases/StartWorkoutUseCase.swift`, `Judge` and `Script`
+`Sources/LedgerTestSupport/Engine/WorkoutSessionClientContract+ConcurrentHistory.swift` and
+`…+ConcurrentScripts.swift`. The full gate was not run, as the brief says: everything below is the Mac host's.
+
+#### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| 1. SF1 | The type: what a call that throws can still let readers see (an end that was waiting, and after a failed write the state found in the store); "in this process" for the one workout there may be. `current`: "the `live` of the last update". `finish`: "That holds in this process. After a relaunch the unsaved workout is no longer shown, another can be started, and the launch step saves the first when it can." | `Protocol:13-18`, `:31`, `:78-79` |
+| 1. SF1 | Architecture §6, the "finished" bullet: the same two corrections | `docs/architecture.md:289-293` |
+| 1. SF1 | The actor's own comment: a call whose append is refused leaves memory as it was; an end that is stored and cannot be completed has moved the clock and `seq` on | `Actor:17-21` |
+| 2. SF2 | `finish`: nothing tells a reader that an end is waiting, and the three consequences. No behaviour changed; ADR-004 is not amended | `Protocol:69-76`, `:81-89` |
+| 2, 8 | "Inputs for S3 and S4, and for F09 S6" above, corrected in place (its first paragraph says so): S3's transaction, S4's replace and Debug row, the waiting end's three consequences for S4, S7 and F09 S6, S7's two open questions and its contract clauses, F17's list | this file, the section before "Not verified" |
+| 3. SF3 | The wiring test waits for the second `.began(.resumeWorkout)` on a stream the harness feeds from `record`; the bounded yield loop is gone | `Tests/LedgerAppKitTests/WorkoutSessionWiringTests.swift:160-166`; `Tests/LedgerAppKitTests/Support/Harness.swift:24`, `:53` |
+| 4. SF4 | The judge places what each task did at points of the history, in the task's own order: a call that published stands at its update; a call that was refused or ignored, a stream opened in flight and a `current()` each need a point where the rules allow them, no earlier than what the same task did before. So `noLiveWorkout` passes only where nothing was live then. The opening call is judged against the first state alone | `Judge:15-42` (`Deed`), `:52-90`, `:95-114`, `:119-141` |
+| 4. F10-S2-3 | The acting subscriber's stream is read on from its reaction to the end and must equal the stream opened first. The subscriber now logs two sets, not one | `Script:104-107`, `:123`, `:180-205` |
+| 4 | Every script holds a start, an end the engine ignores and an end it takes, one place apart in three tasks | `Script:63-81` |
+| 4, faults | `refusesAnApplyUnderOverlap` (an apply that finds another inside throws `noLiveWorkout`; breaks "callers at once") and `repeatsAnUpdateOnTheSecondStream` (the second stream opened gets its second update twice; breaks "two subscribers") | `Tests/LedgerSyncTests/Support/FaultyWorkoutSession.swift:20-23`, `:71-81`, `:223-228`; `…+Fault.swift:70-73`, `:99`, `:134-135` |
+| 4, tests | The script's shape; each overlap fault must be reported by at least 4 of the 20 fixed seeds (was 1); the acting stream's fault must be reported by all 20, as the acting stream's | `Tests/LedgerSyncTests/WorkoutSessionConcurrentScriptTests.swift:34-54`, `:73-89`, `:91-101` |
+| 5. F10-S2-2 | With `replacingLive`, a discard that throws `noLiveWorkout` is not an error: the new workout is started | `UseCase:98-102`, docs `:19-20`, `:69-72`; test `Tests/LedgerDomainTests/UseCases/StartWorkoutUseCaseTests.swift:143` with the session `EndsAfterTheLook` (`:219`) |
+| 6. F10-S2-4 | `start` reads `highestSeq(for:device:)` and stamps the next `seq`. When a log of that id was kept, it then reads the store again (one recovery pass) and shows what the whole log replays to, with no haptic; with no kept log a start costs one more read and nothing else changes | `Actor:171-191`; test `Tests/LedgerSyncTests/LocalWorkoutSessionActorTests.swift:197` |
+
+The tester's five failing tests pass on both pools with no tester file touched (`git status --short | grep
+Adversarial` and `git diff 677fc49 -- 'LedgerKit/Tests/*/Adversarial'` are both empty), and the two tests that pin
+F10-S2-1 (`HostUnsavableAdversarialTests`) pass unchanged.
+
+**SF1, one clause that is not the review's wording.** The review's sentence for the type is "A call that throws
+stores and publishes nothing of its own". Its own point 4 says a finish whose save fails has stored its envelope,
+so I wrote "publishes nothing of its own, and has stored nothing, except an end that reached the log before its
+save or its drop failed".
+
+#### Nits
+
+| Nit | Taken | What | Where |
+|---|---|---|---|
+| N1 | yes, as documentation | `finish`: a retry can find the end completed in between and then throws `noLiveWorkout`. `start`: after a lost answer it names the caller's own workout | `Protocol:74-76`, `:40-41` |
+| N2 | yes | An own envelope the store says it already held: the host is marked unrecovered and throws `LedgerSyncError.alreadyStored(key)`; the next call reads the store | `Actor:260-273`; `Sources/LedgerSync/LedgerSyncError.swift:9-12`; test `LocalWorkoutSessionActorTests.swift:173` |
+| N3 | yes, the log | Recovery logs a fault when the host shows a workout and no stored log replays to it. The workout stays shown; what else to do is F17's | `Recovery:90-93`; test `LocalWorkoutSessionActorRecoveryTests.swift:170` ("documents") |
+| N4 | yes, one sentence | `run` is for a step the launch does not run itself | `Sources/LedgerPersistence/DatabaseLaunch.swift:128-129` |
+| N5 | yes | A task-local set while an operation runs, asserted at the top of `inTurn` | `Actor:52-53`, `:118-126` |
+| N6 | yes | `PerformanceBudget.apply` and `.runs`; architecture §15 gains the row | `Tests/LedgerSyncTests/Support/PerformanceBudget.swift`; `LocalWorkoutSessionActorPerformanceTests.swift`; `docs/architecture.md:506` |
+| N7 | yes, measured once | Below | |
+| N8 | no code | An input for F17 (the inputs section above). The protocol is S1's and a peer is F17's | |
+| N9 | yes | `EndEffectsTests`: over every property seed, a random log that ends by a finish or a discard: `.materialize` of the state it leaves for the finish, `.discardLog` for the discard, neither for any other envelope | `Tests/LedgerDomainTests/Engine/EndEffectsTests.swift` |
+| N10 | **not taken** | It needs the first CI run's times, which I do not have. Host times are under "Host runs" | |
+
+**N5 is not shown by a test.** An assertion that fires ends the process, and the suites have no exit test. The
+assert ran in every Debug test of this round and never fired.
+
+**N7.** A throwaway test in LedgerPersistenceTests, deleted after the run: the stats performance suite's seed
+(a file database, 20,000 sets in 400 workouts, 12 exercises), an active program whose day has 8 slots, each with a
+last performance, and `StartWorkoutUseCase` over the GRDB stores and the fake session. One warm-up, then 20
+starts: **p95 9.1 ms, median 7.0 ms, slowest 9.2 ms**, against the plan's 200 ms. On the Mac host, Debug; not on
+a phone or a simulator.
+
+#### Criterion 11 after SF4: what the faults show
+
+Reports out of the 20 fixed seeds, ten runs on each pool (a throwaway test, deleted):
+
+| Fault | Default pool | One thread |
+|---|---|---|
+| `judgesAnIgnoredEndLater` (the weakest) | **8 to 11** | 9 |
+| `refusesAnApplyUnderOverlap` (new) | 11 to 13 | 10 |
+| `dropsHapticsUnderOverlap` | 10 to 14 | 12 |
+| `startsTwiceAtOnce` | 18 to 19 | 19 |
+| `commitsTheStartLate` | 19 | 19 |
+| `registersAfterASuspension` | 19 to 20 | 20 |
+| `appliesAfterTheEnd`, `publishesTheStartLate`, `endsTwiceAtOnce`, `losesAnEditBetweenCallers` | 20 | 20 |
+| `repeatsAnUpdateOnTheSecondStream` (new, no overlap needed) | 20 | 20 |
+
+- **The weakest fault is reported by 8 of 20 seeds at the least** (the review counted 6, and 8 on one thread).
+  The test asks for 4. With the ignored end and the real one at the same place of two tasks, as the review writes
+  it, one run gave 8; a start one place before and the real end one place after gave the table's figures, and I
+  kept that.
+- **Why not more.** The stand-in looks again a hundred yields after the ignored end came in, and strikes only if
+  nothing is live then. By then the script's other tasks have run on, and in about half the scripts one of them
+  has started another workout. By the place of the ignored end the reports were 2, 3, 4 and 4 of 5 seeds: the
+  later it comes, the less follows it. I did not move every ignored end to the end of its script, because that
+  fits the script to this stand-in's window and not to a host's. When the fault does strike it is always
+  reported: the rules allow an ignored end to return at no point.
+- **`refusesAnApplyUnderOverlap` is what shows SF4.** Under the old judge a `noLiveWorkout` passed wherever it
+  was thrown. It is reported by half the scripts and not by all, because a refusal whose task published nothing
+  afterwards can still be placed at a later point where nothing was live. To do better the judge would need to
+  know when each call began and ended, not only its task's order.
+
+Mutants of this round (`fix1/mutants-fix1.py`: each applied alone, the named suites run, the file put back and
+compared byte for byte):
+
+| Mutant | Killed by |
+|---|---|
+| R1 the use case rethrows the discard's `noLiveWorkout` | 3 tests: mine and the tester's two |
+| R2 `start` stamps `seq` 1 whatever the store holds | 1: `start_overAKeptLog_followsTheStore` |
+| R3 `start` over a kept log keeps the bare snapshot | 2: mine and the tester's |
+| R4 an envelope the store already held is taken for stored | 1: `apply_envelopeAlreadyStored_readsTheStore` |
+| R5 the judge places a refusal anywhere in the history | 2: `overlapFault_breaksAScript` and the tester's margin test |
+| R6 the acting stream is read only up to its reaction | 2: `faultOnTheActingStream_breaksEveryScript` and the tester's |
+| E1 the engine drops a finished workout's log instead of materialising it | `EndEffectsTests` |
+| E2 a discard has no `.discardLog` | `EndEffectsTests` |
+| E3 a skipped rest drops the log | `EndEffectsTests` |
+| E4 a finish materialises the state as it was before the end | `EndEffectsTests` |
+
+Ten of ten killed. Not mutated: the documentation, N3's log line, N5's assertion.
+
+#### Files outside the slice's list, and why
+
+- `Tests/LedgerAppKitTests/Support/Harness.swift` (F07's): `onEvent`, called from `record`. SF3's fix as the
+  review writes it needs the harness to tell of an event; nothing else in the harness changed.
+- `Tests/LedgerSyncTests/Support/FaultyWorkoutSession.swift` and `+Fault.swift` (S1's stand-in): the two faults.
+- `Sources/LedgerSync/LedgerSyncError.swift`: the case `alreadyStored`, and `import LedgerDomain` for
+  `EnvelopeKey`. LedgerSync already depends on LedgerDomain: no new edge.
+- `Sources/LedgerPersistence/DatabaseLaunch.swift`: N4's sentence.
+- New: `Tests/LedgerDomainTests/Engine/EndEffectsTests.swift`, `Tests/LedgerSyncTests/Support/PerformanceBudget.swift`.
+
+#### Host runs, lint, Release build
+
+`env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file --filter
+'^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests)\.'` on the final tree, once as it
+is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`fix1/final-default.log`, `fix1/final-onethread.log`):
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 244 tests in 43 suites, passed (13 known issues, S1's) | 244 tests, **2 issues**, both below |
+| LedgerPersistenceTests | 452 tests in 104 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerAppKitTests | 63 tests in 15 suites, passed | the same |
+| Exit | **0** | **1** |
+
+At `677fc49` on the default pool (`fix1/baseline.log`) the counts were 239, 452, 836 and 63, with 13 issues, all
+in the tester's five tests. This round adds five tests to Sync and two to Domain.
+
+**One thread: two of S1's tester tests fail, in every run, and they are not this round's.**
+`racyClient_isRejectedByThisSuitesOverlapChecks` at `SessionContractBiteAdversarialTests.swift:111`
+(`.racyLateRegistration`) and at `SessionContractRoundTwoAdversarialTests.swift:116`
+(`.registersBeforeItsFirstElement`), in 8 of 8 runs of the Sync target on one thread, and when the two suites run
+alone (14 tests, 2 issues). They are the two that S1's touch-up records above as failing on one thread in every
+run ("The one-thread check", "For the tester"). They run the tester's own `Seam` checks on the tester's own
+clients and call nothing this round changed. Everything else passed on one thread: the tester's five tests, the
+two that pin F10-S2-1, and mine. I did not run the two at `677fc49`, which needs a checkout.
+
+| Command | Exit | Result |
+|---|---|---|
+| The filter above, default pool | 0 | the table |
+| The same, one thread | 1 | the two S1 tests |
+| `stress.py 20 '<nine suites>'`: the script suite, the host's contract, serial and own-action suites, the tester's three script and kept-log suites, the wiring suite, the use case's | 0 | 20 of 20 green, 231 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 585 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter LocalWorkoutSessionActorPerformanceTests`, once | 0 | passed with the budget moved to `PerformanceBudget` |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, script tests; 61 s. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `FakeWorkoutSessionClient`, `InMemoryStores`, `SplitMix64`, the stand-in or the scripts in a Release object |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's, as the brief says |
+
+**For N10.** The Sync target took 14.5 to 22.5 s on the default pool, with the load, against 14.4 s at `677fc49`,
+and 52 to 56 s on one thread. On one thread every test waits for all the others, and the suites' limit is one
+minute, so the tests that span the run have a few seconds left there. Skipping the whole script suite took 5 s
+off the one-thread run, so this round's share is small; the rest is S1's and S2's suites as they were. Nothing
+timed out in any run.
+
+#### Code lines
+
+`count-lines.py` as before (`git diff -U0`, blank and whole-line comment lines excluded):
+
+| | Against `48403f5` (the slice) | This round, against `677fc49` |
+|---|---|---|
+| Product | **+466 −18** (was +448) | +23 −5 |
+| Test support | +500 −0 | +147 −70 |
+| Tests, the tester's included | +6095 −7 | +205 −15 |
+
+Under the stop line of about 550.
+
+#### Not verified, and what I saw
+
+- **The full gate, and anything on a simulator or a device.** Not run, as the brief says. The orchestrator runs it.
+- **The two S1 tester tests that fail on one thread, at `677fc49`.** I could not build that commit without
+  moving HEAD. That they are not this round's rests on S1's notes ("The one-thread check"), on their failing when
+  the two suites run alone, and on their calling nothing this round changed.
+- **N5's assertion** (no exit test), **N10** (no CI times), and **N7 on a phone**.
+- **The repeated runs** are 20 per pool of nine suites, not the 60 of the first round, and on the host.
+- **A start under a kept log that already holds an end** (the inputs for F17): reasoned from the code, not tested.
+- A compiler warning in the tester's file, seen when the test target was recompiled:
+  `Tests/LedgerSyncTests/Adversarial/RacyHostAdversarialSupport.swift:151`, "no 'async' operations occur within
+  'await' expression". Not touched. A warning in a test target did not fail the first round's gates
+  (`PayloadVersionAdversarialTests.swift:29` is in both of their logs).
+- Nothing odd in shared state. Other lanes' builds kept the load average between 3 and 22 during the runs.
+- No test helper process was left running.
+
+### S2 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0. The tester's five tests pass and the tester's files
+  are unchanged since `677fc49`, which was the tester's closing condition: **G2 is closed. G3 approved.**
+- Known, not this slice's: on a one-thread pool two of S1's tester tests fail in every run (that tester's own
+  overlap checks need a yield between calls, as the contract's got in S1's touch-up). Queued as a follow-up.
+- Nit N10 is not taken (it needs CI timings); N8 is a note for F17.
+
+## Slice S3 — orchestrator's brief (2026-10-05)
+
+S2 merged as #29 (`6c5939d`). S3's specification is the brief's last section, "Plan amendments — slice S3".
+
+- **O8 stands** (the program change is applied inside `materialize`; no `replaceSlotExercise`; no migration), with
+  one addition from F05 S2's lesson: an update may only touch a slot of the workout's own program.
+- **SF5 from S2's review is in scope:** the log is dropped in `materialize`'s transaction, and the host stops
+  compacting after a save.
+- **O10 is not in S3.** The swap event keeps its payload; S8 decides, and an ADR-004 change would go to Pete.
+- **CI cost (criterion 9).** #29's macOS job took 38 minutes: the iOS build 1,148 s on a cold cache (a new branch
+  restores nothing) and the iOS tests 998 s, against 570 s and 422 s for #27. The tests are the part this slice can
+  cut. The step's deadline in `check.sh` is 2,400 s, so there is little room left.
+- Some of S2's tests, the implementer's and the tester's, pin "the save succeeded and the compaction failed". Over
+  the database that state goes away. The implementer's own tests are its to change; a tester's test that
+  contradicts criteria 4 or 5 is not edited: it is listed with the criterion, and the tester moves it.
+
+## Slice S3 — the persistence follow-up (G1 implementer, 2026-10-05)
+
+On `95ac9b8`, in the worktree `F10-s3`, on `feat/F10-s3-program-updates`. Nothing is committed and no PR is open.
+Paths are under `LedgerKit/` unless they start with `docs/`, `tasks/` or `scripts/`. Scratch files are in
+`scratchpad/f10s3/` (written `f10s3/…` below). Short names: `Repositories` is
+`Sources/LedgerDomain/Protocols/Repositories.swift`, `GRDB` `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift`,
+`Events` `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift`, `Recovery`
+`Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift`, `Fake` `Sources/LedgerFakes/InMemoryWorkoutRepository.swift`,
+`FakePrograms` and `FakeEvents` its neighbours `InMemoryProgramRepository.swift` and `InMemoryWorkoutEventStore.swift`,
+`Linked` `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift`. The full gate was not run, as
+the brief says: everything below is the Mac host's, plus two runs of two test targets on the iOS simulator for
+criterion 9.
+
+**Two things are not as the specification asks, and one tester test fails by ruling:**
+
+1. **Criterion 9 is met for the suites I may change and not for the session suites as a whole.** The session
+   suites cost 58.1 s before and 36.9 s after on the simulator: 64 %, not a third. The implementer's suites went
+   from 25.7 s to 5.9 s (23 %). The tester's suites are 31 s of what is left, and I may not edit them. The
+   figures and the edits they need are under "Criterion 9".
+2. **`materialize(_:slotUpdates:)` stays on the protocol beside the new call** (decision 1): four tester types
+   conform to `WorkoutRepository`, and a requirement they do not implement would stop their targets compiling.
+3. `WorkoutRelaunchAdversarialTests.kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch` fails, as criteria 4
+   and 5 say it must. It is under "Tester tests that now contradict a criterion".
+
+### What landed
+
+| File | Contents |
+|---|---|
+| `Sources/LedgerDomain/Protocols/Repositories.swift` | `materialize(_:slotUpdates:)`'s documentation: program updates are applied, and by which rule. New requirement `materialize(_:slotUpdates:droppingLog:) -> Bool` (`:87`) with its default (`:109-115`) |
+| `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift`, `WorkoutSessionClient.swift` | documentation only: who drops a finished workout's log; what `finish` stores in one transaction, and what a failed save leaves |
+| `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` | both forms of `materialize` (`:55`, `:69`); `writeProgramUpdates` (`:205-247`) |
+| `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift` | `deleteLog(of:in:)` (`:92`), the one statement `compact` and the save both run |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | `complete(_:)` (`:147-162`): one call that saves and drops; the compaction after it only when the repository answers that the log is still there |
+| `Sources/LedgerFakes/InMemoryWorkoutRepository.swift`, `InMemoryProgramRepository.swift`, `InMemoryWorkoutEventStore.swift`, `InMemoryStores.swift` | the linked stores follow: `writeSave(misses:exercises:inProgram:)`, `drop(_:)`, the event store linked into the workout store |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift` (new) | `linkedClauses` (six), `Program.difference(from:)`, three public fixtures |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract.swift` | `HistoryStores.events`, optional |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` | `ProbedWorkoutRepository` forwards the new call |
+| `Tests/LedgerPersistenceTests/WorkoutRepositoryLinkedTests.swift` (new) | the rows and statements of a save: 7 test functions, 12 cases |
+| `Tests/LedgerPersistenceTests/LinkedSaveDifferentialTests.swift` (new) | seeded scripts, the linked fakes against GRDB: 30 seeds in the PR lane, every seed in the nightly one |
+| `Tests/LedgerPersistenceTests/{InMemoryContractTests,WorkoutRepositoryTests,MigrationCompatibilityTests}.swift`, `Performance/RecordReplayPerformanceTests.swift`, `Performance/PerformanceBudget.swift`, `Support/RepositoryTesting.swift` | the linked clauses on both stores; an unlinked fake; the version-1 fixture; criterion 8's timing |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActorSaveTests.swift`, `LocalWorkoutSessionActorProgramTests.swift` (new) | criterion 5 on the host: 4 and 5 tests |
+| `Tests/LedgerSyncTests/LocalWorkoutSessionActor{End,Recovery,Contract}Tests.swift`, `WorkoutSession{ClientContract,ConcurrentScript}Tests.swift`, `Support/{HostSupport,Tags}.swift`; `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift` | changed: listed under "Tests changed" |
+| `docs/architecture.md` | §5 (`WorkoutState.programUpdates`), §6 (the save, recovery, the `.materialize` comment), §7 (the `workout_event` row), §15 (the budget's row) |
+
+Unchanged: `Migrations.swift`, every fixture under `Tests/LedgerPersistenceTests/Fixtures/`, `Package.swift`,
+`package-graph.expected.txt`, `project.pbxproj`, every test plan, `scripts/`, ADR-004 and ADR-008, every file under
+a `Tests/*/Adversarial/` folder (`git status --short | grep Adversarial` prints nothing), `tasks/todo.md`.
+
+### Decisions and deviations
+
+1. **The shape: a second requirement, `materialize(_:slotUpdates:droppingLog:) -> Bool`, with a default**
+   (`Repositories:72-87`, `:109-115`).
+   - *The parameter* is the ruling's. `droppingLog: true` asks for the save and the end of the log as one step.
+   - *The answer* is whether the log went with the save. A repository knows whether it shares a database with
+     the log; the host does not, and a flag on the host could disagree with its stores. So the path for a store
+     that is not one database needs no configuration: such a repository answers `false`, and the host then
+     compacts in a second step (`Recovery:157-161`), which is S2's path, row for row.
+   - *The default* (`Repositories:109-115`) is that repository: it saves through `materialize(_:slotUpdates:)` and
+     answers `false`. A wrapper that forwards only the old call therefore loses the one transaction and nothing
+     else. `WorkoutEventStore.unreadableCount(for:)` has no default for the opposite reason: there a wrapper that
+     did not forward would let the host drop rows it cannot see.
+   - **Deviation: the old requirement stays.** One requirement with `droppingLog` and a convenience for the
+     two-argument call would be smaller. Four types in tester files conform to `WorkoutRepository` and implement
+     only the old call: `HistoryModel` (`Tests/LedgerPersistenceTests/Adversarial/HistoryModel+Repositories.swift:6`),
+     `SiegeWorkoutRepository` and `SabotagedWorkoutRepository` (`Tests/LedgerSyncTests/Adversarial/HostSiegeStoresAdversarialSupport.swift:66`,
+     `HostSiegeSabotageAdversarialSupport.swift:61`), `BriefWorkoutRepository`
+     (`Tests/LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift:41`). Removing the requirement they
+     implement stops three test targets compiling, and I may not edit them. Open question 4.
+   - *Why the workout repository may delete event rows.* A workout's log is that workout before it was saved
+     (ADR-004 rule 5), and the save is what ends its use, so "saved" and "log gone" are one fact, and two
+     transactions make room for a third state, which is SF5. The repository drops that one log, on request,
+     never reads an envelope and never writes one. Over GRDB it does not hold the SQL either: `compact` and the
+     save both run `GRDBWorkoutEventStore.deleteLog(of:in:)` (`Events:92`, called at `GRDB:83`).
+   - *What it does not do.* It does not check that the log is complete. The host still asks
+     `unreadableCount(for:)` first (`Recovery:148`), in a read of its own, as before S3. Open question 7.
+2. **The order of writes in the transaction** (`GRDB:75-85`): the workout's place in history (a read), its rows
+   (workout, exercises, sets), its records, the misses, the program updates, the log.
+   - Every refusal the protocol names is thrown before the misses are written. What comes after never refuses:
+     it skips, and logs at notice level. So a refused workout has changed no slot and dropped no log even before
+     the rollback.
+   - Anything that fails later (a full disk; in the tests a trigger on `slot_miss`, on `slot.exercise_id` or on
+     `workout_event`) rolls all of it back: `lateFailure_rollsEverythingBack` compares every row of ten tables.
+   - The log goes last so that a log is never dropped ahead of a statement that can still be refused. Mutant G9
+     (the log first) is seen only by the statement order, which `save_isOneTransaction_inOrder` pins.
+3. **Which update is applied** (`writeProgramUpdates`, `GRDB:205-247`). An entry is applied when its slot is
+   live, under a live day, of the workout's own live program (`source.programID`), and its exercise has a row.
+   - *Another program's slot* is never written. This is the class of F05 S2's B1 (a save that silently took over
+     another program's rows): a workout of block 1 that is saved late must not rewrite block 2. The check is one
+     query that joins `slot`, `day_template` and `program` (`GRDB:216-222`) and reads no id out of the database.
+   - *The exercise* is checked as a program save checks it (`ProgramRows.refuseUnknownExercises`): the row
+     exists, deleted or not, which is what the slot's foreign key asks. Without the check the update would fail
+     the foreign key and with it the whole save.
+   - *An ad-hoc workout* has no program, so every entry is skipped.
+   - *The active program plays no part.* A swap lands on the workout's program whether or not it is the active
+     one. The misses differ: the host sends none when another program is active (S2, ruling O9).
+     `finish_anotherProgramActive_changesTheWorkoutsProgram` pins both.
+   - *What is written:* `slot.exercise_id` and that row's `updated_at`. The slot's numbers, its misses and the
+     program's own row are untouched (Pete's default 2: a program swap keeps the slot's numbers).
+   - *A slot that already holds the exercise* is not written at all (`GRDB:231-233`), so a second materialisation
+     still runs no `INSERT` and no `UPDATE`, as F05's decision 1 says.
+   - *Two updates for one slot* cannot be given: `programUpdates` is a dictionary, and the engine keeps the
+     latest swap of a slot. Entries are applied in slot-id order, so the statements run in one order.
+4. **Idempotence.** Materialising the same workout again changes no row of any table, with the log gone or
+   there again (`secondSave_writesNoRow`; the contract's `programUpdatesTwice` on both stores).
+   - It is not idempotent against a program that was edited in between: a second materialisation sets the slot
+     back to the workout's swap, as re-sent slots would clear misses recorded since (F10 "Inputs from F05",
+     item 6). Over the database nothing materialises a workout twice any more, because no log is left to do it
+     from. Open question 2.
+   - A workout read from history has no `programUpdates` (a live-only field, reset on a read), so storing one
+     again never touches a program.
+5. **The host** (`complete(_:)`, `Recovery:147-162`): `unreadableCount`, the misses from the program as stored
+   now, then one call that saves and drops. It returns at once when the repository answers that the log went
+   with the save, and compacts otherwise. A discarded workout's log is compacted as before. Nothing else in the
+   host changed: the waiting end, `settle()`, `reconcile()` and `needsRecovery` are S2's. The tables below say
+   what each call now does.
+6. **The fakes** (ADR-008 decision 5).
+   - `InMemoryWorkoutRepository` writes the misses and the program updates, and drops the log, inside its own
+     write, after the last statement that can throw (`Fake:52-67`): all or nothing, in the database's order.
+   - The program store takes both in one step, `writeSave(misses:exercises:inProgram:)` (`FakePrograms:81-93`),
+     so that store never holds half of a save.
+   - **`InMemoryWorkoutEventStore` keeps its logs behind a `Mutex`, and is still an actor** (`FakeEvents:13`,
+     `drop(_:)` at `:73`). A write under a lock cannot wait for an actor, and a save that awaited the event
+     store after its own write would let a reader see the workout in history with its log still there, which is
+     the state this slice removes. ADR-008 decision 4 says the event store "stays an actor"; it does, so the ADR
+     is not edited. An actor whose state sits behind a lock is a class in all but name. Open question 3.
+   - *Lock order:* history, then programs, then exercises; history, then events. Never the other way.
+   - *What the fake cannot give.* The programs and the log change under their own locks, inside the history's
+     write. A reader that reads history never sees half a save. A reader that reads only the programs and the
+     log, at that instant, can see the program changed and the log still there. One lock over the six stores
+     would close it; I did not rebuild the fakes for it.
+   - A stand-alone `InMemoryWorkoutRepository()` holds no log, answers `false`, and its programs check no
+     exercise, as before (`unlinkedWorkouts_holdNoLog`).
+7. **The contract: a third list, `linkedClauses`** (`Linked:12-35`), beside `clauses` and `storageClauses`.
+   F05's oracle `HistoryModel` runs `clauses` (`HistoryContractAdversarialTests.swift:15`) and models neither a
+   slot's exercise nor the log, as it does not model columns. `HistoryStores.events` is optional for the same
+   subject.
+8. **The differential scripts.** The three that exist are tester files (`Fakes{History,Store,Catalog}DifferentialAdversarialTests`).
+   They pass unchanged. I added one of my own, `LinkedSaveDifferentialTests`, for the saves this slice changed.
+9. **Criterion 9 by a lane check in the test target, not by a plan change** (`Tests/LedgerSyncTests/Support/Tags.swift:19-26`,
+   `WorkoutSessionClientContractTests.swift:29`). No test plan, no `project.pbxproj` and no environment
+   variable changed.
+10. **ADR-004 rule 5 still reads "compacted after successful materialisation".** Over the database it is now
+    "with". ADR-004 is not edited (an ADR change is Pete's to review). Open question 5.
+11. **A failing test prints a line, not the values.** The new clauses and suites compare to a `Bool` or a count
+    and name what differs (`Program.difference(from:)`, `Linked:38-66`; `difference` in the two row suites), as
+    the orchestrator asked during the slice. `WorkoutRelaunchTests` compared every row of six tables inside
+    `#expect`; it no longer does.
+
+### Criteria → tests
+
+| # | Tests |
+|---|---|
+| 1 | `linkedClauses`: `appliesProgramUpdates`, `observersHearTheSave` (GRDB and fakes); `WorkoutRepositoryLinkedTests`: `save_isOneTransaction_inOrder`, `programUpdate_writesTwoColumnsOfOneRow`; host: `LocalWorkoutSessionActorProgramTests` (5) |
+| 2 | `linkedClauses.skipsWhatCannotBeApplied`; `estrangedSlot_isSkipped` (× 4: a deleted slot, a deleted day, a deleted program, another program's), `whatCannotBeApplied_writesNoSlot` |
+| 3 | `linkedClauses.programUpdatesTwice`; `secondSave_writesNoRow`; `savedLog_isSavedAgainAndDropped` (× 2); `logLeftBehindASavedWorkout_isSavedAgainUnchanged` (a real file, seven tables) |
+| 4 | `linkedClauses`: `dropsTheLog`, `refusedSaveChangesNothing`; `lateFailure_rollsEverythingBack` (× 3), `refusedWorkout_rollsEverythingBack`; `saveThatCannotDropTheLog_savesNothing` (a real file) |
+| 5 | `LocalWorkoutSessionActorSaveTests` (4); `LocalWorkoutSessionActorEndTests`: `finish_storesThenSavesAndDropsInOneStep`, `finish_publishesAfterTheSave` (× 3), `finish_saveFails_secondFinishRetries` (× 2); `LocalWorkoutSessionActorRecoveryTests`: `finishedLog_isSavedAndDropped` (× 2); `WorkoutRelaunchTests` (6); the host's contract and concurrent scripts in all six set-ups |
+| 6 | the six linked clauses on `InMemoryStores` (`workouts_keepTheLinkedClauses`); `LinkedSaveDifferentialTests` (30 seeds, every seed of the lane in the nightly one; `scripts_holdEveryKindOfStep`); `unlinkedWorkouts_holdNoLog`; the tester's three differential suites, unchanged |
+| 7 | `MigrationCompatibilityTests.open_savesWithAProgramUpdateAndTheLogDropped` (the version-1 fixture, and the applied migrations after it); `fixture_isAtV001` and `SchemaTests`, unchanged; no migration and no fixture in the diff |
+| 8 | `RecordReplayPerformanceTests.finishWithProgramUpdatesAndTheLog_underBudget`, nightly lane only |
+| 9 | `Seeds.hostSeeds`; the figures below |
+
+### Mutants
+
+`f10s3/mutants.py`, logs `mutants1.log` and `mutants2.log`: each applied alone, the named suites run, the file put
+back and compared byte for byte. **24 of 26 fail at least one test.**
+
+| Mutant | Killed by (first) |
+|---|---|
+| G1 any stored slot takes the update, whatever its program | `estrangedSlot_isSkipped`, the GRDB linked clause, the differential |
+| G2, G3, G4 a deleted slot, a slot under a deleted day, a slot of a deleted program takes it | `estrangedSlot_isSkipped`, each by its own case and by no other test |
+| G5 the exercise is not checked | `whatCannotBeApplied_writesNoSlot`, the linked clause, the differential |
+| G6 a slot that holds the exercise is written again | `secondSave_writesNoRow` |
+| G7 the log is never dropped and the answer is yes; G10 every log is dropped | 7 tests each |
+| G8 the log is dropped whatever was asked | the linked clause, the differential |
+| G9 the log is dropped before the workout's rows | `save_isOneTransaction_inOrder` alone |
+| G11 the answer is always no | 6 tests |
+| G12 the program updates are not applied | 8 tests |
+| G13 the log is dropped in a transaction of its own, after the save | `saveThatCannotDropTheLog_savesNothing`, `save_isOneTransaction_inOrder`, `lateFailure_rollsEverythingBack` |
+| F1 the fake changes any program's slot; F3b an ad-hoc workout's; F2 it checks no exercise | the fake's linked clause, the differential |
+| F4 the fake never drops the log and answers yes | 19 tests |
+| F5 the fake drops the log whatever was asked; F6 it writes the program and drops the log before the workout can be refused | the fake's linked clause, the differential |
+| F7 the fake applies no program update | 8 tests |
+| H1 the host compacts after every save; H3 it saves without dropping the log | 7 and 8 tests |
+| H2 the host never compacts after a save; D1 the protocol's default answers that it dropped the log | 31 tests each, the tester's siege suites among them |
+| **F3 the fake changes a deleted program** | **survives.** The protocol cannot show a deleted program, and saving it again replaces it whole. The database's rule is G4, killed at the row |
+| **F8 the fake writes the misses and the exercises in two steps** | **survives.** A stream keeps its newest value, so only a reader racing the save could see the half; I wrote no test that rests on a race |
+
+H2 and D1 also hang one test for good: `finish_publishesAfterTheSave` holds `.compact`, which never comes, and
+`StoreProbe.waitUntilHeld()` cannot be cancelled by a time limit. I stopped the helper by hand both times. It is how
+the first run of this slice lost ten minutes. Open question 8.
+
+### The failure table
+
+What changed since S2 is in bold. "The database" also means the linked in-memory stores.
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event | unchanged; marked unrecovered | nothing (rolled back) | the store's error | nothing | reads the store first; the same `seq` and stamp when nothing was stored | replay |
+| append that stored and then threw (a store that lies) | unchanged; marked unrecovered | the envelope | the store's error | nothing, until the next call | the next call adopts what is stored and publishes it without a haptic; an end is completed | replay |
+| the clock is not finite | unchanged | nothing | `noFiniteStamp`, a fault logged | nothing | works once the clock reads a time | — |
+| **the save, after `.finished` is stored: one transaction** (`finish_saveFails_secondFinishRetries` × 2, `lateFailure_rollsEverythingBack` × 3, `saveThatCannotDropTheLog_savesNothing`, `finish_saveFails_theProgramWaitsWithTheWorkout`) | `live` as before the finish; the end pending; clock and `seq` advanced | **the log whole, with its `finished`; no history row, no miss, no program change** | the store's error | nothing; `current()` still the workout | `finish`: saves **and drops** in one transaction, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| **the save that stored and then threw (a store that lies; `finish_saveAnswerLost_theRetryEndsIt`)** | the same | the workout in history, the log gone | the store's error | nothing; `current()` still the workout | `finish`: saves again (no change), publishes once | nothing live, nothing to do |
+| `compact`, after the save: **only over stores that are not one database** (`finish_separateStores_compactFails_waitsAndRetries`; the tester's siege suites) | the same | the log, and the history row with its misses and program changes | the store's error | nothing | saves again (no change), compacts, publishes once | saved again unchanged, compacted |
+| `compact`, after `.discarded` | the same, a discard pending | the log | the store's error | nothing | `discard`: compacts, publishes. `finish`: completes it, then `noLiveWorkout` | compacted |
+| a read during recovery | as before the pass | untouched | the store's error, from every call | a stream starts with what is known | the next call or foreground runs the pass again | — |
+| a save during recovery | the other logs dealt with; the live one resumed | that log kept whole, **and nothing of its save** | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+What each call does now, over the database:
+
+- **`finish`:** stores `finished`; then one transaction; then the ending update. After the transaction nothing
+  is left that can fail, so `finish` never throws for a workout that is in history
+  (`finish_oneDatabase_neverThrowsOnceSaved`: a compaction made to fail a hundred times is never reached).
+- **A second `finish`:** `noLiveWorkout` when the first succeeded; the retry of the whole transaction when the
+  first save failed.
+- **`discard`:** unchanged: stores `discarded`, compacts in the event store's own transaction, publishes. No
+  program changes. A `discard` while a finish waits still saves the workout (S2, SF2).
+- **The launch step and a relaunch:** the table below.
+
+### The recovery table
+
+| Stored when the app died | The step | Afterwards |
+|---|---|---|
+| nothing, or a `started` that never reached the store | nothing | no workout |
+| a live log | resumes it: no haptic, no effect run | `current()` is the workout |
+| `finished` stored, not saved | **one transaction:** saves, with the misses from the program as stored now and the program updates, and drops the log | in history; no live workout |
+| **saved, and the log still there** | saves again, which changes nothing, and drops the log, **in one transaction over the database** | the same |
+| `discarded` stored, not compacted | compacts | nothing in history, no program changed |
+| a log that replays to nothing | keeps it and logs a notice | no workout |
+| a log with rows this version cannot read | live: resumes from what it reads; ended: keeps it | a workout, or none |
+| a save that throws | keeps the log whole; nothing is saved; records the step as failed; carries on with the other logs | retried on the next foreground |
+
+The fourth row is the one criterion 5 speaks of. The host no longer produces it over the database. It is still
+handled, for two sources: a workout repository that does not hold the log (the protocol's default; every store
+of the tester's siege), and a database left so by a build from before this slice. Both are tested
+(`savedLog_isSavedAgainAndDropped` × 2; `logLeftBehindASavedWorkout_isSavedAgainUnchanged` on a real file).
+
+### Tests changed, with reasons
+
+All are S2's implementer tests or F05's and F07's implementer tests and support. No tester file is touched.
+
+| File | Change | Why |
+|---|---|---|
+| `Tests/LedgerSyncTests/Support/HostSupport.swift` | `Subject.init(oneDatabase:)`; `SeparateWorkoutRepository`, which forwards every call but the new one | the two-step path needs a store that is not one database (criterion 5) |
+| `LocalWorkoutSessionActorEndTests.swift` | `finish_storesThenSavesThenDrops` → `finish_storesThenSavesAndDropsInOneStep`: the writes are `[.append, .materialize]`, were `[.append, .materialize, .compact]` | criterion 5 |
+| | `finish_publishesAfterTheSave`: its cases were `.materialize` and `.compact` on linked stores; now `.materialize` on both kinds of store and `.compact` on separate stores | over one database no compaction follows a save, so a held `.compact` never arrives |
+| | `finish_saveFails_secondFinishRetries`: runs on both kinds of store | the row is the same on both |
+| | `finish_compactFails_waitsAndRetries` → `LocalWorkoutSessionActorSaveTests.finish_separateStores_compactFails_waitsAndRetries`, on separate stores, assertions unchanged | the row exists only there (criterion 5) |
+| `LocalWorkoutSessionActorRecoveryTests.swift` | `finishedLog_isSavedThenDropped` → `finishedLog_isSavedAndDropped` (× 2): `[.materialize]` over one database, `[.materialize, .compact]` over separate stores | criterion 5 |
+| | `savedLog_isSavedAgainAndDropped`: on both kinds of store, and it asserts that nothing is left to recover | the row is handled for both |
+| `LocalWorkoutSessionActorContractTests.swift`, `WorkoutSessionConcurrentScriptTests.swift`, `WorkoutSessionClientContractTests.swift`, `Support/Tags.swift` | the two host matrices take `Seeds.hostSeeds`; `TestLane.isNightly` | criterion 9. No assertion changed |
+| `Tests/LedgerAppKitTests/WorkoutRelaunchTests.swift` | `killedBeforeTheDrop_isSavedAgainUnchanged` is replaced by `saveThatCannotDropTheLog_savesNothing` and `logLeftBehindASavedWorkout_isSavedAgainUnchanged`; both workouts now hold a swap with the program; `rows()` reads `slot` too | the kill point "after the save, before the drop" is gone (criteria 4 and 5): a drop that fails takes the save with it. The second test keeps what the old one showed, from a log put back beside the saved workout |
+| `Tests/LedgerPersistenceTests/Support/RepositoryTesting.swift`, `InMemoryContractTests.swift` | `Repositories.events`; `history` and `history()` hand the event store to `HistoryStores` | the linked clauses need the log |
+| `Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract.swift` | `HistoryStores.events`, optional, `nil` by default | the same; the tester's `HistoryStores(workouts:stats:programs:)` still compiles |
+| `Sources/LedgerTestSupport/Engine/StoreProbe.swift` | `ProbedWorkoutRepository` forwards `materialize(_:slotUpdates:droppingLog:)` under `.materialize` | a host over probed stores of one database must still get the one transaction |
+
+### Tester tests that now contradict a criterion
+
+**One fails, and is left failing.**
+
+`Tests/LedgerAppKitTests/Adversarial/WorkoutRelaunchAdversarialTests.swift:77-92`,
+`kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch`, at `:85` (`saved.count == 1`) and `:89`
+(`relaunched.history() == saved`).
+
+- *What it does:* it refuses `DELETE ON workout_event` with a trigger, expects `finish` to throw with the workout
+  already in history, and expects the relaunch to compact.
+- *What contradicts it:* criterion 4 ("when it fails, nothing changed: no history row, no program change, the log
+  whole") and criterion 5 ("over the database a workout can no longer be in history and still shown as live").
+  The trigger now fails the one transaction, so the save is rolled back with the drop.
+- *The change it needs,* either of two:
+  - keep the kill point and assert what is now right: `:85` becomes `#expect(saved.isEmpty)`, and `:89` becomes
+    `#expect(try await relaunched.history() == [Launch.asStored(finished)].compactMap(\.self))` with
+    `finished = Launch.folded(Launch.middle + [.finished(endedAt: Launch.end)])`, as the test above it has; the
+    title becomes "A finish whose log cannot be dropped saves nothing; the relaunch saves and compacts";
+  - or keep the row "saved, log still there" and build it without the host: let the first relaunch save, append
+    the finished log again with `stores.events.append`, relaunch, and compare. My
+    `logLeftBehindASavedWorkout_isSavedAgainUnchanged` does this.
+
+**None other fails, but the tester should know why.** `SiegeWorkoutRepository` and `SabotagedWorkoutRepository`
+implement only `materialize(_:slotUpdates:)`, so every host of the tester's siege gets the protocol's default and
+takes the two-step path, over the in-memory backing and over the GRDB one alike. Their tests of a compaction
+that fails after the save (`HostEndFailureAdversarialTests.finish_compactionFails_savedOnceAndEndedOnce`,
+`HostMissesRetryAdversarialTests`, `HostStartUseCaseAdversarialTests:107`, the siege's `.compact` faults) pass
+because of that, and they now test a store that is not one database. Nothing in the tester's Sync suites
+exercises the one transaction. To siege it, the two wrappers forward the new call; the `.compact` faults after a
+save then stop firing, and the tests that inject them need a wrapper that does not forward. That is the
+tester's choice to make.
+
+### Criterion 9: before and after
+
+**How it was measured.** `f10s3/measure.sh <label>`, through the lock, from the worktree root:
+`/usr/bin/python3 <sim-lock> f10s3/measure.sh before` on the tree at `95ac9b8`, and `… after` on the tree with
+the slice. The script boots the iPhone 17 simulator (iOS 27.0), runs `xcodebuild build-for-testing` and then
+`test-without-building` with `-testPlan PR -only-testing:LedgerSyncTests -only-testing:LedgerPersistenceTests` and
+`check.sh`'s flags (`-parallel-testing-enabled NO`, timeouts on, 60 s allowance). `f10s3/suites.py` sums, per
+suite, the durations of its test runs in the result bundle; the tests run one after another, so the sum is the
+time (135 test-seconds of a 141 s test operation in the first run).
+
+| | Before | After |
+|---|--:|--:|
+| The test step, both targets | 145 s | 120 s |
+| `LedgerSyncTests` | 58.5 s, 4,633 runs | 37.3 s, 2,485 runs |
+| `LedgerPersistenceTests` | 76.5 s, 4,418 runs | 77.1 s, 4,474 runs |
+| Load average when the tests started | 68.6 | 13.8 |
+
+The first run started under another lane's load. It mattered little: the tester's suites, which did not change,
+took 32.3 s in it and 31.0 s in the second. The second run was taken before two small changes (the fake's
+one-step program write, one more contract clause), so I ran a third on the final tree, at a load of 4.6
+(`f10s3/final.xcresult`): 122 s for the step, `LedgerSyncTests` 37.3 s in 2,485 runs, the session suites 36.9 s,
+`LedgerPersistenceTests` 75.8 s in 4,476 runs, both targets passing. The slice's own new suites cost 1.4 s
+there, 1.3 s of it the differential's 30 scripts. Per session suite (every suite of `LedgerSyncTests` but the
+`FakeLinkBus` and companion-session ones):
+
+| Suite | Whose | Before | After |
+|---|---|--:|--:|
+| `LocalWorkoutSessionActor · the contract` | implementer | 14.7 s, 1,350 runs | 2.1 s, 270 runs |
+| `Adversarial F10 S2 · never lost, never doubled` (`HostNeverLostAdversarialTests`) | tester | 12.6 s, 304 | 12.1 s, 304 |
+| `WorkoutSessionClient · calls made at once, as one history` | implementer | 9.3 s, 1,415 | 2.0 s, 335 |
+| `Adversarial F10 S1 · does the session contract bite` | tester | 4.7 s, 145 | 4.7 s |
+| `Adversarial F10 S2 · does the concurrent script bite` | tester | 4.1 s, 17 | 3.7 s |
+| `Adversarial F10 S2 · the contract over this suite's stores` (`HostContractRunAdversarialTests`) | tester | 3.8 s, 202 | 3.6 s |
+| `Adversarial F10 S1 · the contract after the fix round` | tester | 3.3 s, 39 | 3.3 s |
+| `Adversarial F10 S2 · many callers at once` (`HostReentrancyAdversarialTests`) | tester | 1.6 s, 185 | 1.5 s |
+| `WorkoutSessionClient · the contract notices a faulty client` | implementer | 0.9 s, 57 | 1.0 s |
+| `Adversarial F10 S1 · fake session vs the engine` | tester | 0.8 s, 201 | 0.8 s |
+| `WorkoutSessionClient · the contract on the fake` | implementer | 0.7 s, 227 | 0.7 s |
+| every other session suite | both | 1.6 s | 1.4 s |
+| **The implementer's session suites** | | **25.7 s** | **5.9 s (23 %)** |
+| **The tester's session suites** | | 32.3 s | 31.0 s |
+| **All session suites** | | **58.1 s** | **36.9 s (64 %)** |
+
+**What was cut.** The two matrices of seeds by host set-ups: `sessionScripts_fakeAndActorPublishTheSame` and
+`host_isOneHistory`, each 200 seeds × 6 set-ups in the PR lane, now 20 × 6. The twenty are the fixed seeds, which
+existing tests show to reach every call and every refusal (`scripts_reachEveryCallAndRefusal`), every kind of
+action (`scripts_holdEveryKindOfAction`) and every overlap fault (`overlapFault_breaksAScript`). The nightly lane
+runs every seed of the lane on every set-up, as before: `TestLane.isNightly` reads `LEDGER_TEST_LANE`.
+
+**What still runs once or more in the PR lane.** Every clause on every set-up (144 cases, and `violations` on
+each set-up); every kind of store (in-memory, GRDB, suspending), each recovered at launch and not, on 20
+sequential and 20 concurrent scripts; every fault of the stand-in, by clause and by script; the fake's 200
+sequential and 200 concurrent scripts. No assertion changed.
+
+**Why it is not a third.** The tester's suites were 56 % of the cost before, and no cut of mine reaches them:
+with the implementer's suites at zero the whole would still be 53 %. The edits that would get there, which I did
+not make:
+
+| Tester suite | Edit | Saves, about |
+|---|---|--:|
+| `HostNeverLostAdversarialTests` | the PR lane sieges 20 seeds in memory and 20 over GRDB, where it sieges `SeamSeed.all` (200) and `.prefix(100)`; the nightly lane keeps both | 9.5 s |
+| `HostContractRunAdversarialTests` | `.prefix(10)` in the PR lane, where it has `.prefix(40)` | 2.7 s |
+| `HostReentrancyAdversarialTests` | 30 and 15 storms in the PR lane, where it has 120 and 60 | 1.1 s |
+
+That gives about 23.6 s, 41 %. The last eight points are in the three "does it bite" suites (11.7 s for 201
+runs), which run each fault many times over until it strikes; I have not read them closely enough to name a cut.
+
+### Code lines
+
+`f10s3/count-lines.py 95ac9b8` (S2's script): added lines of `git diff -U0 95ac9b8`, new files whole, blank and
+whole-line comment lines excluded.
+
+| File | Added | Removed |
+|---|--:|--:|
+| `Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` | 50 | 0 |
+| `Sources/LedgerDomain/Protocols/Repositories.swift` | 9 | 0 |
+| `Sources/LedgerPersistence/Events/GRDBWorkoutEventStore.swift` | 7 | 6 |
+| `Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift` | 4 | 1 |
+| `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift`, `WorkoutSessionClient.swift` | 0 | 0 |
+| **Product** (the brief: about 50 to 90) | **70** | 7 |
+| `Sources/LedgerFakes/InMemoryWorkoutEventStore.swift` | 28 | 20 |
+| `Sources/LedgerFakes/InMemoryProgramRepository.swift` | 27 | 11 |
+| `Sources/LedgerFakes/InMemoryWorkoutRepository.swift` | 20 | 2 |
+| `Sources/LedgerFakes/InMemoryStores.swift` | 2 | 2 |
+| **`LedgerFakes`** (the plan: about 20) | **77** | 35 |
+| `LedgerTestSupport` (3 files) | 247 | 1 |
+| Tests (19 files) | 780 | 53 |
+
+The fakes are well over the plan's twenty lines. The plan counted the program update alone. The log's drop
+needed the event store's state behind a lock (28 lines, 20 of them the old ones rewritten), and the one-step
+program write another 16.
+
+### Host runs, lint, Release build
+
+On the final tree. `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file
+--skip-build --filter '^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests|LedgerDependenciesTests)\.'`,
+once as it is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`f10s3/final-default.log`,
+`f10s3/final-onethread.log`). At `95ac9b8` the default pool gave 244, 452, 838, 63 and 63 tests, all passing
+(`f10s3/host-baseline-default.log`).
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 252 tests in 45 suites, passed (13 known issues, S1's) | 252 tests, **2 issues**: S1's two tester tests, below |
+| LedgerPersistenceTests | 466 tests in 106 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerDependenciesTests | 63 tests in 11 suites, passed (17 known issues) | the same |
+| LedgerAppKitTests | 64 tests in 15 suites, **1 failing**: the tester's test above | the same |
+| Exit | **1** | **1** |
+
+- The one-thread failures are `SessionContractBiteAdversarialTests.swift:111` and
+  `SessionContractRoundTwoAdversarialTests.swift:116`, the two the brief names. Nothing else fails there.
+- Eight tests are new in Sync, fourteen in Persistence and one in AppKit.
+
+| Command | Exit | Result |
+|---|---|---|
+| The full matrix on the host: `LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200 swift test … --filter 'LocalWorkoutSessionActorContractTests\|WorkoutSessionConcurrentScriptTests\|WorkoutSessionClientContractTests\|LinkedSaveDifferentialTests'` | 0 | 144 clause cases, 1,200 sequential and 1,200 concurrent scripts on the host, 200 differential scripts; the same on one thread |
+| `stress.py 20 '<seven host suites>' LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200`: the contract, the concurrent scripts, the serial, end, save, recovery and program suites | 0 | 20 of 20 green, 173 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 432 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter RecordReplayPerformanceTests`, once | 0 | criterion 8 on the Mac host, Debug: the finish save with 2 program updates, 5 misses and a log of 60 dropped, at the end of 400 workouts and 20,000 sets: p95 16.0 ms, median 10.7 ms, against 50 ms. The plain save beside it: p95 14.9 ms, median 9.7 ms (`f10s3/attachments/finish-save.txt`) |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, pins, script tests. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `InMemoryStores`, `InMemoryWorkoutEventStore`, `InMemoryWorkoutRepository`, `InMemoryProgramRepository`, `FakeWorkoutSessionClient`, `SplitMix64`, `FakeLinkBus` or `Fixtures` in a Release object; `Release/LedgerFakes.o` is 1,176 bytes, as at S1 and S2 |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+### Open questions
+
+1. **Criterion 9 is at 64 %, not a third.** Recommendation: the tester makes the three cuts in the table (about
+   41 %), with the same lane check, and looks at the "bite" suites for the rest; or the orchestrator sanctions
+   those edits as it sanctioned the launch model's in S2. Lowering `LEDGER_PROPERTY_SEED_COUNT` in the PR plan would
+   also cut the Domain's and the persistence suites' seeds, which nobody asked for.
+2. **A second materialisation sets a slot back if the program was edited in between.** Recommendation: accept
+   for M1. Over the database no log is left to materialise from. F17's rebuilds decide it with the misses' rule
+   (never re-send an older workout's slots), and F11 should know that a swap can land on a program edited during
+   the workout: the slot's exercise is the swap's, its other fields the edit's.
+3. **`InMemoryWorkoutEventStore` is an actor with its state behind a `Mutex`.** Recommendation: a mechanical
+   follow-up that makes it a final class like the other fakes, with one sentence of ADR-008 decision 4 amended.
+   No caller changes: every call is already awaited.
+4. **Two forms of `materialize` on the protocol.** Recommendation: keep both. The default is the honest answer
+   of a store that holds no log, and it is what keeps every wrapper safe. If one requirement is wanted, the four
+   tester types need a two-line forward each.
+5. **ADR-004 rule 5** says the log is "compacted after successful materialisation". Recommendation: one line, with
+   the paragraph on a waiting end that S2's rulings already owe ADR-004, in a PR Pete reviews.
+6. **A skipped program update is silent.** The log says which slot and why; the lifter is told nothing.
+   Recommendation: S8 decides. It happens only when the program was edited or deleted during the workout.
+7. **The completeness check and the drop are two reads apart** (`Recovery:148`, then the transaction).
+   Recommendation: leave for M1, where only the host writes the log and it takes one operation at a time. F17,
+   which appends a peer's envelopes, keeps those appends in the host's queue, or moves the check into the
+   transaction.
+8. **`StoreProbe.waitUntilHeld()` waits for ever when the held call never comes,** and a time limit cannot
+   cancel it. Under xcodebuild the 60 s allowance ends the runner; under `swift test` nothing does.
+   Recommendation: about eight lines in `StoreProbe` that resume the waiter on cancellation, in the next change
+   to that file.
+9. **The fake's programs and log are not under the history's lock for a reader that reads only those two**
+   (decision 6). Recommendation: leave; say so in ADR-008 when it is next amended.
+
+### Inputs for S4, S7, S8 and F13
+
+Corrected in place in fix round 1 (2026-10-05), as S2's inputs were: S7's sentence on what `finish` may throw and
+its "Discard" line, S8's compare-and-set bullet (review S3-SF2) and its last bullet (S3-N6, which was wrong), and
+F17's rule for a peer's or a rebuilt workout.
+
+- **S4.** Nothing new to call. When `finish` returns, or its update arrives, the workout is in history, the
+  program holds its swaps and the log is gone, all at once. The Debug "Start sample workout" row still needs a
+  new workout id for every start.
+- **S7.**
+  - A failed save leaves nothing half done: no row, no miss, no program change. "Try again" is still `finish`,
+    it retries the whole transaction, and it keeps the first end date. S2's three consequences of a waiting end
+    stand unchanged, and so do its two open questions.
+  - Over the database the call that saves a workout does not throw once the workout is in history, so the
+    receipt may read history as soon as `finish` returns. (It would take the host's look at its event store and
+    the compaction that answers a failed look to fail one after the other, right after a save that succeeded.)
+  - "Discard" after a failed save saves the workout **and** changes the program, as a waiting finish is
+    completed first. Decide with Pete's question on abandoning a workout that cannot be saved.
+  - `FakeWorkoutSessionClient` stores nothing: a test that the program changed at Finish needs the host over
+    `InMemoryStores`, as `LocalWorkoutSessionActorProgramTests` does.
+- **S8.**
+  - A swap with `alsoUpdateProgram: true` records `programUpdates[slotID]`; the program changes when the
+    workout is saved, and never when it is discarded (Pete's decision 1, default A).
+  - Only an exercise with a `slotID` can record one (`Sources/LedgerDomain/Engine/WorkoutEngine+Reduce.swift:150`):
+    hide the toggle for an ad-hoc workout, or it does nothing.
+  - **A later swap of the same slot with the toggle off does not clear the earlier entry** (the same line: the
+    entry is only ever written). Bench to dumbbell bench with the toggle on, then to incline with it off, saves
+    a workout that did incline and a program that says dumbbell bench. It is the engine's rule (F04), not this
+    slice's; decide it with O10.
+  - **Make the swap compare-and-set, with O10** (review S3-SF2). Today an entry is applied by every
+    materialisation, whenever the slot does not already hold its exercise. So a save that lands after the lifter
+    changed that slot (a waiting end completed days later, a retry, a rebuild) sets the slot back to the swap's
+    exercise, with no log line: the lifter's later choice is replaced by an older one. The protocol says so now,
+    and the contract pins it (`linkedClauses.laterSaveSetsTheSlotBack`). The cure: the swap carries the exercise
+    the slot held when the lifter swapped, `programUpdates[slot]` becomes that pair, and an entry is applied
+    only while the slot still holds the first of the two. The write is then safe at any time and in any order.
+    In the repository it is one more bound value in a query that already reads the slot's exercise
+    (`writeProgramUpdates`), the same in the fake, and the clause turns round. It changes an engine payload,
+    which is why it goes with O10.
+  - The slot keeps its sets, reps, loads and misses (Pete's decision 2, default A), and this workout's miss is
+    recorded on it, judged on the replacement's sets against the targets the swap kept.
+  - The update goes to the workout's own program even when another is active; the misses do not (ruling O9).
+  - `observeActive()` emits the program once the save has changed it (`linkedClauses.observersHearTheSave`), so
+    Today's next session follows without a reload.
+  - The replacement must have a row: an update naming an exercise with none is skipped. A soft-deleted exercise
+    keeps its row, so an update naming one is applied, as a program save accepts it
+    (`ProgramRows.holdsExercise(_:in:)`, the one rule for both). No call deletes an exercise today.
+  - Nothing tells the lifter that an update was skipped (open question 6).
+- **F13.**
+  - Over the database a saved workout has no log, so the phone's own finish can no longer bring back a workout
+    History deleted, or overwrite `updateSets` edits (F17 "Inputs from F05", S3). One exception in this
+    process: a save that committed and was answered as a failure is saved again from memory at the next call or
+    foreground. The hazard remains for F17's rebuilds from a peer's envelopes.
+  - `delete(id:)` does not undo a program change or a miss: both belong to the program.
+  - Storing a workout that was read from history never touches a program (decision 4): it has no
+    `programUpdates`.
+  - A stored workout's exercise row carries the swapped exercise's id and name with the original's equipment
+    and step. That is O10, not decided here.
+- **F17.**
+  - **The rule for a peer's or a rebuilt workout** (review S3-SF2; for the ADR-004 amendment). A
+    materialisation is not free to repeat: each one writes the misses and the program updates again, on the
+    program as stored then. So a rebuild that stores an older workout again sends no slots and no
+    `programUpdates` (the workout as history returns it has none), until swaps are compare-and-set. A peer's
+    finished workout that the phone materialises for the first time carries the peer's `programUpdates`: they
+    land on the phone's copy of the program by the same rule (the workout's own program, a stored exercise).
+    Decide whether both devices apply a swap, or only the one where the lifter asked for it.
+  - Until then the order of saves decides which swap a slot keeps. A recovery pass completes ended logs in the
+    order their workouts started (fix round 1, S3-N5); a rebuild path must keep that order.
+  - A saved workout has no log on this device. A late envelope for it finds no `started`, replays to nothing
+    and is kept: the amendment must say what the host does then.
+  - The host looks in its own event store after every save (F10-S3-1), so a workout repository paired with
+    another store's log cannot leave one behind. A wrapper around `WorkoutRepository` now has to implement the
+    one call and say what it answers; there is no default to fall into.
+  - The completeness check and the drop are still two reads apart (open question 7), and
+    `GRDBWorkoutRepository` answers for its own queue only.
+
+### Not verified
+
+- **The full gate, anything on watchOS, and the coverage gate.** Not run. The simulator saw only
+  `LedgerSyncTests` and `LedgerPersistenceTests`, on iOS, twice.
+- **Criterion 8 on a simulator.** The timing suite is nightly only; the 16 ms is a Mac's.
+- **Criterion 9 on CI.** The figures are one Mac's, one run each, under different loads. Whether 64 % locally is
+  64 % of CI's 576 s I cannot say.
+- **The nightly lane's full matrix on a simulator** (2,000 seeds × 6). On the host I ran 200 × 6 with the lane
+  set to nightly.
+- **The one-step program write in the fake** (mutant F8) and **the fake's deleted program** (F3): no test tells
+  them apart.
+- **A kill by the system.** As in S2, a kill point is a trigger that refuses a statement.
+- Shared state: the disk ran low at about 11:40, as the orchestrator reported. One host run of mine straddled
+  it and its log is cut in the middle of a line; I ran it again. The hang in that run was real and is open
+  question 8, not the disk. The lock was held by F08's runs when I first asked for it (110 s) and free
+  afterwards. No test helper process is left running.
+
+### S3 — orchestrator rulings after G1 (2026-10-05)
+
+- **Deviation 1 accepted for now:** the two-argument `materialize` stays a requirement beside the new call, so the
+  testers' conforming types still compile. The reviewer judges whether one of the two should go once the testers'
+  types are moved.
+- **Criterion 9 is half done:** the implementer's session suites went from 25.7 s to 5.9 s; the S1 and S2 testers'
+  suites (about 31 s) are theirs. S2's tester, who tests this slice too, cuts its own in the PR lane by the same
+  lane check (nightly keeps the full matrix); S1's tester's suites are cut in the same pass, as sanctioned edits
+  limited to how many seeds and set-ups run in which lane.
+- **The tester test that fails by ruling** (`kill_afterTheSaveBeforeTheCompaction_compactsOnRelaunch`) is the
+  tester's to move: over one database that state no longer exists.
+- **ADR-004 rule 5** ("compacted after successful materialisation") now reads "with" over the database. The ADR is
+  not edited in this slice; the wording goes into one ADR-004 amendment with the waiting-end paragraph, for Pete's
+  review, before F17 is planned.
+- This commit has not had the orchestrator's full gate: one test fails by ruling until the tester moves it. The gate
+  runs on the tree after the tester's round.
+
+### S3 — orchestrator rulings after G2 and G3 (2026-10-05)
+
+G3 approved: 0 Blocking, 5 Should fix, 6 nits; the save is one transaction in the right order, and it found no way
+to lose, duplicate or half-save a workout or to write another program's rows. G2 round 1: the save held; one latent
+bug in how the host uses it (two tests failing on purpose); its failing S2 test is replaced; the session suites
+now cost 14.6 s in the PR lane against 58.1 s before the slice (criterion 9 is met).
+
+For fix round 1:
+- **F10-S3-1 accepted:** the host does not take the repository's word alone. After a save that answered that the
+  log was dropped, the host checks its own event store, and compacts there when the log is still present. A host
+  whose repository and event store are not one database then ends with the log gone, as the rule "an end is
+  complete when its log is gone" asks. The tester's two tests pass unedited.
+- **S3-SF1 accepted, now:** `materialize(_:slotUpdates:droppingLog:) -> Bool` is the one requirement, with no
+  default and not discardable; the two-argument call is an extension that passes `droppingLog: false`. Every
+  conforming type states what it holds. The mechanical change to the testers' conforming types is sanctioned
+  (implement the three-argument form: save and answer `false`, or forward where the type wraps a linked store);
+  each changed line is listed, and the tester audits it.
+- **S3-SF2:** the protocol says now that a later materialisation sets a slot back to the swap's exercise if the
+  lifter changed it in between, as it already says of misses. Making the swap compare-and-set belongs to S8 with
+  O10; the rule for a peer's and a rebuilt workout goes into the ADR-004 amendment (Pete), before F17 is planned.
+- **S3-SF3:** not in this slice. ADR-008's and standards §4's description of the event-store fake is corrected in
+  the same amendment PR as ADR-004's; the PR body of this slice says so.
+- **S3-SF4 and S3-SF5 accepted** (a probe that fails instead of waiting for ever; programs compared to a `Bool`
+  with a printed difference, never whole inside `#expect`).
+- **Nits** as the review writes them unless one costs more than a few lines; S3-N5 (recovery deals with ended logs
+  in a stated order) is taken.
+- **F10-S3-2** (two overlap cases of S1's tester fail on one thread; the cut keeps them in the nightly lane only)
+  joins the chore list.
+
+### S3 fix round 1 (G1 implementer, 2026-10-05)
+
+On `f1427aa`, tree clean at the start. Nothing is committed. Paths are under `LedgerKit/` unless they start with
+`docs/` or `tasks/`. `Repositories` is `Sources/LedgerDomain/Protocols/Repositories.swift`, `Protocol`
+`Sources/LedgerDomain/Protocols/WorkoutSessionClient.swift`, `GRDB`
+`Sources/LedgerPersistence/Repositories/GRDBWorkoutRepository.swift`, `Recovery`
+`Sources/LedgerSync/LocalWorkoutSessionActor+Recovery.swift`, `Probe`
+`Sources/LedgerTestSupport/Engine/StoreProbe.swift`, `Linked`
+`Sources/LedgerTestSupport/Persistence/WorkoutRepositoryContract+Linked.swift`. Scratch files are in
+`scratchpad/f10s3/fix1/`. The full gate was not run, as the brief says: everything below is the Mac host's.
+
+**Three things to know first:**
+
+1. **A fifth tester type was changed, which the review does not name.** `OldWrapper`
+   (`Tests/LedgerPersistenceTests/Adversarial/LinkedSaveLogAdversarialTests.swift:125`) conforms to
+   `WorkoutRepository` through the default that S3-SF1 removes, so its target stopped compiling. I made the same
+   mechanical change there and nothing else; its comment and its test's premise are now the tester's to reword
+   (under "Sanctioned test edits").
+2. **A look that fails is not thrown** (item 2 below). The host compacts instead. I chose that over letting the
+   read's error out, so that the call that saves a workout still does not throw once the workout is in history.
+3. **In the nightly lane on one thread three tests fail**, none of them this round's by what they check: S1's
+   tester's two overlap-check tests and S2's timing test. In the PR lane nothing fails on either pool.
+
+#### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| 1. S3-SF1 | `materialize(_:slotUpdates:droppingLog:) -> Bool` is the one requirement: no default, not discardable. The two-argument call is an extension method that passes `droppingLog: false` and drops the answer | `Repositories:54-88`, `:110-115` |
+| 1 | The forwarding methods are gone from the GRDB repository and the fake; each states what it answers (its own queue's log; the linked event store's, or none) | `GRDB:32-87`; `Sources/LedgerFakes/InMemoryWorkoutRepository.swift:38-64` |
+| 1 | The stub, the probe's wrapper and `SeparateWorkoutRepository` implement the one form: the stub throws, the probe passes the call on with its answer, the separate repository saves and answers `false` | `Sources/LedgerDependencies/Unimplemented/UnimplementedStores.swift:62`; `Sources/LedgerTestSupport/Engine/ProbedStores.swift:89`; `Tests/LedgerSyncTests/Support/HostSupport.swift:100` |
+| 1 | The testers' conforming types: under "Sanctioned test edits" | |
+| 2. F10-S3-1 | After a save that answered `true` the host looks in its own event store (`holdsNoLog(of:)`: one `uncompactedWorkoutIDs()`), and returns only when the log is not listed. Listed, or the look failed: it compacts, as after an answer of `false` | `Recovery:150-181`, `:183-202` |
+| 2 | What the answer means, and that a caller holding an event store looks there | `Repositories:79-83`; `GRDB:22-26` (the queue), `:61-62`; `Sources/LedgerDomain/Protocols/WorkoutEventStore.swift:40-44`, `:55-57`; `Protocol:89-94`; `docs/architecture.md` §6 |
+| 3. S3-SF2 | "changes nothing, the program included as long as it was not edited in between"; a new bullet: an entry is applied by every materialisation, and one made after the lifter changed the slot sets it back; store an older workout again without its `programUpdates` | `Repositories:60-61`, `:70-72`; `GRDB:50-52` |
+| 3 | The same rule as a contract clause, on GRDB and the linked fakes: stored again without its entries a workout leaves the program alone, with them it sets the slot back | `Linked:26-29`, `:181-205` |
+| 3 | Compare-and-set into the inputs for S8, and the rule for a peer's or a rebuilt workout into the inputs for F17 | this file, "Inputs for S4, S7, S8 and F13", corrected in place (its first paragraph says so) |
+| 4. S3-SF4 | `waitUntilHeld()` throws `StoreProbe.NeverHeld`, which names the held call, when its task is cancelled before the call came, as a suite's time limit cancels it. The waiters sit behind a `Mutex`, so the cancellation handler lets one go without waiting for the actor, and a waiter cancelled before it could wait is marked so | `Probe:26-39`, `:53-62`, `:92-123`, `:142-148`; six callers now `try` |
+| 4 | `StoreProbe.swift` went over the file limit with it: the probed store wrappers moved, unchanged but for item 1, to a file of their own | `Sources/LedgerTestSupport/Engine/ProbedStores.swift` (new) |
+| 5. S3-SF5 | The host's program suite compares programs by `Program.difference(from:)`, and a saved workout by a `Bool`: no whole program or workout inside `#expect` | `Tests/LedgerSyncTests/LocalWorkoutSessionActorProgramTests.swift:36-44`, and the eleven expectations that use them |
+| 6. S3-N5 | A recovery pass reads every log first, then completes the ended ones in the order their workouts started, then by id (`startedBefore`, which `resume` uses too) | `Recovery:15-17`, `:62-88`, `:116-119` |
+
+**Item 2, the design.** `complete(_:)` saves; on `true` it looks; it returns when the log is not listed, and in
+every other case it runs the compaction it always ran after `false`.
+
+- *Which read.* `uncompactedWorkoutIDs()` is the store's own definition of "a log is still there", unreadable
+  rows included. `envelopes(for:)` leaves unreadable rows out and `highestSeq` asks about one device.
+- *A log still listed* after `true` means the repository dropped another store's. The host logs a fault, because
+  no composition of the app pairs stores so, and compacts.
+- *A look that fails* is logged at error level and answered by the compaction too. Compacting a log that is gone
+  does nothing, so the end is still only complete once the log is known to be gone: either the look said so or
+  the compaction succeeded. The alternative, throwing the read's error, would make `finish` throw for a workout
+  that is in history whenever one read failed after the commit. As built it takes the look **and** the
+  compaction failing, one after the other, right after a save that succeeded
+  (`finish_theLookAndTheCompactionFail_theEndWaits`): the end then waits as any other, and the retry saves again
+  and ends it.
+- *What the fix does not do.* It does not tie a repository to an event store. A pairing of two stores is still
+  only found out at the first finish, by the fault in the log.
+
+#### The cost of the host's look
+
+One read of the event store per save of a finished workout: at `finish`, at its retry, and for each finished log
+a recovery pass saves. No write, unless the log is still listed or the look failed, and then one compaction.
+
+- Over GRDB it is `SELECT DISTINCT workout_id FROM workout_event`, on the table's index, in a read of its own.
+  After a save that dropped the log the table holds only the logs that are kept: usually none.
+- Measured in the nightly timing test, which now times the look after each save
+  (`RecordReplayPerformanceTests.finishWithProgramUpdatesAndTheLog_underBudget`), by hand on the Mac host, Debug, a
+  file database of 20,000 sets with a kept log of 200 events beside the one dropped: **p95 80 µs, median 56 µs**,
+  against p95 11.1 ms and median 10.5 ms for the save before it. Under one per cent of the finish
+  (`fix1/attachments/finish-save.txt`).
+- That test now holds the save and the look together to the save's budget of 50 ms.
+- Call for call, a finish over one database is now `unreadableCount`, `append`, `unreadableCount`, `materialize`,
+  `uncompactedWorkoutIDs` (`finish_oneDatabase_looksOnceAfterTheSave` pins the list).
+
+#### The failure table, as it now stands
+
+Rows changed in this round are in bold; the others are as in the slice's section above.
+
+| Step that fails | Memory | Store | Caller | Subscribers | Retry | Relaunch |
+|---|---|---|---|---|---|---|
+| append, any event; an append that stored and then threw; the clock | as in S2 | | | | | |
+| the save, after `.finished` is stored: one transaction | `live` as before the finish; the end pending; clock and `seq` advanced | the log whole, with its `finished`; no history row, no miss, no program change | the store's error | nothing; `current()` still the workout | `finish`: saves and drops in one transaction, looks, publishes once, returns the state ended at the first date. `apply`, `discard`: complete it, then `noLiveWorkout`. `start`: `workoutInProgress`. Foreground: the step, no haptic | saved by the step; nothing live meanwhile |
+| the save that stored and then threw (a store that lies) | the same | the workout in history, the log gone | the store's error | nothing; `current()` still the workout | `finish`: saves again (no change), looks, publishes once | nothing live, nothing to do |
+| **the look after the save** (`finish_theLookFails_theHostCompacts`) | nothing pending | the workout in history; the log gone, or still listed | **nothing is thrown:** the host compacts, and `finish` returns | the ending update, once | — | — |
+| **the look, and then the compaction** (`finish_theLookAndTheCompactionFail_theEndWaits`) | `live` as before the finish; the end pending | the workout in history; over one database the log is gone and the host does not know it | the compaction's error | nothing; `current()` still the workout | `finish`: saves again (no change), looks, publishes once | over one database nothing is left; otherwise saved again, compacted |
+| **`compact` after the save, where the host's own event store still lists the log:** the repository holds no log (`false`), or holds another store's (`true`, and the look finds the log; `finish_repositoryAnswersForAnotherStore_theHostDropsItsOwnLog`, the tester's `HostMixedStoresAdversarialTests`) | the same | the log, and the history row with its misses and program changes | the store's error | nothing | saves again, compacts, publishes once | saved again, compacted |
+| `compact`, after `.discarded`; a read during recovery | as in S2 | | | | | |
+| a save during recovery | the other logs dealt with, **in start order**; the live one resumed | that log kept whole, and nothing of its save | the step throws; a protocol call does not | — | the next foreground | the next launch |
+
+"Saves again" changes nothing as long as the program was not edited in between (S3-SF2).
+
+- **`finish` over the database:** stores `finished`; one transaction; one read; the ending update. Nothing is
+  thrown after the transaction unless that read and the compaction that answers it both fail.
+- **`discard`, a second `finish`, the launch step:** as in the slice's section.
+
+#### The recovery table, as it now stands
+
+| Stored when the app died | The step | Afterwards |
+|---|---|---|
+| nothing, or a `started` that never reached the store | nothing | no workout |
+| a live log | resumes it: no haptic, no effect run | `current()` is the workout |
+| `finished` stored, not saved | one transaction: saves, with the misses from the program as stored now and the program updates, and drops the log; **then looks** | in history; no live workout |
+| saved, and the log still there | saves again and drops the log; **where the repository answered for another store's log, the look finds it and the host compacts** | the same; the program as the save leaves it (S3-SF2) |
+| `discarded` stored, not compacted | compacts | nothing in history, no program changed |
+| a log that replays to nothing | keeps it and logs a notice | no workout |
+| a log with rows this version cannot read | live: resumes from what it reads; ended: keeps it | a workout, or none |
+| a save that throws | keeps the log whole; nothing is saved; records the step as failed; carries on with the other logs | retried on the next foreground |
+
+**Order (new).** A pass reads every log before it completes any, so a read that fails leaves nothing completed.
+The ended logs are then completed in the order their workouts started, then by id, whatever order the store
+lists them in: of two finished workouts that swapped one slot, the program keeps the later one's exercise
+(`recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted`, with the later log listed first and last).
+
+#### Sanctioned test edits (for the tester's audit)
+
+`git diff f1427aa -- 'LedgerKit/Tests/*/Adversarial'` shows four files and these lines only. Line numbers are the
+files' now.
+
+| File | Line | Old | New |
+|---|---|---|---|
+| `Tests/LedgerPersistenceTests/Adversarial/HistoryModel+Repositories.swift` | 7 | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {` | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {` |
+| | 16 | (no line) | `return false`, after the `write { … }` block |
+| `Tests/LedgerSyncTests/Adversarial/HostSiegeSabotageAdversarialSupport.swift` | 64-66 | `func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}` | `func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {`, `false`, `}` |
+| `Tests/LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift` | 42-45 | `func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {}` | the same three lines, and a blank line after them, which the formatter asks for after a body of more than one line (`blankLinesBetweenScopes`; checked on a copy) |
+| `Tests/LedgerPersistenceTests/Adversarial/LinkedSaveLogAdversarialTests.swift` (`OldWrapper`, **not named by the review**) | 128 | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {` | `func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog _: Bool) async throws -> Bool {` |
+| | 130 | (no line) | `return false` |
+
+- **`SiegeWorkoutRepository` is not edited.** It already implements the three-argument form
+  (`HostSiegeStoresAdversarialSupport.swift:81`); its two-argument method is now an ordinary method, which its
+  own unlinked path calls.
+- **`HistoryModel`, `SabotagedWorkoutRepository`, `BriefWorkoutRepository`** each save as before (or not at all)
+  and answer `false`: none holds a log.
+- **`OldWrapper`, for the tester.** It was written to show what the default did for "a wrapper written before
+  S3". There is no default now, and such a wrapper no longer compiles, which is S3-SF1's point. With the edit it
+  is a wrapper that does not pass `droppingLog` on, and its test
+  (`save_throughAWrapperOfBeforeS3_keepsTheLogAndSaysSo`) passes on both stores and still shows something true: a
+  wrapper that saves through the two-argument call keeps the log, says so, and loses no program change. Left as
+  they were, and no longer exact: the comment at `:124` ("inherits the new one's default"; it could read "it
+  saves through the two-argument call and answers that the log is still there") and the test's name. I did not
+  touch either.
+- **The tester's two failing tests pass unedited:** `finish_eventStoreElsewhere_dropsItsLog` and
+  `relaunch_afterAFinish_findsNoLogToSaveAgain`, four pairings each, on both pools.
+- No other tester file is changed, and no tester test fails.
+
+Tests of my own that changed: the six `waitUntilHeld()` callers (`try`); `LocalWorkoutSessionActorProgramTests`
+(S3-SF5); `LinkedSaveDifferentialTests` (its own thirty seeds); the timing test (the look);
+`LocalWorkoutSessionActorPerformanceTests` (the lane's one name); `SeparateWorkoutRepository` (item 1).
+
+New tests: `LocalWorkoutSessionActorSaveTests`: `finish_oneDatabase_looksOnceAfterTheSave`,
+`finish_repositoryAnswersForAnotherStore_theHostDropsItsOwnLog`, `finish_theLookFails_theHostCompacts`,
+`finish_theLookAndTheCompactionFail_theEndWaits`, `probe_waitForACallThatNeverComes_endsOnCancellation`;
+`LocalWorkoutSessionActorProgramTests.recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted` (× 2); the contract
+clause `laterSaveSetsTheSlotBack` (× 2 stores).
+
+#### Nits
+
+| Nit | Taken | What | Where |
+|---|---|---|---|
+| S3-N1 | yes | The differential builds its own thirty seeds; the nightly lane runs every seed of the lane and never fewer than the thirty | `Tests/LedgerPersistenceTests/LinkedSaveDifferentialTests.swift:20-28`, `:64` |
+| S3-N2 | **in part** | `hostSeeds` is the longer of the lane's seeds and the fixed twenty. The Sync target reads the lane by one name (`TestLane.isNightly`; the inline read is gone). Testing-strategy §1 and §6 say how a matrix is cut by lane. **Not taken: one name across targets.** The tester's `SessionLane` uses `TestLane.isNightly` (`Tests/LedgerSyncTests/Adversarial/SessionLaneAdversarialSupport.swift:10`), and tester files of Persistence and Design use `TestLane.runsSlowTests`: either rename edits a tester's file | `Tests/LedgerSyncTests/WorkoutSessionClientContractTests.swift:24-30`; `LocalWorkoutSessionActorPerformanceTests.swift:15`; `docs/testing-strategy.md` §1, §6 |
+| S3-N3 | yes | The repository's `init` says which queue its answer is about, and that a host looks in its own event store all the same | `GRDB:22-26` |
+| S3-N4 | yes | One rule for "the exercise is stored", `ProgramRows.holdsExercise(_:in:)`, used by a program save and by the program updates. An ad-hoc workout returns before the loop, with one notice | `Sources/LedgerPersistence/Records/ProgramRows.swift:87`, `:94-99`; `GRDB:210-216`, `:238` |
+| S3-N5 | yes | item 6 above | |
+| S3-N6 | yes | "A host whose stores are one database saves in one transaction"; "the call that saves it does not throw once it is in history"; "`discard` saves the workout, with its program changes". The notes' sentence on a deleted custom exercise was wrong and is corrected in place | `Protocol:64-69`, `:97-99`; this file, the inputs for S8 |
+
+#### Mutants of this round
+
+`fix1/mutants-fix1.py` (logs `fix1/mutants.log`, `fix1/mutants2.log`): each applied alone, the named suites run,
+the file put back and compared byte for byte. **Thirteen of thirteen are seen, one of them by a hang.**
+
+| Mutant | Seen by |
+|---|---|
+| R1 the host takes the repository's word: no look | 6 tests: mine and the tester's two |
+| R2 a look that fails is taken for a log that is gone | `finish_theLookFails_theHostCompacts`, `finish_theLookAndTheCompactionFail_theEndWaits` |
+| R3 a log that is still listed is taken for gone | mine and the tester's two |
+| R4 recovery completes ended logs in the store's order; R5 latest first | `recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted` alone |
+| H1 the host compacts after every save | 7 tests, in 11 s |
+| H2 the host never compacts after a save | 37 tests, **in 70 s**: `finish_publishesAfterTheSave` waits to its time limit and then fails with `NeverHeld`. In the first round this mutant hung the run for good |
+| H3 the host saves without dropping the log | 11 tests |
+| G5 the exercise is not checked; G5b the shared rule asks for a live row; G11 the answer is always no; G14 an ad-hoc workout's updates reach a program | 1 to 4 tests each |
+| **R6 the probe's wait ignores cancellation** | **a hang**, which is the fault it puts back: the probe's own test never returns. The script stopped it after 420 s |
+
+**My first version of the probe's test hung under H1, H3 and G11.** It held `.compact` and then called `finish`
+on a host that must not compact; a host that did compact parked there for good. The test now uses a bare probe
+and no host (`Tests/LedgerSyncTests/LocalWorkoutSessionActorSaveTests.swift:31-43`). The general weakness stays: a held call that does
+come, in a test that then fails before its `release()`, still waits for ever. Open question below.
+
+#### Host runs, lint, Release build
+
+On the final tree. `env -u SDKROOT swift test --package-path LedgerKit --only-use-versions-from-resolved-file
+--skip-build --filter '^(LedgerSyncTests|LedgerDomainTests|LedgerAppKitTests|LedgerPersistenceTests|LedgerDependenciesTests)\.'`,
+once as it is and once with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` (`fix1/final-default.log`,
+`fix1/final-onethread.log`):
+
+| Target | Default pool | One thread |
+|---|---|---|
+| LedgerSyncTests | 276 tests in 48 suites, passed (13 known issues, S1's) | the same |
+| LedgerPersistenceTests | 495 tests in 113 suites, passed (1 known issue) | the same |
+| LedgerDomainTests | 838 tests in 138 suites, passed | the same |
+| LedgerDependenciesTests | 63 tests in 11 suites, passed (17 known issues) | the same |
+| LedgerAppKitTests | 66 tests in 16 suites, passed | the same |
+| Exit | **0** | **0** |
+
+At `f1427aa` the Sync target had 270 tests, with the tester's two failing on purpose; six are new.
+
+| Command | Exit | Result |
+|---|---|---|
+| The filter above, default pool | 0 | the table |
+| The same, one thread | 0 | the table: nothing fails there in the PR lane |
+| `LEDGER_TEST_LANE=nightly LEDGER_PROPERTY_SEED_COUNT=200 swift test … --filter '^LedgerSyncTests\.\|LinkedSave\|InMemoryContractTests\|WorkoutRepositoryLinkedTests'`, default pool | 0 | 276 and 53 tests passed, the full matrices |
+| The same, one thread | **1** | three tests fail, below |
+| `stress.py 20 'LocalWorkoutSessionActor\|WorkoutSessionConcurrentScriptTests\|HostMixedStoresAdversarialTests\|HostLinkedSaveAdversarialTests\|HostNeverLostAdversarialTests\|HostRecovery\|HostEndFailure\|HostProgramUpdate'`: the host's own suites and the tester's save, siege and recovery suites, 123 tests in 18 suites | 0 | 20 of 20 green, 109 s |
+| The same with `LIBDISPATCH_COOPERATIVE_POOL_STRICT=1` | 0 | 20 of 20 green, 188 s |
+| `LEDGER_TEST_LANE=nightly swift test … --filter RecordReplayPerformanceTests`, once | 0 | the look's cost, above |
+| `scripts/check.sh --lint-only` | **0** | format, `swiftlint --strict`, package graph, pins, script tests. No new suppression |
+| `cd LedgerKit && env -u SDKROOT swift build -c release --only-use-versions-from-resolved-file` | **0** | no warning; no symbol of `InMemoryStores`, `InMemoryWorkoutEventStore`, `InMemoryWorkoutRepository`, `InMemoryProgramRepository`, `FakeWorkoutSessionClient`, `SplitMix64`, `FakeLinkBus` or `Fixtures` in a Release object; `Release/LedgerFakes.o` is 1,176 bytes, as before |
+| `scripts/check.sh` (full gate) | not run | the orchestrator's |
+
+**The nightly lane on one thread: three tests fail, in every such run I made (one).**
+
+- `SessionContractBiteAdversarialTests.racyClient_isRejectedByThisSuitesOverlapChecks` and
+  `SessionContractRoundTwoAdversarialTests`' test of the same name: the two cases the tester's finding F10-S3-2
+  names (`found != nil`), and nine more cases of the same two tests that met their one-minute time limit. On one
+  thread a test waits for every other test of the run, and the whole Sync target took 65 s there with the
+  nightly matrices.
+- `LocalWorkoutSessionActorPerformanceTests.apply_withItsAppend_isUnderBudget` (S2's timing test): over its
+  budget while the rest of the target ran on the same one thread. Alone it passes: p95 116 µs.
+- None of them checks anything this round changed. I did not run the same at `f1427aa`, which needs a checkout,
+  so that they fail there too is not shown.
+
+#### Code lines
+
+`count-lines.py` as before (`git diff -U0`, blank and whole-line comment lines excluded):
+
+| | Against `95ac9b8` (the slice) | This round, against `f1427aa` |
+|---|---|---|
+| Product | **+100 −20** (was +70 −7) | +45 −28 |
+| `LedgerFakes` | +74 −36 | +0 −4 |
+| Test support | +433 −118 | +193 −124 (113 of each are the wrappers moved to `ProbedStores.swift`) |
+| Tests, the testers' included | +2,782 −108 | +197 −35 |
+
+Product by file, this round: `Recovery` +29 −10 (the look, the order), `GRDB` +9 −10, `ProgramRows.swift` +4 −1,
+`Repositories` +2 −6, `UnimplementedStores.swift` +1 −1. The slice is now ten lines over the brief's "about 50 to
+90"; the look and the order are what took it there.
+
+#### Open questions
+
+1. **A held store call in a test that fails before its `release()` still waits for ever** (`StoreProbe.hold`,
+   and the tester's `Siege.hold` alike). S3-SF4 closed the wait for a call that never comes, not this.
+   Recommendation: a `withHeld(_:during:)` on the probe that releases on every way out of its body, when the
+   next test needs a held call.
+2. **A look that fails is answered by a compaction, not thrown.** Recommendation: keep. If the reviewer would
+   rather have every store error reach the caller, it is two lines, and `finish` then throws for a saved
+   workout on one failed read.
+3. **The lane check has two names across targets** (S3-N2). Recommendation: the chore that moves S1's two
+   one-thread cases can rename one of them, since it edits tester files anyway.
+4. **`OldWrapper`'s comment and test name** are the tester's to reword (above).
+5. **Product lines are at 100.** Recommendation: accept; nothing was compressed, and what was added is the
+   ruling's.
+
+#### Not verified
+
+- **The full gate, anything on a simulator or a watch, coverage.** Not run in this round. The orchestrator runs
+  the gate.
+- **Criterion 9's figure after this round.** Six host tests are new and none is a matrix; I did not measure
+  again.
+- **The three nightly, one-thread failures at `f1427aa`** (above), and the nightly lane's 2,000 seeds.
+- **The look's cost on a simulator or a phone.** 80 µs is the Mac's.
+- **The probe's wait under a real time limit** is shown by mutant H2 (70 s, then a failure); the probe's own
+  test cancels its waiter by hand.
+- Nothing odd in shared state. No helper process is left running. I interrupted my own mutant run once, and
+  checked afterwards that every mutated file was back, by its diff.
+
+### S3 — orchestrator's close (2026-10-05)
+
+- The orchestrator's full gate on the fix round's tree exited 0. The tester's two tests for F10-S3-1 pass unedited,
+  which was the finding's closing condition. **G2 is closed; G3 approved.**
+- The edits to the testers' conforming types were read by the orchestrator line by line: each is the new signature
+  answering `false`, nothing else (four files; a fifth type, `OldWrapper`, for the same reason).
+- Not in this slice, queued: S3-SF3 and the ADR-004 wording (one amendment for Pete); S3-N2's name across targets;
+  the three tests that fail in the nightly lane on one thread (S1's two overlap tests, S2's timing test).
+
+## Slice S4 — the cover and the header (G1 implementer, 2026-10-08)
+
+Built on `d61a3c4` (`main` `1d16e28` plus the specification), in the worktree `F10-s4`, on `feat/F10-s4-cover`.
+Nothing is committed and no PR is open. **This section is written as the work goes; "The runs" at its end says
+what was run and what was not.**
+
+### The lifecycle table
+
+Two objects, with one job each. `WorkoutLauncher` (public; the app's root holds one for its life) owns *which
+workout is showing*: its `phase` is one of `idle`, `working`, `cover`, `conflict(source)`, `failed(failure)`, so
+the cover, the conflict dialog and a failure can never be up together. `WorkoutStore` (one per presentation of
+the cover) owns *the workout on screen*: it follows `WorkoutSessionClient.updates()`, and holds the finish
+dialog, the discard and the reason the cover closes (`exit`). Neither keeps a workout of its own: what is live is
+always what the session says.
+
+An intent is accepted by the launcher only while it is `idle`, `conflict` or `failed`; while it is `working` or
+the cover is up, `start`, `resume` and the dialog's choices do nothing. Each row below is one test
+("Criteria → tests").
+
+| # | What happens | Launcher `phase` / store state afterwards | What the lifter sees | The session afterwards |
+|---|---|---|---|---|
+| L1 | `start(day)`, nothing live | `working` → `cover`; `StartWorkoutUseCase.start` ran once | the cover: the day's name, 0:00 counting, no segment done | that day's new workout, live |
+| L2 | `start(day)`, that day's workout live (resume) | `working` → `cover`; the use case is **not** called (criterion 3) | the cover, with the workout as it stands and its real elapsed time | unchanged |
+| L3 | `start(day)`, that day's workout live, and the day since deleted or emptied in the program | as L2 | as L2 | unchanged |
+| L4 | `resume()`, a workout live | `working` → `cover`; no use case | the cover | unchanged |
+| L5 | `resume()`, nothing live | `working` → `idle` | nothing | none |
+| L6 | `start(other day)`, a workout live | `working` → `conflict(other day)`; the use case answered `.conflict` | "You have a workout in progress" with its three choices | unchanged: the first workout, live |
+| L7 | conflict → "Resume it" | `working` → `cover` (as L4) | the cover, with the live workout | unchanged |
+| L8 | conflict → "Discard and start new" | `working` → `cover`; the use case ran with `replacingLive`: built the new one, **then** discarded, **then** started | the cover, with the new workout at 0:00 | the new workout, live; the old one discarded, nothing of it in history |
+| L9 | conflict → "Cancel" (or the dialog dismissed) | `idle` | the tabs | unchanged |
+| L10 | conflict → "Discard and start new", the discard fails | `failed(.notReplaced(.liveKept))`; no `start` was made | "Couldn't start the new workout" / "Your workout in progress was kept." | the old workout, live |
+| L11 | conflict → "Discard and start new", the discard succeeds and the start fails | `failed(.notReplaced(.nothingLive))` | "Couldn't start the new workout" / "Your workout in progress was discarded." | none |
+| L12 | conflict → "Discard and start new", the new day cannot be built (emptied, deleted, block over) | `failed(.notReplaced(.liveKept))`; nothing was discarded | as L10 | the old workout, live |
+| L13 | the live workout ends elsewhere while the conflict dialog shows, then "Discard and start new" | `cover` | the cover, with the new workout | the new workout, live |
+| L14 | the live workout ends elsewhere while the conflict dialog shows, then "Resume it" | `idle` (as L5) | the tabs | none |
+| L15 | `start(day)` refused: the day has no exercise / is not in the active program / its week is past the block / anything else | `failed(.notStarted(reason))`, one reason each | "Couldn't start this workout" and the reason's line | unchanged: none, or the other day's workout that was live |
+| L16 | `resume()` and the session cannot be read | `failed(.notOpened)` | "Couldn't open this workout" / "Try again." | unknown to the app; nothing was changed |
+| L17 | a second `start` or `resume` while one is `working`, or while the cover is up | unchanged; the second is dropped | nothing new | at most the one workout the first made |
+| L18 | the view that runs the launcher's task goes away while it works | what the work reached: `cover` if the start went through, else `idle`; a cancellation is never shown as a failure | — | whatever the session completed: the host finishes a call in its own task |
+| L19 | `start(day)`: the store took the write and its answer was lost, so the call threw | `cover`: the launcher reads the session after any failure, and the workout asked for is live | the cover | that day's workout, live |
+| S1 | the cover opens on a live workout | store `loaded(workout)` | the header | unchanged |
+| S2 | "Minimize" | `exit = .minimized`; launcher `idle`; route `.minimized` | the tabs | unchanged: live |
+| S3 | "Finish" | `dialog = .finish` | "End workout?" with "Discard" and "Keep lifting" | unchanged |
+| S4 | "Keep lifting" (or the dialog dismissed) | `dialog = nil` | the cover | unchanged |
+| S5 | "Discard" | `isDiscarding`, then `exit = .discarded`; launcher `idle`; route `.discarded` | the header's buttons disabled, then the tabs | none; nothing in history |
+| S6 | "Discard", and the session refuses it | `dialog = .discardFailed`, `isDiscarding` false | "Couldn't discard this workout" / "It's still in progress. Try again."; then the cover as before | the workout, live (a host keeps its end waiting and shows it live) |
+| S7 | "Discard", and the workout had already ended (`noLiveWorkout`) | no failure; the stream's ending update closes the cover (S9 or S10) | the tabs | none |
+| S8 | another change to the workout arrives (a set logged elsewhere) | `loaded(new state)`; a dialog that shows stays | the header redrawn | as published |
+| S9 | the workout is discarded elsewhere, with or without a dialog showing | `dialog = nil`, `exit = .discarded` | the tabs | none |
+| S10 | the workout is finished elsewhere, with or without a dialog showing | `dialog = nil`, `exit = .saved(id)`; the app selects Today | the tabs | none; the workout is in history |
+| S11 | the cover opens and nothing is live (the stream's first element is nil) | `exit = .nothingToShow`: the cover closes and no route is sent | the tabs | none |
+| S12 | the stream ends while the cover is up (no session bound; a host never ends one) | `failed` | "Couldn't open this workout" / "Close this screen and try again." with "Close" (which minimizes) | unchanged |
+| S13 | the cover goes away (minimize, or the app's root is torn down) while a discard is running | no failure is shown or logged for the cancellation | — | the host completes the discard in its own task |
+| S14 | haptics in an update | ignored in this slice; S6 plays them from the stream only, never from a call's return, so never twice | — | — |
+
+After any request that threw, the launcher reads `session.current()` once more and lets that decide (L10 to L12,
+L19): the error says a call failed, the session says what is live. A read that fails too gives
+`.notReplaced(.unknown)`, whose line claims nothing ("Try again.").
+
+### What landed
+
+- **`FeatureWorkout`** (was a placeholder): `WorkoutRoute`; `WorkoutLauncher` with its state types
+  (`WorkoutLaunch.swift`: phase, failure, action, request) and `View.workoutCover(_:onRoute:)` (`WorkoutCover.swift`);
+  `WorkoutRoot`; `WorkoutStore`; `WorkoutPresentation` (+`Header`) and its models (`WorkoutModel.swift`);
+  `Views/WorkoutScreen`, `Views/WorkoutHeader`, `Views/WorkoutTimeline`; `WorkoutCopy` and
+  `Resources/Localizable.xcstrings` (27 keys); `Workout+Previews` (six states); `WorkoutLauncher+Sample` (Debug only).
+- **`LedgerDomain`**: `WorkoutState.checkedCursor`.
+- **`LedgerAppKit`**: `MainRoot` holds the launcher and applies the modifier in `body`; `Routes+Workout.swift`
+  (`AppRouter.resolve(_: WorkoutRoute)`); the Debug menu's sheet passes the extra row and starts the sample once the
+  sheet is down.
+- **`LedgerDesign`**: `DebugMenu(actions:diagnostics:)` and `DebugMenu.Action`; the menu's preview shows one.
+- **Registrations**: `Package.swift` (the target's `resources`, `snapshotTestTargets`), `coverage-thresholds.json`
+  (`required`), `PreviewScan.registeredModules`, `ModuleCopyTests.exemptions` (the Debug-only sample file).
+- **Tests**: twelve suites in `FeatureWorkoutTests`, `WorkoutRoutesTests` in `LedgerAppKitTests`, one test added to
+  `WorkoutStateTests`, and one UI test in `Apps/LedgerUITests/Smoke.swift`.
+
+### The cover's VoiceOver tree
+
+Pinned by `WorkoutAccessibilityTests.tree_isExactlyTheTable`, for every preview state, at light `.large` and dark
+`.accessibility3`. Read from `WorkoutScreen` itself, which holds no scroll view yet.
+
+| # | Stop | Label | Value | Traits |
+|---|---|---|---|---|
+| 1 | Minimize | "Minimize" | | button (and not enabled while a discard runs) |
+| 2 | the dot and the time, one element | "Elapsed time" | | none |
+| 3 | Finish | "Finish" | | button (and not enabled while a discard runs) |
+| 4 | the workout's name | "Upper A — Push focus" | | header, static text |
+| 5 | the progress segments, one element | "Workout progress" | "Exercise 2 of 5" (empty when the cursor names no row) | none |
+
+Loading has no stop. Failed reads: "Couldn't open this workout" (header), "Close this screen and try again.",
+"Close" (button). The two dialogs and the two alerts are the system's, and are tested through state, not by tree.
+
+### Decisions and deviations
+
+1. **Two objects, not one** (see the table's first paragraph). The task's "the store ... the two dialogs" is read
+   as: the store has the finish dialog and the alert of a discard that failed; the launcher has the conflict
+   dialog and the alert of a start that failed. The conflict dialog shows with no cover up, so it cannot belong
+   to an object that lives with the cover. Tests are split the same way (`WorkoutLauncher…Tests`,
+   `WorkoutStore…Tests`), as the plan's test table has them.
+2. **`WorkoutLauncher.start(_:)` is synchronous** (the rulings, `implementation-notes.md` "O11 accepted. O12–O14";
+   the plan's surface at "S4 — cover and header" still says `async`). An accepted intent makes the next
+   `request`; the modifier's `.task(id: launcher.request)` runs it. Same pattern as onboarding's save attempt.
+3. **`WorkoutRoot` is internal**, where the plan lists it as public. The app never builds it: it only holds the
+   launcher and applies the modifier. Its closure takes a `WorkoutExit`, which is a route or "nothing to show"
+   (row S11), because a cover that found no workout has no route to send.
+4. **`Text(timerInterval:)` is used**, by the specification's criterion 6, against the plan's older line
+   ("`Text(timerInterval:)` … are not used", "Snapshots per slice"). It is written once, in `WorkoutTimeline`, with
+   the timeline's `pauseTime`; `FeatureWorkoutSourceTests` pins both.
+5. **The current segment wins over "done".** The S4 input says "done when every set is done, current when it holds
+   the shown row"; the prototype colours by position (`Ledger v2.dc.html:578`). Here the exercise that holds the
+   cursor is current whatever its sets, so the orange segment is always the exercise the spoken value names; a
+   workout with every set done keeps one orange segment, as the prototype does.
+6. **The workout's name is under the row, as an eyebrow.** Criterion 1 asks for the name; v2's header draws none
+   (`:134-149`), v1 draws it as an eyebrow over the bars (`Ledger.dc.html:520`). It is a VoiceOver heading.
+7. **"Minimize" has no chevron.** v2 draws "‹ Minimize" with a left chevron (`:137-139`). `PillButton` takes no
+   icon, `LedgerIcon` has no left chevron, and `LedgerPressStyle` is internal to `LedgerDesign`, so a button of the
+   feature's own could not press like the others. It is `PillButton(.ghost, flush: .leading)`. See open question 2.
+8. **The finish dialog is the system's `confirmationDialog`** with "Discard" (destructive) and "Keep lifting"
+   (cancel), and no line of sets and volume: S7 replaces it with the "End workout?" sheet, which has that line.
+9. **A dialog's dismissal and its button's action are accepted in either order.** SwiftUI sets `isPresented` to
+   false and calls the action, and the order is not documented. So "Discard", "Resume it" and "Discard and start
+   new" do not depend on the dialog's flag still being up (`WorkoutStore.send`, `WorkoutLauncher.accept`), and a
+   dismissal is only ever the cancelling choice.
+10. **The sample row lives in `FeatureWorkout`** (`WorkoutLauncher+Sample.swift`, wholly `#if DEBUG`, exempt in
+    `ModuleCopyTests` as `debugOnly`): its title is a literal, which `LedgerAppKit`'s audit would refuse in
+    `MainRoot`, and `Fixtures` is `LedgerFakes`', which the feature already links. It starts **week 1** of the
+    active program's first day, not the calendar's week: the seed program's block ends on 2026-10-11, after which
+    a start by date would be refused. `MainRoot` starts it from the sheet's `onDismiss`, because a cover cannot
+    go up over a sheet that is still there.
+11. **`.saved` selects Today** (`Routes+Workout.swift`); `.minimized` and `.discarded` do nothing. Nothing in this
+    slice emits `.saved` except a workout finished elsewhere.
+12. **Header buttons are disabled while a discard runs**, Minimize included. A discard that hung would leave no
+    exit; a host's discard is two store calls, so this was not given a way round.
+13. **A `Date` cannot hold NaN on this SDK** (`Date(timeIntervalSinceReferenceDate: .nan)` traps in `Integers.swift`,
+    measured on the Mac host), so `WorkoutTimeline` guards only a start outside `distantPast ... distantFuture`.
+14. **`FeatureWorkoutTests` imports `LedgerSync`** for the real host over `ProbedStores` (the failure rows): it
+    reaches it through `LedgerTestSupport`, with no new edge in `Package.swift`.
+
+### The catalog's keys
+
+The brief's, word for word (10): "Minimize", "Finish", "Exercise %lld of %lld", "You have a workout in progress",
+"Resume it", "Discard and start new", "Cancel" (the brief gives it for the swap sheet; the conflict's third choice
+uses it), "End workout?", "Discard", "Keep lifting".
+
+**Texts the brief does not give, for the product owner's copy review** (17 keys; "Try again." is used in three
+places):
+
+| Text | When it shows |
+|---|---|
+| "Elapsed time" | spoken only: VoiceOver's name for the running time in the header |
+| "Workout progress" | spoken only: VoiceOver's name for the progress bars; its value is "Exercise 2 of 5" |
+| "OK" | the one button of every alert below |
+| "Couldn't start this workout" | alert title: a start was refused and nothing changed |
+| "This day has no exercises yet." | its message when the day has no exercise |
+| "This day is no longer in your program." | its message when the day, or its program, is not the active program's |
+| "Your program's block has ended." | its message when the week asked for is past the last week |
+| "Nothing was changed. Try again." | its message for any other cause (a store or the session failed) |
+| "Couldn't start the new workout" | alert title: "Discard and start new" did not end with the new workout live |
+| "Your workout in progress was kept." | its message when the old workout is still live |
+| "Your workout in progress was discarded." | its message when the old workout was discarded and the new one did not start |
+| "Try again." | its message when the app cannot tell which; and the message of "Couldn't open this workout" as an alert |
+| "Couldn't open this workout" | alert title when Resume cannot read the session; and the title on the cover when it loses the session |
+| "Close this screen and try again." | under that title, on the cover |
+| "Close" | the button under it; it closes the cover and leaves the session alone |
+| "Couldn't discard this workout" | alert title, over the cover: "Discard" was refused |
+| "It's still in progress. Try again." | its message |
+
+### Inputs for S5
+
+- **Where the body goes.** `Views/WorkoutScreen.swift`, the `.workout` case: the header stays pinned and
+  `ScrollView { WorkoutPage(model: workout.page) }` goes under it; `WorkoutModel` gains `page`. The header's
+  horizontal inset is the screen's (`WorkoutScreen.body`), so move that padding onto the header when the page
+  takes its own. `Support/WorkoutParts.swift` (tests) then stacks the header and the page; trees and references
+  come from it, and `WorkoutAccessibilityTests.screen` must switch to it once the screen holds a scroll view.
+- **How the store grows.** `WorkoutStore.send` is the one switch; add the set intents to `WorkoutAction`. Work that
+  awaits follows the discard's shape: the intent makes the next id, `WorkoutRoot` runs it from a `.task(id:)`. For
+  a queue of taps (two quick "+"), one `.task` draining an `AsyncStream` of intents is the plan's pump; take
+  `apply`'s return as the base for the next intent and leave `workout` to the stream.
+- **Selection.** `WorkoutPresentation.header` reads `checkedCursor`; give it the shown row
+  (`selectedSetID` or the cursor) as a parameter. `segments(of:current:)` already takes the index.
+- **Haptics** are S6's, and belong in `WorkoutStore.follow()`'s loop (`update.haptics`), nowhere else.
+- **`isBusy`** disables the header; the page's controls should read the same flag.
+- The preview fixture `WorkoutPreview.logged(_:in:)` logs rows through the engine at the cursor; S5's states can
+  be built with it.
+
+### Inputs for F09 S5: how Today calls the launcher
+
+`MainRoot` already holds `workout` (a `WorkoutLauncher`). In `Routes+Today.swift`:
+`.startWorkout(program:weekIndex:day:)` → `workout.start(WorkoutSource(programID:weekIndex:dayTemplateID:))`;
+`.resumeWorkout` → `workout.resume()`. Both are synchronous and return at once; a second tap while one is being
+answered is dropped. Today need not check anything first: a live workout of the same day is shown as it is, even
+if its day has since left the program; another day's asks; a refusal shows its own alert. Today keeps following
+`workoutSession.updates()` for its card; the launcher tells it nothing. `onRoute` gives `.minimized`, `.discarded`
+or `.saved(id)` after the cover has closed. The Debug row can go once Today starts workouts, or stay for a
+database with no program.
+
+### Criteria → tests
+
+Suites are in `LedgerKit/Tests/FeatureWorkoutTests` unless another place is named. "Ln" and "Sn" are the rows of
+the lifecycle table; each test's display name starts with its row.
+
+| Criterion | Tests |
+|---|---|
+| 1 Start | `WorkoutLauncherTests.start_nothingLive_startsTheDayAndOpensTheCover` (L1); `WorkoutPresentationTests.header_justStarted_isWordForWord` (name, start, no segment done); `WorkoutSnapshotTests`; UI `Smoke.test_sampleWorkout_startsCountsMinimizesResumesDiscards` |
+| 2 Resume | `WorkoutLauncherTests.start_sameDayLive_opensTheCoverWithoutTheUseCase` (L2), `resume_live_opensTheCover` (L4), `resume_nothingLive_staysIdle` (L5), `send_onlyActsOnItsOwnPhase` (minimize, then again); `WorkoutStoreTests.follow_live_showsTheSessionsWorkout` (S1), `minimize_closesAndKeepsTheWorkoutLive` (S2); the UI test. After a kill: the launcher only reads `session.current()`; recovery itself is S2's `WorkoutRelaunchTests`. Not driven on the simulator here ("Not verified") |
+| 3 Resume never meets the start refusal | `WorkoutLauncherTests.start_sameDayLive_dayGoneFromTheProgram_stillOpens` (L3; deleted and emptied, with a control that the use case does refuse that day), and L2's check that the program store was never read |
+| 4 Conflict | `WorkoutLauncherConflictTests` (L6 to L9, L13, L14: the order `discarded` then `started` is read from the fake's record); `WorkoutLauncherFailureTests.replace_discardFails_keepsTheOldWorkout_startsNothing` (L10), `replace_startFailsAfterTheDiscard_leavesNoneLive` (L11), `replace_dayCannotBeBuilt_discardsNothing` (L12); `WorkoutPresentationTests.dialogs_areTheBriefs` |
+| 5 Finish, for now | `WorkoutStoreTests.finish_asks_keepLiftingReturns` (S3, S4); `WorkoutStoreDiscardTests` (S5 to S7, S13); the UI test |
+| 6 Elapsed time | `FeatureWorkoutSourceTests.elapsedTime_isDrawnByTheTimelineAlone`; `WorkoutTimelineTests`; `WorkoutSnapshotTests.header_pastAnHour_matchesReference` ("1:01:05"); `PreviewTests.preview_showsItsState` (the three times through `ClockText`); the tree's stop 2 ("Elapsed time", no value) |
+| 7 The store | `WorkoutStoreTests` (S1 to S4, S8 to S12), `WorkoutStoreDiscardTests`; no `Task {` and no sleep in the module: `FeatureWorkoutSourceTests.sources_neverCountTime` and review |
+| 8 Presentation and copy | `WorkoutPresentationTests`, `WorkoutCopyTests`, `FeatureWorkoutSourceTests`; `LedgerAppKitTests/ModuleCopyTests` (the audit, and the built bundle resolves all 27 keys); the gate's catalog step |
+| 9 The shell | `LedgerAppKitTests/WorkoutRoutesTests`; the UI test (the cover over the tabs, the Debug row); `WorkoutLauncherTests.startSample_noProgram_savesTheSeedProgramAndStarts`; the tester's `AppRootAdversarialTests.root_idleAndReady_readToVoiceOver` still reads "Today" alone |
+| 10 Tests | this table; `WorkoutAccessibilityTests` (the tree, 44 pt targets, what each button sends) |
+| 11 Wiring | `PreviewTests` (registry and render), `LedgerDesignTests`' rule that every module with a `#Preview` is registered, `ModuleCopyTests`, the catalog step |
+
+Failure rows not named above: L15 `WorkoutLauncherRefusalTests.start_refused_saysWhy`,
+`start_refused_whileAnotherIsLive_keepsIt`, `start_storeRefusesTheWrite_startsNothing`; L16
+`sessionCannotBeRead_opensNothing`; L17 `WorkoutLauncherTests.secondRequest_whileWorkingOrCovered_isDropped` and
+`WorkoutLauncherFailureTests.start_stillRunning_secondRunAndRequestDoNothing`; L18
+`start_viewGoesAwayWhileItRuns_isNoFailure`, `request_cancelledBeforeItsAnswer_isIdle`; L19
+`start_answerLost_opensTheWorkoutThatIsLive`; S8 `update_fromElsewhere_isShown`; S9, S10
+`endedElsewhere_closesTheCover` (four cases); S11 `follow_nothingLive_closesWithNoRoute`; S12
+`follow_streamEnds_fails`. S14 has no test of its own: the store has no haptics dependency, and S8's update
+carries the engine's `.setLogged` haptic through a store built on test dependencies, where touching `haptics`
+would fail the test.
+
+The failure rows run on the real host (`LocalWorkoutSessionActor`) over `ProbedStores` on the in-memory stores:
+the fake cannot refuse a write or hold a call. L11 holds the discard's `compact`, then fails the next `append`,
+so the start is the call that fails; no test sleeps. Two doubles are the tests' own
+(`Support/SessionDoubles.swift`): `EndedSession` (the key's stub: updates end, calls throw) and `GatedSession`
+(the fake behind a gate that throws `CancellationError` to a cancelled caller).
+
+Two more decisions, found on the simulator:
+
+15. **The conflict's "Cancel" is not drawn.** From iOS 26 the system draws no button for a dialog's cancelling
+    role; tapping outside the dialog cancels (seen on iOS 27.0, `screenshots/s4/conflict-dialog-*.png`). The
+    choice exists and does what it says (L9); the lifter reaches it the platform's way. "Keep lifting" is in the
+    brief's copy, so it is a plain button with no role, and is drawn (`finish-dialog-*.png`).
+16. **Only the header's two buttons are disabled during a discard**, not the row: a disabled row made the elapsed
+    time read "dimmed" to VoiceOver (found by the tree test).
+
+### References added
+
+Five, in `LedgerKit/Tests/FeatureWorkoutTests/__Snapshots__/WorkoutSnapshotTests/`, written by a run in the
+library's default mode (each failed once, then passed), on the iPhone 17 simulator (iOS 27.0). Each was looked at.
+
+| File | Shows |
+|---|---|
+| `header_matchesReferences.light-large.png` | "Minimize", the dot and "24:22", "Finish"; "UPPER A — PUSH FOCUS"; five segments: done, current (orange), three upcoming |
+| `header_matchesReferences.light-xLarge.png` | the same, one text size up |
+| `header_matchesReferences.dark-large.png` | the same on the dark ground |
+| `header_matchesReferences.dark-xLarge.png` | the same, one text size up |
+| `header_pastAnHour_matchesReference.dark-large.png` | "1:01:05"; three segments done, the fourth upcoming, the fifth current |
+
+One more than the plan's four: nothing else can show what the timer text reads past an hour.
+
+### Screenshots for the product owner
+
+`tasks/features/F10-active-workout/screenshots/s4/`, light and dark of each: `cover-just-started`,
+`cover-after-24-minutes`, `cover-past-an-hour` (the previews' states, drawn by a test at 402 × 874 with time
+standing still; no status bar), `conflict-dialog` and `finish-dialog` (the running app on the simulator, from a UI
+test's attachments). The conflict dialog cannot be reached in the app yet (the Debug row always asks for the same
+day), so for those two shots only, the sample alternated between two days in a temporary build; that change and
+the two temporary tests were removed, and the final runs below are of the tree without them.
+
+### Code lines per file
+
+Non-blank, non-comment lines of product code (tests, `LedgerTestSupport`, the catalog and docs left out). Counted
+when the store and the launcher were done (947) and at the end (952). The plan said about 580; the orchestrator
+was told at 947 and ruled: one pull request, nothing cut.
+
+| File | Lines |
+|---|---|
+| `FeatureWorkout/WorkoutLauncher.swift` | 140 |
+| `FeatureWorkout/WorkoutStore.swift` | 121 |
+| `FeatureWorkout/WorkoutCopy.swift` | 105 |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 86 |
+| `FeatureWorkout/WorkoutCover.swift` | 84 |
+| `FeatureWorkout/WorkoutPresentation.swift` | 63 |
+| `FeatureWorkout/WorkoutRoot.swift` | 52 |
+| `FeatureWorkout/WorkoutLaunch.swift` | 43 |
+| `FeatureWorkout/Views/WorkoutHeader.swift` | 43 |
+| `FeatureWorkout/WorkoutModel.swift` | 42 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 33 |
+| `FeatureWorkout/WorkoutLauncher+Sample.swift` (Debug) | 30 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 23 |
+| `FeatureWorkout/Views/WorkoutTimeline.swift` | 19 |
+| `FeatureWorkout/WorkoutRoute.swift` | 6 |
+| `LedgerAppKit/MainRoot.swift` | +22 (−2) |
+| `LedgerAppKit/Routes+Workout.swift` | 11 |
+| `LedgerDesign/Gallery/DebugMenu.swift` | +17 (−1) |
+| `LedgerDesign/Components/Components+Previews.swift` | +4 (−1) |
+| `LedgerDomain/Model/WorkoutState.swift` | +8 |
+| `FeatureWorkout/FeatureWorkout.swift` (the placeholder, deleted) | −3 |
+| **Total** | **952** |
+
+Where the plan's estimate fell short: the failure states and their sixteen texts (types, presentation, copy:
+about 150), the two system dialogs and two alerts with their bindings (`WorkoutCover`, `WorkoutRoot`: about 90
+over a bare cover), and the previews' workout built through the engine (about 40).
+
+### The runs
+
+All on the final tree (the temporary screenshot code removed), 2026-10-08. Simulator runs went through the lock,
+on iPhone 17 (iOS 27.0), `PR` plan, `build-for-testing` then `test-without-building -only-testing`.
+
+| Run | Result |
+|---|---|
+| iOS `build-for-testing` (scheme Ledger, plan PR) | exit 0 |
+| `scripts/check-string-catalogs.sh` (the gate's catalog step, after that build) | exit 0 |
+| `FeatureWorkoutTests` (simulator) | 71 of 71 passed |
+| `LedgerUITests/Smoke` | 2 of 2 passed; the new test takes 22 s |
+| `LedgerAppKitTests` + `LedgerDesignTests` (simulator) | 544 results: 537 passed, 6 expected failures, 1 skipped, 0 failed (none of the seven is this slice's) |
+| `swift test --filter FeatureWorkoutTests` (Mac host; before the last two view edits) | 66 tests passed (no snapshot is drawn there, the tree tests are iOS only) |
+| `swift test --filter LedgerDomainTests` (Mac host) | 1,213 tests passed |
+| `scripts/check.sh --lint-only` | exit 0 |
+
+The gate's preview step is `PreviewTests` in each registered module: FeatureWorkout's (in the 71) and
+LedgerDesign's and LedgerAppKit's (in the 544) passed. `LedgerSyncTests` was not run: `LedgerSync` was not touched.
+
+### Not verified
+
+- **The full gate**, watchOS, and the coverage gate (FeatureWorkout is now `required` at 70 %): the
+  orchestrator's. `LedgerDesign` builds for watchOS too; the `DebugMenu` change was not built there.
+- **Kill and relaunch with the cover** (criterion 2's last sentence) was not driven on the simulator. The
+  launcher reads `session.current()` and S2's `WorkoutRelaunchTests` prove recovery; the two were not run together.
+- **"Discard and start new" in the running app.** The conflict dialog and "Resume it" were driven once in the app
+  (the temporary screenshot run); the replace path is proven by the launcher's tests only.
+- **VoiceOver itself**, on a device: the tree is read through UIKit in a test process.
+- **The alerts' look** (four failure alerts): system alerts, tested through state; none was screenshot.
+- **Accessibility sizes above `.accessibility3`** for the header's row. At `.accessibility3` every element is
+  inside the screen and every button is 44 pt (the tree suite); `.accessibility5` was not drawn.
+- The host run of `FeatureWorkoutTests` was not repeated after the last two view edits (the buttons' `disabled`,
+  "Keep lifting" without a role); the simulator run was.
+
+### Open questions
+
+1. **Should VoiceOver hear the elapsed time?** Today it hears "Elapsed time" and no number (F09 S4's ruling). A
+   lifter who cannot see the header cannot learn how long they have trained. Recommendation: in S6, when the rest
+   card needs spoken times anyway, give this element a value made at the moment it is asked for (a custom
+   accessibility value from the injected date), and pin it with the timeline fixed.
+2. **"Minimize" has no chevron** (decision 7). Recommendation: S6 already changes `PillButton` and re-records its
+   gallery; add an optional leading icon and a left chevron there, then one line here.
+3. **The conflict's "Cancel" is invisible on iOS 26 and later** (decision 15). Recommendation: accept the
+   platform's way for the conflict; or, if Pete wants a visible third choice, make it a plain button as
+   "Keep lifting" is.
+4. **"Your workout in progress was kept." after a discard whose log could not be dropped.** A host stores the end,
+   fails to drop the log, and goes on showing the workout live; the next call completes the discard (S1's
+   protocol, "a waiting end"). The line is true of what the session shows and may stop being true a moment
+   later. Recommendation: leave it until ADR-004's paragraph on telling readers that an end is waiting; the
+   launcher then has something to read.
+5. **Sixteen texts are mine** (the table above). Recommendation: Pete reads the table before S5 merges; each is one
+   catalog key and one copy member.
+6. **`.saved` selects Today.** Recommendation: keep until S7 decides what "Done" on the receipt does.
+7. **The header at the largest text sizes** is one row whatever the size. Recommendation: S5, which draws the
+   whole screen at `.accessibility3` and above, decides whether the row stacks.
+
+## Slice S4 — fix round 1 (G1 implementer, 2026-10-08)
+
+On `fcb9fa0` (the slice as `46d4103`, the tester's files and the review on top), in the worktree `F10-s4`. Nothing
+is committed. Criteria 12 to 18 are the brief's "Plan amendments — slice S4 after round 1". **Written before the
+long runs; "The runs" at the end says what was run.**
+
+### What changed, per item
+
+| Item | Change | Where |
+|---|---|---|
+| Criterion 14 (F10-S4-2) | The guard asks `timeIntervalSinceReferenceDate.isFinite` first: every comparison of a `Date` that is not a number holds, so the range was built from it and SwiftUI trapped when it formatted the timer. Such a start now counts from the far future and reads "0:00". | `Views/WorkoutTimeline.swift`; the tester's `elapsed_startNotANumber_readsZero`; my `WorkoutTimelineTests` now holds NaN and a signalling NaN |
+| Criterion 13 (F10-S4-1) | "Done" is decided first: an exercise whose every set is done is done also when the cursor rests on it; of the others the cursor's is current. A workout with every set logged has no current segment. The spoken value still names the cursor's exercise. | `WorkoutPresentation+Header.swift`; the tester's `segments_allDone`; `WorkoutPresentationTests.segments_everySetLogged_areAllDone`, `segments_doneWinsOverCurrent_andAnEmptyExerciseIsNeverDone` |
+| Criterion 12 (SF1, F10-S4-4) | "Cancel" has no cancel role, as "Keep lifting": the system draws it. A tap outside still cancels. | `WorkoutCover.swift`; UI `Smoke.test_sampleWorkout_anotherDay_cancelResumeAndReplace` (three buttons hittable, by label); screenshots retaken |
+| Criterion 15 (F10-S4-3) | "Discard and start new" that is refused for a reason a lifter can act on (empty day, day gone, block ended), with the old workout still live, ends as `.notStarted(reason)`: the plain start's title and line. No new text. `.notReplaced` remains for a failure with no such reason. | `WorkoutLauncher.phase(afterFailing:_:)`; `WorkoutLauncherFailureTests.replace_dayCannotBeBuilt_discardsNothing_saysWhy`, `replace_weekPastTheBlock_discardsNothing_saysTheBlockEnded` |
+| Criterion 16 (SF3) | New `Reason.unknown`: a start that failed for no nameable reason **and** whose session could not be read again says "Couldn't start this workout / Try again." "Nothing was changed. Try again." is said only when the session was read and shows it. No new text ("Try again." exists). | `WorkoutLaunch.swift`, `WorkoutLauncher.swift`, `WorkoutPresentation.swift`; `WorkoutLauncherRefusalTests.sessionCannotBeRead_opensNothing`; the alert table's new row |
+| Criterion 17 (SF2) | The UI test reads the time as text: the system's timer draws a static text inside the element VoiceOver knows as "Elapsed time" (the tester's F10-S4-6). It asserts at most 2 s on the clock when the cover is first read, then a later reading, then a still later one after Minimize and back. Minimize and Discard are each followed by `today.isHittable`, not `exists`. **Not exactly "0:00"**: by the time XCUITest can read the cover its first second may have passed; that a start reads "0:00" is the reference's. | `Apps/LedgerUITests/Smoke.swift` |
+| Criterion 17 (SF4) | A third list, `unstructured` (`Task{`, `Task(`, `Task.detached`, `Task.init`, `Task<`), and `sources_startNoTaskOfTheirOwn`. | `FeatureWorkoutSourceTests.swift` |
+| Criterion 17 (SF5) | "The current exercise's place in the workout, counted from 1, then the number of exercises", in the copy file and the catalog, word for word. | `WorkoutCopy.swift`, `Localizable.xcstrings` |
+| Criterion 18 (F10-S4-5) | `WorkoutLauncher.startSample(day:)` (0 by default) and a second Debug row, "Start another day's sample workout" (`debug.menu.startOtherSampleWorkout`), which asks for the active program's second day. `DebugMenu.Action.sampleWorkouts(_:)` gives `MainRoot` both rows. One UI test takes Cancel, Resume it and Discard and start new in turn. It is in `Smoke`, so it runs in the PR lane: the plan selects that class only, and a test plan is not mine to edit. | `WorkoutLauncher+Sample.swift`, `WorkoutLaunch.swift`, `WorkoutLauncher.swift`, `MainRoot.swift`; `WorkoutLauncherTests.startSample_otherDay_conflictsWithTheFirst` |
+
+Decision 5 of the slice's notes ("the current segment wins over done") is reversed by criterion 13. Decision 13
+("a `Date` cannot hold NaN on this SDK") was wrong: my probe's output was lost in the crash it caused, and the trap
+was SwiftUI's, as the tester's crash report shows. Decision 15 (the conflict's Cancel is not drawn) is superseded
+by criterion 12. Open question 5 said sixteen texts; the table has seventeen (S4-N8).
+
+### The reviewer's nits
+
+| Nit | Done or declined |
+|---|---|
+| N1 a stale store on a fast re-present | **Not changed.** I could not observe it: the only way to ask for the cover again in the app is through the Debug sheet, which takes seconds. The two UI tests re-present the cover five times through that sheet and each new cover answers (Minimize works on it). F09 S5's "Resume" straight after "Minimize" is the test that would show it; the `.id(launcher.request?.number)` insurance is one line if it does. |
+| N2 `onRoute`'s sentence | Done: the doc says it is told as the cover starts to go down, and that a route must not present anything in that turn. |
+| N3 (a) a resume whose second read finds the workout | Done: it opens the cover (`resume_firstReadFails_secondFindsTheWorkout_opensTheCover`). (b) "Resume it" after the workout ended elsewhere stays silent: right for a phone alone; F15's list. |
+| N4 a replacement that cannot be built does not say why | Done by criterion 15. The two-device case ("was kept" of a workout a third device replaced) is declined here: it needs the replaced workout's id carried through the dialog; F15's list. |
+| N5 the dot's orange | Done: `LedgerColor.accentText`, the orange of the current segment. The two light references changed. The raw `5` stays (a shape's size; not a token). |
+| N6 the plan's stale surface | Done: a note under the plan's block ("Inputs the implementer needs › S4"). |
+| N7 a store per evaluation | Done as a sentence on `WorkoutStore`: making one does nothing, and must stay so. |
+| N8 sixteen or seventeen | Seventeen. Corrected above. |
+| N9 the loading cover has no way out | **Declined for S4.** It would add a state to the pinned tree and a control that, on the app's host, is never drawn: the launcher has awaited `current()` before the cover goes up. S5 must not make loading longer; if it ever can be, the failed screen's "Close" is the control to reuse. |
+| N10 the alert's title goes empty as it dismisses | **Not changed, and not observed.** No failure alert can be raised in the running app from the Debug rows (a refused start needs an emptied day or a failing store). What would settle it: F09 S5 starting an emptied day, or a Debug row that fails. The fix, if seen, is to keep the last failure's model until the next request. |
+| N11 three things written twice | Declined until a third use (the reviewer's own advice). |
+| `/code-review`: the comment on a cancelled request | Done: it now says "on a host that completes each call in a task of its own, as the app's does". |
+
+### New and changed texts
+
+No new catalog key. One comment changed (SF5). One new Debug-only literal, not in the catalog: the row
+"Start another day's sample workout".
+
+For the product owner, what the fix round changes in when a text shows:
+
+| Text | Now also shows when | No longer shows when |
+|---|---|---|
+| "Couldn't start this workout" with "This day has no exercises yet." / "This day is no longer in your program." / "Your program's block has ended." | "Discard and start new" was refused for that reason; the workout in progress is untouched | |
+| "Couldn't start the new workout" / "Your workout in progress was kept." | | the refusal has one of those three reasons |
+| "Couldn't start this workout" / "Try again." (a new pairing of two existing texts) | a start failed for no nameable reason and the app could not read the session afterwards | |
+| "Nothing was changed. Try again." | | the app could not read the session afterwards |
+| "Cancel" | drawn as the conflict dialog's third button | |
+
+### The tester's tests that now fail, by design
+
+Each pins the old line for a replacement that cannot be built; criterion 15 changes it. Not edited.
+
+| Test | It expects | It now gets |
+|---|---|---|
+| `WorkoutConflictAdversarialTests` "L14: a new day that cannot be built leaves the old workout live, with no discard" (two cases: fake, host; `WorkoutConflictAdversarialTests.swift:126`) | "Couldn't start the new workout / Your workout in progress was kept. / OK" | "Couldn't start this workout" with the reason's line (see the run for the exact text) |
+| `WorkoutConflictAdversarialTests` "A day past the block's end asked over a live workout: the dialog shows, and replacing discards nothing" (`+Changed.swift:139`) | `phase == .failed(.notReplaced(.liveKept))` | `.failed(.notStarted(.blockEnded))` |
+
+In the L14 row above, the text it now gets is "Couldn't start this workout / This day has no exercises yet. / OK"
+(read from the run).
+
+### References and screenshots
+
+Two references re-recorded, by deleting them and running `WorkoutSnapshotTests` once in the library's default mode
+(it failed once and wrote them; the next run passed). Cause: the header's dot is now `accentText` (S4-N5). Both
+were looked at: the dot is the darker orange of the current segment; nothing else moved.
+
+| File | Shows |
+|---|---|
+| `header_matchesReferences.light-large.png` | as before, with the dot in the current segment's orange |
+| `header_matchesReferences.light-xLarge.png` | the same, one text size up |
+
+The old references still passed with the new dot (five points of colour are inside the suite's precision), so
+they were re-recorded on purpose, for the stated cause, and not to turn a red test green. The three dark
+references are unchanged: in dark the two oranges are one.
+
+`screenshots/s4/conflict-dialog-light.png` and `conflict-dialog-dark.png` were retaken from the new UI test's
+attachment on the final build (the dark one with the simulator's appearance set to dark for that one run, then
+set back to light): three buttons, "Resume it", "Discard and start new" in red, "Cancel". No temporary code was
+needed this time. **Not retaken:** the three `cover-*-light.png`, which still show the dot in the brighter orange.
+
+### Code lines per file
+
+965 in total (952 before this round; the limit is 1,000). Counted before the round and once after criterion 18,
+not after each item as asked: items 1 to 5 were written in one pass, and the count was taken when 18 was in.
+
+| File | Lines | Change |
+|---|---|---|
+| `FeatureWorkout/WorkoutLauncher.swift` | 144 | +4 |
+| `FeatureWorkout/WorkoutStore.swift` | 121 | |
+| `FeatureWorkout/WorkoutCopy.swift` | 105 | |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 86 | |
+| `FeatureWorkout/WorkoutCover.swift` | 84 | |
+| `FeatureWorkout/WorkoutPresentation.swift` | 64 | +1 |
+| `FeatureWorkout/WorkoutRoot.swift` | 52 | |
+| `FeatureWorkout/WorkoutLaunch.swift` | 44 | +1 |
+| `FeatureWorkout/Views/WorkoutHeader.swift` | 43 | |
+| `FeatureWorkout/WorkoutModel.swift` | 42 | |
+| `FeatureWorkout/WorkoutLauncher+Sample.swift` (Debug) | 38 | +8 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 33 | |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 23 | |
+| `FeatureWorkout/Views/WorkoutTimeline.swift` | 20 | +1 |
+| `FeatureWorkout/WorkoutRoute.swift` | 6 | |
+| `LedgerAppKit/MainRoot.swift` | +20 | −2 |
+| `LedgerAppKit/Routes+Workout.swift` | 11 | |
+| `LedgerDesign/Gallery/DebugMenu.swift` | +17 | |
+| `LedgerDesign/Components/Components+Previews.swift` | +4 | |
+| `LedgerDomain/Model/WorkoutState.swift` | +8 | |
+| **Total** | **965** | **+13** |
+
+### The runs
+
+On the final tree, 2026-10-08, simulator runs through the lock on iPhone 17 (iOS 27.0), `PR` plan.
+
+| Run | Result |
+|---|---|
+| iOS `build-for-testing` | exit 0 |
+| `scripts/check-string-catalogs.sh` after that build | exit 0 |
+| `FeatureWorkoutTests` (mine and the tester's) | 156 results: 154 passed, 2 failed. The two are the tester's pins in the table above (`replace_newDayEmptied_keepsTheOldWorkout`, both cases; `replace_weekPastTheBlock_keepsTheOldWorkout`), and no other. The tester's `segments_allDone` and `elapsed_startNotANumber_readsZero` pass, unedited; the process no longer traps |
+| `LedgerUITests/Smoke` | 3 of 3 passed: launch 6 s, the cover 22 s, the conflict's three choices 32 s |
+| `LedgerAppKitTests` + `LedgerDesignTests` | 544 results: 537 passed, 6 expected failures, 1 skipped, 0 failed |
+| `swift test --filter FeatureWorkoutTests` (Mac host; before the wrong test of mine was removed) | 142 tests; the failures were the tester's two pins and that one test |
+| `scripts/check.sh --lint-only` | exit 0 |
+
+### Not verified
+
+- The full gate, watchOS and the coverage gate: the orchestrator's. The PR lane's UI step grows by about 55 s
+  with the two workout tests in `Smoke`.
+- The tester's nightly UI test `WorkoutAdversarial` was not run after this round (it is not in the `PR` plan); it
+  taps "debug.menu.startSampleWorkout", which is unchanged.
+- N1 and N10 were not observed either way (reasons in the table).
+- `LedgerDomainTests` and the Mac-host run were not repeated on the final tree; `LedgerDomain` was not touched in
+  this round.
+- A failure alert in the running app, kill and relaunch with the cover (F15), VoiceOver on a device, text sizes
+  above `.accessibility3`: as before.
+- The first reading of the clock in the UI test is asserted as at most 2 s, not as exactly "0:00" (criterion 17's
+  words): see the item's row.
+
+### Fix round 2 (G1 implementer, 2026-10-08): criterion 19
+
+On fix round 1 plus the tester's uncommitted round 2. Nothing committed.
+
+- **(a) F10-S4-7.** A replacement refused for a reason (empty day, day gone, block ended) says that reason whatever
+  the session shows or fails to show afterwards: `.replace where reason == .other` is now the only path to
+  `.notReplaced` (`WorkoutLauncher.phase(afterFailing:_:)`). Each such refusal is thrown before anything is
+  discarded, so the reason needs no read.
+- **(c) F10-S4-9.** `WorkoutPresentation.currentExercise(of:cursor:)`: the cursor's exercise while it has a set to
+  log, otherwise the first exercise that has one; nil when every set is logged. The spoken value names the same
+  exercise as the orange segment (with every set logged, the cursor's). Mine:
+  `header_cursorOnAFinishedExercise_marksTheFirstUnfinished`.
+- **(b) F10-S4-8: half done, and stopped for a ruling.** With (a), a workout finished elsewhere under the dialog is
+  no longer called discarded when the replacement is refused for a reason (the tester's red test). What is **not**
+  done: the neutral text for the remaining case (it ended elsewhere, and the new start then fails for no nameable
+  reason), which still reads "Your workout in progress was discarded." Any new or reworded key fails the tester's
+  green `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` (27 keys, by name), and rewording the
+  existing line also fails its pins of that line (`WorkoutConflictAdversarialTests.swift:66`, `:106`,
+  `WorkoutRulingsAdversarialTests+Replace.swift:47`, `WorkoutWordsAdversarialTests.swift:45`, `:79`). Telling
+  "ended elsewhere" from "this request discarded it" also needs a read of the session before the use case runs,
+  which shifts the call counts the tester's fault tests skip by. Proposed, once ruled: reword the one line to
+  "Your workout in progress has ended." (true of both cases, no extra read, no new key), with those pins updated
+  by the tester.
+- **One detail where the tester's pin and criterion 19 differ.** "While any set is not logged exactly one segment
+  is current" is not held when the cursor names no row: then none is current and no value is spoken, as the
+  tester's green `segments_cursorOutOfRange` and the round 1 tree expect. No session publishes such a cursor. Left
+  as the tester has it.
+
+The tester's three red tests pass unedited (`refusedReplacement_sessionUnreadable_stillSaysWhy`,
+`refusedReplacement_afterFinishElsewhere_doesNotSayDiscarded`, `segments_anyOrder`).
+
+**Lines:** 973 product lines (965 before; `WorkoutPresentation+Header.swift` 33 → 41). No catalog change.
+
+**Runs.** Through the lock, iPhone 17 (iOS 27.0): build exit 0; catalog step exit 0; `FeatureWorkoutTests` 169 of
+169 passed; `LedgerUITests/Smoke` 3 of 3. `scripts/check.sh --lint-only` exit 0. After the simulator run two of
+my tests were moved, unchanged, into a new suite (`WorkoutPresentationDialogTests`; the old one was five lines
+over the lint's type length): that move was run on the Mac host only (150 tests in 23 suites passed).
+`LedgerAppKitTests`, `LedgerDesignTests` and the tester's nightly UI tests were not run in this round.
+
+## Slice S5 — logging the sets of a solo exercise (G1 implementer, 2026-10-09)
+
+Built on `fc8a38f` (`main` `0d4a156` plus the specification), in the worktree `F10-s5`, on
+`feat/F10-s5-solo-logging`. Criteria 1 to 12 are the brief's "Plan amendments — slice S5". Paths are under
+`LedgerKit/` unless they start with `Apps/` or `tasks/`. **"The runs" at the end says what was run and what was
+not.**
+
+### What landed
+
+- **`Sources/FeatureWorkout`**
+  - `WorkoutEdit.swift` (new): `WorkoutEdit` (the page's eight taps: select, log, un-log, step weight, step reps,
+    repeat, add set, jump), `WorkoutSelection` (the row the lifter chose, where it is not the engine's cursor) and
+    `WorkoutEditPlan.make`, a pure function from a tap, the workout, the selection, the time and a new set's id to
+    the events to apply and the selection afterwards.
+  - `WorkoutPageModel.swift` (new): `WorkoutPageModel`, `ExerciseCardModel`, `SetRowModel`, `SteppersModel`,
+    `RemainingModel`. `WorkoutModel` gains `page`.
+  - `WorkoutPresentation+Card.swift` (new): `shownExercise`, `activeSet`, `page`, `card`. `WorkoutPresentation.screen`
+    takes `selection:` and `calendar:`; `header` takes `selection:` (defaulted) and names the shown exercise.
+  - `WorkoutCopy+Card.swift` (new): 27 lookups and the module's `Locale.forCountedText`; the catalog has 54 keys
+    (27 before).
+  - `WorkoutStore.swift`: the pump (`pump()`, `drain()`, the queue), `selection`, the dialog `editFailed`.
+    `WorkoutAction.swift` (new) holds `WorkoutAction` (now with `.edit`), `WorkoutExit`, `WorkoutStoreError` and
+    `WorkoutDialog`, moved out of the store's file for the lint's file length; `WorkoutStore.Dialog` remains as a
+    type alias.
+  - `Views/WorkoutPage.swift`, `Views/ExerciseCard.swift` (with `FactLine`), `Views/SetRowList.swift`,
+    `Views/RemainingList.swift` (new); `Views/WorkoutScreen.swift` puts the page in a scroll view under the pinned
+    header; `WorkoutRoot.swift` runs the pump from a second `.task` and shows the alert of a refused change.
+  - `Workout+Previews.swift`: two new states, "Logging a set" and "A drop set, in kilograms".
+- **Tests** (`Tests/FeatureWorkoutTests`): `WorkoutEditPlanTests`, `WorkoutEditPlanMoveTests`,
+  `WorkoutPresentationCardTests`, `WorkoutPresentationPageTests`, `WorkoutStorePumpTests`, `WorkoutStoreEditTests`,
+  `WorkoutScreenTests`, `WorkoutPageLayoutTests` with `Support/WorkoutLayoutProbe.swift`,
+  `WorkoutAccessibilityTrees.swift` (new); `WorkoutAccessibilityTests`, `WorkoutSnapshotTests`, `WorkoutCopyTests`,
+  `PreviewTests`, `WorkoutPresentationTests`, `Support/WorkoutParts.swift` (changed); ten new references.
+- **UI test**: `Apps/LedgerUITests/WorkoutLogging.swift` (new; nightly: the `PR` plan selects `Smoke` only).
+- **Not touched**: `LedgerDomain`, `LedgerSync`, `LedgerDesign`, `LedgerAppKit` (the Debug rows needed nothing),
+  `Package.swift`, the project file, the test plans, the coverage thresholds.
+
+### The rules of the page (what the engine does not decide)
+
+| Question | Rule | Where |
+|---|---|---|
+| Which exercise is on screen | the one the lifter chose (a row tapped, a stepper, a jump) while it is in the workout; otherwise S4's current exercise (the cursor's while it has a set to log, else the first that has one); with every set logged, the cursor's. The header's orange segment and "Exercise 2 of 5" name the same one | `WorkoutPresentation.shownExercise` |
+| Which row is the shown row | the row chosen, else the cursor's row when it is in this exercise, else the exercise's first row; each only while it is not logged. A logged row is never the shown row (v2: `active = i === activeSet && !x.done`), so with every set logged there are no steppers | `activeSet` |
+| When the choice ends | when a set is logged: the engine's cursor then says which row is next (rule 20). Un-logging moves nothing (rule 22). The choice lives with one presentation of the cover; after Minimize the engine's cursor decides, and a choice of a row that is not logged was also sent to the engine (`exerciseSelected`), so it survives | `WorkoutEditPlan` |
+| A tap on a logged row's body | nothing (it cannot be the shown row; its check un-logs it) | `select` |
+| A stepper on a logged row | nothing (it has no steppers on screen; a tap that was queued before the row was logged is dropped) | `step` |
+| Weight and reps limits | `Weight.advanced(bySteps:of:)` with `WorkoutExercise.step` (the Domain's step for the equipment and unit, copied at build time, rule 16), held at zero; `Reps(clamping:)`. A step that would change nothing sends no event | `WorkoutEditPlan.make` |
+| "+ Add set" on an exercise with no row | 0 × 8 (spec §3.7) | `repsOfAFirstSet` |
+| "REMAINING" | the exercises after the shown one, whatever is logged in them (spec §3.7: "only later ones are listed"), each "{rows} × {reps of the first row}" (rule 26: the scheme follows an added set); with no card, every exercise | `page` |
+
+### The pump
+
+`send(.edit)` only appends to a queue and wakes the pump. `WorkoutRoot` runs `pump()` in a `.task`: it makes a
+one-slot `AsyncStream<Void>` as its wake signal and calls `drain()` for each wake. `drain()` takes the taps oldest
+first; each is planned on **the session's answer to the tap before it** (`ahead`), or on what the stream shows when
+nothing is ahead, and its events are applied one by one. A tap stays at the front of the queue until it is done.
+
+- The page draws what the stream publishes, never `ahead`. `ahead` is dropped when the stream shows that state, or
+  when an answer is already what the stream shows (an event the engine ignored).
+- Why not a stream of the taps themselves: an `AsyncStream` ends for good when its consumer's task is cancelled, so
+  a cover whose view went away and came back would have a dead pump. With a queue and a signal, a tap made with no
+  pump running waits for the next one (`pump_drainsAsTapsAreMade`).
+- Why not `.task(id:)`, as the discard has: a new id cancels the call in flight.
+- **A refused change drops the taps queued behind it.** They were made on a page that never came to be ("+", "+",
+  check: logging at a weight the first "+" did not reach would be wrong). The alert says "Couldn't save that
+  change" / "Try again." / "OK". This is the one case where a tap is lost; criterion 7's "none is lost" is read as
+  holding while calls succeed. See open question 2.
+- `noLiveWorkout` and a cancellation are no failures, as for the discard. A tap made while a discard runs, or
+  after the cover began to close, is not queued; taps still queued when "Discard" is tapped are dropped.
+- No unstructured task: the source test's `unstructured` list still passes.
+
+### Decisions and deviations (every look the prototypes do not settle)
+
+1. **No card behind the exercise.** v2 draws the exercise on the ground; v1 on a white card. v2 is followed.
+2. **The TARGET line is v1's, drawn in v2's manner.** v2 has no target line; the criterion asks for one. It is a
+   label and a value on one line, like "Last", with no pill and **no orange** (v1's "TARGET" is orange; criterion
+   9 allows one accent). Both labels are `.label` in muted ink, both values `.caption` in secondary ink. At
+   accessibility sizes the value goes under its label.
+3. **The eyebrow "Exercise 2 of 5" is sentence case in muted ink** (v2), not `Eyebrow`'s capitals.
+4. **Orange.** The card adds none of its own. What is orange on the page is `LedgerDesign.SetRow`'s: the shown
+   row's number, its rule and its check's ring, and **the filled disc of every logged row** (v2: "orange fill when
+   done"). So criterion 9's "the page's one accent" holds for what calls for a tap, and the logged discs are a
+   second use of the colour, as v2 and the design system draw them. See open question 3.
+5. **"REMAINING" has no small number before each name** (v2 draws "2", "3", …): `HairlineRow` has no leading
+   column, and the header's segments place the exercise. Each row is one button, read "Incline DB Press, 3 × 11".
+6. **No swap button, no rest panel, no plate line**: S8, S6 and F25. No dead control is drawn.
+7. **"Repeat" is the outline `PillButton`** beside "Last"; without a last workout the line reads "No history yet"
+   and the button is not drawn.
+8. **"+ Add set" is the ghost `PillButton`, flush left** (v2: left-aligned text button), 44 pt high.
+9. **While a discard runs the whole page is disabled with one modifier**, so VoiceOver reads every stop of it as
+   dimmed, the texts too (the tree's table says so). The header disables its two buttons only, as in S4.
+10. **The set label and the reps are plain digits** (`String(n)`), as the Domain writes the weight beside them; they
+    are not catalog entries. A drop set's "D" is.
+11. **A row's number counts the rows that are not drop sets**, so a set added after a drop set reads "4" after "D",
+    not "5".
+12. **Units are the workout's** (`WorkoutState.units`, snapshotted at build time), for the column, the target, the
+    step and the spoken weight.
+13. **`WorkoutPresentation.screen` gained `calendar:`**: "Last" is `LastPerformance.line(units:calendar:)`, whose day
+    depends on the time zone, and an ambient calendar is forbidden. The store reads `@Dependency(\.calendar)`.
+14. **A double tap on a check** logs once because the view sends `.log` for a row drawn open and `.unlog` for one
+    drawn logged: a second tap made before the first was drawn finds the set logged and does nothing. A second tap
+    made after the row was redrawn is an un-log, as in the prototype; no time-based guard exists or is wanted.
+15. **Deviation from the plan's file list**: `SetRowList` and `RemainingList` exist as listed; `WorkoutPage`,
+    `WorkoutEdit`, `WorkoutPageModel`, `WorkoutAction` and `WorkoutCopy+Card` are additional files (sizes and the
+    lint's limits).
+
+### What a day with a superset draws
+
+The engine already runs rounds, so nothing logs wrongly; what is drawn is not yet a superset. Each member is drawn
+as its own card ("Exercise 4 of 5", rows "1", "2", "3", its own target and "Last"). Logging A's set moves the
+engine's cursor to B's (rule 20), so **the card switches to the other member after every set**, and the header's
+current segment with it; the group's rest is the engine's (it starts after B). "Repeat", "+ Add set" and the
+steppers act on the member shown. Not drawn: "Superset · block 2 of 4", "Round 2 of 3", the legend, "Rest 1:15
+after B", the labels "A1"/"B1"/"AD". The Debug sample (Upper A) ends with such a pair: Lat Pulldown and Cable
+Lateral Raise. S9 replaces the two cards with the block.
+
+### The page's VoiceOver tree
+
+Pinned by `WorkoutAccessibilityTests.tree_isExactlyTheTable` for the eight preview states at light `.large` and
+dark `.accessibility3`, from `WorkoutParts` (the header over the page, no scroll view). After the header's five
+stops (S4's table):
+
+| # | Stop | Label | Value | Traits |
+|---|---|---|---|---|
+| 6 | the place | "Exercise 1 of 5" | | static text |
+| 7 | the name | "Barbell Bench Press" | | header, static text |
+| 8 | the target, one stop | "TARGET, 5 × 5 @ 200 lb · RPE 8" | | static text |
+| 9 | the last workout, one stop | "Last, Sep 9 · 5×5 @ 195 lb" or "Last, No history yet" | | static text |
+| 10 | Repeat (only with a last workout) | "Repeat" | | button |
+| 11 | the column headings, one stop | "#, lb, reps" | | static text |
+| per set | the row | "Set 1, 200 pounds, 5 reps" ("Drop set, 8.75 kilograms, 16 reps") | "Done", "Current set" or "Pending" | button |
+| per set | its check | "Log set 1" / "Undo set 1" ("Log drop set" / "Undo drop set") | "Done" once logged | button, selected once logged |
+| after the shown row | the weight stepper | "5 LB" | "200 pounds" | adjustable |
+| after the shown row | the reps stepper | "1 REP" | "5 reps" | adjustable |
+| | add | "+ Add set" | | button |
+| | the list's heading | "REMAINING" | | header, static text |
+| per remaining exercise | its row | "Incline DB Press, 3 × 11" | | button |
+
+While a discard runs every stop of the page also carries "not enabled". The row and its check are the design
+system's two stops (`SetRow`); the brief's older "Set 2, 185 pounds, 5 reps, not done" is read as that row with
+its state as the value.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 1 the page | `WorkoutScreenTests` (one scroll view under the header; the header's tree and buttons in place with `outsideScrollViews: true`; the page scrolls at `.accessibility3`; loading and failed hold none); trees and references from `WorkoutParts`; UI `WorkoutLogging` |
+| 2 the card | `WorkoutPresentationCardTests` (word for word; no history; the calendar's zone; rows; steppers; drop set; kilograms; RPE 8.5); `WorkoutCopyTests.cardsTexts_areWordForWord` |
+| 3 logging | `WorkoutEditPlanTests.log_…`, `unlog_…`; `WorkoutStorePumpTests.doubleTapOnACheck_logsOnce`; `WorkoutStoreEditTests.log_sendsNoRestEvent`, `log_clearsTheChoice_unlogKeepsIt` |
+| 4 steppers | `WorkoutEditPlanTests.stepWeight_movesByTheDomainsStep` (8 equipment and unit pairs), `stepWeight_neverUnderZero`, `stepReps_movesByOne_neverUnderOne`, `step_onTheShownRow_…`, `step_onAnotherRow_selectsItFirst`, `step_onAnotherExercise_…`, `step_onALoggedRow_…`; `WorkoutStorePumpTests.stepOnAnotherRow_selectsItFirst`; `WorkoutAccessibilityTests.steppers_adjustTheShownRow` |
+| 5 repeat and add | `WorkoutEditPlanMoveTests.repeatLast_…`, `addSet_copiesTheLastRow`, `addSet_noRow_addsZeroByEight`; `WorkoutStoreEditTests.repeatLast_writesEverySet_keepsDoneFlags`, `addSet_appendsACopy_andTheSegmentWidens` |
+| 6 remaining | `WorkoutPresentationPageTests.remaining_…`; `WorkoutEditPlanMoveTests.jump_…`; `mixedTaps_areAppliedInOrder` (the jump); the UI test |
+| 7 in order, each once | `WorkoutStorePumpTests.twoQuickSteps_areTwoSteps`, `doubleTapOnACheck_logsOnce`, `mixedTaps_areAppliedInOrder`, `heldApply_laterTapsWaitTheirTurn` (the real host, an append held in the store), `pump_drainsAsTapsAreMade`; `FeatureWorkoutSourceTests.sources_startNoTaskOfTheirOwn` |
+| 8 a failed apply | `WorkoutStoreEditTests.refusedApply_isShown_andThePageStays` (the real host, an append refused), `applyAfterTheWorkoutEnded_isNoFailure`, `busyOrClosing_tapsDoNothing`; `WorkoutAccessibilityTests.discarding_sendsNothing`; `WorkoutPresentationCardTests`… `page_busy_isNotEnabled` |
+| 9 orange, labels, stops | the tree table; `buttons_sendTheirActions`, `steppers_adjustTheShownRow`; the references for the colour |
+| 10 sizes and settings | `WorkoutPageLayoutTests` (cut, inside the phone, no overlap, 44 pt; five text sizes × 375 and 402 pt × Bold Text × right to left; a long-words page; the two self-checks); `controls_haveA44PointTarget`; the `.accessibility3` and Increase Contrast references |
+| 11 words | `WorkoutCopyTests` (the card's texts, the spoken texts, `reps_takeTheCatalogsPluralForm` in nine locale cases, 54 keys); the gate's catalog step; the module audit |
+| 12 pure and total | `WorkoutPresentationPageTests.page_noExercise_isEmpty`, `card_noSet_hasNoRow`, `page_cursorNamesNoRow_listsEveryExercise` (five cursors), `page_choiceNamesNothing_fallsBack`, `card_exerciseNotStored_…`; `WorkoutEditPlanMoveTests.edit_namingNothing_comesToNothing` (twelve edits, two workouts); `FeatureWorkoutSourceTests` |
+
+**The cut-word check** (criterion 10; the idea of `ProgramViewsCutAdversarialTests`, which is not on `main`: read
+from commit `6ea83da`). `WorkoutLayoutProbe.cut` measures a part by itself with all the width it wants and on the
+page: narrower on the page and no taller means words were lost. It covers what this module lays out (the place,
+the name, the two facts, "Repeat", "+ Add set", each remaining row); a part it cannot find on the page is reported,
+not skipped. **Not covered**: the set rows' numerals and the steppers, which are `LedgerDesign`'s (a numeral too
+long for its column shrinks to half size by design before it would be cut).
+
+### Tests checked by breaking the code
+
+Each mutant was applied to the product code, `swift test --filter FeatureWorkoutTests` run on the Mac host, and the
+code restored; every one was caught.
+
+| Mutant | Tests that failed |
+|---|---|
+| the next tap is planned on what the stream shows, not on the last answer | `twoQuickSteps_areTwoSteps`, `doubleTapOnACheck_logsOnce`, `mixedTaps_areAppliedInOrder` |
+| a logged row can be logged again | `log_rowAlreadyLogged_comesToNothing`, `doubleTapOnACheck_logsOnce`, `heldApply_laterTapsWaitTheirTurn` |
+| a stepper never selects its row | `step_onAnotherRow_selectsItFirst`, `step_onAnotherExercise_selectsItFirst`, `stepOnAnotherRow_selectsItFirst` (store) |
+| a refusal keeps the taps behind it | `refusedApply_isShown_andThePageStays` |
+| the weight is not held at zero | `stepWeight_neverUnderZero` |
+| a count takes the lifter's plural rule | `reps_takeTheCatalogsPluralForm` |
+| "REMAINING" lists the shown exercise too | five, among them `remaining_listsTheLaterExercises`, `remaining_lastExercise_isNil` |
+| logging keeps the lifter's choice | `log_openRow_logsWhatTheRowReads`, `log_clearsTheChoice_unlogKeepsIt` |
+| a failed change shows no alert | `refusedApply_isShown_andThePageStays` |
+
+### Sanctioned edits to the tester's files
+
+Ruled by the orchestrator on 2026-10-09 before any was made; this slice's tester audits them. All in
+`Tests/FeatureWorkoutTests/Adversarial/`. `swiftformat` wrapped the lines that grew past 120 columns.
+
+| # | File and test | Old | New |
+|---|---|---|---|
+| 1 | `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` | `expected` ends `"It's still in progress. Try again."` | the same 27, then S5's 27 keys under a comment: `"TARGET"`, `"%lld × %lld @ %@ lb · RPE %@"`, `"%lld × %lld @ %@ kg · RPE %@"`, `"Last"`, `"No history yet"`, `"Repeat"`, `"#"`, `"reps"`, `"lb"`, `"kg"`, `"D"`, `"%@ LB"`, `"%@ KG"`, `"1 REP"`, `"+ Add set"`, `"REMAINING"`, `"%lld × %lld"`, `"Set %lld"`, `"Drop set"`, `"%@ pounds"`, `"%@ kilograms"`, `"%lld reps"`, `"Log set %lld"`, `"Undo set %lld"`, `"Log drop set"`, `"Undo drop set"`, `"Couldn't save that change"`. The test's name still says 27 |
+| 2 | `WorkoutWordsAdversarialTests.forbidden` | `".formatted(",` | `".formatted()", ".formatted(.",` |
+| 3 | `WorkoutCoverTreeAdversarialTests.screen(_:after:send:)` (used by `tree_liveWorkout`, `tree_fitsAtEverySize`, `tree_busy_buttonsAreDisabled`, `tree_activation`) | `WorkoutScreen(model: model, send: send)` | a `Group`: `WorkoutHeader(model: workout.header, send: send)` when the model is a workout, else the same `WorkoutScreen`; the environment and the 400 pt frame as before. Expectations unchanged |
+| 3 | `WorkoutElapsedAdversarialTests.header_anyStart` | `WorkoutScreen(model: model) { _ in }` | `WorkoutHeader(model: header) { _ in }`, with `guard let header = model.drawnHeader` (recording an issue) before the loop. Expectations unchanged |
+| 4 | `WorkoutPresentation.screen(…, locale: Fixtures.locale)` at **seven** call sites (I had counted six): `WorkoutCoverTreeAdversarialTests` 2, `WorkoutElapsedAdversarialTests` 1, `WorkoutHeaderAdversarialTests+Words` 4 | three arguments | `calendar: Fixtures.calendar` added |
+
+**Edit 2, shown.** With a file planted in `Sources/FeatureWorkout` holding `moment.formatted()` (a `Date`) and
+`count.formatted(.number)`, `sources_readNothingAmbient` failed with exactly
+`["TmpPlanted.swift:5: .formatted()", "TmpPlanted.swift:9: .formatted(."]`; with the file removed it passed, over
+sources that hold `Weight.formatted(in:)` six times. (`Date().formatted()` itself is also caught by the token
+`Date()`.)
+
+**The header in place** (the ruling's condition on edit 3): `WorkoutScreenTests.screen_headerInPlace_isItsTree`
+reads the header's five stops from the real `WorkoutScreen`, above its scroll view, with
+`outsideScrollViews: true`, for the six workout states at both appearances, and
+`screen_headerButtons_sendTheirActions` activates them there.
+
+### References
+
+Ten new, recorded by the library's default mode on the `PR` plan's iPhone 17 (iOS 27.0): the first run wrote them
+and failed, the next compared and passed. **No existing reference changed**: the five header references of S4 are
+still drawn from the header alone (`WorkoutParts(headerOnly: true)`) and passed unre-recorded.
+
+| File (`__Snapshots__/WorkoutSnapshotTests/`) | Shows |
+|---|---|
+| `cover_logging_matchesReferences.{light,dark}-{large,xLarge}.png` (4) | two rows logged, the shown row with its steppers, "Last" with "Repeat", "REMAINING" |
+| `cover_logging_accessibility3_matchesReference.dark-accessibility3.png` | the same at the largest size of the matrix: the facts and the steppers stacked |
+| `cover_logging_increasedContrast_matchesReference.light-large-increasedContrast.png` | the same with Increase Contrast |
+| `cover_dropSet_matchesReferences.{light,dark}-large.png` (2) | the last exercise in kilograms with a drop set "D"; nothing remains |
+| `cover_noHistory_matchesReferences.{light,dark}-large.png` (2) | "No history yet", no "Repeat" |
+
+The plan listed nine (it had `ExerciseCard` alone at `.xLarge`; the whole cover is drawn instead, and one with
+Increase Contrast is added for criterion 10). 744 kB in the folder, fifteen files.
+
+### Screenshots for the product owner
+
+`tasks/features/F10-active-workout/screenshots/s5/` (fifteen files). From the running app, the Debug sample
+workout, taken by the UI test's attachments on the final build, light and then dark (the simulator's appearance
+set to dark for one run and set back): `app-started-*`, `app-one-set-logged-*` (a logged row at 190 × 4 after two
+"+" and one "−", the shown row with its steppers), `app-after-jump-*` (Lat Pulldown, reached from "REMAINING"),
+`app-accessibility3-*` and `app-accessibility3-last-exercise-*` (the `AccessibilityXL` text size). The app's
+screenshots were scaled to 1310 px high. Copies of five references: `reference-logging-{light,dark}.png`,
+`reference-logging-accessibility3-dark.png`, `reference-drop-set-kg-light.png`, `reference-no-history-dark.png`.
+"Repeat" is only in the references: the sample runs on a fresh database, where no exercise has a last workout.
+
+### Every text not given by the brief
+
+The brief's, word for word (15 keys): "TARGET", "%lld × %lld @ %@ lb · RPE %@", "Last", "No history yet", "Repeat",
+"#", "lb", "kg", "reps", "D", "%@ LB", "%@ KG", "1 REP", "+ Add set", "REMAINING", "%lld × %lld" (16 with the last).
+
+Mine, for the product owner's copy review (11 keys):
+
+| Text | When it shows |
+|---|---|
+| "%lld × %lld @ %@ kg · RPE %@" | the target line in kilograms (the brief writes the pounds form only) |
+| "Set %lld" | spoken only: the start of a row's name, "Set 2, 185 pounds, 5 reps" |
+| "Drop set" | spoken only: the same for a drop set, which has no number |
+| "%@ pounds" / "%@ kilograms" | spoken only: a row's weight, and the weight stepper's value |
+| "%lld reps" (one: "%lld rep") | spoken only: a row's reps, and the reps stepper's value |
+| "Log set %lld" / "Undo set %lld" | spoken only: a row's check (the brief's non-functional section and the S1 amendment give these words) |
+| "Log drop set" / "Undo drop set" | spoken only: a drop set's check (`LedgerDesign`'s gallery uses the first) |
+| "Couldn't save that change" | alert title: the session refused a tap's change. Its message is the existing "Try again.", its button the existing "OK" |
+
+The spoken join ", " between a row's three parts is not a catalog entry.
+
+### Product lines per file
+
+877 in total (plan 485; the orchestrator ruled one pull request on 2026-10-09, with the split presentation +
+store / views taken if a fix round passes about 1,000). Non-blank, non-comment lines, against `fc8a38f`.
+
+| File | Lines | Change |
+|---|---|---|
+| `FeatureWorkout/WorkoutCopy+Card.swift` | 167 | new |
+| `FeatureWorkout/WorkoutEdit.swift` | 162 | new |
+| `FeatureWorkout/WorkoutPresentation+Card.swift` | 153 | new |
+| `FeatureWorkout/WorkoutStore.swift` | 201 | +80 |
+| `FeatureWorkout/Views/ExerciseCard.swift` | 62 | new |
+| `FeatureWorkout/WorkoutPageModel.swift` | 56 | new |
+| `FeatureWorkout/Workout+Previews.swift` (Debug) | 140 | +54 |
+| `FeatureWorkout/Views/SetRowList.swift` | 35 | new |
+| `FeatureWorkout/WorkoutAction.swift` | 21 | new (moved out of the store) |
+| `FeatureWorkout/Views/RemainingList.swift` | 21 | new |
+| `FeatureWorkout/Views/WorkoutPage.swift` | 21 | new |
+| `FeatureWorkout/WorkoutPresentation.swift` | 85 | +21 |
+| `FeatureWorkout/WorkoutRoot.swift` | 61 | +9 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 30 | +7 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 48 | +7 |
+| `FeatureWorkout/WorkoutModel.swift` | 43 | +1 |
+| **Total** | | **+877** |
+
+Where the overrun is: the copy file is 167 lines where the plan counted none (every key that carries a value needs
+its own member with its locale and its translator's comment); the pump with the planning of each tap is about 240
+where the plan had "handlers"; the previews are 54.
+
+### Open questions
+
+1. **A member of a superset is drawn as a solo card that switches after every set** (above). Recommendation:
+   accept until S9; the alternative, drawing no rows for a superset day, would make the Debug sample's last two
+   exercises impossible to log.
+2. **A refused change drops the taps queued behind it.** Recommendation: keep. The other reading of "none is
+   lost" would log a set at a weight the lifter did not see.
+3. **The logged rows' discs are orange** (decision 4). Recommendation: keep v2's look; if "orange once" is meant
+   strictly, the change is in `LedgerDesign.SetRowCheck`, not in this module.
+4. **Eleven texts are mine** (the table). "1 pounds" is possible in speech for a weight of exactly one: the weight
+   is a formatted text ("52.5"), which cannot pick a plural form. Recommendation: accept; no seed load is 1.
+5. **The un-logged row does not become the shown row** (rule 22, the prototype). After un-logging, the lifter taps
+   the row to bring the steppers to it. Recommendation: keep.
+6. **An exercise before the shown one cannot be reached from the page** while a later one is shown and has sets
+   left (spec: only later exercises are listed); it becomes the shown one again once the cursor's exercise is
+   finished. Recommendation: put it to Pete with S9, where the legend adds another way to jump.
+7. **`FeatureToday`'s counted texts** still take the lifter's plural rule (the brief's "separate chore"): not
+   touched.
+
+### Inputs for S6 (rest), S7 (finish), S9 (supersets)
+
+- **S6.** The rest panel floats over the page (v2): put it in `WorkoutScreen`'s `.workout` case as an overlay or
+  `safeAreaInset(edge: .bottom)` of the scroll view, and give `WorkoutPage` bottom room for it. The engine already
+  starts the rest on a log (`WorkoutState.rest` is set in the store's state today; nothing draws it). "+30s" and
+  "Skip rest" are two more `WorkoutEdit` cases whose plan is one event each; `restExtended` needs the tap's time,
+  which `WorkoutEditPlan.make` is already handed as `now`. Haptics go in `WorkoutStore.follow()`'s loop, as S4
+  said. The "next" line needs the shown row: `WorkoutPresentation.activeSet`.
+- **S7.** `WorkoutDialog` is where the finish sheet's state goes; the save follows the discard's shape
+  (`discardAttempt`, a `.task(id:)`), not the pump. Taps still queued when a save starts should be dropped, as
+  `startDiscard()` does. The line "%lld of %lld sets logged · %@ lb moved" has two numbers: one is the count that
+  picks the form, the other is passed as text (standards §7), and it takes `locale.forCountedText`, which is in
+  `WorkoutCopy+Card.swift` as a private extension: move it to `WorkoutCopy.swift` when a second file needs it.
+- **S9.** `WorkoutPresentation.page` is the one place that decides what a block draws: where
+  `SupersetRounds.blocks(in:)` gives a block of more than one member, build the block's model in place of `card`.
+  `shownExercise` should then name the block's current member for the header's segment. The plan of a tap needs no
+  change (rows are named by exercise index and set id); "REMAINING" should list blocks, not members. Swap (S8)
+  adds its button beside the title in `ExerciseCard`: the eleven whole-cover references change then, as the plan
+  says.
+- **The layout probe** (`Support/WorkoutLayoutProbe.swift`) takes any view and any list of parts: a new panel or
+  sheet adds its parts and one test.
+- **The UI test** `WorkoutLogging` leaves no workout running (it discards); S6 will see the rest panel over the
+  rows it taps, and should skip the rest or tap through it.
+
+### The runs
+
+2026-10-09, on the final code (commit `c490067`; only this file and the screenshots were added after it).
+Simulator runs through the lock, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 122 s (lint 74 s; host Domain and Persistence tests 1,223 in 186 suites) |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 209 tests in 29 suites passed (5 s). The snapshot, tree, layout and screen suites draw on iOS only |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 242 tests in 34 suites passed (54 s): mine and the tester's, with the four sanctioned edits |
+| `LedgerUITests/WorkoutLogging` by itself (`Nightly` plan, `-only-testing`) | 2 of 2 passed, twice (light 50 s, dark 50 s): the logging flow 33 s, the accessibility-size order 17 s |
+| `scripts/check.sh` (the full gate) | exit 0 in 827 s: lint 70 s, iOS build 10 s, catalogs (FeatureWorkout: 54 keys match the code), iOS tests 453 s, watchOS build 47 s, watchOS tests 243 s, coverage 2 s. FeatureWorkout 1,708 of 1,730 lines, 98.72 % (threshold 70 %) |
+| The nine mutants, the planted `.formatted()` file | Mac host, each caught (tables above) |
+
+Earlier red runs in this slice were of my tests, not of the code: a stop's traits while the page is disabled (the
+texts are dimmed too; the table was corrected), two self-checks of the layout probe, the pinned header's place
+(the reader's window is taller than the phone and centres the screen), and the UI test waiting for "Undo set 6"
+after the last set, when the card has already moved to the next exercise.
+
+### Not verified
+
+- The rest of the `Nightly` plan (the tester's `WorkoutAdversarial` and `WorkoutConflictAdversarial` UI tests, the
+  performance lanes) was not run; both tap identifiers this slice did not change, but both now meet a page under
+  the header.
+- CI: nothing is pushed.
+- VoiceOver on a device, text sizes above the two the UI test and the references use (the layout check goes to
+  `.accessibility5`), a refused change in the running app (no Debug row fails a store), kill and relaunch (F15).
+- Right to left and Bold Text are measured (frames), not looked at: no reference draws them.
+- "Repeat" in the running app: the sample has no history. It is covered by the store test and the references.
+
+## Slice S5 — review, round 1 (G3 reviewer, 2026-10-09)
+
+Reviewed `git diff main...f0318dd` (commits `c490067`, `f0318dd`) by reading only: nothing was built or run, so
+every "met" below rests on the code as read and on the implementer's reported runs. Line numbers are those of the
+files at `f0318dd`, under `LedgerKit/Sources/FeatureWorkout/` unless a path says otherwise. "Not checked" is at the
+end.
+
+**Verdict: approve with should-fix.** No blocking finding. S-1 and S-2 are defects a lifter would meet and each is
+a few lines; S-3 is a product decision with a three-line cost; S-4 restores a check that a sanctioned edit
+weakened. The pump is correct for what the session's contract promises and is close to the smallest shape that
+can be.
+
+### Blocking
+
+None.
+
+### Should fix
+
+- **S-1. A jump to an exercise with nothing left to log holds the page there.** `WorkoutEdit.swift:184-186`
+  sets `WorkoutSelection(exerciseIndex:, setID: nil)` and sends no event; `WorkoutPresentation+Card.swift:19-21`
+  then shows that exercise for as long as the selection stands, and only a logged set clears it
+  (`WorkoutEdit.swift:101`). "REMAINING" lists the later exercises whatever is logged in them
+  (`WorkoutPresentation+Card.swift:54`). So: do the last exercise first (jump, log its sets; the page returns to
+  exercise 1), then tap it in "REMAINING" again. The card shows it with every row done, no steppers, no
+  "REMAINING", and a tap on a done row's body does nothing (`WorkoutEdit.swift:146`). The only ways back to the
+  exercises that still have sets are to un-log and re-log a set, to add a set and log it, or to Minimize and
+  reopen. `jump_nothingToLog_showsTheExercise` pins the selection; no test asks what the page then offers.
+  **Proposed:** list in "REMAINING" only the later exercises that have a set to log, which is what criterion 6
+  says ("the exercises still to do"). `jump`'s `nil` branch, the optional `WorkoutSelection.setID` and the
+  "with every set logged" arm of `shownExercise`'s comment then go away: less code. Looking back at a finished
+  exercise is the same question as open question 6 (an earlier exercise cannot be reached either) and belongs
+  to Pete with S9.
+- **S-2. The page keeps its scroll position when the shown exercise changes**, so the new exercise can appear
+  with its name off screen. `Views/WorkoutScreen.swift:30-33` has no scroll position. Evidence:
+  `screenshots/s5/app-accessibility3-last-exercise-{dark,light}.png` start at "TARGET 3 × 15 @ 12.5 lb": neither
+  "Exercise 5 of 5" nor "Cable Lateral Raise" is on screen, and the pinned header names the day, not the
+  exercise. The same happens when the last set of an exercise is logged from a scrolled page and the card moves
+  on. The UI test passes because it reads the title's label, which exists off screen
+  (`Apps/LedgerUITests/WorkoutLogging.swift:128`). **Proposed:** reset to the top when
+  `page.card?.exerciseIndex` changes (`.scrollPosition` bound to the top, or `.id(exerciseIndex)` on the scroll
+  view if VoiceOver focus survives it; try the first), and make the UI test assert
+  `app.staticTexts["workout.card.title"].isHittable` after each jump.
+- **S-3. An accidental second tap on a check un-logs the set** (decision 14). A person's double tap is 100 to
+  300 ms apart; the row is redrawn as soon as the stream answers (a local write), so the second tap of a real
+  double tap will usually land on a row already drawn done and be sent as `.unlog`. The "logs once" case
+  (`doubleTapOnACheck_logsOnce`) covers only two taps inside one redraw. What the lifter then has: the set not
+  logged, the cursor already on the next row (rule 22 moves nothing back), the rest still running from S6 on,
+  and an empty ring one row up that is easy to miss. **Cost of a guard:** in `WorkoutEditPlan.unlog`
+  (`WorkoutEdit.swift:105-109`), handed `now` as `log` is (`make` already has it), ignore an
+  un-log within about 0.6 s after the set's `doneAt` (and only when `doneAt <= now`). Three lines and one test,
+  pure, no timer, no sleep. **For the product owner to decide**; my recommendation is to add it, because the
+  cost of a lost set is higher than that of a deliberate undo that must wait half a second.
+- **S-4. Sanctioned edit 2 weakened the ambient-format check.**
+  `Tests/FeatureWorkoutTests/Adversarial/WorkoutWordsAdversarialTests.swift:120` replaced `".formatted("` by
+  `".formatted()"` and `".formatted(."`. The commonest ambient call, `date.formatted(date: .abbreviated, time:
+  .omitted)`, matches neither, nor does `.formatted(style)` or `.formatted(Date.FormatStyle…)`. **Proposed:**
+  put `".formatted("` back and blank the Domain's own call before the scan, as line 133 already does for
+  `date.now`: `.replacingOccurrences(of: ".formatted(in:", with: "domainFormat")`. The other three edits lost
+  nothing (below).
+- **S-5. At accessibility sizes the two facts are grouped wrongly.** In `reference-logging-accessibility3-dark.png`
+  and `app-accessibility3-*.png`, "Last" stands closer to the target's value above it than to its own value
+  below. `Views/ExerciseCard.swift:25` and `:65` use the same `LedgerSpacing.xs` between the facts and inside
+  one. **Proposed:** a larger gap between the two `FactLine`s than inside them at accessibility sizes
+  (`LedgerSpacing.m` outside).
+- **S-6. Three behaviours of the pump have no test.** (a) A change from elsewhere between two of the lifter's
+  taps: the second must be planned on the newest workout (`follow()`'s `live == ahead` and `isShown`,
+  `WorkoutStore.swift:170-173, 270, 291-296`); the mutant list has none for those lines. (b) A pump cancelled
+  while a call waits: see N-2. (c) Whatever S-1 and S-2 become.
+
+### Nits
+
+- **N-1.** `WorkoutStore.swift:283-285`: a refused change sets `dialog = .editFailed` over an open finish dialog
+  (taps keep draining under it). Harmless today; say in the comment that the refusal wins, or keep the finish
+  dialog and show the refusal after it. S7 should decide with its sheet.
+- **N-2.** `WorkoutStore.swift:249` empties the queue for any `false`, cancellation included (`:279-281`), while
+  the type's comment (`:226-227`) and the notes say a tap with no pump waits for the next one. A pump cancelled
+  mid-call drops the taps behind it silently. Either keep the queue on cancellation
+  (`apply` returning a three-case result) or say so in the comment. Reaching it needs the view to go and return
+  with the same store, which the cover does not do today.
+- **N-3.** `leave()` (`WorkoutStore.swift:147`) drops queued taps on Minimize. Right for Discard; for Minimize it
+  is a tap lost without a word (criterion 7). At a hand's speed the queue is empty by then (each apply is one
+  local write), so accept, but list it beside the refusal as the second case where a tap can be lost.
+- **N-4.** `WorkoutEdit.swift:70` clamps at zero itself while the doc comment (`:50-52`) says the engine holds it.
+  Both do (`WorkoutEngine+Reduce.swift` `changeTarget`); the plan needs its own to see "would change nothing".
+  Say that in the comment. Better home later: a Domain `Weight` helper that steps and floors.
+- **N-5.** `WorkoutEdit.swift:141` `repsOfAFirstSet = 8` (spec §3.7) and "a new set copies the last row" (rule 26,
+  `:131-137`) are product rules in the feature because `setAdded` takes a whole set. The watch will need the
+  same two. Not for this slice (the engine is out of scope); record as an input for the watch's logging feature:
+  move `WorkoutEditPlan`'s rule parts to the Domain when a second caller exists.
+- **N-6.** `WorkoutEdit.swift:163-164`: the plan asks `WorkoutPresentation` which row is shown. It is the one
+  place the rule lives, so it is right to share it; it reads oddly that the store's planning depends on the
+  presentation. A neutral home (`WorkoutSelection` static functions) would cost nothing.
+- **N-7.** `WorkoutPresentation.swift:12` and `WorkoutPresentation+Header.swift:17`: `selection` is defaulted to
+  nil. A caller that forgets it compiles and draws the cursor's exercise. The only product caller passes it;
+  drop the defaults when the tester's files are next touched.
+- **N-8.** `WorkoutStore.swift:32`: `typealias Dialog = WorkoutDialog` exists for old call sites; rename them and
+  drop it.
+- **N-9.** `Views/ExerciseCard.swift:27, 51`: `ledgerHitTarget` on the TARGET line, which is not a control, and on
+  the whole "Last" line. At the standard size it puts about 48 pt between "TARGET" and "Last" and makes the two
+  facts read as unrelated lines (`app-started-*.png`); v2 sets them tight. Keep 44 pt for "Repeat" alone.
+- **N-10.** "REMAINING" counts a drop set as a row: three sets and a drop read "4 × 16" beside a target of
+  "3 × 16" (`WorkoutPresentation+Card.swift:60`). It follows rule 26's `sets.length`; mention to Pete.
+- **N-11.** `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts`: its name still says 27 keys.
+- **N-12.** A stale `ahead` is possible in theory: if the stream showed the answer and then a later change from
+  elsewhere before the call's return resumed on the main actor, `isShown(answer)` is false and `ahead` stays old
+  until the next answer. It needs the main actor to run two stream turns before one resumption, and the next
+  plan would be wrong only for the same row. Accept; S-6 (a) would document the intended behaviour.
+
+### Criteria
+
+| # | Criterion | Verdict | Evidence |
+|---|---|---|---|
+| 1 | the page | met | `Views/WorkoutScreen.swift:26-33` (pinned header over `ScrollView { WorkoutPage }`); `Apps/LedgerUITests/WorkoutLogging.swift` logs sets. See S-2 |
+| 2 | the card | met | `WorkoutPresentation+Card.swift:78-135`, strings final in the model; kg and lb; `WorkoutPresentationCardTests` |
+| 3 | logging | met, with S-3 | `WorkoutEdit.swift:90-109`; no rest event sent (`log_sendsNoRestEvent`); nothing of rest drawn |
+| 4 | steppers | met | `WorkoutEdit.swift:68-77, 154-175`; the step is `WorkoutExercise.step`, reps through `Reps(clamping:)`. N-4 |
+| 5 | repeat and add | met | `WorkoutEdit.swift:113-138`; `repeatLast_writesEverySet_keepsDoneFlags`, `addSet_appendsACopy_andTheSegmentWidens` |
+| 6 | remaining | partly | lists later exercises whether or not they are still to do (`WorkoutPresentation+Card.swift:54`); S-1. The superset report is given |
+| 7 | in order, each once | partly | order and once: `WorkoutStore.swift:239-251, 264-272`; no unstructured task (`WorkoutRoot.swift:52-60`). "None is lost" does not hold on a refusal (accepted), on Minimize (N-3) or on a cancelled pump (N-2) |
+| 8 | a failed apply | met | `WorkoutStore.swift:277-286`, `WorkoutRoot.swift:47-51`, `WorkoutPage.swift:26`; `refusedApply_isShown_andThePageStays` on the real host |
+| 9 | orange once; labels; stops | partly | labels and stops as the tree table says (not run by me). Orange on the surface, by eye: the header's dot and current segment, the shown row's number, rule and ring, and every logged row's filled disc |
+| 10 | sizes and settings | met as reported | `WorkoutPageLayoutTests` with a cut check that reports a part it cannot find. By eye nothing is cut or overlapping in the 15 images; S-5 |
+| 11 | words | met | `WorkoutCopy+Card.swift`; 54 keys, each new one with a translator's comment, "%lld reps" with one/other; `forCountedText` on the one counted text |
+| 12 | pure and total | met | no ambient read in the new files as read; `checkedCursor` and index guards at `WorkoutPresentation+Card.swift:30, 38`, `WorkoutEdit.swift:199` |
+
+### The pump
+
+- **Correct against the contract.** `WorkoutSessionClient.updates()` is unbounded and in order, and `apply`
+  returns the state its update carries, so "plan on the last answer until the stream shows it" cannot miss.
+  Each tap is taken from the front, planned when its turn comes on the newest workout (not the one the lifter
+  saw), and removed when done. A row is named by set id, so a plan on a newer workout still means the same row,
+  and `.log` logs what the row reads then.
+- **Why not plan at tap time and apply events serially:** `setTargetChanged` carries an absolute weight, so two
+  quick "+" planned on the drawn page would both say 205. Planning at the turn is needed while events are
+  absolute. Why not show the answer directly and drop `ahead`: an older update still in the stream would draw
+  the page backwards. So `ahead` earns its place. The queue and wake signal are about 25 lines; `isDraining`
+  only matters for two overlapping pumps and is cheap. I would not ask for a smaller design.
+- **Across events.** Restart: the queue survives, the new pump's first signal drains it (N-2 for a call in
+  flight). Discard: queue emptied, taps refused while it runs, the call in flight is completed by the host.
+  Finish dialog: taps keep draining under it (N-1). Minimize: queue dropped, store gone, the choice of row
+  with it; the engine's cursor carries a choice of an open row. An update from elsewhere: shown as it comes;
+  the next tap plans on it unless `ahead` is newer (N-12).
+- **Isolation.** `@MainActor` store, value types `Sendable`, both dependencies injected, no `Task {}`.
+- **263 lines:** about 80 added to the store and 162 of planning, of which the planning is a pure function with
+  its own two test suites. Justified.
+
+### A refused change drops the taps behind it
+
+Right call. The taps behind were made on a page that assumed the refused one; applying them would log a weight
+the lifter never saw. The alert ("Couldn't save that change" / "Try again." / "OK") is honest and claims nothing
+about a first event of a two-event tap that may have gone through. Afterwards the page is what the stream says,
+`ahead` is cleared, and the selection is unchanged, which `activeSet` reconciles with the cursor. Keep, and
+reword criterion 7 in the brief to say so.
+
+### A day with a superset
+
+Nothing logs wrongly: every event names its row by set id and the engine runs the rounds and the group's rest.
+Each member reads "Exercise n of m" with its own target, "Last" and rows; "REMAINING" under member A lists B.
+What misleads is the card changing after every set with no word about why, which S-2 makes worse when the name
+is scrolled away. With S-2 fixed it is acceptable on `main` for an app that is not released. S9 must come before
+any release.
+
+### Deviations and open questions
+
+| Item | Judgement |
+|---|---|
+| Deviations 1, 2, 3, 5, 6, 7, 8 (the looks) | accept. 2 with N-9 |
+| 4 orange | for Pete. Note: v2 draws the shown row's ring in 50 % ink, not orange (`x.done ? ORANGE : active ? 'rgba(244,242,237,.5)'`); the orange ring is `LedgerDesign.SetRow`'s, outside this slice |
+| 9 the whole page disabled | accept |
+| 10, 11, 12 digits, numbering after "D", the workout's units | accept |
+| 13 `calendar:` | accept; required by "no ambient calendar" |
+| 14 double tap | S-3 |
+| 15 extra files | accept; each is under the lint's limits and has one job |
+| Q1 superset as solo cards | accept until S9 |
+| Q2 refusal drops the queue | accept |
+| Q3 orange discs | for Pete; a change would be in `LedgerDesign` |
+| Q4 eleven texts; "1 pounds" | accept. Also "1 kilograms". A fix needs a number, not a text, to pick a form; not worth it now |
+| Q5 un-logged row is not the shown row | accept (rule 22) |
+| Q6 earlier exercises unreachable | for Pete with S9; S-1 is its sharp end and should not wait |
+| Q7 Today's counted texts | accept. Move `forCountedText` to a shared place (taking the bundle) with the Today chore, when the third module needs it; within this module to `WorkoutCopy.swift` in S7 as the notes say |
+
+### The four sanctioned edits
+
+1. The catalog's list: still an exact two-way set comparison, now of 54. No loss. N-11.
+2. `forbidden`: weakened. S-4.
+3. The tree and elapsed tests on the header alone: the same expectations on the same header view; the header
+   in place in the real screen is covered by `WorkoutScreenTests.screen_headerInPlace_isItsTree` and
+   `screen_headerButtons_sendTheirActions` (as the notes say; I read their names, not their bodies). The failed
+   and loading states still go through `WorkoutScreen`. No loss.
+4. `calendar:` at seven call sites: mechanical. No loss.
+
+### Tests
+
+- The plan's tests pin events exactly (`==` on the event list), so they cannot pass with a wrong weight, order or
+  selection. The pump's tests wait on `Observations`, not on time; `heldApply_laterTapsWaitTheirTurn` and
+  `refusedApply_isShown_andThePageStays` use the real host with a probed store. No sleep found in the new tests;
+  the UI test waits on predicates with timeouts.
+- Could pass with the code broken: `doubleTapOnACheck_logsOnce` says nothing about a tap after the redraw (S-3);
+  nothing covers S-1's page, S-2's scroll, or S-6 (a) and (b).
+- The UI test: sound. It taps the steppers by position (0.9 and 0.1 of the width), which right to left would
+  swap; it runs left to right only. It reads off-screen labels as present (S-2).
+
+### The look, by eye
+
+Opened all fifteen images in `screenshots/s5/`: `app-started-{dark,light}`, `app-one-set-logged-{dark,light}`,
+`app-after-jump-{dark,light}`, `app-accessibility3-{dark,light}`, `app-accessibility3-last-exercise-{dark,light}`,
+`reference-logging-{dark,light}`, `reference-logging-accessibility3-dark`, `reference-drop-set-kg-light`,
+`reference-no-history-dark`. The prototype was read as source (its set row's colours), not rendered.
+
+- Nothing clipped, nothing overlapping. Logged rows are dimmed with a filled disc; the shown row is clear.
+- "+ Add set" in muted ink reads as a caption more than a control at the standard size. It is v2's look; fine,
+  but the weakest affordance on the page.
+- Standard size: the facts are spread out (N-9). Accessibility size: the facts are misgrouped (S-5); the
+  steppers stack well; "Sep 9 · 5×5 @ 195 lb" wraps beside "Repeat" without loss.
+- After a jump at the accessibility size the exercise's name is off screen (S-2).
+- Orange: see criterion 9.
+
+### Simplicity
+
+- S-1's fix removes a branch and an optional.
+- N-6, N-7, N-8 are small removals.
+- `WorkoutPresentation.Context` (two fields, one caller) could be two parameters; leave it if S6 adds a third.
+- Nothing else I would cut. The copy file is long because standards §7 asks one member per key.
+
+### Size
+
+877 product lines, of which 167 are copy members and 54 previews; about 650 carry logic, in files of one job
+each. Reviewable as one pull request and inside the agreed range for larger slices. The fixes above are about
++20 lines net (S-1 removes some). Split only if the fix round passes 1,000.
+
+### For the product owner, in plain words
+
+1. **A second tap on a check takes the set back.** Do you want the app to ignore an undo in the first half
+   second after a set is logged? (S-3)
+2. **Jumping to an exercise you already finished can leave you stuck on it** until you minimize. The proposed
+   fix lists only exercises that still have sets. Going back to look at or correct a finished exercise, and
+   going back to an earlier one at all, is not possible from this page: how should that work? (S-1, Q6)
+3. **Orange.** It is on the header's dot and bar, on the shown row (number, line, ring) and on every logged
+   row's disc. The prototype has the logged discs orange and the shown row's ring grey. Is this what you want?
+4. **A superset day** switches the card between the two exercises after every set, with no superset label, until
+   S9.
+5. **"REMAINING" counts a drop set**: "4 × 16" for three sets and a drop. And VoiceOver says "1 pounds" for a
+   weight of exactly one.
+6. Look at `app-started-dark.png` (spacing of TARGET and Last) and `app-accessibility3-last-exercise-dark.png`
+   (the name scrolled away).
+
+### Not checked
+
+- No build, test, lint or simulator run; no mutant re-run. Green claims are the implementer's.
+- Read in full: the store, the plan, the action and model files, both presentation extensions, the root, the
+  five views, the copy file, the pump and store-edit tests, the plan's move tests, the layout probe, the UI test,
+  the four sanctioned diffs. Read by name or in part only: `WorkoutEditPlanTests`,
+  `WorkoutPresentationCardTests`, `WorkoutPresentationPageTests`, `WorkoutPageLayoutTests`,
+  `WorkoutScreenTests`, `WorkoutAccessibilityTests`/`Trees`, `WorkoutSnapshotTests`, `WorkoutCopyTests`,
+  `Workout+Previews.swift`, `Support/WorkoutParts.swift`.
+- The ten references under `__Snapshots__` beyond the five copied to `screenshots/s5/`. Right to left and Bold
+  Text were not seen (no image draws them). VoiceOver was not heard.
+- `LedgerDesign.SetRow` and `SetRowSteppers` were not read; the session host only for how it treats
+  cancellation (`LocalWorkoutSessionActor.swift:124`, a task of its own).
+- The tester's concurrent changes in the worktree were ignored.
+
+## Slice S5 — adversarial testing, round 1 (G2 tester, 2026-10-09)
+
+On `f0318dd`, in the worktree `F10-s5`. No product code was changed. New files carry `Adversarial` in their names;
+three of the S4 tester's files were edited (below). The round was interrupted once by a network outage; the state
+was read again from disk and every run listed under "The runs" was seen to its end afterwards. Paths are under
+`LedgerKit/Tests/FeatureWorkoutTests/Adversarial/` unless they start with `Apps/`.
+
+### What was attacked, and how
+
+| # | Attack | Where | Result |
+|---|---|---|---|
+| 1 | The pump | `WorkoutPumpAdversarialSession.swift` (`PumpSession`: the real engine behind gates; every call can wait before the engine or after it, a numbered call is refused, the stream is kept behind the answers and let on one update at a time, another hand changes the workout in between; `PumpBench`), `WorkoutPumpAdversarialTests.swift`, `…+Lifecycle.swift` | 16 seeded storms of 36 taps each (every kind, one in eight naming a row the workout does not hold) come to the same events, the same workout and the same choice as the same taps made one at a time; a change from elsewhere while a call waits, behind a lagging stream, and with nothing behind; an answer that returns after the page showed it; a refusal in the middle; a refused discard; a workout ended elsewhere before the page heard; a pump cancelled while a call waits. **Findings 1, 2, 3** |
+| 2 | The rules are the Domain's | `WorkoutRulesAdversarialLoggingTests.swift`, `WorkoutWalkAdversarialTests.swift` | the brief's table of steps written out, for 7 kinds of equipment × 2 units, against the event and the stepper's label; the floors through the engine (7.5 lb → 2.5 → 0, reps 2 → 1, five more taps send nothing); the workout's own step, not the equipment's of today; "+ Add set" after a drop set; "Repeat" over a drop set and a logged row, and without history; five solo exercises logged from the first check to the last by tapping only what the page shows (18 sets in rule 20's order, then no steppers, no list, no current segment); un-log after the end. All pass. **Finding 4** |
+| 3 | The presentation | `WorkoutPageAdversarialTests.swift` | kilograms, twelve rows, a drop set as the fifth (rows "1"–"4", "D", "5"–"11"), RPE 8.5, every text character for character; the day of "Last" under four calendars with the machine's zone moved under it; reps 1, 2, 5, 21 and 0 under en, ja, ru, pl, fr, ar and cy; 400 seeded broken workouts (no exercise, no set, cursor and choice anywhere from −2 to 6) give a page that does not trap and does not contradict itself (one shown row at most, the steppers on it and never on a logged row, the header's words equal to the card's place, the list exactly the later exercises); every tap on 200 of them comes to a plan. All pass |
+| 4 | A day with a superset | `WorkoutWalkAdversarialTests.swift` | Upper A's last two exercises walked round by round from the page: A1, B1, A2, B2, A3, B3; before every tap the card's place, name, target and rows, the header's words and current segment and the list name the same exercise, and every check logs the set its card showed at the weight its row read; a stepper, "+ Add set" and a jump to the second member change that member only. Nothing logs wrongly. What misleads is the reviewer's point and the implementer's question 1: the card changes after every set |
+| 5 | The views | `WorkoutPageViewsAdversarialTests.swift` (simulator) | my own trees for two states no preview draws (every set logged; a cursor that names no row), both appearances; each stop sends its own tap once; busy: all seven controls dimmed, none sends; the set rows' numerals at five sizes × 375 and 402 pt × Bold × right to left ("187.5"/"12", "102.5"/"10", "315"/"5", "47.5"/"15": none needs less than half its size, so none is cut; the check is shown to see a cut); orange by pixels in three states × two appearances: only inside the shown row and the logged rows. **Finding 5** |
+| 6 | The sanctioned edits | the S4 tester's files | below |
+| 7 | The nightly UI tests | `Apps/LedgerUITests` | `WorkoutAdversarial` and `WorkoutConflictAdversarial` pass on this tree unchanged. New: `Apps/LedgerUITests/WorkoutLoggingAdversarial.swift`. **Findings 5, 6** |
+| 8 | Mutation | 16 source changes | below |
+
+### Findings
+
+| # | Severity | What | Reproducing test (fails by design) |
+|---|---|---|---|
+| F10-S5-1 | bug, low to medium | **"Minimize" drops the taps that were still waiting**, without a word. `WorkoutStore.leave` empties the queue for every exit; the workout goes on after a Minimize, so a check tapped just before it is a set that is never logged. The store's own text says nothing is dropped but behind a refusal. It needs a call still under way when Minimize is tapped (a slow write), so it is rare; when it happens it is a lost set | `WorkoutPumpAdversarialTests.minimize_keepsTheTapsMadeBeforeIt` |
+| F10-S5-2 | bug, latent | **A tap that waited for the next pump is planned on the workout as the cover last drew it.** When the cover's tasks start again the pump drains before the session's first update has arrived: the test's waiting check logs the set over the watch's log of it (300 lb × 1 becomes 185 × 5). No screen takes the cover's view away and brings it back with the same store today, so no lifter can reach it yet; the queue is kept across pumps for exactly that case, and it is the wrong thing to keep. Either drop the queue when a pump ends, or let a new pump wait for the stream's first update | `…pumpRestarted_plansOnTheNewestWorkout` (the same over 5 runs) |
+| F10-S5-3 | bug, latent | **The kept answer (`ahead`) outlives a follow that starts again.** It is given up only when the stream shows that very workout; a new stream starts with the session's newest workout, and after a change from elsewhere the kept one is never shown. Every later tap is then planned on it: "+" on a row the page reads 300 lb sends 195. Same precondition as finding 2. One line: forget `ahead` when `follow()` starts | `…followRestarted_forgetsTheOldAnswer` |
+| F10-S5-4 | bug, medium (the reviewer's S-1) | **A row of "REMAINING" can lead to a page with nothing to log and no way on.** The last exercise done first; the page returns to the first and still lists the last; a tap on it shows a card with every row done, no steppers and no list, with thirteen sets left | `WorkoutWalkAdversarialTests.jump_toAFinishedExercise_isNoDeadEnd` |
+| F10-S5-5 | bug, medium (the reviewer's S-2) | **The page keeps its scroll position when the shown exercise changes.** Hosted: the real screen at `.accessibility3` scrolled 250 pt stays at 250 after a jump (and, rightly, after a change within the exercise). In the app at the `AccessibilityXL` size: after a tap on the last row of "REMAINING" the name's top is at y 114, the scroll view's at 219; neither the name nor "Exercise 5 of 5" can be touched | `WorkoutPageViewsAdversarialTests.scroll_returnsToTheTop_whenTheExerciseChanges` (PR lane); `Apps/…/WorkoutLoggingAdversarial.test_jumpFromRemaining_showsTheNewExercisesName` (nightly) |
+| F10-S5-6 | question for the product owner (the reviewer's S-3, decision 14) | **A second touch on a check after the row was redrawn un-logs the set.** The system's double tap (`doubleTap()`) logs once in the running app: its second touch comes before the redraw, and that test passes. Two separate touches on the same spot 0.78 s apart leave the set not logged, with the shown row already on the next. Where between the two a person's accidental second touch falls was not measured; the reviewer proposes a guard of about 0.6 s | `Apps/…/WorkoutLoggingAdversarial.test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (nightly) |
+
+Notes, with no failing test:
+
+- **N-a. A two-change tap is not stopped by Discard.** A stepper on a row that is not shown is two events; when
+  "Discard" is tapped between them the second is still sent. With a host that takes its calls in order it lands
+  before the discard or is answered `noLiveWorkout`; harmless.
+- **N-b. A tap can be lost if a discard is refused while an older call is still out** (`queue.dropFirst()` after
+  the queue was emptied and filled again). Not reachable on a session that takes its calls one at a time, as the
+  protocol says a client does; `PumpSession` could show it, and I did not write it.
+- **N-c. After a refusal of a tap's second change the lifter's earlier choice stands** while the engine's cursor
+  has moved to the row the tap named. The next log names its own row, so nothing is logged wrongly.
+- **N-d. Digits.** "Exercise 2 of 5" and "5 × 5" take the injected locale's digits (S4's ruling), the weight,
+  the RPE, the row labels and the reps are plain digits, so under `ar_EG` one target line would mix both. Read
+  in the code, not run. English is the only language shipped.
+- **N-e. The list's "3 × 15" counts rows, drop sets included**, so an exercise prescribed 3 × 15 with a drop set
+  reads "4 × 15" in "REMAINING" and "3 × 15 @ …" on its card. The notes say rule 26; the brief's "5 × 5" does not
+  say which.
+
+### The sanctioned edits
+
+| # | Verdict | What I did |
+|---|---|---|
+| 1 catalog keys | not weaker: still exactly the 54 keys | nothing (the test's title still says 27) |
+| 2 `forbidden` | **weaker**: `date.formatted(date:time:)`, `.formatted(style)` passed (the reviewer's S-4) | `WorkoutWordsAdversarialTests`: `".formatted("` is back; the scan blanks the Domain's `.formatted(in:` as it blanks `date.now` (`scanned(_:)`); new `scan_seesAmbientFormats` with seven lines, five caught and two passed. The module's sources pass |
+| 3 the header alone | **weaker**: the header was drawn without the screen's insets, 32 pt wider than the cover draws it, so `tree_fitsAtEverySize` measured an easier layout, and four tests no longer met the real screen | `WorkoutCoverTreeAdversarialTests.screen(_:after:send:)` and `WorkoutElapsedAdversarialTests.header_anyStart` draw `WorkoutScreen` again and read it with `outsideScrollViews: true`: the pinned header in place. Expectations unchanged; all pass |
+| 4 `calendar:` | not weaker | nothing |
+
+### Mutation
+
+Each change applied to the product code, `swift test --filter FeatureWorkoutTests` on the Mac host, the file
+restored from a scratchpad copy. "Existing" is every test that was on the branch before this round.
+
+| # | Mutant | Existing tests | This round's tests |
+|---|---|---|---|
+| M1 | the stream never clears the kept answer | **missed** | `changeElsewhere_shownBeforeTheNextTap` |
+| M2 | every answer is kept, shown or not | **missed** | `answerAfterThePageShowedIt_isNotKept` (written for it) |
+| M3 | "Discard" keeps the waiting taps | **missed** | `refusedDiscard_thePageAnswersAgain` (strengthened for it) |
+| M4 | a workout ended elsewhere is shown as a failed change | **missed** | `endedElsewhere_beforeThePageHeard` (written for it) |
+| M5 | a cancelled call is shown as a failed change | **missed** | `pumpCancelled_whileACallWaits` |
+| M6 | un-logging gives up the lifter's choice | caught (1) | – |
+| M7 | "+ Add set" copies the first row | caught (1) | caught |
+| M8 | "Repeat" takes the last workout's set count as reps | caught (2) | caught |
+| M9 | a jump lands on the first row, logged or not | caught (2) | – |
+| M10 | the shown row ignores the lifter's choice | caught (1) | – |
+| M11 | a drop set takes a number | caught (1) | caught (2) |
+| M12 | "REMAINING" counts the prescribed sets | caught (2) | – |
+| M13 | the weight moves by the equipment's step of today | **missed** | `stepWeight_isTheWorkoutsOwnStep` |
+| M14 | the header's current segment ignores the choice | caught (1) | – |
+| M15 | a set is logged at the prescribed load | caught (2) | caught |
+| M16 | a tap never changes the lifter's choice | caught (2) | – |
+
+Six of sixteen were missed by the existing tests, five of them in `WorkoutStore`'s handling of `ahead`, of an end
+and of a cancellation (the reviewer's S-6); all sixteen are caught now. M6, M9, M10, M12, M14 and M16 are caught
+by the implementer's tests alone. No view was mutated: a view's mutant needs a simulator run each.
+
+### Questions
+
+1. Finding 6: is a guard wanted, and how long?
+2. Finding 1: should the taps waiting at a Minimize be applied before the cover closes, or after it by a task
+   that outlives the view (the source rule forbids one today)?
+3. Findings 2 and 3 share one precondition that no screen meets yet. Fix now (two small changes), or record for
+   the slice that first covers the cover?
+4. N-e: rows or prescribed sets in "REMAINING"?
+
+### What I did not attack
+
+- VoiceOver on a device; Increase Contrast beyond the implementer's reference; text sizes between the five of
+  the sweep; a watch.
+- The stepper pills' two halves one by one: VoiceOver sees a pill as one stop, and the halves cannot be measured
+  through it. `ledgerHitTarget` gives each a 44 pt minimum by construction, and the implementer's sweep holds the
+  pills inside the phone and apart for "5 LB" and "1.25 KG".
+- A numeral longer than five characters ("1247.5") at the accessibility sizes: `SetRow` would cut it; no load
+  of the seed reaches it.
+- The real host under the storms: `PumpSession` wraps the engine, not `LocalWorkoutSessionActor`. The
+  implementer's `heldApply_laterTapsWaitTheirTurn` and `refusedApply_isShown_andThePageStays` run on the host.
+- A refused change in the running app (no Debug row fails a store), kill and relaunch (F15).
+- View mutants; `LedgerDesign`'s own components beyond what the page draws with them.
+- The scroll test spins the run loop for 0.1 s to let SwiftUI settle; it is the one place this round reads a
+  clock.
+
+### The runs
+
+On the final tests, product code as at `f0318dd`. Simulator runs through the lock, iPhone 17 (iOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | OK in 130 s (lint 76 s, host tests 54 s) |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 240 tests in 33 suites; **4 tests fail, 5 issues**: findings 1, 2 (two issues), 3 and 4. Before this round: 209 in 29, all passing. The pump and walk suites repeated 5 times: the same 4 each time |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 280 tests in 39 suites; **5 tests fail, 6 issues**: the four above and finding 5's hosted test. The S4 tester's suites pass with sanctioned edits 2 and 3 restored |
+| `LedgerUITests` `WorkoutAdversarial`, `WorkoutConflictAdversarial`, `WorkoutLogging` (`Nightly` plan) | 4 of 4 pass, the first two unchanged on this tree (33 s and 55 s) |
+| `LedgerUITests/WorkoutLoggingAdversarial` (`Nightly` plan) | 3 tests; `test_doubleTapOnACheck_logsTheSetOnce` passes; **2 fail**: `test_jumpFromRemaining_showsTheNewExercisesName` (finding 5) and `test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (finding 6) |
+| 16 mutants (Mac host) | table above; every product file restored, `git status` shows none changed |
+
+An earlier red run of mine was the test's, not the code's: the orange check compared the image's lines with
+frames the reader had placed elsewhere in its window (a marker over the page now gives its top), and the second
+touch of finding 6's test was first aimed at an element that no longer existed.
+
+## Slice S5 — fix round 1 (G1 implementer, 2026-10-10)
+
+On `2ff8d7c` (the slice, the tester's round and the rulings), in the worktree `F10-s5`. Criteria 13 to 21 are the
+brief's "Plan amendments — slice S5 after round 1". Code, tests and references are commit `f1719d6`; this section
+and the screenshots follow it. Paths are under `LedgerKit/` unless they start with `Apps/` or `tasks/`.
+
+### What changed, per criterion
+
+| Criterion | Change | Where |
+|---|---|---|
+| 13 reworded | The store's text now says what drops a tap: a refusal (with the alert), and "Discard" for the workout it ends; nothing else. | `WorkoutStore`'s type comment |
+| 14 Minimize keeps the taps before it (F10-S5-1) | With no tap waiting, "Minimize" closes the cover at once, as before. With taps waiting it sets `exitWhenDrained`; nothing answers meanwhile (the header and the page are disabled, as while a discard runs); the pump applies the taps and then closes the cover. **When one of them is refused the cover stays up** with the alert, so the lifter sees that a set was not saved; "Minimize" can be tapped again. No task outlives the view: the cover is still up while the taps are applied (each is one local write). | `WorkoutStore+Pump.swift` `minimize()`, `drain()` |
+| 15 a restart plans on the newest workout (F10-S5-2, -3) | `follow()` forgets `ahead` when it starts. The store knows whether it is hearing the session (`isHearingTheSession`: from the first update of the stream being followed until that stream is left); `drain()` applies nothing while it is not, and the first update wakes the pump. So a tap that waited is planned on the session's workout, in either order of the root's two tasks. | `WorkoutStore.follow()`, `drain()` |
+| 16 "REMAINING" lists only what can be logged (F10-S5-4, S-1) | After the shown exercise, only exercises with a set not logged; "n × m" counts the rows that are not drop sets (an added set still counts, rule 26). **With no exercise shown** (the cursor names no row and nothing was chosen) every exercise is still listed, so that one with no set can be reached for "+ Add set": the orchestrator's ruling on the tester's line 142. | `WorkoutPresentation.page` |
+| 17 the page starts at the top (F10-S5-5, S-2) | `WorkoutScreen` holds a `ScrollPosition`; when `page.card?.exerciseIndex` changes it scrolls to the top edge. A change within the exercise leaves the page where it is. The scroll view is the same view before and after (no `.id`), so VoiceOver's place is not thrown away with it. | `Views/WorkoutScreen.swift` |
+| 18 a second touch does not undo a set just logged (F10-S5-6, S-3) | In the plan: an un-log whose moment is at or after the set's `doneAt` and less than `WorkoutEditPlan.undoGuard` (one second) after it comes to nothing. A set logged by a clock ahead of this one (a peer's) is not guarded. Two moments are compared; nothing counts time. | `WorkoutEdit.swift` `unlog` |
+| 19 room between the two facts (S-5, N-9) | The two `FactLine`s stand `LedgerSpacing.m` apart at every size (`xs` inside one, where they stack). The 44 pt frames on the TARGET line and on the whole "Last" line are gone: neither is a control, and "Repeat" keeps its own 44 pt. | `Views/ExerciseCard.swift` |
+| 20 housekeeping | The plan's comment on the weight's floor says that the engine and the plan both hold it and why the plan must (N-4). The store's comments on the queue say what happens on a cancellation (N-2, below). The tester's test title reads 54 (sanctioned edit 4). | `WorkoutEdit.swift`, `WorkoutStore+Pump.swift` |
+
+Also changed, because the rulings touch it:
+
+- **A call cancelled with the cover counts as sent** (the orchestrator's ruling on my question; N-2): the tap in
+  flight is taken off the queue and is not sent again by the next pump, the drain stops there, and **the taps
+  behind it stay queued** for the next pump. The session's host completes a call in a task of its own, so the tap
+  is not lost on the app's host. Pinned by the tester's `pumpCancelled_whileACallWaits` (no alert, nothing
+  applied twice, the new pump carries on) and by mutant R9 below.
+- **A tap is not taken off a queue that was emptied and refilled while it was being applied** (the tester's note
+  N-b): the queue counts the times it was emptied as a whole (`queueEpoch`).
+- **The header's current segment** is the shown exercise while it has a set to log (one rule, with or without a
+  choice); no existing expectation changed.
+- **The pump is in `WorkoutStore+Pump.swift`** (the store's file passed the lint's 300 lines). For that, the
+  store's `dialog`, `selection`, `exitWhenDrained`, its queue fields, `leave`, `isShowingWorkout`, the logger and
+  three dependencies are no longer `private`: they are the store's own, used from its extension in another file,
+  and a comment says so. No other file writes them.
+
+**Not changed:** the reviewer's N-1 (a refusal over the finish dialog: S7's), N-5 and N-6 (where the rules live:
+when the watch needs them), N-7 and N-8 (the defaulted `selection:` and the `Dialog` alias: both are used by the
+tester's files), N-12 (accepted by the reviewer); the tester's notes N-a, N-c, N-d.
+
+### The tester's seven tests
+
+All pass unedited: `minimize_keepsTheTapsMadeBeforeIt`, `pumpRestarted_plansOnTheNewestWorkout`,
+`followRestarted_forgetsTheOldAnswer`, `jump_toAFinishedExercise_isNoDeadEnd`,
+`scroll_returnsToTheTop_whenTheExerciseChanges` (PR lane); `test_jumpFromRemaining_showsTheNewExercisesName`,
+`test_secondTouchOnTheSameCheck_doesNotLoseTheSet` (nightly). The UI test's two touches were inside the one-second
+guard on this run.
+
+### Sanctioned edits to the tester's files
+
+Three of the tester's green tests pinned what criteria 16 and 18 reverse, and one title named the old count. I
+reported each before touching it; the orchestrator ruled all four on 2026-10-10; the tester audits them in round
+2. In `Tests/FeatureWorkoutTests/Adversarial/`:
+
+| # | File and test | Old | New |
+|---|---|---|---|
+| 1 | `WorkoutPageAdversarialTests.page_isTotal` (line 156) | `#expect(listed == Array(state.exercises.indices.filter { $0 > card.exerciseIndex }), "seed \(seed)")` | under a comment, `let stillToDo = state.exercises.indices.filter { index in index > card.exerciseIndex && state.exercises[index].sets.contains { !$0.isDone } }` and `#expect(listed == Array(stillToDo), "seed \(seed)")`. Line 142 ("with no card every exercise is listed") is unchanged and passes |
+| 2 | `WorkoutPageAdversarialTests`, "Kilograms, twelve rows and a drop set in the middle…" (line 75) | `== ["Incline DB Press, 3 × 10"]` | `== ["Incline DB Press, 2 × 10"]` (two working sets and a drop set) |
+| 3 | `WorkoutWalkAdversarialTests.unlog_afterTheEnd_canBeLoggedAgain` (line 100) | `let bench = try await Bench.make()` | under a comment, `let bench = try await Bench.make { $0.exercises[1].sets[2].doneAt = Fixtures.now.addingTimeInterval(-60) }`: the set the test un-logs was logged a minute before, so the un-log is not a second touch. What the test checks is unchanged |
+| 4 | `WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts` | `@Test("The catalog holds the 27 texts and no other")` | `@Test("The catalog holds the 54 texts and no other")` |
+
+No special case for 0 s exists in the product code. The tester's seeded storms also send un-logs at 0 s; they
+compare two runs under the same rule and stay green.
+
+### New tests
+
+| Criterion | Tests |
+|---|---|
+| 14 | `WorkoutStoreMinimizeTests.minimize_whileATapIsRefused_staysAndShowsIt` (the real host, an append refused: the cover stays, the alert shows, a tap made after Minimize was not queued, and with nothing waiting Minimize closes at once); the tester's `minimize_keepsTheTapsMadeBeforeIt` |
+| 15 | the tester's two |
+| 16 | `WorkoutPresentationRemainingTests.remaining_listsOnlyWhatCanBeLogged` (a later exercise with every set logged and one with no set are left out; with nothing left there is no list), `remaining_countsWithoutTheDropSet` (three sets and a drop read "3 × 12", as the card's target; an added set makes it "4 × 12"); `card_noSet_hasNoRow` changed to the new list |
+| 17 | the tester's hosted test; UI `WorkoutLogging` now asserts the title **hittable** after the cursor's move to the next exercise, after a jump, and at the accessibility size with "Exercise 5 of 5" |
+| 18 | `WorkoutUndoTests.unlog_withinASecondOfTheLog_comesToNothing` (pure, nine moments: 0, 0.001, 0.78 and 0.999 s do nothing; 1, 1.001 and 60 s un-log; a set logged 0.5 s and an hour ahead of this clock un-logs), `unlogRightAfterTheLog_keepsTheSet` (through the store, with the injected date); `mixedTaps_areAppliedInOrder` now expects the un-log made in the log's own moment to send nothing; `log_clearsTheChoice_unlogKeepsIt` un-logs a set logged a minute before |
+| 19 | `WorkoutPageLayoutTests.facts_standApart` (five sizes × both widths × Bold Text × right to left, with and without "Repeat": at least `m` between the two facts) |
+
+Moved, unchanged, for the lint's type length: the "REMAINING" tests into `WorkoutPresentationRemainingTests`, the
+un-log's plan test into `WorkoutUndoTests`.
+
+**Checked by breaking the code** (Mac host, each restored; all caught):
+
+| Mutant | Tests that failed |
+|---|---|
+| R1 an un-log always un-logs | `unlog_withinASecondOfTheLog_…`, `unlogRightAfterTheLog_keepsTheSet`, `mixedTaps_areAppliedInOrder` |
+| R2 the guard also holds for a set logged ahead of this clock | `unlog_withinASecondOfTheLog_…` |
+| R3 "REMAINING" lists finished exercises | `remaining_listsOnlyWhatCanBeLogged`, `card_noSet_hasNoRow`, the tester's `jump_toAFinishedExercise_isNoDeadEnd` and `page_isTotal` |
+| R4 "REMAINING" counts the drop set | `remaining_countsWithoutTheDropSet`, the tester's kilograms test |
+| R5 Minimize closes at once | `minimize_whileATapIsRefused_…`, the tester's `minimize_keepsTheTapsMadeBeforeIt` |
+| R6 the kept answer survives a new follow | the tester's `followRestarted_forgetsTheOldAnswer` |
+| R7 taps are planned before the stream is heard | the tester's `pumpRestarted_plansOnTheNewestWorkout` |
+| R8 a refusal under Minimize still closes the cover | `minimize_whileATapIsRefused_…` |
+| R9 a cancelled call is sent again | the tester's `pumpCancelled_whileACallWaits` |
+
+Not mutated: the scroll reset and the facts' spacing (a simulator run each); the tester's hosted scroll test and
+`facts_standApart` failed before the change and pass after it.
+
+### References and screenshots
+
+**Re-recorded: the ten references of this slice**, all of `__Snapshots__/WorkoutSnapshotTests/cover_*`, by deleting
+them and running `WorkoutSnapshotTests` once in the library's default mode (it wrote them and failed), then the
+whole module's suite (passed). Cause: criterion 19 (the gap between the two facts, and no 44 pt frame on them),
+which moves everything under the facts; nothing else in them changed. Looked at: at `.accessibility3` "Last" now
+stands 12 pt under the target's value and 4 pt over its own.
+
+- `cover_logging_matchesReferences.{light,dark}-{large,xLarge}.png` (4)
+- `cover_logging_accessibility3_matchesReference.dark-accessibility3.png`
+- `cover_logging_increasedContrast_matchesReference.light-large-increasedContrast.png`
+- `cover_dropSet_matchesReferences.{light,dark}-large.png` (2)
+- `cover_noHistory_matchesReferences.{light,dark}-large.png` (2)
+
+S4's five header references are unchanged and pass.
+
+`screenshots/s5/`: all fifteen refreshed from the final build (the ten of the running app from the UI test's
+attachments, light and dark; the five reference copies). `app-accessibility3-last-exercise-*` now shows
+"Exercise 5 of 5" and "Cable Lateral Raise" at the top of the page after the jump.
+
+### For the product owner
+
+- **The one-second guard** (criterion 18). The check of a set logged less than a second ago ignores a touch. The
+  prototype has no guard. Nothing is drawn differently during that second: a deliberate undo made that fast simply
+  does nothing, and works on the next touch.
+- **"Minimize" with a change still being saved** waits for it (the buttons dim for that moment), and stays on the
+  workout with "Couldn't save that change" if it fails.
+- No new text. No key was added to the catalog (54).
+
+### Product lines per file
+
+932 in total (877 before; the split is taken past about 1,000). Against `fc8a38f`; the change is this round's.
+
+| File | Lines | This round |
+|---|---|---|
+| `FeatureWorkout/WorkoutStore+Pump.swift` | 95 | new (the pump, moved and grown) |
+| `FeatureWorkout/WorkoutStore.swift` | 149 | −52 |
+| `FeatureWorkout/WorkoutEdit.swift` | 168 | +6 |
+| `FeatureWorkout/WorkoutPresentation+Card.swift` | 158 | +5 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | 35 | +5 |
+| `FeatureWorkout/Views/ExerciseCard.swift` | 60 | −2 |
+| `FeatureWorkout/WorkoutPresentation+Header.swift` | 46 | −2 |
+| **This round** | | **+55** |
+
+The reviewer expected about +20. The difference is criteria 14 and 15, which the review had as notes: the waiting
+Minimize, the "hearing" flag, the three-way outcome of a tap and the queue's count are about 40 lines.
+
+### Open questions
+
+1. **A stuck page is still possible from outside the page**: the lifter chooses a row of an exercise, and the
+   watch (F17) logs every set of that exercise. The choice stands until a set is logged here, the card shows that
+   exercise with nothing to log, and "REMAINING" lists only later exercises. One phone cannot reach it.
+   Recommendation: with S9 and the question of going back, let a choice give way when its exercise has nothing
+   left to log; I tried it in this round and withdrew it, because the tester's `noSet_addSet` pins that a chosen
+   exercise with no set shows its card.
+2. **"Minimize" waits on a call that never returns.** A host's apply is one local write; if one hung, the cover
+   would stay with its buttons dimmed, as a hung discard already does (S4's decision 12). Recommendation: accept.
+3. **The guard is one second from the set's `doneAt`, which is this device's clock at the log.** A set logged on
+   the watch less than a second ago is guarded here too when the clocks agree. Recommendation: accept.
+
+### The runs
+
+2026-10-10, on the code of `f1719d6` (only this file and the screenshots were added after it). Simulator runs
+through the lock, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 138 s |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 245 tests in 36 suites passed (6 s) |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 286 tests in 42 suites passed (69 s), the tester's five PR-lane tests among them |
+| `LedgerUITests` `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` (`Nightly` plan, `-only-testing`, one run) | 7 of 7 passed in 193 s: 2, 3, 1 and 1. `WorkoutLogging` once more in dark for the screenshots: 2 of 2 |
+| `scripts/check.sh` (the full gate) | exit 0 in 842 s, no failing test: lint 86 s, iOS tests 480 s, watchOS tests 250 s, coverage (FeatureWorkout 1,776 of 1,796 lines, 98.88 %) |
+| Nine mutants (Mac host) | each caught (table above) |
+
+Red runs on the way were mine: the first form of `facts_standApart` had an upper bound that "Repeat"'s 44 pt row
+breaks by design (removed); the ten references before they were re-recorded.
+
+### Not verified
+
+- The rest of the `Nightly` plan; CI (nothing is pushed); VoiceOver on a device, in particular where its focus
+  goes when the page returns to its top; a refused change and a waiting Minimize in the running app (no Debug row
+  slows or fails a store); the one-second guard by hand.
+
+## Slice S5 — adversarial testing, round 2 (G2 tester, 2026-10-10)
+
+On `8bbc91c` (the fix round), in the worktree `F10-s5`. No product code was changed. Paths are under
+`LedgerKit/Tests/FeatureWorkoutTests/Adversarial/` unless they start with `Apps/`. Round 1's seven tests pass, as
+the implementer says. **One test is left failing, for one new finding (F10-S5-7, latent).**
+
+### The fix round's four sanctioned edits
+
+| # | Verdict | What I did |
+|---|---|---|
+| 1 `page_isTotal`, the list's filter | not weaker: still my own model of the list, now criterion 16's (later exercises with a set left); the mutant "lists finished exercises" fails it | nothing |
+| 2 "Incline DB Press, 2 × 10" | not weaker: the fixture's second exercise is two working rows and a drop set; the mutant "counts the drop set" fails it | nothing |
+| 3 `unlog_afterTheEnd_canBeLoggedAgain` | **a little weaker**: the set it un-logs was logged by the fixture, a minute before, not through the page | restored: `PumpBench` has a clock the test moves; all 18 sets are logged through the page again, a minute passes, then the un-log |
+| 4 the title's 54 | not weaker | nothing |
+
+### What was attacked
+
+| Criterion | Attack | Result |
+|---|---|---|
+| 14 Minimize | `WorkoutMinimizeAdversarialTests.swift` on `PumpSession`: while Minimize waits, Minimize again, a further tap, Finish and Discard (nothing answers, header and page dimmed, no dialog, no discard); the two taps made before it applied once each, nothing after the cover closed; a call held under the real `pump()` and released one at a time (the cover stays up until the last); Minimize while a discard is under way (ignored, the discard ends the workout, the tap before Discard not applied); the pump's task cancelled while Minimize waits, then a new pump (each check once, the cover closes); the cover asked for again through the launcher while Minimize waits (`resume()` and `start` of the same day: one cover, one route, the tap once) | all pass but one: **finding 7** |
+| 15 the pump waits for the stream | read in `drain()` and `follow()`; round 1's two tests | it waits for as long as the stream is silent. `WorkoutSessionClient.updates()` promises a first element at once, with no workout a nil state, which closes the cover (`nothingToShow`); only a broken session leaves it waiting. What the lifter then sees: on a first presentation the loading screen, which draws nothing (S4's); after a restart the old page, enabled, whose taps wait without a word. No test: nothing reachable to pin |
+| 18 the guard | `WorkoutUndoGuardAdversarialTests.swift`, with a clock the test moves: a set logged, another row chosen, then the un-log at 0, 0.5 and 0.999 s: no event, the workout unchanged field for field, the choice, the dialog and the exit untouched; a tap queued behind a guarded un-log is still applied (it is no refusal); at exactly 1 s the check un-logs and moves neither the cursor, the rest nor the choice. A set logged elsewhere, at six moments: 0.3 and 0.999 s ago kept, 1 s and 90 s ago un-logged, 0.001 s and 5 s ahead of this clock un-logged | all pass |
+| 18 and the storms | the storms' clock stood still, so **every un-log they sent fell in the moment of its set's log and none was applied** (`storms_exerciseTheUnlog` counts 0). The bench's clock now moves by a seeded 0 to 0.4 s for each tap the store plans (`PumpBench.make(ticking:)`; the same moments for the same taps in both runs), and one tap in five is an un-log (was one in ten) | 16 storms still equal the same taps one at a time; they apply 15 un-logs and hold 2 by the guard (17 with ten seconds between taps) |
+| 16, 17, 19 | a mutation each, below. Criterion 17: `scroll_returnsToTheTop_whenTheExerciseChanges` now also logs the shown row's set in the same exercise: the page stays at 250 pt | pass; the mutants are caught |
+| the pump's move | `storesMembers_areUsedByTheStoreAlone`: no file of the module but `WorkoutStore.swift` and `WorkoutStore+Pump.swift` spells one of the eighteen members that lost `private`, and no view names `WorkoutStore` (`WorkoutRoot` reads `store.dialog` and writes nothing) | passes. The compiler no longer keeps a view from `store.selection = …`; this scan does, by spelling |
+
+### Finding
+
+| # | Severity | What | Reproducing test (fails by design) |
+|---|---|---|---|
+| F10-S5-7 | bug, latent, low | **When the session's updates end while "Minimize" waits for a tap, the cover can never be closed.** The store shows the failed screen ("Couldn't open this workout"), whose one button, "Close", sends `.minimize`; `send` answers nothing while `exitWhenDrained` is set, and the drain that would clear it applies nothing once the store no longer hears the session. Nothing else on the cover answers either. No host ends a stream (the key's stub does), and it needs a tap still waiting at that instant, so no lifter meets it today. The same lock holds for as long as a call never returns under Minimize: the cover is dimmed with no way out; with local writes that is not expected. A fix: when `follow()` ends in `failed`, give up `exitWhenDrained` and the queue (or let `.minimize` through while the workout is not shown) | `WorkoutMinimizeAdversarialTests.streamEnds_whileMinimizeWaits_closeStillCloses` |
+
+Notes:
+
+- **N-f.** `Apps/LedgerUITests/WorkoutLoggingAdversarial.test_secondTouchOnTheSameCheck_doesNotLoseTheSet` depended
+  on XCUITest's two taps being under a second apart (0.78 s in round 1). It now reads the page, discards, and is
+  **skipped** when the two taps took a second or more, where the run says nothing about the guard. It passed on
+  this run. The implementer's `WorkoutLogging` taps "Undo" a second time when the first came inside the guard.
+- **N-g.** The implementer's `minimize_whileATapIsRefused_staysAndShowsIt` does not see mutant H7 (taps still
+  queued while Minimize waits): its second tap names a set whose log was refused together with the queue.
+  `minimizeWaiting_nothingElseAnswers` sees it.
+- **N-h.** Round 1's doc comments still read "FINDING F10-S5-n" on tests that now pass: they name what each test
+  reproduces.
+
+### Mutation (each restored from a scratchpad copy)
+
+| # | Mutant | Implementer's tests | Tester's tests |
+|---|---|---|---|
+| H1 | "REMAINING" lists finished exercises (16) | 2 | `jump_toAFinishedExercise_isNoDeadEnd`, `page_isTotal` |
+| H2 | "REMAINING" counts the drop set (16) | 1 | the kilograms card |
+| H3 | the guard is two seconds (18) | 1 | `secondTouch_insideAndAfterTheSecond`, `setLoggedElsewhere` |
+| H4 | the guard also holds a set logged ahead of this clock (18) | 1 | `setLoggedElsewhere` |
+| H5 | a guarded un-log gives up the lifter's choice (18) | 1 | `secondTouch_insideAndAfterTheSecond` |
+| H6 | Minimize does not dim the cover while it waits (14) | 1 | 2 |
+| H7 | taps are still queued while Minimize waits (14) | **missed** | `minimizeWaiting_nothingElseAnswers` |
+| H8 | a cancelled call leaves its tap in the queue (the ruling on N-2) | **missed** (the implementer names the tester's test for it) | `pumpCancelled_whileACallWaits` |
+| V1 | the page never returns to the top (17; simulator) | – | `scroll_returnsToTheTop_whenTheExerciseChanges` |
+| V2 | the page returns to the top on any change of the page (17; simulator) | – | the same test, at "a change within the exercise" and at "a set logged" |
+| V3 | the two facts stand `xs` apart (19; simulator) | `facts_standApart` | – |
+
+### Four references, by eye
+
+- `cover_logging…light-large`: two logged rows with filled orange discs, row 3 shown with an orange number and
+  ring and the steppers under it; "TARGET 5 × 5 @ 200 lb · RPE 8" and, clearly lower, "Last Sep 9 · 5×5 @ 195 lb"
+  with "Repeat" at the right; "REMAINING" with four rows. The line over the shown row reads as a dark hairline in
+  light, as orange in dark.
+- `cover_logging_accessibility3…dark`: the title on two lines, both facts stacked label over value, the steppers
+  one over the other, the list's schemes under the names; nothing cut. The four lines of the two facts look
+  almost evenly spaced to the eye: the extra room of criterion 19 is there by measurement (`facts_standApart`)
+  but is small beside the lines' own height at this size. For the product owner's eye, not a defect I can pin.
+- `cover_dropSet…light-large`: "Exercise 5 of 5", kilograms, rows 1, 2, 3 and "D" at 8.75, "1.25 KG", no
+  "REMAINING", the last segment current.
+- `cover_noHistory…dark-large`: "Last No history yet" with no "Repeat", directly under the target with the new
+  room; row 1 shown.
+
+### What I did not attack
+
+- A watch; VoiceOver on a device; the finish dialog over a refused change (S7's).
+- Whether VoiceOver's focus survives the scroll to the top.
+- The full gate: the orchestrator runs it next.
+
+### The runs
+
+On the final tests, product code as at `8bbc91c`. Simulator runs through the lock, iPhone 17 (iOS 27.0).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | OK in 122 s |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | 255 tests in 38 suites; **1 fails**: `streamEnds_whileMinimizeWaits_closeStillCloses` (finding 7). This module's adversarial suites repeated 5 times (119 tests): the same 1 each time |
+| `FeatureWorkoutTests` on the simulator (`PR` plan, `-only-testing`) | 296 tests in 44 suites; the same **1 fails** |
+| `LedgerUITests` `WorkoutLogging` and `WorkoutLoggingAdversarial` (`Nightly` plan) | 5 of 5 pass, none skipped |
+| 8 host mutants, 3 view mutants on the simulator | table above; every product file restored, and the two view suites pass again on the restored build (15 tests) |
+
+`WorkoutAdversarial` and `WorkoutConflictAdversarial` were not run again in this round.
+
+Seen in passing, not this slice's: `swift test --filter Adversarial` over the whole package on the Mac host also
+runs `LedgerDesign`'s font suites (`BoldTextAdversarialTests`, `LedgerFontRenderingAdversarialTests`,
+`ArchivoFontAdversarialTests`, `WatchTypeFloorAdversarialTests`), which fail there (53 issues). `check.sh --fast`
+does not run them on the host and is green; I did not look into them.
+
+## Slice S5 — fix round 2 (G1 implementer, 2026-10-10)
+
+On `321193d`. One change, for the tester's finding F10-S5-7 (latent): when the session's updates end while
+"Minimize" waits for a tap, the cover could never be closed.
+
+- **The change** (`Sources/FeatureWorkout/WorkoutStore.swift`, `follow()`): when the stream ends and the store
+  shows the failed screen, it empties the queue and gives up the waiting exit. The failed screen's "Close" then
+  sends `.minimize` to a store with nothing waiting, which closes the cover at once.
+- **What happens to the taps that were waiting: they are dropped with the failed screen.** The store has lost its
+  source and no longer knows the workout they were made on. The call that was already under way is not taken
+  back: the session completes or refuses it as it would have. This is one more case in which a tap is dropped,
+  beside a refusal (criterion 13's wording is the orchestrator's to amend); the store's type comment now names
+  both. No alert is shown for it: the failed screen itself says the workout cannot be shown. No host ends a
+  stream (the key's stub does), so no lifter meets it today.
+- **Accepted, not changed:** a call that never returns while "Minimize" waits leaves the cover dimmed with no way
+  out, as a hung discard already does (S4's decision 12). No timeout was added.
+- **The tester's test** `WorkoutMinimizeAdversarialTests.streamEnds_whileMinimizeWaits_closeStillCloses` passes
+  unedited. No tester's file was touched, no test of mine was added or changed, no reference changed.
+- **Product lines:** 934 (932 before; `WorkoutStore.swift` 149 → 151).
+- **Runs** (2026-10-10): `swift test --filter FeatureWorkoutTests` on the Mac host, 255 tests in 38 suites passed;
+  `FeatureWorkoutTests` on the simulator through the lock (`PR` plan, iPhone 17, iOS 27.0), 296 tests in 44 suites
+  passed, `git status` showing no reference changed; `scripts/check.sh --fast` exit 0 in 130 s. The full gate and
+  the nightly UI tests were not run in this round: the orchestrator runs the gate.
+
+## S6 — rest and haptics, as built (G1 implementer, 2026-10-10)
+
+Branch `feat/F10-s6-rest`, cut from `main` at release 0.10.0 (`89cfbcb`). The contract is the brief's "Plan
+amendments — slice S6" (criteria 1 to 15) and "Plan amendments — slice S6, rulings during G1", which amends
+criterion 3. After this slice a logged set brings up the rest panel under the cover: the ring and the time
+left, the set that comes next, "+30s" and "Skip rest"; at zero the phone plays `.restOver` and the panel reads
+"0:00" and "Rest over" until "+30s", "Skip rest" or the next logged set.
+
+### What was built
+
+| Where | What |
+|---|---|
+| `LedgerDomain/Protocols/Clients.swift` | `HapticsClient.play(_:)`; `NotificationsClient.scheduleRestOver(at:)` and `cancelRestOver()`. None can throw |
+| `LedgerDomain/Model/WorkoutState.swift` | `shownRest`: the rest a screen shows. It reads no clock |
+| `LedgerDomain/Model/RestTimer.swift` | `nextTick(after:)`: how long until the countdown's text next changes (the rest's next whole second), nil when no time is left |
+| `LedgerDomain/Units/ClockText.swift` | `remaining(_:)`: a countdown's text, by the whole second, rounded up, so "0:00" is read only at zero |
+| `LedgerDependencies/Unimplemented/UnimplementedDevices.swift` | the two stubs log at fault level and return |
+| `LedgerFakes/DeviceFakes.swift` | `FakeHaptics` (`played`) and `FakeNotifications` (`calls`, `restOverAt`), actors that record |
+| `LedgerSync/LocalWorkoutSessionActor.swift`, `+Notifications.swift` | `init(… notifications: (any NotificationsClient)? = nil …)`; `notify(_:)` runs the two notification effects once the envelope is stored and the update is out |
+| `LedgerAppKit/LiveHaptics.swift`, `AppComposition.swift` | the iPhone's haptics, bound with the session in `bind(_:)` |
+| `LedgerDesign/Components/PillButton.swift` | `fillsWidth:`; two rows more in `PillButtonStatesGallery` |
+| `FeatureWorkout/WorkoutEdit.swift`, `WorkoutEdit+Rest.swift` | `.extendRest` and `.skipRest`, one event each |
+| `FeatureWorkout/RestPanelModel.swift`, `WorkoutPresentation+Rest.swift`, `WorkoutCopy+Rest.swift` | the panel's model at one moment, every string final |
+| `FeatureWorkout/Views/RestPanel.swift` (`RestPanel`, `RestReading`), `Views/WorkoutScreen.swift` | the panel, as the scroll view's bottom inset |
+| `FeatureWorkout/WorkoutStore.swift`, `WorkoutStore+Rest.swift`, `WorkoutStore+Pump.swift`, `WorkoutRoot.swift` | haptics from the stream; `moment`; `keepRestTime()`, run by `.task(id: store.shownRest)` |
+| `LedgerTestSupport/WithTestDependencies.swift` | **shared test support changed**: `haptics = FakeHaptics()` among the defaults, a new fake for each call (ruling 4) |
+
+Product lines (Swift lines that are not blank or comment, under `LedgerKit/Sources` and `Apps/` product code,
+without `LedgerFakes` and `LedgerTestSupport`): **74** after the Domain, stubs, host and `LiveHaptics`; **372**
+after the store, the presentation, the copy and the panel; **394** at the end (the splits the lint's length limits asked for add file headers). The plan said about 385.
+
+### How the time is kept (criterion 3 as amended)
+
+- **No `TimelineView`, no `Timer`, no stored countdown.** The ruling pointed at "the cover's existing tick"; there
+  is none. S4's header is SwiftUI's own `Text(timerInterval:pauseTime:countsDown:)`
+  (`Views/WorkoutTimeline.swift:28`), which the system draws from the device's clock and which can drive neither
+  a ring nor the change to "Rest over". So the tick is new, and it is the store's, on the injected clock and the
+  injected date.
+- `WorkoutStore.moment` is the injected date as it was last read. It is read in two places and no other: once for
+  each tap the pump plans (`WorkoutStore+Pump.swift`, the same reading that is the tap's `doneAt` or `tappedAt`,
+  so a rest is first drawn at its own start), and by `keepRestTime()`.
+- `keepRestTime()` (`WorkoutStore+Rest.swift`), run by `WorkoutRoot`'s `.task(id: store.shownRest)`: read the date
+  into `moment`; ask the Domain how long until the text next changes (`RestTimer.nextTick(after:)`); wait that
+  long on `@Dependency(\.continuousClock)`; read the date again. It never adds a second. After any time away the
+  first wait to end reads the wall clock, so the panel is right at once. It ends when the rest is over.
+- The model is `WorkoutPresentation.rest(_:at:…)` of `moment`: `RestTimer.remaining(at:)` and `fraction(at:)`,
+  written by `ClockText.remaining`. The view (`RestPanel`) draws strings and one number and reads no clock, so
+  every state of it can be drawn at a chosen instant, and under a UI test's `-LEDGER_UITEST_NOW` the panel moves
+  with the app's date (the header's elapsed time does not: `UITestClock`'s own note).
+- The date is **not** read at an update of the session. I did that first, and the tester's storm
+  (`WorkoutPumpAdversarialTests.storm_isTheSameAsOneAtATime`, whose date moves on at every reading) showed why
+  not: the readings then depend on how updates and taps interleave, and so would every `doneAt`.
+- A date that stands still while the clock runs (a test's or a preview's fixed date with an immediate clock)
+  ends the task instead of spinning: `keepRestTime()` returns when the date it reads after a wait is the one it
+  read before it.
+- **Cost, against the brief's non-functional line** ("no per-second store updates"): the store changes `moment`
+  once a second while a rest runs, and the cover's model is rebuilt then. Nothing changes once the rest is over,
+  or with no rest.
+
+### Criteria → tests
+
+Host unless marked: *sim* runs on the iPhone 17 simulator only, *UI* is the nightly UI test.
+
+| # | Criterion | Tests |
+|---|---|---|
+| 1 | the panel while a rest is shown; room under the page; none with auto rest off | `WorkoutPresentationRestTests.resting`, `noPanel`, `screen_needsAMoment`, `nextSet`, `nextSet_isTheNextExercises`; `WorkoutStoreRestTests.log_showsThePanel`, `autoRestOff_noPanel`; *sim* `RestPanelPlaceTests.screen_keepsRoomForThePanel` (the scroll view's bottom inset is at least the panel's height at `.large`, AX3 and AX5; its frame and its content are unchanged), `WorkoutScreenTests` (the panel's three stops stand outside the scroll view, in every state that rests); *UI* `WorkoutRest` (the last row scrolled clear of the panel at Accessibility XL, and tapped) |
+| 2 | `WorkoutState.shownRest` | `ShownRestTests` (12, through the engine): fresh, a logged set and after its end, auto rest off, skip, the next set, "+30s" both ways, un-log, a superset's member that starts no rest (during, after, at the end), an ended workout, a rest of no length and dates that are no dates |
+| 3 | the clock rule, as amended | `ShownRestTests.nextTick`, `remainingText`; `WorkoutPresentationRestTests.wallClock`; `WorkoutStoreRestTimeTests.keepsTime_bySeconds` (nothing is read between two seconds), `background_fortySeconds`, `endedInTheBackground_playsNothing` ("0:00" and "Rest over" on return), `fixedDate_ends`, `noRest_doesNothing`; the tester's `sources_readNothingAmbient` passes with `TimelineView` and `Timer` still forbidden; `FeatureWorkoutSourceTests.testersScan_stillCatchesATimer` (the control of ruling 1) |
+| 4 | "Rest over" stays until "+30s", "Skip rest" or the next set | `WorkoutPresentationRestTests.over`; `WorkoutStoreRestTimeTests.zero_playsRestOverOnce` (still there 600 s on); `WorkoutStoreRestTests.extend_atRestOver_thenSkip`, `nextSet_replaces_unlogKeeps` |
+| 5 | two `WorkoutEdit` cases through the one queue | `WorkoutRestPlanTests` (6); `WorkoutStoreRestTests.extend_whileResting`, `extend_atRestOver_thenSkip`, `quickTaps_inOrder_eachOnce`, `refused_dropsTheLaterTaps` (the host over a store that refuses), `minimize_waits`; *UI* `WorkoutRest` |
+| 6 | un-logging never cancels a rest; the guard unchanged | `ShownRestTests.unlog_keepsTheRest`; `WorkoutRestPlanTests.unlog_sendsNoRestEvent`; `WorkoutStoreRestTests.nextSet_replaces_unlogKeeps`; S5's `WorkoutUndoTests` and the tester's `WorkoutUndoGuardAdversarialTests` pass unedited |
+| 7 | haptics | `DeviceClientTests.deviceClients_returnFromEveryCall`, `deviceFakes_record`, `haptics_defaultsToAFreshFake`; `WorkoutDevicesWiringTests.boot_bindsTheLiveHaptics` (fails if the composition leaves the key unbound); `WorkoutStoreHapticsTests` (3: played once, not again after a restart or by a second cover, a change made elsewhere); `WorkoutStoreRestTimeTests.zero_playsRestOverOnce`; `WorkoutStoreRestOverTests` (`lateness` × 4, `reopenedAfterTheEnd_playsNothing`, `extendedOrSkipped_isNotPlayed`, `staleWait_playsNothing`) |
+| 8 | notifications run by the host; nothing traps without a live client | `HostRestNotificationTests` (9 cases in 8 tests); `WorkoutDevicesWiringTests.rest_runsWithoutANotificationsClient` (the app's own composition) |
+| 9 | a full-width `PillButton` | *sim* `PillButtonStateTests.fullWidthPill_fillsItsRow`, `fullWidthPill_isAButton`; the six re-recorded references (below) |
+| 10 | orange once on the panel | the list below; *sim* the references |
+| 11 | texts | `WorkoutCopyTests.restTexts`; the catalog's 63 keys (`WorkoutCopyTests`, the tester's pinned list, the gate's catalog check) |
+| 12 | VoiceOver | *sim* `RestPanelTests.tree_isExactlyTheTable`, `timeLeft_isSpokenAsADuration`, `buttons_sendTheirEdits`, `panel_nothingLeavesOrOverlaps` (44 pt); `WorkoutScreenTests.screen_headerInPlace_isItsTree` (the panel after the page); `WorkoutPresentationRestTests.spokenTime_takesTheLocale` |
+| 13 | sizes and settings | *sim* `RestPanelTests.panel_noWordIsCut`, `panel_nothingLeavesOrOverlaps` (five sizes × 375 and 402 pt × Bold Text × right to left, three models), `check_seesACut`; `RestPanelPlaceTests`; `RestPanelSnapshotTests` (the 11 references) |
+| 14 | Reduce Motion | *sim* `RestPanelTests.ring_reduceMotion` (the one decision, as a function); not looked at in motion |
+| 15 | the UI tests | *UI* `WorkoutRest` (two tests); `WorkoutLogging` skips each rest; the testers' three pass unedited |
+
+### `shownRest`, and what it cannot tell
+
+`rest` is what the engine keeps: a skip clears it, "+30s" replaces it, a logged set that starts a rest replaces
+it. One case is left over, and only a superset has it: a member logged after the rest's end that starts no rest
+of its own, after which the engine still holds the ended rest. `shownRest` tells it by the sets: nil when a set's
+`doneAt` is not before the rest's end. Two consequences, both for S9:
+
+- Un-logging that very set brings "Rest over" back (rule 22 forbids cancelling a rest; nothing forbids this).
+- A member logged while the rest still runs does not hide it, so "Rest over" then stands until the round's last
+  member is logged. If S9 wants otherwise, the engine has to say so in the state.
+
+With `autoRest` off no rest starts, so none is shown; `shownRest` does not look at `autoRest` itself. A rest
+that a peer started on a workout whose auto rest is off would be shown (F17's to rule; no path in M1 makes one).
+
+### The notification client (criterion 8)
+
+**Chosen: the host takes an optional client, and the app gives it none until F23.**
+`LocalWorkoutSessionActor.init(… notifications: (any NotificationsClient)? = nil …)`; with nil, `notify(_:)`
+returns at once. `AppComposition.opened` builds the host without one, and says so. F23 passes its client there,
+and nothing else changes. Why this and not the alternatives:
+
+- Binding the `notifications` key's stub would log a fault at every logged set ("a wiring bug: loud in the log"),
+  which is false: nothing is mis-wired. The stub now has the two methods (they log and return), and nobody calls it.
+- A do-nothing client type in the app would be a fake with a product name.
+- The default also keeps every existing construction of the host, the testers' ten among them, as it was.
+
+The effects run once the envelope is stored and the update is out, in the engine's order, inside the host's
+turn: `.scheduleRestNotification` on a logged set, on "+30s" and on a `start` whose snapshot holds a rest;
+`.cancelRestNotification` on a skip, a finish and a discard, also when the end then fails to save (the workout
+has ended in its log). A refused append runs none. **Recovery runs none**: a notification the system holds
+outlives the process, so a resumed rest keeps the one it had. For F23: the client is awaited in the host's turn,
+so a client that hangs holds the next change; and a workout that recovery ends (killed between the stored end
+and its cancel) leaves its notification scheduled, which F23 can drop at launch when no workout is live.
+
+### Haptics (criterion 7)
+
+- **One subscriber plays: `WorkoutStore.follow()`**, each update's `haptics` once, after the update is on screen,
+  the ending update's included (S7's `.workoutFinished` needs nothing more). A stream's first element carries
+  none, so a follow that starts again, and a second cover, play nothing old. Today plays nothing.
+- **`.restOver`** is `keepRestTime()`'s, at zero, when all of these hold: it saw the rest running; its last wait
+  ended less than `restOverWindow` (1 s) after the rest's end; it has not been played for this rest. So not on a
+  redraw, not for a rest that had ended when the task began (a reopened cover, the tasks starting again), and
+  not for a rest that ended while the app was suspended and whose wait ends on the return.
+- `LiveHaptics`: `.setLogged` is `UIImpactFeedbackGenerator(style: .rigid)`; `.restOver` the notification
+  generator's `.warning`; `.personalRecord` and `.workoutFinished` its `.success`. Generators are made at the
+  moment and not kept prepared.
+
+### Texts, for the product owner
+
+In the catalog (63 keys, 9 new), through `WorkoutCopy+Rest.swift`.
+
+| Text | Source |
+|---|---|
+| "+30s", "Skip rest", "Rest over", "Set %lld · %@ lb × %lld" | the brief and the prototype, word for word |
+| **"Resting"** | the prototype reads "Resting · watch buzzes at zero". There is no watch until F17 and F18, so the promise is left out. Decide: this, or another line, until then |
+| **"Add 30 seconds"** | what VoiceOver reads for "+30s" |
+| **"Set %lld · %@ kg × %lld"** | the kilogram form |
+| **"Drop set · %@ lb × %lld"**, **"Drop set · %@ kg × %lld"** | a drop set has no number |
+| the time left, spoken: "1 minute, 15 seconds" | Foundation's duration words in the lifter's locale; not in the catalog |
+
+**Not used: "Set %lld · next exercise".** In the prototype it shows when the logged set was its exercise's last.
+Here the engine has already moved its cursor to the next exercise's first set when the rest begins (rule 20), and
+the card with it, so the line names that set ("Set 1 · 55 lb × 10"). With every set of the shown exercise logged
+the panel names no set. Say if the line should say "next exercise" in words instead.
+
+No counted text was added ("× 5" is no word form), so `forCountedText` stays where it is.
+
+### Look decisions, for the product owner
+
+1. **The card is opaque**: `surface` with a `hairlineStrong` border, radius 26. The prototype's is 82 % with a
+   blur and a shadow; a blur cannot be pinned by a reference and reads badly over rows of numbers.
+2. **"+30s" is a full-width `PillButton`, as tall as "Skip rest" (54 pt) and in the button's label size**
+   (16 pt bold), so the two read as a pair. The prototype draws both 42 px tall at 14 px.
+3. **The ring is the design system's 64 pt `RestRing`**; its arc moves to its new place over each second, and
+   steps there with Reduce Motion. It is a second behind at most; at zero it empties as "0:00" arrives.
+4. **At the accessibility sizes** the two lines stand under the ring and the buttons one over the other. The
+   panel is then about half the screen (about 400 pt of 874 at Accessibility XL in the running app), and the
+   shown row is under it until the page is scrolled. It can be scrolled clear (the UI test does), but it is a
+   lot of screen: a smaller ring or one row of buttons at those sizes is the product owner's call.
+5. **Margins**: 16 pt from the cover's sides, 8 pt from the end of the safe area, 16 pt inside.
+6. **The time is rounded up** to the whole second, so a 2:30 rest reads "2:30" for its first second and "0:00"
+   comes with "Rest over".
+7. **The window for the buzz at zero is one second** (see Haptics). And which pattern each haptic is.
+8. **No VoiceOver announcement at zero.** The brief's accessibility line asks for "Rest, 1:30 remaining" on
+   appear and "Rest over" at zero; the criteria do not, and nothing announces. The stop is there to be read, with
+   the time in words. Recommendation: with S7, when the store has other things to say aloud.
+
+### What is orange while the panel is up (criterion 10)
+
+On the panel: **"Skip rest"** (the one accent fill) and **the ring's arc** (`RestRing`, the design system's).
+"+30s", the two lines and the border are ink. On the rest of the cover, as S5 left it: the header's dot beside
+the elapsed time, the current progress segment, the shown row's number, rule and check ring, and the disc of
+every logged row. So with a rest up there are two orange buttons' worth on screen: "Skip rest" and the shown
+row's check ring. This goes to Pete with S5's open question (orange "once per surface").
+
+### Re-recorded and new references
+
+**Re-recorded: 6**, `LedgerDesignTests/__Snapshots__/PillButtonStateTests/` (the states gallery gained the
+full-width pill beside a primary button, and one alone and disabled). `PillButtonGallery`, the design gallery
+and the composite sheets do not hold it, and none of their references changed.
+
+| Reference | Before | After | What changed |
+|---|---|---|---|
+| light and dark × `large`, `xLarge` (4) | 402 × 218 | 402 × 342 | rows 0 to 199 are the same pixel for pixel; from row 200 (the old image's bottom margin, 18 rows) the two new rows: +124 pt |
+| light and dark × `accessibility3` (2) | 402 × 281 | 402 × 445 | rows 0 to 262 the same; from row 263 the two new rows: +164 pt |
+
+**New: 11**, `FeatureWorkoutTests/__Snapshots__/RestPanelTests/`: the panel resting and at "Rest over", light
+and dark × `large` and `xLarge` (8); the panel resting, dark, `accessibility3` (1); the whole screen resting,
+light and dark (2). None of S4's and S5's 21 references changed: they are drawn from `WorkoutParts`, the header
+over the page, which holds no panel.
+
+### Deviations
+
+1. **Criterion 3 was amended during G1** (the brief's rulings section): no `TimelineView`; the tick is the
+   store's. And there was no existing tick to use (above).
+2. **`.extendRest` at "Rest over" needs a shown rest.** With none shown (no panel), "+30s" and "Skip rest" send
+   nothing, so a double "Skip rest" skips once and a "+30s" queued behind a skip does not start a rest out of
+   nothing.
+3. **The panel is the scroll view's `safeAreaInset(edge: .bottom)`** (`WorkoutScreen`): it floats over the
+   page's end, the page shows through beside and under its corners, and the scroll view keeps the panel's
+   height as room under its content with nothing measured. The body stays `ScrollView { WorkoutPage(model:) }`.
+   A drag that starts on the panel does not scroll the page; the page is dragged where it shows. At
+   Accessibility XL that is about 240 pt between the header and the panel.
+4. **`WorkoutPresentation.screen` takes `now: Date? = nil`**, and draws no panel without it. The presentation
+   reads no clock, so the moment is an argument; every existing caller (the testers' among them) passes none and
+   gets the screen it got before.
+5. **Every preview with a set logged now shows a panel** (`minutes`, `hour`, `logging`, `discarding` at "Rest
+   over"), because that is what the app shows then. Two cases are new: `resting` and `restOver`.
+6. **`WorkoutLogging` (S5's UI test, mine) skips each rest** it starts, as criterion 15 allows: "+ Add set" and
+   the lower rows stand under the panel at the default size. **And it had a check that fails on `main`**
+   (the nightly plan is not in the gate, so nobody saw): `app.scrollViews.count == 1`. Since F09 S5 put Today on
+   screen, Today's own scroll view is still counted under the cover, with no panel and no rest involved. The
+   check now counts the scroll views that hold the card's title (one) and the cover's addition to what was
+   there before it (one), and reads the page's frame from that scroll view. The tester's
+   `WorkoutLoggingAdversarial` reads `app.scrollViews.firstMatch.frame`, which may be Today's; it passes, and
+   is the tester's to look at.
+7. **`DependencyKeysTests`** (F07's, not a tester's): `haptics` left the list of keys that fail unconfigured
+   inside `withTestDependencies`; `haptics_defaultsToAFreshFake` pins the new default and that the key still
+   fails outside it.
+8. **The brief's announcement at zero is not built** (look decision 8).
+9. **Files split for the lint's length limits**, nothing compressed: `WorkoutStore+Rest.swift`,
+   `WorkoutEdit+Rest.swift`, `LocalWorkoutSessionActor+Notifications.swift`; and in the tests
+   `Support/RestBench.swift`, three suites of store tests in two files, three suites in `RestPanelTests.swift`,
+   `DeviceClientTests.swift`, `WorkoutDevicesWiringTests.swift`. Three members of the store lost `private` for
+   it (`haptics`, `clock`, `restPlayedOver`), as the pump's did in S5.
+
+### Edits to the testers' files
+
+One file, two edits, both sanctioned:
+`Tests/FeatureWorkoutTests/Adversarial/WorkoutWordsAdversarialTests.swift`.
+
+| Where | Edit | Reason |
+|---|---|---|
+| `catalog_holdsExactlyTheSlicesTexts` | the nine keys of the rest panel added to the pinned set; the test's name says 63 | criterion 11 adds the keys |
+| `scanned(_:)` | blanks the exact spelling `RestTimer` before the forbidden spellings are looked for | ruling 1: criterion 2 makes the shown rest a `RestTimer`. `forbidden` is unchanged; `FeatureWorkoutSourceTests.testersScan_stillCatchesATimer` shows `Timer.scheduledTimer`, `Timer.publish`, `var timer: Timer?` and `TimelineView` are still caught |
+
+No other tester's file was touched, and none of their checks was weakened. Their UI tests pass unedited.
+
+### Inputs for S7, S8, S9 and F23
+
+- **S7.** The ending update's haptics are already played (`follow()`); `.personalRecord` needs a way in, since
+  the engine never emits it. `keepRestTime()` ends with the workout (no rest is shown once it is not live). The
+  finish sheet goes up over the panel; `isBusy` disables the panel's buttons as it does the page's. A VoiceOver
+  announcement at zero, if wanted, belongs where `.restOver` is played.
+- **S8.** The swap button's 11 whole-cover references become 13: the two whole screens resting.
+- **S9.** `shownRest`'s two consequences above. The next-set line reads the shown row (`activeSet`); a block
+  should name its next member's row ("A2"), which needs a text.
+- **F23.** Pass the live client to `LocalWorkoutSessionActor` in `AppComposition.opened`; the three notes under
+  "The notification client". The `notifications` key itself has no reader yet.
+- **F17/F18.** "Resting · watch buzzes at zero" can come back when the watch buzzes. A change made elsewhere
+  is drawn at the store's last `moment` until the next tick (under a second while a rest runs; until the next
+  tap or tick otherwise): fine on one phone, worth a reading of the date at an update once a peer exists, by a
+  rule that does not break the storm test.
+- **Chore.** `PrimaryButton.minimumHeight` is read by `PillButton` (same module); if a third control wants it,
+  it is a token.
+
+### Screenshots
+
+`tasks/features/F10-active-workout/screenshots/s6/`. From the running app (the nightly UI test `WorkoutRest`,
+iPhone 17 simulator, light): `app-resting-light`, `app-after-30s-light`, `app-accessibility-xl-resting-light`,
+`app-accessibility-xl-page-end-light` (the page's last row scrolled clear of the panel). From the references,
+because the app's rest lasts 150 s and no UI test waits it out, and no dark run of the app was made:
+`reference-panel-rest-over-light` and `-dark`, `reference-panel-resting-dark`,
+`reference-panel-resting-accessibility3-dark`, `reference-screen-resting-light` and `-dark`.
+
+### The runs
+
+2026-10-10, iPhone 17 (iOS 27.0) and Apple Watch Series 12 46 mm (watchOS 27.0); every simulator run through
+the lock. The gate and the UI tests ran on the working tree that commit `bf452eb` then recorded unchanged, the
+screenshots with it; only this section came after (`45d05cb`).
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 130 s: format, lint, the package graph, 1,235 host tests in 187 suites |
+| `swift test --filter "FeatureWorkoutTests\|LedgerDependenciesTests\|LedgerSyncTests\|LedgerAppKitTests"` (Mac host), three times | exit 0 each (21 to 25 s): FeatureWorkout 293 tests in 44 suites; Sync 284 in 49; Dependencies 66 in 12; AppKit 257 in 41 |
+| `PR` plan, `-only-testing` FeatureWorkoutTests, LedgerDesignTests, LedgerAppKitTests, LedgerSyncTests, LedgerDependenciesTests, on the simulator | exit 0 in 178 s, on the code before the files were split for the lint; the full gate below ran the same targets on the final code |
+| `scripts/check.sh` (the full gate) | **exit 0 in 1,061 s**: lint 75 s, iOS build 28 s, catalogs (FeatureWorkout: 63 keys match the code), iOS tests 685 s, watchOS build 35 s, watchOS tests 234 s, coverage 2 s. FeatureWorkout 2,074 of 2,094 lines, 99.04 % (threshold 70 %); LedgerSync 99.00 %; LedgerDomain 99.35 %; overall 98.73 % |
+| `Nightly` plan, `-only-testing:LedgerUITests/` `WorkoutRest`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` | **exit 0 in 266 s: 9 of 9** (`WorkoutRest` 2, `WorkoutLogging` 2, the testers' 5, unedited) |
+
+Red runs on the way, and what they were:
+
+- The first host run after the store read `@Dependency(\.haptics)`: about 25 store tests failed on the unbound
+  key (ruling 4), and the tester's scan on `RestTimer`, `TimelineView` and `.formatted(` (rulings 1 to 3).
+- The tester's storm, 16 seeds, when the store read the date at each update (above): fixed in the store, not in
+  the test.
+- My timing tests hung once: they advanced a test clock before the store's task had begun its sleep. `RestBench`
+  now counts sleeps and waits for one before it moves time; no test waits on real time.
+- Three UI rounds: "+ Add set" tapped under the panel (`WorkoutLogging` now skips each rest); Today's scroll
+  view counted under the cover (deviation 6); a swipe that began on the panel and scrolled nothing (the test now
+  drags the page where it shows).
+- The fast gate's lint, three times, on lengths: files and suites were split (deviation 9).
+
+### Not verified
+
+- **On a device: nothing.** The haptics' patterns are chosen from the documentation and were never felt; the
+  simulator has no Taptic Engine. Whether a buzz at zero is felt with the phone in a pocket and the cover up is a
+  device question.
+- **The 40 s in the background in the running app.** It is shown by the store's tests with a clock they step
+  (the wait pending while the date moves on), and by the presentation at the later moment. No UI test puts the
+  app in the background, and none waits for a rest's end: "Rest over" and `.restOver` are shown by the store's
+  tests and the references only.
+- **Reduce Motion in motion.** The decision is a function with a test; nobody looked at the ring move, with it
+  on or off, beyond the screenshots, which show the digits changing without a fade.
+- **VoiceOver itself.** The stops, their words and their traits are pinned from the accessibility tree; how often
+  VoiceOver speaks a stop marked as updating often was not listened to.
+- **Dark and Increase Contrast in the running app**; right to left and Bold Text are measured (frames), not
+  looked at. No reference draws the panel with Increase Contrast.
+- **A superset with a rest** on screen: `shownRest`'s cases are tested in the Domain; the cover draws members as
+  solo cards until S9, and no test draws the panel over one.
+- The rest of the `Nightly` plan (Today's, the tabs', the performance lanes) was not run. CI: nothing is pushed.
+- A refused "+30s" in the running app (no Debug row fails a store); kill and relaunch with a rest running (F15).
+
+## S6 — fix round 1 (G1 implementer, 2026-10-10 and -11)
+
+On `306c1cd` (the review `fc787ea`, the tester's round `306c1cd`). The contract is the brief's "Plan amendments —
+slice S6 after round 1" (rulings 16 to 21) and its two rulings made during the round. The round was cut off once
+by a usage limit and taken up again from the working tree; nothing was discarded, and every run reported below is
+from after that.
+
+### Per ruling
+
+| # | What changed | Tests |
+|---|---|---|
+| 16 | `rest` left `WorkoutModel`; `now:` left `WorkoutPresentation.screen` (S5's signature again; deviation 4 of the section above is gone). `WorkoutStore.restPanel` (`WorkoutStore+Rest.swift`) is the one reader of `moment`. `WorkoutScreen` is generic over a bottom-inset slot: `WorkoutRoot` fills it with `StoreRestPanel(store:)`, whose body is the one place that reads `store.restPanel`; previews and tests use `WorkoutScreen(model:rest:send:)`, which fills it with `PlacedRestPanel`. `WorkoutPreview.restPanel` is new. The brief's line 81 and `docs/architecture.md` §13 say what is built | `WorkoutStoreTickAndTapTimeTests.tick_firesForThePanelOnly` (`withObservationTracking`: a second of a rest fires 0 times for a reader of `model`, once for a reader of `restPanel`, and `model` is an equal value), `change_firesForTheModel` (the control), `model_holdsNoMoment`; the tester's `eachSecond_oneChange_thePageUntouched` as ruled (0 changes of `model` and 10 of `restPanel` in 10 s; 0 of either after the end) and `root_keepsTheRestsTime` (review S6-SF1: green, on the hosted `WorkoutRoot`) |
+| 17 | A compact panel at the accessibility sizes (`Views/RestPanel.swift`), below | `RestPanelRoomTests.page_keepsItsRoom` (at least 120 pt on the three phones at all twelve sizes, resting and at "Rest over"; the panel never ends below the screen), `compactPanel_isShorter`; the tester's `screen_leavesThePageRoom_beyondTheCriterion` passes **unedited (its threshold is 44 pt)**; `RestPanelTests` (no word cut, nothing overlapping, both buttons 44 pt, five sizes × two widths × Bold Text × right to left); the tester's `panel_everySize` |
+| 18 | A queued tap carries its instant: `WorkoutTap(edit:tappedAt:)`, the injected date read once in `enqueue` (that is, when `send` is called); the pump plans with it. Done for **every** edit, not only the two rest taps: it was the same change, and S5's and the testers' tests needed no edit at all (the storm's seeded date is read once a tap, as before, now in tap order). The panel's `moment` takes a tap's instant only when it is later than the last reading, so a tap that waited behind a slow save does not set the panel back | `extend_behindAHeldSave_carriesTheTapsTime` (over the real host, the append held: "+30s" tapped with 2 s left and applied 5 s later extends the rest to 180 s ending at 180 s; before, a fresh 30 s rest ending at 183 s), `log_behindAHeldSave_carriesTheTapsTime` (`doneAt` and the rest's end are the tap's), `momentNeverGoesBackForATap` |
+| 19 | `RestPanel.ringAnimation(reduceMotion:isOver:)`: no animation once the rest is over | `RestPanelTests.ring_reduceMotion`, with the case. Still not seen in motion by anyone |
+| 20 | **F10-S6-2 fixed** (4 product lines): at zero `keepRestTime()` asks the newest workout the store knows (`newestRest`: the session's answer to the last tap where the stream has not shown it, else the page's), so a rest the session has already skipped is not played. **F10-S6-3 fixed** (9 product lines): the first update of a follow that started again carries no haptics, so `follow()` plays what changed between the page and that first workout, by the engine's own account of a change between two states (`WorkoutEngine.effects(from:to:)`: a set newly done; `missedHaptics`). Nothing for a first follow, nothing when the page already showed it. **F10-S6-1 left red, by ruling**: below | the tester's `skipped_withThePageBehind_isNotFelt` and `followStartedAgain_withAnUpdateBehind`, green unedited; the tester's walk (40 seeds: every haptic once, also across restarted tasks) still green |
+| 21 | Recorded in "Inputs", below; nothing built | |
+
+### The compact panel (ruling 17)
+
+At an accessibility size the panel has no ring: the time left is text (`numeralS`) on one line with "Resting" or
+"Rest over", and the next set is under them. The two buttons stand side by side where both words fit on one line
+each ("Skip rest" at its own width, "+30s" in what is left: two equal halves wrapped "Skip rest"), else one over
+the other (`ViewThatFits`). That was enough everywhere but on the 375 pt home-button phone at `.accessibility5`
+(86 pt), so the third step of the ruling was taken **at `.accessibility5` only**: the next-set line is not drawn
+there (VoiceOver still reads it, in the stop's label). The condition is the text size and not the phone: the view
+does not know the screen's height. Margins, padding and the buttons' height are as at the default size. Nothing
+further was designed.
+
+Page showing over the panel, in pt, measured as the tester measures (`WorkoutRestPanelAdversarialTests.room`):
+
+| | AX1 | AX2 | AX3 | AX4 | AX5 |
+|---|---|---|---|---|---|
+| 375 pt, home button: before | 186 | 136 | 57 | 5 | 0 |
+| after | 360 | 297 | 234 | 173 | 182 |
+| 375 pt, notch: before | 267 | 217 | 138 | 83 | 11 |
+| after | 441 | 377 | 315 | 254 | 263 |
+| iPhone 17: before | 317 | 267 | 217 | 133 | 61 |
+| after | 491 | 427 | 395 | 328 | 313 |
+
+The least is 173 pt (the home-button phone at AX4). The panel is 165, 203, 225, 270 and 239 pt there (it was 339
+to 492). Below the accessibility sizes nothing changed: the least is 334 pt (the home-button phone at `xxxLarge`).
+
+**The app agrees with the model.** The tester's UI test at the largest size
+(`WorkoutRestAdversarial.test_rest_atTheLargestTextSize_leavesSomeOfThePage`, iPhone 17) passes, and its
+screenshot (`screenshots/s6/app-compact-accessibility5-resting-light.png`) shows the header ending at about
+287 pt and the panel beginning at about 603 pt: about 316 pt of page, against the model's 313.7 pt. Read off the
+image by eye, to a few points.
+
+For the product owner: the compact form itself (screenshots `app-compact-…` and
+`reference-panel-resting-accessibility3-dark`); that the next set is not on screen at the largest size; and, seen
+in the same screenshot and not S6's, that the header breaks "Minimi/ze" and "Finis/h" inside a word at that size
+(the tester's note too).
+
+### F10-S6-1, left red (ruling 20)
+
+**What happens now.** A rest ends: the panel reads "0:00" and "Rest over", `keepRestTime()` has ended, and
+nothing reads the date until a tap. The wall clock is then set back, say by 60 s. The panel goes on saying "Rest
+over" although 60 s of the rest are left by the clock. A tap of any kind (a stepper) is planned at the earlier
+date, as every tap is at its own instant, but the panel's `moment` no longer goes back for a tap (ruling 18's
+consequence), so the panel still says "Rest over". The frozen countdown the tester found ("1:00 · Resting",
+never moving, never ending) is therefore gone; what remains is "Rest over" shown early, with no buzz at the
+rest's true end. It rights itself when the rest's task runs again: "+30s" (which is judged at the tap's date, so
+it extends the rest that is still running and the panel counts down), the next logged set, a reopened cover.
+The tester's `clockSetBack_atRestOver_thenATap` fails on its first expectation (it expects "1:00" after the tap)
+and on the panel's fault ten seconds on.
+
+**Why no local fix.** The test wants the countdown shown and running after the tap. That needs something to tick
+after the rest's task has ended, and the store starts no task of its own. The root could start the task again
+(a `.task(id:)` whose value also says whether the panel is over), but the tester's harness (`RestCover.sync`)
+mirrors `.task(id: store.shownRest)` exactly: it starts the task again only when `shownRest` changes, so such a
+fix cannot turn its test green. A task that does not end with the rest (waiting to be woken by the pump, as
+`pump()` waits) breaks every test that awaits the task's end, mine and the tester's.
+
+**What a real fix takes.** One of: (a) the rest's task outlives the rest's end and is woken by the pump when a
+tap's date is earlier than `moment`, with the tests that await its end changed to cancel it (about ten, in three
+files of mine and two of the tester's); or (b) the root's task id gains "the panel is over", a stored flag the
+task and the pump keep, and the harness mirrors that id. Either is about 15 to 20 product lines. With F17's other
+clock cases.
+
+### Edits to the testers' files (for the audit in round 2)
+
+| File | Edit | Reason |
+|---|---|---|
+| `WorkoutRestAdversarialSupport.swift` | `store.model.rest` → `store.restPanel` (1) | ruling 16: the field moved |
+| `WorkoutRestPanelAdversarialTests+Screen.swift` | `store.model.rest` → `store.restPanel` (4); `WorkoutScreen(model: preview.model)` → `WorkoutScreen(model: preview.model, rest: preview.restPanel)` (1) | ruling 16: the field moved, and the screen is handed its panel |
+| the same file, `screen_roomIsMeasured` | the last range `55 ... 75` → `304 ... 324`, with a comment naming ruling 17 and the old range | ruled during the round: the compact panel's measured 313.7 pt ± 10 |
+| `WorkoutRestAdversarialTests+Edges.swift`, `eachSecond_oneChange_thePageUntouched` | watches `store.model` (0 changes in the 10 s) and `store.restPanel` (10); reads the clock from `store.restPanel`; 0 of either after the end; the title; and a helper `counting(_:)` beside it, which the lint's 40-line limit for a function body asked for | ruled during the round: ruling 16 inverts the expectation |
+
+`swiftformat` turned my two `//` comments over that test into `///`. No other tester's file was touched;
+`clockSetBack_atRestOver_thenATap` is as the tester wrote it.
+
+### References
+
+**Re-recorded: 1.** `RestPanelTests/panel_resting_accessibility3_matchesReference.dark-accessibility3.png`,
+402 × 428 → 402 × 215: the compact panel (no ring, the time as text beside "Resting", the buttons side by side).
+Every pixel of it is new. The other ten references of the panel, the six of `PillButton` and every earlier
+reference are unchanged: below the accessibility sizes the panel draws as it did.
+
+### Product lines
+
+**483** now (394 before the round; +89): the screen's slot and the two small views that fill it, the compact form,
+`WorkoutTap`, `restPanel`, `missedHaptics`, `newestRest`. Counted as before.
+
+### Inputs for later slices (ruling 21; recorded, not built)
+
+- **F14** (Settings' effect on the workout): `Settings.watchBuzz` gates the phone's buzz at zero as well as the
+  watch's (spec §4.5: "both should honour `watchBuzz`"; testing-strategy D11). Today `keepRestTime()` plays
+  `.restOver` whatever the setting says; the setting has no screen and defaults to on.
+- **S7's criteria**: the brief's VoiceOver announcements, "Rest, 1:30 remaining" when the panel appears and "Rest
+  over" at zero. They belong where `.restOver` is played (`keepRestTime()`), and need a client for announcements.
+- **F23**: recovery re-asserts the rest notification (today it schedules nothing: right after a kill, not after
+  notifications were turned off and on, or a restore); `WorkoutDevicesWiringTests.rest_runsWithoutANotificationsClient`
+  becomes a test that fails when the client is missing; a `start` onto a kept log goes through recovery and so
+  schedules nothing for a snapshot that holds a rest (review S6-N4).
+- **F18**: `follow()` awaits the haptics client before it takes the next update. `LiveHaptics` returns at once;
+  the watch's client must too, or the page waits for it (review S6-N2).
+- **F17**: the tester's question 7: a peer's second `setLogged` of a done row after a rest's end hides "Rest
+  over"; a wall clock set back by more than a rest between two logs hides a running rest (`shownRest` compares
+  `doneAt` with the rest's end). And F10-S6-1 above. `missedHaptics` plays a set a peer logged while the cover's
+  view was away, once, on its return: say if that is wanted then.
+- **S9**: the tester's question 2: a superset's member un-logged brings "Rest over" back; a member logged while
+  the rest runs leaves "Rest over" standing at its end.
+
+### The runs
+
+2026-10-11, iPhone 17 (iOS 27.0), every simulator run through the lock, on the working tree that the round's
+code commit then recorded unchanged.
+
+| Run | Result |
+|---|---|
+| `scripts/check.sh --fast` | exit 0 in 144 s; 1,239 host tests in 188 suites |
+| `swift test --filter FeatureWorkoutTests` (Mac host) | exit 1: 314 tests in 46 suites, **1 red, F10-S6-1** (two issues), as ruled |
+| `PR` plan, `-only-testing:FeatureWorkoutTests` | exit 65 in 183 s: 377 tests in 57 suites, **F10-S6-1 red** as ruled, and the one reference recorded on that run (the test that records a missing reference reports it); the full gate ran it again against the recorded image |
+| `Nightly` plan, `-only-testing:LedgerUITests/` `WorkoutRest`, `WorkoutRestAdversarial`, `WorkoutLogging`, `WorkoutLoggingAdversarial`, `WorkoutAdversarial`, `WorkoutConflictAdversarial` | **exit 0 in 318 s: 11 of 11**, the testers' unedited |
+| `scripts/check.sh` (the full gate) | **exit 65 in 825 s, as ruling 20 makes it**: lint, the iOS build and the catalogs pass; the iOS `PR` plan's one failing test is `WorkoutRestAdversarialTests.clockSetBack_atRestOver_thenATap` (F10-S6-1), and every other iOS test of every target passes, the re-recorded reference among them. The gate stops there: **the watchOS build, the watchOS tests and the coverage gate did not run in this round** (the script has no watch-only mode; no watch code and nothing outside `FeatureWorkout` changed) |
+
+Only `FeatureWorkout` product code changed in this round (and two documents), so the targeted simulator run is of
+`FeatureWorkoutTests`; the full gate ran every target.
+
+### Not verified
+
+- As before: nothing on a device; the ring in motion, with Reduce Motion or at zero; VoiceOver heard; dark and
+  Increase Contrast in the running app.
+- The compact panel on a real 375 pt phone: the two 375 pt phones are windows of their sizes on the iPhone 17
+  simulator, as the tester models them. In the running app it was seen on the iPhone 17 only, at Accessibility XL
+  and at the largest size, light.
+- That nothing but the panel is drawn at a tick is pinned by observation on the store (and by the tester's count
+  of changes); no test counts view bodies.
+- `missedHaptics` beyond a logged set: the engine's account of a change between two states knows that haptic
+  only, so an end that was missed the same way is not felt (it closes the cover).
+- The rest of the `Nightly` plan was not run. Nothing is pushed.

@@ -20,7 +20,12 @@ struct InMemoryContractTests {
 
     static func history() async throws -> HistoryStores {
         let stores = try await stores()
-        return HistoryStores(workouts: stores.workouts, stats: stores.stats, programs: stores.programs)
+        return HistoryStores(
+            workouts: stores.workouts,
+            stats: stores.stats,
+            programs: stores.programs,
+            events: stores.events
+        )
     }
 
     @Test("InMemoryExerciseRepository keeps the contract clause", arguments: ExerciseRepositoryContract.clauses)
@@ -83,6 +88,15 @@ extension InMemoryContractTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test(
+        "The linked InMemoryWorkoutRepository keeps the linked clause",
+        arguments: WorkoutRepositoryContract.linkedClauses
+    )
+    func workouts_keepTheLinkedClauses(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Self.history())
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("InMemoryWorkoutEventStore keeps the storage clause", arguments: WorkoutEventStoreContract.storageClauses)
     func events_keepTheStorageClauses(_ clause: WorkoutEventStoreContract.Clause) async throws {
         let issue = try await clause.check(InMemoryWorkoutEventStore())
@@ -101,6 +115,24 @@ extension InMemoryContractTests {
         let unlinked = InMemoryProgramRepository()
         try await unlinked.save(program)
         #expect(try await unlinked.active() == program)
+    }
+
+    @Test("Without an event store, a workout store saves, drops no log and says so; its programs check no exercise")
+    func unlinkedWorkouts_holdNoLog() async throws {
+        let program = try ProgramRepositoryContract.program()
+        let programs = InMemoryProgramRepository(programs: [program])
+        let unlinked = InMemoryWorkoutRepository(programs: programs)
+        let events = InMemoryWorkoutEventStore()
+        var workout = WorkoutRepositoryContract.workout()
+        workout.source = WorkoutSource(programID: program.id, weekIndex: 0, dayTemplateID: program.days[0].id)
+        let unknown = ExerciseID(EventBuilders.uuid(0x404))
+        workout.programUpdates = [program.days[0].slots[0].id: unknown]
+        _ = try await events.append(EventBuilders.log(from: [.restSkipped], workoutID: workout.id))
+        let dropped = try await unlinked.materialize(workout, slotUpdates: [], droppingLog: true)
+        #expect(!dropped)
+        #expect(await events.uncompactedWorkoutIDs() == [workout.id])
+        #expect(try await unlinked.recent(limit: 5).map(\.id) == [workout.id])
+        #expect(try await programs.active()?.days[0].slots[0].exerciseID == unknown)
     }
 
     @Test("A seed is stored as given; one whose programs name exercises its catalog lacks reports them (F7-10)")

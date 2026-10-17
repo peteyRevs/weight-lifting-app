@@ -30,6 +30,26 @@ struct WorkoutStateTests {
         #expect(try sample().volume == Volume(gramReps: expected))
     }
 
+    @Test("The checked cursor is the cursor when it names a row, and nil for any cursor that names none")
+    func checkedCursor_onlyNamesARowThatExists() throws {
+        var state = try sample()
+        var checked: [Cursor?] = []
+        let cursors: [Cursor?] = [
+            Cursor(exerciseIndex: 0, setIndex: 0), Cursor(exerciseIndex: 1, setIndex: 1), nil,
+            Cursor(exerciseIndex: 2, setIndex: 0), Cursor(exerciseIndex: 0, setIndex: 3),
+            Cursor(exerciseIndex: -1, setIndex: 0), Cursor(exerciseIndex: 1, setIndex: -1),
+            Cursor(exerciseIndex: .max, setIndex: .max)
+        ]
+        for cursor in cursors {
+            state.cursor = cursor
+            checked.append(state.checkedCursor)
+        }
+        #expect(checked == [cursors[0], cursors[1], nil, nil, nil, nil, nil, nil])
+        state.exercises = []
+        state.cursor = Cursor(exerciseIndex: 0, setIndex: 0)
+        #expect(state.checkedCursor == nil)
+    }
+
     @Test("Elapsed runs from startedAt to now, freezes at endedAt and is never negative (rule 24)")
     func elapsed_fromStartToNowOrEnd() throws {
         var state = try sample()

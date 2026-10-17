@@ -104,6 +104,37 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
             .reduce(Volume.zero) { $0 + Volume(weight: $1.weight, reps: $1.reps) }
     }
 
+    /// `cursor` when it names a row that exists, else nil (F04 review N7): a `started` snapshot's cursor is not
+    /// validated, and the engine keeps whatever cursor it has. A screen indexes `exercises` with this one,
+    /// never with the raw cursor.
+    public var checkedCursor: Cursor? {
+        guard let cursor, exercises.indices.contains(cursor.exerciseIndex),
+              exercises[cursor.exerciseIndex].sets.indices.contains(cursor.setIndex)
+        else {
+            return nil
+        }
+        return cursor
+    }
+
+    /// The rest a screen shows (F10 S6): the running rest, and after it has ended the same rest, for
+    /// "Rest over", until a set is logged, the rest is skipped or it is extended; otherwise nil.
+    ///
+    /// No clock is read. `rest` is what the engine keeps: a skip clears it, "+30s" replaces it, and a logged
+    /// set that starts a rest replaces it too. One case is left: a set logged once the rest had ended that
+    /// starts no rest of its own (a superset's member that does not end its round), after which the engine
+    /// still holds the ended rest. A set whose `doneAt` is not before the rest's end tells that case: a set
+    /// logged while the rest ran is done before it ends. Un-logging a set never cancels a rest (rule 22),
+    /// and here it can only bring an ended one back.
+    public var shownRest: RestTimer? {
+        guard phase == .live, let rest else {
+            return nil
+        }
+        let isOverAndDone = exercises.contains { exercise in
+            exercise.sets.contains { set in set.doneAt.map { $0 >= rest.endsAt } ?? false }
+        }
+        return isOverAndDone ? nil : rest
+    }
+
     /// Rule 24: time since `startedAt`, frozen at `endedAt` once the workout ends; never negative.
     /// It saturates at 2^63 s (`Double(Int64.max)`; NaN gives zero), because both dates can come from a
     /// peer's envelope and `Duration.seconds` traps on a non-finite or out-of-range interval (F04 fix

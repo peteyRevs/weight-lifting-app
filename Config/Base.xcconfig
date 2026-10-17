@@ -25,7 +25,7 @@ SUPPORTED_PLATFORMS = iphoneos iphonesimulator
 TARGETED_DEVICE_FAMILY = 1
 
 // ---- Versioning (release-please owns MARKETING_VERSION) -------------------
-MARKETING_VERSION = 0.4.0 // x-release-please-version
+MARKETING_VERSION = 0.10.0 // x-release-please-version
 CURRENT_PROJECT_VERSION = 1
 
 // ---- Naming ---------------------------------------------------------------

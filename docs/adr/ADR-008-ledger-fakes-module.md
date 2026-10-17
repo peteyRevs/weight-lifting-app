@@ -71,6 +71,33 @@ swift-issue-reporting's `IssueReporting`, which is Foundation-only and already l
 that `InMemoryStores` can fail the test that seeds a state no database could hold: a program naming exercises the
 seed's catalog lacks (finding F7-10).
 
+**Amendment (2026-10-05, F10 S3, review S3-SF3; for Pete's review with ADR-004's amendment of the same date):**
+the event store is now linked to the workout store, and its state sits behind a lock.
+
+- *How it is built.* `InMemoryWorkoutEventStore` is still an `actor`, but its logs sit behind a
+  `Synchronization.Mutex`, with one `nonisolated` synchronous entry, `drop(_:)`. `InMemoryStores` hands the event
+  store to `InMemoryWorkoutRepository`, whose `materialize(_:slotUpdates:droppingLog:)` stores the workout, writes
+  the misses and the program updates, and drops the log, all inside its own write, under the history's lock and
+  after the last step that can throw. A stand-alone `InMemoryWorkoutRepository()` holds no log and answers `false`.
+- *Why.* Decision 5. Over the database a finished workout is saved and its log dropped in one transaction, all or
+  nothing (ADR-004, amendment of 2026-10-05, point 1). A write under a lock cannot wait for an actor, and a save
+  that awaited the event store after its own write would show a reader the workout in history with its log still
+  there, which is the state that transaction removes. The contract's `linkedClauses` hold both implementations
+  to it.
+- *Decision 4: an extension, not a use of its allowance.* Decision 4 allows the `Mutex` for one reason, that
+  `observe…()` must register synchronously, and names the event store as the fake that needs none ("stays an
+  actor"). It is still an actor, so that sentence holds by its letter; the lock is there for a second reason.
+  Decision 4 now reads: a fake keeps its state behind a `Mutex` when `observe…()` must register synchronously,
+  or when one write spans linked stores and must be a single step. Decision 1's "Settings and the event store
+  stand alone" now holds for settings only. There is still no `@unchecked Sendable`, and all of it is `#if DEBUG`.
+  Standards §4 names both reasons.
+- *Limits.* The locks are taken in one order (history, then programs, then exercises; history, then events) and
+  never the other way. The programs and the log change under their own locks inside the history's write, so a
+  reader of history never sees half a save, while a reader of only the programs and the log can, for an instant.
+  One lock over the six stores would close that; the S3 review agreed it is not worth it today.
+- *Proposed, not done:* make the event store a `final class` like the other fakes. No caller changes, since
+  every call is already awaited.
+
 ## Alternatives rejected
 
 - **Keep `LedgerTestSupport` in the spine.** Leaves the transitive link to the whole stack that the module rule

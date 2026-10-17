@@ -10,9 +10,12 @@
         case eyebrow = "Eyebrow"
         case hairlineList = "HairlineList"
         case iconPillButton = "IconPillButton"
+        case iconPillButtonSymbol = "IconPillButton symbol"
         case ledgerIcon = "LedgerIcon"
         case pillButton = "PillButton"
+        case pillButtonStates = "PillButton states"
         case primaryButton = "PrimaryButton"
+        case primaryButtonTimer = "PrimaryButton timer"
         case restRing = "RestRing"
         case setRow = "SetRow"
         case setRowSteppers = "SetRowSteppers"
@@ -21,6 +24,9 @@
         case progressSegments = "ProgressSegments"
         case sheetChrome = "SheetChrome"
         case emptyState = "EmptyState"
+        case stepperField = "StepperField"
+        case ledgerToggleStyle = "LedgerToggleStyle"
+        case wrapLayout = "WrapLayout"
         case watchPrimaryButton = "WatchPrimaryButton"
         case watchRestRing = "WatchRestRing"
         case watchStatBlock = "WatchStatBlock"
@@ -33,9 +39,12 @@
             case .eyebrow: EyebrowGallery().ledgerGalleryPage()
             case .hairlineList: HairlineListGallery().ledgerGalleryPage()
             case .iconPillButton: IconPillButtonGallery().ledgerGalleryPage()
+            case .iconPillButtonSymbol: IconPillButtonSymbolGallery().ledgerGalleryPage()
             case .ledgerIcon: Self.iconsPage
             case .pillButton: PillButtonGallery().ledgerGalleryPage()
+            case .pillButtonStates: PillButtonStatesGallery().ledgerGalleryPage()
             case .primaryButton: PrimaryButtonGallery().ledgerGalleryPage()
+            case .primaryButtonTimer: PrimaryButtonTimerGallery().ledgerGalleryPage()
             case .restRing: RestRingGallery().ledgerGalleryPage()
             case .setRow: SetRowGallery().ledgerGalleryPage()
             case .setRowSteppers: Self.setRowSteppersPage
@@ -44,11 +53,17 @@
             case .progressSegments: ProgressSegmentsGallery().ledgerGalleryPage()
             case .sheetChrome: SheetChromeGallery().ledgerGalleryPage()
             case .emptyState: EmptyStateGallery().ledgerGalleryPage()
+            case .stepperField: StepperFieldGallery().ledgerGalleryPage()
+            case .ledgerToggleStyle: LedgerToggleGallery().ledgerGalleryPage()
+            case .wrapLayout: WrapLayoutGallery().ledgerGalleryPage()
             case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
             case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
             case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
             case .designGallery: DesignGallery()
-            case .debugMenu: DebugMenu { Self.diagnostics }
+            case .debugMenu:
+                DebugMenu(actions: [DebugMenu.Action("Start sample workout", identifier: "debug.menu.sample") {}]) {
+                    Self.diagnostics
+                }
             case .diagnosticsPage: NavigationStack { DiagnosticsPage(sections: Self.diagnostics) }
             }
         }
@@ -103,6 +118,10 @@
         DesignPreview.iconPillButton.content
     }
 
+    #Preview("IconPillButton symbol") {
+        DesignPreview.iconPillButtonSymbol.content
+    }
+
     #Preview("LedgerIcon") {
         DesignPreview.ledgerIcon.content
     }
@@ -111,8 +130,16 @@
         DesignPreview.pillButton.content
     }
 
+    #Preview("PillButton states") {
+        DesignPreview.pillButtonStates.content
+    }
+
     #Preview("PrimaryButton") {
         DesignPreview.primaryButton.content
+    }
+
+    #Preview("PrimaryButton timer") {
+        DesignPreview.primaryButtonTimer.content
     }
 
     #Preview("RestRing") {
@@ -145,6 +172,18 @@
 
     #Preview("EmptyState") {
         DesignPreview.emptyState.content
+    }
+
+    #Preview("StepperField") {
+        DesignPreview.stepperField.content
+    }
+
+    #Preview("LedgerToggleStyle") {
+        DesignPreview.ledgerToggleStyle.content
+    }
+
+    #Preview("WrapLayout") {
+        DesignPreview.wrapLayout.content
     }
 
     #Preview("WatchPrimaryButton") {

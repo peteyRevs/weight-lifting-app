@@ -28,7 +28,7 @@ Goals, in priority order:
 |---|---|---|---|---|
 | Domain unit + property | Swift Testing | ~55 % | ~550 tests, ~1,200 parameterized cases | PR |
 | Persistence integration | Swift Testing + in-memory GRDB | ~15 % | ~150 | PR (performance suite: nightly) |
-| Sync integration + property | Swift Testing + `FakeTransport` | ~10 % | ~90 tests, 200 seeds/PR | PR |
+| Sync integration + property | Swift Testing + `FakeTransport` | ~10 % | ~90 tests, 200 seeds/PR (a matrix of seeds by host set-ups: its fixed seeds, §6) | PR |
 | Health | Swift Testing + `FakeHealthStore` | ~3 % | ~30 | PR |
 | Design system snapshots | swift-snapshot-testing | ~5 % | ~50 tests → ~100 PNGs | PR |
 | Feature stores + screen snapshots | Swift Testing | ~10 % | ~120 store tests + ~45 snapshot tests → ~170 PNGs | PR |
@@ -52,7 +52,7 @@ Goals, in priority order:
   the row.
 - **Property-style tests** for `WorkoutEngine` (ADR-004) use a seeded RNG
   (`SeededGenerator` in `LedgerTestSupport`) and run `LEDGER_PROPERTY_SEED_COUNT`
-  seeds (PR: 200, nightly: 2,000): shuffle → same state (commutativity),
+  seeds (PR: 200, and the hosted `Check` job its first 40, `docs/ci-cd.md`; nightly: 2,000): shuffle → same state (commutativity),
   apply twice → same state (idempotence), `replay(log) == fold(reduce)`.
 - **Exit tests** (`#expect(processExitsWith:)`) run only on macOS, not on iOS
   simulators (R3 §2). Domain validates at construction with failable or
@@ -202,6 +202,10 @@ Concrete test names (file = suite = source type; see §6):
   helper turns on UIKit's accessibility automation (`_AXSSetAutomationEnabled`, private,
   test-only, as KIF and AccessibilitySnapshot do) while it reads. A button's accessibility frame
   is its tappable area, which is how `ComponentAccessibilityTests` checks the 44 pt target.
+  The reader cannot see inside a scroll view: a hosted SwiftUI `ScrollView` hands UIKit no
+  accessibility children in a package test process (measured on iOS 27.0, F08 S2). It fails the
+  test when its walk meets one, with a message that says to host the page ("A screen that
+  scrolls", §2.6), so a tree is never pinned from a reading that silently lacks what scrolls.
 - Review policy: a PR that changes any PNG lists them under "Screenshots" in
   the PR template with the reason; the reviewer inspects GitHub's image diff
   against the prototype screen label (workflow review point 4); more than 20
@@ -227,6 +231,64 @@ Concrete test names (file = suite = source type; see §6):
   {solo, superset, rest, swapSheet}, Receipt, Builder, Day editor, Library,
   Exercise history, Workout list/detail, Settings, Onboarding ×3, Watch
   {idle, ready, rest, list, end, summary}. Same matrix as §2.5.
+- **A screen that scrolls** (M1 convention, F08 S2) is its pinned parts plus
+  `ScrollView { <Screen>Page(model:) }`. The page view holds everything that scrolls and never
+  a scroll view; the screen has one layout, whatever the text size (no "scrolls only when it
+  does not fit" switch). `DesignGallery` and `DesignGalleryContent` are the same split.
+  **The model to copy is onboarding's.** In `LedgerKit/Sources/FeatureOnboarding/Views/`:
+  `OnboardingScreen.swift` (the layout alone: the scroll view around the page, the pinned part
+  under it, and where a change of content lands), `OnboardingPage.swift` (everything that
+  scrolls) and `OnboardingFooter.swift` (the pinned part). In
+  `LedgerKit/Tests/FeatureOnboardingTests/`: `Support/OnboardingParts.swift` (the parts
+  stacked without the scroll view), `OnboardingAccessibilityTests.swift` with
+  `OnboardingAccessibilityTrees.swift` and `OnboardingSnapshotTests.swift` (the trees and the
+  references, from the parts), `OnboardingScrollTests.swift` (what scrolling adds, on the real
+  screen and root) and `OnboardingRootTests.swift` (the root's tasks, and its pinned buttons
+  through the reader's opt-in). What is pinned where:
+  - **The VoiceOver tree and the snapshot references are taken from the pinned parts and the
+    page, stacked in the screen's reading order,** in a `<Screen>Parts` view in the test
+    target, hosted without the scroll view: the table in the notes, the table-driven tree test
+    and `assertLedgerSnapshot` all draw that. Onboarding has one pinned part, under the page,
+    so its order is the page, then the pinned part; a screen with a bar pinned above the page
+    and a button pinned below reads bar, page, button. The hosted reader cannot see inside a
+    scroll view (§2.5), and a scroll view has no height of its own for "at its own height".
+  - **A hosted test of the screen or its root pins what exists only because the page
+    scrolls** and needs no accessibility tree: that there is one scroll view, and where a
+    change of content lands (onboarding: a new step starts at its top). The `UIScrollView`
+    is found under the hosting view and moved there.
+  - **One UI test per scrolling screen, in the nightly lane,** is the backstop for what the
+    split cannot show: the stops in the table's order inside the real scroll view at an
+    accessibility text size, with their selected and enabled states. XCUITest is the only
+    reader here that is a real accessibility client; it is too slow to be the tree a slice
+    pins before its tester starts.
+  - **The reader is loud:** handed a scroll view it fails the test and says to host the page.
+    A caller that knowingly reads only the pinned parts around a scroll view says so with
+    `outsideScrollViews: true`, which leaves every scroll view out without failing; it is never
+    the way to read a page. It has two proper uses: the pinned parts of a real screen or root
+    (`OnboardingRootTests` activates the root's pinned buttons that way), and a test of a frame
+    alone, which does not own what scrolls inside it (F06's test of `SheetChrome`: the title
+    over rows the frame was handed). The reviewer confirms each `outsideScrollViews: true`, as
+    for the copy audit's exemptions.
+  - **A feature's sheet whose content scrolls is a screen that scrolls,** and is split the same
+    way: its pinned parts (the title, a pinned button) plus `ScrollView { <Sheet>Page(model:) }`,
+    with its trees and references from a `<Sheet>Parts` view. Read with the opt-in, such a
+    sheet would pin its title and never its rows.
+  - **A scroll view inside a page is not settled:** a row that scrolls sideways, a nested
+    `ScrollView`, or a `List` or `Form` as the page or inside it. The page "never holds a
+    scroll view", and the default read of a page that holds one is loud. The first slice that
+    needs one raises it with the orchestrator before writing it. What is known, from F08 S2's
+    close-out (`ReaderCloseOutAdversarialTests`): a sideways row and an inner scroll view are
+    loud, and the opt-in leaves them out; the reader did read the rows of a `List` and of a
+    `Form` there, which no test requires of it.
+  - **Known limit (F8-S2-8): to the loud reader a multi-line text field is a scroll view.** A
+    `TextEditor`, or a `TextField` with a vertical axis, is a `UITextView`, which is a scroll
+    view and yields no element in a test process. A page that holds one fails the default
+    read, and the message's advice (host the page without its scroll view) does not fit; with
+    the opt-in the rest is read and the field is left out, which is what the opt-in is never
+    for. No screen has such a field today. It is fixed when the first that does (a note on a
+    workout, a custom exercise) needs it, and until then
+    `ReaderCloseOutAdversarialTests.limit_textEditorOnAPage_isLoud` keeps it known: it fails
+    when the limit goes.
 - Previews draw a state; loading goes in a separate loader view (F07's
   `DiagnosticsPage` / `DiagnosticsLoader`). Each module's `#Preview`s are cases
   of a registry enum, which `PreviewTests` render in swift-dependencies'
@@ -376,7 +438,16 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   `.enabled(if: TestLane.isDevice)`. A single `.slow` test inside a PR suite
   carries `.enabled(if: TestLane.runsSlowTests)` instead, which is true only
   when `LEDGER_TEST_LANE` is `nightly` (F06: LedgerDesignTests' full
-  bare-font matrix; the PR lane runs a representative subset).
+  bare-font matrix; the PR lane runs a representative subset). A seeded
+  matrix that multiplies its seeds by set-ups is cut the same way (F10 S3):
+  the PR lane and `swift test` run a fixed list of seeds that a test of the
+  suite shows to reach every case, on every set-up; the nightly lane runs
+  every seed of the lane, and never fewer than the fixed list. A test that
+  asks what its seeds reach (a control, "the property has teeth") must pass
+  on the first 40 seeds: PR CI gives every seeded test that many
+  (`TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT`, `docs/ci-cd.md`). A test target
+  spells the check once (`TestLane.runsSlowTests`; `TestLane.isNightly` in
+  LedgerSyncTests).
 
 | Lane | Plans | Runs |
 |---|---|---|
@@ -409,6 +480,9 @@ xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan PR \
   -resultBundlePath .derivedData/Results/PR-iOS.xcresult \
   -parallel-testing-enabled YES -test-timeouts-enabled YES \
   -default-test-execution-time-allowance 60 -quiet | mise x -- xcbeautify
+#   check.sh builds first, then compares every String Catalog with the keys
+#   that build extracted, then runs the tests ("String catalogs" below)  <1 s
+scripts/check-string-catalogs.sh
 # 4 watchOS build + PR-Watch plan                                     ~3–4 min warm
 rm -rf .derivedData/Results/PR-watchOS.xcresult
 xcodebuild test -project Ledger.xcodeproj -scheme LedgerWatch -testPlan PR-Watch \
@@ -425,6 +499,45 @@ Expected runtime on an M-series Mac: ~9–12 min warm, ~15 min cold;
 `--fast` ~5 min. CI runs the identical commands (`docs/ci-cd.md` §2) with
 `--renderer github-actions` on xcbeautify. `.derivedData/` is git-ignored and
 shared between local and CI so cache keys match.
+
+**String catalogs (F09).** Step 3 runs `scripts/check-string-catalogs.sh`
+right after the iOS build and before the iOS tests. During that build the
+Swift compiler writes the keys it extracted from each source file
+(`<Source>.stringsdata`, under `.derivedData`). The script compares every
+`LedgerKit/Sources/<Module>/Resources/Localizable.xcstrings` with the keys of
+the Swift files its module has today. The catalog must hold exactly those
+keys, byte for byte, and must read as `xcrun xcstringstool sync` (the tool
+Xcode updates a catalog with) would write it: keys in order, each written
+once, a comment given in code (`comment:`) kept as the code gives it. The
+final newline is set aside. The check runs in every mode that builds iOS (the
+full gate, `--ios-only`, `--skip-lint`, `--skip-static` and
+`--record-snapshots`), never on the watch build, and has its own line in the
+timing table. It only reads the catalog.
+
+A lookup that is not in a copy file (`<Name>Copy.swift`,
+`<Name>Copy+<Area>.swift`) fails first, with its file and line, whether or not
+the catalog has its key: a bare `Text("…")` in a view or a preview, a
+`Button("\(done)/\(total)")`. The author moves the lookup into the copy file
+and hands the view a `String`, or in Debug-only code writes `Text(verbatim:)`;
+the catalog gets no key for it. Among the copy files' lookups, a failure names
+each key the code looks up that the catalog lacks, with the file and line of
+the lookup, and each catalog key that no code looks up. The author adds the
+key to the catalog or deletes it, or corrects the lookup.
+When the keys agree but the file differs, the failure shows a diff against
+what the tool writes, and the author edits the catalog to match. A catalog
+with no `.stringsdata` to compare with fails too, and so does a repository in
+which no catalog is found: the step never passes on nothing. That is also what
+a catalog in a watch module meets, because the iOS build does not compile it:
+`LedgerWatchAppKit` and `WatchFeatureWorkout` get their catalogs with F18.
+Any other `*.xcstrings` under `LedgerKit/Sources` fails the step: a module has
+one catalog, in one place. A record run stops at a failing catalog before any
+reference is recorded.
+
+The cases are in `scripts/tests/adversarial/string-catalogs.adv.sh` and, the
+tester's, `string-catalogs-tester.adv.sh`. They compile small Swift sources
+with the real compiler, so they also pin how it keys a lookup: `%lld` for an
+`Int`, `%@` for a `String`, and `%` doubled only in a text that has a value.
+Those two are the only specifiers a key may hold (standards §7).
 
 ---
 

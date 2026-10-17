@@ -145,7 +145,7 @@
 
     /// The tables: every component in every state it offers, and its intended tree.
     nonisolated enum TreeTables {
-        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings + slice3
+        nonisolated static let cases: [TreeCase] = buttons + labels + lists + sets + rings + slice3 + forms
 
         nonisolated static let buttons: [TreeCase] = [
             TreeCase("PrimaryButton with an icon", [.button("Start workout")]) {
@@ -160,6 +160,26 @@
             TreeCase("PrimaryButton, disabled", [.button("Save workout", .notEnabled)]) {
                 PrimaryButton("Save workout") {}.disabled(true)
             },
+            TreeCase("PrimaryButton, a timer for a label: its spoken line", [.button("Resume workout")]) {
+                PrimaryButton(
+                    label: PrimaryButtonTimerGallery.elapsed,
+                    accessibilityLabel: "Resume workout",
+                    icon: .arrow
+                ) {}
+            },
+            TreeCase(
+                "PrimaryButton, a timer for a label, disabled",
+                [.button("Resume workout", .notEnabled)]
+            ) {
+                PrimaryButton(label: PrimaryButtonTimerGallery.elapsed, accessibilityLabel: "Resume workout") {}
+                    .disabled(true)
+            },
+            TreeCase(
+                "PrimaryButton, a timer for a label and no spoken line: read as drawn, and updating",
+                [.button("12:48", .updatesFrequently)]
+            ) {
+                PrimaryButton(label: PrimaryButtonTimerGallery.elapsed) {}
+            },
             TreeCase("PillButton, outline", [.button("Finish")]) { PillButton("Finish") {} },
             TreeCase("PillButton, filled (selected)", [.button("Chest", .selected)]) {
                 PillButton("Chest", style: .filled) {}
@@ -168,11 +188,33 @@
                 PillButton("Chest", style: .filled) {}.environment(\.ledgerDrawsPressed, true)
             },
             TreeCase("PillButton, ghost", [.button("Skip setup")]) { PillButton("Skip setup", style: .ghost) {} },
+            TreeCase("PillButton, ghost, flush with the leading edge", [.button("Back")]) {
+                PillButton("Back", style: .ghost, flush: .leading) {}
+            },
+            TreeCase("PillButton, outline, disabled", [.button("Finish", .notEnabled)]) {
+                PillButton("Finish") {}.disabled(true)
+            },
+            TreeCase("PillButton, filled, disabled", [.button("Chest", [.selected, .notEnabled])]) {
+                PillButton("Chest", style: .filled) {}.disabled(true)
+            },
+            TreeCase("PillButton, ghost, disabled", [.button("Back", .notEnabled)]) {
+                PillButton("Back", style: .ghost, flush: .leading) {}.disabled(true)
+            },
             TreeCase("IconPillButton", [.button("Swap exercise")]) {
                 IconPillButton("Swap exercise", icon: .swap) {}
             },
             TreeCase("IconPillButton, pressed", [.button("Swap exercise")]) {
                 IconPillButton("Swap exercise", icon: .swap) {}.environment(\.ledgerDrawsPressed, true)
+            },
+            TreeCase("IconPillButton, a symbol (the symbol is no stop)", [.button("Settings")]) {
+                IconPillButton("Settings", systemImage: "gearshape") {}
+            },
+            TreeCase(
+                "IconPillButton, a symbol, at the largest text size of the matrix",
+                at: SnapshotAppearance(.dark, .accessibility3),
+                [.button("Settings")]
+            ) {
+                IconPillButton("Settings", systemImage: "gearshape") {}
             }
         ]
 

@@ -43,6 +43,10 @@ struct UnimplementedProgramRepository: ProgramRepository {
         throw stub.failure()
     }
 
+    func update(_: ProgramID, _: @Sendable (Program) throws -> Program) async throws -> Program {
+        throw stub.failure()
+    }
+
     func setActive(_: ProgramID) async throws {
         throw stub.failure()
     }
@@ -59,7 +63,7 @@ struct UnimplementedProgramRepository: ProgramRepository {
 struct UnimplementedWorkoutRepository: WorkoutRepository {
     let stub = Unimplemented(key: "workoutRepository")
 
-    func materialize(_: WorkoutState, slotUpdates _: [Slot]) async throws {
+    func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
         throw stub.failure()
     }
 

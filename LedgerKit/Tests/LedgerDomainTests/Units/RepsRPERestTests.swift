@@ -94,3 +94,44 @@ struct RepsRPERestTests {
         #expect(throws: DecodingError.self) { try decoder.decode(RestDuration.self, from: Data("100".utf8)) }
     }
 }
+
+// MARK: - Clamping initializers (F11 slice S1: the Day editor's steppers)
+
+extension RepsRPERestTests {
+    @Test("RPE(clamping:) holds a value to 5…10 and rounds it to the nearest half, a tie going up (rule 3)")
+    func rpeClampingInitializer_roundsToTheHalfAndStaysInRange() {
+        let rpe = ["4.5": 5, "5": 5, "7.2": 7, "7.25": 7.5, "7.3": 7.5, "7.74": 7.5, "7.75": 8, "9.99": 10, "10.5": 10]
+            as [String: Decimal]
+        for (text, expected) in rpe {
+            #expect(RPE(clamping: dec(text)).value == expected, "RPE \(text)")
+        }
+        #expect(RPE(clamping: -8).value == 5)
+        #expect(RPE(clamping: .greatestFiniteMagnitude).value == 10)
+        #expect(RPE(clamping: .nan).value == 5, "a NaN sorts below every number")
+        #expect(RPE.step == dec("0.5"))
+        for halves in 10 ... 20 {
+            let value = Decimal(halves) / 2
+            #expect(RPE(clamping: value) == RPE(value), "a valid RPE is kept: \(value)")
+        }
+    }
+
+    @Test("RestDuration(clampingSeconds:) holds a value to 30…300 s and rounds it to the nearest 15 (rule 3)")
+    func restClampingInitializer_roundsToFifteenAndStaysInRange() {
+        let rest = [-30: 30, 0: 30, 29: 30, 30: 30, 37: 30, 38: 45, 52: 45, 53: 60, 100: 105, 292: 285, 293: 300]
+        for (seconds, expected) in rest {
+            #expect(RestDuration(clampingSeconds: seconds).seconds == expected, "\(seconds) s")
+        }
+        #expect(RestDuration(clampingSeconds: 315).seconds == 300)
+        #expect(RestDuration(clampingSeconds: .max).seconds == 300)
+        #expect(RestDuration(clampingSeconds: .min).seconds == 30)
+        #expect(RestDuration.stepSeconds == 15)
+        for seconds in -20 ... 340 {
+            let clamped = RestDuration(clampingSeconds: seconds)
+            #expect(RestDuration(seconds: clamped.seconds) == clamped, "\(seconds) s gives a rest the model accepts")
+            #expect(abs(clamped.seconds - min(max(seconds, 30), 300)) <= 7, "\(seconds) s goes to the nearest step")
+        }
+        for seconds in stride(from: 30, through: 300, by: 15) {
+            #expect(RestDuration(clampingSeconds: seconds).seconds == seconds, "a valid rest is kept")
+        }
+    }
+}

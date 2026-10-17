@@ -103,3 +103,614 @@ _Filled in by agents during delivery:_
 - `F11-program-builder/implementation-notes.md`
 - `F11-program-builder/test-findings.md`
 - `F11-program-builder/review.md`
+
+---
+
+## Plan amendments (orchestrator, 2026-10-05)
+
+The plan is `F11-program-builder/implementation-notes.md`. Where it and the text above differ, the plan and
+this section are the specification. The differences that change behaviour:
+
+- **Slices.** The feature is delivered as slices, one pull request each (the plan's "Slice plan"). The plan's
+  S1 and S2 are built together as **S1** (below); the number S2 is not used; S3 to S14 keep the plan's numbers.
+- **Criterion 2's count.** From rest, a weekday cycles through the program's days in order and back to rest:
+  with four days, taps one to four give UA, LA, UB, LB and the fifth gives rest.
+- **Signatures** are the plan's ("The editing functions, as proposed"), not the sketch under "Domain changes":
+  new ids are parameters; block editing works on a `Program` and day editing on a `DayTemplate`; the weeks that
+  hold a finished workout are handed to `removeLastWeek`; `ProgramEditError` has two cases.
+- **Saving.** No 300 ms timer is built. An edit is applied on screen at once and stored through
+  `ProgramRepository.update` (S3) by one save loop; edits made while a write runs go together in the next one
+  (the plan's "The 300 ms debounce"). Criterion 13 reads: the first edit is written at once, the stored program
+  after any sequence of edits is the program on screen, and a workout saved meanwhile loses nothing.
+- **Fixtures.** "The F08 default program" in criterion 1 is the spec's seed program (`Fixtures.seedProgram()`);
+  the day cards' minutes are `TimeEstimate`'s (39, 38, 37, 31).
+- **Routes and strings** follow the M1 conventions: `ProgramRoute` in the feature, the mapping in
+  `LedgerAppKit`; one catalog and one copy file family in `FeatureProgram`. Names of Domain values a module
+  shows (equipment, muscles, progression) are entries of that module's own catalog.
+- **Defaults built until Pete answers** (the plan's "Decisions for Pete"): the screens are drawn in the dark
+  design's language, the week chips wrap; a superset moves as one (the brief's rule); the library has the
+  brief's ten chips; "Delete day" sits at the foot of the Day editor and is allowed while that day's workout
+  runs; a day's tag is not editable; the plan's wording for the texts the brief lacks.
+
+## Plan amendments — slice S1, program and day editing in the Domain (orchestrator, 2026-10-05)
+
+The plan's S1 and S2 as one pull request, cut from `main`: every editing rule of spec §7.1 as pure functions
+of `LedgerDomain`, with no screen, no store and no repository. About 570 product lines planned. The functions,
+their behaviour row by row and the worked examples are in the plan: "The editing functions, as proposed",
+"Group-aware move, defined", and "Inputs the implementer needs › S1" and "› S2". The slice is accepted when:
+
+1. **Pure and total.** Every function of `ProgramEditing` and `DayEditing` is a pure function of its
+   arguments, never traps, and returns its input unchanged when given an id the program or day does not hold.
+   Only `removeLastWeek` and `newSlot` throw, with typed throws. Every program a `ProgramEditing` function
+   returns is accepted by `Program.init`, and every slot a `DayEditing` function returns by `Slot.init`.
+2. **Names.** `cleanedName` removes every scalar of category `Cc`, trims, and is `nil` when nothing is left;
+   `renameProgram` and `renameDay` set the cleaned name and change nothing for a blank one.
+3. **Weeks** (criterion 4). `addWeek` appends a week with the next index, the last week's schedule and no
+   deload flag. `removeLastWeek` throws `.minimumTwoWeeks` at two weeks whatever else holds, then
+   `.weekHasLoggedSessions(weekNumber:)` (one-based) when the last index is among the logged weeks, and
+   otherwise drops the last week. `toggleDeload` flips one week's flag.
+4. **Schedule** (criteria 2 and 3). `cycleSchedule` goes rest, first day, …, last day, rest, in the order of
+   the program's days; `copyPreviousWeek` and `applyToLaterWeeks` copy schedules and leave every deload flag.
+5. **Days** (criteria 5 and 6). `addDay` appends a day with no slots and the tag "D{n}", or the next number
+   whose tag is free; `deleteDay` removes the day and every schedule entry that names it; `updateDay` replaces
+   one day and ignores a result with another id.
+6. **Slots.** `newSlot` builds rule 7's defaults (criterion 12: 3 × 8, top 10, RPE 8, the default rest,
+   linear, the exercise's start load in the lifter's unit); `addSlots` appends and leaves out an id the day
+   holds; `removeSlot` removes one, and the next member leads if it led a superset.
+7. **Fields** (criterion 8). `set` clamps (sets 1…12, reps 1…30, top of range 2…40, RPE 5…10 on the half, rest
+   30…300 s on the 15, start load never below zero) and then keeps the top of the range above reps. `stepped`
+   gives the value one step away and does not clamp; the start load goes to the next multiple of the slot's
+   step, or of the equipment's default step in the lifter's unit, and never below zero.
+8. **Progression, drop set, superset** (criteria 9 and 11). Choosing double progression makes the top of the
+   range at least reps + 2; a drop set is 1 or 0; a day is always returned in normal form (its first slot is
+   never joined to a previous one).
+9. **Move** (criterion 10): as "Group-aware move, defined", with its six properties checked on seeded days.
+10. **Every week's prescription** (criterion 7): `ProgressionRules.prescriptions` gives Incline DB Press 50,
+    50, 50, 52.5, 52.5, 52.5, 55 and 47.5 lb with reps 10, 11, 12, 10, 11, 12, 10, 11, and Back Squat 240 lb in
+    the deload week; a missed week marks the next as held.
+11. **The library's filter** (criterion 12): on the seed catalog, "row" with Back and Machine is exactly
+    "Chest-Supported Row"; the five muscle chips map to muscle groups as the plan lists.
+12. **What editing never writes.** No function changes the misses or the exercise of a slot that already
+    exists (a property over every function, on seeded programs). S3 relies on it.
+13. **The Domain's rules.** Foundation only; exact decimals, no `Double`; public pure types `nonisolated` and
+    `Sendable` as their neighbours are; the three ranges of `Slot` become public constants with no change in
+    behaviour (the existing tests pass untouched); 100 % line coverage of the new files.
+
+## Plan amendments — slice S1 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (154 tests; findings F11-S1-1 to -3 are two questions and a note on test quality) and
+the reviewer approved with three should-fix items and nine nits. Rulings, which add to S1's thirteen criteria:
+
+14. **Choosing the progression a slot already has changes nothing** (review S-1). `setProgression` returns the
+    day as it was when the slot already has that progression, so a second tap on "Double" never widens a range
+    the lifter narrowed. Changing from linear to double still makes the top of the range at least reps + 2.
+15. **Criterion 12 cannot be escaped** (review S-2): a source test over `LedgerDomain/Programs` fails when a
+    function that returns a `Program` or a `DayTemplate` is missing from the property's tables, or when a line
+    outside `newSlot` assigns a slot's misses or exercise or builds a `Slot`.
+16. **The library's filter is `ExerciseSearch.filtered(_:query:muscle:equipment:)`** (review N-1), beside
+    `sorted(_:)`; nothing else about it changes.
+17. **Kept as built:** the direction cases `upward` and `downward` (F11-S1-2); a name of only invisible
+    characters is stored (F11-S1-1; a rule "a name has a visible character" is not in the specification);
+    `prescriptions` is for a stored program's weeks and a valid slot, as `prescribe` is, and says so.
+
+**For S13 and S14** (review S-3). `toggleDeload`, `cycleSchedule`, `move` and `removeLastWeek` are relative:
+applied twice they do not give what one application gives. Each queued edit therefore reaches the stored
+program exactly once. After an `update` that failed or was cancelled, the waiting edits are dropped and the
+screen is redrawn from the stored program; they are never sent again. **For S7** (review N-8): the start load
+and the step a slot resolves to (its own, or the exercise's and the equipment's default in the lifter's unit)
+become two small functions on `Slot`, used by `ProgressionRules` and `DayEditing`, before a presentation
+writes that pair a third time.
+18. **Recorded, not fixed** (F11-S1-4, round 2): the source test of criterion 15 is a tripwire for the likely
+    mistakes (a new `static func` left out of the tables; a line that assigns a slot's misses or exercise). It
+    does not see an instance or `mutating` method, a write through a key path or a whole-slot assignment, or
+    code outside `LedgerDomain/Programs`. The property test over the listed functions remains the proof; a
+    reviewer of any later change to these files checks criterion 12 by reading.
+## Plan amendments — slice S3, the atomic program update (orchestrator, 2026-10-06)
+
+Cut from `main`, independent of S1. One new requirement on `ProgramRepository`, so that a builder edit is
+applied to the program as it is stored at that moment and can never write back an older copy of what a
+workout's save put there (a slot's misses; a swap's exercise). The plan's "Saving and a live workout" gives
+the reasons and the code it stands on; "Inputs the implementer needs › S3" gives the signatures and files;
+Risks 1 and 2 apply. About 45 product lines; most of the slice is contract and tests. Accepted when:
+
+1. **The requirement.** `func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program`
+   on `ProgramRepository`, with no default body. It applies `change` to the program `id` as stored now and
+   saves the result, in one step that no other write can come between, and returns the program as stored
+   afterwards.
+2. **Nothing to update.** A program that is not stored, or is deleted, throws the repository's missing-row
+   error; `change` is not called and nothing is written.
+3. **A change that throws** is rethrown as it is; nothing is written and no observer is woken.
+4. **A result that `save` would refuse** (an id another program holds, a slot whose exercise has no row, text
+   the store refuses) is refused with the same error, and so is a result with another id; nothing is written.
+5. **A change that returns the program as it was** writes no row and wakes no observer.
+6. **Rows.** Only rows that changed are written, a row the result no longer has is soft-deleted, as `save`
+   does; which program is active does not change.
+7. **Nothing is lost between a builder and a workout's save.** The losing sequence is the slice's first test:
+   read a program, save a finished workout that records a miss and a swap on it, then write the builder's edit.
+   Through `save` the miss and the swap are gone (the test shows it); through `update` both are kept. For
+   seeded interleavings of `update` calls and workout saves, the stored program equals the calls applied one
+   at a time in the order they were taken, on the database and on the in-memory stores alike.
+8. **Cancellation.** A call whose task is cancelled stores all of its change or none of it. What GRDB does
+   with a write whose task is cancelled is established by a test and written down, since S13 relies on it.
+9. **The in-memory stores follow** (ADR-008 decision 5): the same clauses of the shared contract pass on both;
+   the in-memory repository works under the one lock a workout's save takes. The unimplemented stub reports as
+   its neighbours do, and the probe forwards `update` and can hold it (S13's store test holds the first write).
+10. **Every other conformer compiles**: the four test doubles on `main` gain the requirement by a mechanical
+    edit, each listed in the notes (two are testers' files; the edit is sanctioned and audited).
+11. **No migration, no schema change**; the version fixtures and every existing contract clause are untouched
+    and pass.
+
+## Plan amendments — slice S3 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (32 tests, 282 cases; one question, F11-S3-1) and the reviewer approved with two
+should-fix items. Atomicity holds by construction on both stores. Rulings, which add to S3's eleven criteria:
+
+12. **The in-memory store cancels as the database does** (F11-S3-1, review S1; ADR-008 decision 5). A call
+    whose task is cancelled before the change, inside the change, or while it waited for the lock throws
+    `CancellationError` and stores nothing; one cancelled after its write is stored whole and returns. The
+    contract's cancellation clauses are strict on both stores, so a store tested over the fakes sees the same
+    rollback path.
+13. **`save` says what it costs** (review S2): its documentation warns that saving an earlier copy of a stored
+    program writes back the misses and the exercise a workout's save put there, and points to `update`.
+14. **Criterion 6, as built:** `update` leaves which program is active as it was when the change does not touch
+    the flag; a change that sets the flag is saved as `save` saves it. A result under another id is refused
+    with the duplicate-identifier error.
+15. **One ending on both stores** (F11-S3-2, round 2): when a call is cancelled inside a change whose result
+    is also refused, both stores report what the database reports. The in-memory store makes the database's
+    checks in the database's order: the result's id and validity, then cancellation, then the write.
+
+## Plan amendments — slice S5, the builder's presentation (orchestrator, 2026-10-06)
+
+Cut from `main`, which now holds the tab shell and the localization rule (#28), the editing rules (S1) and the
+atomic update (S3). The logic and the words of the Program builder screen, with no view and no store: one pure
+function, `ProgramPresentation.make(_:) -> ProgramBuilderModel`, in the form `FeatureToday`'s presentation
+has on `main`. The views (S9) only draw the model and the store (S13) only fills the input and sends the
+model's actions to `ProgramEditing`. About 470 product lines planned (the plan's S5 row lists the files). The
+slice is accepted when:
+
+1. **One input, one model.** `make` takes one input value (the program, the exercises, the settings, the
+   selected week, the weeks that hold a finished workout, a notice if one is showing, the calendar and the
+   locale) and returns a model whose every string is final and whose every action is a value the store can
+   apply without deciding anything: an edit named by ids and places, or a `ProgramRoute`.
+2. **The header and the block** (criterion 1): the eyebrow "MY PROGRAM", the program's name with its
+   placeholder, "BLOCK · 8 WEEKS", "−" and "+", and one chip per week reading "W1" with "4 DAYS", or "DELOAD"
+   for a deload week, the selected one marked.
+3. **The selected week** (criteria 1 to 3): "WEEK 3" or "WEEK 3 · DELOAD"; the seven cells in the order of the
+   settings' week start, each with the weekday's letter from the injected calendar and locale and the day's
+   tag or "REST"; each cell's action is the cycle of that weekday; the hint "Tap to assign"; the week's
+   actions "First week" (disabled) or "Copy week 2", "Apply to later weeks" (absent on the last week), and
+   the deload toggle with its state.
+4. **The seed program reads as criterion 1 gives it:** W1 to W7 "4 DAYS", W8 "DELOAD"; week 1's strip
+   M UA · T REST · W LA · T REST · F UB · S LB · S REST; "4 days · 58 sets a week"; four day cards whose
+   minutes are `TimeEstimate`'s (39, 38, 37, 31).
+5. **The day cards** (criterion 5): name, tag, the meta line from the slots' own numbers (exercises, sets as
+   Σ(sets + drop sets), minutes), "No exercises yet" for an empty day, each carrying `ProgramRoute.day(id)`;
+   and "+ Add training day".
+6. **Notices** (criterion 4 and behaviour 6): "A block needs at least 2 weeks.", "Week 8 has logged sessions
+   and can't be removed.", and the notice for a weekday assigned to a day with no exercises, each a final
+   string the store shows from an error or an edit's result, built here.
+7. **Words.** Every text is the brief's "Copy (exact)" or the plan's decision 6, resolved in `ProgramCopy`
+   from `FeatureProgram`'s own String Catalog under standards §7 (one counted value per key; `locale:` when
+   a key carries a value; spoken texts are copy; no literal outside the copy files but "" and " · "). The
+   equipment names this slice needs are entries of this catalog. Texts the brief does not give are listed
+   in the notes for Pete.
+8. **Spoken texts** for the chips, the cells ("Tuesday, rest") and the cards exist, are copy, and agree with
+   what is drawn.
+9. **Pure and total.** No `Date()`, `Calendar.current`, `Locale.current` or `TimeZone.current` in the module
+   (a source test in the form of `FeatureToday`'s); nothing traps for a program with no days, a selected week
+   out of range (read as the nearest week), a day with no slots, a slot whose exercise is not stored; the
+   same input gives the same model in any order of the exercises handed in.
+10. **No rule of its own.** Counts, minutes, limits and the cycle come from `LedgerDomain`
+    (`ProgramEditing`, `TimeEstimate`, `WeekCalendar`); the presentation adds no clamp and no schedule rule.
+11. **The module is wired as `FeatureToday` is:** the target's `resources`, `FeatureProgram` in the coverage
+    thresholds, the placeholder file and its test gone; the gate's string-catalog step and `ModuleCopyTests`
+    pass with no exemption.
+
+## Plan amendments — slice S5 after round 1 (orchestrator, 2026-10-06)
+
+The tester found no bug (44 tests, 300 cases; findings F11-S5-1 to -4 are questions and notes) and the reviewer
+approved with six should-fix items. Rulings, which add to S5's eleven criteria:
+
+12. **The screen's edits of a cell and of a deload are absolute** (review S-1). A cell's action names what the
+    cell becomes (a day's id, or rest) and the deload switch names the state it turns to, so an edit drawn or
+    applied twice gives what one application gives. `LedgerDomain` gains `ProgramEditing.setSchedule(_:week:weekday:day:)`
+    (a day the program lacks changes nothing) and `setDeload(_:_:week:)`; the cycle's order (rest, first day, …,
+    last day, rest) is one pure function the presentation asks for the next value. `cycleSchedule` and
+    `toggleDeload` stay and are written in terms of them. Adding a week, removing the last week and moving
+    stay relative, and the note "For S13 and S14" still holds for them.
+13. **With no training day, a cell offers nothing** (F11-S5-2): no action, no hint, and its spoken text says
+    only the weekday and "rest".
+14. **The name is a draft in the store** (review S-3): the model carries the stored name and a `rename` action
+    that takes the typed text; the comment says a view binds a draft, not the model's name.
+15. **Kept as built:** the seven cells follow the settings' week start (criterion 3; F11-S5-1), with the
+    letters and spoken names from the injected calendar and locale. Digits and plural forms follow the injected
+    locale (F11-S5-3): as for Today, the store hands in the app's locale, which is English while the catalogs
+    hold English only.
+16. **Housekeeping from the review:** no whole `Program` is compared inside an expectation (S-5); the source
+    test checks the `Double` spellings as Today's does (S-6); the notes no longer claim that `update` refuses
+    "−" when a workout finished meanwhile (S-2: the store reads the logged weeks again before it sends that
+    edit, which is S13's to build); standards §7 gains the sentence of ruling 3 (S-4), as the reviewer words it.
+17. **Criterion 14, as built** (F11-S5-5, round 2): the rename is the action `ProgramBuilderAction.rename(_:)`,
+    which takes the typed text; it is not a field of the model, since the model cannot know the text.
+
+## Plan amendments — slice S6, the Day editor's and the slot editor's presentation (orchestrator, 2026-10-08)
+
+The plan's S6 and S7 as one pull request (Pete asked on 2026-10-08 for larger batches; the number S7 is not
+used). Cut from `main`, which holds the builder's presentation (S5) and the editing rules. The logic and the
+words of the Day editor screen, including the panel that opens under one exercise, with no view and no store:
+pure functions in `FeatureProgram/DayEditor/` in the form `ProgramPresentation` has, and their copy files and
+catalog entries. About 720 product lines planned (the plan's S6 and S7 rows list the files); one pull request
+while it stays under about 1,000. The slice is accepted when:
+
+1. **One input, one model.** `DayEditorPresentation.make` takes one input value (the program, the day's id,
+   the exercises, the settings, the week shown, the open slot if any, the calendar and locale) and returns a
+   model whose every string is final and whose every action is a value the store applies with one
+   `ProgramEditing.updateDay` around one `DayEditing` call, or a `ProgramRoute`. A day the program no longer
+   holds gives a model that says so (the store closes the editor).
+2. **The header and the meta line** (brief, "Copy (exact)"): the day's name and tag, "Week n" with the counts
+   of that week's prescription (behaviour 13: a deload week counts its own sets and minutes), back and done.
+3. **The rows** (criteria 7, 10, 11): each exercise's name, its sub line (sets × reps or range, load in the
+   lifter's unit, RPE, rest as "45s" / "2 min" / "2:30", "no rest" inside a superset), the superset headers
+   ("2 exercises back to back · rest after B") with letters A, B, …, a drop set's mark; a slot whose exercise
+   is not stored is listed under a dash and can be removed (behaviour 19).
+4. **The open slot's fields** (criteria 8, 9): the six steppers with their labels ("REPS" / "REP FLOOR" and
+   "TOP OF RANGE" for double progression), each value drawn, each "−" and "+" an action carrying
+   `DayEditing.set(DayEditing.stepped(…))`'s field so that the store adds nothing; the progression chips with
+   the note ("Adds a rep each week up to 10, then +5 lb back at 8."), the drop-set switch, the superset
+   action that applies ("Superset with next" or "Break out"), move up, move down and remove, each present
+   only when it can do something.
+5. **Every week's prescription** (criterion 7): the selected week's line and the strip "W1 50 · W2 50 · …"
+   from `ProgressionRules.prescriptions`, with "(deload)" and " · HELD" where they apply, the eyebrow
+   "WEEK 8 · DELOAD", in pounds and in kilograms.
+6. **Delete day** (Pete's decision 4, default): the button, and the confirmation's title and lines ("Delete
+   Lower B?", "It's scheduled in 8 weeks. Those days become rest.", one week, nowhere), as values.
+7. **Words.** Every text is the brief's "Copy (exact)" or the plan's decision 6, resolved in the module's
+   copy files from `FeatureProgram`'s catalog under standards §7; equipment and progression names are entries
+   of this catalog; spoken texts (each stepper as one adjustable element with its value; rows; headers) are
+   copy. Texts the brief does not give are listed in the notes for Pete.
+8. **No rule of its own.** Limits, coupling, steps, groups, moves, counts and minutes come from
+   `LedgerDomain`. The start load and the step a slot resolves to become two small functions on `Slot`
+   used by `ProgressionRules`, `DayEditing` and this presentation (the note "For S7" of S1's rulings).
+9. **Pure and total.** No ambient clock, calendar, locale or zone (the module's source test covers the new
+   files); nothing traps for a day with no slots, one slot, a week out of range, an open slot the day no
+   longer holds (read as none open); the same input gives the same model.
+10. **Absolute where it can be.** Field edits name the value they set; the drop set and the superset name
+    the state they turn to; only move and remove are relative, and the model marks them so.
+
+## Plan amendments — slice S6 after round 1 (orchestrator, 2026-10-08)
+
+The tester found no bug (53 tests against its own model of the screen; six questions and notes) and the
+reviewer approved with four should-fix items and recommends one pull request at about 1,007 lines (the seam
+is taken only if fixes pass about 1,050). Rulings, which add to S6's ten criteria:
+
+11. **A superset shows the rest the workout takes** (review S-1): the line after a superset's last exercise
+    reads the rest the Domain gives the group (the longest of its members'), not that row's own. The seed's
+    Upper A superset reads 1:15. (The prototype printed the row's own; listed for Pete.)
+12. **Set counts come from the Domain** (review S-3): `TimeEstimate` gains the count of sets for a day and
+    for a week's prescription; the builder's and the Day editor's presentations call it and sum nothing.
+13. **No queued edit is safe to send twice** (review S-2): the comment on `isRelative` says that the mark is
+    about drawing an edit again over a program that already has it, not about replaying a queue; a test
+    pins an example in which two unmarked edits replayed give another program.
+14. **"Rest" the day and "rest" the pause are different texts** (F11-S6-4): separate keys with translators'
+    comments, although the English is the same.
+15. **Kept as built:** in a deload week a row's line shows that week's prescription, RPE included
+    (F11-S6-1, -3); `isHeld` is false in a deload week (F11-S6-2); remove is marked relative (F11-S6-6); both
+    superset actions can show (spec §3.4 e); a slot whose exercise is missing is listed and removable only.
+16. **Housekeeping:** no whole model inside an expectation (review S-4).
+
+**For F15** (F11-S6-5): spoken texts that reuse drawn abbreviations ("+5/wk", "3×12", "45s") are reworded for
+VoiceOver in the accessibility pass, with the product owner's wording.
+
+**Criterion 14 of this section is withdrawn** (orchestrator, 2026-10-08; F11-S6-7): standards §7 makes the
+English text the key, so "rest" the day and "rest" the pause stay one key with a translator's comment that
+names both uses. How the localization rule tells two uses of one English text apart is a question for the
+first translation and for the product owner; it is not decided here.
+
+## Plan amendments — slice S8, the form controls and the exercise library's presentation (orchestrator, 2026-10-08)
+
+The plan's S4 and S8 as one pull request (larger batches; the number S4 is not used again). Cut from `main`,
+which holds the builder's and the Day editor's presentations. Two parts in two modules, with no view of a
+screen and no store: three controls in `LedgerDesign` that every later view slice of F11 (and F14) draws with,
+and the logic and words of the exercise library sheet in `FeatureProgram/Picker/`. About 480 product lines
+planned (the plan's S4 and S8 rows list the files; "Inputs the implementer needs", S4, gives the shapes); one
+pull request while it stays under about 1,000; past about 800 the implementer stops and reports before
+going on. The slice is accepted when:
+
+**Part one: the controls (`LedgerDesign/Components/`).**
+
+1. **`StepperField`**: a label, a value, "−" and "+". It takes `String`s and one closure per step and looks
+   nothing up; either step can be switched off (a value at its limit), and a switched-off step is drawn and
+   spoken as such. To VoiceOver it is one adjustable element with the label and the value; a spoken value
+   can be given apart from the drawn one. Both buttons are 44 pt targets; the parts stack at accessibility
+   sizes.
+2. **`LedgerToggleStyle`** (`.toggleStyle(.ledger)`): an ink track when on, no orange (Pete's decision 1,
+   default A); the knob reads in both themes and under Increase Contrast; VoiceOver keeps SwiftUI's switch
+   with its value.
+3. **`WrapLayout`**: children run along a row and wrap onto the next; right-to-left runs from the right; no
+   child, one child and a child wider than the row (it gets the row's width) all lay out; the size it
+   reports is the size it uses.
+4. **Registered and shown**: each control has its cases in the preview registry and a section of the design
+   gallery; snapshot references at the six cells of testing-strategy §2.5; one pinned VoiceOver tree each
+   (the layout's with pill buttons inside it); the 44 pt check. They compile for watchOS.
+5. **The set row is not touched.** Its private stepper stays as it is; whether the two become one is a
+   later chore, named in the notes.
+
+**Part two: the exercise library's presentation (`FeatureProgram/Picker/`).**
+
+6. **One input, one model.** `ExercisePickerPresentation.make` takes one input value (the stored exercises,
+   the exercises already in the day, the query, the muscle and equipment chosen, the picks in the order
+   picked, the locale) and returns a model whose every string is final and whose every action is a value.
+   The list is `ExerciseSearch.filtered`'s, in its order; the presentation filters and sorts nothing itself.
+7. **The chips** (Pete's decision 3, default B): "All, Chest, Back, Shoulders, Legs, Arms" and "All,
+   Barbell, Dumbbell, Cable, Machine, Bodyweight", one selected in each row, each an action that names the
+   filter it sets (absolute). The chips are built from one list each, so that decision A (Core, Kettlebell,
+   Band) is three more entries and no other change.
+8. **The rows** (criterion 12): the name; the line "Machine · Back", with " · already in this day" when the
+   day holds the exercise (the mark is a separate value too, so that the view can draw it apart); whether
+   it is picked, and its place among the picks; the action that picks or unpicks it. An exercise in the day
+   can still be picked (the spec allows it twice). Custom exercises are rows like any other.
+9. **Nothing matches**: "Nothing matches that filter." and "Clear filters", whose action resets the query
+   and both chips. A catalog with no exercise at all gives the same model and does not trap.
+10. **The foot**: "Select exercises to add" (disabled), "Add 1 exercise", "Add %lld exercises" by the
+    catalog's plural forms; its action carries the picked exercises' ids in the order picked, each at most
+    once per pick, and only those still stored. Title "Exercise library", "Cancel", placeholder "Search
+    exercises".
+11. **The picks become slots through the Domain.** The Day editor's edit gains the one case S6's notes
+    name (`.slot(.add…)` around `DayEditing.addSlots` and `newSlot`): rule 7's defaults come from there, and
+    the presentation builds no slot.
+12. **Words.** Every text is the brief's "Copy (exact)", resolved in `ProgramCopy+Picker.swift` from the
+    module's catalog under standards §7; the muscle names are entries of this catalog; the equipment names
+    are the entries S6 added and are not added again. Spoken texts (a chip with its row's name, a row with
+    its line and whether it is picked, the foot) are copy. Texts the brief does not give are listed in the
+    notes for Pete.
+13. **Pure and total.** No ambient clock, calendar, locale or zone (the module's source test covers the new
+    files); the same input gives the same model; picks or day exercises that are no longer stored are
+    ignored, not trapped on.
+
+**Not in this slice:** the library's views (S12, with the builder's views next), its store (S14), any change
+to `LedgerAppKit`, the project file or a test plan.
+
+## Plan amendments — slice S8 after round 1 (orchestrator, 2026-10-08)
+
+The tester found one bug, one defect against a criterion's wording and one test gap (43 tests, two left
+failing); the reviewer approved with three should-fix items and recommends one pull request at about 590
+lines. Rulings, which add to S8's thirteen criteria:
+
+14. **The plural form is English's while the catalog is English** (F11-S8-1). A text with a plural takes its
+    form by the rules of the language the catalog resolves to, not by the lifter's locale: "Add 1 exercise"
+    under ja_JP, "Add 21 exercises" under ru_RU. The fix is one place in `ProgramCopy` that every plural of
+    the module goes through, so `exercises` and `weeks` (on `main` since S5) are right too; the tester's
+    test passes unedited. The other modules' copy files have the same cause and are a chore of their own,
+    not this slice. If the fix needs more than one helper of about thirty lines, or a change outside
+    `FeatureProgram`, the implementer stops and reports.
+15. **Criterion 1 is amended** (F11-S8-2, review): a switched-off step is drawn as off; it is spoken only
+    when both steps are off or the field is disabled (the element is then dimmed). There is no trait for one
+    direction and no caller switches one step off. The tester replaces its failing test with one that pins
+    this.
+16. **A disabled stepper field looks disabled** (review S-2): its label and value take the faint ink
+    `PillButton` gives disabled text; the slice's own references are recorded again (none of them is on
+    `main`).
+17. **The lint waiver stays, with its reason on the line** (review S-1), as an exception to standards §12
+    that the pull request names for the product owner, with the reviewer's alternative (the rule ignoring
+    case lists) as his option. The lint configuration is not changed here.
+18. **Housekeeping** (review N-1 to N-5): the missing translator's comment; `Row`'s two spoken fields that
+    only repeat `name` and `line` go, as does the action that is an alias of `setQuery`; the source test's
+    list names the two new files; `WrapLayout`'s comment says what it asks of an over-wide child, and a
+    zero-width proposal with children is tested.
+19. **Accepted as built**: `StepperField`'s two optional closures; a picked row spoken through the selected
+    trait (S12's VoiceOver table pins the trait); the other decisions of the implementer's notes.
+
+**For S14** (F11-S8-3): no hosted test can tap, so a finger's tap on "−", "+" and the switch is covered by
+nothing until the nightly UI test of the Day editor taps all three. **For S12**: whether VoiceOver says a
+pick's place is the product owner's question, asked with S12's VoiceOver table. **Not covered by criterion
+13** (tester's Q1, Q2): two stored exercises under one id (the schema forbids it) and a blank name (F12's
+rule for custom exercises).
+
+## Plan amendments — slice S9, the builder's and the exercise library's views (orchestrator, 2026-10-09)
+
+The plan's S9 and S12 as one pull request (larger batches; the number S12 is not used again). Cut from `main`,
+which holds the builder's and the library's presentations and the three form controls. Views drawn from a
+model only: no store, nothing in the app (the Program tab keeps its placeholder until S14). About 670
+product lines planned (the plan's S9 and S12 rows list the files); views have landed close to plan; past
+about 850 the implementer stops and reports. Pete's decision 1 is taken at its default A (the dark design's
+language; orange only on "DELOAD" in the builder and on the library's "Add n exercises" button). The slice is
+accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `ProgramBuilderModel` or `ExercisePickerModel`
+   and closures over the model's action values; no view decides what is shown, formats a number, filters a
+   list or reads a clock, calendar or locale. Every text on screen is a string of the model or a lookup the
+   model does not carry (none is expected; any is listed for Pete).
+2. **Both screens scroll as the convention says** (testing-strategy §2.5–§2.6): `ProgramScreen` and
+   `ExercisePickerScreen` are their pinned parts plus a `ScrollView` around one page view
+   (`ProgramPage(model:)`, `ExercisePickerPage(model:)`); snapshots and VoiceOver trees are taken from the
+   pages; no page holds a scroll view.
+3. **The builder** (criteria 1–6 of the brief, drawn): the header with the program's name as a field, "BLOCK
+   · 8 WEEKS" with "−" and "+", the week chips in `WrapLayout` (eight weeks make two rows), the selected
+   week's schedule strip of seven cells that wraps at accessibility sizes, the week's actions, "TRAINING
+   DAYS" with its helper, one card per day, "+ Add training day", and the validation message where the
+   model carries one.
+4. **The library sheet** (criterion 12 of the brief, drawn): `SheetChrome` with "Exercise library" and
+   "Cancel", the search field, the two chip rows in `WrapLayout`, the rows with their line and the "already
+   in this day" mark, a picked row shown as picked, "Nothing matches that filter." with "Clear filters", and
+   the pinned foot button, disabled with "Select exercises to add".
+5. **States have previews and snapshots** (the notes' snapshot table): builder: default at six cells; deload
+   week selected, a day with no exercise, the two-weeks message at two each. Library: results at six cells;
+   three picked, nothing matches at two each. One preview registry for the module; `Package.swift`'s
+   snapshot targets and `PreviewScan.registeredModules` gain `FeatureProgram`.
+6. **VoiceOver** (the notes' tables for S9 and S12): the pinned trees match them: a week chip "Week 3, 4
+   days", a cell "Tuesday, rest" with its hint, the chips' short names hidden on a day card, chip rows as
+   one-selected groups, a library row as a button with its line as value and the selected trait when picked
+   (S8 criterion 19), the foot. Headings are headings. Every target is 44 pt.
+7. **Sizes and settings**: nothing clips or overlaps at `.accessibility3`, with Bold Text, Increase
+   Contrast and right-to-left; sixteen weeks and a long program name lay out.
+8. **The orange audit** (decision 1 A): a test or a pinned list shows where the accent is used on each
+   screen.
+9. **No rule of its own**: the views use `LedgerDesign`'s components and tokens (`StepperField` is not
+   needed here; `PillButton`, `WrapLayout`, `SheetChrome`, `HairlineRow`, `PrimaryButton`); a new shared
+   component is proposed in the report, not added quietly.
+
+**Not in this slice:** the Day editor's views (S10, S11), any store (S13, S14), `LedgerAppKit`, the project
+file or a test plan, and any change to a presentation beyond a field a view provably needs (listed).
+
+## Plan amendments — slice S9 after round 1 (orchestrator, 2026-10-09)
+
+The reviewer asked for changes (one blocking fault, five should-fix items) and the tester found the same
+fault wider, plus two minor ones (46 tests, six left failing; fifteen mutations). Rulings, which add to S9's
+nine criteria:
+
+10. **The schedule strip never cuts a word** (review B-1, F11-S9-1): at every text size, at 375 and 402 pt,
+    with Bold Text and right to left, with the seed's tags and with ten days ("D10"), each cell draws its
+    word whole. The strip is one row of seven equal cells while every cell's word fits its share, and wraps
+    into rows of equal cells otherwise. At the default size on a 375 pt phone it stays one row if trimming
+    the cells' inner spacing by a point or two achieves that (the miss is one point); if not, it wraps there
+    and the existing test `scheduleStrip_defaultSize_isOneRowOfEqualTargets` is changed to say so. The
+    tester's four tests pass unedited; the two references that pinned "RE…" are recorded again.
+11. **Room at the largest sizes** (review S-2, S-3; F11-S9-2): the search field's text stands inside its
+    pill at every size; a wrapped "REST" and a week chip's second line clear their outlines at
+    `.accessibility3`.
+12. **The search field sends only a changed query** (F11-S9-3), as the name field already does.
+13. **Housekeeping** (review S-1, N-1 to N-3, N-6): the comment on the model's name says where the draft
+    lives now; the day row's chevron and the section line align as Today's do; one rule above the sheet's
+    foot; the unneeded hint helper goes.
+14. **Accepted as built:** all views in `Views/`; the name's draft as view state (last writer wins); a
+    library row on `HairlineRow`; no `EmptyState` for one sentence; `DayCard`'s tag measure stays in the
+    feature until S10.
+
+**For S13** (review S-1; tester's mutations 2, 3, 6): the UI test of the builder types a name and reads it
+back, taps the drawn "−" and "+" and checks which way the block moved, and reads both fields' labels; the
+store knows that a name changed from outside under an open draft is overwritten by the next keystroke.
+**For S14** (review deviation 8): the model's `detail`, `inDayMark` and `pickMark` are drawn or removed
+before F11 ends; the product owner chooses. **Chores, not this slice:** the hosted reader fails on (or
+records) a text field, with testing-strategy §2.5 saying so (review S-4); icons that must not mirror right
+to left, the check mark first, in `LedgerDesign` (review S-5; the set row has it too); `SectionLine` and a
+public press style in `LedgerDesign` before S10; the reference precision on long pages (tester's note 1:
+three visible mutations passed every reference at 0.995).
+
+## Plan amendments — slice S10, the Day editor's and the slot editor's views (orchestrator, 2026-10-10)
+
+The plan's S10 and S11 as one pull request (larger batches; the number S11 is not used again). Cut from
+`main` at release 0.10.0, which holds the Day editor's presentation (S6), the form controls (S8) and the
+builder's views (S9). Views drawn from a model only: no store, nothing in the app (S14 puts it there).
+About 580 product lines planned (the plan's S10 and S11 rows list the files); views have landed close to
+plan; past about 800 the implementer stops and reports. Pete's decision 1 stays at its default A. The
+notes' "Inputs for the views (S10, S11)" and "Inputs for S10 and S11" are part of this contract. The slice
+is accepted when:
+
+1. **Drawn from the model only.** Every view takes its part of `DayEditorModel.Content` and
+   `(DayEditorAction) -> Void`; it builds no action but the name field's `rename`, decides nothing that is
+   shown, formats no number and reads no clock, calendar or locale. Every text on screen is a string of the
+   model; a lookup the model does not carry is not expected, and any is listed for Pete.
+2. **The screen scrolls as the convention says** (testing-strategy §2.5–§2.6): `DayEditorScreen` is its
+   pinned header plus a `ScrollView` around `DayEditorPage(model:send:)`; snapshots and VoiceOver trees are
+   taken from the page and the header; the page holds no scroll view.
+3. **The files live in `FeatureProgram/Views/`** (S9's deviation 1 is the rule now); the folder scans of
+   earlier testers (`DayEditorWordsAdversarialTests` reads `DayEditor/`, `ProgramViewsSourceTests` reads
+   `Views/`) pass unedited except for adding the new screen file to `screens`.
+4. **The header**: the back control, `header.position` ("DAY 1 OF 4"), "Done", the day's name as a text
+   field bound to a draft (S9's `ProgramHeader` rule: seeded from `header.name`, sends `rename` with the
+   text as typed, does not take the stored name back while focused), `header.tag` drawn, the summary line.
+5. **The page, closed**: per `Group`, the superset header once above its rows where it is not nil, the rows
+   as one visual block; a row with its code, name, scheme, load where not nil, and a caret by `isOpen`;
+   "+ Add exercise"; "Delete day" presenting the confirmation from `deleteDay.confirmation`, whose "Cancel"
+   sends nothing.
+6. **The panel, open** (drawn from `row.panel` and nothing else, inside the row's block): the week line;
+   one `StepperField` per field; "PROGRESSION" with its chips in `WrapLayout`, the selected one not a
+   button, and its note; the drop set as `.toggleStyle(.ledger)` with its note; the superset actions; "Move
+   up", "Move down", "Remove"; the week strip. A control the model does not carry is not drawn (`details ==
+   nil`, an empty `supersetActions`, a nil move).
+7. **A stepper is drawn with `label` and `value`** and is one adjustable element to VoiceOver with
+   `spokenLabel` and `value` (the plan's default; the other reading of decision 1 is listed for Pete with
+   a screenshot, not built).
+8. **Colour**: only the facts the notes name pick the accent (`WeekLine.isDeload`/`isHeld`,
+   `Entry.isDeload`/`isHeld`/`isShown`, `DropSet.isOn`, `Row.isOpen`); no view splits `week.eyebrow` or
+   `strip.text`. An orange audit, as S9's, pins where the accent is on this screen, and its list is given
+   to Pete.
+9. **States have previews and snapshots** (the notes' snapshot table, rows S10 and S11): all closed at six
+   cells; a day with a superset, open double, drop set on at two each; open linear at six; plus the deload
+   week once. `ProgramPreview` gains `.dayEditors`; one registry for the module.
+10. **VoiceOver** (the plan's tree, notes line 571 on): `header.position` a heading; the name field
+    labelled `header.nameLabel` (pinned as `ProgramTextFieldTests` does, since the hosted reader does not
+    see a text field); a superset header a heading with label `spokenLabel` and value `note`; a row a
+    button with `spokenLabel`, `spokenValue` and its open or closed state; each stepper adjustable, its
+    two actions sent by decrement and increment; the chips a one-selected group; the drop set a switch
+    with `note` as hint. Every target is 44 pt.
+11. **Sizes and settings**: no word is cut and nothing overlaps at the twelve text sizes on 375 and 402 pt,
+    with Bold Text, Increase Contrast and right to left; a long exercise name and a long day name lay out.
+    Truncation is checked by measurement (S9's cut-word checks), not by a reference image alone.
+12. **Each control sends exactly its model's action, once**: pinned by a test that walks the page.
+13. **No rule of its own**: `LedgerDesign`'s components and tokens, the feature's `SectionLine` and
+    `ControlPill` (generalised if the Day editor's control type needs it, not copied). A new shared
+    component is proposed in the report, not added quietly.
+
+**Not in this slice:** any store (S13, S14), the exercise library sheet's presentation from the Day editor,
+`LedgerAppKit`, the project file or a test plan, the chores queued after S9 (`SectionLine` into
+`LedgerDesign`, the reader and a text field), and any change to a presentation beyond a field a view
+provably needs (listed).
+
+## Plan amendments — slice S10 after round 1 (orchestrator, 2026-10-10)
+
+The reviewer asked for changes (one blocking item, four should-fix) and the tester left one test failing
+(`smallPhone_headerIsNotSqueezed`) and two questions as known issues. Rulings, which add to S10's thirteen
+criteria:
+
+14. **Only the bar is pinned.** `DayEditorScreen` pins the row "Program … Done" alone; the title block
+    (`header.position`, the name field, `header.tag`, the summary line) is the first thing in
+    `DayEditorPage` and scrolls with it. Criteria 2 and 4 and the plan tree's "Pinned:" list are amended to
+    this. The pinned bar keeps its own height on every screen: it is never squeezed (review B-1 step 2,
+    tester F11-S10-2).
+15. **The day's name is drawn whole at every text size** on 375 and 402 pt, plain and bold, for the four
+    seed day names and the long name: it wraps onto further lines while it is not being edited. The
+    one-line `TextField` is kept (a field with a vertical axis is a `UITextView`, which the hosted reader
+    refuses and the source test bans); a wrapping `Text` of the draft is drawn while the field has no
+    focus, hidden from accessibility and from hit testing. The layout must not jump the keyboard's target
+    off screen at the moment focus arrives.
+16. **One `NameField` in `Views/`** holds the draft rule and this wrapping, used by the Day editor's title
+    block and by `ProgramHeader`, so that a long program name wraps too. Of S9's references only those
+    whose name wraps may change; if any other changes by a pixel, `ProgramHeader` stays as it is and the
+    implementer reports.
+17. **Stepper labels are "Sets", "Reps", … in the small grey label style** (decision 1 A's own words win
+    over criterion 7): `spokenLabel` is drawn, and the then redundant `.accessibilityLabel` goes (review
+    S-1). The tree stays one adjustable element with that label and `value`.
+18. **The week's eyebrow uses `Eyebrow`** with its tint (review S-4).
+19. **The cut-word sweep is thinned** (review S-2): the wide drawing once per part, size, weight and
+    direction; right to left at four sizes; in `words_otherStates_areDrawnWhole` only the open row and its
+    panel's parts. The title is swept under the four seed day names and the long name, not "Arms";
+    `dayName_isCutInItsOneLineField` goes. Target: `DayEditorLayoutTests` under about 50 s on the simulator.
+20. **Not changed, recorded for the product owner or later slices:** a one-word exercise name breaking
+    across lines at `.accessibility4` and above (tester F11-S10-4); `.alert` against F10's dialog for
+    destructive questions; "Remove" looking like "Move down"; "Program" and "Done" sending the same action;
+    the empty band between two exercises; `row.hasDropSet` removed in S14; for S14: `.id(model.id)` or a
+    new screen per day (the draft, the focus and `isConfirming` are keyed by place), and `rename` applied
+    synchronously by the store.
+
+## Plan amendments — slice S10 after round 2 (orchestrator, 2026-10-11)
+
+The reviewer's second pass found one blocking item (B-2) and two smaller ones (S-5, S-6); the tester's second
+round closed round 1's two findings, left two tests red on purpose (F11-S10-5, F11-S10-6) and refuted S-5
+and S-6 by measurement. Rulings, which add to the twenty before:
+
+21. **The name stands clear of the tag at every text size** (tester F11-S10-6, review B-2): no descender of
+    the name's last line, wrapped or one line, reaches the tag's pill, at all twelve sizes on 375 and 402 pt,
+    plain and bold; `name_standsAboveTheTag` passes unedited. The gap under the name is a spacing token, no
+    literal points. *As built and accepted:* the token stands outside the field, in `DayEditorHeader` (`xs`
+    and `s` under the name), because room inside `NameField` turned four of the tester's other tests red;
+    the name does not move, everything under it moves down 8 pt.
+22. **Under the focus the name's descenders are cut, and that is not fixed in this slice.** The field's frame
+    is the title role's line height, which is `LedgerDesign`'s; no change of a view makes it higher
+    (measured), and `ProgramHeader` on `main` clips the same way. The fix is a design-system change and
+    belongs to the queued chore, with `ProgramHeader` adopting `NameField` and the re-recording of its
+    references. `focus_doesNotCutTheDescenders` is left as it is, red, until the tester marks it a known
+    issue that names the chore. The notes hold the chore's input in full.
+23. **Review S-5 is refuted by measurement** (the bar is rigid: 60.0 / 61.3 / 70.3 pt alone, in the parts and
+    on screen). The screen's `.fixedSize(vertical:)` on the bar goes if `bar_isNeverSqueezed` stays green
+    without it.
+24. **Review S-6 is refuted as written** (an emptied draft moves the rows below by 2.3 to 2.7 pt at
+    accessibility sizes, inside the gap; nothing overlaps). Nothing is built for it.
+25. **Stale comments are corrected:** `DayEditorAccessibilityTests.swift:15`, `DayEditorSnapshotTests.swift:8`,
+    `DayEditorLayoutTests.swift:40-41`, and `NameField.swift:4-5`, which said it serves the builder.
+26. **Recorded for S14 and the product owner, not built:** a draft of only spaces shows neither letters nor
+    the placeholder; while being edited a name is one line and runs out of the field from `.xLarge` on 375
+    pt; that a tap on the name gives it the focus, and that the drawn text follows the draft while typing,
+    are for S14's UI tests.
+
+No tester file is edited in this round.

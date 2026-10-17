@@ -1,0 +1,697 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ kg" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ kg moved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved"
+          }
+        }
+      }
+    },
+    "%@ kg moved this week" : {
+      "comment" : "Spoken text of the volume tile: the week's volume, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved this week"
+          }
+        }
+      }
+    },
+    "%@ kg moved this week, %@ from last week" : {
+      "comment" : "Spoken text of the volume tile: the week's volume in kilograms, then its change, as in +8%",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved this week, %@ from last week"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%@ lb moved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved"
+          }
+        }
+      }
+    },
+    "%@ lb moved this week" : {
+      "comment" : "Spoken text of the volume tile: the week's volume, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved this week"
+          }
+        }
+      }
+    },
+    "%@ lb moved this week, %@ from last week" : {
+      "comment" : "Spoken text of the volume tile: the week's volume in pounds, then its change, as in +8%",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved this week, %@ from last week"
+          }
+        }
+      }
+    },
+    "%@ of %lld sessions this week" : {
+      "comment" : "Spoken text of the sessions tile: the sessions done, then the sessions planned",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld session this week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld sessions this week"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%@ of %lld sets" : {
+      "comment" : "The sets done in a workout, then all its sets",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld set"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld sets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld exercises" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "comment" : "A workout's length in minutes",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld min"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld min"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld weeks done. Start the next block from Program." : {
+      "comment" : "Program is the name of the app's Program tab",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld week done. Start the next block from Program."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weeks done. Start the next block from Program."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@" : {
+      "comment" : "An exercise's sets, then its reps, then its load, which carries no unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@"
+          }
+        }
+      }
+    },
+    "%lld%%" : {
+      "comment" : "No change in the week's volume",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        }
+      }
+    },
+    "+%lld%%" : {
+      "comment" : "A rise in the week's volume",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld%%"
+          }
+        }
+      }
+    },
+    "/%lld" : {
+      "comment" : "The sessions planned this week, after the number done: 2/4",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "/%lld"
+          }
+        }
+      }
+    },
+    "Block complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Block complete"
+          }
+        }
+      }
+    },
+    "Can't show today right now" : {
+      "comment" : "Title shown in place of the Today screen when its data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show today right now"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Deload" : {
+      "comment" : "Marks a deload week, after the week's number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deload"
+          }
+        }
+      }
+    },
+    "Edit this week" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit this week"
+          }
+        }
+      }
+    },
+    "LOGGED · WEEK %lld" : {
+      "comment" : "Eyebrow of the card for today's finished session, with the program week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LOGGED · WEEK %lld"
+          }
+        }
+      }
+    },
+    "Logged" : {
+      "comment" : "Marks a day already trained this week",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged"
+          }
+        }
+      }
+    },
+    "Next: %@ · %@" : {
+      "comment" : "The next session's weekday, then the short tag of its day, as in UB",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %@ · %@"
+          }
+        }
+      }
+    },
+    "Next: week %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: week %lld"
+          }
+        }
+      }
+    },
+    "No program yet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No program yet"
+          }
+        }
+      }
+    },
+    "No session today" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No session today"
+          }
+        }
+      }
+    },
+    "No sessions yet. Your first workout lands here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No sessions yet. Your first workout lands here."
+          }
+        }
+      }
+    },
+    "Nothing scheduled for %@ in week %lld. Next up is %@." : {
+      "comment" : "Today's weekday, the program week counted from 1, then the next session's weekday",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing scheduled for %@ in week %lld. Next up is %@."
+          }
+        }
+      }
+    },
+    "Nothing scheduled for %@ in week %lld. Next up is next %@." : {
+      "comment" : "Today's weekday, the program week counted from 1, then the next session's weekday",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing scheduled for %@ in week %lld. Next up is next %@."
+          }
+        }
+      }
+    },
+    "Nothing scheduled for %@ in week %lld. No sessions are left in this block." : {
+      "comment" : "Today's weekday, then the program week counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing scheduled for %@ in week %lld. No sessions are left in this block."
+          }
+        }
+      }
+    },
+    "Nothing scheduled for %@ in week %lld. This is the last week of the block." : {
+      "comment" : "Today's weekday, then the program week counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing scheduled for %@ in week %lld. This is the last week of the block."
+          }
+        }
+      }
+    },
+    "Open Program" : {
+      "comment" : "Button that opens the app's Program tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Program"
+          }
+        }
+      }
+    },
+    "Pick a day from week %lld." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick a day from week %lld."
+          }
+        }
+      }
+    },
+    "RECENT" : {
+      "comment" : "Eyebrow of the list of the last finished workouts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECENT"
+          }
+        }
+      }
+    },
+    "Rest day" : {
+      "comment" : "Title of the Today screen on a day with no session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest day"
+          }
+        }
+      }
+    },
+    "Resume workout" : {
+      "comment" : "Spoken label of the button of a live workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume workout"
+          }
+        }
+      }
+    },
+    "Resume · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume · %@"
+          }
+        }
+      }
+    },
+    "SCHEDULED REST" : {
+      "comment" : "Eyebrow of the card for a day with no session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SCHEDULED REST"
+          }
+        }
+      }
+    },
+    "Set up a program to see your next session here." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up a program to see your next session here."
+          }
+        }
+      }
+    },
+    "Set up program" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up program"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "comment" : "Spoken label of the button that opens Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        }
+      }
+    },
+    "Start workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start workout"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "comment" : "Title of the Today screen; also the day of a workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        }
+      }
+    },
+    "Today, %@" : {
+      "comment" : "Spoken label of today in the week strip, before its date",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today, %@"
+          }
+        }
+      }
+    },
+    "Train off-schedule" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Train off-schedule"
+          }
+        }
+      }
+    },
+    "UP NEXT" : {
+      "comment" : "Eyebrow of the card for today's session",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UP NEXT"
+          }
+        }
+      }
+    },
+    "View session" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View session"
+          }
+        }
+      }
+    },
+    "Week %lld of %lld" : {
+      "comment" : "The program week, counted from 1, then the number of weeks in the block",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week %lld of %lld"
+          }
+        }
+      }
+    },
+    "Your block starts on %@." : {
+      "comment" : "The rest-day card before a block begins: the block's first day, as in Monday, September 28",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your block starts on %@."
+          }
+        }
+      }
+    },
+    "Your workouts are still on this iPhone. Open the app again to try once more." : {
+      "comment" : "Under the title shown when the Today screen's data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workouts are still on this iPhone. Open the app again to try once more."
+          }
+        }
+      }
+    },
+    "k" : {
+      "comment" : "Thousands, after the week's volume: 24.2k",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "k"
+          }
+        }
+      }
+    },
+    "kg moved" : {
+      "comment" : "Caption of the week's volume, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kg moved"
+          }
+        }
+      }
+    },
+    "lb moved" : {
+      "comment" : "Caption of the week's volume, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lb moved"
+          }
+        }
+      }
+    },
+    "sessions this week" : {
+      "comment" : "Caption under the sessions done and planned",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sessions this week"
+          }
+        }
+      }
+    },
+    "~%lld min" : {
+      "comment" : "A session's estimated length",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "~%lld min"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "~%lld min"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "−%lld%%" : {
+      "comment" : "A fall in the week's volume",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%lld%%"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

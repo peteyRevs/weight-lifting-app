@@ -32,4 +32,17 @@ public struct RestTimer: Hashable, Codable, Sendable {
         }
         return min(1, remaining(at: now) / total)
     }
+
+    /// How long after `now` the countdown's text next changes: the time to the next whole second left
+    /// (`ClockText.remaining` rounds up, so 74.3 s left reads "1:15" for another 0.3 s), a full second when
+    /// a whole number of seconds is left, and nil when no time is left. What ticks a screen waits this long
+    /// and then reads the clock again; it never counts the seconds itself.
+    public func nextTick(after now: Date) -> Duration? {
+        let left = remaining(at: now)
+        guard left > .zero else {
+            return nil
+        }
+        let fraction = Duration(secondsComponent: 0, attosecondsComponent: left.components.attoseconds)
+        return fraction > .zero ? fraction : .seconds(1)
+    }
 }

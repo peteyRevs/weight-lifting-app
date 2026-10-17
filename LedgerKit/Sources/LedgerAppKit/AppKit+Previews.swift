@@ -5,19 +5,25 @@
     /// content, its tests (`PreviewTests`) render every case and fail on a `#Preview` that is not
     /// a case here.
     enum AppPreview: String, CaseIterable {
-        case today = "Today"
+        case tabs = "Tabs"
+        case placeholder = "Placeholder"
         case databaseUnavailable = "Database unavailable"
 
         @ViewBuilder var content: some View {
             switch self {
-            case .today: TodayPlaceholder()
+            case .tabs: AppTabs(router: AppRouter())
+            case .placeholder: PlaceholderScreen(AppCopy.title(of: .program), identifier: "program.title")
             case .databaseUnavailable: DatabaseUnavailableView()
             }
         }
     }
 
-    #Preview("Today") {
-        AppPreview.today.content
+    #Preview("Tabs") {
+        AppPreview.tabs.content
+    }
+
+    #Preview("Placeholder") {
+        AppPreview.placeholder.content
     }
 
     #Preview("Database unavailable") {

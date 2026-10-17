@@ -29,7 +29,36 @@ public protocol ProgramRepository: Sendable {
     /// `duplicateIdentifier`; a slot naming an exercise that is not stored throws `unknownExercise` (seed the
     /// catalog first; product decision #28); a name or tag holding U+0000 throws `nulInText`; a failed save writes
     /// nothing.
+    ///
+    /// For a new program, or to replace one whole (an import, a repair). To edit a program that is already
+    /// stored use `update`: a copy read earlier and saved here writes back the misses and the exercises a
+    /// workout's save stored since.
     func save(_ program: Program) async throws
+    /// Applies `change` to the program `id` as it is stored now and saves the result as `save` would, in one
+    /// step that no other write can come between. Returns the program as stored afterwards.
+    ///
+    /// For an edit of a program that is already stored (the builder, F11). A finished workout's save writes
+    /// into the program too (each slot's misses, and a swap's exercise), so a copy read earlier and saved
+    /// whole with `save` writes the older misses and exercises back. A change is applied to what is stored
+    /// at that moment, so it and a workout's save give the same program in either order, as long as the
+    /// change leaves alone what it does not mean to edit.
+    ///
+    /// - A program that is not stored, or is deleted, throws `missingRow`; `change` is not called.
+    /// - What `change` throws is rethrown as it is, and nothing is written.
+    /// - A result `save` would refuse is refused with the same error, and a result under another id with
+    ///   `duplicateIdentifier` naming that id; nothing is written.
+    /// - Only what the change altered is written: a result equal to the stored program writes nothing, and
+    ///   `observeActive` then emits nothing. A result's `isActive` is saved as `save` saves it, so a change
+    ///   that leaves it alone leaves which program is active alone.
+    /// - A call whose task is cancelled stores all of its change or none of it, and throws
+    ///   `CancellationError` only when it stored none.
+    ///
+    /// **`change` runs inside the store's write**, while every other call on that store waits. Keep it a
+    /// quick, pure function of its argument and of values it captured, and never call a store from it. It is
+    /// synchronous, so the compiler already refuses every `async` call; the one call that compiles is
+    /// `observeActive()`, which deadlocks or traps there. It is called at most once. There is no default:
+    /// reading, changing and saving in three steps is the sequence this requirement replaces.
+    func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program
     /// Makes the program the one active one; one that is not saved, or is deleted, throws `missingRow`.
     func setActive(_ id: ProgramID) async throws
     /// Soft-deletes the program and everything in it, which also makes it inactive; saving it again brings it
@@ -51,20 +80,41 @@ public protocol ProgramRepository: Sendable {
 /// changed onward: so correcting a typo in an old workout removes the false record and gives a later workout
 /// the record it then deserves. Callers never supply records.
 public protocol WorkoutRepository: Sendable {
-    /// Rule 31: stores the finished workout with its exercises and sets, and the misses of `slotUpdates`
-    /// (rule 13), and detects personal records again from it onward, in one transaction: all of it or nothing.
+    /// Rule 31: stores the finished workout with its exercises and sets, the misses of `slotUpdates` (rule 13)
+    /// and the program changes its swaps asked for (`workout.programUpdates`, decision #13), detects personal
+    /// records again from it onward and, when `droppingLog`, drops the workout's event log
+    /// (`WorkoutEventStore`), in one transaction: all of it or nothing. When it throws, nothing changed: no
+    /// workout, no miss, no program change, and the log whole.
     ///
-    /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, a
-    ///   changed one replaces its exercises and sets, and a deleted one comes back. A workout stored late, before
-    ///   others, takes its place in the order, and the records of those after it follow.
+    /// - It is an upsert keyed by the workout's id: materialising the same workout again changes nothing, the
+    ///   program included as long as it was not edited in between; a changed one replaces its exercises and
+    ///   sets, and a deleted one comes back. A workout stored late, before others, takes its place in the
+    ///   order, and the records of those after it follow.
     /// - Of each slot in `slotUpdates` only `misses` is written, replacing the slot's stored misses whole, so
     ///   build each slot from the program as stored now. A slot that is not stored is skipped.
-    /// - `workout.programUpdates` is not applied.
+    /// - Each entry of `workout.programUpdates` sets the exercise of one slot, and nothing else of it. It may
+    ///   only touch a stored slot of the workout's own program (`source.programID`), and only name a stored
+    ///   exercise: an entry of an ad-hoc workout, or one naming a slot that is not stored, a slot of another
+    ///   program or an exercise that is not stored, is skipped. A skipped entry never fails the save.
+    /// - An entry is applied by every materialisation: one made after the lifter changed that slot sets it
+    ///   back to the swap's exercise. So store an older workout again without its `programUpdates`, as
+    ///   without its slots.
+    ///
+    /// **The log.** A workout's log is that workout before it was saved (ADR-004 rule 5), and the save is what
+    /// ends its use: that is why this repository may drop it. It drops that one log, never reads an envelope
+    /// and never writes one; the caller has made sure the log is complete
+    /// (`WorkoutEventStore.unreadableCount(for:)`).
+    ///
+    /// Returns whether this repository dropped the log with the save. `false` when `droppingLog` is false, and
+    /// from a repository that holds no log, whose caller then compacts it in a second step. `true` says only
+    /// that the log is gone from the repository's own database: nothing ties a repository to the event store
+    /// a caller holds beside it, so a caller that holds one looks there before it takes the log for gone, as
+    /// the session host does. Every implementation states which it is; there is no default.
     ///
     /// Throws `notFinished` unless the workout is `.finished` with an `endedAt`; `duplicateIdentifier` for an
     /// exercise or set id used twice, or held by another stored workout (even a deleted one); `nulInText` for a
     /// name or tag holding U+0000.
-    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot], droppingLog: Bool) async throws -> Bool
     /// The stored workout, or `nil`. A history read resets the live-only fields: no `cursor`, no `rest`, no
     /// `programUpdates`, no exercise's `lastPerformance`, and `autoRest` true.
     func workout(id: WorkoutID) async throws -> WorkoutState?
@@ -84,6 +134,13 @@ public protocol WorkoutRepository: Sendable {
     func delete(id: WorkoutID) async throws
     /// `recent(limit:)` now, then after every change that alters it, and for no other write.
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]>
+}
+
+public extension WorkoutRepository {
+    /// The save alone: `materialize(_:slotUpdates:droppingLog:)` that leaves the workout's log where it is.
+    func materialize(_ workout: WorkoutState, slotUpdates: [Slot]) async throws {
+        _ = try await materialize(workout, slotUpdates: slotUpdates, droppingLog: false)
+    }
 }
 
 /// User preferences (single row).

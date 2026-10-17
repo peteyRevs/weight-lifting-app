@@ -15,9 +15,13 @@ extension Decimal {
         return result
     }
 
-    /// Rounds to a whole number and returns it as an `Int`.
+    /// Rounds to a whole number and returns it as an `Int`. A value that is not a number rounds to 0.
+    ///
+    /// `Decimal` gives NaN, not zero, for a quotient too small for it to hold (10⁻⁸⁸ g in thousands
+    /// of a unit), and `NSDecimalNumber.intValue` of a NaN is undefined: it read as an arbitrary
+    /// number that changed from launch to launch (F09 S2, finding F9-S2-1).
     func roundedToInt(_ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> Int {
-        NSDecimalNumber(decimal: rounded(scale: 0, rule)).intValue
+        isNaN ? 0 : NSDecimalNumber(decimal: rounded(scale: 0, rule)).intValue
     }
 
     /// `NSDecimalNumber.RoundingMode` only has plain / bankers / up (toward +∞) / down (toward −∞);

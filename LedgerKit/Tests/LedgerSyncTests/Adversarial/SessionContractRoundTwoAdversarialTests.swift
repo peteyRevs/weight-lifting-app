@@ -106,7 +106,7 @@ struct SessionContractRoundTwoAdversarialTests {
 
     @Test(
         "This suite's overlap checks reject a client whose round 2 fault shows only when calls overlap",
-        arguments: SeamLateFault.racy
+        arguments: SessionLane.cut(SeamLateFault.racy, to: 3)
     )
     func racyClient_isRejectedByThisSuitesOverlapChecks(_ fault: SeamLateFault) async throws {
         var found: String?

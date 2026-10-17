@@ -67,6 +67,10 @@ extension FaultyWorkoutSession {
         case publishesTheStartLate
         /// `start` publishes, suspends, then commits: a subscriber told of the workout finds none.
         case commitsTheStartLate
+        /// An `apply` that finds another one inside the client throws `noLiveWorkout`, the workout live.
+        case refusesAnApplyUnderOverlap
+        /// The second stream opened is given its second update twice; every other stream is right.
+        case repeatsAnUpdateOnTheSecondStream
 
         var description: String {
             rawValue
@@ -92,7 +96,7 @@ extension FaultyWorkoutSession {
         static let overlapping: Set<Fault> = [
             .losesAnEditBetweenCallers, .startsTwiceAtOnce, .endsTwiceAtOnce, .appliesAfterTheEnd,
             .registersAfterASuspension, .judgesAnIgnoredEndLater, .dropsHapticsUnderOverlap,
-            .publishesTheStartLate, .commitsTheStartLate
+            .publishesTheStartLate, .commitsTheStartLate, .refusesAnApplyUnderOverlap
         ]
 
         static let brokenClauses: [Fault: String] = [
@@ -126,7 +130,9 @@ extension FaultyWorkoutSession {
             .judgesAnIgnoredEndLater: "finish and discard at a date the engine ignores",
             .dropsHapticsUnderOverlap: "callers at once",
             .publishesTheStartLate: "a start against applies",
-            .commitsTheStartLate: "a subscriber acting on the start's update"
+            .commitsTheStartLate: "a subscriber acting on the start's update",
+            .refusesAnApplyUnderOverlap: "callers at once",
+            .repeatsAnUpdateOnTheSecondStream: "two subscribers"
         ]
     }
 }

@@ -19,6 +19,9 @@
 #                                       macOS job, which runs after the Linux one. Combines with
 #                                       --ios-only and --record-snapshots
 #
+# Step 3 also checks every String Catalog against the keys its iOS build extracted
+# (scripts/check-string-catalogs.sh), in every mode that builds iOS, --record-snapshots too.
+#
 # Destinations are overridable:
 #   LEDGER_IOS_DEST, LEDGER_WATCH_DEST
 # Also read: LEDGER_BOOT_TIMEOUT (scripts/sim-boot.sh), LEDGER_XCODEBUILD_DEADLINE and
@@ -180,6 +183,10 @@ if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_
 # before an app-hosted test could launch, which ran out the CI step (F01 notes, "Second CI run").
 # Packages resolve only to the committed Package.resolved: a stale one fails the build rather than
 # being rewritten, as Swift 6.4 rewrote it (F32 notes, "Package pins").
+# The iOS build leaves the keys the compiler extracted from each module's code. Before any iOS test runs,
+# every String Catalog is compared with them (F09; scripts/check-string-catalogs.sh). The watch build's
+# keys are not read. A record run stops there too: a screen recorded from a catalog that does not match
+# the code would have to be recorded again.
 test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bundle name>
     local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
         -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
@@ -190,6 +197,11 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     xcodebuild build-for-testing "${xcargs[@]}" ${CACHE_SETTINGS[@]+"${CACHE_SETTINGS[@]}"} \
         -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
+    if [[ "$2" == iOS ]]; then
+        step "$1 · string catalogs (each against the keys the $2 build extracted)"
+        scripts/check-string-catalogs.sh
+        done_step "string catalogs"
+    fi
     step "$1 · $2 simulator boot"
     scripts/sim-boot.sh --wait "$5"
     done_step "$2 boot"

@@ -83,12 +83,17 @@ public struct GRDBWorkoutEventStore: WorkoutEventStore {
     }
 
     public func compact(workout: WorkoutID) async throws {
-        try await queue.write { database in
-            try database.execute(
-                sql: "DELETE FROM workout_event WHERE workout_id = ?",
-                arguments: [ColumnCodec.text(workout)]
-            )
-        }
+        try await queue.write { database in try Self.deleteLog(of: workout, in: database) }
+    }
+
+    /// Deletes every row of the workout's log, unreadable ones included, in the caller's transaction:
+    /// `compact(workout:)`, and the last step of the save that drops a finished workout's log with it
+    /// (`GRDBWorkoutRepository.materialize(_:slotUpdates:droppingLog:)`).
+    static func deleteLog(of workout: WorkoutID, in database: Database) throws {
+        try database.execute(
+            sql: "DELETE FROM workout_event WHERE workout_id = ?",
+            arguments: [ColumnCodec.text(workout)]
+        )
     }
 
     private func storedPayloads(of workout: WorkoutID) async throws -> [StoredPayload] {

@@ -65,6 +65,65 @@ import Testing
             }
         }
 
+        /// The form controls of F11 S8, each gallery in the phone matrix, and the three on one sheet at the
+        /// settings the matrix leaves out (Increase Contrast in both themes, pressed, accessibility5).
+        @Suite("FormControlSnapshots", .tags(.design, .snapshot))
+        struct FormControlSnapshotTests {
+            @Test("StepperField matches its references", arguments: SnapshotAppearance.phoneMatrix)
+            func stepperField_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: StepperFieldGallery().phonePage(), appearance)
+            }
+
+            @Test("LedgerToggleStyle matches its references", arguments: SnapshotAppearance.phoneMatrix)
+            func ledgerToggleStyle_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: LedgerToggleGallery().phonePage(), appearance)
+            }
+
+            @Test("WrapLayout matches its references", arguments: SnapshotAppearance.phoneMatrix)
+            func wrapLayout_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: WrapLayoutGallery().phonePage(), appearance)
+            }
+
+            @Test("WrapLayout, right to left, matches its reference (dark, large)")
+            func wrapLayout_rightToLeft_matchesReference() {
+                let appearance = SnapshotAppearance(.dark, .large)
+                assertPhoneSnapshot(
+                    of: WrapLayoutGallery().phonePage().environment(\.layoutDirection, .rightToLeft),
+                    appearance,
+                    named: "rightToLeft-\(appearance)"
+                )
+            }
+
+            @Test(
+                "The form controls with Increase Contrast match their references (large)",
+                arguments: [ColorScheme.light, .dark]
+            )
+            func formControls_increasedContrast_matchesReference(_ scheme: ColorScheme) {
+                let appearance = SnapshotAppearance(scheme, .large)
+                assertPhoneSnapshot(
+                    of: FormControls().phonePage(),
+                    appearance,
+                    named: "increasedContrast-\(appearance)",
+                    modifyingTraits: { $0.accessibilityContrast = .high }
+                )
+            }
+
+            @Test("The form controls, pressed, match their reference (dark, large)")
+            func formControls_pressed_matchesReference() {
+                let appearance = SnapshotAppearance(.dark, .large)
+                assertPhoneSnapshot(
+                    of: FormControls().phonePage().environment(\.ledgerDrawsPressed, true),
+                    appearance,
+                    named: "pressed-\(appearance)"
+                )
+            }
+
+            @Test("The form controls at accessibility5 match their reference (light)")
+            func formControls_accessibility5_matchesReference() {
+                assertPhoneSnapshot(of: FormControls().phonePage(), SnapshotAppearance(.light, .accessibility5))
+            }
+        }
+
         /// Every slice-2 component on one sheet, at the settings the matrix leaves out: the largest
         /// text size (the components claim to hold up through AX5 without clipping), Bold Text (they
         /// follow it), every button pressed, and Increase Contrast, whose stronger hairlines and inks
@@ -129,6 +188,17 @@ import Testing
                 HairlineListGallery()
                 SetRowGallery()
                 RestRingGallery()
+            }
+        }
+    }
+
+    /// The form controls' galleries, one after another.
+    private struct FormControls: View {
+        var body: some View {
+            VStack(alignment: .leading, spacing: LedgerSpacing.xxl) {
+                StepperFieldGallery()
+                LedgerToggleGallery()
+                WrapLayoutGallery()
             }
         }
     }

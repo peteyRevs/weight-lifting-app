@@ -14,8 +14,8 @@ public enum ProgressionRules {
     /// - deload week (rule 12, decision #3): `load = (load × 0.85).rounded(toStep: step)`,
     ///   `sets = max(1, sets − 1)`, `rpe = max(5, rpe − 2)`.
     ///
-    /// `start = slot.startLoad ?? exercise.startLoad(in: units)` and
-    /// `step = slot.step ?? exercise.equipment.defaultStep(in: units)` (rule 1, decision #9).
+    /// `start` is `slot.resolvedStartLoad` and `step` is `slot.resolvedStep`: the slot's own, or the
+    /// exercise's start load and its equipment's default step in `units` (rule 1, decision #9).
     /// `weekIndex` drives advancement and HELD; `week` supplies only `isDeload`. Pass the block's
     /// week at `weekIndex` (`week.index == weekIndex`); the pair is not cross-checked.
     public static func prescribe(
@@ -26,8 +26,8 @@ public enum ProgressionRules {
         units: Units
     ) -> Prescription {
         let advancement = (0 ..< max(0, weekIndex)).count { !slot.misses.contains($0) }
-        let start = slot.startLoad ?? exercise.startLoad(in: units)
-        let step = slot.step ?? exercise.equipment.defaultStep(in: units)
+        let start = slot.resolvedStartLoad(exercise: exercise, units: units)
+        let step = slot.resolvedStep(exercise: exercise, units: units)
         var load: Weight
         var reps = slot.reps
         switch slot.progression {
@@ -58,5 +58,19 @@ public enum ProgressionRules {
             isHeld: slot.misses.contains(weekIndex - 1),
             isDeload: week.isDeload
         )
+    }
+
+    /// The slot's prescription in each of `weeks`, in their order, each under its own index: one slot's row
+    /// of the block's table, and what the Day editor's strip of weekly loads prints (F11 criterion 7).
+    ///
+    /// The weeks are a program's (indices 0 … n − 1) and the slot is one `Slot.init` accepts, as for
+    /// `prescribe`: this is that function for each week, with the same preconditions.
+    public static func prescriptions(
+        for slot: Slot,
+        weeks: [Week],
+        exercise: Exercise,
+        units: Units
+    ) -> [Prescription] {
+        weeks.map { prescribe(week: $0, weekIndex: $0.index, slot: slot, exercise: exercise, units: units) }
     }
 }

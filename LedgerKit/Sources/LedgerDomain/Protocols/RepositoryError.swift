@@ -28,13 +28,15 @@ public enum RepositoryError: Error, Equatable, Sendable {
     /// both would land in one row, and one would be lost. Also a week, day or slot id that another program
     /// holds, live or deleted: saving it would move that row out of the other program. The same for a workout's
     /// exercise and set ids, and for a personal record that names another workout than the one it is stored
-    /// with (`"personal_record of workout id"`): it would replace that workout's record.
+    /// with (`"personal_record of workout id"`): it would replace that workout's record. And the result of a
+    /// program `update`'s change that has another id than the program it was given (`"program id"`, the
+    /// result's): saving it would put that program's rows under the other id.
     case duplicateIdentifier(String)
     /// A text value to be saved holds U+0000 (`"table.column"`). SQLite would keep the text only up to it, so
     /// it is refused rather than stored cut short.
     case nulInText(String)
-    /// No live row has this id (`"table id"`): `setActive` named a program that is not saved, or deleted, or
-    /// `updateSets` an exercise of no stored workout.
+    /// No live row has this id (`"table id"`): `setActive` or `update` named a program that is not saved, or
+    /// deleted, or `updateSets` an exercise of no stored workout.
     case missingRow(String)
     /// A program's slot names an exercise that is not stored (`"exercise id"`, the first in slot order): saving it
     /// would point the slot at nothing. Seed the catalog, or save the custom exercise, before the program (F05

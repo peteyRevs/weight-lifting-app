@@ -75,14 +75,17 @@
                 }
             }
 
-            /// `grep -E "public (nonisolated )?struct \w+(<…>)?: View" Components/*.swift`, 2026-09-30.
+            /// `grep -E "public (nonisolated )?struct \w+(<…>)?: View" Components/*.swift`, 2026-09-30, and
+            /// again on 2026-10-08 (F11 S8: `StepperField`). The slice's two other controls are no views and
+            /// are listed with it: `LedgerToggleStyle` is a style and `WrapLayout` a layout.
             static let publicViews = [
                 "EmptyState", "Eyebrow", "HairlineList", "HairlineRow", "HairlineRule", "IconPillButton",
                 "LedgerIconView",
                 "PillButton", "PrimaryButton", "ProgressSegments", "RestRing", "SetRow", "SetRowHeader",
                 "SetRowSteppers",
                 "SheetChrome", "StatTile", "StatTileRow", "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock",
-                "WeekStrip"
+                "WeekStrip",
+                "StepperField", "LedgerToggleStyle", "WrapLayout"
             ]
 
             @Test("Every public view in Components/ is named by a gallery heading")

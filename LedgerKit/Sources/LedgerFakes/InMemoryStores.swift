@@ -4,9 +4,11 @@
     import LedgerDomain
 
     /// The six in-memory stores, linked where one database links them: the stats read the workouts' history; a
-    /// materialised workout's slot updates reach the programs in the same step; and a program saved with a slot
-    /// naming an exercise the exercise store does not hold is refused (`unknownExercise`), as the slot's foreign
-    /// key refuses it. Settings and the event store stand alone, as their tables do. Built from a `Seed`, which is
+    /// materialised workout's slot updates and program updates reach the programs in the same step, and its
+    /// event log is dropped in that step when the save is asked to
+    /// (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`); and a program saved with a slot naming an
+    /// exercise the exercise store does not hold is refused (`unknownExercise`), as the slot's foreign key
+    /// refuses it. Settings stand alone, as their table does. Built from a `Seed`, which is
     /// stored state: kept as given, without a save's checks (like a database restored as it was). A seed whose
     /// programs name exercises its catalog lacks is a state no database can hold (the slots' foreign key), so it
     /// reports an issue naming them, which fails the test that made it (finding F7-10).
@@ -74,10 +76,10 @@
             }
             exercises = InMemoryExerciseRepository(catalog: seed.catalog, version: seed.catalogVersion)
             programs = InMemoryProgramRepository(programs: seed.programs, exercises: exercises)
-            workouts = InMemoryWorkoutRepository(programs: programs, workouts: seed.workouts)
+            events = InMemoryWorkoutEventStore(seed.envelopes)
+            workouts = InMemoryWorkoutRepository(programs: programs, workouts: seed.workouts, events: events)
             stats = InMemoryStatsQueries(workouts, now: now)
             settings = InMemorySettingsRepository(seed.settings)
-            events = InMemoryWorkoutEventStore(seed.envelopes)
         }
     }
 #endif

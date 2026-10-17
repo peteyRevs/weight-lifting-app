@@ -9,9 +9,7 @@ import LedgerDomain
     import LedgerHealth
 #endif
 import LedgerPersistence
-#if canImport(WatchConnectivity)
-    import LedgerSync
-#endif
+import LedgerSync
 import SwiftUI
 
 /// The iPhone app's composition root (architecture §4, §13): the one place live values are bound to the
@@ -23,25 +21,47 @@ public final class AppComposition {
     public typealias State = DatabaseLaunch.State
 
     let environment: Environment
-    let database: DatabaseLaunch
+    /// Built on first use, so that opening the database can hand the stores back to this composition.
+    private(set) lazy var database = DatabaseLaunch(
+        at: environment.databaseURL,
+        kind: .phone,
+        now: environment.now,
+        newID: environment.newID,
+        logger: environment.logger.log,
+        record: environment.record,
+        onOpen: { [weak self] stores in self?.opened(stores) }
+    )
+    /// The live workout's host over the open database (F10): what `workoutSession` is bound to.
+    private(set) var session: LocalWorkoutSessionActor?
     private var isCompanionActive = false
 
     init(_ environment: Environment) {
         self.environment = environment
-        let preparesDependencies = environment.preparesDependencies
-        database = DatabaseLaunch(
-            at: environment.databaseURL,
-            kind: .phone,
-            now: environment.now,
-            newID: environment.newID,
-            logger: environment.logger.log,
-            record: environment.record,
-            onOpen: { stores in
-                if preparesDependencies {
-                    prepareDependencies { Self.bind(stores, into: &$0) }
+    }
+
+    /// The database is open, and `state` is not yet `.ready`: builds the live workout's host over its stores
+    /// and, in the app, binds the keys process-wide.
+    ///
+    /// The host is given no `NotificationsClient` (F10 S6): the rest-over notification and its permission are
+    /// F23's, which passes its client here. Until then a rest that starts schedules nothing, and nothing
+    /// calls the `notifications` key's stub.
+    private func opened(_ stores: LedgerStores) {
+        session = LocalWorkoutSessionActor(
+            events: stores.events,
+            workouts: stores.workouts,
+            programs: stores.programs,
+            device: stores.deviceID,
+            now: environment.now
+        )
+        if environment.preparesDependencies {
+            prepareDependencies {
+                bind(&$0)
+                if environment.clockOffset != nil {
+                    // A UI test's date (`UITestClock`): the stores' clock is the launch's.
+                    $0.date = DateGenerator(environment.now)
                 }
             }
-        )
+        }
     }
 
     public var state: State {
@@ -92,12 +112,22 @@ public final class AppComposition {
 
     /// The launch's asynchronous part, from the root view's `.task(id: scenePhase)`: the database half
     /// (`DatabaseLaunch.resume(isForeground:)`: the seed, the settings, and on return to the foreground the retries
-    /// of #28 and #29), then WatchConnectivity, activated once.
+    /// of #28 and #29), then the live workout's recovery, then WatchConnectivity, activated once.
+    ///
+    /// The recovery (`LocalWorkoutSessionActor.resumeFromStore()`, F10) resumes a workout the app was killed in
+    /// and stores one it was killed while saving. It runs once the database is open, and again on a return to
+    /// the foreground while the host has work left: a recovery that failed, or a finish whose save failed.
     public func resume(in phase: ScenePhase) async {
         guard state != .idle else {
             return
         }
         await database.resume(isForeground: phase == .active)
+        if let session {
+            let hasWorkLeft = await session.needsRecovery
+            await database.run(.resumeWorkout, retrying: phase == .active && hasWorkLeft) {
+                try await session.resumeFromStore()
+            }
+        }
         if !isCompanionActive {
             environment.record(.began(.activateCompanionSession))
             isCompanionActive = true
@@ -116,12 +146,17 @@ public final class AppComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores and this device's id; binds nothing until the database is open. The app binds once,
-    /// process-wide, through `prepareDependencies`; the logger and the device keys keep their live values (the
-    /// device ones are stubs until F16–F23).
+    /// Binds the six stores, this device's id, the live workout's host and the haptics its cover plays (F10 S6);
+    /// binds nothing until the database is open. The app binds once, process-wide, through
+    /// `prepareDependencies`; the logger and the other device keys keep their live values (the device ones are
+    /// stubs until F16–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
+        }
+        if let session {
+            values.workoutSession = session
+            values.haptics = LiveHaptics()
         }
     }
 
@@ -152,6 +187,8 @@ extension AppComposition {
         var preparesDependencies: Bool
         /// When this process started (`ProcessStart`), where launch-to-first-frame begins.
         var processStart: Date?
+        /// The seconds `now` and `processStart` are moved by, when a UI test asked for a date (`UITestClock`).
+        var clockOffset: TimeInterval?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -161,11 +198,12 @@ extension AppComposition {
             #if canImport(WatchConnectivity)
                 let activator = CompanionSessionActivator()
             #endif
+            let offset = UITestClock.liveOffset(arguments: arguments)
             return Environment(
                 databaseURL: arguments.contains("-LEDGER_UITEST")
                     ? URL.temporaryDirectory.appending(path: "LedgerUITest-\(UUID().uuidString)/ledger.sqlite")
                     : LedgerStores.defaultURL,
-                now: { Date() },
+                now: { Date().addingTimeInterval(offset ?? 0) },
                 newID: { UUID() },
                 logger: launchLogger,
                 record: { event in launchLogger.log.debug("Launch: \(String(describing: event), privacy: .public)") },
@@ -180,7 +218,8 @@ extension AppComposition {
                     #endif
                 },
                 preparesDependencies: true,
-                processStart: ProcessStart.date()
+                processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
+                clockOffset: offset
             )
         }
     }

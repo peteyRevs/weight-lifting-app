@@ -79,6 +79,56 @@
                 #expect(!row.traits.contains(.button))
             }
 
+            @Test("StepperField: one adjustable element named by its label, 44 pt target", arguments: sizes)
+            func stepperField_accessibility_adjustableWithTarget(_ appearance: SnapshotAppearance) throws {
+                let elements = StepperField("Start load", value: "185 lb", onDecrement: {}, onIncrement: {})
+                    .accessibilityElements(appearance)
+                let field = try #require(elements.first)
+                #expect(elements.count == 1, "\(elements)")
+                #expect(field.label == "Start load" && field.value == "185 lb")
+                #expect(field.traits.contains(.adjustable))
+                expectTarget(field)
+            }
+
+            @Test(
+                "LedgerToggleStyle: the label names the switch, its value is its state, 44 pt target",
+                arguments: sizes
+            )
+            func ledgerToggle_accessibility_switchWithTarget(_ appearance: SnapshotAppearance) throws {
+                for isOn in [false, true] {
+                    let toggle = Toggle(isOn: .constant(isOn)) { Text(verbatim: "Drop set") }.toggleStyle(.ledger)
+                    let elements = toggle.accessibilityElements(appearance)
+                    let element = try #require(elements.first)
+                    #expect(elements.count == 1, "\(elements)")
+                    #expect(element.label == "Drop set" && element.value == (isOn ? "1" : "0"))
+                    expectButton(element)
+                }
+            }
+
+            @Test(
+                "WrapLayout: every pill inside it keeps its label and its 44 pt target, on every row",
+                arguments: sizes
+            )
+            func wrapLayout_pills_keepTheirTargets(_ appearance: SnapshotAppearance) {
+                let titles = WrapLayoutGallery.equipment
+                let wrap = WrapLayout {
+                    ForEach(titles, id: \.self) { PillButton($0) {} }
+                }
+                let elements = wrap.accessibilityElements(appearance)
+                #expect(elements.map(\.label) == titles)
+                #expect(Set(elements.map(\.frame.minY)).count > 1, "control: the pills wrap")
+                for (place, element) in elements.enumerated() {
+                    expectButton(element)
+                    // No target overlaps the one before it.
+                    if place > 0 {
+                        #expect(
+                            !element.frame.intersects(elements[place - 1].frame),
+                            "\(element) \(elements[place - 1])"
+                        )
+                    }
+                }
+            }
+
             @Test("Eyebrow is a heading")
             func eyebrow_accessibility_isHeader() throws {
                 let eyebrow = try #require(Eyebrow("Up next", tint: .accent).accessibilityElements().first)

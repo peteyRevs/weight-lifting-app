@@ -29,6 +29,17 @@ public nonisolated enum LedgerIcon: CaseIterable, Sendable {
         }
     }
 
+    /// Whether the icon is drawn mirrored in a right-to-left layout. Apple's guidance (Human Interface
+    /// Guidelines, "Right to left") flips an icon that shows a direction of reading or of movement and never
+    /// a check mark: the arrow and the chevron point forward, and so does the upper arrow of the swap pair.
+    /// The check mark stays as drawn; the steppers' signs are their own mirror images.
+    var mirrorsRightToLeft: Bool {
+        switch self {
+        case .arrow, .chevron, .swap: true
+        case .check, .minus, .plus: false
+        }
+    }
+
     /// The strokes as polylines on the 24-point grid.
     var strokes: [[CGPoint]] {
         switch self {
@@ -65,6 +76,12 @@ public struct LedgerIconView: View {
         let weight = legibilityWeight == .bold ? LedgerIcon.boldTextStrokeScale : 1
         LedgerIconShape(icon: icon, lineWidth: icon.strokeWidth * weight)
             .frame(width: side, height: side)
+            // A shape turns round in a right-to-left layout, which drew the check mark backwards there. So the
+            // shape is always drawn as on its grid, and this, the one place, flips the icons that point along
+            // the reading direction. (`Shape.layoutDirectionBehavior = .fixed` did not stop the mirroring:
+            // measured 2026-10-12, 204 pixels of a 32-point check mark still moved.)
+            .environment(\.layoutDirection, .leftToRight)
+            .flipsForRightToLeftLayoutDirection(icon.mirrorsRightToLeft)
             .accessibilityHidden(true)
     }
 }

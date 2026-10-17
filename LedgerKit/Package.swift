@@ -64,13 +64,21 @@ let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistenc
 
 /// Test targets whose suites commit `__Snapshots__` references; SwiftPM must not treat those
 /// PNGs as sources. Add a target here with its first snapshot suite.
-let snapshotTestTargets: Set<String> = ["LedgerDesign", "LedgerAppKit", "LedgerWatchAppKit"]
+let snapshotTestTargets: Set<String> = [
+    "LedgerDesign", "LedgerAppKit", "LedgerWatchAppKit", "FeatureProgram", "FeatureToday", "FeatureWorkout"
+]
 
-/// Test targets that read committed fixtures through `Bundle.module` (F05: `schema-v001.sql`).
-let testResources: [String: [Resource]] = ["LedgerPersistence": [.copy("Fixtures")]]
+/// Test targets that read committed fixtures through `Bundle.module` (F05: `schema-v001.sql`; F09 S1: the string
+/// catalog fixture that proves a formatted string and a plural resolve from a package target's bundle).
+let testResources: [String: [Resource]] = [
+    "LedgerPersistence": [.copy("Fixtures")],
+    "LedgerAppKit": [.process("Fixtures")]
+]
 
 let package = Package(
     name: "LedgerKit",
+    // English is the source language of every module's `Resources/Localizable.xcstrings` (standards §7).
+    defaultLocalization: "en",
     platforms: [
         // macOS is present only so `swift test` can run the pure targets on the
         // host; every Apple-framework import outside Domain is behind #if canImport.
@@ -123,14 +131,25 @@ let package = Package(
 
         // ---- features -------------------------------------------------------
         .target(name: "FeatureOnboarding", dependencies: featureSpine, swiftSettings: uiSettings),
-        .target(name: "FeatureToday", dependencies: featureSpine, swiftSettings: uiSettings),
-        .target(name: "FeatureProgram", dependencies: featureSpine, swiftSettings: uiSettings),
+        .target(
+            name: "FeatureToday",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
+        .target(
+            name: "FeatureProgram",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
         .target(name: "FeatureLibrary", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(name: "FeatureHistory", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(name: "FeatureSettings", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(
             name: "FeatureWorkout",
             dependencies: featureSpine + ["LedgerActivityKit"],
+            resources: [.process("Resources")],
             swiftSettings: uiSettings
         ),
         .target(name: "WatchFeatureWorkout", dependencies: featureSpine, swiftSettings: uiSettings),
@@ -179,6 +198,7 @@ let package = Package(
                 "LedgerActivityKit",
                 dependenciesProduct
             ],
+            resources: [.process("Resources")],
             swiftSettings: uiSettings
         ),
         .target(

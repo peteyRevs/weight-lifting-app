@@ -1,0 +1,62 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld fixture sets" : {
+      "comment" : "A counted string: English has the forms one and other",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld fixture set"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld fixture sets"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "fixture.next %@" : {
+      "comment" : "A formatted string with a text argument. Its English text differs from its key, so a test can tell the catalog's text from the key a failed lookup falls back to",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next: %@"
+          }
+        }
+      }
+    },
+    "fixture.plain" : {
+      "comment" : "A plain string whose English text differs from its key",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resolved from the catalog"
+          }
+        }
+      }
+    },
+    "fixture.week %lld of %lld" : {
+      "comment" : "A formatted string with two numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week %lld of %lld"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -53,7 +53,7 @@ workout-app/
 ├── LedgerKit/                      # ONE local Swift package, many targets
 │   ├── Package.swift
 │   ├── Sources/
-│   │   ├── LedgerAppKit/           # umbrella: iOS composition root (imports every iOS feature)
+│   │   ├── LedgerAppKit/           # umbrella: iOS composition root, tab shell, route mapping (imports every iOS feature)
 │   │   ├── LedgerWatchAppKit/      # umbrella: watch composition root
 │   │   ├── LedgerDomain/           # models, WorkoutEngine, progression, 1RM, plate math, protocols, seed catalog JSON
 │   │   ├── LedgerPersistence/      # GRDB schema, migrations, repositories, queries
@@ -75,7 +75,7 @@ workout-app/
 │   │   └── LedgerSnapshotTesting/  # snapshot helpers + device/theme/type matrix (test-only)
 │   └── Tests/                      # one test target per source target
 ├── Apps/
-│   ├── Ledger/                     # iOS app shell: composition root, tabs, routes, Info.plist, entitlements
+│   ├── Ledger/                     # iOS app target: `@main`, assets, Info.plist, entitlements (root, tabs and routes are in LedgerAppKit)
 │   ├── LedgerWatch/                # watchOS app shell: composition root, WKApplicationDelegate
 │   ├── LedgerWidgets/              # iOS widget + Live Activity extension
 │   └── LedgerWatchWidgets/         # watch complications / Smart Stack
@@ -156,16 +156,51 @@ targets only.
   (`AppComposition`, F07): it assigns
   `HKHealthStore.workoutSessionMirroringStartHandler` **synchronously at the
   top of launch** (R1 §2.5 gotcha 4), then opens and migrates the database.
-  Seeding, settings and the WatchConnectivity session delegate follow the
-  first frame.
+  Seeding, settings, the live workout's recovery (§6) and the WatchConnectivity
+  session delegate follow the first frame.
 - Both apps share the database half of their launch: `DatabaseLaunch`
   (`LedgerPersistence`, a `@MainActor` observable type) opens the file (product
   decision #29), seeds the catalog (#28), loads the settings and retries on
   return to the foreground; each composition root keeps its platform steps.
-- Root view: `TabView` with four tabs (Today · Program · Library · History),
-  each owning a `NavigationStack` keyed by that feature's `Route` enum.
-- Active workout is presented as a full-screen cover over the tab root;
-  "Minimize" dismisses the cover and Today shows "Resume · m:ss".
+- Root view (`LedgerAppKit`, F09): `AppRoot` draws the composition's state. Once
+  the database is open it draws `MainRoot`, the tab shell: a `TabView` with four
+  tabs (Today · Program · Library · History; `AppTab`), each owning a
+  `NavigationStack`. Every stack is keyed by the one `AppDestination` enum
+  (`LedgerAppKit/Routes.swift`), which lists every screen a stack can push: any
+  tab can show any screen, and a route can open a screen in another tab.
+  `AppRouter` (`@MainActor @Observable`) holds the selected tab and one path per
+  tab; `open(_:in:)` selects a tab and pushes there, and a tab keeps its stack
+  while another is selected. The tab bar is the system's. Its tint is
+  `LedgerColor.accentText`, the accent as text and icons may wear it (AA in both
+  themes: the accent on dark, `#B2390E` on light), and the tint ends at the tab
+  bar: `AppTabs` sets it back to the system's on each tab's stack
+  (`tabContentTint()`), so nothing a tab draws is tinted unless the screen
+  tints it (product decision #17).
+- Routing (M1 convention, 2026-10-04): a feature exposes
+  `public nonisolated enum <Feature>Route: Hashable, Sendable` and
+  `<Feature>Root(onRoute: @escaping @MainActor (<Feature>Route) -> Void)`.
+  `onRoute` is synchronous: a route is an intent, never a navigation call.
+  Every public entry view of a feature is named `…Root`, whether it is a tab's
+  root or a screen a stack pushes (Library's exercise history, say): it owns
+  its store and takes `onRoute`.
+- The resolver is `MainRoot`. It owns the router and the presenters of the
+  features that present themselves over the tabs, builds each feature's
+  `onRoute` from them, and hands it to `AppTabs`, which passes it to the
+  feature's root. What a route does is written once per feature, in
+  `LedgerAppKit/Routes+<Feature>.swift`, as calls on the router and the
+  presenters; the screens it pushes are cases of `AppDestination`, and until a
+  screen's feature lands its case draws a placeholder that names it
+  (`AppTabs.screen(for:)`). `MainRoot` has three members so that the features'
+  changes to it do not meet: `body` (what is presented over everything: the
+  workout's cover), `content` (which screen the root shows: the "no active
+  program" branch) and `tabs`.
+- A feature never presents another feature and never sees the router. A
+  feature with no exit the app must resolve (onboarding) has no route. A
+  feature that presents itself over the tabs (the workout) exports its
+  presenter and modifier, which `MainRoot` applies; its start and resume entry
+  points are synchronous intents as well, drained by its own `.task`.
+- Active workout is presented as a full-screen cover over the tab root
+  (`MainRoot`); "Minimize" dismisses the cover and Today shows "Resume · m:ss".
 - Live Activity (rest + elapsed) is started inside the mirroring start
   handler (10 s budget) and updated sparsely (R1 §4.1).
 
@@ -219,7 +254,7 @@ Entities (all `struct`, `Equatable`, `Sendable`, `Codable`):
 | `DayTemplate` | id, name, tag, slots: [Slot] |
 | `Slot` | id, exercise, sets (1–12), reps (1–30), repsHi (2–40), rpe (5–10 by 0.5), rest (30–300 s by 15), progression (`linear/double/fixed`), startLoad, step?, isSupersetWithPrevious, dropSets (0/1), misses: Set<Int> |
 | `Prescription` | load, sets, reps, rpe, rest, step, progression, isHeld, isDeload — computed by `ProgressionRules.prescribe(week:slot:)` per spec §7.2 |
-| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`) |
+| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`), programUpdates: [SlotID: ExerciseID] (swaps with "Also update program"; live only, applied to the workout's own program when it is saved, §6) |
 | `WorkoutExercise` | id, exercise snapshot (id, name, equipment, step, rest, rpe, isSupersetWithPrevious), target (sets, reps, load), sets: [LoggedSet], lastPerformance? |
 | `LoggedSet` | id, weight, reps, kind (`working/drop/added/warmup`), doneAt? |
 | `WorkoutSummary` | elapsed, doneSets, totalSets, volume, prs: [PersonalRecord], rows for the receipt |
@@ -236,7 +271,7 @@ Pure services in `LedgerDomain` (all unit-tested to ~100 %):
 - `PersonalRecords.detect(finished:history:)`.
 - `PlateMath.perSide(load:bar:plates:)`.
 - `TimeEstimate.minutes(day:)` — one formula (decision #14).
-- `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days.
+- `WeekCalendar` — civil startDate → current week index, week boundaries (each the start of its own calendar day, ADR-007), off-schedule days, the next scheduled day (`nextScheduledDay(after:in:)` → `ScheduledDay`).
 - `MissTracking.update(slot:workout:)` — decision #5.
 - `ProgramTemplates.program(_:catalog:id:newID:)` — onboarding's first block (F08): a 3-, 4-, 5- or 6-day split for one of four goals, 8 weeks with a deload last; `both` on four days is spec §6.4. Exercises are matched by catalog name and start loads copied from the catalog (decisions #21, #24); `startDate(containing:weekStart:calendar:)` gives decision #18's date and `preview(days:)` the days onboarding lists.
 
@@ -264,7 +299,7 @@ public enum Effect: Hashable, Sendable {
     case updateLiveActivity
     case persist(EventEnvelope)         // before .transmit
     case transmit(EventEnvelope)
-    case materialize(WorkoutState)      // F05 writes the rows and the receipt (summary)
+    case materialize(WorkoutState)      // the save: rows, records, misses, program updates, the log dropped
     case discardLog
 }
 ```
@@ -272,17 +307,50 @@ public enum Effect: Hashable, Sendable {
 The shipped API is in `LedgerDomain/Engine` (with `WorkoutEventStore` in `LedgerDomain/Protocols`); the
 rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed envelopes, the host loop).
 
-- Both apps hold a `WorkoutSessionActor` (in `LedgerSync`) that owns the log,
-  applies local intents (creating envelopes with its `DeviceID`, next `seq` and
-  a hybrid-logical-clock `wallClock`), rebuilds by `replay` on received
-  envelopes, and publishes `WorkoutState` as an `AsyncStream`.
-- The rest timer is `RestTimer(endsAt: Date, total: Duration)`. Views render
-  with `TimelineView`/`Text(timerInterval:)`; no tick events cross devices.
-- On `finished`, `LedgerPersistence` materialises normalized rows and computes
-  PRs and misses; the event log is compacted after that transaction commits.
-- Recovery: on launch, each log in `WorkoutEventStore.uncompactedWorkoutIDs()`
-  is replayed: live → resume, ended → materialise or drop; both apps also hook
-  HealthKit recovery (`handleActiveWorkoutRecovery` / `shouldHandleActiveWorkoutRecovery`).
+- The live workout is hosted by `LocalWorkoutSessionActor` (`LedgerSync`; on the iPhone since F10, on the
+  watch with F18): the real `WorkoutSessionClient` (`LedgerDomain/Protocols`; key `workoutSession`, §13).
+  Screens call it (`start`, `apply`, `finish`, `discard`, `current`) and watch `updates()`: a new stream per
+  call, which starts with the workout as it stands and then carries one `WorkoutSessionUpdate` (the state, and
+  the haptics to play) for each event the engine accepts. `FakeWorkoutSessionClient` (`LedgerFakes`) is the same
+  engine without a store; `WorkoutSessionClientContract` (`LedgerTestSupport`) holds both to one set of rules.
+- An own action is stamped with the device's next `seq` and its `HybridLogicalClock` (`LedgerDomain/Engine`),
+  reduced, stored, and only then published. The host takes one operation at a time, each in a task it owns, so
+  two callers never start from the same state and a cancelled caller loses nothing; its memory changes only
+  once the store has taken the envelope. F17 adds the envelopes it receives (`replay`, then
+  `effects(from:to:)`) and the transport.
+- The rest timer is `RestTimer(endsAt: Date, total: Duration)`; no tick events cross devices. On the
+  phone the workout's store reads the injected date once a second while a rest is shown, on the injected
+  clock (`WorkoutStore.keepRestTime()`), and the rest panel is the presentation's reading of the rest at that
+  moment (`RestTimer.remaining(at:)`, `fraction(at:)`). Only the panel's view observes that moment
+  (`WorkoutStore.restPanel`); the root, the header and the page are not drawn again at a tick. No view of
+  the rest reads a clock: there is no `TimelineView`. (The header's elapsed time is `Text(timerInterval:)`.)
+- On `finished`, the host stores the envelope, then saves the workout in one transaction
+  (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`, F10 S3): the rows, the records it detects, the
+  slots' misses from `MissTracking` on the program as stored then (when it is the active one), the program
+  changes its swaps asked for (`WorkoutState.programUpdates`: a slot's exercise, only on the workout's own
+  program, and what cannot be applied is logged and skipped), and the end of its log. Only then does it publish
+  the ending update. So over the database a workout is in history and no longer live, or neither, and a
+  discarded workout changes no program. A save that fails changes nothing: it leaves the end in the log and,
+  in this process, the workout in front of every reader as it stood, where nothing can be started over it; the
+  next `finish`, any later change to the workout, the next return to the foreground and the next launch each
+  try again. After a relaunch the unsaved workout is no longer shown and another can be started; the launch
+  step saves the first when it can. An end is complete when its log is gone from the host's own event store,
+  and the host does not take the repository's word for it: after the save it looks there (one read), and where
+  the log is still listed, because the repository holds no log or holds another store's (no composition of the
+  app), it compacts in a second step, which can fail by itself and is retried the same way.
+- Recovery is `LocalWorkoutSessionActor.resumeFromStore()`: the launch step `LaunchStep.resumeWorkout`
+  (after `loadSettings`; the launch owns its task), or the first protocol call when the launch has not run it,
+  and every call waits for it. The clock continues from `WorkoutEventStore.newestWallClock()`, and each log in
+  `uncompactedWorkoutIDs()` is replayed: live → resume (no haptic, no effect), finished → materialise with
+  the log dropped in the same transaction (a workout found already saved is saved again, which changes
+  nothing unless its program was edited since), discarded → compact; a log that replays to nothing, or an
+  ended one with rows this version cannot read, is kept. Every log is read first, and the ended ones are then
+  completed in the order their workouts started, so a later workout's misses and swaps are written last. Both
+  apps also hook HealthKit recovery (`handleActiveWorkoutRecovery` /
+  `shouldHandleActiveWorkoutRecovery`).
+- `StartWorkoutUseCase` (`LedgerDomain/UseCases`) is "Start workout": it resumes the day's live workout
+  (rule 17), reports a conflict with another day's, or builds the session with `SessionBuilder` from what is
+  stored and starts it.
 
 ---
 
@@ -303,7 +371,7 @@ nullable `deleted_at` soft-delete for sync):
 | `workout`, `workout_exercise`, `logged_set` | finished history | yes |
 | `workout_health` | avg/max HR, active energy, HealthKit workout UUID | **never** (App Review 5.1.3(ii), R1 §3.4) |
 | `personal_record` | PRs, derived from `logged_set` and recomputed on a new device | never (F05) |
-| `workout_event` | live event log (envelopes) | never; compacted after finish |
+| `workout_event` | live event log (envelopes) | never; dropped in the transaction that saves the finished workout, or after a discard |
 | `settings` | single-row preferences + plate inventory | yes |
 | `device` | this device's `DeviceID`, name, last sync marks | never |
 
@@ -405,7 +473,8 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 - `LedgerColor` — semantic tokens (`ground`, `surface`, `ink` at fixed alphas, `hairline`, `accent`, `accentText`, `watch…`) with light + dark values from §8.1–8.3, nudged where needed so every text token meets WCAG AA (F06 notes, decision 7). Adaptive colours are a dynamic `UIColor` on iOS, with stronger ink alphas under Increase Contrast; watchOS has one (dark) appearance. Accent usage rule: once per screen, on the primary action.
 - `LedgerFont` — 21 roles (`display` … `numeralS`, `watch…`) with the v2 prototype's size, `wght`, `wdth`, line height and tracking. The Archivo variable font ships once, as a `LedgerDesign` resource; the apps' `UIAppFonts` point into that resource bundle (`LedgerKit_LedgerDesign.bundle/…`), and previews and package tests register it on first use (`FontRegistration`). Axes are set with a `CTFontDescriptor` carrying `kCTFontVariationAttribute` (`'wght'` 2003265652, `'wdth'` 2003072104), wrapped as `Font(ctFont)`. Views use `.ledgerFont(.role)`, which reads Dynamic Type and Bold Text from the environment (size on SwiftUI's custom-font curve for the role's text style; Bold Text = one weight step up) and applies tracking, case and `lineHeight`. The `Font` entry points take the text size explicitly (`LedgerFont.font(_:dynamicTypeSize:)`), because a Core Text instance cannot follow the environment by itself. Tabular figures for every numeral role; watch roles never go below 11 pt.
 - `LedgerSpacing`, `LedgerRadius` (pill 999, card 26, sheet 28), `LedgerHairline`, `LedgerMotion` (`snappy`, `ledgerBuzz(trigger:)` with a Reduce Motion opacity variant).
-- Components: `PrimaryButton`, `PillButton`, `IconPillButton`, `HairlineList/Row`,
+- Components: `PrimaryButton`, `PillButton` (with a full-width form that stands beside a primary
+  button), `IconPillButton`, `HairlineList/Row`,
   `SetRow` (with `SetRowHeader` and `SetRowSteppers`), `RestRing`, `WeekStrip`, `StatTile`,
   `ProgressSegments`, `Eyebrow`, `SheetChrome` (the swap sheet's frame), `EmptyState`, and for the
   watch `WatchPrimaryButton`, `WatchRestRing` (the phone ring's geometry at the watch's
@@ -439,8 +508,9 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 | FeatureSettings | Settings | units, rest, plate inventory, toggles, export CSV, Health status |
 | WatchFeatureWorkout | Watch — before workout / set ready / rest timer / session list / end workout / summary | watch UI over the same `WorkoutSessionActor` |
 
-Each feature exposes `public struct <Feature>Root: View` and `public enum
-<Feature>Route`. The app shell maps routes across features.
+Each feature exposes its entry views as `public struct <Name>Root: View`, and
+a `public enum <Feature>Route` when it has an exit the app must resolve;
+onboarding has none. `MainRoot` resolves the routes (§4).
 
 ---
 
@@ -484,7 +554,8 @@ dependencies.
 | Cold launch to Today (iPhone 15 class) | < 600 ms |
 | Set logged → other device reflects (reachable) | < 1 s |
 | Any stats query (20 k sets) | < 50 ms |
-| Recording a new workout at the end of history, its record replay included (20 k sets) | < 50 ms |
+| Recording a new workout at the end of history, its record replay included, and with what a finish adds: its program updates, its misses and its log dropped (20 k sets) | < 50 ms |
+| An `apply` on the session host, its append to the store included (F10) | < 30 ms |
 | A History write that re-detects records: edit, delete, late or moved workout (20 k sets, 400 workouts, 5 lifts; p95, simulator, Debug) | < 250 ms |
 | Watch set-ready screen update on crown detent | next frame |
 | App size (iOS) | < 15 MB |

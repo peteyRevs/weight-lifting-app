@@ -1,0 +1,696 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "#" : {
+      "comment" : "Heading of the column of set numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#"
+          }
+        }
+      }
+    },
+    "%@ KG" : {
+      "comment" : "The weight stepper's step, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ KG"
+          }
+        }
+      }
+    },
+    "%@ LB" : {
+      "comment" : "The weight stepper's step, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ LB"
+          }
+        }
+      }
+    },
+    "%@ kilograms" : {
+      "comment" : "Spoken weight, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kilograms"
+          }
+        }
+      }
+    },
+    "%@ pounds" : {
+      "comment" : "Spoken weight, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ pounds"
+          }
+        }
+      }
+    },
+    "%lld reps" : {
+      "comment" : "Spoken number of repetitions",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld rep"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reps"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld × %lld" : {
+      "comment" : "An exercise's number of sets, then its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ kg · RPE %@" : {
+      "comment" : "What the program prescribes: sets, reps, the load in kilograms, then the effort from 5 to 10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ kg · RPE %@"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ lb · RPE %@" : {
+      "comment" : "What the program prescribes: sets, reps, the load in pounds, then the effort from 5 to 10",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ lb · RPE %@"
+          }
+        }
+      }
+    },
+    "+ Add set" : {
+      "comment" : "Button that adds a set to the exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Add set"
+          }
+        }
+      }
+    },
+    "+30s" : {
+      "comment" : "Button that adds 30 seconds to the rest timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+30s"
+          }
+        }
+      }
+    },
+    "1 REP" : {
+      "comment" : "The reps stepper's step",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 REP"
+          }
+        }
+      }
+    },
+    "Add 30 seconds" : {
+      "comment" : "Spoken label of the +30s button",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add 30 seconds"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "comment" : "Closes the workout screen when the workout cannot be shown",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "Close this screen and try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close this screen and try again."
+          }
+        }
+      }
+    },
+    "Couldn't discard this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't discard this workout"
+          }
+        }
+      }
+    },
+    "Couldn't open this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't open this workout"
+          }
+        }
+      }
+    },
+    "Couldn't save that change" : {
+      "comment" : "Title of the alert shown when a tap on the workout could not be saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save that change"
+          }
+        }
+      }
+    },
+    "Couldn't start the new workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start the new workout"
+          }
+        }
+      }
+    },
+    "Couldn't start this workout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't start this workout"
+          }
+        }
+      }
+    },
+    "D" : {
+      "comment" : "A drop set's label in the column of set numbers",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "D"
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "comment" : "Ends the workout without saving it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
+          }
+        }
+      }
+    },
+    "Discard and start new" : {
+      "comment" : "Discards the workout that is running and starts the one that was asked for",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard and start new"
+          }
+        }
+      }
+    },
+    "Drop set" : {
+      "comment" : "Spoken name of a drop set's row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set"
+          }
+        }
+      }
+    },
+    "Drop set · %@ kg × %lld" : {
+      "comment" : "The drop set that comes after the rest: its weight in kilograms, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set · %@ kg × %lld"
+          }
+        }
+      }
+    },
+    "Drop set · %@ lb × %lld" : {
+      "comment" : "The drop set that comes after the rest: its weight in pounds, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop set · %@ lb × %lld"
+          }
+        }
+      }
+    },
+    "Elapsed time" : {
+      "comment" : "Spoken label of the workout's running time",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed time"
+          }
+        }
+      }
+    },
+    "End workout?" : {
+      "comment" : "Title of the dialog the Finish button opens",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End workout?"
+          }
+        }
+      }
+    },
+    "Exercise %lld of %lld" : {
+      "comment" : "The current exercise's place in the workout, counted from 1, then the number of exercises",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exercise %lld of %lld"
+          }
+        }
+      }
+    },
+    "Finish" : {
+      "comment" : "Button that asks how to end the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish"
+          }
+        }
+      }
+    },
+    "It's still in progress. Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It's still in progress. Try again."
+          }
+        }
+      }
+    },
+    "Keep lifting" : {
+      "comment" : "Closes the dialog and returns to the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep lifting"
+          }
+        }
+      }
+    },
+    "Last" : {
+      "comment" : "Label before what was done in the last workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last"
+          }
+        }
+      }
+    },
+    "Log drop set" : {
+      "comment" : "Spoken label of the button that logs a drop set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log drop set"
+          }
+        }
+      }
+    },
+    "Log set %lld" : {
+      "comment" : "Spoken label of the button that logs a set: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log set %lld"
+          }
+        }
+      }
+    },
+    "Minimize" : {
+      "comment" : "Button that closes the workout screen and keeps the workout running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minimize"
+          }
+        }
+      }
+    },
+    "No history yet" : {
+      "comment" : "Shown after Last for an exercise never logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No history yet"
+          }
+        }
+      }
+    },
+    "Nothing was changed. Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing was changed. Try again."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "REMAINING" : {
+      "comment" : "Heading of the exercises still to come",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REMAINING"
+          }
+        }
+      }
+    },
+    "Repeat" : {
+      "comment" : "Button that gives every set the last workout's weight and reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeat"
+          }
+        }
+      }
+    },
+    "Rest over" : {
+      "comment" : "Shown on the rest timer when it has reached zero",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest over"
+          }
+        }
+      }
+    },
+    "Resting" : {
+      "comment" : "Shown on the rest timer while time is left",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resting"
+          }
+        }
+      }
+    },
+    "Resume it" : {
+      "comment" : "Opens the workout that is already running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume it"
+          }
+        }
+      }
+    },
+    "Set %lld" : {
+      "comment" : "Spoken name of a set's row: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld"
+          }
+        }
+      }
+    },
+    "Set %lld · %@ kg × %lld" : {
+      "comment" : "The set that comes after the rest: its number, its weight in kilograms, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld · %@ kg × %lld"
+          }
+        }
+      }
+    },
+    "Set %lld · %@ lb × %lld" : {
+      "comment" : "The set that comes after the rest: its number, its weight in pounds, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld · %@ lb × %lld"
+          }
+        }
+      }
+    },
+    "Skip rest" : {
+      "comment" : "Button that ends the rest timer",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip rest"
+          }
+        }
+      }
+    },
+    "TARGET" : {
+      "comment" : "Label before what the program prescribes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TARGET"
+          }
+        }
+      }
+    },
+    "This day has no exercises yet." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This day has no exercises yet."
+          }
+        }
+      }
+    },
+    "This day is no longer in your program." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This day is no longer in your program."
+          }
+        }
+      }
+    },
+    "Try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again."
+          }
+        }
+      }
+    },
+    "Undo drop set" : {
+      "comment" : "Spoken label of the button that un-logs a drop set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo drop set"
+          }
+        }
+      }
+    },
+    "Undo set %lld" : {
+      "comment" : "Spoken label of the button that un-logs a set: the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo set %lld"
+          }
+        }
+      }
+    },
+    "Workout progress" : {
+      "comment" : "Spoken label of the workout's progress bar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workout progress"
+          }
+        }
+      }
+    },
+    "You have a workout in progress" : {
+      "comment" : "Title of the dialog shown when starting a workout while another is running",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have a workout in progress"
+          }
+        }
+      }
+    },
+    "Your program's block has ended." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your program's block has ended."
+          }
+        }
+      }
+    },
+    "Your workout in progress was discarded." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workout in progress was discarded."
+          }
+        }
+      }
+    },
+    "Your workout in progress was kept." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workout in progress was kept."
+          }
+        }
+      }
+    },
+    "kg" : {
+      "comment" : "Kilograms, as a column heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kg"
+          }
+        }
+      }
+    },
+    "lb" : {
+      "comment" : "Pounds, as a column heading",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lb"
+          }
+        }
+      }
+    },
+    "reps" : {
+      "comment" : "Heading of the column of repetitions",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reps"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
