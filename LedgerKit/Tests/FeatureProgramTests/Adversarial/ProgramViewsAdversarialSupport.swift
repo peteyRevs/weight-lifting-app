@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -14,21 +15,31 @@
         var isBold = false
         var isRightToLeft = false
 
+        /// The narrower of the two phones.
+        static let narrowWidth: CGFloat = 375
+
         /// The widths swept: an iPhone 17's, and a 375 pt phone's.
-        static let widths: [CGFloat] = [SnapshotConfig.phoneWidth, 375]
+        static let widths: [CGFloat] = [SnapshotConfig.phoneWidth, narrowWidth]
 
         var testDescription: String {
             "\(size), \(Int(width)) pt" + (isBold ? ", Bold Text" : "") + (isRightToLeft ? ", right to left" : "")
         }
 
-        /// A size on both widths, each plain, with Bold Text, and right to left.
+        /// A size on both widths, each plain, with Bold Text, and right to left. On the hosted PR runner
+        /// (`TestSweep`) three of the six: the iPhone 17 plain, and the 375 pt phone with Bold Text and right
+        /// to left.
         static func sweep(_ size: DynamicTypeSize) -> [ViewsSetting] {
-            widths.flatMap { width in
+            let all = widths.flatMap { width in
                 [
                     ViewsSetting(size: size, width: width),
                     ViewsSetting(size: size, width: width, isBold: true),
                     ViewsSetting(size: size, width: width, isRightToLeft: true)
                 ]
+            }
+            return TestSweep.subset(all) { setting in
+                setting.width == narrowWidth
+                    ? setting.isBold || setting.isRightToLeft
+                    : !setting.isBold && !setting.isRightToLeft
             }
         }
     }

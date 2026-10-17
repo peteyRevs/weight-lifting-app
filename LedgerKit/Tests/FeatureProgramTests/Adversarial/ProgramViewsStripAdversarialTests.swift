@@ -193,7 +193,7 @@
 
         @Test(
             "On a 375 and a 402 pt phone, at every size: no word cut, equal cells, every target 44 pt",
-            arguments: programs, DynamicTypeSize.allCases
+            arguments: programs, ProgramViewsCutAdversarialTests.stripSizes
         )
         func phones_everySize_wholeEqualAnd44(_ program: String, _ size: DynamicTypeSize) throws {
             let cells = try Self.cells(of: program)

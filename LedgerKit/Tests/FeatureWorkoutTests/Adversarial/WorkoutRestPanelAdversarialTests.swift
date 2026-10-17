@@ -58,7 +58,7 @@
 
         @Test(
             "At every text size: no word cut, nothing outside the phone or over another, both buttons 44 pt",
-            arguments: everySize
+            arguments: TestSweep.sizes(everySize)
         )
         func panel_everySize(_ size: DynamicTypeSize) throws {
             for (name, model) in try Self.models() {
