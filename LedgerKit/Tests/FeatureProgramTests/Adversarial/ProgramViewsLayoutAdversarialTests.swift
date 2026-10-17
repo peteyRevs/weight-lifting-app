@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -13,7 +14,8 @@
     /// another stop.
     @Suite("Adversarial F11 S9 · frames at every size and width", .serialized, .tags(.feature))
     struct ProgramViewsLayoutAdversarialTests {
-        nonisolated static let sizes = DynamicTypeSize.allCases
+        /// Every text size; on the hosted PR runner (`TestSweep`) the four representatives.
+        nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
 
         static func faults(of view: some View, at size: DynamicTypeSize) -> [String] {
             ViewsSetting.sweep(size).flatMap { setting in
@@ -40,13 +42,13 @@
 
         @Test(
             "Each of this tester's library states lays out soundly, the 224 rows too",
-            arguments: LibraryState.allCases, [
+            arguments: LibraryState.allCases, TestSweep.sizes([
                 DynamicTypeSize.xSmall,
                 .large,
                 .xxxLarge,
                 .accessibility3,
                 .accessibility5
-            ]
+            ])
         )
         func library_states_layOutSoundly(_ state: LibraryState, _ size: DynamicTypeSize) throws {
             let faults = try Self.faults(of: ExercisePickerParts(model: state.model()), at: size)

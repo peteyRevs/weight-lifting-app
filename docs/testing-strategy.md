@@ -447,7 +447,15 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   on the first 40 seeds: PR CI gives every seeded test that many
   (`TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT`, `docs/ci-cd.md`). A test target
   spells the check once (`TestLane.runsSlowTests`; `TestLane.isNightly` in
-  LedgerSyncTests).
+  LedgerSyncTests). A sweep of a hosted view over text sizes or settings
+  (width, Bold Text, direction), each case a check of its own, takes its list
+  through `TestSweep` (LedgerTestSupport): PR CI sets
+  `TEST_RUNNER_LEDGER_SWEEP=pr` and keeps each sweep's representatives, a
+  subset of the full list; unset, as in the local gate and the nightly, the
+  list is whole. A check over all the sizes at once (the least room, a
+  boundary between two arrangements, a control), or one that reads a list's
+  count or positions, keeps its list whole; a test pinned to a finding at a
+  size names that size (`TestSweep.sizes(_:also:)`).
 
 | Lane | Plans | Runs |
 |---|---|---|
