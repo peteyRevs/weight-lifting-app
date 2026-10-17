@@ -79,24 +79,26 @@ authoritative; the plan differs:
   - *Sweeps on the runner (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `Check` sets
     `TEST_RUNNER_LEDGER_SWEEP=pr`, which the test runner reads as `LEDGER_SWEEP` through one helper,
     `TestSweep` in `LedgerTestSupport`. There a hosted view's sweep over text sizes keeps the smallest,
-    `.large`, `.xxxLarge` and the largest of its list (and its own ends), and the two setting sweeps
-    (`LayoutSetting` in FeatureWorkoutTests, `ViewsSetting` in FeatureProgramTests) keep the iPhone 17 plain
-    beside the 375 pt phone with Bold Text and right to left. Every reduced list is a subset of the full one.
-    Unset, as in the full local gate (§4), the nightly and `swift test`, every sweep runs whole; to run what
-    `Check` runs, export both `TEST_RUNNER_` variables before `scripts/check.sh`. Checks over all sizes at
-    once (the least room, a switch between arrangements, a control) keep their lists. Why: on `main` the
+    `.large`, `.xxxLarge` and `.accessibility5`, plus any size a test names because a finding was seen
+    there. The two setting sweeps (`LayoutSetting` in FeatureWorkoutTests, `ViewsSetting` in
+    FeatureProgramTests) keep the iPhone 17 plain beside the 375 pt phone with Bold Text and right to left.
+    Every reduced list is a subset of the full one. Unset, as in the full local gate (§4), the nightly and
+    `swift test`, every sweep runs whole; to run what `Check` runs, export both `TEST_RUNNER_` variables
+    before `scripts/check.sh`. Checks over all sizes or settings at once keep their lists: the least room,
+    the compact rest panel's switch between its two arrangements (`LayoutSetting.everySetting`), controls.
+    A test that reads a swept list's count or positions must take its list whole. Why: on `main` the
     iOS test step took about 1,255–1,293 s on a developer Mac at the plan's seeds, so a PR's first run (cold
     build) reached the deadline whatever its code; the sweeps were the largest part. Measured on the Mac
-    with 40 seeds: 903 s with every sweep, 576 s under `pr` (FeatureProgramTests 374 → 196 s of cases,
-    FeatureWorkoutTests 185 → 64 s). The rest is the UI smoke (65 s), launches, the seeded suites and
+    with 40 seeds: 903 s with every sweep, 595 s under `pr` (FeatureProgramTests 374 → 205 s of cases,
+    FeatureWorkoutTests 185 → 66 s). The rest is the UI smoke (65 s), launches, the seeded suites and
     single-case hosted tests, which no sweep reaches.
   - *Deadline (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `LEDGER_XCODEBUILD_DEADLINE` is
     3,120 s; the step's timeout is 54 min, 2 min after the deadline, and the job's 59. A PR's first run
     restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
-    script tests. Under both runner variables the tests take 576 s on a developer Mac. The runner took 2.0
+    script tests. Under both runner variables the tests took 576 s on a developer Mac when the deadline was set (595 s after the review's fix round, which gave findings and boundaries back some sizes and settings). The runner took 2.0
     to 3.2 times the Mac's time for the same commits on 2026-10-09 (3.6 for #49, whose suites the Mac run
-    lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, and 5 min
-    more is 3,120 s. A run stopped by the deadline costs its minutes and a re-run's; a green run bills
+    lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, plus 5 min
+    is about 3,086 s, set to 3,120 s. At 595 s the same sum is about 2,834 s, 286 s inside. A run stopped by the deadline costs its minutes and a re-run's; a green run bills
     only what it uses, so headroom costs nothing until something hangs (then 10 more paid minutes than at
     2,520 s). The deadline was 2,400 s until 2026-10-09 and 2,520 s until 2026-10-17; at 2,400 s two first
     runs of 2026-10-09 were interrupted in their tests with no test failing (builds of 1,140 and 1,145 s;

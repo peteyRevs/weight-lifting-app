@@ -453,7 +453,9 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   `TEST_RUNNER_LEDGER_SWEEP=pr` and keeps each sweep's representatives, a
   subset of the full list; unset, as in the local gate and the nightly, the
   list is whole. A check over all the sizes at once (the least room, a
-  boundary between two arrangements, a control) keeps its list whole.
+  boundary between two arrangements, a control), or one that reads a list's
+  count or positions, keeps its list whole; a test pinned to a finding at a
+  size names that size (`TestSweep.sizes(_:also:)`).
 
 | Lane | Plans | Runs |
 |---|---|---|

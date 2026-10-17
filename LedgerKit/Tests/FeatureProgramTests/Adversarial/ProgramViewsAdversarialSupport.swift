@@ -15,8 +15,11 @@
         var isBold = false
         var isRightToLeft = false
 
+        /// The narrower of the two phones.
+        static let narrowWidth: CGFloat = 375
+
         /// The widths swept: an iPhone 17's, and a 375 pt phone's.
-        static let widths: [CGFloat] = [SnapshotConfig.phoneWidth, 375]
+        static let widths: [CGFloat] = [SnapshotConfig.phoneWidth, narrowWidth]
 
         var testDescription: String {
             "\(size), \(Int(width)) pt" + (isBold ? ", Bold Text" : "") + (isRightToLeft ? ", right to left" : "")
@@ -34,7 +37,8 @@
                 ]
             }
             return TestSweep.subset(all) { setting in
-                setting.width == widths.min() ? setting.isBold || setting.isRightToLeft
+                setting.width == narrowWidth
+                    ? setting.isBold || setting.isRightToLeft
                     : !setting.isBold && !setting.isRightToLeft
             }
         }

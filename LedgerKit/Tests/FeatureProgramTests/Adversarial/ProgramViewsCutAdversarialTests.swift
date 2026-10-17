@@ -23,6 +23,13 @@
             also: [.xLarge, .xxLarge, .accessibility1, .accessibility2]
         )
 
+        /// The search field's sizes: those, and on the runner too the two besides the largest that FINDING
+        /// F11-S9-2 was seen at.
+        nonisolated static let searchFieldSizes = TestSweep.sizes(
+            DynamicTypeSize.allCases,
+            also: [.accessibility3, .accessibility4]
+        )
+
         /// The lines of `cut` for a builder's page in every setting of `size`: the strip's cells, or the rest.
         static func cutInBuilder(_ model: ProgramBuilderModel, at size: DynamicTypeSize, cells: Bool) -> [String] {
             let page = ProgramPage(model: model) { _ in }
@@ -193,7 +200,10 @@
         /// a "q"'s tail stands on the outline (looked at once as a picture). `PillButton` keeps
         /// `LedgerSpacing.s` above and below its words; this asks for `LedgerSpacing.xs`. Fails at those
         /// three sizes.
-        @Test("The search field's text stands at least 4 pt inside its pill, above and below", arguments: sizes)
+        @Test(
+            "The search field's text stands at least 4 pt inside its pill, above and below",
+            arguments: searchFieldSizes
+        )
         func searchField_textStandsInsideItsPill(_ size: DynamicTypeSize) throws {
             let pill = try Self.height(of: Self.searchField(), at: size)
             let line = try Self.lineHeight(of: Self.searchField(), at: size)

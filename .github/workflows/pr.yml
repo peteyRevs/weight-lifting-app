@@ -124,9 +124,9 @@ jobs:
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3120: a
           # PR's first run builds cold (up to 1,221 s measured) after 125 s of script tests, and the tests
-          # below, seeds and sweeps cut (576 s on a developer Mac), take up to 1,440 s on a runner 2.5x
-          # slower (2-3.6x seen on 2026-10-09): about 2,786 s, which leaves 5 min. A stopped run costs a
-          # re-run; a green one bills only what it uses (docs/ci-cd.md, "Deadline").
+          # below, seeds and sweeps cut (576-595 s on a developer Mac), take up to 1,440-1,490 s on a runner
+          # 2.5x slower (2-3.6x seen on 2026-10-09): about 2,786-2,834 s, which leaves about 5 min. A
+          # stopped run costs a re-run; a green one bills only what it uses (docs/ci-cd.md, "Deadline").
           LEDGER_XCODEBUILD_DEADLINE: 3120
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a

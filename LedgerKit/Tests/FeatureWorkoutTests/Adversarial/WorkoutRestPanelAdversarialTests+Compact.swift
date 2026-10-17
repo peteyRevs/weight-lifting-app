@@ -61,7 +61,7 @@
         func buttons_sideBySide_exactlyWhereTheWordsFit(_ size: DynamicTypeSize) throws {
             let model = try RestPanelTests.model(.resting)
             let panel = PlacedRestPanel(model: model) { _ in }
-            for setting in LayoutSetting.sweep(size) {
+            for setting in LayoutSetting.everySetting(size) {
                 let buttons = setting.elements(of: panel).filter { $0.traits.contains(.button) }
                 try #require(buttons.count == 2)
                 let (extend, skip) = (buttons[0].frame, buttons[1].frame)
@@ -96,7 +96,7 @@
         func largest_nextSetIsSpokenNotDrawn() throws {
             let with = try RestPanelTests.model(.resting)
             let without = Self.model(with, next: nil)
-            for setting in LayoutSetting.sweep(.accessibility5) + LayoutSetting.sweep(.accessibility4) {
+            for setting in LayoutSetting.everySetting(.accessibility5) + LayoutSetting.everySetting(.accessibility4) {
                 let drawn = setting.elements(of: RestPanel(model: with) { _ in })
                 let bare = setting.elements(of: RestPanel(model: without) { _ in })
                 #expect(drawn.map(\.label) == ["Resting, Set 3, 200 pounds, 5 reps", "Add 30 seconds", "Skip rest"])
