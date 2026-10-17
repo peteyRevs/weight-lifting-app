@@ -90,14 +90,17 @@ authoritative; the plan differs:
     with 40 seeds: 903 s with every sweep, 576 s under `pr` (FeatureProgramTests 374 → 196 s of cases,
     FeatureWorkoutTests 185 → 64 s). The rest is the UI smoke (65 s), launches, the seeded suites and
     single-case hosted tests, which no sweep reaches.
-  - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 2,520 s; the step's timeout is 44 min and the job's 49.
-    A PR's first run restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after
-    about 125 s of script tests and before 10 s of catalogs and boot. Under both runner variables the
-    tests take 576 s on the Mac, about 1,040–1,150 s on a runner 1.8–2× slower, so a cold run ends at
-    2,322–2,508 s: 12–198 s inside the deadline, short of the 5 min wanted (the chore lists the options).
-    A warm run (570–750 s build) has about 10 min. At 2,400 s two first runs of 2026-10-09 were
-    interrupted in their tests with no test failing (builds of 1,140 and 1,145 s; the tests then needed
-    855 s and 1,497 s on the re-runs).
+  - *Deadline (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `LEDGER_XCODEBUILD_DEADLINE` is
+    3,120 s; the step's timeout is 54 min, 2 min after the deadline, and the job's 59. A PR's first run
+    restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
+    script tests. Under both runner variables the tests take 576 s on a developer Mac. The runner took 2.0
+    to 3.2 times the Mac's time for the same commits on 2026-10-09 (3.6 for #49, whose suites the Mac run
+    lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, and 5 min
+    more is 3,120 s. A run stopped by the deadline costs its minutes and a re-run's; a green run bills
+    only what it uses, so headroom costs nothing until something hangs (then 10 more paid minutes than at
+    2,520 s). The deadline was 2,400 s until 2026-10-09 and 2,520 s until 2026-10-17; at 2,400 s two first
+    runs of 2026-10-09 were interrupted in their tests with no test failing (builds of 1,140 and 1,145 s;
+    the tests then needed 855 s and 1,497 s on the re-runs).
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
