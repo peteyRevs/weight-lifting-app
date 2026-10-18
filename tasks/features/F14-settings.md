@@ -72,3 +72,8 @@ _Filled in by agents during delivery:_
   damaged column (`malformedColumn`) or invalid JSON (`DecodingError`). Fall back to `Settings.default` in
   memory, but never save it over the row: a later version, or the lifter, may still read it. Subscribe
   again after the lifter's next deliberate save.
+
+## Inputs from F08 (2026-10-04, S1)
+- A generated slot stores its start load in the unit of the day it was created, and `step == nil`, so after a unit
+  change in Settings a stored 45 lb reads 20.41 kg and steps as 20.41, 22.91, 25.41. F14 must decide what a unit
+  change does to stored start loads: convert and round to the new unit's step, or keep them exact.
