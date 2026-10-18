@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.10.0...v0.11.0) (2026-10-18)
+
+
+### Features
+
+* **program:** the builder's store, its save loop and its root (F11 S13) ([#63](https://github.com/peteyRevs/weight-lifting-app/issues/63)) ([b4364a8](https://github.com/peteyRevs/weight-lifting-app/commit/b4364a8e4d665eb094ba4da4518a661ddb1980e2))
+* **program:** the views of the Day editor and of its slot panel (F11 S10) ([#55](https://github.com/peteyRevs/weight-lifting-app/issues/55)) ([77b33ec](https://github.com/peteyRevs/weight-lifting-app/commit/77b33ec90d2cb0d67582e28cb5805cc0072acf6d))
+* **workout:** finishing a workout from the cover, with its save and a failed save (F10 S7a) ([#59](https://github.com/peteyRevs/weight-lifting-app/issues/59)) ([160989c](https://github.com/peteyRevs/weight-lifting-app/commit/160989ccf26618ae12a53501804f511ecd3e46e2))
+* **workout:** the rest panel under the cover, with haptics (F10 S6) ([#54](https://github.com/peteyRevs/weight-lifting-app/issues/54)) ([d3ea51a](https://github.com/peteyRevs/weight-lifting-app/commit/d3ea51a4c937f0b95fa35bf0f4712f09db312435))
+
+
+### Fixes
+
+* counted texts in Today, icons right to left, and three test chores (M1 batch B) ([#56](https://github.com/peteyRevs/weight-lifting-app/issues/56)) ([d30500d](https://github.com/peteyRevs/weight-lifting-app/commit/d30500dadf63a0ad30faab6a117659e6415f6194))
+* **design:** a name being edited keeps the tails of its letters ([#60](https://github.com/peteyRevs/weight-lifting-app/issues/60)) ([a3b8ab6](https://github.com/peteyRevs/weight-lifting-app/commit/a3b8ab655d1a4303b77f5c29995d2c790f95edf4))
+
 ## [0.10.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.9.0...v0.10.0) (2026-10-10)
 
 
