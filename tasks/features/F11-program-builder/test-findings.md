@@ -1380,3 +1380,55 @@ killed (below).
 | `xcodebuild test -testPlan PR -only-testing:` my suites (before the split into files) | 65, as intended: only F11-S13-1 failed; the root suite passed |
 | mutation driver, 10 mutants at 40 seeds | each killed |
 | `scripts/check.sh` (full gate) at `b8f49bc` | **65, as intended**: format, lint and the script suites clean; the iOS PR plan's only failing test is `ProgramStoreEmissionsAdversarialTests.workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` (F11-S13-1; listed twice by xcodebuild); 955 s of iOS tests, 1,061 s in all. The gate stops there, so the watchOS step and the coverage gate did not run |
+
+---
+
+## S13 — round 2 (G2 tester, 2026-10-18)
+
+Tested at `1b0c07a` (fix `852150b`, notes `1b0c07a`). No product or implementer-test file changed. One new
+suite, `Adversarial/ProgramReadAfterWriteAdversarialTests.swift` (5 tests; the storm runs per seed: 200 at the
+default count). **Three tests fail on purpose** (F11-S13-6, -7, -8); round 1's F11-S13-1 test passes unedited.
+
+### Verdict: F11-S13-1 is fixed for the case it named; the new read reopens it in a narrower window, and drops a change of program
+
+`newestAfter` reads `active()` after a write that heard an emission, while `isWriting` is still true; then the
+synchronous step sets `heardDuringWrite = nil` and adopts the read. Two consequences:
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S13-6 | **should fix** (small; display only; same class as S13-1) | **An emission heard during the read is dropped.** A workout saved after `active()` has read and before it returns is emitted, kept aside as "heard during the write", then cleared; the read (without the workout's misses) is adopted and nothing else is emitted. Expected: rename and misses on screen; actual: the rename only, until the next edit or emission. Repro is deterministic with `hold(.activeProgram, afterStoring: true)`. Fix: clear `heardDuringWrite` before the read and read again while one was heard during it (it ends: each read is the store's newest when it starts), or adopt the read and then whatever was heard after it began. | `ProgramReadAfterWriteAdversarialTests.emissionDuringTheRead_isDrawn` — **fails** |
+| F11-S13-7 | should fix (low today: no M1 path makes another program active while the builder writes; F12/onboarding will) | **Another program made active during the write is not followed.** The read names it; `newestAfter` returns the program just written because the ids differ, and the emission of the new one, heard during the write, is cleared. The builder keeps showing (and editing) a program that is no longer active. Expected: the session adopts the other program (`adopt` already drops edits made on the old one); actual: `stored.id` is the seed's, header "Waiting". | `…readNamesAnotherProgram_isFollowed` — **fails** |
+| F11-S13-8 | should fix (low, same reason) | **The active program deleted during the write is still shown.** `try? await programs.active()` is nil, the `guard let` returns the written program, and the heard `nil` is cleared: `.loaded` instead of `.noProgram`. Expected the empty state. Fix for -7 and -8 together: adopt the read whatever it names (nil included); keep the returned program only when the read throws. | `…readNamesNoProgram_isTheEmptyState` — **fails** |
+| F11-S13-9 | note | **A read that fails leaves the returned program** and clears what was heard, as the amended R6 says; the next edit heals the screen. Pinned, passes. | `…readFails_keepsTheReturnedProgram` |
+
+**What held.** Round 1's `workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` passes unedited. A storm of 30 taps
+per seed from the screen, with writes held at random before or after storing and workouts' misses saved between
+taps (0–2 yields inside store calls, 0–3 between taps), ends with the screen equal to the store on all 200 seeds
+(`stormWithWorkoutsSaved_endsOnTheStore`): the window of F11-S13-6 is not reached by free scheduling on the
+in-memory stores, only by the held read.
+
+### F11-S13-2 and -3 adopted: at full strength
+
+Mutation, switched in `ProgramStore.swift` and put back with `git checkout` (`git status` clean): a log line
+preceded by `let s13Mutant = "Saved";` and a `Task(priority: .high) {}` in the logger getter. Round 1's
+`sources_holdNoCopyOutsideTheCopyFiles` and my `literals_onlyInTheCopyFiles…` both find `"Saved"` (round 0's
+line-wide rule would have skipped it); `FeatureProgramSourceTests.sources_startNoWorkOfTheirOwn` and my
+`noTaskOfItsOwn…` both find the task. The implementer's regex is mine verbatim; its self-check lists all six
+spellings and the three non-tasks.
+
+### Audit of the two sanctioned edits to my files
+
+| Edit | Verdict |
+|---|---|
+| `ProgramWordsAdversarialTests.swift:155-162` | **Justified and stronger.** Literals are now read by `SwiftSource` (comments, escapes, multi-line literals handled; line numbers from the literal) and exempt only by `isForTheDeveloper`; the lookup check over every code line is unchanged; the scope (the module's own folder) is as before. Killed the mutant above. |
+| `ProgramStoreSourceAdversarialTests.swift:80-81` | **Justified.** The two assertions pinned the gap F11-S13-3 closed; they now require the same spellings to be caught. The function's name (`…missesTwoSpellings`) is stale; harmless. |
+
+### Runs (2026-10-18, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `swift test --filter` the new suite, F11-S13-1's suite, the three source suites | 1, as intended: 24 tests, 3 failed (F11-S13-6, -7, -8) |
+| scan mutation (literal on a log line; `Task(priority:)`) | killed by all four scans |
+| `scripts/check.sh` (full gate) | see the report |
