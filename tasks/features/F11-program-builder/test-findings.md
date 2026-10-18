@@ -1267,3 +1267,116 @@ The baseline recorded no issue.
 | five probe runs of the name suite; one of the mutation driver (0; 230 cases) | — |
 
 Free disk: 10 GB at the end.
+
+---
+
+## S13 — round 1 (G2 tester, 2026-10-18)
+
+Tested at `98ca8cf` (`feat/F11-s13-stores`). No product file, implementer test, pbxproj, test plan or `.github/`
+file changed. Twelve new files in `LedgerKit/Tests/FeatureProgramTests/Adversarial/`: two of support
+(`StoreAdversarialSupport`, `StoreAdversarialDoubles`) and ten suites, **44 tests** (the two storms run once per
+seed of `LEDGER_PROPERTY_SEED_COUNT`: 400 cases at the default 200). **One test fails on purpose** (F11-S13-1).
+
+**Independence.** The tests were written from the slice's criteria, the rulings, the declarations and their doc
+comments (`ProgramEditSession`, `ProgramStore`, `+Sources`, `ProgramRoot`, `StoreProbe.hold(_:afterStoring:)`)
+before any function body, implementer test, `Support/ProgramStoreScene.swift`, `Support/ProgramDatabase.swift` or
+the notes' "S13 + S14 — as built" was read. The bodies were read afterwards, for the mutations only. Limits: I
+read the stored-property declarations (to know the dependency keys and that `heardDuringWrite`, `waiting`,
+`routeAfterSave` are readable), and the support reuses round 1's `ProgramActionsAdversarialTests.offered` and
+`ProgramFixtures`, which are on `main`.
+
+### Verdict: the save loop holds under every storm I could make; one gap in R6, two tripwires too loose
+
+The loop is right: 200 seeds of held bursts and 200 of forty taps from the screen with writes held and let go at
+random and the scheduler free (0–2 yields inside each store call, 0–3 between taps) all store exactly what the
+same edits store one at a time, draw it after every tap, and write once per burst. R1, R4, R7, the route after
+"+ Add training day" and the failed state's restart all hold. Ten mutants of the session and the store, each
+killed (below).
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S13-1 | **should fix** (small; display only, healed by the next write or emission) | **R6 drops a program newer than the write's own.** A workout saved after the builder's write committed and before `update` returned is emitted during the write; `write` then sets `heardDuringWrite = nil` and adopts the returned program, which is older. The store has nothing more to emit, so the screen (and `session.stored`) stays without the workout's change (misses, an exercise swap) until the next edit or emission. Expected: what the store holds (rename and misses); actual: the rename without the misses. Nothing is lost in the store: the next write reads it. On GRDB the window is the hop from the commit to the return, so it is rare. A fix that keeps R6: after the write, adopt the returned program, then adopt the one heard during it only if it is not the program as it stood before this write's edits (or simply read `active()` once after a write during which something was heard). R6 as written ("the returned program wins") does not cover a newer emission; the orchestrator may rule instead. | `ProgramStoreEmissionsAdversarialTests.workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` — **fails** (`session.stored == stored`, `session.shown == stored`) |
+| F11-S13-2 | low (test strength) | **The sanctioned literal exemption is wider than its purpose** (audit below). | `ProgramStoreSourceAdversarialTests.sanctionedExemption_isTooWide_tighterOneHolds` (passes: it pins the hole and the tighter rule) |
+| F11-S13-3 | low (test strength) | **`FeatureProgramSourceTests.startsATask` misses `Task(priority: …) {` and `Task.init {`**: it looks for `Task{` with the spaces removed. No product file spells either today. My scan (`startsATask`, a regex over `SwiftSource.code`, every file of the module and its folders) catches all six spellings and lets `addTask`, `Task.yield`, `Task.isCancelled`, `Task.checkCancellation` through. | `ProgramStoreSourceAdversarialTests.implementersTripwire_missesTwoSpellings` (pins the gap), `noTaskOfItsOwn_noTimer_noFormat` (passes) |
+| F11-S13-4 | note | **A lost acknowledgement** (stored, then the call throws): `.saveFailed` is shown although the edit is stored; the screen then shows the stored program (the heard emission is adopted on failure), so it reads "not saved" over a program that holds the change. Harmless; S3 says GRDB has no such path. | `ProgramSaveFailuresAdversarialTests.lostAcknowledgement_screenEndsOnWhatIsStored` (passes) |
+| F11-S13-5 | note | **The same notice twice is announced once**: "−" tapped again at two weeks leaves the notice unchanged, so VoiceOver hears nothing the second time. As criterion 12 reads ("appears or changes"); for Pete if he wants it said each time. | `ProgramRootAdversarialTests.notice_isAnnounced` (passes; a drop in between announces again) |
+
+### What was attacked, and held
+
+- **Storms** (`ProgramSaveLoopAdversarialTests`, seeded): held bursts of 1–6 edits (renames incl. blank, "+",
+  "−" with and without the last week logged, deloads, cells incl. a day the program lacks, copy, apply, new days)
+  on blocks of 2–6 weeks, with a follower feeding emissions; each edit is drawn before `enqueue` returns, is
+  queued exactly when it changes the screen (R7), the store ends equal to the one-at-a-time fold, and the probe
+  counts one `update` per burst that queued an edit. The store storm takes every action the model offers (no
+  route, no new day) for forty taps.
+- **Pinned**: three edits during a held write go in one second write; "Upper Lowe" typed against a held write is
+  two writes; a rename back to the stored name during a write is written (R7 compares with the screen, not the
+  store); nine no-op edits write nothing.
+- **R1**: cancelled before storing (held before the store) keeps all three edits, shows no failure, and the next
+  run adds the week once; cancelled after storing drops them and sends nothing again; `TaskCancelSwitch` fired in
+  `prepare` keeps the edit and reports no outcome; a `CancellationError` thrown while the task runs on is a
+  failure, sent once (no retry loop).
+- **Other failures**: refused with two edits queued behind it drops all three, `update` called once, the line
+  reads "That change wasn't saved. Try again.", the next edit clears it and is stored; a throwing `prepare` sends
+  nothing.
+- **R6**: "−" and a Day editor move stored and emitted before the return are drawn once (7 weeks, not 6; moved
+  once); a workout's misses saved while a rename waits before the store are both kept and drawn.
+- **Underneath**: "−" while the block is cut elsewhere removes one more (relative, once); cut to two, the write
+  shows "A block needs at least 2 weeks." and the stored two weeks.
+- **R4**: a workout finished in week 8 while "−", a deload and a rename wait behind a held write: the first write
+  is stored, the whole batch is dropped, the notice names week 8; the workouts are read before the write (log).
+- **Selection**: today's week (index 4) on first load; a request before the load wins; a day before the block is
+  handed raw (negative) and the first chip drawn; one "+" action sent twice adds two weeks and selects the
+  second; after "−" on the last week the selection stays raw.
+- **Routes**: the day's route waits behind an earlier write and for its own; a double (triple) tap adds one day
+  and one route, delivered once; a failed write routes nothing and does not block the next tap; a cancelled write
+  routes after the next run, once.
+- **Root** (hosted, iOS): empty and failed states from the root's own task; failed, then hosted again, loads (the store suite checks it never passes through loading);
+  the day's route reaches `onRoute` after a sentinel route sent while its write
+  was held, then once; a failed write hands nothing; four notices announced in order; a requested week wins over
+  today's, a redraw with the same request selects nothing, a new number selects it again, a request made while
+  the program is read wins.
+- **Conventions**: no task of any spelling in the module; no timer, sleep, clock, `Date()`, `.current` or
+  `.formatted(` in the S13 files; outside the copy files only `""`, `" · "`, log messages and the category.
+
+### Audit of the implementer's sanctioned edits to the testers' files
+
+| Edit | Verdict |
+|---|---|
+| `ProgramAdversarialScreen.swift:78`, `case .saveFailed` | Justified: the switch is exhaustive; the English matches the catalog (my `refusedWrite_dropsEveryWaitingEdit` reads the same line from the model). |
+| `ProgramAdversarialScreen.swift:28`, a blank line | Justified (file length); no code. |
+| `ProgramWordsAdversarialTests.swift:158-162`, log lines not scanned for literals | **Justified in purpose, too wide in form.** It skips *every* literal of *any* line containing `logger.log.` or `.category(`: `notice = "Saved"; logger.log.error("x")`, a labelled argument `logger.log.error("x", label: "Program")`, or any other `.category("…")` call would pass. The lookup half of the test is untouched, so its strength is kept for lookups and for every line that does not log. **Tighter alternative**, built and passing on the current sources: exempt a literal only when `SwiftSource` places it (or the literal holding it) as the first unlabelled argument of a callee ending `logger.log.<level>`, or when it is exactly `"program"` as the argument of `.category` (`ProgramStoreSourceAdversarialTests.isForTheDeveloper` and `literals_onlyInTheCopyFiles_tighterThanTheSanctionedScan`). Recommend round 1's scan adopt that rule (an edit of my file I am content for the implementer to make, listed). Note `SwiftSource` reads a callee across the code with whitespace removed, so the match must be on its end (`.saveFailedlogger.log.error` is what it reports for line 207). |
+| `ProgramWordsAdversarialTests.swift:188-189`, 33 → 38 lookups | Justified: `ProgramCopy+States.swift` holds five lookups. |
+| `StoreProbe.hold(_:afterStoring:)` (support, not mine) | Sound: the default is the old behaviour; `leave` parks after the store, so a test can hold a call that has stored. Used by six of my tests. |
+
+### Mutations (10, switched in the sources and put back with `git checkout`; `git status` clean after each)
+
+| # | Mutant | Killed by |
+|---|---|---|
+| 1 | a cancelled write drops its edits | the three R1 cancellation tests |
+| 2 | an emission during a write is drawn at once | both R6 tests |
+| 3 | a stored write drops every waiting edit | both storms and five pinned tests |
+| 4 | R7 judged against the stored program | both storms, `backToTheStoredName_duringAWrite_isWritten` |
+| 5 | the logged weeks not read again before "−" | `minusInABatch_weekLoggedSinceTheTap_dropsTheBatch` |
+| 6 | the day's route after any stored write | `addDay_behindAnotherWrite_routeOnlyAfterItsOwnWrite` |
+| 7 | any `CancellationError` keeps the edits | `cancellationErrorWithoutCancellation_isAFailure_notALoop` |
+| 8 | one edit per write | both storms and four pinned tests |
+| 9 | a failure keeps the unsent edits | `refusedWrite_dropsEveryWaitingEdit` |
+| 10 | a failure ignores the emission heard | `lostAcknowledgement…`, `removeLastWeek_blockCutToTwoUnderneath…` |
+
+### Not verified
+
+- That a failure is logged: the injected logger cannot be read from a test.
+- The root's drawn `EmptyState` texts: checked through `store.state`, not the accessibility tree.
+- GRDB: every store test runs on the in-memory stores behind the probe; S3's GRDB contract covers `update`.
+
+### Runs (2026-10-18, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `swift test --filter` my nine host suites, 200 seeds | 1, as intended: 37 tests, 1 failed (F11-S13-1), ~10 s |
+| `xcodebuild test -testPlan PR -only-testing:` my suites (before the split into files) | 65, as intended: only F11-S13-1 failed; the root suite passed |
+| mutation driver, 10 mutants at 40 seeds | each killed |
+| `scripts/check.sh` (full gate) | see the report |
