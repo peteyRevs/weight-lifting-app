@@ -5606,3 +5606,39 @@ Series 12 46 mm, both 27.0).
   99.08 %, 3,372 / 3,403 lines; overall 98.70 %).
 - **Not run:** any UI test (S13 adds none; criterion 24 is S14's), the nightly lane, CI. `#60` re-checked at
   the end: still `OPEN`.
+
+## S13 — fix round 1 (G1 implementer, 2026-10-18)
+
+On `d7b29e0` (S13, the tester's round 1); the orchestrator's rulings on `test-findings.md` "S13 — round 1".
+Commit `852150b`.
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| **F11-S13-1 (fix)** | `ProgramEditSession.write`: after a write that returned, `newestAfter(_:ofProgram:)` reads the stored program once (`programs.active()`), inside the loop and before the synchronous step that drops the sent edits, **when an emission was heard during the write**, and adopts it; with nothing heard the returned program is adopted as before. A read that fails, or names another program, leaves the returned one (it holds the write; the next emission or write brings the rest). The tester's `ProgramStoreEmissionsAdversarialTests.workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` passes unedited; with the read switched off it fails again (mutation, reverted). R6 is amended in the brief's "Rulings before G1" to say this. Open question 2 of "as built" (and deviation 5's "left open") is closed by it. |
+| **F11-S13-2 (take)** | `ProgramWordsAdversarialTests.sources_holdNoCopyOutsideTheCopyFiles` reads every literal with `SwiftSource` and exempts only those `ProgramStoreSourceAdversarialTests.isForTheDeveloper` accepts: the first unlabelled argument of a callee ending `logger.log.<level>`, or exactly `"program"` to `.category`. The line-wide skip of round 0 is gone. |
+| **F11-S13-3 (take)** | `FeatureProgramSourceTests.startsATask` is the tester's regex: it finds `Task {`, `Task(priority:) {`, `Task<…>`, `Task.init {`, `Task.detached`, and not `addTask {`, `Task.yield()`, `Task.isCancelled`; its self-check lists all of them. |
+| S13-4, S13-5 | No change (S13-5, the same notice announced once, is for Pete). |
+
+### Sanctioned edits to the testers' files (this round)
+
+| File:line | Edit | Why |
+|---|---|---|
+| `Tests/FeatureProgramTests/Adversarial/ProgramWordsAdversarialTests.swift:155-162` | The round 0 exemption (any line holding `logger.log.` or `.category(`) replaced by the tester's tighter rule above; the lookup check on every line is unchanged | Ruling F11-S13-2 |
+| `Tests/FeatureProgramTests/Adversarial/ProgramStoreSourceAdversarialTests.swift:80-81` | `implementersTripwire_missesTwoSpellings`: the two `#expect(!…startsATask(…))` that pinned the gap now `#expect(…startsATask(…))`; display name `"… for a task (fixed)"` | Ruling F11-S13-3 closes the gap the test pinned; the assertion is the same spelling, now required to be caught (stronger) |
+
+### Product lines now
+
+`ProgramEditSession.swift` 113 (+10); **S13 474**.
+
+### The runs
+
+- Host, `swift test --filter FeatureProgramTests`: 436 tests in 47 suites, green (the tester's included).
+  Mutation: no read after a heard write fails `workoutSavedAfterTheCommit_beforeTheReturn_isDrawn`.
+- `scripts/check.sh --lint-only`: OK.
+- **`scripts/check.sh`, the full gate, on `852150b`, through the lock: exit 0, "check.sh OK", 1,321 s**:
+  lint 70 s, iOS build 18 s, string catalogs 1 s, iOS tests 974 s (4,157 tests, 4,126 passed, 0 failed, 15
+  skipped, 16 expected failures), watchOS build 19 s, watchOS tests 236 s (2,301 tests, 0 failed), coverage
+  2 s (FeatureProgram 99.12 %, overall 98.70 %).
+- `#60`: still `OPEN`; S14 not started.
