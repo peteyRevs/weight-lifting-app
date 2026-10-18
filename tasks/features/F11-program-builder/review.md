@@ -1790,3 +1790,22 @@ return from a pushed Day editor (R5).
 `swift test` (a tester's untracked file was in the tree), any simulator run, the adversarial suites line by line,
 `onChange(initial:)` on reappearance, how often GRDB emits before `update` returns, the by-hand budgets, the
 in-memory `update`'s `CancellationError` after a released hold, and criteria 15–25.
+
+## Slice S13 — review round 2 (G3 reviewer, 2026-10-18)
+
+Pass on `git diff 1b0c07a..60ff64e` (fix round 2, notes, testers' rounds 2–3, re-amended R6). Host
+`swift test --filter FeatureProgramTests` at `60ff64e`: 447 tests in 49 suites passed (200 seeds). Committed by the
+orchestrator.
+
+**Verdict: approve.** Blocking 0 · Should fix 0 · Nit 3. S-1, S-2, S-3 and N-1 to N-8 resolved as ruled; the fixes
+introduce no new defect (re-read with cancellation and a later throw; `adopt(nil)` then a stored write; a new run's
+`hasEnded` reset racing an old run's end; a builder created in the background).
+
+Nits, carried to S14 by the orchestrator: (1) `ProgramEditSession.swift:157-158` a later read that throws could return
+the last successful read instead of `saved` (F11-S13-10); (2) `:152` the re-read loop has no bound (F11-S13-11),
+unreachable in M1, cap it if sync ever writes continuously; (3) `ProgramRootTests.root_backFromTheBackground_
+followsAgain` waits on a counter Observation cannot see and may hang if an equal value does not notify. F11-S13-12
+(a card tapped during "+ Add training day"'s write drops the day's route): a note for S14.
+
+Not checked: the iOS-only root suites (relied on the full gates at `c29faa5` and `a8c1035`), any simulator run,
+the round 2–3 adversarial bodies, `@Observable`'s equal-value behaviour, S14.
