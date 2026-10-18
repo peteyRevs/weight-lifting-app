@@ -56,7 +56,7 @@ final class ProgramStore {
     var settings: Settings?
     var exercises: [ExerciseID: Exercise]?
     var loggedWeeks: Set<Int>?
-    /// A source ended or a read failed in this run.
+    /// A source ended or a read failed; cleared when the logged weeks are next read.
     var hasFailed = false
 
     @ObservationIgnored private var routeNumber = 0

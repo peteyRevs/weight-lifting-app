@@ -10,13 +10,14 @@ import LedgerDomain
 ///
 /// The model is made once every source has spoken and the logged weeks are read; what they said is kept
 /// across runs, so once loaded the builder is never loading again. An observation that ends while its task
-/// runs, or a read that fails, is logged and shows the failed state; the next run tries again.
+/// runs, or a read that fails, is logged and shows the failed state. The next run tries again and keeps
+/// that state on screen until it has read the program's workouts, as Today keeps its own, rather than
+/// passing through loading.
 extension ProgramStore {
     /// How many finished workouts are followed: a workout finished meanwhile is the newest.
     static let followedWorkouts = 1
 
     func run() async {
-        hasFailed = false
         let (marks, mark) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followProgram(mark) }
@@ -85,6 +86,7 @@ extension ProgramStore {
             let read = try await readLoggedWeeks(of: program)
             if !Task.isCancelled {
                 loggedWeeks = read
+                hasFailed = false
             }
         } catch {
             if !Task.isCancelled {

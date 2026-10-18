@@ -54,7 +54,7 @@
         func root_runsTheStoreAndTheSession() async throws {
             let scene = try ProgramStoreScene()
             #expect(scene.store.state == .loading)
-            try await Self.hosting(Hosted(store: scene.store, handed: Handed())) {
+            try await Self.hosting(Hosted(store: scene.store, handed: Handed())) { () async throws in
                 await eventually { scene.store.state.isLoaded }
                 scene.store.send(.edit(.setDeload(true, week: 0)))
                 await scene.idle()
@@ -66,7 +66,7 @@
         func root_handsARouteOnce() async throws {
             let scene = try ProgramStoreScene()
             let handed = Handed()
-            try await Self.hosting(Hosted(store: scene.store, handed: handed)) {
+            try await Self.hosting(Hosted(store: scene.store, handed: handed)) { () async throws in
                 await eventually { scene.store.state.isLoaded }
                 let card = try #require(scene.model.days.cards.first)
                 scene.store.send(card.action)
@@ -81,7 +81,7 @@
             let scene = try ProgramStoreScene()
             let handed = Handed()
             handed.week = ProgramWeekRequest(number: 1, weekIndex: 2)
-            try await Self.hosting(Hosted(store: scene.store, handed: handed)) {
+            try await Self.hosting(Hosted(store: scene.store, handed: handed)) { () async throws in
                 await eventually { scene.store.state.isLoaded }
                 #expect(try scene.model.week.title == "WEEK 3")
                 scene.store.send(.selectWeek(6))
@@ -112,7 +112,7 @@
             program.weeks.removeLast(6)
             let scene = try ProgramStoreScene(program: program)
             let handed = Handed()
-            try await Self.hosting(Hosted(store: scene.store, handed: handed)) {
+            try await Self.hosting(Hosted(store: scene.store, handed: handed)) { () async throws in
                 await eventually { scene.store.state.isLoaded }
                 try scene.store.send(scene.model.block.removeWeek)
                 await eventually { handed.announcements.count == 1 }
