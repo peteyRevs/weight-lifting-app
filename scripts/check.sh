@@ -187,10 +187,14 @@ if [[ $IOS_ONLY -eq 0 ]]; then WATCH_DEST="$(scripts/sim-destination.sh "$WATCH_
 # every String Catalog is compared with them (F09; scripts/check-string-catalogs.sh). The watch build's
 # keys are not read. A record run stops there too: a screen recorded from a catalog that does not match
 # the code would have to be recorded again.
+# ARCHS=arm64: every simulator here (a developer Mac, the xcode-27 image) runs on Apple silicon. Without it
+# the iOS build also builds the embedded watch app and its package modules for x86_64, since the active-arch
+# rule covers only the destination's own platform (tasks/chores/2026-10-18-arm64-only.md). Both actions
+# get it, so the tests run what was built.
 test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bundle name>
     local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
         -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
-        -onlyUsePackageVersionsFromResolvedFile)
+        -onlyUsePackageVersionsFromResolvedFile ARCHS=arm64)
     step "$1 · $2 build (the simulator boots meanwhile)"
     scripts/sim-boot.sh "$5"
     rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"

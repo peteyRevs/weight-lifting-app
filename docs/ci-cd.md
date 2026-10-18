@@ -103,6 +103,14 @@ authoritative; the plan differs:
     2,520 s). The deadline was 2,400 s until 2026-10-09 and 2,520 s until 2026-10-17; at 2,400 s two first
     runs of 2026-10-09 were interrupted in their tests with no test failing (builds of 1,140 and 1,145 s;
     the tests then needed 855 s and 1,497 s on the re-runs).
+  - *arm64 only (2026-10-18; `tasks/chores/2026-10-18-arm64-only.md`).* Every `xcodebuild` in `check.sh`
+    passes `ARCHS=arm64`, on both lanes and on the build and the test run alike (check-wiring W76). The
+    iOS build also builds the embedded watch app, and the active-arch rule covers only the destination's
+    platform, so its 16 watch-simulator modules were built for x86_64 as well. Measured on a developer Mac,
+    cache on: 546 → 422 compile tasks, 75 → 59 modules, 81 → 63 links; compile task time 824–945 → 706–805
+    s; wall 116–142 → 107–114 s cold, 29–57 → 23–28 s warm; the cache 1.5 → 1.25 GB. Every simulator here
+    is Apple silicon (the `xcode-27` image is arm64); an Intel Mac could no longer run the gate. The
+    nightly's own `xcodebuild` calls still build both: slower, but it is manual and tests the same arm64 slices.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
   `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`

@@ -106,6 +106,7 @@ simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-
 FULL="$(echo $FULL) "
 
 unset FAIL_AT GITHUB_ACTIONS SNAPSHOT_TESTING_RECORD TEST_RUNNER_SNAPSHOT_TESTING_RECORD
+unset LEDGER_COMPILATION_CACHE # W65 sets it per run; a caller's export must not reach the other runs
 run
 expect_exit "W01 full run with every step green exits 0" 0 "$code" "$out"
 if [[ "$calls" == "$FULL" ]]; then pass "W02 full run calls every step in order"; else
@@ -446,6 +447,20 @@ check "W65 LEDGER_COMPILATION_CACHE=YES turns caching on for both builds and not
     is "$on|$off|$(cached)" "0 build-for-testing:on test-without-building:off build-for-testing:on test-without-building:off |\
 build-for-testing:off test-without-building:off build-for-testing:off test-without-building:off |\
 build-for-testing:off test-without-building:off build-for-testing:off test-without-building:off "
+
+# arm64 only (tasks/chores/2026-10-18-arm64-only.md): without ARCHS=arm64 the iOS build also builds the embedded
+# watch app's modules for x86_64. Every build and test invocation passes it once, so each test run is given the
+# build it ran after; --ios-only (PR CI) is the same.
+archs() { grep -E '^(build-for-testing|test-without-building) ' "$LOG.args" | awk '{ n = 0; for (i = 1; i <= NF; i++) {
+    if ($i ~ /^ARCHS=/) { a = $i; n++ } else if ($i == "-scheme") s = $(i + 1) }; print $1 "-" s ":" (n == 1 ? a : n " ARCHS") }' | tr '\n' ' '; }
+run; full_archs="$code $(archs)"
+LEDGER_COMPILATION_CACHE=YES run --ios-only --skip-lint
+check "W76 every build-for-testing and test-without-building, on both lanes, passes ARCHS=arm64 exactly once (--ios-only too)" \
+    is "$full_archs|$code $(archs)" "0 build-for-testing-Ledger:ARCHS=arm64 test-without-building-Ledger:ARCHS=arm64 \
+build-for-testing-LedgerWatch:ARCHS=arm64 test-without-building-LedgerWatch:ARCHS=arm64 |\
+0 build-for-testing-Ledger:ARCHS=arm64 test-without-building-Ledger:ARCHS=arm64 "
+check "W76 ... and each test run's arguments are its build's, the action and bundle aside (cache setting: W65)" \
+    is "$(run; grep -E '^(build-for-testing|test-without-building) ' "$LOG.args" | sed -E 's/^[a-z-]+ //; s/ -resultBundlePath [^ ]+.*$//' | uniq | wc -l | tr -d ' ')" 2
 
 # adversarial/run.sh picks the half: fake suites, one marked as needing macOS, in a copy of the runner.
 RS="$ADV_TMP/runner"
