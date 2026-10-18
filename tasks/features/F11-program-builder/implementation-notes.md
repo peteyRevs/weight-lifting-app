@@ -5401,3 +5401,208 @@ Series 12 46 mm, both 27.0).
   typing; VoiceOver itself; the screen in the app; the watchOS plan and the coverage gate on this commit;
   the nightly lane.
 
+
+## S13 + S14 — as built (G1 implementer, 2026-10-18)
+
+**S13 only.** Pull request #60 (`chore/name-field-line-height`) was still open on `origin/main` when S13 was
+green (`gh pr view 60`: `OPEN`, checked before S13 started and again at its end), so, as the rulings say,
+S14 was not started: no Day editor store, no library store, nothing in `LedgerAppKit`, no UI test, and the
+Program tab still shows #28's placeholder. Everything below is S13's. Branch `feat/F11-s13-stores`, cut from
+`main` at `8d56edd`; the brief's "Plan amendments — slices S13 and S14" and "Rulings before G1" are the
+specification.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- `Sources/FeatureProgram/ProgramEditSession.swift` (new): `protocol ProgramEdit` (`applied(to:) throws ->
+  Program`; ruling R3), conformed to by `ProgramBuilderEdit` and, already, `DayEditorEdit` (S14 uses it);
+  `ProgramEditSession<Edit>`, `@MainActor @Observable`: `stored`, `shown`, `waiting`, `isWriting`,
+  `heardDuringWrite`; `hear(_:)`, `enqueue(_:) -> Bool`, `run(prepare:finished:)`, the one loop, woken by an
+  `AsyncStream` that keeps the newest signal (ruling R2, as `WorkoutStore.pump()`).
+- `Sources/FeatureProgram/ProgramStore.swift` (new): `ProgramStore` with `State` (`loading`, `loaded(model)`,
+  `noProgram`, `failed`), `ProgramPendingRoute`, the intents (`send`, `select(week:)`, `deliverRoute(to:)`),
+  `save()` and what it does around a write (the fresh logged weeks before a removal; the outcome).
+- `Sources/FeatureProgram/ProgramStore+Sources.swift` (new): `run()`, the four observations in one task
+  group, and the logged weeks.
+- `Sources/FeatureProgram/ProgramRoot.swift` (new, public): `ProgramRoot(week:onRoute:)` and the public
+  `ProgramWeekRequest` (ruling R10's request, with its number).
+- `Sources/FeatureProgram/ProgramCopy+States.swift` (new): decision 6's five texts. `ProgramBuilderAction.swift`:
+  `ProgramBuilderNotice.saveFailed`; `ProgramPresentation.swift`: its line. `Resources/Localizable.xcstrings`:
+  five keys, each with a comment, in code-unit order (only additions in the diff).
+- `Sources/LedgerTestSupport/Engine/StoreProbe.swift`: `hold(_:afterStoring:)` (ruling R6): a held call can
+  wait once its store has done what was asked, before it returns. `leave` became `async`; its one caller
+  (`ProbedStores.probed`) already awaited it. Support code, not counted.
+- Tests, in `Tests/FeatureProgramTests/`: `ProgramEditSessionTests.swift` and `+Cancellation`,
+  `ProgramStoreTests.swift`, `+Actions`, `+Routes`, `ProgramRootTests.swift` (iOS), `Support/ProgramStoreScene.swift`
+  (the scene, `finishedWorkout(of:weekIndex:)`, `eventually`, `EndedPrograms`, `CancellingPrograms` over
+  `TaskCancelSwitch`), `Support/ProgramDatabase.swift` (the GRDB repositories of one in-memory database, for
+  criterion 2). `FeatureProgramSourceTests` reads the new files (criterion 26).
+
+No change to `LedgerDomain`, `LedgerPersistence`, `LedgerAppKit`, the project file, a test plan or `.github/`.
+
+### How it works, in four sentences
+
+An intent applies its edit to `session.shown` before it returns, and `ProgramStore.state` is computed from
+`shown` and the store's own fields when it is read, so the model a tap is taken from always holds every
+earlier tap. `run(prepare:finished:)` sends every waiting edit in one `update`, whose change captures the
+array of edits and applies it to the program `update` read; on return the returned program is adopted and
+exactly the sent edits are dropped, in one synchronous step. A program the store emits while a write runs
+is kept in `heardDuringWrite` and adopted only if the write fails or is cancelled. `CancellationError`
+while the task is cancelled keeps the edits at the front for the next run (ruling R1); any other error
+drops every waiting edit and is reported to the store (`Outcome.failed`), which shows the notice and logs
+it, or, for `ProgramEditError`, shows that error's notice (ruling R4).
+
+### Criteria → tests
+
+Suites: `ProgramEditSessionTests` (ES), `ProgramStoreTests` (PS), `ProgramRootTests` (RT),
+`FeatureProgramSourceTests` (ST). All in `FeatureProgramTests`.
+
+| Criterion | Tests |
+|---|---|
+| 1. One session, one loop | ES `edit_isSavedAtOnce_andEditsMadeMeanwhileGoTogether` (held first write, three more edits, two writes, stored = shown) |
+| 2. The closure holds values only | ES `workoutSavedDuringAnEdit_bothAreKept_inMemory`, `…_onTheDatabase` (S3's losing sequence through the store: a miss and a swap saved while the edit's write is held; both kept, and the edit). Mutation check: applying the edits to the store's copy fails both, and PS `storedProgramChanges_isShown` |
+| 3. Exactly once, drawn once | ES `emissionDuringAWrite_isNotDrawnUnderTheEdit_removeLastWeek` (through the store), `…_move` (`ProgramEditSession<DayEditorEdit>` directly, Upper A's first slot moved down: once). Both hold the update after it stored and emitted (`hold(.updateProgram, afterStoring: true)`). Mutation check: drawing the emission during the write fails both |
+| 4. An edit that changes nothing is not queued | ES `editThatChangesNothing_isNotWritten` (a deload set to what it is, the stored name, a blank name, rest set on a rest day; then one edit: one write) |
+| 5. A write that fails | ES `saveFails_showsTheStoredProgramAndSaysSo` (the sent edit and the one waiting behind it both dropped, one write; the stored program shown; the line; then an edit stored, the line gone) |
+| 6. A write whose task is cancelled | ES `viewGoesAwayDuringASave_storesAllOrNothing` (`TaskCancelSwitch` fired from inside the change: nothing stored, the edit waits, nothing shown as failed; a new run adds the week once), `viewGoesAwayDuringAHeldSave_theNextRunSendsItOnce` (held, cancelled, released: the next run removes one week, not two), `cancelledOnceStored_isNotSentAgain` (cancelled while held after storing: it returned, one write). Mutation check: dropping the edits on cancellation fails the first two |
+| 7. Sources | PS `run_showsTheStoredProgram`, `noActiveProgram_showsTheEmptyState`, `streamEndsBeforeAValue_showsFailed`, `loaded_neverReturnsToLoading`, `storedProgramChanges_isShown` |
+| 8. The logged weeks | PS `loggedLastWeek_minusSaysSo` (first run), `workoutFinishedMeanwhile_isRead` (the recent workouts change), `workoutFinishedBeforeTheWrite_removesNothing` (a week-8 workout stored between the tap on "−" and its write: nothing removed, the message). Mutation check: skipping the read before the write fails the third |
+| 9. The selected week | PS `firstLoad_selectsTheWeekThatHoldsToday` (week 5 at `Fixtures.now`), `requestedWeek_isSelected`, `beforeTheBlock_selectionIsRaw` (−3, read as week 1), `removeWeek_keepsTheSelectionInsideTheBlock` ("−" keeps 7 raw; "+" selects the new week by its id); RT `root_selectsTheRequestedWeek` |
+| 10. Actions as the table says | PS `tuesdayTappedFiveTimes_cyclesAndCounts` (brief 2), `copyApplyAndDeload_asTheBriefSays` (brief 3), `removeWeek_atTwoWeeks_showsTheMessage_andChangesNothing` (brief 4, "+" too), `addDay_isNamedAndTagged_andOpens` (brief 5), `addWeek_twiceFromOneModel_addsTwoWeeks`. Brief 6 (deleting a day) is the Day editor's: S14 |
+| 11. The name | PS `name_typedLetterByLetter_isStored`, `name_tenLettersAgainstAHeldWrite_areTwoWrites`, `nameChangedElsewhere_isOverwrittenByTheNextKeystroke`; a blank name: ES `editThatChangesNothing_isNotWritten` |
+| 12. Notices | PS `notice_isReplacedAndDropped`; the failed write's line: ES `saveFails_…`, PS `failedWrite_emitsNoRoute_andARouteTwiceIsOne`; the announcement: RT `root_announcesTheNotice` |
+| 13. Routes | PS `route_isEmittedOnce_afterTheSaveReturned`, `addDay_duringAWrite_opensAfterItsOwnWrite`, `addDay_doubleTap_addsOneDay`, `failedWrite_emitsNoRoute_andARouteTwiceIsOne`; RT `root_handsARouteOnce` |
+| 14. `ProgramRoot` | RT `root_runsTheStoreAndTheSession`, `root_handsARouteOnce`, `root_selectsTheRequestedWeek`, `root_drawsTheMessages` (both messages read from the hosted root) |
+| 26. The conventions, by test | ST `sources_startNoWorkOfTheirOwn` (new: no unstructured `Task {` in any file of the module, `addTask {` told apart; no `Task.detached`, `DispatchQueue`, `Timer`, `TimelineView`, `.formatted(` in the session, the store and the root), `storesAndPresentations_neverClamp` (now also reads the four new files), `sources_neverReadTheClockOrTheCurrentCalendar` (every file, the new ones included); `ModuleCopyTests` with no exemption for `FeatureProgram` |
+| 27. Budgets | Measured by hand (ruling R12), below |
+| 28. The attacks of S13 | An update held while edits arrive: ES criterion 1, PS criterion 11; a workout saved between two edits, on GRDB: ES criterion 2; the view going away during a save: ES criterion 6; a route emitted twice: PS `failedWrite_…`, `route_isEmittedOnce_…`, RT `root_handsARouteOnce`; a failure, then a success: ES criterion 5; a double tap on "+ Add training day": PS `addDay_doubleTap_addsOneDay`. The day deleted under the Day editor is S14's |
+| 15–25 | S14's; not built |
+
+### Decisions and deviations
+
+1. **The logged weeks are read over the whole block**, from a week before its first day to the end of time
+   (`ProgramStore+Sources.swift`, `readLoggedWeeks`), not from a day before the last week (notes:224-239).
+   After a "−" the last week is an earlier one, which a read of the old last week does not cover; two "−"
+   in one write would check the second against a set that lacks its week. The whole block is at most a
+   block's workouts (32 for the seed), read on each run, when the newest workout changes, when another
+   block becomes active, and before a write that removes a week. The extra week before the block covers a
+   workout started before midnight in another zone, as the notes' extra day did.
+2. **The model is computed when it is read** (`ProgramStore.state`), not stored and rebuilt. "The model is
+   rebuilt before the next intent" then holds by construction, and no path can forget a rebuild. `make`
+   measured about 1 ms at 16 × 6 (below); SwiftUI reads it once per body.
+3. **Two root tasks, no scene phase**: `.task { run() }` and `.task { save() }`. Today restarts on the scene
+   phase to catch a new day; the builder needs nothing the observations do not report (a workout finished
+   in the background is observed when stored).
+4. **"+" selects the week found by its id** in the program the edit was applied to (review N-1); the
+   action's `selecting:` place is not read.
+5. **An emission during a write is adopted only if the write fails or is cancelled.** On success the
+   returned program wins, as criterion 3 says. Left open: an emission of a write that committed *after*
+   ours but reached the store before our call returned is dropped, and the screen is one change behind
+   until the next emission. On the database, emissions follow commit order and our own commit's emission
+   comes after our return or with it, so this needs a third writer between our commit and our return
+   (milliseconds). Open question 2.
+6. **A notice carried by an edit is set even when the edit changes nothing** (`notice_isReplacedAndDropped`):
+   the notice belongs to the tap, as the action table says.
+7. **While any route waits, "+ Add training day" adds nothing** (criterion 13 names the new day's route; a
+   card's route waiting is the same "one route waits at a time"). A card tapped while the new day's write
+   runs takes the slot; the new day's route is then dropped, and the day is in the builder.
+8. **A logged-weeks read that fails shows the failed state**, as Today shows a read that fails; one before a
+   write fails that write (the line, edits dropped). **The failed state stays through a new run** until that
+   run has read the program's workouts again (as Today keeps its failed state until its next model), so a
+   root that comes back does not trade the message for a blank screen (`root_drawsTheMessages` found that
+   on the simulator; fixed in `e4a25a6`).
+9. **`followedWorkouts = 1`**: the newest finished workout is followed, since a workout finished meanwhile is
+   the newest one; the read itself is the whole block (deviation 1).
+10. **The message states are drawn in the root** (`EmptyState`, padded, on the ground), not in a new view of
+    `Views/`: a view there may not reach for the copy (`ProgramViewsSourceTests.views_decideNothing`), and
+    `EmptyState` has its own previews in `LedgerDesign`. No new preview.
+11. **The announcement is the root's**, through an injectable closure (`announce`, default
+    `AccessibilityNotification.Announcement(text).post()`), on a change of the model's notice text. The same
+    notice twice in a row is announced once (the text did not change).
+12. **The injected date is spelled `date()`**, not `date.now`: the S5 tester's ambient scan flags any `.now`
+    (`ProgramWordsAdversarialTests.sources_readNothingAmbient`); both read the injected `DateGenerator`.
+13. **`DayEditorEdit: ProgramEdit` lands now** (one line), so criterion 3's move is tested on the session.
+
+### Sanctioned edits to the testers' files
+
+| File:line | Edit | Why |
+|---|---|---|
+| `Tests/FeatureProgramTests/Adversarial/ProgramAdversarialScreen.swift:78` | `case .saveFailed: "That change wasn't saved. Try again."` in the oracle's exhaustive switch over `ProgramBuilderNotice` | The new case (criterion 12) does not compile without it; the text is the oracle's English, as its other cases |
+| `Tests/FeatureProgramTests/Adversarial/ProgramAdversarialScreen.swift:28` | One blank line removed, between `weekdayNames` and `helper` | The line above put the file at 301 lines, past SwiftLint's 300; no code changed |
+| `Tests/FeatureProgramTests/Adversarial/ProgramWordsAdversarialTests.swift:158-162` | A line that is a logger call (`logger.log.`) or names the logger's category (`.category(`) is not read for literals | The scan predates any store: it read the store's three log messages and the category `"program"` as copy. They are for the developer (standards §8). A lookup on such a line is still found: the lookup check below it is unchanged |
+| `Tests/FeatureProgramTests/Adversarial/ProgramWordsAdversarialTests.swift:188-189` | `lookups == 33` → `38`, with a comment | The five new keys of decision 6 in `ProgramCopy+States.swift`, which the scan reads |
+
+No assertion was removed or loosened beyond the log-line rule above; no other tester's file was touched.
+
+### Product lines per file
+
+Non-blank, non-comment lines (standards §10), `LedgerKit/Sources` only:
+
+| File | Lines | Planned |
+|---|---|---|
+| `FeatureProgram/ProgramEditSession.swift` | 103 | ~120 |
+| `FeatureProgram/ProgramStore.swift` | 154 | ~150 |
+| `FeatureProgram/ProgramStore+Sources.swift` | 87 | ~90 |
+| `FeatureProgram/ProgramRoot.swift` | 80 | ~70 |
+| `FeatureProgram/ProgramCopy+States.swift` | 38 | ~35 (with the action file) |
+| `ProgramBuilderAction.swift`, `ProgramPresentation.swift` | +2 | |
+| **S13** | **464** | **~465** |
+
+S14 (~395 planned) is not built; with it the pull request would be about 860.
+
+### For the product owner
+
+- **No wording was invented.** The five texts are decision 6's, word for word: "No program yet", "Your
+  program appears here once you have set one up.", "Can't show your program right now", "Your workouts are
+  still on this iPhone. Open the app again to try once more.", "That change wasn't saved. Try again."
+- **Nothing to look at in the app yet**: S13 changes nothing the app shows. The screenshots of the Program
+  tab, the builder, the Day editor and the library sheet (light and dark, default and an accessibility
+  size, under `screenshots/s13/`) need S14, which waits for #60; they were not taken.
+
+### Criterion 27, measured by hand
+
+Ruling R12: no `.performance` suite. Measured once with a throwaway host test (`swift test`, Debug, macOS
+host, best of 20 calls; deleted, not committed), on a program of 16 weeks × 6 training days of 7 slots each
+(`ProgramFixtures.day(_:slotCount:)`), every weekday but Sunday scheduled:
+
+| Budget (brief:85) | What was timed | Measured | Budget |
+|---|---|---|---|
+| The builder's first model, 16 × 6 | `ProgramPresentation.make` of that program | **1.9 ms** | 100 ms |
+| A slot edit to the next model | `ProgramEditSession<DayEditorEdit>.enqueue` of a sets edit, then `DayEditorPresentation.make` with that slot open | **0.8 ms** | 16 ms |
+| A keystroke's library model, 224 exercises | `ExercisePickerPresentation.make` over the bundled catalog (224) with a one- to five-letter query | **0.7 ms** | 10 ms |
+
+The second and third are the presentations S14's stores will call; the stores themselves are S14's. A
+release build on a device was not measured.
+
+### Open questions, each with a recommendation
+
+1. **S14 waits for #60.** *Recommendation:* merge #60, then merge `main` into this branch and build S14 here
+   (or merge S13 alone first; it stands on its own and changes nothing in the app).
+2. **An emission newer than the returned program** (deviation 5). *Recommendation:* accept for M1; if it is
+   ever seen, the session can read `active()` once after a write that heard an emission it did not adopt.
+3. **The same notice twice in a row is announced once** (deviation 11). *Recommendation:* accept; a counter
+   in the store would announce each refusal, at the cost of a field.
+
+### The runs
+
+All on 2026-10-18, in the worktree; every simulator command through the lock (iPhone 17 and Apple Watch
+Series 12 46 mm, both 27.0).
+
+- Host, `swift test --filter 'ProgramEditSessionTests|ProgramStoreTests'`: 35 tests, green fifteen times in a
+  row. Four mutations, each reverted after: drawing an emission during a write (criterion 3's two tests
+  fail), dropping the edits of a cancelled write (criterion 6's first two fail), no read of the logged weeks
+  before a removal (criterion 8's third fails), applying the edits to the store's copy rather than to
+  `update`'s argument (criterion 2's two tests and `storedProgramChanges_isShown` fail).
+- Host, `swift test --filter 'FeatureProgramTests|LedgerAppKitTests'`: 399 and 257 tests, green (the root
+  tests are iOS only).
+- Simulator, `FeatureProgramTests` on the PR plan, twice: the first did not compile (a hosting closure whose
+  only `try` sits inside `#expect` is not inferred as throwing; host builds skip that file); the second ran
+  552 tests, 549 passed, **1 failed** (`root_drawsTheMessages`: the failed message became a blank loading
+  screen once the root's task restarted the store, deviation 8), 2 known issues. Fixed in `e4a25a6`.
+- **`scripts/check.sh`, the full gate, on `e4a25a6`: exit 0, "check.sh OK", 1,360 s**: lint 77 s, iOS build
+  8 s, string catalogs 1 s, iOS tests 976 s (4,113 tests, 4,082 passed, 0 failed, 15 skipped, 16 expected
+  failures), watchOS build 46 s, watchOS tests 250 s (2,301 tests, 0 failed), coverage 2 s (FeatureProgram
+  99.08 %, 3,372 / 3,403 lines; overall 98.70 %).
+- **Not run:** any UI test (S13 adds none; criterion 24 is S14's), the nightly lane, CI. `#60` re-checked at
+  the end: still `OPEN`.
