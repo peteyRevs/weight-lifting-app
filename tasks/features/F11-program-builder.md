@@ -1036,3 +1036,15 @@ name's focus and the blank draft), and the DoD's screenshots.
 - **R12. The budgets' suite** (criterion 27) needs the PR plan's `skippedTests` (flagged above).
   *Recommendation:* build it tagged `.performance` and have the plan edited; if the edit cannot be made in
   this slice, the suite waits and criterion 27 is measured by hand and written in the notes.
+
+### Rulings before G1 — slices S13 and S14 (orchestrator, 2026-10-18)
+
+- **R1–R11 as recommended above.** R1 amends lines 196–199: a write that throws `CancellationError` (it stored
+  nothing, per S3) keeps its waiting edits and sends them again; every other failure drops them and shows the
+  notice.
+- **R12:** no test-plan edit in this slice (test plans are human-owned). Criterion 27 is measured by hand and
+  written in the notes; the `.performance` suite is not built.
+- **Questions for Pete 1–5:** built to their defaults (A in each) until he answers; each is S14's, so S13 does
+  not wait. A different answer is a fix round before the PR.
+- **Order:** S13 first. S14 starts only after #60 is on `main` (merge `main` in first); if #60 has not merged
+  when S13 is done, stop and report. Past about 950 product lines, stop and report (split at S13 | S14).
