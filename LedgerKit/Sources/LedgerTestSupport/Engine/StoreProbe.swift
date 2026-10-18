@@ -50,6 +50,8 @@ public actor StoreProbe {
     private var unreadable: Int?
     private var faults: [Call: Fault] = [:]
     private var held: Call?
+    /// Whether the held call waits once its store has done what was asked, rather than before it.
+    private var holdsAfterStoring = false
     private var parked: CheckedContinuation<Void, Never>?
     /// Those waiting in `waitUntilHeld()`, by the order they came. Behind a lock, not the actor, so that a
     /// cancelled waiter is let go from its cancellation handler, which cannot wait for the actor.
@@ -85,9 +87,12 @@ public actor StoreProbe {
         unreadable = count
     }
 
-    /// The next `call` waits inside the store until `release()`.
-    public func hold(_ call: Call) {
+    /// The next `call` waits until `release()`: before it reaches the store, or, with `afterStoring`, once
+    /// the store has done what was asked and before the call returns (F11 S13: a program stored and emitted
+    /// while its update has not returned yet).
+    public func hold(_ call: Call, afterStoring: Bool = false) {
         held = call
+        holdsAfterStoring = afterStoring
     }
 
     /// Returns once a held call is waiting. Throws `NeverHeld` when the waiting task is cancelled first, so a
@@ -133,28 +138,36 @@ public actor StoreProbe {
         unreadable
     }
 
-    /// Before the store: records the call, parks it when it is held, and throws when it is made to fail.
+    /// Before the store: records the call, parks it when it is held before the store, and throws when it is
+    /// made to fail.
     func enter(_ call: Call) async throws {
         calls.append(call)
-        if held == call {
-            held = nil
-            await withCheckedContinuation { waiting in
-                parked = waiting
-                let arrived = arrivals.withLock { arrivals in
-                    defer { arrivals = [:] }
-                    return Array(arrivals.values)
-                }
-                for case let .waiting(waiter) in arrived {
-                    waiter.resume()
-                }
-            }
-        }
+        await park(call, afterStoring: false)
         try refuse(call, afterStoring: false)
     }
 
-    /// After the store: throws when the call is made to fail once it is stored.
-    func leave(_ call: Call) throws {
+    /// After the store: parks the call when it is held after storing, and throws when it is made to fail once
+    /// it is stored.
+    func leave(_ call: Call) async throws {
+        await park(call, afterStoring: true)
         try refuse(call, afterStoring: true)
+    }
+
+    private func park(_ call: Call, afterStoring: Bool) async {
+        guard held == call, holdsAfterStoring == afterStoring else {
+            return
+        }
+        held = nil
+        await withCheckedContinuation { waiting in
+            parked = waiting
+            let arrived = arrivals.withLock { arrivals in
+                defer { arrivals = [:] }
+                return Array(arrivals.values)
+            }
+            for case let .waiting(waiter) in arrived {
+                waiter.resume()
+            }
+        }
     }
 
     private func refuse(_ call: Call, afterStoring: Bool) throws {

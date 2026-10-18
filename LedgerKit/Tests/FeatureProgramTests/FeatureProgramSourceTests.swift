@@ -30,6 +30,23 @@ nonisolated struct FeatureProgramSourceTests {
     /// The spellings that name a binary floating-point number, or turn a decimal into one.
     static let inexact = ["Double", "Float", "CGFloat", "TimeInterval", ".doubleValue", ".floatValue"]
 
+    /// The spellings of work no view's task owns, of a clock that ticks by itself, and of a format of its own
+    /// (F11 S13 criterion 26; standards §4 and §11). An unstructured `Task {` is found by `startsATask`, so
+    /// that a task group's `addTask {` is not taken for one.
+    static let unstructured = ["Task.detached", "DispatchQueue", "Timer", "TimelineView", ".formatted("]
+
+    /// Whether `line` starts an unstructured task: `Task {`, `Task(priority:) {`, `Task<…>`, `Task.init {` or
+    /// `Task.detached`, and not `addTask {`, `Task.yield()`, `Task.isCancelled` or `Task.checkCancellation()`
+    /// (the round 1 tester's rule, F11-S13-3).
+    static func startsATask(_ line: String) -> Bool {
+        line.firstMatch(of: /(^|[^A-Za-z0-9_.])Task\s*(\{|\(|<|\.init\b|\.detached\b)/) != nil
+    }
+
+    /// The edit session, the stores and the roots (F11 S13 and S14).
+    static let storeFiles = [
+        "ProgramEditSession.swift", "ProgramStore.swift", "ProgramStore+Sources.swift", "ProgramRoot.swift"
+    ]
+
     /// The lines of `source` on which `spelling` stands in code: the file's own, or a string interpolation's.
     /// A comparison (`repsHi ==`) is not the assignment it begins like.
     static func lines(of spelling: String, in source: SwiftSource) -> [Int] {
@@ -90,8 +107,31 @@ nonisolated struct FeatureProgramSourceTests {
             "ExercisePickerPresentation.swift",
             "ExercisePickerAction.swift",
             "ExercisePickerInput.swift"
-        ] {
+        ] + Self.storeFiles {
             #expect(read.contains { $0.hasSuffix(name) }, "\(name) is not among the files read")
+        }
+    }
+
+    @Test("No file of FeatureProgram starts a task of its own; the stores and roots keep no timer and format nothing")
+    func sources_startNoWorkOfTheirOwn() throws {
+        #expect(try Self.uses(of: Self.unstructured, inFiles: Self.storeFiles.contains) == [])
+        let sources = try CopyAudit.sources(ofModule: "FeatureProgram")
+        let tasks = sources.sorted { $0.key < $1.key }.flatMap { path, text in
+            SwiftSource(text).code.enumerated().filter { Self.startsATask($0.element) }
+                .map { "\(path):\($0.offset + 1)" }
+        }
+        #expect(tasks == [])
+        for name in Self.storeFiles {
+            #expect(sources[name] != nil, "\(name) is not among the files read")
+        }
+        for spelling in [
+            "let task = Task { await work() }", "Task {", "Task(priority: .high) { }", "_ = Task.init { }",
+            "Task<Void, Never> { }", "Task.detached { }"
+        ] {
+            #expect(Self.startsATask(spelling), "\(spelling)")
+        }
+        for spelling in ["group.addTask { await self.follow() }", "await Task.yield()", "Task.isCancelled"] {
+            #expect(!Self.startsATask(spelling), "\(spelling)")
         }
     }
 
@@ -129,7 +169,7 @@ nonisolated struct FeatureProgramSourceTests {
         #expect(Self.lines(of: "repsHi=", in: source) == [7])
         #expect(Self.lines(of: ".doubleValue", in: source) == [10])
         // Every spelling of the three lists is found when it stands in code.
-        for spelling in Self.ambient + Self.clamps + Self.inexact {
+        for spelling in Self.ambient + Self.clamps + Self.inexact + Self.unstructured {
             #expect(Self.lines(of: spelling, in: SwiftSource("let value = call(\(spelling)")) == [1], "\(spelling)")
         }
     }
