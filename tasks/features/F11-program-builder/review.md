@@ -1735,3 +1735,58 @@ note 2.
 Nothing compiled or run; the tester's figures (the bar's heights, the tails, the emptied draft) are taken
 from `test-findings.md`, not re-measured; the tester's new test files were read by their names and
 findings only; the cause of note 1.
+
+## Slice S13 — review (G3 reviewer, 2026-10-18)
+
+Reviewer pass on `feat/F11-s13-stores` at `1b0c07a` (`git diff origin/main...1b0c07a`). Every product file read in
+full, with the implementer's tests and the sanctioned edits to testers' files; compared with `TodayStore`/`TodayRoot`,
+`WorkoutStore+Pump` and `GRDBProgramRepository.update`. Committed by the orchestrator (the reviewer was read-only).
+
+### Verdict
+
+**Approve**, with three should-fix items. Blocking 0 · Should fix 3 · Nit 8.
+
+What holds: the save loop drops exactly what it sent (`sent` taken before `prepare`; `waiting` only grows while
+writing); R1, R4, R7 and amended R6 as ruled; a run started while an old write is in flight is woken by that
+write's `defer`; Swift 6 isolation clean, no unstructured task; 474 product lines recounted; conventions hold;
+no smaller design found for criteria 1–6.
+
+### Should fix
+
+1. `ProgramStore+Sources.swift:90` (with `ProgramStore.swift:59-60`): one `hasFailed` flag serves both a failed
+   read and an ended observation, so a later successful logged-weeks read clears an ended observation's failed
+   state within the run (the builder is drawn over a dead observation). Keep a per-run "ended" flag a read cannot
+   clear, as Today's `sources.hasEnded`; keep deviation 8's cross-run behaviour.
+2. `ProgramRoot.swift:52-54`: `run()` is not restarted on a return from the background, so the failed copy's
+   "Open the app again to try once more" is false. Key `run()` on the scene phase as `TodayRoot` does; keep
+   `save()` unkeyed so backgrounding never cancels a write. May land with S14 if written down as S14's.
+3. `ProgramEditSession.swift:151`: after a write that heard an emission, a successful read naming another program
+   or none is discarded for the returned program (same as G2's F11-S13-7 and -8). Adopt whatever a successful read
+   returns; `adopt` already drops edits made on another program.
+
+### Nit
+
+1. `ProgramStore.swift:153-160`: `routeAfterSave` is never cleared if `adopt` drops the waiting new-day edit, so
+   "+ Add training day" stops working for the store's life.
+2. `ProgramStore+Sources.swift:18,73`: `followedWorkouts = 1` does not observe a non-newest workout deleted or
+   edited in History; logged weeks stay stale for the run (errs safe). Say so in the type's comment.
+3. Notes, "How it works", sentence 3, and deviation 5 still describe the pre-fix behaviour.
+4. The R6 amendment was written in the implementer's commit; the orchestrator should confirm it.
+5. `implementersTripwire_missesTwoSpellings`: the identifier says the opposite of what it now asserts.
+6. `ProgramEditSessionTests.losingSequence` and the `again` tasks in `+Cancellation` are cancelled without being
+   awaited; use `Running.cancel()`.
+7. On GRDB a write's own emission can arrive before `update` returns, so the post-write read may run after many
+   writes; the notes should not call it rare.
+8. `ProgramStore.swift:56-60`: say in a comment why four properties are module-writable.
+
+### For S14's wiring
+
+The public API fits. Pin with UI tests: whether `onChange(of: week, initial: true)` fires again when the root
+reappears (a stale request overriding the lifter's selection), and that the builder's waiting edits are re-sent on
+return from a pushed Day editor (R5).
+
+### What I did not check
+
+`swift test` (a tester's untracked file was in the tree), any simulator run, the adversarial suites line by line,
+`onChange(initial:)` on reappearance, how often GRDB emits before `update` returns, the by-hand budgets, the
+in-memory `update`'s `CancellationError` after a released hold, and criteria 15–25.
