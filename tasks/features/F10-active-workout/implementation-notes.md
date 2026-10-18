@@ -5854,3 +5854,212 @@ engine will not take is never saved by "Try again"; "Close" and a new "Save work
 | **full `scripts/check.sh` on `247e40c`** | **exit 0, 1550 s**; FeatureWorkout coverage 99.10 % |
 
 The code is `247e40c`; only this section and two screenshots came after it.
+
+## S7b — the receipt, as built (G1 implementer, 2026-10-18)
+
+Branch `feat/F10-s7b-receipt`, cut from `main` at `16a2e52` (S7a is #59). The contract is the brief's "Plan
+amendments — slice S7": criteria 25 to 37, and 38 to 40 for the receipt's own views, with "Rulings before G1 —
+slice S7". After this slice "Save workout" shows the saved workout's receipt in the cover (date, name, "Done", three
+tiles, the records line, one row for each exercise), and "Done" closes the cover onto Today's Logged card. A set
+that makes a new record is felt once (criterion 36). **The live record stayed in the slice**: the count is under
+800 (below).
+
+### What was built
+
+| Where | What |
+|---|---|
+| `LedgerDesign/Components/ReceiptLayout.swift` | `ReceiptLayout` and its string-only `Model`, `Tile`, `Row`; `ReceiptLayoutGallery`. In the gallery (`DesignGallery`, after `WrapLayout`), the component previews, `docs/architecture.md` §11 |
+| `FeatureWorkout/ReceiptScreenModel.swift` | `ReceiptScreenModel` (header, page), `ReceiptHeaderModel` |
+| `FeatureWorkout/WorkoutPresentation+Receipt.swift` | `WorkoutPresentation.receipt(_:records:locale:calendar:)`, `spokenElapsed` |
+| `FeatureWorkout/WorkoutCopy+Receipt.swift` | the receipt's 11 lookups |
+| `FeatureWorkout/Views/ReceiptScreen.swift`, `ReceiptHeader.swift` | `ReceiptScreen` (header pinned over `ScrollView { ReceiptPage }`), `ReceiptPage`, `ReceiptHeader` |
+| `FeatureWorkout/WorkoutStore+Receipt.swift` | `receipt`, `isSavedHere`, `showReceipt`, `closeReceipt`, `records(of:)`, `readBests()`, `recordHaptics(in:)`, `HeldRecord` |
+| `FeatureWorkout/WorkoutStore+Intents.swift` | `send(_:)` and its helpers, moved out of `WorkoutStore.swift` (file length; see "Deviations") |
+| `WorkoutStore.swift`, `+Finish`, `+Rest`, `WorkoutModel.swift`, `WorkoutAction.swift`, `WorkoutScreen.swift`, `WorkoutRoot.swift` | `saved`, `bests`, `heldRecords`, the `statsQueries` key; `model` is `.receipt` once saved; `.done`; `follow()` shows the receipt on the ending update and plays the live record; `save()` shows it on `finish`'s answer; `shownRest` and `restPanel` are nil on the receipt; the root's `.task(id: store.bestsSubject) { await store.readBests() }` |
+| `FeatureWorkout/Receipt+Previews.swift` | `ReceiptPreview`: with a record (24:22), past an hour (1:01:05, no record), in kilograms |
+
+### How it works
+
+- **Which save shows a receipt** (criterion 25; `isSavedHere`). The finished state from `finish`'s answer always
+  does. From the stream's ending update, one does when a save is running (`isSaving`), the session was asked to
+  finish (`PendingSave.wasSent`), and the state is finished, of the workout being saved, **at the end that save
+  asked for**. So criterion 18's second outcome (the answer lost, the stream says finished) shows the receipt, and an
+  end another hand made first (criterion 17: before the call, or under it as `noLiveWorkout`) closes the cover as
+  `.saved` with no receipt. Criterion 18's third outcome (no finished state reaches the store) closes as before
+  (O7). After a failed save and "Close", R10 holds: the store keeps no knowledge of the waiting end, so a tap whose
+  `apply` completes it closes the cover as `.saved` with no receipt (S7a's `close_thenATap_completesTheSave`).
+- **The receipt is set once** (`saved`), the sheet goes down, the queue is emptied, `isSaving` is false. While it
+  shows, `send` answers `.done` alone. A later non-live update (the ending update after the answer, a new stream's
+  first update with nothing live) leaves it up: only "Done" closes the cover, as `.route(.saved(id))`. A live
+  update that lags behind the answer still lands in `workout` but changes nothing drawn.
+- **Nothing of the live workout remains** (37): `shownRest` and `restPanel` are nil once `saved` is set, so the
+  root's `.task(id: store.shownRest)` ends `keepRestTime()` and nothing more is announced; the screen's bottom inset
+  is only the live workout's.
+- **The bests** (30, 31, 36) are read once, by `readBests()` from the root's task keyed by the workout on screen
+  (`bestsSubject`). A failed read is logged (`workout` category) and stored as `.failed`; nothing retries. A read
+  cancelled with the cover's tasks leaves `.idle`, so the task that starts again reads. The receipt never waits:
+  `receipt` is computed, so the line appears when the read answers. The records are
+  `PersonalRecords.detect(workout:against:now: startedAt)`; the store passes nothing to the save (R6).
+- **The live record** (36). When the bests arrive, the records the workout already holds are put in `heldRecords`
+  and never played. On each live update `follow()` plays `.personalRecord` once for each record of the workout not
+  held yet, after the update's own haptics, and holds it. A record is told from another by its exercise and its
+  kind (estimate or weight at reps), not its value, so an un-log and a second log, or a heavier set later, do not
+  play it again. Nothing is drawn (O10).
+
+### Criteria → tests
+
+Host unless marked: *sim* runs on the iPhone 17 simulator only, *UI* is a UI test.
+
+| # | Criterion | Tests |
+|---|---|---|
+| 25 | the receipt shows; the cover stays up; another hand's end and O7 close without one | `WorkoutStoreReceiptTests.save_showsTheReceipt_doneCloses`, `answerLost_streamSaysFinished_showsTheReceipt`, `endedElsewhere_showsNoReceipt`; `WorkoutStoreSaveRestartTests.save_answerLost_closesAsSaved` (`saved == nil`); every S7a save test, now through the receipt |
+| 26 | "Done": `.saved(id)`; no route case; identifier | `save_showsTheReceipt_doneCloses`; *sim* `ReceiptTests.done_sendsDone`; *UI* `Smoke.test_sampleWorkout_logASet_saveWorkout_todayShowsItLogged` (finds `workout.receipt.done`, then Today's Logged card) |
+| 27 | pinned header over one scroll view; parts | *sim* `ReceiptTests.screen_isOneScrollViewUnderItsHeader` (`.large`, `.accessibility5`) |
+| 28 | the start's day, from the injected calendar and locale | `WorkoutPresentationReceiptTests.date_isTheStartsDay` (UTC, Tokyo, `fr_FR`), `receipt_isTheBriefs` |
+| 29 | three tiles from the summary | `receipt_isTheBriefs` ("24:22", "23/25", "24,180"), `receipt_pastAnHour`, `receipt_inKilograms` |
+| 30 | the records line, counted | `recordsLine_countsTheRecords`; `WorkoutCopyTests.receiptTexts_areWordForWord` (1, 3, 1,234); `WorkoutStoreReceiptTests.records_comeFromTheBests` (read once, stamped with the start), `deload_hasNoRecords` |
+| 31 | bests unreadable or pending | `bestsUnreadable_noLine` (not retried), `bestsPending_receiptShowsFirst` |
+| 32 | the rows as the Domain gives them | `rows_areTheDomains` (chips, "—", spoken) |
+| 33 | `ReceiptLayout` string-only, gallery, previews | `DesignGalleryTests` (the components list), `LedgerDesignTests.PreviewTests`, `AccessibilityTreeTests` (`TreeTables.receipts`), *sim* `ReceiptLayoutSnapshotTests` (6) |
+| 34 | pure and total | `receipt_isTotal` (no exercise, zero volume, a NaN start, a saturated time) |
+| 35 | no orange control | *sim* `ReceiptLayoutTests.orange_isTheTimeLabelAndTheRecords` (light and dark: every orange pixel is in the TIME tile or the records line; none in "Done") |
+| 36 | the live record | `WorkoutStoreLiveRecordTests` (4: felt once through un-log and re-log; two kinds twice; held at open not felt; no bests, nothing felt) |
+| 37 | nothing live on the receipt | `WorkoutStoreReceiptTests.receipt_holdsNothingLive` |
+| 38 | sizes, 44 pt, stacking | *sim* `ReceiptLayoutTests.receipt_noWordIsCut`, `receipt_nothingLeavesOrOverlaps` (five sizes to `.accessibility5` × 375 and 402 pt × Bold Text × right to left, four models, one with 1,234 of 1,250 sets and a long name), `receipt_stacksAtAccessibilitySizes`, `check_seesACut` |
+| 39 | Bold Text and right to left | the same sweep; `rightToLeft_isMirrored` |
+| 40 | VoiceOver | *sim* `ReceiptTests.tree_withRecords_isCriterion40s` (word for word), `tree_isExactlyTheTable` (three states, light `.large` and dark `.accessibility3`) |
+
+The text checks: `WorkoutCopyTests.receiptTexts_areWordForWord`, `FeatureWorkoutSourceTests.receiptLookups_areInTheirCopyFile`, `root_readsTheBests` (in `WorkoutStoreReceiptTests`).
+
+### The receipt's VoiceOver tree (criterion 40), with a record
+
+| Stop | Traits |
+|---|---|
+| "Wednesday, September 16" | text |
+| "Upper A — Push focus" | heading |
+| "Done" | button |
+| "TIME, 24 minutes, 22 seconds" | text, one stop |
+| "6 of 18 sets logged" | text, one stop |
+| "5,578 lb moved" | text, one stop |
+| "1 new PR this session" | text |
+| "LOGGED" | heading |
+| "Barbell Bench Press, Prescribed 5 × 5 @ 200 lb, Logged 5 × 200×5" | text, one stop |
+| … one for each exercise; "Chest-Supported Row, Prescribed 4 × 8 @ 75 lb, Nothing logged" | text, one stop |
+
+"Prescribed on the right" is no stop. The same at `.accessibility3`, and mirrored.
+
+### Edits to the testers' files (for the audit)
+
+| File | Old | New | Strength |
+|---|---|---|---|
+| `Adversarial/WorkoutSaveAdversarialCover.swift`, `SaveCover.sync()` | the root's part: the save's and discard's tasks, and the exit | the same, and a lifter who taps "Done" as soon as a receipt shows (`receipts` records each) | every check after it unchanged; a save that once closed the cover now closes it through the receipt. Covers the storm, the walk, `+Once`, `+Failures`, `+RoundTwo` |
+| `Adversarial/WorkoutWordsAdversarialTests.swift`, `catalog_holdsExactlyTheSlicesTexts` | 71 keys | the same list and 11 more under a comment naming this slice; the name says 82 | the same: both directions of the set difference |
+| `Adversarial/WorkoutRootSaveAdversarialTests.swift`, `Hosted` and `sheet_isPresented_andHeldWhileSaving` | binds the session and the date; waits for the exit | also `inMemoryStores()` (the root now reads the bests); waits for the receipt, sends `.done`, then the same wait and expectation | the same exit, one step later |
+| `Apps/LedgerUITests/WorkoutFinishAdversarial.swift`, `WorkoutSaveFailureAdversarial.swift` | after a save, "View session" on Today | waits for `workout.receipt.done` and taps it first, under a comment | the same Today checks |
+
+The implementer's own tests that changed: the S7a save tests (one line before each `.saved` expectation after a
+save: `#expect(store.doneOnReceipt(of:))`, which sends `.done` only when that receipt is on screen), the O7 line in
+`save_answerLost_closesAsSaved`, `WorkoutCopyTests` (71 → 82), `PreviewTests` (the receipt's enum and its renders),
+`WorkoutStoreSaveTests` (its last test moved into an extension for the lint's length), `Smoke` (the receipt step),
+`WorkoutSaveFailure` (the same Done tap), `DesignGalleryTests` (the list).
+
+### Texts
+
+Catalog keys added (11), each `translated`: "Done", "TIME", "SETS", "LB MOVED", "KG MOVED", "%lld new PRs this
+session" (one: "%lld new PR this session"), "LOGGED", "Prescribed on the right", and the three invented ones below.
+The date, the time, "23/25", the volume, the targets and the chips are formatted values, not entries.
+
+**Invented, for the product owner** (from the specification's list, used as drafted):
+
+| Text | Where |
+|---|---|
+| "Prescribed %@" | a row, spoken only |
+| "Logged %@" | a row, spoken only |
+| "Nothing logged" | a row with "—", spoken only |
+
+The tile's spoken time ("24 minutes, 22 seconds", "1 hour, 1 minute, 5 seconds") is the system's duration format
+in the lifter's locale, joined to "TIME" with ", ". No text beyond the specification's list was invented.
+
+### For the product owner
+
+Each default is one small place.
+
+1. **O5: "1 new PR" counts records** (`summary.prs.count`): one lift can be two. Place: `WorkoutPresentation.receipt`.
+2. **O6: the brief's date, "Wednesday, September 16"**, drawn as written (caption, muted), not the prototype's
+   uppercase "WEDNESDAY, AUG 19"; the header is pinned. Place: `startDay(of:)`, `ReceiptHeader`.
+3. **O7: no receipt for a workout the cover did not see finish**, nor for one finished by another hand, nor after a
+   failed save's "Close" when a later tap completes the save (R10). Place: `isSavedHere`.
+4. **O9: "Prescribed on the right"** stays when mirrored (the target is then on the left); its translator's comment
+   says it stands at the trailing edge.
+5. **O10: a record made during the workout is felt, not shown.** One buzz for each record, so a set that beats both
+   bests of an exercise buzzes twice; a record is felt at most once per exercise and kind in a cover, so a heavier
+   set later in the same workout is not felt again. Place: `recordHaptics(in:)`.
+6. **Criterion 35, orange**: the "TIME" label and the records line, nothing else. **The prototype's ink-filled TIME
+   tile is not drawn**: every tile is on the raised surface. In dark mode an ink tile is near white, and the orange
+   label on it falls below AA. Place: `ReceiptTile`.
+7. **"Done" is an outlined ink pill**, not the prototype's ink-filled one: `PillButton`'s filled style means
+   "selected" and VoiceOver would say so. Place: `ReceiptHeader`.
+8. **Chips are pills** (capsules), where the prototype rounds them by 7 px: there is no radius token that small.
+9. **At accessibility sizes** the tiles stand one per row, "Done" under the name, the note under "LOGGED", a row's
+   target under its name (reference `receipt_accessibility3`).
+
+### Product lines
+
+Swift lines that are not blank or comment, against `16a2e52`, without `LedgerFakes`, `LedgerTestSupport` and the
+UI tests (`scratchpad/s7b/lines.py`): **609**. The specification planned 670 and expected 750 to 950. The live
+record is in (about 30 lines). 50 of the lines are `send(_:)` moved into `WorkoutStore+Intents.swift`, which
+`WorkoutStore.swift` loses (−30 net there).
+
+| File | Change | Now |
+|---|---|---|
+| `LedgerDesign/Components/ReceiptLayout.swift` | +195 | 195 |
+| `FeatureWorkout/WorkoutStore+Receipt.swift` | +87 | 87 |
+| `FeatureWorkout/WorkoutPresentation+Receipt.swift` | +86 | 86 |
+| `FeatureWorkout/WorkoutCopy+Receipt.swift` | +82 | 82 |
+| `FeatureWorkout/Receipt+Previews.swift` | +62 | 62 |
+| `FeatureWorkout/WorkoutStore+Intents.swift` | +50 | 50 |
+| `FeatureWorkout/Views/ReceiptHeader.swift` | +28 | 28 |
+| `FeatureWorkout/Views/ReceiptScreen.swift` | +25 | 25 |
+| `FeatureWorkout/ReceiptScreenModel.swift` | +11 | 11 |
+| `LedgerDesign/Components/Components+Previews.swift` | +5 | 180 |
+| `FeatureWorkout/WorkoutRoot.swift` | +3 | 99 |
+| `FeatureWorkout/Views/WorkoutScreen.swift` | +2 | 60 |
+| `LedgerDesign/Gallery/DesignGallery.swift`, `WorkoutModel.swift`, `WorkoutAction.swift` | +1 each | |
+| `FeatureWorkout/WorkoutStore.swift` | −30 | 153 |
+
+### Deviations
+
+1. **`send(_:)` moved to `WorkoutStore+Intents.swift`**, and the three dismissals share one case
+   (`dialogs(closedBy:)`): `WorkoutStore.swift` passed the lint's 300 lines and `send` its complexity of 10 with
+   `.done`. Behaviour is unchanged; `startDiscard` and `dismiss` lost `private` for it.
+2. **Criterion 25's "from the ending update"** is narrowed to the end the save asked for (above), so criterion 17
+   keeps closing without a receipt; in the tests the date stands still, which is why `wasSent` is checked too.
+3. **`spokenElapsed` holds the time under `Int64.max` seconds**: the system's duration format traps on a saturated
+   time (2^63 s), which criterion 34's "a start that is not finite" reaches.
+4. **The cut check leaves out the tiles' values** (they shrink by design, as the set rows' numerals do) and the
+   note beside "LOGGED" (no VoiceOver stop to find it by); both are in the references.
+5. **The cut check leaves out "LOGGED"**: right to left at the accessibility sizes the reader gives the tracked
+   eyebrow 5 pt less than it measures alone (140 of 145 pt at `.accessibility3`), in a row ten times as wide. A
+   temporary render of the mirrored receipt at `.accessibility3` (not committed) shows the word whole; giving the
+   eyebrow the row's width did not change the reading. It is still checked for its place and overlaps.
+
+### References
+
+New: 13 in `FeatureWorkoutTests/__Snapshots__/ReceiptTests/` (`receipt_matchesReferences` {withRecords, noRecords,
+kilograms} × {light, dark} × {large, xLarge}; `receipt_accessibility3` dark) and 6 in
+`LedgerDesignTests/__Snapshots__/ComponentSnapshotTests/` (`receiptLayout`, the phone matrix), recorded on the
+iPhone 17 (iOS 27.0). Changed: 1, `DesignGalleryTests/designGallery_dark_matchesReference.dark-large` (the new
+section at the gallery's end). Looked at: withRecords light large, withRecords dark accessibility3.
+
+### Inputs for later slices
+
+- **S8.** A swap adds an exercise whose bests were not read: `readBests()` reads once per store, keyed by the
+  workout's id; S8 reads the new exercise's and merges them into `bests` (and into `heldRecords` as of the swap).
+- **F13.** `ReceiptLayout.Model` is all F13's detail needs; `WorkoutPresentation.receipt` is FeatureWorkout's and
+  stays there (each module its own copy, standards §7).
+- **F17.** Telling a reader how a workout ended would let criterion 25 show a receipt after "Close" too (R10).
+
+### Not verified
+
+- **VoiceOver and the `.personalRecord` buzz on a device.** The haptic is played through the injected client.
+- **The receipt in the running app in dark mode**: only the references (S7a's dark-appearance note stands).

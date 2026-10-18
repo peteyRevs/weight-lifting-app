@@ -39,15 +39,16 @@
             try ReceiptPreview.allCases.map { try #require($0.model) } + [longWords()]
         }
 
-        /// The parts whose words this module and `ReceiptLayout` lay out: the header, the records line,
-        /// "LOGGED" and each row. A tile's value shrinks rather than wraps, by design (`LedgerDesign`), so a
-        /// tile is checked for its place, not for a cut.
+        /// The parts whose words this module and `ReceiptLayout` lay out: the header, the records line and
+        /// each row. A tile's value shrinks rather than wraps, by design (`LedgerDesign`), so a tile is
+        /// checked for its place, not for a cut. "LOGGED" is left out: right to left at the accessibility
+        /// sizes the reader gives the tracked eyebrow 5 pt less than it measures alone, while the word is
+        /// drawn whole (the notes, S7b "Deviations" 5); it is checked for its place.
         static func parts(of model: ReceiptScreenModel) -> [LayoutPart] {
             var parts = [
                 LayoutPart(model.header.date) { Text(model.header.date).ledgerFont(.caption) },
                 LayoutPart(model.header.title) { Text(model.header.title).ledgerFont(.heading) },
-                LayoutPart(model.header.done) { PillButton(model.header.done) {} },
-                LayoutPart(model.page.logged) { Eyebrow(model.page.logged) }
+                LayoutPart(model.header.done) { PillButton(model.header.done) {} }
             ]
             if let records = model.page.records {
                 parts.append(LayoutPart(records) { Text(records).ledgerFont(.caption) })
