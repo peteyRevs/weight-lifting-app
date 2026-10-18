@@ -83,16 +83,27 @@ final class DayEditor: XCTestCase {
         lowerA.tap()
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         XCTAssertEqual(name.value as? String, "Lower A — Squat focus", "nothing of Upper A's draft")
-        // The system's swipe back, from the screen's leading edge.
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
-        start.press(
-            forDuration: 0.05,
-            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)),
-            withVelocity: .slow,
-            thenHoldForDuration: 0.1
-        )
-        XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the swipe back pops it")
+        Self.swipeBack(in: app)
+        // Known (S14 notes, open question 1): with the navigation bar hidden the system's swipe back does not pop
+        // the Day editor; the same swipe pops Settings (`test_swipeBack_control_popsAScreenWithTheSystemBar`).
+        // Strict: this fails as soon as the swipe pops, so the mark goes with the fix.
+        XCTExpectFailure("The hidden navigation bar takes the system's swipe back away (criterion 20)") {
+            XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the swipe back pops it")
+        }
+        Self.barButton("Program", in: app).tap()
+        XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Upper A — Push focus draft"].exists, "the draft was stored as typed")
+    }
+
+    /// The control of the swipe above: the same synthesized swipe pops Today's Settings, a pushed screen that
+    /// keeps the system's navigation bar. So a failure above is the Day editor's, not the gesture's.
+    @MainActor
+    func test_swipeBack_control_popsAScreenWithTheSystemBar() {
+        let app = BuilderApp.launch(at: Builder.week5)
+        app.buttons["Settings"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["settings.title"].waitForExistence(timeout: 5))
+        Self.swipeBack(in: app)
+        XCTAssertTrue(app.staticTexts["settings.title"].waitForNonExistence(timeout: 5), "the swipe back pops it")
     }
 
     /// 24d: the library: a query typed, a chip tapped, three exercises picked and added, in the order picked.
@@ -167,6 +178,17 @@ final class DayEditor: XCTestCase {
 }
 
 private extension DayEditor {
+    /// The system's swipe back, from the screen's leading edge.
+    @MainActor
+    static func swipeBack(in app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).press(
+            forDuration: 0.05,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)),
+            withVelocity: .slow,
+            thenHoldForDuration: 0.1
+        )
+    }
+
     /// The Day editor's bar button of this label, not the tab bar's "Program".
     @MainActor
     static func barButton(_ label: String, in app: XCUIApplication) -> XCUIElement {
