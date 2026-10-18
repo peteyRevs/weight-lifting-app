@@ -32,7 +32,7 @@
         func noProgram_emptyState() async throws {
             let rig = try S13Rig(program: .some(nil))
             let handed = S13Handed()
-            try await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
                 await s13Until { rig.store.state == .noProgram }
             }
             #expect(handed.spoken.isEmpty)
@@ -43,10 +43,10 @@
         func failed_thenHostedAgain_loads() async throws {
             let rig = try S13Rig { S13EndingPrograms(base: $0, endings: 1) }
             let handed = S13Handed()
-            try await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
                 await s13Until { rig.store.state == .failed }
             }
-            try await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
                 await s13Until { rig.model != nil }
             }
             #expect(rig.model?.header.name == "Upper / Lower")
@@ -81,7 +81,7 @@
         func addDay_failedWrite_noRoute() async throws {
             let rig = try S13Rig()
             let handed = S13Handed()
-            try await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
                 await s13Until { rig.model != nil }
                 await rig.probe.fail(.updateProgram)
                 rig.store.send(.addDay(name: "Day 5", weekIndex: 0))
@@ -96,7 +96,7 @@
         func notice_isAnnounced() async throws {
             let rig = try S13Rig()
             let handed = S13Handed()
-            try await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: S13RootInput(), handed: handed)) {
                 await s13Until { rig.model != nil }
                 rig.store.send(.notice(.minimumTwoWeeks))
                 await s13Until { handed.spoken.count == 1 }
@@ -124,7 +124,7 @@
             let rig = try S13Rig()
             let handed = S13Handed()
             let input = S13RootInput(week: ProgramWeekRequest(number: 1, weekIndex: 6))
-            try await Self.hosting(S13RootHost(store: rig.store, input: input, handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: input, handed: handed)) {
                 await s13Until { rig.model != nil }
                 #expect(rig.store.selectedWeek == 6, "asked for 6; today is in week 5 (index 4)")
                 rig.store.send(.selectWeek(2))
@@ -146,7 +146,7 @@
             let rig = try S13Rig()
             let handed = S13Handed()
             let input = S13RootInput()
-            try await Self.hosting(S13RootHost(store: rig.store, input: input, handed: handed)) {
+            await Self.hosting(S13RootHost(store: rig.store, input: input, handed: handed)) {
                 input.week = ProgramWeekRequest(number: 1, weekIndex: 7)
                 await s13Until { rig.model != nil }
                 await s13Until { rig.store.selectedWeek == 7 }

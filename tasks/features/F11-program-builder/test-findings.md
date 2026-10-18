@@ -1432,3 +1432,58 @@ spellings and the three non-tasks.
 | `swift test --filter` the new suite, F11-S13-1's suite, the three source suites | 1, as intended: 24 tests, 3 failed (F11-S13-6, -7, -8) |
 | scan mutation (literal on a log line; `Task(priority:)`) | killed by all four scans |
 | `scripts/check.sh` (full gate) at `2e4223f` | **65, as intended**: format, lint, script suites clean; the iOS PR plan's only failing tests are the three of F11-S13-6, -7, -8 (xcodebuild lists some twice); round 1's F11-S13-1 test passes; 1,089 s. The gate stops at step 3: watchOS and coverage did not run |
+
+---
+
+## S13 — round 3 (G2 tester, 2026-10-18)
+
+Tested at `c641816` (fix `c29faa5`, notes `c641816`, review `d47afc8` read). No product or implementer-test file
+changed. Two new suites: `Adversarial/ProgramReReadAdversarialTests.swift` (4 tests) and, iOS only,
+`Adversarial/ProgramRootPhaseAdversarialTests.swift` (3 tests). One edit of my own file:
+`ProgramRootAdversarialTests.swift`, the `try` dropped before the seven `Self.hosting` calls whose closure
+throws nothing (lines 35, 46, 49, 84, 99, 127, 149; the warning reported at 49). **No test fails.**
+
+### Verdict: F11-S13-6, -7 and -8 are closed; G2 can close
+
+Every round 1 and round 2 suite passes **unedited**: `emissionDuringTheRead_isDrawn`,
+`readNamesAnotherProgram_isFollowed`, `readNamesNoProgram_isTheEmptyState` included (host, 46 tests in 11
+suites, 200 seeds).
+
+### The new code, attacked
+
+| Attack | Result | Test |
+|---|---|---|
+| An emission during **every** read (a store that writes while each of twenty reads runs) | The loop ends after the 21st read, the one undisturbed; the screen equals the store; an edit made while it read is written afterwards. It ends only once the store goes quiet: a store that kept writing would keep the write open (and queued edits waiting) for as long as it writes. Each write is a real change, so this needs an unbounded stream of writes; note, not a defect | `emissionDuringEveryRead_endsWhenTheStoreGoesQuiet` |
+| A read that **throws on the second turn**, after the first found a newer program | The program `update` returned is kept, as R6 re-amended says ("a read that throws, at any turn, … keeps `saved`"); the screen is without a workout's misses the first read had seen, until the next edit, which heals it. Pinned as ruled (F11-S13-10) | `readThrowsOnTheSecondTurn_keepsTheNewest` |
+| **Nil, then a program** (the active program deleted, then another made active during the first read) | Two reads; the builder follows the second program | `nilThenAProgram_followsTheProgram` |
+| **Per-run `hasEnded`** (SF1): an observation ends in run 1, not in run 2, again in run 3 | failed → shown → failed; a cancelled run is not a failure | `endedFlag_isPerRun` |
+| **Scene phase**: a write held before the store, background → active, released | Not cancelled; one `update`; nine weeks; no notice; the screen ends on the store | `ProgramRootPhaseAdversarialTests.heldBeforeStoring_acrossTheBackground_storedOnce` |
+| Same, held after storing (the sources' run restarts and re-hears during the write, so the re-read runs) | Adopted once; nine weeks; one `update` | `…heldAfterStoring_acrossTheBackground_adoptedOnce` |
+| Background → active is not the failed state | The builder is shown again, never `.failed` | `…background_isNotAFailure` |
+| **`routeAfterSave` (nit 1)**: `newDayWaits` | Holds for every case of round 1 (behind another write, double tap, failed, cancelled: all pass unedited) and for the implementer's dropped-with-another-program case | round 1's route suite |
+
+Mutations (switched, put back with `git checkout`, `git status` clean): the re-read loop made a single read
+(`while` → `if`) fails four tests here and round 2's emission-during-the-read test; `hasEnded = false` removed
+from `run()` fails `endedFlag_isPerRun`.
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S13-10 | note (for the orchestrator) | On a read that throws after an earlier read succeeded, keeping the last read (`newest`) instead of `saved` would lose nothing and show more; R6 as ruled keeps `saved`. | `readThrowsOnTheSecondTurn_keepsTheNewest` (pins the ruling) |
+| F11-S13-11 | note | The re-read loop runs for as long as the store emits during each read (above). | `emissionDuringEveryRead_endsWhenTheStoreGoesQuiet` |
+| F11-S13-12 | note (pre-existing, not from nit 1) | If a route is emitted (a card tap) after "+ Add training day" and before its write returns, the day's route finds `pendingRoute` taken and is dropped with `routeAfterSave`: the day is added, the editor does not open. The root hands a route on within a frame, so the window is that frame. No test. | — |
+
+### Audit of the sanctioned edit to my file
+
+`ProgramStoreSourceAdversarialTests.swift:78`, `implementersTripwire_missesTwoSpellings` →
+`…_catchesBothSpellings`: **justified**, the name I called stale in round 2; nothing else changed.
+
+### Runs (2026-10-18, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `swift test --filter` my eleven host suites, 200 seeds | 0: 46 tests (after pinning F11-S13-10 as ruled) |
+| two mutants | both killed |
+| `scripts/check.sh --lint-only` | 0 |
+| `scripts/check.sh` (full gate) | see the report |
