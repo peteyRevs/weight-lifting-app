@@ -1431,4 +1431,4 @@ spellings and the three non-tasks.
 |---|---|
 | `swift test --filter` the new suite, F11-S13-1's suite, the three source suites | 1, as intended: 24 tests, 3 failed (F11-S13-6, -7, -8) |
 | scan mutation (literal on a log line; `Task(priority:)`) | killed by all four scans |
-| `scripts/check.sh` (full gate) | see the report |
+| `scripts/check.sh` (full gate) at `2e4223f` | **65, as intended**: format, lint, script suites clean; the iOS PR plan's only failing tests are the three of F11-S13-6, -7, -8 (xcodebuild lists some twice); round 1's F11-S13-1 test passes; 1,089 s. The gate stops at step 3: watchOS and coverage did not run |
