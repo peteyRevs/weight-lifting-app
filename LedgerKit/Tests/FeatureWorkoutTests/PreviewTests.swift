@@ -7,7 +7,8 @@
     import Testing
 
     /// Every `#Preview` in FeatureWorkout is a case of `WorkoutPreview` or, for the "End workout?" sheet
-    /// (F10 S7), of `FinishSheetPreview`, and every case renders (the
+    /// (F10 S7), of `FinishSheetPreview`, or, for the receipt (F10 S7b), of `ReceiptPreview`, and every case
+    /// renders (the
     /// convention F07's criterion 8 set for each module with previews).
     @Suite("Previews (FeatureWorkout)", .serialized, .tags(.feature))
     struct PreviewTests {
@@ -17,6 +18,7 @@
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
             let cases = WorkoutPreview.allCases.map(\.rawValue) + FinishSheetPreview.allCases.map(\.rawValue)
+                + ReceiptPreview.allCases.map(\.rawValue)
             #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(cases.count == Set(cases).count)
         }
@@ -45,6 +47,7 @@
                 case .loading: kinds.append("loading")
                 case .failed: kinds.append("failed")
                 case let .workout(workout): kinds.append(workout.header.isEnabled ? "workout" : "busy")
+                case .receipt: kinds.append("receipt")
                 }
             }
             #expect(kinds == [

@@ -58,6 +58,8 @@ struct WorkoutScreen<Inset: View>: View {
                     position.scrollTo(edge: .top)
                 }
             }
+        case let .receipt(receipt):
+            ReceiptScreen(model: receipt, send: send)
         case let .failed(failed):
             EmptyState(failed.title, body: failed.message, actionTitle: failed.close) { send(.minimize) }
                 .padding(.horizontal, LedgerSpacing.screen)

@@ -67,6 +67,9 @@ struct WorkoutRoot: View {
         .task(id: store.shownRest) {
             await store.keepRestTime()
         }
+        .task(id: store.bestsSubject) {
+            await store.readBests()
+        }
         .onChange(of: store.exit) { _, exit in
             if let exit {
                 onExit(exit)

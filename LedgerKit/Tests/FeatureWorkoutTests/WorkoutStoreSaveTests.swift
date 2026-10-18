@@ -129,6 +129,7 @@ struct WorkoutStoreSaveTests {
         await store.save()
         await store.save()
         #expect(await scene.asked() == [.finished(Fixtures.now.addingTimeInterval(600))])
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         #expect(store.dialog == nil)
         #expect(try await scene.session.current() == nil)
@@ -144,6 +145,7 @@ struct WorkoutStoreSaveTests {
         store.send(.finish)
         store.send(.save)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
         #expect(stored.phase == .finished)
@@ -152,7 +154,11 @@ struct WorkoutStoreSaveTests {
         #expect(try await scene.session.current() == nil)
         await task.value
     }
+}
 
+// MARK: Criterion 13: felt once
+
+extension WorkoutStoreSaveTests {
     @Test("The finished workout is felt once, by the stream, whichever of the answer and the update comes first")
     func save_playsWorkoutFinishedOnce() async throws {
         let haptics = FakeHaptics()
@@ -179,6 +185,7 @@ struct WorkoutStoreSaveTests {
         await gate.open()
         await saving.value
         await following.value
+        #expect(second.doneOnReceipt(of: live.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(second.exit == .route(.saved(live.id)))
         #expect(await other.played == [.workoutFinished])
     }

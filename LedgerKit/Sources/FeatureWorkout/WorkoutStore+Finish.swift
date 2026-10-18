@@ -95,7 +95,8 @@ extension WorkoutStore {
             guard ended.phase == .finished else {
                 throw WorkoutStoreError.notFinished
             }
-            leave(.route(.saved(ended.id)))
+            // The workout this save ended: its receipt shows, and "Done" closes the cover (F10 S7b).
+            showReceipt(ended)
         } catch WorkoutSessionError.noLiveWorkout {
             // `isSaving` stays: the ending update says whether it was saved or discarded.
         } catch {

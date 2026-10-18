@@ -24,6 +24,8 @@ final class SaveCover {
     private var ranFor = (save: -1, discard: -1)
     /// Every exit the store showed, as the root's `onChange` hands them on: one at most.
     private(set) var exits: [WorkoutExit] = []
+    /// Every receipt the store showed, by its workout, before "Done" was tapped on it (F10 S7b): one at most.
+    private(set) var receipts: [WorkoutID] = []
 
     init(_ change: (inout WorkoutState) -> Void = { _ in }) async {
         var workout = EventBuilders.seedSession()
@@ -73,6 +75,13 @@ final class SaveCover {
             ranFor.discard = store.discardAttempt
             discarding?.cancel()
             discarding = Task { [store] in await store.discard() }
+        }
+        // F10 S7b (edited for the audit): a save this cover made shows its receipt and keeps the cover up.
+        // The lifter of these tests taps "Done" as soon as it shows, which closes the cover as saved; the
+        // receipts shown are kept, so a test can tell that one was.
+        if let saved = store.saved, store.exit == nil {
+            receipts.append(saved.id)
+            store.send(.done)
         }
         if let exit = store.exit, exits.last != exit {
             exits.append(exit)

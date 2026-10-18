@@ -148,10 +148,28 @@ nonisolated struct WorkoutCopyTests {
         #expect(WorkoutCopy.setsLogged(done: "1", of: 1, locale: Locale(identifier: "ar_EG")).hasSuffix("set logged"))
     }
 
+    @Test("The receipt's texts, word for word, and the records line in both its forms (F10 S7b)")
+    func receiptTexts_areWordForWord() {
+        let locale = Fixtures.locale
+        let plain = [
+            WorkoutCopy.done, WorkoutCopy.timeTile, WorkoutCopy.setsTile, WorkoutCopy.movedTile(units: .lb),
+            WorkoutCopy.movedTile(units: .kg), WorkoutCopy.logged, WorkoutCopy.prescribedOnTheRight,
+            WorkoutCopy.spokenNothingLogged
+        ]
+        #expect(plain == [
+            "Done", "TIME", "SETS", "LB MOVED", "KG MOVED", "LOGGED", "Prescribed on the right", "Nothing logged"
+        ])
+        #expect(WorkoutCopy.newRecords(1, locale: locale) == "1 new PR this session")
+        #expect(WorkoutCopy.newRecords(3, locale: locale) == "3 new PRs this session")
+        #expect(WorkoutCopy.newRecords(1234, locale: locale) == "1,234 new PRs this session")
+        #expect(WorkoutCopy.spokenPrescribed("5 × 5 @ 185 lb", locale: locale) == "Prescribed 5 × 5 @ 185 lb")
+        #expect(WorkoutCopy.spokenLogged("5 × 185×5, 185×4", locale: locale) == "Logged 5 × 185×5, 185×4")
+    }
+
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 71)
+        #expect(catalog.keys.count == 82)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

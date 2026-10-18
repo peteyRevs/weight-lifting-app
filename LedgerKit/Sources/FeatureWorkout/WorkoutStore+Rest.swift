@@ -21,18 +21,19 @@ extension WorkoutStore {
     }
 
     /// The rest on screen, which `WorkoutRoot` runs `keepRestTime()` for: nil while no workout is shown,
-    /// and while the workout shows no rest.
+    /// while the workout shows no rest, and once its receipt shows (F10 S7b, criterion 37).
     var shownRest: RestTimer? {
-        if case let .loaded(state) = workout {
+        if saved == nil, case let .loaded(state) = workout {
             return state.shownRest
         }
         return nil
     }
 
-    /// The rest panel, read at `moment`; nil while no rest is shown, and until the date was first read.
-    /// The one reader of `moment`: the view that draws it is the only one a tick of the rest draws again.
+    /// The rest panel, read at `moment`; nil while no rest is shown, until the date was first read, and on
+    /// the receipt. The one reader of `moment`: the view that draws it is the only one a tick of the rest
+    /// draws again.
     var restPanel: RestPanelModel? {
-        guard let moment, case let .loaded(state) = workout else {
+        guard let moment, saved == nil, case let .loaded(state) = workout else {
             return nil
         }
         return WorkoutPresentation.rest(state, at: moment, selection: selection, isBusy: isBusy, locale: locale)

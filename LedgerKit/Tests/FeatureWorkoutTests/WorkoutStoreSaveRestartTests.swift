@@ -40,6 +40,7 @@ struct WorkoutStoreSaveRestartTests {
         await again.value
 
         #expect(store.dialog != .saveFailed)
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         #expect(store.saveAttempt == 1)
         let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
@@ -70,6 +71,7 @@ struct WorkoutStoreSaveRestartTests {
         await store.save()
         await store.follow()
         #expect(store.exit == .route(.saved(running.id)), "never nothingToShow, never the failure alert")
+        #expect(store.saved == nil, "F10 S7b, product default O7: no finished state reached the store, no receipt")
         #expect(store.dialog == nil)
     }
 
@@ -109,6 +111,7 @@ struct WorkoutStoreSaveRestartTests {
         let again = Task { await store.follow() }
         await store.save()
         #expect(await scene.asked() == [.changed, .finished(Fixtures.now)], "the waiting log found the set logged")
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         await again.value
     }
