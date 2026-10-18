@@ -1104,6 +1104,21 @@ call whose task is cancelled does not count, and the next pass saves; pinned by
   time."; every translator's comment. The port adds no text a lifter sees. Not copy: `UITestProgram`'s argument,
   value and fatal message (Debug only, exempted in `ModuleCopyTests`), and `GateTabsStandIn`'s titles (test code).
 
+### Gate, CI time and screenshots
+
+- **Full `scripts/check.sh` through the simulator lock on `9647760`: `check.sh OK`, exit 0, 1,958 s** (iOS tests
+  1,552 s, watchOS tests 255 s). Coverage: `FeatureOnboarding` 716 / 719, 99.58 % (threshold 70); overall 98.78 %.
+- **Criterion 25, not fully measured.** In the full-sweep gate bundle, the F08 suites of `LedgerAppKitTests` sum to
+  6.9 s of test-case time; `FeatureOnboardingTests`' cases did not report durations I could separate in that
+  bundle. I did not run the iOS step under `TEST_RUNNER_LEDGER_SWEEP=pr`, so the seconds the slice adds to the
+  hosted PR step are **open**. The three size sweeps above go through `TestSweep`, so the PR run is a subset of
+  this one.
+- **Screenshots.** Brought over unchanged from `7c0b78f` (the screen did not change in the port; R6 moves only
+  who posts the announcement): `screenshots/s2/*` (the three steps, default size and AX5, light and dark, the
+  failures) and `screenshots/s3/fresh-install-first-screen-{light,dark}.png`. **Not taken:** "Today after Start
+  training", light and dark. The branch's pair shows the placeholder Today of 2026-10-05, so it was not brought
+  over; it is for the orchestrator's run of the app.
+
 ### How to verify
 
 ```
