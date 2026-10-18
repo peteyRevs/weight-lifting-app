@@ -545,6 +545,17 @@
         }
       }
     },
+    "Can't show your program right now" : {
+      "comment" : "Title shown in place of the Program builder when its data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show your program right now"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "comment" : "Dismisses the confirmation and the day stays; also closes the exercise library",
       "localizations" : {
@@ -952,6 +963,17 @@
         }
       }
     },
+    "No program yet" : {
+      "comment" : "Title shown in place of the Program builder when no program is active",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No program yet"
+          }
+        }
+      }
+    },
     "Nothing matches that filter." : {
       "comment" : "Shown in the exercise library when the search and the two chip rows leave no exercise",
       "localizations" : {
@@ -1323,6 +1345,17 @@
         }
       }
     },
+    "That change wasn't saved. Try again." : {
+      "comment" : "Shown under the block when an edit could not be stored; the program is shown as stored",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That change wasn't saved. Try again."
+          }
+        }
+      }
+    },
     "Top of range" : {
       "comment" : "Spoken label of the stepper for the most reps of a range",
       "localizations" : {
@@ -1418,6 +1451,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Week %lld has logged sessions and can't be removed."
+          }
+        }
+      }
+    },
+    "Your program appears here once you have set one up." : {
+      "comment" : "Under the title shown when no program is active",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your program appears here once you have set one up."
+          }
+        }
+      }
+    },
+    "Your workouts are still on this iPhone. Open the app again to try once more." : {
+      "comment" : "Under the title shown when the Program builder's data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workouts are still on this iPhone. Open the app again to try once more."
           }
         }
       }

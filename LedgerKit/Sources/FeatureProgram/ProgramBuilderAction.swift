@@ -78,6 +78,8 @@ nonisolated enum ProgramBuilderNotice: Hashable, Sendable {
     case weekHasLoggedSessions(weekNumber: Int)
     /// A weekday was just assigned a day that has no exercise yet.
     case dayHasNoExercises
+    /// A write failed: the builder shows the program as stored, without the edits that were waiting.
+    case saveFailed
 
     /// The notice for an edit the Domain refused.
     init(_ error: ProgramEditError) {

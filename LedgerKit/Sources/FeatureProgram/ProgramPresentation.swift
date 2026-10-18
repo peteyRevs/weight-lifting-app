@@ -36,6 +36,7 @@ nonisolated enum ProgramPresentation {
         case .minimumTwoWeeks: ProgramCopy.minimumTwoWeeks
         case let .weekHasLoggedSessions(weekNumber): ProgramCopy.weekHasLoggedSessions(weekNumber, locale: locale)
         case .dayHasNoExercises: ProgramCopy.dayHasNoExercises
+        case .saveFailed: ProgramCopy.saveFailed
         }
     }
 

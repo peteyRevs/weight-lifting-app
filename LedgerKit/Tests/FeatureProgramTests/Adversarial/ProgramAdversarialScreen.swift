@@ -26,7 +26,6 @@ nonisolated enum AdvScreen {
         .monday: "Monday", .tuesday: "Tuesday", .wednesday: "Wednesday", .thursday: "Thursday",
         .friday: "Friday", .saturday: "Saturday", .sunday: "Sunday"
     ]
-
     static let helper = "Shared by every week. The schedule above decides which day you train, and when."
 
     static func counted(_ count: Int, _ one: String, _ other: String) -> String {
@@ -76,6 +75,7 @@ nonisolated extension AdvScreen {
         case .minimumTwoWeeks: "A block needs at least 2 weeks."
         case let .weekHasLoggedSessions(number): "Week \(number) has logged sessions and can't be removed."
         case .dayHasNoExercises: "Add at least one exercise before scheduling this day."
+        case .saveFailed: "That change wasn't saved. Try again."
         }
     }
 

@@ -155,7 +155,11 @@ nonisolated extension ProgramWordsAdversarialTests {
             for (number, line) in Self.code(file.text).enumerated() {
                 let pieces = line.split(separator: "\"", omittingEmptySubsequences: false)
                 let literals = pieces.enumerated().filter { $0.offset % 2 == 1 }.map { String($0.element) }
-                found += literals.filter { !["", " · "].contains($0) }.map { "\(file.name):\(number + 1) \"\($0)\"" }
+                // A store's log line and its logger's category are for the developer, never read or heard by
+                // a lifter (standards §8); a lookup on such a line is still found below (F11 S13, sanctioned).
+                let isLog = line.contains("logger.log.") || line.contains(".category(")
+                found += literals.filter { !isLog && !["", " · "].contains($0) }
+                    .map { "\(file.name):\(number + 1) \"\($0)\"" }
                 let lookups = ["String(localized", "LocalizedStringKey", "NSLocalizedString", "Text(", "bundle:"]
                 found += lookups.filter { line.contains($0) }.map { "\(file.name):\(number + 1) \($0)" }
             }
@@ -181,7 +185,8 @@ nonisolated extension ProgramWordsAdversarialTests {
                 }
             }
         }
-        #expect(lookups == 33, "the scan read \(lookups) lookups for the catalog's 33 keys")
+        // 33, and the five of the builder's empty and failed states and of a change not saved (F11 S13).
+        #expect(lookups == 38, "the scan read \(lookups) lookups for the catalog's 38 keys")
         #expect(found.isEmpty, "\(found.prefix(5))")
     }
 }
