@@ -1486,4 +1486,4 @@ from `run()` fails `endedFlag_isPerRun`.
 | `swift test --filter` my eleven host suites, 200 seeds | 0: 46 tests (after pinning F11-S13-10 as ruled) |
 | two mutants | both killed |
 | `scripts/check.sh --lint-only` | 0 |
-| `scripts/check.sh` (full gate) | see the report |
+| `scripts/check.sh` (full gate) at `a8c1035` | **0, "check.sh OK"**, 1,324 s: lint 69 s, iOS tests 977 s, watchOS tests 233 s, coverage 2 s (FeatureProgram 99.18 %); no warning in my files |
