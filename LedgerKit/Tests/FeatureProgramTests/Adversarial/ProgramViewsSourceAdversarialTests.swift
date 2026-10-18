@@ -92,7 +92,8 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             "ExercisePickerScreen.swift: send(model.cancel.action)",
             "ExerciseRow.swift: send(row.action)",
             "FilterChips.swift: send(chip.action)",
-            "ProgramHeader.swift: send(.rename(text))",
+            // The chore of 2026-10-13: the program's name reaches its header as `NameField`'s argument too.
+            "ProgramHeader.swift: send(.rename($0))",
             "ProgressionChips.swift: send(action)",
             "ScheduleStrip.swift: send(action)",
             "SlotDetails.swift: send(field.decrement)",
@@ -110,7 +111,7 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         #expect(sent.count { $0.hasSuffix(": send(action)") } == unwrapped.count, "a bare action, not unwrapped")
     }
 
-    @Test("The only state a view keeps: the two names' drafts, the three fields' focus, the delete alert's flag")
+    @Test("The only state a view keeps: the name field's draft, the two fields' focus, the delete alert's flag")
     func views_keepNoStateButDraftsFocusAndTheAlert() throws {
         let kept = try Self.matches(#"@(State|FocusState|Binding|Bindable|StateObject|ObservedObject|AppStorage)\b.*"#)
         #expect(kept == [
@@ -118,16 +119,15 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             // Fix round 1 (ruling 16): the day's draft and focus are `NameField`'s.
             "DayEditorPage.swift: @State private var isConfirming = false",
             "ExercisePickerScreen.swift: @FocusState private var isEditing: Bool",
+            // The chore of 2026-10-13: the program's draft and focus are `NameField`'s too.
             "NameField.swift: @State private var draft: String",
-            "NameField.swift: @FocusState private var isEditing: Bool",
-            "ProgramHeader.swift: @State private var draft: String",
-            "ProgramHeader.swift: @FocusState private var isEditing: Bool"
+            "NameField.swift: @FocusState private var isEditing: Bool"
         ], "\(kept)")
         let watched = try Self.matches(#"\.(onChange|onReceive|onAppear|onDisappear|onSubmit|task|refreshable)\b"#)
         // S10: the day's name field watches what the program's does.
         // Fix round 1 (ruling 16): `NameField` watches for the day's name.
-        let headers = ["NameField.swift", "ProgramHeader.swift"]
-        #expect(watched == headers.flatMap { Array(repeating: "\($0): .onChange", count: 3) }, "\(watched)")
+        // The chore of 2026-10-13: and for the program's, so it alone watches.
+        #expect(watched == Array(repeating: "NameField.swift: .onChange", count: 3), "\(watched)")
     }
 
     @Test("The only thing a view reads from its environment is the text size")

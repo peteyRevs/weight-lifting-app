@@ -141,12 +141,42 @@ public extension View {
     /// nothing inside the view moves. A single line therefore sits where SwiftUI puts it, up to
     /// ~10 pt from the CSS prototype; components absorb that with spacing tokens (Pete, 2026-09-29).
     func ledgerFont(_ role: LedgerFont.Role) -> some View {
-        modifier(LedgerTextStyle(role: role))
+        modifier(LedgerTextStyle(role: role, lineHeight: role.spec.lineHeight))
     }
+
+    /// Sets a one-line text field in a type role: as `ledgerFont(_:)`, on a line of
+    /// `LedgerFont.fieldLineHeight` where the role's is tighter.
+    ///
+    /// A field is as high as its line, and while it is edited UIKit clips its text to that line. On a
+    /// line tighter than the font's own ascent and descent (the title's is 1) the tails of g, j, p, q
+    /// and y are cut flat (F11 S10, ruling 22). UIKit centres the letters in the looser line, while a
+    /// text keeps them at the top of its line whatever the line, so the field's `.top` guide is moved
+    /// down by half of what the field's line is higher than the size, for every role. A field laid top
+    /// on top over a text of the role draws its letters where the text draws them, and its frame stands
+    /// out above and below the text's line. The guide is the field's own: a stack or a branch around
+    /// the field has a top of its own.
+    ///
+    /// **Known limit** (the chore of 2026-10-13, NF-1): a line that holds a glyph drawn from another
+    /// font (an emoji, Thai, Devanagari, Arabic, any Vietnamese, or Latin letters such as Å É Ç Ł ï ą
+    /// ỵ) UIKit does not centre, and the guide lifts it all the same: such a name moves 3.7, 6.0 and
+    /// 7.3 pt up when the focus comes, at `.large`, `.accessibility3` and `.accessibility5`.
+    func ledgerFieldFont(_ role: LedgerFont.Role) -> some View {
+        modifier(LedgerFieldStyle(role: role))
+    }
+}
+
+public extension LedgerFont {
+    /// The line of a text field, as a multiple of the size: the lowest tenth that draws the tails
+    /// whole at all twelve text sizes, plain and bold (measured on the title role, iOS 27.0). 1.2,
+    /// SwiftUI's `.normal`, cuts them by a point from `.accessibility3`; 1.5, its `.loose`, holds them
+    /// too, but the caret is as high as the line and then hangs 13.7 and 15.3 pt under the name at
+    /// `.accessibility3` and `.accessibility5`.
+    static let fieldLineHeight: CGFloat = 1.3
 }
 
 struct LedgerTextStyle: ViewModifier {
     let role: LedgerFont.Role
+    let lineHeight: CGFloat
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
 
@@ -157,6 +187,21 @@ struct LedgerTextStyle: ViewModifier {
             .font(LedgerFont.font(role, size: size, legibilityWeight: legibilityWeight))
             .tracking(spec.tracking * size)
             .textCase(spec.isUppercase ? .uppercase : nil)
-            .lineHeight(.multiple(factor: spec.lineHeight))
+            .lineHeight(.multiple(factor: lineHeight))
+    }
+}
+
+struct LedgerFieldStyle: ViewModifier {
+    let role: LedgerFont.Role
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func body(content: Content) -> some View {
+        let line = max(LedgerFont.fieldLineHeight, role.spec.lineHeight)
+        let size = LedgerFont.scaledSize(role, dynamicTypeSize: dynamicTypeSize)
+        content
+            .modifier(LedgerTextStyle(role: role, lineHeight: line))
+            // A text keeps its letters at the top of its line whatever the line; UIKit puts them half of
+            // what the field's line is higher than the size lower.
+            .alignmentGuide(.top) { _ in (line - 1) * size / 2 }
     }
 }
