@@ -161,7 +161,7 @@
             let field = try #require(ProgramPreview.dayOpenLinear.dayEditorModel().openRow?.panel?.details?.fields
                 .first)
             let bare = SlotEditorModel.Field(
-                kind: field.kind, label: "", value: "", spokenLabel: "", decrement: field.decrement,
+                kind: field.kind, value: "", spokenLabel: "", decrement: field.decrement,
                 increment: field.increment
             )
             let box = try Self.inkBox(of: SlotStepper(field: bare) { _ in }, size)

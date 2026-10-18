@@ -13,6 +13,10 @@
     /// heading (the pinned tree of the shell's content). The tab bar's own buttons are not in a hosted view's
     /// tree; the `Tabs` UI test pins them in the running app.
     ///
+    /// Since F11 S14 the Program tab is `FeatureProgram`'s builder, which in a window with no scene is told it is
+    /// in the background and follows nothing (`ProgramRoot`): it draws the ground alone, and has no element here.
+    /// What it draws is `FeatureProgramTests`'; that the running app shows it is the `Tabs` UI test's.
+    ///
     /// Since F09 S5 the Today tab is `FeatureToday`'s root. It reads the stores and the session, so the shell is
     /// hosted on empty in-memory stores and a session with nothing live; and all of it scrolls, so the shell is
     /// read outside scroll views (testing-strategy §2.6: the subject is the shell, whose own parts are pinned),
@@ -38,7 +42,7 @@
         @Test(
             "Each placeholder tab shows its own screen, titled as the tab; Today's root is all one scroll view",
             arguments: [
-                (AppTab.today, String?.none), (.program, "Program"), (.library, "Library"), (.history, "History")
+                (AppTab.today, String?.none), (.program, nil), (.library, "Library"), (.history, "History")
             ]
         )
         func selectedTab_showsItsOwnScreen(tab: AppTab, title: String?) {

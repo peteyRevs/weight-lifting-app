@@ -48,7 +48,7 @@ final class DayEditorStore {
     /// A write failed: the root's alert is up until its "OK" (Pete's question 1, A).
     var showsSaveFailure = false
 
-    /// What the sources last said (`+Sources`); each nil until it has spoken, and kept across runs. These four
+    /// What the sources last said (`+Sources`); each nil until it has spoken, and kept across runs. These five
     /// are written by the sources' extension in its own file, so they are not `private(set)`; nothing outside
     /// the store writes them.
     /// The settings, whose units every load is shown and stepped in.
@@ -56,8 +56,11 @@ final class DayEditorStore {
     /// The exercises as the store lists them, for the library, and by id, for the day.
     var exercises: [Exercise]?
     var exercisesByID: [ExerciseID: Exercise]?
-    /// An observation ended in this run.
+    /// An observation ended: the failed state, kept through a new run until its program is heard, so that a
+    /// root that comes back does not trade the message for a blank screen (as `ProgramStore` keeps its own).
     var hasEnded = false
+    /// An observation ended in this run: nothing but the next run clears it.
+    @ObservationIgnored var hasEndedInThisRun = false
 
     @ObservationIgnored private var hasClosed = false
     @ObservationIgnored private var routeNumber = 0

@@ -10,7 +10,7 @@ import LedgerDomain
 extension DayEditorStore {
     /// Follows the active program, the settings and the exercises for as long as the root's task runs.
     func run() async {
-        hasEnded = false
+        hasEndedInThisRun = false
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followProgram() }
             group.addTask { await self.followSettings() }
@@ -21,6 +21,9 @@ extension DayEditorStore {
     private func followProgram() async {
         await follow(programs.observeActive()) { program in
             session.hear(program)
+            if !hasEndedInThisRun {
+                hasEnded = false
+            }
             closeIfDone()
         }
     }
@@ -47,6 +50,7 @@ extension DayEditorStore {
         if !Task.isCancelled {
             logger.log.error("A store's observation ended while a day was being edited")
             hasEnded = true
+            hasEndedInThisRun = true
         }
     }
 }

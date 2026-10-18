@@ -23,8 +23,11 @@
         /// 2026-10-09): Today's root is `FeatureToday`'s, all of it inside one scroll view, so the shell pins no
         /// element there: no heading of its own and no navigation bar. A placeholder tab's root is still the
         /// one heading that names it.
+        ///
+        /// Sanctioned edit of F11 S14 (criterion 25): the Program tab's root is `FeatureProgram`'s builder, which in
+        /// a window with no scene follows nothing and draws the ground alone, so it has no heading here either.
         static func rootHeaders(of tab: AppTab) -> [String] {
-            tab == .today ? [] : roots.filter { $0.tab == tab }.map(\.title)
+            [.today, .program].contains(tab) ? [] : roots.filter { $0.tab == tab }.map(\.title)
         }
 
         /// The labels of the headers VoiceOver finds, top to bottom: one per screen that is on screen.

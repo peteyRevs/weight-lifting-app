@@ -82,4 +82,20 @@ struct DayEditorStoreTests {
         #expect(try await scene.storedDay()?.slots.first?.dropSets == 1)
         await running.cancel()
     }
+
+    @Test("15. A source that ended keeps the failed state through a new run until the program is heard again")
+    func failedState_isKeptThroughANewRun() async throws {
+        let scene = try DayEditorStoreScene { values, probed in
+            values.programRepository = S13PatternPrograms(base: probed.programs, endings: [true, false])
+        }
+        let first = await scene.running()
+        #expect(scene.store.state == .failed)
+        await first.cancel()
+        let second = Task { await scene.store.run() }
+        #expect(scene.store.state == .failed, "not loading while the new run starts")
+        await eventually { scene.store.state != .failed }
+        #expect(try scene.content.header.name == "Upper A — Push focus")
+        second.cancel()
+        await second.value
+    }
 }

@@ -5688,3 +5688,158 @@ No other tester's file was touched; `ProgramReadAfterWriteAdversarialTests` is u
   15 skipped, 16 expected failures; `ProgramRootTests` among them), watchOS build 18 s, watchOS tests 239 s
   (2,301 tests, 0 failed), coverage 2 s (FeatureProgram 99.18 %, overall 98.72 %).
 - `#60`: still `OPEN`; S14 not started.
+
+## S14 — as built (G1 implementer, 2026-10-18)
+
+Branch `feat/F11-s14-program-tab`, cut from `main` at `16a2e52` (S13 #63 and the name-field chore #60 are on it).
+The specification is the brief's "Plan amendments — slices S13 and S14" (criteria 15 to 25, the store conventions,
+"Dependency" and "Project file"), "Rulings before G1" (R1–R12, R6 as amended) and the notes' "Inputs for S14"
+passages it cites. Pete's questions 1 to 5 are built to their defaults (A in each), each in one named place.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- `Sources/FeatureProgram/DayEditorStore.swift` and `DayEditorStore+Sources.swift` (new): the Day editor's store
+  on `ProgramEditSession<DayEditorEdit>` (ruling R3): the route's day and week, fixed at `init`; the open panel;
+  the library's store; the close; the failed-save flag. `state` is made from `session.shown` when it is read, as
+  `ProgramStore.state` is, so every intent's edit is in the next model (criterion 15). The sources' extension
+  follows the program, the settings and the exercises in one task group.
+- `Sources/FeatureProgram/ExercisePickerStore.swift` (new): the library sheet's query, chips, picks and
+  `isShown`; owned by the Day editor's store (ruling R9), with the Day editor's session and day, so "Add" queues
+  one `.slot(.add(slots), day:)` on it.
+- `Sources/FeatureProgram/DayEditorRoot.swift` (new, public): `DayEditorRoot(day:weekIndex:onRoute:)`; its tasks
+  (sources keyed by the background as `ProgramRoot`'s, the save loop unkeyed, the route hand-over); the hidden
+  navigation bar; the library `.sheet` (a swipe down is "Cancel"); the failed-save `.alert`; `.id(model.id)` on
+  the screen.
+- `Sources/FeatureProgram/ProgramRoot.swift`: its message view is now `ProgramMessage`, which the Day editor's
+  root draws too for a source that ends.
+- `Sources/FeatureProgram/ProgramEditSession.swift`: the re-read after a heard write is bounded and keeps the
+  last read that answered (G3 S13 round 2, notes 1 and 2); the session has the injected logger.
+- `Sources/FeatureProgram/ProgramStore.swift`: a card's route is dropped while a new day's edit waits
+  (F11-S13-12).
+- `Sources/FeatureProgram/Views/NameField.swift`: a draft of only spaces shows the placeholder (question 5).
+- The clean-up (criterion 21): `DayEditorModel.Row.hasDropSet`, `SlotEditorModel.Field.label` with the six copy
+  members only it used (`setsLabel` … `targetRPELabel`) and their six catalog keys; `ExercisePickerModel.Row`'s
+  `detail`, `inDayMark` and `pickMark` (question 4), which takes the module's last `.formatted(` out of the
+  picker. `ProgramCopy.rest`'s comment no longer says it labels a stepper (code and catalog).
+- Copy: `ProgramCopy.okay` ("OK", the alert's button; Pete's question 1 names it). `saveFailed`'s comment now
+  says it is also the Day editor's alert (code and catalog).
+- `Sources/LedgerAppKit/Routes.swift`: `AppDestination.day(DayTemplateID, weekIndex:)`; `AppRouter.programWeek`
+  (ruling R10: a `ProgramWeekRequest` numbered anew on each request) and `requestProgramWeek(_:)`.
+  `Routes+Program.swift` (new): `resolve(_: ProgramRoute)` and `editProgramWeek(_:)`. `Routes+Today.swift`:
+  `.editWeek` goes there; `.openProgram` and `.setUpProgram` select the tab only. `AppTabs.swift`: the Program
+  tab draws `ProgramRoot(week: router.programWeek, onRoute:)`; `.day` draws `DayEditorRoot(...).id(destination)`.
+  `MainRoot.swift`: `onProgramRoute: { router.resolve($0) }`.
+- Tests (below). UI tests in `Apps/LedgerUITests` (synchronized folder): `Builder.swift`, `DayEditor.swift` (new);
+  `Tabs.swift`, `TabsAdversarial.swift` (criterion 25, sanctioned edits).
+
+No change to `LedgerDomain`, `LedgerPersistence`, `LedgerTestSupport`, the project file, a test plan or `.github/`.
+No snapshot reference was re-recorded (none draws a removed field; `ShellSnapshotTests` keep the placeholder).
+
+### Pete's defaults, and where each lives
+
+| Question | Built (A) | The one place to change it |
+|---|---|---|
+| 1. A failed save in the Day editor | Alert "That change wasn't saved. Try again." with "OK"; the editor shows the stored program; a waiting close is dropped | `DayEditorStore.saved(_:)` sets `showsSaveFailure`; `DayEditorRoot.body`'s `.alert`. B would be a line in the header from the same flag |
+| 2. "Edit this week" while a Day editor is open | The Program tab pops to the builder with the week selected | `AppRouter.editProgramWeek(_:)` (`Routes+Program.swift`), the line `self[path: .program] = []`. B is that line removed |
+| 3. "Delete day" | Keeps S10's alert | `DayEditorPage.swift`'s `DeleteDayButton` (unchanged) |
+| 4. "already in this day" | Drawn as the end of the grey line; `detail`, `inDayMark`, `pickMark` removed | `ExercisePickerPresentation.row(_:input:picks:)`. B would add a field back beside `line` |
+| 5. A name of only spaces | The placeholder shows over it while it has the focus | `NameField.showsThePlaceholderOverABlankDraft` |
+
+### Criteria → tests
+
+Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`) (DS), `ExercisePickerStoreTests`
+(PK), `DayEditorRootTests` (DR, iOS), `ProgramRouteMappingTests` (RM, `LedgerAppKitTests`), `TodayRouteMappingTests`
+(TM, `LedgerAppKitTests`), UI: `Builder` (UB), `DayEditor` (UD), `Tabs`/`TabsAdversarial`.
+
+| Criterion | Tests |
+|---|---|
+| 15. `DayEditorStore` | DS `run_showsTheDayInTheRoutesWeek`, `failedState_isKeptThroughANewRun`, `open_setsThePanel_andNothingIsWritten`, `stepper_twoQuickTaps_areTwoSteps` (held write; the second "+" from the model after the first: 7 sets, two writes), `dropSetAndName_areAppliedAtOnce` |
+| 16. The day is gone | DS `delete_closesOnceItsWriteReturned`, `dayRemovedElsewhere_closesTheEditor` (once, though gone again), `dayIsGone_isJudgedOnlyAfterTheFirstProgram` |
+| 17. Leaving waits for the write | DS `done_waitsForTheWrite` (held write, an edit behind it, "Done" and "Program": one `.closeDay` once idle), `failedWrite_dropsTheClose_andSaysSo`, `failedDelete_bringsTheDayBack`, `viewGoesAwayDuringASave_storesAllOrNothing` (`TaskCancelSwitch` from inside the change: the move is not stored, nothing failed). Mutation: `closeIfDone` without `session.isIdle` fails four of them |
+| 18. One screen per day | Store: `DayEditorStore.day` is a `let` fixed at `init`, every edit names it (DS `dropSetAndName_…`). App: `AppTabs` draws `.day` with `.id(destination)`; UD `test_backAndSwipeBack_andTheNextDayIsItsOwn` (Upper A's draft, then Lower A shows its own name) |
+| 19. `ExercisePickerStore` | PK `add_appendsInPickOrder_andKeepsTheFilters` (one write, order, rest from settings, chips kept, day's new exercises marked), `clearFilters_resetsQueryMuscleAndEquipment`, `cancel_addsNothing_andKeepsTheChips`, `customExerciseSavedWhileOpen_appears`, `add_skipsWhatCannotBeAdded` (a stranger id and a negative start load left out) |
+| 20. `DayEditorRoot` | DR `root_runsTheStoreAndTheSession`, `root_handsTheCloseOnce`, `root_drawsTheFailedMessage`; the sheet, the alerts and the swipe back: UD |
+| 21. The clean-up | Compiler; the catalog step; `ModuleCopyTests`; `ProgramCopyTests+DayEditor` |
+| 22. Destinations and routes | RM `day_pushesTheDayEditor`, `closeDay_popsOnlyADayOnTop`, `editWeek_popsToTheBuilder_andRequestsTheWeek` |
+| 23. The Program tab | TM `editWeek_landsOnTheBuilder`, `programRoutes_selectProgram` (now `.openProgram`, `.setUpProgram`, no week asked); `AppTabsTests.selectedTab_showsItsOwnScreen`; `TodayWiringAdversarialTests` (sanctioned); UB `test_name_typedLetterByLetter_isReadBack` |
+| 24 a | UB `test_name_typedLetterByLetter_isReadBack` (both fields by their spoken labels), `test_blockLength_fingerOnMinusAndPlus` |
+| 24 b | UB `test_wrappedName_takesTheFocus_andABlankDraftShowsThePlaceholder` (the drawn placeholder is hidden from accessibility, as the drawn name is: the attached screenshot shows it) |
+| 24 c | UD `test_fingerOnARowAStepperAChipAndTheSwitch`, `test_deleteAlert_cancelThenDelete` |
+| 24 d | UD `test_library_queryChipThreePicks` |
+| 24 e | UB `test_addDayAddExerciseChangeProgression` |
+| 24 f | UB `test_atAnAccessibilitySize_readsItsStopsInOrder`, UD `test_atAnAccessibilitySize_readsItsStopsInOrder` |
+| 25. The tab shell's tests | `Tabs.swift`, `TabsAdversarial.swift`, `AppTabsTests`, `AppTabsAdversarialTests` (sanctioned edits, below) |
+| 26. Conventions by test | `FeatureProgramSourceTests.storeFiles` gains the three new store and root files (no `Task {`, timer, `.formatted(`; the clamp tripwire reads them); `ModuleCopyTests` with no exemption |
+| 27. Budgets | S13's measurement by hand stands (ruling R12): the Day editor's and the library's models are the presentations it timed; the stores add a dictionary of the exercises when they change |
+
+### The S13 carry-overs
+
+- **G3 round 2, note 1 (F11-S13-10), decided:** a read that throws keeps the last read that answered, or the
+  program `update` returned when none did. Every read starts after the write returned, so the last answer is
+  never older than the write; what was heard during the read that threw is not drawn, since it may be older
+  still. Tested by the tester's `readThrowsOnTheSecondTurn_…`, edited to expect the first read's misses.
+- **Note 2 (F11-S13-11):** the loop makes at most `ProgramEditSession.readsAfterAWrite` (5) reads, then adopts the
+  last read and logs. Tested by the tester's `emissionDuringEveryRead_stopsAtTheBound` (rewritten from
+  `…_endsWhenTheStoreGoesQuiet`, which pinned twenty-one reads): five reads, the last read shown, an edit heals it.
+- **Note 3:** `CountingPrograms` says each new count on an `AsyncStream` (`counts`, `observed(_:)`), and
+  `root_backFromTheBackground_followsAgain` waits on it, not on a store value that may be written equal.
+- **F11-S13-12:** a card's tap while the new day's edit waits is dropped (`ProgramStore.emit`), so the new day
+  opens. `ProgramStoreTests.cardTappedDuringTheNewDaysWrite_theNewDayOpens`.
+
+### Decisions and deviations
+
+1. **The stores and the Day editor's root stand at the module's root**, beside `ProgramStore.swift`, not in
+   `DayEditor/` and `Picker/` as the plan's table put them: `ProgramViewsSourceTests.dayEditorViews_standInViews`
+   forbids a SwiftUI file in `DayEditor/`, and the testers' scans of those two folders pin their files and
+   their literals (the logger's lines are not copy, as S13 settled for the module root).
+2. **"Done" before any program is heard closes at once**: nothing waits to be stored. The day is judged gone
+   only once the store has said which program is active.
+3. **A Day editor whose source ends draws the builder's failed message** (`ProgramMessage`, decision 6's texts).
+   No new wording; the brief does not say what that state shows.
+4. **The library's store takes the exercises and the settings as arguments of "Add"**, from the Day editor's
+   store, rather than keeping copies; its model is made from the Day editor's exercises and session.
+5. **The blank-draft placeholder is drawn in `.placeholder`**, the system style the field draws its own prompt
+   in, so a blank draft and an empty one look alike. It is not a `LedgerColor` token: the field's own placeholder
+   is not one either. For the reviewer.
+6. **No animation on opening a panel** (the notes leave it to the store); nothing scrolls to the opened row.
+7. **`.id` twice** (ruling R8): `AppTabs` keys each `.day` destination's root, so its store is the route's;
+   the root keys the screen by the day.
+8. **A Day editor whose source ended keeps the failed state through a new run** until the program is heard
+   again (`hasEnded`, `hasEndedInThisRun`), as `ProgramStore` keeps its own (S13 deviation 8): found by
+   `DayEditorRootTests.root_drawsTheFailedMessage` on the simulator, where the root's restarted task traded the
+   message for a blank screen. `DayEditorStoreTests.failedState_isKeptThroughANewRun`; the reset at the run's
+   start put back fails it (mutation, reverted).
+9. **Today's `.editWeek` ignores its program id**: the builder edits the active program, which is the one Today
+   shows.
+
+### Sanctioned edits to the testers' files
+
+| File | Edit | Why |
+|---|---|---|
+| `Adversarial/ProgramReReadAdversarialTests.swift` | `emissionDuringEveryRead_endsWhenTheStoreGoesQuiet` → `…_stopsAtTheBound` (hook writes for five reads; expects five, the last read shown behind the store, healed by the next edit); `readThrowsOnTheSecondTurn_…` expects `[0, 1]`, not `[]`; titles | G3 notes 1 and 2 |
+| `Adversarial/ProgramViewsSourceAdversarialTests.swift` | `views_reachForNothing` leaves out exactly `NameField.swift: .allSatisfy(`; `views_conditionsOnLists_areTheTwo` lists `NameField.swift: draft.isEmpty` | Question 5: the check is on the view's own draft (S9 ruling 14), which no model holds |
+| `Adversarial/ExercisePickerAdversarialSupport.swift` | The oracle's row line and the model's lose `detail`, the mark and the place | Question 4 |
+| `Adversarial/ExercisePickerModelAdversarialTests.swift`, `ExercisePickerWordsAdversarialTests.swift` | The two `pickMark` expectations removed | Question 4: the field is gone |
+| `Adversarial/DayEditorAdversarialScreen.swift`, `DayEditorOfferedAdversarialTests.swift`, `DayEditorViewsAdversarialModels.swift`, `DayEditorViewsLayoutAdversarialTests.swift` | `hasDropSet` and `Field.label` lines removed from the oracle, an expectation and two model copies | Criterion 21 |
+| `LedgerAppKitTests/Adversarial/TodayWiringAdversarialTests.swift` | `.editWeek` expects the Program stack emptied | Criterion 23, question 2 |
+| `LedgerAppKitTests/Adversarial/AppTabsAdversarialTests.swift` | `rootHeaders` has no heading for the Program tab either | Criterion 25 |
+| `Apps/LedgerUITests/TabsAdversarial.swift` | The Program tab is found by "No program yet"; its height is not among the one-word titles | Criterion 25 |
+
+The implementer's own files edited the same way: `DayEditorTesting.swift` (a test `Field.label`, the spoken
+label in capitals, so the many `field("SETS")` lookups stay), `ExercisePickerTesting.swift` (`isMarkedInDay` and
+`detail` read off the line; `pickLine` from the foot's order), and the presentation and preview tests that read
+the removed fields.
+
+### For the product owner
+
+- **Wording:** none invented. "OK" is question 1's; the Day editor's failed state reuses decision 6's builder
+  texts ("Can't show your program right now", …), which say "your program": they fit the Day editor too.
+- **Seen in the UI test, for you to judge:** a name is stored as it is typed (S13 criterion 11), so deleting a
+  name letter by letter stores each shorter name down to its first letter; a blank one is not stored. Emptying
+  "A long program name" to type another therefore stores "A" on the way, and, if the lifter leaves the field
+  blank, "A" stays. *Recommendation:* accept for M1 (each keystroke is a write anyway, and the next letters
+  overwrite it); the alternative is to store the name when the field loses focus, which S9 and S13 ruled against.
+- **Screenshots** of the builder and the Day editor (default size and an accessibility size) are attached to the
+  UI tests' results (`Builder`, `DayEditor`), not committed.
