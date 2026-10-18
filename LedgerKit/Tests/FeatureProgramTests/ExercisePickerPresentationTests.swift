@@ -114,7 +114,6 @@ nonisolated struct ExercisePickerPresentationTests {
         input.locale = Locale(identifier: "ar_EG")
         let arabic = ExercisePickerPresentation.make(input)
         #expect(arabic.foot.title == "Add ٣ exercises")
-        #expect(try arabic.row("Leg Press").pickMark == "٢")
     }
 
     @Test("The search field's action stores the query as typed, and the model hands it back")

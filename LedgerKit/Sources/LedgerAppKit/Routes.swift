@@ -1,3 +1,5 @@
+import FeatureProgram
+import LedgerDomain
 import Observation
 
 /// The four tabs, in the tab bar's order (product decision #1).
@@ -12,6 +14,8 @@ nonisolated enum AppTab: Hashable, Sendable, CaseIterable {
 nonisolated enum AppDestination: Hashable, Sendable {
     /// Settings (F14), which Today's gear opens (product decision #19).
     case settings
+    /// The Day editor (F11) on one day of the active program, showing program week `weekIndex`.
+    case day(DayTemplateID, weekIndex: Int)
 }
 
 /// The shell's navigation state: the selected tab and each tab's stack. A feature never sees it: it emits a route,
@@ -21,12 +25,20 @@ nonisolated enum AppDestination: Hashable, Sendable {
 final class AppRouter {
     var selectedTab = AppTab.today
     private var paths: [AppTab: [AppDestination]] = [:]
+    /// The week the Program builder was last asked to select (Today's "Edit this week"), numbered so that a
+    /// second request for the same week selects it again (ruling R10). Nil until one is made.
+    private(set) var programWeek: ProgramWeekRequest?
 
     /// `tab`'s stack, the screen on top last; empty while the tab shows its root. Selecting another tab leaves it
     /// as it is, so the lifter finds each tab where they left it.
     subscript(path tab: AppTab) -> [AppDestination] {
         get { paths[tab, default: []] }
         set { paths[tab] = newValue }
+    }
+
+    /// Asks the Program builder to select the week at `weekIndex`.
+    func requestProgramWeek(_ weekIndex: Int) {
+        programWeek = ProgramWeekRequest(number: (programWeek?.number ?? 0) + 1, weekIndex: weekIndex)
     }
 
     /// Selects `tab` and pushes `destination` on its stack.

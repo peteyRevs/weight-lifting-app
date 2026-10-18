@@ -17,9 +17,12 @@ extension AppRouter {
             // The workout's detail is F13's; until then, the History tab it will be pushed in (F13
             // criterion 6).
             selectedTab = .history
-        case .editWeek, .openProgram, .setUpProgram:
-            // The week editor and the next block are F11's and F24's, on the Program tab; setting up a
-            // program is F08's, which replaces the tabs altogether while there is none.
+        case let .editWeek(_, weekIndex):
+            // The builder edits the active program, which is the one Today shows.
+            editProgramWeek(weekIndex)
+        case .openProgram, .setUpProgram:
+            // The next block is F24's, on the Program tab; setting up a program is F08's, which replaces the
+            // tabs altogether while there is none.
             selectedTab = .program
         case .settings:
             // One Settings on the stack, however often it is asked for.

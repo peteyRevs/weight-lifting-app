@@ -45,7 +45,7 @@ nonisolated extension ProgramCopy {
         String(
             localized: "That change wasn't saved. Try again.",
             bundle: .module,
-            comment: "Shown under the block when an edit could not be stored; the program is shown as stored"
+            comment: "Shown when an edit could not be stored, under the builder's block or in the Day editor's alert"
         )
     }
 }

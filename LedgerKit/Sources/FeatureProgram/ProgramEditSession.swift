@@ -60,6 +60,12 @@ final class ProgramEditSession<Edit: ProgramEdit> {
     @ObservationIgnored private var wake: AsyncStream<Void>.Continuation?
 
     @ObservationIgnored @Dependency(\.programRepository) private var programs
+    @ObservationIgnored @Dependency(\.logger) private var injectedLogger
+
+    /// The injected logger under the module's own category (standards §8).
+    private var logger: LedgerLogger {
+        injectedLogger.category("program")
+    }
 
     /// No edit waits and no write runs.
     var isIdle: Bool {
@@ -139,23 +145,40 @@ final class ProgramEditSession<Edit: ProgramEdit> {
         }
     }
 
-    /// The program to adopt after a write that stored `saved` (R6, amended in S13 fix round 2). With nothing
-    /// heard meanwhile, `saved`. A program heard during the write may be older than `saved` (the store's
-    /// emission of an earlier write) or newer (a workout saved after this write committed, another program
-    /// made active, the program deleted), and neither can be told from the other, so the store is read, and
-    /// read again while something is heard during the read: each read is the store's newest word when it
-    /// starts, so the loop ends once one runs undisturbed. Whatever the last read names is adopted, another
-    /// program or none included (`adopt` drops edits made on another program). A read that throws, at any turn,
-    /// ends the reading and keeps `saved`, which holds this write; the next emission or write brings the rest.
+    /// The most reads `newestAfter` makes after one write: a store that is written on every read (a sync that
+    /// never pauses) would otherwise hold the loop for good.
+    static var readsAfterAWrite: Int {
+        5
+    }
+
+    /// The program to adopt after a write that stored `saved` (R6, amended in S13 fix round 2; S14). With
+    /// nothing heard meanwhile, `saved`. A program heard during the write may be older than `saved` (the
+    /// store's emission of an earlier write) or newer (a workout saved after this write committed, another
+    /// program made active, the program deleted), and neither can be told from the other, so the store is
+    /// read, and read again while something is heard during the read: each read is the store's newest word
+    /// when it starts, so the loop ends once one runs undisturbed. Whatever the last read names is adopted,
+    /// another program or none included (`adopt` drops edits made on another program).
+    ///
+    /// **What ends the reading early** keeps the last read that answered, or `saved` before any did. Every read
+    /// starts after the write returned, so the last answer is never older than `saved` and holds this write;
+    /// what was heard during the read that did not finish is not drawn, since it may be older still. The next
+    /// emission or write brings the rest. Two things end it so: a read that throws, and the bound
+    /// `readsAfterAWrite`, which is logged.
     private func newestAfter(_ saved: Program) async -> Program? {
         var newest: Program? = saved
+        var reads = 0
         while heardDuringWrite != nil {
             heardDuringWrite = nil
+            guard reads < Self.readsAfterAWrite else {
+                logger.log.error("The program kept changing while it was read after a write; the last read is shown")
+                return newest
+            }
+            reads += 1
             do {
                 newest = try await programs.active()
             } catch {
                 heardDuringWrite = nil
-                return saved
+                return newest
             }
         }
         return newest

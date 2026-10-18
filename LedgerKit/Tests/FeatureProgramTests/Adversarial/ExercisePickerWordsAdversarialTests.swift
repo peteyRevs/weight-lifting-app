@@ -58,7 +58,6 @@ nonisolated struct ExercisePickerWordsAdversarialTests {
             let row = ExercisePickerPresentation.make(input).rows.first
             #expect(row?.name == name)
             #expect(row?.line == "Band · Core · already in this day")
-            #expect(row?.pickMark == "1")
         }
     }
 

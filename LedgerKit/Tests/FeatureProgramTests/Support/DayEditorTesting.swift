@@ -208,9 +208,17 @@ nonisolated extension DayEditorModel.Row {
     /// The row with no panel under it, open or closed as it was: what a test draws to look at a row alone.
     var withoutItsPanel: DayEditorModel.Row {
         DayEditorModel.Row(
-            id: id, index: index, name: name, sub: sub, scheme: scheme, load: load, hasDropSet: hasDropSet,
+            id: id, index: index, name: name, sub: sub, scheme: scheme, load: load,
             isOpen: isOpen, spokenLabel: spokenLabel, spokenValue: spokenValue, action: action, panel: nil
         )
+    }
+}
+
+nonisolated extension SlotEditorModel.Field {
+    /// The field's short name in the tests, "SETS" or "REP FLOOR": its spoken label in capitals. The model
+    /// draws no label of its own since S14 (`Field.label` was drawn nowhere).
+    var label: String {
+        spokenLabel.uppercased()
     }
 }
 

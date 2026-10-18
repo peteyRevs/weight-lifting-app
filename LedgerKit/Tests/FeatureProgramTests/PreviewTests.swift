@@ -91,7 +91,7 @@
 
             let drop = try ProgramPreview.dayDropSet.dayEditorModel()
             let curl = try #require(drop.openRow)
-            #expect(curl.hasDropSet && curl.panel?.details?.dropSet.isOn == true)
+            #expect(curl.panel?.details?.dropSet.isOn == true)
             #expect(curl.panel?.supersetActions.isEmpty == true, "the last exercise, on its own")
 
             let deload = try ProgramPreview.dayDeload.dayEditorModel()
@@ -107,12 +107,12 @@
         func libraryPreviews_showTheirStates() throws {
             let library = try ProgramPreview.library.libraryModel()
             #expect(library.rows.count == 8)
-            #expect(library.rows.count { $0.inDayMark != nil } == 1)
+            #expect(library.rows.count(where: \.isMarkedInDay) == 1)
             #expect(library.foot.action == nil)
             #expect(library.muscles.selected == ["Back"] && library.equipment.selected == ["Cable"])
 
             let picked = try ProgramPreview.libraryPicked.libraryModel()
-            #expect(picked.rows.filter(\.isPicked).compactMap(\.pickMark) == ["3", "1", "2"])
+            #expect(picked.rows.filter(\.isPicked).count == 3)
             #expect(picked.foot.title == "Add 3 exercises")
 
             let nothing = try ProgramPreview.libraryNothing.libraryModel()

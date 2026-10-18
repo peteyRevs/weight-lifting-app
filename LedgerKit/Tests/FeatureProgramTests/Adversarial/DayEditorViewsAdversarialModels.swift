@@ -79,7 +79,6 @@ nonisolated struct DayViewsText {
             sub: change("\(path).sub", row.sub),
             scheme: change("\(path).scheme", row.scheme),
             load: row.load.map { change("\(path).load", $0) },
-            hasDropSet: row.hasDropSet,
             isOpen: row.isOpen,
             spokenLabel: change("\(path).spokenLabel", row.spokenLabel),
             spokenValue: change("\(path).spokenValue", row.spokenValue),
@@ -103,7 +102,6 @@ nonisolated struct DayViewsText {
         let fields = details.fields.enumerated().map { place, field in
             SlotEditorModel.Field(
                 kind: field.kind,
-                label: change("panel.field.\(place).label", field.label),
                 value: change("panel.field.\(place).value", field.value),
                 spokenLabel: change("panel.field.\(place).spokenLabel", field.spokenLabel),
                 decrement: field.decrement,

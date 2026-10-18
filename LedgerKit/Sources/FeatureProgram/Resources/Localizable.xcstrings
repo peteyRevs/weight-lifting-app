@@ -985,6 +985,17 @@
         }
       }
     },
+    "OK" : {
+      "comment" : "Closes the alert that says a change to a day was not saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
     "One extra set at −15% after the last working set." : {
       "localizations" : {
         "en" : {
@@ -1049,30 +1060,8 @@
         }
       }
     },
-    "REP FLOOR" : {
-      "comment" : "Label of the stepper for the fewest reps of a range",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "REP FLOOR"
-          }
-        }
-      }
-    },
-    "REPS" : {
-      "comment" : "Label of the stepper for an exercise's reps",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "REPS"
-          }
-        }
-      }
-    },
     "REST" : {
-      "comment" : "A weekday with no training day, in the week's schedule; also the label of the stepper for rest",
+      "comment" : "A weekday with no training day, in the week's schedule",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1144,28 +1133,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rest"
-          }
-        }
-      }
-    },
-    "SETS" : {
-      "comment" : "Label of the stepper for an exercise's sets",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "SETS"
-          }
-        }
-      }
-    },
-    "START LOAD" : {
-      "comment" : "Label of the stepper for the load of the first week",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "START LOAD"
           }
         }
       }
@@ -1290,28 +1257,6 @@
         }
       }
     },
-    "TARGET RPE" : {
-      "comment" : "Label of the stepper for an exercise's target RPE",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TARGET RPE"
-          }
-        }
-      }
-    },
-    "TOP OF RANGE" : {
-      "comment" : "Label of the stepper for the most reps of a range",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TOP OF RANGE"
-          }
-        }
-      }
-    },
     "TRAINING DAYS" : {
       "comment" : "Eyebrow of the list of training days",
       "localizations" : {
@@ -1346,7 +1291,7 @@
       }
     },
     "That change wasn't saved. Try again." : {
-      "comment" : "Shown under the block when an edit could not be stored; the program is shown as stored",
+      "comment" : "Shown when an edit could not be stored, under the builder's block or in the Day editor's alert",
       "localizations" : {
         "en" : {
           "stringUnit" : {

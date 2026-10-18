@@ -180,9 +180,11 @@ final class ProgramStore {
         }
     }
 
-    /// One route waits at a time: a tap that comes before the app was handed the one before is dropped.
+    /// One route waits at a time: a tap that comes before the app was handed the one before is dropped, and so
+    /// is one that comes while a new day's write runs, whose route would otherwise find the place taken when
+    /// the write returns (F11-S13-12): the day is added and opened, the card's tap is dropped.
     private func emit(_ route: ProgramRoute) {
-        guard pendingRoute == nil else {
+        guard pendingRoute == nil, !newDayWaits else {
             return
         }
         routeNumber += 1
