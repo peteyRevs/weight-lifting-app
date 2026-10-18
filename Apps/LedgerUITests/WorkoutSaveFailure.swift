@@ -69,6 +69,7 @@ final class WorkoutSaveFailure: XCTestCase {
             "-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", "2026-08-17T12:00:00Z",
             "-LEDGER_UITEST_FAIL_FINISH", "\(failures)"
         ]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         let today = app.staticTexts["today.title"]
         XCTAssertTrue(today.waitForExistence(timeout: 10))

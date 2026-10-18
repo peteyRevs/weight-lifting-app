@@ -62,7 +62,10 @@ nonisolated struct ModuleCopyTests {
                     "-LEDGER_UITEST_FAIL_FINISH",
                     "-LEDGER_UITEST",
                     " needs a count from 1 up: "
-                ]
+                ],
+                // A UI test's program (F08, ruling R2): the two launch arguments, the one value, and what stops a
+                // launch whose value cannot be read. Read by the launch or by the test's author, never drawn.
+                "UITestProgram.swift": ["-LEDGER_UITEST_PROGRAM", "seed", "-LEDGER_UITEST", " takes one value, : "]
             ],
             // The Debug menu's Diagnostics sections.
             debugOnly: ["AppComposition+Diagnostics.swift"]

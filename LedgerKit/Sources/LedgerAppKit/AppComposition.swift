@@ -1,4 +1,5 @@
 import Dependencies
+import FeatureWorkout
 import Foundation
 #if os(iOS)
     import HealthKit
@@ -34,6 +35,10 @@ public final class AppComposition {
     /// The live workout's host over the open database (F10): what `workoutSession` is bound to.
     private(set) var session: LocalWorkoutSessionActor?
     private var isCompanionActive = false
+    #if DEBUG
+        /// Whether `saveUITestProgramIfAsked()` has run in this process: it runs once.
+        private var isUITestProgramDone = false
+    #endif
 
     init(_ environment: Environment) {
         self.environment = environment
@@ -135,6 +140,44 @@ public final class AppComposition {
         }
     }
 
+    /// What onboarding's "Retry" awaits before it saves again (F08, ruling O13): the database half of the launch
+    /// once more, as in the foreground. While the catalog is unseeded it starts the seed step again (product
+    /// decision #28), or waits for the one that is running; a step that has succeeded is not run again.
+    ///
+    /// It is not `resume(in:)`, and must stay this narrow. Every control of onboarding is disabled while it
+    /// runs, so it has to return: here that is one local transaction that commits or throws. The workout's
+    /// recovery and the device steps are the launch's to run and to retry, not a lifter's tap on "Retry".
+    func retrySeed() async {
+        await database.resume(isForeground: true)
+    }
+
+    /// A UI test's program (`UITestProgram`, F08 ruling R2): once the launch's pass has run, and before the
+    /// root's gate first reads the active program, saves the spec's seed program as the active one when there
+    /// is none, as the Debug menu's sample does. Once in a process, and only when the launch asked for it; a
+    /// failure is logged, and the test then finds onboarding. A call whose task is cancelled (the scene's phase
+    /// changed during the launch's first pass) does not count: the next pass makes it. A Release build does
+    /// nothing here.
+    func saveUITestProgramIfAsked() async {
+        #if DEBUG
+            guard environment.seedsUITestProgram, !isUITestProgramDone, !Task.isCancelled,
+                  let programs = stores?.programs
+            else {
+                return
+            }
+            do {
+                try await SampleProgram.activeOrSeed(in: programs)
+                isUITestProgramDone = true
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                isUITestProgramDone = true
+                let reason = String(describing: error)
+                environment.logger.log.error("The UI test's program was not saved: \(reason, privacy: .public)")
+            }
+        #endif
+    }
+
     /// The root view calls this when it first appears: measures launch-to-first-frame once and logs it.
     func rootAppeared() {
         guard launchToFirstFrame == nil, let start = environment.processStart else {
@@ -198,6 +241,8 @@ extension AppComposition {
         var clockOffset: TimeInterval?
         /// How many calls of the session's `finish` fail, when a UI test asked for that (`UITestSaveFailures`).
         var failedFinishes: Int?
+        /// Whether a UI test asked for the seed program (`UITestProgram`).
+        var seedsUITestProgram = false
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -229,7 +274,8 @@ extension AppComposition {
                 preparesDependencies: true,
                 processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
                 clockOffset: offset,
-                failedFinishes: UITestSaveFailures.liveCount(arguments: arguments)
+                failedFinishes: UITestSaveFailures.liveCount(arguments: arguments),
+                seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments)
             )
         }
     }

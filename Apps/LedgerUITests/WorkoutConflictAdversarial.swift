@@ -16,6 +16,7 @@ final class WorkoutConflictAdversarial: XCTestCase {
     func test_conflict_itsTree_bothWaysOut_andOneWorkoutAfterReplacing() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         XCTAssertTrue(app.staticTexts["today.title"].waitForExistence(timeout: 10))
         let minimize = app.buttons["workout.header.minimize"]

@@ -48,6 +48,7 @@ final class WorkoutSaveFailureAdversarial: XCTestCase {
     private func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = arguments + ["-LEDGER_UITEST_NOW", "2026-08-17T12:00:00Z"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         XCTAssertTrue(app.staticTexts["today.title"].waitForExistence(timeout: 10))
         return app

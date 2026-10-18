@@ -35,8 +35,9 @@ public struct Settings: Hashable, Codable, Sendable {
 
     /// The prototype defaults (spec §2 state seed): lb, 90 s rest, plate math, auto rest and
     /// watch buzz on, standard inventories for both units. `weekStart` is Monday here because the
-    /// domain cannot read the locale; the app seeds it from `Weekday.first(of:)` on first launch
-    /// (decision #15).
+    /// domain cannot read the locale. Decision #15 (the week start from the iPhone's region on first
+    /// launch, `Weekday.first(of:)`) is not implemented yet: whether first launch reads the region is
+    /// F14's to decide (F08, Pete's decision 5 = C).
     public static let `default` = Settings(
         units: .lb,
         defaultRest: .defaultRest,

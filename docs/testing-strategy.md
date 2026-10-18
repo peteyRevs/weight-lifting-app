@@ -303,11 +303,13 @@ Concrete test names (file = suite = source type; see §6):
 
 ### 2.7 UI (`LedgerUITests`, `LedgerWatchUITests`)
 
-- Critical flows, iOS: `Smoke.launchesToToday`, `Onboarding.threeStepsGenerateProgram`,
+- Critical flows, iOS: `Smoke.freshInstall_skipsSetupToToday`, `Onboarding.threeStepsGenerateProgram`,
   `Workout.startLogThreeSetsRestFinishReceipt`, `Workout.swapExercise`,
   `Workout.minimizeAndResume`, `Builder.addDayAddExerciseChangeProgression`,
   `Library.searchOpensHistoryChart`, `History.editThenDeleteWorkout`,
-  `Settings.switchUnitsToKg`, `Settings.exportCSV`, `Onboarding.dynamicTypeXL`,
+  `Settings.switchUnitsToKg`, `Settings.exportCSV`,
+  `Onboarding.voiceOverReadsEachStepInOrder_insideTheScrollView_atAnAccessibilitySize`,
+  `Onboarding.eachStepOpensAtItsTop_atAnAccessibilitySize`,
   `Accessibility.auditEveryTabRoot`, `LaunchPerformance.test_launchToFirstFrame`
   (`XCTApplicationLaunchMetric`, nightly; reports, never gates: decision #30). watchOS:
   `Smoke.launchesToToday` (`launchesToIdle` once F18 replaces the placeholder),
@@ -323,7 +325,18 @@ Concrete test names (file = suite = source type; see §6):
   `debug.diagnostics.*`); a renamed identifier fails a UI run, not the build.
 - UI tests launch with `-LEDGER_UITEST 1`, so the app opens a fresh database
   file in a new temporary directory (a file, not in-memory, so the launch runs
-  as on a device; F07 S2), seeded with the catalog as every launch is.
+  as on a device; F07 S2), seeded with the catalog as every launch is. A fresh
+  database has no program, so the app opens on onboarding (F08): a test of
+  onboarding, or of what "Skip setup" saves, launches `XCUIApplication.fresh()`
+  and calls `skipSetupToToday()` (`Apps/LedgerUITests/Support/LaunchedApp.swift`).
+  Every other test adds `-LEDGER_UITEST_PROGRAM seed` to its launch arguments
+  (Debug builds only, as `-LEDGER_UITEST_NOW` and `-LEDGER_UITEST_FAIL_FINISH`):
+  the spec's seed program (`Fixtures.seedProgram()`, a block from Monday
+  2026-08-17) is saved as the active one after the launch's pass, before the
+  root first reads it, so the app opens on Today. A new UI test that waits for
+  `today.title` on a fresh launch needs one or the other. Every launch is a
+  fresh database, a relaunch too, so what needs the same database twice is not
+  a UI test until F15's test mode.
 
 ### 2.8 Device protocol (manual, scripted) — `tasks/features/F20-device-protocol/`
 

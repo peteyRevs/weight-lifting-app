@@ -83,14 +83,21 @@ struct AppRootAdversarialTests {
         #expect(composition.state == .idle, "drawing the root opens nothing")
     }
 
+    // Sanctioned edit of F08 S2/S3 (criterion 22, ruling R9). Was: a root over a database with no program, which
+    // makes its own gate. That root now draws the ground colour until its gate has an answer, and then
+    // onboarding: the shell is drawn from a root handed a gate already at `.main`, over a database with a
+    // program, and the drawing must hold more than the ground.
     @Test("The root of a composition whose database is open draws without trapping, here and on the simulator")
-    func root_ready_draws() async {
+    func root_ready_draws() async throws {
         let harness = Harness()
         defer { harness.remove() }
-        let composition = harness.booted()
-        await composition.resume(in: .active)
+        let (composition, gate) = try await harness.bootedWithAProgram()
         #expect(composition.state == .ready)
-        #expect(renderPreview(size: Self.size) { AppRoot(composition: composition) })
+        #expect(renderPreview(size: Self.size) { AppRoot(composition: composition, gate: gate) })
+        let drewTheShell = HostedDrawing.isMoreThanOneColour(
+            AppRoot(composition: composition, gate: gate), size: Self.size
+        )
+        #expect(drewTheShell, "the root drew the ground colour alone, not the shell")
     }
 
     #if os(iOS)
@@ -105,12 +112,14 @@ struct AppRootAdversarialTests {
         }
 
         @Test("An idle root has nothing for VoiceOver, and a ready root shows the shell on Today")
-        func root_idleAndReady_readToVoiceOver() async {
+        func root_idleAndReady_readToVoiceOver() async throws {
             let harness = Harness()
             defer { harness.remove() }
             #expect(AppRoot(composition: harness.composition()).accessibilityElements().isEmpty)
-            let composition = harness.booted()
-            await composition.resume(in: .active)
+            // Sanctioned edit of F08 S2/S3 (criterion 22, ruling R9). Was: a booted root over a database with no
+            // program, which now shows onboarding once its own gate has an answer. The ready root is read here
+            // handed a gate already at `.main`, over a database with a program.
+            let (composition, gate) = try await harness.bootedWithAProgram()
             // Sanctioned edit of F09 S5 (orchestrator, 2026-10-09). Was: the ready root read as the one header
             // "Today", the placeholder's. The shell's Today is now `FeatureToday`'s root over the composition's
             // own stores and session, all inside one scroll view, so the ready root pins no element outside
@@ -120,7 +129,7 @@ struct AppRootAdversarialTests {
             let elements = withTestDependencies {
                 composition.bind(&$0)
             } operation: {
-                AppRoot(composition: composition).accessibilityElements(outsideScrollViews: true)
+                AppRoot(composition: composition, gate: gate).accessibilityElements(outsideScrollViews: true)
             }
             #expect(elements.map(\.label) == [])
 
@@ -132,7 +141,7 @@ struct AppRootAdversarialTests {
             let ready = withTestDependencies {
                 composition.bind(&$0)
             } operation: {
-                Self.pageScrollViews(in: AppRoot(composition: composition))
+                Self.pageScrollViews(in: AppRoot(composition: composition, gate: gate))
             }
             #expect(ready == 1, "ready: the shell on Today's root")
         }
