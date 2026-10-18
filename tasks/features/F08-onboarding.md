@@ -515,3 +515,15 @@ true), merged first; then S3 from `main` (~92). No stacked pull requests.
 5. **Apple's accessibility audit** flags white text on the orange button as "contrast nearly passed" (3.1:1,
    decision of F06) and long titles as "may be clipped" (tight line heights). Default: keep both as decided; F15
    lists them again.
+
+### Rulings before G1 — slices S2 and S3 (orchestrator, 2026-10-18)
+
+- **R1–R12 as recommended above.** R1: a port file by file from `feat/F08-s2-onboarding-ui` @ `24b610b` and
+  `feat/F08-s3-root-gate` @ `7c0b78f` (read with `git show`, never merged), adapted to `main`; the tester and the
+  reviewer then run on the port as on new work.
+- **R10:** built now; the pull request opens after F11 S14 and F10 S7b merge (or `main` is merged in first,
+  whichever comes later), and the implementer lists in the notes every UI test of theirs that the new launch
+  argument touches.
+- **Questions for the product owner 1–5:** built to their defaults until he answers; each is one named place
+  in the code.
+- **Stop rule:** past about 950 product lines, stop and report; the split is S2 alone, then S3 from `main`.
