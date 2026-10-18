@@ -9,10 +9,12 @@ import SwiftUI
 ///
 /// VoiceOver reads the title as a heading, then the cancel button, then the content, and its escape
 /// gesture (a two-finger scrub) calls `onCancel`, as the cancel button does. `title` and `cancel` are
-/// shown as given; features pass copy from their catalog.
+/// shown as given; features pass copy from their catalog. `cancelIdentifier` names the cancel button for
+/// a UI test, where its words are not what the test should find it by.
 public struct SheetChrome<Content: View>: View {
     private let title: String
     private let cancel: String
+    private let cancelIdentifier: String?
     private let onCancel: () -> Void
     private let content: Content
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -20,11 +22,13 @@ public struct SheetChrome<Content: View>: View {
     public init(
         _ title: String,
         cancel: String,
+        cancelIdentifier: String? = nil,
         onCancel: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.cancel = cancel
+        self.cancelIdentifier = cancelIdentifier
         self.onCancel = onCancel
         self.content = content()
     }
@@ -48,7 +52,12 @@ public struct SheetChrome<Content: View>: View {
                     .fixedSize(horizontal: false, vertical: true) // a sheet's height must never cut it short
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
-                PillButton(cancel, style: .ghost, action: onCancel)
+                if let cancelIdentifier {
+                    PillButton(cancel, style: .ghost, action: onCancel)
+                        .accessibilityIdentifier(cancelIdentifier)
+                } else {
+                    PillButton(cancel, style: .ghost, action: onCancel)
+                }
             }
             content
         }

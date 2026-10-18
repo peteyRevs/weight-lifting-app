@@ -5,9 +5,9 @@ import LedgerDomain
 /// the queue of the page's taps, and the work that applies them. In a file of its own for its length; the
 /// members of the store it uses are the store's alone.
 extension WorkoutStore {
-    /// While a discard runs or the cover is closing no control answers.
+    /// While a discard or a save runs, or the cover is closing, no control answers.
     var isBusy: Bool {
-        isDiscarding || exit != nil || exitWhenDrained != nil
+        isDiscarding || isSaving || exit != nil || exitWhenDrained != nil
     }
 
     /// The workout goes on after a Minimize, so the taps made before it are applied first (criterion 14):
@@ -56,18 +56,31 @@ extension WorkoutStore {
     /// running returns at once, and the first applies its taps too. Nothing is applied while the store is
     /// not hearing the session, while a discard runs, or once the cover is closing.
     func drain() async {
+        drainPasses += 1
         guard !isDraining else {
             return
         }
         isDraining = true
-        defer { isDraining = false }
+        // A save that waits for the taps is woken only when this drain applied one: a drain that could
+        // apply none (the session is not heard yet) wakes it for nothing, and it would ask again at once.
+        var hasApplied = false
+        defer {
+            isDraining = false
+            if hasApplied {
+                settled?.wake.yield()
+            }
+        }
         while let tap = queue.first, isHearingTheSession, exit == nil, !isDiscarding {
+            hasApplied = true
             let epoch = queueEpoch
             let outcome = await apply(tap)
             if outcome == .refused {
-                // The taps behind a refused change were made on a page that never came to be.
+                // The taps behind a refused change were made on a page that never came to be, and a save
+                // that waited for them is withdrawn: no workout is saved without a change the lifter
+                // believes was made (F10 S7, criterion 12).
                 emptyQueue()
                 exitWhenDrained = nil
+                isSaving = false
             } else if epoch == queueEpoch {
                 // The tap is done, or was sent and its call cancelled with the cover: it is not sent again.
                 queue.removeFirst()

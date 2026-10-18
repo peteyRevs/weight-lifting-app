@@ -84,7 +84,8 @@
 
         /// The fixed date, UUIDs, clock, calendar and locale of `withTestDependencies`, and haptics that play
         /// nothing: a store that plays one (F10 S6) does so on every logged set, whatever the test is about. A
-        /// test that reads what was played binds a `FakeHaptics` of its own.
+        /// test that reads what was played binds a `FakeHaptics` of its own. The same for the announcements
+        /// of a rest (F10 S7): a fresh `FakeAnnouncements` for each call, never one shared between tests.
         fileprivate mutating func useTestDefaults() {
             date = .constant(Fixtures.now)
             uuid = .incrementing
@@ -92,6 +93,7 @@
             calendar = Fixtures.calendar
             locale = Fixtures.locale
             haptics = FakeHaptics()
+            announcements = FakeAnnouncements()
         }
     }
 

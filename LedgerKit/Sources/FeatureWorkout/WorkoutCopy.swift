@@ -67,20 +67,6 @@ nonisolated enum WorkoutCopy {
         String(localized: "Cancel", bundle: .module)
     }
 
-    // MARK: The finish dialog
-
-    static var endWorkout: String {
-        String(localized: "End workout?", bundle: .module, comment: "Title of the dialog the Finish button opens")
-    }
-
-    static var discard: String {
-        String(localized: "Discard", bundle: .module, comment: "Ends the workout without saving it")
-    }
-
-    static var keepLifting: String {
-        String(localized: "Keep lifting", bundle: .module, comment: "Closes the dialog and returns to the workout")
-    }
-
     // MARK: Failures
 
     static var okay: String {
@@ -91,7 +77,7 @@ nonisolated enum WorkoutCopy {
         String(
             localized: "Close",
             bundle: .module,
-            comment: "Closes the workout screen when the workout cannot be shown"
+            comment: "Closes the workout screen when the workout cannot be shown, or the alert of a failed save"
         )
     }
 

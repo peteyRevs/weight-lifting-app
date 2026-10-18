@@ -14,6 +14,17 @@ nonisolated extension WorkoutCopy {
         String(localized: "Rest over", bundle: .module, comment: "Shown on the rest timer when it has reached zero")
     }
 
+    /// "Rest, 1 minute, 30 seconds remaining": what VoiceOver is asked to say when a rest begins. The time
+    /// is in words (`WorkoutPresentation.spokenRestTime`), never digits and a colon.
+    static func restRemaining(_ time: String, locale: Locale) -> String {
+        String(
+            localized: "Rest, \(time) remaining",
+            bundle: .module,
+            locale: locale,
+            comment: "Spoken when a rest begins: the time left, in words, as in 1 minute, 30 seconds"
+        )
+    }
+
     static var extendRest: String {
         String(localized: "+30s", bundle: .module, comment: "Button that adds 30 seconds to the rest timer")
     }

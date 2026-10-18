@@ -519,6 +519,8 @@ onboarding has none. `MainRoot` resolves the routes (§4).
 `deviceID`, `exerciseRepository`, `programRepository`, `workoutRepository`,
 `workoutEventStore`, `settingsRepository`, `statsQueries`, `healthStore`,
 `liveWorkoutTransport`, `companionTransport`, `haptics`, `notifications`,
+`announcements` (what VoiceOver is asked to say aloud, such as a rest that began or ended; F10 S7:
+posting one is ambient, so no feature posts its own),
 `liveActivities`, `workoutSession` (the live workout's `WorkoutSessionClient`, F10),
 `logger` (a `LedgerLogger` over `os.Logger`), all in the
 nonisolated `LedgerDependencies` (F07). Each `liveValue` is an

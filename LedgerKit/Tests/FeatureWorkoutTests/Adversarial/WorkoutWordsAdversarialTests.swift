@@ -52,7 +52,7 @@ struct WorkoutWordsAdversarialTests {
         #expect(texts.count == expected.count)
     }
 
-    @Test("The catalog holds the 63 texts and no other")
+    @Test("The catalog holds the 71 texts and no other")
     func catalog_holdsExactlyTheSlicesTexts() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
         let expected: Set = [
@@ -72,7 +72,11 @@ struct WorkoutWordsAdversarialTests {
             "Undo set %lld", "Log drop set", "Undo drop set", "Couldn't save that change",
             // F10 S6 (sanctioned edit): the keys of the rest panel.
             "Resting", "Rest over", "+30s", "Add 30 seconds", "Skip rest", "Set %lld · %@ lb × %lld",
-            "Set %lld · %@ kg × %lld", "Drop set · %@ lb × %lld", "Drop set · %@ kg × %lld"
+            "Set %lld · %@ kg × %lld", "Drop set · %@ lb × %lld", "Drop set · %@ kg × %lld",
+            // F10 S7a (sanctioned edit): the keys of the "End workout?" sheet, of a save that failed and
+            // of the rest's announcement.
+            "Save workout", "%@ of %lld sets logged", "%@ lb moved", "%@ kg moved", "Couldn't save this workout",
+            "It's still on this iPhone. Try again.", "Try again", "Rest, %@ remaining"
         ]
         #expect(catalog.keys.subtracting(expected).sorted() == [])
         #expect(expected.subtracting(catalog.keys).sorted() == [])
@@ -96,11 +100,13 @@ struct WorkoutWordsAdversarialTests {
     }
 
     @Test("The two dialogs' models")
-    func dialogs_areTheBriefs() {
+    func dialogs_areTheBriefs() throws {
         let conflict = WorkoutPresentation.conflictDialog
         #expect([conflict.title, conflict.resume, conflict.replace, conflict.cancel]
             == ["You have a workout in progress", "Resume it", "Discard and start new", "Cancel"])
-        let finish = WorkoutPresentation.finishDialog
+        // F10 S7a (sanctioned edit): "End workout?" is a sheet, whose model holds the same three texts.
+        let workout = try Fixtures.seedSession()
+        let finish = WorkoutPresentation.finishSheet(workout, isSaving: false, locale: Fixtures.locale)
         #expect([finish.title, finish.discard, finish.keepLifting] == ["End workout?", "Discard", "Keep lifting"])
     }
 

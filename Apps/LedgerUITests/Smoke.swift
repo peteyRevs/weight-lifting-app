@@ -3,7 +3,7 @@ import XCTest
 /// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1: the app
 /// launches on a fresh database (`-LEDGER_UITEST`) to Today. F10 S4 criterion 10: the workout's cover in the
 /// running app, and criterion 18: the conflict with a workout that is running; both reached through the Debug
-/// menu's sample rows until Today starts workouts (F09).
+/// menu's sample rows until Today starts workouts (F09). F10 S7a: a workout is saved and Today shows it logged.
 final class Smoke: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -151,5 +151,55 @@ final class Smoke: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension Smoke {
+    /// F10 S7a: the sample workout with one set logged is saved. "Finish" opens "End workout?" with what
+    /// the workout holds; "Save workout" stores it and takes the cover down onto Today, which shows the
+    /// session as logged, with the one set, and offers no workout to resume.
+    ///
+    /// The app's clock is moved to the Monday of the seed program's first week: the sample workout is
+    /// that day's session, so Today has a Logged card for it. Under a moved clock the cover's elapsed
+    /// time is not read.
+    @MainActor
+    func test_sampleWorkout_logASet_saveWorkout_todayShowsItLogged() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", "2026-08-17T12:00:00Z"]
+        app.launch()
+        let today = app.staticTexts["today.title"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10))
+
+        startSampleWorkout(in: app)
+        let minimize = app.buttons["workout.header.minimize"]
+        XCTAssertTrue(minimize.waitForExistence(timeout: 10))
+        let save = app.buttons["workout.finish.save"].firstMatch
+        let summary = app.staticTexts["workout.finish.summary"].firstMatch
+
+        // With nothing logged the sheet offers no save.
+        app.buttons["workout.header.finish"].tap()
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertFalse(save.isEnabled, "nothing is logged yet")
+        XCTAssertTrue(summary.label.hasPrefix("0 of "), summary.label)
+        app.buttons["workout.finish.keep"].firstMatch.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 5))
+
+        app.buttons["Log set 1"].tap()
+        XCTAssertTrue(app.buttons["Undo set 1"].waitForExistence(timeout: 5))
+        app.buttons["workout.header.finish"].tap()
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["End workout?"].exists)
+        XCTAssertTrue(summary.label.hasPrefix("1 of "), summary.label)
+        XCTAssertTrue(summary.label.hasSuffix(" lb moved"), summary.label)
+        XCTAssertTrue(save.isEnabled)
+        attachScreenshot(of: app, named: "End workout? with a set logged")
+
+        save.tap()
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "the cover is down")
+        XCTAssertTrue(becomesHittable(today), "the tabs are back")
+        XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5), "Today shows the session as logged")
+        XCTAssertTrue(app.staticTexts["LOGGED · WEEK 1"].exists)
+        XCTAssertFalse(app.buttons["Resume workout"].exists, "nothing is live")
+        attachScreenshot(of: app, named: "Today, the saved workout logged")
     }
 }

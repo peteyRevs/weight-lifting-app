@@ -42,13 +42,14 @@ final class RestKeeper {
 }
 
 /// A cover's store on the fake session, with a date and a clock that move only when the test moves
-/// them, and haptics it can read.
+/// them, and haptics and announcements it can read.
 @MainActor
 struct RestBench {
     let scene: WorkoutScene
     let store: WorkoutStore
     let following: Task<Void, Never>
     let haptics = FakeHaptics()
+    let announcements = FakeAnnouncements()
     let clock = CountingClock()
     let date = LockIsolated(Fixtures.now)
     let running: WorkoutState
@@ -57,8 +58,9 @@ struct RestBench {
         let workout = try running ?? Fixtures.seedSession()
         self.running = workout
         scene = try WorkoutScene.onFake(live: workout)
-        store = scene.store { [haptics, clock, date] in
+        store = scene.store { [haptics, announcements, clock, date] in
             $0.haptics = haptics
+            $0.announcements = announcements
             $0.continuousClock = clock
             $0.date = DateGenerator { date.value }
         }

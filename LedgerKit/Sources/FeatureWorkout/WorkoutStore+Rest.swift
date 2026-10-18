@@ -61,6 +61,10 @@ extension WorkoutStore {
     /// rest changes, which ends the wait for the rest before. It ends when the rest is over; "Rest over"
     /// then stands until the workout changes.
     ///
+    /// VoiceOver is told when a rest begins (F10 S7): "Rest, 1 minute, 30 seconds remaining", once for each
+    /// rest that is shown with time left, at this function's first pass for it, and "Rest over" where the
+    /// haptic is played, after it. Both go through the injected client; nothing here posts one.
+    ///
     /// At zero it plays `.restOver` (brief criterion 6), once for each rest, and only when it saw the rest
     /// run and its last wait ended within `restOverWindow` of the rest's end. So a rest that had already
     /// ended when it began is not played (a cover opened again, a task started again), and neither is one
@@ -86,14 +90,28 @@ extension WorkoutStore {
                 if sawItRun, isOnTime, rest != restPlayedOver, rest == newestRest {
                     restPlayedOver = rest
                     await haptics.play(.restOver)
+                    await announcements.announce(WorkoutCopy.restOver)
                 }
                 return
+            }
+            if shouldAnnounce(rest), let text = WorkoutPresentation.restAnnouncement(rest, at: now, locale: locale) {
+                restAnnounced = rest
+                await announcements.announce(text)
             }
             guard await (try? clock.sleep(for: wait)) != nil, rest == shownRest, date.now != now else {
                 return
             }
             sawItRun = true
         }
+    }
+
+    /// Whether `rest` should be announced when it is first shown with time left: once for each rest, so not at
+    /// a tick, and not when the cover's tasks start again on the same rest.
+    ///
+    /// Product default O8: "+30s" makes a new rest, and a new rest is announced like any other ("Rest, 45
+    /// seconds remaining"). This is the one place to change that.
+    private func shouldAnnounce(_ rest: RestTimer) -> Bool {
+        rest != restAnnounced
     }
 
     /// How long after a rest's end, in seconds, its last wait may end and its haptic still be played: a

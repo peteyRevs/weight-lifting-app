@@ -6,7 +6,8 @@
     import SwiftUI
     import Testing
 
-    /// Every `#Preview` in FeatureWorkout is a case of `WorkoutPreview`, and every case renders (the
+    /// Every `#Preview` in FeatureWorkout is a case of `WorkoutPreview` or, for the "End workout?" sheet
+    /// (F10 S7), of `FinishSheetPreview`, and every case renders (the
     /// convention F07's criterion 8 set for each module with previews).
     @Suite("Previews (FeatureWorkout)", .serialized, .tags(.feature))
     struct PreviewTests {
@@ -15,7 +16,20 @@
             let names = try PreviewScan.previews(inModule: "FeatureWorkout")
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
-            #expect(Set(names.compactMap(\.self)) == Set(WorkoutPreview.allCases.map(\.rawValue)))
+            let cases = WorkoutPreview.allCases.map(\.rawValue) + FinishSheetPreview.allCases.map(\.rawValue)
+            #expect(Set(names.compactMap(\.self)) == Set(cases))
+            #expect(cases.count == Set(cases).count)
+        }
+
+        @Test("Every preview of the End workout? sheet renders, and shows the state it is named for")
+        func finishSheet_previewsRender() throws {
+            for preview in FinishSheetPreview.allCases {
+                #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 437)) { preview.content })
+            }
+            let models = try FinishSheetPreview.allCases.map { try #require($0.model, "\($0.rawValue)") }
+            #expect(models.map(\.canSave) == [true, false, true, false])
+            #expect(models.map(\.isEnabled) == [true, true, true, false])
+            #expect(models[2].summary.hasSuffix("kg moved"))
         }
 
         @Test("Every preview renders", arguments: WorkoutPreview.allCases)

@@ -34,11 +34,12 @@ final class WorkoutAdversarial: XCTestCase {
         XCTAssertTrue(discard.waitForExistence(timeout: 5))
         record(app)
 
-        // A point well away from the dialog's buttons, wherever the system put them.
-        let window = app.windows.firstMatch.frame
-        let away = discard.frame.midY < window.midY ? 0.85 : 0.2
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: away)).tap()
-        XCTAssertTrue(discard.waitForNonExistence(timeout: 5), "a tap outside leaves the dialog")
+        // F10 S7a fix round 1 (ruling on S7a-1; edited by the implementer): the sheet stands at full height,
+        // with no outside to tap; it is left by a swipe down from its title.
+        let title = app.staticTexts["End workout?"].firstMatch
+        let low = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.05, thenDragTo: low)
+        XCTAssertTrue(discard.waitForNonExistence(timeout: 5), "a swipe down leaves the dialog")
         XCTAssertTrue(minimize.exists, "and the workout is still up")
         XCTAssertTrue(minimize.isHittable)
 

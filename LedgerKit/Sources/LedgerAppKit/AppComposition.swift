@@ -146,17 +146,24 @@ public final class AppComposition {
         environment.logger.log.notice("First frame \(milliseconds, privacy: .public) ms after the process started")
     }
 
-    /// Binds the six stores, this device's id, the live workout's host and the haptics its cover plays (F10 S6);
-    /// binds nothing until the database is open. The app binds once, process-wide, through
-    /// `prepareDependencies`; the logger and the other device keys keep their live values (the device ones are
-    /// stubs until F16–F23).
+    /// Binds the six stores, this device's id, the live workout's host, and the haptics its cover plays and
+    /// the announcements it makes (F10 S6, S7); binds nothing until the database is open. The app binds once,
+    /// process-wide, through `prepareDependencies`; the logger and the other device keys keep their live
+    /// values (the device ones are stubs until F16–F23).
     public func bind(_ values: inout DependencyValues) {
         if let stores {
             Self.bind(stores, into: &values)
         }
         if let session {
             values.workoutSession = session
+            #if DEBUG
+                if let failures = environment.failedFinishes {
+                    // A UI test's failing save (`UITestSaveFailures`).
+                    values.workoutSession = UITestFailingFinishSession(base: session, failures: failures)
+                }
+            #endif
             values.haptics = LiveHaptics()
+            values.announcements = LiveAnnouncements()
         }
     }
 
@@ -189,6 +196,8 @@ extension AppComposition {
         var processStart: Date?
         /// The seconds `now` and `processStart` are moved by, when a UI test asked for a date (`UITestClock`).
         var clockOffset: TimeInterval?
+        /// How many calls of the session's `finish` fail, when a UI test asked for that (`UITestSaveFailures`).
+        var failedFinishes: Int?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -219,7 +228,8 @@ extension AppComposition {
                 },
                 preparesDependencies: true,
                 processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
-                clockOffset: offset
+                clockOffset: offset,
+                failedFinishes: UITestSaveFailures.liveCount(arguments: arguments)
             )
         }
     }

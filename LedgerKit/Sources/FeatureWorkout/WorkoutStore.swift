@@ -5,14 +5,14 @@ import LedgerDomain
 import Observation
 
 /// The store of the workout's cover (M1 store convention): the workout as the session last published it, the
-/// row the lifter chose, the dialogs the cover can show over itself, and the work it starts: the discard, and
-/// the changes the page's taps ask for.
+/// row the lifter chose, the dialogs the cover can show over itself, and the work it starts: the discard, the
+/// save (`WorkoutStore+Finish.swift`), and the changes the page's taps ask for.
 ///
 /// It keeps no workout of its own. `follow()` listens to `WorkoutSessionClient.updates()` for as long as the
 /// cover is up, and every state it shows is one the session published; a workout that ends, by this cover's
 /// discard or by any other hand, closes the cover through `exit`. Intents are synchronous and only change
-/// state; `WorkoutRoot` runs `follow()`, `pump()` and `discard()` from its `.task`s, so nothing here outlives
-/// the view.
+/// state; `WorkoutRoot` runs `follow()`, `pump()`, `discard()` and `save()` from its `.task`s, so nothing
+/// here outlives the view.
 ///
 /// **The pump** (F10 S5 criteria 7 and 13 to 15). A tap on the page is queued by `send` and applied by
 /// `pump()`, one at a time and in the order the taps were made: each is planned at its turn on the newest
@@ -46,6 +46,11 @@ final class WorkoutStore {
     private(set) var isDiscarding = false
     /// The discard the root's `.task(id:)` runs: each accepted tap on "Discard" makes the next.
     private(set) var discardAttempt = 0
+    /// True from the accepted tap on "Save workout" until the save fails or is withdrawn; once it succeeds
+    /// the cover closes. (Set by the store alone; the save is in its own file.)
+    var isSaving = false
+    /// The save the root's `.task(id:)` runs: each accepted "Save workout" and "Try again" makes the next.
+    var saveAttempt = 0
     private(set) var exit: WorkoutExit?
     /// "Minimize" was tapped while taps were still waiting: the cover closes with this once they are applied.
     /// Until then nothing answers, as while a discard runs.
@@ -75,6 +80,20 @@ final class WorkoutStore {
     /// The rest whose end was played, so that no second wait plays it again. (The store's alone; its rest
     /// is in a file of its own.)
     @ObservationIgnored var restPlayedOver: RestTimer?
+    /// The rest that was announced when it was first shown, so that no second wait announces it again.
+    @ObservationIgnored var restAnnounced: RestTimer?
+    /// The save that is running, or the one that last failed, which "Try again" runs again.
+    @ObservationIgnored var pendingSave: PendingSave?
+    /// Counts the runs of `save()`, so that one a later run has replaced decides nothing.
+    @ObservationIgnored var saveRun = 0
+    /// Whether this store has asked the session to finish the workout. From then on "Discard" is not
+    /// offered: the host keeps an end it could not save and completes it before any discard, so a discard
+    /// would save the workout (F10 S7a, fix round 1). Never set back.
+    var hasAskedToFinish = false
+    /// How many times `drain()` was entered: for the tests that bound the save's wait.
+    @ObservationIgnored var drainPasses = 0
+    /// Wakes the run of `save()` that waits for the taps made before it; nil while none waits.
+    @ObservationIgnored var settled: (run: Int, wake: AsyncStream<Void>.Continuation)?
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.date) var date
@@ -82,6 +101,7 @@ final class WorkoutStore {
     @ObservationIgnored @Dependency(\.calendar) private var calendar
     @ObservationIgnored @Dependency(\.uuid) var uuid
     @ObservationIgnored @Dependency(\.haptics) var haptics
+    @ObservationIgnored @Dependency(\.announcements) var announcements
     @ObservationIgnored @Dependency(\.continuousClock) var clock
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
 
@@ -104,8 +124,8 @@ final class WorkoutStore {
     // MARK: Intents
 
     func send(_ action: WorkoutAction) {
-        // Nothing answers once the cover is closing, or while a discard runs.
-        guard exit == nil, exitWhenDrained == nil, !isDiscarding else {
+        // Nothing answers once the cover is closing, or while a discard or a save runs.
+        guard exit == nil, exitWhenDrained == nil, !isDiscarding, !isSaving else {
             return
         }
         switch action {
@@ -115,10 +135,16 @@ final class WorkoutStore {
             show(.finish)
         case .keepLifting:
             dismiss([.finish])
+        case .save:
+            startSave()
         case .discard:
             startDiscard()
+        case .retrySave:
+            retrySave()
         case .dismissFailure:
-            dismiss([.discardFailed, .editFailed])
+            dismiss([.discardFailed, .editFailed, .saveFailed])
+        case let .dismissed(dialog):
+            dismiss([dialog])
         case let .edit(edit):
             enqueue(edit)
         }
@@ -147,7 +173,7 @@ final class WorkoutStore {
 
     /// Not tied to the dialog's flag: its dismissal and its button's action arrive in either order.
     private func startDiscard() {
-        guard isShowingWorkout else {
+        guard isShowingWorkout, canDiscard else {
             return
         }
         dialog = nil
@@ -165,10 +191,13 @@ final class WorkoutStore {
         emptyQueue()
         exitWhenDrained = nil
         exit = reason
+        settled?.wake.yield()
     }
+}
 
-    // MARK: Work the root's tasks run
+// MARK: - Work the root's tasks run
 
+extension WorkoutStore {
     /// Shows the session's workout for as long as the cover is up: the workout as it stands, then every
     /// change. An update whose workout is no longer live ends it: finished closes the cover as saved,
     /// discarded as discarded, and no workout at all (which only the first update can say) closes it with
@@ -192,7 +221,7 @@ final class WorkoutStore {
         defer { isHearingTheSession = false }
         for await update in await session.updates() {
             guard let live = update.live else {
-                leave(Self.exit(for: update.state))
+                leave(exit(for: update.state))
                 await play(update.haptics)
                 return
             }
@@ -205,6 +234,7 @@ final class WorkoutStore {
             if !isHearingTheSession {
                 isHearingTheSession = true
                 wake?.yield()
+                settled?.wake.yield()
             }
             await play(missed + update.haptics)
         }
@@ -213,14 +243,25 @@ final class WorkoutStore {
         }
         logger.log.error("The session's updates ended while the workout's cover was up")
         // The store has lost its source: the taps still waiting are given up with it, and so is a "Minimize"
-        // that waited for them, so that the failed screen's "Close" closes the cover (F10-S5-7).
+        // that waited for them, so that the failed screen's "Close" closes the cover (F10-S5-7). So are a
+        // save that waited for them, and the sheet, which has no workout to ask about.
         emptyQueue()
         exitWhenDrained = nil
+        isSaving = false
+        dismiss([.finish])
         workout = .failed(WorkoutStoreError.updatesEnded)
+        settled?.wake.yield()
     }
 
-    private static func exit(for ended: WorkoutState?) -> WorkoutExit {
+    /// Why the cover closes on an update whose workout is not live. No workout at all, which only a
+    /// stream's first update can say, has nothing to tell, but in one case: this store asked the session
+    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile). The
+    /// host completes that call in a task of its own, so the workout is the one being saved.
+    private func exit(for ended: WorkoutState?) -> WorkoutExit {
         guard let ended else {
+            if isSaving, let save = pendingSave, save.wasSent {
+                return .route(.saved(save.id))
+            }
             return .nothingToShow
         }
         return .route(ended.phase == .finished ? .saved(ended.id) : .discarded)

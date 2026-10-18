@@ -61,6 +61,18 @@
         }
     }
 
+    /// `AnnouncementsClient` for previews and tests: it says nothing and records what it was asked to say.
+    public actor FakeAnnouncements: AnnouncementsClient {
+        /// Every text it was asked to announce, in call order.
+        public private(set) var announced: [String] = []
+
+        public init() {}
+
+        public func announce(_ text: String) {
+            announced.append(text)
+        }
+    }
+
     /// `LiveActivitiesClient` for previews and tests; F21 records starts, updates and ends.
     public struct FakeLiveActivities: LiveActivitiesClient {
         public init() {}

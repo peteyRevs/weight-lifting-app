@@ -7,7 +7,7 @@ import Testing
 /// makes them.
 @Suite("WorkoutPresentation dialogs", .tags(.feature))
 struct WorkoutPresentationDialogTests {
-    @Test("The two dialogs read as the brief writes them")
+    @Test("The conflict dialog and the failed discard's alert read as the brief writes them")
     func dialogs_areTheBriefs() {
         #expect(WorkoutPresentation.conflictDialog == WorkoutConflictDialogModel(
             title: "You have a workout in progress",
@@ -15,11 +15,7 @@ struct WorkoutPresentationDialogTests {
             replace: "Discard and start new",
             cancel: "Cancel"
         ))
-        #expect(WorkoutPresentation.finishDialog == WorkoutFinishDialogModel(
-            title: "End workout?",
-            discard: "Discard",
-            keepLifting: "Keep lifting"
-        ))
+        // "End workout?" is a sheet from F10 S7 on: `WorkoutPresentationFinishTests`.
         #expect(WorkoutPresentation.discardFailedAlert == WorkoutAlertModel(
             title: "Couldn't discard this workout",
             message: "It's still in progress. Try again.",

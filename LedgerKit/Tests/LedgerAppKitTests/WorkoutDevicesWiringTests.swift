@@ -8,7 +8,7 @@ import LedgerTestSupport
 import Testing
 
 /// F10 S6, criteria 7 and 8: what the iPhone's composition gives the live workout of the device: its
-/// haptics, bound with the session; and no notifications client, until F23.
+/// haptics and its announcements (F10 S7a), bound with the session; and no notifications client, until F23.
 @Suite("AppComposition · the live workout's devices", .timeLimit(.minutes(1)))
 struct WorkoutDevicesWiringTests {
     /// F10 S6, criterion 7 and the ruling on the test default: the composition binds the iPhone's haptics
@@ -34,6 +34,29 @@ struct WorkoutDevicesWiringTests {
         for haptic in Haptic.allCases {
             await haptics.play(haptic)
         }
+    }
+
+    /// F10 S7a, criterion 20: the composition binds the iPhone's announcements with the session, as it does
+    /// the haptics. `withDependencies` starts from the live values, so a composition that left the key
+    /// unbound would hand back the stub and fail this test.
+    @Test("With the database open the composition binds the live announcements; before that it binds nothing")
+    func boot_bindsTheLiveAnnouncements() async {
+        let harness = Harness()
+        defer { harness.remove() }
+        func bound(by composition: AppComposition) -> any AnnouncementsClient {
+            withDependencies {
+                $0.context = .live
+                composition.bind(&$0)
+            } operation: {
+                @Dependency(\.announcements) var announcements
+                return announcements
+            }
+        }
+        #expect(!(bound(by: harness.composition()) is LiveAnnouncements))
+        let announcements = bound(by: harness.booted())
+        #expect(announcements is LiveAnnouncements)
+        // Posting one traps nothing where no assistive technology runs.
+        await announcements.announce("Rest over")
     }
 
     /// F10 S6, criterion 8: the app's host is given no notifications client until F23. A rest that starts,
