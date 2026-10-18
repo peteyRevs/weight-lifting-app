@@ -152,14 +152,15 @@ nonisolated extension ProgramWordsAdversarialTests {
     func sources_holdNoCopyOutsideTheCopyFiles() throws {
         var found: [String] = []
         for file in try Self.sources() where !file.name.hasPrefix("ProgramCopy") {
+            // Every literal, read by `SwiftSource`, but a log line's message (the first unlabelled argument of
+            // `logger.log.<level>`) and the logger's category `"program"`: they are for the developer, never
+            // read or heard by a lifter (standards §8; F11 S13 fix round 1, the round 1 tester's rule).
+            let source = SwiftSource(file.text)
+            let isForTheDeveloper = ProgramStoreSourceAdversarialTests.isForTheDeveloper
+            found += source.literals
+                .filter { !["", " · "].contains($0.text) && !isForTheDeveloper($0, source) }
+                .map { "\(file.name):\($0.line) \"\($0.text)\"" }
             for (number, line) in Self.code(file.text).enumerated() {
-                let pieces = line.split(separator: "\"", omittingEmptySubsequences: false)
-                let literals = pieces.enumerated().filter { $0.offset % 2 == 1 }.map { String($0.element) }
-                // A store's log line and its logger's category are for the developer, never read or heard by
-                // a lifter (standards §8); a lookup on such a line is still found below (F11 S13, sanctioned).
-                let isLog = line.contains("logger.log.") || line.contains(".category(")
-                found += literals.filter { !isLog && !["", " · "].contains($0) }
-                    .map { "\(file.name):\(number + 1) \"\($0)\"" }
                 let lookups = ["String(localized", "LocalizedStringKey", "NSLocalizedString", "Text(", "bundle:"]
                 found += lookups.filter { line.contains($0) }.map { "\(file.name):\(number + 1) \($0)" }
             }

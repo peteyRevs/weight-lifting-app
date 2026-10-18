@@ -35,12 +35,11 @@ nonisolated struct FeatureProgramSourceTests {
     /// that a task group's `addTask {` is not taken for one.
     static let unstructured = ["Task.detached", "DispatchQueue", "Timer", "TimelineView", ".formatted("]
 
-    /// Whether `line` starts an unstructured task: `Task {` or `Task<…>`'s initializer, not `addTask {`.
+    /// Whether `line` starts an unstructured task: `Task {`, `Task(priority:) {`, `Task<…>`, `Task.init {` or
+    /// `Task.detached`, and not `addTask {`, `Task.yield()`, `Task.isCancelled` or `Task.checkCancellation()`
+    /// (the round 1 tester's rule, F11-S13-3).
     static func startsATask(_ line: String) -> Bool {
-        let code = line.filter { !$0.isWhitespace }
-        return code.ranges(of: "Task{").contains { found in
-            found.lowerBound == code.startIndex || !code[code.index(before: found.lowerBound)].isLetter
-        }
+        line.firstMatch(of: /(^|[^A-Za-z0-9_.])Task\s*(\{|\(|<|\.init\b|\.detached\b)/) != nil
     }
 
     /// The edit session, the stores and the roots (F11 S13 and S14).
@@ -125,8 +124,15 @@ nonisolated struct FeatureProgramSourceTests {
         for name in Self.storeFiles {
             #expect(sources[name] != nil, "\(name) is not among the files read")
         }
-        #expect(Self.startsATask("let task = Task { await work() }") && Self.startsATask("Task {"))
-        #expect(!Self.startsATask("group.addTask { await self.follow() }"))
+        for spelling in [
+            "let task = Task { await work() }", "Task {", "Task(priority: .high) { }", "_ = Task.init { }",
+            "Task<Void, Never> { }", "Task.detached { }"
+        ] {
+            #expect(Self.startsATask(spelling), "\(spelling)")
+        }
+        for spelling in ["group.addTask { await self.follow() }", "await Task.yield()", "Task.isCancelled"] {
+            #expect(!Self.startsATask(spelling), "\(spelling)")
+        }
     }
 
     @Test("The presentations, the copy and the models never name Double: weights stay exact")

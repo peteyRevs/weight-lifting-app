@@ -73,12 +73,12 @@ nonisolated struct ProgramStoreSourceAdversarialTests {
     }
 
     @Test(
-        "Audit: the implementer's tripwire takes `Task(priority:) {` and `Task.init {` for no task (a gap)"
+        "Audit: the implementer's tripwire takes `Task(priority:) {` and `Task.init {` for a task (fixed)"
     )
     func implementersTripwire_missesTwoSpellings() {
         #expect(FeatureProgramSourceTests.startsATask("let t = Task { }"))
-        #expect(!FeatureProgramSourceTests.startsATask("let t = Task(priority: .userInitiated) { await x() }"))
-        #expect(!FeatureProgramSourceTests.startsATask("_ = Task.init { await x() }"))
+        #expect(FeatureProgramSourceTests.startsATask("let t = Task(priority: .userInitiated) { await x() }"))
+        #expect(FeatureProgramSourceTests.startsATask("_ = Task.init { await x() }"))
     }
 
     // MARK: Literals and lookups
