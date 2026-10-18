@@ -5448,7 +5448,9 @@ An intent applies its edit to `session.shown` before it returns, and `ProgramSto
 earlier tap. `run(prepare:finished:)` sends every waiting edit in one `update`, whose change captures the
 array of edits and applies it to the program `update` read; on return the returned program is adopted and
 exactly the sent edits are dropped, in one synchronous step. A program the store emits while a write runs
-is kept in `heardDuringWrite` and adopted only if the write fails or is cancelled. `CancellationError`
+is kept in `heardDuringWrite`; if the write fails or is cancelled it is adopted, and if the write stored,
+the store is read instead, again while the read itself hears one, and the last read is adopted, whatever it
+names (corrected in fix round 2; amended R6). `CancellationError`
 while the task is cancelled keeps the edits at the front for the next run (ruling R1); any other error
 drops every waiting edit and is reported to the store (`Outcome.failed`), which shows the notice and logs
 it, or, for `ProgramEditError`, shows that error's notice (ruling R4).
@@ -5496,12 +5498,11 @@ Suites: `ProgramEditSessionTests` (ES), `ProgramStoreTests` (PS), `ProgramRootTe
    in the background is observed when stored).
 4. **"+" selects the week found by its id** in the program the edit was applied to (review N-1); the
    action's `selecting:` place is not read.
-5. **An emission during a write is adopted only if the write fails or is cancelled.** On success the
-   returned program wins, as criterion 3 says. Left open: an emission of a write that committed *after*
-   ours but reached the store before our call returned is dropped, and the screen is one change behind
-   until the next emission. On the database, emissions follow commit order and our own commit's emission
-   comes after our return or with it, so this needs a third writer between our commit and our return
-   (milliseconds). Open question 2.
+5. **An emission during a write** (corrected in fix rounds 1 and 2): if the write fails or is cancelled
+   it is adopted; if the write stored, the stored program is read, and read again while an emission is
+   heard during the read, and the last read is adopted, another program or none included; a read that
+   throws keeps the returned program (amended R6). The read is not rare: on the database a write's own
+   emission can reach the store before `update` returns, so it may follow many writes; it costs one read.
 6. **A notice carried by an edit is set even when the edit changes nothing** (`notice_isReplacedAndDropped`):
    the notice belongs to the tap, as the action table says.
 7. **While any route waits, "+ Add training day" adds nothing** (criterion 13 names the new day's route; a
@@ -5641,4 +5642,49 @@ Commit `852150b`.
   lint 70 s, iOS build 18 s, string catalogs 1 s, iOS tests 974 s (4,157 tests, 4,126 passed, 0 failed, 15
   skipped, 16 expected failures), watchOS build 19 s, watchOS tests 236 s (2,301 tests, 0 failed), coverage
   2 s (FeatureProgram 99.12 %, overall 98.70 %).
+- `#60`: still `OPEN`; S14 not started.
+
+## S13 — fix round 2 (G1 implementer, 2026-10-18)
+
+On `d47afc8` (the tester's round 2, `test-findings.md` "S13 — round 2", and the G3 review, `review.md` "Slice
+S13 — review"); the orchestrator's rulings. Commit `c29faa5`. "How it works" sentence 3 and deviation 5 of
+"as built" are corrected in place (review N-3, N-7).
+
+### What changed, per item
+
+| Item | Change |
+|---|---|
+| **F11-S13-6, -7, -8; review S-3** (post-write read; R6 amended in the brief with the orchestrator's wording) | `ProgramEditSession.newestAfter(_:)`: after a write that heard an emission, it clears `heardDuringWrite`, reads `active()`, and reads again while one was heard during the read; it returns whatever the last read names, another program or nil included, and `adopt` then drops edits made on another program (nil gives `.noProgram`). A read that throws, at any turn, keeps the returned program. With nothing heard the returned program is adopted, no read. All five of `ProgramReadAfterWriteAdversarialTests` and round 1's `workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` pass unedited. |
+| **Review S-1** (per-run ended flag) | `ProgramStore.hasEnded`: set when an observation ends, reset only when `run()` starts, never by a read; `state` is `.failed` while it or `hasFailed` holds. `hasFailed` keeps deviation 8's cross-run behaviour (a new run shows the failed state until it has read the logged weeks). Test: `ProgramStoreTests.observationEnded_staysFailed_throughLaterReads` (settings that say one value and end; two successful logged-weeks reads later, still failed). |
+| **Review S-2** (scene phase) | `ProgramRoot`: `run()` is `.task(id: scenePhase == .background)` with the background guard, as `TodayRoot`; `save()` stays unkeyed, so the background never cancels a write. The root tests host with an explicit phase (`Handed.phase`, shown phase as Today's tests); new `root_backFromTheBackground_followsAgain`: nothing followed in the background; active loads; inactive, background, active follows again (two observations, `CountingPrograms`); an edit is still stored by the same save task. The tester's root host already set `.active`. |
+| **Nit 1** | `ProgramStore.newDayWaits`: "+ Add training day" is refused only while the new day's edit still waits; a write that stores without the day, and whose edit no longer waits, clears `routeAfterSave`. Test: `addDay_droppedWithAnotherProgram_doesNotBlockTheNextTap` (another program made active while the day waits: the route is cleared, and a tap on the other program adds a day and routes). |
+| **Nit 2** | `followedWorkouts`' comment says a non-newest workout deleted or edited in History is not seen until the next run, and that the stale set errs safe. |
+| **Nit 3, 7** | The notes' "How it works" and deviation 5 describe the read as built; it is not called rare. |
+| **Nit 5** | The tester's `implementersTripwire_missesTwoSpellings` renamed `implementersTripwire_catchesBothSpellings` (sanctioned, below). |
+| **Nit 6** | `ProgramEditSessionTests.losingSequence`, the move test and the three `again` tasks of `+Cancellation` are awaited after cancelling (`Running.cancel()` or `.value`). |
+| **Nit 8** | A comment on the five module-writable properties of `ProgramStore` says why (the sources' extension writes them from its own file). |
+| Nit 4 | Done by the orchestrator's ruling (R6's text). |
+
+### Sanctioned edits to the testers' files (this round)
+
+| File:line | Edit | Why |
+|---|---|---|
+| `Tests/FeatureProgramTests/Adversarial/ProgramStoreSourceAdversarialTests.swift:78` | `func implementersTripwire_missesTwoSpellings()` → `func implementersTripwire_catchesBothSpellings()`; body and assertions unchanged | Review N-5: the name said the opposite of what it asserts since round 1 |
+
+No other tester's file was touched; `ProgramReadAfterWriteAdversarialTests` is unedited.
+
+### Product lines now
+
+`ProgramEditSession.swift` 117, `ProgramStore.swift` 168, `ProgramStore+Sources.swift` 89, `ProgramRoot.swift`
+84, `ProgramCopy+States.swift` 38, +2 elsewhere: **S13 498**.
+
+### The runs
+
+- Host, `swift test --filter FeatureProgramTests`: 443 tests in 48 suites, green (the tester's two rounds
+  included; their three round 2 failures now pass).
+- `scripts/check.sh --lint-only`: OK.
+- **`scripts/check.sh`, the full gate, on `c29faa5`, through the lock: exit 0, "check.sh OK", 1,340 s**: format
+  1 s, lint 70 s, iOS build 21 s, string catalogs 0 s, iOS tests 989 s (4,165 tests, 4,134 passed, 0 failed,
+  15 skipped, 16 expected failures; `ProgramRootTests` among them), watchOS build 18 s, watchOS tests 239 s
+  (2,301 tests, 0 failed), coverage 2 s (FeatureProgram 99.18 %, overall 98.72 %).
 - `#60`: still `OPEN`; S14 not started.
