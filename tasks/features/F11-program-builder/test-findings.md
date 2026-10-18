@@ -1379,4 +1379,4 @@ killed (below).
 | `swift test --filter` my nine host suites, 200 seeds | 1, as intended: 37 tests, 1 failed (F11-S13-1), ~10 s |
 | `xcodebuild test -testPlan PR -only-testing:` my suites (before the split into files) | 65, as intended: only F11-S13-1 failed; the root suite passed |
 | mutation driver, 10 mutants at 40 seeds | each killed |
-| `scripts/check.sh` (full gate) | see the report |
+| `scripts/check.sh` (full gate) at `b8f49bc` | **65, as intended**: format, lint and the script suites clean; the iOS PR plan's only failing test is `ProgramStoreEmissionsAdversarialTests.workoutSavedAfterTheCommit_beforeTheReturn_isDrawn` (F11-S13-1; listed twice by xcodebuild); 955 s of iOS tests, 1,061 s in all. The gate stops there, so the watchOS step and the coverage gate did not run |
