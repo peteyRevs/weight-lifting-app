@@ -30,8 +30,7 @@ extension ProgramEditSessionTests {
         let again = Task { await scene.store.save() }
         await scene.idle()
         #expect(try await scene.stored().weeks.count == 9, "the week is added once")
-        sources.cancel()
-        again.cancel()
+        await ProgramStoreScene.Running(sources: sources, saving: again).cancel()
     }
 
     @Test("6. A held write whose task is cancelled stores nothing; the next run removes the last week once")
@@ -52,8 +51,7 @@ extension ProgramEditSessionTests {
         await scene.idle()
         #expect(try await scene.stored().weeks.count == 7, "removed once, not twice")
         #expect(await scene.writes() == 2)
-        running.sources.cancel()
-        again.cancel()
+        await ProgramStoreScene.Running(sources: running.sources, saving: again).cancel()
     }
 
     @Test("6. A write that returns although its task was cancelled stored everything: it is not sent again")
@@ -71,7 +69,6 @@ extension ProgramEditSessionTests {
         await scene.idle()
         #expect(await scene.writes() == 1)
         #expect(try await scene.stored().weeks.count == 9)
-        running.sources.cancel()
-        again.cancel()
+        await ProgramStoreScene.Running(sources: running.sources, saving: again).cancel()
     }
 }

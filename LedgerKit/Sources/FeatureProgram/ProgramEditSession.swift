@@ -29,7 +29,8 @@ nonisolated extension DayEditorEdit: ProgramEdit {}
 /// **Each edit reaches the stored program once.** When `update` returns, the program it returns is adopted
 /// and exactly the edits sent are dropped, in one synchronous step. A program the store emits while a write
 /// runs is kept aside, never drawn under edits that may already be in it; when one was, the stored program
-/// is read once after the write and that is adopted instead (it may be newer than the returned one). A write
+/// is read after the write, again while the read itself hears one, and the last read is adopted instead,
+/// whatever it names (`newestAfter`). A write
 /// that throws `CancellationError` while its task is cancelled stored nothing (F11 S3): its edits stay at the
 /// front and the next run sends them. Any other failure stored nothing either, and every waiting edit, sent
 /// or not, is dropped: the screen goes back to the stored program, and `finished` says why.
@@ -118,7 +119,7 @@ final class ProgramEditSession<Edit: ProgramEdit> {
                 let saved = try await programs.update(program.id) { current in
                     try edits.reduce(current) { try $1.applied(to: $0) }
                 }
-                let newest = await newestAfter(saved, ofProgram: program.id)
+                let newest = await newestAfter(saved)
                 waiting.removeFirst(sent)
                 heardDuringWrite = nil
                 isWriting = false
@@ -138,20 +139,26 @@ final class ProgramEditSession<Edit: ProgramEdit> {
         }
     }
 
-    /// The program to adopt after a write that stored `saved`. With nothing heard meanwhile, `saved`. A
-    /// program heard during the write may be older than `saved` (the store's emission of an earlier write) or
-    /// newer (a workout saved after this write committed and before it returned), and neither can be told
-    /// from the other: the store is read once, and its answer adopted.
-    private func newestAfter(_ saved: Program, ofProgram id: ProgramID) async -> Program {
-        guard heardDuringWrite != nil else {
-            return saved
+    /// The program to adopt after a write that stored `saved` (R6, amended in S13 fix round 2). With nothing
+    /// heard meanwhile, `saved`. A program heard during the write may be older than `saved` (the store's
+    /// emission of an earlier write) or newer (a workout saved after this write committed, another program
+    /// made active, the program deleted), and neither can be told from the other, so the store is read, and
+    /// read again while something is heard during the read: each read is the store's newest word when it
+    /// starts, so the loop ends once one runs undisturbed. Whatever the last read names is adopted, another
+    /// program or none included (`adopt` drops edits made on another program). A read that throws, at any turn,
+    /// ends the reading and keeps `saved`, which holds this write; the next emission or write brings the rest.
+    private func newestAfter(_ saved: Program) async -> Program? {
+        var newest: Program? = saved
+        while heardDuringWrite != nil {
+            heardDuringWrite = nil
+            do {
+                newest = try await programs.active()
+            } catch {
+                heardDuringWrite = nil
+                return saved
+            }
         }
-        // A read that fails or is cancelled leaves the returned program, which holds this write; the next
-        // emission or write brings what it missed.
-        guard let read = try? await programs.active(), read.id == id else {
-            return saved
-        }
-        return read
+        return newest
     }
 
     private func adoptHeardDuringWrite() {

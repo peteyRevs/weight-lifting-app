@@ -20,10 +20,17 @@ public nonisolated struct ProgramWeekRequest: Hashable, Sendable {
 /// comes back. The app hands it `onRoute`, which resolves where a tap goes (architecture §4), and the week
 /// to select, when it asks for one.
 ///
+/// **The sources are followed again when the app comes back from the background**, as `TodayRoot` follows
+/// Today's: the task's id changes on the way there and on the way back, and at no other change of the scene's
+/// phase, so the failed state's "Open the app again" is true. The save loop's task is not keyed: going to the
+/// background never cancels a write. A view hosted with no scene is told it is in the background, and
+/// follows nothing until its host says otherwise.
+///
 /// It draws the builder once the program is known, and a message when there is none or it cannot be read
 /// (Pete's decision 6). The notice under the block is announced to VoiceOver when it appears or changes.
 public struct ProgramRoot: View {
     @State private var store: ProgramStore
+    @Environment(\.scenePhase) private var scenePhase
     private let week: ProgramWeekRequest?
     private let onRoute: @MainActor (ProgramRoute) -> Void
     private let announce: @MainActor (String) -> Void
@@ -49,7 +56,10 @@ public struct ProgramRoot: View {
     public var body: some View {
         let state = store.state
         content(state)
-            .task {
+            .task(id: scenePhase == .background) {
+                guard scenePhase != .background else {
+                    return
+                }
                 await store.run()
             }
             .task {

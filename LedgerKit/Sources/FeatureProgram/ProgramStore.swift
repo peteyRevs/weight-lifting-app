@@ -52,12 +52,18 @@ final class ProgramStore {
     /// The Day editor's route for a day just added, until the write that holds the day has returned.
     private(set) var routeAfterSave: ProgramRoute?
 
-    // What the sources last said (`+Sources`); each nil until it has spoken, and kept across runs.
+    // What the sources last said (`+Sources`); each nil until it has spoken, and kept across runs. These five
+    // are written by the sources' extension in its own file, so they are not `private(set)`; nothing outside
+    // the store writes them.
     var settings: Settings?
     var exercises: [ExerciseID: Exercise]?
     var loggedWeeks: Set<Int>?
-    /// A source ended or a read failed; cleared when the logged weeks are next read.
+    /// A source ended or a read failed, in this run or the one before; cleared when the logged weeks are
+    /// next read, so a new run keeps the failed state on screen until it has something to show.
     var hasFailed = false
+    /// An observation ended in this run: nothing clears it but the next run, since the store can no longer
+    /// follow that source (as Today's `sources.hasEnded`).
+    var hasEnded = false
 
     @ObservationIgnored private var routeNumber = 0
 
@@ -78,7 +84,7 @@ final class ProgramStore {
 
     /// The model, made from what is known now: before any intent returns, it holds that intent's edit.
     var state: State {
-        guard !hasFailed else {
+        guard !hasFailed, !hasEnded else {
             return .failed
         }
         guard session.hasHeard, let settings, let exercises, let loggedWeeks else {
@@ -148,15 +154,29 @@ final class ProgramStore {
     }
 
     /// "+ Add training day": the day is queued now and the Day editor's route waits for the write that holds
-    /// it, so the editor never opens on a day that is not stored. While a route waits, a tap adds nothing.
+    /// it, so the editor never opens on a day that is not stored. While a route waits, a tap adds nothing; a
+    /// route whose edit no longer waits (dropped with another program's edits) waits for nothing.
     private func addDay(named name: String, weekIndex: Int) {
-        guard pendingRoute == nil, routeAfterSave == nil else {
+        guard pendingRoute == nil, !newDayWaits else {
             return
         }
         let id = DayTemplateID(uuid())
         notice = nil
         if session.enqueue(.addDay(id, name: name)) {
             routeAfterSave = .day(id, weekIndex: weekIndex)
+        }
+    }
+
+    /// Whether the edit of the day `routeAfterSave` opens is still waiting to be stored.
+    private var newDayWaits: Bool {
+        guard case let .day(id, _)? = routeAfterSave else {
+            return false
+        }
+        return session.waiting.contains { edit in
+            if case let .addDay(waiting, _) = edit {
+                return waiting == id
+            }
+            return false
         }
     }
 
@@ -190,14 +210,17 @@ final class ProgramStore {
     private func saved(_ outcome: ProgramEditSession<ProgramBuilderEdit>.Outcome) {
         switch outcome {
         case .stored:
-            // The new day may still wait behind this write, if it was added while the write ran.
-            guard let route = routeAfterSave, case let .day(id, _) = route,
-                  session.stored?.days.contains(where: { $0.id == id }) == true
-            else {
+            // The new day may still wait behind this write, if it was added while the write ran; an edit that no
+            // longer waits and is not stored was dropped (the active program changed), and its route with it.
+            guard let route = routeAfterSave, case let .day(id, _) = route else {
                 return
             }
-            routeAfterSave = nil
-            emit(route)
+            if session.stored?.days.contains(where: { $0.id == id }) == true {
+                routeAfterSave = nil
+                emit(route)
+            } else if !newDayWaits {
+                routeAfterSave = nil
+            }
         case let .failed(error as ProgramEditError):
             routeAfterSave = nil
             notice = ProgramBuilderNotice(error)

@@ -75,7 +75,7 @@ nonisolated struct ProgramStoreSourceAdversarialTests {
     @Test(
         "Audit: the implementer's tripwire takes `Task(priority:) {` and `Task.init {` for a task (fixed)"
     )
-    func implementersTripwire_missesTwoSpellings() {
+    func implementersTripwire_catchesBothSpellings() {
         #expect(FeatureProgramSourceTests.startsATask("let t = Task { }"))
         #expect(FeatureProgramSourceTests.startsATask("let t = Task(priority: .userInitiated) { await x() }"))
         #expect(FeatureProgramSourceTests.startsATask("_ = Task.init { await x() }"))

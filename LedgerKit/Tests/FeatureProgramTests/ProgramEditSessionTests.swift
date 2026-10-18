@@ -81,8 +81,7 @@ struct ProgramEditSessionTests {
         #expect(stored.days[0].slots[0].exerciseID == Fixtures.CatalogID.inclineDBPress, "the swap is kept")
         #expect(stored.days[0].slots[0].misses == [3], "the miss is kept")
         #expect(stored.weeks[1].isDeload, "the edit is kept")
-        sources.cancel()
-        saving.cancel()
+        await ProgramStoreScene.Running(sources: sources, saving: saving).cancel()
     }
 
     // MARK: Criterion 3
@@ -133,6 +132,8 @@ struct ProgramEditSessionTests {
         #expect(try await memory.programs.active()?.days[0].slots.map(\.id) == moved)
         hearing.cancel()
         writing.cancel()
+        await hearing.value
+        await writing.value
     }
 
     // MARK: Criterion 4

@@ -14,10 +14,13 @@ import LedgerDomain
 /// that state on screen until it has read the program's workouts, as Today keeps its own, rather than
 /// passing through loading.
 extension ProgramStore {
-    /// How many finished workouts are followed: a workout finished meanwhile is the newest.
+    /// How many finished workouts are followed: a workout finished meanwhile is the newest. A workout that is
+    /// not the newest, deleted or edited in History, is not seen until the next run, and the logged weeks stay
+    /// as they were: they may then refuse a "−" that would now be allowed, never allow one that should not be.
     static let followedWorkouts = 1
 
     func run() async {
+        hasEnded = false
         let (marks, mark) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followProgram(mark) }
@@ -107,6 +110,7 @@ extension ProgramStore {
         if !Task.isCancelled {
             logger.log.error("A store's observation ended while the program was on screen")
             hasFailed = true
+            hasEnded = true
         }
     }
 }

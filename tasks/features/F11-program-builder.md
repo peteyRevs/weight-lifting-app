@@ -1042,10 +1042,12 @@ name's focus and the blank draft), and the DoD's screenshots.
 - **R1–R11 as recommended above.** R1 amends lines 196–199: a write that throws `CancellationError` (it stored
   nothing, per S3) keeps its waiting edits and sends them again; every other failure drops them and shows the
   notice.
-- **R6, amended in S13 fix round 1 (F11-S13-1):** a write during which no emission was heard adopts the
-  program `update` returned. A write during which one was heard trusts neither blindly (the emission may be
-  older than the write, or newer: a workout saved after the commit and before the return): the session reads
-  the stored program once, inside its loop, and adopts that; a read that fails leaves the returned program.
+- **R6, amended in S13 fix rounds 1 and 2 (F11-S13-1, -6, -7, -8; review S-3; confirmed by the
+  orchestrator):** a write during which no emission was heard adopts the program `update` returned. After a
+  write during which one was heard, the session clears the heard flag, reads `active()`, and repeats the read
+  while an emission was heard during the read; it adopts whatever the last read returns, another program or
+  nil included (nil gives the empty state; `adopt` drops edits made on another program). Only a read that
+  throws keeps the returned program.
 - **R12:** no test-plan edit in this slice (test plans are human-owned). Criterion 27 is measured by hand and
   written in the notes; the `.performance` suite is not built.
 - **Questions for Pete 1–5:** built to their defaults (A in each) until he answers; each is S14's, so S13 does

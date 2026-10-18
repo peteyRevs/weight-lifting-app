@@ -207,3 +207,59 @@ extension ProgramStore.State {
         return false
     }
 }
+
+/// A program store that counts how often its active program is observed: once by each run of the store.
+final nonisolated class CountingPrograms: ProgramRepository {
+    private let base: any ProgramRepository
+    private let count = Mutex(0)
+
+    init(base: any ProgramRepository) {
+        self.base = base
+    }
+
+    var observations: Int {
+        count.withLock { $0 }
+    }
+
+    func observeActive() -> AsyncStream<Program?> {
+        count.withLock { $0 += 1 }
+        return base.observeActive()
+    }
+
+    func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        try await base.update(id, change)
+    }
+
+    func active() async throws -> Program? {
+        try await base.active()
+    }
+
+    func save(_ program: Program) async throws {
+        try await base.save(program)
+    }
+
+    func setActive(_ id: ProgramID) async throws {
+        try await base.setActive(id)
+    }
+
+    func delete(_ id: ProgramID) async throws {
+        try await base.delete(id)
+    }
+}
+
+/// A settings store whose observation says the pounds settings once and then ends, as a database observation
+/// does when a later read fails.
+nonisolated struct OnceSettings: SettingsRepository {
+    func load() async throws -> Settings {
+        Fixtures.settingsLb
+    }
+
+    func save(_: Settings) async throws {}
+
+    func observe() -> AsyncStream<Settings> {
+        AsyncStream { continuation in
+            continuation.yield(Fixtures.settingsLb)
+            continuation.finish()
+        }
+    }
+}

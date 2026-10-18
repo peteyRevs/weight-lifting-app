@@ -22,6 +22,10 @@
             var routes: [ProgramRoute] = []
             var announcements: [String] = []
             var week: ProgramWeekRequest?
+            /// The scene's phase as the test sets it, and the last one SwiftUI has shown the root. A window with
+            /// no scene, as a package test's is, reports the background, where the root follows nothing.
+            var phase = ScenePhase.active
+            var shownPhase: ScenePhase?
         }
 
         /// The root as the app holds it, with the week request a test changes.
@@ -33,6 +37,8 @@
                 ProgramRoot(store: store, week: handed.week) { handed.routes.append($0) } announce: {
                     handed.announcements.append($0)
                 }
+                .environment(\.scenePhase, handed.phase)
+                .onChange(of: handed.phase, initial: true) { _, phase in handed.shownPhase = phase }
             }
         }
 
@@ -104,6 +110,45 @@
                 "Can't show your program right now",
                 "Your workouts are still on this iPhone. Open the app again to try once more."
             ])
+        }
+
+        /// Moves the scene to `phase` and returns once SwiftUI has shown the root that phase.
+        private static func move(_ handed: Handed, to phase: ScenePhase) async {
+            handed.phase = phase
+            await eventually { handed.shownPhase == phase }
+        }
+
+        @Test("14. Back from the background the root follows the sources again; the save loop is not restarted")
+        func root_backFromTheBackground_followsAgain() async throws {
+            var counting: CountingPrograms?
+            let scene = try ProgramStoreScene { values, probed in
+                let wrapped = CountingPrograms(base: probed.programs)
+                counting = wrapped
+                values.programRepository = wrapped
+            }
+            let programs = try #require(counting)
+            let handed = Handed()
+            handed.phase = .background
+            try await Self.hosting(Hosted(store: scene.store, handed: handed)) { () async throws in
+                await eventually { handed.shownPhase == .background }
+                #expect(scene.store.state == .loading, "in the background the root follows nothing")
+                await Self.move(handed, to: .active)
+                await eventually { scene.store.state.isLoaded }
+                #expect(programs.observations == 1)
+                await Self.move(handed, to: .inactive)
+                await Self.move(handed, to: .background)
+                await Self.move(handed, to: .active)
+                // A run reads the logged weeks as it starts: the store's write of them wakes the check.
+                await eventually {
+                    _ = scene.store.loggedWeeks
+                    return programs.observations == 2
+                }
+                // The save loop's task kept running through it: an edit is stored with no new run of it.
+                scene.store.send(.edit(.setDeload(true, week: 0)))
+                await scene.idle()
+                #expect(try await scene.stored().weeks[0].isDeload)
+                #expect(programs.observations == 2, "inactive alone restarts nothing")
+            }
         }
 
         @Test("12. The notice is announced when it appears and when it changes")
