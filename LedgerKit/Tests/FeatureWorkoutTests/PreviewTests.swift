@@ -34,6 +34,17 @@
             #expect(models[2].summary.hasSuffix("kg moved"))
         }
 
+        @Test("Every preview of the receipt renders, and shows the state it is named for")
+        func receipt_previewsRender() throws {
+            for preview in ReceiptPreview.allCases {
+                #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+            }
+            let models = try ReceiptPreview.allCases.map { try #require($0.model, "\($0.rawValue)") }
+            #expect(models.map { $0.page.records != nil } == [true, false, false])
+            #expect(models.map { $0.page.tiles.first?.value } == ["24:22", "1:01:05", "41:12"])
+            #expect(models.map { $0.page.tiles.last?.label } == ["LB MOVED", "LB MOVED", "KG MOVED"])
+        }
+
         @Test("Every preview renders", arguments: WorkoutPreview.allCases)
         func preview_renders(_ preview: WorkoutPreview) {
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })

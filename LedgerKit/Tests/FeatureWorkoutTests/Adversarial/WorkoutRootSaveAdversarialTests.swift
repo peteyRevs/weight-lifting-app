@@ -36,6 +36,8 @@
                 store = withTestDependencies {
                     $0.workoutSession = client
                     $0.date = .constant(Fixtures.now.addingTimeInterval(900))
+                    // F10 S7b (edited for the audit): the root reads the bests (`readBests()`).
+                    $0.inMemoryStores()
                 } operation: {
                     WorkoutStore()
                 }
@@ -107,6 +109,9 @@
             #expect(sheet.isModalInPresentation, "criterion 10: its interactive dismissal is off while it saves")
             #expect(hosted.sheet != nil, "the sheet stays up while it saves")
             await hosted.session.releaseEnd()
+            // F10 S7b (edited for the audit): the save shows the receipt; its "Done" closes the cover.
+            _ = await Panel.turning("the receipt", until: { store.saved != nil })
+            store.send(.done)
             _ = await Panel.turning("the cover to say it is done", until: { store.exit != nil })
             #expect(store.exit == .route(.saved(hosted.running.id)), "\(hosted.state)")
         }

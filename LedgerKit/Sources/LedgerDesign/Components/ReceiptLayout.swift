@@ -117,7 +117,7 @@ public struct ReceiptLayout: View {
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LedgerSpacing.m))
         return layout {
             Eyebrow(model.logged)
-                .frame(maxWidth: isStacked ? nil : .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(model.note)
                 .ledgerFont(.caption)
                 .foregroundStyle(LedgerColor.inkMuted)
