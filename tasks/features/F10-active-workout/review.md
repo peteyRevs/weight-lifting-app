@@ -2177,3 +2177,28 @@ list, as drafted); the spoken time is the system's duration format after "TIME, 
   not run. The full gate.
 - The receipt in the running app, at 375 pt, in dark; VoiceOver and the `.personalRecord` buzz on a device.
 - The tester's round-2 adversarial files beyond their names, the double they use, and their outcomes.
+
+## S7b — round 2 (G3 reviewer, 2026-10-19)
+
+Range `48c4e3a..4af4041` (one commit, the fix round on round 1), read against each finding, with the notes'
+"S7b review round 1". Run: host `swift test --filter` over the receipt, live-record, presentation, save
+(store and adversarial), source, copy and words suites, 128 tests in 15 suites, exit 0 (the 2 known issues
+are S7a-8); `twoCallsOut_theLastAnswerDecides` five more times, green each. Not run: the simulator suites,
+the UI tests, the full gate (the orchestrator's).
+
+**Verdict: approved.** Every item of round 1 is closed; nothing new blocks.
+
+| Item | Fix | Verdict |
+|---|---|---|
+| SF1 | `ReceiptLayout.swift:122-129`: the note is drawn only when `!isStacked`; the model keeps the string; the doc comment says why. Three `accessibility3` references re-recorded; I opened `receipt_accessibility3` dark: "LOGGED" stands alone over the rows, nothing else moved. The trees are unchanged (the note was never a stop). Listed for Pete beside O9 | closed |
+| N1 | "How it works" first bullet and deviation 2 now describe the `askedEnds` rule | closed |
+| N2 | deviation 2 records `askedEnds` as the sanctioned exception to criterion 16 | closed |
+| N3 | `WorkoutStore+Finish.swift:114-123`: both `catch` branches settle only when `finishesInFlight == 1`. Traced: a stale run's failure no longer settles, and returns on `run != saveRun`; the last call out settles in every branch, so a waiting update is never orphaned while a call can still answer. `twoCallsOut_theLastAnswerDecides` with `AnsweredFinishSession` pins it, and fails on the old code by reading (the earlier refusal would have closed the cover as `.saved`). One residue, not a finding: if the *current* run fails while an older call is still out, the failed-save alert can show until the older answer decides (the receipt then takes it down; `noLiveWorkout` closes). Two calls out needs the cover's tasks to restart mid-call | closed |
+| N4 | `ReceiptPinnedHeader` in `ReceiptScreen.swift`, drawn by the screen and by `ReceiptParts` | closed |
+| N5 | the comment on the `zip`, and the input for S9 in the notes | closed |
+| N6 | both UI messages read "the live workout is gone: the receipt shows"; assertions unchanged | closed |
+| N7 | `.accessibilityAction(.escape) { send(.done) }` on `ReceiptScreen`; `ReceiptTests.escape_isDone` (simulator, read not run) performs escape on the first stop of the real screen and expects `[.done]`. Listed for Pete | closed |
+
+Size: 651 product lines against `16a2e52` (+12). References changed in this round: 3, all expected by SF1.
+For Pete, unchanged from round 1 plus the two items the implementer listed: the note hidden at the
+accessibility sizes (SF1) and escape as "Done" (N7).
