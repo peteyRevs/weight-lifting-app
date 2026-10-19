@@ -1487,3 +1487,55 @@ from `run()` fails `endedFlag_isPerRun`.
 | two mutants | both killed |
 | `scripts/check.sh --lint-only` | 0 |
 | `scripts/check.sh` (full gate) at `a8c1035` | **0, "check.sh OK"**, 1,324 s: lint 69 s, iOS tests 977 s, watchOS tests 233 s, coverage 2 s (FeatureProgram 99.18 %); no warning in my files |
+
+---
+
+## S14 — round 1 (G2 tester, 2026-10-19)
+
+Tested at `f666a9a`. No product or implementer file was changed. New files: `Adversarial/DayEditorStoreAdversarialTests.swift`
+(host, 8 tests), `Adversarial/ProgramStackAdversarialTests.swift` (iOS hosted, 3 tests) and
+`Apps/LedgerUITests/ProgramTabAdversarial.swift` (Nightly UI, 3 tests).
+
+### Verdict: the stores hold; one should-fix in the app wiring (F11-S14-1); criterion 20's gap is real (F11-S14-2)
+
+### Findings
+
+| # | Severity | What | Test |
+|---|---|---|---|
+| F11-S14-1 | **should fix** (small; display only, nothing is lost) | **A week the app asked for is selected again every time the builder appears again.** `ProgramRoot` applies `week` with `.onChange(of: week, initial: true)`, and SwiftUI runs that initial action on each appearance, not once. So once Today's "Edit this week" has asked for week 5, the lifter picks week 6, opens a day and taps "Done" (or goes to Today and back), and the builder is on week 5 again: their pick is overwritten by an old request. Criterion 9 / R10 say a request selects its week, and a *new* request selects it again; coming back is not a new request. Repro: host `ProgramRoot` in a `NavigationStack` with `week = (1, weekIndex: 1)`, `.selectWeek(5)`, push, pop: `selectedWeek` is 1. The same with a `TabView` switch. One fix: the store remembers the number of the last request it applied and ignores the same request again (`select(request:)`), so neither the appearance nor a new store body matters. | `ProgramStackAdversarialTests.requestedWeek_thenPicked_survivesAPushAndPop`, `…_survivesATabSwitch`: **fail** (`selectedWeek → 1`, expected 5); on screen `ProgramTabAdversarial.test_editThisWeek_thenAnotherWeek_isKeptAfterTheDayEditorAndATabSwitch` (see runs) |
+| F11-S14-2 | **for the orchestrator** (criterion 20 not met; known, the implementer's open question 1) | **No swipe back on the Day editor**, confirmed on its own: from a Day editor just opened (no field ever focused), neither the edge swipe nor iOS 26's swipe from inside the content pops it; the implementer's control (the same gesture pops Today's Settings) passes, so the gesture is fair. "Program" and "Done" work, and nothing is lost. Needs a ruling (implementer's option A, B or C) or a fix; until then my two tests fail in Nightly. | `ProgramTabAdversarial.test_edgeSwipe_onAFreshDayEditor_pops`, `test_contentSwipe_onAFreshDayEditor_pops`: **fail**; `DayEditor.test_swipeBack_control_…` passes; `test_backAndSwipeBack_…`'s strict expected failure is matched |
+| F11-S14-3 | note | **Edits kept by R1 die with a popped Day editor.** A tab switch cancels the editor's tasks; a write in flight at that moment keeps its edits for the next run (R1). If Today's "Edit this week" then pops the editor (question 2, A), the store goes, and so do they. The window is that write's milliseconds, as in R5; for the record. | — (needs `AppTabs` hosted with a held write) |
+| F11-S14-4 | note | The day deleted elsewhere while the editor's write on it fails: the editor closes (the day is gone) with `showsSaveFailure` set, so the alert is asked for on a screen being popped. Harmless: the edit was on a day that no longer exists. | `DayEditorStoreAdversarialTests.dayDeletedElsewhere_andTheWriteFails_closesWithTheAlertSet` (passes; pins it) |
+
+### What was attacked, and held
+
+| Attack | Result | Test |
+|---|---|---|
+| Builder and Day editor on one program: the builder's rename held before the store, the editor renames its day and steps a field (its write passes the held one), then release | Both kept; both sessions' `shown` equal the store | `builderAndEditor_interleavedDuringAHeldWrite_bothScreensEndAsStored` |
+| "Done" during a write held after storing, an edit behind it, and the second write refused | No close; the alert; the day as stored ("Push", not "Push A"); a second "Done" closes | `done_thenTheSecondWriteFails_dropsTheClose_andShowsWhatIsStored` |
+| "Done", then the write's task cancelled (R1) | Nothing failed; the edit stays on screen; the next run stores it, then `.closeDay` | `done_writeCancelled_closesAfterTheNextRunStoresIt` |
+| The day deleted elsewhere under the editor's held stepper write | One `.closeDay`, no alert; the write does not bring the day back | `dayDeletedElsewhere_duringTheEditorsHeldWrite_closesOnce_andDoesNotBringItBack` |
+| "Delete" behind a held rename | Blank while it waits; two writes; one close | `delete_behindAHeldWrite_closesOnceBothAreStored` |
+| Library: two "Add"s while a write is held | The chip is kept; waiting slots already read "already in this day" (question 4); each exercise once, in order, own ids; the adds go in one write | `library_twoAddsWhileAWriteIsHeld_storeEachOnceInOrder` |
+| Library: "Add" of only exercises that are gone | No write; the sheet closes | `library_addOfOnlyStrangers_writesNothing` |
+| R1 hosted: the builder's write held while a screen is pushed over it | Stored once (nine weeks) | `ProgramStackAdversarialTests.heldWrite_whenAScreenIsPushed_isStoredOnce` |
+| A route's week out of range (selection kept raw after "−") | Both the builder's card route and the Day editor clamp it with `nearestPlace` | read in the sources |
+| Bounded re-read (5) and the throwing read | The screen can end behind the store: at the bound, and after a read that throws (what was heard is not drawn), until the next emission or edit. As ruled (G3 notes 1 and 2), pinned by the sanctioned tests | `ProgramReReadAdversarialTests` |
+| Q5 and clearing a name letter by letter | `cleanedName` trims, so "Upper A" → "Upper " stores "Upper"; a blank stores nothing. Nothing worse than the implementer's case (the first letter stays if the field is left blank). The placeholder's `isWhitespace` and the Domain's blank rule differ only for control characters, which a keyboard does not type | — |
+| The removals | No `hasDropSet`, `Field.label`, `detail`, `inDayMark` or `pickMark` left in `Sources` or the UI tests; the tests' `detail`/`label` are test extensions read off the line and the spoken label | grep |
+
+### Audit of the implementer's sanctioned edits to the testers' files
+
+All eleven rows of the notes' table are **justified** and do no more than they say: the re-read tests follow G3 notes 1 and 2
+(they still pin that the screen is behind at the bound, and healed); the source scans let through exactly
+`NameField.swift: .allSatisfy(` and `draft.isEmpty`; the oracles lose only the removed fields; 91 → 85 strings is the six
+labels; `addDay_routeAfterTheWrite_once` now pins F11-S13-12's drop; the shell edits follow criterion 25 and question 2.
+
+### Runs (2026-10-19, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `swift test --filter DayEditorStoreAdversarialTests` | 0: 8 tests |
+| `xcodebuild … -testPlan PR -only-testing:FeatureProgramTests/ProgramStackAdversarialTests` | 65, as intended: the two F11-S14-1 tests fail, the R1 test passes |
+| `xcodebuild … -testPlan Nightly` UI: `ProgramTabAdversarial` swipes, `DayEditor` swipe and control | the two swipe tests fail (F11-S14-2); the control passes; the strict expected failure is matched |
+| swiftformat `--lint`, swiftlint `--strict` on my three files | 0 |
