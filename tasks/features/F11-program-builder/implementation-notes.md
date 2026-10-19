@@ -5760,7 +5760,7 @@ Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`)
 | 17. Leaving waits for the write | DS `done_waitsForTheWrite` (held write, an edit behind it, "Done" and "Program": one `.closeDay` once idle), `failedWrite_dropsTheClose_andSaysSo`, `failedDelete_bringsTheDayBack`, `viewGoesAwayDuringASave_storesAllOrNothing` (`TaskCancelSwitch` from inside the change: the move is not stored, nothing failed). Mutation: `closeIfDone` without `session.isIdle` fails four of them |
 | 18. One screen per day | Store: `DayEditorStore.day` is a `let` fixed at `init`, every edit names it (DS `dropSetAndName_…`). App: `AppTabs` draws `.day` with `.id(destination)`; UD `test_backAndSwipeBack_andTheNextDayIsItsOwn` (Upper A's draft, then Lower A shows its own name) |
 | 19. `ExercisePickerStore` | PK `add_appendsInPickOrder_andKeepsTheFilters` (one write, order, rest from settings, chips kept, day's new exercises marked), `clearFilters_resetsQueryMuscleAndEquipment`, `cancel_addsNothing_andKeepsTheChips`, `customExerciseSavedWhileOpen_appears`, `add_skipsWhatCannotBeAdded` (a stranger id and a negative start load left out) |
-| 20. `DayEditorRoot` | DR `root_runsTheStoreAndTheSession`, `root_handsTheCloseOnce`, `root_drawsTheFailedMessage`; the sheet, the alerts and the swipe back: UD |
+| 20. `DayEditorRoot` | DR `root_runsTheStoreAndTheSession`, `root_handsTheCloseOnce`, `root_drawsTheFailedMessage`; the sheet and the alerts: UD. **The swipe back is not kept** (open question 1): UD `test_backAndSwipeBack_…` marks it as an expected failure, with a control |
 | 21. The clean-up | Compiler; the catalog step; `ModuleCopyTests`; `ProgramCopyTests+DayEditor` |
 | 22. Destinations and routes | RM `day_pushesTheDayEditor`, `closeDay_popsOnlyADayOnTop`, `editWeek_popsToTheBuilder_andRequestsTheWeek` |
 | 23. The Program tab | TM `editWeek_landsOnTheBuilder`, `programRoutes_selectProgram` (now `.openProgram`, `.setUpProgram`, no week asked); `AppTabsTests.selectedTab_showsItsOwnScreen`; `TodayWiringAdversarialTests` (sanctioned); UB `test_name_typedLetterByLetter_isReadBack` |
@@ -5823,6 +5823,9 @@ Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`)
 | `Adversarial/ExercisePickerAdversarialSupport.swift` | The oracle's row line and the model's lose `detail`, the mark and the place | Question 4 |
 | `Adversarial/ExercisePickerModelAdversarialTests.swift`, `ExercisePickerWordsAdversarialTests.swift` | The two `pickMark` expectations removed | Question 4: the field is gone |
 | `Adversarial/DayEditorAdversarialScreen.swift`, `DayEditorOfferedAdversarialTests.swift`, `DayEditorViewsAdversarialModels.swift`, `DayEditorViewsLayoutAdversarialTests.swift` | `hasDropSet` and `Field.label` lines removed from the oracle, an expectation and two model copies | Criterion 21 |
+| `Adversarial/DayEditorViewsNameAdversarialTests.swift` | `emptyName_showsThePlaceholderOnce("   ")`: with the focus the placeholder is drawn over the spaces | Question 5 (the test pinned the gap the question names) |
+| `Adversarial/DayEditorViewsTreeAdversarialTests.swift` | 91 strings → 85 | Criterion 21: the six steppers' `label`s |
+| `Adversarial/ProgramRootAdversarialTests.swift` | `addDay_routeAfterTheWrite_once`: a route sent during the day's write is dropped; the day's route alone, then the sentinel | F11-S13-12 (the test pinned the drop of the day's route) |
 | `LedgerAppKitTests/Adversarial/TodayWiringAdversarialTests.swift` | `.editWeek` expects the Program stack emptied | Criterion 23, question 2 |
 | `LedgerAppKitTests/Adversarial/AppTabsAdversarialTests.swift` | `rootHeaders` has no heading for the Program tab either | Criterion 25 |
 | `Apps/LedgerUITests/TabsAdversarial.swift` | The Program tab is found by "No program yet"; its height is not among the one-word titles | Criterion 25 |
@@ -5843,3 +5846,21 @@ the removed fields.
   overwrite it); the alternative is to store the name when the field loses focus, which S9 and S13 ruled against.
 - **Screenshots** of the builder and the Day editor (default size and an accessibility size) are attached to the
   UI tests' results (`Builder`, `DayEditor`), not committed.
+
+### Open questions, each with a recommendation
+
+1. **Criterion 20's swipe back is lost.** With the navigation bar hidden (`toolbarVisibility(.hidden, for:
+   .navigationBar)`, as notes:5051-5052 ask), the system's edge swipe does not pop the Day editor on iOS 27.0:
+   `DayEditor.test_backAndSwipeBack_andTheNextDayIsItsOwn` marks it with a strict `XCTExpectFailure`, and its
+   control, the same synthesized swipe on Today's pushed Settings (system bar shown), pops
+   (`test_swipeBack_control_popsAScreenWithTheSystemBar`). "Program" and "Done" work. Nothing is lost when the
+   swipe is missing (no write is cut off); the lifter has the bar's "Program". *Options:* (A) an isolated wrapper
+   in `LedgerDesign` (standards §1 allows one) that re-enables the stack's `interactivePopGestureRecognizer`
+   while the bar is hidden; that path would then pop at once and cancel a write in flight (ruling R5, as
+   planned). (B) Keep the system bar on the Day editor with its back button and drop "Program" from the drawn bar
+   (a design change). (C) Accept: "Program" is the way back. *Recommendation:* A, in a small follow-up with its
+   own test, since it is UIKit and a design-system addition this slice should not smuggle in.
+2. **Clearing a name stores its first letter on the way** (above, for the product owner). *Recommendation:*
+   accept for M1.
+3. **The blank-draft placeholder's style is the system's `.placeholder`**, not a token (deviation 5).
+   *Recommendation:* accept: it is the style the field's own placeholder already uses.
