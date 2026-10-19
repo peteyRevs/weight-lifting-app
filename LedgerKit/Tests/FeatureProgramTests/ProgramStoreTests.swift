@@ -138,6 +138,20 @@ struct ProgramStoreTests {
         await running.cancel()
     }
 
+    @Test("9. A week request is applied once: handed in again it keeps the week picked since; a new one applies")
+    func weekRequest_isAppliedOnce_andANewOneAgain() async throws {
+        let scene = try ProgramStoreScene()
+        let running = await scene.running()
+        scene.store.select(request: ProgramWeekRequest(number: 1, weekIndex: 1))
+        #expect(scene.store.selectedWeek == 1)
+        scene.store.send(.selectWeek(5))
+        scene.store.select(request: ProgramWeekRequest(number: 1, weekIndex: 1))
+        #expect(scene.store.selectedWeek == 5, "the builder appearing again is no new request (F11-S14-1)")
+        scene.store.select(request: ProgramWeekRequest(number: 2, weekIndex: 1))
+        #expect(scene.store.selectedWeek == 1, "the same week asked for again")
+        await running.cancel()
+    }
+
     @Test("9. Before the block, the selection is handed in raw and read as the first week")
     func beforeTheBlock_selectionIsRaw() async throws {
         var program = try Fixtures.seedProgram()

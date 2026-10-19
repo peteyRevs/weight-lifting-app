@@ -5760,7 +5760,7 @@ Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`)
 | 17. Leaving waits for the write | DS `done_waitsForTheWrite` (held write, an edit behind it, "Done" and "Program": one `.closeDay` once idle), `failedWrite_dropsTheClose_andSaysSo`, `failedDelete_bringsTheDayBack`, `viewGoesAwayDuringASave_storesAllOrNothing` (`TaskCancelSwitch` from inside the change: the move is not stored, nothing failed). Mutation: `closeIfDone` without `session.isIdle` fails four of them |
 | 18. One screen per day | Store: `DayEditorStore.day` is a `let` fixed at `init`, every edit names it (DS `dropSetAndName_…`). App: `AppTabs` draws `.day` with `.id(destination)`; UD `test_backAndSwipeBack_andTheNextDayIsItsOwn` (Upper A's draft, then Lower A shows its own name) |
 | 19. `ExercisePickerStore` | PK `add_appendsInPickOrder_andKeepsTheFilters` (one write, order, rest from settings, chips kept, day's new exercises marked), `clearFilters_resetsQueryMuscleAndEquipment`, `cancel_addsNothing_andKeepsTheChips`, `customExerciseSavedWhileOpen_appears`, `add_skipsWhatCannotBeAdded` (a stranger id and a negative start load left out) |
-| 20. `DayEditorRoot` | DR `root_runsTheStoreAndTheSession`, `root_handsTheCloseOnce`, `root_drawsTheFailedMessage`; the sheet and the alerts: UD. **The swipe back is not kept** (open question 1): UD `test_backAndSwipeBack_…` marks it as an expected failure, with a control |
+| 20. `DayEditorRoot` | DR `root_runsTheStoreAndTheSession`, `root_handsTheCloseOnce`, `root_drawsTheFailedMessage`; the sheet and the alerts: UD. **Open: the swipe back is not kept** (open question 1; F11-S14-2, follow-up with a `LedgerDesign` UIKit helper): UD `test_backAndSwipeBack_…` marks it as an expected failure, with a control |
 | 21. The clean-up | Compiler; the catalog step; `ModuleCopyTests`; `ProgramCopyTests+DayEditor` |
 | 22. Destinations and routes | RM `day_pushesTheDayEditor`, `closeDay_popsOnlyADayOnTop`, `editWeek_popsToTheBuilder_andRequestsTheWeek` |
 | 23. The Program tab | TM `editWeek_landsOnTheBuilder`, `programRoutes_selectProgram` (now `.openProgram`, `.setUpProgram`, no week asked); `AppTabsTests.selectedTab_showsItsOwnScreen`; `TodayWiringAdversarialTests` (sanctioned); UB `test_name_typedLetterByLetter_isReadBack` |
@@ -5889,3 +5889,21 @@ Day editor's sources (the kept failed state).
   failures; watchOS build 51 s, tests 253 s: 2,418, 0 failed; coverage 3 s: FeatureProgram 98.70 %, overall
   98.65 %).
 - Not run: the full nightly lane, CI.
+
+## S14 — fix round 1 (G1 implementer, 2026-10-19)
+
+On `62d5c10` (the tester's round 1, `test-findings.md` "S14 — round 1"); the orchestrator's rulings.
+
+| Item | Change |
+|---|---|
+| **F11-S14-1 (fix)** | `ProgramStore.select(request:)` remembers the number of the last `ProgramWeekRequest` it applied (`appliedRequest`) and ignores the same request handed in again; a request with a new number selects its week again. `ProgramRoot` calls it from its `.onChange(of: week, initial: true)`, whose initial action SwiftUI runs on every appearance. The app-facing calls (`select(week:)`, `select(request:)`, `deliverRoute`) moved into an extension in the same file (the class body was past 150 lines). Tests: `ProgramStoreTests.weekRequest_isAppliedOnce_andANewOneAgain` (new); the tester's `ProgramStackAdversarialTests.requestedWeek_thenPicked_survivesAPushAndPop`, `…_survivesATabSwitch` and `ProgramTabAdversarial.test_editThisWeek_thenAnotherWeek_isKeptAfterTheDayEditorAndATabSwitch` unedited |
+| **F11-S14-2 (criterion 20: open)** | Not fixed in this slice. Ruling: Pete's default, a follow-up pull request with a UIKit helper in `LedgerDesign` that gives the Day editor back the system's swipe (open question 1, option A). Until then the Day editor is left by "Program" and "Done" |
+| **F11-S14-3, -4 (notes, accepted for M1)** | -3: edits kept by R1 after a tab switch cancelled a write die with the store when "Edit this week" then pops the Day editor (question 2, A); the window is that write's milliseconds, as in R5. -4: a day deleted elsewhere while the editor's write on it fails closes the editor with the alert asked for on a screen being popped; harmless, the edit was on a day that no longer exists (pinned by the tester's `dayDeletedElsewhere_andTheWriteFails_closesWithTheAlertSet`) |
+
+### Sanctioned edits to the testers' files (this round)
+
+| File | Edit | Why |
+|---|---|---|
+| `Apps/LedgerUITests/ProgramTabAdversarial.swift` | `test_edgeSwipe_onAFreshDayEditor_pops` and `test_contentSwipe_onAFreshDayEditor_pops`: the pop's assertion inside a strict `XCTExpectFailure` citing F11-S14-2; gestures and assertions unchanged | Ruling on F11-S14-2: the nightly stays green and goes red the moment the swipe works |
+
+Criterion 20 stands **open** in the criteria table above, with the follow-up.

@@ -70,7 +70,7 @@ public struct ProgramRoot: View {
             }
             .onChange(of: week, initial: true) { _, week in
                 if let week {
-                    store.select(week: week.weekIndex)
+                    store.select(request: week)
                 }
             }
             .onChange(of: state.notice) { _, notice in

@@ -43,7 +43,11 @@ final class ProgramTabAdversarial: XCTestCase {
         let app = BuilderApp.launch(at: Builder.week5)
         BuilderApp.openUpperA(in: app)
         Self.drag(in: app, from: 0, to: 0.85, atHeight: 0.3)
-        XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the edge swipe pops it")
+        // Sanctioned edit (S14 fix round 1, ruling on F11-S14-2): criterion 20 is open, its fix a follow-up with a
+        // UIKit helper in `LedgerDesign`. Strict: this fails as soon as the swipe pops, so the mark goes with it.
+        XCTExpectFailure("F11-S14-2: the hidden navigation bar takes the system's swipe back away") {
+            XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the edge swipe pops it")
+        }
         attach(app, named: "After the edge swipe")
     }
 
@@ -53,7 +57,11 @@ final class ProgramTabAdversarial: XCTestCase {
         let app = BuilderApp.launch(at: Builder.week5)
         BuilderApp.openUpperA(in: app)
         Self.drag(in: app, from: 0.3, to: 0.95, atHeight: 0.3)
-        XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the content swipe pops it")
+        // Sanctioned edit (S14 fix round 1, ruling on F11-S14-2): criterion 20 is open, its fix a follow-up with a
+        // UIKit helper in `LedgerDesign`. Strict: this fails as soon as the swipe pops, so the mark goes with it.
+        XCTExpectFailure("F11-S14-2: the hidden navigation bar takes the system's swipe back away") {
+            XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the content swipe pops it")
+        }
         attach(app, named: "After the content swipe")
     }
 
