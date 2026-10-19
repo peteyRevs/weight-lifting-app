@@ -2011,7 +2011,9 @@ back: left to right it is cut-checked in every setting; right to left it must st
 line limit and room below it wraps before it truncates, so one line and narrower is a reading, not a cut) and
 within 8 pt of its own width (the 5 pt measured). `tileValues_neverTruncate` checks the other part the
 implementer's check leaves out: a tile's value fits at half its size (the most it shrinks), so it never
-truncates. Results under "Commands".
+truncates. **Both pass** on the iPhone 17 (iOS 27.0): left to right "LOGGED" is never cut, and right to left it
+stays one line within 8 pt of its width. **The exemption is justified** (a reading of the mirrored frame, not a
+cut), but it is wider than it needs to be: it could be limited to right to left, where this suite now covers it.
 
 ### Mutants (host; product tree restored after each, `git status` clean under `Sources/`)
 
@@ -2023,6 +2025,10 @@ truncates. Results under "Commands".
 
 | Command | Exit | Result |
 |---|---|---|
-| `swift test --filter "WorkoutReceiptAdversarialTests\|ReceiptPresentationAdversarialTests"` | 1 | 19 tests; the three red of F10-S7b-1/-2 only |
+| `swift test --filter "WorkoutReceiptAdversarialTests\|ReceiptPresentationAdversarialTests"` | 1 | 20 tests; red: the three of F10-S7b-1 and -2 only |
 | `swift test --filter WorkoutSaveAdversarialTests` (the walk strengthened, before the S7a edit) | 0 | 25 tests, 2 known issues (S7a-8) |
 | `swift test --filter FeatureWorkoutTests` | 1 | 459 tests in 62 suites; red: the four tests of F10-S7b-1 and -2 only |
+| `PR` plan through the lock, `-only-testing` `ReceiptLoggedCutAdversarialTests`, `ReceiptPresentationAdversarialTests`, `ReceiptLayoutTests` | 0 | 15 tests in 3 suites (35 runs with arguments), 123 s |
+
+Not checked: the receipt in the running app at 375 pt, VoiceOver and the `.personalRecord` buzz on a device; the
+full gate (the orchestrator's).
