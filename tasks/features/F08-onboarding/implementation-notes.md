@@ -1152,6 +1152,23 @@ The tester's round 1 on the port (`32d13f6`; findings, "Slices S2 and S3 — the
   is no nightly CI run to compare with, so whether `main` fails it too is not known. Not edited: the
   orchestrator decides whether it is the port's (a slower first frame over the seed program racing
   `XCUIDevice.appearance`) or the environment's.
+- **Full gate on `6397035`:** `check.sh OK`, exit 0, 1,940 s (iOS tests 1,578 s, watchOS 257 s); `FeatureOnboarding`
+  99.58 %, overall 98.78 %.
+- **The accent test's dark half, looked into (2026-10-19): an environment issue, not the port's; for a chore.**
+  - *How it switches:* `XCUIDevice.shared.appearance = .dark` on the simulator before `launch()` (with a `defer`
+    that restores it), no launch argument; the light half's app is terminated first. The app's colour scheme is
+    the system trait alone.
+  - *What the port changes on that path* (`git diff 16a2e52 HEAD`, every launch and root change): the test's
+    launch gains `-LEDGER_UITEST_PROGRAM seed`; the app's root draws the ground colour until the gate's first
+    answer, then the tabs (`AppRoot`, `MainRoot`, `RootGate`); the seed program is saved after the first pass
+    (`AppComposition`, `UITestProgram`, `SampleProgram`); `MainRoot`'s `mainStandIn` is nil in the app.
+    `Apps/Ledger`, `Config`, the project file, `LedgerDesign` and the colour tokens are unchanged. No added line
+    names a colour scheme, an appearance, a user-interface style or `preferredColorScheme` (grep of the diff).
+  - *So:* nothing the port changes can choose light or dark; the "Today-dark" screenshot drawn light means the
+    device's appearance had not reached the relaunched app when the test read the tab bar. The one thing the port
+    changes along the path is timing (the tabs come after the first pass), and `launch()` already waits for the tab
+    bar before any read. Not edited. **Chore:** make the test wait until the app is drawn in the asked appearance
+    (or check `XCUIDevice.shared.appearance` took effect) before measuring, and see whether `main` fails it too.
 - **F8-S2S3-2, -3:** notes only, no change.
 - **Follow-up for F09: audit Today over an ended block.** Over the seed program after 2026-10-11 the system's
   audit reports "Contrast nearly passed" and "Text clipped" on "Open Program" (the orange button) and "Text
