@@ -6063,3 +6063,23 @@ section at the gallery's end). Looked at: withRecords light large, withRecords d
 
 - **VoiceOver and the `.personalRecord` buzz on a device.** The haptic is played through the injected client.
 - **The receipt in the running app in dark mode**: only the references (S7a's dark-appearance note stands).
+
+### S7b fix round 1 (G1 implementer, 2026-10-19)
+
+On the tester's `3fc795a` and `7310976` (`test-findings.md`, "S7b — round 1") and the orchestrator's rulings.
+
+| Finding / ruling | What changed | Tests |
+|---|---|---|
+| **F10-S7b-1** (Major): the receipt depended on which of `finish`'s answer and the ending update came first | `askedEnds`, every end this cover asked the session for in its life, replaces `wasSent` + "this attempt's end" in `isSavedHere`: an ending update at any of them (T₁ after a refused save and "Close", or T₂) shows the receipt at once. An ending update at an end the cover did **not** ask for, while `finish` is out (`finishesInFlight`), waits for the answer (`deferredEnd`): a finished answer is the cover's save (the session kept an end of its own) and shows the receipt; `noLiveWorkout` or a failure judges the waiting update by `askedEnds` (`settleDeferredEnd`), so another hand's end closes as `.saved`. Each order now gives the same outcome. `save()`'s call is in `finish(_:run:)` for the lint's length | the tester's `closeThenSaveAgain_showsTheReceipt`, `heldEnd_eitherOrder_showsTheReceipt` (both orders), `close_thenNoDiscard_saveSavesAtTheFirstEnd`, unedited and green; criterion 17's `endedElsewhere_whileTheCallIsInFlight_noReceipt` and the S7a tests stay green |
+| **F10-S7b-2** (Minor): a record set while the bests read was out was taken as held | `readBests()` holds `records(of: state)`, the workout the read was made for | `recordBeforeTheBestsAnswer_isFelt`, unedited and green |
+| "LOGGED" exemption | the cut check leaves "LOGGED" out right to left only; left to right it is cut-checked again (`ReceiptLayoutTests.parts(of:isRightToLeft:)`) | `receipt_noWordIsCut` |
+| The nit (sanctioned edit) | `Apps/LedgerUITests/WorkoutFinishAdversarial.swift`: the message after a save's `minimize.waitForNonExistence` read "the cover is down"; it now reads "the live workout is gone: the receipt shows". The assertion is unchanged | — |
+
+R10 still holds: after "Close" with no new save, `isSaving` is false and a tap that completes the waiting end
+closes the cover as `.saved` with no receipt (S7a's `close_thenATap_completesTheSave`).
+
+**Product lines**: 639 against `16a2e52`, up from 609 (`WorkoutStore+Finish.swift` +23, `WorkoutStore.swift` +5,
+`WorkoutStore+Receipt.swift` +2).
+
+**Runs**: host `FeatureWorkoutTests` 459 tests in 62 suites, all passed; the save and receipt suites five times in
+a row, 79 of 79 each; `LedgerAppKitTests` 183 and `LedgerDesignTests` 262 passed. The full gate: in the report.

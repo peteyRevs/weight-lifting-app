@@ -41,15 +41,18 @@
 
         /// The parts whose words this module and `ReceiptLayout` lay out: the header, the records line and
         /// each row. A tile's value shrinks rather than wraps, by design (`LedgerDesign`), so a tile is
-        /// checked for its place, not for a cut. "LOGGED" is left out: right to left at the accessibility
-        /// sizes the reader gives the tracked eyebrow 5 pt less than it measures alone, while the word is
-        /// drawn whole (the notes, S7b "Deviations" 5); it is checked for its place.
-        static func parts(of model: ReceiptScreenModel) -> [LayoutPart] {
+        /// checked for its place, not for a cut. "LOGGED" is left out right to left only: there the reader
+        /// gives the tracked eyebrow 5 pt less than it measures alone at the accessibility sizes, while the
+        /// word is drawn whole (the notes, S7b "Deviations" 5; `ReceiptLoggedCutAdversarialTests`).
+        static func parts(of model: ReceiptScreenModel, isRightToLeft: Bool = false) -> [LayoutPart] {
             var parts = [
                 LayoutPart(model.header.date) { Text(model.header.date).ledgerFont(.caption) },
                 LayoutPart(model.header.title) { Text(model.header.title).ledgerFont(.heading) },
                 LayoutPart(model.header.done) { PillButton(model.header.done) {} }
             ]
+            if !isRightToLeft {
+                parts.append(LayoutPart(model.page.logged) { Eyebrow(model.page.logged) })
+            }
             if let records = model.page.records {
                 parts.append(LayoutPart(records) { Text(records).ledgerFont(.caption) })
             }
@@ -81,7 +84,9 @@
             for model in try Self.models() {
                 let receipt = ReceiptParts(model: model)
                 for setting in LayoutSetting.sweep(size) {
-                    let cut = WorkoutLayoutProbe.cut(in: receipt, parts: Self.parts(of: model), setting)
+                    let cut = WorkoutLayoutProbe.cut(
+                        in: receipt, parts: Self.parts(of: model, isRightToLeft: setting.isRightToLeft), setting
+                    )
                     #expect(cut.isEmpty, "\(setting.testDescription): \(cut.prefix(2).joined(separator: "; "))")
                 }
             }

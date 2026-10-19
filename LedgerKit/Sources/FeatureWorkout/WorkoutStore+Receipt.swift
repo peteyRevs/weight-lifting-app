@@ -29,17 +29,29 @@ extension WorkoutStore {
         return nil
     }
 
-    /// Whether `ended` is the workout the save running in this cover ended: then its receipt shows. The
-    /// session was asked to finish it, and it is finished at the end that was asked for; an end another
-    /// hand made first, before the call or under it (`noLiveWorkout`), is not this cover's.
+    /// Whether `ended` is the workout the save running in this cover ended: then its receipt shows. It is
+    /// finished, it is the workout being saved, and its end is one this cover asked the session for
+    /// (`askedEnds`): this attempt's, or an earlier one's that the host kept and completes now (a refused
+    /// save, "Close", then "Save workout" again). An end another hand made, before the call or under it
+    /// (`noLiveWorkout`), is not this cover's. `finish`'s answer and the ending update are judged by this
+    /// alone, so the order they arrive in never changes the outcome (F10 S7b, fix round 1).
     func isSavedHere(_ ended: WorkoutState) -> Bool {
         if let saved {
             return saved.id == ended.id
         }
-        guard isSaving, let save = pendingSave, save.wasSent else {
+        guard isSaving, let save = pendingSave, let end = ended.endedAt else {
             return false
         }
-        return ended.phase == .finished && ended.id == save.id && ended.endedAt == save.endedAt
+        return ended.phase == .finished && ended.id == save.id && askedEnds.contains(end)
+    }
+
+    /// Whether the ending update `ended`, at an end this cover did not ask for, waits for `finish`'s answer:
+    /// the workout being saved finished while this cover's call is out and no receipt is up yet. A finished
+    /// answer then makes it this cover's save (the session kept an end of its own); `noLiveWorkout` makes it
+    /// another hand's.
+    func waitsForTheAnswer(_ ended: WorkoutState) -> Bool {
+        saved == nil && exit == nil && isSaving && finishesInFlight > 0 && ended.phase == .finished
+            && ended.id == pendingSave?.id
     }
 
     /// Shows the receipt of `ended`, once; the cover stays up until "Done". The sheet goes down, nothing
@@ -73,7 +85,7 @@ extension WorkoutStore {
     }
 
     /// Reads the bests the workout on screen is judged against, once for the store. The records the
-    /// workout already holds then are taken as held, and are never played (criterion 36).
+    /// workout held when the read started are taken as held, and are never played (criterion 36).
     func readBests() async {
         guard case .idle = bests, case let .loaded(state) = workout else {
             return
@@ -84,9 +96,9 @@ extension WorkoutStore {
                 return
             }
             bests = .loaded(read)
-            if case let .loaded(shown) = workout {
-                heldRecords = Set(records(of: shown).map(HeldRecord.init))
-            }
+            // The records of the workout the read was made for: one set while the read was out is felt at
+            // the next update (F10 S7b, fix round 1).
+            heldRecords = Set(records(of: state).map(HeldRecord.init))
         } catch {
             guard !(error is CancellationError && Task.isCancelled) else {
                 return

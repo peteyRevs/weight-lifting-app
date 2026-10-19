@@ -99,6 +99,13 @@ final class WorkoutStore {
     var saved: WorkoutState?
     /// The bests the workout is judged against, read once (`readBests()`); a failed read is not retried.
     var bests = Loadable<PersonalRecords.Bests>.idle
+    /// Every end this cover asked the session to finish the workout at, in its life: an ending update at one
+    /// of them is this cover's save (`isSavedHere`).
+    @ObservationIgnored var askedEnds: Set<Date> = []
+    /// How many calls to `finish` this cover has out; while one is, an ending update waits for its answer.
+    @ObservationIgnored var finishesInFlight = 0
+    /// The ending update of the workout being saved that arrived while `finish` was out.
+    @ObservationIgnored var deferredEnd: WorkoutState?
     /// The records the workout holds that were played, or held when the bests arrived: none is played twice.
     @ObservationIgnored var heldRecords: Set<HeldRecord> = []
 
@@ -187,6 +194,10 @@ extension WorkoutStore {
             guard let live = update.live else {
                 if let ended = update.state, isSavedHere(ended) {
                     showReceipt(ended)
+                } else if let ended = update.state, waitsForTheAnswer(ended) {
+                    // An end this cover did not ask for, with `finish` still out: its answer decides
+                    // (`WorkoutStore+Finish.swift`).
+                    deferredEnd = ended
                 } else if saved == nil {
                     // A receipt already up stays up: only "Done" closes the cover then.
                     leave(exit(for: update.state))

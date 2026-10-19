@@ -90,23 +90,56 @@ extension WorkoutStore {
         }
         pendingSave?.wasSent = true
         hasAskedToFinish = true
+        askedEnds.insert(save.endedAt)
+        await finish(save, run: run)
+    }
+
+    /// Asks the session to finish the workout at `save`'s end, and shows what it answers. An ending update
+    /// at an end this cover asked for shows the receipt as soon as it comes (`isSavedHere`); one at another
+    /// end, while the call is out, waits for it (`deferredEnd`, `follow()`): a finished answer is this
+    /// cover's save, whatever end the session kept, and shows the receipt; any other answer leaves the
+    /// waiting update to be judged by the ends this cover asked for. So the order of the answer and the
+    /// update never changes the outcome (F10 S7b, fix round 1).
+    private func finish(_ save: PendingSave, run: Int) async {
+        finishesInFlight += 1
+        defer { finishesInFlight -= 1 }
         do {
             let ended = try await session.finish(endedAt: save.endedAt)
             guard ended.phase == .finished else {
                 throw WorkoutStoreError.notFinished
             }
             // The workout this save ended: its receipt shows, and "Done" closes the cover (F10 S7b).
+            deferredEnd = nil
             showReceipt(ended)
         } catch WorkoutSessionError.noLiveWorkout {
-            // `isSaving` stays: the ending update says whether it was saved or discarded.
+            // The ending update, waiting or still to come, says how it ended; `isSaving` stays until then.
+            settleDeferredEnd()
         } catch {
-            guard !(error is CancellationError && Task.isCancelled), run == saveRun, exit == nil else {
+            guard !settleDeferredEnd(), !(error is CancellationError && Task.isCancelled), run == saveRun,
+                  exit == nil
+            else {
                 return
             }
             logger.log.error("The workout could not be saved: \(String(describing: error), privacy: .public)")
             isSaving = false
             dialog = .saveFailed
         }
+    }
+
+    /// Judges the ending update that waited for `finish`'s answer, if one did, as any ending update is
+    /// judged: true when it decided the cover's outcome.
+    @discardableResult
+    func settleDeferredEnd() -> Bool {
+        guard let ended = deferredEnd, exit == nil, saved == nil else {
+            return false
+        }
+        deferredEnd = nil
+        if isSavedHere(ended) {
+            showReceipt(ended)
+        } else {
+            leave(.route(.saved(ended.id)))
+        }
+        return true
     }
 
     /// The workout on screen, when one is.
