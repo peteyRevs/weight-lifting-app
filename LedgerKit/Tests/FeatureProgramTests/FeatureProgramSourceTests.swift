@@ -45,7 +45,7 @@ nonisolated struct FeatureProgramSourceTests {
     /// The edit session, the stores and the roots (F11 S13 and S14).
     static let storeFiles = [
         "ProgramEditSession.swift", "ProgramStore.swift", "ProgramStore+Sources.swift", "ProgramRoot.swift",
-        "DayEditorStore.swift", "ExercisePickerStore.swift", "DayEditorRoot.swift"
+        "DayEditorStore.swift", "DayEditorStore+Sources.swift", "ExercisePickerStore.swift", "DayEditorRoot.swift"
     ]
 
     /// The lines of `source` on which `spelling` stands in code: the file's own, or a string interpolation's.

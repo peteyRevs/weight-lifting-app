@@ -129,4 +129,22 @@ extension DayEditorStoreTests {
         sources.cancel()
         await sources.value
     }
+
+    @Test("17. A write that fails while the library is up closes the sheet, and says so once the sheet is down")
+    func failedWrite_whileTheLibraryIsUp_closesItAndSaysSoAfter() async throws {
+        let scene = try DayEditorStoreScene()
+        let running = await scene.running()
+        await scene.probe.fail(.updateProgram)
+        scene.store.send(.openLibrary)
+        scene.store.send(.rename("Push", day: scene.store.day))
+        await scene.idle()
+        #expect(!scene.store.library.isShown, "the sheet is closed")
+        #expect(!scene.store.showsSaveFailure, "not under the sheet, where it would not be seen")
+        scene.store.libraryClosed()
+        #expect(scene.store.showsSaveFailure)
+        scene.store.showsSaveFailure = false
+        scene.store.libraryClosed()
+        #expect(!scene.store.showsSaveFailure, "said once")
+        await running.cancel()
+    }
 }

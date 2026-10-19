@@ -14,7 +14,8 @@ import SwiftUI
 /// draft, a focus or a delete confirmation never passes to another day drawn in its place (ruling R8).
 ///
 /// It presents the exercise library as a sheet on "+ Add exercise from library"; a swipe down is its
-/// "Cancel". A change that could not be saved is said in an alert with one "OK" (Pete's question 1, A);
+/// "Cancel". A change that could not be saved is said in an alert with one "OK" (Pete's question 1, A), once the
+/// sheet is down if the write failed while it was up (review S14 N-1);
 /// "Delete day" asks in the page's own alert (question 3, A).
 public struct DayEditorRoot: View {
     @State private var store: DayEditorStore
@@ -47,7 +48,7 @@ public struct DayEditorRoot: View {
             .task(id: store.pendingRoute) {
                 store.deliverRoute(to: onRoute)
             }
-            .sheet(isPresented: isLibraryShown) {
+            .sheet(isPresented: isLibraryShown, onDismiss: store.libraryClosed) {
                 if let model = store.libraryModel {
                     ExercisePickerScreen(model: model, send: store.send)
                 }
@@ -66,7 +67,20 @@ public struct DayEditorRoot: View {
             DayEditorScreen(model: model, send: store.send)
                 .id(model.id)
         case .failed:
-            ProgramMessage(title: ProgramCopy.failedTitle, text: ProgramCopy.failedBody)
+            // The screen's own bar with "Program" over the message: the navigation bar is hidden and the swipe
+            // back is lost (F11-S14-2), so without it the lifter could not leave (review S14 SF-1).
+            VStack(spacing: 0) {
+                HStack {
+                    PillButton(ProgramCopy.backToProgram, style: .ghost, flush: .leading) {
+                        store.send(.route(.closeDay))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, LedgerSpacing.screen)
+                .padding(.vertical, LedgerSpacing.s)
+                ProgramMessage(title: ProgramCopy.failedTitle, text: ProgramCopy.failedBody)
+            }
+            .background(LedgerColor.ground)
         }
     }
 

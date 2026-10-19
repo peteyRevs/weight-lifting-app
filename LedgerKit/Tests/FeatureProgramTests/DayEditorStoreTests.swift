@@ -2,6 +2,7 @@
 import Foundation
 import LedgerDomain
 import LedgerTestSupport
+import Synchronization
 import Testing
 
 /// F11 S14, criteria 15 to 17: the Day editor's store over the in-memory stores behind a probe, run in tasks
@@ -85,17 +86,82 @@ struct DayEditorStoreTests {
 
     @Test("15. A source that ended keeps the failed state through a new run until the program is heard again")
     func failedState_isKeptThroughANewRun() async throws {
+        var counted: CountingPrograms?
+        let gate = AsyncStream<Void>.makeStream()
         let scene = try DayEditorStoreScene { values, probed in
-            values.programRepository = S13PatternPrograms(base: probed.programs, endings: [true, false])
+            let held = HeldSecondPrograms(base: probed.programs, gate: gate.stream)
+            let counting = CountingPrograms(base: held)
+            counted = counting
+            values.programRepository = counting
         }
+        let programs = try #require(counted)
         let first = await scene.running()
         #expect(scene.store.state == .failed)
         await first.cancel()
         let second = Task { await scene.store.run() }
-        #expect(scene.store.state == .failed, "not loading while the new run starts")
+        // The new run has asked for the program, which is held: it is running and has heard nothing yet.
+        await programs.observed(2)
+        #expect(scene.store.state == .failed, "not loading while the new run waits for its program")
+        gate.continuation.yield()
         await eventually { scene.store.state != .failed }
         #expect(try scene.content.header.name == "Upper A — Push focus")
         second.cancel()
         await second.value
+    }
+}
+
+/// A program store whose first observation ends at once and whose second says nothing until `gate` yields, then
+/// follows the base: a new run that is running and has not yet heard its program.
+final nonisolated class HeldSecondPrograms: ProgramRepository {
+    let base: any ProgramRepository
+    let gate: AsyncStream<Void>
+    private let observations = Mutex(0)
+
+    init(base: any ProgramRepository, gate: AsyncStream<Void>) {
+        self.base = base
+        self.gate = gate
+    }
+
+    func observeActive() -> AsyncStream<Program?> {
+        let number = observations.withLock { count in
+            count += 1
+            return count
+        }
+        guard number > 1 else {
+            return AsyncStream { $0.finish() }
+        }
+        let (source, opening) = (base, gate)
+        return AsyncStream { continuation in
+            let task = Task {
+                for await _ in opening {
+                    break
+                }
+                for await program in source.observeActive() {
+                    continuation.yield(program)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func active() async throws -> Program? {
+        try await base.active()
+    }
+
+    func save(_ program: Program) async throws {
+        try await base.save(program)
+    }
+
+    func update(_ id: ProgramID, _ change: @Sendable (Program) throws -> Program) async throws -> Program {
+        try await base.update(id, change)
+    }
+
+    func setActive(_ id: ProgramID) async throws {
+        try await base.setActive(id)
+    }
+
+    func delete(_ id: ProgramID) async throws {
+        try await base.delete(id)
     }
 }

@@ -73,16 +73,21 @@
             }
         }
 
-        @Test("20. With a source that ends, the root draws the builder's message for a program it cannot read")
+        @Test("20. With a source that ends, the root draws \"Program\" over the builder's message, and it goes back")
         func root_drawsTheFailedMessage() async throws {
             let scene = try DayEditorStoreScene { values, _ in values.programRepository = EndedPrograms() }
             await scene.running().cancel()
             #expect(scene.store.state == .failed)
-            let labels = Hosted(store: scene.store, handed: Handed()).accessibilityElements().map(\.label)
+            let handed = Handed()
+            let labels = Hosted(store: scene.store, handed: handed).accessibilityElements().map(\.label)
             #expect(labels == [
+                "Program",
                 "Can't show your program right now",
                 "Your workouts are still on this iPhone. Open the app again to try once more."
             ])
+            // Review S14 SF-1: its tap is the editor's "Program", which closes it.
+            scene.store.send(.route(.closeDay))
+            #expect(scene.store.pendingRoute?.route == .closeDay)
         }
     }
 #endif

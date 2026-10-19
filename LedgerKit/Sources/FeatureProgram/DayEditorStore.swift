@@ -47,6 +47,9 @@ final class DayEditorStore {
     private(set) var isClosing = false
     /// A write failed: the root's alert is up until its "OK" (Pete's question 1, A).
     var showsSaveFailure = false
+    /// A write failed while the library sheet was up: the sheet is closed, and the alert waits for it to be down,
+    /// since one view cannot present an alert while it presents a sheet (review S14 N-1).
+    @ObservationIgnored private var failureWaitsForTheSheet = false
 
     /// What the sources last said (`+Sources`); each nil until it has spoken, and kept across runs. These five
     /// are written by the sources' extension in its own file, so they are not `private(set)`; nothing outside
@@ -144,6 +147,14 @@ final class DayEditorStore {
         library.send(action, exercises: exercisesByID, settings: settings)
     }
 
+    /// The library sheet is down: the failure that closed it is said now.
+    func libraryClosed() {
+        if failureWaitsForTheSheet {
+            failureWaitsForTheSheet = false
+            showsSaveFailure = true
+        }
+    }
+
     /// Hands the waiting route to `handler`, once, and forgets it when the handler has returned.
     func deliverRoute(to handler: (ProgramRoute) -> Void) {
         guard let pending = pendingRoute else {
@@ -163,7 +174,12 @@ final class DayEditorStore {
     private func saved(_ outcome: ProgramEditSession<DayEditorEdit>.Outcome) {
         if case let .failed(error) = outcome {
             isClosing = false
-            showsSaveFailure = true
+            if library.isShown {
+                library.isShown = false
+                failureWaitsForTheSheet = true
+            } else {
+                showsSaveFailure = true
+            }
             logger.log.error("A change to a day was not saved: \(String(describing: error), privacy: .public)")
         }
         closeIfDone()

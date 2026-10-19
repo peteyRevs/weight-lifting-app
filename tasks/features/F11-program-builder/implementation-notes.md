@@ -5800,7 +5800,7 @@ Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`)
    No new wording; the brief does not say what that state shows.
 4. **The library's store takes the exercises and the settings as arguments of "Add"**, from the Day editor's
    store, rather than keeping copies; its model is made from the Day editor's exercises and session.
-5. **The blank-draft placeholder is drawn in `.placeholder`**, the system style the field draws its own prompt
+5. **(Superseded in the review round: a token now.)** **The blank-draft placeholder was drawn in `.placeholder`**, the system style the field draws its own prompt
    in, so a blank draft and an empty one look alike. It is not a `LedgerColor` token: the field's own placeholder
    is not one either. For the reviewer.
 6. **No animation on opening a panel** (the notes leave it to the store); nothing scrolls to the opened row.
@@ -5829,6 +5829,7 @@ Suites in `FeatureProgramTests` unless named: `DayEditorStoreTests` (+`Closing`)
 | `LedgerAppKitTests/Adversarial/TodayWiringAdversarialTests.swift` | `.editWeek` expects the Program stack emptied | Criterion 23, question 2 |
 | `LedgerAppKitTests/Adversarial/AppTabsAdversarialTests.swift` | `rootHeaders` has no heading for the Program tab either | Criterion 25 |
 | `Apps/LedgerUITests/TabsAdversarial.swift` | The Program tab is found by "No program yet"; its height is not among the one-word titles | Criterion 25 |
+| `Apps/LedgerUITests/Tabs.swift` (F09's) | `test_eachTab_…`: the Program tab's title is found by "No program yet"; the other tabs as before | Criterion 25 (added in review round 1, N-5) |
 
 The implementer's own files edited the same way: `DayEditorTesting.swift` (a test `Field.label`, the spoken
 label in capitals, so the many `field("SETS")` lookups stay), `ExercisePickerTesting.swift` (`isMarkedInDay` and
@@ -5907,3 +5908,21 @@ On `62d5c10` (the tester's round 1, `test-findings.md` "S14 — round 1"); the o
 | `Apps/LedgerUITests/ProgramTabAdversarial.swift` | `test_edgeSwipe_onAFreshDayEditor_pops` and `test_contentSwipe_onAFreshDayEditor_pops`: the pop's assertion inside a strict `XCTExpectFailure` citing F11-S14-2; gestures and assertions unchanged | Ruling on F11-S14-2: the nightly stays green and goes red the moment the swipe works |
 
 Criterion 20 stands **open** in the criteria table above, with the follow-up.
+
+## S14 — review round 1 fixes (G1 implementer, 2026-10-19)
+
+On `116099e` (`review.md` "S14 — round 1"); the orchestrator's rulings.
+
+| Item | Change |
+|---|---|
+| **SF-1** | `DayEditorRoot`'s `.failed` state draws the screen's own bar with "Program" (`ProgramCopy.backToProgram`, the editor's own back control, sending `.route(.closeDay)`) over `ProgramMessage`, on the ground; the system bar stays hidden. `DayEditorRootTests.root_drawsTheFailedMessage` reads "Program" first and its action closes |
+| **SF-2** | `NameField`'s `TextField` has an explicit `prompt:`, `Text(label)` in `LedgerColor.inkFaint`, and the placeholder drawn over a blank draft uses the same token (`NameField.placeholderColor`). The drawn placeholder keeps `.ledgerFont(.title)` in the stack under the field, where the drawn name stands: the field's guide (`ledgerFieldFont`) puts the field's letters on the text's line, so the two placeholders sit on one line (screenshot below) |
+| **SF-3** | `FeatureProgramSourceTests.storeFiles` lists `DayEditorStore+Sources.swift` (sanctioned: criterion 26) |
+| **N-1** | A write that fails while the library sheet is up closes the sheet and holds the alert until the sheet is down (`DayEditorStore.saved`, `libraryClosed()`, the root's `.sheet(onDismiss:)`): one view cannot present an alert while it presents a sheet. Query and picks are kept (the sheet closed without "Cancel"). `DayEditorStoreTests.failedWrite_whileTheLibraryIsUp_closesItAndSaysSoAfter` |
+| **N-2** | `failedState_isKeptThroughANewRun` waits for the new run's second observation (`CountingPrograms` over `HeldSecondPrograms`, whose second stream says nothing until a gate opens) before it checks `.failed`, then opens the gate. The reset at the run's start put back fails it (mutation, reverted). The implementer's own test |
+| **N-3** | `ExercisePickerStoreTests.add_skipsWhatCannotBeAdded`: "logged" dropped from the title (no capturing logger exists); the assertions are unchanged. The implementer's own test |
+| **N-4** | `DayEditor.test_backAndSwipeBack_…`'s expected failure cites F11-S14-2 |
+| **N-5** | `Tabs.swift`'s row added to the sanctioned table above |
+| **N-6 (for the swipe-back follow-up only)** | `.closeDay` names no day and pops whichever Day editor is on top. Right while only the top editor can emit. When the follow-up gives the swipe back, consider `.closeDay(DayTemplateID)`, popping only a matching top, so a close delivered as a swipe pops cannot pop another editor |
+
+No tester's file was edited this round.

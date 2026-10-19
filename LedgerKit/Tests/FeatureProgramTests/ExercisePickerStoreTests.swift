@@ -94,7 +94,7 @@ struct ExercisePickerStoreTests {
         await running.cancel()
     }
 
-    @Test("19. An exercise gone since the pick is left out; one whose slot cannot be made is left out and logged")
+    @Test("19. An exercise gone since the pick is left out, and so is one whose slot cannot be made")
     func add_skipsWhatCannotBeAdded() async throws {
         let refused = Exercise(
             id: ExerciseID(Fixtures.uuid(77002)), name: "Negative Press", shortName: "Neg", equipment: .barbell,

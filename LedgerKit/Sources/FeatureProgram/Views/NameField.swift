@@ -52,6 +52,12 @@ struct NameField: View {
         isEditing && !draft.isEmpty && draft.allSatisfy(\.isWhitespace)
     }
 
+    /// The placeholder's colour, the field's prompt and the one drawn over a blank draft alike (review S14 SF-2:
+    /// a token, not the system's placeholder style).
+    private static var placeholderColor: Color {
+        LedgerColor.inkFaint
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             // The label on one line, unseen and of no width: an empty draft keeps the name's one line, under
@@ -64,8 +70,8 @@ struct NameField: View {
             if showsThePlaceholderOverABlankDraft {
                 Text(label)
                     .ledgerFont(.title)
-                    // The style the field draws its own placeholder in, so a blank draft reads as an empty one.
-                    .foregroundStyle(.placeholder)
+                    // The colour of the field's own prompt, so a blank draft reads as an empty one.
+                    .foregroundStyle(Self.placeholderColor)
                     .fixedSize(horizontal: true, vertical: false)
             }
             Text(draft)
@@ -79,14 +85,16 @@ struct NameField: View {
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .accessibilityHidden(true)
         .overlay(alignment: .topLeading) {
-            TextField(label, text: $draft)
-                .ledgerFieldFont(.title)
-                // Where the text starts: at the layout's leading edge, whatever the name's script.
-                .multilineTextAlignment(strategy: .layoutBased)
-                .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
-                .submitLabel(.done)
-                .focused($isEditing)
-                .accessibilityLabel(label)
+            TextField(text: $draft, prompt: Text(label).foregroundStyle(Self.placeholderColor)) {
+                Text(label)
+            }
+            .ledgerFieldFont(.title)
+            // Where the text starts: at the layout's leading edge, whatever the name's script.
+            .multilineTextAlignment(strategy: .layoutBased)
+            .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
+            .submitLabel(.done)
+            .focused($isEditing)
+            .accessibilityLabel(label)
         }
         .ledgerHitTarget(alignment: .topLeading)
         .contentShape(Rectangle())

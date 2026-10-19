@@ -87,7 +87,7 @@ final class DayEditor: XCTestCase {
         // Known (S14 notes, open question 1): with the navigation bar hidden the system's swipe back does not pop
         // the Day editor; the same swipe pops Settings (`test_swipeBack_control_popsAScreenWithTheSystemBar`).
         // Strict: this fails as soon as the swipe pops, so the mark goes with the fix.
-        XCTExpectFailure("The hidden navigation bar takes the system's swipe back away (criterion 20)") {
+        XCTExpectFailure("F11-S14-2: the hidden navigation bar takes the system's swipe back away (criterion 20)") {
             XCTAssertTrue(app.textFields["Program name"].waitForExistence(timeout: 5), "the swipe back pops it")
         }
         Self.barButton("Program", in: app).tap()
