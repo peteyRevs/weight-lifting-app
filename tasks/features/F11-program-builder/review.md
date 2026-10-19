@@ -1809,3 +1809,118 @@ followsAgain` waits on a counter Observation cannot see and may hang if an equal
 
 Not checked: the iOS-only root suites (relied on the full gates at `c29faa5` and `a8c1035`), any simulator run,
 the round 2–3 adversarial bodies, `@Observable`'s equal-value behaviour, S14.
+
+## S14 — round 1 (G3 reviewer, 2026-10-19)
+
+Pass on `feat/F11-s14-program-tab` at `e98d9e2` (`git diff 16a2e52...HEAD`). Every new and changed product file read in
+full; the implementer's store, root and route tests, the UI tests' expected failures and every sanctioned edit to a
+tester's file read; the notes' S14 sections, test-findings S14 rounds 1–2 and my S13 rounds checked against the code.
+Host `swift test --filter 'DayEditorStore|ExercisePickerStore|ProgramStoreTests|ProgramReRead|FeatureProgramSourceTests'`
+at `e98d9e2`: 63 tests in 6 suites passed (the `LedgerAppKitTests` and iOS-hosted root suites do not run on the host;
+relied on the implementer's full gate at `a1e1d92` and the tester's targeted simulator runs). No simulator run.
+
+### Verdict
+
+**Approve**, with three should-fix items. Blocking 0 · Should fix 3 · Nit 6.
+
+What holds:
+- **`DayEditorStore`** (criteria 15–17): `state` is made from `session.shown` on every read, so a stepper's second
+  "+" is taken from the model after the first; `.open` touches only `openSlot`. `closeIfDone` needs
+  `session.isIdle`, is called after every intent, every heard program and every write's outcome, and `hasClosed`
+  makes the route once. A failed write clears `isClosing` and sets `showsSaveFailure` (Q1 A), the session has
+  already redrawn from the stored program, and a failed "Delete" brings the day back with no close. "Done" before
+  the first program closes at once (deviation 2): nothing can wait then, so that is right. Day gone is judged
+  only after `hasHeard`. Nothing is left behind that matters: `openSlot` pointing at a slot that is gone reads as
+  none open.
+- **`ExercisePickerStore`** (criterion 19): every action synchronous; "Add" builds the slots with `\.uuid` at the
+  tap, skips a stranger, logs a refused `newSlot`, queues one `.slot(.add(…))` (an "Add" that leaves nothing is
+  dropped by R7), empties query and picks, keeps the chips. The sheet's binding sends `.cancel` only on an
+  interactive dismissal.
+- **`DayEditorRoot`**: sources keyed by the background, save loop unkeyed, the route handed over by
+  `.task(id: pendingRoute)`; `.id(destination)` in `AppTabs` plus `.id(model.id)` in the root (R8).
+- **S13 carry-overs**: the re-read is bounded at `readsAfterAWrite` (5) and logged; a throwing read keeps the
+  last read that answered (never older than the write, as the comment argues); the background-root test waits
+  on `CountingPrograms.counts`; F11-S13-12 by `emit`'s `!newDayWaits` guard (the day's own route clears
+  `routeAfterSave` before `emit`, so it is never dropped by it).
+- **`select(request:)`** (F11-S14-1): the request number is remembered per store, the store lives in
+  `ProgramRoot`'s `@State` under `MainRoot`'s router, and the tester's seven attacks on it hold.
+- **`LedgerAppKit`**: `.day` pushes on the Program stack from any tab; `.closeDay` pops only a `.day` on top;
+  `editProgramWeek` selects the tab, empties the stack (Q2 A) and numbers a new request; `.openProgram` and
+  `.setUpProgram` select the tab only.
+- **Removals**: `hasDropSet`, `Field.label` with its six copy members and keys, the picker's `detail`, `inDayMark`
+  and `pickMark` (Q4 A); none is left in `Sources` (grep), the catalog step passed in the full gate.
+- **Deviation 1** (stores at the module root): agreed; `DayEditor/` must hold no SwiftUI file and the testers'
+  folder scans pin those folders' files, and the root is where `ProgramStore` stands.
+- **Conventions**: `@MainActor @Observable final class`, empty-effect initializers, synchronous intents, work only in
+  the root's tasks, no `Task {`/`Timer`/`TimelineView`/`.formatted(`, the lifter's words only from `ProgramCopy`
+  (the logger's lines are not copy, as S13 settled). Product lines 403 added (notes), under the 950 stop line.
+- **Expected failures for criterion 20**: `XCTExpectFailure(_:failingBlock:)` is strict by default, wraps only
+  the pop's assertion, and the control (`test_swipeBack_control_…`) proves the synthesized swipe is fair.
+- **Sanctioned edits**: 15 tester files in the notes' tables plus `ProgramTabAdversarial.swift` in the fix round;
+  each does only what its row says (the tester audited them too). One file is missing from the table (N-5).
+
+### Should fix
+
+1. **`DayEditorRoot.swift:68-69` (with `:37`): the failed state has no way back.** With the navigation bar hidden
+   and the swipe back lost (F11-S14-2), `ProgramMessage` draws no "Program" and no back button, so a Day editor
+   whose source ended is left only by re-tapping the tab or by Today's "Edit this week". The builder's failed
+   state is a tab root and needs none; this one is pushed. *Fix:* keep the system bar visible for `.failed` (apply
+   `hidesTheNavigationBar()` to the `.editing` and `.loading`/`.dayIsGone` content only, so no bar flickers on a
+   normal push), which gives the system back button; or draw the screen's own bar with "Program" above the
+   message. Pin it in `DayEditorRootTests.root_drawsTheFailedMessage` (a back control among the elements).
+2. **`NameField.swift:64-70`: `.foregroundStyle(.placeholder)` is a system colour in a feature** (standards:159-163,
+   "Tokens only", enforced by review; :466 lists the system styles the lint does not catch). Deviation 5's argument
+   (match the field's own prompt) is right on looks, but the rule is about who owns the colour. *Fix:* give the
+   `TextField` an explicit `prompt: Text(label)` in a `LedgerColor` token and draw the blank-draft placeholder in
+   the same token, so the two match by construction (`LedgerColor.inkFaint` is the nearest; or a
+   `LedgerColor.placeholder` in `LedgerDesign` if the system's is wanted). While there: the drawn placeholder uses
+   `.ledgerFont(.title)` and the field `.ledgerFieldFont(.title)` (line 1.3, #60), so check in the attached
+   `Builder` screenshot that the drawn and the field's own placeholder sit on the same line; and the caret stands
+   after the spaces, inside the drawn word (see "For Pete"). If the orchestrator rules the system style
+   acceptable, write it in standards' list as an allowed exception rather than leave it to this file.
+3. **`FeatureProgramSourceTests.swift:46-49`: `storeFiles` omits `DayEditorStore+Sources.swift`.** The module-wide
+   scans (`Task {`, the clock, clamps) read it, but the `unstructured` list (`Task.detached`, `DispatchQueue`,
+   `Timer`, `TimelineView`, `.formatted(`) is applied only to `storeFiles`, so criterion 26's "covers the new
+   files" misses the one file that follows the sources (its S13 twin `ProgramStore+Sources.swift` is listed).
+   *Fix:* add it to the list; the file holds none of them today, so the test stays green.
+
+### Nit
+
+1. **`DayEditorRoot.swift:55-57`**: a write that fails while the library sheet is up (a stepper's write slow, then
+   "+ Add exercise from library") asks for the alert on a view that is presenting a sheet; SwiftUI does not show it
+   until the sheet goes, if at all. A local write's milliseconds make it rare; attach the same alert inside the
+   sheet's content too, or say so in the root's comment.
+2. **`DayEditorStoreTests.swift:94-95`**: the `.failed` check runs before the new `Task` has started (the main actor
+   has not suspended), so it pins nothing; the test still discriminates through line 97 (a reset at the run's start
+   would leave `.loading` and `content` would throw). Await the second subscription before the check (a counting
+   double, as `CountingPrograms`), or drop the line.
+3. **`ExercisePickerStoreTests.swift:97-110`**: the title says the refused exercise is "logged", but no log is
+   read. Assert the line through the injected test logger, or drop "logged" from the title.
+4. **`Apps/LedgerUITests/DayEditor.swift:90`**: the expected failure's message does not cite F11-S14-2, as
+   `ProgramTabAdversarial.swift:48,62` do; cite it so the follow-up finds all three marks by the id.
+5. **Notes, "Sanctioned edits to the testers' files"**: `Apps/LedgerUITests/Tabs.swift` (F09's, criterion 25) is
+   edited but has no row; "What landed" names it, the table does not. Add the row.
+6. **`Routes+Program.swift:11-15`**: `.closeDay` names no day, so it pops whichever Day editor is on top. Right
+   while only the top editor can emit; when F11-S14-2's follow-up gives back the swipe, consider
+   `.closeDay(DayTemplateID)` and pop only a matching top, so a close delivered as a swipe pops cannot pop a
+   different editor.
+
+(The tester's `ProgramWeekRequestAdversarialTests.settle()`, twenty `Task.yield()`s before a negative check, can
+pass falsely but never flakes; the tester's file, left as it is.)
+
+### For Pete
+
+No wording invented: "OK" is question 1's; the Day editor's failed state reuses decision 6's builder texts
+("Can't show your program right now", "… Open the app again to try once more."), which fit. To decide:
+- **The swipe back on the Day editor is missing** (criterion 20, F11-S14-2), ruled to a follow-up with a
+  `LedgerDesign` UIKit helper (option A). Until then "Program" and "Done" are the way back, and see should-fix 1.
+- **Clearing a name letter by letter stores its first letter on the way**, and that letter stays if the field is
+  left blank (notes, "For the product owner"). Recommended: accept for M1.
+- **Question 5's placeholder over spaces** is drawn in the system's placeholder grey (should-fix 2), and the caret
+  stands after the spaces, so it blinks inside the drawn word. Look at the attached `Builder` screenshot.
+
+### What I did not check
+
+Any simulator or UI test run; the iOS-hosted root suites and `LedgerAppKitTests` (not run on the host); the
+adversarial bodies line by line beyond their waits; the by-hand budgets (criterion 27, S13's measurement stands);
+whether re-tapping the Program tab pops to the builder on iOS 27 (it bears on should-fix 1's severity only).
