@@ -5864,3 +5864,28 @@ the removed fields.
    accept for M1.
 3. **The blank-draft placeholder's style is the system's `.placeholder`**, not a token (deviation 5).
    *Recommendation:* accept: it is the style the field's own placeholder already uses.
+
+### Product lines
+
+Non-blank, non-comment lines (standards §10), `LedgerKit/Sources`, against `16a2e52`: **403 added, 49 removed
+(net 354)**, planned ~395. New: `DayEditorStore.swift` 129, `DayEditorStore+Sources.swift` 41,
+`ExercisePickerStore.swift` 86, `DayEditorRoot.swift` 69, `LedgerAppKit/Routes+Program.swift` 18; the rest are
+small edits (the session +14, `NameField` +9, `ProgramRoot` +8 −4, `AppTabs` +8 −2, `Routes` +7) and the removals
+(copy −18, presentations and models −20). Measured before the last fix round, which added a few lines to the
+Day editor's sources (the kept failed state).
+
+### The runs
+
+- Host, `swift test --filter 'FeatureProgramTests|LedgerAppKitTests'`: green (the hosted root and shell suites
+  are iOS only). Mutations, each reverted: `closeIfDone` without the idle check (four DS tests fail); the failed
+  state reset at the run's start (`failedState_isKeptThroughANewRun` fails).
+- Simulator, targeted through the lock (Nightly plan's build): `Builder` (5) and `DayEditor` (6, the swipe back
+  as an expected failure, its control passing), `Tabs`, `DayEditorRootTests`, `ProgramRootTests`, `AppTabsTests`,
+  `AppTabsAdversarialTests` and the three tester suites edited last: all green.
+- The first full gate (on `9403e28`) failed three iOS-only tester tests that pinned the old behaviour (question 5,
+  criterion 21, F11-S13-12); sanctioned edits in `a1e1d92`.
+- **`scripts/check.sh`, the full gate, on `a1e1d92`, through the lock: exit 0, "check.sh OK", 1,994 s** (lint 78 s,
+  iOS build 15 s, catalogs 1 s, iOS tests 1,592 s: 4,466 tests, 4,433 passed, 0 failed, 16 skipped, 17 expected
+  failures; watchOS build 51 s, tests 253 s: 2,418, 0 failed; coverage 3 s: FeatureProgram 98.70 %, overall
+  98.65 %).
+- Not run: the full nightly lane, CI.
