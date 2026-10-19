@@ -2006,3 +2006,174 @@ The only cut on offer is the closure form of the slot, which I advise against ab
 - The tester's new files beyond the four edits and the one line that hosts the root.
 - `RestBench`, `WorkoutPresentationRestTests` and `WorkoutScreenTests` edits were read from the stat and
   the notes only; the previews' edit was read.
+
+## S7b — round 1 (G3 reviewer, 2026-10-19)
+
+Range `16a2e52...03a9df7` on `feat/F10-s7b-receipt` (seven commits: the product `7d3ec40`, its tests and
+references `ee860b5`, notes `a301c4b`, G2 round 1 `3fc795a`/`7310976`, fix round 1 `0b0737e`, G2 round 2
+`03a9df7`). Read against the S7 amendments (criteria 25 to 37; 38 to 40 for the receipt's views; texts;
+references; R1 to R11; O5 to O7, O9, O10; "Rulings before G1 — slice S7"). Every product file of the diff in
+full, the store's `follow()`/`exit(for:)` and the root whole, the store, presentation, view and support tests,
+the implementer's edits to testers' files, and two references by eye; only then the notes' S7b sections and
+`test-findings.md` S7b rounds 1–2. Run: host `swift test --filter` over the receipt, live-record, save,
+source, copy and words suites (102 tests in 14 suites, exit 0). Not run: the simulator suites, the full gate.
+
+**Verdict: approved.** No blocking finding. One should-fix, a visible false sentence at the accessibility sizes,
+needs a one-line product answer from Pete before or after merge; the nits are small.
+
+### Blocking
+
+None.
+
+### Should fix
+
+- **S7b-SF1. "Prescribed on the right" is drawn where it is false.** `LedgerDesign/Components/ReceiptLayout.swift:114-127`
+  (`loggedHeader`) with `:175-189` (`ReceiptRowView`). At the accessibility sizes the row's target stands
+  **under** the name, at the leading edge (criterion 38), but the note is still drawn, now under "LOGGED"
+  (reference `receipt_accessibility3_matchesReference.dark-accessibility3.png`, and the two `receiptLayout`
+  `accessibility3` references). It is hidden from VoiceOver because "it describes the picture"
+  (criterion 40); stacked, the picture no longer matches it. The contract did not foresee the conflict
+  (O9 covers only the mirrored layout), so this is Pete's word, and it is an invented-behaviour decision, not
+  a code defect. **Recommended:** draw the note only when `!isStacked` (one `if` in `loggedHeader`; the model
+  keeps the string; the three `accessibility3` references are re-recorded and the cut check loses one part).
+  The alternative is a second string ("Prescribed under each name"), which is invented wording and a new key.
+  List it for Pete with O9.
+
+### Nits
+
+- **S7b-N1. The notes describe the superseded rule.** `implementation-notes.md:5883-5888` ("How it works",
+  first bullet: `PendingSave.wasSent` and "at the end that save asked for") and deviation 2 at `:6035-6036`
+  still describe round 0; the fix round's table is the truth (`askedEnds`, `finishesInFlight`,
+  `deferredEnd`). A reader of the slice lands on the wrong one first. Fix: rewrite the bullet and deviation 2
+  to the round-1 rule and point at the fix-round table.
+- **S7b-N2. `askedEnds` is knowledge of a waiting end kept past "Close".** `WorkoutStore.swift` (`askedEnds`),
+  `WorkoutStore+Receipt.swift:38-46`. Criterion 16 says the store "keeps no knowledge of a waiting end beyond
+  that (R10)". It is read only while a new save runs (`isSavedHere` requires `isSaving`), so after "Close"
+  with no new save behaviour is S7a's (a tap that completes the end closes as `.saved`), and that is what the
+  fix of F10-S7b-1 needs. Fix: one sentence in the notes (and, if the orchestrator wishes, in the brief's
+  criterion 16) that `askedEnds` is the sanctioned exception: it decides only receipt-or-close for a save
+  the lifter asked for again, and tells no reader anything.
+- **S7b-N3. A stale run settles the waiting update.** `WorkoutStore+Finish.swift:117-121`: in the generic
+  `catch`, `settleDeferredEnd()` runs before the `run == saveRun` and cancellation checks, so a cancelled
+  earlier run judges `deferredEnd` while the current run's call may still be out. I traced every way to get
+  there (a cover's tasks starting again mid-call with an unknown end waiting): each ends `.saved` with no
+  receipt, which is O7's default anyway, so no outcome is wrong today. It does break the stated invariant
+  "the answer decides". Fix if touched again: settle only when this is the last call out
+  (`finishesInFlight == 1` inside the `catch`, before `defer` runs), in both `catch` branches.
+- **S7b-N4. The parts duplicate the screen's header insets.** `Tests/.../Support/ReceiptParts.swift:27-29`
+  repeats `Views/ReceiptScreen.swift:14-16` (`.padding(.horizontal, .screen)`, `.padding(.vertical, .l)`).
+  A change to the screen would not show in the trees or the references. Fix: give `ReceiptScreen` a small
+  `ReceiptPinnedHeader` (header plus its insets) that both use, as `ReceiptPage` already is for the page.
+- **S7b-N5. `zip(summary.rows, finished.exercises)` relies on one row per exercise.**
+  `WorkoutPresentation+Receipt.swift:50-52`. True today (`WorkoutEngine.summary` maps the exercises), and the
+  tester's seeded property pins "Nothing logged exactly when the chips are the dash"; but S9's superset rows
+  could change the summary's shape and `zip` would silently drop rows. Fix: a one-line comment naming the
+  assumption, and an input for S9 in the notes.
+- **S7b-N6. Two UI messages still say the cover is down when the receipt is up.**
+  `Apps/LedgerUITests/WorkoutSaveFailure.swift:37` and `WorkoutSaveFailureAdversarial.swift:40`
+  ("saved: the cover is down", after `minimize.waitForNonExistence`). The tester's same nit was fixed in
+  `WorkoutFinishAdversarial` only. Fix: "the live workout is gone: the receipt shows", as there.
+- **S7b-N7. VoiceOver's escape does nothing on the receipt.** `Views/ReceiptScreen.swift:12-22`: `send` drops
+  every action but `.done` on the receipt, and nothing maps the escape gesture. Not in the contract (criterion
+  40 names the sheet's escape only). If Pete wants it: `.accessibilityAction(.escape) { send(.done) }` on
+  `ReceiptScreen`, one line and one tree test.
+
+### The receipt-or-close decision
+
+Correct, order-independent, and nothing is left behind that changes behaviour. The rule, read from the code
+before the notes:
+
+| Arrives | Condition | Outcome |
+|---|---|---|
+| `finish`'s answer, finished | — | receipt (`showReceipt`, once) |
+| ending update | the save running, the workout being saved, finished at an end in `askedEnds` | receipt at once |
+| ending update | the same, at another end, with a `finish` call out | waits (`deferredEnd`); the answer decides: finished → receipt; `noLiveWorkout`/refusal → judged by `askedEnds` → `.saved` |
+| ending update | anything else, no receipt up | S7a's `exit(for:)` |
+| any non-live update | a receipt up | nothing; only "Done" closes |
+
+- **State.** `saved` is set once; `deferredEnd` is cleared by the answer or `settleDeferredEnd`, and when no
+  answer ever comes the next stream's nil first update closes the cover (`exit` set, so the late answer is a
+  no-op, tester's `deferredEnd_answerNever…`); `finishesInFlight` is balanced by `defer`; `askedEnds` lives as
+  long as the store (N2). `follow()` returns on the deferral path without touching the "stream ended" branch.
+  `showReceipt` empties the queue, clears `exitWhenDrained` and `isSaving`, and wakes a waiting run.
+- **Simplest?** Not the smallest conceivable, but each piece is load-bearing: M1 (no end comparison) breaks
+  criterion 17 in flight, M2 (no waiting) breaks the reopened cover and the update-first order, M3 (always
+  receipt) breaks another hand's end. The only simpler design is "any finished end of the workout being saved,
+  once a save was sent, is this cover's", which deletes `deferredEnd`, `finishesInFlight`,
+  `waitsForTheAnswer` and `settleDeferredEnd` (about 30 lines) but shows a receipt when the watch ends the
+  workout under this cover's call: a product call that F17 is the right time for. I would not change it now.
+- **The tester's accepted limits** (another hand at exactly an asked end; a finished answer that completed
+  another hand's refused end) are real and need two clients; they belong in F17's inputs, where the notes put
+  the related R10 item.
+
+### Criteria
+
+| # | Verdict | Where |
+|---|---|---|
+| 25 | met | `WorkoutStore+Receipt.swift:38-69`, `+Finish.swift:103-143`, `WorkoutStore.swift` `follow()`; another hand's end and O7 close as `.saved` |
+| 26 | met | `.done` → `closeReceipt` → `.route(.saved(id))`; no route case; `workout.receipt.done` |
+| 27 | met | `ReceiptScreen`: header over one `ScrollView { ReceiptPage }`; trees and references from `ReceiptParts` (N4) |
+| 28 | met | `startDay(of:)`: `Date.FormatStyle(locale:calendar:timeZone:)…format(_:)`; tested in UTC, Tokyo, `fr_FR` |
+| 29 | met | `ClockText.elapsed`, "23/25" from the summary's counts, `volume.formatted(in:)`; no arithmetic |
+| 30 | met | `PersonalRecords.detect(…, now: startedAt)` over `bests(before:for:)`; `forCountedText`; deload none |
+| 31 | met | `.failed` logged, never retried, no wait; a cancelled read stays `.idle` and is read again |
+| 32 | met | rows are the Domain's name, target, chips; `WrapLayout` |
+| 33 | met | `ReceiptLayout`: `String`s, `Bool`, tokens (`LedgerSpacing`, `LedgerColor`, `LedgerRadius`, `.ledgerPill`; the `0.5` scale `StatTile` uses); gallery, previews, §11. `LedgerDesign` has no `LedgerDomain` dependency, so the compiler enforces it |
+| 34 | met | reads nothing ambient; no exercise, "—", NaN and saturated start, zero volume (`spokenElapsed` clamps under `Int64.max` seconds) |
+| 35 | met | "Done" is the outlined ink `PillButton`; orange is the TIME label and the records line (pixel test, light and dark) |
+| 36 | met | `readBests` holds the workout's records as the read started; `recordHaptics` per exercise and kind, after the update's own haptics; nothing drawn. 639 product lines, so it stays |
+| 37 | met | `shownRest` and `restPanel` nil once `saved`, so the root's rest task ends; no announcement |
+| 38–40 | met but SF1 | sizes, 44 pt, stacking, mirroring and the trees are pinned on the simulator (not re-run by me); the stacked note is SF1 |
+
+### Conventions
+
+- `WorkoutStore` is `@MainActor @Observable`; every intent is synchronous; `readBests()` runs in the root's
+  `.task(id: store.bestsSubject)` (source-pinned); no `Task {}`, `Timer`, `TimelineView` or Foundation
+  `.formatted(` in the new files (`volume.formatted(in:)` is the Domain's). Lookups only in
+  `WorkoutCopy+Receipt.swift` (source-pinned), English keys, `translated`, the plural through
+  `locale.forCountedText`; the three spoken joins (", ") are in the presentation, as S7a's " · " is.
+- **The move into `WorkoutStore+Intents.swift`** is behaviour-preserving: the same guard plus "`.done` alone
+  on the receipt"; `dialogs(closedBy:)` maps `.keepLifting` → `[.finish]`, `.dismissed(d)` → `[d]`,
+  `.dismissFailure` → the three alerts, exactly as before. `startDiscard` and `dismiss` lose `private`, which
+  the module's file-per-concern convention already accepts elsewhere.
+- `statsQueries` is bound in `AppComposition.swift:176`; architecture §13 already lists the key.
+
+### Tests
+
+They pin behaviour, not structure: the receipt is checked through `store.model`, the haptic list, the exit
+and the stored workout; the trees word for word with `firstDifference`; tiles as small arrays; no large model
+`#expect`. Determinism: gates (`Gate`, `HeldFinishSession`, `KeptEndSession`, `BestsSession`) and an injected
+date that moves only on a tap; no sleeps. `doneOnReceipt(of:)` sends `.done` only when that receipt is on
+screen, so each S7a test that gained it now also asserts the receipt. The live-record tests space taps by
+ten seconds to stay clear of the double-tap guard, which is named.
+
+### Edits to testers' files
+
+All accepted. `SaveCover.sync()` taps "Done" when a receipt shows (the tester then made `receipts` checked in
+the walk); the catalog list 71 → 82 keeps both set differences; `WorkoutRootSaveAdversarialTests` adds
+`inMemoryStores()` and the Done step before the same expectation; the three UI tests tap Done before the same
+Today checks (N6 for two messages).
+
+### References
+
+19 new (13 `ReceiptTests`, 6 `receiptLayout` phone matrix) and 1 changed (`designGallery_dark`), as the
+contract's table plans; no composite beyond the gallery changed. Looked at: `withRecords` light `.large` and
+dark `.accessibility3`: tiles, orange, chips and the stacked header as the notes say; SF1 is visible in the
+second.
+
+### For the product owner
+
+Defaults as built, each one place: O5 counts records (one lift can be two); O6 the brief's date, pinned
+header; O7 no receipt when the cover did not see the save finish, nor after "Close" when a later tap completes
+it (R10); O9 the note when mirrored; O10 a buzz per record, once per exercise and kind per cover. Departures
+from the prototype the notes list: the TIME tile is not ink-filled (AA in dark), "Done" is an outlined ink
+pill (a filled pill reads "selected"), chips are capsules. **New for Pete:** SF1, the note at the
+accessibility sizes. Invented wording: "Prescribed %@", "Logged %@", "Nothing logged" (the specification's
+list, as drafted); the spoken time is the system's duration format after "TIME, ". None beyond that.
+
+### What I did not check
+
+- The simulator suites (layout sweep, cut checks, orange pixels, trees, references) and the UI tests: read,
+  not run. The full gate.
+- The receipt in the running app, at 375 pt, in dark; VoiceOver and the `.personalRecord` buzz on a device.
+- The tester's round-2 adversarial files beyond their names, the double they use, and their outcomes.
