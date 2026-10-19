@@ -131,7 +131,10 @@ final class TabsAdversarial: XCTestCase {
 
     @MainActor
     func test_everyTabRoot_passesTheSystemsAccessibilityAudit() throws {
-        let app = launch()
+        // Sanctioned edit of the F08 port (fix round 1, F8-S2S3-4): the audit reads Today inside the seed program's
+        // block, on the day `Today` and `TodayAuditAdversarial` read (Wednesday of week 5, Lower A), not after the
+        // block's end, which `TodayAuditExclusions` was not measured on.
+        let app = launch(["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z"])
         var issues: [String] = []
         let tabBar = app.tabBars.firstMatch.frame
         for tab in Self.tabs {

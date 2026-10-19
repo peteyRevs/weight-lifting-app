@@ -1119,6 +1119,46 @@ call whose task is cancelled does not count, and the next pass saves; pinned by
   training", light and dark. The branch's pair shows the placeholder Today of 2026-10-05, so it was not brought
   over; it is for the orchestrator's run of the app.
 
+### Fix round 1 (G1 implementer, 2026-10-19)
+
+The tester's round 1 on the port (`32d13f6`; findings, "Slices S2 and S3 — the port, round 1"), as ruled:
+
+- **F8-S2S3-4 (Major), fixed, in the audit test alone.** `test_everyTabRoot_passesTheSystemsAccessibilityAudit`
+  launches with `-LEDGER_UITEST_NOW 2026-09-16T12:00:00Z` (Wednesday of week 5 of the seed block, Lower A: the
+  session day of `Today` and `TodayAuditAdversarial`), so the audit reads Today inside the block. Sanctioned edit
+  of the tester's file; diff: `- let app = launch()` / `+ let app = launch(["-LEDGER_UITEST_NOW",
+  "2026-09-16T12:00:00Z"])`, with a three-line comment. `TodayAuditExclusions` is not changed.
+- **Why not the shared launch helper, as the ruling first said.** The first nightly run with the date in
+  `launch(_:)` failed three other tests of the suite: inside the block Today's title is the session's day
+  ("Lower A") or "Rest day", never "Today" (`TodayPresentation.header`: "Today" only with no program or after the
+  block), and `:36`, `:48` and the accent test (`:89`, "Today is not in the accent", seen once on that run)
+  read the title "Today" or the tab at that state. Those three keep the undated launch: since 2026-10-12 the seed
+  block is over at the real date, so the title reads "Today", and it stays over (the date only moves on). That
+  makes them dated content without a date, by construction stable; F09's follow-up below may prefer pinning
+  them after the block (for example `2026-10-19T12:00:00Z`) once it owns the ended-block state.
+- **The other launches of the 18, checked for dated Today content without a date.** `Tabs` reads only that
+  `today.title` exists and the tab titles; Smoke's two undated sample tests, `WorkoutAdversarial`,
+  `WorkoutConflictAdversarial`, `WorkoutFinishAdversarial.openTheSheet`, `WorkoutLogging*` and `WorkoutRest*`
+  read the sample workout's cover (its first week whatever the date) and only that Today is back (hittable).
+  The Today cards they read ("View session", "LOGGED · WEEK 1") are at `Smoke:210` and
+  `WorkoutFinishAdversarial:182`, in tests already launched at 2026-08-17. `Today`, `TodayAuditAdversarial`,
+  `WorkoutSaveFailure*` are dated. **None else pinned.**
+- **Nightly `TabsAdversarial` after the fix** (Nightly plan, `-only-testing:LedgerUITests/TabsAdversarial`, through the
+  lock, twice): 7 tests, 6 pass, the audit among them. **Open:**
+  `test_selectedTab_isDrawnInTheAccent_andNoOtherIs_lightAndDark` fails both times at `:86`, "Today selected:
+  Today is not in the accent", in its dark half: the screenshot it attaches as "Today-dark" is drawn in the light
+  theme, so the dark bounds find no accent. It failed the same way with the date in the shared launch, so the date
+  is not the cause. Nothing in the app sets a colour scheme. The tester's round did not run this test, and there
+  is no nightly CI run to compare with, so whether `main` fails it too is not known. Not edited: the
+  orchestrator decides whether it is the port's (a slower first frame over the seed program racing
+  `XCUIDevice.appearance`) or the environment's.
+- **F8-S2S3-2, -3:** notes only, no change.
+- **Follow-up for F09: audit Today over an ended block.** Over the seed program after 2026-10-11 the system's
+  audit reports "Contrast nearly passed" and "Text clipped" on "Open Program" (the orange button) and "Text
+  clipped" on "Block complete" (a display text), the same classes F06/F09 decided for "Set up program" / "Start
+  workout" and the header texts; `TodayAuditExclusions` names labels and holds neither. F09 measures and decides
+  them, and audits that state on purpose.
+
 ### How to verify
 
 ```
