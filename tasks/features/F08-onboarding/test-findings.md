@@ -978,3 +978,134 @@ For the record:
   warning; `r2-sim-2` was my nine suites after the restructure (48 tests, 0). `r2-sim-3` and `r2-ui-1` did not
   compile: a stored list of exclusions that Swift 6 refuses, since made a computed one.
 - After the lint run I changed no Swift file. Result bundles are deleted, and no process of mine is running.
+
+## Slices S2 and S3 — the port, round 1 (G2 tester, 2026-10-18/19)
+
+Adversarial pass over the port on `feat/F08-s2-onboarding` @ `bac3103` (product commit `9647760`), against the
+brief's "Plan amendments — slices S2 and S3", its "Rulings before G1", ruling B and the notes' "Slices S2 and S3 —
+the port". I re-ran every ported suite (mine of 2026-10-05 among them), audited the implementer's sanctioned edits
+and the ruling-B list, and attacked what is new: R2's launch seam, the gate over today's `MainRoot`, the router
+replaced (R4), R8. No product code, no test plan, no project file and no workflow was edited; the one product file
+I touched (the R12 mutant, `MainRoot.swift`) was restored byte for byte (`git diff --quiet`).
+
+The round was cut by a usage limit for about 19 hours, with a host test process of mine hung throughout (the
+coordinator killed it). That hang was my own test's bug, not the product's: F8-S2S3-1.
+
+**Result: no product bug found; one Major finding (F8-S2S3-4: the nightly UI lane goes red on the port, item 4
+of the brief, criterion 24); round not closed.** One test-quality finding (mine, fixed before commit) and two
+notes. New: `LedgerAppKitTests/Adversarial/UITestProgramAdversarialTests.swift` (4 tests, 9 cases).
+
+### Findings
+
+1. **F8-S2S3-1 — test quality, my own; fixed. A test that waits on a task nobody can cancel hangs past its
+   time limit.**
+   - *What happened:* the first draft of `phaseChange_duringTheFirstPass_opensOnTheTabs` replaced the launch's
+     event handler before the first pass had run (no suspension between creating the task and resetting the
+     handler), so the first `follow` was never cancelled and followed the store for ever; the test then
+     awaited `first.task?.value`, which does not answer the test's cancellation, so `.timeLimit(.minutes(1))`
+     recorded "Time limit was exceeded" and the process stayed up (19 hours, until killed; the other suites in
+     the same process never reported).
+   - *Fix (in the committed test):* the handler records that it cancelled the pass (`isCancelledAtTheStep`,
+     asserted); every wait on the first pass is `until { … }` over observable state; the pass is cancelled
+     again before its value is awaited. 8 repeated host runs of `--filter UITestProgram` (10 tests, 2 suites)
+     with a 60 s watchdog: 8 × 0 issues, each under 0.2 s.
+   - *Rule for the suites:* never `await task.value` on a task whose end the test does not control; the
+     suites' `until` and `Latch` already follow it.
+
+2. **F8-S2S3-2 — note. A UI test's program that fails to save is not tried again in that process.**
+   `saveUITestProgramIfAsked` marks itself done on a real failure (logged), so a launch whose seed step failed
+   leaves the test on onboarding even after a later pass seeds the catalog. As the doc comment says; a UI test
+   would fail visibly ("no `today.title`"). No action asked.
+
+3. **F8-S2S3-3 — note. The argument is read positionally, the first occurrence deciding.** A repeated
+   `-LEDGER_UITEST_PROGRAM bogus` after a good one is not read, and `-LEDGER_UITEST_PROGRAM=seed` is not
+   recognised (no fatal: the test opens on onboarding). Same pattern as `UITestSaveFailures`; pinned by
+   `arguments_readByPosition`. No action asked.
+
+4. **F8-S2S3-4 — Major (criterion 24, "the nightly UI run green"). The nightly
+   `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` fails over the seed program after its
+   block has ended.**
+   - *Repro:* Nightly plan, `-only-testing:LedgerUITests/TabsAdversarial/test_everyTabRoot_passesTheSystemsAccessibilityAudit`,
+     iPhone 17 iOS 27.0, 2026-10-19 (`ui.full.log`). The test launches with `-LEDGER_UITEST_PROGRAM seed` and no
+     `-LEDGER_UITEST_NOW`, so Today reads the seed program (block from 2026-08-17, eight weeks) at the real date,
+     after the block.
+   - *Actual:* `TabsAdversarial.swift:156`: `["Today: Contrast nearly passed [9 \"Open Program\"]", "Today: Text
+     clipped [9 \"Open Program\"]", "Today: Text clipped [48 \"Block complete\"]"]`, expected `[]`. It fails
+     every day from 2026-10-12 on (date-driven, not flaky). Before the port the test read "No program yet",
+     which `TodayAuditExclusions` covers.
+   - *Cause:* the state is new to the audit, not new to the app: "Open Program" is the orange button and "Block
+     complete" a short-line display text, the same two classes F06/F09 decided and excluded for "Set up
+     program" / "Start workout" and the header texts, but `TodayAuditExclusions` names labels, and these two
+     are not among them. The implementer flagged exactly this risk (notes, "Note for the nightly").
+   - *Not a product bug.* The remedy is a test decision for the orchestrator: pin the test's date inside the
+     block (`-LEDGER_UITEST_NOW`, as `Today`/`TodayAuditAdversarial` do), or measure and add the ended-block
+     labels to `TodayAuditExclusions` with their reasons. Both are edits of other testers' files (R9-style).
+   - *Also run, passed:* `Smoke` (4 tests, 100 s, its three seeded launches open on Today: the seam's cancelled
+     first task did not lose the save) and `DebugMenu` (rows 1 / 8 / 4 / 16 after "Skip setup").
+
+### What held
+
+- **R2's seam, through the root's own call** (`RootGate.follow(_:in:)`, new suite): the first pass cancelled
+  at `seedCatalog`, `loadSettings` and `activateCompanionSession` (a phase change during the launch), with the
+  next pass started before the cancelled one returned (as SwiftUI does) and after it: the gate's answers are
+  exactly `[.loading, .main]` (onboarding never flashes by), one live program, the seed. Two overlapping calls
+  of the seam: one program (the second save of the same seed program writes nothing), and later passes save
+  nothing more. Two gates over one composition that asked: one program, both answer the tabs first. The save
+  runs after the launch's pass and before the gate's first read in every case.
+- **Debug only**, by reading (no Release build was compiled here: `check.sh` builds Debug): the seam's body and
+  its flag are `#if DEBUG`, `liveSeeds` returns false in Release, `SampleProgram` is inside `#if DEBUG` in
+  `FeatureWorkout`, nothing outside Debug names it.
+- **The gate and R4**: every ported root suite passes on the simulator; `AppRootTests.pushedScreen_…` and the
+  reset suite show a new router on Today with empty stacks after each onboarding; F11's `programWeek` and
+  every tab's own state go with the tabs' subtree. F10's `WorkoutLauncher` is not reset (R5 keeps the cover
+  over the gate's content); no workout can be started from onboarding.
+- **The ruling-B list is complete.** Every host of `AppRoot`/`MainRoot` in `LedgerAppKitTests` is on the
+  notes' list. The two drawings of the real tabs outside `withTestDependencies`
+  (`AppRootAdversarialTests.root_ready_draws`, `RootGateStoreAdversarialTests.sanctionedPicture_…`) are
+  synchronous and over an answered gate.
+- **The 12-of-16 race, measured**: the seven suites that host a root (`AppRootTests`, `AppRootAdversarialTests`,
+  `AppRootResetAdversarialTests`, `RootGateStoreAdversarialTests`, `AppRootGateAdversarialTests`,
+  `AppRootFollowingAdversarialTests`, `AppRootOnboardingAdversarialTests`), PR plan, `-test-iterations 16`:
+  **1,104 test runs, 0 failed, 0 runtime warnings, 0 lines "has no test implementation"**. The full PR-plan run
+  of both targets: 0 such lines either.
+- **Store**: the ported suites (picks across steps, Skip setup's default whatever is picked and after a failed
+  Start, retry with the failed attempt's picks, one program under every double tap and interleaving) pass on
+  host and simulator; nothing new found.
+- **Copy, accessibility, kg/lb, R8**: the ported copy, VoiceOver and layout suites pass; `forCountedText`
+  is the one lookup of the counted body; the Arabic-digits test still passes with it.
+- **UI edits (R9, criterion 21)**: every file that launches `-LEDGER_UITEST` either adds
+  `-LEDGER_UITEST_PROGRAM seed` (one line per helper: 18 launches in 14 files, as listed) or goes through
+  `XCUIApplication.fresh()` + "Skip setup" (`Smoke`'s first test, `DebugMenu`, `LaunchPerformance`);
+  `TodayAuditExclusionsAdversarial` has no launch of its own. The five no-program assertions are the ones removed.
+
+### Measurements asked for
+
+- **(1) CI time under `TEST_RUNNER_LEDGER_SWEEP=pr`** (PR plan, `LedgerAppKitTests` + `FeatureOnboardingTests`,
+  iPhone 17 iOS 27.0): `FeatureOnboardingTests` 155 tests in 12.9 s (Swift Testing's wall time; 6.2 s of
+  test-case time); the F08 suites of `LedgerAppKitTests` ~6.8 s of test-case time (the target: 359 tests,
+  30.7 s wall). The `xcodebuild test-without-building` step for both targets: 55 s including the host app's
+  launch. Against the implementer's full-sweep bundle, the F08 suites' test-case time is 13.0 s (PR sweep) vs
+  14.0 s (full): the slice adds roughly **20 s** to the iOS step on the runner's PR sweep, before the runner's
+  slower clock.
+- **(3) R12's mutant**: `MainRoot`'s `OnboardingRoot { await composition.retrySeed() }` → `OnboardingRoot {}`;
+  `AppRootOnboardingAdversarialTests.retry_runsTheSeedStep_thenSaves` **fails** (`:138`, "Retry did not run the
+  launch's seed step"), exit 65. Restored; unmutated it passes (run 1).
+- **(4) The nightly `TabsAdversarial` audit over the seed program after its block ended**: run once; **fails**
+  (F8-S2S3-4), 23 s.
+
+### Commands and exit statuses
+
+Scratch folder `f08s23-g2/`; simulator runs through the lock with `ios.sh` (as the implementer's, plus
+`SWEEP`, `ITER`, `NOBUILD`). I did not run the full gate.
+
+| Command | Exit |
+|---|---|
+| host `swift test --filter 'FeatureOnboardingTests\|LedgerAppKitTests'`, port as received (`host-1.log`) | 0 |
+| host `--filter UITestProgram`, final tree, 8 times with a watchdog (`rep-1…8.log`) | 0 × 8 |
+| `scripts/check.sh --lint-only`, final tree (`lint.log`) | 0 |
+| sim, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`, `LedgerAppKitTests` + `FeatureOnboardingTests` (`r1`) | 0 |
+| sim, PR plan, the seven root suites, `-test-iterations 16` (`r2`) | 0 |
+| sim, PR plan, the R12 mutant, `retry_runsTheSeedStep_thenSaves` (`mut`) | 65 (killed, as intended) |
+| sim, Nightly plan, `TabsAdversarial` audit + `Smoke` + `DebugMenu` (`ui`) | 65: the audit (F8-S2S3-4); 5 of 6 passed |
+
+Result bundles `g2-*.xcresult` deleted after reading; no process of mine is running.
