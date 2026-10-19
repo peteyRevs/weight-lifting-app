@@ -7,9 +7,17 @@ import LedgerTestSupport
 /// The fake session whose `finish` ends the workout (the stream says so) and then waits for `answer()` before
 /// it answers; with `keptEnd`, it ends the workout at that end whatever the caller asked, as the host does
 /// when an end already waits in the log. With `answerFirst` the stream's ending update is held back until the
-/// answer has been given.
+/// answer has been given. `answer` says what the call answers once let: the finished workout, or (G2 round 2)
+/// `noLiveWorkout` (another hand's end) or a refusal, the workout ended all the same.
 actor KeptEndSession: WorkoutSessionClient {
+    enum Answer: Sendable {
+        case finished, noLiveWorkout, refused
+    }
+
+    struct Refused: Error {}
+
     private let base: FakeWorkoutSessionClient
+    private let reply: Answer
     private let keptEnd: Date?
     private let answerFirst: Bool
     private var ended: CheckedContinuation<Void, Never>?
@@ -18,8 +26,9 @@ actor KeptEndSession: WorkoutSessionClient {
     private var held: [AsyncStream<WorkoutSessionUpdate>.Continuation] = []
     private var heldUpdate: WorkoutSessionUpdate?
 
-    init(live: WorkoutState, keptEnd: Date?, answerFirst: Bool) {
+    init(live: WorkoutState, keptEnd: Date?, answerFirst: Bool, answer: Answer = .finished) {
         base = FakeWorkoutSessionClient(live: live)
+        reply = answer
         self.keptEnd = keptEnd
         self.answerFirst = answerFirst
     }
@@ -80,7 +89,11 @@ actor KeptEndSession: WorkoutSessionClient {
             // The answer reaches the caller first; the ending update follows it.
             Task { await self.release() }
         }
-        return finished
+        switch reply {
+        case .finished: return finished
+        case .noLiveWorkout: throw WorkoutSessionError.noLiveWorkout
+        case .refused: throw Refused()
+        }
     }
 
     private func release() {

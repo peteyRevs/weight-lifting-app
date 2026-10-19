@@ -2032,3 +2032,70 @@ cut), but it is wider than it needs to be: it could be limited to right to left,
 
 Not checked: the receipt in the running app at 375 pt, VoiceOver and the `.personalRecord` buzz on a device; the
 full gate (the orchestrator's).
+
+## S7b — round 2 (G2 tester, 2026-10-19)
+
+On `0b0737e` (the fix round: `askedEnds`, `finishesInFlight`, `deferredEnd`, `settleDeferredEnd()`; the bests held
+from `state`; "LOGGED" exempt right to left only; the message in `WorkoutFinishAdversarial`). No product code
+edited; two host mutants were run and reverted. New: `Adversarial/WorkoutReceiptAdversarialTests+RoundTwo.swift`;
+`KeptEndSession` can now answer `noLiveWorkout` or a refusal after ending the workout.
+
+### Result
+
+**G2 can close.** F10-S7b-1 and F10-S7b-2 are fixed: all their red tests are green, unedited. The waiting rule held
+up under every attack below. No new Blocking, Major or Minor finding. Two limits are written down, not opened as
+findings (see "Accepted limits").
+
+| Id | Status |
+|---|---|
+| F10-S7b-1 | **Fixed.** `closeThenSaveAgain_showsTheReceipt`, `heldEnd_eitherOrder_showsTheReceipt` (both orders), and `close_thenNoDiscard_saveSavesAtTheFirstEnd` are green; criterion 17's `endedElsewhere_whileTheCallIsInFlight_noReceipt` is still green |
+| F10-S7b-2 | **Fixed.** `recordBeforeTheBestsAnswer_isFelt` is green |
+
+### The waiting rule under attack (all green)
+
+| Attack | Test | Outcome |
+|---|---|---|
+| An ending update at an unknown end waits, and the answer never comes | `deferredEnd_answerNever_restartClosesAsSaved` | The update waits (`deferredEnd` set, `isSaving`, no exit): nothing times out, as the contract says. When the cover's tasks start again, the new stream says nothing is live and the cover closes as `.saved` (O7). The old call answering late changes nothing, and no alert shows |
+| Another hand's end at an unknown end while this cover's call is out, with the answer `noLiveWorkout` or a refusal, in both orders (4 cases) | `unknownEnd_otherAnswers_closeAsSaved` | Every case closes as `.saved` with no receipt, and `deferredEnd` is cleared. With a refusal answered first, the code sets the failed-save alert until the ending update closes the cover a moment later (read in the code, not measured; the exit is the same) |
+| `askedEnds` across five refused saves, each with a refused "Try again", and Closes (real host) | `manyRefusals_thenTheReceipt` | One end per tap on "Save workout" and none per "Try again" (5). The sixth save shows the receipt at the first tap's end, which is what the host kept |
+| A cover opened after another cover's refused save, so its `askedEnds` starts empty (real host) | `reopenedCover_saveShowsTheReceipt` | The receipt shows at the kept end: the host publishes the ending update first, it waits, and the finished answer decides |
+| R10 after three refused saves and Closes | `r10_afterManyCloses_aTapClosesAsSaved` | A tap that completes the end, with no save running, closes as `.saved` with no receipt |
+| Criterion 17, every order | round 1's in-flight test and `endedElsewhere_showsNoReceipt`, plus the four cases above | `.saved`, no receipt |
+
+### Mutants (host; product tree restored after each)
+
+| Mutant | Caught by |
+|---|---|
+| M2: an ending update never waits (`waitsForTheAnswer` false) | `deferredEnd_answerNever…`, `reopenedCover_saveShowsTheReceipt`, `heldEnd_eitherOrder…(false)` |
+| M3: an update that waited always shows the receipt | `endedElsewhere_whileTheCallIsInFlight_noReceipt`, `unknownEnd_otherAnswers_closeAsSaved` (the two update-first cases) |
+
+### Accepted limits (not findings)
+
+- **Another hand's end at exactly one of this cover's asked ends** shows the receipt. Nothing in the update can tell
+  the two apart, and it needs two clients that end the same workout at the same instant. The same is true of
+  round 1's single end.
+- **A finished answer is taken as this cover's save** even when another hand's end was what the host completed: the
+  other hand's end was refused at materialize, so it waits, and this cover's `finish` then returns it. That takes
+  a second client (the watch, F17). Note for F17.
+- **Two unknown ends** cannot reach one store. `follow()` returns after the first update that is not live, and
+  every stream after it starts with nothing live. So `deferredEnd` is never overwritten.
+- **A tab switch** does not touch the cover's tasks, because the cover is presented over the tabs. A restart of the
+  tasks is the case covered above.
+
+### Re-checks
+
+- **"LOGGED"**: `ReceiptLayoutTests.parts(of:isRightToLeft:)` now cut-checks it left to right and leaves it out
+  only right to left, where `ReceiptLoggedCutAdversarialTests` covers it. Simulator result under "Commands".
+- **`WorkoutFinishAdversarial`**: the message now reads "the live workout is gone: the receipt shows". The assertion
+  is unchanged, so the nit is closed.
+
+### Commands
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --filter "WorkoutReceiptAdversarialTests\|ReceiptPresentationAdversarialTests"` | 0 | 24 tests |
+| `swift test --filter FeatureWorkoutTests`, 3 runs | 0 each | 464 tests in 62 suites, 2 known issues (S7a-8) |
+| host mutants M2, M3 | 1 each | caught |
+| `PR` plan through the lock, `-only-testing` `ReceiptLayoutTests`, `ReceiptLoggedCutAdversarialTests` | 0 | 8 tests in 2 suites, 128 s. "LOGGED" is cut-checked left to right in `receipt_noWordIsCut` and passes |
+
+Not checked: the full gate (the orchestrator's), the running app at 375 pt, VoiceOver and the buzz on a device.
