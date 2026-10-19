@@ -1903,3 +1903,126 @@ All three were caught:
 | `Nightly`: `TabsAdversarial/test_selectedTab_…lightAndDark` | 0 | passes |
 
 Not checked: a Release build itself (read, not built; 3–5 GB free), the 375 pt phone in the running app, and VoiceOver on a device.
+
+## S7b — round 1 (G2 tester, 2026-10-19)
+
+On `a301c4b` (`feat/F10-s7b-receipt`: `7d3ec40`, `ee860b5`, `a301c4b`). No product code edited; one host
+mutant was run and reverted (below). New, under `FeatureWorkoutTests/Adversarial/`: `WorkoutReceiptAdversarialTests.swift` and `+Records.swift`
+(store and host), `WorkoutReceiptAdversarialSession.swift` (`KeptEndSession`, a session double that ends the
+workout at an end it keeps and lets the test choose the order of answer and update),
+`ReceiptPresentationAdversarialTests.swift` (pure, with a seeded property), `ReceiptLoggedCutAdversarialTests.swift`
+(simulator). Edited: two of my own S7a
+files (below, "Audit").
+
+### Result
+
+**G2 does not close.** One Major finding (F10-S7b-1) and one Minor (F10-S7b-2) are red.
+
+| Id | Severity | Finding | Failing tests |
+|---|---|---|---|
+| F10-S7b-1 | **Major** | After a refused save and "Close", a new "Save workout" in the same cover shows **no receipt** when the ending update reaches the store before `finish`'s answer, which is what the real host does | `WorkoutReceiptAdversarialTests.closeThenSaveAgain_showsTheReceipt` (host), `heldEnd_eitherOrder_showsTheReceipt(answerFirst: false)` (the order alone; `true` passes), `WorkoutSaveAdversarialTests.close_thenNoDiscard_saveSavesAtTheFirstEnd` (edited to criterion 25) |
+| F10-S7b-2 | Minor | A record made in this cover **before the bests answer** is taken as held at open and never felt | `WorkoutReceiptAdversarialTests.recordBeforeTheBestsAnswer_isFelt` |
+
+### F10-S7b-1 · Major · criterion 25 · the receipt depends on which of the answer and the ending update comes first
+
+Criterion 25: for a save the lifter asked for in this cover (`send(.save)` accepted) "the finished state, from
+`finish`'s return or from the ending update, **whichever comes first**, sets the store's receipt". The notes'
+deviation 2 narrows the ending-update path to "the end that save asked for" (`isSavedHere`:
+`ended.endedAt == save.endedAt`), but `finish`'s answer path checks no end. The two disagree whenever the session
+ends the workout at an end other than the one this attempt asked for, and the S7a contract makes that the normal
+outcome of one path it supports: after a refused save the end waits in the host's log; "Close", then a new
+"Save workout" (S7a-5, `close_thenNoDiscard_saveSavesAtTheFirstEnd`) makes a new `PendingSave` at the new tap's
+time, and the host completes **the first end** (`end(_:leaving:)` returns `ending.state` after `settle()`, which
+publishes it first).
+
+- Repro (real host over the probed stores): one set logged; "Save workout" at T₁ with `materialize` failing once
+  → `saveFailed`; "Close"; clock +240 s; "Finish", "Save workout" (accepted, `isSaving`); `save()`.
+- Expected: `saved?.id == running.id`, `exit == nil` (the receipt, until "Done").
+- Actual: `exit == .route(.saved(id))`, `saved == nil`. The host publishes the ending update (`endedAt == T₁`)
+  before it answers; `isSavedHere` compares it with T₂ and the cover closes; the answer then finds `exit` set and
+  `showReceipt` does nothing. With `KeptEndSession` (the same end kept, the order chosen): answer first → receipt;
+  ending update first → no receipt. The workout is saved either way; the lifter loses the receipt.
+- The same narrowing also covers a queued tap whose `apply` completes the waiting end while the second save
+  waits for its taps (`wasSent` still false); criterion 16 sends that through criterion 13 (S7a), which S7b's
+  criterion 25 changes for a save "asked for in this cover". One ruling covers both.
+- Why the S7a suite stayed green: `close_thenNoDiscard_saveSavesAtTheFirstEnd` waited for the cover to close and
+  passed on the order. I edited it (my file) to criterion 25: the receipt, then "Done", then `.saved`.
+- Not a fix to criterion 17: the end comparison is load-bearing. Without it, only my new
+  `endedElsewhere_whileTheCallIsInFlight_noReceipt` fails (another hand ends the workout at another end while
+  this cover's `finish` is in flight; the implementer's tests all pass on that mutant). A fix that keeps both:
+  accept an ending update at **any end this cover asked the session for** (the ends of every `PendingSave` it
+  sent), or ask the orchestrator to rule that a re-save after "Close" closes without a receipt and then make the
+  answer path agree with the update path, so the outcome no longer depends on the order.
+
+### F10-S7b-2 · Minor · criterion 36 · a record set before the bests answer is never felt
+
+Criterion 36: "the records the workout already holds **when the cover opens** are not played". `readBests()`
+takes as held the records of the workout as it stands **when the read answers** (`records(of: shown)`), not as it
+stood when the read started. A set logged in this cover while the read is out makes a record that is then held,
+and never played.
+
+- Repro (fake session, `BestsSession` gated): no set logged; the bests read waits; log set 1 (beats the best
+  estimate); open the gate; log set 2.
+- Expected: one `.personalRecord`. Actual: none.
+- Reach: the read is one local query, so the window is short; a slow first read (a cold database) widens it.
+  Fix: hold the records of `state`, the workout the read was made for, so the next update plays what came after
+  (`records(of: state)` in place of `records(of: shown)`).
+
+### What held
+
+- **Which save shows a receipt**: the stream's ending update first with the answer held (receipt at once, set
+  once, the late answer changes nothing, `.workoutFinished` once); the answer first; the answer lost (the
+  implementer's); another hand's end before the call, and while the call is in flight at another end (no
+  receipt, `.saved`); discard (no receipt); after a failed save and "Close", a tap that completes the end (R10: no
+  receipt, `.saved`). **Done** sends `.route(.saved(id))` once; a second Done, and a new stream after it, change
+  nothing; Done with no receipt does nothing and is not "Keep lifting".
+- **Records**: O5 counts records (one set beating both bests reads "2 new PRs"); a failed read is not retried
+  across the cover's tasks starting again and the receipt shows without the line; the deload (implementer's).
+- **The live record**: per exercise and kind across a heavier set later; another exercise's record is its own;
+  records held at open are never felt and still counted on the receipt; nothing felt on the receipt.
+- **Presentation** (pure, total): an end before the start, under a second, and no end → "0:00", "TIME, 0
+  seconds"; a start at ±infinity → no date, a written time; "1/1", "1 of 1 set logged"; 1, 2 and 0 records;
+  1,235,000 lb and 1,207,500 kg grouped, the kg chip "600 × 402.5×5"; `ar`, `he_IL`, `fa_IR`, `ja_JP`, `de_DE`
+  keep the Domain's clock, volume, chips and targets; a 420-character name as stored; the same model twice; and
+  over 40 seeded random logs, a row says "Nothing logged" exactly when its chips are the dash, else exactly its
+  chips.
+- **`ReceiptLayout` is string-only**: `LedgerDesign` has no dependency in `Package.swift`, so no `LedgerDomain`
+  type can reach it; only tokens, and the `0.5` scale factor `StatTile`, `SetRow` and `RestRing` use.
+- **Nothing live on the receipt**: `shownRest` and `restPanel` nil once saved (implementer's and mine).
+- **`WorkoutStore+Intents.swift`**: read against `main`'s `send(_:)`: the same guard plus "Done alone on the
+  receipt", the same dismissals (`dialogs(closedBy:)` maps `.keepLifting`, `.dismissFailure`, `.dismissed` as
+  before); every S7a store and adversarial test passes.
+
+### Audit of the edits to testers' files
+
+| Edit | Verdict |
+|---|---|
+| `SaveCover.sync()` taps Done | Sound, but `receipts` was recorded and never read, so a receipt shown twice, of another workout, or before a discard would pass. **Strengthened** in the walk (`WorkoutSaveAdversarialTests+Walk`): more than one receipt, one of another workout, or one with a `.discarded` exit is a fault |
+| catalog list 71 → 82 | Sound: the 11 keys of the specification's "Texts", both directions of the set difference kept |
+| `WorkoutRootSaveAdversarialTests` | Sound: `inMemoryStores()` for the bests; waits for the receipt, sends Done, the same exit |
+| UI: `WorkoutFinishAdversarial`, `WorkoutSaveFailure`, `WorkoutSaveFailureAdversarial` tap Done | Sound. Nit: in `WorkoutFinishAdversarial` the line before reads `minimize.waitForNonExistence` "the cover is down", which now holds because the receipt replaced the live screen; the Today checks after Done still prove the cover went |
+| `Smoke` | Sound: it reads the receipt ("1 of … sets logged"), checks no "Minimize" is left, and that Today is not hittable before Done |
+| S7a's `close_thenNoDiscard_saveSavesAtTheFirstEnd` (not edited by the implementer) | Passed on the order (F10-S7b-1); **edited by me** to criterion 25 |
+
+### "LOGGED", left out of the implementer's cut check
+
+The exemption is in every setting, left to right too. `ReceiptLoggedCutAdversarialTests.logged_isWhole` puts it
+back: left to right it is cut-checked in every setting; right to left it must stay one line (a `Text` with no
+line limit and room below it wraps before it truncates, so one line and narrower is a reading, not a cut) and
+within 8 pt of its own width (the 5 pt measured). `tileValues_neverTruncate` checks the other part the
+implementer's check leaves out: a tile's value fits at half its size (the most it shrinks), so it never
+truncates. Results under "Commands".
+
+### Mutants (host; product tree restored after each, `git status` clean under `Sources/`)
+
+| Mutant | Caught by |
+|---|---|
+| M1: `isSavedHere` without the end comparison | only `endedElsewhere_whileTheCallIsInFlight_noReceipt` (new); it also turns F10-S7b-1's three tests green, which is why the fix must keep criterion 17 |
+
+### Commands
+
+| Command | Exit | Result |
+|---|---|---|
+| `swift test --filter "WorkoutReceiptAdversarialTests\|ReceiptPresentationAdversarialTests"` | 1 | 19 tests; the three red of F10-S7b-1/-2 only |
+| `swift test --filter WorkoutSaveAdversarialTests` (the walk strengthened, before the S7a edit) | 0 | 25 tests, 2 known issues (S7a-8) |
+| `swift test --filter FeatureWorkoutTests` | 1 | 459 tests in 62 suites; red: the four tests of F10-S7b-1 and -2 only |

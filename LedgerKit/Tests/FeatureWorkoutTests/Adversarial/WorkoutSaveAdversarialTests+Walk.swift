@@ -53,6 +53,18 @@ extension WorkoutSaveAdversarialTests {
         }
     }
 
+    /// G2 S7b: a receipt is set once, only of the workout this cover saved, and never for one that closed as
+    /// discarded; nil when the receipts the cover showed say none of that.
+    static func receiptFault(of cover: SaveCover) -> String? {
+        if cover.receipts.count > 1 || cover.receipts.contains(where: { $0 != cover.running.id }) {
+            return "receipts shown: \(cover.receipts.count)"
+        }
+        if !cover.receipts.isEmpty, cover.exits.contains(.route(.discarded)) {
+            return "a receipt was shown for a workout that closed as discarded"
+        }
+        return nil
+    }
+
     /// Seeded steps of everything a lifter, SwiftUI, the session and another hand can do to a cover that
     /// can save: taps, the sheet's three controls, the alert's two, the tasks starting again, calls held and
     /// let on, updates kept back, a finish that fails, an end from elsewhere. After each step, and at rest
@@ -88,7 +100,7 @@ extension WorkoutSaveAdversarialTests {
         }
         await cover.settle()
         let atRest = await cover.fault()
-        walk.fault = walk.fault ?? atRest
+        walk.fault = walk.fault ?? atRest ?? receiptFault(of: cover)
         if walk.fault == SaveCover.savedButDiscarded, walk.trail.contains("endedElsewhere") {
             walk.misreportedADiscard = true
             walk.fault = nil
