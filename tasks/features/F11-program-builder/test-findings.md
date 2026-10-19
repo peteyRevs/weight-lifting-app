@@ -1540,3 +1540,55 @@ labels; `addDay_routeAfterTheWrite_once` now pins F11-S13-12's drop; the shell e
 | `xcodebuild … -testPlan Nightly` UI: `ProgramTabAdversarial` swipes, `DayEditor` swipe and control | the two swipe tests fail (F11-S14-2); the control passes; the strict expected failure is matched |
 | `xcodebuild … -testPlan Nightly` UI: `ProgramTabAdversarial.test_editThisWeek_…` (a rest day of week 5, 2026-09-17) | 65, as intended: both of its checks fail (F11-S14-1, in the running app) |
 | swiftformat `--lint`, swiftlint `--strict` on my three files | 0 |
+
+---
+
+## S14 — round 2 (G2 tester, 2026-10-19)
+
+Tested at `0b80519` (fix round 1). No product or implementer file was changed. New:
+`Adversarial/ProgramWeekRequestAdversarialTests.swift` (iOS hosted, 7 tests).
+
+### Verdict: F11-S14-1 is fixed; no new finding; G2 can close (criterion 20 stays open, as ruled)
+
+Round 1's tests that failed for F11-S14-1 pass **unedited** (both hosted tests, and the on-screen
+`test_editThisWeek_thenAnotherWeek_isKeptAfterTheDayEditorAndATabSwitch` in the running app).
+
+### The fix, attacked
+
+| Attack | Result | Test |
+|---|---|---|
+| The same week asked for again, with a new number | Selected again; the lifter's next pick then survives a push and pop | `sameWeek_newNumber_selectsAgain_thenIsKept` |
+| Question 2: a request that pops a pushed screen (stack emptied and a new request in one go, as `editProgramWeek` does) | Its week is selected; a later pick survives the next pop | `requestWhilePushed_popsAndSelects` |
+| A request handed in before the store has loaded | It wins over the week that holds today, and is not applied again after a pop | `requestBeforeLoad_winsOverToday` |
+| The root hosted again over the same store (a new run of its tasks) | The pick is kept | `hostedAgain_keepsThePick` |
+| The active program deleted (empty state), then made active again | The old request is not applied again | `programGoneAndBack_doesNotReapply` |
+| A week past the block (20 of 8) | Kept raw, drawn as the last week ("WEEK 8 · DELOAD"); the next pick holds | `requestOutOfRange_drawsTheLastWeek` |
+| Two requests in one go | The second's week; neither comes back after a pop | `twoRequestsAtOnce_theSecondWins` |
+| The extension move | `select(week:)` and `deliverRoute(to:)` have the same bodies and access; every store and root suite passes | `ProgramStoreTests` (host), the hosted suites |
+
+### Round 1's candidate note: can the Program tab's root be rebuilt while the router survives? No, on this branch
+
+- The router is `MainRoot`'s `@State`. `AppTabs` and `ProgramRoot` sit under it with no `.id` and no branch between them.
+- The only branch above is `AppRoot`'s switch on `composition.state` (`DatabaseLaunch.state`). It is set only when the database opens (`.ready` or `.databaseUnavailable`) and never goes back, so the router and the tabs live and go together.
+- The scene phase only re-keys `.task(id:)`s; it never changes the views' structure.
+- A tab switch keeps the tab's state: the on-screen week test passes in the real `AppTabs`, and a rebuilt root would have applied the old request again.
+- F08's onboarding branch will make a new `AppRouter()` (the orchestrator says so), so its request goes with it.
+
+Not a finding. No test beyond the on-screen one: a hosted test cannot reach the store that `AppTabs` builds.
+
+### Audit of the sanctioned edit to my file
+
+`Apps/LedgerUITests/ProgramTabAdversarial.swift`: **justified**. In `test_edgeSwipe_…` and `test_contentSwipe_…` only the
+pop's assertion is wrapped, in a strict `XCTExpectFailure` citing F11-S14-2. The gestures, the launch and the screenshot
+are unchanged, and the mark fails the day the swipe pops (the ruling: criterion 20 goes to a follow-up).
+
+### Runs (2026-10-19, in the worktree; every simulator command through the lock; iPhone 17, iOS 27.0)
+
+| Command | Exit |
+|---|---|
+| `swift test --filter 'DayEditorStoreAdversarialTests\|ProgramStoreTests'` | 0: 37 tests |
+| `xcodebuild … -testPlan PR -only-testing:` `ProgramStackAdversarialTests`, `ProgramWeekRequestAdversarialTests` | 65: 9 of 10 passed. The tenth, `requestOutOfRange_…`, failed on my oracle (it expected "WEEK 8"; the seed's week 8 is a deload, "WEEK 8 · DELOAD"); its other check passed. Fixed afterwards to `hasPrefix("WEEK 8")`; not re-run on the simulator |
+| `xcodebuild … -testPlan Nightly -only-testing:LedgerUITests/ProgramTabAdversarial` | 0: 3 passed, the two swipe tests as matched strict expected failures |
+| swiftformat `--lint`, swiftlint `--strict` on the new file | 0 |
+
+The result bundles were deleted after each run.
