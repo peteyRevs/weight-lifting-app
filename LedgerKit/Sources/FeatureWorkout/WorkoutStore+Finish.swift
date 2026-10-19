@@ -113,10 +113,13 @@ extension WorkoutStore {
             showReceipt(ended)
         } catch WorkoutSessionError.noLiveWorkout {
             // The ending update, waiting or still to come, says how it ended; `isSaving` stays until then.
-            settleDeferredEnd()
+            // A waiting update is judged only by the last call out: another call's answer still decides.
+            if finishesInFlight == 1 {
+                settleDeferredEnd()
+            }
         } catch {
-            guard !settleDeferredEnd(), !(error is CancellationError && Task.isCancelled), run == saveRun,
-                  exit == nil
+            let isSettled = finishesInFlight == 1 && settleDeferredEnd()
+            guard !isSettled, !(error is CancellationError && Task.isCancelled), run == saveRun, exit == nil
             else {
                 return
             }

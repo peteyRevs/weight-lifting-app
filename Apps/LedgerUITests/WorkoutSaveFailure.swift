@@ -34,7 +34,7 @@ final class WorkoutSaveFailure: XCTestCase {
         }
         XCTAssertTrue(
             app.buttons["workout.header.minimize"].waitForNonExistence(timeout: 10),
-            "saved: the cover is down"
+            "the live workout is gone: the receipt shows"
         )
         // F10 S7b (edited for the audit): the receipt shows first; its "Done" takes the cover down.
         XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt")

@@ -81,6 +81,18 @@
             #expect(sent == [.done])
         }
 
+        @Test("VoiceOver's escape on the receipt is Done")
+        func escape_isDone() throws {
+            let model = try #require(ReceiptPreview.withRecords.model)
+            var sent: [WorkoutAction] = []
+            let screen = WorkoutScreen(model: .receipt(model)) { sent.append($0) }.frame(height: 874)
+            let escaped = screen.withAccessibilityElements(outsideScrollViews: true) { elements in
+                elements.first?.accessibilityPerformEscape() ?? false
+            }
+            #expect(escaped)
+            #expect(sent == [.done])
+        }
+
         // MARK: Criterion 27: the real screen scrolls
 
         @Test("The receipt itself is its header pinned over one scroll view", arguments: [

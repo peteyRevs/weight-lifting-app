@@ -83,3 +83,58 @@ actor BestsSession: StatsQueries {
         try await base.recentlyLogged(limit: limit)
     }
 }
+
+/// The fake session whose `finish` calls each wait until the test answers them, in any order, with a state or
+/// an error: two calls out at once, as when the cover's tasks start again while the host is still saving.
+actor AnsweredFinishSession: WorkoutSessionClient {
+    struct Refused: Error {}
+
+    let base: FakeWorkoutSessionClient
+    private var calls: [CheckedContinuation<Result<WorkoutState, any Error>, Never>] = []
+    private var arrivals: [CheckedContinuation<Void, Never>] = []
+
+    init(live: WorkoutState) {
+        base = FakeWorkoutSessionClient(live: live)
+    }
+
+    func updates() async -> AsyncStream<WorkoutSessionUpdate> {
+        await base.updates()
+    }
+
+    func current() async throws -> WorkoutState? {
+        await base.current()
+    }
+
+    func start(_ initial: WorkoutState) async throws {
+        try await base.start(initial)
+    }
+
+    func apply(_ event: WorkoutEvent) async throws -> WorkoutState {
+        try await base.apply(event)
+    }
+
+    func finish(endedAt _: Date) async throws -> WorkoutState {
+        let answer = await withCheckedContinuation { continuation in
+            calls.append(continuation)
+            arrivals.forEach { $0.resume() }
+            arrivals = []
+        }
+        return try answer.get()
+    }
+
+    func discard(endedAt: Date) async throws {
+        try await base.discard(endedAt: endedAt)
+    }
+
+    /// Returns once `count` calls to `finish` have arrived.
+    func waitForCalls(_ count: Int) async {
+        while calls.count < count {
+            await withCheckedContinuation { arrivals.append($0) }
+        }
+    }
+
+    /// Answers the call that arrived `index`-th (from 0).
+    func answer(_ index: Int, with result: Result<WorkoutState, any Error>) {
+        calls[index].resume(returning: result)
+    }
+}

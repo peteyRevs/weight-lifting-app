@@ -9,8 +9,9 @@ import SwiftUI
 /// decides nothing about a workout. A tile whose `isAccented` is set has its label in orange (the
 /// prototype's "TIME"), and so has the records line; nothing on it is a control.
 ///
-/// At accessibility text sizes the tiles stand one per row, the note beside "LOGGED" goes under it, and a
-/// row's target stands under its name, so no word has to break. A tile's value stays on one line and
+/// At accessibility text sizes the tiles stand one per row and a row's target stands under its name, so no
+/// word has to break; the note beside "LOGGED" is then not drawn, since the targets are no longer on the
+/// right. A tile's value stays on one line and
 /// shrinks rather than wrap ("1,234,567"). Chips wrap (`WrapLayout`).
 ///
 /// VoiceOver reads each tile as one stop (its `spoken`, "TIME, 24 minutes, 22 seconds"), the records line,
@@ -118,11 +119,14 @@ public struct ReceiptLayout: View {
         return layout {
             Eyebrow(model.logged)
                 .frame(maxWidth: isStacked ? nil : .infinity, alignment: .leading)
-            Text(model.note)
-                .ledgerFont(.caption)
-                .foregroundStyle(LedgerColor.inkMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHidden(true)
+            // Stacked, a row's target stands under its name, not on the right, and the note would be false.
+            if !isStacked {
+                Text(model.note)
+                    .ledgerFont(.caption)
+                    .foregroundStyle(LedgerColor.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
         }
     }
 

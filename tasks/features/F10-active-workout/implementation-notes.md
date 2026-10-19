@@ -5880,14 +5880,17 @@ that makes a new record is felt once (criterion 36). **The live record stayed in
 
 ### How it works
 
-- **Which save shows a receipt** (criterion 25; `isSavedHere`). The finished state from `finish`'s answer always
-  does. From the stream's ending update, one does when a save is running (`isSaving`), the session was asked to
-  finish (`PendingSave.wasSent`), and the state is finished, of the workout being saved, **at the end that save
-  asked for**. So criterion 18's second outcome (the answer lost, the stream says finished) shows the receipt, and an
-  end another hand made first (criterion 17: before the call, or under it as `noLiveWorkout`) closes the cover as
-  `.saved` with no receipt. Criterion 18's third outcome (no finished state reaches the store) closes as before
-  (O7). After a failed save and "Close", R10 holds: the store keeps no knowledge of the waiting end, so a tap whose
-  `apply` completes it closes the cover as `.saved` with no receipt (S7a's `close_thenATap_completesTheSave`).
+- **Which save shows a receipt** (criterion 25; the rule as of fix round 1, its table below). A finished answer
+  of `finish` always does. The stream's ending update does, at once, when a save is running (`isSaving`) and the
+  workout being saved is finished at **any end this cover asked the session for** (`askedEnds`: this attempt's, or
+  an earlier one's that the host kept, as after a refused save, "Close" and "Save workout" again). An ending update
+  at another end, while a call to `finish` is out, waits for its answer (`deferredEnd`): finished shows the receipt;
+  `noLiveWorkout` or a failure judges it by `askedEnds`, so another hand's end (criterion 17, before the call or
+  under it) closes as `.saved` with no receipt. Only the last call out judges a waiting update (review N3). The
+  order of the answer and the update never changes the outcome. Criterion 18's second outcome (the answer lost, the
+  stream says finished at an asked end) shows the receipt; its third (no finished state reaches the store) closes
+  as before (O7). After a failed save and "Close" with no new save, `isSaving` is false and a tap whose `apply`
+  completes the waiting end closes the cover as `.saved` with no receipt (S7a's `close_thenATap_completesTheSave`).
 - **The receipt is set once** (`saved`), the sheet goes down, the queue is emptied, `isSaving` is false. While it
   shows, `send` answers `.done` alone. A later non-live update (the ending update after the answer, a new stream's
   first update with nothing live) leaves it up: only "Done" closes the cover, as `.route(.saved(id))`. A live
@@ -5990,7 +5993,11 @@ Each default is one small place.
 3. **O7: no receipt for a workout the cover did not see finish**, nor for one finished by another hand, nor after a
    failed save's "Close" when a later tap completes the save (R10). Place: `isSavedHere`.
 4. **O9: "Prescribed on the right"** stays when mirrored (the target is then on the left); its translator's comment
-   says it stands at the trailing edge.
+   says it stands at the trailing edge. **New (review SF1): at the accessibility sizes it is not drawn**, since a
+   row's target then stands under its name and the line would be false. Place: `ReceiptLayout.loggedHeader`. The
+   alternative, a second line ("Prescribed under each name"), would be new wording and a new key.
+   **New (review N7): VoiceOver's escape gesture on the receipt is "Done"**, as the sheet's is "Keep lifting"; the
+   contract names only the sheet's. Place: `ReceiptScreen`.
 5. **O10: a record made during the workout is felt, not shown.** One buzz for each record, so a set that beats both
    bests of an exercise buzzes twice; a record is felt at most once per exercise and kind in a cover, so a heavier
    set later in the same workout is not felt again. Place: `recordHaptics(in:)`.
@@ -6032,8 +6039,12 @@ record is in (about 30 lines). 50 of the lines are `send(_:)` moved into `Workou
 1. **`send(_:)` moved to `WorkoutStore+Intents.swift`**, and the three dismissals share one case
    (`dialogs(closedBy:)`): `WorkoutStore.swift` passed the lint's 300 lines and `send` its complexity of 10 with
    `.done`. Behaviour is unchanged; `startDiscard` and `dismiss` lost `private` for it.
-2. **Criterion 25's "from the ending update"** is narrowed to the end the save asked for (above), so criterion 17
-   keeps closing without a receipt; in the tests the date stands still, which is why `wasSent` is checked too.
+2. **Criterion 25's "from the ending update"** counts an end as this cover's when it is one the cover asked for
+   (`askedEnds`), and lets `finish`'s answer decide an end it did not ask for (above; fix round 1), so criterion 17
+   keeps closing without a receipt. **Sanctioned exception to criterion 16 (R10; review N2):** `askedEnds` keeps the
+   ends asked for past "Close". It is read only while a new save runs (`isSavedHere` requires `isSaving`), decides
+   only receipt-or-close for a save the lifter asked for again, and tells no reader anything; with no new save the
+   store behaves as S7a's after "Close".
 3. **`spokenElapsed` holds the time under `Int64.max` seconds**: the system's duration format traps on a saturated
    time (2^63 s), which criterion 34's "a start that is not finite" reaches.
 4. **The cut check leaves out the tiles' values** (they shrink by design, as the set rows' numerals do) and the
@@ -6083,3 +6094,25 @@ closes the cover as `.saved` with no receipt (S7a's `close_thenATap_completesThe
 
 **Runs**: host `FeatureWorkoutTests` 459 tests in 62 suites, all passed; the save and receipt suites five times in
 a row, 79 of 79 each; `LedgerAppKitTests` 183 and `LedgerDesignTests` 262 passed. The full gate: in the report.
+
+### S7b review round 1 (G1 implementer, 2026-10-19)
+
+On G3's `review.md`, "S7b — round 1" (approved; one should-fix, seven nits), as the orchestrator took them.
+
+| Item | What changed | Test |
+|---|---|---|
+| SF1 | "Prescribed on the right" is drawn only when the layout is not stacked; the model keeps the string. For Pete, beside O9 ("For the product owner" 4) | the three `accessibility3` references re-recorded (`receipt_accessibility3`, `receiptLayout` light and dark); the trees unchanged (the note was never a stop) |
+| N1 | "How it works", first bullet, and deviation 2 rewritten to the `askedEnds` rule | — |
+| N2 | `askedEnds` recorded as the sanctioned exception to criterion 16 (deviation 2) | — |
+| N3 | a waiting ending update is judged only by the last call to `finish` out (`finishesInFlight == 1`), in both `catch` branches | `WorkoutStoreReceiptTests.twoCallsOut_theLastAnswerDecides` (a new double, `AnsweredFinishSession`); it fails on the code before (the earlier call's failure closed the cover as `.saved`) |
+| N4 | `ReceiptPinnedHeader` (the header and its insets), drawn by both `ReceiptScreen` and `ReceiptParts` | the trees and references, unchanged |
+| N5 | a comment on `zip(summary.rows, finished.exercises)`; S9's input below | — |
+| N6 (sanctioned edit) | `Apps/LedgerUITests/WorkoutSaveFailure.swift` and `WorkoutSaveFailureAdversarial.swift`: "saved: the cover is down" now reads "the live workout is gone: the receipt shows"; the assertions are unchanged | — |
+| N7 | `.accessibilityAction(.escape) { send(.done) }` on `ReceiptScreen`. For Pete ("For the product owner" 4) | `ReceiptTests.escape_isDone` |
+
+**Input for S9** (N5): `WorkoutPresentation.receipt` zips the summary's rows with the workout's exercises,
+one row each in order (`WorkoutEngine.summary`). If superset rows change the summary's shape, the zip would
+drop rows silently: S9 pairs them by exercise, or makes the summary carry what the spoken row needs.
+
+**Product lines**: 651 against `16a2e52`, up from 639.
+

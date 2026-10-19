@@ -5,20 +5,34 @@ import SwiftUI
 /// `ScrollView { ReceiptPage(model:) }`, its one layout at every text size (standards §7). The VoiceOver
 /// trees and the references are taken from the header and the page stacked without the scroll view
 /// (`ReceiptParts`, in the tests). Nothing of the live workout is drawn: no rest panel, no timer.
+///
+/// VoiceOver's escape gesture is "Done", as the sheet's is "Keep lifting".
 struct ReceiptScreen: View {
     let model: ReceiptScreenModel
     let send: (WorkoutAction) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            ReceiptHeader(model: model.header, send: send)
-                .padding(.horizontal, LedgerSpacing.screen)
-                .padding(.vertical, LedgerSpacing.l)
+            ReceiptPinnedHeader(model: model.header, send: send)
             ScrollView {
                 ReceiptPage(model: model.page)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .accessibilityAction(.escape) { send(.done) }
+    }
+}
+
+/// The receipt's pinned part: its header, inset as the cover's header is. `ReceiptScreen` and the tests'
+/// `ReceiptParts` both draw this one view.
+struct ReceiptPinnedHeader: View {
+    let model: ReceiptHeaderModel
+    let send: (WorkoutAction) -> Void
+
+    var body: some View {
+        ReceiptHeader(model: model, send: send)
+            .padding(.horizontal, LedgerSpacing.screen)
+            .padding(.vertical, LedgerSpacing.l)
     }
 }
 

@@ -226,4 +226,32 @@ extension WorkoutStoreReceiptTests {
         #expect(FeatureWorkoutSourceTests.lines(of: ".task(id:store.bestsSubject)", in: source).count == 1)
         #expect(FeatureWorkoutSourceTests.lines(of: "awaitstore.readBests()", in: source).count == 1)
     }
+
+    // MARK: Fix round 1, review N3: the last call out decides a waiting update
+
+    @Test("With two calls out, an earlier call that fails leaves a waiting update to the last, whose answer decides")
+    func twoCallsOut_theLastAnswerDecides() async throws {
+        let running = try Save.logged(1)
+        let session = AnsweredFinishSession(live: running)
+        let scene = try Scene.on(session)
+        let (store, task) = await Self.following(scene)
+        store.send(.save)
+        let first = Task { await store.save() }
+        await session.waitForCalls(1)
+        // The cover's tasks start again while the first call is out: the same save is asked again.
+        let second = Task { await store.save() }
+        await session.waitForCalls(2)
+        // The session ends the workout at an end this cover never asked for: the update waits for an answer.
+        let ended = try await session.base.finish(endedAt: Fixtures.now.addingTimeInterval(-30))
+        await task.value
+        #expect(store.deferredEnd != nil)
+        await session.answer(0, with: .failure(AnsweredFinishSession.Refused()))
+        await first.value
+        #expect(store.exit == nil, "an earlier call's failure does not settle the waiting update")
+        #expect(store.deferredEnd != nil)
+        await session.answer(1, with: .success(ended))
+        await second.value
+        #expect(store.saved?.id == running.id, "the last call's finished answer is this cover's save")
+        #expect(store.exit == nil)
+    }
 }
