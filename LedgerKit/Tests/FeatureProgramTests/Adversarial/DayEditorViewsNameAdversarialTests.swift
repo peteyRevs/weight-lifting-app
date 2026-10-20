@@ -285,7 +285,8 @@
                 )
                 let isBlank = try shown.anything().isNull
                 #expect(isBlank == (!name.isEmpty && !isFocused), "focus \(isFocused): nothing is drawn: \(isBlank)")
-                #expect(try shown.letters(hidingTheField: true).isNull == !drawsItsOwn)
+                // The placeholder is drawn in faint ink (review S14 SF-2), never as the name's letters.
+                #expect(try shown.letters(hidingTheField: true).isNull)
             }
             #expect(shown.field.placeholder == "Day name")
         }

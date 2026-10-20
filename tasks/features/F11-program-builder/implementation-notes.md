@@ -5925,4 +5925,17 @@ On `116099e` (`review.md` "S14 — round 1"); the orchestrator's rulings.
 | **N-5** | `Tabs.swift`'s row added to the sanctioned table above |
 | **N-6 (for the swipe-back follow-up only)** | `.closeDay` names no day and pops whichever Day editor is on top. Right while only the top editor can emit. When the follow-up gives the swipe back, consider `.closeDay(DayTemplateID)`, popping only a matching top, so a close delivered as a swipe pops cannot pop another editor |
 
-No tester's file was edited this round.
+One tester's file was edited this round: `Adversarial/DayEditorViewsNameAdversarialTests.swift`,
+`emptyName_showsThePlaceholderOnce`. The line `letters(hidingTheField: true).isNull` goes back to the tester's
+original. Fix round 0 had tied it to the placeholder, because the system grey was bright enough to count as
+letters. In `inkFaint` the placeholder is no longer letters, and it is still required through
+`anything(hidingTheField: true)` (sanctioned: SF-2).
+
+**SF-2's screenshot** (`Builder.test_wrappedName_…`, attachment "Builder, a draft of only spaces", iPhone 17,
+iOS 27.0, `.accessibilityXL`): one placeholder, "Program name", drawn in the token's grey on the name's own line,
+and no second image. The caret stands after the three spaces, inside the "P" (the review's "For Pete"). The
+field's own empty prompt is not in that shot. Its line matches by construction: `ledgerFieldFont` puts the
+field's letters on the line of a text of the same role.
+
+**References:** none changed. No snapshot draws an empty or blank name, and the gate's snapshot suites
+compared clean.
