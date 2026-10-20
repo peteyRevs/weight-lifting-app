@@ -1471,3 +1471,48 @@ amendment).
 - **Stability of the three `Onboarding` UI tests beyond three green runs:** no repetition run exists.
 - **Whether the nightly plan is run on a schedule anywhere,** coverage, watchOS, CI.
 - **Swift Testing's failure record** (the hazard's cure), and the tester's files.
+
+## G3 review, round 2 (2026-10-20): after merging `main` (761db7e, 4a9e2b0, aaea03c, ca5b507)
+
+Read-only review; no tests run. **APPROVED**, no must-fix.
+
+**Merged tree:** coherent.
+- `MainRoot` carries F08's `content`/`newRouter` beside S14's `onProgramRoute`.
+- `AppRouter.programWeek` goes with the old router when onboarding appears (R4).
+- `AppRoot`, `AppComposition` and `LaunchedApp` are unchanged by the merge.
+- S7b's `Smoke` and `WorkoutSaveFailure*` edits sit inside seeded launches.
+
+**SF1:** done in code.
+- The seed line is in `BuilderApp.launch` (Builder.swift:154).
+- `Tabs` is stronger: the eyebrow plus `Program name` == "Upper / Lower", which ProgramTemplates+Splits.swift:91 confirms.
+- `TabsAdversarial` is equivalent.
+- The AX5 exclusion's new reason holds.
+
+**Launches:** every launch carries the seed line except the `fresh()` ones (Onboarding, OnboardingAdversarial, Smoke's fresh install, DebugMenu, LaunchPerformance), which is correct.
+
+### Should fix
+
+**SF-A.** `AppRootResetAdversarialTests` (:23, :39, :49; AppRootGateAdversarialHosting.swift:46-48).
+- `labels == []` on `.program` is exactly Today's reading. Only `router.selectedTab` proves the tab, and that reads state, not what is drawn.
+- `tabsAgain.isTabs` (:49) catches a selection that survived onto Program only while the builder is still `.loading`. That is 2 of 6 iterations.
+- Fix: put the drawn tab bar's selection in `GateShown`, require `selected == "Today"` in `isTabs`, and expect `shown.selected` at :39 and :82. Add `router.selectedTab == .today` after :49, and update notes :1066-1070.
+
+**SF-B.** The nightly `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` is red with 26 builder issues (contrast, partial Dynamic Type, clipping), the first audit of the builder at week 5.
+- It needs a recorded ruling and an owner before the push.
+- Say what the re-run covered: only Builder and Tabs, 7 of 7.
+
+### Nits
+- **N1:** delete the untracked `Apps/LedgerUITests/ZZTemporaryScreenshots.swift`. The groups are synchronized, so it would compile and run. Stage named paths.
+- **N2:** notes :1095 should say 19 launches in 15 files; :1103 should point to the new "Sanctioned edits after merging main…" section.
+- **N3:** hand the `Builder.test_wrappedName_…:80` "A l" flake to F11's test findings.
+- **N4:** comment `GateTabsStandIn`'s `Text("Program")` (AppRootGateAdversarialHosting.swift:78) as the pre-S14 placeholder.
+
+### Orchestrator's ruling on SF-B (2026-10-20)
+
+Exclude nothing. The 26 issues go to F11's test findings as a follow-up slice with an owner, and the nightly stays red on that one test until it lands. F09 measured Today's audit issues the same way before excluding any.
+
+**Taken in `2aac7a3`:**
+- SF-A: `GateShown.selected`, `isTabs` needs Today selected. Mutant `MainRoot .onAppear {}` was caught.
+- SF-B: F11-S14-5 (the 26 audit issues) and F11-S14-6 (the "A l" flake) are in F11 test-findings.
+- N1, N2 and N4 are done.
+- The dark "Today after Start training" screenshot could not be taken: the simulator draws light with the appearance set to dark (the same environment issue as the accent test).
