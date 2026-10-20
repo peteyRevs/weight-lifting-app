@@ -1924,3 +1924,45 @@ No wording invented: "OK" is question 1's; the Day editor's failed state reuses 
 Any simulator or UI test run; the iOS-hosted root suites and `LedgerAppKitTests` (not run on the host); the
 adversarial bodies line by line beyond their waits; the by-hand budgets (criterion 27, S13's measurement stands);
 whether re-tapping the Program tab pops to the builder on iOS 27 (it bears on should-fix 1's severity only).
+
+## S14 — round 2 (G3 reviewer, 2026-10-19)
+
+Pass on `git diff 116099e..49c2515` (fix commits `2487ebd`, `49c2515`; the notes' "S14 — review round 1 fixes").
+Host `swift test --filter 'DayEditorStore|ExercisePickerStore|ProgramStoreTests|ProgramReRead|FeatureProgramSourceTests'`
+at `49c2515`: 64 tests in 6 suites passed. The iOS-hosted suites (`DayEditorRootTests`,
+`DayEditorViewsNameAdversarialTests`) are left to the orchestrator's full gate; no simulator run.
+
+**Verdict: approve.** Blocking 0 · Should fix 0 · Nit 2. Every round-1 item is resolved as asked:
+
+- **SF-1:** `.failed` draws the editor's own bar, `PillButton(ProgramCopy.backToProgram, …)` sending
+  `.route(.closeDay)`, over `ProgramMessage` (`DayEditorRoot.swift:70-83`). No new copy. `closeIfDone` closes at
+  once when nothing waits and still waits for a write in flight, so leaving from the failed state follows
+  criterion 17. The system bar stays hidden, so a normal push has no flicker.
+- **SF-2:** an explicit `prompt:` in `LedgerColor.inkFaint`, and the placeholder over spaces drawn in the same token
+  (`NameField.placeholderColor`). The two match by construction, and no system style is left in the feature.
+  The notes record the screenshot check of the line.
+- **SF-3:** `DayEditorStore+Sources.swift` is in `storeFiles`.
+- **N-1:** a failed write while the sheet is up closes it and holds the alert until `.sheet(onDismiss:)` calls
+  `libraryClosed()`. It is said once (pinned by `failedWrite_whileTheLibraryIsUp_closesItAndSaysSoAfter`), and
+  "Add" or "Cancel" dismissals leave the flag false. The binding's setter does not send `.cancel` for this
+  programmatic close, since `isShown` is already false.
+- **N-2:** `failedState_isKeptThroughANewRun` now waits for the second observation (`CountingPrograms` over a gated
+  `HeldSecondPrograms`) before it checks `.failed`, so the check means something. The new double's inner
+  `Task` lives in test support, outside the sources' conventions.
+- **N-3** (title), **N-4** (F11-S14-2 cited), **N-5** (the `Tabs.swift` row) and **N-6** (recorded for the swipe
+  follow-up) are done as suggested.
+- **The sanctioned tester edit:** `DayEditorViewsNameAdversarialTests.swift:285` is byte for byte the tester's
+  original at `16a2e52` (`#expect(try shown.letters(hidingTheField: true).isNull)`), with a comment above it. The
+  placeholder is still required through the `anything(hidingTheField: true)` line, which keeps its round-0
+  sanctioned edit. This is justified: the system grey counted as letters and `inkFaint` does not.
+
+Nits (neither blocks):
+1. `DayEditorRootTests.root_drawsTheFailedMessage` reads "Program" among the labels but then sends
+   `.route(.closeDay)` itself rather than activating the drawn button. The wiring is one line, but activating
+   the element (as `accessibilityElements()`'s helpers allow) would pin it.
+2. N-1's programmatic close keeps the query and picks (notes say so). The next opening then shows the failed
+   attempt's picks, which is reasonable, since the lifter may want to add them again. It is a small difference
+   from "Cancel" empties them, for Pete only if he asks.
+
+For Pete: the placeholder over a blank name is now the faint ink token, the same as the empty field's prompt.
+The caret still stands after the spaces, inside the "P" (Builder screenshot "a draft of only spaces").
