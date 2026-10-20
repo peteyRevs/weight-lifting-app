@@ -139,10 +139,15 @@ nonisolated extension ExercisePickerModel {
         try #require(rows.first { $0.name == name }, "no row \(name) among \(rows.count) rows")
     }
 
-    /// "2 Leg Press · 1 Back Squat" sorted by place: "1 Back Squat · 2 Leg Press". The picked rows that are
-    /// listed, by their marks.
+    /// "1 Back Squat · 2 Leg Press": the picked rows that are listed, each by its place in the order "Add"
+    /// adds them (the rows carry no place of their own since S14, Pete's question 4).
     var pickLine: String {
-        rows.filter(\.isPicked).map { "\($0.pickMark ?? "?") \($0.name)" }.sorted().joined(separator: " · ")
+        guard case let .add(ids)? = foot.action else {
+            return ""
+        }
+        return ids.enumerated().compactMap { place, id in
+            rows.first { $0.id == id && $0.isPicked }.map { "\(place + 1) \($0.name)" }
+        }.joined(separator: " · ")
     }
 }
 
@@ -155,5 +160,21 @@ nonisolated extension ExercisePickerModel.ChipRow {
     /// The titles of the chips marked selected.
     var selected: [String] {
         chips.filter(\.isSelected).map(\.title)
+    }
+}
+
+/// The row's grey line in its parts, for the tests that read one: the model has the line alone since S14
+/// (Pete's question 4, A: the mark is drawn as the end of the line).
+nonisolated extension ExercisePickerModel.Row {
+    private static let mark = " · already in this day"
+
+    /// Whether the line ends with "already in this day".
+    var isMarkedInDay: Bool {
+        line.hasSuffix(Self.mark)
+    }
+
+    /// "Machine · Back": the line without the mark.
+    var detail: String {
+        isMarkedInDay ? String(line.dropLast(Self.mark.count)) : line
     }
 }

@@ -15,13 +15,13 @@ nonisolated extension ExercisePickerPresentationTests {
         let model = try ExercisePickerPresentation.make(Fixture.input(dayExercises: [squat]))
         let inDay = try model.row("Back Squat")
         #expect(inDay.detail == "Barbell · Quads")
-        #expect(inDay.inDayMark == "already in this day")
+        #expect(inDay.isMarkedInDay)
         #expect(inDay.line == "Barbell · Quads · already in this day")
         let other = try model.row("Lat Pulldown")
         #expect(other.detail == "Cable · Back")
-        #expect(other.inDayMark == nil)
+        #expect(!other.isMarkedInDay)
         #expect(other.line == "Cable · Back")
-        #expect(model.rows.count { $0.inDayMark != nil } == 1)
+        #expect(model.rows.count(where: \.isMarkedInDay) == 1)
     }
 
     @Test("Every kind of equipment and every muscle group has its word on a row")
@@ -43,7 +43,7 @@ nonisolated extension ExercisePickerPresentationTests {
         try screen.tapRow("Back Squat")
         let row = try screen.model.row("Back Squat")
         #expect(row.isPicked)
-        #expect(row.inDayMark == "already in this day")
+        #expect(row.isMarkedInDay)
         #expect(screen.model.foot.action == .add([squat]))
     }
 
@@ -51,7 +51,6 @@ nonisolated extension ExercisePickerPresentationTests {
     func picks_carryTheirPlace_andUnpick() throws {
         var screen = try PickerScreen(Fixture.input())
         #expect(try screen.model.row("Leg Press").isPicked == false)
-        #expect(try screen.model.row("Leg Press").pickMark == nil)
         for name in ["Leg Press", "Back Squat", "Lat Pulldown"] {
             try screen.tapRow(name)
         }
@@ -122,7 +121,7 @@ nonisolated extension ExercisePickerPresentationTests {
         let none = try ExercisePickerPresentation.make(Fixture.input(picks: [gone], dayExercises: [gone]))
         #expect(none.foot.action == nil)
         #expect(none.rows.count == 224)
-        #expect(none.rows.allSatisfy { !$0.isPicked && $0.inDayMark == nil })
+        #expect(none.rows.allSatisfy { !$0.isPicked && !$0.isMarkedInDay })
     }
 
     // MARK: Criterion 11: the picks become slots through the Domain

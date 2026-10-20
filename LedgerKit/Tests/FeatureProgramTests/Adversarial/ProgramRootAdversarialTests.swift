@@ -61,18 +61,21 @@
                 await rig.probe.hold(.updateProgram)
                 rig.store.send(.addDay(name: "Day 5", weekIndex: 4))
                 try await rig.probe.waitUntilHeld()
-                // A route of its own, handed on while the day's write is held: the app has been handed what
-                // waits by the time it arrives.
+                // Sanctioned edit (S14, F11-S13-12): a route of its own sent while the day's write is held is
+                // dropped, so that the new day's route finds its place free when the write returns. Before S14
+                // it was handed on, and the new day's route was then dropped.
                 rig.store.send(.route(.closeDay))
-                await s13Until { handed.routes.contains(.closeDay) }
-                #expect(handed.routes == [.closeDay], "no Day editor before its day is stored")
+                #expect(
+                    rig.store.pendingRoute == nil && handed.routes.isEmpty,
+                    "no Day editor before its day is stored"
+                )
                 await rig.probe.release()
-                await s13Until { handed.routes.count == 2 }
-                #expect(handed.routes == [.closeDay, .day(DayTemplateID(S13IDs.id(0)), weekIndex: 4)])
+                await s13Until { handed.routes.count == 1 }
+                #expect(handed.routes == [.day(DayTemplateID(S13IDs.id(0)), weekIndex: 4)])
                 #expect(try await rig.storedProgram()?.days.count == 5)
                 // Nothing more is handed on: one more route, as a sentinel, arrives alone.
                 rig.store.send(.route(.closeDay))
-                await s13Until { handed.routes.count == 3 }
+                await s13Until { handed.routes.count == 2 }
                 #expect(handed.routes.last == .closeDay)
             }
         }

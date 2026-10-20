@@ -36,13 +36,16 @@ struct ProgramReReadAdversarialTests {
         }
     }
 
-    @Test("An emission during each of twenty reads: the loop ends after the twenty-first, on what the store holds")
-    func emissionDuringEveryRead_endsWhenTheStoreGoesQuiet() async throws {
+    @Test("An emission during every read: the reading stops at its bound on the last read; the next edit heals it")
+    func emissionDuringEveryRead_stopsAtTheBound() async throws {
+        // Sanctioned edit (S14, G3 round-2 note 2, F11-S13-11): the loop is bounded. Before S14 it read until
+        // the store went quiet, twenty-one reads for twenty emissions.
+        let bound = ProgramEditSession<ProgramBuilderEdit>.readsAfterAWrite
         let hook = S13ReadHook()
         let rig = try S13Rig { S13HookedPrograms(base: $0, hook: hook) }
         let memory = rig.memory
         hook.set { read in
-            if read <= 20 {
+            if read <= bound {
                 try await Self.writeMisses(memory, [read % 3])
             }
         }
@@ -53,17 +56,21 @@ struct ProgramReReadAdversarialTests {
         }
         try await Self.renameHeardDuringItsWrite(rig)
         await rig.probe.release()
-        // An edit made while the session reads waits, and is written once the reading is done.
+        await rig.settled()
+        #expect(hook.reads == bound, "one read per emission heard, up to the bound")
+        let stored = try #require(try await rig.storedProgram())
+        #expect(stored.name == "Waiting")
+        #expect(rig.session.shown?.name == "Waiting", "the last read holds the write")
+        let isBehind = rig.session.shown?.days[0].slots[0].misses != stored.days[0].slots[0].misses
+        #expect(isBehind, "what was heard during the last read is not drawn")
         rig.store.send(.edit(.setDeload(true, week: 1)))
         await rig.settled()
-        let stored = try #require(try await rig.storedProgram())
-        #expect(hook.reads == 21, "one read per emission heard, then one undisturbed")
-        #expect(stored.name == "Waiting")
-        #expect(stored.week(at: 1)?.isDeload == true)
-        #expect(rig.session.shown == stored)
+        let healed = try #require(try await rig.storedProgram())
+        #expect(healed.week(at: 1)?.isDeload == true)
+        #expect(rig.session.shown == healed)
     }
 
-    @Test("A read that throws on the second turn keeps the returned program, as R6 rules; the next edit heals it")
+    @Test("A read that throws on the second turn keeps the first read, which holds the write; the next edit heals it")
     func readThrowsOnTheSecondTurn_keepsTheNewest() async throws {
         let hook = S13ReadHook()
         let rig = try S13Rig { S13HookedPrograms(base: $0, hook: hook) }
@@ -87,11 +94,11 @@ struct ProgramReReadAdversarialTests {
         await rig.settled()
         let stored = try #require(try await rig.storedProgram())
         #expect(stored.days[0].slots[0].misses == [1])
-        // R6 as re-amended: a read that throws at any turn keeps the program `update` returned (no misses),
-        // although the first read found a newer one ([0, 1]); the store holds [1]. Pinned as ruled; finding
-        // F11-S13-10 suggests keeping the last read instead. The next edit heals it.
+        // Sanctioned edit (S14, F11-S13-10): a read that throws keeps the last read that answered, the first
+        // ([0, 1]), not the older program `update` returned (no misses); the store holds [1]. The next edit
+        // heals it.
         #expect(rig.session.stored?.name == "Waiting", "the write is shown")
-        #expect(rig.session.stored?.days[0].slots[0].misses == [], "as ruled: the returned program")
+        #expect(rig.session.stored?.days[0].slots[0].misses == [0, 1], "the last read that answered")
         rig.store.send(.edit(.setDeload(true, week: 1)))
         await rig.settled()
         #expect(try await rig.session.shown == (rig.storedProgram()))

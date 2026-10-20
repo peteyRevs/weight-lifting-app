@@ -76,7 +76,6 @@ nonisolated extension DayEditorPresentation {
             sub: sub,
             scheme: scheme,
             load: load,
-            hasDropSet: slot.dropSets > 0,
             isOpen: isOpen,
             spokenLabel: ProgramCopy.spokenRow(index: index, name: name, locale: locale),
             spokenValue: ([scheme] + (load.map { [$0] } ?? []) + [sub]).joined(separator: separator),

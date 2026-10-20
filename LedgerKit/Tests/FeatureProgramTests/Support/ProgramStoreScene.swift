@@ -209,20 +209,37 @@ extension ProgramStore.State {
 }
 
 /// A program store that counts how often its active program is observed: once by each run of the store.
+/// A test waits for a count on `counts`, which says each new count as it is reached, so no wait depends on
+/// what a store happens to write meanwhile (G3 S13 round 2, note 3).
 final nonisolated class CountingPrograms: ProgramRepository {
     private let base: any ProgramRepository
     private let count = Mutex(0)
+    private let counted: AsyncStream<Int>.Continuation
+    /// Each count of observations as it is reached, 1 first. One test reads it, one wait at a time.
+    let counts: AsyncStream<Int>
 
     init(base: any ProgramRepository) {
         self.base = base
+        (counts, counted) = AsyncStream.makeStream()
     }
 
     var observations: Int {
         count.withLock { $0 }
     }
 
+    /// Returns once the active program has been observed `times` times.
+    func observed(_ times: Int) async {
+        for await reached in counts where reached >= times {
+            return
+        }
+    }
+
     func observeActive() -> AsyncStream<Program?> {
-        count.withLock { $0 += 1 }
+        let reached = count.withLock { count in
+            count += 1
+            return count
+        }
+        counted.yield(reached)
         return base.observeActive()
     }
 

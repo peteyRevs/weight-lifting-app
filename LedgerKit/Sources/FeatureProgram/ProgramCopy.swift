@@ -116,7 +116,7 @@ nonisolated enum ProgramCopy {
         String(
             localized: "REST",
             bundle: .module,
-            comment: "A weekday with no training day, in the week's schedule; also the label of the stepper for rest"
+            comment: "A weekday with no training day, in the week's schedule"
         )
     }
 

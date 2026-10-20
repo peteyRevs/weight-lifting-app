@@ -154,7 +154,6 @@ nonisolated struct DayEditorOfferedAdversarialTests {
         #expect(AdvDay.rows(turnedOn).map(\.sub) == [
             "Barbell · +5/wk · drop · RPE 8 · 1:30 rest", "Barbell · +5/wk · RPE 8 · 1:30 rest"
         ])
-        #expect(AdvDay.rows(turnedOn).map(\.hasDropSet) == [true, false])
         #expect(AdvDay.content(turnedOn)?.header.meta == "Week 1 · 2 exercises · 7 sets · ~15 min")
         let again = AdvDay.apply(off.action, to: turnedOn).input
         let isSame = again.program == turnedOn.program

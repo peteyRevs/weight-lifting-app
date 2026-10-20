@@ -18,10 +18,8 @@ nonisolated extension ProgramCopyTests {
         #expect(ProgramCopy.delete == "Delete")
         #expect(ProgramCopy.cancel == "Cancel")
         #expect(ProgramCopy.heldMark == "HELD")
-        #expect([
-            ProgramCopy.setsLabel, ProgramCopy.repsLabel, ProgramCopy.repFloorLabel, ProgramCopy.topOfRangeLabel,
-            ProgramCopy.startLoadLabel, ProgramCopy.targetRPELabel, ProgramCopy.rest
-        ] == ["SETS", "REPS", "REP FLOOR", "TOP OF RANGE", "START LOAD", "TARGET RPE", "REST"])
+        #expect(ProgramCopy.rest == "REST")
+        #expect(ProgramCopy.okay == "OK")
         #expect(ProgramCopy.progressionTitle == "PROGRESSION")
         #expect(Progression.allCases.map(ProgramCopy.progression) == ["Linear", "Double", "Fixed"])
         #expect(ProgramCopy.dropSet == "Drop set")

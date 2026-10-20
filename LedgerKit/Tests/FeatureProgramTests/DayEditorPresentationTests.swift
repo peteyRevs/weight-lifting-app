@@ -50,7 +50,6 @@ nonisolated struct DayEditorPresentationTests {
         ])
         let upperB = try DayEditorPresentation.make(DayEditorFixtures.seedInput(dayIndex: DayIndex.upperB)).content()
         #expect(upperB.rows.last?.sub == "Barbell · Reps 12–14 · drop · RPE 9 · 1 min rest")
-        #expect(upperB.rows.map(\.hasDropSet) == [false, false, false, true])
         #expect(upperB.rows.first?.sub == "Bodyweight · +2.5/wk · RPE 8 · 2:30 rest")
     }
 

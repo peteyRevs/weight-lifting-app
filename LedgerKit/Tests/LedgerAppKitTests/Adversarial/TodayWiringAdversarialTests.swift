@@ -76,7 +76,12 @@ struct TodayWiringAdversarialTests {
             case .openWorkout:
                 #expect(router.selectedTab == .history && depths == [0, 1, 0, 1], "\(route)")
                 #expect(launcher.request == nil)
-            case .editWeek, .openProgram, .setUpProgram:
+            case .editWeek:
+                // Sanctioned edit (F11 S14, criterion 23 and Pete's question 2, A): "Edit this week" lands on
+                // the builder, so the Program tab's stack is emptied.
+                #expect(router.selectedTab == .program && depths == [0, 0, 0, 1], "\(route)")
+                #expect(launcher.request == nil)
+            case .openProgram, .setUpProgram:
                 #expect(router.selectedTab == .program && depths == [0, 1, 0, 1], "\(route)")
                 #expect(launcher.request == nil)
             case .settings:

@@ -1,3 +1,4 @@
+import FeatureProgram
 import FeatureToday
 import LedgerDesign
 import SwiftUI
@@ -8,12 +9,15 @@ import SwiftUI
 /// contrast in both themes, and each stack sets the tint back to the system's, so that nothing a tab draws is
 /// tinted unless the screen tints it (product decision #17: the accent once per screen).
 ///
-/// Today draws `FeatureToday`'s root, which is handed where its routes go; the other three show a
-/// `PlaceholderScreen` until F11–F13 replace them, one line each.
+/// Today draws `FeatureToday`'s root and Program `FeatureProgram`'s builder, each handed where its routes go;
+/// the builder is also handed the week the router was last asked to select. Library and History show a
+/// `PlaceholderScreen` until F12 and F13 replace them, one line each.
 struct AppTabs: View {
     @Bindable var router: AppRouter
     /// Where Today's routes go: `MainRoot` resolves them with the router and the workout's presenter.
     var onTodayRoute: @MainActor (TodayRoute) -> Void = { _ in }
+    /// Where the Program screens' routes go: `MainRoot` resolves them with the router.
+    var onProgramRoute: @MainActor (ProgramRoute) -> Void = { _ in }
     /// Debug builds: opens the debug menu (F07 criterion 7).
     var onTodayTitleLongPress: () -> Void = {}
 
@@ -23,7 +27,7 @@ struct AppTabs: View {
                 stack(.today) { TodayRoot(onRoute: onTodayRoute, onTitleLongPress: onTodayTitleLongPress) }
             }
             Tab(AppCopy.title(of: .program), systemImage: "calendar", value: AppTab.program) {
-                stack(.program) { PlaceholderScreen(AppCopy.title(of: .program), identifier: "program.title") }
+                stack(.program) { ProgramRoot(week: router.programWeek, onRoute: onProgramRoute) }
             }
             Tab(AppCopy.title(of: .library), systemImage: "dumbbell", value: AppTab.library) {
                 stack(.library) { PlaceholderScreen(AppCopy.title(of: .library), identifier: "library.title") }
@@ -51,7 +55,12 @@ struct AppTabs: View {
     @ViewBuilder
     private func screen(for destination: AppDestination) -> some View {
         switch destination {
-        case .settings: PlaceholderScreen(AppCopy.settingsTitle, identifier: "settings.title")
+        case .settings:
+            PlaceholderScreen(AppCopy.settingsTitle, identifier: "settings.title")
+        case let .day(day, weekIndex):
+            // A screen and a store per route (ruling R8): another day pushed in its place is drawn anew.
+            DayEditorRoot(day: day, weekIndex: weekIndex, onRoute: onProgramRoute)
+                .id(destination)
         }
     }
 }

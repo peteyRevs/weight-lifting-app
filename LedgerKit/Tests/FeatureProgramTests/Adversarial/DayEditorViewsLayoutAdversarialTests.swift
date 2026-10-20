@@ -80,7 +80,7 @@
             let seed = try #require(ProgramPreview.dayEditor.dayEditorModel().rows.first)
             let row = DayEditorModel.Row(
                 id: seed.id, index: seed.index, name: name, sub: seed.sub, scheme: seed.scheme, load: load,
-                hasDropSet: false, isOpen: false, spokenLabel: seed.spokenLabel, spokenValue: seed.spokenValue,
+                isOpen: false, spokenLabel: seed.spokenLabel, spokenValue: seed.spokenValue,
                 action: seed.action, panel: nil
             )
             return ExerciseRow(row: row) { _ in }
@@ -161,7 +161,7 @@
             let field = try #require(ProgramPreview.dayOpenLinear.dayEditorModel().openRow?.panel?.details?.fields
                 .first)
             let bare = SlotEditorModel.Field(
-                kind: field.kind, label: "", value: "", spokenLabel: "", decrement: field.decrement,
+                kind: field.kind, value: "", spokenLabel: "", decrement: field.decrement,
                 increment: field.increment
             )
             let box = try Self.inkBox(of: SlotStepper(field: bare) { _ in }, size)
