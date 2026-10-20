@@ -1109,3 +1109,78 @@ Scratch folder `f08s23-g2/`; simulator runs through the lock with `ios.sh` (as t
 | sim, Nightly plan, `TabsAdversarial` audit + `Smoke` + `DebugMenu` (`ui`) | 65: the audit (F8-S2S3-4); 5 of 6 passed |
 
 Result bundles `g2-*.xcresult` deleted after reading; no process of mine is running.
+
+## Slices S2 and S3 — the port, round 2 (G2 tester, 2026-10-19)
+
+Re-test of fix round 1 (`6397035`, plus `3be001e`, notes only) on `feat/F08-s2-onboarding` @ `3be001e`. Scratch
+`f08s23-g2/`, runs through the lock; result bundles deleted after reading. No product code edited.
+
+**Result: F8-S2S3-4 resolved. The accent test's dark half is the environment's, not the port's: a chore.
+No Blocking or Major finding is open; round closed.**
+
+### Status of round 1's findings
+
+| ID | Status |
+|---|---|
+| F8-S2S3-1 (test quality, mine) | Fixed in `32d13f6` |
+| F8-S2S3-2, -3 (notes) | Kept as notes; no change asked |
+| F8-S2S3-4 (Major) | **Resolved** by `6397035`; the edit is audited below |
+
+### Audit of the sanctioned edit (`TabsAdversarial.swift:133-137`)
+
+- The edit is `launch()` → `launch(["-LEDGER_UITEST_NOW", "2026-09-16T12:00:00Z"])` in
+  `test_everyTabRoot_passesTheSystemsAccessibilityAudit` alone, with a comment that names the finding. Nothing
+  else in the file changed. `TodayAuditExclusions` is unchanged.
+- The instant is the one that `Today` and `TodayAuditAdversarial` use: Wednesday of week 5 of the seed block,
+  Lower A. Those exclusions were measured at that instant. The audit's one Today-specific exclusion (`:147`)
+  still applies.
+- **Keeping the other tests undated is sound, and I accept the ruling.** `:33`, `:45` and `:65` read the title
+  "Today". Over the seed program, Today shows that title only with no program or after the block. The block is
+  fixed (from 2026-08-17, eight weeks) and the real date only moves on, so these reads are stable from
+  2026-10-12 onward.
+  - The hidden dependency is now `Fixtures.seedProgram()`'s start date: moving the seed block later would turn
+    these three red.
+  - Before the port they leaned on "No program yet" in the same way.
+  - Recorded as a note (F8-S2S3-5). The notes' F09 follow-up (pin them after the block once F09 owns that
+    state) is the right home for it.
+- Nightly `TabsAdversarial`, whole suite (`r2tabs`): **7 tests, 6 passed**, the audit among them. The one
+  failure is `test_selectedTab_isDrawnInTheAccent_andNoOtherIs_lightAndDark`, `:86`, "Today selected: Today is
+  not in the accent". Exit 65.
+
+### The accent test's dark half: always red, and not the port's
+
+- **Three more runs** (`-test-iterations 3`, `r2accent`): **3 of 3 failed**, all at `:86`. With the suite run
+  that is 4 of 4, plus the implementer's 2 of 2. The failure is deterministic, not timing-dependent.
+- **The "Today-dark" screenshot, exported from the bundle, is the light theme.** It is identical to
+  "Today-light": cream bar, deep accent. The test captures it after it has waited for the tab bar and tapped
+  each tab. A running app follows a change of the system's appearance, so a late appearance would still have
+  arrived by then. The app was never told dark; this is not a race with the first frame.
+- **A probe outside XCTest** (`probe.sh`, under the lock): `simctl ui <sim> appearance dark` (simctl then reports
+  `dark`), then `simctl launch com.petearevalo.Ledger -LEDGER_UITEST 1 -LEDGER_UITEST_PROGRAM seed`, then a
+  screenshot (`probe-dark.png`).
+  - **The status bar, which the system draws, is light (black text), and so is the app.**
+  - The app installed at that moment was another lane's pre-port build: it opened on Today's "No program yet",
+    with no gate. So an app without the port's gate also stays light on this simulator.
+  - The simulator reported `dark` before the probe too, though the screens are light: its appearance setting is
+    not taking effect.
+- **Verdict: a chore, not a finding against the port.** The port only changes when the tabs appear; it gives
+  the appearance more time to arrive, not less, and no line it adds names a colour scheme. The shared iPhone 17
+  simulator (iOS 27.0) does not apply an appearance change here, through `XCUIDevice.appearance` or through
+  `simctl`.
+  - For the chore: look at the simulator's state, or erase it when no lane holds it, and re-run the test.
+  - Then, if it still fails, make the test assert that the asked appearance took effect (the status bar, or a
+    known element's colour) before it measures, so an environment failure reads as one.
+- The simulator's appearance was put back to `dark`, the value it had before my probe.
+
+5. **F8-S2S3-5 — note.** Three undated `TabsAdversarial` reads of "Today" depend on the seed block having ended
+   by the real date. They are stable from 2026-10-12 as long as `Fixtures.seedProgram()`'s dates do not move
+   later. For F09's follow-up; no action in this slice.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| sim, Nightly plan, `-only-testing:LedgerUITests/TabsAdversarial` (`r2tabs`) | 65: 6 of 7 passed; the accent test failed |
+| sim, Nightly plan, the accent test, `-test-iterations 3` (`r2accent`) | 65: 3 of 3 failed |
+| `probe.sh` (simctl dark, launch, screenshot, then light), under the lock | 0 |
+| `simctl ui … appearance dark` (put back), under the lock; read back `dark` | 0 |
