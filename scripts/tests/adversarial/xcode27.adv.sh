@@ -326,8 +326,8 @@ for w in "$WF"/*.yml; do json "$w" >"$T/$(basename "$w" .yml).json"; done
 jobs="$(for w in "$WF"/*.yml; do
     jq -r --arg w "$(basename "$w")" '.jobs | to_entries[] | "\($w):\(.key)=\(.value."runs-on" | tostring)"' "$T/$(basename "$w" .yml).json"
 done)"
-check "WF54 every job in every workflow runs on ubuntu-* or on xcode-27 (Check, and the nightly's tests and dependency report)" \
-    is "$(grep -vE '=(ubuntu-[a-z0-9.-]+|xcode-27)$' <<<"$jobs" | tr '\n' ' ')|$(grep -c '=xcode-27$' <<<"$jobs")" "|3"
+check "WF54 every job in every workflow runs on ubuntu-* or on xcode-27 (Check, main-cache's build, and the nightly's tests and dependency report)" \
+    is "$(grep -vE '=(ubuntu-[a-z0-9.-]+|xcode-27)$' <<<"$jobs" | tr '\n' ' ')|$(grep -c '=xcode-27$' <<<"$jobs")" "|4"
 
 # The package cache: its key must change with the Xcode and with either lockfile, and name only live files.
 key="$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | select(.with.path == ".derivedData/SourcePackages")
@@ -352,7 +352,7 @@ check "WF55 the package cache key hashes .xcode-version and both lockfiles, and 
     is "$covered|$dead" ".xcode-version=yes LedgerKit/Package.resolved=yes Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved=yes |"
 
 # In a Mac job, nothing may build, test or resolve before Xcode is selected.
-order="$(for w in pr nightly; do
+order="$(for w in pr nightly main-cache; do
     jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
         | [.value.steps | to_entries[] | select(.value.run // "" | test("xcode-select -s")) | .key] as $sel
         | [.value.steps | to_entries[] | select((.value.run // "" | test("xcodebuild|swift |scripts/"))
@@ -361,7 +361,7 @@ order="$(for w in pr nightly; do
         "$T/$w.json"
 done | tr '\n' ' ')"
 check "WF56 each Mac job selects Xcode once, before any step that runs xcodebuild, swift or a script" \
-    is "$order" "check:ok test:ok dependencies:ok "
+    is "$order" "check:ok test:ok dependencies:ok warm:ok "
 
 # Each Select step, run as the runner runs it, with the committed .xcode-version, must pick a path the
 # xcode-27 image has (its README: Xcode 27.0 at /Applications/Xcode_27.app, linked as Xcode_27.0.app).
@@ -384,7 +384,7 @@ export SELECTED="$SEL/selected"
 select_steps() { # runs every Mac job's Select step against $SEL/repo/.xcode-version: "ok|failed ...", then the paths
     : >"$SELECTED"
     local w step ran=""
-    for w in pr nightly; do
+    for w in pr nightly main-cache; do
         while IFS= read -r step; do
             [[ -z "$step" ]] && continue
             (cd "$SEL/repo" && PATH="$SEL/bin:$PATH" bash -eo pipefail -c "$(jq -r '.' <<<"$step")") >/dev/null 2>&1 &&
@@ -395,19 +395,19 @@ select_steps() { # runs every Mac job's Select step against $SEL/repo/.xcode-ver
     printf '%s%s' "$ran" "$(sort -u "$SELECTED" | tr '\n' ' ')"
 }
 check "WF57 every Select step, run with the committed pin, selects an Xcode the xcode-27 image has" \
-    is "$(select_steps)" "ok ok ok /Applications/Xcode_27.0.app "
+    is "$(select_steps)" "ok ok ok ok /Applications/Xcode_27.0.app "
 # F32 fix round (T4): a pin saved with a CRLF, or padded, reads as check-xcode-version.sh reads it (XV14).
 printf '27.0\r\n' >"$SEL/repo/.xcode-version"
 crlf="$(select_steps)"
 printf ' 27.0 \r\n' >"$SEL/repo/.xcode-version"
 check "WF57 ... and with a CRLF, or padded with spaces, the same Xcode (no Xcode_27.0\\r.app)" \
-    is "$crlf|$(select_steps)" "ok ok ok /Applications/Xcode_27.0.app |ok ok ok /Applications/Xcode_27.0.app "
+    is "$crlf|$(select_steps)" "ok ok ok ok /Applications/Xcode_27.0.app |ok ok ok ok /Applications/Xcode_27.0.app "
 cp "$ROOT/.xcode-version" "$SEL/repo/.xcode-version"
 
 # F32 fix round (T5): every Mac job checks the selected Xcode against the pin before it builds: the nightly's
-# jobs in the run step right after Select, and Check by running check.sh, whose step 0 is that check in every
-# mode, --ios-only included (W40).
-checked="$(for w in pr nightly; do
+# jobs in the run step right after Select, and Check and main-cache's build by running check.sh, whose step 0
+# is that check in every mode, --ios-only and --build-only included (W40, W77).
+checked="$(for w in pr nightly main-cache; do
     jq -r '.jobs | to_entries[] | select(.value."runs-on" | startswith("ubuntu") | not) | .key as $job
         | [.value.steps[] | select(.run) | .run] as $runs
         | ($runs | map(test("xcode-select -s")) | index(true)) as $sel
@@ -416,7 +416,7 @@ checked="$(for w in pr nightly; do
         "$T/$w.json"
 done | tr '\n' ' ')"
 check "WF60 each Mac job's next run step after Select checks the Xcode against .xcode-version (the nightly too)" \
-    is "$checked" "check:checked test:checked dependencies:checked "
+    is "$checked" "check:checked test:checked dependencies:checked warm:checked "
 
 # actionlint: the config only teaches it the preview label; a mistyped label still fails.
 check "WF58 .github/actionlint.yaml declares the xcode-27 label and nothing else" \

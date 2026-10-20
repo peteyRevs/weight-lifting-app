@@ -82,7 +82,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 59 # the step's 54, plus checkout, Xcode, mise, both caches and the failure upload
+    timeout-minutes: 71 # the step's 66, plus checkout, Xcode, mise, both caches and the failure upload
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,7 +105,9 @@ jobs:
       # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
       # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
       # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one.
-      # A PR's first run has nothing to restore; its later pushes and re-runs do (docs/ci-cd.md,
+      # A run may read only its PR's caches and main's. Only main-cache.yml saves on main (a PR run
+      # cannot), building what this job builds on each push to main, under these keys. So a PR's first run starts
+      # from main's newest cache, and its later pushes and re-runs from its own (docs/ci-cd.md,
       # "Compilation cache").
       - name: Restore compiled output (Xcode compilation cache)
         id: compilation-cache
@@ -120,14 +122,17 @@ jobs:
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
       - name: iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
-        timeout-minutes: 54 # fails the step before the job times out, so the bundles still upload
+        timeout-minutes: 66 # fails the step before the job times out, so the bundles still upload
         env:
-          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3120: a
-          # PR's first run builds cold (up to 1,221 s measured) after 125 s of script tests, and the tests
-          # below, seeds and sweeps cut (576-595 s on a developer Mac), take up to 1,440-1,490 s on a runner
-          # 2.5x slower (2-3.6x seen on 2026-10-09): about 2,786-2,834 s, which leaves about 5 min. A
-          # stopped run costs a re-run; a green one bills only what it uses (docs/ci-cd.md, "Deadline").
-          LEDGER_XCODEBUILD_DEADLINE: 3120
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3840: a
+          # first run now restores main's cache (main-cache.yml) and builds warm, as #65's and #66's re-runs
+          # did (441-758 s, 2026-10-19/20, after 87-150 s of script tests); those re-runs tested for
+          # 2,099-2,210 s, about 1,960 s less this chore's sweeps (tasks/chores/ci-test-time.md): about
+          # 2,870 s at most. The deadline still covers a cold build (1,424 s, when no cache matches the
+          # lockfiles): 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min. Standard minutes are free on this
+          # public repository, so headroom costs nothing until something hangs; were it private again, a
+          # hang would bill about 12 minutes more than at 3,120 s (docs/ci-cd.md, "Deadline": revisit).
+          LEDGER_XCODEBUILD_DEADLINE: 3840
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
           # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.

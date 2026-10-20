@@ -169,9 +169,7 @@ struct WorkoutStoreHapticsTests {
         bench.following.cancel()
         await bench.following.value
         let again = Task { [store = bench.store] in await store.follow() }
-        while !bench.store.isHearingTheSession {
-            await Task.yield()
-        }
+        await eventually("the store to hear the session again") { bench.store.isHearingTheSession }
         let second = bench.running.exercises[0].sets[1].id
         try await bench.tap(.log(exerciseIndex: 0, setID: second))
         await eventuallyPlayed(bench.haptics, [.setLogged, .setLogged])

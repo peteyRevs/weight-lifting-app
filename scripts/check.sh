@@ -18,6 +18,10 @@
 #   scripts/check.sh --skip-static      steps 0 and 3–5, plus the script suites that need macOS: PR CI's
 #                                       macOS job, which runs after the Linux one. Combines with
 #                                       --ios-only and --record-snapshots
+#   scripts/check.sh --build-only       step 0 and step 3's iOS build alone, as step 3 runs it: no
+#                                       simulator boot, string catalogs, tests or coverage. main-cache.yml
+#                                       runs it on each push to main to save main's compilation cache
+#                                       (docs/ci-cd.md, "Compilation cache"). Takes no other flag
 #
 # Step 3 also checks every String Catalog against the keys its iOS build extracted
 # (scripts/check-string-catalogs.sh), in every mode that builds iOS, --record-snapshots too.
@@ -34,7 +38,7 @@ IOS_DEST="${LEDGER_IOS_DEST:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
 WATCH_DEST="${LEDGER_WATCH_DEST:-platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0}"
 RESULTS=".derivedData/Results"
 
-FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0 STATIC_ONLY=0 SKIP_STATIC=0
+FAST=0 LINT_ONLY=0 SKIP_LINT=0 RECORD_SNAPSHOTS=0 IOS_ONLY=0 STATIC_ONLY=0 SKIP_STATIC=0 BUILD_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --fast) FAST=1 ;;
@@ -44,6 +48,7 @@ for arg in "$@"; do
         --ios-only) IOS_ONLY=1 ;;
         --static-only) STATIC_ONLY=1 ;;
         --skip-static) SKIP_STATIC=1 ;;
+        --build-only) BUILD_ONLY=1 ;;
         *) echo "error: unknown flag $arg" >&2; exit 2 ;;
     esac
 done
@@ -54,6 +59,12 @@ if (( (LINT_ONLY || STATIC_ONLY) && (SKIP_LINT || FAST || RECORD_SNAPSHOTS || IO
     echo "error: contradictory flags: $*" >&2
     exit 2
 fi
+if (( BUILD_ONLY && $# > 1 )); then
+    echo "error: --build-only takes no other flag: $*" >&2
+    exit 2
+fi
+# --build-only is the iOS half of the gate without its static steps; the rest of the script reads these.
+if [[ $BUILD_ONLY -eq 1 ]]; then IOS_ONLY=1 SKIP_LINT=1; fi
 
 TIMINGS=()
 STEP_STARTED_AT=0
@@ -83,9 +94,10 @@ if [[ -n "${LEDGER_XCODEBUILD_DEADLINE:-}" ]]; then
 fi
 
 # PR CI sets LEDGER_COMPILATION_CACHE=YES: xcodebuild then keeps each compilation's result in a
-# content-addressed cache, .derivedData/CompilationCache.noindex, which pr.yml restores and saves. A cache
-# key hashes the compiler, its arguments and every input's contents, never a file's mtime, so a fresh
-# checkout reuses it and a changed input misses it (docs/ci-cd.md). Locally it stays off.
+# content-addressed cache, .derivedData/CompilationCache.noindex, which pr.yml restores and saves, and
+# main-cache.yml (--build-only) saves on main. A cache key hashes the compiler, its arguments and every
+# input's contents, never a file's mtime, so a fresh checkout reuses it and a changed input misses it
+# (docs/ci-cd.md). Locally it stays off.
 CACHE_SETTINGS=()
 if [[ "${LEDGER_COMPILATION_CACHE:-}" == YES ]]; then CACHE_SETTINGS=(COMPILATION_CACHE_ENABLE_CACHING=YES); fi
 
@@ -195,12 +207,17 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     local xcargs=(-project Ledger.xcodeproj -scheme "$3" -testPlan "$4" -destination "$5"
         -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages
         -onlyUsePackageVersionsFromResolvedFile ARCHS=arm64)
-    step "$1 · $2 build (the simulator boots meanwhile)"
-    scripts/sim-boot.sh "$5"
+    if [[ $BUILD_ONLY -eq 1 ]]; then
+        step "$1 · $2 build (--build-only: no simulator boots, nothing is tested)"
+    else
+        step "$1 · $2 build (the simulator boots meanwhile)"
+        scripts/sim-boot.sh "$5"
+    fi
     rm -rf "$RESULTS/$6-build.xcresult" "$RESULTS/$6.xcresult"
     xcodebuild build-for-testing "${xcargs[@]}" ${CACHE_SETTINGS[@]+"${CACHE_SETTINGS[@]}"} \
         -resultBundlePath "$RESULTS/$6-build.xcresult" -quiet | beautify
     done_step "$2 build"
+    if [[ $BUILD_ONLY -eq 1 ]]; then return; fi
     if [[ "$2" == iOS ]]; then
         step "$1 · string catalogs (each against the keys the $2 build extracted)"
         scripts/check-string-catalogs.sh
@@ -218,6 +235,11 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     done_step "$2 tests"
 }
 test_platform 3 iOS Ledger PR "$IOS_DEST" PR-iOS
+if [[ $BUILD_ONLY -eq 1 ]]; then
+    summary
+    printf '\n\033[32mcheck.sh (--build-only) OK\033[0m\n' # built, not tested
+    exit 0
+fi
 if [[ $IOS_ONLY -eq 1 ]]; then
     step "4 · watchOS skipped (--ios-only): the full gate and the nightly test it"
     done_step "watchOS skipped (--ios-only)"

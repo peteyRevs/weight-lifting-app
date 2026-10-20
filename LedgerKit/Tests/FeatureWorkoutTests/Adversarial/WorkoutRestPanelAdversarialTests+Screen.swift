@@ -142,17 +142,17 @@
         }
 
         /// Lets the run loop and the main actor's queue both turn until `condition` holds: SwiftUI starts a
-        /// `.task` after its view appears, which is the run loop's doing. No time is waited for.
-        static func turning(_ what: String, until condition: () -> Bool) async -> Bool {
-            for _ in 0 ..< 20000 {
-                if condition() {
-                    return true
-                }
+        /// `.task` after its view appears, which is the run loop's doing. `eventually`'s bound: at most 10 s
+        /// of the wall clock, then an issue.
+        static func turning(
+            _ what: String,
+            sourceLocation: SourceLocation = #_sourceLocation,
+            until condition: @MainActor () async -> Bool
+        ) async -> Bool {
+            await eventually(what, sourceLocation: sourceLocation) {
                 turnTheRunLoop()
-                await Task.yield()
+                return await condition()
             }
-            Issue.record("never came: \(what)")
-            return false
         }
 
         /// `WorkoutRoot` in a window, over a store whose clock the test steps and whose haptics it reads.
@@ -230,10 +230,7 @@
             // The rest reaches its end with the cover up: felt once.
             await hosted.seconds(140)
             #expect(store.restPanel?.status == "Rest over")
-            for _ in 0 ..< 200 {
-                Self.turnTheRunLoop()
-                await Task.yield()
-            }
+            _ = await Self.turning("Rest over to be felt") { await hosted.haptics.played.count >= 2 }
             #expect(await hosted.haptics.played == [.setLogged, .restOver])
         }
 

@@ -23,10 +23,12 @@ authoritative; the plan differs:
   `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
-- **Free minutes (Pete, 2026-09-27); paid since 2026-09-30, with a $60 monthly limit.** `pr.yml` has one
-  macOS job, `Check` (`check.sh --ios-only --skip-static`). It runs after two Linux jobs: `Scope` skips
+- **Free minutes (Pete, 2026-09-27); paid from 2026-09-30; free again since the repository went public
+  (2026-10-20: standard runners).** `pr.yml` has one macOS job, `Check` (`check.sh --ios-only
+  --skip-static`). It runs after two Linux jobs: `Scope` skips
   both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
-  change (renames count at both paths). `Static checks` comes next (below). Nightly is manual;
+  change (renames count at both paths). `Static checks` comes next (below). `main-cache.yml` builds on
+  each code push to `main` to save `main`'s caches ("What is main-scoped", below). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
   §9 is superseded: before the changes below, a green `Check` job took 846–1,302 s (15–22 billed
   minutes) over the six green iOS-only runs to 2026-10-01, 805–1,262 s of it in `check.sh`. The notes
@@ -57,14 +59,37 @@ authoritative; the plan differs:
     it restored: a corrupted cache was dropped and filled again there (`recovered from invalid data`),
     while one corrupted after that check, on the same boot, failed the build (notes, "Measured"). The
     keys are taken to hold absolute paths (not tested from a second path); GitHub keeps the checkout at
-    `/Users/runner/work/<repo>/<repo>`. A PR's first run has nothing to restore, since no job saves on
-    `main`; its later pushes and re-runs do. Measured on a developer Mac (2026-10-01; notes, "Measured"):
+    `/Users/runner/work/<repo>/<repo>`. Measured on a developer Mac (2026-10-01; notes, "Measured"):
     the iOS `build-for-testing` took 58–59 s with the cache off, 57 s filling an empty cache (1,113 misses)
     and 17–18 s from a full one with nothing else built and every source's mtime moved (1,003–1,018 hits, no
-    miss). The cache was 1.0 GB, 343 MB through `tar | zstd`. The runner's figures are not known until a
-    PR's second run there.
-  - *No `main` warm-up job.* One would cost about as much per merge as it saves on each PR's first run
-    (notes). Revisit if most PRs get one run only.
+    miss). The cache was 1.0 GB, 343 MB through `tar | zstd`. On the runner (2026-10-08 and -10) a PR's
+    second push built in 750 s against 1,221 s cold, and re-runs of the same commit in 452 s and (#59,
+    2026-10-17) 760 s against 1,458 s: the driver's planning, linking and signing are not cached, so a warm
+    cache about halves the runner's build.
+  - *What is main-scoped (2026-10-20; `tasks/chores/2026-10-17-main-cache.md`, `tasks/chores/ci-test-time.md`).* GitHub scopes caches by
+    branch: a PR's run reads its own ref's caches and `main`'s, never another PR's, and `pr.yml` never runs
+    on `main`. Until 2026-10-20 nothing saved on `main`, so every PR's first run found no cache (`Cache not
+    found for input keys: compilation-…`) and built cold: 937–1,458 s for #58–#61, and #59 reached the
+    deadline in its tests at a 1,458 s build. `.github/workflows/main-cache.yml` runs on each push to
+    `main` that changes more than `docs/`, `tasks/`, `design/` or root-level `*.md` (Scope's allowlist, as
+    `paths-ignore`). Its one job, on `xcode-27`, repeats Check's checkout, Xcode, mise, package-cache and
+    restore steps field for field (WF69) and runs `scripts/check.sh --build-only`: step 0 and step 3's iOS
+    `build-for-testing` through the same code, so the compiler's arguments, and every entry's key, are
+    Check's (check-wiring W77); nothing is tested. It saves the compilation cache under Check's key scheme,
+    and `actions/cache` saves the package checkouts under their exact key, both in `main`'s scope, after a
+    green build only: a cancelled run (a newer push cancels it; `concurrency: main-cache`) or a red one saves
+    nothing. A PR's first run therefore restores `main`'s newest cache and compiles only what differs from
+    it; its later pushes and re-runs restore its own. Expected first-run build: about 450–760 s on the
+    runner, as a PR's warm runs above, against 937–1,458 s cold. Locally `--build-only` took 114 s cold and
+    28–34 s warm (cache 1.5 GB, 452 MB through `tar | zstd`). Each save is an entry of about 450 MB; GitHub
+    keeps 10 GB per repository and evicts the least recently used, so `main`'s older entries, which no
+    restore picks once a newer one exists, go first. Cost: one warm build per code merge, about 10–14 macOS
+    minutes. Held back on 2026-10-17 for that cost (chore file, "Cost"); shipped 2026-10-20
+    (`tasks/chores/ci-test-time.md`) once the repository was public, where standard runner minutes are free.
+    Should it go private again, revisit both this and the deadline below: `main-cache.yml` would bill about
+    10–14 macOS minutes per code merge, and the deadline's headroom bills only on a hang (about 12 minutes
+    more than at 3,120 s). Run by hand (`workflow_dispatch`) on `main`, it rebuilds a cache that was evicted
+    or that a red or cancelled run did not save.
   - *Seeds on the runner (2026-10-09; `tasks/chores/2026-10-09-pr-lane-time.md`).* `Check` sets
     `TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT=40`. `xcodebuild` hands a `TEST_RUNNER_` variable to the test
     runner without the prefix, and there it replaces the PR plan's `LEDGER_PROPERTY_SEED_COUNT` (200): every
@@ -91,18 +116,25 @@ authoritative; the plan differs:
     build) reached the deadline whatever its code; the sweeps were the largest part. Measured on the Mac
     with 40 seeds: 903 s with every sweep, 595 s under `pr` (FeatureProgramTests 374 → 205 s of cases,
     FeatureWorkoutTests 185 → 66 s). The rest is the UI smoke (65 s), launches, the seeded suites and
-    single-case hosted tests, which no sweep reaches.
-  - *Deadline (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `LEDGER_XCODEBUILD_DEADLINE` is
-    3,120 s; the step's timeout is 54 min, 2 min after the deadline, and the job's 59. A PR's first run
-    restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
-    script tests. Under both runner variables the tests took 576 s on a developer Mac when the deadline was set (595 s after the review's fix round, which gave findings and boundaries back some sizes and settings). The runner took 2.0
-    to 3.2 times the Mac's time for the same commits on 2026-10-09 (3.6 for #49, whose suites the Mac run
-    lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, plus 5 min
-    is about 3,086 s, set to 3,120 s. At 595 s the same sum is about 2,834 s, 286 s inside. A run stopped by the deadline costs its minutes and a re-run's; a green run bills
-    only what it uses, so headroom costs nothing until something hangs (then 10 more paid minutes than at
-    2,520 s). The deadline was 2,400 s until 2026-10-09 and 2,520 s until 2026-10-17; at 2,400 s two first
-    runs of 2026-10-09 were interrupted in their tests with no test failing (builds of 1,140 and 1,145 s;
-    the tests then needed 855 s and 1,497 s on the re-runs).
+    single-case hosted tests, which no sweep reaches. On 2026-10-20 (`tasks/chores/ci-test-time.md`) six suites added
+    since, which swept every size or setting, ask through `TestSweep` too: NameFieldLine (and its Room and
+    Round 2 files), FieldFont, the receipt's layout and LOGGED cut, the "End workout?" sheet's adversarial
+    suite, and the seed names of the F11 S10 name field. A check pinned to a size where a measure stands
+    nearest its bound names that size (`also:`).
+  - *Deadline (2026-10-20; `tasks/chores/ci-test-time.md`).* `LEDGER_XCODEBUILD_DEADLINE` is 3,840 s; the
+    step's timeout is 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
+    first runs (#65, #66) restored nothing, built cold (865 and 1,424 s, after 96 and 150 s of script tests)
+    and were stopped by the 3,120 s deadline in their tests; their re-runs built warm (441 and 758 s) and
+    tested for 2,099 and 2,210 s (2,635 and 3,124 s in all). Since then a first run restores `main`'s cache
+    ("What is main-scoped", above), and the sweeps of six more suites keep their representatives
+    ("Sweeps on the runner"): 297 s of their cases on a developer Mac become 170 s, which at the runner's 2.0
+    to 3.0 times saves about 250–380 s there, so the tests are about 1,960 s at most. A warm first run is then
+    about 150 + 758 + 1,960, near 2,870 s (48 min); the deadline also covers a cold one, for a PR whose
+    lockfiles or Xcode no cache matches: 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min, set to 3,840 s.
+    Standard minutes are free on this public repository (2026-10-20), so headroom costs nothing until
+    something hangs; if it goes private again, a hang bills about 12 minutes more than at 3,120 s (revisit,
+    with `main-cache.yml`'s cost above). Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
+    2026-10-20, each sized for a cold build and stopped by the tests' growth (`tasks/chores/2026-10-17-pr-sweeps.md`).
   - *arm64 only (2026-10-18; `tasks/chores/2026-10-18-arm64-only.md`).* Every `xcodebuild` in `check.sh`
     passes `ARCHS=arm64`, on both lanes and on the build and the test run alike (check-wiring W76). The
     iOS build also builds the embedded watch app, and the active-arch rule covers only the destination's
@@ -295,7 +327,7 @@ step (`gh issue create --label nightly`) — add in F01.
 
 ## 4. No branch protection (Pete, 2026-09-27)
 
-GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
+GitHub Free, public since 2026-10-20, with no protection rule: nothing blocks a direct push or a red merge. G5 merges only when the
 full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran. Since
 2026-09-30 CI tests iOS only, so that full local run is a PR's only watchOS gate.
 A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free

@@ -183,16 +183,16 @@ extension SaveCover {
             await Task.yield()
         }
         // The taps that waited change the session's workout as they land: it is asked again each round.
-        for _ in 0 ..< 400 {
+        let isAtRest = await eventually("the cover to come to rest") {
             await rest()
             let truth = await session.current()
             let isQuiet = store.queue.isEmpty && !store.isDraining
-            if store.exit != nil || store.shown == nil || (store.shown == truth && isQuiet) {
-                return
-            }
+            return store.exit != nil || store.shown == nil || (store.shown == truth && isQuiet)
         }
-        let state = "queue \(store.queue.count), draining \(store.isDraining), hearing \(store.isHearingTheSession)"
-        Issue.record("the cover never came to rest: \(state), saving \(store.isSaving)")
+        if !isAtRest {
+            let state = "queue \(store.queue.count), draining \(store.isDraining), hearing \(store.isHearingTheSession)"
+            Issue.record("the cover never came to rest: \(state), saving \(store.isSaving)")
+        }
     }
 
     /// What must hold of a cover at rest, whatever was done to it (criteria 8, 13, 14, 17 and 18): nil

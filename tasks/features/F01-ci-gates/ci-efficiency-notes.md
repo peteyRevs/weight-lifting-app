@@ -54,6 +54,10 @@ already running, nor when the restore hit the exact key (a re-run of the same co
 
 ### No warm-up job on `main`
 
+Superseded 2026-10-20: first runs reached the deadline on a cold build, and the repository went public (free
+standard minutes), so `main-cache.yml` now saves `main`'s caches on each code push
+(`tasks/chores/2026-10-17-main-cache.md`, `tasks/chores/ci-test-time.md`). The reasoning below was the cost side.
+
 No job saves a cache on `main`, so a PR's first run has nothing to restore. A job that did would run a
 cold build on every merge, which is the most expensive step there is (745–1,104 s on the runner). At
 best it would save the same build once, on the next PR's first run. With about one PR per merge that

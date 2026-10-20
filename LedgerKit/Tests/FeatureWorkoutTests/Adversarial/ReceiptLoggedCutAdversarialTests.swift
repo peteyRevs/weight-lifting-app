@@ -27,7 +27,13 @@
                 let receipt = ReceiptParts(model: model)
                 let word = model.page.logged
                 let part = LayoutPart(word) { Eyebrow(word) }
-                for setting in LayoutSetting.everySetting(size) {
+                // The cut check runs left to right only, so the PR runner's sweep (the iPhone 17 plain, the
+                // 375 pt phone bold and mirrored) also keeps the 375 pt phone bold left to right: the narrow
+                // phone is cut-checked on every runner, and each direction has a setting.
+                let narrow = { (setting: LayoutSetting) in
+                    setting.width == LayoutSetting.narrowWidth && setting.isBold && !setting.isRightToLeft
+                }
+                for setting in LayoutSetting.sweep(size, also: narrow) {
                     if !setting.isRightToLeft {
                         let cut = WorkoutLayoutProbe.cut(in: receipt, parts: [part], setting)
                         #expect(cut.isEmpty, "\(setting.testDescription): \(cut.joined(separator: "; "))")
@@ -56,7 +62,8 @@
         func tileValues_neverTruncate(_ size: DynamicTypeSize) throws {
             for model in try ReceiptLayoutTests.models() {
                 let receipt = ReceiptParts(model: model)
-                for setting in LayoutSetting.everySetting(size) {
+                // The PR runner's sweep keeps the 375 pt phone, where the three tiles have least room.
+                for setting in LayoutSetting.sweep(size) {
                     let stops = setting.elements(of: receipt)
                     for tile in model.page.tiles {
                         let frame = try #require(stops.first { $0.label == tile.spoken }).frame

@@ -141,9 +141,7 @@ extension WorkoutRestAdversarialTests {
         store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
         await store.drain()
         await eventually("the rest on the page") { store.shownRest != nil }
-        for _ in 0 ..< 20000 where await haptics.played != [.setLogged] {
-            await Task.yield()
-        }
+        await eventually("the logged set to be felt") { await haptics.played == [.setLogged] }
         try #require(await haptics.played == [.setLogged], "the logged set was never felt")
         await haptics.hold()
         let waits = [Task { await store.keepRestTime() }, Task { await store.keepRestTime() }]
