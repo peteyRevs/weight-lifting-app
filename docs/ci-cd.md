@@ -26,7 +26,8 @@ authoritative; the plan differs:
 - **Free minutes (Pete, 2026-09-27); paid since 2026-09-30, with a $60 monthly limit.** `pr.yml` has one
   macOS job, `Check` (`check.sh --ios-only --skip-static`). It runs after two Linux jobs: `Scope` skips
   both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
-  change (renames count at both paths). `Static checks` comes next (below). Nightly is manual;
+  change (renames count at both paths). `Static checks` comes next (below). `main-cache.yml` builds on
+  each code push to `main` to save `main`'s caches ("What is main-scoped", below). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
   §9 is superseded: before the changes below, a green `Check` job took 846–1,302 s (15–22 billed
   minutes) over the six green iOS-only runs to 2026-10-01, 805–1,262 s of it in `check.sh`. The notes
@@ -57,14 +58,33 @@ authoritative; the plan differs:
     it restored: a corrupted cache was dropped and filled again there (`recovered from invalid data`),
     while one corrupted after that check, on the same boot, failed the build (notes, "Measured"). The
     keys are taken to hold absolute paths (not tested from a second path); GitHub keeps the checkout at
-    `/Users/runner/work/<repo>/<repo>`. A PR's first run has nothing to restore, since no job saves on
-    `main`; its later pushes and re-runs do. Measured on a developer Mac (2026-10-01; notes, "Measured"):
+    `/Users/runner/work/<repo>/<repo>`. Measured on a developer Mac (2026-10-01; notes, "Measured"):
     the iOS `build-for-testing` took 58–59 s with the cache off, 57 s filling an empty cache (1,113 misses)
     and 17–18 s from a full one with nothing else built and every source's mtime moved (1,003–1,018 hits, no
-    miss). The cache was 1.0 GB, 343 MB through `tar | zstd`. The runner's figures are not known until a
-    PR's second run there.
-  - *No `main` warm-up job.* One would cost about as much per merge as it saves on each PR's first run
-    (notes). Revisit if most PRs get one run only.
+    miss). The cache was 1.0 GB, 343 MB through `tar | zstd`. On the runner (2026-10-08 and -10) a PR's
+    second push built in 750 s against 1,221 s cold, and re-runs of the same commit in 452 s and (#59,
+    2026-10-17) 760 s against 1,458 s: the driver's planning, linking and signing are not cached, so a warm
+    cache about halves the runner's build.
+  - *What is main-scoped (2026-10-20; `tasks/chores/2026-10-17-main-cache.md`, `tasks/chores/ci-test-time.md`).* GitHub scopes caches by
+    branch: a PR's run reads its own ref's caches and `main`'s, never another PR's, and `pr.yml` never runs
+    on `main`. Until 2026-10-20 nothing saved on `main`, so every PR's first run found no cache (`Cache not
+    found for input keys: compilation-…`) and built cold: 937–1,458 s for #58–#61, and #59 reached the
+    deadline in its tests at a 1,458 s build. `.github/workflows/main-cache.yml` runs on each push to
+    `main` that changes more than `docs/`, `tasks/`, `design/` or root-level `*.md` (Scope's allowlist, as
+    `paths-ignore`). Its one job, on `xcode-27`, repeats Check's checkout, Xcode, mise, package-cache and
+    restore steps field for field (WF69) and runs `scripts/check.sh --build-only`: step 0 and step 3's iOS
+    `build-for-testing` through the same code, so the compiler's arguments, and every entry's key, are
+    Check's (check-wiring W77); nothing is tested. It saves the compilation cache under Check's key scheme,
+    and `actions/cache` saves the package checkouts under their exact key, both in `main`'s scope, after a
+    green build only: a cancelled run (a newer push cancels it; `concurrency: main-cache`) or a red one saves
+    nothing. A PR's first run therefore restores `main`'s newest cache and compiles only what differs from
+    it; its later pushes and re-runs restore its own. Expected first-run build: about 450–760 s on the
+    runner, as a PR's warm runs above, against 937–1,458 s cold. Locally `--build-only` took 114 s cold and
+    28–34 s warm (cache 1.5 GB, 452 MB through `tar | zstd`). Each save is an entry of about 450 MB; GitHub
+    keeps 10 GB per repository and evicts the least recently used, so `main`'s older entries, which no
+    restore picks once a newer one exists, go first. Cost: one warm build per code merge, about 10–14 macOS
+    minutes. Held back on 2026-10-17 for that cost (chore file, "Cost"); shipped 2026-10-20
+    (`tasks/chores/ci-test-time.md`) once the repository was public, where standard runner minutes are free.
   - *Seeds on the runner (2026-10-09; `tasks/chores/2026-10-09-pr-lane-time.md`).* `Check` sets
     `TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT=40`. `xcodebuild` hands a `TEST_RUNNER_` variable to the test
     runner without the prefix, and there it replaces the PR plan's `LEDGER_PROPERTY_SEED_COUNT` (200): every
@@ -94,7 +114,7 @@ authoritative; the plan differs:
     single-case hosted tests, which no sweep reaches.
   - *Deadline (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `LEDGER_XCODEBUILD_DEADLINE` is
     3,120 s; the step's timeout is 54 min, 2 min after the deadline, and the job's 59. A PR's first run
-    restores no compiled output and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
+    restored no compiled output until `main-cache.yml` (above) and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
     script tests. Under both runner variables the tests took 576 s on a developer Mac when the deadline was set (595 s after the review's fix round, which gave findings and boundaries back some sizes and settings). The runner took 2.0
     to 3.2 times the Mac's time for the same commits on 2026-10-09 (3.6 for #49, whose suites the Mac run
     lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, plus 5 min

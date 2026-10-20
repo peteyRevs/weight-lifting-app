@@ -21,7 +21,8 @@ json() {
 json "$WF/pr.yml" >"$T/pr.json"
 json "$WF/nightly.yml" >"$T/nightly.json"
 json "$WF/release-please.yml" >"$T/rp.json"
-q() { jq -r "$2" "$T/$1.json"; } # q <pr|nightly|rp> <jq filter>
+json "$WF/main-cache.yml" >"$T/mc.json"
+q() { jq -r "$2" "$T/$1.json"; } # q <pr|nightly|rp|mc> <jq filter>
 
 # ---- actionlint -------------------------------------------------------------------
 # mise.toml pins both, and check.sh step 0 installs them: a missing one fails (S2).
@@ -75,12 +76,12 @@ check "WF10 failure uploads Results and SnapshotArtifacts as results-* (criteria
     is "$(q pr '.jobs.check.steps[] | select(.uses // "" | test("upload-artifact")) | [.if, (.with.name | startswith("results-")), (.with.path | test("\\.derivedData/Results") and test("\\.derivedData/SnapshotArtifacts")), .with["include-hidden-files"]] | map(tostring) | join(" ")')" \
     "failure() true true true"
 check "WF11 only package checkouts and Xcode's compilation cache are cached (never DerivedData's Build, or results)" \
-    is "$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with.path' "$T/pr.json" "$T/nightly.json" | sort -u | tr '\n' ' ')" \
+    is "$(jq -r '.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | .with.path' "$T/pr.json" "$T/nightly.json" "$T/mc.json" | sort -u | tr '\n' ' ')" \
     ".derivedData/CompilationCache.noindex .derivedData/SourcePackages "
 check "WF52 [F32] the package cache restores on an exact key only (a stale Package.resolved then resolves cold, and fails)" \
     is "$(jq -r '[.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | select(.with.path == ".derivedData/SourcePackages")
-        | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" | tr '\n' ' ')" \
-    "[false] [] "
+        | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" "$T/mc.json" | tr '\n' ' ')" \
+    "[false] [] [false] "
 # The compilation cache (ci-efficiency notes): restored before check.sh, which turns it on, and saved after it,
 # on a red run too, under the restore step's key. Its keys hash the Xcode and both lockfiles; restore-keys are
 # the key without the commit, so a run starts from its PR's (or main's) newest cache.
@@ -109,18 +110,18 @@ IFS= read -r select_xcode <<'SH'
 sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app"
 SH
 xcode_ok=""
-for w in pr nightly; do
+for w in pr nightly mc; do
     xcode_ok="$xcode_ok$(jq -r --arg sel "$select_xcode" '[.jobs[] | select(."runs-on" | startswith("ubuntu") | not)
         | [.steps[].run // "" | contains($sel)] | any] | all' "$T/$w.json")"
 done
 check "WF14 every macOS job selects Xcode from .xcode-version, read as check-xcode-version.sh reads it" \
-    is "$xcode_ok $(grep -cF "tr -d '[:space:]' < " "$ROOT/scripts/check-xcode-version.sh")" "truetrue 1"
+    is "$xcode_ok $(grep -cF "tr -d '[:space:]' < " "$ROOT/scripts/check-xcode-version.sh")" "truetruetrue 1"
 # The xcode-27 image's README: Xcode 27.0 (27A266a) is /Applications/Xcode_27.app, linked as Xcode_27.0.app.
 check "WF15 .xcode-version pins 27.0 (Xcode_27.0.app on the xcode-27 image)" is "$(tr -d '[:space:]' <"$ROOT/.xcode-version")" 27.0
 
 # A `run:` without `shell:` is `bash -e {0}`: no pipefail, so `a | b` hides a's failure.
 # Only an explicit `shell: bash` (bash -eo pipefail) or `set -o pipefail` covers it.
-for w in pr nightly rp; do
+for w in pr nightly rp mc; do
     jq -c '.defaults.run.shell as $wd | .jobs | to_entries[] | .key as $job | (.value.defaults.run.shell // $wd) as $jd
            | .value.steps | to_entries[] | select(.value.run) | {job: $job, step: (.value.name // .value.id // "#\(.key)"),
              shell: (.value.shell // $jd), run: .value.run}' "$T/$w.json"
@@ -142,7 +143,7 @@ if [[ -z "$unsafe" ]]; then pass "WF16 every piped run step fails when an upstre
 # ---- the docs-only decision (pr.yml, Scope, step "scope") ----------------------------
 q pr '.jobs.scope.steps[] | select(.id == "scope") | .run' >"$T/scope.sh"
 # B1: check.sh's script tests read history (RP11), so a job that runs it checks out everything.
-full="$(for w in pr nightly rp; do q $w '.jobs | to_entries[] | select([.value.steps[].run // "" | test("scripts/check\\.sh")] | any)
+full="$(for w in pr nightly rp mc; do q $w '.jobs | to_entries[] | select([.value.steps[].run // "" | test("scripts/check\\.sh")] | any)
     | "\(.key): fetch-depth \([.value.steps[] | select(.uses // "" | test("actions/checkout")) | .with["fetch-depth"] // 1] | first)"'; done)"
 shallow="$(grep -v 'fetch-depth 0$' <<<"$full" || true)"
 check "WF47 [B1] every job that runs check.sh checks out full history (fetch-depth: 0)" \
@@ -345,13 +346,46 @@ check "WF65 the deadline is 3120 s, 2 min before the step's 54 min, and the job 
 check "WF66 Check runs 40 property seeds, fewer than the PR plan's; no other job, and no nightly step, sets a count" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT') \
 $(jq -r '.defaultOptions.environmentVariableEntries[] | select(.key == "LEDGER_PROPERTY_SEED_COUNT") | .value | tonumber > 40' "$ROOT/TestPlans/PR.xctestplan") \
-$(cat "$WF/pr.yml" "$WF/nightly.yml" | grep -c 'LEDGER_PROPERTY_SEED_COUNT:')" "40 true 1"
+$(cat "$WF"/*.yml | grep -c 'LEDGER_PROPERTY_SEED_COUNT:')" "40 true 1"
 # Sweeps on the runner (tasks/chores/2026-10-17-pr-sweeps.md): Check alone keeps the sweeps' representatives. No
 # plan sets LEDGER_SWEEP, and the nightly and every other job leave it unset, so they sweep in full.
 check "WF67 Check sets LEDGER_SWEEP=pr for the test runner; no plan, no other job and no nightly step sets it" \
     is "$(q pr '.jobs.check.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_SWEEP') \
-$(cat "$WF/pr.yml" "$WF/nightly.yml" | grep -c 'LEDGER_SWEEP:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_SWEEP')" \
+$(cat "$WF"/*.yml | grep -c 'LEDGER_SWEEP:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_SWEEP')" \
     "pr 1 0"
+
+# ---- main-cache.yml (tasks/chores/2026-10-17-main-cache.md) -------------------------------------------------
+# A PR's run reads only its own caches and main's, and nothing else saves on main: this workflow builds what
+# Check builds, on each push to main, and saves both caches there under Check's keys.
+check "WF68 main-cache runs on push to main alone, skipping the paths Scope calls docs-only, one run at a time, newest wins" \
+    is "$(q mc '[.on | keys[]] | join(",")') $(q mc '.on.push.branches | join(",")') $(q mc '.on.push["paths-ignore"] | join(",")') \
+$(q mc '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostring)') $(q mc '.permissions | tojson')" \
+    'push main docs/**,tasks/**,design/**,*.md main-cache true {"contents":"read"}'
+# Scope's allowlist, read from its step: the filter must name the same folders and root-level Markdown.
+check "WF68 ... and those are exactly the paths Scope's step skips" \
+    is "$(grep -oE '^ +docs/\* \| tasks/\* \| design/\* \|' "$T/scope.sh" | tr -d ' ')$(grep -cE '^ +\*\.md\) ;;$' "$T/scope.sh")" \
+    "docs/*|tasks/*|design/*|1"
+# The steps up to the build are Check's own, so the job selects the same Xcode and tools and reads and
+# writes the same keys; the build is check.sh's, so its compile arguments, and with them every entry's key,
+# are Check's too (check-wiring W77).
+setup='[.jobs | to_entries[] | select(.value."runs-on" == "xcode-27") | .value.steps[]
+    | select((.uses // "" | test("actions/checkout|mise-action|actions/cache(@|/restore)")) or (.run // "" | test("xcode-select")))]'
+check "WF69 its one job runs on Check's image, and its checkout, Select, mise, package cache and restore are Check's, field for field" \
+    is "$(q mc '[.jobs[]."runs-on"] | join(",")') $(jq -c "$setup" "$T/mc.json" | jq 'length') \
+$([[ "$(jq -cS "$setup" "$T/mc.json")" == "$(jq -cS "$setup" "$T/pr.json")" ]] && echo same)" "xcode-27 5 same"
+# --build-only runs step 0 and the iOS build alone, no test plan (check-wiring W77).
+check "WF70 besides Select, its one run step is check.sh --build-only, with Check's cache setting alone (no runner variables)" \
+    is "$(q mc '[.jobs[].steps[].run // empty | select(test("xcode-select -s") | not)] | join(";")') \
+$(q mc '.jobs[].steps[] | select(.run // "" | test("check.sh")) | .env | tojson')" \
+    'scripts/check.sh --build-only {"LEDGER_COMPILATION_CACHE":"YES"}'
+check "WF71 it saves the compilation cache under the restore step's key after a green build only (not red, not cancelled)" \
+    is "$(q mc '.jobs[].steps | map(.uses // .run | split("@")[0] | select(test("actions/cache/|check\\.sh"))) | join(" ")') \
+$(q mc '.jobs[].steps[] | select(.uses // "" | test("actions/cache/save")) | [.if, .with.key, .with.path] | join(" ")')" \
+    "actions/cache/restore scripts/check.sh --build-only actions/cache/save \
+\${{ success() && steps.compilation-cache.outputs.cache-hit != 'true' }} \${{ steps.compilation-cache.outputs.cache-primary-key }} \
+.derivedData/CompilationCache.noindex"
+check "WF71 ... and the package checkouts through actions/cache, which saves its exact key after a green job" \
+    is "$(q mc '[.jobs[].steps[] | select(.with.path // "" | test("SourcePackages")) | .uses | split("@")[0]] | join(",")')" actions/cache
 
 # ---- release-please.yml ------------------------------------------------------------------
 check "WF32 release-please runs on push to main only" \

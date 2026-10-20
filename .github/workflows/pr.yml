@@ -105,7 +105,9 @@ jobs:
       # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
       # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
       # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one.
-      # A PR's first run has nothing to restore; its later pushes and re-runs do (docs/ci-cd.md,
+      # A run may read only its PR's caches and main's. This job never saves on main: main-cache.yml does,
+      # building what this job builds on each push to main, under these keys. So a PR's first run starts
+      # from main's newest cache, and its later pushes and re-runs from its own (docs/ci-cd.md,
       # "Compilation cache").
       - name: Restore compiled output (Xcode compilation cache)
         id: compilation-cache

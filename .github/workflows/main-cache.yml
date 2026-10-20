@@ -1,0 +1,68 @@
+# main's caches (docs/ci-cd.md, "Compilation cache"; tasks/chores/2026-10-17-main-cache.md). A PR's run may read
+# only its own caches and main's, and pr.yml runs on PRs alone, so before this workflow every PR's first run
+# built cold. On each push to main this builds what pr.yml's Check builds, exactly as it builds it
+# (check.sh --build-only: step 3's iOS build-for-testing, nothing tested), and saves the package checkouts
+# and the compilation cache in main's scope, under the keys Check restores. The steps up to the build are
+# Check's own, word for word (WF68 compares them).
+name: Main cache
+
+on:
+  push:
+    branches: [main]
+    # Check's Scope job, as a filter: a push that changes only these builds nothing new. A push that also
+    # changes anything else runs (GitHub skips a run only when every changed path matches).
+    paths-ignore: ["docs/**", "tasks/**", "design/**", "*.md"]
+
+# One at a time; a newer push cancels the older run, whose build would be stale. A cancelled run saves
+# nothing (the save step needs success()).
+concurrency:
+  group: main-cache
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+jobs:
+  warm:
+    name: Build main's cache
+    runs-on: xcode-27 # Check's image: a cache entry's key holds the compiler and the checkout's path
+    timeout-minutes: 40 # a cold build took up to 1,458 s on 2026-10-17, plus checkout, tools and both caches
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # as Check (WF47)
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      # Saved after a green job under its exact key, in main's scope, so a PR's first run finds it too.
+      - name: Cache Swift package checkouts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/SourcePackages
+          # An exact key only, no restore-keys: xcodebuild trusts checkouts over Package.resolved, so
+          # another run's checkouts would let a stale one build (F32 notes, "Package pins").
+          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      # main's newest cache: this run compiles only what the push changed.
+      - name: Restore compiled output (Xcode compilation cache)
+        id: compilation-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
+          restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+      - name: iOS build, as Check builds it (check.sh --build-only)
+        timeout-minutes: 35
+        env:
+          LEDGER_COMPILATION_CACHE: "YES" # as Check; quoted: YAML 1.1 reads a bare YES as true
+        run: scripts/check.sh --build-only
+      # Green builds only: a red or cancelled one would leave main's newest cache short of what main builds.
+      - name: Save compiled output
+        if: ${{ success() && steps.compilation-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: ${{ steps.compilation-cache.outputs.cache-primary-key }}
