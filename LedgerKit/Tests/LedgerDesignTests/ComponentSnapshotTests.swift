@@ -65,6 +65,16 @@ import Testing
             }
         }
 
+        /// F10 S7b: the receipt's layout in the phone matrix: three tiles side by side, then one per row at
+        /// accessibility3; a record, three rows, one with nothing logged.
+        @Suite("ReceiptLayoutSnapshots", .tags(.design, .snapshot))
+        struct ReceiptLayoutSnapshotTests {
+            @Test("ReceiptLayout matches its references", arguments: SnapshotAppearance.phoneMatrix)
+            func receiptLayout_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: ReceiptLayoutGallery().phonePage(), appearance)
+            }
+        }
+
         /// The form controls of F11 S8, each gallery in the phone matrix, and the three on one sheet at the
         /// settings the matrix leaves out (Increase Contrast in both themes, pressed, accessibility5).
         @Suite("FormControlSnapshots", .tags(.design, .snapshot))

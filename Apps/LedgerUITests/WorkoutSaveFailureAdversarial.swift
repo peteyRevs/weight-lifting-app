@@ -37,7 +37,10 @@ final class WorkoutSaveFailureAdversarial: XCTestCase {
         alert.buttons["Try again"].tap()
         XCTAssertTrue(answers(alert.buttons["Try again"]), "failure 3, after Try again")
         alert.buttons["Try again"].tap()
-        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "saved: the cover is down")
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "the live workout is gone: the receipt shows")
+        // F10 S7b (edited for the audit): the receipt shows first; its "Done" takes the cover down.
+        XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt")
+        app.buttons["workout.receipt.done"].tap()
         XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }

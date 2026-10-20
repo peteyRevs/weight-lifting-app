@@ -94,15 +94,30 @@ final class WorkoutStore {
     @ObservationIgnored var drainPasses = 0
     /// Wakes the run of `save()` that waits for the taps made before it; nil while none waits.
     @ObservationIgnored var settled: (run: Int, wake: AsyncStream<Void>.Continuation)?
+    /// The workout this cover saved, as the session ended it: its receipt shows until "Done" (F10 S7b).
+    /// Set once. (Set by the store alone; the receipt is in its own file.)
+    var saved: WorkoutState?
+    /// The bests the workout is judged against, read once (`readBests()`); a failed read is not retried.
+    var bests = Loadable<PersonalRecords.Bests>.idle
+    /// Every end this cover asked the session to finish the workout at, in its life: an ending update at one
+    /// of them is this cover's save (`isSavedHere`).
+    @ObservationIgnored var askedEnds: Set<Date> = []
+    /// How many calls to `finish` this cover has out; while one is, an ending update waits for its answer.
+    @ObservationIgnored var finishesInFlight = 0
+    /// The ending update of the workout being saved that arrived while `finish` was out.
+    @ObservationIgnored var deferredEnd: WorkoutState?
+    /// The records the workout holds that were played, or held when the bests arrived: none is played twice.
+    @ObservationIgnored var heldRecords: Set<HeldRecord> = []
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.date) var date
     @ObservationIgnored @Dependency(\.locale) var locale
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
+    @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @Dependency(\.uuid) var uuid
     @ObservationIgnored @Dependency(\.haptics) var haptics
     @ObservationIgnored @Dependency(\.announcements) var announcements
     @ObservationIgnored @Dependency(\.continuousClock) var clock
+    @ObservationIgnored @Dependency(\.statsQueries) var stats
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
 
     /// The injected logger under the module's own category (standards §8); a disabled logger stays disabled.
@@ -110,9 +125,13 @@ final class WorkoutStore {
         injectedLogger.category("workout")
     }
 
-    /// What the screen draws, but for the rest panel (`restPanel`).
+    /// What the screen draws, but for the rest panel (`restPanel`): the receipt once this cover saved the
+    /// workout, else the workout as the session shows it.
     var model: WorkoutScreenModel {
-        WorkoutPresentation.screen(
+        if let receipt {
+            return .receipt(receipt)
+        }
+        return WorkoutPresentation.screen(
             workout,
             selection: selection,
             isBusy: isBusy,
@@ -121,58 +140,9 @@ final class WorkoutStore {
         )
     }
 
-    // MARK: Intents
-
-    func send(_ action: WorkoutAction) {
-        // Nothing answers once the cover is closing, or while a discard or a save runs.
-        guard exit == nil, exitWhenDrained == nil, !isDiscarding, !isSaving else {
-            return
-        }
-        switch action {
-        case .minimize:
-            minimize()
-        case .finish:
-            show(.finish)
-        case .keepLifting:
-            dismiss([.finish])
-        case .save:
-            startSave()
-        case .discard:
-            startDiscard()
-        case .retrySave:
-            retrySave()
-        case .dismissFailure:
-            dismiss([.discardFailed, .editFailed, .saveFailed])
-        case let .dismissed(dialog):
-            dismiss([dialog])
-        case let .edit(edit):
-            enqueue(edit)
-        }
-    }
-
-    /// Whether a workout is on screen: only then is there something to finish, discard or change.
-    var isShowingWorkout: Bool {
-        if case .loaded = workout {
-            return true
-        }
-        return false
-    }
-
-    private func show(_ asked: Dialog) {
-        if isShowingWorkout {
-            dialog = asked
-        }
-    }
-
-    /// Takes the dialog down when it is one of `dialogs`.
-    private func dismiss(_ dialogs: [Dialog]) {
-        if let shown = dialog, dialogs.contains(shown) {
-            dialog = nil
-        }
-    }
-
-    /// Not tied to the dialog's flag: its dismissal and its button's action arrive in either order.
-    private func startDiscard() {
+    /// "Discard" (`send`, in `WorkoutStore+Intents.swift`). Not tied to the dialog's flag: its dismissal and
+    /// its button's action arrive in either order.
+    func startDiscard() {
         guard isShowingWorkout, canDiscard else {
             return
         }
@@ -201,7 +171,8 @@ extension WorkoutStore {
     /// Shows the session's workout for as long as the cover is up: the workout as it stands, then every
     /// change. An update whose workout is no longer live ends it: finished closes the cover as saved,
     /// discarded as discarded, and no workout at all (which only the first update can say) closes it with
-    /// nothing to tell. A dialog that was showing goes with the cover.
+    /// nothing to tell. A dialog that was showing goes with the cover. The workout this cover's save ended
+    /// shows its receipt instead, and the cover stays up (F10 S7b, `WorkoutStore+Receipt.swift`).
     ///
     /// The stream ends when the task is cancelled, because the cover went away: that is no failure. If it
     /// ends otherwise the store has lost its source and says so (`failed`), rather than leave a workout on
@@ -221,7 +192,16 @@ extension WorkoutStore {
         defer { isHearingTheSession = false }
         for await update in await session.updates() {
             guard let live = update.live else {
-                leave(exit(for: update.state))
+                if let ended = update.state, isSavedHere(ended) {
+                    showReceipt(ended)
+                } else if let ended = update.state, waitsForTheAnswer(ended) {
+                    // An end this cover did not ask for, with `finish` still out: its answer decides
+                    // (`WorkoutStore+Finish.swift`).
+                    deferredEnd = ended
+                } else if saved == nil {
+                    // A receipt already up stays up: only "Done" closes the cover then.
+                    leave(exit(for: update.state))
+                }
                 await play(update.haptics)
                 return
             }
@@ -236,7 +216,7 @@ extension WorkoutStore {
                 wake?.yield()
                 settled?.wake.yield()
             }
-            await play(missed + update.haptics)
+            await play(missed + update.haptics + recordHaptics(in: live))
         }
         guard !Task.isCancelled, exit == nil else {
             return

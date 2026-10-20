@@ -52,7 +52,7 @@ struct WorkoutWordsAdversarialTests {
         #expect(texts.count == expected.count)
     }
 
-    @Test("The catalog holds the 71 texts and no other")
+    @Test("The catalog holds the 82 texts and no other")
     func catalog_holdsExactlyTheSlicesTexts() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
         let expected: Set = [
@@ -76,7 +76,10 @@ struct WorkoutWordsAdversarialTests {
             // F10 S7a (sanctioned edit): the keys of the "End workout?" sheet, of a save that failed and
             // of the rest's announcement.
             "Save workout", "%@ of %lld sets logged", "%@ lb moved", "%@ kg moved", "Couldn't save this workout",
-            "It's still on this iPhone. Try again.", "Try again", "Rest, %@ remaining"
+            "It's still on this iPhone. Try again.", "Try again", "Rest, %@ remaining",
+            // F10 S7b (edited for the audit): the keys of the receipt.
+            "Done", "TIME", "SETS", "LB MOVED", "KG MOVED", "%lld new PRs this session", "LOGGED",
+            "Prescribed on the right", "Prescribed %@", "Logged %@", "Nothing logged"
         ]
         #expect(catalog.keys.subtracting(expected).sorted() == [])
         #expect(expected.subtracting(catalog.keys).sorted() == [])

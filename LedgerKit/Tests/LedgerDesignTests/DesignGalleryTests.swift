@@ -17,7 +17,7 @@
                 "HairlineList", "HairlineRow", "HairlineRule", "SetRow", "SetRowHeader", "SetRowSteppers",
                 "RestRing", "WeekStrip", "StatTile", "StatTileRow", "ProgressSegments", "SheetChrome", "EmptyState",
                 "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock",
-                "StepperField", "LedgerToggleStyle", "WrapLayout"
+                "StepperField", "LedgerToggleStyle", "WrapLayout", "ReceiptLayout"
             ]
             /// Every token type in `LedgerDesign/Tokens`.
             static let tokenTypes = [

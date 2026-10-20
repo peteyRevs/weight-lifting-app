@@ -476,7 +476,9 @@ Source of truth: `docs/product-spec.md` §8. Encoded as:
 - Components: `PrimaryButton`, `PillButton` (with a full-width form that stands beside a primary
   button), `IconPillButton`, `HairlineList/Row`,
   `SetRow` (with `SetRowHeader` and `SetRowSteppers`), `RestRing`, `WeekStrip`, `StatTile`,
-  `ProgressSegments`, `Eyebrow`, `SheetChrome` (the swap sheet's frame), `EmptyState`, and for the
+  `ProgressSegments`, `Eyebrow`, `SheetChrome` (the swap sheet's frame), `EmptyState`, `ReceiptLayout`
+  (a finished workout's tiles, records line and rows, from a model of final strings; F10's receipt, and
+  F13's workout detail), and for the
   watch `WatchPrimaryButton`, `WatchRestRing` (the phone ring's geometry at the watch's
   proportions) and `WatchStatBlock`. `TabBar` is the native `TabView` tinted; the custom prototype
   bar is not replicated. Beside them: `LedgerIcon` (the spec's stroked icons, sized like a type
