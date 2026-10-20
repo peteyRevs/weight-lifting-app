@@ -41,7 +41,7 @@ final class Tabs: XCTestCase {
             XCTAssertTrue(heading.waitForExistence(timeout: 5), title)
             XCTAssertEqual(heading.label, shown)
             if title == "Program" {
-                XCTAssertEqual(app.textFields["Program name"].value as? String, "Upper Lower", "the seed program")
+                XCTAssertEqual(app.textFields["Program name"].value as? String, "Upper / Lower", "the seed program")
             }
             XCTAssertEqual(
                 Self.titles.map { app.tabBars.buttons[$0].isSelected },

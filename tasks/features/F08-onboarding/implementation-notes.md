@@ -1055,12 +1055,23 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   runs and finds the seed program active.
 - `Tabs.swift`, `test_eachTab_showsItsOwnScreen_andTodayKeepsItsTitle` (S14's sanctioned edit, re-edited): the
   Program tab's heading is the builder's eyebrow "MY PROGRAM", no longer "No program yet", and the name field
-  reads the seed program's name, "Upper Lower". Reason: with the seed line the Program tab shows the builder over
+  reads the seed program's name, "Upper / Lower". Reason: with the seed line the Program tab shows the builder over
   a program, so S14's premise "a UI test's database has none" no longer holds.
 - `TabsAdversarial.swift` (S14's sanctioned edit, re-edited for the same reason): `titles` and `label(of:)` read
   "MY PROGRAM" for the Program tab; the AX5 height check still leaves the Program tab out, now because the
   eyebrow is set in the eyebrow role, not a title's. `test_everyTabRoot_passesTheSystemsAccessibilityAudit` now
   audits the builder over the seed program at week 5, a state neither lane had audited.
+- **Nightly runs after the merge** (Nightly plan, through the lock): `Builder`, `DayEditor`, `ProgramTabAdversarial`,
+  `Tabs`, `TabsAdversarial`: 23 tests, 4 failures on the first run. (1) `Tabs:44`: my assertion read "Upper Lower"
+  (S14's renamed name); the seed program is "Upper / Lower": fixed. (2) `Builder.test_wrappedName_…:80` read
+  "A l" for "A" once (S14's clear-letter-by-letter save). The re-run of `Builder` and `Tabs` passed 7 of 7.
+  (3) **Open, for a ruling:** `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` now audits the
+  builder over the seed program at week 5, the first audit of that screen anywhere. It reports 26 issues on the
+  Program tab: "Contrast failed" on the day line "4 exercises · 15 sets · ~38 min" and the exercise chips (SQUAT,
+  RDL, LEG PRESS, CALF), "Dynamic Type font sizes are partially unsupported" on the eyebrows and chips, and
+  "Text clipped" on "4 days · 58 sets a week", "Apply to later weeks", "TRAINING DAYS" and "BLOCK · 8 WEEKS". Not
+  excluded: deciding them is F11's (measure each, as F09 did for Today), not this port's. (4) The accent test's
+  dark half: the known environment issue above.
 - F10 S7b's UI edits (`Smoke`, `WorkoutFinishAdversarial`, `WorkoutSaveFailure*`) are inside launches that already
   carry the seed line, and it adds no launch helper: no edit. The sweep found no other launch without the seed line,
   apart from the `fresh()` launches of the onboarding tests, `Smoke`'s fresh install, `DebugMenu` and
