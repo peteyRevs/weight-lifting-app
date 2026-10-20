@@ -17,7 +17,10 @@
     /// the shell starts over with a new router (ruling R4), which `GateShell` keeps.
     @Suite("Adversarial F08 S3 · the shell starts over with onboarding", .serialized, .timeLimit(.minutes(1)))
     struct AppRootResetAdversarialTests {
-        static let titles: [AppTab: String] = [.program: "Program", .library: "Library", .history: "History"]
+        /// What each tab's root reads outside scroll views. Port of F08 S2/S3, after merging F11 S14: the Program
+        /// tab is the builder, over the program onboarding saved, whose page is inside its scroll view, so it reads
+        /// nothing there (as Today does); Library and History are still placeholders with their titles.
+        static let titles: [AppTab: [String]] = [.program: [], .library: ["Library"], .history: ["History"]]
 
         @Test(
             "A second and a third onboarding land on Today, whatever tab the program went away under",
@@ -33,7 +36,7 @@
                 #expect(shell.shown.isTabs, "\(shell.shown)")
                 for (run, tab) in tabs.enumerated() {
                     shell.select(tab)
-                    #expect(shell.shown.labels == [Self.titles[tab] ?? "?"], "control: the lifter is on \(tab)")
+                    #expect(shell.shown.labels == Self.titles[tab] ?? ["?"], "control: the lifter is on \(tab)")
                     #expect(shell.router.selectedTab == tab)
                     try await shell.deleteTheProgramAndReopen()
                     let onboarding = shell.shown
@@ -76,7 +79,7 @@
                 #expect(shell.shown.isTabs, "\(shell.shown)")
                 if tab != .today {
                     shell.select(tab)
-                    #expect(shell.shown.labels == [Self.titles[tab] ?? "?"], "the tab's own root, not Settings")
+                    #expect(shell.shown.labels == Self.titles[tab] ?? ["?"], "the tab's own root, not Settings")
                 }
                 #expect(shell.areStacksEmpty)
             }

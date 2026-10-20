@@ -1061,6 +1061,15 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   "MY PROGRAM" for the Program tab; the AX5 height check still leaves the Program tab out, now because the
   eyebrow is set in the eyebrow role, not a title's. `test_everyTabRoot_passesTheSystemsAccessibilityAudit` now
   audits the builder over the seed program at week 5, a state neither lane had audited.
+- `LedgerKit/Tests/LedgerAppKitTests/Adversarial/AppRootResetAdversarialTests.swift` (the F08 S3 tester's): `titles`
+  becomes the labels each tab reads outside scroll views, `[.program: [], .library: ["Library"], .history:
+  ["History"]]`, compared whole. Reason: since S14 the Program tab is the builder, over the program onboarding
+  saved, whose page is inside its scroll view, so it reads nothing there, as Today does; it read the
+  placeholder's "Program" before. The full gate after the merge failed on exactly this
+  (`laterOnboardings_landOnToday`, `shell.shown.labels → []`, expected `["Program"]`). The control that the lifter
+  is on the tab stays in the next line (`router.selectedTab == tab`). After the fix `LedgerAppKitTests` on the
+  simulator: 363 of 363, and no issue recorded outside a test (the builder's store is made in the test's turn,
+  because `GateShell` taps the tabs and settles in scope).
 - **Nightly runs after the merge** (Nightly plan, through the lock): `Builder`, `DayEditor`, `ProgramTabAdversarial`,
   `Tabs`, `TabsAdversarial`: 23 tests, 4 failures on the first run. (1) `Tabs:44`: my assertion read "Upper Lower"
   (S14's renamed name); the seed program is "Upper / Lower": fixed. (2) `Builder.test_wrappedName_…:80` read
