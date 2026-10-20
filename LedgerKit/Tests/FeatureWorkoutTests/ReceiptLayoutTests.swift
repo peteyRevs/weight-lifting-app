@@ -116,7 +116,9 @@
         )
         func receipt_stacksAtAccessibilitySizes(_ size: DynamicTypeSize) throws {
             let model = try #require(ReceiptPreview.withRecords.model)
-            for setting in LayoutSetting.everySetting(size) {
+            // The four sizes stay on every runner: they hold the boundary, which only the text size moves
+            // (`ReceiptLayout` and `ReceiptHeader` stack on `isAccessibilitySize`), so the settings may sweep.
+            for setting in LayoutSetting.sweep(size) {
                 let stops = setting.elements(of: ReceiptParts(model: model))
                 let tiles = model.page.tiles.compactMap { tile in stops.first { $0.label == tile.spoken }?.frame }
                 let title = try #require(stops.first { $0.label == model.header.title }).frame

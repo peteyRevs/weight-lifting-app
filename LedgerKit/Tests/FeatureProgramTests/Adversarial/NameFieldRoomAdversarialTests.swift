@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -64,7 +65,8 @@
         /// next thing drawn is 35 pt further at `.accessibility3` (45 pt at `.large`).
         @Test(
             "Under a name the caret and the field stay above the day's tag and take no neighbour's tap",
-            arguments: [DynamicTypeSize.large, .accessibility1, .accessibility3, .accessibility5],
+            // The PR runner (`TestSweep`) keeps the default and the largest, where the room is least.
+            arguments: TestSweep.sizes([.large, .accessibility1, .accessibility3, .accessibility5]),
             [LegibilityWeight.regular, .bold]
         )
         func caret_staysAboveTheTag(_ size: DynamicTypeSize, _ weight: LegibilityWeight) throws {

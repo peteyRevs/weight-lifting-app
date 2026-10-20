@@ -186,11 +186,7 @@ extension WorkoutAnnouncementAdversarialTests {
             await clock.base.advance(by: .seconds(1))
             await eventually("a second of the rest") { clock.sleeps.value > sleeps || store.restPanel?.isOver == true }
         }
-        var turns = 0
-        while await !haptics.played.contains(.restOver), turns < 20000 {
-            turns += 1
-            await Task.yield()
-        }
+        await eventually("Rest over to be felt") { await haptics.played.contains(.restOver) }
         await giveWay()
         #expect(await haptics.played.suffix(1) == [.restOver])
         #expect(await said.announced.count == 1, "the words came before the haptic had been played")

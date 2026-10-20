@@ -106,7 +106,7 @@ simctl-bootstatus xcodebuild-test-without-building-LedgerWatch xcbeautify check-
 FULL="$(echo $FULL) "
 
 unset FAIL_AT GITHUB_ACTIONS SNAPSHOT_TESTING_RECORD TEST_RUNNER_SNAPSHOT_TESTING_RECORD
-unset LEDGER_COMPILATION_CACHE # W65 sets it per run; a caller's export must not reach the other runs
+unset LEDGER_COMPILATION_CACHE # W65, W76 and W77 set it per run; a caller's export must not reach the other runs
 run
 expect_exit "W01 full run with every step green exits 0" 0 "$code" "$out"
 if [[ "$calls" == "$FULL" ]]; then pass "W02 full run calls every step in order"; else
@@ -461,6 +461,28 @@ build-for-testing-LedgerWatch:ARCHS=arm64 test-without-building-LedgerWatch:ARCH
 0 build-for-testing-Ledger:ARCHS=arm64 test-without-building-Ledger:ARCHS=arm64 "
 check "W76 ... and each test run's arguments are its build's, the action and bundle aside (cache setting: W65)" \
     is "$(run; grep -E '^(build-for-testing|test-without-building) ' "$LOG.args" | sed -E 's/^[a-z-]+ //; s/ -resultBundlePath [^ ]+.*$//' | uniq | wc -l | tr -d ' ')" 2
+
+# --build-only (main-cache.yml; tasks/chores/2026-10-17-main-cache.md): main's cache is only worth saving if its
+# entries' keys are the ones Check looks up, and a key hashes the compiler's arguments. So the build must be
+# step 3's iOS build, argument for argument, and nothing else may run: no boot, catalogs, tests or coverage.
+LEDGER_COMPILATION_CACHE=YES run --ios-only; check_build="$(grep '^build-for-testing ' "$LOG.args")"
+LEDGER_COMPILATION_CACHE=YES run --build-only
+check "W77 --build-only runs step 0, then the iOS build-for-testing alone (no boot, catalogs, tests or coverage), and says so" \
+    is "$code $calls|$(grep -c 'check\.sh (--build-only) OK' <<<"$out") $(grep -cE '^ +[0-9]+s  iOS build$' <<<"$out")" \
+    "0 xcode-version mise-install swiftformat-version swiftlint-version xcodebuild-build-for-testing-Ledger xcbeautify |1 1"
+check "W77 ... with exactly the arguments of Check's iOS build (scheme, plan, simulator, paths, pins, the cache), so its keys are Check's" \
+    is "$([[ -n "$check_build" && "$(cat "$LOG.args")" == "$check_build" ]] && echo same) $(grep -c 'COMPILATION_CACHE_ENABLE_CACHING=YES' "$LOG.args")" \
+    "same 1"
+FAIL_AT=xcodebuild-build-for-testing-Ledger run --build-only
+check "W78 --build-only: a failed build fails it (the workflow then saves no cache)" \
+    is "$([[ $code -ne 0 ]] && echo failed) $(grep -c 'check\.sh (--build-only) OK' <<<"$out")" "failed 0"
+rejected=""
+for flags in "--build-only --ios-only" "--skip-static --build-only" "--build-only --fast" "--build-only --lint-only" \
+    "--build-only --static-only" "--build-only --skip-lint" "--record-snapshots --build-only" "--build-only --build-only"; do
+    run $flags
+    rejected="$rejected$code$(grep -c '^error: .*--build-only takes no other flag\|^error: contradictory flags' <<<"$out")${calls:+ $calls} "
+done
+check "W78 --build-only with any other flag exits 2 before any step" is "$rejected" "21 21 21 21 21 21 21 21 "
 
 # adversarial/run.sh picks the half: fake suites, one marked as needing macOS, in a copy of the runner.
 RS="$ADV_TMP/runner"

@@ -3,6 +3,7 @@ import Dependencies
 import Foundation
 import LedgerDomain
 import LedgerTestSupport
+import Testing
 
 /// A test clock that counts the sleeps begun on it, so a test can wait until the store's task is
 /// asleep before it moves time: no wait is missed, and none is on real time.
@@ -96,11 +97,10 @@ struct RestBench {
         return keeper
     }
 
-    /// Waits, by giving way and never by time, until `keeper` has begun a sleep since `sleeps`, or ended.
+    /// Waits until `keeper` has begun a sleep since `sleeps`, or ended (`eventually`: at most 10 s of the wall
+    /// clock, whatever the machine's load).
     func settled(_ keeper: RestKeeper, after sleeps: Int) async {
-        while clock.sleeps.value == sleeps, !keeper.isDone {
-            await Task.yield()
-        }
+        await eventually("the rest's task to sleep again or end") { clock.sleeps.value != sleeps || keeper.isDone }
     }
 
     /// A second goes by, on the wall clock and on the store's clock together: the task wakes at the
@@ -132,11 +132,13 @@ struct RestBench {
     }
 }
 
-/// Waits until `haptics` has played exactly `wanted`, by asking the actor between yields; the suite's time
-/// limit ends a wait that never holds.
+/// Waits until `haptics` has played exactly `wanted` (`eventually`: at most 10 s of the wall clock, then an
+/// issue that names what was wanted).
 @MainActor
-func eventuallyPlayed(_ haptics: FakeHaptics, _ wanted: [Haptic]) async {
-    while await haptics.played != wanted {
-        await Task.yield()
-    }
+func eventuallyPlayed(
+    _ haptics: FakeHaptics,
+    _ wanted: [Haptic],
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    await eventually("the haptics \(wanted)", sourceLocation: sourceLocation) { await haptics.played == wanted }
 }
