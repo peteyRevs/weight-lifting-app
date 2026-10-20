@@ -23,7 +23,8 @@ authoritative; the plan differs:
   `LedgerKit/Package.resolved` pins exactly the same packages, versions and revisions.
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
-- **Free minutes (Pete, 2026-09-27); paid since 2026-09-30, with a $60 monthly limit.** `pr.yml` has one
+- **Free minutes (Pete, 2026-09-27); paid from 2026-09-30; free again since the repository went public
+  (2026-10-20: standard runners).** `pr.yml` has one
   macOS job, `Check` (`check.sh --ios-only --skip-static`). It runs after two Linux jobs: `Scope` skips
   both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
   change (renames count at both paths). `Static checks` comes next (below). `main-cache.yml` builds on
@@ -111,18 +112,24 @@ authoritative; the plan differs:
     build) reached the deadline whatever its code; the sweeps were the largest part. Measured on the Mac
     with 40 seeds: 903 s with every sweep, 595 s under `pr` (FeatureProgramTests 374 → 205 s of cases,
     FeatureWorkoutTests 185 → 66 s). The rest is the UI smoke (65 s), launches, the seeded suites and
-    single-case hosted tests, which no sweep reaches.
-  - *Deadline (2026-10-17; `tasks/chores/2026-10-17-pr-sweeps.md`).* `LEDGER_XCODEBUILD_DEADLINE` is
-    3,120 s; the step's timeout is 54 min, 2 min after the deadline, and the job's 59. A PR's first run
-    restored no compiled output until `main-cache.yml` (above) and built in 1,140–1,221 s on 2026-10-08 and -09, after about 125 s of
-    script tests. Under both runner variables the tests took 576 s on a developer Mac when the deadline was set (595 s after the review's fix round, which gave findings and boundaries back some sizes and settings). The runner took 2.0
-    to 3.2 times the Mac's time for the same commits on 2026-10-09 (3.6 for #49, whose suites the Mac run
-    lacked), so the deadline is sized for 2.5×: 1,221 + 125 + 1,440 s of tests is about 2,786 s, plus 5 min
-    is about 3,086 s, set to 3,120 s. At 595 s the same sum is about 2,834 s, 286 s inside. A run stopped by the deadline costs its minutes and a re-run's; a green run bills
-    only what it uses, so headroom costs nothing until something hangs (then 10 more paid minutes than at
-    2,520 s). The deadline was 2,400 s until 2026-10-09 and 2,520 s until 2026-10-17; at 2,400 s two first
-    runs of 2026-10-09 were interrupted in their tests with no test failing (builds of 1,140 and 1,145 s;
-    the tests then needed 855 s and 1,497 s on the re-runs).
+    single-case hosted tests, which no sweep reaches. On 2026-10-20 (`tasks/chores/ci-test-time.md`) six suites added
+    since, which swept every size or setting, ask through `TestSweep` too: NameFieldLine (and its Room and
+    Round 2 files), FieldFont, the receipt's layout and LOGGED cut, the "End workout?" sheet's adversarial
+    suite, and the seed names of the F11 S10 name field. A check pinned to a size where a measure stands
+    nearest its bound names that size (`also:`).
+  - *Deadline (2026-10-20; `tasks/chores/ci-test-time.md`).* `LEDGER_XCODEBUILD_DEADLINE` is 3,840 s; the
+    step's timeout is 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
+    first runs (#65, #66) restored nothing, built cold (865 and 1,424 s, after 96 and 150 s of script tests)
+    and were stopped by the 3,120 s deadline in their tests; their re-runs built warm (441 and 758 s) and
+    tested for 2,099 and 2,210 s (2,635 and 3,124 s in all). Since then a first run restores `main`'s cache
+    ("What is main-scoped", above), and the sweeps of six more suites keep their representatives
+    ("Sweeps on the runner"): 297 s of their cases on a developer Mac become 170 s, which at the runner's 2.0
+    to 3.0 times saves about 250–380 s there, so the tests are about 1,960 s at most. A warm first run is then
+    about 150 + 758 + 1,960, near 2,870 s (48 min); the deadline also covers a cold one, for a PR whose
+    lockfiles or Xcode no cache matches: 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min, set to 3,840 s.
+    Standard minutes are free on this public repository (2026-10-20), so headroom costs nothing until
+    something hangs. Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
+    2026-10-20, each sized for a cold build and stopped by the tests' growth (`tasks/chores/2026-10-17-pr-sweeps.md`).
   - *arm64 only (2026-10-18; `tasks/chores/2026-10-18-arm64-only.md`).* Every `xcodebuild` in `check.sh`
     passes `ARCHS=arm64`, on both lanes and on the build and the test run alike (check-wiring W76). The
     iOS build also builds the embedded watch app, and the active-arch rule covers only the destination's
