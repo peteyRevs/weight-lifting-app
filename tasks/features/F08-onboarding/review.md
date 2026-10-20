@@ -268,6 +268,218 @@ These are not findings against S1: the slice implements the brief's tables as wr
 - **Whether the 3-, 5- and 6-day programs are good programs.** I checked that they are the brief's.
 - **S2 and S3**, beyond whether this API serves the call the notes describe.
 
+## Slices S2 and S3 — the port, round 1 (G3 reviewer, 2026-10-19)
+
+Reviewed: `feat/F08-s2-onboarding` @ `849db7c`, `git diff 16a2e52...HEAD` (157 files). The contract is the brief's
+"Plan amendments — slices S2 and S3" with R1–R12, Pete's questions 1–5 at their defaults, his decisions 1 A, 2 A,
+3 A, 4 A, 5 C, ruling B (`mainStandIn`) and F8-S2S3-4 (only the tabs audit is dated). I read the product files
+whole first. Then I read the delta against `24b610b`: `FeatureOnboarding` differs only by R6, R8 and the source
+test, and the 18 references are byte-identical. After that I read the new LedgerAppKit tests, the UI edits, the
+notes' port sections and test-findings port rounds 1–2.
+
+### Verdict
+
+**Approved: 0 Blocking, 2 Should fix, 5 Nit.**
+
+- The port is faithful. The gate, the router replaced on onboarding's appearance (R4) and the UI-test seam
+  (R2) are correct, and I found no order of launch pass, phase change and store value that draws the wrong
+  screen.
+- **SF1 is not about this branch's code, but it must be done before the pull request opens (R10).** Since the
+  notes were written, F11 S14 has added three UI-test files and edited `Tabs`/`TabsAdversarial` on the
+  assumption that a UI test's database has no program. The merge is textually clean but semantically red.
+- **SF2** is a race in one new root test.
+
+### What I ran
+
+- `git merge-tree --write-tree HEAD feat/F11-s14-program-tab` (`2487ebd`) and `… feat/F10-s7b-receipt` (`163f1d1`):
+  both exit 0, no conflicted file.
+- Host `swift test --package-path LedgerKit --filter 'FeatureOnboardingTests|UITestProgram|RootGate'`: exit 0,
+  113 tests in 22 suites. The hosted root suites are `#if os(iOS)`, so they did not run here. For those I read
+  the tester's 1,104 simulator runs (16 iterations, 0 failures).
+- `git diff 24b610b HEAD` over `FeatureOnboarding` sources, tests and `__Snapshots__`.
+- No simulator run, no full gate and no `/code-review` fork: I did the bug pass by hand (below).
+
+### Criteria, briefly
+
+- **1–11 (the screen).**
+  - The store keeps the M1 convention: `@MainActor @Observable`, empty init, synchronous `send`, work only in
+    the root's `.task` / `.task(id: attempt)`. Logging uses `logger.category("onboarding")` and no
+    cancellation is logged.
+  - A save cancelled before its write goes back to `.editing` (or to `.failed` for a retry).
+  - The program id is drawn from `\.uuid` before the generator's ids (argument order,
+    `OnboardingStore.swift:176`).
+  - R6: the announcement is in `OnboardingRoot.swift:47-52`, through `announce`.
+  - R8: `OnboardingCopy.swift:54` uses `locale.forCountedText`. `step(_:of:)` keeps the plain locale, which is
+    right because its key has no plural variation.
+  - Every literal is in `OnboardingCopy*`. `FeatureOnboardingSourceTests` covers the spellings, with a
+    control.
+- **12–15 (gate).**
+  - `RootGate.follow(after:)` reads nothing before `launch` returns. A cancelled call writes nothing, including
+    a value the stream had already handed over (the guard inside the loop). A stream that ends uncancelled
+    gives `.main`.
+  - `MainRoot` stays in the tree, so a phase change keeps onboarding's `@State` store (its step and picks).
+  - R5 holds: the cover stays on `MainRoot.body`.
+- **14 / R4.** `MainRoot.swift:71`: `.onAppear { router = newRouter() }` replaces the router.
+  - S14's `AppRouter.programWeek` therefore goes with the old router, and no reset method has to keep up
+    with it.
+  - `AppRootTests.pushedScreen_isGoneAfterASecondOnboarding` (`:147-173`) checks three things. A new router was
+    made. The old router still holds its pushes (so it was replaced, not emptied). The tabs after onboarding read
+    over the new one.
+- **16 / R12.** `retrySeed()` is the database half alone. `AppRootOnboardingAdversarialTests.retry_runsTheSeedStep_thenSaves`
+  kills the `OnboardingRoot {}` mutant (test-findings, round 1, measurement 3), which closes S3-SF1 of
+  2026-10-05.
+- **20 / R2.**
+  - `UITestProgram.liveSeeds` returns false in Release. The seam's body and its flag are `#if DEBUG`, and
+    `SampleProgram` sits inside the file-wide `#if DEBUG` of `WorkoutLauncher+Sample.swift`.
+  - The seam is saved once. A call that starts cancelled returns before marking itself done, and a
+    `CancellationError` on a cancelled task does not mark it either.
+  - `LedgerAppKit` already depended on `FeatureWorkout` (`MainRoot` imports it), so there is no new package
+    edge.
+  - A real failure is logged and marks the seam done (F8-S2S3-2, accepted).
+- **21 (UI).**
+  - Every `-LEDGER_UITEST` launch either adds the seed line, one per helper, or goes through
+    `XCUIApplication.fresh()` and "Skip setup" (`Smoke`'s first test, `DebugMenu`, `LaunchPerformance`,
+    `Onboarding*`).
+  - I count **17** added `+= ["-LEDGER_UITEST_PROGRAM", "seed"]` lines in 14 files; the notes say 18 launches
+    (notes:1053). The difference is harmless, but the notes should give the count a reader can grep.
+  - The five no-program assertions are the ones removed. F8-S2S3-4's date is on the audit test alone
+    (`TabsAdversarial.swift:134-137`).
+- **22–26.**
+  - The shared one-line files hold the module's name only, and `resources` is added.
+  - `AppRootAdversarialTests`' sanctioned edits are commented and keep the old intent ("draws more than the
+    ground").
+  - Docs: architecture §4 and §14 are right. Testing-strategy §2.7's flow names exist (`Onboarding.swift:17, 76,
+    94`). The F14 bullet and the `Settings.swift:36-40` comment (R11) are comment and brief only.
+- **Seams (ruling B, R4).**
+  - `AppRoot` gains one internal parameter, `mainStandIn` (nil default).
+  - `MainRoot` gains `router:`, `newRouter:` and `mainStandIn:`, all internal and all defaulted, so the app's
+    call sites are `AppRoot(composition:)` and `MainRoot(composition:gate:mainStandIn:)`.
+  - `router:` goes beyond ruling B, but R4's test needs it: the test pushes before onboarding appears.
+  - This is minimal. I would not fold `router:` into `newRouter:`, because the test reads both routers.
+
+### Should fix
+
+**SF1. Merging F11 S14 turns its UI tests red without a single conflict: the notes' R10 list is out of date**
+(`implementation-notes.md:1053-1058`; on `feat/F11-s14-program-tab` @ `2487ebd`: `Apps/LedgerUITests/Builder.swift:151-159`,
+`Tabs.swift:38`, `TabsAdversarial.swift:10, 14, 120`).
+
+- *What.* The notes say S14 "adds no UI test" (true of `7f2b546`). S14 has since added:
+  - `Builder.swift`, `DayEditor.swift` and `ProgramTabAdversarial.swift`. All three launch through
+    `BuilderApp.launch(at:textSize:)` with `["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", …]` and wait for
+    `today.title`. After this port they open on onboarding and fail at `Builder.swift:158`.
+  - Sanctioned edits to `Tabs.swift` and `TabsAdversarial.swift` whose stated premise is "a UI test's database
+    has none [no program]". Their Program tab reads "No program yet". With this port's seed line in those same
+    helpers, the Program tab shows the builder over the seed program. `Tabs.swift:38-41`,
+    `TabsAdversarial.swift:10/14` (the heading and label) and the AX5 height exclusion at `:120` stop
+    matching.
+  - `git merge-tree` reports both files clean, so nothing will flag this before the nightly.
+- *Also.* `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` will then audit the builder
+  over the seed program at week 5. Neither lane has measured that state.
+- *F10 S7b* (`163f1d1`) is fine. Its edits are inside launches that already carry the seed line (`Smoke`,
+  `WorkoutFinishAdversarial`, `WorkoutSaveFailure*`), and it adds no launch helper.
+- *Fix (when `main` with S14 is merged in, before the push, per R10).*
+  - Add the one seed line to `BuilderApp.launch`. Its `seedTheProgram` then finds the seed program active and
+    still works.
+  - Re-edit S14's `Tabs`/`TabsAdversarial` lines so the Program tab is read over a program: the builder's
+    `textFields["Program name"]`, or whatever S14 identifies the builder's heading by. Keep the AX5 exclusion
+    only if the builder's heading still wraps.
+  - These are sanctioned edits of another lane's testers' files: list each with its diff in the notes (R9's
+    way) and have G2 re-run `Builder`, `DayEditor`, `ProgramTabAdversarial`, `Tabs` and `TabsAdversarial` on
+    the Nightly plan.
+  - Update notes:1053-1058 with S14's and S7b's actual files.
+
+**SF2. `root_announcesTheFailureOnce` waits on a value nothing observes** (`LedgerKit/Tests/FeatureOnboardingTests/OnboardingRootTests.swift:16-18, 119`).
+
+- *What.* `Heard` is a plain class. `Hosted.until { !heard.lines.isEmpty }` is an `Observations` sequence, and
+  its closure reads no observable property. If the first evaluation is false, nothing can wake it, so the test
+  runs into its one-minute time limit (or, if the sequence ends instead, the `#expect` on the next line
+  fails).
+- Whether it is already true depends on whether SwiftUI's update has run `onChange(of: model.error)` before
+  `until`'s first evaluation, after the `until { phase == .failed }` above it returned. Those are two
+  independent deliveries on the main actor.
+- The suite is not among the tester's 16-iteration runs (those were the LedgerAppKit root suites), so its green
+  is a few runs at most.
+- *Fix.* Mark `Heard` `@Observable`, as `UITestProgramAdversarialTests.FirstPass` and `GateScene` are. Then
+  `until` wakes on the append. One word, no change to what the test asserts.
+
+### Nit
+
+- **N1. `Support/LaunchedApp.swift:3-5, 25-28`: the doc comments are the S3 branch's, from before R2.**
+  - They say "Eleven of the UI tests start through that helper", and that every test about "anything behind"
+    onboarding "first gets to Today as a lifter who skips setup does". On this branch, three tests outside
+    `Onboarding*` use it, and the rest launch with the seed program.
+  - They also call `skipSetup()` "the one place that knows how" to get past onboarding, but
+    `UITestProgram` is now the other place.
+  - *Fix:* two sentences. The seed argument is how most tests get a program (testing-strategy §2.7); this
+    helper is for tests of onboarding and of what "Skip setup" saves.
+- **N2. Whole `Program` values in `#expect`** (`OnboardingStoreSaveTests.swift:30, 64, 86, 118, 136`,
+  `OnboardingStoreFailureTests.swift:113, 151, 165`, `OnboardingRootTests.swift:73`,
+  `Adversarial/OnboardingAdversarialScene.swift:137`).
+  - These are carried unchanged from `24b610b`. A failure prints two programs of 4–6 days × 8 weeks with their
+    slots.
+  - The port's own new tests already compare outside `#expect` (`UITestProgramTests.swift:42-43`,
+    `AppRootTests.swift:74-77`).
+  - *Fix (optional, not in this PR unless touched anyway):* the same `let matches = saved == expected;
+    #expect(matches, …)` with a short summary (`saved.map(\.id)`, day count) in the comment.
+- **N3. Criterion 25's figure is in test-findings, not in the notes.** The notes call the seconds "open"
+  (notes:1111-1115). The tester measured about +20 s on the PR sweep (test-findings, round 1, "Measurements
+  asked for" (1)). *Fix:* one line in the notes pointing at it, so the PR description can quote it.
+- **N4. `Today.swift` still starts and discards the Debug sample workout in every test to save the seed program**
+  (`seedTheProgram(in:)`).
+  - With `-LEDGER_UITEST_PROGRAM seed` that program is already active, so the step only costs nightly
+    seconds. The header comment (`:11-13`) says so honestly.
+  - R9 allowed one line per helper, so leave it here. *Fix:* a follow-up for F09/F15 to drop it.
+- **N5. Two overlapping `saveUITestProgramIfAsked()` calls both save** (`AppComposition.swift:160-180`).
+  - Only one program results, because both write the same seed program by its fixed id (the tester pinned
+    this, `overlappingCalls_leaveOneProgram`).
+  - The app has one gate per scene and one scene, so this is a property of the fixture, not a guarantee of
+    the seam. *Fix (optional):* say in the doc comment that "once" rests on the seed program's fixed id when
+    calls overlap.
+
+### Conflict risk with F11 S14 (asked)
+
+- **Textual: none.**
+  - S14's LedgerAppKit delta is `AppTabs.swift` (+onProgramRoute), `MainRoot.swift` (one line inside `tabs`,
+    `onProgramRoute: { router.resolve($0) }`), `Routes.swift` (`programWeek`, `requestProgramWeek`),
+    `Routes+Today.swift` and the new `Routes+Program.swift`.
+  - Of those, the port touches `MainRoot.swift` only, and only `content`, the init and the stored properties,
+    away from the `AppTabs(...)` call. `merge-tree` is clean.
+  - S14 constructs no `MainRoot`/`AppRoot` in its tests, so the port's new `gate:` parameter breaks nothing of
+    S14's. The port's tests build no `AppTabs`: `GateTabsStandIn` is its own `TabView`.
+- **Semantic: one thing, SF1 (the UI tests).** In the product, R4's new `AppRouter()` already covers S14's
+  router state: `programWeek` is dropped with the old router when onboarding appears, which R4 intends.
+- **Effort:** small. The merge commit itself is mechanical. SF1's follow-up is one launch line plus roughly
+  three assertion sites in S14's two Tabs files, then a nightly run of five UI suites.
+
+### For Pete (product decisions and invented wording)
+
+- **Invented text, unchanged from 2026-10-05:**
+  - "Back" (question 1; the design has no way back).
+  - The singular "%@, %lld week, %@. Editable any time." (never shown at 8 weeks).
+  - Every translator's comment.
+  - The port adds no text a lifter sees.
+- **Defaults built in, one place each:**
+  - Q2: "Skip setup" saves Both × 4 whatever is picked, also from the failed state (`OnboardingStore.swift:68-69`).
+  - Q3: the launch screen is untouched.
+  - Q4: the first screen waits for the launch's pass (`RootGate.follow(after:)`).
+  - Q5: the audit's two exclusions are kept.
+- **Pete 5 = C:** units and week start are the stored settings' (pounds, Monday) until F14 decides about the
+  region (the F14 bullet).
+- **Follow-ups that touch product judgement, not this PR:**
+  - The audit of Today over an ended block ("Open Program", "Block complete"; notes:1173-1177).
+  - The three undated `TabsAdversarial` reads that rely on the seed block having ended (F8-S2S3-5).
+  - The accent test's dark half on the shared simulator (an environment chore, test-findings round 2).
+- **DoD screenshot still missing:** "Today after Start training", light and dark (notes:1118-1120). It is for the
+  orchestrator's run of the app.
+
+### What I did not check
+
+- The hosted iOS suites, the UI tests and the snapshot references on a simulator. I read the tester's runs and
+  the implementer's gate logs.
+- A Release build: Debug-only is established by reading.
+- The merged tree with S14 or S7b: only `merge-tree`, not built and not tested.
+- VoiceOver by ear, Dynamic Type by hand, or a device.
+
 ---
 
 > **Carried from the reviewed branches, as of 2026-10-05** (F08 S2/S3 port, ruling R1). The sections below are the
