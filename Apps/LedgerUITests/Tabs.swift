@@ -2,7 +2,7 @@ import XCTest
 
 /// F09 S1 criteria 1, 2 and 5, on screen: the root shows four tabs, Today · Program · Library · History, with Today
 /// selected on launch; each tab shows its own screen, whose title names it (the Program tab's, since F11 S14, is
-/// the builder's message for no program); and the tab bar's buttons are what
+/// the builder, over the seed program since F08: its "MY PROGRAM" eyebrow); and the tab bar's buttons are what
 /// VoiceOver reads, each by its title, the selected one marked selected. Nightly only: the `PR` plan selects `Smoke`.
 final class Tabs: XCTestCase {
     private static let titles = ["Today", "Program", "Library", "History"]
@@ -33,12 +33,16 @@ final class Tabs: XCTestCase {
 
         for (index, title) in Self.titles.enumerated().dropFirst() {
             app.tabBars.buttons[title].tap()
-            // Sanctioned edit of F11 S14 (criterion 25): the Program tab draws the builder, which with no program
-            // (a UI test's database has none) shows its message; the other tabs show their placeholders.
-            let shown = title == "Program" ? "No program yet" : title
+            // Sanctioned edit of F11 S14 (criterion 25), re-edited by F08 S2/S3 (review SF1): the Program tab draws
+            // the builder over the seed program (`-LEDGER_UITEST_PROGRAM seed`), found by its eyebrow, with the
+            // program's name in its name field; the other tabs show their placeholders.
+            let shown = title == "Program" ? "MY PROGRAM" : title
             let heading = title == "Program" ? app.staticTexts[shown] : app.staticTexts["\(title.lowercased()).title"]
             XCTAssertTrue(heading.waitForExistence(timeout: 5), title)
             XCTAssertEqual(heading.label, shown)
+            if title == "Program" {
+                XCTAssertEqual(app.textFields["Program name"].value as? String, "Upper Lower", "the seed program")
+            }
             XCTAssertEqual(
                 Self.titles.map { app.tabBars.buttons[$0].isSelected },
                 Self.titles.indices.map { $0 == index },

@@ -1044,6 +1044,28 @@ call whose task is cancelled does not count, and the next pass saves; pinned by
   `AppRootFollowingAdversarialTests`, `AppRootGateAdversarialTests` (the stand-in's call sites), and the seven
   doubles' `update`.
 
+### Sanctioned edits after merging `main` with F11 S14 and F10 S7b (2026-10-20, review SF1)
+
+Merge `761db7e` (`origin/main` @ `685314c`: #65 F10 S7b, #66 F11 S14) merged cleanly; these UI edits follow, each
+to an earlier tester's file, because a fresh UI-test database now opens on onboarding:
+
+- `Builder.swift`, `BuilderApp.launch(at:textSize:)` (F11 S14's launcher, used by `Builder`, `DayEditor` and
+  `ProgramTabAdversarial`): `+ app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"]` after its
+  `-LEDGER_UITEST_NOW` line. Reason: it waits for `today.title` on a fresh launch. Its `seedTheProgram(in:)` still
+  runs and finds the seed program active.
+- `Tabs.swift`, `test_eachTab_showsItsOwnScreen_andTodayKeepsItsTitle` (S14's sanctioned edit, re-edited): the
+  Program tab's heading is the builder's eyebrow "MY PROGRAM", no longer "No program yet", and the name field
+  reads the seed program's name, "Upper Lower". Reason: with the seed line the Program tab shows the builder over
+  a program, so S14's premise "a UI test's database has none" no longer holds.
+- `TabsAdversarial.swift` (S14's sanctioned edit, re-edited for the same reason): `titles` and `label(of:)` read
+  "MY PROGRAM" for the Program tab; the AX5 height check still leaves the Program tab out, now because the
+  eyebrow is set in the eyebrow role, not a title's. `test_everyTabRoot_passesTheSystemsAccessibilityAudit` now
+  audits the builder over the seed program at week 5, a state neither lane had audited.
+- F10 S7b's UI edits (`Smoke`, `WorkoutFinishAdversarial`, `WorkoutSaveFailure*`) are inside launches that already
+  carry the seed line, and it adds no launch helper: no edit. The sweep found no other launch without the seed line,
+  apart from the `fresh()` launches of the onboarding tests, `Smoke`'s fresh install, `DebugMenu` and
+  `LaunchPerformance`, which go through onboarding on purpose.
+
 ### UI tests (criterion 21)
 
 - `Smoke.test_launchesToToday` → `test_freshInstall_skipsSetupToToday` (in `Smoke`, so `PR.xctestplan`'s selection

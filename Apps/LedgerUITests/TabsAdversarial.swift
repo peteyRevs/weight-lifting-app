@@ -5,13 +5,14 @@ import XCTest
 /// and the debug menu after a tour of the tabs. Nightly only, as every UI test but `Smoke` is.
 final class TabsAdversarial: XCTestCase {
     private static let tabs = ["Today", "Program", "Library", "History"]
-    /// Sanctioned edit of F11 S14 (criterion 25): the Program tab draws the builder, which with no program (a UI
-    /// test's database has none) shows its message, found by its title; the other three are found as before.
-    private static let titles = ["today.title", "No program yet", "library.title", "history.title"]
+    /// Sanctioned edit of F11 S14 (criterion 25), re-edited by F08 S2/S3 (review SF1): the Program tab draws the
+    /// builder over the seed program (`-LEDGER_UITEST_PROGRAM seed`), found by its "MY PROGRAM" eyebrow; the
+    /// other three are found as before.
+    private static let titles = ["today.title", "MY PROGRAM", "library.title", "history.title"]
 
-    /// What each tab's title reads: its name, or for the Program tab the builder's message.
+    /// What each tab's title reads: its name, or for the Program tab the builder's eyebrow.
     private static func label(of tab: String) -> String {
-        tab == "Program" ? "No program yet" : tab
+        tab == "Program" ? "MY PROGRAM" : tab
     }
 
     override func setUpWithError() throws {
@@ -119,7 +120,7 @@ final class TabsAdversarial: XCTestCase {
             XCTAssertGreaterThanOrEqual(heading.frame.minX, window.minX, title)
             XCTAssertLessThanOrEqual(heading.frame.maxX, window.maxX, title)
             if tab != "Program" {
-                // The builder's message is three words, which may wrap at this size; it is no one-word title.
+                // The builder's eyebrow is set in the eyebrow role, not a title's: it is no one-word title.
                 heights.append(heading.frame.height)
             }
             attach(app.screenshot(), named: "AX5-\(tab)")

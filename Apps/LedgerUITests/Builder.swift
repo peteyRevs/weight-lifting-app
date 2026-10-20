@@ -151,6 +151,7 @@ enum BuilderApp {
     static func launch(at instant: String, textSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", instant]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         if let textSize {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
         }
