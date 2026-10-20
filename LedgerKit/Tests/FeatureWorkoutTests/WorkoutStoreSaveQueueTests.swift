@@ -33,6 +33,7 @@ struct WorkoutStoreSaveQueueTests {
         await store.save()
 
         #expect(await scene.asked() == [.changed, .changed, .finished(Fixtures.now)])
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         let events = await scene.fake?.applied ?? []
         let heavier = running.exercises[0].sets[1].weight + .pounds(5)
@@ -63,6 +64,7 @@ struct WorkoutStoreSaveQueueTests {
 
         await scene.probe.release()
         await saving.value
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
         #expect(stored.doneSets == 2, "the set logged before Finish is in the saved workout")
@@ -124,6 +126,7 @@ struct WorkoutStoreSaveQueueTests {
         #expect(store.finishSheet?.summary.hasPrefix("1 of ") == true)
         store.send(.save)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         await task.value
     }

@@ -157,14 +157,20 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
         arguments: reachedFor
     )
     func views_reachForNothing(_ pattern: String) throws {
-        let found = try Self.matches(pattern)
+        // Sanctioned edit (S14, Pete's question 5, A): the name field asks whether its own draft is only spaces,
+        // to show the placeholder over it. The draft is the view's state (S9 ruling 14); no model holds it.
+        let found = try Self.matches(pattern).filter { $0 != "NameField.swift: .allSatisfy(" }
         #expect(found == [], "\(found)")
     }
 
-    @Test("A view asks a list only whether it is empty, twice: a program's days and a day's short names")
+    @Test("A view asks a list only whether it is empty: a program's days, a day's short names, a name's draft")
     func views_conditionsOnLists_areTheTwo() throws {
         let asked = try Self.matches(#"[\w.]+\.isEmpty"#)
-        #expect(asked == ["DayCard.swift: model.chips.isEmpty", "TrainingDaysSection.swift: model.cards.isEmpty"])
+        // Sanctioned edit (S14, Pete's question 5, A): and the name field, of its own draft.
+        #expect(asked == [
+            "DayCard.swift: model.chips.isEmpty", "NameField.swift: draft.isEmpty",
+            "TrainingDaysSection.swift: model.cards.isEmpty"
+        ])
     }
 
     /// For the orchestrator: criterion 9 is "no rule of its own". The views hold two measures that are no

@@ -66,6 +66,27 @@ extension ProgramStoreTests {
         await running.cancel()
     }
 
+    @Test("13. A card tapped while the new day's write runs is dropped: the new day still opens (F11-S13-12)")
+    func cardTappedDuringTheNewDaysWrite_theNewDayOpens() async throws {
+        let scene = try ProgramStoreScene()
+        let running = await scene.running()
+        await scene.probe.hold(.updateProgram)
+        try scene.store.send(#require(scene.model.days.addDay.action))
+        try await scene.probe.waitUntilHeld()
+        let card = try #require(scene.model.days.cards.first)
+        scene.store.send(card.action)
+        #expect(scene.store.pendingRoute == nil, "the card's tap waits for nothing")
+        await scene.probe.release()
+        await eventually { scene.store.pendingRoute != nil }
+        let day = try #require(await scene.stored().days.last)
+        var handed: [ProgramRoute] = []
+        scene.store.deliverRoute { handed.append($0) }
+        #expect(handed == [.day(day.id, weekIndex: 4)])
+        scene.store.send(card.action)
+        #expect(scene.store.pendingRoute?.route == .day(card.id, weekIndex: 4), "a card opens once the day is stored")
+        await running.cancel()
+    }
+
     @Test("13. A double tap on \"+ Add training day\" adds one day and one route")
     func addDay_doubleTap_addsOneDay() async throws {
         let scene = try ProgramStoreScene()

@@ -125,9 +125,14 @@ extension WorkoutSaveAdversarialTests {
         date.withValue { $0 += 240 }
         store.send(.save)
         await store.save()
-        guard await eventually("the cover to close", { store.exit != nil }) else {
+        // G2 S7b (F10-S7b-1): this save was asked for in this cover, so its receipt shows (criterion 25),
+        // whichever of the answer and the ending update comes first; "Done" then closes the cover.
+        guard await eventually("the receipt or the cover's exit", { store.saved != nil || store.exit != nil }) else {
             return
         }
+        #expect(store.saved?.id == running.id, "the receipt of the save made in this cover")
+        #expect(store.exit == nil, "the cover stays up on the receipt")
+        store.send(.done)
         #expect(store.exit == .route(.saved(running.id)))
         let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
         #expect(stored.doneSets == 2)

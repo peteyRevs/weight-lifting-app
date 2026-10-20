@@ -60,6 +60,7 @@ struct WorkoutStoreSaveFailureTests {
         #expect(store.saveAttempt == 2)
         #expect(store.model.header?.isEnabled == false)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         let stored = try #require(try await scene.stores.workouts.workout(id: running.id))
         #expect(stored.endedAt == Fixtures.now.addingTimeInterval(900), "the end is the first tap's")
@@ -82,6 +83,7 @@ struct WorkoutStoreSaveFailureTests {
         await store.save()
         let first = Fixtures.now.addingTimeInterval(900)
         #expect(await session.askedToEndAt == [first, first])
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         await task.value
     }
@@ -101,6 +103,7 @@ struct WorkoutStoreSaveFailureTests {
         #expect(!store.isSaving)
         store.send(.retrySave)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         #expect(await Self.materializes(scene) == 3)
         await task.value
@@ -130,6 +133,7 @@ struct WorkoutStoreSaveFailureTests {
         store.send(.finish)
         store.send(.save)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         await task.value
     }

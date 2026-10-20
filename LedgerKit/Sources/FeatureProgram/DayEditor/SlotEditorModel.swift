@@ -34,8 +34,6 @@ nonisolated extension SlotEditorModel {
     struct Field: Equatable, Sendable, Identifiable {
         /// Which field it is: its identity among the steppers.
         let kind: SlotField.Kind
-        /// "SETS", "REPS" or "REP FLOOR", "TOP OF RANGE", "START LOAD", "TARGET RPE", "REST".
-        let label: String
         /// The slot's own value: "5", "50 lb", "8.5", "2:30".
         let value: String
         /// "Sets", "Reps" or "Rep floor", "Top of range", "Start load", "Target RPE", "Rest".

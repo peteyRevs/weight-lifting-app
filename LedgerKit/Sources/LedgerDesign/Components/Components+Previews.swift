@@ -27,6 +27,7 @@
         case stepperField = "StepperField"
         case ledgerToggleStyle = "LedgerToggleStyle"
         case wrapLayout = "WrapLayout"
+        case receiptLayout = "ReceiptLayout"
         case watchPrimaryButton = "WatchPrimaryButton"
         case watchRestRing = "WatchRestRing"
         case watchStatBlock = "WatchStatBlock"
@@ -56,6 +57,7 @@
             case .stepperField: StepperFieldGallery().ledgerGalleryPage()
             case .ledgerToggleStyle: LedgerToggleGallery().ledgerGalleryPage()
             case .wrapLayout: WrapLayoutGallery().ledgerGalleryPage()
+            case .receiptLayout: ReceiptLayoutGallery().ledgerGalleryPage()
             case .watchPrimaryButton: WatchPrimaryButtonGallery().ledgerWatchPage()
             case .watchRestRing: WatchRestRingGallery().ledgerWatchPage()
             case .watchStatBlock: WatchStatBlockGallery().ledgerWatchPage()
@@ -184,6 +186,10 @@
 
     #Preview("WrapLayout") {
         DesignPreview.wrapLayout.content
+    }
+
+    #Preview("ReceiptLayout") {
+        DesignPreview.receiptLayout.content
     }
 
     #Preview("WatchPrimaryButton") {

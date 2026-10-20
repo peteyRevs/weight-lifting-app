@@ -38,6 +38,7 @@ struct WorkoutStoreSaveRoundOneTests {
         let again = Task { await store.follow() }
         await saving.value
         #expect(await scene.asked() == [.changed, .finished(Fixtures.now)])
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         pump.cancel()
         await again.value
@@ -64,6 +65,7 @@ struct WorkoutStoreSaveRoundOneTests {
         // "Save workout" still saves it.
         store.send(.save)
         await store.save()
+        #expect(store.doneOnReceipt(of: running.id), "F10 S7b: the receipt shows first; Done closes the cover")
         #expect(store.exit == .route(.saved(running.id)))
         await task.value
     }

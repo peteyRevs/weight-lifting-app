@@ -134,7 +134,8 @@
             let model = try ProgramPreview.dayOpenDouble.dayEditorModel()
             let (drawn, read) = try (Self.drawing(of: model), DayEditorParts(model: model).stops())
             let paths = DayViewsText.paths(of: model)
-            #expect(paths.count == 91, "\(paths.count) strings")
+            // Sanctioned edit (S14, criterion 21): the six steppers' `label`s are gone, 91 strings before.
+            #expect(paths.count == 85, "\(paths.count) strings")
             for path in paths {
                 let changed = DayViewsText.changing(path, to: "Qq", in: model)
                 let isDrawn = try Self.drawing(of: changed) != drawn

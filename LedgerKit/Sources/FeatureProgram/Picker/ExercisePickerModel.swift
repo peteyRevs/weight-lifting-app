@@ -86,16 +86,10 @@ nonisolated extension ExercisePickerModel {
         let id: ExerciseID
         /// The exercise's name, as stored.
         let name: String
-        /// "Machine · Back": the equipment, then the primary muscle.
-        let detail: String
-        /// "already in this day" when the day holds the exercise, else nil: apart from `detail`, for a
-        /// view that draws the mark in its own style.
-        let inDayMark: String?
-        /// `detail`, then the mark when there is one: "Machine · Back · already in this day".
+        /// "Machine · Back": the equipment, then the primary muscle, and "already in this day" after them
+        /// when the day holds the exercise, drawn as one grey line (Pete's question 4, A).
         let line: String
         let isPicked: Bool
-        /// "2": the exercise's place among the picks, counted from 1. Nil when it is not picked.
-        let pickMark: String?
         /// Picks the exercise, or takes it out of the picks when it is picked.
         let action: ExercisePickerAction
     }

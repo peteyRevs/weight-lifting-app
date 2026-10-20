@@ -139,7 +139,7 @@ nonisolated struct AdvDayScreen {
                 lines += [
                     "row \(index).id=\(id)", "row \(index).name=\(exercise.name)", "row \(index).sub=\(sub)",
                     "row \(index).scheme=\(scheme)", "row \(index).load=\(load(shown.load))",
-                    "row \(index).drop=\(slot.dropSets > 0)", "row \(index).open=\(isOpen)",
+                    "row \(index).open=\(isOpen)",
                     "row \(index).spoken=\(index), \(exercise.name)|\(scheme) · \(load(shown.load)) · \(sub)",
                     "row \(index).action=\(DayEditorAction.open(isOpen ? nil : id))"
                 ]
@@ -190,7 +190,7 @@ nonisolated extension AdvDayScreen {
                 lines += [
                     "row \(index).id=\(row.id)", "row \(index).name=\(row.name)", "row \(index).sub=\(row.sub)",
                     "row \(index).scheme=\(row.scheme)", "row \(index).load=\(row.load ?? "nil")",
-                    "row \(index).drop=\(row.hasDropSet)", "row \(index).open=\(row.isOpen)",
+                    "row \(index).open=\(row.isOpen)",
                     "row \(index).spoken=\(row.spokenLabel)|\(row.spokenValue)",
                     "row \(index).action=\(row.action)"
                 ]

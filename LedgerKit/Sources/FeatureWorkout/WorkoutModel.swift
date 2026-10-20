@@ -1,11 +1,14 @@
 import Foundation
 import LedgerDesign
 
-/// What the cover draws: one of three states. Built by `WorkoutPresentation.screen`, drawn by `WorkoutScreen`.
+/// What the cover draws: one of four states. Built by `WorkoutPresentation.screen` and, for the receipt,
+/// `WorkoutPresentation.receipt`; drawn by `WorkoutScreen`.
 nonisolated enum WorkoutScreenModel: Equatable, Sendable {
     /// The session has not said yet: the ground alone.
     case loading
     case workout(WorkoutModel)
+    /// The workout this cover saved (F10 S7b): the cover stays up until "Done".
+    case receipt(ReceiptScreenModel)
     /// The workout cannot be shown; the one control closes the cover.
     case failed(WorkoutFailedModel)
 }

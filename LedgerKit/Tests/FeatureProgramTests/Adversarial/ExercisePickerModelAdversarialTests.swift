@@ -162,7 +162,6 @@ nonisolated extension ExercisePickerModelAdversarialTests {
         #expect(model?.foot.title == "Add 1,000 exercises")
         #expect(model?.foot.action == .add(picks))
         #expect(model?.rows.count(where: \.isPicked) == 1000)
-        #expect(model?.rows.first { $0.id == picks[999] }?.pickMark == "1,000")
         #expect(taken < .seconds(2), "\(taken)")
     }
 

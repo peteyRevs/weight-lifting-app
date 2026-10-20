@@ -67,30 +67,6 @@ nonisolated extension ProgramCopy {
 
     // MARK: The fields
 
-    static var setsLabel: String {
-        String(localized: "SETS", bundle: .module, comment: "Label of the stepper for an exercise's sets")
-    }
-
-    static var repsLabel: String {
-        String(localized: "REPS", bundle: .module, comment: "Label of the stepper for an exercise's reps")
-    }
-
-    static var repFloorLabel: String {
-        String(localized: "REP FLOOR", bundle: .module, comment: "Label of the stepper for the fewest reps of a range")
-    }
-
-    static var topOfRangeLabel: String {
-        String(localized: "TOP OF RANGE", bundle: .module, comment: "Label of the stepper for the most reps of a range")
-    }
-
-    static var startLoadLabel: String {
-        String(localized: "START LOAD", bundle: .module, comment: "Label of the stepper for the load of the first week")
-    }
-
-    static var targetRPELabel: String {
-        String(localized: "TARGET RPE", bundle: .module, comment: "Label of the stepper for an exercise's target RPE")
-    }
-
     static var setsSpoken: String {
         String(localized: "Sets", bundle: .module, comment: "Spoken label of the stepper for an exercise's sets")
     }

@@ -170,7 +170,6 @@ nonisolated extension DayEditorPresentationPropertyTests {
         for (row, slot) in zip(content.rows, day.slots) {
             let isStored = input.exercises[slot.exerciseID] != nil
             #expect((row.load != nil) == isStored)
-            #expect(row.hasDropSet == (slot.dropSets > 0))
             #expect(row.action == .open(row.isOpen ? nil : slot.id))
         }
         if input.locale.identifier == "en_US" {

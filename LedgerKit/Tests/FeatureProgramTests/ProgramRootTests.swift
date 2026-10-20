@@ -134,15 +134,12 @@
                 #expect(scene.store.state == .loading, "in the background the root follows nothing")
                 await Self.move(handed, to: .active)
                 await eventually { scene.store.state.isLoaded }
+                await programs.observed(1)
                 #expect(programs.observations == 1)
                 await Self.move(handed, to: .inactive)
                 await Self.move(handed, to: .background)
                 await Self.move(handed, to: .active)
-                // A run reads the logged weeks as it starts: the store's write of them wakes the check.
-                await eventually {
-                    _ = scene.store.loggedWeeks
-                    return programs.observations == 2
-                }
+                await programs.observed(2)
                 // The save loop's task kept running through it: an edit is stored with no new run of it.
                 scene.store.send(.edit(.setDeload(true, week: 0)))
                 await scene.idle()

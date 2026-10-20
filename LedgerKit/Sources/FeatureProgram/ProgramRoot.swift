@@ -70,7 +70,7 @@ public struct ProgramRoot: View {
             }
             .onChange(of: week, initial: true) { _, week in
                 if let week {
-                    store.select(week: week.weekIndex)
+                    store.select(request: week)
                 }
             }
             .onChange(of: state.notice) { _, notice in
@@ -88,14 +88,21 @@ public struct ProgramRoot: View {
         case let .loaded(model):
             ProgramScreen(model: model, send: store.send)
         case .noProgram:
-            message(ProgramCopy.noProgramTitle, ProgramCopy.noProgramBody)
+            ProgramMessage(title: ProgramCopy.noProgramTitle, text: ProgramCopy.noProgramBody)
         case .failed:
-            message(ProgramCopy.failedTitle, ProgramCopy.failedBody)
+            ProgramMessage(title: ProgramCopy.failedTitle, text: ProgramCopy.failedBody)
         }
     }
+}
 
-    private func message(_ title: String, _ body: String) -> some View {
-        EmptyState(title, body: body)
+/// A message in place of a Program screen, on the ground: the builder's when there is no program or it
+/// cannot be read, and the Day editor's when it cannot be read (Pete's decision 6's texts).
+struct ProgramMessage: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        EmptyState(title, body: text)
             .padding(LedgerSpacing.screen)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(LedgerColor.ground)

@@ -82,7 +82,9 @@
                 // The form controls (F11 S8) come last: the pages above stand where they stood.
                 GallerySection("StepperField") { StepperFieldGallery() },
                 GallerySection("LedgerToggleStyle") { LedgerToggleGallery() },
-                GallerySection("WrapLayout") { WrapLayoutGallery() }
+                GallerySection("WrapLayout") { WrapLayoutGallery() },
+                // The receipt (F10 S7b) after them, for the same reason.
+                GallerySection("ReceiptLayout") { ReceiptLayoutGallery() }
             ]
         }
     }

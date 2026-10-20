@@ -101,6 +101,29 @@
         }
       }
     },
+    "%lld new PRs this session" : {
+      "comment" : "The number of personal records the saved workout set",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new PR this session"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new PRs this session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld reps" : {
       "comment" : "Spoken number of repetitions",
       "localizations" : {
@@ -327,6 +350,17 @@
         }
       }
     },
+    "Done" : {
+      "comment" : "Closes the receipt of a saved workout and returns to Today",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
     "Drop set" : {
       "comment" : "Spoken name of a drop set's row",
       "localizations" : {
@@ -425,6 +459,17 @@
         }
       }
     },
+    "KG MOVED" : {
+      "comment" : "Label of the receipt's tile for the weight lifted, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KG MOVED"
+          }
+        }
+      }
+    },
     "Keep lifting" : {
       "comment" : "Closes the sheet and returns to the workout",
       "localizations" : {
@@ -432,6 +477,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keep lifting"
+          }
+        }
+      }
+    },
+    "LB MOVED" : {
+      "comment" : "Label of the receipt's tile for the weight lifted, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LB MOVED"
+          }
+        }
+      }
+    },
+    "LOGGED" : {
+      "comment" : "Heading of the receipt's list of exercises and what was logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LOGGED"
           }
         }
       }
@@ -469,6 +536,17 @@
         }
       }
     },
+    "Logged %@" : {
+      "comment" : "Spoken: the sets logged for an exercise of the receipt",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged %@"
+          }
+        }
+      }
+    },
     "Minimize" : {
       "comment" : "Button that closes the workout screen and keeps the workout running",
       "localizations" : {
@@ -491,6 +569,17 @@
         }
       }
     },
+    "Nothing logged" : {
+      "comment" : "Spoken: an exercise of the receipt with no set logged, drawn as a dash",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing logged"
+          }
+        }
+      }
+    },
     "Nothing was changed. Try again." : {
       "localizations" : {
         "en" : {
@@ -507,6 +596,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "Prescribed %@" : {
+      "comment" : "Spoken: what was prescribed for an exercise of the receipt",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prescribed %@"
+          }
+        }
+      }
+    },
+    "Prescribed on the right" : {
+      "comment" : "Beside LOGGED: each exercise's prescription stands at the trailing edge of its row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prescribed on the right"
           }
         }
       }
@@ -577,6 +688,17 @@
         }
       }
     },
+    "SETS" : {
+      "comment" : "Label of the receipt's tile for the sets done of all the workout's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETS"
+          }
+        }
+      }
+    },
     "Save workout" : {
       "comment" : "Ends the workout and keeps it in history",
       "localizations" : {
@@ -639,6 +761,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TARGET"
+          }
+        }
+      }
+    },
+    "TIME" : {
+      "comment" : "Label of the receipt's tile for how long the workout took",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TIME"
           }
         }
       }

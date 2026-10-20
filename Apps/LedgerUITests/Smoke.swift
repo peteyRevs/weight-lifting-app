@@ -164,9 +164,9 @@ final class Smoke: XCTestCase {
 }
 
 extension Smoke {
-    /// F10 S7a: the sample workout with one set logged is saved. "Finish" opens "End workout?" with what
-    /// the workout holds; "Save workout" stores it and takes the cover down onto Today, which shows the
-    /// session as logged, with the one set, and offers no workout to resume.
+    /// F10 S7a and S7b: the sample workout with one set logged is saved. "Finish" opens "End workout?" with
+    /// what the workout holds; "Save workout" stores it and shows its receipt, whose "Done" takes the cover
+    /// down onto Today, which shows the session as logged, with the one set, and offers no workout to resume.
     ///
     /// The app's clock is moved to the Monday of the seed program's first week: the sample workout is
     /// that day's session, so Today has a Logged card for it. Under a moved clock the cover's elapsed
@@ -205,11 +205,27 @@ extension Smoke {
         attachScreenshot(of: app, named: "End workout? with a set logged")
 
         save.tap()
-        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "the cover is down")
+        closeTheReceipt(in: app)
         XCTAssertTrue(becomesHittable(today), "the tabs are back")
         XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5), "Today shows the session as logged")
         XCTAssertTrue(app.staticTexts["LOGGED · WEEK 1"].exists)
         XCTAssertFalse(app.buttons["Resume workout"].exists, "nothing is live")
         attachScreenshot(of: app, named: "Today, the saved workout logged")
+    }
+
+    /// F10 S7b: after "Save workout" the receipt shows in the cover, with the one set of all and nothing of
+    /// the live workout; "Done" takes the cover down.
+    @MainActor
+    private func closeTheReceipt(in app: XCUIApplication) {
+        let done = app.buttons["workout.receipt.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "the receipt shows")
+        XCTAssertFalse(app.buttons["workout.header.minimize"].exists, "nothing of the live workout is left")
+        let sets = app.staticTexts
+            .matching(NSPredicate(format: "label BEGINSWITH '1 of ' AND label ENDSWITH 'sets logged'"))
+        XCTAssertTrue(sets.firstMatch.exists, "the SETS tile reads 1/…")
+        XCTAssertFalse(app.staticTexts["today.title"].isHittable, "the cover is still up")
+        attachScreenshot(of: app, named: "The receipt of the saved workout")
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 10), "the cover is down")
     }
 }

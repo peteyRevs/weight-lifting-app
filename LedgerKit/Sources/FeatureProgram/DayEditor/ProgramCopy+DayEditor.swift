@@ -204,6 +204,12 @@ nonisolated extension ProgramCopy {
         String(localized: "Delete", bundle: .module, comment: "Confirms that a training day is deleted")
     }
 
+    /// The alert's one button when a change in the Day editor was not saved (Pete's question 1, A); the
+    /// alert's title is `saveFailed`.
+    static var okay: String {
+        String(localized: "OK", bundle: .module, comment: "Closes the alert that says a change to a day was not saved")
+    }
+
     static var cancel: String {
         String(
             localized: "Cancel",

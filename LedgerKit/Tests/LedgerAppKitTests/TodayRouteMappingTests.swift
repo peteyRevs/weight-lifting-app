@@ -67,8 +67,23 @@ struct TodayRouteMappingTests {
     }
 
     @Test(
-        "The week editor, the next block and program set-up go to the Program tab, until their features land",
-        arguments: [TodayRoute.editWeek(program: Fixtures.programID, weekIndex: 2), .openProgram, .setUpProgram]
+        "Edit this week lands on the builder in the Program tab, with that week asked for (F11 S14, criterion 23)"
+    )
+    func editWeek_landsOnTheBuilder() {
+        let router = AppRouter()
+        let workout = WorkoutLauncher()
+        router.open(.day(DayTemplateID(Fixtures.uuid(332)), weekIndex: 0), in: .program)
+        router.selectedTab = .today
+        router.resolve(.editWeek(program: Fixtures.programID, weekIndex: 2), workout: workout)
+        #expect(router.selectedTab == .program)
+        #expect(AppTab.allCases.map { router[path: $0].count } == [0, 0, 0, 0], "the Day editor is popped")
+        #expect(router.programWeek?.weekIndex == 2)
+        #expect(workout.request == nil)
+    }
+
+    @Test(
+        "The next block and program set-up go to the Program tab, until their features land",
+        arguments: [TodayRoute.openProgram, .setUpProgram]
     )
     func programRoutes_selectProgram(_ route: TodayRoute) {
         let router = AppRouter()
@@ -76,6 +91,7 @@ struct TodayRouteMappingTests {
         router.resolve(route, workout: workout)
         #expect(router.selectedTab == .program)
         #expect(AppTab.allCases.map { router[path: $0].count } == [0, 0, 0, 0])
+        #expect(router.programWeek == nil)
         #expect(workout.request == nil)
     }
 }

@@ -66,6 +66,8 @@ final class ProgramStore {
     var hasEnded = false
 
     @ObservationIgnored private var routeNumber = 0
+    /// The number of the last week request applied: the same request handed in again is no new request.
+    @ObservationIgnored private var appliedRequest: Int?
 
     @ObservationIgnored @Dependency(\.programRepository) var programs
     @ObservationIgnored @Dependency(\.settingsRepository) var settingsRepository
@@ -126,22 +128,6 @@ final class ProgramStore {
         }
     }
 
-    /// Selects the week at `place`, as asked for by Today's "Edit week" or, on the first program, the week
-    /// that holds today.
-    func select(week place: Int) {
-        selectedWeek = place
-        notice = nil
-    }
-
-    /// Hands the waiting route to `handler`, once, and forgets it when the handler has returned.
-    func deliverRoute(to handler: (ProgramRoute) -> Void) {
-        guard let pending = pendingRoute else {
-            return
-        }
-        handler(pending.route)
-        pendingRoute = nil
-    }
-
     /// "+": the new week is selected, found by its id in the program the edit was applied to.
     private func addWeek() {
         let id = WeekID(uuid())
@@ -180,9 +166,11 @@ final class ProgramStore {
         }
     }
 
-    /// One route waits at a time: a tap that comes before the app was handed the one before is dropped.
+    /// One route waits at a time: a tap that comes before the app was handed the one before is dropped, and so
+    /// is one that comes while a new day's write runs, whose route would otherwise find the place taken when
+    /// the write returns (F11-S13-12): the day is added and opened, the card's tap is dropped.
     private func emit(_ route: ProgramRoute) {
-        guard pendingRoute == nil else {
+        guard pendingRoute == nil, !newDayWaits else {
             return
         }
         routeNumber += 1
@@ -229,6 +217,37 @@ final class ProgramStore {
             notice = .saveFailed
             logger.log.error("A change to the program was not saved: \(String(describing: error), privacy: .public)")
         }
+    }
+}
+
+// MARK: - What the app hands in, and what it is handed
+
+extension ProgramStore {
+    /// Selects the week at `place`, as asked for by Today's "Edit week" or, on the first program, the week
+    /// that holds today.
+    func select(week place: Int) {
+        selectedWeek = place
+        notice = nil
+    }
+
+    /// Selects the week the app asked for, once per request: the root hands the request in again each time the
+    /// builder appears (after a pushed Day editor, a tab switch), and that must not undo a week picked since
+    /// (F11-S14-1). A request with a new number selects its week again.
+    func select(request: ProgramWeekRequest) {
+        guard request.number != appliedRequest else {
+            return
+        }
+        appliedRequest = request.number
+        select(week: request.weekIndex)
+    }
+
+    /// Hands the waiting route to `handler`, once, and forgets it when the handler has returned.
+    func deliverRoute(to handler: (ProgramRoute) -> Void) {
+        guard let pending = pendingRoute else {
+            return
+        }
+        handler(pending.route)
+        pendingRoute = nil
     }
 }
 

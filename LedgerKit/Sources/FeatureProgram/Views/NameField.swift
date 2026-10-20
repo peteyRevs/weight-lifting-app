@@ -23,7 +23,8 @@ import SwiftUI
 /// keep around the name. With the focus the field draws its text itself, on its one line, which scrolls
 /// sideways under the caret as every field's does, and what stands under the name moves up to that line.
 /// An empty draft shows the field's placeholder, over an unseen line of the label, so that the name keeps one
-/// line's height and nothing under it moves at the first letter typed. The field lines its text up by the
+/// line's height and nothing under it moves at the first letter typed; a draft of only spaces shows it too. The field
+/// lines its text up by the
 /// layout's direction, as the text that wraps does, so a name whose script runs against the layout does not
 /// jump across when the focus comes.
 ///
@@ -44,6 +45,19 @@ struct NameField: View {
         _draft = State(initialValue: name)
     }
 
+    /// Pete's question 5, A: a draft of only spaces shows the placeholder, as an empty one does. The field
+    /// draws its own only for an empty text, so this one is drawn for it, while the field has the focus (without
+    /// it the draft is the stored name again).
+    private var showsThePlaceholderOverABlankDraft: Bool {
+        isEditing && !draft.isEmpty && draft.allSatisfy(\.isWhitespace)
+    }
+
+    /// The placeholder's colour, the field's prompt and the one drawn over a blank draft alike (review S14 SF-2:
+    /// a token, not the system's placeholder style).
+    private static var placeholderColor: Color {
+        LedgerColor.inkFaint
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             // The label on one line, unseen and of no width: an empty draft keeps the name's one line, under
@@ -53,6 +67,13 @@ struct NameField: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 0, alignment: .leading)
                 .hidden()
+            if showsThePlaceholderOverABlankDraft {
+                Text(label)
+                    .ledgerFont(.title)
+                    // The colour of the field's own prompt, so a blank draft reads as an empty one.
+                    .foregroundStyle(Self.placeholderColor)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
             Text(draft)
                 .ledgerFont(.title)
                 .foregroundStyle(isEditing ? Color.clear : LedgerColor.ink)
@@ -64,14 +85,16 @@ struct NameField: View {
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .accessibilityHidden(true)
         .overlay(alignment: .topLeading) {
-            TextField(label, text: $draft)
-                .ledgerFieldFont(.title)
-                // Where the text starts: at the layout's leading edge, whatever the name's script.
-                .multilineTextAlignment(strategy: .layoutBased)
-                .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
-                .submitLabel(.done)
-                .focused($isEditing)
-                .accessibilityLabel(label)
+            TextField(text: $draft, prompt: Text(label).foregroundStyle(Self.placeholderColor)) {
+                Text(label)
+            }
+            .ledgerFieldFont(.title)
+            // Where the text starts: at the layout's leading edge, whatever the name's script.
+            .multilineTextAlignment(strategy: .layoutBased)
+            .foregroundStyle(isEditing ? LedgerColor.ink : Color.clear)
+            .submitLabel(.done)
+            .focused($isEditing)
+            .accessibilityLabel(label)
         }
         .ledgerHitTarget(alignment: .topLeading)
         .contentShape(Rectangle())

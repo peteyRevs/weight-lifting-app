@@ -274,14 +274,18 @@
                 if isFocused {
                     try shown.focus(true)
                 }
+                // Sanctioned edit (S14, Pete's question 5, A): a name of spaces is no empty name to UIKit, so the
+                // field keeps its own placeholder back; while it has the focus the name field draws the
+                // placeholder over the spaces itself. Without the focus the draft is the stored name, which is
+                // cleaned, so only a draft can be spaces, and nothing is drawn.
+                let drawsItsOwn = isFocused && !name.isEmpty
                 #expect(
-                    try shown.anything(hidingTheField: true).isNull,
+                    try shown.anything(hidingTheField: true).isNull == !drawsItsOwn,
                     "focus \(isFocused): the text draws under the field"
                 )
-                // A name of spaces is no empty name to UIKit: the field keeps its placeholder back, and the
-                // lifter sees nothing at all (the stored name is cleaned, so only a draft can be spaces).
                 let isBlank = try shown.anything().isNull
-                #expect(isBlank == !name.isEmpty, "focus \(isFocused): nothing is drawn: \(isBlank)")
+                #expect(isBlank == (!name.isEmpty && !isFocused), "focus \(isFocused): nothing is drawn: \(isBlank)")
+                // The placeholder is drawn in faint ink (review S14 SF-2), never as the name's letters.
                 #expect(try shown.letters(hidingTheField: true).isNull)
             }
             #expect(shown.field.placeholder == "Day name")

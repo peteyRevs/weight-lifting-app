@@ -178,7 +178,10 @@ extension WorkoutFinishAdversarial {
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertTrue(save.isEnabled)
         save.doubleTap()
-        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "the cover is down")
+        XCTAssertTrue(minimize.waitForNonExistence(timeout: 10), "the live workout is gone: the receipt shows")
+        // F10 S7b (edited for the audit): the receipt shows first; its "Done" takes the cover down.
+        XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt")
+        app.buttons["workout.receipt.done"].tap()
         XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5), "Today shows the session as logged")
         XCTAssertEqual(app.staticTexts.matching(identifier: "LOGGED · WEEK 1").count, 1)
         XCTAssertFalse(app.buttons["Resume workout"].exists, "nothing is live")

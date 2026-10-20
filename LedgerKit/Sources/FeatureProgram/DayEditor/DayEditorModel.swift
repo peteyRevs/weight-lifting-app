@@ -89,9 +89,6 @@ nonisolated extension DayEditorModel {
         let scheme: String
         /// "185 lb": the shown week's load in the lifter's unit. Nil when the exercise is not stored.
         let load: String?
-        /// Whether the slot ends on a drop set: the sub line then says "drop". For a view that marks such a
-        /// row; it picks no colour.
-        let hasDropSet: Bool
         let isOpen: Bool
         /// "4A, Lat Pulldown".
         let spokenLabel: String

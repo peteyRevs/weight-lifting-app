@@ -21,6 +21,8 @@ nonisolated enum WorkoutAction: Equatable, Sendable {
     case dismissed(WorkoutDialog)
     /// A tap on the page that changes the workout: queued, and applied in its turn by the store's pump.
     case edit(WorkoutEdit)
+    /// The receipt's "Done": the cover closes as saved. Nothing else answers while the receipt shows.
+    case done
 }
 
 /// Why the cover closes. Set once; `WorkoutRoot` hands it to the launcher.

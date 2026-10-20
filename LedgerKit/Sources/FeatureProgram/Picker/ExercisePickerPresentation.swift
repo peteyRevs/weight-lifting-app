@@ -103,23 +103,19 @@ nonisolated enum ExercisePickerPresentation {
         )
     }
 
-    /// An exercise's row: "Machine · Back", with " · already in this day" when the day holds it, and its
-    /// place among the picks when it is picked.
+    /// An exercise's row: "Machine · Back", with " · already in this day" when the day holds it.
     static func row(_ exercise: Exercise, input: ExercisePickerInput, picks: [ExerciseID]) -> ExercisePickerModel.Row {
         let detail = [ProgramCopy.equipment(exercise.equipment), ProgramCopy.muscle(exercise.primaryMuscle)]
             .joined(separator: separator)
         let mark = input.dayExercises.contains(exercise.id) ? ProgramCopy.alreadyInThisDay : nil
         let line = [detail, mark].compactMap(\.self).joined(separator: separator)
-        let place = picks.firstIndex(of: exercise.id)
+        let isPicked = picks.contains(exercise.id)
         return ExercisePickerModel.Row(
             id: exercise.id,
             name: exercise.name,
-            detail: detail,
-            inDayMark: mark,
             line: line,
-            isPicked: place != nil,
-            pickMark: place.map { ($0 + 1).formatted(.number.locale(input.locale)) },
-            action: .setPicked(place == nil, exercise: exercise.id)
+            isPicked: isPicked,
+            action: .setPicked(!isPicked, exercise: exercise.id)
         )
     }
 

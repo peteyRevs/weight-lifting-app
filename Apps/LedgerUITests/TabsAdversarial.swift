@@ -5,7 +5,14 @@ import XCTest
 /// and the debug menu after a tour of the tabs. Nightly only, as every UI test but `Smoke` is.
 final class TabsAdversarial: XCTestCase {
     private static let tabs = ["Today", "Program", "Library", "History"]
-    private static let titles = ["today.title", "program.title", "library.title", "history.title"]
+    /// Sanctioned edit of F11 S14 (criterion 25): the Program tab draws the builder, which with no program (a UI
+    /// test's database has none) shows its message, found by its title; the other three are found as before.
+    private static let titles = ["today.title", "No program yet", "library.title", "history.title"]
+
+    /// What each tab's title reads: its name, or for the Program tab the builder's message.
+    private static func label(of tab: String) -> String {
+        tab == "Program" ? "No program yet" : tab
+    }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -42,7 +49,7 @@ final class TabsAdversarial: XCTestCase {
             app.tabBars.buttons[tab].tap()
             let heading = app.staticTexts[title]
             XCTAssertTrue(heading.waitForExistence(timeout: 5), title)
-            XCTAssertEqual(heading.label, tab)
+            XCTAssertEqual(heading.label, Self.label(of: tab))
             let selected = app.tabBars.buttons.allElementsBoundByIndex.filter(\.isSelected).map(\.label)
             XCTAssertEqual(selected, [tab])
             let others = Self.titles.filter { $0 != title }
@@ -111,7 +118,10 @@ final class TabsAdversarial: XCTestCase {
             XCTAssertTrue(heading.isHittable, title)
             XCTAssertGreaterThanOrEqual(heading.frame.minX, window.minX, title)
             XCTAssertLessThanOrEqual(heading.frame.maxX, window.maxX, title)
-            heights.append(heading.frame.height)
+            if tab != "Program" {
+                // The builder's message is three words, which may wrap at this size; it is no one-word title.
+                heights.append(heading.frame.height)
+            }
             attach(app.screenshot(), named: "AX5-\(tab)")
         }
         let shortest = heights.min() ?? 0

@@ -34,8 +34,11 @@ final class WorkoutSaveFailure: XCTestCase {
         }
         XCTAssertTrue(
             app.buttons["workout.header.minimize"].waitForNonExistence(timeout: 10),
-            "saved: the cover is down"
+            "the live workout is gone: the receipt shows"
         )
+        // F10 S7b (edited for the audit): the receipt shows first; its "Done" takes the cover down.
+        XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt")
+        app.buttons["workout.receipt.done"].tap()
         XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5), "Today shows the session logged")
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
@@ -58,6 +61,9 @@ final class WorkoutSaveFailure: XCTestCase {
         XCTAssertTrue(app.buttons["workout.finish.keep"].firstMatch.exists)
         save.tap()
         XCTAssertTrue(minimize.waitForNonExistence(timeout: 10))
+        // F10 S7b (edited for the audit): the receipt shows first; its "Done" takes the cover down.
+        XCTAssertTrue(app.buttons["workout.receipt.done"].waitForExistence(timeout: 10), "the receipt")
+        app.buttons["workout.receipt.done"].tap()
         XCTAssertTrue(app.buttons["View session"].waitForExistence(timeout: 5))
     }
 

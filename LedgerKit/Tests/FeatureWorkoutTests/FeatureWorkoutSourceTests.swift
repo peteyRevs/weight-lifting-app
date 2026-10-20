@@ -147,6 +147,21 @@ nonisolated struct FeatureWorkoutSourceTests {
         }
     }
 
+    /// F10 S7b: the receipt's texts are looked up in `WorkoutCopy+Receipt.swift`, and no other file holds
+    /// one of their keys.
+    @Test("The receipt's lookups are in WorkoutCopy+Receipt")
+    func receiptLookups_areInTheirCopyFile() throws {
+        let sources = try CopyAudit.sources(ofModule: "FeatureWorkout")
+        let receipt = [
+            "\"Done\"", "\"TIME\"", "\"SETS\"", "MOVED\"", "new PRs this session", "\"LOGGED\"",
+            "Prescribed on the right", "\"Prescribed \\(", "\"Logged \\(", "Nothing logged"
+        ]
+        for text in receipt {
+            let holders = sources.filter { $0.value.contains("localized: \"") && Self.looksUp(text, in: $0.value) }
+            #expect(holders.keys.sorted() == ["WorkoutCopy+Receipt.swift"], "\(text)")
+        }
+    }
+
     /// Whether a line of `source` that makes a lookup holds `text`.
     static func looksUp(_ text: String, in source: String) -> Bool {
         source.split(separator: "\n").contains { $0.contains("localized:") && $0.contains(text) }

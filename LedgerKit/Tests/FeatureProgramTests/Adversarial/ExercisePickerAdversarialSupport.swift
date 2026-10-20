@@ -121,12 +121,12 @@ nonisolated extension AdvPicker {
         let detail = "\(equipmentWords[exercise.equipment] ?? "?") · \(muscleWords[exercise.primaryMuscle] ?? "?")"
         let isInDay = input.dayExercises.contains(exercise.id)
         let line = isInDay ? "\(detail) · already in this day" : detail
-        let place = picked.firstIndex(of: exercise.id)
-        let mark = place.map { number($0 + 1, input.locale) }
-        let action = ExercisePickerAction.setPicked(place == nil, exercise: exercise.id)
+        // Sanctioned edit (S14, Pete's question 4, A): the row has its line alone; no detail, mark or place
+        // apart from it.
+        let isPicked = picked.contains(exercise.id)
+        let action = ExercisePickerAction.setPicked(!isPicked, exercise: exercise.id)
         return [
-            "exercise \(exercise.id.rawValue.uuidString)", exercise.name, detail,
-            isInDay ? "already in this day" : "nil", line, "\(place != nil)", mark ?? "nil", "\(action)"
+            "exercise \(exercise.id.rawValue.uuidString)", exercise.name, line, "\(isPicked)", "\(action)"
         ].joined(separator: " | ")
     }
 
@@ -145,8 +145,8 @@ nonisolated extension AdvPicker {
         case let .rows(rows):
             lines += rows.map { row in
                 [
-                    "exercise \(row.id.rawValue.uuidString)", row.name, row.detail, row.inDayMark ?? "nil",
-                    row.line, "\(row.isPicked)", row.pickMark ?? "nil", "\(row.action)"
+                    "exercise \(row.id.rawValue.uuidString)", row.name,
+                    row.line, "\(row.isPicked)", "\(row.action)"
                 ].joined(separator: " | ")
             }
         }

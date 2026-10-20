@@ -50,11 +50,11 @@ nonisolated extension ExercisePickerPresentationPropertyTests {
             let exercise = input.exercises.first { $0.id == row.id }
             #expect(row.name == exercise?.name)
             #expect(!row.detail.isEmpty && row.detail.components(separatedBy: " · ").count == 2)
-            #expect((row.inDayMark != nil) == input.dayExercises.contains(row.id))
-            #expect(row.line == [row.detail, row.inDayMark].compactMap(\.self).joined(separator: " · "))
+            #expect(row.isMarkedInDay == input.dayExercises.contains(row.id))
+            #expect(row.line == ([row.detail] + (row.isMarkedInDay ? ["already in this day"] : []))
+                .joined(separator: " · "))
             let place = picks.firstIndex(of: row.id)
             #expect(row.isPicked == (place != nil))
-            #expect(row.pickMark == place.map { ($0 + 1).formatted(.number.locale(input.locale)) })
             #expect(row.action == .setPicked(!row.isPicked, exercise: row.id))
         }
     }
