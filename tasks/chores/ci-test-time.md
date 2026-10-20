@@ -115,3 +115,16 @@ Further cuts, not made here (each sweeps every size without `TestSweep`): `Progr
 `NameFieldLineTests` (one), `RestPanelRoomTests` and the LedgerFont sizing/rendering suites (whole-list checks,
 probably to keep); and the hosted drawing itself (`PixelBuffer.init` maps 1.9 million pixels one by one in a
 debug build).
+
+## Verification
+
+- Full gate, `scripts/check.sh` with no variables, under the simulator lock (`ci-chore-gate.log`, scratchpad):
+  **exit 0, 1,993 s** (lint 79 s, iOS build 12 s, iOS tests 1,631 s, watchOS build 14 s, watchOS tests 252 s;
+  coverage overall 98.66 %).
+- The full gate still runs every list whole: NameFieldLine 57 cases (as before, when nothing reduced it; 153.6 s
+  against 194.9 s, the faster scan), FieldFont 36, the sheet's adversarial suite 32, Receipt layout 18, LOGGED
+  cut 10, the S10 name field 51.
+- Script suites: check-wiring 142 passed, workflows 74, xcode27 44 (2 skipped, the opt-in cases, as before).
+- Flake: above (2,000 seeds under load, green).
+- Not shown until it runs on GitHub: `main-cache.yml` saving both caches in `main`'s scope, a PR's first run
+  restoring them, and the runner's test time after the cuts.
