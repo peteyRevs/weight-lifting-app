@@ -14,8 +14,9 @@
     @MainActor
     @Suite("End workout? sheet (adversarial)", .serialized, .tags(.feature), .timeLimit(.minutes(3)))
     struct FinishSheetAdversarialTests {
-        /// Every size the system has, the five below the default included.
-        nonisolated static let sizes = DynamicTypeSize.allCases
+        /// Every size the system has, the five below the default included. On the hosted PR runner
+        /// (`TestSweep`) the representatives: the smallest, the default and the two largest of each kind.
+        nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
 
         /// The longest line the sheet can be asked for, and the shortest.
         static func models() throws -> [WorkoutFinishModel] {
@@ -134,7 +135,7 @@
 
         @Test(
             "Orange is Save workout's fill alone, at four sizes, both widths, bold, mirrored, both themes",
-            arguments: [DynamicTypeSize.xSmall, .large, .accessibility2, .accessibility5],
+            arguments: TestSweep.sizes([DynamicTypeSize.xSmall, .large, .accessibility2, .accessibility5]),
             [ColorScheme.light, .dark]
         )
         func orange_isSaveWorkoutAlone(_ size: DynamicTypeSize, scheme: ColorScheme) throws {

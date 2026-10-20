@@ -1,6 +1,7 @@
 #if os(iOS)
     @testable import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -19,6 +20,10 @@
                 .numeralXL, .numeralL, .numeralM, .numeralS
             ]
 
+            /// The sizes each role is measured at. On the hosted PR runner (`TestSweep`) the default and the
+            /// largest, where `.display` stands on the bound.
+            nonisolated static let sizes = TestSweep.sizes([DynamicTypeSize.large, .accessibility3, .accessibility5])
+
             /// The ink of "Gyp" as a text of `role`, and as an edited field of the role over that text.
             static func inks(
                 _ role: LedgerFont.Role,
@@ -36,7 +41,7 @@
 
             @Test("An edited field of every role draws its tails whole", arguments: roles)
             func everyRole_edited_drawsItsTailsWhole(_ role: LedgerFont.Role) throws {
-                for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
+                for size in Self.sizes {
                     let (text, field) = try Self.inks(role, at: size)
                     #expect(field.height > text.height - 0.34, "\(size): text \(text), field \(field)")
                 }
@@ -48,7 +53,7 @@
                 arguments: roles.filter { $0.spec.lineHeight == 1 }
             )
             func tightRole_fieldStandsOnTheText(_ role: LedgerFont.Role) throws {
-                for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
+                for size in Self.sizes {
                     let (text, field) = try Self.inks(role, at: size)
                     #expect(abs(field.minY - text.minY) < 2, "\(size): text \(text), field \(field)")
                 }
@@ -62,7 +67,7 @@
                 arguments: roles
             )
             func everyRole_fieldStandsOnTheText(_ role: LedgerFont.Role) throws {
-                for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
+                for size in Self.sizes {
                     for weight in [LegibilityWeight.regular, .bold] {
                         let (text, field) = try Self.inks(role, at: size, weight)
                         let down = field.minY - text.minY

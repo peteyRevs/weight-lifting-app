@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -16,6 +17,11 @@
     @Suite("Adversarial chore 2026-10-13 · the name field's line", .serialized, .tags(.feature))
     struct NameFieldLineAdversarialTests {
         typealias Shown = DayEditorViewsNameAdversarialTests.Shown
+
+        /// The sizes most of these checks measure: the default, `.accessibility3` and the largest. On the
+        /// hosted PR runner (`TestSweep`) the default and the largest; a check pinned to `.accessibility3`, where
+        /// a measure stands nearest its bound, names it.
+        nonisolated static let sizes = TestSweep.sizes([.large, .accessibility3, .accessibility5])
 
         /// The two places a name is edited. The builder's header is drawn without its eyebrow where only the
         /// name's ink is measured.
@@ -55,7 +61,7 @@
         /// On `main` the Thai name lost 0.7 to 2.0 pt in the Day editor and 6.7 to 12.0 pt in the builder.
         @Test(
             "With the focus accents, deep marks, other scripts and emoji are drawn whole, plain and bold",
-            arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
+            arguments: sizes
         )
         func focus_keepsAccentsMarksAndEmojiWhole(_ size: DynamicTypeSize) throws {
             var cut: [String] = []
@@ -75,9 +81,10 @@
 
         /// The names the field's guide is right for: the letters stand where the text's do, to the bound the
         /// tester of S10 set (a point and a third), also where a letter has an accent or the name a dash.
+        /// `.accessibility3` on every runner: there the field stands 1 pt higher, nearest the bound.
         @Test(
             "When the focus comes a name stays where it is, in both fields, plain and bold",
-            arguments: Place.allCases, [DynamicTypeSize.large, .accessibility3]
+            arguments: Place.allCases, TestSweep.sizes([.large, .accessibility3], also: [.accessibility3])
         )
         func focus_doesNotMoveTheName(_ place: Place, _ size: DynamicTypeSize) throws {
             for weight in [LegibilityWeight.regular, .bold] {
@@ -96,7 +103,7 @@
         /// there); and every one of these names is lifted as NF-1 says, 3.7, 6.0 and 7.3 pt.
         @Test(
             "With the focus Vietnamese stacked marks are drawn whole, small and capital, plain and bold",
-            arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
+            arguments: sizes
         )
         func focus_keepsVietnameseWhole(_ size: DynamicTypeSize) throws {
             var cut: [String] = []
@@ -125,7 +132,7 @@
         /// UIKit centres. It fails when the lift is gone: remove the wrapper then.
         @Test(
             "When the focus comes a name with an emoji or one of Å Ł ï stays where it is (known: NF-1)",
-            arguments: Place.allCases, [DynamicTypeSize.large, .accessibility3]
+            arguments: Place.allCases, TestSweep.sizes([.large, .accessibility3])
         )
         func focus_doesNotMoveANameWithAnEmoji(_ place: Place, _ size: DynamicTypeSize) throws {
             for name in ["Push 💪", "naïve", "Łódź", "ÅÉÇ", "Tiếng Việt"] {
@@ -150,7 +157,7 @@
         /// both phones: a long name, a name of one long word, a name of one letter.
         @Test(
             "Without the focus a long program name is drawn whole, on both widths, plain and bold",
-            arguments: [DynamicTypeSize.large, .accessibility3, .accessibility5]
+            arguments: sizes
         )
         func longProgramName_isDrawnWhole(_ size: DynamicTypeSize) throws {
             typealias Name = DayEditorViewsNameAdversarialTests

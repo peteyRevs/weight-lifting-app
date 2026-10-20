@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -13,8 +14,18 @@
         /// How much ink stands in each column of the name's drawing at 3×, from its first inked column.
         static func columns(of drawn: PixelBuffer) -> [Int] {
             var sums = [Int](repeating: 0, count: drawn.width)
-            for (place, pixel) in drawn.pixels.enumerated() where pixel.red > 120 && pixel.green > 120 {
-                sums[place % drawn.width] += 1
+            // Row by row through the storage, as `Shown.box(in:_:)`: unoptimized, an index and a division per
+            // pixel were most of a case's time.
+            drawn.pixels.withUnsafeBufferPointer { pixels in
+                for down in 0 ..< drawn.height {
+                    let row = down * drawn.width
+                    for across in 0 ..< drawn.width {
+                        let pixel = pixels[row + across]
+                        if pixel.red > 120, pixel.green > 120 {
+                            sums[across] += 1
+                        }
+                    }
+                }
             }
             guard let first = sums.firstIndex(where: { $0 > 0 }), let last = sums.lastIndex(where: { $0 > 0 }) else {
                 return []
@@ -51,16 +62,19 @@
         /// shapes it a little narrower, at its trailing end, and its leading edge stays.
         @Test(
             "With the focus a name of two scripts keeps its words' order and its edges, either way of writing",
-            arguments: Place.allCases, [DynamicTypeSize.large, .accessibility3, .accessibility5]
+            arguments: Place.allCases, NameFieldLineAdversarialTests.sizes
         )
         func focus_mixedScripts_keepTheirOrder(_ place: Place, _ size: DynamicTypeSize) throws {
             for isRightToLeft in [false, true] {
                 for name in ["Upper עליון", "עליון Upper", "Day 1 יום", "يوم Push 2"] {
                     let shown = try Self.shown(name, place, size, isRightToLeft: isRightToLeft)
                     defer { shown.close() }
-                    let (idle, idleBox) = try (Self.columns(of: shown.pixels()), shown.letters())
+                    // One drawing each, measured twice.
+                    let before = try shown.pixels()
+                    let (idle, idleBox) = (Self.columns(of: before), shown.letters(in: before))
                     try shown.focus(true)
-                    let (focused, focusedBox) = try (Self.columns(of: shown.pixels()), shown.letters())
+                    let after = try shown.pixels()
+                    let (focused, focusedBox) = (Self.columns(of: after), shown.letters(in: after))
                     let apart = Self.distance(idle, focused)
                     let edges = abs(focusedBox.minX - idleBox.minX) < 2 && abs(focusedBox.maxX - idleBox.maxX) < 2
                     #expect(apart < 0.15 && edges, "\(isRightToLeft) \(name): \(apart); \(idleBox) → \(focusedBox)")
@@ -79,7 +93,7 @@
         /// than the field while edited is left out: its visible part is where UIKit scrolls it.)
         @Test(
             "At the accessibility sizes a name against the layout's direction does not jump across either",
-            arguments: Place.allCases, [DynamicTypeSize.accessibility3, .accessibility5]
+            arguments: Place.allCases, TestSweep.sizes([.accessibility3, .accessibility5])
         )
         func focus_doesNotJumpAcross_atAccessibilitySizes(_ place: Place, _ size: DynamicTypeSize) throws {
             for (name, isRightToLeft) in [
@@ -130,9 +144,7 @@
         }
 
         /// The builder's header with an empty name keeps one line of the title, as the Day editor's does.
-        @Test("With the draft emptied the builder's header is as high as under one letter", arguments: [
-            DynamicTypeSize.large, .accessibility3, .accessibility5
-        ])
+        @Test("With the draft emptied the builder's header is as high as under one letter", arguments: sizes)
         func emptyProgramName_keepsALine(_ size: DynamicTypeSize) throws {
             func height(_ name: String) throws -> CGFloat {
                 let header = Place.program.view(name)

@@ -27,7 +27,8 @@
                 let receipt = ReceiptParts(model: model)
                 let word = model.page.logged
                 let part = LayoutPart(word) { Eyebrow(word) }
-                for setting in LayoutSetting.everySetting(size) {
+                // Both directions on every runner: the PR runner's sweep keeps one setting of each.
+                for setting in LayoutSetting.sweep(size) {
                     if !setting.isRightToLeft {
                         let cut = WorkoutLayoutProbe.cut(in: receipt, parts: [part], setting)
                         #expect(cut.isEmpty, "\(setting.testDescription): \(cut.joined(separator: "; "))")
@@ -56,7 +57,8 @@
         func tileValues_neverTruncate(_ size: DynamicTypeSize) throws {
             for model in try ReceiptLayoutTests.models() {
                 let receipt = ReceiptParts(model: model)
-                for setting in LayoutSetting.everySetting(size) {
+                // The PR runner's sweep keeps the 375 pt phone, where the three tiles have least room.
+                for setting in LayoutSetting.sweep(size) {
                     let stops = setting.elements(of: receipt)
                     for tile in model.page.tiles {
                         let frame = try #require(stops.first { $0.label == tile.spoken }).frame

@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -70,10 +71,11 @@
         }
 
         /// Round 1's finding F11-S10-1, closed by ruling 15: where the one-line field read "Lower A — Squat
-        /// foc…" from `.xLarge`, the name now wraps. No known issue is left here.
+        /// foc…" from `.xLarge`, the name now wraps. No known issue is left here. On the hosted PR runner
+        /// (`TestSweep`) the representative sizes and `.xLarge`, the finding's.
         @Test(
             "Without the focus each seed day's name is drawn whole, on both widths, plain and bold",
-            arguments: DynamicTypeSize.allCases
+            arguments: TestSweep.sizes(DynamicTypeSize.allCases, also: [.xLarge])
         )
         func seedNames_areDrawnWhole(_ size: DynamicTypeSize) throws {
             let lines = try Self.notWhole(Field.seedNames, at: size)
@@ -205,23 +207,12 @@
 
             /// The box, in points, around the pixels `isIncluded` picks; `.null` when there is none.
             func box(hidingTheField: Bool = false, _ isIncluded: (Pixel) -> Bool) throws -> CGRect {
-                let drawn = try pixels(hidingTheField: hidingTheField)
-                var (minX, minY, maxX, maxY) = (Int.max, Int.max, -1, -1)
-                for (place, pixel) in drawn.pixels.enumerated() where isIncluded(pixel) {
-                    let (across, down) = (place % drawn.width, place / drawn.width)
-                    (minX, maxX) = (min(minX, across), max(maxX, across))
-                    (minY, maxY) = (min(minY, down), max(maxY, down))
-                }
-                guard maxX >= 0 else {
-                    return .null
-                }
-                return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
-                    .applying(CGAffineTransform(scaleX: 1 / scale, y: 1 / scale))
+                try box(in: pixels(hidingTheField: hidingTheField), isIncluded)
             }
 
             /// Where letters are drawn: the ink, near white, and never the caret's or the marker's blue.
             func letters(hidingTheField: Bool = false) throws -> CGRect {
-                try box(hidingTheField: hidingTheField) { $0.red > 150 && $0.green > 150 }
+                try letters(in: pixels(hidingTheField: hidingTheField))
             }
 
             /// Anything that is neither the ground, the marker under the field nor the caret, which is blue:
