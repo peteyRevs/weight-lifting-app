@@ -12,20 +12,26 @@ import Testing
 /// millisecond, which leaves the cores to the tasks that are late. The bound is time, not a number of turns:
 /// a busy machine (another build, a runner with three cores) runs the other tasks later, never fewer of
 /// them, and a count of 200,000 yields once ran out before such a task did (seed 1021568 of
-/// `WorkoutAnnouncementAdversarialTests.walk_saysEachRestOnce`, 2026-10-19).
+/// `WorkoutAnnouncementAdversarialTests.walk_saysEachRestOnce`, 2026-10-19). The condition may ask an actor
+/// (`await haptics.played == …`): every wait in this target that waits for something to happen comes here,
+/// `RestBench`'s and the hosted root's `turning` included.
 @MainActor
 @discardableResult
 func eventually(
     _ what: String,
     limit: Duration = .seconds(10),
     sourceLocation: SourceLocation = #_sourceLocation,
-    _ condition: @MainActor () -> Bool
+    _ condition: @MainActor () async -> Bool
 ) async -> Bool {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: limit)
     var turns = 0
-    while !condition() {
-        guard clock.now < deadline, !Task.isCancelled else {
+    while await !condition() {
+        guard !Task.isCancelled else {
+            Issue.record("cancelled while waiting for: \(what)", sourceLocation: sourceLocation)
+            return false
+        }
+        guard clock.now < deadline else {
             Issue.record("never came in \(limit): \(what)", sourceLocation: sourceLocation)
             return false
         }

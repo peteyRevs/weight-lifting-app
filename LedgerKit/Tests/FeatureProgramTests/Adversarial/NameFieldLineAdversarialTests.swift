@@ -84,7 +84,7 @@
         /// `.accessibility3` on every runner: there the field stands 1 pt higher, nearest the bound.
         @Test(
             "When the focus comes a name stays where it is, in both fields, plain and bold",
-            arguments: Place.allCases, TestSweep.sizes([.large, .accessibility3], also: [.accessibility3])
+            arguments: Place.allCases, [DynamicTypeSize.large, .accessibility3]
         )
         func focus_doesNotMoveTheName(_ place: Place, _ size: DynamicTypeSize) throws {
             for weight in [LegibilityWeight.regular, .bold] {

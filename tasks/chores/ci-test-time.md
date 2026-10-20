@@ -128,3 +128,146 @@ debug build).
 - Flake: above (2,000 seeds under load, green).
 - Not shown until it runs on GitHub: `main-cache.yml` saving both caches in `main`'s scope, a PR's first run
   restoring them, and the runner's test time after the cuts.
+
+## G2 round 1 (2026-10-20)
+
+Adversarial pass over `origin/main..HEAD` (5 commits). Mutants were scratch edits, each reverted (tree clean
+after); simulator runs under the lock (scratchpad `g2/run.sh`). No test committed: nothing found needs one.
+
+**Findings**
+
+- **CI-TT-1 (Minor): the flake's class is still in other waits.** Only `eventually(_:)` moved to a time bound.
+  Waits that still count yields and then expect something to have happened: `restOver_isSaidAfterItIsFelt`
+  (`WorkoutAnnouncementAdversarialTests.swift:190`, 20,000 yields, then `#expect(... == [.restOver])`), and
+  `WorkoutRestPanelAdversarialTests.turning` (`+Screen.swift:147`, 20,000 turns, then an issue). Under a slow
+  runner they fail the way seed 1021568 did. `RestBench.eventuallyPlayed` has no bound at all (a hang until
+  the plan's 60 s allowance). One run of 9 busy loops beside 10 suites stayed green, so this is from reading
+  the code, not reproduced.
+- **CI-TT-2 (Minor): PR mode cut-checks LOGGED left to right only on the widest, plainest phone.**
+  `LayoutSetting.sweep` keeps the iPhone 17 plain (left to right) and the 375 pt phone bold (right to left).
+  `logged_isWhole` runs the cut check only left to right, so on the PR runner it never checks the 375 pt
+  phone, the setting most likely to cut. The 375 pt case is checked only by the mirrored "one line,
+  within 8 pt" check. The comment "Both directions on every runner" is true but suggests more coverage than
+  there is. Mutants M4 (the note never wraps) and M4b (LOGGED `lineLimit(1)`, note `layoutPriority(1)`)
+  passed in **full** mode too, so no loss was shown; the full gate keeps all eight settings.
+- **CI-TT-3 (Note): the cold margin is about two or three feature PRs.** Recomputed from the job logs (#65:
+  96/865 cold, 87/441/2,099 warm; #66: 150/1,424 cold, 144/758/2,210 warm; tools, catalogs, boot and coverage
+  about 11 s): warm first run ≈ 150 + 758 + 1,960 + 11 ≈ 2,880 s (960 s inside 3,840); cold ≈ 3,545 s (295 s
+  inside). The tests grew 111 s from #65's set to #66's, so the cold case runs out after about three more
+  suites. WF65's pin is consistent (3,840 s, 66 min, 71 min, 120 s before the step's end). The job's 5 min
+  covers what the steps around it took (about 25 s before, 50 s after on a red run).
+- **CI-TT-4 (Note): `eventually` on cancellation.** A cancelled wait records "never came in 10 s" when
+  10 s did not pass. A red walk costs the same as before: with product mutant M5 (the store never says it
+  hears the session), `walk_saysEachRestOnce` stopped at the PR plan's 60 s allowance on its first seed, both
+  with the new helper (34 "never came") and with `main`'s (26). The 10 s bound makes no red run longer.
+- **CI-TT-5 (Note): `focus_doesNotMoveTheName`'s `TestSweep.sizes([.large, .accessibility3], also:
+  [.accessibility3])` changes nothing:** both sizes are kept either way. `focus_doesNotMoveANameWithAnEmoji`
+  (a known-issue test) drops `.accessibility3` on the PR runner; at `.large` it still notices if NF-1 goes away.
+- **CI-TT-6 (Note): main-cache operations.** It has no `workflow_dispatch`. After a red or cancelled push run,
+  or after 7 days without a PR (eviction), the fix is "Re-run" of the last run or another code push.
+  `pr.yml`'s `workflow_dispatch` on `main` is a second writer into `main`'s scope (it saves after red runs
+  too). Only people with write access can trigger it, and the cache is content-addressed, so this is benign.
+  The cache entry grows across merges until a lockfile or Xcode bump (accepted in the 2026-10-17 chore).
+- **CI-TT-7 (Note, not this chore):** mutant M2 (`fieldLineHeight` 1.25) is caught only by FieldFont; the
+  NameFieldLine and S10 name-field suites pass it in full mode.
+
+**Attacked and held**
+
+- Cache keys and paths: identical strings in both workflows (hashFiles inputs, prefixes, paths); WF68–71 and
+  check-wiring W77/W78 re-run green (74 and 142 passed). A PR reads the base branch's exact `spm-` key.
+  Both saves are `success()`-gated, docs-only pushes are skipped, and a lockfile or `.xcode-version`
+  change is not ignored. A push cancelled by a newer one saves nothing. Fork and same-repo PRs save
+  only under `refs/pull/<n>/merge`, and `main-cache.yml` restores `main`'s scope alone, so a PR cannot
+  poison `main`'s cache. The build-only build's arguments are Check's (W77), and the environment
+  variables Check adds are runner variables, not build settings. Usage is 9.95 GB of 10 GB with 38
+  entries. `main`'s entries are read by every PR, so LRU evicts the PR entries first.
+- Coverage in full mode: every routed list goes through `TestSweep.subset`, which returns the list itself
+  when `LEDGER_SWEEP` is unset, and `LayoutSetting.sweep` equals `everySetting` in full mode. Case
+  counts by arithmetic: NameFieldLine 57 full, 43 PR, as claimed. No assertion is gated on the mode.
+- `also:` and bounds: mutants M2 (`fieldLineHeight` 1.25) and M3 (the field's `.top` guide `.rounded()`)
+  fail in full mode at `.accessibility5` for every failing role (M2 also at `.accessibility3` for numeralL and
+  numeralXL; M3 at `.accessibility5` alone). So PR mode catches both. The room under the caret is least at
+  `.accessibility5` (17.3, 7.3, 3.0, 2.0 pt).
+- The pixel walks: `PixelBuffer`'s public init always packs `width * height` pixels (`bytesPerRow =
+  width * 4`), so a row-major walk visits exactly the old `enumerated()` pixels with the same (x, y).
+  Min, max and column sums don't depend on the order. Empty buffers give `.null` and `[]` as before, and
+  RTL doesn't enter at pixel level. Measuring one drawing twice can only differ from two drawings by the
+  caret, which both filters leave out.
+- `eventually` under load: 10 FeatureWorkout adversarial suites (Announcement, Rest, Save, Store, Updates,
+  Relaunch, Pump, Minimize, RootSave, RestPanel), PR mode, 40 seeds, 9 busy loops on 10 cores: 111 tests, 110
+  passed, 1 expected failure, 211 s. A plain `Task.yield` loop measured 200,000 yields in 0.67 s
+  (macOS, -Onone), and 1,000 1 ms sleeps in 1.98 s.
+
+## G3 round 1 (2026-10-20)
+
+
+**APPROVED.** No must-fix.
+
+### G3: Should-fix
+1. **pr.yml:127-130.** "A first run restores main's cache … 441-758 s" credits the figures to the wrong runs. They came from re-runs that restored their own exact cache. Reword it to "builds warm, as #65/#66's re-runs did (441-758 s)".
+2. **docs/ci-cd.md:86-88 and :130; pr.yml:132.** Nothing says what changes if the repo goes private again. Add one clause: main-cache.yml would then cost about 10–14 billed macOS minutes per code merge, and a hang would cost about 12 minutes more at the 3,840 s deadline. Say to revisit both.
+3. **main-cache.yml:6.** "(WF68 compares them)" should read WF69.
+
+### G3: Nits
+4. **FinishSheetAdversarialTests.swift:18.** Reword to "the largest of each kind (standard and accessibility)".
+5. **NameFieldLineAdversarialTests.swift:87.** `TestSweep.sizes([.large, .accessibility3], also: [.accessibility3])` is a no-op wrapper. Optional.
+6. **pr.yml:108.** "This job never saves on main" isn't strictly true. Write "Only main-cache.yml saves on main (a PR run cannot)".
+7. **WorkoutAdversarialWaiting.swift:28-29.** When the wait was cancelled, give it its own message.
+8. **The hashFiles triple** is duplicated across both workflows. WF69 guards it, so no change.
+9. **docs/ci-cd.md:26-27** has an odd wrap. **:325** "GitHub Free, private" is stale.
+10. **persist-credentials: false.** Optional; it would have to change in both workflows to keep WF69 green.
+
+### G3: Checked and correct
+- the trigger and paths-ignore;
+- concurrency, and that a cancelled run saves nothing;
+- permissions `contents: read`;
+- the SHAs, which match pr.yml;
+- supply chain: fork and PR runs can't write main's scope;
+- the --build-only mode, with W77 and W78;
+- the pixel walk's index math;
+- `eventually`, which is structured;
+- the TestSweep idiom, and that the full-mode case sets are unchanged;
+- the deadline math (3,840 is justified, because a lockfile or Xcode bump always builds cold);
+- the scope: DayEditorViewsName is justified.
+
+## Fix round 1 (2026-10-20)
+
+Taken from G3: SF1 (`pr.yml` credits 441–758 s to #65's and #66's re-runs), SF2 (`docs/ci-cd.md` and `pr.yml`
+say what to revisit if the repository goes private: `main-cache.yml` about 10–14 billed macOS minutes per code
+merge; the deadline's headroom bills only on a hang, about 12 minutes more than at 3,120 s), SF3
+(`main-cache.yml` cites WF69), nits 4 (FinishSheet's comment), 5 (the no-op `TestSweep.sizes(…, also:)` is the
+literal list again), 6 ("Only main-cache.yml saves on main"), 7 (a cancelled `eventually` says "cancelled while
+waiting for …") and 9 (the §1 wrap; §4 says public). Nits 8 and 10: no change.
+
+Taken from G2:
+- **CI-TT-1.** `eventually`'s condition may now be `async` (it can ask an actor), and every wait in
+  FeatureWorkoutTests that waits for something to happen goes through it, so all have the same 10 s
+  wall-clock bound:
+  - `WorkoutAnnouncementAdversarialTests.restOver_isSaidAfterItIsFelt` (was 20,000 yields, then an expect);
+  - `WorkoutRestAdversarialTests+Edges` (the logged set's haptic, 20,000 yields, then a `#require`);
+  - `WorkoutRestPanelAdversarialTests.turning` (20,000 turns): now `eventually` turning the run loop each
+    check, with a `sourceLocation`; its callers in `+Screen` and `WorkoutRootSaveAdversarialTests` unchanged;
+  - `+Screen`'s "Rest over felt with the cover up" (200 turns, then an expect): `turning` until two haptics;
+  - `RestBench.eventuallyPlayed` and `RestBench.settled` (unbounded `while`): `eventually`;
+  - `WorkoutStoreRestTests.haptics_notAgainAfterARestart` (unbounded `while !isHearingTheSession`);
+  - `SaveCover.settle` (400 rounds of `rest()`, then its issue): `eventually`, the same issue after it.
+
+  Left on purpose, each a "nothing more happened" give or an interleaving, not a wait for something:
+  `giveWay()` (2,000 yields), `SaveCover.rest()` (400) and `settle`'s first release loop (bounded by
+  `waiting`), `WorkoutSaveAdversarialTests+RoundTwo` (5,000 turns, then "at most 8 drains"), LedgerPersistence's
+  10-yield rooms and random yields (races by design). Also left: `WorkoutReceiptAdversarialSession.answer()`,
+  a double's handshake that waits for a continuation the store parks; it has no expectation after it, and
+  a hang there ends at the 60 s allowance.
+- **CI-TT-2.** `LayoutSetting.sweep(_:also:)` takes extra settings; `logged_isWhole` adds the 375 pt phone,
+  bold, left to right, so the narrow phone is cut-checked on every runner (three settings under `pr`).
+- **CI-TT-6.** `main-cache.yml` has `workflow_dispatch` (WF68 pins `push,workflow_dispatch`).
+
+Recorded, not fixed:
+- **CI-TT-3, follow-up.** The cold-run margin is about 295 s, two or three feature PRs of tests. Next: route
+  `ProgramViewsRoomAdversarialTests`, `DayEditorViewsRoomAdversarialTests`, `NameFieldLineTests` and
+  `RestPanelRoomTests` through `TestSweep`, and look at `PixelBuffer.init`'s per-pixel conversion.
+- **CI-TT-7.** The `fieldLineHeight` mutant (1.25) is caught only by FieldFont.
+
+Load run (`flake.sh fw200`, scratchpad): all of FeatureWorkoutTests at the PR plan's 200 seeds, every sweep
+whole, beside nine busy loops on ten cores: 568 tests, 567 passed and 1 expected failure, none failed, 1,169 s.
+Under `pr`, the LOGGED cut suite with the narrow phone added: green, 8.8 s (5.7 s before it).

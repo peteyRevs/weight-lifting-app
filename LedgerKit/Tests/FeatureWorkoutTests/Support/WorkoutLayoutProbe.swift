@@ -32,11 +32,15 @@
 
         /// `everySetting(size)`. On the hosted PR runner (`TestSweep`) two of the eight: the iPhone 17 plain,
         /// left to right, and the hardest of them, the 375 pt phone with Bold Text, right to left; mirroring
-        /// breaks no line differently.
-        static func sweep(_ size: DynamicTypeSize) -> [LayoutSetting] {
+        /// breaks no line differently. A test that checks some settings only one way names more in `also`.
+        static func sweep(
+            _ size: DynamicTypeSize,
+            also: (LayoutSetting) -> Bool = { _ in false }
+        ) -> [LayoutSetting] {
             TestSweep.subset(everySetting(size)) { setting in
                 (setting.width == SnapshotConfig.phoneWidth && !setting.isBold && !setting.isRightToLeft)
                     || (setting.width == narrowWidth && setting.isBold && setting.isRightToLeft)
+                    || also(setting)
             }
         }
 

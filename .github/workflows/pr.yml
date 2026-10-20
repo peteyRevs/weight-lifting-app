@@ -105,8 +105,8 @@ jobs:
       # for the package checkouts: a run starts from its PR's newest cache, or main's. The keys still carry
       # the Xcode and both lockfiles, so a toolchain or package bump starts a new cache. Xcode validates the
       # cache once per boot (ValidateCAS), so a runner validates what it restored, and drops a corrupt one.
-      # A run may read only its PR's caches and main's. This job never saves on main: main-cache.yml does,
-      # building what this job builds on each push to main, under these keys. So a PR's first run starts
+      # A run may read only its PR's caches and main's. Only main-cache.yml saves on main (a PR run
+      # cannot), building what this job builds on each push to main, under these keys. So a PR's first run starts
       # from main's newest cache, and its later pushes and re-runs from its own (docs/ci-cd.md,
       # "Compilation cache").
       - name: Restore compiled output (Xcode compilation cache)
@@ -125,12 +125,13 @@ jobs:
         timeout-minutes: 66 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3840: a
-          # first run now restores main's cache (main-cache.yml) and builds warm, 441-758 s on 2026-10-19/20,
-          # after 87-150 s of script tests; the tests below took 2,099-2,210 s on those re-runs, about 1,960 s
-          # less this chore's sweeps (tasks/chores/ci-test-time.md): about 2,870 s at most. The deadline still
-          # covers a cold build (1,424 s, when no cache matches the lockfiles): 1,424 + 150 + 1,960 is about
-          # 3,534 s, plus 5 min. Standard minutes are free on this public repository, so headroom costs
-          # nothing until something hangs (docs/ci-cd.md, "Deadline").
+          # first run now restores main's cache (main-cache.yml) and builds warm, as #65's and #66's re-runs
+          # did (441-758 s, 2026-10-19/20, after 87-150 s of script tests); those re-runs tested for
+          # 2,099-2,210 s, about 1,960 s less this chore's sweeps (tasks/chores/ci-test-time.md): about
+          # 2,870 s at most. The deadline still covers a cold build (1,424 s, when no cache matches the
+          # lockfiles): 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min. Standard minutes are free on this
+          # public repository, so headroom costs nothing until something hangs; were it private again, a
+          # hang would bill about 12 minutes more than at 3,120 s (docs/ci-cd.md, "Deadline": revisit).
           LEDGER_XCODEBUILD_DEADLINE: 3840
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a

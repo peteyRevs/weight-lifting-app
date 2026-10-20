@@ -24,8 +24,8 @@ authoritative; the plan differs:
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
 - **Free minutes (Pete, 2026-09-27); paid from 2026-09-30; free again since the repository went public
-  (2026-10-20: standard runners).** `pr.yml` has one
-  macOS job, `Check` (`check.sh --ios-only --skip-static`). It runs after two Linux jobs: `Scope` skips
+  (2026-10-20: standard runners).** `pr.yml` has one macOS job, `Check` (`check.sh --ios-only
+  --skip-static`). It runs after two Linux jobs: `Scope` skips
   both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
   change (renames count at both paths). `Static checks` comes next (below). `main-cache.yml` builds on
   each code push to `main` to save `main`'s caches ("What is main-scoped", below). Nightly is manual;
@@ -86,6 +86,10 @@ authoritative; the plan differs:
     restore picks once a newer one exists, go first. Cost: one warm build per code merge, about 10–14 macOS
     minutes. Held back on 2026-10-17 for that cost (chore file, "Cost"); shipped 2026-10-20
     (`tasks/chores/ci-test-time.md`) once the repository was public, where standard runner minutes are free.
+    Should it go private again, revisit both this and the deadline below: `main-cache.yml` would bill about
+    10–14 macOS minutes per code merge, and the deadline's headroom bills only on a hang (about 12 minutes
+    more than at 3,120 s). Run by hand (`workflow_dispatch`) on `main`, it rebuilds a cache that was evicted
+    or that a red or cancelled run did not save.
   - *Seeds on the runner (2026-10-09; `tasks/chores/2026-10-09-pr-lane-time.md`).* `Check` sets
     `TEST_RUNNER_LEDGER_PROPERTY_SEED_COUNT=40`. `xcodebuild` hands a `TEST_RUNNER_` variable to the test
     runner without the prefix, and there it replaces the PR plan's `LEDGER_PROPERTY_SEED_COUNT` (200): every
@@ -128,7 +132,8 @@ authoritative; the plan differs:
     about 150 + 758 + 1,960, near 2,870 s (48 min); the deadline also covers a cold one, for a PR whose
     lockfiles or Xcode no cache matches: 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min, set to 3,840 s.
     Standard minutes are free on this public repository (2026-10-20), so headroom costs nothing until
-    something hangs. Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
+    something hangs; if it goes private again, a hang bills about 12 minutes more than at 3,120 s (revisit,
+    with `main-cache.yml`'s cost above). Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
     2026-10-20, each sized for a cold build and stopped by the tests' growth (`tasks/chores/2026-10-17-pr-sweeps.md`).
   - *arm64 only (2026-10-18; `tasks/chores/2026-10-18-arm64-only.md`).* Every `xcodebuild` in `check.sh`
     passes `ARCHS=arm64`, on both lanes and on the build and the test run alike (check-wiring W76). The
@@ -322,7 +327,7 @@ step (`gh issue create --label nightly`) — add in F01.
 
 ## 4. No branch protection (Pete, 2026-09-27)
 
-GitHub Free, private: nothing blocks a direct push or a red merge. G5 merges only when the
+GitHub Free, public since 2026-10-20, with no protection rule: nothing blocks a direct push or a red merge. G5 merges only when the
 full local `scripts/check.sh` is green on the merge candidate and CI is green whenever it ran. Since
 2026-09-30 CI tests iOS only, so that full local run is a PR's only watchOS gate.
 A skipped `Check` counts only when Scope's log says `code=false` (the docs-only notice). When the free

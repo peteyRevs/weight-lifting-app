@@ -3,7 +3,7 @@
 # built cold. On each push to main this builds what pr.yml's Check builds, exactly as it builds it
 # (check.sh --build-only: step 3's iOS build-for-testing, nothing tested), and saves the package checkouts
 # and the compilation cache in main's scope, under the keys Check restores. The steps up to the build are
-# Check's own, word for word (WF68 compares them).
+# Check's own, word for word (WF69 compares them).
 name: Main cache
 
 on:
@@ -12,6 +12,9 @@ on:
     # Check's Scope job, as a filter: a push that changes only these builds nothing new. A push that also
     # changes anything else runs (GitHub skips a run only when every changed path matches).
     paths-ignore: ["docs/**", "tasks/**", "design/**", "*.md"]
+  # By hand, on main: rebuilds a cache that was evicted (7 days unread) or that a red or cancelled run
+  # did not save, without a code push.
+  workflow_dispatch:
 
 # One at a time; a newer push cancels the older run, whose build would be stale. A cancelled run saves
 # nothing (the save step needs success()).

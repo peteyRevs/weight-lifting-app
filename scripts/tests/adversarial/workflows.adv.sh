@@ -357,10 +357,10 @@ $(cat "$WF"/*.yml | grep -c 'LEDGER_SWEEP:') $(cat "$ROOT"/TestPlans/*.xctestpla
 # ---- main-cache.yml (tasks/chores/2026-10-17-main-cache.md) -------------------------------------------------
 # A PR's run reads only its own caches and main's, and nothing else saves on main: this workflow builds what
 # Check builds, on each push to main, and saves both caches there under Check's keys.
-check "WF68 main-cache runs on push to main alone, skipping the paths Scope calls docs-only, one run at a time, newest wins" \
+check "WF68 main-cache runs on push to main (and by hand), skipping the paths Scope calls docs-only, one run at a time, newest wins" \
     is "$(q mc '[.on | keys[]] | join(",")') $(q mc '.on.push.branches | join(",")') $(q mc '.on.push["paths-ignore"] | join(",")') \
 $(q mc '.concurrency.group + " " + (.concurrency["cancel-in-progress"] | tostring)') $(q mc '.permissions | tojson')" \
-    'push main docs/**,tasks/**,design/**,*.md main-cache true {"contents":"read"}'
+    'push,workflow_dispatch main docs/**,tasks/**,design/**,*.md main-cache true {"contents":"read"}'
 # Scope's allowlist, read from its step: the filter must name the same folders and root-level Markdown.
 check "WF68 ... and those are exactly the paths Scope's step skips" \
     is "$(grep -oE '^ +docs/\* \| tasks/\* \| design/\* \|' "$T/scope.sh" | tr -d ' ')$(grep -cE '^ +\*\.md\) ;;$' "$T/scope.sh")" \

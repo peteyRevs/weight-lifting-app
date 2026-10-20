@@ -15,7 +15,8 @@
     @Suite("End workout? sheet (adversarial)", .serialized, .tags(.feature), .timeLimit(.minutes(3)))
     struct FinishSheetAdversarialTests {
         /// Every size the system has, the five below the default included. On the hosted PR runner
-        /// (`TestSweep`) the representatives: the smallest, the default and the two largest of each kind.
+        /// (`TestSweep`) the representatives: the smallest, the default and the largest of each kind
+        /// (standard and accessibility).
         nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
 
         /// The longest line the sheet can be asked for, and the shortest.
