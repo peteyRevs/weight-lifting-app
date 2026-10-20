@@ -131,10 +131,12 @@ final class AdversarialScene {
         let saved = try #require(programs.saved.first, "nothing was saved", sourceLocation: sourceLocation)
         #expect(programs.saved.count == 1, sourceLocation: sourceLocation)
         let active = try await stores.programs.active()
-        #expect(active == saved, "the saved program is the active one", sourceLocation: sourceLocation)
+        let isActive = active == saved // a `Bool` first (review N2)
+        #expect(isActive, "the saved program is the active one", sourceLocation: sourceLocation)
         #expect(saved.isActive, sourceLocation: sourceLocation)
         let expected = try await expectedProgram(goal: goal, days: days, idsOf: saved)
-        #expect(saved == expected, sourceLocation: sourceLocation)
+        let isTheProgram = saved == expected // a `Bool` first (review N2)
+        #expect(isTheProgram, "the saved program is not the one expected", sourceLocation: sourceLocation)
         #expect(
             ids.all.contains(saved.id.rawValue),
             "the program's id is the generator's",

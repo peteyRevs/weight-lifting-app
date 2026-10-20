@@ -3,6 +3,7 @@
     import LedgerDomain
     import LedgerSnapshotTesting
     import LedgerTestSupport
+    import Observation
     import SwiftUI
     import Testing
     import UIKit
@@ -12,7 +13,8 @@
         var calls = 0
     }
 
-    /// What the root announced, in order.
+    /// What the root announced, in order. Observable, so that `Hosted.until` wakes on each line (review SF2).
+    @Observable
     final class Heard {
         var lines: [String] = []
     }
@@ -70,7 +72,9 @@
                     await Hosted.until { scene.store.state.phase == .saved }
                 }
                 let expected = try StoreScene.expectedProgram(goal: .both, days: .four)
-                #expect(scene.programs.saved == [expected])
+                // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+                let isTheProgram = scene.programs.saved == [expected]
+                #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
             }
         }
 

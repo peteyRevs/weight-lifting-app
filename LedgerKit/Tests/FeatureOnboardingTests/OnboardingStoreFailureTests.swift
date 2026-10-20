@@ -110,9 +110,12 @@ struct OnboardingStoreFailureTests {
             #expect(scene.store.state.phase == .saved)
             // The failed attempt drew the program's id (0) and no other, so the retry's ids start at 1.
             let expected = try StoreScene.expectedProgram(goal: .strength, days: .six, firstID: 1)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
             let active = try await scene.stores.programs.active()
-            #expect(active == expected)
+            let isActive = active == expected // a `Bool` first (review N2)
+            #expect(isActive, "the active program is not the one expected")
         }
     }
 
@@ -148,7 +151,9 @@ struct OnboardingStoreFailureTests {
             scene.store.send(.retry)
             await scene.save { try? await scene.seedCatalog() }
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four, firstID: 1)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
         }
     }
 
@@ -162,7 +167,9 @@ struct OnboardingStoreFailureTests {
             await scene.save { try? await scene.seedCatalog() }
             #expect(scene.preparations == 1)
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four, firstID: 1)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
         }
     }
 

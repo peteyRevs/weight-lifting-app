@@ -153,7 +153,8 @@ public final class AppComposition {
 
     /// A UI test's program (`UITestProgram`, F08 ruling R2): once the launch's pass has run, and before the
     /// root's gate first reads the active program, saves the spec's seed program as the active one when there
-    /// is none, as the Debug menu's sample does. Once in a process, and only when the launch asked for it; a
+    /// is none, as the Debug menu's sample does. Once in a process, and only when the launch asked for it (two
+    /// calls that overlap may both save, and leave one program only because the seed program's id is fixed); a
     /// failure is logged, and the test then finds onboarding. A call whose task is cancelled (the scene's phase
     /// changed during the launch's first pass) does not count: the next pass makes it. A Release build does
     /// nothing here.

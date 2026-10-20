@@ -27,9 +27,12 @@ struct OnboardingStoreSaveTests {
             await scene.save()
 
             let expected = try StoreScene.expectedProgram(goal: goal, days: days)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
             let active = try await scene.stores.programs.active()
-            #expect(active == expected)
+            let isActive = active == expected // a `Bool` first (review N2)
+            #expect(isActive, "the active program is not the one expected")
             #expect(scene.store.state.phase == .saved)
             #expect(scene.preparations == 0, "a first attempt prepares nothing")
 
@@ -61,7 +64,9 @@ struct OnboardingStoreSaveTests {
             await scene.save()
 
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
             #expect(scene.store.state.phase == .saved)
             #expect(scene.store.state.goal == .strength, "the picks themselves are left as they were")
 
@@ -83,7 +88,9 @@ struct OnboardingStoreSaveTests {
             let sunday = CivilDate(year: 2026, month: 9, day: 13)
             #expect(scene.programs.saved.map(\.startDate) == [sunday])
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four, startDate: sunday)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
         }
     }
 
@@ -115,7 +122,8 @@ struct OnboardingStoreSaveTests {
 
             let saved = try #require(scene.programs.saved.first)
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four, units: .kg)
-            #expect(saved == expected)
+            let isTheProgram = saved == expected // a `Bool` first (review N2)
+            #expect(isTheProgram, "the saved program is not the one expected")
             let bench = try #require(StoreScene.catalog.first { $0.name == "Barbell Bench Press" })
             let benchSlot = try #require(saved.days.first?.slots.first)
             #expect(benchSlot.exerciseID == bench.id)
@@ -133,7 +141,9 @@ struct OnboardingStoreSaveTests {
             await scene.startTraining()
             #expect(scene.store.state.units == .kg)
             let expected = try StoreScene.expectedProgram(goal: .both, days: .four, units: .kg)
-            #expect(scene.programs.saved == [expected])
+            // Compared to a `Bool` first: a failing `#expect` would print every day, week and slot (review N2).
+            let isTheProgram = scene.programs.saved == [expected]
+            #expect(isTheProgram, "\(scene.programs.saved.count) saved, not the one expected")
         }
     }
 }

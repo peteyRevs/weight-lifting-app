@@ -1051,11 +1051,17 @@ call whose task is cancelled does not count, and the next pass saves; pinned by
 - `DebugMenu` reaches Today by "Skip setup" and reads `rows.program` 1, `program_week` 8, `day_template` 4,
   `slot` 16. `LaunchPerformance`'s report skips setup first (as `7c0b78f`).
 - **Every UI test the launch argument touches** (R10): the 18 launches listed above, in 14 files. Of the lanes in
-  flight: **F11 S14** (`feat/F11-s14-program-tab` @ `7f2b546`) adds no UI test and edits `MainRoot.tabs` (its
-  `onProgramRoute` line), `Routes.swift` and `AppTabs.swift`, none of the lines this port changes; its
-  `AppRouter.programWeek` is dropped with the old router when onboarding appears, which R4 wants. **F10 S7b**
-  (`feat/F10-s7b-receipt`) has no commit beyond `16a2e52` yet. Any UI test either adds that waits for `today.title`
-  on a fresh launch needs `-LEDGER_UITEST_PROGRAM seed` or "Skip setup".
+  flight: **F11 S14** (`feat/F11-s14-program-tab`): its product edits are `MainRoot.tabs` (its `onProgramRoute`
+  line), `Routes.swift` and `AppTabs.swift`, none of the lines this port changes, and its `AppRouter.programWeek`
+  is dropped with the old router when onboarding appears, which R4 wants. *Corrected 2026-10-19 (review SF1):* the
+  first version of this note said S14 "adds no UI test", true of `7f2b546` only. At `49c2515` it adds
+  `Builder.swift`, `DayEditor.swift` and `ProgramTabAdversarial.swift` (all through `BuilderApp.launch`, which
+  waits for `today.title` and has no seed line), and edits `Tabs.swift` and `TabsAdversarial.swift` on the premise
+  that a UI test's database has no program. Merging it after this port turns them red without a conflict; the fix
+  (the seed line in `BuilderApp.launch`, and those assertions reading the builder over a program) is done after
+  `main` with S14 is merged in. **F10 S7b** (`163f1d1`) edits `Smoke`, `WorkoutFinishAdversarial` and
+  `WorkoutSaveFailure*` inside launches that already carry the seed line, and adds no launch helper. Any UI test a
+  lane adds that waits for `today.title` on a fresh launch needs `-LEDGER_UITEST_PROGRAM seed` or "Skip setup".
 - Note for the nightly: `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` read Today's
   "No program yet"; it now reads Today over the seed program at the real date, after its 8-week block (from
   2026-08-17), a state F09's exclusions were not measured on.
@@ -1108,6 +1114,9 @@ call whose task is cancelled does not count, and the next pass saves; pinned by
 
 - **Full `scripts/check.sh` through the simulator lock on `9647760`: `check.sh OK`, exit 0, 1,958 s** (iOS tests
   1,552 s, watchOS tests 255 s). Coverage: `FeatureOnboarding` 716 / 719, 99.58 % (threshold 70); overall 98.78 %.
+- **Criterion 25, measured by the tester (review N3):** under `TEST_RUNNER_LEDGER_SWEEP=pr` the slice adds roughly
+  **20 s** to the iOS test step on the runner's PR sweep, before the runner's slower clock (test-findings, "Slices
+  S2 and S3 — the port, round 1", "Measurements asked for" (1)). The paragraph below is what this G1 had before.
 - **Criterion 25, not fully measured.** In the full-sweep gate bundle, the F08 suites of `LedgerAppKitTests` sum to
   6.9 s of test-case time; `FeatureOnboardingTests`' cases did not report durations I could separate in that
   bundle. I did not run the iOS step under `TEST_RUNNER_LEDGER_SWEEP=pr`, so the seconds the slice adds to the
@@ -1170,6 +1179,14 @@ The tester's round 1 on the port (`32d13f6`; findings, "Slices S2 and S3 — the
     bar before any read. Not edited. **Chore:** make the test wait until the app is drawn in the asked appearance
     (or check `XCUIDevice.shared.appearance` took effect) before measuring, and see whether `main` fails it too.
 - **F8-S2S3-2, -3:** notes only, no change.
+- **Follow-up for F09/F15 (review N4):** `Today.swift`'s `seedTheProgram(in:)` still starts and discards the Debug
+  sample workout in every test to save the seed program, which `-LEDGER_UITEST_PROGRAM seed` has already made
+  active. It costs nightly seconds only; R9 allowed one line per helper, so it stays here.
+- **Review round 1 fixes (2026-10-19):** SF2 `Heard` is `@Observable`; N1 `LaunchedApp.swift`'s doc comments say
+  the seed argument is how most tests get a program; N2 the carried whole-`Program` comparisons
+  (`OnboardingStoreSaveTests`, `OnboardingStoreFailureTests`, `OnboardingRootTests`, `OnboardingAdversarialScene`)
+  are made `Bool`s first; N5 `saveUITestProgramIfAsked()`'s doc says "once" rests on the seed program's fixed id
+  when calls overlap. No product behaviour changes.
 - **Follow-up for F09: audit Today over an ended block.** Over the seed program after 2026-10-11 the system's
   audit reports "Contrast nearly passed" and "Text clipped" on "Open Program" (the orange button) and "Text
   clipped" on "Block complete" (a display text), the same classes F06/F09 decided for "Set up program" / "Start
