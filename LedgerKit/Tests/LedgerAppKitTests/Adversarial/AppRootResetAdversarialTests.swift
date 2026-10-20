@@ -22,6 +22,17 @@
         /// nothing there (as Today does); Library and History are still placeholders with their titles.
         static let titles: [AppTab: [String]] = [.program: [], .library: ["Library"], .history: ["History"]]
 
+        /// The tab bar's title of `tab` (review round 2, SF-A): Program and Today read alike outside scroll views,
+        /// so the drawn selection tells them apart.
+        static func name(of tab: AppTab) -> String {
+            switch tab {
+            case .today: "Today"
+            case .program: "Program"
+            case .library: "Library"
+            case .history: "History"
+            }
+        }
+
         @Test(
             "A second and a third onboarding land on Today, whatever tab the program went away under",
             arguments: [[AppTab.program, .history], [.library, .program], [.history, .library]]
@@ -36,7 +47,9 @@
                 #expect(shell.shown.isTabs, "\(shell.shown)")
                 for (run, tab) in tabs.enumerated() {
                     shell.select(tab)
-                    #expect(shell.shown.labels == Self.titles[tab] ?? ["?"], "control: the lifter is on \(tab)")
+                    let onTab = shell.shown
+                    #expect(onTab.labels == Self.titles[tab] ?? ["?"], "control: the lifter is on \(tab)")
+                    #expect(onTab.selected == Self.name(of: tab), "control: the bar shows \(tab) selected: \(onTab)")
                     #expect(shell.router.selectedTab == tab)
                     try await shell.deleteTheProgramAndReopen()
                     let onboarding = shell.shown
@@ -47,6 +60,7 @@
                     let tabsAgain = shell.shown
                     #expect(tabsAgain.tabBars == 1)
                     #expect(tabsAgain.isTabs, "onboarding \(run + 2) left \(tab) selected: \(tabsAgain)")
+                    #expect(shell.router.selectedTab == .today, "the router the tabs show is on Today")
                 }
                 let stored = try await shell.stores.queue.read { database in
                     try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM program WHERE deleted_at IS NULL") ?? -1
@@ -79,7 +93,9 @@
                 #expect(shell.shown.isTabs, "\(shell.shown)")
                 if tab != .today {
                     shell.select(tab)
-                    #expect(shell.shown.labels == Self.titles[tab] ?? ["?"], "the tab's own root, not Settings")
+                    let onTab = shell.shown
+                    #expect(onTab.labels == Self.titles[tab] ?? ["?"], "the tab's own root, not Settings")
+                    #expect(onTab.selected == Self.name(of: tab), "the bar shows \(tab) selected: \(onTab)")
                 }
                 #expect(shell.areStacksEmpty)
             }

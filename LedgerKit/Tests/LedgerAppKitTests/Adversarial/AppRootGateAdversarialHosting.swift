@@ -30,6 +30,8 @@
         var labels: [String]
         var tabBars: Int
         var scrollViews: Int
+        /// The title of the tab the drawn tab bar shows selected; nil with no tab bar (review round 2, SF-A).
+        var selected: String?
 
         /// The ground colour alone: no tab bar, no scroll view, nothing for VoiceOver.
         var isGround: Bool {
@@ -42,9 +44,10 @@
         }
 
         /// The tabs, on Today. Port of F08 S2/S3: Today's title is on its page, inside its one scroll view, since
-        /// F09 S5, so Today has nothing outside it (it read "Today" on the S3 branch's placeholder).
+        /// F09 S5, so Today has nothing outside it (it read "Today" on the S3 branch's placeholder). Since F11 S14 the
+        /// Program tab reads the same (the builder's page is in its scroll view), so the drawn selection decides.
         var isTabs: Bool {
-            tabBars == 1 && labels.isEmpty && scrollViews == 1
+            tabBars == 1 && labels.isEmpty && scrollViews == 1 && selected == "Today"
         }
 
         /// Product decision #29's screen and nothing else.
@@ -53,7 +56,7 @@
         }
 
         var description: String {
-            "\(labels) tab bars \(tabBars) scroll views \(scrollViews)"
+            "\(labels) tab bars \(tabBars) scroll views \(scrollViews) selected \(selected ?? "none")"
         }
     }
 
@@ -75,6 +78,7 @@
                 Tab("Today", systemImage: "chart.bar", value: AppTab.today) {
                     ScrollView { Color.clear.frame(height: 10) }
                 }
+                // The pre-S14 placeholder's title; the app's Program tab is the builder (F11 S14).
                 Tab("Program", systemImage: "calendar", value: AppTab.program) { Text("Program") }
                 Tab("Library", systemImage: "dumbbell", value: AppTab.library) { Text("Library") }
                 Tab("History", systemImage: "clock", value: AppTab.history) { Text("History") }
@@ -128,8 +132,21 @@
             return GateShown(
                 labels: labels,
                 tabBars: views(UITabBar.self).count,
-                scrollViews: views(UIScrollView.self).count { !($0 is UITextView) }
+                scrollViews: views(UIScrollView.self).count { !($0 is UITextView) },
+                selected: selectedTab()
             )
+        }
+
+        /// The drawn tab bar's selected tab: its item's title, or, when SwiftUI's tab view leaves the bar's
+        /// `selectedItem` unset, the label of the bar's control that is selected.
+        private func selectedTab() -> String? {
+            guard let bar = views(UITabBar.self).first else {
+                return nil
+            }
+            if let title = bar.selectedItem?.title {
+                return title
+            }
+            return views(UIControl.self).first { $0.isDescendant(of: bar) && $0.isSelected }?.accessibilityLabel
         }
 
         /// Activates the element VoiceOver reads as `label`, outside any scroll view, as a double tap does.

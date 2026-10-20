@@ -1066,21 +1066,33 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   ["History"]]`, compared whole. Reason: since S14 the Program tab is the builder, over the program onboarding
   saved, whose page is inside its scroll view, so it reads nothing there, as Today does; it read the
   placeholder's "Program" before. The full gate after the merge failed on exactly this
-  (`laterOnboardings_landOnToday`, `shell.shown.labels → []`, expected `["Program"]`). The control that the lifter
-  is on the tab stays in the next line (`router.selectedTab == tab`). After the fix `LedgerAppKitTests` on the
-  simulator: 363 of 363, and no issue recorded outside a test (the builder's store is made in the test's turn,
-  because `GateShell` taps the tabs and settles in scope).
+  (`laterOnboardings_landOnToday`, `shell.shown.labels → []`, expected `["Program"]`). After the fix
+  `LedgerAppKitTests` on the simulator: 363 of 363, and no issue recorded outside a test (the builder's store is
+  made in the test's turn, because `GateShell` taps the tabs and settles in scope).
+- **Review round 2, SF-A (2026-10-20):** `labels == []` cannot tell the Program tab from Today, and `isTabs` caught a
+  selection left on Program only while the builder was still loading. `GateShown` gains `selected`, the drawn tab
+  bar's selection (`UITabBar.selectedItem?.title`, or the label of the bar's selected control when SwiftUI leaves
+  `selectedItem` unset), and `isTabs` requires `selected == "Today"`. The reset suite expects `selected` to be the
+  tab's title where it selects a tab (`laterOnboardings_landOnToday`, `pushedScreen_isGoneAfterOnboarding`), and
+  `router.selectedTab == .today` after each later onboarding. `GateTabsStandIn` reads "Today" selected on the
+  suites that use it, as the real tabs do. **Mutant** (`MainRoot`'s `.onAppear { router = newRouter() }` →
+  `.onAppear {}`, so the selection and stacks survive onto the next root; restored after): the reset suite fails 2 of
+  3 tests, with `selected` read right on every tab (`tabsAgain` → `selected Program` / `Library` / `History`, and
+  `isTabs` false on each), `router.selectedTab == .today` failing 6 times, and `isRouterAtItsStart` 8 times. In the
+  Program case the builder was also still loading (`scroll views 0`), so that one failure is not the selection's
+  alone. Restored: `LedgerAppKitTests` on the simulator 363 of 363, the `GateTabsStandIn` suites included.
 - **Nightly runs after the merge** (Nightly plan, through the lock): `Builder`, `DayEditor`, `ProgramTabAdversarial`,
   `Tabs`, `TabsAdversarial`: 23 tests, 4 failures on the first run. (1) `Tabs:44`: my assertion read "Upper Lower"
   (S14's renamed name); the seed program is "Upper / Lower": fixed. (2) `Builder.test_wrappedName_…:80` read
-  "A l" for "A" once (S14's clear-letter-by-letter save). The re-run of `Builder` and `Tabs` passed 7 of 7.
-  (3) **Open, for a ruling:** `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` now audits the
-  builder over the seed program at week 5, the first audit of that screen anywhere. It reports 26 issues on the
-  Program tab: "Contrast failed" on the day line "4 exercises · 15 sets · ~38 min" and the exercise chips (SQUAT,
-  RDL, LEG PRESS, CALF), "Dynamic Type font sizes are partially unsupported" on the eyebrows and chips, and
-  "Text clipped" on "4 days · 58 sets a week", "Apply to later weeks", "TRAINING DAYS" and "BLOCK · 8 WEEKS". Not
-  excluded: deciding them is F11's (measure each, as F09 did for Today), not this port's. (4) The accent test's
-  dark half: the known environment issue above.
+  "A l" for "A" once (S14's clear-letter-by-letter save): recorded as F11-S14-6 in F11's test-findings.
+  (3) `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` now audits the builder over the seed
+  program at week 5, the first audit of that screen anywhere: 26 issues on the Program tab. **Ruling (orchestrator,
+  2026-10-20): nothing is excluded; the 26 go to F11 as a follow-up slice, and the nightly stays red on this one test
+  until it lands** (`tasks/features/F11-program-builder/test-findings.md`, "S14 — follow-ups found by F08 S2/S3",
+  F11-S14-5, with the issues grouped by kind). (4) The accent test's dark half: the known environment issue above.
+  **What the re-run covered:** only `Builder` and `Tabs` were run again (7 of 7). `DayEditor` and
+  `ProgramTabAdversarial` passed on the first run; the rest of `TabsAdversarial` passed on the first run only,
+  apart from (3) and (4).
 - F10 S7b's UI edits (`Smoke`, `WorkoutFinishAdversarial`, `WorkoutSaveFailure*`) are inside launches that already
   carry the seed line, and it adds no launch helper: no edit. The sweep found no other launch without the seed line,
   apart from the `fresh()` launches of the onboarding tests, `Smoke`'s fresh install, `DebugMenu` and
@@ -1092,7 +1104,8 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   is unchanged): onboarding's title, no tab bar, "Skip setup", Today selected.
 - `DebugMenu` reaches Today by "Skip setup" and reads `rows.program` 1, `program_week` 8, `day_template` 4,
   `slot` 16. `LaunchPerformance`'s report skips setup first (as `7c0b78f`).
-- **Every UI test the launch argument touches** (R10): the 18 launches listed above, in 14 files. Of the lanes in
+- **Every UI test the launch argument touches** (R10): 19 launches in 15 files: the 18 listed above, in 14 files, and
+  `BuilderApp.launch` in `Builder.swift` since the merge. Of the lanes in
   flight: **F11 S14** (`feat/F11-s14-program-tab`): its product edits are `MainRoot.tabs` (its `onProgramRoute`
   line), `Routes.swift` and `AppTabs.swift`, none of the lines this port changes, and its `AppRouter.programWeek`
   is dropped with the old router when onboarding appears, which R4 wants. *Corrected 2026-10-19 (review SF1):* the
@@ -1100,8 +1113,8 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   `Builder.swift`, `DayEditor.swift` and `ProgramTabAdversarial.swift` (all through `BuilderApp.launch`, which
   waits for `today.title` and has no seed line), and edits `Tabs.swift` and `TabsAdversarial.swift` on the premise
   that a UI test's database has no program. Merging it after this port turns them red without a conflict; the fix
-  (the seed line in `BuilderApp.launch`, and those assertions reading the builder over a program) is done after
-  `main` with S14 is merged in. **F10 S7b** (`163f1d1`) edits `Smoke`, `WorkoutFinishAdversarial` and
+  (the seed line in `BuilderApp.launch`, and those assertions reading the builder over a program) is in "Sanctioned
+  edits after merging `main` with F11 S14 and F10 S7b" above. **F10 S7b** (`163f1d1`) edits `Smoke`, `WorkoutFinishAdversarial` and
   `WorkoutSaveFailure*` inside launches that already carry the seed line, and adds no launch helper. Any UI test a
   lane adds that waits for `today.title` on a fresh launch needs `-LEDGER_UITEST_PROGRAM seed` or "Skip setup".
 - Note for the nightly: `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` read Today's
@@ -1169,6 +1182,11 @@ to an earlier tester's file, because a fresh UI-test database now opens on onboa
   failures) and `screenshots/s3/fresh-install-first-screen-{light,dark}.png`. **Not taken:** "Today after Start
   training", light and dark. The branch's pair shows the placeholder Today of 2026-10-05, so it was not brought
   over; it is for the orchestrator's run of the app.
+  *2026-10-20:* `screenshots/s3/today-after-start-training-light.png` taken (fresh install, onboarding with the
+  defaults, "Start training"; Today on Tuesday 2026-10-20, a rest day of week 1, by a throwaway UI test never
+  committed); **the dark one is not taken**: with `simctl ui appearance dark` set (and read back as dark) before
+  and after the launch, the simulator drew the light theme, status bar included, twice. The same environment issue
+  as the accent test's dark half.
 
 ### Fix round 1 (G1 implementer, 2026-10-19)
 
