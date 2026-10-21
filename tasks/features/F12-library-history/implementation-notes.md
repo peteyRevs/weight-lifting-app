@@ -255,7 +255,7 @@ That is far under the plan's 30–40 s estimate. Unreduced (local gate), Feature
   - `LibraryPerformanceTests` (2), `StatsQueriesPerformanceTests` (with `bestSets`), UI `Library` and UI `Tabs`:
     green.
   - `TabsAdversarial`: 5 of 7 green; two fail. See open question 3.
-- **Full gate:** see "The gate" below.
+- **Full gate:** green on `4231d65`; see "The gate" below.
 - References: I looked at all 12 Library references, and at the gallery's new section.
 
 ### Open questions, each with a recommendation
@@ -302,4 +302,11 @@ That is far under the plan's 30–40 s estimate. Unreduced (local gate), Feature
 
 ### The gate
 
-(Filled in below after the run.)
+- **First run, on `5fe3d57`: exit 65.** Two AppKit adversarial suites still expected the Library placeholder's
+  "Library" heading (`AppTabsAdversarialTests`, `AppRootResetAdversarialTests`). Both edits are sanctioned
+  (above), in `a5ab3cb`.
+- **Second run, on `4231d65`: exit 0, "check.sh OK", 2,061 s.**
+  - lint 81 s, iOS build 5 s, catalogs 1 s (FeatureLibrary: 39 keys).
+  - iOS tests 1,677 s, watchOS build 44 s, watchOS tests 248 s.
+  - Coverage 3 s: FeatureLibrary 98.94 %, overall 98.69 %.
+- The only commit after `4231d65` is this paragraph.
