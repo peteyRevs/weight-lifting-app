@@ -168,3 +168,362 @@ the root gate and the UI tests.
 7. Program names, day names, tags and preview lines are English data in the Domain, not String Catalog entries.
 8. Test names follow `docs/testing-strategy.md` §6, not the `test_…` names above. "100 % line coverage" of
    `ProgramTemplates` is checked by the reviewer from the file's coverage; the gate is per module.
+
+## Plan amendments — slices S2 and S3 (orchestrator, 2026-10-18)
+
+The plan's S2 (the onboarding screen) and S3 (the root gate and the UI tests) as **one pull request** on
+`feat/F08-s2-onboarding`, cut from `main` @ `16a2e52` (S1 merged as #61). Where this section and anything
+above it, or the notes' "Slice plan", "Seams", "Decisions for the orchestrator" and "Test plan changes"
+(notes:6-337), disagree, this section wins. Line references are to `main` @ `16a2e52` unless a commit is named.
+
+**The slices were built once already.** S2 and S3 were specified, built, attacked and reviewed on 2026-10-05 and
+never merged, because S1 waited for Pete's decision 3 and the "no stacked PRs" rule held the rest behind it. Both
+are on `origin`: `feat/F08-s2-onboarding-ui` @ `24b610b` (S2: G2 closed, G3 approved, the orchestrator's full gate
+green, 671 product lines) and `feat/F08-s3-root-gate` @ `7c0b78f` (S3, stacked on S2: G2 closed, G3 approved,
+gate green with F10 S1–S2 merged, 64 product lines). Their specifications (`ec6c370`, `4a59443`), notes, findings
+and reviews are on those branches only; `main`'s copy of this brief and its notes stop at S1. `main`'s docs
+already describe S2's files as the model of a screen that scrolls (`docs/testing-strategy.md:238-247`:
+`OnboardingScreen.swift`, `OnboardingPage.swift`, `OnboardingFooter.swift`, `Support/OnboardingParts.swift`,
+`OnboardingRootTests.swift` …), none of which exists on `main`. This slice is therefore a **port** of that work
+onto today's `main`, with the changes `main` now requires (ruling R1), not a new design.
+
+### What changed since the plan of 2026-10-04
+
+| The plan said | `main` has now | So |
+|---|---|---|
+| S3 wraps `TodayPlaceholder` in `AppRoot`'s `.ready` switch, or F09's shell (notes:15, 118) | `AppRoot` draws `MainRoot` in `.ready` (`AppRoot.swift:25-26`); `MainRoot` has three members, `body` (the workout's cover, `MainRoot.swift:30-33`), `content` ("F08 adds its 'no active program' branch here", `:35-38`), `tabs` (`:41-55`); architecture:186-196 fixes that shape. `TodayPlaceholder` is gone; `today.title` is `FeatureToday/Views/TodayHeader.swift:24`, its long press reaches the Debug menu through `AppTabs.swift:23` | S3 edits `MainRoot.content` and `AppRoot`, as the 2026-10-04 rulings (notes:466-467) said |
+| L0: localization scaffolding still to build; `OnboardingStrings.swift`; `StringCatalogScan` (notes:16, O1) | One catalog and copy file per module (standards:174-418), `scripts/check-string-catalogs.sh`, `CopyAudit` + `ModuleCopyTests` (`LedgerAppKitTests/ModuleCopyTests.swift`); counted texts take `locale.forCountedText` (`LedgerDomain/Units/CountedText.swift:22`, `FeatureWorkout/WorkoutCopy.swift:140-145`); `logger.category("onboarding")` is allowed by the audit and named in standards:293, :490 | The S2 branch already follows all of it except `forCountedText` (its counted body sentence predates it: R8) |
+| O2: store pattern; `saveAttempt` ticket from `.task(id:)` | The convention as `TodayStore`/`WorkoutStore`/`ProgramStore` hold it (F11 brief:754-770): empty init (`TodayStore.swift:42-47`), synchronous intents, work in the root's `.task`s, internal `init(store:)` for tests (`TodayRoot.swift:30-41`), no `Task {}`/`Timer`/`TimelineView`/`.formatted(`; F11 chose a wake stream over a ticket for its save loop (F11 brief:1004-1007) | The S2 store already matches; its `.task(id: attempt)` is kept (R7) |
+| O3, O13: `OnboardingRoot(prepareRetry:)` wired to `composition.resume(in: .active)` | `resume(in:)` now also runs the workout's recovery and activates WatchConnectivity (`AppComposition.swift:120-136`) | S3's review already narrowed "Retry" to `AppComposition.retrySeed()`, the database half alone (`DatabaseLaunch.swift:105`); kept |
+| The page scrolls only when it does not fit (S2 G1) | The scrolling-screen convention (standards:154-156, testing-strategy:234-291) was lifted out of S2 by #41; the hosted reader refuses a scroll view; `PillButton` has its disabled look and `flush` | The S2 branch's final tree is that convention; nothing of #41 is redone |
+| Shared one-line files: `snapshotTestTargets`, `required`, `registeredModules` | None lists `FeatureOnboarding` (`Package.swift:67-69`, `scripts/coverage-thresholds.json:15`, `PreviewScan.swift:9-11`); the target has no `resources` (`Package.swift:133`); `defaultLocalization` is set (`:81`) | S2 adds the module's name to each, and `resources: [.process("Resources")]` |
+| O11: the existing UI tests reach Today by tapping "Skip setup"; three tests look for `today.title` (notes:85, 327-329) | **16** UI test files launch with `-LEDGER_UITEST` and wait for `today.title`; **12** of them get a program from the Debug menu's sample, which saves `Fixtures.seedProgram()` only when there is no active program (`FeatureWorkout/WorkoutLauncher+Sample.swift:41-47`), and the dated ones read week 5 of its 2026-08-17 block under `-LEDGER_UITEST_NOW` (`Apps/LedgerUITests/Today.swift:6-13`); five assertions read Today's "No program yet" (`Today.swift:33`, `TodayAuditAdversarial.swift:27-46`) | "Skip setup" would save a different program (this week's start, the catalog's loads) and make the sample's seed branch dead: R2 replaces O11 |
+| F09's "No program" card becomes unreachable (notes:125-128) | It shipped: "No program yet" (`FeatureToday/TodayCopy+Cards.swift:201`) with `.setUpProgram` (`TodayPresentation+Card.swift:272`), which selects the Program tab (`Routes+Today.swift:20-23`) | Kept as the defensive state (R3) |
+| CI: no sweep rule | `TestSweep` (`LedgerTestSupport/Sweeps/TestSweep.swift`) reduces size sweeps on the hosted PR run; the iOS test step has a 3,120 s deadline (`docs/ci-cd.md:79-104`) | The ported tests' size sweeps go through `TestSweep` (criterion 25) |
+| Hosted root tests: none read a ready root | `LedgerAppKitTests/Adversarial/AppRootAdversarialTests.swift:86-139` reads a ready `AppRoot` as Today's scroll view | A new root's gate draws the ground first: sanctioned edit (criterion 22, R9) |
+| `DatabaseUnavailableView` names the product (notes:134-135) | Fixed (`AppCopy.swift:37-43`) | Closed |
+| Pete decisions 1–5 open | Answered: 1 A, 2 A, 3 A, 4 A, 5 C | Built as the defaults already were; 5 C adds an F14 input (R11) |
+| Lanes in flight: F09, F10 | F11 S14 (`feat/F11-s14-program-tab`) edits `MainRoot.swift`, `Routes.swift`, `Routes+Today.swift`, `AppTabs.swift` (F11 brief:937); F10 S7b (`feat/F10-s7b-receipt`) is likely to add workout UI tests that launch to Today | Merge order and the UI-test seam: R10 |
+
+### What S2 is (the screen, not yet shown by the app)
+
+`FeatureOnboarding` as the S2 branch left it (`24b610b`): `OnboardingRoot` (public), `OnboardingStore`,
+`OnboardingState` (step, picks, units, phase; `OnboardingAction`; `OnboardingSaveAttempt`), the pure
+`OnboardingPresentation`, `OnboardingCopy.swift` and `OnboardingCopy+Options.swift` with
+`Resources/Localizable.xcstrings`, `Views/OnboardingScreen`, `OnboardingPage`, `OnboardingFooter`,
+`OnboardingOptionRow`, and `Onboarding+Previews.swift`. The placeholder `FeatureOnboarding.swift` and its test go.
+Changes on the way in: R6 (the announcement moves into the root), R8 (`forCountedText`), criterion 25 (sweeps).
+
+### What S3 is (the app opens on it)
+
+`LedgerAppKit/RootGate.swift` (`.loading / .onboarding / .main` from `ProgramRepository.observeActive()`, after the
+launch's first pass), `AppRoot` owning the gate (internal `init(composition:gate:)` for tests), the switch in
+`MainRoot.content`, the shell started again when onboarding appears (R4), `AppComposition.retrySeed()`, the UI-test
+program seam (R2), and every UI test brought to the new first screen. The S3 branch's product delta
+(`git diff 5ff87ff 7c0b78f` plus `git diff 24b610b aff5855`, `LedgerKit/Sources` only) is re-applied by hand to
+today's files; its tests are ported and adapted.
+
+### Store conventions (as `TodayStore`, `WorkoutStore`, `ProgramStore` hold them)
+
+- `OnboardingStore` is `@MainActor @Observable final class` with an empty initializer; `OnboardingRoot` keeps it
+  in `@State` and takes one in an internal `init(store:prepareRetry:announce:)` for tests (`TodayRoot.swift:30-41`,
+  `ProgramRoot.swift:44-54`). `RootGate` follows the same rule (nothing in its `init`).
+- Intents are synchronous and only change state (`send(_:)`); an accepted tap on "Start training", "Skip setup" or
+  "Retry" makes the next `OnboardingSaveAttempt`, the id of the root's `.task(id:)`, which runs `save(prepareRetry:)`
+  (R7). `loadUnits()` runs from a plain `.task`. The gate's `follow` runs from `AppRoot`'s `.task(id: scenePhase)`.
+- No `Task {}`, `Task.detached`, `DispatchQueue`, `Timer`, `TimelineView`, `.formatted(`, `Date()`,
+  `Calendar.current`, `Locale.current` (standards §4, §11). Time, ids, calendar and locale are the injected
+  `\.date`, `\.uuid`, `\.calendar`, `\.locale`; the store logs through `logger.category("onboarding")` and never logs
+  a cancellation (standards:490).
+- Every lookup is in `OnboardingCopy*.swift`; the counted body takes `locale.forCountedText`; no other file holds a
+  literal a lifter reads or hears. Display values come only from `OnboardingPresentation.make`.
+- The feature has no route and makes no navigation call (architecture:197-198): saving the active program is the
+  navigation, and the gate follows it.
+
+### Acceptance criteria
+
+**The screen (S2).** Criteria 1–11 are the S2 branch's specification (`ec6c370`, brief section "Plan amendments
+— slice S2"), restated with today's amendments.
+
+1. **Start.** `OnboardingRoot` opens on step 1 of 3 with "Both, honestly" picked; the bars read "Step 1 of 3".
+2. **Picking and moving.** A tap picks one option and unpicks the others; the picked one shows the orange check
+   (a glyph, not colour alone). "Continue" goes to step 2 ("4 days" picked) and step 3. Steps 2 and 3 have a
+   "Back" pill (O9); the picks survive going back and forth.
+3. **Step 3 is a read-only list** (Pete 2 = A): every day of `ProgramTemplates.preview(days:)`
+   (`ProgramTemplates.swift:61`) in order, each "{name with ' — ' replaced by ' · '}" over its line ("Upper A ·
+   Push focus" / "Bench, incline, row, pulldown, laterals"); not buttons, no check. The body reads "{program name},
+   8 weeks, {pounds|kilograms}. Editable any time.", in the stored settings' unit. Lower B's line is "Deadlift,
+   front squat, leg curl" (Pete 1 = A; the Domain's data).
+4. **"Start training"** saves exactly one program: `ProgramTemplates.program(_:catalog:id:newID:)` (`:94`) over the
+   picks, the stored units, `startDate(containing:weekStart:calendar:)` (`:71`) for the injected date, calendar
+   and the stored week start (Pete 4 = A), `exerciseRepository.all()`, the program's id from `\.uuid` first and
+   then the generator's ids. It is active. A second tap while a save runs, or after one succeeded, saves nothing.
+5. **"Skip setup"**, on any step, saves `both` × four days in the same way, whatever is picked.
+6. **Kilograms.** With stored units kg the body says "kilograms" and the start loads are the catalog's kilogram
+   loads. Units and week start are whatever the stored settings say (Pete 5 = C: pounds and Monday today).
+7. **Failure.** A failure to read the settings or the catalog, to generate (an unseeded catalog throws
+   `ProgramTemplateError.unknownExercise`), or to save shows "Couldn't save your program. Try again." with
+   "Retry"; nothing is saved; it is logged once under "onboarding". "Retry" awaits `prepareRetry`, then saves the
+   failed attempt's picks again. While the failure shows, picks and "Back" are locked. A cancelled task is not a
+   failure and logs nothing; a save cancelled before its write leaves the phase as before the tap.
+8. **VoiceOver.** The trees of the S2 branch's notes ("The intended VoiceOver trees", notes @ `24b610b`
+   :1019-1083) hold, copied into this lane's notes and pinned by `OnboardingAccessibilityTests` from
+   `Support/OnboardingParts` (testing-strategy:248-254): each option one button "{label}, {sub}", `.isSelected`
+   when picked, no value; the bars one element "Step n of 3" with no value; the title a header; preview rows
+   static text; on step 1 "Back" is no stop; while saving every button is not enabled. When the failure line
+   appears it is announced once, through the root's `announce` (R6), pinned by a root test.
+9. **Copy.** Every text below is in `FeatureOnboarding`'s catalog and looked up in its copy files; the counted
+   body passes `locale.forCountedText` (R8). `ModuleCopyTests` passes with no exemption for the module, and the
+   gate's catalog step (`scripts/check-string-catalogs.sh`) passes. No text names the product.
+10. **Type sizes, themes and scrolling.** The screen is its pinned footer plus `ScrollView { OnboardingPage }`;
+    one layout at every size; going to another step starts it at its top (`OnboardingScrollTests`). Option rows
+    wrap and nothing truncates or is cut, light and dark, up to `.accessibility5`, on a 375 pt phone.
+11. **Surface.** `OnboardingRoot(prepareRetry:)` is the module's only public symbol (`OnboardingSurfaceTests`); a
+    new `FeatureOnboardingSourceTests` reads the module for the spellings listed under "Store conventions", as
+    `FeatureTodaySourceTests` does.
+
+**The app (S3).** Criteria 12–21 are the S3 branch's specification (`4a59443`), restated.
+
+12. **Fresh install.** With no active program, once the database is open and the launch's first pass
+    (`composition.resume(in:)`) has returned, the root shows onboarding on step 1, full screen, no tab bar.
+    Before that it draws the ground colour only (O12): neither screen flashes by.
+13. **A lifter with a program** opens on the tabs with Today selected, and onboarding never flashes by.
+14. **Finishing.** "Start training" or "Skip setup" switches the root to the tabs with Today selected and every
+    stack empty, the second time as the first (R4). Nothing but the stored active program makes the switch.
+15. **Following.** The program going away (F14's "Delete all data") shows onboarding; one appearing (F28) shows
+    the tabs. An observation that ends on a task nobody cancelled shows the tabs, never onboarding. A cancelled
+    follow changes nothing, so a phase change keeps onboarding's step and picks.
+16. **Retry** runs `AppComposition.retrySeed()` (`database.resume(isForeground: true)` alone), which always
+    returns, then saves. Pinned by `failedSeed_isRetriedByTheCallRetryMakes`, and by a hosted root test of the
+    line in `MainRoot` that passes it if `LedgerTestSupport` on `main` can host it without sleeping; otherwise
+    the gap (S3 review SF1) is written in the notes again.
+17. **The week** (brief criterion 11). Saved through onboarding at `Fixtures.now` (Wednesday 2026-09-16, weeks
+    from Monday): `startDate` 2026-09-14, in week index 0, on a real database (the words on Today are F09's).
+18. **Relaunch** opens on the tabs: a package test boots twice on one database file.
+19. **Unchanged:** the Debug menu opens from a long press on Today's title once a program exists; the
+    database-unavailable screen; the watch app; launch-to-first-frame is still measured at the root's first
+    appearance, which is now the ground colour (architecture §14 says so: S3 review SF3).
+20. **The UI-test program** (R2). `-LEDGER_UITEST_PROGRAM seed` beside `-LEDGER_UITEST`, read in Debug builds only
+    as `UITestSaveFailures` reads its argument (`UITestSaveFailures.swift:11-42`): after the launch's first pass
+    and before the gate's first read, when there is no active program, `Fixtures.seedProgram()` is saved as the
+    active one, once; a Release build reads nothing. Tests as `UITestSaveFailuresTests` (argument absent,
+    present, malformed, without `-LEDGER_UITEST`; the gate reads `.main` on its first value).
+21. **UI tests** (`Apps/LedgerUITests`):
+    a. `Smoke.test_launchesToToday` becomes `test_freshInstall_skipsSetupToToday` (in `Smoke`, so the PR plan's
+       selection is unchanged): `onboarding.title`, tap `onboarding.skip`, then `today.title` reads "Today".
+    b. `Onboarding` (nightly, from the S3 branch): the three steps with their picks; the VoiceOver order of each
+       step inside the real scroll view at an accessibility size; a step opening at its top; "Start training"
+       landing on Today. `OnboardingAdversarial*` (the tester's, with its three audit exclusions) come too.
+    c. `DebugMenu` reaches Today by "Skip setup" and reads `debug.diagnostics.rows.program` 1, `program_week` 8,
+       `day_template` 4, `slot` 16: criteria 4 and 5 on the real database.
+    d. `LaunchPerformance`'s report step skips setup first.
+    e. Every other launch (the other Smoke tests, `Tabs`, `TabsAdversarial`, `Today`, `TodayAuditAdversarial`,
+       `Workout*`) adds `-LEDGER_UITEST_PROGRAM seed` to its launch arguments, one line per launch helper and
+       nothing else. The five "No program yet" assertions are removed; `TodayAuditAdversarial`'s three
+       no-program audits are replaced by the onboarding audits of `OnboardingAdversarial+Audit` (R3).
+    The identifiers stay the S3 branch's: `onboarding.title`, `.progress`, `.option.<n>`, `.preview.<n>`,
+    `.cta`, `.skip`, `.back`, `.error`.
+
+**Throughout.**
+
+22. **Hosted root tests.** Tests that read a ready `AppRoot` (`AppRootAdversarialTests.swift:86-139`) hand it a
+    gate already at `.main` through `init(composition:gate:)`; `RootGateTests`, `RootGateLaunchTests`,
+    `AppRootTests` and the tester's root suites from the S3 branch cover `.loading`, `.onboarding`, `.main`.
+23. **Shared files.** `FeatureOnboarding` gains `resources: [.process("Resources")]` (`Package.swift:133`) and is
+    added to `snapshotTestTargets` (`:67-69`), `coverage-thresholds.json` `required` (`:15`) and
+    `PreviewScan.registeredModules` (`PreviewScan.swift:9-11`): its name only (M1 convention 4).
+    `package-graph.expected.txt` does not change.
+24. **Coverage and gate.** `FeatureOnboarding` at or above its threshold (70; the S2 branch had 99.85 %); coverage
+    does not decrease elsewhere; `scripts/check.sh` green; the nightly UI run green.
+25. **CI time.** Each ported test that sweeps text sizes over hosted views takes `TestSweep.sizes(…)` (or names its
+    finding's size in `also:`) unless it checks all sizes at once; the implementer measures the seconds the
+    slice adds to the iOS test step under `TEST_RUNNER_LEDGER_SWEEP=pr` and writes them in the notes.
+26. **Docs.** architecture §4 (the gate in the root bullet, `docs/architecture.md:165-196`) and §14
+    (launch-to-first-frame ends at the ground colour); testing-strategy §2.7's first flow is
+    `Smoke.freshInstall_skipsSetupToToday`, and the UI-test program argument is written under §2.7's launch
+    bullet (:324-326); F14's "Inputs from F08" gains the locale week-start follow-up (R11).
+
+### Texts
+
+Exact, from `docs/product-spec.md` §6.7 (:672-680) and the brief's "Copy (exact)" (above, :82):
+
+| Where | Text | Source |
+|---|---|---|
+| Step 1 title / body | "What are you training for?" / "This sets how your loads progress week to week." | spec §6.7; brief :82 (no product name) |
+| Step 1 options | "Get stronger" — "Low reps, linear load increases"; "Build muscle" — "Moderate reps, volume tracking"; "Both, honestly" — "Barbell strength + accessory volume"; "Stay consistent" — "Habit first, numbers second" | spec §6.7 |
+| Step 2 title / body | "How many days a week?" / "Pick the number you will actually hit, not the one you want to hit." | spec §6.7 |
+| Step 2 options | "3 days" — "Full body each session"; "4 days" — "Upper / lower split"; "5 days" — "Push, pull, legs + accessories"; "6 days" — "Body-part split" | spec §6.7 |
+| Step 3 title / body | "Your program" / "%@, %lld weeks, %@. Editable any time." with "pounds" / "kilograms" | spec §6.7; brief :82 |
+| Buttons | "Continue", "Start training", "Skip setup", "Retry" | spec §6.7, §3.10 (:366); brief :82 |
+| Failure | "Couldn't save your program. Try again." | brief :82 |
+| Spoken | "Step %lld of %lld" | brief criterion 12 ("Step 1 of 3") |
+| **Invented** | "Back" (O9; the design draws none). The singular form "%@, %lld week, %@. Editable any time." (the plural rule's `one`; never shown at 8 weeks). Every translator's comment | the S2 branch |
+
+Not copy: the program, day names, tags and preview lines (`ProgramTemplates`, Domain data; O7). The S3 slice adds
+no text: the gate draws the ground colour or another feature's root.
+
+### Accessibility
+
+As criterion 8, plus the manual list from the S2 and S3 branches: focus moves to the new title after "Continue"
+(`@AccessibilityFocusState`, `OnboardingPage`); every button at least 44 pt (`OnboardingAccessibilityTests`);
+Dynamic Type to AX5 by hand on the simulator; Apple's audit in the nightly `OnboardingAdversarial+Audit` with its
+three exclusions and their reasons (white on the accent "contrast nearly passed", F06's decision; "text clipped"
+on display roles whose line height is below Archivo's natural one; a line hidden behind the pinned footer measured
+against it), light and dark.
+
+### Snapshot references
+
+The S2 branch's 18 (O10), drawn from `Support/OnboardingParts` (page then footer) at 402 pt: step 1 light and dark
+× `.large`, `.xLarge`, `.accessibility3` (6); step 2 light and dark × `.large` (2); step 3 four days, the full
+matrix (6); step 3 six days, dark × `.large`, `.accessibility3` (2); step 3 failed, light and dark × `.large` (2).
+They are ported as recorded on 2026-10-05; if the gate shows a difference, each re-recorded reference names its
+visual cause in the PR (testing-strategy:209-213). Under 20, so no `chore(snapshots):` PR. No LedgerAppKit
+reference changes (`ShellSnapshotTests` draws the shell, not the root). The PR also carries the DoD's screenshots:
+the three steps at the default size and at AX5, a fresh install's first screen, and Today after "Start training",
+light and dark.
+
+### Tests the criteria ask for
+
+Ported from the branches (names as there): `OnboardingStore*Tests`, `OnboardingPresentation*Tests`,
+`OnboardingCopyTests`, `OnboardingAccessibilityTests` + `OnboardingAccessibilityTrees`, `OnboardingSnapshotTests`,
+`OnboardingScrollTests`, `OnboardingRootTests`, `OnboardingSurfaceTests`, `PreviewTests`, the tester's 22
+`Adversarial/` files; `RootGateTests`, `RootGateLaunchTests`, `AppRootTests`, `Support/GateSupport`, the tester's
+`RootGate*`/`AppRoot*` adversarial suites (only the F08 ones: the S3 branch also carries F10 S1–S2's, already on
+`main` in their final form). New: `FeatureOnboardingSourceTests` (11), a root test of the announcement (8), the
+`UITestProgram` suite (20), the root test of `retrySeed` wiring if hostable (16), `AppRouterTests` or
+`MainRootTests` for the second onboarding opening on Today with empty stacks (14), the edited
+`AppRootAdversarialTests` (22). UI: `Onboarding`, `OnboardingAdversarial*`, `Support/LaunchedApp` (its "Skip setup"
+helper), and the edits of 21.
+
+### Not in this slice
+
+Editing the generated program (F11); "Delete all data" and the unit change's effect on stored loads (F14); a
+first-launch region default for units or week start (Pete 5 = C; F14); a UI-test launch mode that keeps its
+database across launches (F15); the launch screen's colour (a target change: Question 3); an abs slot on Lower B
+(Pete 1 = A); "Start next block" (F24); anything on the watch; any change to `LedgerDomain` but the comment in R11;
+any change to the program tables (Pete 3 = A: as written, the double-progression and `consistency` points not
+applied).
+
+### Product lines, estimated (standards §10: code only, not tests, catalogs, docs or comments)
+
+| Part | File | Lines |
+|---|---|--:|
+| S2 | `FeatureOnboarding/OnboardingStore.swift` | 120 |
+| S2 | `OnboardingState.swift` | 41 |
+| S2 | `OnboardingPresentation.swift` | 121 |
+| S2 | `OnboardingCopy.swift` (+ `forCountedText`, R8) | 89 |
+| S2 | `OnboardingCopy+Options.swift` | 84 |
+| S2 | `OnboardingRoot.swift` (+ `announce`, R6) | 29 |
+| S2 | `Views/OnboardingScreen.swift`, `OnboardingPage.swift`, `OnboardingFooter.swift` (− the announcement), `OnboardingOptionRow.swift` | 24 + 62 + 28 + 33 |
+| S2 | `Onboarding+Previews.swift` | 49 |
+| S2 | the placeholder `FeatureOnboarding.swift` removed | −3, not counted |
+| | **S2** | **~680** |
+| S3 | `LedgerAppKit/RootGate.swift` (new) | 32 |
+| S3 | `AppRoot.swift` (the gate, the task, the test init) | ~9 |
+| S3 | `MainRoot.swift` (the switch, onboarding's branch, the new router on appear) | ~15 |
+| S3 | `AppComposition.swift` (`retrySeed()`, the program seam's field and call) | ~8 |
+| S3 | `LedgerAppKit/UITestProgram.swift` (new, R2) | ~22 |
+| S3 | `FeatureWorkout/WorkoutLauncher+Sample.swift` (the seed made callable, Debug only, R2) | ~6 |
+| | **S3** | **~92** |
+| | **Total** | **~770** |
+
+S2's lines are measured, not planned (the branch's files counted as standards §10 counts, plus the two small
+changes); S3's are the branch's 64 re-applied plus R2's seam. **One pull request:** inside the 700–900 band and
+under 1,000. The 50–90 % overruns seen were fresh builds against a plan; here 87 % of the lines exist and are
+counted, and even +20 % (~925) stays under the split line. **Past about 950 the implementer stops and reports.**
+The split, if needed: S2 alone (~680; not wired, so safe to merge alone, and it makes testing-strategy:238-247
+true), merged first; then S3 from `main` (~92). No stacked pull requests.
+
+### Project file and test plans (human-owned: flagged, not planned)
+
+- **No `project.pbxproj` change.** `Apps/LedgerUITests` is a synchronized folder (`Ledger.xcodeproj/project.pbxproj:90`),
+  so `Onboarding.swift`, `OnboardingAdversarial*.swift` and the new `Support/LaunchedApp.swift` need no entry (the
+  S3 branch added them so). Every product file is in `LedgerKit`.
+- **No test-plan change.** `FeatureOnboardingTests` is already in both plans (`TestPlans/PR.xctestplan:94`,
+  `Nightly.xctestplan:94`); `PR` selects `Smoke` in `LedgerUITests` (`PR.xctestplan:160-162`), and the renamed test
+  stays in `Smoke`; `Nightly` runs every UI test.
+- **The UI tests that wait for `today.title` after a fresh launch** (all 16 files; criterion 21) stop finding it
+  the moment the gate lands: a fresh `-LEDGER_UITEST` database now opens on onboarding. S3 keeps them passing in
+  the same pull request: the PR-lane `Smoke` launch-to-Today test goes through onboarding ("Skip setup"), the
+  ones that need the spec's seed program launch with `-LEDGER_UITEST_PROGRAM seed` and are otherwise unchanged,
+  and the no-program assertions go. Any UI test another lane adds before this merges needs the same one line.
+
+### Rulings needed from the orchestrator
+
+- **R1. Port, not rebuild.** Bring the S2 branch's `FeatureOnboarding` sources, catalog, tests and references,
+  and the S3 branch's F08 tests, onto `feat/F08-s2-onboarding` as files (`git show <branch>:<path>` or `git
+  restore --source=<branch> -- <path>`), and re-apply the S3 branch's product delta and the shared one-line files
+  by hand. Do not merge either old branch: `git merge-tree main feat/F08-s3-root-gate` conflicts in 36 files, most
+  of them pre-squash copies of #28 and #41. Carry the branches' S2/S3 notes, findings and review sections into this
+  lane's files, marked as of 2026-10-05. Then a G2 and a G3 on the port: the tester re-runs every ported
+  adversarial test and attacks what is new (R2's seam, the gate over today's `MainRoot`, the router replaced, the
+  UI-test edits); the reviewer reads the delta against `24b610b` / `7c0b78f` and the new files whole.
+  *Recommendation:* as written; rebuilding would re-spend two reviewed slices and leave the docs' model files
+  missing meanwhile.
+- **R2. How the UI tests get a program** (replaces O11). *Recommendation:* the Debug-only launch argument of
+  criterion 20, saving `Fixtures.seedProgram()` through the function the Debug sample already uses (made callable
+  from `LedgerAppKit` inside `#if DEBUG`, so no package edge is added and `package-graph.expected.txt` stays). The
+  alternative, a helper that taps "Skip setup" everywhere, saves this week's block with the catalog's loads, makes
+  the sample's seed branch dead, and means rewriting every week-5 and load assertion in 12 tester files. F15 still
+  owns a launch mode that keeps its database.
+- **R3. Today's "No program yet".** *Recommendation:* keep the card, its texts and `.setUpProgram` as the state
+  shown when the gate's read failed and Today can still read (defensive, nothing removed from F09); remove the UI
+  assertions that reach it on a fresh database and replace the three no-program audits with onboarding's.
+- **R4. Starting the shell again.** The S3 fix for F8-S3-1 added `AppRouter.reset()`. F11 S14 adds state to the
+  router (the requested week). *Recommendation:* `MainRoot` replaces its router with a new `AppRouter()` when
+  onboarding appears, so no reset method has to keep up with the router's fields; pinned by a test that pushes a
+  screen, goes through onboarding and finds Today with every stack empty.
+- **R5. The workout's cover stays on `MainRoot.body`**, around the gate's content, as architecture:194-196 has
+  it. *Recommendation:* keep. No workout can start while onboarding shows; one recovered at launch has a program,
+  so the gate shows the tabs under it.
+- **R6. The failure's announcement** is posted from `OnboardingFooter` on the branch (`AccessibilityNotification
+  .Announcement(...).post()` in a view). *Recommendation:* move it to `OnboardingRoot`, through an `announce`
+  closure in its internal init with the posting default, as `ProgramRoot.swift:44-54, 76-80` does, so a root test
+  hears it once.
+- **R7. `.task(id: store.attempt)`, not a wake stream.** *Recommendation:* keep the attempt id: an attempt is
+  accepted only while no save runs, so a change of id never cancels a write (the reason F11 took a stream), and the
+  branch's tests pin it.
+- **R8. The counted body sentence** is a plural key looked up with the plain locale on the branch.
+  *Recommendation:* add `var forCountedText: Locale { forCountedText(in: .module) }` to the copy file and pass it,
+  as `WorkoutCopy.swift:140-145`; a test with `fr_FR` that still reads "weeks".
+- **R9. Sanctioned edits of testers' files:** `AppRootAdversarialTests` (criterion 22); the launch lines of
+  `Tabs`, `TabsAdversarial`, `Today`, `TodayAuditAdversarial`, `Workout*Adversarial`, `WorkoutLogging`,
+  `WorkoutRest`, `WorkoutSaveFailure`; the five no-program assertions. *Recommendation:* the implementer makes
+  them, lists each with its diff in the notes, and the tester audits that list (F11 R11's way).
+- **R10. Order with the lanes in flight.** F11 S14 edits `MainRoot.swift` and `Routes.swift`; F10 S7b may add UI
+  tests that wait for `today.title` on a fresh launch. *Recommendation:* build now; open this PR after S14 and
+  S7b have merged (merge `main` in, gate, push once), and tell both lanes now that a UI test written for `main`
+  after this lands needs `-LEDGER_UITEST_PROGRAM seed` or "Skip setup".
+- **R11. Pete 5 = C.** *Recommendation:* one bullet in F14's "Inputs from F08" (`F14-settings.md:76`): decision #15
+  (week start from the iPhone's region on first launch) is unimplemented and onboarding copies the stored units
+  and week start into the block; F14 decides whether first launch reads the region. And the comment at
+  `LedgerDomain/Model/Settings.swift:36-39` stops saying the app seeds the week start ("F14 decides"); comment
+  only, no product line.
+- **R12. The retry wiring's test** (criterion 16; S3 review SF1, left open on 2026-10-05). *Recommendation:*
+  require the hosted root test if `ProbedStores` / `StoreProbe` can refuse the seed and the root can be driven
+  without a sleep; otherwise say so in the notes, not a blocker.
+
+### Open questions for the product owner (the default holds until answered)
+
+1. **"Back" on steps 2 and 3.** The design has no way back; the screen draws a small "Back" pill. Default: keep it.
+2. **"Skip setup" after picking** saves the 4-day "Both, honestly" program, not the picks. Default: as now (the
+   design's "Skip" means "skip the questions").
+3. **The launch screen is white in light mode** and the first frame is cream, so a fresh launch fades from white
+   to cream. Default: leave it for F26 (it is a change to the app target, yours to make).
+4. **The first screen waits for the launch's first pass** (the ground colour for a moment, hidden under the launch
+   screen on the simulator), for lifters with a program too. Default: keep; F26 measures it on a device.
+5. **Apple's accessibility audit** flags white text on the orange button as "contrast nearly passed" (3.1:1,
+   decision of F06) and long titles as "may be clipped" (tight line heights). Default: keep both as decided; F15
+   lists them again.
+
+### Rulings before G1 — slices S2 and S3 (orchestrator, 2026-10-18)
+
+- **R1–R12 as recommended above.** R1: a port file by file from `feat/F08-s2-onboarding-ui` @ `24b610b` and
+  `feat/F08-s3-root-gate` @ `7c0b78f` (read with `git show`, never merged), adapted to `main`; the tester and the
+  reviewer then run on the port as on new work.
+- **R10:** built now; the pull request opens after F11 S14 and F10 S7b merge (or `main` is merged in first,
+  whichever comes later), and the implementer lists in the notes every UI test of theirs that the new launch
+  argument touches.
+- **Questions for the product owner 1–5:** built to their defaults until he answers; each is one named place
+  in the code.
+- **Stop rule:** past about 950 product lines, stop and report; the split is S2 alone, then S3 from `main`.

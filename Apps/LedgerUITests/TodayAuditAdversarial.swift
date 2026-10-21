@@ -1,10 +1,9 @@
 import XCTest
 
 /// F09 S5 adversarial round 1 (G2): the system's accessibility audit on every state of Today a UI test can
-/// reach, in the running app. `TabsAdversarial.test_everyTabRoot_passesTheSystemsAccessibilityAudit` reads
-/// only the state of a fresh database ("No program yet") in light at the default text size; these read the
-/// others: a session day, the same day with a workout minimized (Resume), a rest day, its off-schedule
-/// sheet, the first state in dark and at an accessibility text size.
+/// reach, in the running app: a session day, the same day with a workout minimized (Resume), a rest day, its
+/// off-schedule sheet. (Round 1 also audited a fresh database's "No program yet", in light, in dark and at an
+/// accessibility text size; F08 replaced those with onboarding's audits.)
 ///
 /// Each issue is recorded with the element's type, label and frame, and a picture of the element is kept
 /// with the result, so that a "text clipped" can be looked at. Nightly only.
@@ -23,29 +22,9 @@ final class TodayAuditAdversarial: XCTestCase {
         continueAfterFailure = true
     }
 
-    @MainActor
-    func test_noProgram_light_passesTheAudit() throws {
-        let app = launch(at: Self.sessionDay)
-        XCTAssertTrue(app.staticTexts["No program yet"].waitForExistence(timeout: 10))
-        XCTAssertEqual(try audit(app, state: "no program, light"), [])
-    }
-
-    @MainActor
-    func test_noProgram_dark_passesTheAudit() throws {
-        let before = XCUIDevice.shared.appearance
-        defer { XCUIDevice.shared.appearance = before }
-        XCUIDevice.shared.appearance = .dark
-        let app = launch(at: Self.sessionDay)
-        XCTAssertTrue(app.staticTexts["No program yet"].waitForExistence(timeout: 10))
-        XCTAssertEqual(try audit(app, state: "no program, dark"), [])
-    }
-
-    @MainActor
-    func test_noProgram_atAnAccessibilitySize_passesTheAudit() throws {
-        let app = launch(at: Self.sessionDay, textSize: "UICTContentSizeCategoryAccessibilityL")
-        XCTAssertTrue(app.staticTexts["No program yet"].waitForExistence(timeout: 10))
-        XCTAssertEqual(try audit(app, state: "no program, accessibility large"), [])
-    }
+    // Sanctioned edit of F08 S2/S3 (ruling R3): the three audits of a fresh database's "No program yet" are gone.
+    // A fresh database now opens on onboarding, whose audits, light, dark and at an accessibility size, are
+    // `OnboardingAdversarial+Audit`'s; these tests launch with the seed program.
 
     @MainActor
     func test_sessionDay_upNextThenResume_passTheAudit() throws {
@@ -161,6 +140,7 @@ private extension TodayAuditAdversarial {
     func launch(at instant: String, textSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", instant]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         if let textSize {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
         }

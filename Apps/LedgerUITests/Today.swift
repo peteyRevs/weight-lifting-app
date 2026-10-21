@@ -8,8 +8,8 @@ import XCTest
 /// weeks from Monday 2026-08-17: Upper A on Monday, Lower A on Wednesday, Upper B on Friday, Lower B on
 /// Saturday). The instants are noon UTC, the same calendar day in every time zone from UTC−11 to UTC+11.
 ///
-/// **The program is the Debug menu's.** A UI test's database holds the catalog and no program, so each test
-/// first starts the menu's sample workout, which saves the seed program, and discards that workout. Under a
+/// **The program is the seed program.** Each test launches with `-LEDGER_UITEST_PROGRAM seed` (F08), which saves it
+/// before Today first reads, and then starts the menu's sample workout, over it, and discards that workout. Under a
 /// moved clock the cover's elapsed time is not read: the system's timer counts it from the device's clock.
 final class Today: XCTestCase {
     /// Thursday of week 5: nothing is scheduled.
@@ -29,8 +29,6 @@ final class Today: XCTestCase {
         let app = launch(at: Self.restDay)
         let title = app.staticTexts["today.title"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Today", "no program yet")
-        XCTAssertTrue(app.staticTexts["No program yet"].exists)
         seedTheProgram(in: app)
 
         XCTAssertTrue(app.staticTexts["No session today"].waitForExistence(timeout: 10))
@@ -157,6 +155,7 @@ final class Today: XCTestCase {
     private func launch(at instant: String, textSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", instant]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         if let textSize {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
         }

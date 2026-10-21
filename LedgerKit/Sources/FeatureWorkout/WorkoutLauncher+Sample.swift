@@ -32,6 +32,22 @@
         }
     }
 
+    /// The program the sample starts its workouts in, which the UI tests also open on (F08, ruling R2: the app's
+    /// `-LEDGER_UITEST_PROGRAM seed`).
+    public nonisolated enum SampleProgram {
+        /// The active program; with none, the spec's seed program (`Fixtures.seedProgram()`), saved as the active
+        /// one first.
+        @discardableResult
+        public static func activeOrSeed(in programs: any ProgramRepository) async throws -> Program {
+            if let active = try await programs.active() {
+                return active
+            }
+            let seed = try Fixtures.seedProgram()
+            try await programs.save(seed)
+            return seed
+        }
+    }
+
     nonisolated enum WorkoutSample {
         /// The active program holds no day at that place: it cannot happen with the seed program as it is.
         struct NoDay: Error {}
@@ -39,13 +55,8 @@
         /// The day at `index` of the active program, in its first week; the program is the seed program when
         /// there was none. The first week is always inside the block, whatever today's date is.
         static func source(day index: Int, in programs: any ProgramRepository) async throws -> WorkoutSource {
-            var program = try await programs.active()
-            if program == nil {
-                let seed = try Fixtures.seedProgram()
-                try await programs.save(seed)
-                program = seed
-            }
-            guard let program, program.days.indices.contains(index) else {
+            let program = try await SampleProgram.activeOrSeed(in: programs)
+            guard program.days.indices.contains(index) else {
                 throw NoDay()
             }
             return WorkoutSource(programID: program.id, weekIndex: 0, dayTemplateID: program.days[index].id)

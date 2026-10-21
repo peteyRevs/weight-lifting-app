@@ -1592,3 +1592,29 @@ are unchanged, and the mark fails the day the swipe pops (the ruling: criterion 
 | swiftformat `--lint`, swiftlint `--strict` on the new file | 0 |
 
 The result bundles were deleted after each run.
+
+## S14 — follow-ups found by F08 S2/S3 (F08 implementer, 2026-10-20)
+
+Found by F08 S2/S3's seed program (`-LEDGER_UITEST_PROGRAM seed`), 2026-10-20, after merging `main` with S14 into
+`feat/F08-s2-onboarding`; owner: F11 follow-up. Until a UI test's database had a program, the Program tab showed
+"No program yet"; now it shows the builder over the seed program, at week 5 under `-LEDGER_UITEST_NOW
+2026-09-16T12:00:00Z`.
+
+1. **F11-S14-5 — the builder over a program fails the system's accessibility audit (26 issues).** Orchestrator's
+   ruling: nothing is excluded; a follow-up slice measures and decides each, and the nightly stays red on this
+   one test until it lands.
+   - *Test:* `Apps/LedgerUITests/TabsAdversarial.swift`,
+     `test_everyTabRoot_passesTheSystemsAccessibilityAudit` (`:170`), Nightly plan, iPhone 17, iOS 27.0, on the
+     Program tab. Today, Library and History raise nothing new.
+   - *Contrast failed (5):* "4 exercises · 15 sets · ~38 min", "SQUAT", "RDL", "LEG PRESS", "CALF".
+   - *Dynamic Type font sizes are partially unsupported (17):* "INCLINE", "BLOCK · 8 WEEKS", "4 DAYS" (×8), "+1",
+     "WEEK 5", "CS ROW", "PULLDOWN", "BENCH", "TRAINING DAYS", "DELOAD", "MY PROGRAM".
+   - *Text clipped (4):* "4 days · 58 sets a week", "Apply to later weeks" (a button), "TRAINING DAYS",
+     "BLOCK · 8 WEEKS".
+   - All elements are type 48 (static text) except "Apply to later weeks" (9, button). Measured once, on the
+     first nightly run after the merge.
+2. **F11-S14-6 — flaky: `Builder.test_wrappedName_takesTheFocus_andABlankDraftShowsThePlaceholder` (`:80`), seen
+   once.** "XCTAssertEqual failed: ("Optional("A l")") is not equal to ("Optional("A")") - a blank name is not
+   stored": the name cleared letter by letter stored "A l" as its last value before the field went blank, instead
+   of "A". The re-run of `Builder` (with `Tabs`) passed 7 of 7. Likely the save loop's timing at
+   `AccessibilityXL`; not reproduced.

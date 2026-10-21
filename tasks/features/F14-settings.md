@@ -77,3 +77,7 @@ _Filled in by agents during delivery:_
 - A generated slot stores its start load in the unit of the day it was created, and `step == nil`, so after a unit
   change in Settings a stored 45 lb reads 20.41 kg and steps as 20.41, 22.91, 25.41. F14 must decide what a unit
   change does to stored start loads: convert and round to the new unit's step, or keep them exact.
+- (2026-10-18, S2/S3; Pete's decision 5 = C) Decision #15, the week start from the iPhone's region on first
+  launch, is unimplemented: nothing writes the settings before onboarding, so onboarding copies the stored
+  units and week start (`Settings.default`: pounds and Monday) into the block it saves. F14 decides whether
+  first launch reads the region for the week start (and the units), and what that does to a block saved before.

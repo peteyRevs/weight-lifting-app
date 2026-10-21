@@ -99,6 +99,7 @@ private extension WorkoutLoggingAdversarial {
     private func launch(_ arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1"] + arguments
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         XCTAssertTrue(app.staticTexts["today.title"].waitForExistence(timeout: 10))
         return app

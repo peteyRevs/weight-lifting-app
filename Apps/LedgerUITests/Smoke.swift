@@ -1,7 +1,9 @@
 import XCTest
 
-/// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1: the app
-/// launches on a fresh database (`-LEDGER_UITEST`) to Today. F10 S4 criterion 10: the workout's cover in the
+/// Selected by the `PR` test plan as `LedgerUITests/Smoke` (docs/testing-strategy.md §8). F07 criterion 1 and F08
+/// criteria 12 and 14: the app launches on a fresh database (`-LEDGER_UITEST`) to onboarding, full screen, and
+/// "Skip setup" lands on Today, with the tabs. The other tests launch with the seed program
+/// (`-LEDGER_UITEST_PROGRAM seed`, F08) and open on Today. F10 S4 criterion 10: the workout's cover in the
 /// running app, and criterion 18: the conflict with a workout that is running; both reached through the Debug
 /// menu's sample rows until Today starts workouts (F09). F10 S7a: a workout is saved and Today shows it logged.
 final class Smoke: XCTestCase {
@@ -10,13 +12,18 @@ final class Smoke: XCTestCase {
     }
 
     @MainActor
-    func test_launchesToToday() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
+    func test_freshInstall_skipsSetupToToday() {
+        let app = XCUIApplication.fresh()
         app.launch()
-        let title = app.staticTexts["today.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Today")
+        let onboarding = app.staticTexts["onboarding.title"]
+        XCTAssertTrue(onboarding.waitForExistence(timeout: 10))
+        XCTAssertEqual(onboarding.label, "What are you training for?")
+        XCTAssertFalse(app.tabBars.firstMatch.exists, "onboarding is full screen: no tab bar")
+        XCTAssertFalse(app.staticTexts["today.title"].exists)
+
+        XCTAssertTrue(app.skipSetupToToday())
+        XCTAssertTrue(app.tabBars.buttons["Today"].isSelected)
+        XCTAssertFalse(onboarding.exists)
     }
 
     /// The sample workout starts and its cover goes up over the tabs with no more than a second or two on
@@ -29,6 +36,7 @@ final class Smoke: XCTestCase {
     func test_sampleWorkout_startsCountsMinimizesResumesDiscards() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         let today = app.staticTexts["today.title"]
         XCTAssertTrue(today.waitForExistence(timeout: 10))
@@ -75,6 +83,7 @@ final class Smoke: XCTestCase {
     func test_sampleWorkout_anotherDay_cancelResumeAndReplace() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         let today = app.staticTexts["today.title"]
         XCTAssertTrue(today.waitForExistence(timeout: 10))
@@ -166,6 +175,7 @@ extension Smoke {
     func test_sampleWorkout_logASet_saveWorkout_todayShowsItLogged() {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", "2026-08-17T12:00:00Z"]
+        app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"] // F08: the seed program, not onboarding
         app.launch()
         let today = app.staticTexts["today.title"]
         XCTAssertTrue(today.waitForExistence(timeout: 10))

@@ -2,7 +2,9 @@ import XCTest
 
 /// F07 criteria 1 and 7, the data half on screen: the debug menu opens from a long press on Today's title, and
 /// Diagnostics shows the database in Application Support's place for a UI test (a fresh temporary file), the catalog
-/// seeded (at least 200 exercise rows), and swift-dependencies' live context in an app a UI test launched.
+/// seeded (at least 200 exercise rows), and swift-dependencies' live context in an app a UI test launched. F08
+/// criteria 4 and 5 on the real database: Today is reached by "Skip setup", which saves one program of the default
+/// four-day split, eight weeks, sixteen slots.
 final class DebugMenu: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -10,11 +12,10 @@ final class DebugMenu: XCTestCase {
 
     @MainActor
     func test_diagnostics_showsTheSeededCatalog() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-LEDGER_UITEST", "1"]
+        let app = XCUIApplication.fresh()
         app.launch()
+        XCTAssertTrue(app.skipSetupToToday())
         let title = app.staticTexts["today.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 10))
 
         attachScreenshot(of: app, named: "Today")
         title.press(forDuration: 1)
@@ -26,6 +27,10 @@ final class DebugMenu: XCTestCase {
         let exercises = app.staticTexts["debug.diagnostics.rows.exercise"]
         XCTAssertTrue(exercises.waitForExistence(timeout: 10))
         XCTAssertGreaterThanOrEqual(try XCTUnwrap(Int(exercises.label)), 200)
+        let rows = ["program", "program_week", "day_template", "slot"].map {
+            app.staticTexts["debug.diagnostics.rows.\($0)"].label
+        }
+        XCTAssertEqual(rows, ["1", "8", "4", "16"], "Skip setup saved one program, the default")
         attachScreenshot(of: app, named: "Diagnostics")
         XCTAssertTrue(app.staticTexts["debug.diagnostics.path"].label.hasSuffix("/ledger.sqlite"))
         XCTAssertEqual(app.staticTexts["debug.diagnostics.context"].label, "live")

@@ -163,7 +163,17 @@ targets only.
   decision #29), seeds the catalog (#28), loads the settings and retries on
   return to the foreground; each composition root keeps its platform steps.
 - Root view (`LedgerAppKit`, F09): `AppRoot` draws the composition's state. Once
-  the database is open it draws `MainRoot`, the tab shell: a `TabView` with four
+  the database is open it draws `MainRoot`: onboarding while there is no active
+  program, else the tab shell (F08). `RootGate` says which: `AppRoot`'s launch
+  task awaits the launch's pass, then follows `ProgramRepository.observeActive()`,
+  and until the gate's first answer the root is the ground colour alone. When
+  the active program cannot be read the root shows the tabs, never onboarding,
+  and reads again at the next change of the scene's phase. Each time onboarding
+  appears `MainRoot` starts the shell over with a new `AppRouter`, so the tabs
+  that follow open on Today with empty stacks. A UI test that launches with
+  `-LEDGER_UITEST_PROGRAM seed` (Debug builds only) gets the spec's seed program
+  saved after the launch's pass, before the gate's first read
+  (`UITestProgram`). The tab shell is a `TabView` with four
   tabs (Today · Program · Library · History; `AppTab`), each owning a
   `NavigationStack`. Every stack is keyed by the one `AppDestination` enum
   (`LedgerAppKit/Routes.swift`), which lists every screen a stack can push: any
@@ -548,7 +558,11 @@ dependencies.
 - A debug-only "Diagnostics" page, opened from the debug menu (a long press on
   Today's title, F07; `LedgerDesign`'s `DebugMenu` and `DiagnosticsPage`): the
   database file, row counts per table, this device's id, HealthKit's
-  authorization state and launch-to-first-frame (decision #30). Sync state and
+  authorization state and launch-to-first-frame (decision #30). That figure
+  ends at the root's first appearance, which since F08 is the ground colour: it
+  does not include the launch's pass, the gate's read of the active program or
+  the building of the first screen, and the time to that screen (§15's "cold
+  launch to Today") is not measured yet (F26). Sync state and
   event log size join it with F17.
 
 ## 15. Performance budgets
