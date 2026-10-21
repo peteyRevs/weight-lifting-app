@@ -2,6 +2,7 @@
     import Dependencies
     @testable import LedgerAppKit
     import LedgerDesign
+    import LedgerDomain
     import LedgerSnapshotTesting
     import LedgerTestSupport
     import SwiftUI
@@ -16,6 +17,11 @@
     /// Since F11 S14 the Program tab is `FeatureProgram`'s builder, which in a window with no scene is told it is
     /// in the background and follows nothing (`ProgramRoot`): it draws the ground alone, and has no element here.
     /// What it draws is `FeatureProgramTests`'; that the running app shows it is the `Tabs` UI test's.
+    ///
+    /// Since F12 S1 the Library tab is `FeatureLibrary`'s root, which in a window with no scene follows nothing and
+    /// draws the ground alone, as the Program tab does: it has no element here either (sanctioned edit, C4). What
+    /// it draws is `FeatureLibraryTests`'; that the running app shows it, titled `library.title`, is the `Tabs` UI
+    /// test's.
     ///
     /// Since F09 S5 the Today tab is `FeatureToday`'s root. It reads the stores and the session, so the shell is
     /// hosted on empty in-memory stores and a session with nothing live; and all of it scrolls, so the shell is
@@ -42,7 +48,7 @@
         @Test(
             "Each placeholder tab shows its own screen, titled as the tab; Today's root is all one scroll view",
             arguments: [
-                (AppTab.today, String?.none), (.program, nil), (.library, "Library"), (.history, "History")
+                (AppTab.today, String?.none), (.program, nil), (.library, nil), (.history, "History")
             ]
         )
         func selectedTab_showsItsOwnScreen(tab: AppTab, title: String?) {
@@ -53,6 +59,15 @@
                 #expect(Self.labels(elements) == [title].compactMap(\.self))
                 #expect(elements.map(\.accessibilityTraits) == [title].compactMap { $0.map { _ in Self.heading } })
                 #expect(elements.map { $0.accessibilityValue ?? "" } == [title].compactMap { $0.map { _ in "" } })
+            }
+        }
+
+        @Test("An exercise's history is pushed as the placeholder that names it, until F12 S2 draws it")
+        func exerciseDestination_drawsItsPlaceholder() {
+            let router = AppRouter()
+            router.open(.exercise(ExerciseID(Fixtures.uuid(451))), in: .library)
+            Self.hosting(router) { read in
+                #expect(Self.labels(read()) == ["Exercise history"])
             }
         }
 

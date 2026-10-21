@@ -1,0 +1,459 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@: %@" : {
+      "comment" : "Spoken label of a filter chip: Muscle or Equipment, then the chip's own text",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: %@"
+          }
+        }
+      }
+    },
+    "%lld sessions" : {
+      "comment" : "On a recently logged exercise's row: how many workouts it was done in",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld session"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld sessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ALL EXERCISES" : {
+      "comment" : "Heading of the Library's every exercise, A to Z",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ALL EXERCISES"
+          }
+        }
+      }
+    },
+    "All" : {
+      "comment" : "First filter chip of the Library, in the muscle row and in the equipment row: no filter",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        }
+      }
+    },
+    "Arms" : {
+      "comment" : "Filter chip: every muscle of the arms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arms"
+          }
+        }
+      }
+    },
+    "Back" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        }
+      }
+    },
+    "Band" : {
+      "comment" : "Equipment: a resistance band",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Band"
+          }
+        }
+      }
+    },
+    "Barbell" : {
+      "comment" : "Equipment: a barbell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barbell"
+          }
+        }
+      }
+    },
+    "Biceps" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biceps"
+          }
+        }
+      }
+    },
+    "Bodyweight" : {
+      "comment" : "Equipment: none, the body's weight",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bodyweight"
+          }
+        }
+      }
+    },
+    "Cable" : {
+      "comment" : "Equipment: a cable machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cable"
+          }
+        }
+      }
+    },
+    "Calves" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calves"
+          }
+        }
+      }
+    },
+    "Can't show the library right now" : {
+      "comment" : "Title shown in place of the Library when its data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show the library right now"
+          }
+        }
+      }
+    },
+    "Chest" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chest"
+          }
+        }
+      }
+    },
+    "Clear filters" : {
+      "comment" : "Button under: Nothing matches that filter. It empties the search and sets both chip rows to All",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear filters"
+          }
+        }
+      }
+    },
+    "Core" : {
+      "comment" : "Muscle group: the abdominals and lower back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core"
+          }
+        }
+      }
+    },
+    "Custom" : {
+      "comment" : "On an exercise's row, after its equipment and muscle: the lifter made it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        }
+      }
+    },
+    "Dumbbell" : {
+      "comment" : "Equipment: dumbbells",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dumbbell"
+          }
+        }
+      }
+    },
+    "Equipment" : {
+      "comment" : "Spoken name of the Library's equipment chips",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Equipment"
+          }
+        }
+      }
+    },
+    "Forearms" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forearms"
+          }
+        }
+      }
+    },
+    "Glutes" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glutes"
+          }
+        }
+      }
+    },
+    "Hamstrings" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hamstrings"
+          }
+        }
+      }
+    },
+    "Kettlebell" : {
+      "comment" : "Equipment: a kettlebell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kettlebell"
+          }
+        }
+      }
+    },
+    "Legs" : {
+      "comment" : "Filter chip: every muscle of the legs",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legs"
+          }
+        }
+      }
+    },
+    "Library" : {
+      "comment" : "Title of the Library tab's screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Library"
+          }
+        }
+      }
+    },
+    "Machine" : {
+      "comment" : "Equipment: a weight machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machine"
+          }
+        }
+      }
+    },
+    "Muscle" : {
+      "comment" : "Spoken name of the Library's muscle chips",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muscle"
+          }
+        }
+      }
+    },
+    "New exercise" : {
+      "comment" : "Button in the Library's header, and under No exercises yet: creates an exercise of one's own",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New exercise"
+          }
+        }
+      }
+    },
+    "No exercises yet." : {
+      "comment" : "Shown in the Library when no exercise is stored at all",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No exercises yet."
+          }
+        }
+      }
+    },
+    "Nothing matches that filter." : {
+      "comment" : "Shown in the Library when the search and the two chip rows leave no exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing matches that filter."
+          }
+        }
+      }
+    },
+    "PR %@ kilograms" : {
+      "comment" : "Spoken best weight, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PR %@ kilograms"
+          }
+        }
+      }
+    },
+    "PR %@ pounds" : {
+      "comment" : "Spoken best weight, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PR %@ pounds"
+          }
+        }
+      }
+    },
+    "Quads" : {
+      "comment" : "Muscle group: the quadriceps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quads"
+          }
+        }
+      }
+    },
+    "RECENTLY LOGGED" : {
+      "comment" : "Heading of the Library's exercises logged last, latest first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECENTLY LOGGED"
+          }
+        }
+      }
+    },
+    "Search %lld exercises" : {
+      "comment" : "Placeholder and spoken label of the Library's search field, with the number of exercises",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Search %lld exercise"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Search %lld exercises"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Shoulders" : {
+      "comment" : "Muscle group, also a filter chip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shoulders"
+          }
+        }
+      }
+    },
+    "Triceps" : {
+      "comment" : "Muscle group",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Triceps"
+          }
+        }
+      }
+    },
+    "Your exercises and workouts are still on this iPhone. Open the app again to try once more." : {
+      "comment" : "Under the title shown when the Library's data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your exercises and workouts are still on this iPhone. Open the app again to try once more."
+          }
+        }
+      }
+    },
+    "—" : {
+      "comment" : "In place of the best weight of an exercise never logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

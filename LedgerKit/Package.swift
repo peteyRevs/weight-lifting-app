@@ -66,7 +66,7 @@ let fakesCoverageTargets: Set<String> = ["LedgerDependencies", "LedgerPersistenc
 /// PNGs as sources. Add a target here with its first snapshot suite.
 let snapshotTestTargets: Set<String> = [
     "LedgerDesign", "LedgerAppKit", "LedgerWatchAppKit", "FeatureOnboarding", "FeatureProgram", "FeatureToday",
-    "FeatureWorkout"
+    "FeatureWorkout", "FeatureLibrary"
 ]
 
 /// Test targets that read committed fixtures through `Bundle.module` (F05: `schema-v001.sql`; F09 S1: the string
@@ -149,7 +149,12 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: uiSettings
         ),
-        .target(name: "FeatureLibrary", dependencies: featureSpine, swiftSettings: uiSettings),
+        .target(
+            name: "FeatureLibrary",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
         .target(name: "FeatureHistory", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(name: "FeatureSettings", dependencies: featureSpine, swiftSettings: uiSettings),
         .target(

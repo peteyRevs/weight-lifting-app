@@ -24,6 +24,11 @@ nonisolated enum AppCopy {
         String(localized: "Settings", bundle: .module, comment: "Title of the Settings screen")
     }
 
+    /// The title of an exercise's history placeholder, until F12 S2's screen draws its own.
+    static var exerciseHistoryTitle: String {
+        String(localized: "Exercise history", bundle: .module, comment: "Title of an exercise's history screen")
+    }
+
     /// The title of product decision #29's screen: the database could not be opened.
     static var databaseUnavailableTitle: String {
         String(

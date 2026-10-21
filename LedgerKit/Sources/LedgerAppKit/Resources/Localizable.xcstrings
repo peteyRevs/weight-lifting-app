@@ -12,6 +12,17 @@
         }
       }
     },
+    "Exercise history" : {
+      "comment" : "Title of an exercise's history screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exercise history"
+          }
+        }
+      }
+    },
     "History" : {
       "comment" : "Tab title, and the title of the History screen",
       "localizations" : {
