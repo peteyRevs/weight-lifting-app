@@ -26,8 +26,10 @@
         ///
         /// Sanctioned edit of F11 S14 (criterion 25): the Program tab's root is `FeatureProgram`'s builder, which in
         /// a window with no scene follows nothing and draws the ground alone, so it has no heading here either.
+        ///
+        /// Sanctioned edit of F12 S1 (C4): the Library tab's root is `FeatureLibrary`'s, which does the same.
         static func rootHeaders(of tab: AppTab) -> [String] {
-            [.today, .program].contains(tab) ? [] : roots.filter { $0.tab == tab }.map(\.title)
+            [.today, .program, .library].contains(tab) ? [] : roots.filter { $0.tab == tab }.map(\.title)
         }
 
         /// The labels of the headers VoiceOver finds, top to bottom: one per screen that is on screen.

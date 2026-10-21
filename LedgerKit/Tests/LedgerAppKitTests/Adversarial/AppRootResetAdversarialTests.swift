@@ -19,8 +19,9 @@
     struct AppRootResetAdversarialTests {
         /// What each tab's root reads outside scroll views. Port of F08 S2/S3, after merging F11 S14: the Program
         /// tab is the builder, over the program onboarding saved, whose page is inside its scroll view, so it reads
-        /// nothing there (as Today does); Library and History are still placeholders with their titles.
-        static let titles: [AppTab: [String]] = [.program: [], .library: ["Library"], .history: ["History"]]
+        /// nothing there (as Today does); History is still a placeholder with its title. Sanctioned edit of F12 S1
+        /// (C4): the Library tab is `FeatureLibrary`'s root, which in a window with no scene draws the ground alone.
+        static let titles: [AppTab: [String]] = [.program: [], .library: [], .history: ["History"]]
 
         /// The tab bar's title of `tab` (review round 2, SF-A): Program and Today read alike outside scroll views,
         /// so the drawn selection tells them apart.
