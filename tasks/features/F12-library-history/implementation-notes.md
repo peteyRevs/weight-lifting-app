@@ -310,3 +310,63 @@ That is far under the plan's 30–40 s estimate. Unreduced (local gate), Feature
   - iOS tests 1,677 s, watchOS build 44 s, watchOS tests 248 s.
   - Coverage 3 s: FeatureLibrary 98.94 %, overall 98.69 %.
 - The only commit after `4231d65` is this paragraph.
+
+## S1 — round 2 (G1 implementer, 2026-10-21)
+
+**Ruling (orchestrator):**
+- Fix F12-S1-1 in this slice: `SearchField` takes `.ledgerFieldFont(.body)` in place of `.ledgerFont(.body)`.
+- R5 is amended for this one case. "Byte-identical" guarded the move; a defect fix in the moved component is a
+  separate change, and it may change the references that draw the field.
+- The line count is accepted as is.
+- F12-S1-3 and F12-S1-4 stay pinned; F12-S1-3 goes to Pete in the PR.
+
+**Commit:** `d5704eb` fix(design). It changes one line of `LedgerDesign/Components/SearchField.swift` and
+re-records the four references below.
+
+**Re-recorded references.** Record mode was `failed`, so only references that no longer matched were rewritten. I
+looked at each image and measured each against its old version.
+
+| File | What changed |
+|---|---|
+| `FeatureLibraryTests/__Snapshots__/LibrarySnapshotTests/populated_matchesReferences.light-accessibility3.png` | The search pill is 3 pt taller (4,255 → 4,258 px) |
+| `FeatureLibraryTests/__Snapshots__/LibrarySnapshotTests/populated_matchesReferences.dark-accessibility3.png` | The same |
+| `FeatureProgramTests/__Snapshots__/ProgramSnapshotTests/library_matchesReferences.light-accessibility3.png` | The same in F11's picker (2,047 → 2,050 px) |
+| `FeatureProgramTests/__Snapshots__/ProgramSnapshotTests/library_matchesReferences.dark-accessibility3.png` | The same |
+
+How the comparison was done, per pixel:
+- **Above the field:** every row is identical to the old image. The Library's differences start at row 134, the
+  picker's at row 112.
+- **Below the field:** with the 3 px shift applied, every row is identical. The last differing row is 188 for the
+  Library and 166 for the picker.
+- **So the changes lie only in the field's band:** the pill's height and the placeholder's place in it.
+- **No other reference changed.** That includes the gallery, the `.large` and `.xLarge` references, and every
+  other F11 reference.
+
+**Runs** (targeted, through the lock; I did not run the full gate):
+- **PR plan,** recording failed references: `LedgerDesignTests`, `FeatureProgramTests/ProgramSnapshotTests`,
+  `FeatureProgramTests/DayEditorSnapshotTests`, `FeatureLibraryTests`. The run exited 0 and recorded the four
+  references.
+- **PR plan, compare run:** the same suites, exit 0, all green:
+  - 393 LedgerDesign tests, 27 of them known issues;
+  - 19 FeatureProgram snapshot tests;
+  - 65 FeatureLibrary tests.
+  G2's `SearchFieldLineAdversarialTests.searchField_edited_drawsItsTailsWhole` passed, unedited.
+- **Nightly plan,** UI `Library` and `LibraryAuditAdversarial`: exit 0. `Library` passed.
+  `LibraryAuditAdversarial.test_libraryRoot_passesTheAudit_butForItsMeasuredFalsePositives` **still fails**. Its
+  only lines are "Text clipped" on "Search 224 exercises", at:
+  - the default size (field 350 × 44);
+  - Accessibility L (350 × 51);
+  - Accessibility XXXL (350 × 72).
+
+  Its other test passed.
+
+**Open (for the orchestrator).** The field's line height was not what the audit's "Text clipped" reports on. The
+audit flags the empty field's placeholder even at the default size, where an edited query was never cut. The
+placeholder is drawn by the `TextField` from its title, without the field's font.
+
+Candidates, none built:
+- an explicit `prompt:`, as F11 gave `NameField` in its SF-2;
+- or, if the audit misjudges the placeholder of a system field, an exclusion measured as for F12-S1-2.
+
+I recommend trying the `prompt:` first. It would change the same four references again, and the picker's along
+with them.

@@ -44,8 +44,12 @@ commit; one product line was changed temporarily to prove a test (below) and put
 
 ### Findings
 
-**F12-S1-1 — Major, open for G1. The search field cuts a query's tails while it is edited, at accessibility
+**F12-S1-1 — Major. The search field cuts a query's tails while it is edited, at accessibility
 sizes; it is also the audit's "Text clipped" on "Search 224 exercises".**
+- **G1 round 2 (2026-10-21): the tails are fixed in `d5704eb`** (`.ledgerFieldFont(.body)`, the ruling's one
+  line). `searchField_edited_drawsItsTailsWhole` passes, unedited. **The audit's "Text clipped" is not fixed:**
+  Nightly `LibraryAuditAdversarial` still reports it on the field, at the default size, at Accessibility L and at
+  Accessibility XXXL. That part stays open; see the implementation notes' "Round 2".
 - Cause: `LedgerDesign/Components/SearchField.swift:21` sets the field with `.ledgerFont(.body)`, the role's own
   line of 1.2. `ledgerFieldFont(_:)` exists for exactly this: its doc comment and F11 S10's ruling 22 say UIKit
   clips an edited field's text to its line and that 1.2 cuts the tails from `.accessibility3`; a one-line field
