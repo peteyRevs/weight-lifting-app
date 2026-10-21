@@ -15,9 +15,8 @@ nonisolated enum ExercisePickerPresentation {
 
     /// The muscle chips after "All", in order: the Domain's list of them.
     static let muscleChips = ExerciseSearch.MuscleFilter.allCases
-    /// The equipment chips after "All", in order (Pete's decision 3, default B). Kettlebell and band have
-    /// no chip: those exercises are found under "All" and by name.
-    static let equipmentChips: [Equipment] = [.barbell, .dumbbell, .cable, .machine, .bodyweight]
+    /// The equipment chips after "All", in order: the Domain's list of them (Pete's decision 3, default B).
+    static let equipmentChips = ExerciseSearch.equipmentFilters
 
     static func make(_ input: ExercisePickerInput) -> ExercisePickerModel {
         // A kind of equipment that has no chip would filter the list with no chip selected.

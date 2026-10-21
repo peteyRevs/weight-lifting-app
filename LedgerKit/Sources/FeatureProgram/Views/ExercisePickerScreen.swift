@@ -30,41 +30,14 @@ struct ExercisePickerScreen: View {
     }
 }
 
-/// The search field, pinned under the sheet's title: an outlined pill, at least 44 pt high and with `s`
-/// above and below its line of text at every size, that holds the model's query and sends each change as
-/// typed. Its placeholder is its spoken label too. A tap anywhere on the pill
-/// puts the cursor in the field, which by itself is only as high as its line of text.
+/// The search field, pinned under the sheet's title: `LedgerDesign`'s `SearchField` (moved there for F12's
+/// Library), holding the model's query and sending each change as typed. Its placeholder is its spoken label too.
 struct ExerciseSearchField: View {
     let model: ExercisePickerModel.Search
     let send: (ExercisePickerAction) -> Void
-    @FocusState private var isEditing: Bool
 
     var body: some View {
-        TextField(model.placeholder, text: query)
-            .ledgerFont(.body)
-            .foregroundStyle(LedgerColor.ink)
-            .autocorrectionDisabled()
-            .submitLabel(.search)
-            .focused($isEditing)
-            .padding(.horizontal, LedgerSpacing.l)
-            .padding(.vertical, LedgerSpacing.s)
-            .ledgerHitTarget(alignment: .leading)
-            .onTapGesture { isEditing = true }
-            .background {
-                Capsule.ledgerPill.strokeBorder(LedgerColor.hairlineStrong, lineWidth: LedgerHairline.width)
-            }
-            .accessibilityLabel(model.placeholder)
-    }
-
-    /// The model's query, and a text that differs from it sent as typed. The field writes its text back
-    /// unchanged when it takes the focus and when it loses it; that is no change of the query and sends
-    /// nothing, as the name field sends nothing for the stored name.
-    private var query: Binding<String> {
-        Binding { model.query } set: {
-            if $0 != model.query {
-                send(.setQuery($0))
-            }
-        }
+        SearchField(model.placeholder, text: model.query) { send(.setQuery($0)) }
     }
 }
 

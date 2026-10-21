@@ -68,6 +68,10 @@ public extension ExerciseSearch {
         }
     }
 
+    /// The equipment chips after "All", in order: the exercise library's (F11, Pete's decision 3, default B) and
+    /// the Library's (F12). Kettlebell and band have no chip: those exercises are found under "All" and by name.
+    static let equipmentFilters: [Equipment] = [.barbell, .dumbbell, .cable, .machine, .bodyweight]
+
     /// The library's rows: the exercises whose primary muscle is one of the chip's groups, whose equipment
     /// is the one asked for, and whose name or short name contains `query` (decision #23), in name order.
     /// `nil` for a chip is "All", and a blank query matches every exercise. The query is folded once.
