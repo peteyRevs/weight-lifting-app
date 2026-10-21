@@ -46,6 +46,11 @@ public struct Pixel: Equatable, Sendable {
     init(red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
         (self.red, self.green, self.blue, self.alpha) = (red, green, blue, alpha)
     }
+
+    /// Whether a `Pixel` is laid out as an RGBA pixel of a bitmap, which `PixelBuffer.init(_:)` draws into.
+    static let isPackedRGBA = MemoryLayout<Pixel>.stride == 4
+        && MemoryLayout<Pixel>.offset(of: \.red) == 0 && MemoryLayout<Pixel>.offset(of: \.green) == 1
+        && MemoryLayout<Pixel>.offset(of: \.blue) == 2 && MemoryLayout<Pixel>.offset(of: \.alpha) == 3
 }
 
 /// An image decoded to 8-bit premultiplied sRGB, for pixel measurements and diffs.
@@ -54,26 +59,29 @@ public struct PixelBuffer: Equatable, Sendable {
     public let height: Int
     public let pixels: [Pixel]
 
+    /// `image` drawn into the pixels' own storage: a `Pixel` is its four bytes in RGBA order, so the context's
+    /// premultiplied RGBA rows are the array as it is. Copying the bytes into the array one pixel at a time
+    /// took about as long as the drawing in the unoptimized test builds (2026-10-21,
+    /// `tasks/chores/ci-test-time-2.md`).
     public init?(_ image: CGImage) {
+        precondition(Pixel.isPackedRGBA, "Pixel is no longer four bytes in RGBA order")
         let (imageWidth, imageHeight) = (image.width, image.height)
-        var bytes = [UInt8](repeating: 0, count: imageWidth * imageHeight * 4)
-        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
-            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-                  let context = CGContext(
-                      data: buffer.baseAddress, width: imageWidth, height: imageHeight, bitsPerComponent: 8,
-                      bytesPerRow: imageWidth * 4, space: space,
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                  )
-            else { return false }
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        var drawn = false
+        let drawnPixels = [Pixel](unsafeUninitializedCapacity: imageWidth * imageHeight) { buffer, count in
+            let bytes = UnsafeMutableRawBufferPointer(buffer)
+            bytes.initializeMemory(as: UInt8.self, repeating: 0)
+            count = buffer.count
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: imageWidth, height: imageHeight, bitsPerComponent: 8,
+                bytesPerRow: imageWidth * 4, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
             context.draw(image, in: CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight))
-            return true
+            drawn = true
         }
         guard drawn else { return nil }
-        width = imageWidth
-        height = imageHeight
-        pixels = stride(from: 0, to: bytes.count, by: 4).map { offset in
-            Pixel(red: bytes[offset], green: bytes[offset + 1], blue: bytes[offset + 2], alpha: bytes[offset + 3])
-        }
+        (width, height, pixels) = (imageWidth, imageHeight, drawnPixels)
     }
 
     init(width: Int, height: Int, pixels: [Pixel]) {
