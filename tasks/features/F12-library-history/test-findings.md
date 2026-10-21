@@ -47,9 +47,18 @@ commit; one product line was changed temporarily to prove a test (below) and put
 **F12-S1-1 — Major. The search field cuts a query's tails while it is edited, at accessibility
 sizes; it is also the audit's "Text clipped" on "Search 224 exercises".**
 - **G1 round 2 (2026-10-21): the tails are fixed in `d5704eb`** (`.ledgerFieldFont(.body)`, the ruling's one
-  line). `searchField_edited_drawsItsTailsWhole` passes, unedited. **The audit's "Text clipped" is not fixed:**
-  Nightly `LibraryAuditAdversarial` still reports it on the field, at the default size, at Accessibility L and at
-  Accessibility XXXL. That part stays open; see the implementation notes' "Round 2".
+  line). `searchField_edited_drawsItsTailsWhole` passes, unedited. **F12-S1-1 is fixed (the tails) in `d5704eb`.**
+  The audit's "Text clipped" on the empty field persisted, also with an explicit `prompt:` (round 3, reverted),
+  and is F12-S1-5 below.
+
+**F12-S1-5 — note, excluded (G1 round 3, ruling's Option 2). The audit's "Text clipped" on the empty search
+field is a false positive.** The placeholder "Search 224 exercises" has no descender, and it is drawn whole
+between the pill's two strokes at all three sizes. The evidence is the field's picture at each size, kept with the
+result, and `LibraryAuditAdversarial.test_searchPlaceholder_isDrawnWholeInsideTheField`, which reads that picture
+row by row. It finds the two strokes, and finds the placeholder's ink clear of both by more than 2 px. The reported
+frames are the field's own: 350 × 44, 51 and 72 pt. The audit gave the same verdict with the system's
+placeholder and with an explicit prompt in the field's font. That exact line, the label "Search … exercises" on
+"Text clipped", is now excluded in `LibraryAuditExclusions`.
 - Cause: `LedgerDesign/Components/SearchField.swift:21` sets the field with `.ledgerFont(.body)`, the role's own
   line of 1.2. `ledgerFieldFont(_:)` exists for exactly this: its doc comment and F11 S10's ruling 22 say UIKit
   clips an edited field's text to its line and that 1.2 cuts the tails from `.accessibility3`; a one-line field

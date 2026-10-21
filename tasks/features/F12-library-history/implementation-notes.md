@@ -370,3 +370,37 @@ Candidates, none built:
 
 I recommend trying the `prompt:` first. It would change the same four references again, and the picker's along
 with them.
+
+## S1 — round 3 (G1 implementer, 2026-10-21)
+
+**Ruling (orchestrator):** try Option 1, an explicit `prompt:` in the field's font and colour. If the audit still
+reports "Text clipped", revert it, prove the placeholder whole, and exclude that one line (Option 2).
+
+**It ended as Option 2.**
+- **Option 1 was tried.** `TextField(text:prompt:)` with `Text(placeholder).foregroundStyle(LedgerColor.inkFaint)`
+  under `.ledgerFieldFont(.body)`. Nightly `LibraryAuditAdversarial` still reported "Text clipped" on "Search 224
+  exercises" at all three sizes, with the same frames. The change was reverted before any reference was recorded,
+  so the references are still those of `d5704eb`.
+- **Option 2: evidence.** I added `test_searchPlaceholder_isDrawnWholeInsideTheField` to `LibraryAuditAdversarial`.
+  This is a sanctioned addition to G2's file; their test was not edited. At the default size, Accessibility L and
+  Accessibility XXXL it:
+  - keeps the field's picture with the result;
+  - finds the pill's two strokes in it;
+  - requires the placeholder's ink to lie between them, clear of each by more than 2 px.
+
+  I looked at the pictures at the default size and at XXXL: the placeholder is whole, with room above and below it.
+  The text has no descender. The audit's reported frames are the field's own (350 × 44, 51 and 72 pt).
+- **Option 2: the exclusion.** `LibraryAuditExclusions` excludes "Text clipped" on a label "Search … exercises",
+  with the evidence in its comment. This is F12-S1-5 in `test-findings.md`. F12-S1-1 is marked fixed for the tails
+  (`d5704eb`).
+
+**Re-recorded references:** none in this round.
+
+**Runs** (targeted, through the lock; I did not run the full gate):
+- **Nightly, `Library` and `LibraryAuditAdversarial`, with the prompt:** exit 0, one test failed (the audit, as
+  above).
+- **Nightly, the same two suites, after the revert, with the exclusion and the new test:** exit 0. 4 tests, 0
+  failures. Both audit-suite tests the orchestrator named pass: the audit and `test_lastRow_scrollsClearOfTheTabBar`.
+  So do the new measurement test and the Library UI test.
+- **PR plan, `LedgerDesignTests`, `ProgramSnapshotTests`, `DayEditorSnapshotTests` and `FeatureLibraryTests`:**
+  exit 0, all green, nothing recorded. That is 393 tests (27 known issues), 19 tests and 65 tests.
