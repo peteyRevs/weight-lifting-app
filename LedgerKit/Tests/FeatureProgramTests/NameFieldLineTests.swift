@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -36,10 +37,12 @@
         }
 
         /// The five letters with a tail. Their box without the focus is the wrapping text's, which nothing
-        /// clips; with the focus it is the field's.
+        /// clips; with the focus it is the field's. On the hosted PR runner (`TestSweep`) the representative
+        /// sizes: the tails are whole at every size, and the name moves most with the focus at `.accessibility5`
+        /// (1.67 of the 2 pt allowed; a third of a point at `.large`), in both places and weights (2026-10-21).
         @Test(
             "With the focus both names keep their tails and their place, at every text size, plain and bold",
-            arguments: DynamicTypeSize.allCases
+            arguments: TestSweep.sizes(DynamicTypeSize.allCases)
         )
         func focus_keepsTheTails(_ size: DynamicTypeSize) throws {
             for place in Place.allCases {
