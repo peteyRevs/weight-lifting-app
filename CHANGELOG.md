@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.11.0...v0.12.0) (2026-10-21)
+
+
+### Features
+
+* **onboarding:** the three onboarding steps and the root gate that shows them on a fresh install (F08 S2+S3) ([#67](https://github.com/peteyRevs/weight-lifting-app/issues/67)) ([a59315f](https://github.com/peteyRevs/weight-lifting-app/commit/a59315fc5ee05b946ecca6eb1ba43d367095ddfc))
+* **program:** the Program tab in the app, with the Day editor's and the library's stores (F11 S14) ([#66](https://github.com/peteyRevs/weight-lifting-app/issues/66)) ([685314c](https://github.com/peteyRevs/weight-lifting-app/commit/685314caa634aefb2002025b2fb8fc55a8571031))
+* **workout:** the receipt of a saved workout, with its records and Done (F10 S7b) ([#65](https://github.com/peteyRevs/weight-lifting-app/issues/65)) ([8316b7c](https://github.com/peteyRevs/weight-lifting-app/commit/8316b7c8c9f5f1c2006e0873ec1bce68b9de64cc))
+
 ## [0.11.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.10.0...v0.11.0) (2026-10-18)
 
 
