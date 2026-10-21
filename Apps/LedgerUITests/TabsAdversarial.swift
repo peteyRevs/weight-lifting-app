@@ -185,7 +185,8 @@ private extension TabsAdversarial {
                 tabBar: tabBar
             )
         case "Library":
-            LibraryAuditExclusions.isKnownFalsePositive(issue: issue, label: label, frame: frame, tabBar: tabBar)
+            // F12 S1 round 4 (review M1): the Library's exclusions read the element itself.
+            LibraryAuditExclusions.isKnownFalsePositive(issue: issue, element: element, tabBar: tabBar)
         default: false
         }
     }

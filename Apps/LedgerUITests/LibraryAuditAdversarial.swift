@@ -27,10 +27,12 @@ final class LibraryAuditAdversarial: XCTestCase {
         XCTAssertEqual(issues, [])
     }
 
-    /// F12-S1-5 (G1 round 3, sanctioned addition): the audit's "Text clipped" on the empty search field, measured.
-    /// At each size the field's picture is read row by row: the pill's two strokes are the rows inked across most of
-    /// its width, and the placeholder's ink lies between them, clear of both, with no ink row cut flat against
-    /// either. "Search 224 exercises" has no descender, so nothing of it can hang below its line.
+    /// F12-S1-5 (G1 round 3, sanctioned addition; tightened in round 4, review M1): the audit's "Text clipped" on
+    /// the empty search field, measured. At each size the field's picture is read row by row and column by column
+    /// (`PlaceholderInk.faults`): the placeholder's ink lies between the pill's two strokes, clear of both; it is
+    /// as tall for its width as a whole line of it (a clip to the field's text box, or a sliver, is not); and it
+    /// ends short of the trailing padding (a placeholder cut short with "…" runs into it). The guards are proved
+    /// by `test_placeholderGuards_failOnAClippedAndOnATruncatedPicture`.
     @MainActor
     func test_searchPlaceholder_isDrawnWholeInsideTheField() throws {
         for textSize in Self.sizes {
@@ -39,16 +41,37 @@ final class LibraryAuditAdversarial: XCTestCase {
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             let shot = field.screenshot()
             attach(shot, named: "search field, \(textSize ?? "default size")")
-            let ink = try XCTUnwrap(InkRows(shot.image), "the picture was not read")
-            let state = "\(textSize ?? "default size"), field \(field.frame)"
-            XCTAssertEqual(ink.strokes.count, 2, "\(state): the pill's two strokes: \(ink.strokes)")
-            let text = try XCTUnwrap(ink.text, "\(state): no placeholder ink")
-            if let top = ink.strokes.first, let bottom = ink.strokes.last {
-                XCTAssertGreaterThan(text.lowerBound, top + 2, "\(state): the ink reaches the top stroke: \(text)")
-                XCTAssertLessThan(text.upperBound, bottom - 2, "\(state): the ink reaches the bottom stroke: \(text)")
-            }
+            let ink = try XCTUnwrap(PlaceholderInk(shot.image), "the picture was not read")
+            // The text drawn: the field's placeholder, which is not its spoken label.
+            let drawn = field.placeholderValue ?? ""
+            XCTAssertEqual(ink.faults(of: drawn), [], "\(textSize ?? "default size"), \(drawn), \(field.frame): \(ink)")
             app.terminate()
         }
+    }
+
+    /// Review M1 (c): the same guards on the real picture at Accessibility XXXL, doctored twice: its placeholder's
+    /// lower third painted over with the pill's ground, as a clip to the field's text box would leave it; and a
+    /// column of ink drawn into the trailing padding, where a placeholder cut short with "…" ends. Each must be
+    /// found, and the undoctored picture must pass.
+    @MainActor
+    func test_placeholderGuards_failOnAClippedAndOnATruncatedPicture() throws {
+        let app = launchLibrary(textSize: "UICTContentSizeCategoryAccessibilityXXXL")
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        let ink = try XCTUnwrap(PlaceholderInk(field.screenshot().image), "the picture was not read")
+        let drawn = field.placeholderValue ?? ""
+        XCTAssertEqual(drawn, "Search", "at Accessibility XXXL the whole placeholder does not fit")
+        XCTAssertEqual(ink.faults(of: drawn), [], "control: the real picture passes: \(ink)")
+        let clipped = try XCTUnwrap(PlaceholderInk(ink.clippingTheTextsLowerThird()))
+        let truncated = try XCTUnwrap(PlaceholderInk(ink.inkingTheTrailingPadding()))
+        let found = (clipped: clipped.faults(of: drawn), truncated: truncated.faults(of: drawn))
+        let report = XCTAttachment(string: "clipped: \(found.clipped)\ntruncated: \(found.truncated)")
+        report.name = "the guards on the doctored pictures"
+        report.lifetime = .keepAlways
+        add(report)
+        XCTAssertTrue(found.clipped.contains { $0.hasPrefix("too short") }, "a clip passes: \(clipped)")
+        XCTAssertTrue(found.truncated.contains { $0.hasPrefix("into the trailing padding") }, "\(truncated)")
+        app.terminate()
     }
 
     /// The audit's "Contrast failed" on the rows under the floating tab bar is the bar's glass measured over them
@@ -92,8 +115,16 @@ enum LibraryAuditExclusions {
     /// The Library's eyebrows.
     private static let eyebrows: Set = ["RECENTLY LOGGED", "ALL EXERCISES"]
 
-    static func isKnownFalsePositive(issue: String, label: String, frame: CGRect, tabBar: CGRect) -> Bool {
-        switch issue {
+    /// The tab bar's own buttons, which a frame under the bar would also take in.
+    private static let tabs: Set = ["Today", "Program", "Library", "History"]
+
+    /// Whether `issue` on `element` is a measured false positive. Round 4 (review M1, m1): the search field is
+    /// matched as an empty text field, never by its label, which stays the placeholder while a query is typed;
+    /// and what lies under the tab bar is excluded only when it is not one of the bar's own buttons.
+    @MainActor
+    static func isKnownFalsePositive(issue: String, element: XCUIElement, tabBar: CGRect) -> Bool {
+        let (label, frame) = (element.label, element.frame)
+        return switch issue {
         case "Dynamic Type font sizes are partially unsupported":
             // As Today's F09-S5-2: `Eyebrow` is 10 pt on the Caption 2 curve, flat from Extra Small to Large, so
             // it does not shrink below its default size; it grows at every size above (measured: 10 pt tall at
@@ -102,19 +133,30 @@ enum LibraryAuditExclusions {
         case "Text clipped":
             // As Today's F09-S5-4: the eyebrow's frame is its line, as tall as its size, and Archivo's ascent and
             // descent are 1.088 of it; its capitals have no tail, and the pictures at every size show it whole.
-            // F12-S1-5 (G1 round 3): the empty search field, whose placeholder ("Search 224 exercises", no
-            // descender) is drawn whole between the pill's strokes at the default size, Accessibility L and XXXL
-            // (`test_searchPlaceholder_isDrawnWholeInsideTheField`; the reported frames are the field's, 350 x 44,
-            // 51 and 72 pt). An edited query's tails were F12-S1-1, fixed by the field's line (`d5704eb`).
-            eyebrows.contains(label) || label.hasPrefix("Search ") && label.hasSuffix(" exercises")
+            // F12-S1-5 (G1 rounds 3 and 4): the empty search field, whose placeholder ("Search 224 exercises",
+            // or "Search" where it does not fit; no descender) is drawn whole between the pill's strokes and short
+            // of its trailing padding at the default size, Accessibility L and XXXL
+            // (`test_searchPlaceholder_isDrawnWholeInsideTheField`, whose guards are shown to fail on a clipped
+            // and a truncated picture; the reported frames are the field's, 350 x 44, 51 and 72 pt). An edited
+            // query's tails were F12-S1-1, fixed by the field's line (`d5704eb`); an edited field is not excluded.
+            eyebrows.contains(label) || isEmptySearchField(element)
         case "Contrast failed":
-            // As Today's fourth: what rests under the floating tab bar while the page is at its top (measured:
-            // every element reported lies inside the bar's frame, y 791-874, and none above it). Scrolled to
-            // its end the page stands clear (`test_lastRow_scrollsClearOfTheTabBar`).
-            frame.intersects(tabBar)
+            // As Today's fourth: a row of the page resting under the floating tab bar while the page is at its top
+            // (measured: every element reported lies inside the bar's frame, y 791-874, and none above it).
+            // Scrolled to its end the page stands clear (`test_lastRow_scrollsClearOfTheTabBar`). By frame and by
+            // label, as Today's: the bar's own buttons are never excluded, so a tab whose contrast really fails
+            // still fails (review m1).
+            frame.intersects(tabBar) && !tabs.contains(label)
         default:
             false
         }
+    }
+
+    /// A text field with nothing typed: its value is empty or is its placeholder, as XCUITest reads an empty field.
+    @MainActor
+    private static func isEmptySearchField(_ element: XCUIElement) -> Bool {
+        let value = element.value as? String ?? ""
+        return element.elementType == .textField && (value.isEmpty || value == element.placeholderValue)
     }
 }
 
@@ -152,7 +194,7 @@ private extension LibraryAuditAdversarial {
                 line += " [\(element.elementType.rawValue) \"\(element.label)\" \(box)]"
                 elements.append(("\(state): \(issue.compactDescription): \(element.label)", element))
                 isKnown = LibraryAuditExclusions.isKnownFalsePositive(
-                    issue: issue.compactDescription, label: element.label, frame: frame, tabBar: tabBar
+                    issue: issue.compactDescription, element: element, tabBar: tabBar
                 )
             } else {
                 line += " [no element]"
@@ -180,60 +222,5 @@ private extension LibraryAuditAdversarial {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-    }
-}
-
-/// The rows of a picture of the search field that hold ink, against the colour of its middle-left pixel inside
-/// the pill: a stroke is a run of rows faintly inked across most of the width; the placeholder is every other row
-/// that holds strong ink.
-private struct InkRows {
-    let strokes: [Int]
-    let text: ClosedRange<Int>?
-
-    init?(_ image: UIImage) {
-        guard let picture = image.cgImage, let space = CGColorSpace(name: CGColorSpace.sRGB) else {
-            return nil
-        }
-        let width = picture.width
-        let height = picture.height
-        var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
-            guard let context = CGContext(
-                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
-                bytesPerRow: width * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else {
-                return false
-            }
-            context.draw(picture, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        guard drawn else {
-            return nil
-        }
-        // The pill's ground: on the middle row, inside the round end and left of the placeholder's start.
-        let ground = (width / 40, height / 2)
-        func pixel(_ column: Int, _ row: Int) -> [Int] {
-            (0 ..< 3).map { Int(bytes[(row * width + column) * 4 + $0]) }
-        }
-        let base = pixel(ground.0, ground.1)
-        // The columns between the pill's round ends.
-        let columns = (width / 8) ..< (width * 7 / 8)
-        var strokeRows: [Int] = []
-        var textRows: [Int] = []
-        for row in 0 ..< height {
-            // The stroke is a faint hairline (`hairlineStrong`); the placeholder's grey stands well off the ground.
-            let faint = columns.count { column in zip(pixel(column, row), base).contains { abs($0 - $1) > 8 } }
-            let strong = columns.count { column in zip(pixel(column, row), base).contains { abs($0 - $1) > 40 } }
-            if faint > columns.count * 4 / 5 {
-                strokeRows.append(row)
-            } else if strong > 0 {
-                textRows.append(row)
-            }
-        }
-        // A stroke is one to a few rows thick: keep the first row of each run.
-        strokes = strokeRows.enumerated()
-            .filter { $0.offset == 0 || strokeRows[$0.offset - 1] != $0.element - 1 }
-            .map(\.element)
-        text = textRows.first.flatMap { first in textRows.last.map { first ... $0 } }
     }
 }
