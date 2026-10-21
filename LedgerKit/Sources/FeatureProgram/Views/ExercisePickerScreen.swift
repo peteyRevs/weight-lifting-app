@@ -37,7 +37,7 @@ struct ExerciseSearchField: View {
     let send: (ExercisePickerAction) -> Void
 
     var body: some View {
-        SearchField(model.placeholder, text: model.query) { send(.setQuery($0)) }
+        SearchField(model.placeholder, short: model.shortPlaceholder, text: model.query) { send(.setQuery($0)) }
     }
 }
 

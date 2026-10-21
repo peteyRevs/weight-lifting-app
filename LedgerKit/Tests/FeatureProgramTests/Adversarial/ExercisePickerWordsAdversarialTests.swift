@@ -146,7 +146,8 @@ nonisolated struct ExercisePickerWordsAdversarialTests {
                 missing.append("value and locale disagree: \(literal)")
             }
         }
-        #expect(lookups == 24, "the scan read \(lookups) lookups")
+        // Sanctioned edit (F12 S1 round 4, review M1): 25 since "Search", the field's short placeholder.
+        #expect(lookups == 25, "the scan read \(lookups) lookups")
         #expect(missing.isEmpty, "\(missing.prefix(5))")
     }
 }

@@ -51,6 +51,7 @@ nonisolated enum LibraryPresentation {
             newExercise: newExercise,
             search: LibraryModel.Search(
                 placeholder: LibraryCopy.searchExercises(rows.exercises.count, locale: locale),
+                shortPlaceholder: LibraryCopy.search,
                 query: filter.query
             ),
             muscles: chipRow(

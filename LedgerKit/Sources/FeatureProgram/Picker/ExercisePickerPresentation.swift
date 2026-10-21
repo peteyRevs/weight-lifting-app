@@ -32,7 +32,7 @@ nonisolated enum ExercisePickerPresentation {
         return ExercisePickerModel(
             title: ProgramCopy.exerciseLibrary,
             cancel: Control(title: ProgramCopy.cancel, action: .cancel),
-            search: ExercisePickerModel.Search(placeholder: ProgramCopy.searchExercises, query: input.query),
+            search: search(query: input.query),
             muscles: chipRow(
                 ProgramCopy.muscleRow,
                 all: ChipSpec(isSelected: input.muscle == nil, action: .setMuscle(nil)),
@@ -56,6 +56,15 @@ nonisolated enum ExercisePickerPresentation {
                 ))
                 : .rows(shown.map { row($0, input: input, picks: picks) }),
             foot: foot(picks: picks, locale: locale)
+        )
+    }
+
+    /// The search field: "Search exercises", and "Search" where that does not fit.
+    static func search(query: String) -> ExercisePickerModel.Search {
+        ExercisePickerModel.Search(
+            placeholder: ProgramCopy.searchExercises,
+            shortPlaceholder: ProgramCopy.search,
+            query: query
         )
     }
 

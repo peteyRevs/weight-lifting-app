@@ -23,6 +23,9 @@ nonisolated struct LibraryModel: Equatable, Sendable {
     struct Search: Equatable, Sendable {
         /// "Search 224 exercises", counting every live exercise: the field's placeholder and its spoken label.
         let placeholder: String
+        /// "Search": drawn in place of `placeholder` where it is too wide for the field; `placeholder` is still
+        /// what VoiceOver reads.
+        let shortPlaceholder: String
         /// The field's text, as the store holds it.
         let query: String
     }

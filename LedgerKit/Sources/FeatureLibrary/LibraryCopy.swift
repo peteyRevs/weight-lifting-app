@@ -33,6 +33,14 @@ nonisolated enum LibraryCopy {
         )
     }
 
+    static var search: String {
+        String(
+            localized: "Search",
+            bundle: .module,
+            comment: "The Library's search field's placeholder where Search 224 exercises does not fit the field"
+        )
+    }
+
     // MARK: Filter chips
 
     static var allChip: String {

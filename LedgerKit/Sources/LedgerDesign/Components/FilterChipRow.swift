@@ -47,8 +47,8 @@ struct FilterChipRowGallery: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.l) {
-            SearchField("Search 224 exercises", text: "") { _ in }
-            SearchField("Search 224 exercises", text: "row") { _ in }
+            SearchField("Search 224 exercises", short: "Search", text: "") { _ in }
+            SearchField("Search 224 exercises", short: "Search", text: "row") { _ in }
             FilterChipRow(
                 Self.chips,
                 title: \.title,

@@ -387,6 +387,17 @@
         }
       }
     },
+    "Search" : {
+      "comment" : "The Library's search field's placeholder where Search 224 exercises does not fit the field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search"
+          }
+        }
+      }
+    },
     "Search %lld exercises" : {
       "comment" : "Placeholder and spoken label of the Library's search field, with the number of exercises",
       "localizations" : {

@@ -23,6 +23,14 @@ nonisolated extension ProgramCopy {
         )
     }
 
+    static var search: String {
+        String(
+            localized: "Search",
+            bundle: .module,
+            comment: "The exercise library's search field's placeholder where Search exercises does not fit the field"
+        )
+    }
+
     // MARK: Filter chips
 
     static var allChip: String {

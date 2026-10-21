@@ -15,7 +15,9 @@ struct LibraryPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xl) {
             LibraryHeader(title: model.title, newExercise: model.newExercise, send: send)
-            SearchField(model.search.placeholder, text: model.search.query) { send(.setQuery($0)) }
+            SearchField(model.search.placeholder, short: model.search.shortPlaceholder, text: model.search.query) {
+                send(.setQuery($0))
+            }
             VStack(alignment: .leading, spacing: LedgerSpacing.m) {
                 chips(model.muscles)
                 chips(model.equipment)

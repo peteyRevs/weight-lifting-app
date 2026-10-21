@@ -33,6 +33,16 @@ import Testing
             }
         }
 
+        /// F12 S1 (review m3): the two components moved from FeatureProgram: the search field empty and with a
+        /// query, and a chip row with one chip selected.
+        @Suite("FilterChipRowSnapshots", .tags(.design, .snapshot))
+        struct FilterChipRowSnapshotTests {
+            @Test("FilterChipRow and SearchField match their references", arguments: SnapshotAppearance.phoneMatrix)
+            func filterChipRowAndSearchField_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: FilterChipRowGallery().phonePage(), appearance)
+            }
+        }
+
         @Suite("EyebrowSnapshots", .tags(.design, .snapshot))
         struct EyebrowSnapshotTests {
             @Test("Eyebrow matches its references", arguments: SnapshotAppearance.phoneMatrix)

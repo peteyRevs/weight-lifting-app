@@ -19,7 +19,11 @@ nonisolated struct ExercisePickerPresentationTests {
         let model = try ExercisePickerPresentation.make(Fixture.input())
         #expect(model.title == "Exercise library")
         #expect(model.cancel == ExercisePickerModel.Control(title: "Cancel", action: .cancel))
-        #expect(model.search == ExercisePickerModel.Search(placeholder: "Search exercises", query: ""))
+        #expect(model.search == ExercisePickerModel.Search(
+            placeholder: "Search exercises",
+            shortPlaceholder: "Search",
+            query: ""
+        ))
         #expect(model.rows.count == 224)
         let isInNameOrder = model.rows.map(\.id) == ExerciseSearch.sorted(catalog).map(\.id)
         #expect(isInNameOrder)
