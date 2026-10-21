@@ -120,7 +120,11 @@ authoritative; the plan differs:
     since, which swept every size or setting, ask through `TestSweep` too: NameFieldLine (and its Room and
     Round 2 files), FieldFont, the receipt's layout and LOGGED cut, the "End workout?" sheet's adversarial
     suite, and the seed names of the F11 S10 name field. A check pinned to a size where a measure stands
-    nearest its bound names that size (`also:`).
+    nearest its bound names that size (`also:`). On 2026-10-21 (`tasks/chores/ci-test-time-2.md`) four more:
+    the name field's tails, the week chip's room and the long tag's strip, the Day editor's pinned bar and
+    the rows under it, and the rest panel's room; and `PixelBuffer` draws straight into its pixels' storage
+    (the per-pixel copy cost as much as a drawing unoptimized). The PR plan's cases on a developer Mac: 931 →
+    801 s, a floor taken on a loaded host (196 s saved where faster).
   - *Deadline (2026-10-20; `tasks/chores/ci-test-time.md`).* `LEDGER_XCODEBUILD_DEADLINE` is 3,840 s; the
     step's timeout is 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
     first runs (#65, #66) restored nothing, built cold (865 and 1,424 s, after 96 and 150 s of script tests)
@@ -133,7 +137,11 @@ authoritative; the plan differs:
     lockfiles or Xcode no cache matches: 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min, set to 3,840 s.
     Standard minutes are free on this public repository (2026-10-20), so headroom costs nothing until
     something hangs; if it goes private again, a hang bills about 12 minutes more than at 3,120 s (revisit,
-    with `main-cache.yml`'s cost above). Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
+    with `main-cache.yml`'s cost above). On 2026-10-21 (#67, F08 added) the runner tested for 2,407 s
+    warm; the cuts of `tasks/chores/ci-test-time-2.md` (129–197 s on the Mac, 2.4–2.6 times on the runner)
+    bring that to about 1,900–2,100 s, so a cold first run is about 150 + 1,450 + 2,100 = 3,700 s at worst,
+    140–340 s inside the deadline: not yet room for a large feature's tests (that file lists the next
+    levers). Earlier: 2,400 s until 2026-10-09, 2,520 s until 2026-10-17 and 3,120 s until
     2026-10-20, each sized for a cold build and stopped by the tests' growth (`tasks/chores/2026-10-17-pr-sweeps.md`).
   - *arm64 only (2026-10-18; `tasks/chores/2026-10-18-arm64-only.md`).* Every `xcodebuild` in `check.sh`
     passes `ARCHS=arm64`, on both lanes and on the build and the test run alike (check-wiring W76). The
