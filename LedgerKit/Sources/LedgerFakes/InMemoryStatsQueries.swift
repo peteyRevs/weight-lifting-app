@@ -41,6 +41,22 @@
             return best.map { ($0.weight, $0.reps) }
         }
 
+        /// `bestSet(exerciseID:)`'s rule, over every exercise in one walk of the live workouts.
+        public func bestSets() async throws -> [ExerciseID: BestSet] {
+            var best: [ExerciseID: LoggedSet] = [:]
+            for workout in live {
+                for exercise in workout.exercises {
+                    for set in Self.recordSets(of: exercise.exerciseID, in: workout) {
+                        let id = exercise.exerciseID
+                        if best[id].map({ Self.isHeavier(set, $0) }) ?? true {
+                            best[id] = set
+                        }
+                    }
+                }
+            }
+            return best.mapValues { BestSet(weight: $0.weight, reps: $0.reps) }
+        }
+
         public func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
             live.flatMap { Self.recordSets(of: exerciseID, in: $0) }.compactMap(Self.estimate).max()
         }

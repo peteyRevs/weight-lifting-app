@@ -167,6 +167,9 @@ public protocol StatsQueries: Sendable {
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance?
     /// The heaviest set of the exercise, and of two as heavy the one with more reps; `nil` when there is none.
     func bestSet(exerciseID: ExerciseID) async throws -> (weight: Weight, reps: Reps)?
+    /// `bestSet(exerciseID:)` of every exercise, in one read (the Library's PR column, F12): an exercise with no
+    /// set that counts has no entry.
+    func bestSets() async throws -> [ExerciseID: BestSet]
     /// The best Brzycki estimate over sets of at most 12 reps (decision #4); `nil` when there is none.
     func bestE1RM(exerciseID: ExerciseID) async throws -> Weight?
     /// Decision #4: the best e1RM of each of the last `lastWeeks` weeks of `calendar`, the current one

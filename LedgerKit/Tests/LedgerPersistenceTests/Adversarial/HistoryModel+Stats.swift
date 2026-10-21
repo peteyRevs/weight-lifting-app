@@ -56,6 +56,18 @@ extension HistoryModel: StatsQueries {
         return best.map { ($0.weight, $0.reps) }
     }
 
+    /// F12 S1 (sanctioned): `bestSet(exerciseID:)` of every exercise with a set that counts.
+    func bestSets() async throws -> [ExerciseID: BestSet] {
+        let ids = Set(state.withLock { live($0) }.flatMap { $0.exercises.map(\.exerciseID) })
+        var bests: [ExerciseID: BestSet] = [:]
+        for id in ids {
+            if let best = try await bestSet(exerciseID: id) {
+                bests[id] = BestSet(weight: best.weight, reps: best.reps)
+            }
+        }
+        return bests
+    }
+
     func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
         state.withLock { live($0) }.flatMap { recordSets(of: exerciseID, in: $0) }.compactMap(estimate).max()
     }

@@ -86,6 +86,10 @@ private struct BriefStatsQueries: StatsQueries {
         (pounds("200"), .one)
     }
 
+    func bestSets() async throws -> [ExerciseID: BestSet] {
+        [:]
+    }
+
     func bestE1RM(exerciseID _: ExerciseID) async throws -> Weight? {
         nil
     }
