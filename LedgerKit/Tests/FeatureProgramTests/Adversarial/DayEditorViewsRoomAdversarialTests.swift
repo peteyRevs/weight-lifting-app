@@ -2,6 +2,7 @@
     @testable import FeatureProgram
     import LedgerDesign
     @testable import LedgerSnapshotTesting
+    import LedgerTestSupport
     import SwiftUI
     import Testing
     import UIKit
@@ -75,10 +76,12 @@
         /// Round 1's finding F11-S10-2, closed by ruling 14: the whole header was pinned and a short screen
         /// squeezed it (325 pt needed, 302 given). Now the bar alone is pinned, at its own height. Each
         /// phone's screen is hosted three times: with all its height, with 3,000 pt, and with 150 pt, where
-        /// a part that can give way does.
+        /// a part that can give way does. On the hosted PR runner (`TestSweep`) the representative sizes: the bar
+        /// is 60 pt to `.accessibility2` and grows from `.accessibility3` to 70.3 pt at `.accessibility5`, the
+        /// size nearest its 72 pt bound, on both phones (2026-10-21).
         @Test(
             "The pinned bar keeps its own height on both phones, however little room the screen has",
-            arguments: [Phone.iPhone17, .small], DynamicTypeSize.allCases
+            arguments: [Phone.iPhone17, .small], TestSweep.sizes(DynamicTypeSize.allCases)
         )
         func bar_isNeverSqueezed(_ phone: Phone, _ size: DynamicTypeSize) throws {
             let width = phone.size.width
@@ -112,10 +115,14 @@
         /// rows of the seed program: with the bar alone pinned every cell shows two rows but the small
         /// phone's at the two largest sizes (1.99 and 1.36 rows of 293 and 424 pt), which stay a known issue
         /// for the product owner. The page's first rows are its title block, which this count leaves out: it
-        /// is the room under the bar, not what is left under the title.
+        /// is the room under the bar, not what is left under the title. On the hosted PR runner (`TestSweep`) the
+        /// representative sizes, and `.accessibility3` and `.accessibility4`: the small phone's 2.26 rows at
+        /// `.accessibility3` are the least that pass, and its 1.99 at `.accessibility4` the first of the known
+        /// issue (2026-10-21).
         @Test(
             "Under the pinned bar the page has room for at least two closed rows",
-            arguments: [Phone.iPhone17, .small], DynamicTypeSize.allCases
+            arguments: [Phone.iPhone17, .small],
+            TestSweep.sizes(DynamicTypeSize.allCases, also: [.accessibility3, .accessibility4])
         )
         func page_showsAtLeastTwoRows(_ phone: Phone, _ size: DynamicTypeSize) throws {
             let hosted = try Self.hosted(width: phone.size.width, height: phone.size.height - phone.topInset, at: size)
