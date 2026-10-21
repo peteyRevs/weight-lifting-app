@@ -26,7 +26,8 @@ public extension GRDBStatsQueries {
         let table = WorkoutExerciseRecord.databaseTableName
         let rows = try await queue.read { database in
             try Row.fetchAll(database, sql: sql).compactMap { row in
-                row.readable(as: table) { row -> (ExerciseID, BestSet) in
+                // The row's `id` is the exercise's, so a row left out is logged under the exercise (review n2).
+                row.readable(as: ExerciseRecord.databaseTableName) { row -> (ExerciseID, BestSet) in
                     let set = ColumnReader(row: row, table: "logged_set")
                     let id: ExerciseID = try ColumnReader(row: row, table: table).identifier("id")
                     return try (id, BestSet(weight: Weight(e7g: set.integer("weight_e7g")), reps: set.reps("reps")))
