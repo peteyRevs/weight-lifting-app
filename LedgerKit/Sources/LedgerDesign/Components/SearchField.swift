@@ -18,7 +18,7 @@ public struct SearchField: View {
 
     public var body: some View {
         TextField(placeholder, text: binding)
-            .ledgerFont(.body)
+            .ledgerFieldFont(.body)
             .foregroundStyle(LedgerColor.ink)
             .autocorrectionDisabled()
             .submitLabel(.search)
