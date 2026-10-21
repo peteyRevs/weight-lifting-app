@@ -155,10 +155,10 @@ final class TabsAdversarial: XCTestCase {
                 // reports four issues that were measured and judged false positives (F09-S5-1 to 4). They
                 // are excluded on the Today tab alone, by the issue's words and the element's label;
                 // `TodayAuditExclusions` holds the element, the measurement and the reason of each.
-                let isKnown = tab == "Today" && issue.element.map { element in
-                    TodayAuditExclusions.isKnownFalsePositive(
-                        issue: issue.compactDescription, label: element.label, frame: element.frame, tabBar: tabBar
-                    )
+                // Sanctioned edit of F12 S1 G2 (F12-S1-2): the Library's measured false positives, in
+                // `LibraryAuditExclusions`, are excluded on the Library tab alone in the same way.
+                let isKnown = issue.element.map { element in
+                    Self.isKnownFalsePositive(on: tab, issue.compactDescription, element, tabBar: tabBar)
                 } ?? false
                 if !isKnown {
                     let element = issue.element.map { "\($0.elementType.rawValue) \"\($0.label)\"" } ?? "no element"
@@ -172,6 +172,24 @@ final class TabsAdversarial: XCTestCase {
 }
 
 private extension TabsAdversarial {
+    /// Whether the audit's `issue` on `element` is one of the measured false positives of `tab`'s root: Today's
+    /// (`TodayAuditExclusions`) or the Library's (`LibraryAuditExclusions`, F12-S1-2), each on its own tab alone.
+    @MainActor
+    static func isKnownFalsePositive(on tab: String, _ issue: String, _ element: XCUIElement, tabBar: CGRect) -> Bool {
+        let (label, frame) = (element.label, element.frame)
+        return switch tab {
+        case "Today": TodayAuditExclusions.isKnownFalsePositive(
+                issue: issue,
+                label: label,
+                frame: frame,
+                tabBar: tabBar
+            )
+        case "Library":
+            LibraryAuditExclusions.isKnownFalsePositive(issue: issue, label: label, frame: frame, tabBar: tabBar)
+        default: false
+        }
+    }
+
     /// The share of the element's pixels that are the tab bar's tint, `LedgerColor.accentText` (F09 S1 fix round 1,
     /// review S6): the accent, `#FF5B22`, in dark and the deep accent, `#B2390E`, in light, give or take the
     /// display's rendering (measured on the iPhone 17 simulator: `#FF682F` and `#A73107`).
