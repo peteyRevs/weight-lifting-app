@@ -46,3 +46,26 @@ This goes to Pete in the PR.
   - If it does not truncate, a trailing-column guard is added anyway.
 - **n1 and n3** are follow-ups in the notes.
 - **m2 and m4** are open questions for Pete in the PR.
+
+## Slice S1 — round 2 (G3 reviewer, 2026-10-21)
+
+Reviewed `34783dd..b3343d3` and the merge of #69 at `15925b5`. Host-only; `scripts/check.sh --lint-only` exit 0.
+
+**Verdict: approved.** No blocker or major.
+
+- **M1 and m1:** fixed. Real truncation is caught by the host test `SearchFieldFitTests`, which can't pass vacuously, and its control proves it measures the real font and width. The "Text clipped" exclusion is narrowed to an empty `.textField`. The contrast exclusion spares the four tab buttons.
+- **m3 and n2:** fixed.
+- **The short-placeholder switch:** there is no layout loop. `room` comes from `onGeometryChange` on the greedy `TextField`; `needed` comes from a hidden `.fixedSize()` `Text`.
+
+### Minor and nits, deferred to S2's first commit (orchestrator's ruling)
+
+- **R2-1 (minor):** the UI test's trailing-padding guard (b) can't see a real "…", because UIKit truncates inside `placeholderRect`. Reword the comments in `LibraryAuditAdversarial.swift`, or drop guard (b).
+- **R2-2 (minor):** `SearchField` switches at `needed <= room` with no margin. Its measure is SwiftUI's; the truncation happens in UIKit's `placeholderRect`. Add a margin (+1 pt or the measured inset), or add 393, 430 and 440 pt to `SearchFieldFitTests.widths`.
+- **R2-3 (minor):** no test asserts that VoiceOver reads the whole placeholder while "Search" is drawn. Add one `XCTAssertEqual(field.label, …)` in the guard test.
+- **R2-4 (nit):** FeatureLibrary doesn't assert `LibraryModel.Search.shortPlaceholder`.
+- **R2-5 (nit):** the in-memory `bestSets()` from `46838db` is the same rule, but it now makes several reads, and its differential clause has become circular. Restore the single walk.
+- **R2-6 (nit):** branch-only product lines are 996–998, under 1,000.
+
+### Orchestrator's gate
+
+`scripts/check.sh` on `15925b5`, with `main` `2c9b66a` in: exit 0, "check.sh OK", 1,862 s in total (iOS tests 1,494 s, watchOS tests 237 s).
