@@ -132,6 +132,8 @@ jobs:
           # lockfiles): 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min. Standard minutes are free on this
           # public repository, so headroom costs nothing until something hangs; were it private again, a
           # hang would bill about 12 minutes more than at 3,120 s (docs/ci-cd.md, "Deadline": revisit).
+          # 2026-10-21: #67 tested for 2,407 s warm; tasks/chores/ci-test-time-2.md brings that to about
+          # 1,900-2,100 s, so a cold first run is about 150 + 1,450 + 2,100 = 3,700 s at worst.
           LEDGER_XCODEBUILD_DEADLINE: 3840
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a

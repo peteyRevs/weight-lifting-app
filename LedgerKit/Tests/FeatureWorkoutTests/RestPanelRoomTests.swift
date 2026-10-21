@@ -1,5 +1,6 @@
 #if os(iOS) && DEBUG
     @testable import FeatureWorkout
+    import LedgerTestSupport
     import SwiftUI
     import Testing
 
@@ -14,6 +15,11 @@
         /// The least height of page the ruling asks for.
         nonisolated static let leastPage: CGFloat = 120
 
+        /// Every text size. On the hosted PR runner (`TestSweep`) the representative sizes and `.accessibility4`,
+        /// where the page is least on every phone (173 pt on the 375 pt phone with a home button, 182 at
+        /// `.accessibility5`; 2026-10-21).
+        nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases, also: [.accessibility4])
+
         @Test("At every text size at least 120 pt of the page show over the panel, on three phones", arguments: [
             WorkoutPreview.resting, .restOver
         ])
@@ -22,7 +28,7 @@
             var least = CGFloat.infinity
             for phone in Rooms.phones {
                 var row: [String] = []
-                for size in DynamicTypeSize.allCases {
+                for size in Self.sizes {
                     let room = try Rooms.room(on: phone.size, at: size, preview)
                     least = min(least, room.page)
                     row.append("\(Int(room.page))/\(Int(room.panel))")
@@ -30,7 +36,8 @@
                 }
                 table.append("\(phone.name): " + row.joined(separator: " "))
             }
-            let measured = "page/panel in pt, xSmall to accessibility5. \(table.joined(separator: " | "))"
+            let swept = Self.sizes.map { "\($0)" }.joined(separator: ", ")
+            let measured = "page/panel in pt at \(swept). \(table.joined(separator: " | "))"
             #expect(least >= Self.leastPage, "\(measured)")
             // The table, for the notes: kept with the run's result.
             Attachment.record(measured, named: "room-\(preview.rawValue)")
