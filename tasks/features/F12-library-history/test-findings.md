@@ -51,6 +51,15 @@ sizes; it is also the audit's "Text clipped" on "Search 224 exercises".**
   The audit's "Text clipped" on the empty field persisted, also with an explicit `prompt:` (round 3, reverted),
   and is F12-S1-5 below.
 
+**Round 4 (G3's review M1, G1).**
+- **The placeholder was truncated for real** on 375- and 390-pt phones from `.accessibility3`, and on a 320-pt
+  phone from `.accessibility2`. The field now draws "Search" where the whole placeholder doesn't fit.
+- **The measurement is tightened.** It gained a height-for-width floor per drawn text, a trailing-padding guard,
+  and a control that is shown to fail.
+- **The exclusion is narrowed** to an empty text field.
+
+See the notes' "Round 4".
+
 **F12-S1-5 — note, excluded (G1 round 3, ruling's Option 2). The audit's "Text clipped" on the empty search
 field is a false positive.** The placeholder "Search 224 exercises" has no descender, and it is drawn whole
 between the pill's two strokes at all three sizes. The evidence is the field's picture at each size, kept with the

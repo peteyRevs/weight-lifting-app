@@ -404,3 +404,129 @@ reports "Text clipped", revert it, prove the placeholder whole, and exclude that
   So do the new measurement test and the Library UI test.
 - **PR plan, `LedgerDesignTests`, `ProgramSnapshotTests`, `DayEditorSnapshotTests` and `FeatureLibraryTests`:**
   exit 0, all green, nothing recorded. That is 393 tests (27 known issues), 19 tests and 65 tests.
+
+## S1 — round 4 (G1 implementer, 2026-10-21)
+
+G3's review was not approved (`review.md`, "Slice S1 — review"). The orchestrator ruled to fix M1, m1, m3 and n2.
+
+### M1 (b): the truncation was real
+
+`LedgerDesignTests/SearchFieldFitTests` measures the hosted `UITextField`: the drawn placeholder's width against
+`placeholderRect(forBounds:)`. It does this on phones 320, 375, 390 and 402 pt wide with the screen's margins, at
+every text size, through `TestSweep`.
+
+**Before the fix**, "Search 224 exercises" needed this much width (pt):
+
+| Size | Needed | Room at 320 | 375 | 390 | 402 |
+|---|--:|--:|--:|--:|--:|
+| `.accessibility2` | 261 | 236 | | | |
+| `.accessibility3` | 312 | 236 | 291 | 306 | 318 |
+| `.accessibility4` | 362 | | | | 318 |
+| `.accessibility5` | 420 | | | | 318 |
+
+It was cut short on 375- and 390-pt phones from `.accessibility3`, on a 320-pt phone from `.accessibility2`, and on
+the iPhone 17 from `.accessibility4`.
+
+The exercise library's "Search exercises" was also cut short:
+- at `.accessibility5` on every width (it needs 337, with at most 318 of room);
+- on a 320-pt phone from `.accessibility3` (it needs 250, with 236 of room).
+
+**The fix** follows the ruling's fallback:
+- `SearchField(_:short:text:onChange:)` draws `short` when the whole placeholder is wider than the field. It
+  measures the whole placeholder in a hidden, fixed-size `Text` in the field's font and compares it with the
+  field's width (two `@State` widths, `onGeometryChange`). The spoken label stays the whole placeholder.
+- The Library passes `LibraryModel.Search.shortPlaceholder`, the new `LibraryCopy.search`.
+- The picker passes `ExercisePickerModel.Search.shortPlaceholder`, the new `ProgramCopy.search`.
+
+**New wording for Pete:** "Search", in both catalogs, as the short placeholder.
+
+**After the fix,** every case of the fit suite passes:
+- the Library's placeholder fits, whole or short;
+- the picker's placeholder fits;
+- the whole placeholder is drawn on the iPhone 17 at the default size, and on a 375-pt phone at `.xxxLarge`;
+- a control field without `short` still overflows at `.accessibility5` on 375 pt.
+
+On the iPhone 17 the snapshots' sizes still draw the whole placeholder, so no existing reference changed. That
+covers `.large`, `.xLarge` and `.accessibility3`, F11's picker references included.
+
+**The two readers disagree on the iPhone 17 at Accessibility XXXL.** The hosted measure (`.accessibility5`)
+says the whole placeholder does not fit there. The running app's XXXL picture in round 3 drew it whole, 312 pt
+wide, and its `placeholderValue` is now "Search". The app now draws "Search" at XXXL, and the UI test asserts it.
+
+### M1 (a) and (c): the measurement and its control
+
+- **`Apps/LedgerUITests/PlaceholderInk.swift` (new)** reads the field's picture. It finds:
+  - the pill's two strokes;
+  - the placeholder's ink rows and columns.
+- **Its guards** are:
+  - the ink is clear of both strokes;
+  - **(a)** the ink is at least as tall for its width as a whole line of the drawn text. Measured on the running
+    app: "Search 224 exercises" 0.0744 at the default size and 0.0762 at Accessibility L; "Search" 0.236 at
+    Accessibility XXXL. The floors are 0.065 and 0.2, and an unknown text is a fault;
+  - **(b)** the ink ends short of the trailing padding (16 pt).
+- **`test_searchPlaceholder_isDrawnWholeInsideTheField`** checks the drawn text (`placeholderValue`) at the
+  default size, Accessibility L and Accessibility XXXL.
+- **(c) `test_placeholderGuards_failOnAClippedAndOnATruncatedPicture`** doctors the real XXXL picture two ways:
+  - its lower third painted over with the pill's ground;
+  - a column of ink drawn into the trailing padding.
+
+  The guards report on both doctored pictures (attachment "the guards on the doctored pictures"):
+  - `clipped: ["too short for its width: 63 px tall, 401 px wide, 0.157"]`;
+  - `truncated: ["too short for its width: 95 px tall, 953 px wide, 0.0997", "into the trailing padding: ink to
+    column 1007 of 1050"]`.
+
+  **The control failed first, on two flaws of my own:**
+  - The doctoring painted only the middle columns, which left the "S" whole.
+  - A floor shared by both texts (0.07, then a share of the pill's height) let a clipped "Search" pass.
+
+  Both were seen failing (`a clip passes`) before the guards were fixed.
+
+### The exclusions (M1, m1)
+
+- **"Text clipped"** now matches the search field only as an empty text field: element type `.textField`, with a
+  value that is empty or is its placeholder. `isKnownFalsePositive` takes the element. `TabsAdversarial`'s helper
+  passes it, a one-line sanctioned edit. An edited field is never excluded.
+- **"Contrast failed"** under the tab bar excludes only elements whose label is not one of the four tabs', so a
+  tab whose contrast really fails still fails. The comments say so.
+
+### m3: component snapshots
+
+`ComponentSnapshotTests.FilterChipRowSnapshotTests` runs `FilterChipRowGallery` on `phoneMatrix`. That draws the
+field empty and with "row", and the muscle row with Back selected. It recorded six new references, and I looked at
+all six. At `.accessibility3` the whole placeholder still fits on 402 pt.
+- `LedgerDesignTests/__Snapshots__/ComponentSnapshotTests/filterChipRowAndSearchField_appearance_matchesReference-_.{light,dark}-{large,xLarge,accessibility3}.png`
+
+The gallery passes `short: "Search"`. The gallery's dark reference is unchanged; it compared clean.
+
+### n2
+
+`GRDBStatsQueries.bestSets()` now logs a row it leaves out under `exercise`, the table its id names, not
+`workout_exercise`.
+
+### Line budget
+
+Two changes kept the slice under 1,000:
+- `InMemoryStatsQueries.bestSets()` is now `bestSet(exerciseID:)` over every exercise the live workouts perform:
+  7 lines instead of 14, and the contract clause still passes.
+- `SearchField` picks its placeholder inline.
+
+**Product lines now: 991 added, 31 removed (net 960)** in `LedgerKit/Sources` and `Apps` without the UI tests.
+`Package.swift`'s 5 bring it to 996.
+
+### Sanctioned edits (round 4)
+
+| File | Edit | Why |
+|---|---|---|
+| `FeatureProgramTests/Adversarial/ExercisePickerWordsAdversarialTests.swift` | 24 → 25 lookups | The picker's "Search" |
+| `FeatureProgramTests/ExercisePickerPresentationTests.swift` (my own) | `Search` with `shortPlaceholder: "Search"` | M1 (b) |
+| `Apps/LedgerUITests/LibraryAuditAdversarial.swift` (G2's) | The measurement test reworked, the control added, both exclusions narrowed, `isKnownFalsePositive(issue:element:tabBar:)` | M1, m1 |
+| `Apps/LedgerUITests/TabsAdversarial.swift` | The Library's exclusions are handed the element | M1 |
+
+### Follow-ups, and questions for Pete in the PR
+
+- **n1, a follow-up.** "PR 1 pounds": a one-unit best is spoken with a plural unit.
+- **n3, a follow-up.** As G3 recorded it.
+- **m2, open question.** "New exercise" does nothing until S3. *Recommendation:* accept for S1; S3 follows.
+- **m4, open question.** RECENTLY LOGGED reads "· 1 session · Custom". *Recommendation:* accept; the alternative
+  is to drop "Custom" in that section.
+- **New wording.** "Search" as the short placeholder.
