@@ -53,4 +53,8 @@ struct UnimplementedStatsQueries: StatsQueries {
     func recentlyLogged(limit _: Int) async throws -> [ExerciseID] {
         throw stub.failure()
     }
+
+    func exerciseSessions(exerciseID _: ExerciseID) async throws -> [ExerciseSession] {
+        throw stub.failure()
+    }
 }

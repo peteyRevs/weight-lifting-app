@@ -195,4 +195,8 @@ public protocol StatsQueries: Sendable {
     /// The `limit` exercises with a done set in the most recent workouts, the latest first, and exercises of
     /// one workout in id order; none when `limit` is below 1.
     func recentlyLogged(limit: Int) async throws -> [ExerciseID]
+    /// Each stored workout with a done set of the exercise, newest first as `recent` lists them, with its done
+    /// sets of every kind (F12 S2, N9). `ExerciseHistory.make` folds the exercise's history from it, so the bests,
+    /// the weeks and the session count agree with the queries above.
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession]
 }

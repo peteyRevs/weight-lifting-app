@@ -90,6 +90,10 @@ private struct BriefStatsQueries: StatsQueries {
         [:]
     }
 
+    func exerciseSessions(exerciseID _: ExerciseID) async throws -> [ExerciseSession] {
+        []
+    }
+
     func bestE1RM(exerciseID _: ExerciseID) async throws -> Weight? {
         nil
     }

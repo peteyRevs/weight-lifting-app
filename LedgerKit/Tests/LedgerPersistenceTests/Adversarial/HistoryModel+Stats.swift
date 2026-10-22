@@ -192,4 +192,13 @@ extension HistoryModel: StatsQueries {
         }
         return limit < 0 && has(.negativeLimitIsAll) ? ordered.map(\.key) : ordered.prefix(max(0, limit)).map(\.key)
     }
+
+    /// F12 S2 (sanctioned): each live workout with a done set of the exercise, newest first, its done sets in row
+    /// order, dated as every other query here dates it.
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        state.withLock { live($0) }.compactMap { workout in
+            let done = sets(of: exerciseID, in: workout).filter(\.isDone)
+            return done.isEmpty ? nil : ExerciseSession(workoutID: workout.id, startedAt: date(workout), sets: done)
+        }
+    }
 }

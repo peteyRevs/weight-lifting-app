@@ -36,4 +36,30 @@ public extension GRDBStatsQueries {
         }
         return Dictionary(rows) { first, _ in first }
     }
+
+    /// Each live finished workout with a done set of the exercise, newest first as `recent` lists them (of two that
+    /// started together, the smaller id first), with its done sets of every kind in row and set order (F12 S2,
+    /// N9). One read through `idx_wex_exercise_workout`. A set that cannot be read throws, as `bestSet` does.
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        let sql = """
+        SELECT logged_set.*, workout.id AS session_id, workout.started_at AS started_at
+        \(Self.doneSets) AND workout_exercise.exercise_id = ?
+        ORDER BY workout.started_at DESC, workout.id, workout_exercise.position, logged_set.position
+        """
+        return try await queue.read { database in
+            var sessions: [ExerciseSession] = []
+            for row in try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]) {
+                let workout = ColumnReader(row: row, table: WorkoutRecord.databaseTableName)
+                let id: WorkoutID = try workout.identifier("session_id")
+                let set = try LoggedSetRecord(row: row).set
+                if sessions.last?.workoutID == id {
+                    sessions[sessions.count - 1].sets.append(set)
+                } else {
+                    let startedAt = try workout.date("started_at")
+                    sessions.append(ExerciseSession(workoutID: id, startedAt: startedAt, sets: [set]))
+                }
+            }
+            return sessions
+        }
+    }
 }

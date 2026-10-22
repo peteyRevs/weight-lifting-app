@@ -57,7 +57,8 @@ struct StatsQueriesPerformanceTests {
             ("sessionsCompleted", { _ = try await stats.sessionsCompleted(in: week) }),
             ("sessionCount", { _ = try await stats.sessionCount(exerciseID: lift) }),
             ("personalRecords", { _ = try await stats.personalRecords(exerciseID: lift) }),
-            ("recentlyLogged", { _ = try await stats.recentlyLogged(limit: 5) })
+            ("recentlyLogged", { _ = try await stats.recentlyLogged(limit: 5) }),
+            ("exerciseSessions", { _ = try await stats.exerciseSessions(exerciseID: lift) })
         ]
         let clock = ContinuousClock()
         var report: [String] = []
@@ -72,6 +73,24 @@ struct StatsQueriesPerformanceTests {
             report.append("\(query.name): p95 \(percentile95), median \(timings[timings.count / 2])")
             #expect(percentile95 < PerformanceBudget.statsQuery, "\(query.name): \(timings)")
         }
+        // F12 S2, N11: the fold of the main lift's sessions.
+        let sessions = try await stats.exerciseSessions(exerciseID: lift)
+        let fold95 = Self.foldPercentile95(sessions, calendar: calendar)
+        report.append("ExerciseHistory.make over \(sessions.flatMap(\.sets).count) sets: p95 \(fold95)")
+        #expect(fold95 < PerformanceBudget.historyFold)
         Attachment.record(report.joined(separator: "\n"), named: "stats-queries.txt")
+    }
+
+    /// The 95th percentile of `statsRuns` folds of `sessions`, after one untimed warm-up (F12 S2, N11).
+    static func foldPercentile95(_ sessions: [ExerciseSession], calendar: WeekCalendar) -> Duration {
+        let clock = ContinuousClock()
+        var folds: [Duration] = []
+        for _ in 0 ... PerformanceBudget.statsRuns {
+            folds.append(clock.measure {
+                _ = ExerciseHistory.make(sessions: sessions, records: [], now: now, calendar: calendar)
+            })
+        }
+        folds = Array(folds.dropFirst()).sorted()
+        return folds[folds.count * 95 / 100 - 1]
     }
 }

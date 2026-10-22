@@ -2,7 +2,7 @@ import XCTest
 
 /// F12 S1, criteria 2 and 3, on screen: the Library tab in the running app over a fresh database (the bundled
 /// catalog, no history): a query typed, two chips tapped, the one row left tapped, which pushes the exercise's
-/// history (its placeholder until S2) on the Library's stack; back returns to the Library as it was. Nightly only:
+/// history on the Library's stack; back returns to the Library as it was. Nightly only:
 /// the `PR` plan selects `Smoke`.
 final class Library: XCTestCase {
     override func setUpWithError() throws {
@@ -33,7 +33,7 @@ final class Library: XCTestCase {
         row.tap()
         let history = app.staticTexts["library.history.title"]
         XCTAssertTrue(history.waitForExistence(timeout: 5))
-        XCTAssertEqual(history.label, "Exercise history")
+        XCTAssertEqual(history.label, "Chest-Supported Row")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Equipment: Machine"].isSelected, "the Library is as it was left")

@@ -147,7 +147,6 @@ nonisolated struct ModuleCopyTests {
         let bundle = try #require(StringCatalog.resourceBundle(ofModule: "LedgerAppKit"))
         let catalog = try TestCatalog.plain("Today", "Not in the bundle", "today")
         #expect(catalog.unresolvedKeys(in: bundle) == ["Not in the bundle", "today"])
-        // Sanctioned edit (F12 S1): eight keys since "Exercise history", the history's placeholder until S2.
-        #expect(try StringCatalog(module: "LedgerAppKit").unresolvedKeys(in: .main).count == 8, "nor in another bundle")
+        #expect(try StringCatalog(module: "LedgerAppKit").unresolvedKeys(in: .main).count == 7, "nor in another bundle")
     }
 }

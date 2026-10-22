@@ -17,7 +17,7 @@
             self.now = now
         }
 
-        private var live: [WorkoutState] {
+        fileprivate var live: [WorkoutState] {
             workouts.history.read(\.live)
         }
 
@@ -186,6 +186,18 @@
                 week = previous
             }
             return false
+        }
+    }
+
+    public extension InMemoryStatsQueries {
+        /// The live workouts with a done set of the exercise, newest first, with their done sets in row order
+        /// (F12 S2).
+        func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+            live.compactMap { workout in
+                let done = workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets).filter(\.isDone)
+                return done.isEmpty
+                    ? nil : ExerciseSession(workoutID: workout.id, startedAt: workout.startedAt, sets: done)
+            }
         }
     }
 #endif
