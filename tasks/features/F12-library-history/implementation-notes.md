@@ -677,3 +677,9 @@ SearchField fit +0.15 s for the three widths. **Added ≈ 4.0 s.**
 - Simulator, PR plan, PR sweep: `FeatureLibraryTests`, `LedgerDesignTests`, `LedgerAppKitTests`: 861 tests, 0
   failures (after recording the 10 history references and the 6 StatTile ones).
 - Nightly: UI `Library` and `LibraryAuditAdversarial` (5 tests) pass; `StatsQueriesPerformanceTests` passes.
+
+### The gate
+
+`scripts/check.sh` through the lock on `057391d`: **exit 0, "check.sh OK", 1,894 s** (lint 78 s, iOS build 21 s,
+iOS tests 1,507 s, watchOS build 46 s, watchOS tests 237 s, coverage 2 s; overall 98.69 %). The only commit after
+`057391d` is this paragraph.
