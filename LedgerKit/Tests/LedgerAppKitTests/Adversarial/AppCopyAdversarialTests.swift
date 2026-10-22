@@ -14,7 +14,10 @@ nonisolated struct AppCopyAdversarialTests {
     static let databaseTitle = "Can't open your data right now"
     static let databaseBody = "Your workouts are still on this iPhone. The app tries again when you come back to it."
     /// The prototype's tab labels (`design/prototype/LedgerTabs.dc.html`), the pushed placeholder, and the two above.
-    static let shellStrings = ["Today", "Program", "Library", "History", "Settings", databaseTitle, databaseBody]
+    /// Sanctioned edit (F12 S1): "Exercise history", the pushed history's placeholder until F12 S2 draws it.
+    static let shellStrings = [
+        "Today", "Program", "Library", "History", "Settings", databaseTitle, databaseBody, "Exercise history"
+    ]
 
     @Test("Each tab's title is the prototype's label", arguments: zip(AppTab.allCases, shellStrings.prefix(4)))
     func tabTitle_isThePrototypesLabel(tab: AppTab, label: String) {

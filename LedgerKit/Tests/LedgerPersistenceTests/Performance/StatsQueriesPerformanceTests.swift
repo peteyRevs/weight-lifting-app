@@ -48,6 +48,8 @@ struct StatsQueriesPerformanceTests {
         let queries: [(name: String, run: @Sendable () async throws -> Void)] = [
             ("lastPerformance", { _ = try await stats.lastPerformance(exerciseID: lift) }),
             ("bestSet", { _ = try await stats.bestSet(exerciseID: lift) }),
+            // F12 S1 (N4): the Library's best set of every exercise, in one read.
+            ("bestSets", { _ = try await stats.bestSets() }),
             ("bestE1RM", { _ = try await stats.bestE1RM(exerciseID: lift) }),
             ("e1RMByWeek", { _ = try await stats.e1RMByWeek(exerciseID: lift, lastWeeks: 8, calendar: calendar) }),
             ("weeklyVolume", { _ = try await stats.weeklyVolume(in: week) }),

@@ -14,6 +14,10 @@ struct UnimplementedStatsQueries: StatsQueries {
         throw stub.failure()
     }
 
+    func bestSets() async throws -> [ExerciseID: BestSet] {
+        throw stub.failure()
+    }
+
     func bestE1RM(exerciseID _: ExerciseID) async throws -> Weight? {
         throw stub.failure()
     }

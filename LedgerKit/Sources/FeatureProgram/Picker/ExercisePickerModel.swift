@@ -25,6 +25,9 @@ nonisolated struct ExercisePickerModel: Equatable, Sendable {
     struct Search: Equatable, Sendable {
         /// "Search exercises": the field's placeholder and its spoken label.
         let placeholder: String
+        /// "Search": drawn in place of `placeholder` where it is too wide for the field (F12 S1 review M1); nil
+        /// draws `placeholder` whatever its width.
+        var shortPlaceholder: String?
         /// The field's text, as the input holds it. A view sends `ExercisePickerAction.setQuery(_:)` with
         /// the text as it is typed.
         let query: String

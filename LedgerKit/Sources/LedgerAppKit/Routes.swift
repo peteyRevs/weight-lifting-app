@@ -16,6 +16,8 @@ nonisolated enum AppDestination: Hashable, Sendable {
     case settings
     /// The Day editor (F11) on one day of the active program, showing program week `weekIndex`.
     case day(DayTemplateID, weekIndex: Int)
+    /// An exercise's history (F12): a placeholder that names it until S2 draws the screen.
+    case exercise(ExerciseID)
 }
 
 /// The shell's navigation state: the selected tab and each tab's stack. A feature never sees it: it emits a route,

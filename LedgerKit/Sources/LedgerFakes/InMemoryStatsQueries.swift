@@ -41,6 +41,15 @@
             return best.map { ($0.weight, $0.reps) }
         }
 
+        /// `bestSet(exerciseID:)` of every exercise the live workouts perform.
+        public func bestSets() async throws -> [ExerciseID: BestSet] {
+            var bests: [ExerciseID: BestSet] = [:]
+            for id in Set(live.flatMap { $0.exercises.map(\.exerciseID) }) {
+                bests[id] = try await bestSet(exerciseID: id).map { BestSet(weight: $0.weight, reps: $0.reps) }
+            }
+            return bests
+        }
+
         public func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
             live.flatMap { Self.recordSets(of: exerciseID, in: $0) }.compactMap(Self.estimate).max()
         }

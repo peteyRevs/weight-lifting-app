@@ -51,6 +51,10 @@ actor BestsSession: StatsQueries {
         try await base.bestSet(exerciseID: exerciseID)
     }
 
+    func bestSets() async throws -> [ExerciseID: BestSet] {
+        try await base.bestSets()
+    }
+
     func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
         try await base.bestE1RM(exerciseID: exerciseID)
     }

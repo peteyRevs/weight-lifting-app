@@ -118,7 +118,8 @@ nonisolated struct ProgramViewsSourceAdversarialTests {
             // S10: the day's name has its draft and focus as the program's has, and "Delete day" its alert.
             // Fix round 1 (ruling 16): the day's draft and focus are `NameField`'s.
             "DayEditorPage.swift: @State private var isConfirming = false",
-            "ExercisePickerScreen.swift: @FocusState private var isEditing: Bool",
+            // Sanctioned edit (F12 S1, ruling R5): the search field's focus moved with the field into
+            // `LedgerDesign`'s `SearchField`.
             // The chore of 2026-10-13: the program's draft and focus are `NameField`'s too.
             "NameField.swift: @State private var draft: String",
             "NameField.swift: @FocusState private var isEditing: Bool"

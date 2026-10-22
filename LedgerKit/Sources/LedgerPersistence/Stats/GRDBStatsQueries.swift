@@ -18,7 +18,7 @@ import LedgerDomain
 /// - Columns are read strictly (`ColumnReader`): a damaged value throws `malformedColumn`, never traps and
 ///   never reads as a rounded number.
 public struct GRDBStatsQueries: StatsQueries {
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
     private let now: @Sendable () -> Date
 
     /// - Parameter now: the clock that says which week is the current one (`e1RMByWeek`); the composition root
