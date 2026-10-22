@@ -31,8 +31,10 @@ final class LibraryAuditAdversarial: XCTestCase {
     /// the empty search field, measured. At each size the field's picture is read row by row and column by column
     /// (`PlaceholderInk.faults`): the placeholder's ink lies between the pill's two strokes, clear of both; it is
     /// as tall for its width as a whole line of it (a clip to the field's text box, or a sliver, is not); and it
-    /// ends short of the trailing padding (a placeholder cut short with "…" runs into it). The guards are proved
-    /// by `test_placeholderGuards_failOnAClippedAndOnATruncatedPicture`.
+    /// ends short of the trailing padding, so no ink runs out of the field's own frame. A placeholder cut short
+    /// with "…" is not seen here: UIKit truncates it inside `placeholderRect(forBounds:)`, short of the padding, so
+    /// truncation is `SearchFieldFitTests`' to catch, on the hosted field (review R2-1). The guards are proved by
+    /// `test_placeholderGuards_failOnAClippedAndOnATruncatedPicture`.
     @MainActor
     func test_searchPlaceholder_isDrawnWholeInsideTheField() throws {
         for textSize in Self.sizes {
@@ -51,8 +53,9 @@ final class LibraryAuditAdversarial: XCTestCase {
 
     /// Review M1 (c): the same guards on the real picture at Accessibility XXXL, doctored twice: its placeholder's
     /// lower third painted over with the pill's ground, as a clip to the field's text box would leave it; and a
-    /// column of ink drawn into the trailing padding, where a placeholder cut short with "…" ends. Each must be
-    /// found, and the undoctored picture must pass.
+    /// column of ink drawn into the trailing padding, as text that ran out of the field's frame would leave it (a
+    /// "…" never stands there: review R2-1). Each must be found, and the undoctored picture must pass. While
+    /// "Search" is drawn, VoiceOver still reads the whole placeholder (review R2-3).
     @MainActor
     func test_placeholderGuards_failOnAClippedAndOnATruncatedPicture() throws {
         let app = launchLibrary(textSize: "UICTContentSizeCategoryAccessibilityXXXL")
@@ -61,6 +64,7 @@ final class LibraryAuditAdversarial: XCTestCase {
         let ink = try XCTUnwrap(PlaceholderInk(field.screenshot().image), "the picture was not read")
         let drawn = field.placeholderValue ?? ""
         XCTAssertEqual(drawn, "Search", "at Accessibility XXXL the whole placeholder does not fit")
+        XCTAssertEqual(field.label, "Search 224 exercises", "the spoken label is the whole placeholder")
         XCTAssertEqual(ink.faults(of: drawn), [], "control: the real picture passes: \(ink)")
         let clipped = try XCTUnwrap(PlaceholderInk(ink.clippingTheTextsLowerThird()))
         let truncated = try XCTUnwrap(PlaceholderInk(ink.inkingTheTrailingPadding()))
