@@ -199,4 +199,7 @@ public protocol StatsQueries: Sendable {
     /// sets of every kind (F12 S2, N9). `ExerciseHistory.make` folds the exercise's history from it, so the bests,
     /// the weeks and the session count agree with the queries above.
     func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession]
+    /// `exerciseSessions(exerciseID:)` now, then after every change that alters it, and for no other write: a
+    /// workout of the exercise finished, deleted or edited, the newest or an older one (F12 S2, N13).
+    func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]>
 }

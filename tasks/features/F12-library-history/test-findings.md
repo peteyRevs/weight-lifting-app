@@ -324,3 +324,26 @@ No hosted view sweep was added, so the PR sweep gains nothing through `TestSweep
 - Clipping and orange at sizes beyond what the implementer's sweeps cover. No hosted sweep was added, so the CI
   budget stays as it is.
 - The N11 budgets, which are the implementer's Nightly performance suite and were not re-run.
+
+### Orchestrator's ruling (S2 round 1)
+
+1. **F12-S2-1 ("+0 lb"): fix.** The tag compares what the screen shows. When the step, rounded to the display
+   precision in the current unit, is not positive, the tag is "—", as for a drop. The PR tag is unaffected. G2's
+   `tag_tinyStepAcrossUnits_neverReadsPlusZero` is to pass as written.
+2. **F12-S2-2 ("1 sessions"): fix.** The caption becomes a plural string-catalog key read through the shared
+   `Locale.forCountedText(in:)` helper, as Today and Workout do. The VoiceOver label is to read naturally too.
+3. **F12-S2-3 (older workout changes missed): fix.** The history follows its own data, not the newest workout:
+   an observed form of the sessions query, `observeExerciseSessions(exerciseID:) -> AsyncStream<[ExerciseSession]>`
+   beside `exerciseSessions` (GRDB `ValueObservation` with `removeDuplicates()`, the in-memory store and the
+   Unimplemented stub to match), with a contract clause: it emits on finishing, deleting or editing an older
+   workout of that exercise, and not for another exercise's change. The history store follows it instead of
+   `observeRecent(limit: 1)`. Not `observeRecent(limit: Int.max)`.
+   - **Follow-up F12-S2-6 (for S3 or F13), out of scope here.** The S1 Library store (`LibraryStore`) follows
+     `observeRecent(limit: followedWorkouts)` and shares the class of miss: a change to a workout older than the
+     followed ones does not reach RECENTLY LOGGED, the session counts or the best sets. `LibraryStore` is not
+     changed in S2.
+4. **F12-S2-4 (the chart speaks only its name): fix.** The chart descriptor gets a summary (the change line,
+   "Up 10 lb over 8 weeks", or the no-data message), and the chart element an accessibility value with the same
+   summary.
+5. **F12-S2-5 ("+Δ" against the session just before): keep as built.** The spec says "the previous session"; the
+   passing pin stays. A candidate for Pete: compare with the latest earlier session that has a working set. No code.

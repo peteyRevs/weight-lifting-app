@@ -94,6 +94,10 @@ private struct BriefStatsQueries: StatsQueries {
         []
     }
 
+    func observeExerciseSessions(exerciseID _: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        AsyncStream { $0.finish() }
+    }
+
     func bestE1RM(exerciseID _: ExerciseID) async throws -> Weight? {
         nil
     }

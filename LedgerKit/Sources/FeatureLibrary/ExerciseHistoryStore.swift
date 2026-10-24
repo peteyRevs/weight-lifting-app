@@ -7,9 +7,10 @@ import Observation
 /// The store of one exercise's history (F12 S2; the M1 store convention, as `LibraryStore`).
 ///
 /// **It follows three sources and reads two queries.** `run()` follows the exercises (a rename, N13), the settings
-/// (units and the first day of the week) and the newest finished workout, for as long as the root's task runs; on
-/// every change of the newest workout it reads the exercise's sessions and records again. Every change marks one
-/// channel that keeps only the newest mark, and one loop rebuilds the model.
+/// (units and the first day of the week) and the exercise's own sessions, for as long as the root's task runs; on
+/// every change of the sessions (a workout of the exercise finished, edited or deleted, the newest or an older one,
+/// F12-S2-3) it reads the sessions and records again, together. Every change marks one channel that keeps only the
+/// newest mark, and one loop rebuilds the model.
 ///
 /// **A failure is shown**: a source that ends, a read that fails, or an exercise that is not stored. It is
 /// logged, and the next change or the next run reads again. A route waits until the app has taken it, so a double
@@ -32,7 +33,6 @@ final class ExerciseHistoryStore {
 
     @ObservationIgnored @Dependency(\.exerciseRepository) private var exercises
     @ObservationIgnored @Dependency(\.settingsRepository) private var settings
-    @ObservationIgnored @Dependency(\.workoutRepository) private var workouts
     @ObservationIgnored @Dependency(\.statsQueries) private var stats
     @ObservationIgnored @Dependency(\.date) private var date
     @ObservationIgnored @Dependency(\.calendar) private var calendar
@@ -51,9 +51,9 @@ final class ExerciseHistoryStore {
     private struct Sources {
         var exercise: Exercise??
         var settings: Settings?
-        /// The sessions and the record workouts, as last read; nil when the newest workout has changed since.
+        /// The sessions and the record workouts, as last read; nil when the sessions have changed since.
         var read: (sessions: [ExerciseSession], records: Set<WorkoutID>)?
-        /// Counts the changes of the newest workout, so that a read one of them overtook is shown and not kept.
+        /// Counts the changes of the sessions, so that a read one of them overtook is shown and not kept.
         var generation = 0
         var hasEnded = false
     }
@@ -92,7 +92,7 @@ final class ExerciseHistoryStore {
             }
             group.addTask { await self.follow(self.settings.observe(), mark) { $0.settings = $1 } }
             group.addTask {
-                await self.follow(self.workouts.observeRecent(limit: 1), mark) { kept, _ in
+                await self.follow(self.stats.observeExerciseSessions(exerciseID: id), mark) { kept, _ in
                     kept.read = nil
                     kept.generation += 1
                 }
@@ -156,8 +156,8 @@ final class ExerciseHistoryStore {
     }
 
     /// The sessions and records as last read, or read now. Nil when the read failed, which is logged and shown,
-    /// or the run was cancelled meanwhile. A read that a change of the newest workout overtook is shown and not
-    /// kept: the change has marked the channel, so the next turn reads again.
+    /// or the run was cancelled meanwhile. A read that a change of the sessions overtook is shown and not kept:
+    /// the change has marked the channel, so the next turn reads again.
     private func readHistory() async -> (sessions: [ExerciseSession], records: Set<WorkoutID>)? {
         if let kept = sources.read {
             return kept

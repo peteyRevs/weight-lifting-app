@@ -57,4 +57,8 @@ struct UnimplementedStatsQueries: StatsQueries {
     func exerciseSessions(exerciseID _: ExerciseID) async throws -> [ExerciseSession] {
         throw stub.failure()
     }
+
+    func observeExerciseSessions(exerciseID _: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        stub.emptyStream()
+    }
 }

@@ -19,14 +19,14 @@
         /// The tree each preview is written to have at `size`.
         static func tree(_ preview: HistoryPreview, _ size: DynamicTypeSize) throws -> [ViewStop] {
             let model = try preview.model()
-            let stats = model.stats.map { ViewStop.text("\($0.value)\($0.unit ?? ""), \($0.caption)") }
+            let stats = model.stats.map { ViewStop.text($0.spoken ?? "\($0.value)\($0.unit ?? ""), \($0.caption)") }
             let delta = model.chart.delta.map { [ViewStop.text($0)] } ?? []
             let chart: [ViewStop] = if let empty = model.chart.empty {
                 [.text(empty)]
             } else if size.isAccessibilitySize {
                 model.chart.bars.map { .text("\($0.week), \($0.value)") }
             } else {
-                [ViewStop(kind: .field, label: model.chart.spokenTitle)]
+                [ViewStop(kind: .field, label: model.chart.spokenTitle, value: model.chart.spokenSummary ?? "")]
             }
             let log = model.log.empty.map { [ViewStop.text($0)] } ?? model.log.entries.map {
                 .button($0.date, value: $0.spokenValue)

@@ -35,6 +35,8 @@ nonisolated struct ExerciseHistoryModel: Equatable, Sendable {
         /// "×5" after the best set's weight.
         let unit: String?
         let caption: String
+        /// What VoiceOver reads for the tile, "1 session", when the value and caption joined would not read well.
+        let spoken: String?
         /// The estimate, in orange (Pete's question 3, A).
         let isAccented: Bool
     }
@@ -50,6 +52,9 @@ nonisolated struct ExerciseHistoryModel: Equatable, Sendable {
         let empty: String?
         /// What VoiceOver's chart descriptor reads: the chart's name and its two axes' (criterion 12).
         let spokenTitle: String
+        /// "Up 22 lb over 8 weeks", or `empty`: the chart's value and its descriptor's summary (F12-S2-4); nil
+        /// when one week alone has a value.
+        let spokenSummary: String?
         let weekAxis: String
         let valueAxis: String
     }

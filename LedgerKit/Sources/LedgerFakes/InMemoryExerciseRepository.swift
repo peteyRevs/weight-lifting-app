@@ -22,7 +22,7 @@
             }
         }
 
-        private let state: ObservedState<State, [Exercise]>
+        private let state: ObservedState<State>
 
         /// An empty repository, or one holding `catalog` as seeded at `version` (`seedIfNeeded`'s rule), by
         /// default the bundled catalog's version, so the launch's `seedIfNeeded` is then the no-op it is on a

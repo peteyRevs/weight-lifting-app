@@ -14,8 +14,15 @@ nonisolated extension LibraryCopy {
         String(localized: "best set", bundle: .module, comment: "Under an exercise's heaviest set, as 195×5")
     }
 
-    static var sessionsCaption: String {
-        String(localized: "sessions", bundle: .module, comment: "Under how many workouts an exercise was done in")
+    /// "session" / "sessions", under the count the tile shows as its value (F12-S2-2): the Library row's counted
+    /// "34 sessions", so the catalog picks the form, without its number, written as the lookup writes it. A
+    /// counted key keeps its number (standards §7), so the words are what is left of it.
+    static func sessionsCaption(_ count: Int, locale: Locale) -> String {
+        let counted = sessions(count, locale: locale)
+        guard let number = counted.range(of: count.formatted(.number.locale(locale.forCountedText))) else {
+            return counted
+        }
+        return counted.replacingCharacters(in: number, with: "").trimmingCharacters(in: .whitespaces)
     }
 
     /// "×5": the reps after the best set's weight.
@@ -58,6 +65,47 @@ nonisolated extension LibraryCopy {
         switch units {
         case .lb: String(localized: "Pounds", bundle: .module, comment: "VoiceOver's name for the chart's values")
         case .kg: String(localized: "Kilograms", bundle: .module, comment: "VoiceOver's name for the chart's values")
+        }
+    }
+
+    /// "Up 22 lb over 8 weeks": what VoiceOver reads of the chart's change (F12-S2-4), `weight` being its size
+    /// without a sign.
+    static func spokenChange(_ weight: String, sign: Int, units: Units, locale: Locale) -> String {
+        switch (units, sign.signum()) {
+        case (.lb, 1):
+            String(
+                localized: "Up \(weight) lb over 8 weeks",
+                bundle: .module,
+                locale: locale,
+                comment: "VoiceOver's reading of the chart's gain in pounds over its 8 weeks"
+            )
+        case (.lb, -1):
+            String(
+                localized: "Down \(weight) lb over 8 weeks",
+                bundle: .module,
+                locale: locale,
+                comment: "VoiceOver's reading of the chart's loss in pounds over its 8 weeks"
+            )
+        case (.kg, 1):
+            String(
+                localized: "Up \(weight) kg over 8 weeks",
+                bundle: .module,
+                locale: locale,
+                comment: "VoiceOver's reading of the chart's gain in kilos over its 8 weeks"
+            )
+        case (.kg, -1):
+            String(
+                localized: "Down \(weight) kg over 8 weeks",
+                bundle: .module,
+                locale: locale,
+                comment: "VoiceOver's reading of the chart's loss in kilos over its 8 weeks"
+            )
+        case (_, _):
+            String(
+                localized: "No change over 8 weeks",
+                bundle: .module,
+                comment: "VoiceOver's reading of the chart when its first and last weeks are equal"
+            )
         }
     }
 

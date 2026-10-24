@@ -42,6 +42,7 @@ struct ExerciseHistoryPage: View {
                             value: stat.value,
                             unit: stat.unit,
                             caption: stat.caption,
+                            accessibilitySummary: stat.spoken,
                             isValueAccented: stat.isAccented
                         )
                     }

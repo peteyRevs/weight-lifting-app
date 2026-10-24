@@ -20,7 +20,7 @@ struct E1RMChartDescriptor: AXChartDescriptorRepresentable {
         ) { String(Int($0)) }
         return AXChartDescriptor(
             title: chart.spokenTitle,
-            summary: nil,
+            summary: chart.spokenSummary,
             xAxis: weeks,
             yAxis: estimates,
             additionalAxes: [],

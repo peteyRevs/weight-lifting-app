@@ -277,6 +277,28 @@
         }
       }
     },
+    "Down %@ kg over 8 weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in kilos over its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Down %@ kg over 8 weeks"
+          }
+        }
+      }
+    },
+    "Down %@ lb over 8 weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in pounds over its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Down %@ lb over 8 weeks"
+          }
+        }
+      }
+    },
     "Dumbbell" : {
       "comment" : "Equipment: dumbbells",
       "localizations" : {
@@ -438,6 +460,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New exercise"
+          }
+        }
+      }
+    },
+    "No change over 8 weeks" : {
+      "comment" : "VoiceOver's reading of the chart when its first and last weeks are equal",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No change over 8 weeks"
           }
         }
       }
@@ -608,6 +641,28 @@
         }
       }
     },
+    "Up %@ kg over 8 weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in kilos over its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up %@ kg over 8 weeks"
+          }
+        }
+      }
+    },
+    "Up %@ lb over 8 weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in pounds over its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up %@ lb over 8 weeks"
+          }
+        }
+      }
+    },
     "W%lld" : {
       "comment" : "A week under the chart, W1 oldest",
       "localizations" : {
@@ -648,17 +703,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "best set"
-          }
-        }
-      }
-    },
-    "sessions" : {
-      "comment" : "Under how many workouts an exercise was done in",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "sessions"
           }
         }
       }

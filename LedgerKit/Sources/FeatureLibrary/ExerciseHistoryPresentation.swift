@@ -45,6 +45,7 @@ nonisolated enum ExerciseHistoryPresentation {
                 value: history.e1RM.map { String($0.wholeValue(in: input.units)) } ?? LibraryCopy.noRecord,
                 unit: nil,
                 caption: LibraryCopy.estimateCaption,
+                spoken: nil,
                 isAccented: history.e1RM != nil
             ),
             ExerciseHistoryModel.Stat(
@@ -52,13 +53,15 @@ nonisolated enum ExerciseHistoryPresentation {
                 value: best?.weight.formatted(in: input.units) ?? LibraryCopy.noRecord,
                 unit: best.map { LibraryCopy.reps($0.reps.value, locale: input.locale) },
                 caption: LibraryCopy.bestSetCaption,
+                spoken: nil,
                 isAccented: false
             ),
             ExerciseHistoryModel.Stat(
                 id: 2,
                 value: String(history.sessions),
                 unit: nil,
-                caption: LibraryCopy.sessionsCaption,
+                caption: LibraryCopy.sessionsCaption(history.sessions, locale: input.locale),
+                spoken: LibraryCopy.sessions(history.sessions, locale: input.locale),
                 isAccented: false
             )
         ]
@@ -86,14 +89,18 @@ nonisolated enum ExerciseHistoryPresentation {
             )
         }
         let change = shown.count < 2 ? nil : (shown.last ?? 0) - (shown.first ?? 0)
+        let empty = shown.isEmpty ? LibraryCopy.noChart : nil
         return ExerciseHistoryModel.Chart(
             title: LibraryCopy.chartTitle,
             delta: change.map {
                 LibraryCopy.change(String(abs($0)), sign: $0, units: input.units, locale: input.locale)
             },
             bars: bars,
-            empty: shown.isEmpty ? LibraryCopy.noChart : nil,
+            empty: empty,
             spokenTitle: LibraryCopy.spokenChartTitle,
+            spokenSummary: change.map {
+                LibraryCopy.spokenChange(String(abs($0)), sign: $0, units: input.units, locale: input.locale)
+            } ?? empty,
             weekAxis: LibraryCopy.weekAxis,
             valueAxis: LibraryCopy.unitAxis(input.units)
         )
@@ -105,8 +112,7 @@ nonisolated enum ExerciseHistoryPresentation {
     ) -> ExerciseHistoryModel.Entry {
         let tag = switch entry.tag {
         case .record: LibraryCopy.record
-        case let .heavier(step):
-            LibraryCopy.change(step.formatted(in: input.units), sign: 1, units: input.units, locale: input.locale)
+        case let .heavier(step): heavier(step, input)
         case .same: LibraryCopy.noRecord
         }
         let sets = entry.sets.map {
@@ -121,6 +127,16 @@ nonisolated enum ExerciseHistoryPresentation {
             spokenValue: ([tag] + sets).joined(separator: LibraryPresentation.spokenSeparator),
             route: .openWorkout(entry.workoutID)
         )
+    }
+
+    /// "+5 lb", or "—" for a step that is no step as shown: one that rounds to zero in the lifter's units, as a
+    /// change of units makes (100 kg, then 220.5 lb, is 0.04 lb up), reads as the two sets do (F12-S2-1).
+    private static func heavier(_ step: Weight, _ input: ExerciseHistoryInput) -> String {
+        let shown = step.formatted(in: input.units)
+        guard shown != Weight.zero.formatted(in: input.units) else {
+            return LibraryCopy.noRecord
+        }
+        return LibraryCopy.change(shown, sign: 1, units: input.units, locale: input.locale)
     }
 
     /// "Aug 12" in the current year, "Aug 12, 2025" in another (N14), in the injected calendar's time zone.

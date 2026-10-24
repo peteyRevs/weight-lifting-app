@@ -136,4 +136,8 @@ nonisolated struct UnreadableSessions: StatsQueries {
     func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
         try await base.recentlyLogged(limit: limit)
     }
+
+    func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        base.observeExerciseSessions(exerciseID: exerciseID)
+    }
 }

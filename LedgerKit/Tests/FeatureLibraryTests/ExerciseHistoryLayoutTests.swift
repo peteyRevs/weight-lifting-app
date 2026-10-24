@@ -25,9 +25,9 @@
         @Test("N12. The stats stand side by side, and stack at accessibility sizes", arguments: Setting.all)
         func stats_stackAtAccessibilitySizes(_ setting: Setting) throws {
             let model = try HistoryPreview.logged.model()
-            let captions = model.stats.map(\.caption)
+            let labels = model.stats.map { $0.spoken ?? "\($0.value)\($0.unit ?? ""), \($0.caption)" }
             let frames = LibraryLayoutTests.placed(HistoryParts(preview: .logged), setting)
-                .filter { stop in captions.contains { stop.stop.label.hasSuffix(", \($0)") } }.map(\.frame)
+                .filter { labels.contains($0.stop.label) }.map(\.frame)
             try #require(frames.count == 3)
             let stacked = frames[1].minY >= frames[0].maxY - 0.5 && frames[2].minY >= frames[1].maxY - 0.5
             #expect(stacked == setting.size.isAccessibilitySize, "\(frames)")

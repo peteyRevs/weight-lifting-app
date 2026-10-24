@@ -193,6 +193,15 @@
         /// The live workouts with a done set of the exercise, newest first, with their done sets in row order
         /// (F12 S2).
         func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+            Self.sessions(of: exerciseID, in: live)
+        }
+
+        /// `exerciseSessions(exerciseID:)` now, then after every write that changes it.
+        func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+            workouts.history.observe { Self.sessions(of: exerciseID, in: $0.live) }
+        }
+
+        private static func sessions(of exerciseID: ExerciseID, in live: [WorkoutState]) -> [ExerciseSession] {
             live.compactMap { workout in
                 let done = workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets).filter(\.isDone)
                 return done.isEmpty

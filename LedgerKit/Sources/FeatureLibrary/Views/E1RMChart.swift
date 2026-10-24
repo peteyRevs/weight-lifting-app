@@ -62,6 +62,7 @@ struct E1RMChart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(chart.spokenTitle)
+        .accessibilityValue(chart.spokenSummary ?? "")
         .accessibilityChartDescriptor(E1RMChartDescriptor(chart: chart))
     }
 

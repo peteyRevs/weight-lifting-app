@@ -36,13 +36,13 @@
             let chart = try Self.orangePixels(in: E1RMChart(chart: model.chart), theme)
             let unaccented = ExerciseHistoryModel.Chart(
                 title: model.chart.title, delta: nil, bars: Array(model.chart.bars.dropLast()), empty: nil,
-                spokenTitle: "", weekAxis: "", valueAxis: ""
+                spokenTitle: "", spokenSummary: nil, weekAxis: "", valueAxis: ""
             )
             #expect(chart > 0)
             #expect(try Self.orangePixels(in: E1RMChart(chart: unaccented), theme) == 0, "the other bars and the title")
             let noDelta = ExerciseHistoryModel.Chart(
                 title: model.chart.title, delta: nil, bars: model.chart.bars, empty: nil,
-                spokenTitle: "", weekAxis: "", valueAxis: ""
+                spokenTitle: "", spokenSummary: nil, weekAxis: "", valueAxis: ""
             )
             let bar = try Self.orangePixels(in: E1RMChart(chart: noDelta), theme)
             #expect(bar > 0 && bar < chart, "the last bar, and the change beside the title")

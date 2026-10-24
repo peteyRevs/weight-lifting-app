@@ -32,6 +32,10 @@ public enum StatsQueriesContract {
             "exerciseSessions lists each workout's done sets, newest first; its fold is the bests, weeks and count",
             exerciseSessions
         ),
+        Clause(
+            "observeExerciseSessions follows any workout of the exercise, an older one too, and no other exercise's",
+            observeExerciseSessions
+        ),
         Clause("every query follows updateSets and delete", followsEdits)
     ]
 

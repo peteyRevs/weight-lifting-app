@@ -683,3 +683,57 @@ SearchField fit +0.15 s for the three widths. **Added ≈ 4.0 s.**
 `scripts/check.sh` through the lock on `057391d`: **exit 0, "check.sh OK", 1,894 s** (lint 78 s, iOS build 21 s,
 iOS tests 1,507 s, watchOS build 46 s, watchOS tests 237 s, coverage 2 s; overall 98.69 %). The only commit after
 `057391d` is this paragraph.
+
+### Fix round 1 (G1, 2026-10-24): G2's F12-S2-1 to -4, as the orchestrator ruled
+
+The ruling is in `test-findings.md`, "Orchestrator's ruling (S2 round 1)". F12-S2-5 is kept as built (a candidate
+for Pete); F12-S2-6 (the Library store's same miss) is a follow-up for S3 or F13, and `LibraryStore` is unchanged.
+
+- **F12-S2-1 ("+0 lb").** `ExerciseHistoryPresentation.heavier`: the step is written with `formatted(in:)`, and a
+  step that writes as zero does (`Weight.zero.formatted(in:)`) reads "—", as the two sets read the same. The PR tag
+  is untouched. G2's `tag_tinyStepAcrossUnits_neverReadsPlusZero` passes as written.
+- **F12-S2-2 ("1 sessions").** `LibraryCopy.sessionsCaption(_:locale:)` is the Library row's counted "%lld
+  sessions" (looked up with `locale.forCountedText`), without its number. **Why not a plural key of the bare
+  word:** standards §7 and the catalog audit (`StringCatalog.pluralProblems`) require a counted key to hold its
+  `%lld` in every form, so a form "session" with no number fails the gate. The caption is therefore the counted
+  text with the number removed, written as the lookup writes it (`count.formatted(.number.locale(…))`): the
+  catalog picks the form, and the number is the tile's value. Tested at 0, 1, 2, 1,234 and 1,000,000 in en_US,
+  de_DE, fr_FR, hi_IN and ar_EG. The old "sessions" key is gone. **VoiceOver:** `Stat.spoken` is the whole counted
+  text, handed to `StatTile(accessibilitySummary:)`, so the tile reads "1 session" (it read "1, sessions").
+- **F12-S2-3 (older workout changes missed).** `StatsQueries.observeExerciseSessions(exerciseID:)`: GRDB
+  `ValueObservation` of the same fetch with `removeDuplicates()` (`sessionsObservation`, beside
+  `recentObservation`; `exerciseSessions` reads through the same `fetchSessions`), in memory over the history's
+  `ObservedState`, and the Unimplemented stub's empty stream. `ObservedState` now takes the value type per
+  `observe` call (its observers are closures), so one state can be observed as two types; its four users lose
+  the second generic argument. Contract clause 26: the observation emits after the newest workout, after an
+  older one, after `updateSets` and `delete` of the older one, and nothing for writes of another exercise alone.
+  The store follows it instead of `observeRecent(limit: 1)`; on each emission it reads the sessions and records
+  together, as before, so the failed-read and overtaken-read paths are unchanged. `workoutRepository` is no longer
+  a dependency of the history's store. Both G2 store tests pass.
+- **F12-S2-4 (the chart speaks only its name).** `Chart.spokenSummary`: "Up 28 lb over 8 weeks" / "Down …" / "No
+  change over 8 weeks", or the no-data message; nil when one week alone has a value (no change to read). It is the
+  descriptor's `summary` and the bars element's `accessibilityValue`.
+
+**New wording for Pete:** "Up %@ lb over 8 weeks", "Down %@ lb over 8 weeks", the two kg forms and "No change over
+8 weeks" (VoiceOver only). The visible caption is unchanged but for "session" under 1.
+
+**Sanctioned edits of others' tests:** `HistoryContractAdversarialTests` 25 → 26 clauses; `HistoryModel` (+Stats)
+observes sessions (its own observer list, `emitsEveryWrite` honoured); the forwarding doubles (`ReceiptSupport`,
+`FailingBests`, `UnreadableBests`, `UnreadableSessions`, G2's `GatedSessions`) forward
+`observeExerciseSessions`; `BriefStatsQueries` returns a finished stream; `UnimplementedStubTests` checks the new
+stream ends. My own: `ExerciseHistoryAccessibilityTests` (the stats read `spoken` when there is one; the chart
+element has the summary as its value), `ExerciseHistoryLayoutTests` (finds the tiles by the same labels),
+`ExerciseHistoryOrangeAuditTests` (the new field), `ExerciseHistoryPresentationTests` (+1 test over 5 locales;
+summary and spoken expectations). No snapshot reference changed (nothing drawn changed at the fixtures' counts).
+
+**Product lines** (same rules): against `d92cc15`, **939 added, 40 removed (net 899)**; this round +73 net. Under
+the 950 stop line.
+
+**Runs.**
+- Host `swift test` over the whole package: exit 0, no ✘ lines (the known issues already there).
+- `scripts/check.sh --lint-only`: exit 0.
+- Simulator, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`: `FeatureLibraryTests`, `LedgerDesignTests`, `LedgerAppKitTests`,
+  G2's three adversarial suites, `StatsQueriesTests`, `InMemoryContractTests`, `HistoryContractAdversarialTests`,
+  `UnimplementedStubTests`. First run exit 65: the accessibility tree and layout tests still expected "6, sessions"
+  and no chart value (updated above). Second run: exit 0, 916 passed, 0 failed, 3 skipped.
+- Simulator, Nightly: `LedgerUITests/HistoryVoiceOverAdversarial` and `LedgerUITests/Library`: exit 0, 4 passed.

@@ -41,25 +41,41 @@ public extension GRDBStatsQueries {
     /// started together, the smaller id first), with its done sets of every kind in row and set order (F12 S2,
     /// N9). One read through `idx_wex_exercise_workout`. A set that cannot be read throws, as `bestSet` does.
     func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        try await queue.read { database in try Self.fetchSessions(exerciseID, in: database) }
+    }
+
+    /// `exerciseSessions(exerciseID:)` now, then after every change that alters it. A set that cannot be read
+    /// ends the stream, as every observation's failure does.
+    func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        Self.sessionsObservation(exerciseID).stream(in: queue)
+    }
+}
+
+extension GRDBStatsQueries {
+    /// `observeExerciseSessions(exerciseID:)`'s observation: `exerciseSessions(exerciseID:)`, emitted only when it
+    /// differs from the last value.
+    static func sessionsObservation(_ exerciseID: ExerciseID) -> DistinctObservation<[ExerciseSession]> {
+        ValueObservation.tracking { database in try fetchSessions(exerciseID, in: database) }.removeDuplicates()
+    }
+
+    private static func fetchSessions(_ exerciseID: ExerciseID, in database: Database) throws -> [ExerciseSession] {
         let sql = """
         SELECT logged_set.*, workout.id AS session_id, workout.started_at AS started_at
-        \(Self.doneSets) AND workout_exercise.exercise_id = ?
+        \(doneSets) AND workout_exercise.exercise_id = ?
         ORDER BY workout.started_at DESC, workout.id, workout_exercise.position, logged_set.position
         """
-        return try await queue.read { database in
-            var sessions: [ExerciseSession] = []
-            for row in try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]) {
-                let workout = ColumnReader(row: row, table: WorkoutRecord.databaseTableName)
-                let id: WorkoutID = try workout.identifier("session_id")
-                let set = try LoggedSetRecord(row: row).set
-                if sessions.last?.workoutID == id {
-                    sessions[sessions.count - 1].sets.append(set)
-                } else {
-                    let startedAt = try workout.date("started_at")
-                    sessions.append(ExerciseSession(workoutID: id, startedAt: startedAt, sets: [set]))
-                }
+        var sessions: [ExerciseSession] = []
+        for row in try Row.fetchAll(database, sql: sql, arguments: [ColumnCodec.text(exerciseID)]) {
+            let workout = ColumnReader(row: row, table: WorkoutRecord.databaseTableName)
+            let id: WorkoutID = try workout.identifier("session_id")
+            let set = try LoggedSetRecord(row: row).set
+            if sessions.last?.workoutID == id {
+                sessions[sessions.count - 1].sets.append(set)
+            } else {
+                let startedAt = try workout.date("started_at")
+                sessions.append(ExerciseSession(workoutID: id, startedAt: startedAt, sets: [set]))
             }
-            return sessions
         }
+        return sessions
     }
 }
