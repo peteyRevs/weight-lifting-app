@@ -818,3 +818,7 @@ sets took 4.1 ms); model over 2,000 sets **9.17 ms median** (budget 16); `exerci
   `UnimplementedStubTests`: exit 0, 947 tests, 936 passed, 0 failed, 4 skipped, 7 expected failures.
 - Simulator, Nightly: `StatsQueriesPerformanceTests`, `LibraryPerformanceTests`, UI `HistoryVoiceOverAdversarial`
   and `Library`: exit 0, 8 passed.
+
+**The gate (review round 1).** `scripts/check.sh` through the lock on `d8b909c`: **exit 0, "check.sh OK", 1,885 s**
+(lint 77 s, iOS build 17 s, string catalogs 1 s, iOS tests 1,501 s, watchOS build 32 s, watchOS tests 256 s,
+coverage 1 s; overall 98.68 %). The only commit after `d8b909c` is this paragraph.
