@@ -65,6 +65,25 @@ jobs:
         with:
           fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      - name: TEMP swiftformat segfault probe
+        env:
+          LINUX_SOURCEKIT_LIB_PATH: /usr/share/swift/usr/lib
+        run: |
+          set -x
+          sf=$(mise which swiftformat)
+          file "$sf" || true
+          ldd "$sf" || true
+          swift --version || true
+          cat /etc/os-release | head -3
+          "$sf" --version || echo "exit $?"
+          printf 'let a = 1\n' > /tmp/probe.swift
+          "$sf" --lint /tmp/probe.swift || echo "exit $?"
+          "$sf" --lint --swift-version 6.4 LedgerKit/Package.swift || echo "exit $?"
+          "$sf" --lint --swift-version 6.4 Apps || echo "exit $?"
+          "$sf" --lint --swift-version 6.4 LedgerKit || echo "exit $?"
+          env -u LINUX_SOURCEKIT_LIB_PATH "$sf" --lint --swift-version 6.4 LedgerKit Apps || echo "exit $?"
+          mise exec swiftformat@0.64.1 -- swiftformat --lint --swift-version 6.4 LedgerKit Apps || echo "exit $?"
+          gdb -batch -ex run -ex bt --args "$sf" --lint --swift-version 6.4 LedgerKit 2>&1 | tail -40 || true
       - name: Format, lint, package graph and pins, script tests (check.sh --static-only)
         env:
           # SwiftLint's Linux build loads SourceKit (libsourcekitdInProc.so) from here, the image's Swift
