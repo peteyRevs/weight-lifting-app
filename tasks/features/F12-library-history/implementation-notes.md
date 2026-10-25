@@ -737,3 +737,7 @@ the 950 stop line.
   `UnimplementedStubTests`. First run exit 65: the accessibility tree and layout tests still expected "6, sessions"
   and no chart value (updated above). Second run: exit 0, 916 passed, 0 failed, 3 skipped.
 - Simulator, Nightly: `LedgerUITests/HistoryVoiceOverAdversarial` and `LedgerUITests/Library`: exit 0, 4 passed.
+
+**The gate (fix round 1).** `scripts/check.sh` through the lock on `a8a041a`: **exit 0, "check.sh OK", 1,858 s**
+(lint 79 s, iOS build 15 s, string catalogs 1 s, iOS tests 1,480 s, watchOS build 51 s, watchOS tests 231 s,
+coverage 1 s; overall 98.70 %). The only commit after `a8a041a` is this paragraph.
