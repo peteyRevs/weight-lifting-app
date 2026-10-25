@@ -20,7 +20,8 @@
         static func tree(_ preview: HistoryPreview, _ size: DynamicTypeSize) throws -> [ViewStop] {
             let model = try preview.model()
             let stats = model.stats.map { ViewStop.text($0.spoken ?? "\($0.value)\($0.unit ?? ""), \($0.caption)") }
-            let delta = model.chart.delta.map { [ViewStop.text($0)] } ?? []
+            // F12-S2-R1-7: where the bars are drawn, their value speaks the change, and the delta is hidden.
+            let delta = size.isAccessibilitySize ? model.chart.delta.map { [ViewStop.text($0)] } ?? [] : []
             let chart: [ViewStop] = if let empty = model.chart.empty {
                 [.text(empty)]
             } else if size.isAccessibilitySize {

@@ -58,7 +58,7 @@ struct ExerciseHistoryStoreTests {
         endedRun.cancel()
         #expect(ended.store.state == .failed)
 
-        let unreadable = try HistoryScene { $0.statsQueries = UnreadableSessions(base: $0.statsQueries) }
+        let unreadable = try HistoryScene { $0.statsQueries = UnreadableRecords(base: $0.statsQueries) }
         let unreadableRun = await unreadable.running()
         unreadableRun.cancel()
         #expect(unreadable.store.state == .failed)
@@ -83,14 +83,14 @@ struct ExerciseHistoryStoreTests {
     }
 }
 
-/// The stats of `base`, but the sessions cannot be read.
-nonisolated struct UnreadableSessions: StatsQueries {
+/// The stats of `base`, but the records cannot be read (the store reads only them, F12-S2-R1-3).
+nonisolated struct UnreadableRecords: StatsQueries {
     struct Unreadable: Error {}
 
     let base: any StatsQueries
 
-    func exerciseSessions(exerciseID _: ExerciseID) async throws -> [ExerciseSession] {
-        throw Unreadable()
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        try await base.exerciseSessions(exerciseID: exerciseID)
     }
 
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {
@@ -125,8 +125,8 @@ nonisolated struct UnreadableSessions: StatsQueries {
         try await base.sessionCount(exerciseID: exerciseID)
     }
 
-    func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord] {
-        try await base.personalRecords(exerciseID: exerciseID)
+    func personalRecords(exerciseID _: ExerciseID) async throws -> [PersonalRecord] {
+        throw Unreadable()
     }
 
     func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests {

@@ -208,3 +208,32 @@ silent failure modes into a CI failure. Record **4** as the follow-up for when t
 commissioned. That is the point where 5's guard would fire, and where the audit exception earns its cost. If the
 orchestrator prefers no string surgery at all in S2, 4 is the clean option. It is the only alternative I found
 that is both robust and catalog-native, at about 25 lines and one standards ruling.
+
+### Orchestrator's ruling (S2 review round 1)
+
+Recorded by G1 as handed down, 2026-10-24.
+
+1. **R1-1 (Major):** as G3 proposes: one pass keeping the heaviest weight per rep count (reuse/mirror
+   `PersonalRecords.Tally.atReps`), Brzycki only on those candidates, best set from the same tally. Results must
+   stay identical (the property/differential tests are the proof). The performance test folds 2,000 sets, budget
+   unchanged at 5 ms.
+2. **R1-2:** add the model build at 2,000 sets to the Nightly performance suite with a 16 ms budget. If it fails,
+   build the model off the main actor (its input is Sendable, the builder nonisolated), keeping the generation
+   guard. Report the measured number either way.
+3. **R1-3:** use the sessions the observation emits; read only `personalRecords` per change, same generation guard.
+4. **R1-4 (caption):** G3's option 5: keep the stripping for now, but move it out of the copy file (copy files hold
+   lookups only, standards §7) into the presentation, have the tile number and the stripped caption use one
+   formatter, and add a catalog test: every plural form of "%lld sessions" in every localization is exactly
+   `%lld`, one space, then words with no digit. A comment points to the follow-up (option 4, a numberless caption
+   key with an audit exception), which is Pete's call.
+5. **R1-5:** when sessions exist but no week has an estimate, the chart says "No set of 12 reps or fewer in the
+   last 8 weeks." (new key; wording goes to Pete). The no-session message stays.
+6. **R1-6:** make "another exercise's write emits nothing" able to fail: race `next()` against a bounded deadline
+   (~200 ms) and expect the deadline; prove it by temporarily removing `removeDuplicates()` (the test must fail),
+   then restore and say so.
+7. **R1-7:** hide the delta's own VoiceOver stop when the bars are drawn (the chart's value says it); the spoken
+   summary names the actual span ("over 4 weeks" when the first point is W5; 8 when W1); speak units the way S1's
+   Library rows speak them. Stat tiles unchanged.
+8. **R1-8:** the sessions tile number uses the locale's number format (the same formatter as item 4).
+
+Budget: S2 at 899 net product lines; up to about 1,000 allowed, stop and report beyond.

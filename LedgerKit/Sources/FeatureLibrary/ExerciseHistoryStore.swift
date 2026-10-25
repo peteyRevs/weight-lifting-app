@@ -6,11 +6,11 @@ import Observation
 
 /// The store of one exercise's history (F12 S2; the M1 store convention, as `LibraryStore`).
 ///
-/// **It follows three sources and reads two queries.** `run()` follows the exercises (a rename, N13), the settings
-/// (units and the first day of the week) and the exercise's own sessions, for as long as the root's task runs; on
-/// every change of the sessions (a workout of the exercise finished, edited or deleted, the newest or an older one,
-/// F12-S2-3) it reads the sessions and records again, together. Every change marks one channel that keeps only the
-/// newest mark, and one loop rebuilds the model.
+/// **It follows three sources and reads one query.** `run()` follows the exercises (a rename, N13), the settings
+/// (units and the first day of the week) and the exercise's own sessions, for as long as the root's task runs; the
+/// sessions it keeps as they are observed, and on every change of them (a workout of the exercise finished, edited
+/// or deleted, the newest or an older one, F12-S2-3) it reads the records again (F12-S2-R1-3). Every change marks
+/// one channel that keeps only the newest mark, and one loop rebuilds the model, off the main actor.
 ///
 /// **A failure is shown**: a source that ends, a read that fails, or an exercise that is not stored. It is
 /// logged, and the next change or the next run reads again. A route waits until the app has taken it, so a double
@@ -51,8 +51,10 @@ final class ExerciseHistoryStore {
     private struct Sources {
         var exercise: Exercise??
         var settings: Settings?
-        /// The sessions and the record workouts, as last read; nil when the sessions have changed since.
-        var read: (sessions: [ExerciseSession], records: Set<WorkoutID>)?
+        /// The exercise's sessions, as last observed.
+        var sessions: [ExerciseSession]?
+        /// The record workouts, as last read; nil when the sessions have changed since.
+        var records: Set<WorkoutID>?
         /// Counts the changes of the sessions, so that a read one of them overtook is shown and not kept.
         var generation = 0
         var hasEnded = false
@@ -92,8 +94,9 @@ final class ExerciseHistoryStore {
             }
             group.addTask { await self.follow(self.settings.observe(), mark) { $0.settings = $1 } }
             group.addTask {
-                await self.follow(self.stats.observeExerciseSessions(exerciseID: id), mark) { kept, _ in
-                    kept.read = nil
+                await self.follow(self.stats.observeExerciseSessions(exerciseID: id), mark) { kept, sessions in
+                    kept.sessions = sessions
+                    kept.records = nil
                     kept.generation += 1
                 }
             }
@@ -129,7 +132,7 @@ final class ExerciseHistoryStore {
             state = .failed
             return
         }
-        guard let found = sources.exercise, let current = sources.settings else {
+        guard let found = sources.exercise, let current = sources.settings, let sessions = sources.sessions else {
             return
         }
         guard let exercise = found else {
@@ -137,43 +140,51 @@ final class ExerciseHistoryStore {
             state = .failed
             return
         }
-        guard let read = await readHistory() else {
+        guard let records = await readRecords() else {
             return
         }
-        let model = ExerciseHistoryPresentation.make(ExerciseHistoryInput(
+        let model = await Self.model(ExerciseHistoryInput(
             exercise: exercise,
-            sessions: read.sessions,
-            records: read.records,
+            sessions: sessions,
+            records: records,
             units: current.units,
             weekStart: current.weekStart,
             now: date.now,
             calendar: calendar,
             locale: locale
         ))
+        guard !Task.isCancelled else {
+            return
+        }
         if state != .loaded(model) {
             state = .loaded(model)
         }
     }
 
-    /// The sessions and records as last read, or read now. Nil when the read failed, which is logged and shown,
-    /// or the run was cancelled meanwhile. A read that a change of the sessions overtook is shown and not kept:
-    /// the change has marked the channel, so the next turn reads again.
-    private func readHistory() async -> (sessions: [ExerciseSession], records: Set<WorkoutID>)? {
-        if let kept = sources.read {
+    /// The model, built off the main actor: 2,000 sets of as many weights take more than a frame (F12-S2-R1-2). A
+    /// model that a change overtook while it was built is shown, and the change's turn builds the next.
+    @concurrent
+    private nonisolated static func model(_ input: ExerciseHistoryInput) async -> ExerciseHistoryModel {
+        ExerciseHistoryPresentation.make(input)
+    }
+
+    /// The record workouts as last read, or read now. Nil when the read failed, which is logged and shown, or the
+    /// run was cancelled meanwhile. A read that a change of the sessions overtook is shown and not kept: the change
+    /// has marked the channel, so the next turn reads again.
+    private func readRecords() async -> Set<WorkoutID>? {
+        if let kept = sources.records {
             return kept
         }
         let generation = sources.generation
         do {
-            let sessions = try await stats.exerciseSessions(exerciseID: exerciseID)
-            let records = try await stats.personalRecords(exerciseID: exerciseID)
+            let records = try await Set(stats.personalRecords(exerciseID: exerciseID).map(\.workoutID))
             guard !Task.isCancelled else {
                 return nil
             }
-            let read = (sessions: sessions, records: Set(records.map(\.workoutID)))
             if sources.generation == generation {
-                sources.read = read
+                sources.records = records
             }
-            return read
+            return records
         } catch {
             guard !Task.isCancelled else {
                 return nil

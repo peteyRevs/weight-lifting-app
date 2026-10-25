@@ -741,3 +741,80 @@ the 950 stop line.
 **The gate (fix round 1).** `scripts/check.sh` through the lock on `a8a041a`: **exit 0, "check.sh OK", 1,858 s**
 (lint 79 s, iOS build 15 s, string catalogs 1 s, iOS tests 1,480 s, watchOS build 51 s, watchOS tests 231 s,
 coverage 1 s; overall 98.70 %). The only commit after `a8a041a` is this paragraph.
+
+### Review round 1 (G1, 2026-10-24): G3's F12-S2-R1-1 to -8, as the orchestrator ruled
+
+The ruling is in `review.md`, "Orchestrator's ruling (S2 review round 1)".
+
+- **R1-1 (the fold at 2,000 sets).** `ExerciseHistory.make` walks the counted sets once into
+  `PersonalRecords.Tally<Weight>.atReps` (the heaviest weight at each rep count) and takes Brzycki of those
+  candidates only; the best set is the heaviest of the same tally (as `Bests.bestSet(of:)`), and each week does
+  the same over its sessions. Brzycki, rounded to the gram, rises with the weight at fixed reps, so the results
+  are the same; the domain, property and differential tests pass unchanged. The Nightly fold now times 2,000 sets
+  in 400 sessions from `Seeders.exerciseSessions(of:sessions:setsPerSession:rng:)` (new, LedgerTestSupport: one
+  lift's `Seeders.history`, every row done), budget still 5 ms; `PerformanceBudget.historyFold`'s comment says so.
+- **R1-2 (the model at 2,000 sets).** `LibraryPerformanceTests.historyModel_underAFrame`: the model over the same
+  2,000 sets, median of five, budget 16 ms. **First measured 24.1 ms on the host (Debug): it failed.** Most of it
+  was 2,000 `LibraryCopy.set` lookups (13 ms). Two changes, as ruled and to make the budget hold:
+  - `ExerciseHistoryPresentation.SetTexts` writes each weight × reps once per model (a lifter repeats a few):
+    **9.2 ms on the simulator, 8.8 ms on the host**;
+  - the store builds the model off the main actor (`@concurrent nonisolated static func model(_:)`; input and model
+    are `Sendable`), because 2,000 sets of 2,000 different weights still take 24 ms (measured by hand on the host,
+    not committed). The generation guard on the records read is unchanged; a model a change overtook while it was
+    built is shown, and the change's turn builds the next, as with an overtaken read.
+- **R1-3.** The store keeps the sessions the observation emits (`Sources.sessions`), and reads only
+  `personalRecords` per change (`readRecords()`), with the same generation guard. The failed and overtaken-read
+  doubles now act on the records read: G2's `SessionsGate`/`GatedSessions` are `RecordsGate`/`GatedRecords`, my
+  `UnreadableSessions` is `UnreadableRecords`; both G2 tests pass as written otherwise.
+- **R1-4.** The caption's derivation left `LibraryCopy` (now lookups only) for
+  `ExerciseHistoryPresentation.sessionsStat(_:locale:)`: one `count.formatted(.number.locale(locale.forCountedText))`
+  is the tile's value and what is removed from "%lld sessions". Its comment names the follow-up (a numberless
+  caption key with an audit exception), Pete's call. `LibraryCopyTests.sessionsForms_areTheNumberThenWords` reads
+  the catalog and holds every form of "%lld sessions" in every localization to `%lld`, one space, then a word
+  with no digit and no `%`.
+- **R1-5.** With sessions but no week with an estimate, the chart (and its spoken summary) reads "No set of 12 reps
+  or fewer in the last 8 weeks." (`LibraryCopy.noEstimate`); "Log a session to start the chart." stays for no
+  session at all.
+- **R1-6.** `StatsQueriesContract.observeExerciseSessions` reads the stream through `StreamArrivals`
+  (LedgerTestSupport, new): one task takes every value as it is sent, so none is replaced unseen in the bridge's
+  buffer of one, and after the row's workout and after the row's edit a read waits `quiet` (200 ms) and must get
+  nothing. **Proved:** with `removeDuplicates()` taken out of `GRDBStatsQueries.sessionsObservation`, the GRDB
+  clause failed ("a value after the row's workout, which is unheard: got Optional(["1"]), expected nil"); restored,
+  it passes (`git diff` of LedgerPersistence empty).
+- **R1-7.** (a) The delta is hidden from VoiceOver where the bars are drawn (their value speaks the change); it
+  stays a stop at accessibility sizes, where the weeks are a list. (b) The spoken change names its span, from the
+  first week with a value to the last, both counted: "Up 11 pounds over 4 weeks" from W5, "over 8 weeks" from W1.
+  The five keys are counted ("%lld weeks", one and other forms). (c) The unit is spoken as S1's rows speak it
+  (`spokenRecord`'s "pounds" / "kilograms"). Stat tiles unchanged.
+- **R1-8.** The sessions tile's value is that same formatter's: "1,234", and Arabic digits in ar_EG.
+
+**New wording for Pete:** "No set of 12 reps or fewer in the last 8 weeks." (visible and spoken); VoiceOver's
+"Up %@ pounds over %lld weeks", "Down %@ pounds over %lld weeks", the two kilograms forms and "No change over %lld
+weeks" (singular "week" forms exist but are unreachable: a change needs two weeks). They replace round 1's "Up %@
+lb over 8 weeks" and its siblings. Like S1's "PR 1 pounds" (n1 follow-up), a change of 1 reads "Up 1 pounds".
+
+**Sanctioned edits of others' tests:** G2's `HistoryAdversarialDoubles` and `ExerciseHistoryAdversarialTests`
+(the gate moves to the records read, R1-3); `StatsQueriesPerformanceTests`, `PerformanceBudget` (R1-1). My own:
+`ExerciseHistoryPresentationTests` (spoken wording, R1-5's message, +1 span test, the sessions stat over 5 locales
+with its value), `ExerciseHistoryAccessibilityTests` (the delta is a stop only at accessibility sizes),
+`ExerciseHistoryStoreTests` (`UnreadableRecords`), `LibraryCopyTests` (+1), `LibraryPerformanceTests` (+1). No
+snapshot reference changed (nothing drawn changed at the fixtures).
+
+**Product lines** (same rules): against `d92cc15`, **984 added, 40 removed (net 944)**; this round +45 net. Under
+the 1,000 line.
+
+**Measured** (Nightly plan, simulator, Debug): fold over 2,000 sets **2.49 ms p95** (budget 5; round 1's 1,703
+sets took 4.1 ms); model over 2,000 sets **9.17 ms median** (budget 16); `exerciseSessions` 13.3 ms p95,
+`personalRecords` 0.28 ms p95. Host, Debug: fold 2.4–2.5 ms, model 8.6–9.1 ms.
+
+**Runs.**
+- Host `swift test` over the whole package: exit 0, no ✘ lines.
+- `scripts/check.sh --lint-only`: exit 0 (after wrapping a line, splitting the presentation's helpers into an
+  extension, and extracting the fold timing into `foldUnderBudget`).
+- Simulator, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`: `FeatureLibraryTests`, `LedgerDesignTests`,
+  `LedgerAppKitTests`, `StatsQueriesTests`, `InMemoryContractTests`, `HistoryContractAdversarialTests`,
+  `HistoryCloseoutAdversarialTests`, `ExerciseSessionsPropertyTests`, `ExerciseHistoryWeeksAdversarialTests`, the
+  domain's `ExerciseHistoryTests`, `ExerciseHistoryAdversarialTests`, `ExerciseHistoryPropertyAdversarialTests`,
+  `UnimplementedStubTests`: exit 0, 947 tests, 936 passed, 0 failed, 4 skipped, 7 expected failures.
+- Simulator, Nightly: `StatsQueriesPerformanceTests`, `LibraryPerformanceTests`, UI `HistoryVoiceOverAdversarial`
+  and `Library`: exit 0, 8 passed.

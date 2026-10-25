@@ -25,7 +25,7 @@ struct ExerciseHistoryPresentationTests {
         #expect(model.chart.bars.map(\.week) == ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"])
         #expect(model.chart.title == "ESTIMATED 1RM · 8 WEEKS")
         #expect(model.chart.delta == "+28 lb")
-        #expect(model.chart.spokenSummary == "Up 28 lb over 8 weeks")
+        #expect(model.chart.spokenSummary == "Up 28 pounds over 8 weeks")
         #expect(model.chart.empty == nil)
     }
 
@@ -57,12 +57,13 @@ struct ExerciseHistoryPresentationTests {
         #expect(model.chart.bars.last?.level == 100)
     }
 
-    @Test("6. A best of 100 × 15: 1RM est is a dash, the best set 100×15, and the chart has nothing to draw")
+    @Test("6, F12-S2-R1-5. A best of 100 × 15: 1RM est is a dash, the best set 100×15, and the chart says why")
     func repsOver12_haveNoEstimate() throws {
         let model = try Self.model(HistoryFixtures.input([HistoryFixtures.session(1, Fixtures.now, sets: 2, 100, 15)]))
         #expect(model.stats.map(\.value) == ["—", "100", "1"])
         #expect(model.stats[1].unit == "×15")
-        #expect(model.chart.empty == "Log a session to start the chart.")
+        #expect(model.chart.empty == "No set of 12 reps or fewer in the last 8 weeks.")
+        #expect(model.chart.spokenSummary == model.chart.empty)
     }
 
     @Test("7. The log reads PR, —, +5 lb, —, — from Aug 12 down, with every set and its date")
@@ -123,9 +124,20 @@ struct ExerciseHistoryPresentationTests {
         let spoken = try [(falling, Units.lb), (falling, .kg), (flat, .lb)].map {
             try Self.model(HistoryFixtures.input($0, units: $1)).chart.spokenSummary
         }
-        #expect(spoken == ["Down 23 lb over 8 weeks", "Down 10 kg over 8 weeks", "No change over 8 weeks"])
+        #expect(spoken == [
+            "Down 23 pounds over 2 weeks", "Down 10 kilograms over 2 weeks", "No change over 2 weeks"
+        ])
         #expect(try Self.model(HistoryFixtures.input(HistoryFixtures.criterion4Sessions, units: .kg)).chart
-            .spokenSummary == "Up 13 kg over 8 weeks")
+            .spokenSummary == "Up 13 kilograms over 8 weeks")
+    }
+
+    @Test("F12-S2-R1-7. The spoken change names its span: from W5 it is 4 weeks")
+    func spokenChange_namesItsSpan() throws {
+        let fromW5 = Array(HistoryFixtures.criterion4Sessions.prefix(3))
+        let model = try Self.model(HistoryFixtures.input(fromW5))
+        #expect(model.numbers == [nil, nil, nil, nil, 208, nil, 214, 219])
+        #expect(model.chart.delta == "+11 lb")
+        #expect(model.chart.spokenSummary == "Up 11 pounds over 4 weeks")
     }
 
     @Test(
@@ -134,8 +146,13 @@ struct ExerciseHistoryPresentationTests {
     )
     func sessionsCaption_isCounted(identifier: String) {
         let locale = Locale(identifier: identifier)
-        let captions = [1, 2, 0, 1234, 1_000_000].map { LibraryCopy.sessionsCaption($0, locale: locale) }
-        #expect(captions == ["session", "sessions", "sessions", "sessions", "sessions"])
+        let counts = [1, 2, 0, 1234, 1_000_000]
+        let stats = counts.map { ExerciseHistoryPresentation.sessionsStat($0, locale: locale) }
+        #expect(stats.map(\.caption) == ["session", "sessions", "sessions", "sessions", "sessions"])
+        // F12-S2-R1-8: the value is the number the spoken text writes, "1,234" and not "1234".
+        #expect(stats.map(\.value) == counts.map { $0.formatted(.number.locale(locale.forCountedText)) })
+        #expect(stats.map(\.spoken) == counts.map { LibraryCopy.sessions($0, locale: locale) })
+        #expect(stats.allSatisfy { $0.spoken?.hasPrefix($0.value) == true })
     }
 
     @Test("12. The chart's spoken names, in pounds and in kilograms")

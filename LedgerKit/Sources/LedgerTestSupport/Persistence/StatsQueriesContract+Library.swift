@@ -90,18 +90,20 @@ extension StatsQueriesContract {
     }
 
     /// F12 S2 (finding F12-S2-3): the sessions observed follow a workout of the exercise finished, edited or deleted
-    /// behind the newest one, and a write of another exercise alone emits nothing, so each value read is the next
-    /// change of bench's sessions.
+    /// behind the newest one, and a write of another exercise alone emits nothing: every value is read as it comes,
+    /// and a read after such a write must wait out `quiet` (finding F12-S2-R1-6).
     static func observeExerciseSessions(_ stores: HistoryStores) async throws -> String? {
         let stats = stores.stats
         let newest = Seeders.workout(number: 1, endedAt: now, [.straight(bench, sets: 1, reps: 5, pounds: 185)])
         let older = Seeders.workout(number: 2, endedAt: day(-10), [.straight(bench, sets: 2, reps: 5, pounds: 175)])
         let rows = Seeders.workout(number: 3, endedAt: day(-5), [.straight(row, sets: 2, reps: 8, pounds: 200)])
-        var values = stats.observeExerciseSessions(exerciseID: bench.id).makeAsyncIterator()
+        let values = StreamArrivals(stats.observeExerciseSessions(exerciseID: bench.id))
+        defer { values.cancel() }
         let initial = await values.next()
         try await stores.materialize(newest)
         let afterNewest = await values.next()
         try await stores.materialize(rows)
+        let afterRows = await values.next(within: quiet)
         try await stores.materialize(older)
         let afterOlder = await values.next()
         var edited = older.exercises[0]
@@ -109,6 +111,7 @@ extension StatsQueriesContract {
         try await stores.workouts.updateSets(workoutExerciseID: edited.id, sets: edited.sets)
         let afterEdit = await values.next()
         try await stores.workouts.updateSets(workoutExerciseID: rows.exercises[0].id, sets: [])
+        let afterRowEdit = await values.next(within: quiet)
         try await stores.workouts.delete(id: older.id)
         let afterDelete = await values.next()
         let drawn = { (sessions: [ExerciseSession]?) in sessions?.map { "\($0.sets.count)" } ?? ["ended"] }
@@ -116,12 +119,17 @@ extension StatsQueriesContract {
         return ContractCheck.first(
             ContractCheck.expect(drawn(initial), [], "the first value"),
             ContractCheck.expect(afterNewest?.map(\.workoutID), [newest.id], "the value after the newest workout"),
-            ContractCheck.expect(drawn(afterOlder), ["1", "2"], "the value after an older workout, the row's unheard"),
+            ContractCheck.expect(afterRows.map(drawn), nil, "a value after the row's workout, which is unheard"),
+            ContractCheck.expect(drawn(afterOlder), ["1", "2"], "the value after an older workout"),
             ContractCheck.expect(drawn(afterEdit), ["1", "1"], "the value after updateSets of the older workout"),
-            ContractCheck.expect(afterDelete, read, "the value after delete of the older one, the row's edit unheard"),
+            ContractCheck.expect(afterRowEdit.map(drawn), nil, "a value after the row's edit, which is unheard"),
+            ContractCheck.expect(afterDelete, read, "the value after delete of the older one"),
             ContractCheck.expect(read.map(\.workoutID), [newest.id], "the sessions left")
         )
     }
+
+    /// How long a read waits for a value that must not come (finding F12-S2-R1-6).
+    static let quiet: Duration = .milliseconds(200)
 
     /// The workouts of the `exerciseSessions` clause, as its comment lists them, but the deleted one.
     private static var sessionWorkouts: [WorkoutState] {

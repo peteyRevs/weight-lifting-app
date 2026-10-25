@@ -1,11 +1,12 @@
 import Foundation
 import LedgerDomain
 
-// The doubles of `ExerciseHistoryAdversarialTests` (F12 S2, G2): a gate on the sessions read, and an exercise
+// The doubles of `ExerciseHistoryAdversarialTests` (F12 S2, G2): a gate on the records read, and an exercise
 // repository whose live list the test sends.
 
-/// Holds the first sessions read until released, or fails the first `failures` of them.
-final nonisolated class SessionsGate: @unchecked Sendable {
+/// Holds the first records read until released, or fails the first `failures` of them. Since F12-S2-R1-3 the store
+/// reads only the records; the sessions are the observation's.
+final nonisolated class RecordsGate: @unchecked Sendable {
     private let lock = NSLock()
     private var failures: Int
     private var holdsFirst: Bool
@@ -58,18 +59,13 @@ final nonisolated class SessionsGate: @unchecked Sendable {
     }
 }
 
-/// The stats of `base`, with its sessions read through `gate`.
-nonisolated struct GatedSessions: StatsQueries {
+/// The stats of `base`, with its records read through `gate`.
+nonisolated struct GatedRecords: StatsQueries {
     let base: any StatsQueries
-    let gate: SessionsGate
+    let gate: RecordsGate
 
-    /// Read first, then held: a held read returns what was stored before the hold, as a slow database read would.
     func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
-        let sessions = try await base.exerciseSessions(exerciseID: exerciseID)
-        guard await gate.pass() else {
-            throw UnreadableSessions.Unreadable()
-        }
-        return sessions
+        try await base.exerciseSessions(exerciseID: exerciseID)
     }
 
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {
@@ -104,8 +100,13 @@ nonisolated struct GatedSessions: StatsQueries {
         try await base.sessionCount(exerciseID: exerciseID)
     }
 
+    /// Read first, then held: a held read returns what was stored before the hold, as a slow database read would.
     func personalRecords(exerciseID: ExerciseID) async throws -> [PersonalRecord] {
-        try await base.personalRecords(exerciseID: exerciseID)
+        let records = try await base.personalRecords(exerciseID: exerciseID)
+        guard await gate.pass() else {
+            throw UnreadableRecords.Unreadable()
+        }
+        return records
     }
 
     func bests(before workout: WorkoutState, for exerciseIDs: Set<ExerciseID>) async throws -> PersonalRecords.Bests {

@@ -155,6 +155,27 @@ public extension Seeders {
         }
     }
 
+    /// One exercise's sessions as `StatsQueries.exerciseSessions` returns them, newest first: a `history` of
+    /// `sessions` workouts of `setsPerSession` rows of `exercise` alone, every row done. 400 × 5 is F12 S2's N11
+    /// load, 2,000 sets, with `history`'s loads, reps and drop sets.
+    static func exerciseSessions(
+        of exercise: Exercise,
+        sessions: Int,
+        setsPerSession: Int,
+        rng: inout some RandomNumberGenerator
+    ) -> [ExerciseSession] {
+        history(exercises: [exercise], workouts: sessions, setsPerWorkout: setsPerSession, rng: &rng)
+            .reversed()
+            .map { workout in
+                let sets = workout.exercises.flatMap(\.sets).map { set in
+                    var done = set
+                    done.doneAt = set.doneAt ?? workout.startedAt
+                    return done
+                }
+                return ExerciseSession(workoutID: workout.id, startedAt: workout.startedAt, sets: sets)
+            }
+    }
+
     /// RPE 8, every seeded exercise's.
     private static var rpe: RPE {
         guard let eight = RPE(8) else {

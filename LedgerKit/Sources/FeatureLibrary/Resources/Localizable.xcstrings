@@ -277,24 +277,48 @@
         }
       }
     },
-    "Down %@ kg over 8 weeks" : {
-      "comment" : "VoiceOver's reading of the chart's loss in kilos over its 8 weeks",
+    "Down %@ kilograms over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in kilograms over its weeks with a value",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Down %@ kg over 8 weeks"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ kilograms over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ kilograms over %lld weeks"
+                }
+              }
+            }
           }
         }
       }
     },
-    "Down %@ lb over 8 weeks" : {
-      "comment" : "VoiceOver's reading of the chart's loss in pounds over its 8 weeks",
+    "Down %@ pounds over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in pounds over its weeks with a value",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Down %@ lb over 8 weeks"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ pounds over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ pounds over %lld weeks"
+                }
+              }
+            }
           }
         }
       }
@@ -421,7 +445,7 @@
       }
     },
     "Log a session to start the chart." : {
-      "comment" : "In place of an exercise's chart when none of its last 8 weeks has an estimate",
+      "comment" : "In place of an exercise's chart when it has no session yet",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -464,13 +488,25 @@
         }
       }
     },
-    "No change over 8 weeks" : {
-      "comment" : "VoiceOver's reading of the chart when its first and last weeks are equal",
+    "No change over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart when its first and last weeks with a value are equal",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No change over 8 weeks"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No change over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No change over %lld weeks"
+                }
+              }
+            }
           }
         }
       }
@@ -493,6 +529,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No sessions yet."
+          }
+        }
+      }
+    },
+    "No set of 12 reps or fewer in the last 8 weeks." : {
+      "comment" : "In place of an exercise's chart when it has sessions but none of 12 reps or fewer in its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No set of 12 reps or fewer in the last 8 weeks."
           }
         }
       }
@@ -641,24 +688,48 @@
         }
       }
     },
-    "Up %@ kg over 8 weeks" : {
-      "comment" : "VoiceOver's reading of the chart's gain in kilos over its 8 weeks",
+    "Up %@ kilograms over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in kilograms over its weeks with a value",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Up %@ kg over 8 weeks"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ kilograms over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ kilograms over %lld weeks"
+                }
+              }
+            }
           }
         }
       }
     },
-    "Up %@ lb over 8 weeks" : {
-      "comment" : "VoiceOver's reading of the chart's gain in pounds over its 8 weeks",
+    "Up %@ pounds over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in pounds over its weeks with a value",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Up %@ lb over 8 weeks"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ pounds over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ pounds over %lld weeks"
+                }
+              }
+            }
           }
         }
       }

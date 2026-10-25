@@ -56,11 +56,11 @@ public extension ExerciseHistory {
         now: Date,
         calendar: WeekCalendar
     ) -> ExerciseHistory {
-        let counted = sessions.flatMap { $0.sets.filter(PersonalRecords.countsTowardBests) }
-        let best = counted.max { ($0.weight, $0.reps) < ($1.weight, $1.reps) }
+        let heaviest = heaviestAtReps(sessions)
+        let best = heaviest.max { ($0.value, $0.key) < ($1.value, $1.key) }
         return ExerciseHistory(
-            e1RM: estimate(of: counted),
-            bestSet: best.map { BestSet(weight: $0.weight, reps: $0.reps) },
+            e1RM: estimate(of: heaviest),
+            bestSet: best.map { BestSet(weight: $0.value, reps: $0.key) },
             sessions: sessions.count,
             weeks: weeks(of: sessions, now: now, calendar: calendar),
             log: sessions.indices.map { entry(at: $0, of: sessions, records: records) }
@@ -80,8 +80,23 @@ public extension ExerciseHistory {
         return make(sessions: sessions, records: records, now: now, calendar: weeks)
     }
 
-    private static func estimate(of sets: [LoggedSet]) -> Weight? {
-        sets.compactMap { OneRepMax.brzycki(weight: $0.weight, reps: $0.reps) }.max()
+    /// The heaviest weight at each rep count of the sets of `sessions` that count toward bests, in one walk: the
+    /// tally `PersonalRecords` keeps (F12-S2-R1-1). The best set is the heaviest of these, as `Bests.bestSet(of:)`
+    /// takes it.
+    private static func heaviestAtReps(_ sessions: some Sequence<ExerciseSession>) -> [Reps: Weight] {
+        var tally = PersonalRecords.Tally<Weight>()
+        for session in sessions {
+            for set in session.sets where PersonalRecords.countsTowardBests(set) {
+                tally.add(set.weight, reps: set.reps, estimate: nil)
+            }
+        }
+        return tally.atReps
+    }
+
+    /// The best Brzycki estimate of the heaviest weights at each rep count. At fixed reps the estimate, rounded to
+    /// the gram, rises with the weight, so the best of every set is the best of these: at most 12 estimates.
+    private static func estimate(of heaviest: [Reps: Weight]) -> Weight? {
+        heaviest.compactMap { OneRepMax.brzycki(weight: $0.value, reps: $0.key) }.max()
     }
 
     /// The chart's weeks, walked back from the one holding `now` as ranges of instants, so a week across a change
@@ -92,8 +107,8 @@ public extension ExerciseHistory {
             ranges.insert(calendar.previousCompleteWeek(before: first.lowerBound), at: 0)
         }
         return ranges.map { range in
-            let sets = sessions.filter { range.contains($0.startedAt) }.flatMap(\.sets)
-            return Week(start: range.lowerBound, e1RM: estimate(of: sets.filter(PersonalRecords.countsTowardBests)))
+            let heaviest = heaviestAtReps(sessions.lazy.filter { range.contains($0.startedAt) })
+            return Week(start: range.lowerBound, e1RM: estimate(of: heaviest))
         }
     }
 

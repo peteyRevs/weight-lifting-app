@@ -90,9 +90,9 @@ struct ExerciseHistoryAdversarialTests {
 
     @Test("A read that fails once shows the failed state, and the next change brings the history back")
     func readFailsOnce_unitsChange_recovers() async throws {
-        let gate = SessionsGate(failures: 1)
+        let gate = RecordsGate(failures: 1)
         let scene = try HistoryScene(workouts: HistoryScene.benchWorkouts()) {
-            $0.statsQueries = GatedSessions(base: $0.statsQueries, gate: gate)
+            $0.statsQueries = GatedRecords(base: $0.statsQueries, gate: gate)
         }
         let run = await scene.running()
         defer { run.cancel() }
@@ -104,9 +104,9 @@ struct ExerciseHistoryAdversarialTests {
 
     @Test("A read overtaken by a finished workout ends on the history that holds it")
     func readOvertaken_byAFinishedWorkout_showsIt() async throws {
-        let gate = SessionsGate(holdsFirst: true)
+        let gate = RecordsGate(holdsFirst: true)
         let scene = try HistoryScene(workouts: HistoryScene.benchWorkouts()) {
-            $0.statsQueries = GatedSessions(base: $0.statsQueries, gate: gate)
+            $0.statsQueries = GatedRecords(base: $0.statsQueries, gate: gate)
         }
         let run = Task { await scene.store.run() }
         defer { run.cancel() }

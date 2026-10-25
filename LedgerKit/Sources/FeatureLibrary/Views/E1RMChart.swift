@@ -19,9 +19,11 @@ struct E1RMChart: View {
                 Eyebrow(chart.title)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let delta = chart.delta {
+                    // Where the bars are drawn their value speaks the change, with its span (F12-S2-R1-7).
                     Text(delta)
                         .ledgerFont(.caption)
                         .foregroundStyle(LedgerColor.accentText)
+                        .accessibilityHidden(chart.empty == nil && !dynamicTypeSize.isAccessibilitySize)
                 }
             }
             if let empty = chart.empty {
