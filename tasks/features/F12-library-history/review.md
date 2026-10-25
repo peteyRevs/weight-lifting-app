@@ -69,3 +69,142 @@ Reviewed `34783dd..b3343d3` and the merge of #69 at `15925b5`. Host-only; `scrip
 ### Orchestrator's gate
 
 `scripts/check.sh` on `15925b5`, with `main` `2c9b66a` in: exit 0, "check.sh OK", 1,862 s in total (iOS tests 1,494 s, watchOS tests 237 s).
+
+## Slice S2 — review (G3, 2026-10-24)
+
+Reviewed `d92cc15...118c91a` (S1's R2 fixes in `1c1a688` skimmed only). Read-only. I wrote two scratch timing and
+probe tests on the host, ran them, and deleted them; no product file or test was changed.
+
+**Verdict: changes needed.** One Major (N11 is measured under the specified load, and misses it at that load).
+The rest is Minor or Nit. What holds: the fold against the spec; the tags (N10, criterion 7); the GRDB query and
+its order, which matches `recent`; the parity of the in-memory store; the store's overtaken-read and failure paths;
+cancellation, because the stream's `onTermination` cancels GRDB; the dates (N14); the descriptor; the hosted sweeps
+through `TestSweep`; the bounded waits in G2's suite. The S1-convention `eventually` waits are ended by the suite's
+time limit, as in S1.
+
+**F12-S2-R1-1 (Major). N11's fold budget is measured at about 1,700 sets, and at the brief's 2,000 it misses.**
+- `StatsQueriesPerformanceTests.swift:78` times `ExerciseHistory.make` over the main lift's sessions of the
+  20k-set seed (about 1,703 sets; the notes give 4.1 ms p95 against 5 ms). N11 says 2,000 sets.
+- I measured on the host, Debug: 400 sessions × 5 sets took **5.5–5.9 ms**.
+- 3.4 ms of that is `estimate(of:)` (`ExerciseHistory.swift:83`). It runs a `Decimal` Brzycki for every counted
+  set, and then again in each week (`:96`).
+- **Fix:** keep the heaviest weight per rep count in one walk (`PersonalRecords.Tally.atReps` is that tally
+  already), then take Brzycki of at most 12 candidates. Brzycki, and its rounding to the gram, rise with the
+  weight at fixed reps, so the maximum is the same exactly.
+  - The best set is the maximum over the same tally, as `Bests.bestSet(of:)` does.
+  - Measured on the host: 3.4 ms → 0.38 ms. The fold should land near 2.5 ms.
+- Make the performance test fold 2,000 sets: a seed exercise with 2,000 sets, or the brief's figure named
+  honestly in `PerformanceBudget.historyFold`'s comment.
+
+**F12-S2-R1-2 (Minor). The presentation takes about 24 ms on the main actor per rebuild at 2,000 sets, and no
+budget covers it.**
+- `ExerciseHistoryStore.rebuild` runs `ExerciseHistoryPresentation.make` on `@MainActor`. It runs on every
+  emission of `observeAll` (any exercise saved), of the settings, and of the sessions.
+- Measured on the host, Debug: 23.9–25.1 ms. The cost is mostly each set's `String(localized:)` and
+  `formatted(in:)`, and each entry's date style. That is more than a frame.
+- **Fix:** the input is `Sendable` and `make` is `nonisolated`, so build the model off the main actor and assign
+  it on return. Alternatively, keep the log's strings across rebuilds that change neither the units nor the
+  sessions.
+- Either way, add the presentation at 2,000 sets to the Nightly performance suite with a budget (a frame,
+  16 ms, is a reasonable line).
+
+**F12-S2-R1-3 (Minor). The store discards the observed sessions and reads them again.**
+- `ExerciseHistoryStore.swift:95-98` keeps nothing of the emitted `[ExerciseSession]`. `readHistory` (`:167`)
+  then runs `exerciseSessions` again.
+- So every change of the exercise's sessions costs two full fetches (13 ms p95 each at the N11 seed), and the
+  emitted value is never used.
+- **Fix:** keep the value (`kept.sessions = value; kept.records = nil; kept.generation += 1`). Read only
+  `personalRecords` in `readHistory`, with the same generation guard. This is simpler, it halves the I/O, and the
+  failed-read and overtaken-read paths stay as they are.
+
+**F12-S2-R1-4 (Minor). The sessions caption (F12-S2-2) works by string surgery in the copy file.** The
+caption-question section below gives the assessment and the recommendation.
+
+**F12-S2-R1-5 (Minor, wording for Pete). An exercise logged only above 12 reps reads "Log a session to start the
+chart." for ever.**
+- `ExerciseHistoryPresentation.swift:92` shows `noChart` whenever no week has an estimate.
+- Curls, raises and other accessories are often logged at 15–20 reps. Such an exercise shows sessions in its log,
+  a best set and a count, and the chart keeps telling the lifter to log a session. The brief scoped the message
+  to "no working sets at all".
+- **Fix:** when the log has entries but no week has an estimate, show a second message, for example "No set of
+  12 reps or fewer in the last 8 weeks." This is new wording for Pete. Keep the current text for an empty
+  history.
+
+**F12-S2-R1-6 (Minor). The contract's "a write of another exercise emits nothing" cannot fail.**
+- In `StatsQueriesContract+Library.swift:104-106`, the row's write is followed by the older bench workout's write
+  before the next `values.next()`. The bridges buffer only the newest value (`.bufferingNewest(1)`), so an
+  emission for the row would be replaced unseen. The same holds at `:111-113`.
+- A mutant without `removeDuplicates()` would pass, so the clause's "unheard" overclaims.
+- **Fix:** after the other exercise's write, race `values.next()` against a short bounded deadline (for example
+  200 ms) and expect the deadline to win.
+  - Or, for GRDB, pin `sessionsObservation` directly by counting `onChange` calls around an unrelated write.
+  - Or drop "unheard" from the labels and record that the clause does not pin it.
+
+**F12-S2-R1-7 (Nit, VoiceOver).**
+- (a) The delta is its own stop, "+28 lb" with no context, right after the heading. The chart element then says
+  "Up 28 lb over 8 weeks" again (`E1RMChart.swift:22`). Hide the delta from accessibility when the bars are
+  drawn, since the chart's value speaks it. Keep it in the list layout and when the chart is empty.
+- (b) "Up 28 lb over 8 weeks" is said even when the first point is W5. "Up 28 lb since W5", or dropping "over 8
+  weeks", would be exact. Wording for Pete.
+- (c) The spoken unit is "lb" here and "pounds" in S1's rows ("PR 195 pounds"). The stat tiles speak no unit at
+  all ("219, 1RM est"). One spoken vocabulary would be better: the S1 n1 follow-up ("1 pounds") belongs with it.
+
+**F12-S2-R1-8 (Nit).** The sessions tile's value is `String(history.sessions)` (`ExerciseHistoryPresentation.swift:61`):
+"1234", in Latin digits. Its spoken text and the Library row write "1,234", or "١٬٢٣٤" in ar_EG. Format the
+value with the number the counted lookup writes (`count.formatted(.number.locale(locale.forCountedText))`). The
+estimate's `String(Int)` is the same nit, but it is only reachable above 999.
+
+**Note, no change.** The GRDB observation's region is every column of `logged_set` and the joined columns, so any
+set write in the database re-runs the 13 ms fetch off the main actor, and `removeDuplicates` then drops the
+value. `recentObservation` has the same nature, and the screen's task ends when it disappears. Acceptable.
+
+### The sessions caption (F12-S2-2): assessment and recommendation
+
+**What it does.** `LibraryCopy.sessionsCaption` (`LibraryCopy+History.swift:20-26`):
+1. Looks up the row's counted "%lld sessions".
+2. Formats `count` again with `.number.locale(locale.forCountedText)`.
+3. Deletes the first occurrence of that text and trims spaces.
+
+**Assessment.** It is correct today for every locale the shipping catalog can answer. `forCountedText` always
+resolves to English, and the two formatters agree: G1's test covers en_US, de_DE, fr_FR, hi_IN and ar_EG, and I
+confirmed the grouping and digits on the host.
+
+It is fragile in exactly the ways the brief names, and each failure is silent:
+- A translation that writes the number as a word ("one session") makes `range(of:)` return nil. The tile then
+  reads "1" over "one session".
+- A translation where the number sits mid-phrase, or is wrapped in bidi isolates or marks, leaves those marks or
+  a double space; `.whitespaces` does not trim U+200F or U+2068.
+- The same digits appearing earlier in the phrase would be deleted instead.
+- Two formatters must stay byte-identical for ever.
+- It also breaks standards §7, which says a copy file "holds lookups and nothing else".
+
+**Alternatives I looked at.**
+1. **`AttributedString(localized:)` and `localizedNumericArgument`**, deleting the runs the formatter marks as
+   the argument. I probed it on the host. For a key with plural variations, the whole string is one run tagged
+   as the argument ("1,234 sessions"). It only isolates the number in plain keys ("W" + "3"). **Not viable.**
+2. **Today's precedent** ("sessions this week" under "2" "/4") is a fixed plural caption. It works there only
+   because the denominator makes the plural right. It does not transfer.
+3. **A `StatTile` that takes the whole counted text.** It would still need to find the number to draw it large.
+   That moves the same surgery into LedgerDesign. **No.**
+4. **A counted caption key whose forms omit the number** ("one": "session", "other": "sessions"). This is the
+   standard Apple mechanism: a plural form need not print its argument, and stringsdict and String Catalogs
+   allow it. The lookup becomes a plain catalog lookup, and translators get every plural category.
+   - It needs a **sanctioned exception in `StringCatalog.pluralProblems`**: for keys listed as captions (an
+     allow-list in the audit, or a comment prefix the audit reads), every form holds no specifier, and the
+     "other" form is the key without `%lld `.
+   - It needs a key distinct from the row's "%lld sessions", for example "%lld sessions (count shown above)".
+     The xcstrings key is unique per string, and the English value differs from the key.
+   - It needs one paragraph in standards §7.
+   - Cost: about 15 lines in `LedgerTestSupport` plus audit tests, a standards edit (an orchestrator ruling, A6
+     said "no change"), and an odd-looking key.
+5. **Keep the surgery, but guard it.** A `ModuleCopyTests`-style check that every form of "%lld sessions" in
+   every localization of the catalog is exactly `%lld` + one space + words with no digit, so a translation that
+   breaks the assumption fails CI and names this member. Move the derivation out of the copy file, into
+   `ExerciseHistoryPresentation`, or keep it with a §7 note. Fix R1-8 so the value and the caption share one
+   formatter. Cost: about 10 test lines.
+
+**Recommendation.** Do **5 now**: it is cheap, it is correct for the only language that ships, and it turns the
+silent failure modes into a CI failure. Record **4** as the follow-up for when the first translation is
+commissioned. That is the point where 5's guard would fire, and where the audit exception earns its cost. If the
+orchestrator prefers no string surgery at all in S2, 4 is the clean option. It is the only alternative I found
+that is both robust and catalog-native, at about 25 lines and one standards ruling.
