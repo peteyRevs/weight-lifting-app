@@ -22,7 +22,7 @@ defaults:
 jobs:
   scope:
     name: Scope
-    runs-on: ubuntu-latest # Linux minutes cost a tenth of macOS minutes
+    runs-on: ubuntu-24.04 # Linux minutes cost a tenth of macOS minutes
     timeout-minutes: 5
     outputs:
       code: ${{ steps.scope.outputs.code }}
@@ -58,7 +58,7 @@ jobs:
     # Format, lint, the package graph and pins, and every script suite that runs anywhere, at a tenth of
     # the macOS rate. The suites that need macOS ("# needs macOS:", scripts/tests/adversarial/run.sh) run
     # in Check. Same tool versions as the Mac: mise.toml.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

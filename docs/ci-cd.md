@@ -34,7 +34,10 @@ authoritative; the plan differs:
   minutes) over the six green iOS-only runs to 2026-10-01, 805–1,262 s of it in `check.sh`. The notes
   under "CI efficiency" say what is measured after them, and what only CI can measure.
 - **CI efficiency (2026-09-30; `tasks/features/F01-ci-gates/ci-efficiency-notes.md`).**
-  - *Static checks on Linux.* The `Static checks` job (`ubuntu-latest`, tools from `mise.toml`) runs
+  - *Linux image pinned.* Every Linux job names `ubuntu-24.04`, not `ubuntu-latest`. By 2026-10-24
+    `ubuntu-latest` was Ubuntu 26.04, which has no `libxml2.so.2`, so mise's SwiftLint binary failed to
+    load (exit 127) and every PR's `Static checks` went red. Move the pin deliberately, with a green run.
+  - *Static checks on Linux.* The `Static checks` job (`ubuntu-24.04`, tools from `mise.toml`) runs
     `check.sh --static-only`: format, lint, the package graph and pins, the catalog version, and every
     script suite that runs anywhere. It has no Xcode, so step 0 checks only the tools. `Check` `needs:` it:
     a red static check skips `Check`, costs no macOS minutes, and the run is red. `Check` runs the
