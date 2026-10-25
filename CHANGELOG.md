@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.12.0...v0.13.0) (2026-10-22)
+
+
+### Features
+
+* **library:** the Library tab, with search, filter chips, RECENTLY LOGGED and every exercise's best set (F12 S1) ([#70](https://github.com/peteyRevs/weight-lifting-app/issues/70)) ([d92cc15](https://github.com/peteyRevs/weight-lifting-app/commit/d92cc1541872b84d2e05da6510105669ee714027))
+
 ## [0.12.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.11.0...v0.12.0) (2026-10-21)
 
 
