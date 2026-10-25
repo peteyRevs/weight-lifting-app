@@ -237,3 +237,94 @@ Recorded by G1 as handed down, 2026-10-24.
 8. **R1-8:** the sessions tile number uses the locale's number format (the same formatter as item 4).
 
 Budget: S2 at 899 net product lines; up to about 1,000 allowed, stop and report beyond.
+
+## Slice S2 — round 2 (G3 reviewer, 2026-10-24)
+
+Reviewed `22699d0..7eb7490` (fix `d8b909c`) against "Orchestrator's ruling (S2 review round 1)". Read-only. Host
+`swift test --filter 'LibraryCopyTests|ExerciseHistory|InMemoryContract|StatsQueriesTests'`: green (one known
+issue, already there). No simulator runs.
+
+**Verdict: approved.** No Blocker, Major or Minor. Two nits, both optional.
+
+**R1-1 to R1-8, each resolved as ruled.**
+- **R1-1.**
+  - The fold walks the counted sets once into `Tally<Weight>.atReps`, then takes Brzycki of at most 12
+    candidates. This is exact, because Brzycki rounded to the gram is monotonic at fixed reps.
+  - The best set is the maximum of the tally on (weight, reps), as `Bests.bestSet(of:)` takes it. The weeks reuse
+    the same function lazily.
+  - The domain, property and differential tests are unchanged and pass.
+  - The Nightly suite now folds 2,000 sets: 2.49 ms p95 against 5.
+- **R1-2.**
+  - The budget is 16 ms over 2,000 seeded sets (9.17 ms measured).
+  - `SetTexts` caches per weight × reps, per model.
+  - The model is built off the main actor.
+- **R1-3.** The store keeps the emitted sessions and reads only `personalRecords`, with the generation guard
+  unchanged.
+- **R1-4.** The copy file now holds lookups only. `sessionsStat` sits in the presentation, one formatter gives the
+  value and the stripped number, and the follow-up is named.
+- **R1-5.** `noEstimate` shows when sessions exist but no week has an estimate. "Log a session…" stays for an
+  empty history.
+- **R1-6.** The clause can now fail. G1 proved it with a mutant that removed `removeDuplicates()`.
+- **R1-7.**
+  - The delta is hidden from VoiceOver where the bars speak it. It stays a stop at accessibility sizes, in list
+    form.
+  - The span is counted inclusively, as ruled: W5→W8 reads "over 4 weeks".
+  - The unit is spoken as S1 speaks it.
+- **R1-8.** The tile's number is the locale's: "1,234", and Arabic digits in ar_EG.
+
+**(a) The model built off the main actor: can a stale model be the last one shown?** No.
+- Builds never overlap. `run()` drains the marks in one loop (`for await _ in marks { await rebuild() }`), and
+  each `rebuild` awaits `@concurrent model(_:)` before the loop takes the next mark. Two builds are never in
+  flight in one run, so they assign `state` in order, and an older model cannot overwrite a newer one.
+- A change made during a build marks the channel (`bufferingNewest(1)`), so the loop's next turn rebuilds from
+  the newest sources. A transiently stale model can be shown, but it is always followed by a current one.
+- This holds even for a mixed pair. `sessions` is captured before `await readRecords()`, so a records read can be
+  paired with the previous sessions for one turn, and the generation keeps it from being cached.
+- Across runs (`.task(id: scenePhase…)` restarts without waiting for the old task), the old run's `rebuild`
+  checks `Task.isCancelled` after the build, and `readRecords` checks it before writing `sources`. A cancelled
+  run's late model or records therefore never lands in the new run's state, even when the two generation
+  counters coincide.
+
+**(b) `SetTexts`.** Correct.
+- The cache is per model, so the units and locale are fixed for its life.
+- It is keyed by `Weight` (exact `Decimal` grams) and the reps. The text is a pure function of the key and the
+  input, so a hit cannot return a wrong string.
+- Even if `Decimal`'s hash ever split equal values, the cost would only be a miss.
+
+**(c) `StreamArrivals` and the 200 ms window.**
+- **No flake risk in the direction that matters.** A correct store never emits for the row's writes, so a slow
+  runner only means waiting longer.
+- The reads that expect a value wait up to 5 s, which is generous for a commit-to-callback hop. They used to wait
+  without bound, so a broken implementation now fails in seconds.
+- **The false-pass window is narrow, and the clause's order closes most of it.** A spurious emission that arrives
+  after the 200 ms is queued in order, so it becomes `afterOlder` (`["1"]` rather than `["1", "2"]`) or
+  `afterDelete`, and the clause still fails.
+- One case can pass falsely. If the reader task is starved long enough for the bridge's buffer of one to replace
+  the spurious value with the next real one, the spurious value is never seen. That needs the starvation and the
+  defect at once, and it is acceptable.
+- The cost is about 0.4 s per contract run per store kind.
+
+**(d) The counted spoken-summary keys.**
+- Each of the five has exactly one `%lld`, which picks the plural form. The `%@` is the pre-formatted weight.
+- The `one` and `other` forms are present and marked translated, the `other` form is the key, and the comments
+  match the code. The catalog audit passed in G1's gate.
+- They are looked up with `forCountedText`, as standards §7 requires.
+- The `one` forms are unreachable (a change needs two weeks), as the notes say. "Up 1 pounds" remains S1's n1
+  follow-up.
+
+**(e) `sessionsForms_areTheNumberThenWords`.** It guards what it claims. Every form of "%lld sessions" in every
+localization must:
+- start with `"%lld "`;
+- continue with a letter, so a second space, a bidi mark (U+200F, U+2068) or punctuation fails;
+- contain no other digit and no `%`.
+
+A form that spells the number ("one session"), moves it to the end, or puts it mid-phrase fails. A localization
+with variations other than `plural` has no `stringUnit`, so it fails too, which is conservative. Together with the
+five-locale presentation test of the formatter, this is everything the stripping relies on. The `range(of:)` then
+finds the leading number, because the form starts with it.
+
+**Nits (optional).**
+- **R2-1.** `StreamArrivals.next(within:)` polls every 5 ms. A `withTaskGroup` race of the stream's `next()`
+  against a sleep would be event-driven. It is test support and fine as written.
+- **R2-2.** "Up 28 pounds over 4 weeks" from W5 counts weeks inclusively: three weeks pass between the two points.
+  This is what the ruling asked for. Pete may prefer "since W5" when he reads the wording.
