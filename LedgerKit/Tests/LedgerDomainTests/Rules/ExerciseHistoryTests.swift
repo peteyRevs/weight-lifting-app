@@ -195,15 +195,30 @@ extension ExerciseHistoryTests {
         #expect(Self.make([lighter, first], records: [lighter.workoutID]).log.map(\.tag) == [.record, .same])
     }
 
-    @Test("+{step} compares working sets only: an added set or a warm-up heavier than before is not a step up")
-    func tags_compareWorkingSetsOnly() {
+    /// N19 (S3): the step compares the sets that count toward bests, decision #25's working and added sets, as the
+    /// records do; it replaced S2's working sets alone.
+    @Test("+{step} compares the sets that count toward bests: an added set counts, a warm-up or a drop set does not")
+    func tags_compareCountedSetsOnly() {
         let before = Self.session(1, on: Fixtures.date(2026, 9, 1), Self.straight(3, 200, 5))
         let added = Self.session(
             2,
             on: Fixtures.date(2026, 9, 8),
-            Self.straight(3, 200, 5) + [(210, 3, .added), (300, 1, .warmup)]
+            Self.straight(3, 200, 5) + [(210, 3, .added), (300, 1, .warmup), (305, 8, .drop)]
         )
-        let higher = Self.session(3, on: Fixtures.date(2026, 9, 15), Self.straight(3, 202.5, 5))
-        #expect(Self.make([higher, added, before]).log.map(\.tag) == [.heavier(.pounds(2.5)), .same, .same])
+        let higher = Self.session(3, on: Fixtures.date(2026, 9, 15), Self.straight(3, 207.5, 5))
+        #expect(Self.make([higher, added, before]).log.map(\.tag) == [.same, .heavier(.pounds(10)), .same])
+    }
+
+    @Test("N19: +{step} passes over sessions with no set that counts, which are themselves —")
+    func tags_sessionsWithoutCountedSets_arePassedOver() {
+        let first = Self.session(1, on: Fixtures.date(2026, 9, 1), Self.straight(3, 200, 5))
+        let warmups = Self.session(2, on: Fixtures.date(2026, 9, 4), [(135, 5, .warmup), (185, 3, .warmup)])
+        let drops = Self.session(3, on: Fixtures.date(2026, 9, 6), [(150, 10, .drop)])
+        let heavier = Self.session(4, on: Fixtures.date(2026, 9, 8), Self.straight(3, 205, 5))
+        let lighter = Self.session(5, on: Fixtures.date(2026, 9, 10), [(95, 5, .warmup)] + Self.straight(3, 190, 5))
+        let history = Self.make([lighter, heavier, drops, warmups, first])
+        #expect(history.log.map(\.tag) == [.same, .heavier(.pounds(5)), .same, .same, .same])
+        let onlyWarmups = Self.make([warmups])
+        #expect(onlyWarmups.log.map(\.tag) == [.same])
     }
 }

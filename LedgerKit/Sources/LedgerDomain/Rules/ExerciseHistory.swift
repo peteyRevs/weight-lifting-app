@@ -31,9 +31,10 @@ public struct ExerciseHistory: Hashable, Sendable {
     public enum Tag: Hashable, Sendable {
         /// The workout set a personal record of the exercise (`StatsQueries.personalRecords`).
         case record
-        /// The heaviest working set is heavier than the session before's by this much.
+        /// The heaviest set that counts toward bests (decision #25: working or added) is heavier, by this much,
+        /// than that of the latest earlier session that has one (N19).
         case heavier(Weight)
-        /// Neither: no heavier, the first session (a baseline), or no working set to compare.
+        /// Neither: no heavier, the first session with such a set (a baseline), or none to compare.
         case same
     }
 
@@ -63,7 +64,7 @@ public extension ExerciseHistory {
             bestSet: best.map { BestSet(weight: $0.value, reps: $0.key) },
             sessions: sessions.count,
             weeks: weeks(of: sessions, now: now, calendar: calendar),
-            log: sessions.indices.map { entry(at: $0, of: sessions, records: records) }
+            log: log(of: sessions, records: records)
         )
     }
 
@@ -112,23 +113,32 @@ public extension ExerciseHistory {
         }
     }
 
-    /// The session at `index`, tagged against the one before it in time, the next in the list.
-    private static func entry(at index: Int, of sessions: [ExerciseSession], records: Set<WorkoutID>) -> Entry {
-        let session = sessions[index]
-        let earlier = sessions.indices.contains(index + 1) ? topWorkingWeight(of: sessions[index + 1]) : nil
-        let tag: Tag =
-            if records.contains(session.workoutID) {
-                .record
-            } else if let top = topWorkingWeight(of: session), let earlier, top > earlier {
-                .heavier(top - earlier)
-            } else {
-                .same
-            }
-        return Entry(workoutID: session.workoutID, date: session.startedAt, tag: tag, sets: session.sets)
+    /// One entry per session, newest first, each tagged against the latest earlier session that has a set counting
+    /// toward bests (N19, as amended for S3): a session of warm-ups or drop sets alone is passed over, so it never
+    /// hides a step up, and is itself "—". One walk from the oldest session, carrying the last top weight seen.
+    private static func log(of sessions: [ExerciseSession], records: Set<WorkoutID>) -> [Entry] {
+        var earlier: Weight?
+        var log: [Entry] = []
+        log.reserveCapacity(sessions.count)
+        for session in sessions.reversed() {
+            let top = topCountedWeight(of: session)
+            let tag: Tag =
+                if records.contains(session.workoutID) {
+                    .record
+                } else if let top, let earlier, top > earlier {
+                    .heavier(top - earlier)
+                } else {
+                    .same
+                }
+            log.append(Entry(workoutID: session.workoutID, date: session.startedAt, tag: tag, sets: session.sets))
+            earlier = top ?? earlier
+        }
+        return log.reversed()
     }
 
-    /// The heaviest working set's weight: what "+{step}" compares.
-    private static func topWorkingWeight(of session: ExerciseSession) -> Weight? {
-        session.sets.filter { $0.isDone && $0.kind == .working }.map(\.weight).max()
+    /// The heaviest weight of the sets that count toward bests (`PersonalRecords.countsTowardBests`): what
+    /// "+{step}" compares.
+    private static func topCountedWeight(of session: ExerciseSession) -> Weight? {
+        session.sets.filter(PersonalRecords.countsTowardBests).map(\.weight).max()
     }
 }
