@@ -55,11 +55,14 @@ nonisolated extension LibraryCopy {
         String(localized: "Enter a name.", bundle: .module, comment: "Under the name field when Save found it blank")
     }
 
-    static var nameLength: String {
+    /// "Name must be 2–40 characters.": the bounds are `CustomExerciseDraft.nameLength`'s, in the lifter's digits
+    /// (review F12-S3-R1-5).
+    static func nameLength(_ shortest: String, _ longest: String, locale: Locale) -> String {
         String(
-            localized: "Name must be 2–40 characters.",
+            localized: "Name must be \(shortest)–\(longest) characters.",
             bundle: .module,
-            comment: "Under the name field when Save found it too short or too long"
+            locale: locale,
+            comment: "Under the name field when Save found it too short or too long: the fewest and most characters"
         )
     }
 
@@ -89,7 +92,7 @@ nonisolated extension LibraryCopy {
 
     // MARK: Movement patterns
 
-    /// A movement pattern's chip. The core's is the muscle group's word (`muscle(.core)`), one key in English.
+    /// A movement pattern's chip.
     static func pattern(_ pattern: MovementPattern) -> String {
         switch pattern {
         case .horizontalPush: String(localized: "Horizontal push", bundle: .module, comment: "Movement pattern")
@@ -105,7 +108,12 @@ nonisolated extension LibraryCopy {
                 bundle: .module,
                 comment: "Movement pattern: one joint, one muscle"
             )
-        case .core: muscle(.core)
+        // Its own words, not the muscle group's "Core": a translator gives the two their own (review F12-S3-R1-5).
+        case .core: String(
+                localized: "Core work",
+                bundle: .module,
+                comment: "Movement pattern: bracing and moving the trunk (planks, crunches, rollouts)"
+            )
         }
     }
 }

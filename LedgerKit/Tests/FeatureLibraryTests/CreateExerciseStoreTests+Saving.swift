@@ -18,9 +18,15 @@ extension CreateExerciseStoreTests {
         while !scene.exercises.isHoldingRead {
             await Task.yield()
         }
-        await scene.store.save()
+        // The second call returns at once; were it to read too, its read is held beside the first and released with
+        // it, so the count below fails rather than the test hanging (review F12-S3-R1-3).
+        let second = Task { await scene.store.save() }
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
         scene.exercises.releaseRead()
         await first.value
+        await second.value
         #expect(scene.exercises.saves.count == 1)
         #expect(scene.store.phase == .saved)
     }

@@ -11,13 +11,18 @@ public extension CustomExerciseDraft {
 
     /// The name as it is stored and compared: trimmed of blanks, line breaks and characters that draw nothing at either
     /// end; each character that draws nothing dropped from inside it (a zero-width space, a word joiner, a byte order
-    /// mark, a direction mark); every kind of space (Unicode `Zs`: a no-break space, a thin space) a plain space, and
-    /// every run of spaces one. A joiner or a selector that belongs to its character (an emoji sequence, a script's
-    /// shaping) is kept, and so is a direction override, which the rules refuse.
+    /// mark, a direction mark, a joiner between anything but two emoji); every kind of space (Unicode `Zs`: a no-break
+    /// space, a thin space) a plain space, and every run of spaces one. A joiner inside an emoji sequence and a
+    /// selector that belongs to its character are kept, and so is a direction override, which the rules refuse.
     var storedName: String {
+        let source = Array(name.unicodeScalars)
         var scalars = String.UnicodeScalarView()
         var isAfterSpace = false
-        for scalar in name.unicodeScalars where !Self.drawsNothingAlone(scalar) {
+        for (place, scalar) in source.enumerated() {
+            let isKept = scalar == "\u{200D}" ? Self.joinsEmoji(source, at: place) : !Self.drawsNothingAlone(scalar)
+            guard isKept else {
+                continue
+            }
             let isSpace = scalar.properties.generalCategory == .spaceSeparator
             if isSpace, isAfterSpace {
                 continue
@@ -28,19 +33,35 @@ public extension CustomExerciseDraft {
         return String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Whether `name` draws nothing: once every character Unicode says draws nothing (default-ignorable) is taken out,
-    /// only blanks and line breaks are left (S3-1).
-    internal static func drawsNothing(_ name: String) -> Bool {
-        var scalars = String.UnicodeScalarView()
-        scalars.append(contentsOf: name.unicodeScalars.filter { !$0.properties.isDefaultIgnorableCodePoint })
-        return String(scalars).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// Whether the name draws nothing (S3-1): its stored form holds only blanks and characters that draw nothing (the
+    /// direction controls and selectors `storedName` keeps). One reading of "draws nothing", `storedName`'s (review
+    /// F12-S3-R1-6).
+    internal var drawsNothing: Bool {
+        storedName.unicodeScalars.allSatisfy { $0.properties.isDefaultIgnorableCodePoint || $0.properties.isWhitespace }
     }
 
-    /// A character that draws nothing and belongs to no other: default-ignorable, but neither a joiner nor a selector
-    /// that extends the character before it, nor a direction control, which `isRefused` keeps for its rule.
+    /// A character that draws nothing and belongs to no other: default-ignorable, but neither a selector that extends
+    /// the character before it nor a direction control, which `isRefused` keeps for its rule. The zero-width joiner is
+    /// `joinsEmoji`'s.
     internal static func drawsNothingAlone(_ scalar: Unicode.Scalar) -> Bool {
         scalar.properties.isDefaultIgnorableCodePoint && !scalar.properties.isGraphemeExtend
-            && scalar != "\u{200D}" && !isDirectionControl(scalar)
+            && !isDirectionControl(scalar)
+    }
+
+    /// Whether the zero-width joiner at `place` joins two emoji, as in an emoji sequence (👩‍🦰, 🏋️‍♂️): the scalar
+    /// before it, past the selectors and skin tones that extend it, and the scalar after it are emoji. Anywhere else
+    /// it draws nothing and is dropped (review F12-S3-R1-1). ASCII digits, "#" and "*" are not emoji here.
+    internal static func joinsEmoji(_ scalars: [Unicode.Scalar], at place: Int) -> Bool {
+        var before = place - 1
+        while before >= 0, scalars[before].properties.isGraphemeExtend || scalars[before].properties.isEmojiModifier {
+            before -= 1
+        }
+        let after = place + 1
+        return before >= 0 && after < scalars.count && isEmoji(scalars[before]) && isEmoji(scalars[after])
+    }
+
+    private static func isEmoji(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.properties.isEmoji && !scalar.isASCII
     }
 
     /// What a stored name never holds (S3-1, S3-3): a control character (`Cc`, U+0000 among them), a line or paragraph

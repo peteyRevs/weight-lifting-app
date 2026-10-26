@@ -13,7 +13,8 @@ struct CustomExerciseDraftPropertyTests {
         "a", "Z", "é", "e\u{301}", "ß", "ı", "Ø", "Ж", "ж", "α", "ب", "א", "日", "한", "ｒ", "Ｒ", "5", "-", "'", "·",
         "\u{301}", "\u{308}", "🏋️", "👩🏽‍🦰", "🇫🇷", "\u{200D}", "\u{FE0F}",
         " ", "  ", "\u{A0}", "\u{2003}", "\u{2009}", "\u{3000}", "\n", "\r\n", "\u{2028}", "\u{2029}",
-        "\u{200B}", "\u{2060}", "\u{FEFF}", "\u{200E}", "\u{202E}", "\u{2066}", "\u{3164}", "\u{600}",
+        "\u{200B}", "\u{2060}", "🏋️", "\u{200D}", "♂️", "\u{FEFF}", "\u{200E}", "\u{202E}", "\u{2066}", "\u{3164}",
+        "\u{600}",
         "\u{0}", "\t", "\u{7}", "\u{1B}", "\u{7F}", "\u{85}", "\u{9F}"
     ]
 
@@ -33,16 +34,39 @@ struct CustomExerciseDraftPropertyTests {
         return (0 ..< count).map { _ in pieces.randomElement(using: &generator) ?? "" }.joined()
     }
 
+    /// The scalars the stored name keeps before its spaces are cleaned: none that draws nothing alone, and a joiner
+    /// only between two emoji (review F12-S3-R1-1), selectors and skin tones before it skipped.
+    static func keptScalars(of name: String, directions: Set<UInt32>) -> [Unicode.Scalar] {
+        let all = Array(name.unicodeScalars)
+        // A joiner stays only between two emoji (review F12-S3-R1-1); selectors and skin tones before it are skipped.
+        let isEmoji = { (scalar: Unicode.Scalar) in scalar.properties.isEmoji && scalar.value > 0x7F }
+        let joins = { (place: Int) -> Bool in
+            let before = all[..<place].lastIndex {
+                !($0.properties.isGraphemeExtend || $0.properties.isEmojiModifier)
+            }
+            guard let before, place + 1 < all.count else {
+                return false
+            }
+            return isEmoji(all[before]) && isEmoji(all[place + 1])
+        }
+        return all.indices.filter { place in
+            let scalar = all[place]
+            if scalar == "\u{200D}" {
+                return joins(place)
+            }
+            return !scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isGraphemeExtend
+                || directions.contains(scalar.value)
+        }
+        .map { all[$0] }
+    }
+
     /// The rule read plainly, apart from the code: what the draft must answer for `name`, and the name it stores.
     static func expected(for name: String) -> (error: CustomExerciseError?, stored: String) {
         let directions: Set<UInt32> = [0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069]
         let visible = String(String.UnicodeScalarView(name.unicodeScalars.filter {
             !$0.properties.isDefaultIgnorableCodePoint
         }))
-        let kept = name.unicodeScalars.filter { scalar in
-            !scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isGraphemeExtend
-                || scalar == "\u{200D}" || directions.contains(scalar.value)
-        }
+        let kept = keptScalars(of: name, directions: directions)
         // Spaces are collapsed by scalar: a space under a combining mark is still a space before it.
         let spaced = kept.map { $0.properties.generalCategory == .spaceSeparator ? " " : $0 }
         let collapsed = spaced.indices.filter { $0 == 0 || !(spaced[$0] == " " && spaced[$0 - 1] == " ") }

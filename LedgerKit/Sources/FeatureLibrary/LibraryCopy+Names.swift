@@ -50,7 +50,7 @@ nonisolated extension LibraryCopy {
         case .core: String(
                 localized: "Core",
                 bundle: .module,
-                comment: "Muscle group: the abdominals and lower back; also a movement pattern"
+                comment: "Muscle group: the abdominals and lower back"
             )
         }
     }

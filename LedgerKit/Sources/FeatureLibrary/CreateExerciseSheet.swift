@@ -33,6 +33,8 @@ struct CreateExerciseSheet: View {
             .task(id: store.attempt) {
                 await store.save()
             }
+            // As F10's FinishSheet: no swipe takes the sheet down while its save runs (review F12-S3-R1-4).
+            .interactiveDismissDisabled(store.phase == .saving)
             .onChange(of: store.phase == .saved) { _, isSaved in
                 if isSaved {
                     onClose()

@@ -14,7 +14,7 @@ nonisolated enum CreateExercisePresentation {
             name: CreateExerciseModel.Name(
                 label: LibraryCopy.nameField,
                 text: draft.name,
-                problem: input.problem.flatMap(nameProblem)
+                problem: input.problem.flatMap { nameProblem($0, locale: locale) }
             ),
             groups: [
                 group(.equipment, LibraryCopy.equipmentRow, Equipment.allCases, locale: locale) { equipment in
@@ -85,10 +85,10 @@ nonisolated enum CreateExercisePresentation {
     }
 
     /// The line under the name field: a rule of the name that Save found broken.
-    private static func nameProblem(_ problem: CreateExerciseProblem) -> String? {
+    private static func nameProblem(_ problem: CreateExerciseProblem, locale: Locale) -> String? {
         switch problem {
         case .invalid(.blankName): LibraryCopy.enterAName
-        case .invalid(.nameLength): LibraryCopy.nameLength
+        case .invalid(.nameLength): nameLength(locale: locale)
         case .invalid(.controlCharacter): LibraryCopy.nameHasControlCharacter
         case .invalid(.duplicateName): LibraryCopy.duplicateName
         case .invalid(.primaryAmongSecondaries), .failed: nil
@@ -102,5 +102,16 @@ nonisolated enum CreateExercisePresentation {
         case .failed, .invalid(.primaryAmongSecondaries): LibraryCopy.saveFailed
         case .invalid: nil
         }
+    }
+
+    /// "Name must be 2–40 characters.", the bounds the draft's rule holds, written in `locale`'s digits.
+    private static func nameLength(locale: Locale) -> String {
+        let bounds = CustomExerciseDraft.nameLength
+        let digits = IntegerFormatStyle<Int>(locale: locale)
+        return LibraryCopy.nameLength(
+            digits.format(bounds.lowerBound),
+            digits.format(bounds.upperBound),
+            locale: locale
+        )
     }
 }

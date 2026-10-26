@@ -289,12 +289,23 @@
       }
     },
     "Core" : {
-      "comment" : "Muscle group: the abdominals and lower back; also a movement pattern",
+      "comment" : "Muscle group: the abdominals and lower back",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Core"
+          }
+        }
+      }
+    },
+    "Core work" : {
+      "comment" : "Movement pattern: bracing and moving the trunk (planks, crunches, rollouts)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core work"
           }
         }
       }
@@ -631,13 +642,13 @@
         }
       }
     },
-    "Name must be 2–40 characters." : {
-      "comment" : "Under the name field when Save found it too short or too long",
+    "Name must be %@–%@ characters." : {
+      "comment" : "Under the name field when Save found it too short or too long: the fewest and most characters",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Name must be 2–40 characters."
+            "value" : "Name must be %@–%@ characters."
           }
         }
       }

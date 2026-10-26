@@ -15,7 +15,9 @@ final nonisolated class WatchedExercises: ExerciseRepository, @unchecked Sendabl
     private var saved: [Exercise] = []
     private var failures: Int
     private var holdsRead: Bool
-    private var waiter: CheckedContinuation<Void, Never>?
+    /// Every held read: a second read held while the first waits is kept too, so a release lets both go on and a test
+    /// whose store reads twice fails rather than hangs (review F12-S3-R1-3).
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     init(_ base: any ExerciseRepository, failures: Int = 0, holdsRead: Bool = false) {
         self.base = base
@@ -29,17 +31,19 @@ final nonisolated class WatchedExercises: ExerciseRepository, @unchecked Sendabl
     }
 
     var isHoldingRead: Bool {
-        lock.withLock { waiter != nil }
+        lock.withLock { !waiters.isEmpty }
     }
 
-    /// Lets the held read go on.
+    /// Lets every held read go on.
     func releaseRead() {
         let waiting = lock.withLock {
             holdsRead = false
-            defer { waiter = nil }
-            return waiter
+            defer { waiters = [] }
+            return waiters
         }
-        waiting?.resume()
+        for waiter in waiting {
+            waiter.resume()
+        }
     }
 
     func all() async throws -> [Exercise] {
@@ -50,7 +54,7 @@ final nonisolated class WatchedExercises: ExerciseRepository, @unchecked Sendabl
                     guard holdsRead else {
                         return true
                     }
-                    waiter = continuation
+                    waiters.append(continuation)
                     return false
                 }
                 if resume {

@@ -63,7 +63,11 @@ struct CustomExerciseDraftAdversarialTests {
             "Bench\u{200B} Press",
             "Bench\u{00A0}Press", // a no-break space, as text copied from a web page has
             "Bench  Press", // two spaces
-            "Bench\u{2009}Press" // a thin space
+            "Bench\u{2009}Press", // a thin space
+            // Review F12-S3-R1-1 (S3 fix round 2): a zero-width joiner that joins no two emoji.
+            "Bench Press\u{200D}",
+            "\u{200D}Bench Press",
+            "Bench\u{200D} Press"
         ]
     )
     func drawsAsAnother_isDuplicate(_ name: String) {

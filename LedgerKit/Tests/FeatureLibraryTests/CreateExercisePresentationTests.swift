@@ -44,7 +44,7 @@ struct CreateExercisePresentationTests {
         #expect(model.groups[2].chips.first?.spokenLabel == "Secondary muscles: Back")
         #expect(model.groups[3].chips.map(\.title) == [
             "Horizontal push", "Horizontal pull", "Vertical push", "Vertical pull", "Squat", "Hinge", "Lunge", "Carry",
-            "Isolation", "Core"
+            "Isolation", "Core work"
         ])
         for group in model.groups where !group.allowsMany {
             #expect(group.chips.count { $0.isSelected } == 1, "\(group.title)")
@@ -96,5 +96,16 @@ struct CreateExercisePresentationTests {
         #expect(ExerciseHistoryPresentation.make(input).edit == nil)
         input.exercise = LibraryFixtures.custom
         #expect(ExerciseHistoryPresentation.make(input).edit == "Edit")
+    }
+
+    @Test("The length line's bounds are the rule's, written in the lifter's digits")
+    func lengthLine_takesTheRulesBounds() {
+        let line = { (locale: Locale) in
+            CreateExercisePresentation.make(CreateExerciseInput(
+                draft: CustomExerciseDraft(), problem: .invalid(.nameLength(41)), locale: locale
+            )).name.problem
+        }
+        #expect(line(Fixtures.locale) == "Name must be 2–40 characters.")
+        #expect(line(Locale(identifier: "ar_EG")) == "Name must be ٢–٤٠ characters.")
     }
 }

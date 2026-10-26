@@ -58,7 +58,12 @@ struct StatsQueriesPerformanceTests {
             ("sessionCount", { _ = try await stats.sessionCount(exerciseID: lift) }),
             ("personalRecords", { _ = try await stats.personalRecords(exerciseID: lift) }),
             ("recentlyLogged", { _ = try await stats.recentlyLogged(limit: 5) }),
-            ("exerciseSessions", { _ = try await stats.exerciseSessions(exerciseID: lift) })
+            ("exerciseSessions", { _ = try await stats.exerciseSessions(exerciseID: lift) }),
+            // F12 S3 (review F12-S3-R1-2): what the Library's observation reads after every write to the workouts'
+            // tables, on the database's one queue.
+            ("observeLibraryStats' fetch", {
+                _ = try await queue.read { try GRDBStatsQueries.libraryObservationFetch(recentLimit: 5, in: $0) }
+            })
         ]
         let clock = ContinuousClock()
         var report: [String] = []

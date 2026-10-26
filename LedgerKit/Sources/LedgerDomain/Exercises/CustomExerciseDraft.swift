@@ -58,7 +58,7 @@ public struct CustomExerciseDraft: Hashable, Sendable {
     /// The lifter's exercise `id`, built from the draft, or the first rule it breaks. `live` is every live
     /// exercise; the one with `id` is left out of the name's comparison, so an edit may keep its own name.
     public func exercise(id: ExerciseID, among live: [Exercise]) throws(CustomExerciseError) -> Exercise {
-        guard !Self.drawsNothing(name) else {
+        guard !drawsNothing else {
             throw .blankName
         }
         let trimmed = storedName
