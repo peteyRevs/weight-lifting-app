@@ -399,10 +399,10 @@ check "W56 --ios-only --record-snapshots records on the iPhone alone, lists the 
 $(grep -c '^check-test-results\|^coverage-gate' "$LOG")" "1 $ios_only test-without-building-Ledger all; 1 0"
 
 # ---- PR CI's split (ci-efficiency notes): static checks on Linux, the rest on macOS ------------------
-STATIC_CALLS="mise-install swiftformat-version swiftlint-version swiftformat-lint swiftlint-lint package-graph \
+STATIC_CALLS="mise-install swiftformat-version swiftlint-version swiftlint-lint package-graph \
 package-pins catalog-version script-test-a script-test-b "
 XCODE_REPORTS=26.6 run --static-only
-check "W58 --static-only runs steps 1-2 (no Xcode check: Linux has none), even with another Xcode on PATH" \
+check "W58 --static-only runs step 2, not format (no Xcode check: Linux has none), even with another Xcode on PATH" \
     is "$code $calls|$(grep -c 'check\.sh (--static-only) OK' <<<"$out")" "0 $STATIC_CALLS|1"
 check "W59 ... and its script tests run the portable half of the adversarial suites" \
     is "$(sort -u "$LOG.suites" | tr '\n' ' ')" "portable "
@@ -424,11 +424,11 @@ check "W69 ... whatever LEDGER_ADV_SUITES the caller exports: only --static-only
 # (only for these cases: the full gate's loop would run it too, and W02's list does not have it).
 stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial'
 run --ios-only --skip-static
-check "W62 --ios-only --skip-static (Check): step 0, the macOS script suites, then iOS and coverage; no format or lint" \
-    is "$code $calls" "0 xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos ${IOS_CALLS#*script-test-b }"
+check "W62 --ios-only --skip-static (Check): step 0, format, the macOS script suites, then iOS and coverage; no lint" \
+    is "$code $calls" "0 xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint adversarial-macos ${IOS_CALLS#*script-test-b }"
 FAIL_AT=adversarial run --ios-only --skip-static
 check "W63 ... and a failing macOS suite stops it before the iOS build" \
-    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos "
+    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint adversarial-macos "
 rm "$SB/scripts/tests/adversarial.test.sh"
 rejected=""
 for flags in "--static-only --fast" "--static-only --lint-only" "--static-only --skip-lint" "--static-only --ios-only" \
@@ -533,7 +533,7 @@ check "W73 ... (--ios-only --record-snapshots the same)" \
 stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial' # as W62
 FAIL_AT=string-catalogs run --ios-only --skip-static
 check "W74 --ios-only --skip-static (PR CI's Check): a catalog that does not match stops it after the iOS build, before any test" \
-    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version adversarial-macos \
+    is "$([[ $code -ne 0 ]] && echo failed) $calls" "failed xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint adversarial-macos \
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs "
 rm "$SB/scripts/tests/adversarial.test.sh"
 run --lint-only; lint_calls="$calls"
