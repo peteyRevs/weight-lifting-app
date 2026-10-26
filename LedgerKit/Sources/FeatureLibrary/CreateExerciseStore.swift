@@ -32,7 +32,16 @@ final class CreateExerciseStore {
     let original: Exercise?
     private(set) var draft: CustomExerciseDraft
     private(set) var phase = Phase.editing
-    private(set) var problem: CreateExerciseProblem?
+    private(set) var problem: CreateExerciseProblem? {
+        didSet {
+            if problem != nil {
+                problemNumber += 1
+            }
+        }
+    }
+
+    /// Counts the problems Save has found (finding S3-6: each is announced).
+    private(set) var problemNumber = 0
     /// The save the sheet's `.task(id:)` runs; nil until the first accepted "Save".
     private(set) var attempt: Int?
     @ObservationIgnored private var isSaveRunning = false
@@ -59,6 +68,7 @@ final class CreateExerciseStore {
             isEdit: original != nil,
             isSaving: phase == .saving,
             problem: problem,
+            problemNumber: problemNumber,
             locale: locale
         ))
     }

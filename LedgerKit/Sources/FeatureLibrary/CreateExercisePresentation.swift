@@ -41,7 +41,8 @@ nonisolated enum CreateExercisePresentation {
                 title: LibraryCopy.save,
                 problem: input.problem.flatMap(footProblem),
                 action: input.isSaving ? nil : .save
-            )
+            ),
+            problemNumber: input.problemNumber
         )
     }
 
@@ -59,7 +60,7 @@ nonisolated enum CreateExercisePresentation {
     }
 
     /// One field's chips, each with its title, whether it is chosen and what its tap does.
-    private static func group<Value>(
+    private static func group<Value: RawRepresentable<String>>(
         _ field: CreateExerciseModel.Field,
         _ title: String,
         _ values: [Value],
@@ -70,10 +71,10 @@ nonisolated enum CreateExercisePresentation {
             id: field,
             title: title,
             allowsMany: field == .secondaryMuscles,
-            chips: values.enumerated().map { place, value in
+            chips: values.map { value in
                 let made = chip(value)
                 return CreateExerciseModel.Chip(
-                    id: place,
+                    id: value.rawValue,
                     title: made.title,
                     spokenLabel: LibraryCopy.spokenChip(row: title, title: made.title, locale: locale),
                     isSelected: made.isSelected,

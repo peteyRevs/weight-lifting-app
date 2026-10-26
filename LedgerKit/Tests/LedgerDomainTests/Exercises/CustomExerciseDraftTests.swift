@@ -139,4 +139,35 @@ struct CustomExerciseDraftTests {
         #expect(Self.error(CustomExerciseDraft(name: "\u{0}")) == .nameLength(1))
         #expect(Self.error(CustomExerciseDraft(name: "Barbell\tBench Press"), among: [bench]) == .controlCharacter)
     }
+
+    @Test("S3-2. The name is stored as it draws: no invisible character, every space plain, no run of spaces")
+    func storedName_isTheNameAsItDraws() throws {
+        let draft = CustomExerciseDraft(name: "\u{FEFF} Cable\u{00A0}\u{2009}Y\u{200B} \u{3000}Raise\u{2060} ")
+        #expect(draft.storedName == "Cable Y Raise")
+        let built = try draft.exercise(id: Self.id, among: [])
+        #expect(built.name == "Cable Y Raise" && built.shortName == "Cable Y Raise")
+        // A joiner or selector that belongs to its character stays: the family is one emoji.
+        #expect(CustomExerciseDraft(name: "Carry 👨‍👩‍👧").storedName == "Carry 👨‍👩‍👧")
+    }
+
+    @Test("S3-1 and S3-3. A name that draws nothing is blank; a separator or a direction control inside it is refused")
+    func invisibleAndSeparators() {
+        #expect(Self.error(CustomExerciseDraft(name: "\u{2060}\u{200E}\u{FEFF}")) == .blankName)
+        for name in ["Row\u{2028}ing", "Row\u{2029}ing", "\u{202E}gniwoR", "Row\u{2066}ing", "Row\u{600}ing"] {
+            #expect(
+                Self.error(CustomExerciseDraft(name: name)) == .controlCharacter,
+                "\(name.unicodeScalars.map(\.value))"
+            )
+        }
+    }
+
+    @Test("S3-5. A stored exercise's draft never holds its primary muscle among the secondary ones")
+    func draftOfAnExercise_dropsThePrimaryFromTheSecondaries() {
+        let stored = Exercise(
+            id: Self.id, name: "Hip Thrust Hold", shortName: "Hip Thrust Hold", equipment: .barbell,
+            primaryMuscle: .glutes, secondaryMuscles: [.glutes, .hamstrings], pattern: .hinge,
+            defaultStartLoad: [:], isCustom: true
+        )
+        #expect(CustomExerciseDraft(stored).secondaryMuscles == [.hamstrings])
+    }
 }

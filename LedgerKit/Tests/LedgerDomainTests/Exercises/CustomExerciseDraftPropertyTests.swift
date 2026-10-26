@@ -3,7 +3,8 @@ import Foundation
 import Testing
 
 /// F12 S3, N15 over random Unicode names: whatever the lifter types or pastes, a draft either builds an exercise
-/// that keeps every rule, or names the first rule the name breaks, as a plain reading of the rules says.
+/// that keeps every rule, or names the first rule the name breaks, as a plain reading of the rules says (with the
+/// stored name's cleaning ruled in S3 fix round 1: characters that draw nothing, kinds and runs of spaces).
 @Suite("CustomExerciseDraft · random names", .tags(.domain))
 struct CustomExerciseDraftPropertyTests {
     /// What a name is made of: letters of several scripts, combining marks, fullwidth forms, emoji and their
@@ -11,7 +12,8 @@ struct CustomExerciseDraftPropertyTests {
     static let pieces: [String] = [
         "a", "Z", "é", "e\u{301}", "ß", "ı", "Ø", "Ж", "ж", "α", "ب", "א", "日", "한", "ｒ", "Ｒ", "5", "-", "'", "·",
         "\u{301}", "\u{308}", "🏋️", "👩🏽‍🦰", "🇫🇷", "\u{200D}", "\u{FE0F}",
-        " ", "  ", "\u{A0}", "\u{2003}", "\u{3000}", "\n", "\r\n", "\u{2028}",
+        " ", "  ", "\u{A0}", "\u{2003}", "\u{2009}", "\u{3000}", "\n", "\r\n", "\u{2028}", "\u{2029}",
+        "\u{200B}", "\u{2060}", "\u{FEFF}", "\u{200E}", "\u{202E}", "\u{2066}", "\u{3164}", "\u{600}",
         "\u{0}", "\t", "\u{7}", "\u{1B}", "\u{7F}", "\u{85}", "\u{9F}"
     ]
 
@@ -31,22 +33,41 @@ struct CustomExerciseDraftPropertyTests {
         return (0 ..< count).map { _ in pieces.randomElement(using: &generator) ?? "" }.joined()
     }
 
-    /// The rule read plainly, apart from the code: what the draft must answer for `name`.
-    static func expected(for name: String) -> CustomExerciseError? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return .blankName
+    /// The rule read plainly, apart from the code: what the draft must answer for `name`, and the name it stores.
+    static func expected(for name: String) -> (error: CustomExerciseError?, stored: String) {
+        let directions: Set<UInt32> = [0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069]
+        let visible = String(String.UnicodeScalarView(name.unicodeScalars.filter {
+            !$0.properties.isDefaultIgnorableCodePoint
+        }))
+        let kept = name.unicodeScalars.filter { scalar in
+            !scalar.properties.isDefaultIgnorableCodePoint || scalar.properties.isGraphemeExtend
+                || scalar == "\u{200D}" || directions.contains(scalar.value)
         }
-        if trimmed.count < 2 || trimmed.count > 40 {
-            return .nameLength(trimmed.count)
+        // Spaces are collapsed by scalar: a space under a combining mark is still a space before it.
+        let spaced = kept.map { $0.properties.generalCategory == .spaceSeparator ? " " : $0 }
+        let collapsed = spaced.indices.filter { $0 == 0 || !(spaced[$0] == " " && spaced[$0 - 1] == " ") }
+            .map { spaced[$0] }
+        let stored = String(String.UnicodeScalarView(collapsed)).trimmingCharacters(in: .whitespacesAndNewlines)
+        if visible.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return (.blankName, stored)
         }
-        if trimmed.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
-            return .controlCharacter
+        if stored.count < 2 || stored.count > 40 || stored.unicodeScalars.count > 160 {
+            return (.nameLength(stored.count), stored)
         }
-        if let other = live.first(where: { ExerciseSearch.key($0.name) == ExerciseSearch.key(trimmed) }) {
-            return .duplicateName(other.id)
+        let refused = stored.unicodeScalars.contains { scalar in
+            switch scalar.properties.generalCategory {
+            case .control, .lineSeparator, .paragraphSeparator: true
+            case .format: directions.contains(scalar.value) || !scalar.properties.isDefaultIgnorableCodePoint
+            default: false
+            }
         }
-        return nil
+        if refused {
+            return (.controlCharacter, stored)
+        }
+        if let other = live.first(where: { ExerciseSearch.key($0.name) == ExerciseSearch.key(stored) }) {
+            return (.duplicateName(other.id), stored)
+        }
+        return (nil, stored)
     }
 
     @Test(
@@ -61,9 +82,11 @@ struct CustomExerciseDraftPropertyTests {
             let id = ExerciseID(Fixtures.uuid(7300))
             do {
                 let built = try draft.exercise(id: id, among: Self.live)
-                let isKept = Self.expected(for: name) == nil
+                let expected = Self.expected(for: name)
+                let isKept = expected.error == nil && built.name == expected.stored
                     && built.name == built.name.trimmingCharacters(in: .whitespacesAndNewlines)
                     && CustomExerciseDraft.nameLength.contains(built.name.count)
+                    && built.name.unicodeScalars.count <= 160
                     && !built.name.unicodeScalars.contains("\u{0}")
                     && built.shortName == built.name && built.isCustom
                 #expect(isKept, "\(seed): \(name.unicodeScalars.map(\.value))")
@@ -71,7 +94,7 @@ struct CustomExerciseDraftPropertyTests {
                 let again = try CustomExerciseDraft(built).exercise(id: id, among: Self.live + [built])
                 #expect(again == built, "\(seed): \(name.unicodeScalars.map(\.value))")
             } catch {
-                #expect(error == Self.expected(for: name), "\(seed): \(name.unicodeScalars.map(\.value))")
+                #expect(error == Self.expected(for: name).error, "\(seed): \(name.unicodeScalars.map(\.value))")
             }
         }
     }

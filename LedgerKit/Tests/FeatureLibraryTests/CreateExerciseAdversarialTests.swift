@@ -1,6 +1,11 @@
 import Dependencies
 @testable import FeatureLibrary
 import Foundation
+#if os(iOS)
+    @testable import LedgerSnapshotTesting
+    import SwiftUI
+    import UIKit
+#endif
 import LedgerDomain
 import LedgerTestSupport
 import Testing
@@ -26,26 +31,53 @@ struct CreateExerciseAdversarialTests {
         scene.store.send(.setName("Landmine Squeeze Press Wide"))
         scene.store.send(.save)
         await scene.store.save()
-        withKnownIssue("S3-5: the draft keeps the stored overlap; Save says \"Couldn't save\" every time") {
-            #expect(scene.store.phase == .saved)
-            #expect(scene.store.model.foot.problem == nil)
-        }
+        // S3-5, fixed in S3 fix round 1: the draft of a stored exercise takes its primary out of the secondaries.
+        #expect(scene.store.phase == .saved)
+        #expect(scene.store.model.foot.problem == nil)
     }
 
     // MARK: S3-6
 
-    @Test("S3-6. The problem Save finds is announced to VoiceOver, as Program's and Onboarding's notices are")
-    func saveProblem_isAnnounced() throws {
-        let sources = try CopyAudit.sources(ofModule: "FeatureLibrary")
-        let sheet = try #require(sources.first { $0.key.hasSuffix("CreateExerciseSheet.swift") }?.value)
-        let screen = try #require(sources.first { $0.key.hasSuffix("CreateExerciseScreen.swift") }?.value)
-        let announces = (sheet + screen).contains("Announcement") || (sheet + screen).contains("announce")
-        withKnownIssue(
-            "S3-6: nothing tells VoiceOver that Save found a problem; the line under Name may be off screen"
-        ) {
-            #expect(announces)
+    #if os(iOS)
+        /// What VoiceOver was told by the hosted sheet.
+        @MainActor @Observable
+        final class Heard {
+            var announcements: [String] = []
         }
-    }
+
+        /// S3-6, fixed in S3 fix round 1. The orchestrator ruled that G2's source check be replaced by this behavioural
+        /// test: the sheet hosted in a window runs its save from its own task and announces what Save found, each
+        /// time, the same line again too, and a failed save's line over Save.
+        @Test("S3-6. The problem Save finds is announced to VoiceOver, as Program's and Onboarding's notices are")
+        func saveProblem_isAnnounced() async {
+            let scene = CreateScene(failures: 1)
+            let heard = Heard()
+            let sheet = CreateExerciseSheet(
+                store: scene.store,
+                onClose: {},
+                announce: { heard.announcements.append($0) }
+            )
+            let host = UIHostingController(rootView: sheet)
+            let window = SceneLessWindow.make(frame: CGRect(x: 0, y: 0, width: SnapshotConfig.phoneWidth, height: 874))
+            window.rootViewController = host
+            window.isHidden = false
+            defer {
+                window.isHidden = true
+                window.rootViewController = nil
+            }
+            host.view.layoutIfNeeded()
+            scene.store.send(.save)
+            await eventually { heard.announcements.count == 1 }
+            scene.store.send(.save)
+            await eventually { heard.announcements.count == 2 }
+            scene.store.send(.setName("Landmine Squeeze Press 2"))
+            scene.store.send(.save)
+            await eventually { heard.announcements.count == 3 }
+            #expect(heard.announcements == [
+                "Enter a name.", "Enter a name.", "Couldn't save the exercise. Try again."
+            ])
+        }
+    #endif
 
     // MARK: S3-7
 
@@ -55,9 +87,8 @@ struct CreateExerciseAdversarialTests {
         let ids = { (title: String) in scene.store.model.groups[2].chips.first { $0.title == title }?.id }
         let shoulders = ids("Shoulders")
         scene.store.send(.setPrimaryMuscle(.triceps))
-        withKnownIssue("S3-7: chips are identified by place, so the chip at a place becomes another muscle") {
-            #expect(ids("Shoulders") == shoulders)
-        }
+        // S3-7, fixed in S3 fix round 1: a chip is identified by its value.
+        #expect(ids("Shoulders") == shoulders)
         #expect(scene.store.model.groups[2].chips.first?.title == "Chest", "place 0 was Back, is now Chest")
     }
 

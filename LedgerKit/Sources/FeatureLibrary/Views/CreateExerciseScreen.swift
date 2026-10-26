@@ -9,14 +9,23 @@ struct CreateExerciseScreen: View {
     let model: CreateExerciseModel
     let send: (CreateExerciseAction) -> Void
     let onCancel: () -> Void
+    @State private var position = ScrollPosition(edge: .top)
 
     var body: some View {
         SheetChrome(model.title, cancel: model.cancel, cancelIdentifier: "library.create.cancel", onCancel: onCancel) {
             ScrollView {
                 CreateExercisePage(model: model, send: send)
             }
+            .scrollPosition($position)
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
+            // A problem of the name is shown at the top, under the field: scrolled there when Save finds one, which at
+            // large text sizes is many screens up (finding S3-6).
+            .onChange(of: model.problemNumber) {
+                if model.name.problem != nil {
+                    position.scrollTo(edge: .top)
+                }
+            }
             CreateExerciseFoot(model: model.foot, send: send)
         }
     }

@@ -30,6 +30,8 @@ nonisolated struct CreateExerciseInput: Sendable {
     var isEdit = false
     var isSaving = false
     var problem: CreateExerciseProblem?
+    /// How many times Save has found a problem (finding S3-6).
+    var problemNumber = 0
     var locale: Locale
 }
 
@@ -43,6 +45,13 @@ nonisolated struct CreateExerciseModel: Equatable, Sendable {
     /// Equipment, primary muscle, secondary muscles and movement pattern, in that order.
     let groups: [ChipGroup]
     let foot: Foot
+    /// Counts the problems Save has found, so that each one, the same as the last or not, is announced and the name's
+    /// is scrolled into view (finding S3-6).
+    let problemNumber: Int
+    /// The line Save last found, under the name or over Save: what VoiceOver is told; nil with none.
+    var announcement: String? {
+        name.problem ?? foot.problem
+    }
 
     /// The name field: its heading, which is also its placeholder and spoken label, the text as typed, and the rule
     /// Save found it breaks.
@@ -66,8 +75,9 @@ nonisolated struct CreateExerciseModel: Equatable, Sendable {
     }
 
     struct Chip: Equatable, Sendable, Identifiable {
-        /// The chip's place in its field.
-        let id: Int
+        /// The value the chip stands for, its raw value ("chest"): a chip keeps its identity when the primary muscle
+        /// takes another out of the secondary muscles' row (finding S3-7).
+        let id: String
         let title: String
         /// "Primary muscle: Chest": the chip with its field's name.
         let spokenLabel: String

@@ -40,10 +40,9 @@ struct CustomExerciseDraftAdversarialTests {
         ]
     )
     func invisibleOnly_isBlank(_ name: String) {
-        withKnownIssue("S3-1: format (Cf) characters are neither trimmed nor refused; an invisible name is stored") {
-            let isBlank = Self.result(name) == .blankName
-            #expect(isBlank, "\(name.unicodeScalars.map(\.value))")
-        }
+        // S3-1, fixed in S3 fix round 1.
+        let isBlank = Self.result(name) == .blankName
+        #expect(isBlank, "\(name.unicodeScalars.map(\.value))")
     }
 
     @Test("Pin: a zero-width space is trimmed (Foundation counts it a blank), alone or at the ends", arguments: [
@@ -68,20 +67,18 @@ struct CustomExerciseDraftAdversarialTests {
         ]
     )
     func drawsAsAnother_isDuplicate(_ name: String) {
-        withKnownIssue("S3-2: ExerciseSearch.key folds no invisible character and no run or kind of space") {
-            let isDuplicate = Self.result(name) == .duplicateName(Self.benchID)
-            #expect(isDuplicate, "\(name.unicodeScalars.map(\.value))")
-        }
+        // S3-2, fixed in S3 fix round 1: the draft stores and compares the name as it draws.
+        let isDuplicate = Self.result(name) == .duplicateName(Self.benchID)
+        #expect(isDuplicate, "\(name.unicodeScalars.map(\.value))")
     }
 
     @Test("S3-2. A right-to-left override spells a live exercise's name backwards and draws it forwards")
     func directionOverride_isDuplicate() {
         // U+202E reverses what follows on screen: "sserP hcneB" is drawn "Bench Press".
         let name = "\u{202E}sserP hcneB"
-        withKnownIssue("S3-2: bidirectional format characters are kept in a name") {
-            let isRefused = Self.result(name) != nil
-            #expect(isRefused)
-        }
+        // S3-2, fixed in S3 fix round 1 under S3-1's rule: a direction override is refused.
+        let isRefused = Self.result(name) != nil
+        #expect(isRefused)
     }
 
     // MARK: S3-3 · line separators
@@ -91,25 +88,23 @@ struct CustomExerciseDraftAdversarialTests {
         arguments: ["Bench\u{2028}Press", "Bench\u{2029}Press", "Bench\nPress", "Bench\r\nPress", "Bench\u{85}Press"]
     )
     func lineSeparators_areRefused(_ name: String) {
+        // S3-3, fixed in S3 fix round 1: Zl and Zp are refused as Cc is.
         let refused = Self.result(name) == .controlCharacter
-        if name.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) {
-            #expect(refused, "a Cc line break is refused today: \(name.unicodeScalars.map(\.value))")
-        } else {
-            withKnownIssue("S3-3: U+2028 and U+2029 are Zl and Zp, not Cc; the copy says a line break is refused") {
-                #expect(refused, "\(name.unicodeScalars.map(\.value))")
-            }
-        }
+        #expect(refused, "\(name.unicodeScalars.map(\.value))")
     }
 
     // MARK: S3-4 · grapheme stuffing (nit, pinned)
 
-    @Test("S3-4. Two characters may carry thousands of combining marks: 2–40 bounds graphemes, not storage")
-    func combiningMarks_areUnbounded() throws {
+    /// S3-4, ruled in S3 fix round 1 (sanctioned edit of this pin, which held the old behaviour): a name of more than
+    /// 160 scalars is refused with the length's error, whatever its count of characters.
+    @Test("S3-4. Two characters carrying thousands of combining marks are refused: a name holds at most 160 scalars")
+    func combiningMarks_overTheScalarCap_areRefused() throws {
         let name = "a" + String(repeating: "\u{301}", count: 1000) + "b" + String(repeating: "\u{308}", count: 1000)
-        let built = try CustomExerciseDraft(name: name).exercise(id: Self.id, among: [Self.bench])
-        // Pinned as it stands: 2 characters, 2,002 scalars stored as the name and the short name.
-        let pinned = built.name.count == 2 && built.name.unicodeScalars.count == 2002 && built.shortName == built.name
-        #expect(pinned)
+        #expect(Self.result(name) == .nameLength(2))
+        let atTheCap = "a" + String(repeating: "\u{301}", count: 79) + "b" + String(repeating: "\u{308}", count: 79)
+        let built = try CustomExerciseDraft(name: atTheCap).exercise(id: Self.id, among: [Self.bench])
+        let isKept = built.name.count == 2 && built.name.unicodeScalars.count == 160 && built.shortName == built.name
+        #expect(isKept)
     }
 
     // MARK: Pins of what holds
