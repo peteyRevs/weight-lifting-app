@@ -347,3 +347,138 @@ No hosted view sweep was added, so the PR sweep gains nothing through `TestSweep
    summary.
 5. **F12-S2-5 ("+Δ" against the session just before): keep as built.** The spec says "the previous session"; the
    passing pin stays. A candidate for Pete: compare with the latest earlier session that has a working set. No code.
+
+## S3 — G2 findings (2026-10-26)
+
+Branch `feat/F12-s3-create` at `bf65baf` (slice `526575a`…`bf65baf` over the spec commit `235e845`). Read: the brief's
+S3, the S3 amendments (N19, N20), §3 Q2/Q4/Q5 as A, and the implementer's "S3 — as built". Ruling taken as given:
+N19's "counts" is `PersonalRecords.countsTowardBests` (working or added) for both sides of "+Δ".
+
+### What was attacked, and what held
+
+- **N15 name rules.** Trimming, 2–40 graphemes (emoji ZWJ sequences, flags, skin tones, combining marks, Hangul,
+  Arabic), every `Cc` (C0, DEL, C1, U+0085), uniqueness by `ExerciseSearch.key` (case, diacritics, width, NFD vs
+  NFC), the edited exercise left out, the rules' order, the primary muscle among the secondaries for every muscle.
+  All hold as written. A zero-width space U+200B at the ends is trimmed (Foundation counts it a blank). What does
+  not hold is the class of characters the rule does not name: S3-1, S3-2, S3-3.
+- **Deleted exercises.** No API deletes an exercise (`ExerciseRepository` has none), so "live" is every exercise;
+  nothing to attack.
+- **N16 saving.** Double tap, failure then retry, cancellation before the write: the implementer's tests cover them
+  and they pass. A cancellation during the write is GRDB's: its async write throws `CancellationError` and rolls
+  back, so the store's "cancelled → nothing" reading is right on the device. Edit of an already logged exercise
+  (Q5 A) pinned: the Library follows the id (new name, new equipment, same 2 sessions and PR), the stored workouts
+  keep the name they were logged under. The one gap is an edit of a row the sheet never wrote (S3-5).
+- **N17/Q4.** Short name is the name, start load 0 in both units, no alternatives, also after an edit (pinned).
+- **N18.** Rows' actions zip with the rows; a second tap and "Done" after a row change nothing; before the receipt a
+  row does nothing; a swapped exercise routes to the exercise done (`exerciseID`, not `originalExerciseID`). The
+  router appends to Today's path: two workouts in a row whose receipts each open a history leave two histories on
+  Today's stack, which is "one step deeper" each time and is accepted.
+- **N19.** A differential oracle written apart from the code (quadratic, literal) over 200 random histories the S2
+  generator never makes: undone sets, sessions with no set, runs of warm-up-only or drop-only sessions, records at
+  random, equal masses written in two units (100 lb ≡ 45.359237 kg). It agrees everywhere. Mutant check: with
+  `earlier = top` (a session without counted sets resets the comparison) it fails 64 of 200 cases.
+- **N20.** A GRDB-against-fakes differential over `HistoryScript` (materialise new and older workouts, edit sets,
+  delete, refused calls), 25 seeds × limits 1, 2 and 5, 14 steps each: after every step both observations reach
+  exactly what their own three reads return, the two reads agree, and neither ever emits a value equal to the one
+  before. 24 of 25 scripts show stats (the guard asks for ¾). Mutant check: the observation reading
+  `recentLimit + 1` fails it (37 issues). Observation failure behaviour (left until the next run) is the
+  implementer's open question 3 and is not re-filed.
+- **Strings.** All 22 new keys are in the catalog with comments; none stale; no plural forms are new; no hard-coded
+  user-facing text in the new views. "Core" serving both a muscle and a pattern is one key by design (commented).
+- **Accessibility.** Selected and toggle traits are pinned by the implementer's tree tests and hold. Gaps: S3-6
+  (the problem is never announced), S3-7 (chip identity). G1's truncated name field at accessibility sizes is
+  already open question 1 and is not re-filed.
+
+### Findings
+
+**S3-1 (minor). A name of invisible characters only is saved.**
+- Repro: type or paste U+2060 U+2060 (word joiners), U+FEFF U+FEFF, U+200E U+200F, or U+202E U+202C; Save. The
+  draft builds an exercise whose name draws as nothing; the Library lists an empty row. N15's "Enter a name." is
+  the intent for a name with nothing to read.
+- Cause: `trimmingCharacters(in: .whitespacesAndNewlines)` does not take format characters (`Cf`, other than
+  U+200B), and the `Cc` check does not see them.
+- Test: `LedgerDomainTests/Adversarial/CustomExerciseDraftAdversarialTests.swift`
+  `invisibleOnly_isBlank` (4 arguments, `withKnownIssue`).
+- Fix: before the rules, drop `Cf` scalars (or Unicode's default-ignorable code points) from the name, or refuse
+  them as `controlCharacter`; then the blank check catches an all-invisible name.
+
+**S3-2 (minor). A name that draws exactly as another exercise's passes the duplicate rule.**
+- Repro, with "Bench Press" live: "\u{FEFF}Bench Press", "Bench Press\u{2060}", "Bench\u{200B} Press",
+  "Bench\u{00A0}Press" (a no-break space, as text copied from a web page has), "Bench  Press" (two spaces),
+  "Bench\u{2009}Press" (thin space), and "\u{202E}sserP hcneB" (a right-to-left override that draws "Bench Press").
+  Each is saved; the Library then shows two identical names.
+- Cause: `ExerciseSearch.key` folds case, diacritics and width only; it keeps format characters and every kind and
+  run of space. Search is affected the same way: "bench press" does not find "Bench\u{00A0}Press".
+- Test: `CustomExerciseDraftAdversarialTests.drawsAsAnother_isDuplicate` (6 arguments) and
+  `directionOverride_isDuplicate`, both `withKnownIssue`.
+- Fix: in the draft, store a normalised name (format characters dropped as in S3-1, every run of `Zs` collapsed to
+  one U+0020); optionally fold the same in `ExerciseSearch.key` so search and the rule agree. Decision #23's key is
+  F11's too, so a key change wants the orchestrator's word.
+
+**S3-3 (minor). A line or paragraph separator inside a name is saved.**
+- Repro: "Bench\u{2028}Press" or "Bench\u{2029}Press"; Save. The name is stored with a line break, though the
+  sheet's own copy says a line break is refused ("…a tab, a line break or another control character…"). One-line
+  rows then draw two lines or cut.
+- Cause: U+2028/U+2029 are `Zl`/`Zp`, not `Cc`. "\n", "\r\n" and U+0085 are refused (pinned).
+- Test: `CustomExerciseDraftAdversarialTests.lineSeparators_areRefused` (2 of 5 arguments under `withKnownIssue`;
+  the `Cc` ones pass).
+- Fix: refuse `Zl` and `Zp` with `controlCharacter` (or `CharacterSet.newlines` anywhere in the trimmed name).
+
+**S3-4 (nit). 2–40 bounds graphemes, not storage.**
+- Repro: "a" + 1,000 × U+0301 + "b" + 1,000 × U+0308 is 2 characters and is saved: 2,002 scalars in the name and
+  the short name, drawn as a tall smear over neighbouring rows.
+- Test: `CustomExerciseDraftAdversarialTests.combiningMarks_areUnbounded` (passes; pins today's behaviour).
+- Fix, if wanted: cap combining marks per grapheme (for example 4), or cap the UTF-8 length (for example 200 bytes).
+
+**S3-5 (nit). An edit of a stored exercise whose secondary muscles hold its primary can never be saved.**
+- Repro: a custom exercise stored with primary Chest and secondaries [Chest, Triceps] (no sheet writes this today,
+  but a sync, an import or a later version can); "Edit"; change the name; Save → "Couldn't save the exercise. Try
+  again.", every time. The sheet offers no Chest chip under Secondary muscles, so the lifter cannot see or clear it;
+  only changing the primary muscle and back gets out.
+- Test: `FeatureLibraryTests/CreateExerciseAdversarialTests.swift` `edit_primaryAmongStoredSecondaries_canBeSaved`
+  (`withKnownIssue`).
+- Fix: `CustomExerciseDraft.init(_ exercise:)` removes the primary from the secondaries, as `setPrimaryMuscle` does.
+
+**S3-6 (minor, accessibility). The problem Save finds is never announced.**
+- Repro: VoiceOver on, a blank name, focus on Save (pinned at the foot), double-tap. "Enter a name." appears under
+  the name field, at the top of the scroll view, and nothing is spoken; with the fields scrolled (any accessibility
+  size), the line is also off screen for a sighted lifter. Program and Onboarding announce their notices
+  (`ProgramRoot`, `OnboardingRoot`: `AccessibilityNotification.Announcement`).
+- Test: `CreateExerciseAdversarialTests.saveProblem_isAnnounced` (a source check, `withKnownIssue`).
+- Fix: inject `announce` into `CreateExerciseSheet` as `ProgramRoot` does and post the name's or the foot's problem
+  when it appears; scroll the name field into view (`ScrollViewReader`) for a name problem.
+
+**S3-7 (nit, accessibility). Secondary-muscle chips are identified by place.**
+- Repro: primary Chest: Shoulders is chip 1; choose primary Triceps: Shoulders is chip 2 and chip 1 is Back.
+  `ForEach` identity follows the place, so a chip's view (its pressed state, its accessibility element) becomes
+  another muscle when the primary changes.
+- Test: `CreateExerciseAdversarialTests.secondaryChipIdentity_isTheMuscle` (`withKnownIssue`).
+- Fix: identify chips by their value (`Chip.id` as the field plus the enum's raw value).
+
+### Tests added
+
+All failing tests are wrapped in Swift Testing's `withKnownIssue` (none `.disabled`), so the branch builds, the
+suites pass, and each turns into a "known issue not recorded" failure the moment its fix lands.
+
+| File | Tests | State |
+|---|---|---|
+| `LedgerKit/Tests/LedgerDomainTests/Adversarial/CustomExerciseDraftAdversarialTests.swift` | 12 (S3-1…S3-4 and 7 pins) | S3-1, S3-2, S3-3 known issues; S3-4 and pins pass |
+| `LedgerKit/Tests/LedgerDomainTests/Adversarial/StepOracleAdversarialTests.swift` | 3 (N19 oracle × 200 seeds, 2 pins) | pass |
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/LibraryStatsObservationAdversarialTests.swift` | 1 (N20 differential, 25 seeds × 3 limits) | pass |
+| `LedgerKit/Tests/FeatureLibraryTests/CreateExerciseAdversarialTests.swift` | 6 (S3-5, S3-6, S3-7, 3 pins incl. Q5 A) | S3-5, S3-6, S3-7 known issues; pins pass |
+
+### Commands and exit statuses
+
+| Command | Result |
+|---|---|
+| host `swift test --filter "LedgerDomainTests.(CustomExerciseDraftAdversarialTests\|…StepOracle…)"`, first run | 1: 3 cases' "known issue not recorded" (U+200B is trimmed); cases moved to pins |
+| host `swift test --filter LedgerDomainTests.CustomExerciseDraftAdversarialTests` | 0: 12 tests, 13 known issues |
+| host `swift test --filter FeatureLibraryTests.CreateExerciseAdversarialTests` | 0: 6 tests, 4 known issues |
+| host `swift test --filter LedgerPersistenceTests.LibraryStatsObservationAdversarialTests` | 0: 1.3 s |
+| host, N19 oracle with `earlier = top` (mutant, restored by copy) | 1: 64 of 200 cases fail |
+| host, N20 differential with the observation on `recentLimit + 1` (mutant, restored by copy) | 1: 37 issues |
+| host, final: the four new suites plus `CustomExerciseDraft`, `CreateExerciseStoreTests`, `ExerciseHistoryAdversarialTests`, `LibraryStoreTests` | 0: 1 + 42 + 42 tests, 13 + 4 known issues |
+| `swiftformat --lint` and `swiftlint lint --strict` on the four files | 0 |
+
+**Not run.** No simulator run: the four suites are host-pure (no hosting), and the orchestrator runs the gate.
+VoiceOver by ear. The Nightly UI tests.
