@@ -129,8 +129,13 @@ authoritative; the plan differs:
     the rows under it, and the rest panel's room; and `PixelBuffer` draws straight into its pixels' storage
     (the per-pixel copy cost as much as a drawing unoptimized). The PR plan's cases on a developer Mac: 931 →
     801 s, a floor taken on a loaded host (196 s saved where faster).
-  - *Deadline (2026-10-20; `tasks/chores/ci-test-time.md`).* `LEDGER_XCODEBUILD_DEADLINE` is 3,840 s; the
-    step's timeout is 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
+  - *Deadline (2026-10-26).* `LEDGER_XCODEBUILD_DEADLINE` is 4,500 s; the step's timeout is 77 min, 2 min
+    after the deadline, and the job's 82. #72 (F12 S2) restored its compilation cache and still built for
+    1,062 s, then 1,630 s on a re-run (646–920 s on the four PRs before it), and the re-run was stopped at
+    3,840 s in its tests. The runner's worst seen, 1,630 s of build, 150 s of script tests and #67's 2,402 s of
+    tests, is about 4,180 s; the deadline is 5 min past that. Minutes are free while the repository is public.
+  - *Deadline until 2026-10-26 (`tasks/chores/ci-test-time.md`).* 3,840 s; the
+    step's timeout was 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
     first runs (#65, #66) restored nothing, built cold (865 and 1,424 s, after 96 and 150 s of script tests)
     and were stopped by the 3,120 s deadline in their tests; their re-runs built warm (441 and 758 s) and
     tested for 2,099 and 2,210 s (2,635 and 3,124 s in all). Since then a first run restores `main`'s cache
