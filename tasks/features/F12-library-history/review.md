@@ -462,3 +462,83 @@ error enum. Mutations, each in the scratch copy:
   - one known issue, already present, in the in-memory contracts.
 - Probes: ZWJ (R1-1) and the observation's timing (R1-2), with the results above.
 - No simulator run. The orchestrator runs the gate.
+
+## S3 — G3 review (round 2, 2026-10-26)
+
+Reviewed `a930528..4f01731` (fix `6482559`, notes `4f01731`) against round 1 and the orchestrator's rulings. I did
+not re-open the R1-2 ruling (set taps write `workout_event` only; about 20 ms per finish, edit or delete is
+accepted, and `bestSets`' scan is a follow-up) or the "Core work" ruling. Read-only. I probed and mutated a
+`git archive` copy in my scratchpad, which I have since deleted.
+
+**Verdict: approved.** Each fix is correct and minimal. One nit remains (R2-1); I recommend it as a follow-up, not
+a blocker.
+
+**R1-1 (the joiner): fixed.** A ZWJ survives only if the scalar before it (past grapheme extenders and skin tones)
+and the scalar after it are both non-ASCII emoji.
+- **Mutation:** keeping every ZWJ again fails G2's `drawsAsAnother_isDuplicate` on the new arguments, and the
+  property test on several seeds.
+- **Spoof probe** (an existing name, and a new name that should be its duplicate):
+
+  | Case | Result |
+  |---|---|
+  | A ZWJ at the end or start beside an emoji ("Curl 💪\u{200D}", "\u{200D}💪 Curl") | refused |
+  | A letter–ZWJ–emoji and emoji–ZWJ–letter | refused |
+  | A keycap, then ZWJ, then an emoji ("1️⃣\u{200D}💪") | refused: the skip passes U+20E3 and U+FE0F and reaches the ASCII "1" |
+  | A bare keycap with a ZWJ | refused |
+  | A digit, ZWJ, digit | refused |
+  | A skin tone after a letter, then ZWJ, then an emoji | refused |
+  | A double ZWJ between emoji | refused |
+  | Tag characters U+E0067 and U+E007F, VS15, CGJ | refused (folded by the key) |
+  | **"Curl 💪\u{200D}💪" against "Curl 💪💪"** | **accepted** |
+  | **"Press ©\u{200D}™" against "Press ©™"** | **accepted** |
+  | "Run 🇺\u{200D}🇸" against "Run 🇺🇸" | accepted, but it draws differently (the joiner breaks the flag pair), so it is not a spoof |
+
+**R1-2 (the observation): fixed as ruled, and G1's claim verified.**
+- **From the code:** the live workout's taps go through `GRDBWorkoutEventStore.append`, which writes
+  `workout_event` alone. `materialize` is called only for a finish (`WorkoutEngine+Reduce.swift:200`), a replay
+  and recovery. `updateSets` and `delete` belong to History. No SQL trigger writes the observed tables.
+- **Measured** (host, Debug, the 20,000-set seed, with an observation that counts its fetches and uses the
+  product's `libraryObservationFetch`):
+
+  | 20 writes | Without the observer | With it | Fetches |
+  |---|--:|--:|--:|
+  | Set-tap appends (`append`) | 0.05 ms | 0.41 ms | **0** |
+  | Edits (`updateSets`) | 3.5 ms | 24.0 ms | 20 |
+
+- The fold into one `GROUP BY` is correct. The count is `COUNT(DISTINCT workout.id)` over the same `doneSets`
+  group that `sessionCount` counts. The contract, G2's differential and the in-memory contract all pass.
+- The Nightly line times the fetch under `statsQuery`.
+
+**R1-3: fixed.** `WatchedExercises` keeps every held read, and the test releases both reads, then awaits both.
+- **Mutation** (`!isSaveRunning` removed): the test now **fails in 0.012 s** with `saves.count == 1`, and the run
+  exits (exit 1 after 7 s, the build included). It used to hang.
+
+**R1-4: fixed.** `.interactiveDismissDisabled(store.phase == .saving)`, as `FinishSheet` does.
+
+**R1-5: fixed.**
+- (a) `"Name must be %@–%@ characters."` takes the bounds from `CustomExerciseDraft.nameLength`, formatted by the
+  locale. It is tested in en_US and ar_EG, and the catalog key matches the interpolation.
+- (b) "Core work" has its own key and comment, and the muscle's comment is back to the muscle alone (as ruled).
+  G1 re-recorded the seven references for that chip alone.
+
+**R1-6: fixed.** `drawsNothing` is derived from `storedName`, so there is one reading of "draws nothing". A lone ZWJ
+is dropped, so it is still blank.
+
+**Lines.** The count reproduces: +959 / −152, **net 807**, still under 1,000.
+
+**F12-S3-R2-1 (Nit, follow-up). A ZWJ between two emoji that form no sequence draws as the plain pair, but counts
+as a different name.**
+- Seen in the probe: "Curl 💪\u{200D}💪" is accepted beside "Curl 💪💪", and "Press ©\u{200D}™" beside "Press ©™".
+- **Reach:** it needs an existing name with two emoji side by side, plus a pasted joiner, so it is narrow.
+- **Exact fix:** keep a joiner only inside a recommended (RGI) ZWJ sequence, which needs Unicode's emoji-sequence
+  data. That is not worth it in this slice.
+- **Cheap fix:** fold U+200D out of `ExerciseSearch.key` in the queued key-folding follow-up. The cost is that a
+  real sequence equals its parts ("👨‍👩‍👧" = "👨👩👧"), which is acceptable for a duplicate check.
+
+**Runs (host, scratch copy of `4f01731`).**
+- `swift build --build-tests`: exit 0, 87 s.
+- `swift test --filter "CreateExercise|CustomExerciseDraft|ExerciseHistory|LibraryStatsObservation|StatsQueriesTests|InMemoryContract|LibraryStore|LibraryCopy|ReceiptRowRoute"`:
+  - green, 168 tests;
+  - one known issue, already there.
+- Probes (spoofs, and timing with fetch counts) and two mutations, with the results above.
+- No simulator run.
