@@ -63,6 +63,10 @@ actor BestsSession: StatsQueries {
         base.observeExerciseSessions(exerciseID: exerciseID)
     }
 
+    nonisolated func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+        base.observeLibraryStats(recentLimit: recentLimit)
+    }
+
     func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
         try await base.bestE1RM(exerciseID: exerciseID)
     }

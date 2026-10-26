@@ -40,6 +40,8 @@ final class HistoryModel: Sendable {
         var observers: [Observer] = []
         /// F12 S2 (sanctioned): the observers of one exercise's sessions.
         var sessionObservers: [SessionObserver] = []
+        /// F12 S3 (sanctioned): told of every write, for the Library's stats.
+        var writeSignals: [AsyncStream<Void>.Continuation] = []
     }
 
     struct Observer: Sendable {
@@ -140,6 +142,9 @@ extension HistoryModel {
                     state.sessionObservers[index].last = value
                     state.sessionObservers[index].continuation.yield(value)
                 }
+            }
+            for signal in state.writeSignals {
+                signal.yield()
             }
         }
     }

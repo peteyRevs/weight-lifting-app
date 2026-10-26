@@ -160,7 +160,8 @@ struct LibraryStoreTests {
         #expect(scene.store.state == .failed, "a filter does not draw over the failed state")
     }
 
-    @Test("A stats read that fails shows the failed state")
+    /// F12 S3, N20: the stats are an observation, which ends when its read fails, as GRDB's does.
+    @Test("A stats observation whose read fails shows the failed state")
     func statsReadFails_showsFailed() async {
         let scene = LibraryScene { $0.statsQueries = UnreadableBests(base: $0.statsQueries) }
         let run = await scene.running()
@@ -186,7 +187,8 @@ nonisolated struct EndedSettings: SettingsRepository {
     }
 }
 
-/// The stats of `base`, but `bestSets` throws: a read of the Library's that fails.
+/// The stats of `base`, but the Library's can't be read: `bestSets` throws, and the Library's observation ends at
+/// once, as a database observation does when its read fails.
 nonisolated struct UnreadableBests: StatsQueries {
     struct Unreadable: Error {}
 
@@ -194,6 +196,10 @@ nonisolated struct UnreadableBests: StatsQueries {
 
     func bestSets() async throws -> [ExerciseID: BestSet] {
         throw Unreadable()
+    }
+
+    func observeLibraryStats(recentLimit _: Int) -> AsyncStream<LibraryStats> {
+        AsyncStream { $0.finish() }
     }
 
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {

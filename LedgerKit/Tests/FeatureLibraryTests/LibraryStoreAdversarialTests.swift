@@ -7,7 +7,8 @@ import LedgerTestSupport
 import Testing
 
 /// F12 S1 adversarial round 1 (G2): the store where its own tests are silent. The failed state is left again by the
-/// next change, with the filter typed meanwhile; a deleted newest workout takes its PR and its recent row away
+/// next run (the next change until F12 S3's N20), with the filter typed meanwhile; a deleted newest workout takes its
+/// PR and its recent row away
 /// while the Library is up (N1); RECENTLY LOGGED stops at five; a change of units keeps the filter; a bodyweight
 /// exercise logged at no load reads its zero.
 @MainActor
@@ -15,19 +16,23 @@ import Testing
 struct LibraryStoreAdversarialTests {
     static let benchName = "Barbell Bench Press"
 
-    @Test("A failed stats read is left at the next change: the model returns, with the filter typed meanwhile")
-    func statsReadFailsOnce_nextWorkout_showsTheModelWithTheFilter() async throws {
+    /// F12 S3, N20 (sanctioned edit): the stats are now an observation, which ends when its read fails, as GRDB's
+    /// does; the failed state is left by the next run (the tab or the app coming back), no longer by the next change.
+    @Test("A failed stats read is left at the next run: the model returns, with the filter typed meanwhile")
+    func statsReadFailsOnce_nextRun_showsTheModelWithTheFilter() async throws {
         let failures = Failures(remaining: 1)
         let scene = LibraryScene { $0.statsQueries = FailingBests(base: $0.statsQueries, failures: failures) }
-        let run = await scene.running()
-        defer { run.cancel() }
+        let failed = await scene.running()
         #expect(scene.store.state == .failed)
         scene.store.send(.setQuery("bench"))
+        failed.cancel()
         let bench = try LibraryFixtures.exercise(named: Self.benchName)
         try await scene.memory.workouts.materialize(
             Seeders.workout(number: 1, endedAt: Fixtures.now, [.straight(bench, sets: 1, reps: 5, pounds: 185)]),
             slotUpdates: []
         )
+        let run = Task { await scene.store.run() }
+        defer { run.cancel() }
         await eventually { (try? scene.model) != nil }
         let model = try scene.model
         #expect(model.search.query == "bench")
@@ -114,7 +119,7 @@ struct LibraryStoreAdversarialTests {
     }
 }
 
-/// How many more `bestSets` reads fail.
+/// How many more reads of the Library's stats fail.
 final nonisolated class Failures: @unchecked Sendable {
     private let lock = NSLock()
     private var remaining: Int
@@ -132,7 +137,8 @@ final nonisolated class Failures: @unchecked Sendable {
     }
 }
 
-/// The stats of `base`, but the first `failures` reads of `bestSets` throw, as a read the database refused once.
+/// The stats of `base`, but the first `failures` reads of the Library's stats fail, as a read the database refused
+/// once: a failed `bestSets` throws, and a failed observation ends at once (F12 S3, N20: sanctioned edit).
 nonisolated struct FailingBests: StatsQueries {
     let base: any StatsQueries
     let failures: Failures
@@ -142,6 +148,10 @@ nonisolated struct FailingBests: StatsQueries {
             throw UnreadableBests.Unreadable()
         }
         return try await base.bestSets()
+    }
+
+    func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+        failures.next() ? AsyncStream { $0.finish() } : base.observeLibraryStats(recentLimit: recentLimit)
     }
 
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {

@@ -36,6 +36,10 @@ public enum StatsQueriesContract {
             "observeExerciseSessions follows any workout of the exercise, an older one too, and no other exercise's",
             observeExerciseSessions
         ),
+        Clause(
+            "observeLibraryStats follows any workout, an older one too, and is what the three reads say",
+            observeLibraryStats
+        ),
         Clause("every query follows updateSets and delete", followsEdits)
     ]
 

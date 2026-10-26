@@ -159,10 +159,7 @@ public struct GRDBStatsQueries: StatsQueries {
 
     /// How many workouts hold a done set, of any kind, of the exercise.
     public func sessionCount(exerciseID: ExerciseID) async throws -> Int {
-        let sql = "SELECT COUNT(DISTINCT workout.id) \(SQL.doneSets) AND workout_exercise.exercise_id = ?"
-        return try await queue.read { database in
-            try SQL.count(sql, [ColumnCodec.text(exerciseID)], in: database)
-        }
+        try await queue.read { database in try Self.fetchSessionCount(exerciseID, in: database) }
     }
 
     /// The personal records the exercise's workouts set, newest first by `achievedAt` (the workout's start); of
@@ -187,17 +184,7 @@ public struct GRDBStatsQueries: StatsQueries {
     /// is not positive. Exercises of one workout are in id order. An exercise id this app cannot read is logged
     /// and left out.
     public func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
-        let sql = """
-        SELECT workout_exercise.exercise_id AS id, MAX(workout.started_at) AS started_at
-        \(SQL.doneSets)
-        GROUP BY workout_exercise.exercise_id ORDER BY started_at DESC, workout_exercise.exercise_id LIMIT ?
-        """
-        let table = WorkoutExerciseRecord.databaseTableName
-        return try await queue.read { database in
-            try Row.fetchAll(database, sql: sql, arguments: [max(0, limit)]).compactMap { row in
-                row.readable(as: table) { try ColumnReader(row: $0, table: table).identifier("id") }
-            }
-        }
+        try await queue.read { database in try Self.fetchRecentlyLogged(limit: limit, in: database) }
     }
 }
 

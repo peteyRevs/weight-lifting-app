@@ -98,6 +98,10 @@ private struct BriefStatsQueries: StatsQueries {
         AsyncStream { $0.finish() }
     }
 
+    func observeLibraryStats(recentLimit _: Int) -> AsyncStream<LibraryStats> {
+        AsyncStream { $0.finish() }
+    }
+
     func bestE1RM(exerciseID _: ExerciseID) async throws -> Weight? {
         nil
     }

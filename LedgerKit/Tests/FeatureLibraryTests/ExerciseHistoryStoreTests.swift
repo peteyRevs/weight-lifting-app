@@ -140,4 +140,8 @@ nonisolated struct UnreadableRecords: StatsQueries {
     func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
         base.observeExerciseSessions(exerciseID: exerciseID)
     }
+
+    func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+        base.observeLibraryStats(recentLimit: recentLimit)
+    }
 }

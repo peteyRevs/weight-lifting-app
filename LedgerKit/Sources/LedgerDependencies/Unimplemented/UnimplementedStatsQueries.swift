@@ -61,4 +61,8 @@ struct UnimplementedStatsQueries: StatsQueries {
     func observeExerciseSessions(exerciseID _: ExerciseID) -> AsyncStream<[ExerciseSession]> {
         stub.emptyStream()
     }
+
+    func observeLibraryStats(recentLimit _: Int) -> AsyncStream<LibraryStats> {
+        stub.emptyStream()
+    }
 }

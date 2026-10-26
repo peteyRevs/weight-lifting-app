@@ -202,4 +202,8 @@ public protocol StatsQueries: Sendable {
     /// `exerciseSessions(exerciseID:)` now, then after every change that alters it, and for no other write: a
     /// workout of the exercise finished, deleted or edited, the newest or an older one (F12 S2, N13).
     func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]>
+    /// The Library's stats, `recentlyLogged(limit: recentLimit)`, each one's `sessionCount` and `bestSets()`, now,
+    /// then after every change that alters them, and for no other write: a workout finished, deleted or edited, the
+    /// newest or an older one (F12 S3, N20).
+    func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats>
 }

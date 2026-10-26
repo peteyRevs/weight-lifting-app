@@ -93,7 +93,7 @@ struct UnimplementedStubTests {
         ])
     }
 
-    @Test("The stats queries' stub throws from every query; observeExerciseSessions ends at once")
+    @Test("The stats queries' stub throws from every query; its two observations end at once")
     func statsQueries() async throws {
         let stub = StatsQueriesKey.liveValue
         let bench = Fixtures.CatalogID.benchPress
@@ -116,6 +116,7 @@ struct UnimplementedStubTests {
             { _ = try await stub.recentlyLogged(limit: 3) }
         ])
         #expect(await Self.isEmpty(stub.observeExerciseSessions(exerciseID: bench)))
+        #expect(await Self.isEmpty(stub.observeLibraryStats(recentLimit: 5)))
     }
 
     @Test(

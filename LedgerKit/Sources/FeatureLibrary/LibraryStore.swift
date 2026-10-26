@@ -19,8 +19,8 @@ nonisolated struct LibraryPendingRoute: Hashable, Sendable {
 /// lag behind a store that waited. A keystroke filters rows written when the sources last changed
 /// (`LibraryPresentation.rows`); it formats none.
 ///
-/// **Work** runs from `LibraryRoot`'s task: `run()` follows the sources (`+Sources`). A source that ends, or a
-/// read that fails, is logged and shows the failed state; the next change or the next run reads again.
+/// **Work** runs from `LibraryRoot`'s task: `run()` follows the sources (`+Sources`). A source that ends (an
+/// observation whose read failed among them) is logged and shows the failed state; the next run follows again.
 ///
 /// **Once loaded it is never loading again.** A new run (the tab came back, the app became active) keeps the
 /// model on screen until its own first one is ready, so the field and the chips never flash away.
@@ -52,7 +52,6 @@ final class LibraryStore {
 
     @ObservationIgnored @Dependency(\.exerciseRepository) var exercises
     @ObservationIgnored @Dependency(\.settingsRepository) var settings
-    @ObservationIgnored @Dependency(\.workoutRepository) var workouts
     @ObservationIgnored @Dependency(\.statsQueries) var stats
     @ObservationIgnored @Dependency(\.locale) var locale
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger

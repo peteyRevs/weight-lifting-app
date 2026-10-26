@@ -199,6 +199,39 @@ extension HistoryModel: StatsQueries {
         state.withLock { sessions(of: exerciseID, in: $0) }
     }
 
+    /// F12 S3 (sanctioned): the Library's stats as the three queries here read them, now and after every write
+    /// that changes them (every write with `.emitsEveryWrite`). A read that fails ends the stream.
+    func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+        let (writes, signal) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        state.withLock { $0.writeSignals.append(signal) }
+        signal.yield()
+        return AsyncStream { continuation in
+            let reads = Task {
+                var last: LibraryStats?
+                for await _ in writes {
+                    guard let value = try? await libraryStats(recentLimit: recentLimit) else {
+                        break
+                    }
+                    if value != last || has(.emitsEveryWrite) {
+                        last = value
+                        continuation.yield(value)
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in reads.cancel() }
+        }
+    }
+
+    private func libraryStats(recentLimit: Int) async throws -> LibraryStats {
+        let recent = try await recentlyLogged(limit: recentLimit)
+        var sessions: [ExerciseID: Int] = [:]
+        for id in recent {
+            sessions[id] = try await sessionCount(exerciseID: id)
+        }
+        return try await LibraryStats(recent: recent, sessions: sessions, bestSets: bestSets())
+    }
+
     /// F12 S2 (sanctioned): `exerciseSessions` now, then after every write that changes it.
     func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
         let (stream, continuation) = AsyncStream<[ExerciseSession]>.makeStream()

@@ -128,6 +128,78 @@ extension StatsQueriesContract {
         )
     }
 
+    /// F12 S3, N20: the Library's stats observed follow a workout finished, edited or deleted, the newest or an older
+    /// one, and a write that changes none of them (a workout with nothing done) emits nothing. Each value is what
+    /// `recentlyLogged`, `sessionCount` and `bestSets` read at that moment; the limit is 2, so a third exercise
+    /// logged earlier than the other two is not recent, though it has a best.
+    static func observeLibraryStats(_ stores: HistoryStores) async throws -> String? {
+        let stats = stores.stats
+        let seen = try await libraryArrivals(stores)
+        let read = try await LibraryStats(
+            recent: stats.recentlyLogged(limit: 2),
+            sessions: [
+                bench.id: stats.sessionCount(exerciseID: bench.id),
+                row.id: stats.sessionCount(exerciseID: row.id)
+            ],
+            bestSets: stats.bestSets()
+        )
+        let best = { (stats: LibraryStats?, exercise: Exercise) in
+            stats?.bestSets[exercise.id].map { "\($0.weight.formatted(in: .lb))x\($0.reps.value)" } ?? "none"
+        }
+        return ContractCheck.first(
+            ContractCheck.expect(seen.initial, LibraryStats(recent: [], sessions: [:], bestSets: [:]), "the first"),
+            ContractCheck.expect(seen.newest?.recent, [bench.id], "recent after the newest workout"),
+            ContractCheck.expect(seen.newest?.sessions, [bench.id: 1], "sessions after the newest workout"),
+            ContractCheck.expect(seen.older?.recent, [bench.id, row.id], "recent after an older workout"),
+            ContractCheck.expect(seen.older?.sessions, [bench.id: 2, row.id: 1], "sessions after an older workout"),
+            ContractCheck.expect(best(seen.oldest, squat), "225x5", "the oldest workout's best, though not recent"),
+            ContractCheck.expect(seen.oldest?.recent, [bench.id, row.id], "recent after the oldest workout"),
+            ContractCheck.expect(seen.undone.map { _ in "a value" }, nil, "a value after a workout with nothing done"),
+            ContractCheck.expect(best(seen.edit, row), "210x8", "the row's best after updateSets of an older workout"),
+            // Both are now last logged in the older workout: of one workout, in id order (`recentlyLogged`).
+            ContractCheck.expect(seen.delete.map { Set($0.recent) }, [bench.id, row.id], "recent after the delete"),
+            ContractCheck.expect(best(seen.delete, bench), "175x5", "bench's best after the newest is deleted"),
+            ContractCheck.expect(seen.delete, read, "the value after delete, against the reads")
+        )
+    }
+
+    /// What `observeLibraryStats(recentLimit: 2)` emits at each write of its clause; `undone` must be nil.
+    private struct LibraryArrivals {
+        var initial, newest, older, oldest, undone, edit, delete: LibraryStats?
+    }
+
+    /// Writes the clause's history one step at a time, reading the value each step brings.
+    private static func libraryArrivals(_ stores: HistoryStores) async throws -> LibraryArrivals {
+        let newest = Seeders.workout(number: 1, endedAt: now, [.straight(bench, sets: 1, reps: 5, pounds: 185)])
+        let older = Seeders.workout(number: 2, endedAt: day(-10), [
+            .straight(row, sets: 2, reps: 8, pounds: 200),
+            .straight(bench, sets: 1, reps: 5, pounds: 175)
+        ])
+        let values = StreamArrivals(stores.stats.observeLibraryStats(recentLimit: 2))
+        defer { values.cancel() }
+        var seen = LibraryArrivals()
+        seen.initial = await values.next()
+        try await stores.materialize(newest)
+        seen.newest = await values.next()
+        try await stores.materialize(older)
+        seen.older = await values.next()
+        try await stores.materialize(
+            Seeders.workout(number: 3, endedAt: day(-20), [.straight(squat, sets: 1, reps: 5, pounds: 225)])
+        )
+        seen.oldest = await values.next()
+        try await stores.materialize(
+            Seeders.workout(number: 4, endedAt: day(-5), [Seeders.ExerciseLog(squat, [.init(315, 5, done: false)])])
+        )
+        seen.undone = await values.next(within: quiet)
+        var edited = older.exercises[0]
+        edited.sets[0].weight = .pounds(210)
+        try await stores.workouts.updateSets(workoutExerciseID: edited.id, sets: edited.sets)
+        seen.edit = await values.next()
+        try await stores.workouts.delete(id: newest.id)
+        seen.delete = await values.next()
+        return seen
+    }
+
     /// How long a read waits for a value that must not come (finding F12-S2-R1-6).
     static let quiet: Duration = .milliseconds(200)
 
