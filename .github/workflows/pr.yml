@@ -82,7 +82,7 @@ jobs:
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 71 # the step's 66, plus checkout, Xcode, mise, both caches and the failure upload
+    timeout-minutes: 82 # the step's 77, plus checkout, Xcode, mise, both caches and the failure upload
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,10 +122,10 @@ jobs:
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
       - name: Format, iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
-        timeout-minutes: 66 # fails the step before the job times out, so the bundles still upload
+        timeout-minutes: 77 # fails the step before the job times out, so the bundles still upload
         env:
-          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3840: a
-          # first run now restores main's cache (main-cache.yml) and builds warm, as #65's and #66's re-runs
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). Until
+          # 2026-10-26, 3840: a first run now restores main's cache (main-cache.yml) and builds warm, as #65's and #66's re-runs
           # did (441-758 s, 2026-10-19/20, after 87-150 s of script tests); those re-runs tested for
           # 2,099-2,210 s, about 1,960 s less this chore's sweeps (tasks/chores/ci-test-time.md): about
           # 2,870 s at most. The deadline still covers a cold build (1,424 s, when no cache matches the
@@ -134,7 +134,9 @@ jobs:
           # hang would bill about 12 minutes more than at 3,120 s (docs/ci-cd.md, "Deadline": revisit).
           # 2026-10-21: #67 tested for 2,407 s warm; tasks/chores/ci-test-time-2.md brings that to about
           # 1,900-2,100 s, so a cold first run is about 150 + 1,450 + 2,100 = 3,700 s at worst.
-          LEDGER_XCODEBUILD_DEADLINE: 3840
+          # 2026-10-26: #72 built for 1,062 and 1,630 s with its cache restored, and was stopped at 3,840 s.
+          # The runner's worst seen, 1,630 + 150 + 2,402 (#67's tests), is about 4,180 s, plus 5 min: 4,500.
+          LEDGER_XCODEBUILD_DEADLINE: 4500
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
           # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.
