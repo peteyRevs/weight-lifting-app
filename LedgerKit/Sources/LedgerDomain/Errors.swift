@@ -78,3 +78,19 @@ public enum ProgramEditError: Error, Equatable, Sendable {
     /// The block's last week holds a finished workout. `weekNumber` is one-based, as the message prints it.
     case weekHasLoggedSessions(weekNumber: Int)
 }
+
+/// Why `CustomExerciseDraft.exercise(id:among:)` refused to build an exercise (F12 S3, N15). The checks run in
+/// this order, and the first that fails is the one thrown.
+public enum CustomExerciseError: Error, Equatable, Sendable {
+    /// The name is empty once trimmed of blanks.
+    case blankName
+    /// The trimmed name is not 2–40 characters long; carries how many it has.
+    case nameLength(Int)
+    /// The name holds a control character (Unicode `Cc`), which no field should hold; U+0000 among them, which
+    /// `ExerciseRepository.save` refuses as `nulInText`.
+    case controlCharacter
+    /// The live exercise with this id has the name already, ignoring case, diacritics and width (`ExerciseSearch.key`).
+    case duplicateName(ExerciseID)
+    /// The primary muscle is also among the secondary ones.
+    case primaryAmongSecondaries
+}
