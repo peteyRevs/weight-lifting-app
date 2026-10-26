@@ -25,7 +25,7 @@
         var body: some View {
             VStack(spacing: 0) {
                 ReceiptPinnedHeader(model: model.header, send: send)
-                ReceiptPage(model: model.page)
+                ReceiptPage(model: model.page, rowActions: model.rowActions, send: send)
             }
             .background(LedgerColor.ground)
         }

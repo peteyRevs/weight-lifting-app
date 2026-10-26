@@ -5,9 +5,9 @@ import LedgerDomain
 /// own for the store's length (F10 S7b); the members of the store it uses are the store's alone.
 extension WorkoutStore {
     func send(_ action: WorkoutAction) {
-        // Nothing answers once the cover is closing, or while a discard or a save runs; "Done" alone
-        // answers on the receipt.
-        guard exit == nil, exitWhenDrained == nil, !isDiscarding, !isSaving, saved == nil || action == .done else {
+        // Nothing answers once the cover is closing, or while a discard or a save runs; "Done" and a row
+        // alone answer on the receipt.
+        guard exit == nil, exitWhenDrained == nil, !isDiscarding, !isSaving, saved == nil || action.isReceipts else {
             return
         }
         switch action {
@@ -27,6 +27,8 @@ extension WorkoutStore {
             enqueue(edit)
         case .done:
             closeReceipt()
+        case let .openExercise(exercise):
+            closeReceipt(showing: exercise)
         }
     }
 
@@ -59,6 +61,16 @@ extension WorkoutStore {
     func dismiss(_ dialogs: [Dialog]) {
         if let shown = dialog, dialogs.contains(shown) {
             dialog = nil
+        }
+    }
+}
+
+extension WorkoutAction {
+    /// The receipt's own actions: "Done" and a row. Each closes the cover as saved, and only the receipt sends them.
+    var isReceipts: Bool {
+        switch self {
+        case .done, .openExercise: true
+        default: false
         }
     }
 }

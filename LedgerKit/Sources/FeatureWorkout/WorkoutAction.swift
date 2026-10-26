@@ -1,4 +1,5 @@
 import Foundation
+import LedgerDomain
 
 /// What a tap on the cover asks for. The views send one of these and decide nothing; `WorkoutStore.send` is
 /// the one place that decides what it changes.
@@ -21,8 +22,10 @@ nonisolated enum WorkoutAction: Equatable, Sendable {
     case dismissed(WorkoutDialog)
     /// A tap on the page that changes the workout: queued, and applied in its turn by the store's pump.
     case edit(WorkoutEdit)
-    /// The receipt's "Done": the cover closes as saved. Nothing else answers while the receipt shows.
+    /// The receipt's "Done": the cover closes as saved. Nothing else answers while the receipt shows, but a row.
     case done
+    /// A row of the receipt (F12 S3, N18): the cover closes as saved, and the app shows the exercise's history.
+    case openExercise(ExerciseID)
 }
 
 /// Why the cover closes. Set once; `WorkoutRoot` hands it to the launcher.

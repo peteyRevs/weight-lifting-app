@@ -92,7 +92,10 @@
             }
         }
 
-        @Test("Every stop is inside the phone, none lies over another, and Done is 44 pt", arguments: sizes)
+        @Test(
+            "Every stop is inside the phone, none lies over another, and Done and the rows are 44 pt",
+            arguments: sizes
+        )
         func receipt_nothingLeavesOrOverlaps(_ size: DynamicTypeSize) throws {
             for model in try Self.models() {
                 let receipt = ReceiptParts(model: model)
@@ -103,7 +106,11 @@
                         "\(setting.testDescription): \(misplaced.prefix(2).joined(separator: "; "))"
                     )
                     let buttons = setting.elements(of: receipt).filter { $0.traits.contains(.button) }
-                    #expect(buttons.map(\.label) == ["Done"], "\(setting.testDescription)")
+                    // F12 S3, N18 (sanctioned edit): each exercise's row is a button too, and a 44 pt target.
+                    #expect(
+                        buttons.map(\.label) == ["Done"] + model.page.rows.map(\.spoken),
+                        "\(setting.testDescription)"
+                    )
                     let small = buttons.filter { $0.frame.width < 44 - 0.001 || $0.frame.height < 44 - 0.001 }
                     #expect(small.isEmpty, "\(setting.testDescription)")
                 }

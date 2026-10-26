@@ -68,11 +68,13 @@ extension WorkoutStore {
         settled?.wake.yield()
     }
 
-    /// "Done": the cover closes as saved, and the app selects Today.
-    func closeReceipt() {
-        if let saved {
-            leave(.route(.saved(saved.id)))
+    /// "Done": the cover closes as saved, and the app selects Today. A row: the same, and the app shows the
+    /// exercise's history (F12 S3, N18). Only the receipt answers: with no saved workout, nothing happens.
+    func closeReceipt(showing exercise: ExerciseID? = nil) {
+        guard let saved else {
+            return
         }
+        leave(.route(exercise.map(WorkoutRoute.exercise) ?? .saved(saved.id)))
     }
 
     /// The records `workout` set against the bests before it; none while the bests are not known.
