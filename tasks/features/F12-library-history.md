@@ -346,6 +346,23 @@ S3 sits under the 700-line band by its nature. Folding it into S2 would take S2 
 
 **Needs:** S1 for the Library root and copy; S2 for "Edit" and the history destination.
 
+**S3 amendments (orchestrator, 2026-10-26).** Pete merged S2 (#72) and left #72's four questions to the
+orchestrator's judgement:
+- **S2-Q1, the high-rep chart message:** kept as built ("No set of 12 reps or fewer in the last 8 weeks.").
+- **S2-Q2, the spoken change:** kept as built ("Up {Δ} over {n} weeks", the span between the first and last weeks
+  with a value); "since W5" is the axis's shorthand and reads poorly aloud.
+- **S2-Q3, "+Δ" after a warm-up-only session: changed in S3 (N19).** A session's tag compares its top working
+  weight with the most recent earlier session that has a working set (working or added, decision #25's rule,
+  `PersonalRecords.countsTowardBests`), not merely the session before. A session with no working set still reads
+  "—". A warm-up-only session between two working sessions no longer hides a step up.
+- **S2-Q4, the numberless sessions caption:** deferred until the first translation is commissioned;
+  `LibraryCopyTests.sessionsForms_areTheNumberThenWords` guards the shape until then.
+- **F12-S2-6, carried into S3 (N20):** the Library (S1) follows every workout of the history, not only the newest,
+  so a finished, edited or deleted older workout reaches RECENTLY LOGGED, the session counts and the best sets, as
+  S2's history already does. Use an observation of the stats' sources (as `observeExerciseSessions` does), not a
+  wider `followedWorkouts` window.
+- S3's estimate rises by about 70 lines (N19 about 25, N20 about 45), to about 675.
+
 ## 3. Open questions for Pete
 
 Each will be built to its recommended default until Pete answers.
