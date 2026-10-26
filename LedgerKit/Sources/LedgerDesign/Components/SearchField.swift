@@ -17,6 +17,12 @@ public struct SearchField: View {
     @State private var room = CGFloat.infinity
     @State private var needed = CGFloat.zero
 
+    /// The room the whole placeholder must leave (review R2-2). UIKit draws it, and cuts it short, inside
+    /// `placeholderRect(forBounds:)`, measured by `SearchFieldFitTests` as wide as the field SwiftUI lays out
+    /// (`room`) on phones 320 to 440 pt wide at every size: an inset of 0. The point covers UIKit's rounding of the
+    /// text's width up to a whole point. The closest fit measured is 6 pt (402 pt, `.accessibility3`).
+    static let placeholderMargin: CGFloat = 1
+
     public init(_ placeholder: String, short: String? = nil, text: String, onChange: @escaping (String) -> Void) {
         self.placeholder = placeholder
         self.short = short
@@ -26,7 +32,7 @@ public struct SearchField: View {
 
     public var body: some View {
         // The placeholder drawn: the whole one while it fits, else the short one.
-        TextField(needed <= room ? placeholder : short ?? placeholder, text: binding)
+        TextField(needed + Self.placeholderMargin <= room ? placeholder : short ?? placeholder, text: binding)
             .ledgerFieldFont(.body)
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { room = $0 }
             .background(alignment: .leading) {

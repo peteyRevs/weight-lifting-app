@@ -31,10 +31,11 @@ struct HistoryContractAdversarialTests {
         return broken
     }
 
-    /// Sanctioned edit (F12 S1, N3): 24 since the `bestSets` clause.
-    @Test("An honest in-memory history keeps all 24 clauses, so the contracts need no database")
+    /// Sanctioned edits: 24 since the `bestSets` clause (F12 S1, N3), 25 since `exerciseSessions` (F12 S2, N9), 26
+    /// since `observeExerciseSessions` (F12-S2-3).
+    @Test("An honest in-memory history keeps all 26 clauses, so the contracts need no database")
     func honestFake_keepsEveryClause() async {
-        #expect(Self.clauses.count == 24)
+        #expect(Self.clauses.count == 26)
         #expect(await Self.broken(by: []) == [])
     }
 

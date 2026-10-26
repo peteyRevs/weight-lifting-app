@@ -263,6 +263,9 @@ extension GRDBStatsQueries {
     /// The SQL the stats queries share, for `RecordReplay`'s walk: the done sets that can set a record, of live
     /// finished workouts. Continue the `WHERE` with `AND …`.
     static let recordSets = "\(SQL.doneSets) \(SQL.recordKinds)"
+
+    /// The done sets of every kind of live finished workouts (`exerciseSessions`). Continue the `WHERE` with `AND …`.
+    static let doneSets = SQL.doneSets
 }
 
 /// The SQL the stats queries share.

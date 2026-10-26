@@ -29,7 +29,7 @@
             }
         }
 
-        private let state: ObservedState<State, Program?>
+        private let state: ObservedState<State>
         private let exercises: InMemoryExerciseRepository?
 
         /// An empty repository, or one holding `programs`, stored in order with every check of a save but the

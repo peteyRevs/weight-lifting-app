@@ -37,7 +37,10 @@ nonisolated struct FeatureLibrarySourceTests {
         ".sorted(", ".sort(", "Locale", "Calendar", "Date", "@Dependency"
     ]
 
-    static let storeFiles = ["LibraryStore.swift", "LibraryStore+Sources.swift", "LibraryRoot.swift"]
+    static let storeFiles = [
+        "LibraryStore.swift", "LibraryStore+Sources.swift", "LibraryRoot.swift", "ExerciseHistoryStore.swift",
+        "ExerciseHistoryRoot.swift"
+    ]
 
     static func sources() throws -> [String: String] {
         let sources = try CopyAudit.sources(ofModule: "FeatureLibrary")
@@ -109,21 +112,30 @@ nonisolated struct FeatureLibrarySourceTests {
         #expect(found.isEmpty, "\(found.prefix(5))")
     }
 
-    @Test("Every view imports SwiftUI and LedgerDesign and nothing else; only the screen holds a scroll view")
+    /// F12 S2: the chart's descriptor also imports Accessibility, in that one file (ruling R2); each screen holds
+    /// its scroll view.
+    @Test("Every view imports SwiftUI and LedgerDesign and nothing else; only the screens hold a scroll view")
     func views_importOnlySwiftUIAndTheDesignSystem_andOneScrollView() throws {
         let views = try Self.sources().filter { Self.isView($0.key) }
         #expect(views.count >= 3)
         for (path, text) in views {
             let imports = SwiftSource(text).code.map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { $0.hasPrefix("import ") }
-            #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
+            let allowed: Set = path == "Views/E1RMChartDescriptor.swift"
+                ? ["import Accessibility", "import SwiftUI"] : ["import SwiftUI", "import LedgerDesign"]
+            #expect(Set(imports).isSubset(of: allowed), "\(path): \(imports)")
         }
         let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
-        #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == ["Views/LibraryScreen.swift"])
+        #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == [
+            "Views/ExerciseHistoryScreen.swift", "Views/LibraryScreen.swift"
+        ])
     }
 
-    @Test("N6. Nothing on the Library wears the accent")
+    /// F12 S2: an exercise's history wears it on the estimate, the change and the last bar (Pete's question 3, A):
+    /// the chart spells it, and the stats pass `isValueAccented`. `ExerciseHistoryOrangeAuditTests` count it.
+    @Test("N6. Nothing on the Library wears the accent; of the history, only the chart spells it")
     func views_wearNoAccent() throws {
-        #expect(try Self.uses(of: ["LedgerColor.accent", ".accent", "tint:"]) == [])
+        let spelled = try Self.uses(of: ["LedgerColor.accent", ".accent", "tint:"])
+        #expect(Set(spelled.map { $0.components(separatedBy: ":").first ?? "" }) == ["Views/E1RMChart.swift"])
     }
 }

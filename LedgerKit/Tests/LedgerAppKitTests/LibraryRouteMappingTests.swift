@@ -4,8 +4,8 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// F12 S1, criterion 3: where the Library's routes go (`Routes+Library.swift`). A row's history is pushed on the
-/// selected tab's stack, the one that asked for it, one screen per route.
+/// F12 S1 and S2, criteria 3 and 11: where the Library's routes go (`Routes+Library.swift`). A row's history is
+/// pushed on the selected tab's stack, the one that asked for it, one screen per route; a session opens History.
 @MainActor
 @Suite("Library routes")
 struct LibraryRouteMappingTests {
@@ -32,5 +32,15 @@ struct LibraryRouteMappingTests {
         #expect(router.selectedTab == .history)
         #expect(router[path: .history] == [.exercise(Self.bench)])
         #expect(router[path: .library] == [])
+    }
+
+    @Test("11. A session of the log opens the History tab until F13's detail, and pushes nothing")
+    func openWorkout_selectsTheHistoryTab() {
+        let router = AppRouter()
+        router.open(.exercise(Self.bench), in: .library)
+        router.resolve(LibraryRoute.openWorkout(WorkoutID(Fixtures.uuid(453))))
+        #expect(router.selectedTab == .history)
+        #expect(router[path: .library] == [.exercise(Self.bench)], "the history stays where the lifter left it")
+        #expect(router[path: .history] == [])
     }
 }

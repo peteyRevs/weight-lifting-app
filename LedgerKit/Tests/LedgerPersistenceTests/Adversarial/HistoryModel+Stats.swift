@@ -192,4 +192,29 @@ extension HistoryModel: StatsQueries {
         }
         return limit < 0 && has(.negativeLimitIsAll) ? ordered.map(\.key) : ordered.prefix(max(0, limit)).map(\.key)
     }
+
+    /// F12 S2 (sanctioned): each live workout with a done set of the exercise, newest first, its done sets in row
+    /// order, dated as every other query here dates it.
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        state.withLock { sessions(of: exerciseID, in: $0) }
+    }
+
+    /// F12 S2 (sanctioned): `exerciseSessions` now, then after every write that changes it.
+    func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        let (stream, continuation) = AsyncStream<[ExerciseSession]>.makeStream()
+        state.withLock { state in
+            let first = sessions(of: exerciseID, in: state)
+            continuation.yield(first)
+            let observer = SessionObserver(exerciseID: exerciseID, continuation: continuation, last: first)
+            state.sessionObservers.append(observer)
+        }
+        return stream
+    }
+
+    func sessions(of exerciseID: ExerciseID, in state: State) -> [ExerciseSession] {
+        live(state).compactMap { workout in
+            let done = sets(of: exerciseID, in: workout).filter(\.isDone)
+            return done.isEmpty ? nil : ExerciseSession(workoutID: workout.id, startedAt: date(workout), sets: done)
+        }
+    }
 }

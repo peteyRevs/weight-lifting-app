@@ -57,7 +57,8 @@ struct StatsQueriesPerformanceTests {
             ("sessionsCompleted", { _ = try await stats.sessionsCompleted(in: week) }),
             ("sessionCount", { _ = try await stats.sessionCount(exerciseID: lift) }),
             ("personalRecords", { _ = try await stats.personalRecords(exerciseID: lift) }),
-            ("recentlyLogged", { _ = try await stats.recentlyLogged(limit: 5) })
+            ("recentlyLogged", { _ = try await stats.recentlyLogged(limit: 5) }),
+            ("exerciseSessions", { _ = try await stats.exerciseSessions(exerciseID: lift) })
         ]
         let clock = ContinuousClock()
         var report: [String] = []
@@ -72,6 +73,31 @@ struct StatsQueriesPerformanceTests {
             report.append("\(query.name): p95 \(percentile95), median \(timings[timings.count / 2])")
             #expect(percentile95 < PerformanceBudget.statsQuery, "\(query.name): \(timings)")
         }
+        report.append(Self.foldUnderBudget(calendar: calendar))
         Attachment.record(report.joined(separator: "\n"), named: "stats-queries.txt")
+    }
+
+    /// F12 S2, N11 (finding F12-S2-R1-1): the fold of one lift's 2,000 sets in 400 sessions (the seed's main lift
+    /// has about 1,700) under `historyFold`; the line it adds to the report.
+    static func foldUnderBudget(calendar: WeekCalendar) -> String {
+        var generator = SeededGenerator(seed: 42)
+        let sessions = Seeders.exerciseSessions(of: exercises[0], sessions: 400, setsPerSession: 5, rng: &generator)
+        #expect(sessions.flatMap(\.sets).count == 2000)
+        let fold95 = foldPercentile95(sessions, calendar: calendar)
+        #expect(fold95 < PerformanceBudget.historyFold, "\(fold95)")
+        return "ExerciseHistory.make over 2,000 sets: p95 \(fold95)"
+    }
+
+    /// The 95th percentile of `statsRuns` folds of `sessions`, after one untimed warm-up (F12 S2, N11).
+    static func foldPercentile95(_ sessions: [ExerciseSession], calendar: WeekCalendar) -> Duration {
+        let clock = ContinuousClock()
+        var folds: [Duration] = []
+        for _ in 0 ... PerformanceBudget.statsRuns {
+            folds.append(clock.measure {
+                _ = ExerciseHistory.make(sessions: sessions, records: [], now: now, calendar: calendar)
+            })
+        }
+        folds = Array(folds.dropFirst()).sorted()
+        return folds[folds.count * 95 / 100 - 1]
     }
 }

@@ -9,12 +9,9 @@
     /// before `observe…()` returns. Every write runs whole under the lock, then each stream yields its value if it
     /// changed (GRDB's `removeDuplicates()`). A stream buffers only its newest value, as GRDB's bridge does
     /// (`.bufferingNewest(1)`): a consumer that falls behind sees the latest state, not every one in between.
-    final class ObservedState<State: Sendable, Value: Equatable & Sendable>: Sendable {
-        private struct Observer {
-            let value: @Sendable (State) -> Value
-            let continuation: AsyncStream<Value>.Continuation
-            var last: Value
-        }
+    final class ObservedState<State: Sendable>: Sendable {
+        /// One stream's observer: it yields its value of a state when it differs from the last one it yielded.
+        private typealias Observer = (State) -> Void
 
         private struct Guarded {
             var state: State
@@ -45,16 +42,8 @@
                 var state = guarded.state
                 let result = try body(&state)
                 guarded.state = state
-                for id in guarded.observers.keys {
-                    guard var observer = guarded.observers[id] else {
-                        continue
-                    }
-                    let value = observer.value(state)
-                    if value != observer.last {
-                        observer.last = value
-                        observer.continuation.yield(value)
-                        guarded.observers[id] = observer
-                    }
+                for observer in guarded.observers.values {
+                    observer(state)
                 }
                 return result
             }
@@ -62,14 +51,22 @@
 
         /// `value` of the state now, then after every write that changes it. Ending the stream (its consumer's
         /// task cancelled, or the iterator dropped) stops the observation.
-        func observe(_ value: @escaping @Sendable (State) -> Value) -> AsyncStream<Value> {
+        func observe<Value: Equatable & Sendable>(
+            _ value: @escaping @Sendable (State) -> Value
+        ) -> AsyncStream<Value> {
             let (stream, continuation) = AsyncStream<Value>.makeStream(bufferingPolicy: .bufferingNewest(1))
             let id = guarded.withLock { guarded in
-                let current = value(guarded.state)
+                var last = value(guarded.state)
                 let id = guarded.nextObserver
                 guarded.nextObserver += 1
-                guarded.observers[id] = Observer(value: value, continuation: continuation, last: current)
-                continuation.yield(current)
+                guarded.observers[id] = { state in
+                    let next = value(state)
+                    if next != last {
+                        last = next
+                        continuation.yield(next)
+                    }
+                }
+                continuation.yield(last)
                 return id
             }
             continuation.onTermination = { [weak self] _ in

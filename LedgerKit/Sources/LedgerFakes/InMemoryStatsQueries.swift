@@ -17,7 +17,7 @@
             self.now = now
         }
 
-        private var live: [WorkoutState] {
+        fileprivate var live: [WorkoutState] {
             workouts.history.read(\.live)
         }
 
@@ -41,13 +41,18 @@
             return best.map { ($0.weight, $0.reps) }
         }
 
-        /// `bestSet(exerciseID:)` of every exercise the live workouts perform.
+        /// `bestSet(exerciseID:)`'s rule over every exercise, in one walk of the live workouts' sets, so the
+        /// contract's comparison of the two is not this query against itself (review R2-5).
         public func bestSets() async throws -> [ExerciseID: BestSet] {
-            var bests: [ExerciseID: BestSet] = [:]
-            for id in Set(live.flatMap { $0.exercises.map(\.exerciseID) }) {
-                bests[id] = try await bestSet(exerciseID: id).map { BestSet(weight: $0.weight, reps: $0.reps) }
+            var best: [ExerciseID: LoggedSet] = [:]
+            for exercise in live.flatMap(\.exercises) {
+                for set in exercise.sets where set.isDone && (set.kind == .working || set.kind == .added) {
+                    if best[exercise.exerciseID].map({ Self.isHeavier(set, $0) }) ?? true {
+                        best[exercise.exerciseID] = set
+                    }
+                }
             }
-            return bests
+            return best.mapValues { BestSet(weight: $0.weight, reps: $0.reps) }
         }
 
         public func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
@@ -181,6 +186,27 @@
                 week = previous
             }
             return false
+        }
+    }
+
+    public extension InMemoryStatsQueries {
+        /// The live workouts with a done set of the exercise, newest first, with their done sets in row order
+        /// (F12 S2).
+        func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+            Self.sessions(of: exerciseID, in: live)
+        }
+
+        /// `exerciseSessions(exerciseID:)` now, then after every write that changes it.
+        func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+            workouts.history.observe { Self.sessions(of: exerciseID, in: $0.live) }
+        }
+
+        private static func sessions(of exerciseID: ExerciseID, in live: [WorkoutState]) -> [ExerciseSession] {
+            live.compactMap { workout in
+                let done = workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets).filter(\.isDone)
+                return done.isEmpty
+                    ? nil : ExerciseSession(workoutID: workout.id, startedAt: workout.startedAt, sets: done)
+            }
         }
     }
 #endif

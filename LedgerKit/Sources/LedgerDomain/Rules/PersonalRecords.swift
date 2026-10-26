@@ -106,7 +106,7 @@ public enum PersonalRecords {
 
     /// Product decision #25: a done `.working` or `.added` set counts toward an exercise's bests and can set a
     /// record; a warm-up or a drop set never does.
-    static func countsTowardBests(_ set: LoggedSet) -> Bool {
+    public static func countsTowardBests(_ set: LoggedSet) -> Bool {
         set.isDone && (set.kind == .working || set.kind == .added)
     }
 }

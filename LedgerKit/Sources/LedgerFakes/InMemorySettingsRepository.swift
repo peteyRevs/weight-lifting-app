@@ -7,7 +7,7 @@
     /// inventory's plates come back normalised, and a NaN weight throws `EncodingError`); `observe()` emits only a
     /// change.
     public final class InMemorySettingsRepository: SettingsRepository {
-        private let state: ObservedState<Settings, Settings>
+        private let state: ObservedState<Settings>
 
         /// Holding `settings`, kept as given (stored state); `Settings.default` is what a database with no settings
         /// row loads.

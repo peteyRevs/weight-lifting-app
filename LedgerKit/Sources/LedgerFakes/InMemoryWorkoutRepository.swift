@@ -11,7 +11,7 @@
     /// `events` when asked, in the same step as the workout, so the stores answer as one database would.
     /// Weights and dates are refused as the database's columns refuse them (`StorageBoundary`, ADR-007).
     public final class InMemoryWorkoutRepository: WorkoutRepository {
-        let history: ObservedState<InMemoryHistory, [WorkoutState]>
+        let history: ObservedState<InMemoryHistory>
         private let programs: InMemoryProgramRepository
         private let events: InMemoryWorkoutEventStore?
 

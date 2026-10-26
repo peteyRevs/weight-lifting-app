@@ -64,8 +64,8 @@ struct AppTabs: View {
             // A screen and a store per route (ruling R8): another day pushed in its place is drawn anew.
             DayEditorRoot(day: day, weekIndex: weekIndex, onRoute: onProgramRoute)
                 .id(destination)
-        case .exercise:
-            PlaceholderScreen(AppCopy.exerciseHistoryTitle, identifier: "library.history.title")
+        case let .exercise(id):
+            ExerciseHistoryRoot(exercise: id, onRoute: onLibraryRoute)
                 .id(destination)
         }
     }

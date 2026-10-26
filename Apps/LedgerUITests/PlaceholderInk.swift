@@ -126,8 +126,9 @@ struct PlaceholderInk: CustomStringConvertible {
         return Self.image(doctored, width, height)
     }
 
-    /// This picture with a column of the placeholder's ink drawn inside the trailing padding, where a placeholder
-    /// cut short with "…" ends.
+    /// This picture with a column of the placeholder's ink drawn inside the trailing padding, where text that ran
+    /// out of the field's frame would end. A placeholder cut short with "…" ends short of it, inside UIKit's
+    /// placeholder rect (review R2-1).
     func inkingTheTrailingPadding() -> UIImage {
         var doctored = bytes
         if let rows {

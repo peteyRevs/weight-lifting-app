@@ -168,3 +168,182 @@ None of the CI chore's files was touched (`ProgramViewsRoomAdversarialTests`, `D
 | `scripts/check.sh --lint-only` | 0 |
 | sim, PR, `TEST_RUNNER_LEDGER_SWEEP=pr`, `FeatureLibraryTests` + `BestSetsAdversarialTests` + `SearchFieldLineAdversarialTests` (`final-pr`) | 65: 71 pass, the one F12-S1-1 test fails |
 | sim, Nightly, `LibraryAuditAdversarial` + `TabsAdversarial` + `Library` (`final-ui`) | 65: 7 pass; fail: the two audits (F12-S1-1, and Program's F11-S14-5) and the accent test (environment) |
+
+## Slice S2 — round 1 (G2 tester, 2026-10-24)
+
+**Outcome: three real defects, none of them a wrong number. F12-S2-3 (Minor, latent) is a stale open history
+after a workout that is not the newest. F12-S2-1 (Minor) is "+0 lb" read as a gain. F12-S2-2 (Minor) is "1
+sessions". All three are open for G1. Two low findings record behaviour as built.** The fold held under attack
+against `PersonalRecords` (200 random histories) and against GRDB's `e1RMByWeek`. The second check covered 21
+zone, week-start and change-of-clocks cases, which the implementer's differential (UTC, Monday) did not reach. The
+store's failure, overtaken-read, rename and week-start paths held, and so did the N14 dates.
+
+Slice under test: `feat/F12-s2-history` at `c1c6f03` (3 commits on `main` @ `d92cc15`). Scratch
+`scratchpad/f12s2-g2/`; every simulator command ran through the lock. An earlier, interrupted round had left five
+untracked test files. They were reviewed, run, kept and finished here. The commit changes no product code. Three
+product lines were changed for a while to prove tests (below), and each was put back.
+
+### What was attacked, and what held
+
+- **The fold against `PersonalRecords` (N9, N10).** The test generated 200 random histories with every set kind,
+  kg beside lb, 1–15 reps and random deloads. Records were detected one workout at a time against the bests before
+  it, as F05 stores them. In every history, PR is exactly the detected workouts, so a deload never reads "PR".
+  "+Δ" is the exact step between top working sets, and the oldest entry has no step. The estimate and the best set
+  are `PersonalRecords.Bests`' own. All pass.
+- **Brzycki's edges (criterion 6).** One rep gives the weight. 12 reps count and 13 do not, so a lighter 12-rep
+  set gives the estimate over a heavier 13-rep set. 40 reps give no estimate and no trap, and stay the best set.
+  A zero load gives an estimate of 0, not none. In the presentation, 100×13 reads "—", "100" "×13", and the chart
+  shows its message. A warm-up and a drop set heavier than the working set stay in the log only. All pass.
+- **The weeks (N9, decision #15).** The weeks run unbroken across New Year from Monday, Sunday and Saturday. On New
+  York's spring forward, the 167-hour week holds its own last minute. Santiago's skipped midnight opens its week at
+  01:00. A calendar's own `firstWeekday` is ignored. W1's first instant is in the window and the instant before it
+  is out. Older history only gives eight empty weeks while the stats are kept. **New:** GRDB's `e1RMByWeek` (with
+  a program's `WeekCalendar`) was checked against the fold as the store calls it (`weekStart:calendar:`, weeks
+  from the epoch). The sessions sat at the first and last minute of the 21 days around a change of clocks, in New
+  York, Santiago, Lord Howe (a 30-minute change) and UTC, from Monday, Sunday and Saturday, with `now` on both
+  sides of the change. They agree in all 21 cases. **Mutant:** with the fold's week start forced to Monday, 14 of
+  the 21 cases fail (every Sunday and Saturday case). Restored.
+- **Tags across units.** 100 lb after 45.359237 kg is "—", exactly. The step from 45 kg to 100 lb is exact. Two
+  rows of one workout compare the heavier row. Two sessions that started together follow list order. All pass;
+  F12-S2-1 was found here.
+- **Store (N13, failed state).** All of these pass:
+  - The newest workout deleted while the history is up leaves the screen.
+  - A read that fails once shows the failed state, and the next change of units brings the history back.
+  - A read overtaken by a finished workout ends on the history that holds it.
+  - A change of the first day of the week moves the weeks.
+  - The exercise taken away shows the failed state, and the history returns when it is given back.
+
+  F12-S2-3 was found here.
+- **Dates (N14).** These pass:
+  - In New York at 10:00 on Jan 1, a Dec 31 22:00 session (already 2027 in UTC) reads "Dec 31, 2026" and a 00:30
+    session reads "Jan 1".
+  - In Tokyo, a Jan 1 07:00 session (Dec 31 in UTC) reads "Jan 1".
+  - fr_FR, de_DE and en_GB write the date in their own form.
+
+  **Mutant:** with the format style on GMT, both New Year tests fail. Restored.
+- **The running app (DoD VoiceOver pass, criterion 11).** The Nightly UI test saves a sample workout, then opens
+  Library → RECENTLY LOGGED → the history. It logs the accessibility tree in reading order and keeps it, with
+  pictures, in the result bundle. At the default size the order is heading, three stats ("202, 1RM est", "180×5,
+  best set", "1, sessions"), the chart as one element "Estimated 1RM by week", then SESSION LOG and the session as
+  one button "Aug 17", value "—, 180×5". At Accessibility XXXL the stats stack, there are no bars, and the weeks
+  are a list "W1, —" … "W8, 202". Tapping the session selects the History tab. All three pass. The first session
+  reads "—", a baseline, as criterion 7 says.
+
+### Findings
+
+**F12-S2-1 — Minor. A step up smaller than the shown precision reads "+0 lb" (or "+0 kg"), a gain of nothing.**
+- `ExerciseHistory` tags `.heavier(top − earlier)` from exact weights. The presentation writes the step with
+  `Weight.formatted(in:)`, which rounds to one decimal. A step under 0.05 of the shown unit therefore reads "+0".
+  A change of units makes such steps easily:
+  - 100 kg, then 220.5 lb, is +0.04 lb. Both sessions read "220.5×5" in the log, and the later one says "+0 lb".
+  - 225 lb, then 102.1 kg, reads "+0 kg".
+- Failing test: `FeatureLibraryTests/ExerciseHistoryAdversarialTests.swift`,
+  `tag_tinyStepAcrossUnits_neverReadsPlusZero` (both units).
+- Fix for G1, in `ExerciseHistoryPresentation.entry`: a step that formats as zero in the shown unit reads "—".
+  The other option is to compare the shown values, as the chart's change does (Q7). It needs a ruling on which.
+
+**F12-S2-2 — Minor. The sessions stat reads "1 sessions" (VoiceOver "1, sessions").**
+- The DoD says "Every string above in the String Catalog with plurals (sessions, exercises)". `sessionsCaption`
+  is a fixed "sessions", not a counted key. The Library's own row uses "%lld sessions" with `forCountedText`.
+  The running app shows the defect too: the default-size dump reads "1, sessions".
+- Failing test: `ExerciseHistoryAdversarialTests.sessionsCaption_oneSession_isSingular`.
+- Fix for G1: make the caption a plural key ("session" / "sessions") looked up with `locale.forCountedText`, and
+  hand it the count.
+
+**F12-S2-3 — Minor (latent; Major once F13's delete and edit or the watch's sync land). An open history misses
+any workout change that leaves the newest workout as it was.**
+- The store reads again only when `observeRecent(limit: 1)` emits. That observation emits "for no other write"
+  (`Repositories.swift:135`; GRDB `removeDuplicates`; the fakes do the same). So none of these changes reach an
+  open history:
+  - A workout finished that started before the newest, as a watch workout saved after a phone one would. Its log
+    entry, best set and PR never appear.
+  - A workout deleted that is not the newest. Its entry stays, routing to a workout that is gone, and the count
+    and bests keep it.
+  - An `updateSets` on an older workout.
+- Today no production code deletes or edits an older workout, and one device cannot finish two overlapping
+  workouts, so this is latent. N13 names "a finished workout" without saying "the newest".
+- Failing tests:
+  - `olderWorkoutFinished_whileShown_shows`: the log stays at 3 entries and the best set at "195".
+  - `olderWorkoutDeleted_whileShown_leaves`: the log stays at 3 entries and the count at "3".
+
+  Each waits 2 s, bounded (`eventually(within:)`), so it fails fast.
+- **Mutant:** with the store on `observeRecent(limit: Int.max)`, both tests pass. Restored. That is one possible
+  fix, but it re-reads the whole history on every write. A narrower one is an observation of the exercise's
+  sessions, or of a stats change counter. It needs a ruling. The Library's S1 store follows
+  `observeRecent(limit: followedWorkouts)` and shares this class of miss for older workouts.
+
+**F12-S2-4 — low, note. The chart speaks only its name. Its week values are read only through the chart
+descriptor (the "Describe chart" rotor and the audio graph).**
+- At the default size the bars are one element, labelled "Estimated 1RM by week", with no value. The descriptor's
+  `summary` is nil. The dump confirms the element. The XCUI tree cannot show the descriptor (R3), and this round
+  did not listen to VoiceOver by ear, so the DoD's "VoiceOver reading week values" is still unconfirmed.
+- Option: give the chart an `accessibilityValue` or a descriptor summary, such as "W8 202 pounds, up 28 over 8
+  weeks". That would be new wording for Pete.
+
+**F12-S2-5 — low, note. "+Δ" compares only with the session just before. When that session has no working set
+(added sets or warm-ups only), the next session reads "—", even if it is heavier than the session before that.**
+- Pinned as built: `LedgerDomainTests/Adversarial/ExerciseHistoryAdversarialTests.swift`,
+  `tags_predecessorWithoutWorkingSets_isSame` (passes). N10 says "the previous session's", which this matches
+  literally.
+- Option: compare with the latest earlier session that has a working set. The change belongs in
+  `ExerciseHistory.entry`.
+
+### Tests added
+
+| File | Tests | Result |
+|---|---|---|
+| `LedgerDomainTests/Adversarial/ExerciseHistoryAdversarialTests.swift` | 15 (weeks over 3 and 4 arguments) | pass |
+| `LedgerDomainTests/Adversarial/ExerciseHistoryPropertyAdversarialTests.swift` | 1 × 200 seeds | pass |
+| `LedgerPersistenceTests/Adversarial/ExerciseHistoryWeeksAdversarialTests.swift` | 1 × 21 cases | pass (1.2 s on the simulator) |
+| `FeatureLibraryTests/ExerciseHistoryAdversarialTests.swift` (+ `Support/HistoryAdversarialDoubles.swift`) | 15 | **4 fail: F12-S2-1, -2, -3 (×2)**; 11 pass |
+| `Apps/LedgerUITests/HistoryVoiceOverAdversarial.swift` (Nightly) | 3 | pass |
+
+No hosted view sweep was added, so the PR sweep gains nothing through `TestSweep`. The new PR-plan time is about
+1.5 s of non-hosted tests, plus the two bounded F12-S2-3 waits (2 × 2.4 s) while they fail.
+
+### Commands and exit statuses
+
+| Command | Exit |
+|---|---|
+| host `swift test --filter 'Adversarial F12 S2\|ExerciseHistoryAdversarialTests'` (the interrupted round's files, as left) | 1: F12-S2-1 and -2 fail; the rest pass |
+| host, same, plus the new store, date and reps tests (before the waits were bounded) | 1: the F12-S2-3 tests hit the 60 s limit |
+| host `swift test --filter FeatureLibraryTests.ExerciseHistoryAdversarialTests` (bounded waits) | 1: 4 tests fail (7 issues), 11 pass |
+| host, same, with the store on `observeRecent(limit: Int.max)` (mutant, restored) | 0: both F12-S2-3 tests pass |
+| host `…/date_` with the date format on `.gmt` (mutant, restored) | 1: both New Year tests fail |
+| host `swift test --filter ExerciseHistoryWeeksAdversarialTests` | 0 (21 cases) |
+| host, same, with the fold's week start forced to `.monday` (mutant, restored) | 1: 14 of 21 cases fail |
+| sim `xcodebuild build-for-testing`, Nightly plan, iPhone 17 / iOS 27.0 | 0 |
+| sim, Nightly, `-only-testing:LedgerUITests/HistoryVoiceOverAdversarial` | 0 (3 tests) |
+| sim, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`, the three package adversarial suites | 65: the 4 tests above fail; the 28 others pass |
+| `scripts/check.sh --lint-only` | 0 |
+| host, final: the two adversarial suite names | 1: domain 16 and persistence 1 pass; FeatureLibrary 4 fail as above |
+
+**Not tested.**
+- VoiceOver by ear (F12-S2-4).
+- Rename from S3: the screen does not exist yet; the store's rename path is the implementer's test.
+- Clipping and orange at sizes beyond what the implementer's sweeps cover. No hosted sweep was added, so the CI
+  budget stays as it is.
+- The N11 budgets, which are the implementer's Nightly performance suite and were not re-run.
+
+### Orchestrator's ruling (S2 round 1)
+
+1. **F12-S2-1 ("+0 lb"): fix.** The tag compares what the screen shows. When the step, rounded to the display
+   precision in the current unit, is not positive, the tag is "—", as for a drop. The PR tag is unaffected. G2's
+   `tag_tinyStepAcrossUnits_neverReadsPlusZero` is to pass as written.
+2. **F12-S2-2 ("1 sessions"): fix.** The caption becomes a plural string-catalog key read through the shared
+   `Locale.forCountedText(in:)` helper, as Today and Workout do. The VoiceOver label is to read naturally too.
+3. **F12-S2-3 (older workout changes missed): fix.** The history follows its own data, not the newest workout:
+   an observed form of the sessions query, `observeExerciseSessions(exerciseID:) -> AsyncStream<[ExerciseSession]>`
+   beside `exerciseSessions` (GRDB `ValueObservation` with `removeDuplicates()`, the in-memory store and the
+   Unimplemented stub to match), with a contract clause: it emits on finishing, deleting or editing an older
+   workout of that exercise, and not for another exercise's change. The history store follows it instead of
+   `observeRecent(limit: 1)`. Not `observeRecent(limit: Int.max)`.
+   - **Follow-up F12-S2-6 (for S3 or F13), out of scope here.** The S1 Library store (`LibraryStore`) follows
+     `observeRecent(limit: followedWorkouts)` and shares the class of miss: a change to a workout older than the
+     followed ones does not reach RECENTLY LOGGED, the session counts or the best sets. `LibraryStore` is not
+     changed in S2.
+4. **F12-S2-4 (the chart speaks only its name): fix.** The chart descriptor gets a summary (the change line,
+   "Up 10 lb over 8 weeks", or the no-data message), and the chart element an accessibility value with the same
+   summary.
+5. **F12-S2-5 ("+Δ" against the session just before): keep as built.** The spec says "the previous session"; the
+   passing pin stays. A candidate for Pete: compare with the latest earlier session that has a working set. No code.

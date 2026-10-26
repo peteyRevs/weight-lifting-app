@@ -11,18 +11,21 @@
         let shown: String
         let needed: CGFloat
         let room: CGFloat
+        /// The text field's own width, which is the width SwiftUI lays it out at.
+        let field: CGFloat
     }
 
     extension RenderingSuites {
         /// F12 S1 review M1 (b): `SearchField`'s placeholder fits the field it stands in, measured on the hosted
         /// `UITextField`: the drawn placeholder's own width against the width UIKit draws it in
-        /// (`placeholderRect(forBounds:)`), on phones 320 to 402 pt wide with the screen's margins. Measured before
-        /// the fix: "Search 224 exercises" needed 312 pt at `.accessibility3` and 420 at `.accessibility5`, against
-        /// 291 on a 375-pt phone and 306 on a 390-pt one, so it was cut short ("…") on both, and from
-        /// `.accessibility2` on a 320-pt one. A field given a short placeholder now draws that one instead.
+        /// (`placeholderRect(forBounds:)`), on phones 320 to 440 pt wide with the screen's margins (393, 430 and 440
+        /// since review R2-2). Measured before the fix: "Search 224 exercises" needed 312 pt at `.accessibility3`
+        /// and 420 at `.accessibility5`, against 291 on a 375-pt phone and 306 on a 390-pt one, so it was cut short
+        /// ("…") on both, and from `.accessibility2` on a 320-pt one. A field given a short placeholder now draws
+        /// that one instead.
         @Suite("SearchField fit", .serialized, .tags(.design))
         struct SearchFieldFitTests {
-            nonisolated static let widths: [CGFloat] = [320, 375, 390, 402]
+            nonisolated static let widths: [CGFloat] = [320, 375, 390, 393, 402, 430, 440]
             nonisolated static let sizes = TestSweep.sizes(DynamicTypeSize.allCases)
 
             /// The drawn placeholder, its width and the width it is drawn in, in points, for `field` hosted on a
@@ -53,7 +56,12 @@
                 let textField = try #require(FieldFontTests.field(in: host.view), "no text field")
                 let placeholder = try #require(textField.attributedPlaceholder, "no placeholder")
                 let room = textField.placeholderRect(forBounds: textField.bounds).width
-                return SearchFieldDrawn(shown: placeholder.string, needed: ceil(placeholder.size().width), room: room)
+                return SearchFieldDrawn(
+                    shown: placeholder.string,
+                    needed: ceil(placeholder.size().width),
+                    room: room,
+                    field: textField.bounds.width
+                )
             }
 
             static let library = SearchField("Search 224 exercises", short: "Search", text: "") { _ in }
@@ -66,6 +74,8 @@
                 let drawn = try Self.measure(Self.library, width: width, size: size)
                 #expect(drawn.needed <= drawn.room, "\(width) pt, \(size): \(drawn)")
                 #expect(["Search 224 exercises", "Search"].contains(drawn.shown))
+                // Review R2-2: UIKit's placeholder rect is inset from the field by no more than the field's margin.
+                #expect(drawn.field - drawn.room <= SearchField.placeholderMargin, "\(width) pt, \(size): \(drawn)")
             }
 
             @Test("On the iPhone 17 at the default size the placeholder is the whole one")

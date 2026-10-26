@@ -530,3 +530,295 @@ Two changes kept the slice under 1,000:
 - **m4, open question.** RECENTLY LOGGED reads "· 1 session · Custom". *Recommendation:* accept; the alternative
   is to drop "Custom" in that section.
 - **New wording.** "Search" as the short placeholder.
+
+## S2 — as built (G1 implementer, 2026-10-22)
+
+Branch `feat/F12-s2-history`, cut from `main` at `d92cc15` (S1 merged, #70). The specification is the brief's
+"Plan amendments" (slice S2: criteria 4–8, 11, 12 as restated, N9–N14) and "Rulings before G1" (R1–R7).
+
+**Pete, 2026-10-22: S1 questions 1–5 approved as built** (the failed-state wording, "Search", "New exercise" visible
+though inert until S3, "· Custom", the zero-load best reading "0" / "PR 0 pounds"). Nothing in the code changed for
+them.
+
+### Commits
+
+- `1c1a688` fix(library): G3's deferred S1 findings, R2-1 to R2-5 (first commit, as ruled).
+- the S2 commit: feat(library): an exercise's history.
+- the gate paragraph (docs only), if any.
+
+### R2-1 to R2-5 (first commit)
+
+- **R2-2.** The fit suite measured UIKit's `placeholderRect(forBounds:)` on the hosted field at 320, 375, 390, 393,
+  402, 430 and 440 pt and every size: **inset 0 pt everywhere** (the rect is as wide as the field SwiftUI lays
+  out). `SearchField` now keeps `placeholderMargin = 1` pt (measured inset 0, plus UIKit's rounding of the text's
+  width up to a whole point); the closest whole fit measured is 6 pt (402 pt, `.accessibility3`). The fit suite
+  sweeps the three new widths and asserts the inset stays within the margin. No reference changed.
+- **R2-3.** `LibraryAuditAdversarial`'s guard test asserts `field.label == "Search 224 exercises"` while "Search"
+  is drawn (Nightly, passes).
+- **R2-1.** Guard (b) is kept; its comments (`LibraryAuditAdversarial`, `PlaceholderInk`) now say it sees ink out
+  of the field's frame, not a "…", which UIKit draws inside the placeholder rect; truncation is the fit suite's.
+- **R2-4.** `placeholder_countsEveryExercise` asserts `shortPlaceholder == "Search"`.
+- **R2-5.** `InMemoryStatsQueries.bestSets()` is one walk of the live workouts' sets again.
+
+### What landed (S2)
+
+- **Domain.** `Model/ExerciseSession.swift`; `StatsQueries.exerciseSessions(exerciseID:)` (N9);
+  `PersonalRecords.countsTowardBests` is public; `Rules/ExerciseHistory.swift`, the pure fold: estimate, best set,
+  sessions, the 8 weeks (walked back as ranges from the week holding now, so a DST week is one week), and the log
+  tagged `.record` / `.heavier(Δ)` / `.same` (N10: PR from `personalRecords`' workout ids; "+Δ" compares working
+  sets only). An overload takes `weekStart` and a `Calendar`, so a Feature needs no program start date.
+- **Persistence.** `GRDBStatsQueries.exerciseSessions`: one read of `logged_set.*` joined to its workout, ordered
+  `started_at DESC, workout.id, workout_exercise.position, logged_set.position`; a set that cannot be read throws, as
+  `bestSet` does. `GRDBStatsQueries.doneSets` exposes the shared SQL (one line).
+- **Fakes, stub.** In memory (an extension, keeping the struct under the lint's body length) and Unimplemented.
+- **LedgerDesign.** `StatTile(isValueAccented:)` (the gallery's "218" tile wears it, as v2 does);
+  `LedgerHairline.bar = 2` (the chart's 2-pt bar, R2).
+- **FeatureLibrary.** `LibraryRoute.openWorkout`; `ExerciseHistoryModel` (+ input), `ExerciseHistoryPresentation`,
+  `ExerciseHistoryStore`, `ExerciseHistoryRoot`, `LibraryCopy+History`; views `ExerciseHistoryScreen` (screen and
+  page), `E1RMChart` (bars; a list of week and value at accessibility sizes, N12), `E1RMChartDescriptor` (the one
+  `import Accessibility`, R2), `SessionLog` (F06 hairline rows), `History+Previews` (4 states over
+  `Fixtures.history(weeks: 8)`, records detected honestly). No `import Charts`.
+- **LedgerAppKit.** `.exercise` draws `ExerciseHistoryRoot`; `.openWorkout` selects the History tab (Q1 A);
+  `AppCopy.exerciseHistoryTitle` and its catalog key are removed.
+
+### Decisions
+
+1. **The chart's message** ("Log a session to start the chart.") shows when none of the 8 weeks has an estimate,
+   which covers criterion 5's "no working sets at all" and also older-only history.
+2. **Bar heights**: the lowest shown week at 25 % of the 96-pt track (3 × `xxl`; v2 draws its lowest at about a
+   quarter of 89 px), the highest at 100 %, linear between; one value alone is full height.
+3. **PR tag**: bold ink (`numeralS`), never orange (criterion 12, Q3 A); "+5 lb" `inkSecondary`; "—" too.
+4. **Session rows** are F06's `HairlineRow` (date as the title, sets joined by spaces as the detail, the tag as the
+   accessory), one button each; VoiceOver reads the date, then "PR, 180×5, …".
+5. **Failed state**: a source that ends, a read that fails, or an exercise that is not stored. Title new (below),
+   body the Library's.
+6. **The history's title** keeps the identifier `library.history.title`, so the nightly `Library` UI test now finds
+   the real screen (label "Chest-Supported Row").
+7. **The PR-sweep fold budget** is close: 4.1 ms p95 against 5 ms on the Debug simulator (N11).
+
+### New wording for Pete
+
+All in `LibraryCopy+History.swift`: "1RM est", "best set", "sessions", "×5", "ESTIMATED 1RM · 8 WEEKS", "W1"…"W8",
+"Log a session to start the chart.", "SESSION LOG", "No sessions yet.", "PR", "180×5", "+22 lb" / "−22 lb" / "0 lb"
+(and kg), from the brief. **Not in the brief:** "Can't show this exercise's history right now" (failed title);
+VoiceOver's "Estimated 1RM by week", "Week", "Pounds" / "Kilograms" (chart descriptor). The "—" key's comment now
+covers every dash.
+
+### Criteria → tests
+
+| Criterion | Tests |
+|---|---|
+| 4 (219, 195×5, weeks, +28 lb) | `ExerciseHistoryPresentationTests.criterion4_statsWeeksAndChange`; domain `e1RM_isBrzyckiOfTheBestSetUpTo12Reps` |
+| 5 (gaps, no data) | domain `weeks_eightEndingNow_emptyWeeksNil`, `noCountedSet_hasNothing`; presentation `noData_saysSo`, `oneWeek_hasNoChange`; snapshots `gaps`, `noData` |
+| 6 (100×15) | domain `e1RM_ignoresRepsOver12`; presentation `repsOver12_haveNoEstimate` |
+| 7 (C12 fixture) | domain `tags_criterion7_prUpSame` (records detected by `PersonalRecords`), `tags_firstSessionIsSame_recordWins`, `tags_compareWorkingSetsOnly`; presentation `criterion7_tagsAndDates` |
+| 8 (kg) | presentation `kilograms_convertEverything`, `change_fallAndNone`; store `unitsChanged_redraws`; snapshot `kilograms` |
+| 11 | presentation `entry_routesToItsWorkout`; store `route_isDeliveredOnce`; root `root_runsTheStore_andHandsARouteOnce`; AX `sessions_sendTheirRoutes`; `LibraryRouteMappingTests.openWorkout_selectsTheHistoryTab` |
+| 12 (descriptor, orange) | AX `descriptor_readsTheWeeksValues` (R3's fallback: `makeChartDescriptor()` read directly); `ExerciseHistoryOrangeAuditTests` (2 × 2 themes); SRC `views_wearNoAccent` |
+| N9 | contract clause `exerciseSessions` (GRDB, in memory, `HistoryModel`); `ExerciseSessionsPropertyTests` (40 seeds × 14 steps: GRDB = model = fakes, fold = GRDB's queries) |
+| N10 | domain tag tests; deload: the contract history includes one |
+| N11 | Nightly `StatsQueriesPerformanceTests`: `exerciseSessions` 13.1 ms p95 (budget 50); fold over 1,703 sets 4.1 ms p95 (budget 5) |
+| N12 | AX `tree_isExactlyTheTable` (list at AX sizes), layout `stats_stackAtAccessibilitySizes`, snapshot `logged` at `.accessibility3` |
+| N13 | store `workoutFinishedAndRename_show` |
+| N14 | presentation `date_ofAnotherYear_carriesItsYear` |
+| Failed state | store `failures_showFailed`; root `root_drawsTheFailedMessage` |
+
+All written alongside the code; the snapshots failed first (`.missing`), and the descriptor test failed to
+compile first (point values are refined for Swift out of reach; it reads the points' labels).
+
+**VoiceOver (DoD).** Not checked by ear: the hosted reader does not hand the descriptor over (R3); the descriptor
+is tested directly. A manual VoiceOver pass on the simulator remains for review.
+
+### Sanctioned edits of others' tests
+
+| File | Edit | Why |
+|---|---|---|
+| `LedgerPersistenceTests/Adversarial/HistoryModel+Stats.swift` | `exerciseSessions` from its own live workouts | A protocol requirement (N9) |
+| `LedgerPersistenceTests/Adversarial/HistoryContractAdversarialTests.swift` | 24 → 25 clauses | N9 |
+| `LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift` | `BriefStatsQueries.exerciseSessions` returns `[]` | Requirement |
+| `FeatureWorkoutTests/Support/ReceiptSupport.swift` | forwards `exerciseSessions` | Requirement |
+| `FeatureLibraryTests/LibraryStoreAdversarialTests.swift` (G2's) | `FailingBests` forwards it | Requirement |
+| `LedgerDependenciesTests/UnimplementedStubTests.swift` | the stub list gains it | Requirement |
+| `LedgerPersistenceTests/Performance/StatsQueriesPerformanceTests.swift`, `PerformanceBudget.swift` | one query line, the fold timing and `historyFold` | N11 |
+| `LedgerAppKitTests/ModuleCopyTests.swift` | 8 → 7 | S1's edit reverted |
+| `LedgerAppKitTests/Adversarial/AppCopyAdversarialTests.swift` | "Exercise history" out of `shellStrings` | Reverted |
+| `LedgerAppKitTests/AppTabsTests.swift` | `exerciseDestination_drawsItsPlaceholder` and its `import LedgerDomain` removed | Reverted |
+| `LedgerDesignTests/__Snapshots__/PhoneComponentSnapshotTests/statTile_*` (6) | re-recorded | The gallery's "218" is orange; per-pixel diff confined to the value's box in each; looked at |
+| `Apps/LedgerUITests/LibraryAuditAdversarial.swift`, `PlaceholderInk.swift` (G2's) | R2-1 comments, R2-3 assertion | Ruled |
+
+My own (S1) tests amended: `FeatureLibrarySourceTests` (store files, the descriptor's import, two screens' scroll
+views, the accent spelled only in `E1RMChart`), `PreviewTests` (history previews), `LibraryStoreTests`
+(`UnreadableBests` forwards), `LibraryRouteMappingTests` (+1 test), UI `Library` (history title).
+
+### References (10 new, looked at each)
+
+`FeatureLibraryTests/__Snapshots__/ExerciseHistorySnapshotTests/`: `logged` light/dark at `.large` and
+`.accessibility3`, `gaps`, `noData`, `kilograms` light/dark at `.large`. Bars rise W1→W8 with W8 orange; W3 and W6
+keep their labels with no bar; the list replaces the bars at `.accessibility3` with the stats stacked; kg reads
+102 / 90.7×5 / +10 kg.
+
+### Product lines
+
+Against `d92cc15`, non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps` without `LedgerTestSupport`, the
+UI tests and the catalogs: **842 added, 16 removed (net 826)**; `Package.swift` unchanged. Of it the R2 commit is
+about 10. By area: FeatureLibrary 671 (store 148, presentation 122, previews 74, copy 74, chart 74, model 57, screen
+48, root 40, session log 27, descriptor 25, route and copy edits 3); Domain 94; Persistence 23; Fakes and stub 21;
+LedgerDesign 9; LedgerAppKit −1 net. Under the 950 stop line; the plan's 895 held.
+
+### PR-sweep seconds (R6)
+
+`TEST_RUNNER_LEDGER_SWEEP=pr`, PR plan, sums of per-argument durations: accessibility 1.16 s (22), layout 1.60 s
+(40), orange 0.25 s, snapshots 0.43 s, root 0.13 s, store and presentation 0.03 s, previews' new cases about 0.2 s,
+SearchField fit +0.15 s for the three widths. **Added ≈ 4.0 s.**
+
+### Runs
+
+- Host `swift test` over the whole package: green (one known issue, already there).
+- Simulator, PR plan, PR sweep: `FeatureLibraryTests`, `LedgerDesignTests`, `LedgerAppKitTests`: 861 tests, 0
+  failures (after recording the 10 history references and the 6 StatTile ones).
+- Nightly: UI `Library` and `LibraryAuditAdversarial` (5 tests) pass; `StatsQueriesPerformanceTests` passes.
+
+### The gate
+
+`scripts/check.sh` through the lock on `057391d`: **exit 0, "check.sh OK", 1,894 s** (lint 78 s, iOS build 21 s,
+iOS tests 1,507 s, watchOS build 46 s, watchOS tests 237 s, coverage 2 s; overall 98.69 %). The only commit after
+`057391d` is this paragraph.
+
+### Fix round 1 (G1, 2026-10-24): G2's F12-S2-1 to -4, as the orchestrator ruled
+
+The ruling is in `test-findings.md`, "Orchestrator's ruling (S2 round 1)". F12-S2-5 is kept as built (a candidate
+for Pete); F12-S2-6 (the Library store's same miss) is a follow-up for S3 or F13, and `LibraryStore` is unchanged.
+
+- **F12-S2-1 ("+0 lb").** `ExerciseHistoryPresentation.heavier`: the step is written with `formatted(in:)`, and a
+  step that writes as zero does (`Weight.zero.formatted(in:)`) reads "—", as the two sets read the same. The PR tag
+  is untouched. G2's `tag_tinyStepAcrossUnits_neverReadsPlusZero` passes as written.
+- **F12-S2-2 ("1 sessions").** `LibraryCopy.sessionsCaption(_:locale:)` is the Library row's counted "%lld
+  sessions" (looked up with `locale.forCountedText`), without its number. **Why not a plural key of the bare
+  word:** standards §7 and the catalog audit (`StringCatalog.pluralProblems`) require a counted key to hold its
+  `%lld` in every form, so a form "session" with no number fails the gate. The caption is therefore the counted
+  text with the number removed, written as the lookup writes it (`count.formatted(.number.locale(…))`): the
+  catalog picks the form, and the number is the tile's value. Tested at 0, 1, 2, 1,234 and 1,000,000 in en_US,
+  de_DE, fr_FR, hi_IN and ar_EG. The old "sessions" key is gone. **VoiceOver:** `Stat.spoken` is the whole counted
+  text, handed to `StatTile(accessibilitySummary:)`, so the tile reads "1 session" (it read "1, sessions").
+- **F12-S2-3 (older workout changes missed).** `StatsQueries.observeExerciseSessions(exerciseID:)`: GRDB
+  `ValueObservation` of the same fetch with `removeDuplicates()` (`sessionsObservation`, beside
+  `recentObservation`; `exerciseSessions` reads through the same `fetchSessions`), in memory over the history's
+  `ObservedState`, and the Unimplemented stub's empty stream. `ObservedState` now takes the value type per
+  `observe` call (its observers are closures), so one state can be observed as two types; its four users lose
+  the second generic argument. Contract clause 26: the observation emits after the newest workout, after an
+  older one, after `updateSets` and `delete` of the older one, and nothing for writes of another exercise alone.
+  The store follows it instead of `observeRecent(limit: 1)`; on each emission it reads the sessions and records
+  together, as before, so the failed-read and overtaken-read paths are unchanged. `workoutRepository` is no longer
+  a dependency of the history's store. Both G2 store tests pass.
+- **F12-S2-4 (the chart speaks only its name).** `Chart.spokenSummary`: "Up 28 lb over 8 weeks" / "Down …" / "No
+  change over 8 weeks", or the no-data message; nil when one week alone has a value (no change to read). It is the
+  descriptor's `summary` and the bars element's `accessibilityValue`.
+
+**New wording for Pete:** "Up %@ lb over 8 weeks", "Down %@ lb over 8 weeks", the two kg forms and "No change over
+8 weeks" (VoiceOver only). The visible caption is unchanged but for "session" under 1.
+
+**Sanctioned edits of others' tests:** `HistoryContractAdversarialTests` 25 → 26 clauses; `HistoryModel` (+Stats)
+observes sessions (its own observer list, `emitsEveryWrite` honoured); the forwarding doubles (`ReceiptSupport`,
+`FailingBests`, `UnreadableBests`, `UnreadableSessions`, G2's `GatedSessions`) forward
+`observeExerciseSessions`; `BriefStatsQueries` returns a finished stream; `UnimplementedStubTests` checks the new
+stream ends. My own: `ExerciseHistoryAccessibilityTests` (the stats read `spoken` when there is one; the chart
+element has the summary as its value), `ExerciseHistoryLayoutTests` (finds the tiles by the same labels),
+`ExerciseHistoryOrangeAuditTests` (the new field), `ExerciseHistoryPresentationTests` (+1 test over 5 locales;
+summary and spoken expectations). No snapshot reference changed (nothing drawn changed at the fixtures' counts).
+
+**Product lines** (same rules): against `d92cc15`, **939 added, 40 removed (net 899)**; this round +73 net. Under
+the 950 stop line.
+
+**Runs.**
+- Host `swift test` over the whole package: exit 0, no ✘ lines (the known issues already there).
+- `scripts/check.sh --lint-only`: exit 0.
+- Simulator, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`: `FeatureLibraryTests`, `LedgerDesignTests`, `LedgerAppKitTests`,
+  G2's three adversarial suites, `StatsQueriesTests`, `InMemoryContractTests`, `HistoryContractAdversarialTests`,
+  `UnimplementedStubTests`. First run exit 65: the accessibility tree and layout tests still expected "6, sessions"
+  and no chart value (updated above). Second run: exit 0, 916 passed, 0 failed, 3 skipped.
+- Simulator, Nightly: `LedgerUITests/HistoryVoiceOverAdversarial` and `LedgerUITests/Library`: exit 0, 4 passed.
+
+**The gate (fix round 1).** `scripts/check.sh` through the lock on `a8a041a`: **exit 0, "check.sh OK", 1,858 s**
+(lint 79 s, iOS build 15 s, string catalogs 1 s, iOS tests 1,480 s, watchOS build 51 s, watchOS tests 231 s,
+coverage 1 s; overall 98.70 %). The only commit after `a8a041a` is this paragraph.
+
+### Review round 1 (G1, 2026-10-24): G3's F12-S2-R1-1 to -8, as the orchestrator ruled
+
+The ruling is in `review.md`, "Orchestrator's ruling (S2 review round 1)".
+
+- **R1-1 (the fold at 2,000 sets).** `ExerciseHistory.make` walks the counted sets once into
+  `PersonalRecords.Tally<Weight>.atReps` (the heaviest weight at each rep count) and takes Brzycki of those
+  candidates only; the best set is the heaviest of the same tally (as `Bests.bestSet(of:)`), and each week does
+  the same over its sessions. Brzycki, rounded to the gram, rises with the weight at fixed reps, so the results
+  are the same; the domain, property and differential tests pass unchanged. The Nightly fold now times 2,000 sets
+  in 400 sessions from `Seeders.exerciseSessions(of:sessions:setsPerSession:rng:)` (new, LedgerTestSupport: one
+  lift's `Seeders.history`, every row done), budget still 5 ms; `PerformanceBudget.historyFold`'s comment says so.
+- **R1-2 (the model at 2,000 sets).** `LibraryPerformanceTests.historyModel_underAFrame`: the model over the same
+  2,000 sets, median of five, budget 16 ms. **First measured 24.1 ms on the host (Debug): it failed.** Most of it
+  was 2,000 `LibraryCopy.set` lookups (13 ms). Two changes, as ruled and to make the budget hold:
+  - `ExerciseHistoryPresentation.SetTexts` writes each weight × reps once per model (a lifter repeats a few):
+    **9.2 ms on the simulator, 8.8 ms on the host**;
+  - the store builds the model off the main actor (`@concurrent nonisolated static func model(_:)`; input and model
+    are `Sendable`), because 2,000 sets of 2,000 different weights still take 24 ms (measured by hand on the host,
+    not committed). The generation guard on the records read is unchanged; a model a change overtook while it was
+    built is shown, and the change's turn builds the next, as with an overtaken read.
+- **R1-3.** The store keeps the sessions the observation emits (`Sources.sessions`), and reads only
+  `personalRecords` per change (`readRecords()`), with the same generation guard. The failed and overtaken-read
+  doubles now act on the records read: G2's `SessionsGate`/`GatedSessions` are `RecordsGate`/`GatedRecords`, my
+  `UnreadableSessions` is `UnreadableRecords`; both G2 tests pass as written otherwise.
+- **R1-4.** The caption's derivation left `LibraryCopy` (now lookups only) for
+  `ExerciseHistoryPresentation.sessionsStat(_:locale:)`: one `count.formatted(.number.locale(locale.forCountedText))`
+  is the tile's value and what is removed from "%lld sessions". Its comment names the follow-up (a numberless
+  caption key with an audit exception), Pete's call. `LibraryCopyTests.sessionsForms_areTheNumberThenWords` reads
+  the catalog and holds every form of "%lld sessions" in every localization to `%lld`, one space, then a word
+  with no digit and no `%`.
+- **R1-5.** With sessions but no week with an estimate, the chart (and its spoken summary) reads "No set of 12 reps
+  or fewer in the last 8 weeks." (`LibraryCopy.noEstimate`); "Log a session to start the chart." stays for no
+  session at all.
+- **R1-6.** `StatsQueriesContract.observeExerciseSessions` reads the stream through `StreamArrivals`
+  (LedgerTestSupport, new): one task takes every value as it is sent, so none is replaced unseen in the bridge's
+  buffer of one, and after the row's workout and after the row's edit a read waits `quiet` (200 ms) and must get
+  nothing. **Proved:** with `removeDuplicates()` taken out of `GRDBStatsQueries.sessionsObservation`, the GRDB
+  clause failed ("a value after the row's workout, which is unheard: got Optional(["1"]), expected nil"); restored,
+  it passes (`git diff` of LedgerPersistence empty).
+- **R1-7.** (a) The delta is hidden from VoiceOver where the bars are drawn (their value speaks the change); it
+  stays a stop at accessibility sizes, where the weeks are a list. (b) The spoken change names its span, from the
+  first week with a value to the last, both counted: "Up 11 pounds over 4 weeks" from W5, "over 8 weeks" from W1.
+  The five keys are counted ("%lld weeks", one and other forms). (c) The unit is spoken as S1's rows speak it
+  (`spokenRecord`'s "pounds" / "kilograms"). Stat tiles unchanged.
+- **R1-8.** The sessions tile's value is that same formatter's: "1,234", and Arabic digits in ar_EG.
+
+**New wording for Pete:** "No set of 12 reps or fewer in the last 8 weeks." (visible and spoken); VoiceOver's
+"Up %@ pounds over %lld weeks", "Down %@ pounds over %lld weeks", the two kilograms forms and "No change over %lld
+weeks" (singular "week" forms exist but are unreachable: a change needs two weeks). They replace round 1's "Up %@
+lb over 8 weeks" and its siblings. Like S1's "PR 1 pounds" (n1 follow-up), a change of 1 reads "Up 1 pounds".
+
+**Sanctioned edits of others' tests:** G2's `HistoryAdversarialDoubles` and `ExerciseHistoryAdversarialTests`
+(the gate moves to the records read, R1-3); `StatsQueriesPerformanceTests`, `PerformanceBudget` (R1-1). My own:
+`ExerciseHistoryPresentationTests` (spoken wording, R1-5's message, +1 span test, the sessions stat over 5 locales
+with its value), `ExerciseHistoryAccessibilityTests` (the delta is a stop only at accessibility sizes),
+`ExerciseHistoryStoreTests` (`UnreadableRecords`), `LibraryCopyTests` (+1), `LibraryPerformanceTests` (+1). No
+snapshot reference changed (nothing drawn changed at the fixtures).
+
+**Product lines** (same rules): against `d92cc15`, **984 added, 40 removed (net 944)**; this round +45 net. Under
+the 1,000 line.
+
+**Measured** (Nightly plan, simulator, Debug): fold over 2,000 sets **2.49 ms p95** (budget 5; round 1's 1,703
+sets took 4.1 ms); model over 2,000 sets **9.17 ms median** (budget 16); `exerciseSessions` 13.3 ms p95,
+`personalRecords` 0.28 ms p95. Host, Debug: fold 2.4–2.5 ms, model 8.6–9.1 ms.
+
+**Runs.**
+- Host `swift test` over the whole package: exit 0, no ✘ lines.
+- `scripts/check.sh --lint-only`: exit 0 (after wrapping a line, splitting the presentation's helpers into an
+  extension, and extracting the fold timing into `foldUnderBudget`).
+- Simulator, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`: `FeatureLibraryTests`, `LedgerDesignTests`,
+  `LedgerAppKitTests`, `StatsQueriesTests`, `InMemoryContractTests`, `HistoryContractAdversarialTests`,
+  `HistoryCloseoutAdversarialTests`, `ExerciseSessionsPropertyTests`, `ExerciseHistoryWeeksAdversarialTests`, the
+  domain's `ExerciseHistoryTests`, `ExerciseHistoryAdversarialTests`, `ExerciseHistoryPropertyAdversarialTests`,
+  `UnimplementedStubTests`: exit 0, 947 tests, 936 passed, 0 failed, 4 skipped, 7 expected failures.
+- Simulator, Nightly: `StatsQueriesPerformanceTests`, `LibraryPerformanceTests`, UI `HistoryVoiceOverAdversarial`
+  and `Library`: exit 0, 8 passed.
+
+**The gate (review round 1).** `scripts/check.sh` through the lock on `d8b909c`: **exit 0, "check.sh OK", 1,885 s**
+(lint 77 s, iOS build 17 s, string catalogs 1 s, iOS tests 1,501 s, watchOS build 32 s, watchOS tests 256 s,
+coverage 1 s; overall 98.68 %). The only commit after `d8b909c` is this paragraph.

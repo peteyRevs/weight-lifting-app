@@ -28,6 +28,14 @@ public enum StatsQueriesContract {
         Clause("bests(before:for:) count the record sets of the workouts before one, by start then id", bestsBefore),
         Clause("recentlyLogged lists exercises by their latest workout, newest first, up to the limit", recentlyLogged),
         Clause("bestSets is bestSet of every exercise in one read; one with no counted set has no entry", bestSets),
+        Clause(
+            "exerciseSessions lists each workout's done sets, newest first; its fold is the bests, weeks and count",
+            exerciseSessions
+        ),
+        Clause(
+            "observeExerciseSessions follows any workout of the exercise, an older one too, and no other exercise's",
+            observeExerciseSessions
+        ),
         Clause("every query follows updateSets and delete", followsEdits)
     ]
 

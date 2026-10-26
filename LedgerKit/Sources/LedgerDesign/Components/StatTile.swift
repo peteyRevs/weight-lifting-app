@@ -2,8 +2,9 @@ import SwiftUI
 
 /// One number with a caption (v2 Today "3/4 sessions this week", "41.2k lb moved · +8%"; Exercise
 /// history "195×5 best set"): the value in the heavy narrow numerals, an optional light `unit` after
-/// it, the caption under it and an optional orange `delta` after the caption. Tiles sit side by side,
-/// each taking an equal share of the row.
+/// it, the caption under it and an optional orange `delta` after the caption. `isValueAccented` draws the
+/// value in orange (`accentText`), as v2 draws Exercise history's "1RM est" (F12 S2, Pete's question 3).
+/// Tiles sit side by side, each taking an equal share of the row.
 ///
 /// VoiceOver reads the tile as one element: `accessibilitySummary` if given ("3 of 4 sessions this
 /// week"), else the strings as shown ("3/4, sessions this week"). Strings are shown as given;
@@ -18,6 +19,7 @@ public struct StatTile: View {
     private let caption: String
     private let delta: String?
     private let summary: String?
+    private let isValueAccented: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
 
@@ -26,13 +28,15 @@ public struct StatTile: View {
         unit: String? = nil,
         caption: String,
         delta: String? = nil,
-        accessibilitySummary: String? = nil
+        accessibilitySummary: String? = nil,
+        isValueAccented: Bool = false
     ) {
         self.value = value
         self.unit = unit
         self.caption = caption
         self.delta = delta
         summary = accessibilitySummary
+        self.isValueAccented = isValueAccented
     }
 
     public var body: some View {
@@ -40,7 +44,7 @@ public struct StatTile: View {
         VStack(alignment: .leading, spacing: LedgerSpacing.s) {
             Text(Self.valueLine(value, unit: unit, valueSize: valueSize, legibilityWeight: legibilityWeight))
                 .ledgerFont(.numeralXL)
-                .foregroundStyle(LedgerColor.ink)
+                .foregroundStyle(isValueAccented ? LedgerColor.accentText : LedgerColor.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5) // a long value at the largest text sizes shrinks rather than breaks
             Text(captionLine)
@@ -121,7 +125,7 @@ struct StatTileGallery: View {
                 StatTile(value: "41.2", unit: "k", caption: "lb moved", delta: "+8%")
             }
             StatTileRow {
-                StatTile(value: "218", caption: "1RM est")
+                StatTile(value: "218", caption: "1RM est", isValueAccented: true)
                 StatTile(value: "195", unit: "×5", caption: "best set")
                 StatTile(value: "34", caption: "sessions")
             }

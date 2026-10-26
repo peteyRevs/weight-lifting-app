@@ -183,4 +183,12 @@ nonisolated struct FailingBests: StatsQueries {
     func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
         try await base.recentlyLogged(limit: limit)
     }
+
+    func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
+        base.observeExerciseSessions(exerciseID: exerciseID)
+    }
+
+    func exerciseSessions(exerciseID: ExerciseID) async throws -> [ExerciseSession] {
+        try await base.exerciseSessions(exerciseID: exerciseID)
+    }
 }

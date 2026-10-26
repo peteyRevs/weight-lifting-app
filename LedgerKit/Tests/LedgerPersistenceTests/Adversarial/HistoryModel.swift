@@ -38,12 +38,20 @@ final class HistoryModel: Sendable {
         var programs: [ProgramID: Program] = [:]
         var writes = 0
         var observers: [Observer] = []
+        /// F12 S2 (sanctioned): the observers of one exercise's sessions.
+        var sessionObservers: [SessionObserver] = []
     }
 
     struct Observer: Sendable {
         let limit: Int
         let continuation: AsyncStream<[WorkoutState]>.Continuation
         var last: [WorkoutState]
+    }
+
+    struct SessionObserver: Sendable {
+        let exerciseID: ExerciseID
+        let continuation: AsyncStream<[ExerciseSession]>.Continuation
+        var last: [ExerciseSession]
     }
 
     let faults: Set<Fault>
@@ -124,6 +132,13 @@ extension HistoryModel {
                 if value != state.observers[index].last || has(.emitsEveryWrite) {
                     state.observers[index].last = value
                     state.observers[index].continuation.yield(value)
+                }
+            }
+            for index in state.sessionObservers.indices {
+                let value = sessions(of: state.sessionObservers[index].exerciseID, in: state)
+                if value != state.sessionObservers[index].last || has(.emitsEveryWrite) {
+                    state.sessionObservers[index].last = value
+                    state.sessionObservers[index].continuation.yield(value)
                 }
             }
         }

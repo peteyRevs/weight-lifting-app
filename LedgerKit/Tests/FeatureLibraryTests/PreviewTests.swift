@@ -5,16 +5,18 @@
     import SwiftUI
     import Testing
 
-    /// Every `#Preview` in FeatureLibrary is a case of `LibraryPreview`, and every case renders (the convention
+    /// Every `#Preview` in FeatureLibrary is a case of `LibraryPreview` or (F12 S2) `HistoryPreview`, and every case
+    /// renders (the convention
     /// F07's criterion 8 set for each module with previews).
     @Suite("Previews (FeatureLibrary)", .serialized, .tags(.feature))
     struct PreviewTests {
-        @Test("Every #Preview in FeatureLibrary is a LibraryPreview case, by name, and every case has one")
+        @Test("Every #Preview in FeatureLibrary is a LibraryPreview or HistoryPreview case, and every case has one")
         func registry_listsEveryPreview() throws {
             let names = try PreviewScan.previews(inModule: "FeatureLibrary")
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
-            #expect(Set(names.compactMap(\.self)) == Set(LibraryPreview.allCases.map(\.rawValue)))
+            let cases = LibraryPreview.allCases.map(\.rawValue) + HistoryPreview.allCases.map(\.rawValue)
+            #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(PreviewScan.registeredModules.contains("FeatureLibrary"))
         }
 
@@ -40,6 +42,23 @@
             let none = try LibraryPreview.noExercises.model()
             #expect(none.search.placeholder == "Search 0 exercises")
             #expect(none.sections.isEmpty)
+        }
+
+        @Test("Every history preview renders", arguments: HistoryPreview.allCases)
+        func historyPreview_renders(_ preview: HistoryPreview) {
+            #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+        }
+
+        @Test("Every history preview shows the state it is named for")
+        func historyPreviews_showTheirStates() throws {
+            let logged = try HistoryPreview.logged.model()
+            #expect(logged.numbers.allSatisfy { $0 != nil } && logged.chart.bars.last?.isAccented == true)
+            #expect(logged.log.entries.contains { $0.tag == "PR" })
+            #expect(try HistoryPreview.gaps.model().numbers.map { $0 == nil } == [
+                false, false, true, false, false, true, false, false
+            ])
+            #expect(try HistoryPreview.noData.model().chart.empty != nil)
+            #expect(try HistoryPreview.kilograms.model().chart.delta?.hasSuffix(" kg") == true)
         }
     }
 #endif

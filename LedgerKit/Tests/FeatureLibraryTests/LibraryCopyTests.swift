@@ -26,6 +26,31 @@ struct LibraryCopyTests {
         #expect(LibraryCopy.sessions(0, locale: Locale(identifier: "fr_FR")) == "0 sessions")
     }
 
+    /// F12-S2-R1-4: the history's sessions caption is "%lld sessions" less its number
+    /// (`ExerciseHistoryPresentation.sessionsStat`), which holds only while every form of the key, in every
+    /// localization, is the number, one space, then words. A translation that writes the number as a word, moves
+    /// it, or wraps it in marks fails here and not silently on screen.
+    @Test("F12-S2-R1-4. Every form of \"%lld sessions\" in every localization is the number, a space, then words")
+    func sessionsForms_areTheNumberThenWords() throws {
+        let file = PreviewScan.sourcesDirectory.appending(path: "FeatureLibrary/Resources/Localizable.xcstrings")
+        let catalog = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let entry = try #require((catalog["strings"] as? [String: Any])?["%lld sessions"] as? [String: Any])
+        let localizations = try #require(entry["localizations"] as? [String: [String: Any]])
+        let forms = localizations.flatMap { language, localization in
+            let units = ((localization["variations"] as? [String: Any])?["plural"] as? [String: [String: Any]])?
+                .map { ("\(language) \($0.key)", $0.value) } ?? [(language, localization)]
+            return units.map { name, unit in (name, (unit["stringUnit"] as? [String: Any])?["value"] as? String) }
+        }
+        #expect(!forms.isEmpty)
+        for (name, value) in forms {
+            let words = value?.hasPrefix("%lld ") == true ? value?.dropFirst(5) ?? "" : ""
+            #expect(
+                words.first?.isLetter == true && !words.contains { $0.isNumber || $0 == "%" },
+                "\(name): \(value ?? "no value")"
+            )
+        }
+    }
+
     @Test("The spoken PR names its unit")
     func spokenRecord_namesItsUnit() {
         #expect(LibraryCopy.spokenRecord("195", units: .lb, locale: Fixtures.locale) == "PR 195 pounds")

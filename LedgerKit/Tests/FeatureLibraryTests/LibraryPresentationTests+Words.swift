@@ -19,6 +19,7 @@ extension LibraryPresentationTests {
     func placeholder_countsEveryExercise() throws {
         let model = try Self.model(Self.input(), LibraryFilter(query: "row", muscle: .back, equipment: .machine))
         #expect(model.search.placeholder == "Search \(LibraryFixtures.catalog.count + 1) exercises")
+        #expect(model.search.shortPlaceholder == "Search", "drawn where the whole one does not fit (review R2-4)")
     }
 
     @Test("N7. A row is one button: its name, then the meta's parts and its PR in pounds as its value")

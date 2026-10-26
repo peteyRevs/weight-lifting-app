@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ kg" : {
+      "comment" : "No change, kilos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "comment" : "No change, pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
     "%@: %@" : {
       "comment" : "Spoken label of a filter chip: Muscle or Equipment, then the chip's own text",
       "localizations" : {
@@ -8,6 +30,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@: %@"
+          }
+        }
+      }
+    },
+    "%@×%lld" : {
+      "comment" : "A set: its weight × its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@×%lld"
           }
         }
       }
@@ -31,6 +64,39 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "+%@ kg" : {
+      "comment" : "A gain in kilos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ kg"
+          }
+        }
+      }
+    },
+    "+%@ lb" : {
+      "comment" : "A gain in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%@ lb"
+          }
+        }
+      }
+    },
+    "1RM est" : {
+      "comment" : "Under an exercise's estimated one-rep max",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1RM est"
           }
         }
       }
@@ -156,6 +222,17 @@
         }
       }
     },
+    "Can't show this exercise's history right now" : {
+      "comment" : "Title shown in place of an exercise's history when its data cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show this exercise's history right now"
+          }
+        }
+      }
+    },
     "Chest" : {
       "comment" : "Muscle group, also a filter chip",
       "localizations" : {
@@ -200,6 +277,52 @@
         }
       }
     },
+    "Down %@ kilograms over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in kilograms over its weeks with a value",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ kilograms over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ kilograms over %lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Down %@ pounds over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss in pounds over its weeks with a value",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ pounds over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Down %@ pounds over %lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Dumbbell" : {
       "comment" : "Equipment: dumbbells",
       "localizations" : {
@@ -211,6 +334,17 @@
         }
       }
     },
+    "ESTIMATED 1RM · 8 WEEKS" : {
+      "comment" : "Heading of an exercise's chart of its best estimated one-rep max in each of the last 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ESTIMATED 1RM · 8 WEEKS"
+          }
+        }
+      }
+    },
     "Equipment" : {
       "comment" : "Spoken name of the Library's equipment chips",
       "localizations" : {
@@ -218,6 +352,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Equipment"
+          }
+        }
+      }
+    },
+    "Estimated 1RM by week" : {
+      "comment" : "VoiceOver's name for the chart",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated 1RM by week"
           }
         }
       }
@@ -266,6 +411,17 @@
         }
       }
     },
+    "Kilograms" : {
+      "comment" : "VoiceOver's name for the chart's values",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kilograms"
+          }
+        }
+      }
+    },
     "Legs" : {
       "comment" : "Filter chip: every muscle of the legs",
       "localizations" : {
@@ -284,6 +440,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Library"
+          }
+        }
+      }
+    },
+    "Log a session to start the chart." : {
+      "comment" : "In place of an exercise's chart when it has no session yet",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log a session to start the chart."
           }
         }
       }
@@ -321,6 +488,29 @@
         }
       }
     },
+    "No change over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart when its first and last weeks with a value are equal",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No change over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No change over %lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "No exercises yet." : {
       "comment" : "Shown in the Library when no exercise is stored at all",
       "localizations" : {
@@ -332,6 +522,28 @@
         }
       }
     },
+    "No sessions yet." : {
+      "comment" : "In place of the session log of an exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No sessions yet."
+          }
+        }
+      }
+    },
+    "No set of 12 reps or fewer in the last 8 weeks." : {
+      "comment" : "In place of an exercise's chart when it has sessions but none of 12 reps or fewer in its 8 weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No set of 12 reps or fewer in the last 8 weeks."
+          }
+        }
+      }
+    },
     "Nothing matches that filter." : {
       "comment" : "Shown in the Library when the search and the two chip rows leave no exercise",
       "localizations" : {
@@ -339,6 +551,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nothing matches that filter."
+          }
+        }
+      }
+    },
+    "PR" : {
+      "comment" : "Tag of a session that set a personal record",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PR"
           }
         }
       }
@@ -365,6 +588,17 @@
         }
       }
     },
+    "Pounds" : {
+      "comment" : "VoiceOver's name for the chart's values",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pounds"
+          }
+        }
+      }
+    },
     "Quads" : {
       "comment" : "Muscle group: the quadriceps",
       "localizations" : {
@@ -383,6 +617,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "RECENTLY LOGGED"
+          }
+        }
+      }
+    },
+    "SESSION LOG" : {
+      "comment" : "Heading of an exercise's sessions, newest first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SESSION LOG"
           }
         }
       }
@@ -443,6 +688,74 @@
         }
       }
     },
+    "Up %@ kilograms over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in kilograms over its weeks with a value",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ kilograms over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ kilograms over %lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Up %@ pounds over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain in pounds over its weeks with a value",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ pounds over %lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Up %@ pounds over %lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "W%lld" : {
+      "comment" : "A week under the chart, W1 oldest",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W%lld"
+          }
+        }
+      }
+    },
+    "Week" : {
+      "comment" : "VoiceOver's name for the chart's axis of weeks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week"
+          }
+        }
+      }
+    },
     "Your exercises and workouts are still on this iPhone. Open the app again to try once more." : {
       "comment" : "Under the title shown when the Library's data cannot be read",
       "localizations" : {
@@ -454,13 +767,57 @@
         }
       }
     },
+    "best set" : {
+      "comment" : "Under an exercise's heaviest set, as 195×5",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "best set"
+          }
+        }
+      }
+    },
+    "×%lld" : {
+      "comment" : "Reps after a set's weight: 195×5",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "×%lld"
+          }
+        }
+      }
+    },
     "—" : {
-      "comment" : "In place of the best weight of an exercise never logged",
+      "comment" : "In place of a value there is none of, or a session's tag",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "—"
+          }
+        }
+      }
+    },
+    "−%@ kg" : {
+      "comment" : "A loss in kilos",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%@ kg"
+          }
+        }
+      }
+    },
+    "−%@ lb" : {
+      "comment" : "A loss in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%@ lb"
           }
         }
       }

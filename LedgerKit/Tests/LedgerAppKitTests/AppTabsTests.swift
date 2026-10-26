@@ -2,7 +2,6 @@
     import Dependencies
     @testable import LedgerAppKit
     import LedgerDesign
-    import LedgerDomain
     import LedgerSnapshotTesting
     import LedgerTestSupport
     import SwiftUI
@@ -59,15 +58,6 @@
                 #expect(Self.labels(elements) == [title].compactMap(\.self))
                 #expect(elements.map(\.accessibilityTraits) == [title].compactMap { $0.map { _ in Self.heading } })
                 #expect(elements.map { $0.accessibilityValue ?? "" } == [title].compactMap { $0.map { _ in "" } })
-            }
-        }
-
-        @Test("An exercise's history is pushed as the placeholder that names it, until F12 S2 draws it")
-        func exerciseDestination_drawsItsPlaceholder() {
-            let router = AppRouter()
-            router.open(.exercise(ExerciseID(Fixtures.uuid(451))), in: .library)
-            Self.hosting(router) { read in
-                #expect(Self.labels(read()) == ["Exercise history"])
             }
         }
 

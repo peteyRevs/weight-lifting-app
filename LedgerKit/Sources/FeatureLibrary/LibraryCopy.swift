@@ -101,9 +101,10 @@ nonisolated enum LibraryCopy {
         )
     }
 
-    /// The PR column of an exercise with no best set.
+    /// The PR column of an exercise with no best set; in its history, a stat or a week with no value, and the tag
+    /// of a session no heavier than the one before (F12 S2).
     static var noRecord: String {
-        String(localized: "—", bundle: .module, comment: "In place of the best weight of an exercise never logged")
+        String(localized: "—", bundle: .module, comment: "In place of a value there is none of, or a session's tag")
     }
 
     /// "PR 195 pounds": the best set's weight, as VoiceOver reads it at the end of a row.

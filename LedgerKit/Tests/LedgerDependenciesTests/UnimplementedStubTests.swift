@@ -93,7 +93,7 @@ struct UnimplementedStubTests {
         ])
     }
 
-    @Test("The stats queries' stub throws from every query")
+    @Test("The stats queries' stub throws from every query; observeExerciseSessions ends at once")
     func statsQueries() async throws {
         let stub = StatsQueriesKey.liveValue
         let bench = Fixtures.CatalogID.benchPress
@@ -105,6 +105,7 @@ struct UnimplementedStubTests {
             { _ = try await stub.lastPerformance(exerciseID: bench) },
             { _ = try await stub.bestSet(exerciseID: bench) },
             { _ = try await stub.bestSets() },
+            { _ = try await stub.exerciseSessions(exerciseID: bench) },
             { _ = try await stub.bestE1RM(exerciseID: bench) },
             { _ = try await stub.e1RMByWeek(exerciseID: bench, lastWeeks: 8, calendar: calendar) },
             { _ = try await stub.weeklyVolume(in: all) },
@@ -114,6 +115,7 @@ struct UnimplementedStubTests {
             { _ = try await stub.bests(before: session, for: [bench]) },
             { _ = try await stub.recentlyLogged(limit: 3) }
         ])
+        #expect(await Self.isEmpty(stub.observeExerciseSessions(exerciseID: bench)))
     }
 
     @Test(
