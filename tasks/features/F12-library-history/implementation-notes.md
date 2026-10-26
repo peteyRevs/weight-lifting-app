@@ -1119,3 +1119,73 @@ The domain suites run on the host. This is far under the plan's 25–35 s.
    sets the records and the bests do.
 3. **N20's failure recovery** (decision 2): a failed stats read is now left at the next run, not at the next
    change. *Recommendation:* accept. It is the history's own behaviour since F12-S2-3.
+
+### S3 fix round 1 (G1, 2026-10-26): G2's S3-1 to S3-7, as the orchestrator ruled
+
+**Commit:** `ff30d8c` fix(library). The ruling is the orchestrator's message; G2's findings are in `test-findings.md`
+under "S3 — G2 findings".
+
+**S3-1, S3-2, S3-3 (the name).** Changes in `LedgerDomain/Exercises/CustomExerciseDraft+Name.swift` (new) and the
+draft:
+- **Blank.** A name is blank (`blankName`, "Enter a name.") when nothing is left once its default-ignorable code
+  points, blanks and line breaks are removed.
+- **The stored name, `storedName`.**
+  - Every default-ignorable scalar that stands alone is dropped, at the ends and inside the name: a zero-width
+    space, a word joiner, a byte order mark, direction marks, a Hangul filler.
+  - Kept are a ZWJ, any grapheme extender (variation selectors) and direction controls, which the next step
+    refuses.
+  - Every `Zs` becomes U+0020, a run of spaces collapses to one, and the result is trimmed.
+  - The length rule, the duplicate check (`ExerciseSearch.key` of the stored name) and the stored name and short
+    name all use it.
+  - `ExerciseSearch.key` is unchanged, as ruled.
+- **Refused (`controlCharacter`):** `Cc`; `Zl` and `Zp` inside the name (at the ends they are trimmed as line
+  breaks); direction embeddings, overrides and isolates (U+202A–U+202E, U+2066–U+2069), so U+202E is refused under
+  S3-1; and any other `Cf` that is not default-ignorable (U+0600, for example).
+- **How I resolved the ruling:**
+  - *Bidi controls.* "Refuse, or trim at the ends" and "drop interior default-ignorables" overlap on them. I refuse
+    them wherever they stand, which G2's `directionOverride_isDuplicate` (refused) needs. A name of them alone is
+    still blank (G2's `invisibleOnly_isBlank`).
+  - *ZWJ and variation selectors.* These are default-ignorable but are kept, because dropping them would split
+    emoji sequences: G2's grapheme pin counts the family emoji as one character.
+
+**S3-4.** Besides 2–40 graphemes, a name of more than 160 scalars is refused with `nameLength`. The comment on
+`nameScalars` explains why. G2's pin `combiningMarks_areUnbounded` held the old behaviour; it is now
+`combiningMarks_overTheScalarCap_areRefused` (2,002 scalars refused; exactly 160 kept). This is a sanctioned edit,
+since the ruling changes the behaviour.
+
+**S3-5.** `CustomExerciseDraft.init(_ exercise:)` subtracts the primary muscle from the secondaries.
+
+**S3-6.**
+- `CreateExerciseSheet` takes `announce` (default `AccessibilityNotification.Announcement`), as `ProgramRoot` does.
+- The store counts the problems Save finds (`problemNumber`, in the model), so each one is announced, including the
+  same line twice.
+- When the problem is the name's, the screen scrolls to the top (`ScrollPosition`), where the name field stands.
+- G2's source check is replaced, as ruled, by a hosted behavioural test (iOS). It announces "Enter a name." twice,
+  then "Couldn't save the exercise. Try again.".
+- The scroll has no automated test.
+
+**S3-7.** `CreateExerciseModel.Chip.id` is the value's raw value ("shoulders"), not its place.
+
+**Tests.**
+- Every `withKnownIssue` in G2's two files is gone, and each test passes as a plain test with its assertions as
+  written. The one exception is S3-4's pin, above.
+- My `CustomExerciseDraftTests` gain 3 tests: the stored name, invisible names and separators, and S3-5.
+- The property test's oracle follows the new rule, written as a plain reading of it. It collapses spaces by scalar,
+  because a space under a combining mark is still a space. Its scalar pieces now include format characters,
+  separators, thin and ideographic spaces, a Hangul filler and U+0600. It passes at 200 seeds and at 2,000.
+- No reference changed.
+
+**New wording:** none. "Enter a name." and "That name holds a character that can't be saved." cover the new cases.
+
+**Product lines** (same rules as before): this round adds 83 and removes 15, net +68. Against `235e845` the slice
+is now **922 added, 152 removed, net 770**.
+
+**Runs.**
+- Host: `LedgerDomainTests` draft and history suites (51 tests) and `FeatureLibraryTests` (125 tests) pass.
+- Simulator, PR plan, PR sweep: `FeatureLibraryTests` and `LedgerDomainTests`, 1,529 tests: 0 failed, 6 skipped.
+
+**The gate.** `scripts/check.sh` through the lock on `ff30d8c` exited 0 with "check.sh OK" in 1,934 s.
+- Lint 73 s, iOS build 13 s, string catalogs 1 s, iOS tests 1,537 s, watchOS build 40 s, watchOS tests 267 s,
+  coverage 2 s.
+- Coverage overall 98.53 %, FeatureLibrary 96.98 %, LedgerDomain 99.42 %.
+- The only commit after `ff30d8c` is these notes.
