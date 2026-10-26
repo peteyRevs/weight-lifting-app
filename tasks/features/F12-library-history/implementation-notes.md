@@ -1189,3 +1189,77 @@ is now **922 added, 152 removed, net 770**.
   coverage 2 s.
 - Coverage overall 98.53 %, FeatureLibrary 96.98 %, LedgerDomain 99.42 %.
 - The only commit after `ff30d8c` is these notes.
+
+### S3 fix round 2 (G1, 2026-10-26): G3's review R1-1 to R1-6, as the orchestrator ruled
+
+**Commit:** `6482559` fix(library). The review is in `review.md`, "S3 — G3 review (round 1)".
+
+- **R1-1 (the joiner).**
+  - `storedName` keeps a U+200D only where `joinsEmoji` holds: the scalar before it is an emoji (skin tones and
+    selectors that extend it are skipped), and so is the scalar after it. "Emoji" is `isEmoji` outside ASCII, so
+    digits, "#" and "*" don't count. Anywhere else the joiner is dropped, as a word joiner is.
+  - G3's three names ("Bench Press\u{200D}", "\u{200D}Bench Press", "Bench\u{200D} Press") are added to G2's
+    `drawsAsAnother_isDuplicate`, and all three pass.
+  - Emoji sequences keep their joiners: the family emoji is still one character (G2's pin), and so is
+    "Carry 👨‍👩‍👧" (my test).
+  - The property oracle follows the rule, with "🏋️", a bare U+200D and "♂️" added to its pieces. It passes at 200
+    and at 2,000 seeds.
+- **R1-6 (one reading of "draws nothing").** `drawsNothing` is now a property derived from `storedName`: every scalar
+  of it is default-ignorable or whitespace. The second filter is gone.
+- **R1-2 (the Library's observation).**
+  - **The fetch is two statements.** `fetchRecent(limit:in:)` reads the recent exercises with
+    `COUNT(DISTINCT workout.id) AS sessions` beside `MAX(started_at)` in one `GROUP BY`. `recentlyLogged` maps it,
+    and `fetchSessionCount` stays for the async `sessionCount`. Then the best sets.
+  - **The Nightly suite times it.** `StatsQueriesPerformanceTests` has an "observeLibraryStats' fetch" line under
+    `PerformanceBudget.statsQuery` (50 ms p95), and it passes on the host.
+  - **The live workout's set taps never wake it.** A tap appends to `workout_event`, which the observation does not
+    read. GRDB tracks the tables a fetch reads, so it re-fetches only when `workout`, `workout_exercise` or
+    `logged_set` change. That happens on a finish, a History edit or delete, or a synced finished workout. Those
+    tables already are the narrowest correct region: an edit of an older workout writes `logged_set`, and N20 must
+    see it. So I narrowed nothing.
+  - **Measured as G3 measured it** (host, Debug, the Nightly suite's 20,000-set seed, 20 writes averaged after a
+    warm-up, scratch probe not committed):
+
+    | | without the observer | with it |
+    |---|--:|--:|
+    | `updateSets` (an older workout's edit), before the fold | 3.3 ms | 24.0 ms |
+    | `updateSets`, after the fold | 3.4 ms | 23.2 ms |
+    | a live set tap (`GRDBWorkoutEventStore.append`) | 0.10 ms | 0.11 ms |
+
+    The fetch's median went from 19.1 ms to 17.6 ms. Of that, `bestSets`' window scan is 13.7 ms and the
+    recent-with-sessions read 3.9 ms.
+  - **So the premise "about 22 ms on every set write in a live workout" does not hold**: a set tap costs the same with
+    the observer as without it. The remaining cost (about 20 ms per finish, edit or delete while the Library's task
+    runs) is the `bestSets` scan, which S1 owns. The cuts left are an index or `DatabasePool` (ADR-level) or a
+    rewrite of the S1 query with tie-break risk. I made none of them.
+- **R1-3.** `WatchedExercises` keeps every held read in an array, and `releaseRead()` resumes them all.
+  `doubleTap_savesOnce` runs the second `save()` in a task, releases, then awaits both.
+  - Mutant `!isSaveRunning` removed: it fails in 13 ms ("saves.count == 1"), where it used to hang.
+- **R1-4.** `CreateExerciseSheet` sets `.interactiveDismissDisabled(store.phase == .saving)`, as FinishSheet does.
+  When no save is running, the swipe behaves as before.
+- **R1-5.**
+  - **(a) Format arguments, not a rewording.** The key is now "Name must be %@–%@ characters.". The bounds come
+    from `CustomExerciseDraft.nameLength`, written in the locale's digits: "2–40" in en_US, "٢–٤٠" in ar_EG, both
+    tested. The 160-scalar case still reads this line, which G3 accepts as ruled.
+  - **(b) "Core" for the pattern has its own key: "Core work".** The pattern needed different English: standards §7
+    and `StringCatalog` require a key to be its English text, so a second "Core" key cannot exist. "Core work" is new
+    wording for Pete. The muscle's "Core" comment is back to the muscle alone.
+  - The 7 references were re-recorded for that chip alone. I diffed every pixel against the old images: each
+    change lies in the last pattern chip's box (for example x 115–180, y 754–781 of 402×889), and I looked at the
+    filled light and `.accessibility3` images.
+
+**Product lines** (same rules as before): this round adds 63 and removes 26. Against `235e845` the slice is now
+**959 added, 152 removed, net 807**.
+
+**Runs.**
+- Host: LedgerDomain draft suites (26 tests, also at 2,000 seeds); FeatureLibrary (126 tests); the stats contract,
+  in-memory and `HistoryModel` contracts, Library stores, and `LibraryStatsObservation` (G2's GRDB-against-fakes
+  differential); `StatsQueriesPerformanceTests` under `LEDGER_TEST_LANE=nightly`. All pass.
+- Simulator, PR plan:
+  - the references were recorded, then a compare run of `FeatureLibraryTests`: 154 tests, 151 passed, 0 failed.
+
+**The gate.** `scripts/check.sh` through the lock on `6482559`: exit 0, "check.sh OK", 1,904 s.
+- Lint 73 s, iOS build 13 s, string catalogs 0 s (FeatureLibrary: 90 keys), iOS tests 1,528 s, watchOS build 21 s,
+  watchOS tests 267 s, coverage 1 s.
+- Coverage: overall 98.53 %, FeatureLibrary 97.00 %, LedgerPersistence 99.18 %.
+- The only commit after `6482559` is these notes.
