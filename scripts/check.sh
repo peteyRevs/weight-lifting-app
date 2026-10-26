@@ -13,10 +13,10 @@
 #                                       2026-09-30; docs/ci-cd.md); the full gate, before every
 #                                       merge, runs both. Combines with --skip-lint and
 #                                       --record-snapshots (iOS references only)
-#   scripts/check.sh --static-only      steps 1–2 without the script suites that need macOS, and step 0
+#   scripts/check.sh --static-only      step 2 without the script suites that need macOS, and step 0
 #                                       without the Xcode check: PR CI's Linux job (docs/ci-cd.md)
-#   scripts/check.sh --skip-static      steps 0 and 3–5, plus the script suites that need macOS: PR CI's
-#                                       macOS job, which runs after the Linux one. Combines with
+#   scripts/check.sh --skip-static      steps 0, 1 and 3–5, plus the script suites that need macOS: PR
+#                                       CI's macOS job, which runs after the Linux one. Combines with
 #                                       --ios-only and --record-snapshots
 #   scripts/check.sh --build-only       step 0 and step 3's iOS build alone, as step 3 runs it: no
 #                                       simulator boot, string catalogs, tests or coverage. main-cache.yml
@@ -122,12 +122,16 @@ done_step "tools"
 unset LEDGER_ADV_SUITES
 if [[ $STATIC_ONLY -eq 1 ]]; then export LEDGER_ADV_SUITES=portable; fi
 
-if [[ $SKIP_LINT -eq 0 && $SKIP_STATIC -eq 0 ]]; then
-    # ---- 1. format ----------------------------------------------------------
+# ---- 1. format --------------------------------------------------------------
+# Not in --static-only: SwiftFormat 0.63.0's Linux binary segfaults at random (exit 139) on the
+# ubuntu-24.04 image from 2026-10-21, so PR CI formats in the macOS job (--skip-static) instead.
+if [[ $SKIP_LINT -eq 0 && $STATIC_ONLY -eq 0 ]]; then
     step "1 · format (swiftformat --lint)"
     mise exec -- swiftformat --lint --swift-version 6.4 ${GITHUB_ACTIONS:+--reporter github-actions-log} LedgerKit Apps
     done_step "format"
+fi
 
+if [[ $SKIP_LINT -eq 0 && $SKIP_STATIC -eq 0 ]]; then
     # ---- 2. lint + package graph and pins -----------------------------------
     step "2 · lint (swiftlint --strict) + package graph and pins + script tests"
     mise exec -- swiftlint lint --strict --quiet --config .swiftlint.yml ${GITHUB_ACTIONS:+--reporter github-actions-logging}

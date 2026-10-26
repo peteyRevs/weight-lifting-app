@@ -34,9 +34,13 @@ authoritative; the plan differs:
   minutes) over the six green iOS-only runs to 2026-10-01, 805–1,262 s of it in `check.sh`. The notes
   under "CI efficiency" say what is measured after them, and what only CI can measure.
 - **CI efficiency (2026-09-30; `tasks/features/F01-ci-gates/ci-efficiency-notes.md`).**
-  - *Static checks on Linux.* The `Static checks` job (`ubuntu-latest`, tools from `mise.toml`) runs
-    `check.sh --static-only`: format, lint, the package graph and pins, the catalog version, and every
-    script suite that runs anywhere. It has no Xcode, so step 0 checks only the tools. `Check` `needs:` it:
+  - *Linux image pinned.* Every Linux job names `ubuntu-24.04`, not `ubuntu-latest`. By 2026-10-24
+    `ubuntu-latest` was Ubuntu 26.04, which has no `libxml2.so.2`, so mise's SwiftLint binary failed to
+    load (exit 127) and every PR's `Static checks` went red. Move the pin deliberately, with a green run.
+  - *Static checks on Linux.* The `Static checks` job (`ubuntu-24.04`, tools from `mise.toml`) runs
+    `check.sh --static-only`: lint, the package graph and pins, the catalog version, and every script
+    suite that runs anywhere. Format (step 1) runs in `Check` instead: since the ubuntu-24.04 image of
+    2026-10-21, SwiftFormat 0.63.0's Linux binary segfaults at random (exit 139; Pete, 2026-10-26). It has no Xcode, so step 0 checks only the tools. `Check` `needs:` it:
     a red static check skips `Check`, costs no macOS minutes, and the run is red. `Check` runs the
     adversarial suites whose header says `# needs macOS:` (one of their cases needs xcodebuild, xcrun,
     Apple's `/usr/bin` shims or BSD sed): catalog-version-attack, ci-post-clone, coverage-gate,
@@ -152,7 +156,7 @@ authoritative; the plan differs:
     is Apple silicon (the `xcode-27` image is arm64); an Intel Mac could no longer run the gate. The
     nightly's own `xcodebuild` calls still build both: slower, but it is manual and tests the same arm64 slices.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
-  `--skip-static` since the split above; steps 1–2 then run in `Static checks`): steps 0–3
+  `--skip-static` since the split above; step 2 then runs in `Static checks`): steps 0–3
   and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
   run (36652681235) passed lint, the script tests and all 17 iOS test targets, then reached
   `LEDGER_XCODEBUILD_DEADLINE` (1,500 s) in the watchOS tests and stopped, exit 75, as designed. Its iOS

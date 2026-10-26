@@ -52,10 +52,10 @@ check "WF06 PR token is contents: read, with no job-level override" \
 # Pete, 2026-09-29 (F32): Xcode 27 now, so every macOS job runs on the xcode-27 preview image.
 check "WF07 exactly one macOS job (Check, on the xcode-27 image); Scope and Static checks run on Linux" \
     is "$(q pr '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
-    "scope=ubuntu-latest,static=ubuntu-latest,check=xcode-27"
+    "scope=ubuntu-24.04,static=ubuntu-24.04,check=xcode-27"
 check "WF50 the nightly's macOS jobs run on the xcode-27 image too; its report runs on Linux" \
     is "$(q nightly '[.jobs | to_entries[] | "\(.key)=\(.value."runs-on")"] | join(",")')" \
-    "test=xcode-27,dependencies=xcode-27,report=ubuntu-latest"
+    "test=xcode-27,dependencies=xcode-27,report=ubuntu-24.04"
 check "WF08 Static checks runs check.sh --static-only; Check runs --ios-only --skip-static (watchOS: the full local gate, nightly)" \
     is "$(q pr '[.jobs[].steps[].run // empty | select(test("check.sh"))] | join(";")')" \
     "scripts/check.sh --static-only;scripts/check.sh --ios-only --skip-static"
@@ -394,7 +394,7 @@ check "WF33 release-please token: contents, pull-requests, issues write; nothing
     is "$(q rp '(.permissions | tojson) + " " + (.jobs["release-please"].permissions | to_entries | map("\(.key)=\(.value)") | sort | join(","))')" \
     "{} contents=write,issues=write,pull-requests=write"
 check "WF34 release-please runs on Linux and starts no other workflow (no macOS minutes)" \
-    is "$(q rp '.jobs["release-please"]."runs-on"') $(grep -c 'workflow run' "$WF/release-please.yml")" "ubuntu-latest 0"
+    is "$(q rp '.jobs["release-please"]."runs-on"') $(grep -c 'workflow run' "$WF/release-please.yml")" "ubuntu-24.04 0"
 
 # F32 adversarial (tasks/features/F32-xcode-27-migration/test-findings.md): the toolchain pins are code. A PR
 # that changes only the Xcode pin, a lockfile, the formatter's Swift version or actionlint's labels starts Check.
