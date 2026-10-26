@@ -328,3 +328,137 @@ finds the leading number, because the form starts with it.
   against a sleep would be event-driven. It is test support and fine as written.
 - **R2-2.** "Up 28 pounds over 4 weeks" from W5 counts weeks inclusively: three weeks pass between the two points.
   This is what the ruling asked for. Pete may prefer "since W5" when he reads the wording.
+
+## S3 — G3 review (round 1, 2026-10-26)
+
+Reviewed `235e845..c16cce1` (S3 as built, G2's adversarial round, fix round 1) against the brief's S3, the "S3
+amendments (orchestrator, 2026-10-26)", Q2/Q4/Q5 as A and §4's flags. I did not re-open the orchestrator's rulings
+(N19 "counts" = working or added; S3-2's normalised stored name with `ExerciseSearch.key` unchanged; S3-4's 160-scalar
+cap; C26's truncation). This review is read-only. I probed and mutated a `git archive` copy in my scratchpad, which I
+have since deleted. No product or test file in the worktree changed.
+
+**Verdict: changes required (small).** R1-1 leaves a hole in the S3-2 ruling, and it is a one-rule fix. R1-2 is
+the orchestrator's call: fix it now or queue it as a follow-up. Everything else is a nit. What holds:
+- Criterion 9 (create; "Barbell · Chest · Custom"; the picker test; the error lines) and criterion 10 ("Edit" for a
+  custom exercise only, filled in).
+- N15. The order of the rules, the primary muscle kept out of the secondary muscles in the store, the presentation
+  and the Domain, and S3-5's subtraction.
+- N16. One `save`. A double tap is dropped by the `phase` guard. A failure keeps the draft and Save works again. A
+  cancellation before the write stores nothing and shows nothing.
+- N17/Q4 and Q5 (all fields are rebuilt under the id; an `Exercise` has no field that the rebuild could lose).
+- N18/Q2. `rowActions` is zipped with the rows. Only the receipt answers, and the cover closes once.
+  `open(.exercise, in: .today)` selects Today and pushes. The exhaustive switch is updated in the adversarial cover.
+- N19. One walk carries the last counted top weight.
+- N20. One `ValueObservation` with `removeDuplicates()`. The in-memory observation is built from the same static
+  helpers as the reads. The parity is proved by clause 27 and by G2's random scripts on GRDB and the fakes.
+- Swift 6 isolation. The store is `@MainActor`. `save()` runs from the sheet's `.task(id: attempt)`, and
+  `isSaveRunning` covers a re-entered task. The models are `nonisolated` and `Sendable`.
+- `FilterChipRow.allowsMany` (one stored flag and one trait) and `ReceiptLayout`'s `onRow` (an optional closure,
+  drawn as before, with F10's references byte-identical) each pay for themselves.
+- The catalog has 22 keys with comments. There are no plurals in this slice, so no `%lld` forms to check, and no
+  hard-coded user-facing strings.
+- The line count reproduces: non-blank, non-comment product Swift is **+922 / −152 = net 770**. The code reads at
+  normal density, so nothing was compressed to fit.
+- Each sanctioned edit of another's test is justified and minimal (see the list after the findings).
+
+**F12-S3-R1-1 (Minor; it closes the S3-2 ruling). A U+200D ZERO WIDTH JOINER still makes a name that draws as
+another's a different name.**
+- `CustomExerciseDraft+Name.swift:41-44` (`drawsNothingAlone`) keeps every ZWJ, so that emoji sequences survive.
+  `ExerciseSearch.key` does not fold it, and `trimmingCharacters(in: .whitespacesAndNewlines)` does not trim it.
+- Probe, against `bench` named "Bench Press" (G2's fixture):
+  - `"Bench Press\u{200D}"`, `"\u{200D}Bench Press"` and `"Bench\u{200D} Press"` are each **accepted** (no
+    error) and would be stored beside "Bench Press".
+  - `"Bench Press\u{FE0F}"` is refused as `.duplicateName`, because diacritic folding drops the selector.
+- So a pasted joiner gives two Library rows that look identical. That is the exact case S3-2 was ruled to close,
+  and the file's own doc comment says "a name that draws as another's is that name".
+- **Fix:** keep a ZWJ only between two scalars whose `properties.isEmoji` (or `isExtendedPictographic`) is true, and
+  drop it elsewhere as `drawsNothingAlone` drops a word joiner. Add the three names above to G2's
+  `invisibleCharacter_isDuplicate` arguments. G2's emoji pins (the family emoji counted as one character) are
+  unaffected.
+
+**F12-S3-R1-2 (Minor, performance). While the Library is up, every write to `workout`, `workout_exercise` or
+`logged_set` costs seven statements on the database's one serial queue.**
+- `GRDBStatsQueries+Library.swift:42-51` re-runs `recentlyLogged`, up to five `sessionCount`s and the
+  `bestSets` window scan after each commit to the tracked tables. That includes the live workout's own set writes
+  and a watch's synced sets, which can never change the value (`doneSets` reads finished workouts only).
+- `GRDBStatsQueries.queue` is a `DatabaseQueue`, so GRDB runs the observation's fetch on that serial queue, and the
+  next write waits for it.
+- Measured on the host (Debug, M-series), over the 20,000-set seed of `StatsQueriesPerformanceTests` (scratch probe,
+  since deleted):
+  - one fetch: median 19.2 ms, p95 19.5 ms;
+  - 20 `updateSets` writes averaged **3.2 ms each with no observer and 25.2 ms with `observeLibraryStats` running**,
+    so the observation multiplies a write's cost by about 8.
+- S1's design re-read the stats only when the newest workout changed. N20 asked for every workout to be followed, so
+  some cost is inherent. But nothing budgets the observation itself, and the notes' "bounded by `bestSets`' 50 ms"
+  is per statement, not per change.
+- **Fix (cheap):**
+  - Fold the session counts into `fetchRecentlyLogged`'s `GROUP BY` (`COUNT(DISTINCT workout.id) AS sessions` next
+    to `MAX(started_at)`). The observation is then two statements, not up to seven, and `fetchSessionCount` stays
+    only for the async query.
+  - Add the observation's fetch to the Nightly `StatsQueriesPerformanceTests` under `PerformanceBudget.statsQuery`.
+- **Fix (if wanted later):** a `DatabasePool` would move these fetches off the writer's queue. That is an ADR-level
+  change and not for this slice.
+
+**F12-S3-R1-3 (Nit, test robustness). The double-tap test detects its mutant only by hanging the run.**
+- **Mutation M2:** I removed `!isSaveRunning` from `CreateExerciseStore.swift:110`.
+- `doubleTap_savesOnce` recorded "Time limit was exceeded: 60.000 seconds", but the test process never exited, and I
+  had to kill it after about 8 minutes.
+- **Cause:** `WatchedExercises` (`Support/CreateExerciseTesting.swift:46-60`) keeps one `waiter`, so a second held
+  read overwrites the first's continuation and leaks it. A CI run would sit until the job's own timeout.
+- **Fix:** keep an array of waiters and resume them all in `releaseRead()`. Then assert `saves.count == 1` after
+  both calls return, so the mutant fails in milliseconds.
+
+**F12-S3-R1-4 (Nit). The sheet can be swiped down while it saves, and a filled draft is lost to a swipe.**
+- `CreateExerciseSheet.swift:31-47` has no `interactiveDismissDisabled`. F10's `FinishSheet.swift:25` disables
+  dismissal while its save runs.
+- The N16 cancellation path makes a mid-save swipe safe. Still, `.interactiveDismissDisabled(store.phase ==
+  .saving)` would match the codebase's own convention.
+- Whether a dirty draft should ask before it is discarded is a product question for Pete. It is not a defect.
+
+**F12-S3-R1-5 (Nit, localisation).**
+- (a) The bounds in "Name must be 2–40 characters." (`LibraryCopy+Create.swift:58-64`) are literal text, but
+  `CustomExerciseDraft.nameLength` owns them. Since S3-4, the same line also answers a two-character name with more
+  than 160 scalars, which the line does not describe.
+  - **Suggested:** a follow-up that formats the bounds from `nameLength`, with the locale's digits.
+  - S3-4's case is accepted as ruled.
+- (b) The "Core" movement pattern reuses the muscle group's key (`LibraryCopy+Create.swift:108`). A translator gets
+  one string for two meanings (French: "Tronc" for the muscles, "Gainage" for the pattern). The widened comment
+  flags it. A separate key costs four lines and removes the trap.
+
+**F12-S3-R1-6 (Nit, simplicity).**
+- `drawsNothing(_:)` (`CustomExerciseDraft+Name.swift:33-37`) and `storedName` (`:19-29`) walk the scalars with two
+  near-identical filters.
+- Blank is equivalent to `storedName.unicodeScalars.allSatisfy { $0.properties.isDefaultIgnorableCodePoint ||
+  $0.properties.isWhitespace }`. That gives one source of truth for "draws nothing", which R1-1's fix then touches
+  once.
+- Optional.
+
+**Sanctioned edits of others' tests: each is justified and minimal.**
+- G2's `tags_predecessorWithoutCountedSets_isPassedOver` and the property oracle's `topWorking` and `earlier`
+  restate N19, and nothing more.
+- `statsReadFailsOnce_nextRun_…` and `FailingBests` / `UnreadableBests` change only what N20 changes: an ended
+  stream in place of a thrown read, and recovery at the next run.
+- The receipt's `tree`, `withRecords`, `done_sendsDone` and `receipt_nothingLeavesOrOverlaps` change the rows from
+  static text to buttons, add the rows' actions, and still check the 44-pt targets.
+- `WorkoutSaveAdversarialCover.exitFault` gains one case for the exhaustive switch.
+- The protocol forwarders and stubs are each one function. The 26 → 27 clause count changes one number.
+- No unrelated assertion was weakened.
+
+**Tests: can they fail?** No assertion waits on wall-clock time. The waits are bounded (5 s, and the contract's
+200 ms quiet window). No `#expect` compares a large value: the 2,002-scalar name is checked by `result == …` on an
+error enum. Mutations, each in the scratch copy:
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | Remove `try Task.checkCancellation()` (`CreateExerciseStore.swift:120`) | **Killed**: `cancellation_changesNothing`, 3 issues |
+| M2 | Remove `!isSaveRunning` (`:110`) | Killed only by the 60 s time limit, and the process hangs (R1-3) |
+| M3 | N19's `earlier = top ?? earlier` → `earlier = top` (`ExerciseHistory.swift:134`) | **Killed**: `tags_sessionsWithoutCountedSets_arePassedOver`, G2's pin, and the property oracle on many seeds |
+| M4 | `libraryObservation`'s `.removeDuplicates()` → `.removeDuplicates(by: { _, _ in false })` | **Killed**: GRDB contract clause 27, and G2's random scripts ("emitted a value equal to the one before") |
+
+**Runs (host, scratch copy of `c16cce1`).**
+- `swift build --build-tests`: exit 0, 93 s.
+- `swift test --filter "CreateExerciseStore|ExerciseHistoryTests|ExerciseHistoryAdversarial|LibraryStatsObservation|StatsQueries.*Contract|InMemoryContract|ReceiptRowRoute|CustomExerciseDraft|LibraryStore"`:
+  - green, in 12 suites (114 tests);
+  - one known issue, already present, in the in-memory contracts.
+- Probes: ZWJ (R1-1) and the observation's timing (R1-2), with the results above.
+- No simulator run. The orchestrator runs the gate.
