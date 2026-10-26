@@ -65,7 +65,7 @@ jobs:
         with:
           fetch-depth: 0 # full history: check.sh's script tests read it (RP11: bootstrap-sha is an ancestor)
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-      - name: Format, lint, package graph and pins, script tests (check.sh --static-only)
+      - name: Lint, package graph and pins, script tests (check.sh --static-only)
         env:
           # SwiftLint's Linux build loads SourceKit (libsourcekitdInProc.so) from here, the image's Swift
           # toolchain. Without the library SwiftLint 0.65.1 stops with a fatal error; were the custom rules
@@ -121,7 +121,7 @@ jobs:
       # after a cold 684 s iOS build. watchOS stays in the full local gate, green before every merge
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
-      - name: iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
+      - name: Format, iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
         timeout-minutes: 66 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). 3840: a
