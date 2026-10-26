@@ -11,9 +11,10 @@ nonisolated enum LibraryAction: Hashable, Sendable {
     case setEquipment(Equipment?)
     /// "Clear filters": the query is emptied and both chips go back to "All".
     case clearFilters
-    /// "New exercise": the sheet that creates one is up. The sheet is F12 S3's; until then the store only
-    /// records the request.
+    /// "New exercise": the sheet that creates one is up (F12 S3).
     case newExercise
+    /// The sheet "New exercise" opened is down: cancelled, saved, or taken down by the system.
+    case newExerciseClosed
     /// A tap that asks the app to go somewhere: an exercise's row.
     case route(LibraryRoute)
 }

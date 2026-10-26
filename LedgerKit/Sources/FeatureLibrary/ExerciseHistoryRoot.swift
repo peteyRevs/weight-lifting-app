@@ -4,7 +4,8 @@ import SwiftUI
 
 /// An exercise's history in the app (F12 S2): the screen over its store, pushed on whichever tab's stack asked
 /// for it. It owns its store and runs its work from its tasks, as `LibraryRoot` does: the sources are followed
-/// again when the app comes back from the background, and a session's route is handed to `onRoute` once.
+/// again when the app comes back from the background, and a session's route is handed to `onRoute` once. "Edit", on
+/// the lifter's own exercise, opens `CreateExerciseSheet` on it (F12 S3).
 public struct ExerciseHistoryRoot: View {
     @State private var store: ExerciseHistoryStore
     @Environment(\.scenePhase) private var scenePhase
@@ -31,6 +32,19 @@ public struct ExerciseHistoryRoot: View {
             .task(id: store.pendingRoute) {
                 store.deliverRoute(to: onRoute)
             }
+            .sheet(item: editedExercise) { exercise in
+                CreateExerciseSheet(editing: exercise) { store.editClosed() }
+            }
+    }
+
+    /// "Edit"'s sheet (F12 S3, criterion 10): up while the store holds the exercise, and the store told when it goes
+    /// down, by its own buttons or by the system.
+    private var editedExercise: Binding<Exercise?> {
+        Binding { store.editedExercise } set: { exercise in
+            if exercise == nil {
+                store.editClosed()
+            }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -38,7 +52,7 @@ public struct ExerciseHistoryRoot: View {
         case .loading:
             LedgerColor.ground.ignoresSafeArea()
         case let .loaded(model):
-            ExerciseHistoryScreen(model: model, send: store.send)
+            ExerciseHistoryScreen(model: model, send: store.send, onEdit: store.edit)
         case .failed:
             EmptyState(LibraryCopy.historyFailedTitle, body: LibraryCopy.failedBody)
                 .padding(LedgerSpacing.screen)

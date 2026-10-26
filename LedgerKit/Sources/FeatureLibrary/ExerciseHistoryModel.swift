@@ -23,6 +23,8 @@ nonisolated struct ExerciseHistoryModel: Equatable, Sendable {
     let eyebrow: String
     /// The exercise's name: the screen's heading.
     let title: String
+    /// "Edit", in the bar, for the lifter's own exercise (F12 S3, criterion 10); nil for a catalog one.
+    let edit: String?
     /// "1RM est", "best set" and "sessions", in that order.
     let stats: [Stat]
     let chart: Chart

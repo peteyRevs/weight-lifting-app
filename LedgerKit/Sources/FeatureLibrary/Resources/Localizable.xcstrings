@@ -123,6 +123,17 @@
         }
       }
     },
+    "An exercise with that name already exists." : {
+      "comment" : "Under the name field when Save found another exercise with the name",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An exercise with that name already exists."
+          }
+        }
+      }
+    },
     "Arms" : {
       "comment" : "Filter chip: every muscle of the arms",
       "localizations" : {
@@ -233,6 +244,28 @@
         }
       }
     },
+    "Cancel" : {
+      "comment" : "Closes the exercise sheet without saving",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Carry" : {
+      "comment" : "Movement pattern: a loaded carry",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carry"
+          }
+        }
+      }
+    },
     "Chest" : {
       "comment" : "Muscle group, also a filter chip",
       "localizations" : {
@@ -256,12 +289,23 @@
       }
     },
     "Core" : {
-      "comment" : "Muscle group: the abdominals and lower back",
+      "comment" : "Muscle group: the abdominals and lower back; also a movement pattern",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Core"
+          }
+        }
+      }
+    },
+    "Couldn't save the exercise. Try again." : {
+      "comment" : "Over Save when the exercise could not be stored",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the exercise. Try again."
           }
         }
       }
@@ -345,8 +389,41 @@
         }
       }
     },
+    "Edit" : {
+      "comment" : "Button in the bar of one's own exercise's history: opens the sheet that edits it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        }
+      }
+    },
+    "Edit exercise" : {
+      "comment" : "Title of the sheet that edits one's own exercise",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit exercise"
+          }
+        }
+      }
+    },
+    "Enter a name." : {
+      "comment" : "Under the name field when Save found it blank",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a name."
+          }
+        }
+      }
+    },
     "Equipment" : {
-      "comment" : "Spoken name of the Library's equipment chips",
+      "comment" : "Spoken name of the Library's equipment chips, and heading of the exercise sheet's",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -396,6 +473,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hamstrings"
+          }
+        }
+      }
+    },
+    "Hinge" : {
+      "comment" : "Movement pattern: a hip hinge",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinge"
+          }
+        }
+      }
+    },
+    "Horizontal pull" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Horizontal pull"
+          }
+        }
+      }
+    },
+    "Horizontal push" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Horizontal push"
+          }
+        }
+      }
+    },
+    "Isolation" : {
+      "comment" : "Movement pattern: one joint, one muscle",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isolation"
           }
         }
       }
@@ -455,6 +576,17 @@
         }
       }
     },
+    "Lunge" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lunge"
+          }
+        }
+      }
+    },
     "Machine" : {
       "comment" : "Equipment: a weight machine",
       "localizations" : {
@@ -462,6 +594,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Machine"
+          }
+        }
+      }
+    },
+    "Movement pattern" : {
+      "comment" : "Heading of the chips of how the body moves",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Movement pattern"
           }
         }
       }
@@ -477,8 +620,30 @@
         }
       }
     },
+    "Name" : {
+      "comment" : "Heading and placeholder of the exercise's name field",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
+      }
+    },
+    "Name must be 2–40 characters." : {
+      "comment" : "Under the name field when Save found it too short or too long",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name must be 2–40 characters."
+          }
+        }
+      }
+    },
     "New exercise" : {
-      "comment" : "Button in the Library's header, and under No exercises yet: creates an exercise of one's own",
+      "comment" : "Creates an exercise of one's own (Library header, under No exercises yet); title of its sheet",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -599,6 +764,17 @@
         }
       }
     },
+    "Primary muscle" : {
+      "comment" : "Heading of the chips of the main muscle worked",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Primary muscle"
+          }
+        }
+      }
+    },
     "Quads" : {
       "comment" : "Muscle group: the quadriceps",
       "localizations" : {
@@ -628,6 +804,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SESSION LOG"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "comment" : "Saves the exercise the sheet holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
           }
         }
       }
@@ -666,6 +853,17 @@
         }
       }
     },
+    "Secondary muscles" : {
+      "comment" : "Heading of the chips of the other muscles worked; any number can be chosen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secondary muscles"
+          }
+        }
+      }
+    },
     "Shoulders" : {
       "comment" : "Muscle group, also a filter chip",
       "localizations" : {
@@ -673,6 +871,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Shoulders"
+          }
+        }
+      }
+    },
+    "Squat" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Squat"
+          }
+        }
+      }
+    },
+    "That name holds a character that can't be saved." : {
+      "comment" : "Under the name field when Save found a tab, a line break or another control character in it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That name holds a character that can't be saved."
           }
         }
       }
@@ -730,6 +950,28 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "Vertical pull" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vertical pull"
+          }
+        }
+      }
+    },
+    "Vertical push" : {
+      "comment" : "Movement pattern",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vertical push"
           }
         }
       }

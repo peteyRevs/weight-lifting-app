@@ -2,10 +2,12 @@ import LedgerDesign
 import SwiftUI
 
 /// An exercise's history, drawn from its model: a scroll view around `ExerciseHistoryPage`, on the ground, under
-/// the pushed screen's navigation bar and its back button.
+/// the pushed screen's navigation bar, its back button and, for the lifter's own exercise, "Edit".
 struct ExerciseHistoryScreen: View {
     let model: ExerciseHistoryModel
     let send: (LibraryRoute) -> Void
+    /// "Edit" (F12 S3): drawn in the bar when the model has it.
+    var onEdit: () -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -13,6 +15,14 @@ struct ExerciseHistoryScreen: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(LedgerColor.ground)
+        .toolbar {
+            if let edit = model.edit {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(edit, action: onEdit)
+                        .accessibilityIdentifier("library.history.edit")
+                }
+            }
+        }
     }
 }
 

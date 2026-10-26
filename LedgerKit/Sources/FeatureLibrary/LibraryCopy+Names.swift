@@ -47,7 +47,11 @@ nonisolated extension LibraryCopy {
         case .biceps: String(localized: "Biceps", bundle: .module, comment: "Muscle group")
         case .triceps: String(localized: "Triceps", bundle: .module, comment: "Muscle group")
         case .forearms: String(localized: "Forearms", bundle: .module, comment: "Muscle group")
-        case .core: String(localized: "Core", bundle: .module, comment: "Muscle group: the abdominals and lower back")
+        case .core: String(
+                localized: "Core",
+                bundle: .module,
+                comment: "Muscle group: the abdominals and lower back; also a movement pattern"
+            )
         }
     }
 }

@@ -121,7 +121,7 @@ struct LibraryStoreTests {
         #expect(scene.store.pendingRoute?.number == 2, "a tap after the app took the first is a new route")
     }
 
-    @Test("New exercise is recorded for S3's sheet; it routes nowhere and changes no model")
+    @Test("New exercise puts its sheet up and its close takes it down; neither routes nor changes the model")
     func newExercise_isRecorded_andRoutesNowhere() async throws {
         let scene = LibraryScene()
         let run = await scene.running()
@@ -130,6 +130,9 @@ struct LibraryStoreTests {
         scene.store.send(before.newExercise.action)
         #expect(scene.store.isNewExerciseShown)
         #expect(scene.store.pendingRoute == nil)
+        #expect(try scene.model == before)
+        scene.store.send(.newExerciseClosed)
+        #expect(!scene.store.isNewExerciseShown)
         #expect(try scene.model == before)
     }
 

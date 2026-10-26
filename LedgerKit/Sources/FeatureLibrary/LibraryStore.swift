@@ -41,8 +41,7 @@ final class LibraryStore {
     private(set) var filter = LibraryFilter()
     /// The route the root hands the app next; nil once the app's handler has returned.
     private(set) var pendingRoute: LibraryPendingRoute?
-    /// "New exercise" was tapped. F12 S3 presents its sheet from this flag and sets it back when the sheet goes
-    /// down; until then nothing reads it, and the button opens nothing.
+    /// "New exercise" was tapped and its sheet is up: `LibraryRoot` presents `CreateExerciseSheet` while it holds.
     private(set) var isNewExerciseShown = false
 
     /// What the sources last said in this run (`+Sources`), and the rows written from them.
@@ -75,6 +74,9 @@ final class LibraryStore {
             filter = LibraryFilter()
         case .newExercise:
             isNewExerciseShown = true
+            return
+        case .newExerciseClosed:
+            isNewExerciseShown = false
             return
         case let .route(route):
             emit(route)
