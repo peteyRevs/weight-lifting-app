@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.14.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.13.0...v0.14.0) (2026-10-26)
+
+
+### Features
+
+* **library:** an exercise's history, with its 8-week chart, its stats and its session log (F12 S2) ([#72](https://github.com/peteyRevs/weight-lifting-app/issues/72)) ([20aac83](https://github.com/peteyRevs/weight-lifting-app/commit/20aac83a0f1de2a5cfa15aee99614eb737aa3947))
+
+
+### Fixes
+
+* **ci:** Linux jobs on ubuntu-24.04, and format in the macOS job, after two runner-image breakages ([#73](https://github.com/peteyRevs/weight-lifting-app/issues/73)) ([f46ab86](https://github.com/peteyRevs/weight-lifting-app/commit/f46ab86bd74a0712752f603efaa16946ce76bc76))
+
 ## [0.13.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.12.0...v0.13.0) (2026-10-22)
 
 
