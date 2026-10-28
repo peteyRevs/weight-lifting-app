@@ -152,4 +152,13 @@ receipt.**
 - `LEDGER_TEST_LANE=nightly swift test --filter "HistoryPerformanceTests|HistoryQueriesPerformanceTests"`: both
   passed. The model's median was 16.2 ms; the query's p95 was 14.6 ms (median 13.7 ms), and the observation's fetch
   p95 was 14.5 ms.
+- **Simulator** (through the lock; iPhone 17, iOS 27.0, Nightly plan): `sim-lock.py sim-targeted.sh Nightly none
+  FeatureHistoryTests/HistoryPerformanceTests LedgerPersistenceTests/HistoryQueriesPerformanceTests`: exit 0, 2
+  passed. The model's median was 13.6 ms (budget 30). `historyEntries` had a p95 of 14.5 ms (median 14.1); the
+  observation's fetch had a p95 of 14.4 ms (budget 20).
+  - N4's claims reproduce on the host and the local simulator.
+  - The query keeps about 28 % headroom, so a CI runner 1.4× slower than this machine would fail the nightly. Watch
+    the first nightly.
 - `swiftformat --lint` and `swiftlint lint --strict` on the four files: clean.
+- **Not done:** a mutant run of the differential test (flipping the tie order in the SQL). The temporary product edit
+  would have raced the queued simulator build, and the tool denied it once, so the product code stayed untouched.
