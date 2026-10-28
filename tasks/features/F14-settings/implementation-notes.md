@@ -185,3 +185,70 @@ string catalogs 1 s, iOS tests 1,720 s, watchOS build 53 s, watchOS tests 291 s,
 
 PR-sweep seconds for S1a's suites were not measured separately: S1a adds no hosted suite (the plan's 6–9 s estimate
 is S1b's hosted suites and references).
+
+### S1a fix round 1 (G1, 2026-10-28)
+
+Against G2's findings in `fdb28bf` ("## S1a — G2 findings") and the orchestrator's rulings. Commit `bcdeacb`, then
+this notes commit.
+
+| Finding | What changed |
+|---|---|
+| F14-S1-1 (ruled) | No code change was needed: a failed save already dropped what was queued behind it. The rule is now "back to what is **committed**" (with S1-2). G2's test became `changeDuringAFailingSave_isDroppedWithIt`, which pins the ruling: one save, the screen shows the committed value, and the line. The spec's N1 gains the ruling's sentence. |
+| F14-S1-2 | A failure reverts to `committed`, the newest value the store knows is in the row, not to the observation's last echo. |
+| F14-S1-3 | `SettingsStore.unechoed`: the store's committed saves that the observation has not echoed yet, oldest first. `committed = unechoed.last ?? stored`, and `shown = pending ?? committed`. `pending` is cleared by the saver as soon as it is written, never by an echo. An echo that matches an entry drops that entry and those before it (a GRDB observation may coalesce commits). A value that matches no entry is a change made elsewhere: the list is emptied and that value is committed. |
+| F14-S1-4 | `isSaving`: one save at a time, whichever run started it. A run whose task is cancelled starts no further save, and on leaving it hands any change still pending to the current run's saver. Each run has a number (`runNumber`), and a run clears the marks at its end only while they are still its own. |
+| F14-S1-5 (ruled) | `LocalDevice.open(in:kind:now:newID:) -> (id, isNew)`. `id(…)` now calls it. `LedgerStores.isNewInstall`. `DatabaseLaunch` seeds the regional settings only when `stores.isNewInstall`. A seed that fails on that first launch is not retried: the install then keeps `Settings.default`. |
+| F14-S1-6 | `LedgerAppKit/UITestRegion.swift`: under `-LEDGER_UITEST`, `Environment.live` seeds a US iPhone's settings (en_US, Gregorian: pounds, weeks from Sunday) whatever the simulator's region is. I chose the equivalent under `-LEDGER_UITEST` over adding `-AppleLocale`/`-AppleLanguages` to the 23 launch sites. The app's text is English only (every catalog holds `en`), so the region was the one thing a runner could change. |
+| F14-S1-7 | `present(_:)` returns the trimmed value. |
+
+**Why a list of unechoed saves (S1-3), and not "ignore echoes while anything is pending".** Ignoring echoes still
+needs to know when the last of this store's own echoes has arrived. Without that, the late echo of an earlier save
+lands once nothing is pending and is drawn, which is exactly G2's script. The list is that knowledge, kept as small
+as it can be: values, oldest first. An entry whose echo GRDB coalesced away, or whose value equals the observation's
+last (`removeDuplicates`), can stay in the list. That is harmless: the screen shows the list's newest entry, which is
+the last value written, and a change made elsewhere empties the list. Nothing in S1a writes settings from elsewhere.
+S3's erase will reach the store as such a change.
+
+**G2's known issues are now plain tests**, with no expectation loosened. The doc comments of S1-2 to S1-4 say they
+are fixed. G2's comment on Saudi Arabia was already right (Sunday). No comment or test on this branch says Saturday
+for SA: the Saturday cases are fa_IR's.
+
+**New tests:**
+- `DatabaseLaunchTests+Regional`:
+  - `deviceRowWithoutSettings_isNotSeeded`: a device row with no settings row is not seeded, nothing is written,
+    and the settings are `.default`;
+  - `onlyTheFirstLaunch_isANewInstall`.
+  - The fresh install is still `regional_seededOnce_thenLoaded`, and the pre-F14 install with a program is G2's
+    `installBeforeF14_keepsItsSettings`.
+- `AppCompositionTests.uiTestEnvironment_seedsAUSiPhonesSettings`.
+- The mid-save restart is G2's `restartDuringASave_keepsSaving`, now plain: one save at a time, and a later change
+  is saved.
+
+**Runs (host):**
+- `SettingsReachAdversarialTests.grdb_burstsConverge` (6 seeds × 60 changes over GRDB) passed **30 of 30** runs in a
+  row.
+- `FeatureSettingsTests` (38 tests, the seeded property test included) passed 10 of 10.
+- Each of the persistence, domain, dependencies, AppKit, Library, Program, Today and Onboarding host suites passed.
+- `FeatureWorkoutTests`' pump and updates adversarial suites failed on the host, in different tests each run
+  (`WorkoutPumpAdversarialSession.swift:244`, `WorkoutUpdatesAdversarialTests.swift:27`). Those are unrelated timing
+  waits, while another lane's gate held the machine; nothing in FeatureWorkout changed. The gate below is the
+  arbiter.
+
+**APIs S1b's draft patch must follow when it is rebased:**
+- `SettingsStore`: `written` is gone. It now has `unechoed`, `committed`, `isSaving` and `runNumber`.
+- `shown` is `pending ?? committed`.
+- `stored` is the observation's last value only.
+
+None of these are named in the draft's sources. The draft's `SettingsRootTests` waits on `pending == nil`, which
+still means "written". `LedgerStores.init` gains `isNewInstall:` (default false). `LocalDevice.open` is new.
+
+**Net product lines** (against `bd2d26c`): 662 added, 16 removed, **net 646**, plus 5 in `Package.swift` (651). The
+round itself is +70 / −25, net +45: the store +16, `UITestRegion` +13, `LedgerStores` and `LocalDevice` +15, and
+the composition, launch and presentation +1.
+
+#### The gate (fix round 1)
+
+`scripts/check.sh` (full: iOS and watchOS), through the simulator lock, on `bcdeacb`: **exit 0, "check.sh OK"**,
+2,100 s of steps. Steps: format 1 s, lint 99 s, iOS build 64 s, string catalogs 2 s, iOS tests 1,628 s, watchOS
+build 27 s, watchOS tests 275 s, coverage 2 s. Coverage: FeatureSettings 98.95 % (473 / 478), overall 98.54 %. The
+FeatureWorkout suites that failed on the host passed here.
