@@ -175,6 +175,10 @@ nonisolated struct EndedSettings: SettingsRepository {
     func observe() -> AsyncStream<Settings> {
         AsyncStream { $0.finish() }
     }
+
+    /// F14's `SettingsRepository.seedIfAbsent(_:)` (on `feat/F14-settings`), here before the protocol requires it so
+    /// that this double compiles whichever lane merges first (review R1-3 addendum).
+    func seedIfAbsent(_: Settings) async throws {}
 }
 
 /// The workouts of `base`, but the History list's observation ends at once, as GRDB's does when its read fails.

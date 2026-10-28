@@ -244,3 +244,47 @@ Commit `0bbf19e` fix(history): one language per spoken row, and "<1 min" for a w
   | coverage | 2 s |
 
   Coverage: FeatureHistory 420/420 (100 %), overall 98.58 %.
+
+### S1 fix round 2 (G1, 2026-10-28): G3's R1-1 to R1-4, as the orchestrator ruled
+
+Commit `2154cfb` fix(history): pin equal writes, guard every line of a row, lower-case "under a minute".
+
+- **R1-1.** `WorkoutRepositoryContract.historyClauses` has a fourth clause, "observeHistoryEntries emits nothing for a
+  write to a workout that leaves every entry as it was". It runs on GRDB and in memory through the existing tests.
+  - First, the workout is stored again in other units. That rewrites its `workout` row, so a table observation wakes,
+    but no field of the entry changes.
+  - Then a set that is not done gets another weight, which counts toward no total.
+  - Neither write may emit within `StatsQueriesContract.quiet`. A delete afterwards must still emit.
+  - **Mutant, run in a scratchpad copy only** (rsync of `LedgerKit`, since deleted): with `removeDuplicates { _, _ in
+    false }` in `GRDBWorkoutRepository.historyObservation`, `historyClause_holds` fails. The output was: "a value after
+    a write in other units: got Optional("a value"), expected nil". The mutant is killed. The product code was never
+    edited for it.
+- **R1-2.** `HistoryLayoutTests.longName_wrapsWhole` now requires the row to hold all of its text: the name's height
+  plus the meta's (each measured as its own `Text` at the text column's width), plus `xs` and twice `l` of padding.
+  - The row has no badge, so the column is the row's whole width at every size.
+  - The control `longName_cutToOneLine_failsTheGuard` draws the same row under `.lineLimit(1)`. It fails the guard
+    at `.large` and at `.accessibility5`, both in the PR sweep.
+  - Targeted simulator run (PR plan, PR sweep): `HistoryLayoutTests` and `AppTabsTests` all passed, 9 of 9, the
+    controls included.
+- **R1-3.**
+  - `AppTabsTests.selectingATab_swapsTheScreen` now pushes `.workout(id)` on Program and reads F13's own placeholder
+    title ("History"), instead of F14's Settings placeholder.
+  - **For whichever lane merges second (A10):**
+    1. F14 adds `SettingsRepository.seedIfAbsent(_:)` with no default. **Done here already** (coordinator's
+       addendum): FeatureHistoryTests' `EndedSettings` declares `func seedIfAbsent(_: Settings) async throws {}`, F14's
+       signature from `a374175`, so F13 compiles whichever lane merges first.
+    2. `LedgerKit/Package.swift` conflicts in its adjacent `FeatureHistory` and `FeatureSettings` target lines; keep
+       both targets, each with `resources: [.process("Resources")]`.
+    3. `scripts/coverage-thresholds.json`'s `required` is one line; keep both module names in it.
+    4. Re-check `snapshotTestTargets`, `PreviewScan.registeredModules`, `AppTabs` and `MainRoot.tabs`, which are
+       line-local but adjacent.
+- **R1-4.** The spoken key is now **"under a minute"**, lower case like the words around it ("Wednesday, under a
+  minute, 24,180 pounds, 1 PR"). The drawn key stays "<1 min". The catalog holds the lower-case key only, still 13
+  keys.
+- **R1-5, R1-6 and R1-7 go to S2:**
+  - R1-5: `Weight.spoken` round-trips through `formatted(in:)`'s text, and `Volume.spoken` re-derives the value by
+    hand. Expose the rounded `Decimal` instead. Its first product caller is S3.
+  - R1-6: `HistoryFixtures.entries` should call `HistoryPreviewData.entries`.
+  - R1-7: the detail root needs `.id(destination)` in `AppTabs.screen(for:)`.
+- **Net product lines this round:** 1 added, 1 removed, **net 0**: the key's spelling. The rest is tests,
+  `LedgerTestSupport` and notes. The slice total against `98b340d` stays **net 710**.
