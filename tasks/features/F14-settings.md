@@ -535,3 +535,11 @@ Each will be built to its recommended default until Pete answers.
 - `LedgerKit/Sources/LedgerPersistence/Migrations.swift` (the tables the erase empties) and `Repositories/GRDBExerciseRepository.swift` (the seed)
 - `LedgerKit/Sources/LedgerAppKit/AppTabs.swift`, `MainRoot.swift`, `RootGate.swift`
 - `LedgerKit/Sources/FeatureLibrary/LibraryStore+Sources.swift` (the store pattern to mirror)
+
+## Rulings before G1 (orchestrator, 2026-10-28)
+- **Pete's questions Q1–Q7** are built to the planner's recommended defaults until he answers; each default lives in one place.
+- **A1** `DataReset` (Domain protocol, GRDB implementation, fake, stub, `dataReset` key, contract; one transaction, then VACUUM and a WAL checkpoint): yes.
+- **A2** SwiftUI `ShareLink` with a lazily written file: yes.
+- **A3** `SettingsRepository.seedIfAbsent` with contract clauses: yes.
+- **A4** the unit switch is ONE persistence call in one transaction (settings and the program's converted weights together), not two writes with a retry offer: simpler failure semantics.
+- **K1 / F13 coordination:** F13 and F14 run as parallel lanes. Neither stacks on the other; whichever merges second merges `main` in and takes the other's one-line edits. **K2:** finished workouts display in the current unit (F13 Q5 agrees).
