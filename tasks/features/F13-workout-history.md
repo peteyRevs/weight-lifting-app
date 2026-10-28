@@ -492,3 +492,11 @@ Each will be built to its recommended default until Pete answers.
 - `LedgerKit/Sources/FeatureLibrary/ExerciseHistoryStore.swift` and `LedgerKit/Sources/FeatureToday/TodayStore.swift` (the store pattern)
 - `LedgerKit/Sources/LedgerAppKit/AppTabs.swift`, `Routes.swift`, `Routes+Today.swift`, `Routes+Library.swift`
 - `LedgerKit/Sources/LedgerDomain/Programs/DayEditing+Fields.swift` (the next-multiple step to share)
+
+## Rulings before G1 (orchestrator, 2026-10-28)
+- **Pete's questions Q1–Q8** are built to the planner's recommended defaults until he answers; each default lives in one place.
+- **A1** `observeWorkout(id:)` on `WorkoutRepository`: yes. **A2** no paging, one read of `workout` with a nightly budget: yes.
+- **A3** FeatureHistory's own copy of the receipt strings and model builder, pinned equal to F10's by a parity test: yes (a new shared module costs more than ~70 pinned lines).
+- **A4** one multi-exercise `updateSets` write (one transaction, one record replay): yes. **A5** the list's narrower damaged-sets rule: yes.
+- **A6** the spoken-weight helper lands in S1; moving FeatureLibrary's strings onto it (the "Up 1 pounds" follow-up) is ruled INTO S3.
+- **A10 / F14 coordination:** F13 and F14 run as parallel lanes. Neither stacks on the other; whichever merges second merges `main` in and takes the other's one-line edits. F14's criteria that assert History's screens are written by whichever lands second.
