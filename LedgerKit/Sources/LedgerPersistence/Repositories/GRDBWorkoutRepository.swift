@@ -16,7 +16,7 @@ import os
 /// of the same fact as the workout: a slot's misses (`slot_miss`) and its exercise (`slot.exercise_id`), and,
 /// when the caller asks, the workout's event log (`workout_event`), which the save makes obsolete.
 public struct GRDBWorkoutRepository: WorkoutRepository {
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
     private let now: @Sendable () -> Date
 
     /// - Parameters:

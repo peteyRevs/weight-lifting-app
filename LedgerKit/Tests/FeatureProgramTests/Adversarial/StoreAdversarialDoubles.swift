@@ -69,6 +69,14 @@ nonisolated struct S13LoggedWorkouts: WorkoutRepository {
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
         base.observeRecent(limit: limit)
     }
+
+    func historyEntries() async throws -> [HistoryEntry] {
+        try await base.historyEntries()
+    }
+
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        base.observeHistoryEntries()
+    }
 }
 
 /// A program store that throws `error` from the next `times` updates, before anything is stored, while its task

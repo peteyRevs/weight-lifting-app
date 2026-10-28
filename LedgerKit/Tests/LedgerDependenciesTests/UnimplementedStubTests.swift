@@ -64,9 +64,11 @@ struct UnimplementedStubTests {
             { _ = try await stub.recent(limit: 1) },
             { _ = try await stub.workouts(in: .distantPast ..< .distantFuture) },
             { try await stub.updateSets(workoutExerciseID: session.exercises[0].id, sets: []) },
-            { try await stub.delete(id: Self.workout) }
+            { try await stub.delete(id: Self.workout) },
+            { _ = try await stub.historyEntries() }
         ])
         #expect(await Self.isEmpty(stub.observeRecent(limit: 1)))
+        #expect(await Self.isEmpty(stub.observeHistoryEntries()))
     }
 
     @Test("The settings repository's stub throws from every method; observe ends at once")

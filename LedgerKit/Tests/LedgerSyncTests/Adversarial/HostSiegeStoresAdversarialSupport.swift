@@ -116,6 +116,14 @@ struct SiegeWorkoutRepository: WorkoutRepository {
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
         base.observeRecent(limit: limit)
     }
+
+    func historyEntries() async throws -> [HistoryEntry] {
+        try await base.historyEntries()
+    }
+
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        base.observeHistoryEntries()
+    }
 }
 
 /// Only `active()` goes through the gate.
