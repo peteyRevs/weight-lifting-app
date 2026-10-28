@@ -15,7 +15,8 @@
     @Suite("Receipt", .serialized, .tags(.feature))
     struct ReceiptTests {
         /// The receipt's stops, in reading order: the header, the tiles, the records line when there is one,
-        /// "LOGGED", then each exercise. "Prescribed on the right" is no stop.
+        /// "LOGGED", then each exercise, a button since F12 S3 (N18: it opens the exercise's history; sanctioned
+        /// edit). "Prescribed on the right" is no stop.
         static func tree(_ model: ReceiptScreenModel) -> [Stop] {
             [
                 Stop(model.header.date, .staticText),
@@ -24,10 +25,10 @@
             ] + model.page.tiles.map { Stop($0.spoken, .staticText) }
                 + (model.page.records.map { [Stop($0, .staticText)] } ?? [])
                 + [Stop("LOGGED", [.header, .staticText])]
-                + model.page.rows.map { Stop($0.spoken, .staticText) }
+                + model.page.rows.map { Stop($0.spoken, .button) }
         }
 
-        /// The tree of `withRecords` as criterion 40 writes it, word for word.
+        /// The tree of `withRecords` as criterion 40 writes it, word for word; each exercise a button since F12 S3.
         static let withRecords: [Stop] = [
             Stop("Wednesday, September 16", .staticText),
             Stop("Upper A — Push focus", [.header, .staticText]),
@@ -37,11 +38,11 @@
             Stop("5,578 lb moved", .staticText),
             Stop("1 new PR this session", .staticText),
             Stop("LOGGED", [.header, .staticText]),
-            Stop("Barbell Bench Press, Prescribed 5 × 5 @ 200 lb, Logged 5 × 200×5", .staticText),
-            Stop("Incline DB Press, Prescribed 3 × 11 @ 52.5 lb, Logged 52.5×11", .staticText),
-            Stop("Chest-Supported Row, Prescribed 4 × 8 @ 75 lb, Nothing logged", .staticText),
-            Stop("Lat Pulldown, Prescribed 3 × 13 @ 102.5 lb, Nothing logged", .staticText),
-            Stop("Cable Lateral Raise, Prescribed 3 × 16 @ 15 lb, Nothing logged", .staticText)
+            Stop("Barbell Bench Press, Prescribed 5 × 5 @ 200 lb, Logged 5 × 200×5", .button),
+            Stop("Incline DB Press, Prescribed 3 × 11 @ 52.5 lb, Logged 52.5×11", .button),
+            Stop("Chest-Supported Row, Prescribed 4 × 8 @ 75 lb, Nothing logged", .button),
+            Stop("Lat Pulldown, Prescribed 3 × 13 @ 102.5 lb, Nothing logged", .button),
+            Stop("Cable Lateral Raise, Prescribed 3 × 16 @ 15 lb, Nothing logged", .button)
         ]
 
         // MARK: Criterion 40: what it reads; criterion 26: what Done sends
@@ -67,18 +68,21 @@
             }
         }
 
-        @Test("Done sends .done, once, and is the receipt's one control")
+        /// F12 S3, N18 (sanctioned edit): the rows are controls too, each sending its exercise's history.
+        @Test("Done sends .done, once, and each row its exercise's history: the receipt's only controls")
         func done_sendsDone() throws {
+            let model = try #require(ReceiptPreview.withRecords.model)
             var sent: [WorkoutAction] = []
-            let buttons = try ReceiptParts(.withRecords) { sent.append($0) }.withAccessibilityElements { elements in
+            let buttons = ReceiptParts(model: model) { sent.append($0) }.withAccessibilityElements { elements in
                 let buttons = elements.filter { $0.accessibilityTraits.contains(.button) }
                 for button in buttons {
                     _ = button.accessibilityActivate()
                 }
                 return buttons.count
             }
-            #expect(buttons == 1)
-            #expect(sent == [.done])
+            #expect(buttons == 1 + model.page.rows.count)
+            #expect(sent == [.done] + model.rowActions)
+            #expect(model.rowActions.count == model.page.rows.count && model.rowActions.count == 5)
         }
 
         @Test("VoiceOver's escape on the receipt is Done")

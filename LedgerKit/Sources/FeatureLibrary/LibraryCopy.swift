@@ -19,7 +19,7 @@ nonisolated enum LibraryCopy {
         String(
             localized: "New exercise",
             bundle: .module,
-            comment: "Button in the Library's header, and under No exercises yet: creates an exercise of one's own"
+            comment: "Creates an exercise of one's own (Library header, under No exercises yet); title of its sheet"
         )
     }
 
@@ -56,7 +56,11 @@ nonisolated enum LibraryCopy {
     }
 
     static var equipmentRow: String {
-        String(localized: "Equipment", bundle: .module, comment: "Spoken name of the Library's equipment chips")
+        String(
+            localized: "Equipment",
+            bundle: .module,
+            comment: "Spoken name of the Library's equipment chips, and heading of the exercise sheet's"
+        )
     }
 
     /// "Muscle: Chest", "Equipment: All".

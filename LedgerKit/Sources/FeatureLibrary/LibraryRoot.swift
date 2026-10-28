@@ -10,6 +10,8 @@ import SwiftUI
 /// phase, and SwiftUI restarts it when the tab comes back on screen. A view hosted with no scene (a package
 /// test's window) is told it is in the background, and follows nothing until its host says otherwise.
 ///
+/// **"New exercise"** opens `CreateExerciseSheet` over the tab (F12 S3).
+///
 /// **A route is handed on once.** The screen's taps go to the store, which keeps one route waiting; the task
 /// below hands it to the app and the store forgets it when the app's handler has returned.
 public struct LibraryRoot: View {
@@ -39,6 +41,19 @@ public struct LibraryRoot: View {
             .task(id: store.pendingRoute) {
                 store.deliverRoute(to: onRoute)
             }
+            .sheet(isPresented: newExerciseShown) {
+                CreateExerciseSheet(editing: nil) { store.send(.newExerciseClosed) }
+            }
+    }
+
+    /// "New exercise"'s sheet (F12 S3): up while the store says so, and the store told when it goes down, by its own
+    /// buttons or by the system. A saved exercise reaches the list through the exercises' observation (N1).
+    private var newExerciseShown: Binding<Bool> {
+        Binding { store.isNewExerciseShown } set: { isShown in
+            if !isShown {
+                store.send(.newExerciseClosed)
+            }
+        }
     }
 
     @ViewBuilder private var content: some View {

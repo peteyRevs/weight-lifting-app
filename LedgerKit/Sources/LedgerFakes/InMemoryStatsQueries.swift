@@ -44,15 +44,7 @@
         /// `bestSet(exerciseID:)`'s rule over every exercise, in one walk of the live workouts' sets, so the
         /// contract's comparison of the two is not this query against itself (review R2-5).
         public func bestSets() async throws -> [ExerciseID: BestSet] {
-            var best: [ExerciseID: LoggedSet] = [:]
-            for exercise in live.flatMap(\.exercises) {
-                for set in exercise.sets where set.isDone && (set.kind == .working || set.kind == .added) {
-                    if best[exercise.exerciseID].map({ Self.isHeavier(set, $0) }) ?? true {
-                        best[exercise.exerciseID] = set
-                    }
-                }
-            }
-            return best.mapValues { BestSet(weight: $0.weight, reps: $0.reps) }
+            Self.bestSets(of: live)
         }
 
         public func bestE1RM(exerciseID: ExerciseID) async throws -> Weight? {
@@ -92,7 +84,7 @@
         }
 
         public func sessionCount(exerciseID: ExerciseID) async throws -> Int {
-            live.count { workout in Self.sets(of: exerciseID, in: workout).contains(where: \.isDone) }
+            Self.sessionCount(of: exerciseID, in: live)
         }
 
         /// Newest first by when each was achieved (the workout's start); of two workouts that started together,
@@ -129,22 +121,7 @@
         }
 
         public func recentlyLogged(limit: Int) async throws -> [ExerciseID] {
-            var latest: [ExerciseID: Date] = [:]
-            for workout in live {
-                for exercise in workout.exercises where exercise.sets.contains(where: \.isDone) {
-                    latest[exercise.exerciseID] = max(
-                        latest[exercise.exerciseID] ?? workout.startedAt,
-                        workout.startedAt
-                    )
-                }
-            }
-            let ordered = latest.sorted { lhs, rhs in
-                if lhs.value != rhs.value {
-                    return lhs.value > rhs.value
-                }
-                return lhs.key.rawValue.uuidString < rhs.key.rawValue.uuidString
-            }
-            return ordered.prefix(max(0, limit)).map(\.key)
+            Self.recentlyLogged(limit: limit, in: live)
         }
 
         // MARK: Helpers
@@ -164,7 +141,7 @@
         }
 
         /// The heavier of two sets, and of two as heavy the one with more reps.
-        private static func isHeavier(_ lhs: LoggedSet, _ rhs: LoggedSet) -> Bool {
+        fileprivate static func isHeavier(_ lhs: LoggedSet, _ rhs: LoggedSet) -> Bool {
             lhs.weight != rhs.weight ? lhs.weight > rhs.weight : lhs.reps > rhs.reps
         }
 
@@ -201,12 +178,69 @@
             workouts.history.observe { Self.sessions(of: exerciseID, in: $0.live) }
         }
 
+        /// `recentlyLogged`, each one's `sessionCount` and `bestSets()` now, then after every write that changes them
+        /// (F12 S3).
+        func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+            workouts.history.observe { state in
+                let live = state.live
+                let recent = Self.recentlyLogged(limit: recentLimit, in: live)
+                let sessions = recent.map { ($0, Self.sessionCount(of: $0, in: live)) }
+                return LibraryStats(
+                    recent: recent,
+                    sessions: Dictionary(sessions) { first, _ in first },
+                    bestSets: Self.bestSets(of: live)
+                )
+            }
+        }
+
         private static func sessions(of exerciseID: ExerciseID, in live: [WorkoutState]) -> [ExerciseSession] {
             live.compactMap { workout in
                 let done = workout.exercises.filter { $0.exerciseID == exerciseID }.flatMap(\.sets).filter(\.isDone)
                 return done.isEmpty
                     ? nil : ExerciseSession(workoutID: workout.id, startedAt: workout.startedAt, sets: done)
             }
+        }
+    }
+
+    /// The Library's reads over the live workouts, for the queries and for their observation (F12).
+    extension InMemoryStatsQueries {
+        /// `bestSet(exerciseID:)`'s rule over every exercise, in one walk of the live workouts' sets, so the
+        /// contract's comparison of the two is not this query against itself (review R2-5).
+        static func bestSets(of live: [WorkoutState]) -> [ExerciseID: BestSet] {
+            var best: [ExerciseID: LoggedSet] = [:]
+            for exercise in live.flatMap(\.exercises) {
+                for set in exercise.sets where set.isDone && (set.kind == .working || set.kind == .added) {
+                    if best[exercise.exerciseID].map({ isHeavier(set, $0) }) ?? true {
+                        best[exercise.exerciseID] = set
+                    }
+                }
+            }
+            return best.mapValues { BestSet(weight: $0.weight, reps: $0.reps) }
+        }
+
+        static func sessionCount(of exerciseID: ExerciseID, in live: [WorkoutState]) -> Int {
+            live.count { workout in
+                workout.exercises.contains { $0.exerciseID == exerciseID && $0.sets.contains(where: \.isDone) }
+            }
+        }
+
+        static func recentlyLogged(limit: Int, in live: [WorkoutState]) -> [ExerciseID] {
+            var latest: [ExerciseID: Date] = [:]
+            for workout in live {
+                for exercise in workout.exercises where exercise.sets.contains(where: \.isDone) {
+                    latest[exercise.exerciseID] = max(
+                        latest[exercise.exerciseID] ?? workout.startedAt,
+                        workout.startedAt
+                    )
+                }
+            }
+            let ordered = latest.sorted { lhs, rhs in
+                if lhs.value != rhs.value {
+                    return lhs.value > rhs.value
+                }
+                return lhs.key.rawValue.uuidString < rhs.key.rawValue.uuidString
+            }
+            return ordered.prefix(max(0, limit)).map(\.key)
         }
     }
 #endif

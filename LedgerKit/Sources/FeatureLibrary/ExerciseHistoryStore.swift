@@ -27,6 +27,8 @@ final class ExerciseHistoryStore {
     private(set) var state = State.loading
     /// The route the root hands the app next; nil once the app's handler has returned.
     private(set) var pendingRoute: LibraryPendingRoute?
+    /// The exercise whose edit sheet is up (F12 S3, criterion 10); nil while it is down.
+    private(set) var editedExercise: Exercise?
 
     @ObservationIgnored private var sources = Sources()
     @ObservationIgnored private var routeNumber = 0
@@ -193,5 +195,23 @@ final class ExerciseHistoryStore {
             state = .failed
             return nil
         }
+    }
+}
+
+// MARK: - Edit (F12 S3, criterion 10)
+
+extension ExerciseHistoryStore {
+    /// "Edit": the sheet opens on the exercise as it is stored now. Only the lifter's own exercise is edited.
+    func edit() {
+        guard case let .some(.some(exercise)) = sources.exercise, exercise.isCustom else {
+            return
+        }
+        editedExercise = exercise
+    }
+
+    /// The edit sheet is down: cancelled, saved, or taken down by the system. A saved edit reaches the screen through
+    /// the exercises' observation (N13).
+    func editClosed() {
+        editedExercise = nil
     }
 }

@@ -4,11 +4,15 @@ import SwiftUI
 /// the others outlined. Each chip is read by its spoken label ("Muscle: Chest"), since two rows of one screen
 /// can both have an "All". String-only: the caller says, of each of its own chips, its title, its spoken label
 /// and whether it is the chosen one, and is handed the chip a tap chose (F11's exercise library, F12's Library).
+///
+/// `allowsMany` is for a row of which any number of chips can be chosen (F12 S3's secondary muscles): each chip is
+/// then a switch to VoiceOver, on while chosen, and it is drawn as the others are.
 public struct FilterChipRow<Chip: Identifiable>: View {
     private let chips: [Chip]
     private let title: (Chip) -> String
     private let spokenLabel: (Chip) -> String
     private let isSelected: (Chip) -> Bool
+    private let allowsMany: Bool
     private let onTap: (Chip) -> Void
 
     public init(
@@ -16,12 +20,14 @@ public struct FilterChipRow<Chip: Identifiable>: View {
         title: @escaping (Chip) -> String,
         spokenLabel: @escaping (Chip) -> String,
         isSelected: @escaping (Chip) -> Bool,
+        allowsMany: Bool = false,
         onTap: @escaping (Chip) -> Void
     ) {
         self.chips = chips
         self.title = title
         self.spokenLabel = spokenLabel
         self.isSelected = isSelected
+        self.allowsMany = allowsMany
         self.onTap = onTap
     }
 
@@ -30,6 +36,7 @@ public struct FilterChipRow<Chip: Identifiable>: View {
             ForEach(chips) { chip in
                 PillButton(title(chip), style: isSelected(chip) ? .filled : .outline) { onTap(chip) }
                     .accessibilityLabel(spokenLabel(chip))
+                    .accessibilityAddTraits(allowsMany ? .isToggle : [])
             }
         }
     }

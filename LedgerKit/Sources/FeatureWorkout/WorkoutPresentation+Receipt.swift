@@ -52,7 +52,9 @@ nonisolated extension WorkoutPresentation {
                 rows: zip(summary.rows, finished.exercises).map { row, exercise in
                     receiptRow(row, hasDoneSet: exercise.sets.contains(where: \.isDone), locale: locale)
                 }
-            )
+            ),
+            // The same rows, in the same order: each opens its exercise's history (F12 S3, N18).
+            rowActions: zip(summary.rows, finished.exercises).map { _, exercise in .openExercise(exercise.exerciseID) }
         )
     }
 

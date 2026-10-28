@@ -822,3 +822,444 @@ sets took 4.1 ms); model over 2,000 sets **9.17 ms median** (budget 16); `exerci
 **The gate (review round 1).** `scripts/check.sh` through the lock on `d8b909c`: **exit 0, "check.sh OK", 1,885 s**
 (lint 77 s, iOS build 17 s, string catalogs 1 s, iOS tests 1,501 s, watchOS build 32 s, watchOS tests 256 s,
 coverage 1 s; overall 98.68 %). The only commit after `d8b909c` is this paragraph.
+
+## S3 — as built (G1 implementer, 2026-10-26)
+
+Branch `feat/F12-s3-create`, cut from `main` at `20aac83` plus the spec commit `235e845`. The specification is the
+brief's slice S3 (criteria 9 and 10 as restated per C13 and C14, N15–N18), the "S3 amendments (orchestrator,
+2026-10-26)" (N19, N20), and Pete's Q2 = A, Q4 = A/A, Q5 = A.
+
+### Commits
+
+- `526575a` feat(library): `CustomExerciseDraft`, the lifter's exercise built from the form (N15).
+- `03a0de5` feat(library): the "+step" tag passes over sessions with no set that counts (N19).
+- `afbd81c` feat(library): the Library follows every workout of the history (N20, F12-S2-6).
+- `64e1955` feat(library): New exercise and Edit, the lifter's own exercise in a sheet.
+- `4ab36d3` feat(workout): a receipt row opens its exercise's history (N18).
+- this notes commit (docs only).
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- **Domain.**
+  - `LedgerDomain/Exercises/CustomExerciseDraft.swift` (the brief's path). The draft holds the name as typed,
+    the equipment, the primary muscle, a `Set` of secondary muscles and the pattern. `exercise(id:among:)
+    throws(CustomExerciseError)` checks, in this order: the trimmed name is blank; it is not 2–40 `Character`s;
+    it holds a Unicode `Cc` scalar (U+0000 among them); another live exercise has the same `ExerciseSearch.key`
+    (the one with `id` is left out, so an edit keeps its own name); the primary muscle is among the secondaries.
+    It then builds a custom `Exercise`: the short name is the name, the start load is 0 in both units, there are
+    no curated alternatives, and the secondaries are in `MuscleGroup.allCases` order (Q4 A/A). The step is the
+    equipment's default, `Equipment.defaultStep(in:)`, which an `Exercise` does not store.
+  - `CustomExerciseError` lives in `Errors.swift`, beside `ProgramEditError` (C9).
+  - `Model/LibraryStats.swift` holds the recent ids, their session counts and every best set. It was FeatureLibrary's
+    private struct; it moved to the Domain for N20.
+  - `StatsQueries.observeLibraryStats(recentLimit:)` (N20).
+  - N19: `ExerciseHistory.log(of:records:)` makes one walk from the oldest session. It carries the latest top
+    weight of a session that has a counted set.
+- **Persistence, fakes, stub.**
+  - `GRDBStatsQueries+Library.swift` gains `libraryObservation(recentLimit:)`. It is one `ValueObservation`
+    that reads `recentlyLogged`, each recent exercise's `sessionCount` and `bestSets` in one access, with
+    `removeDuplicates()`.
+  - The three reads became static fetchers inside a database access (`fetchRecentlyLogged`,
+    `fetchSessionCount`, `fetchBestSets`), shared by the async queries and the observation. The first two
+    moved into the `+Library` file to keep `GRDBStatsQueries.swift` under the lint's 300 lines.
+  - `InMemoryStatsQueries` does the same over the history's `ObservedState`, with three static helpers.
+  - The Unimplemented stub returns its empty stream.
+- **Contract.** `StatsQueriesContract` gains clause 27, `observeLibraryStats`. It runs on GRDB, on the in-memory
+  stores and on `HistoryModel`. The stream emits:
+  - the empty stats first;
+  - after the newest workout, and after an older one;
+  - after an oldest workout, whose exercise has a best but is not recent (limit 2);
+  - nothing within `quiet` after a workout with nothing done;
+  - after `updateSets` of an older workout;
+  - after the newest workout is deleted.
+
+  Each value equals what the three reads return.
+- **FeatureLibrary.**
+  - `CreateExerciseModel.swift` holds `CreateExerciseAction`, `CreateExerciseProblem`, `CreateExerciseInput` and
+    `CreateExerciseModel`.
+  - `CreateExercisePresentation`, `CreateExerciseStore`, and `LibraryCopy+Create` (the sheet's words and the ten
+    pattern names).
+  - `CreateExerciseSheet` is the owner view. It holds the store, runs the save from `.task(id: attempt)`, and
+    closes when the phase is `.saved`.
+  - `Views/CreateExerciseScreen.swift` holds the screen, page, name field and foot, on `SheetChrome`.
+  - `Views/Create+Previews.swift` has five states: empty, filled in, name taken, save failed, edit.
+  - `LibraryRoot` presents the sheet from `isNewExerciseShown`, and a new `LibraryAction.newExerciseClosed` sets
+    the flag back.
+  - `ExerciseHistoryModel.edit` is "Edit" for a custom exercise and nil otherwise. The history store has
+    `edit()` and `editClosed()` and keeps `editedExercise`. `ExerciseHistoryRoot` presents the sheet with
+    `.sheet(item:)`, and `ExerciseHistoryScreen` puts "Edit" in the bar (`library.history.edit`).
+  - `LibraryStore+Sources` follows `observeLibraryStats` in place of `observeRecent(limit: 1)` and the stats
+    read. `followedWorkouts`, `readStats()`, the stale counter and the store's `workoutRepository` dependency are
+    gone.
+- **LedgerDesign (A3).**
+  - `FilterChipRow(…, allowsMany:)`: each chip of such a row carries the `.isToggle` trait, so VoiceOver reads
+    it as a switch with the value "1" or "0". It draws as before, and the default `false` changes nothing for
+    F11 or S1.
+  - `ReceiptLayout(model:onRow:)`: with an action, each row is a `Button` (`LedgerPressStyle`, the same
+    `spoken` label) that hands back its place.
+- **FeatureWorkout and LedgerAppKit (N18, Q2 A).**
+  - `WorkoutAction.openExercise(ExerciseID)` and `WorkoutRoute.exercise(ExerciseID)`.
+  - `ReceiptScreenModel.rowActions` comes from the same zip as the rows, so the two keep the same order.
+    `ReceiptPage` sends `rowActions[place]`.
+  - The store accepts `.done` and `.openExercise` on the receipt only (`WorkoutAction.isReceipts`). Both close
+    the cover once, through `closeReceipt(showing:)`.
+  - `Routes+Workout` resolves `.exercise(id)` with `open(.exercise(id), in: .today)`: Today, as for "Done", one
+    step deeper. The push is no presentation, so it may happen as the cover goes down. The nightly UI test
+    proves it on the simulator.
+- **Catalog.** 22 new keys. The comments of "New exercise", "Equipment" and "Core" were widened: each key now also
+  serves the sheet's title, a field heading and the core pattern.
+
+No change to `Package.swift`, the project file, a test plan or `.github/`.
+
+### Decisions and deviations
+
+1. **N19, the amendment's parenthetical read literally.** "Has a working set (working or added, decision #25's
+   rule, `PersonalRecords.countsTowardBests`)" defines the sets that are compared. So both sides of "+Δ" now use
+   `countsTowardBests`:
+   - a session's top weight is its heaviest working or added set;
+   - the comparison is with the latest earlier session that has one.
+
+   **This changes S2's rule.** "+Δ" no longer ignores added sets (S2's `tags_compareWorkingSetsOnly`, now
+   `tags_compareCountedSetsOnly`). The other reading, working sets alone with only the skip changed, would make an
+   added-only session reset nothing and step from nothing. Sessions with only warm-ups or drop sets are passed
+   over and read "—". *If the orchestrator meant `.working` alone, the change is one filter in
+   `topCountedWeight(of:)`, plus the two tests and G2's oracle.*
+2. **N20: the observation emits the Library's stats themselves,** not a signal to read them again. The history's
+   sessions observation works the same way, and the store keeps no stale counter.
+   - **Consequence:** a failed read ends the stream (GRDB's `ValueObservation`), so the failed state is left at the
+     next run (the tab or the app coming back), no longer at the next change.
+   - G2's `statsReadFailsOnce_nextWorkout_…` became `…_nextRun_…` (a sanctioned edit). Its double makes the
+     observation end.
+   - Cost: one GRDB re-read of the three queries per write to the tracked tables while the Library's task runs,
+     which includes the live workout's own writes. The reads run on GRDB's reader, off the main actor, and the
+     duplicates are dropped. The S1 budget for `bestSets` (under 50 ms p95 over 20k sets) bounds each one.
+3. **A new draft** starts with Barbell, Chest and Horizontal push, the first case of each enum, so every
+   single-choice field has a chip chosen. The brief gives no error for "no pattern chosen".
+4. **The primary muscle has no chip among the secondary muscles** (10 chips, not 11). Choosing a primary muscle
+   removes it from the secondaries. The Domain still refuses the overlap (`primaryAmongSecondaries`); were it ever
+   thrown, the sheet would show the save-failed line.
+5. **"Save" is the foot's `PrimaryButton`,** the sheet's one orange, as the picker's "Add" is. `SheetChrome` has no
+   second header button. While a save runs it is disabled.
+6. **Problems** are shown when Save finds them, not while the lifter types. A change to any field clears the line.
+   The name's rules show under the field; a failed save (and the unreachable muscle rule) shows over Save.
+7. **A catalog exercise is never saved from the sheet.** The history offers no "Edit" for one. If the sheet were
+   given one, the store would refuse it before any write (`CreateExerciseStoreError.catalogExercise`), log it, and
+   show the save-failed line.
+8. **Edit (Q5 A)** builds the exercise again from the draft under its id. Every field can change, and the start
+   load stays 0. Workouts keep their snapshot name; the open history and the Library follow `observeAll` (N13).
+9. **"Edit" is a system bar button.** It takes the stack's tint, as the back button beside it does (`AppTabs` sets
+   each stack back to the system's tint). It is not one of criterion 12's three oranges.
+10. **The receipt's row action** has no gallery reference of its own: it draws exactly as the plain row. F10's
+    receipt references are now drawn with the action, and all of them compared clean, which is the proof. The
+    LedgerDesign tree table gains two cases (rows as buttons, at the default size and stacked at `.accessibility3`),
+    and `ReceiptLayoutRowActionTests` activates each row.
+11. **The sheet's owner is a module-level file** (`CreateExerciseSheet.swift`, in `FeatureLibrarySourceTests`'
+    store files), as the roots are. Its drawing lives in `Views/`, with the third screen-level scroll view.
+
+### New wording for Pete
+
+- From the brief: "Edit exercise", "Cancel", "Save", "Name", "Primary muscle", "Secondary muscles",
+  "Movement pattern", "Enter a name.", "Name must be 2–40 characters.", "An exercise with that name already
+  exists.". "New exercise" and "Equipment" reuse S1's keys.
+- **Not in the brief:**
+  - "Edit" (the history's bar button);
+  - "That name holds a character that can't be saved." (a pasted tab, line break or other control character);
+  - "Couldn't save the exercise. Try again.";
+  - the ten pattern names: "Horizontal push", "Horizontal pull", "Vertical push", "Vertical pull", "Squat",
+    "Hinge", "Lunge", "Carry", "Isolation", and "Core" (the muscle's key).
+
+  Spoken chips read "Primary muscle: Chest" and "Secondary muscles: Triceps", through S1's "%@: %@".
+
+### Criteria → tests
+
+Suites, all new unless marked:
+- In `FeatureLibraryTests`: `CreateExerciseStoreTests` (+`Saving`) (S), `CreateExercisePresentationTests` (P),
+  `ExerciseHistoryEditTests` (E), `CreateExerciseAccessibilityTests` (AX, iOS), `CreateExerciseLayoutTests` (L,
+  iOS), `CreateExerciseSnapshotTests` (SN), `LibraryStoreTests+History` (LS), and `PreviewTests` (edited).
+- Elsewhere:
+  - in `LedgerDomainTests`: `CustomExerciseDraftTests` (D) and `CustomExerciseDraftPropertyTests` (DP);
+  - in `FeatureWorkoutTests`: `ReceiptRowRouteTests` (RR), plus the edited `ReceiptTests` and
+    `ReceiptLayoutTests`;
+  - in LedgerDesignTests: `ReceiptLayoutRowActionTests` (RA), plus two tree cases;
+  - in LedgerAppKitTests: `LibraryRouteMappingTests` (RM);
+  - the contract (K), and the Nightly UI test `LibraryCreate` (UI).
+
+| Criterion | Tests |
+|---|---|
+| 9 (create, list, picker, errors) | S `save_insertsAndCloses`, `save_appearsInTheLibrary` ("Barbell · Chest · Custom"), `errorsShown`; D `buildsCustomExercise`; UI `test_newExercise_isListedAndPicked_andEditRenamesIt` (Library row with "Custom", then the Day editor's picker finds it). The swap clause is F10 S8's (C14) |
+| 10 (Edit, custom only) | P `historyEdit_customOnly`; E `edit_custom_opensAndCloses`, `edit_catalog_opensNothing`; S `editCustom_storesUnderItsID`, `editCatalog_isRefused`; UI (Edit renames the open history) |
+| N15 | D (all), DP `randomName_keepsTheRules` (`PropertySeed.all` × 20 names of letters, marks, fullwidth, emoji, blanks, line breaks and controls, against a plain reading of the rule); S `primaryMuscle_isNeverSecondary` |
+| N16 | S `doubleTap_savesOnce` (a held read; the second `save()` and taps do nothing; one `save`), `failure_keepsTheSheet` (then Save works again), `cancellation_changesNothing` (cancelled while the read is held: no write, no line) |
+| N17 / Q4 | D `buildsCustomExercise` (short name, start 0 in both units, no alternatives) |
+| N18 / Q2 | RR (three tests); RA; RM `receiptRow_pushesTheHistoryOnToday`; `ReceiptTests.done_sendsDone` (sanctioned); UI `test_receiptRow_opensTheExercisesHistoryOnToday` (receipt row → history title, Today selected, back is Today) |
+| N19 | `ExerciseHistoryTests.tags_compareCountedSetsOnly`, `tags_sessionsWithoutCountedSets_arePassedOver`; G2's pin and property oracle (sanctioned) |
+| N20 | LS `olderWorkoutChanges_whileRunning_show` (older finished, edited, deleted); K clause 27 on GRDB, in memory and `HistoryModel`; `LibraryStoreTests.statsReadFails_showsFailed` |
+| Sheet accessibility | AX `tree_isExactlyTheTable` (5 states × sizes), `secondaryMuscles_areSwitches`, `controls_sendTheirActions`, `saving_dimsSave`, `targets_areAtLeast44Points`, `nameField_isTheOneField` (the one `UITextField`, placeholder "Name") |
+| Sheet layout | L `parts_layOutSanely` (5 states × settings), `header_titleAndCancel` |
+
+All were written alongside their code. The snapshots failed first (missing). `receipt_nothingLeavesOrOverlaps`
+(F10's) failed first on the rows that are now buttons, which is the sanctioned edit below. I did not watch the N20
+store test fail against the old store.
+
+### References (7 new, I looked at each)
+
+`FeatureLibraryTests/__Snapshots__/CreateExerciseSnapshotTests/`:
+- `empty` and `filled`, light and dark, at `.large`;
+- `nameTaken`, light and dark, at `.large`;
+- `filled` at `.accessibility3`, dark (`filled_matchesReferences.filledAccessibility3-dark-accessibility3.png`).
+
+What they show:
+- the title with "Cancel" beside it, under it at `.accessibility3`;
+- the NAME eyebrow over an outlined field, and the duplicate line under it;
+- four chip fields, with the chosen chips filled;
+- the secondary row without the primary's chip;
+- an orange Save under a rule.
+
+**No existing reference changed.** That includes the gallery, `FilterChipRow` and F10's receipt references.
+
+**A known limit, visible in the `.accessibility3` reference.** While the name field has no focus, a name longer
+than its line is cut with "…" ("Landmine Squeeze…"), as every one-line `TextField` is. C26 prescribes a plain
+one-line field. F11's `NameField` draws the whole name as text that wraps, but it is FeatureProgram's. Open
+question 1.
+
+### Sanctioned edits of others' tests
+
+| File | Edit | Why |
+|---|---|---|
+| `LedgerDomainTests/Adversarial/ExerciseHistoryAdversarialTests.swift` (G2) | `tags_predecessorWithoutWorkingSets_isSame` became `tags_predecessorWithoutCountedSets_isPassedOver`: the middle session holds warm-ups and a drop set, and the expectation is `[+10, —, —]` | N19 overturns F12-S2-5's pin |
+| `LedgerDomainTests/Adversarial/ExerciseHistoryPropertyAdversarialTests.swift` (G2) | The oracle's `topWorking` counts working and added sets, and compares with the latest earlier session that has one | N19 |
+| `FeatureLibraryTests/LibraryStoreAdversarialTests.swift` (G2) | The failed read is left at the next run; `FailingBests.observeLibraryStats` ends the stream for each failure; the header comment | N20 |
+| `FeatureLibraryTests/Support/HistoryAdversarialDoubles.swift` (G2), `FeatureWorkoutTests/Support/ReceiptSupport.swift` | Forward `observeLibraryStats` | A protocol requirement |
+| `LedgerPersistenceTests/Adversarial/HistoryModel.swift`, `HistoryModel+Stats.swift` | `writeSignals`, and `observeLibraryStats` over the three queries (every write with `.emitsEveryWrite`) | Requirement, clause 27 |
+| `LedgerPersistenceTests/Adversarial/HistoryContractAdversarialTests.swift` | 26 → 27 clauses | N20 |
+| `LedgerDomainTests/Adversarial/ProtocolsAdversarialTests.swift` | `BriefStatsQueries` returns a finished stream | Requirement |
+| `LedgerDependenciesTests/UnimplementedStubTests.swift` | The stub's `observeLibraryStats` ends at once | Requirement |
+| `FeatureWorkoutTests/ReceiptTests.swift` | The rows are `.button` stops in `tree` and in `withRecords`; `done_sendsDone` expects Done plus each row's `rowActions` | N18 (A7) |
+| `FeatureWorkoutTests/ReceiptLayoutTests.swift` | `receipt_nothingLeavesOrOverlaps`: the buttons are Done plus the rows, each still a 44-pt target | N18 (A7) |
+| `FeatureWorkoutTests/Support/ReceiptParts.swift` | `ReceiptPage(model:rowActions:send:)` | N18 |
+| `FeatureWorkoutTests/Adversarial/WorkoutSaveAdversarialCover.swift` (G2) | `exitFault` handles `.route(.exercise)` as a saved close | The exhaustive switch |
+| `LedgerDesignTests/AccessibilityTreeReceiptTables.swift` | Two cases with the row action | A3 |
+
+My own tests amended:
+- `ExerciseHistoryTests` (N19);
+- `LibraryStoreTests`: `UnreadableBests` ends the observation, and the New exercise test closes the sheet;
+- `ExerciseHistoryStoreTests`: forwarding;
+- `FeatureLibrarySourceTests`: the store files, and the third screen with a scroll view;
+- `PreviewTests`: `CreatePreview`;
+- `LibraryRouteMappingTests`: one test.
+
+### Product lines
+
+Measured against `235e845`, by the same rules as S1 and S2: non-blank, non-comment Swift in `LedgerKit/Sources`
+and `Apps`, without `LedgerTestSupport`, the UI tests or the catalogs.
+
+**854 added, 152 removed: net 702.** `Package.swift` is unchanged. The plan was about 675; the stop line is
+about 1,000.
+
+By area:
+- FeatureLibrary: the sheet's stack 513 (screen 103, store 97, presentation 90, copy 85, previews 60, model 54,
+  sheet 24), the edits to the roots, stores and copy net +54, and `LibraryStore+Sources` −45.
+- Domain: 104 added, 15 removed (the draft 64).
+- Persistence: net +19.
+- Fakes and stub: net +28.
+- LedgerDesign: net +20.
+- FeatureWorkout and LedgerAppKit: net +24.
+
+### PR-sweep seconds (R6)
+
+These are the sums of the per-argument durations in the gate's `PR-iOS.xcresult`, under the PR sweep:
+
+| Suite | Cases | Seconds |
+|---|--:|--:|
+| ReceiptLayout row action | 1 | 0.40 |
+| Exercise sheet snapshots | 3 (7 references) | 0.33 |
+| Exercise sheet accessibility | 6 | 0.22 |
+| Exercise sheet layout | 2 | 0.07 |
+| CreateExerciseStore | 9 | 0.04 |
+| Receipt rows | 3 | 0.04 |
+| CreateExercisePresentation | 5 | 0.01 |
+| ExerciseHistoryStore · Edit | 3 | 0.01 |
+| **Added** | | **≈ 1.1 s** |
+
+The domain suites run on the host. This is far under the plan's 25–35 s.
+
+### Runs
+
+- Host `swift test`: the touched suites of LedgerDomain, LedgerPersistence (contract, GRDB, in memory,
+  `HistoryModel`), FeatureLibrary (120 tests), FeatureWorkout, LedgerAppKit and LedgerDependencies all pass.
+- Simulator, PR plan, `TEST_RUNNER_LEDGER_SWEEP=pr`:
+  - first run, recording missing references: the 7 references were recorded, and F10's
+    `receipt_nothingLeavesOrOverlaps` failed (fixed by its sanctioned edit);
+  - compare run over `FeatureLibraryTests`, `FeatureWorkoutTests`, `LedgerDesignTests`, `LedgerAppKitTests` and
+    `LedgerDependenciesTests`: **exit 0. 1,566 tests: 1,549 passed, 0 failed, 4 skipped, 13 expected failures.**
+- Simulator, Nightly plan: UI `LibraryCreate` (2 tests) and `Library` (1 test): exit 0, 3 passed.
+- **Not done:** listening to VoiceOver on the simulator (the S2 DoD item is still open), and `TabsAdversarial` and
+  the audit suites on the Nightly plan.
+
+### The gate
+
+`scripts/check.sh` through the lock on `4ab36d3`: **exit 0, "check.sh OK", 1,977 s.**
+- Steps: lint 81 s, iOS build 15 s, string catalogs 1 s (FeatureLibrary: 89 keys), iOS tests 1,554 s, watchOS
+  build 48 s, watchOS tests 275 s, coverage 2 s.
+- Coverage overall 98.45 %, FeatureLibrary 96.08 % (98.94 % after S1; the threshold is 70 %), LedgerDomain
+  99.42 %.
+- The FeatureLibrary drop is the sheet's presentation code in `LibraryRoot`, `ExerciseHistoryRoot`, the toolbar
+  and `CreateExerciseSheet`'s task. Hosted package tests don't present these; the nightly UI test does.
+- I did not measure per-file coverage. Every branch of `CustomExerciseDraft` has a test.
+- The only commit after `4ab36d3` is these notes.
+
+### Open questions, each with a recommendation
+
+1. **The name field cuts a long name at accessibility sizes while it has no focus** (see References).
+   *Recommendation:* a follow-up that moves F11's `NameField` technique (whole text under the field) into
+   LedgerDesign for both features. Building it here would change F11's references and widen the slice.
+2. **N19's reading** (decision 1). *Recommendation:* keep the counted-sets rule. "+Δ" then compares the same
+   sets the records and the bests do.
+3. **N20's failure recovery** (decision 2): a failed stats read is now left at the next run, not at the next
+   change. *Recommendation:* accept. It is the history's own behaviour since F12-S2-3.
+
+### S3 fix round 1 (G1, 2026-10-26): G2's S3-1 to S3-7, as the orchestrator ruled
+
+**Commit:** `ff30d8c` fix(library). The ruling is the orchestrator's message; G2's findings are in `test-findings.md`
+under "S3 — G2 findings".
+
+**S3-1, S3-2, S3-3 (the name).** Changes in `LedgerDomain/Exercises/CustomExerciseDraft+Name.swift` (new) and the
+draft:
+- **Blank.** A name is blank (`blankName`, "Enter a name.") when nothing is left once its default-ignorable code
+  points, blanks and line breaks are removed.
+- **The stored name, `storedName`.**
+  - Every default-ignorable scalar that stands alone is dropped, at the ends and inside the name: a zero-width
+    space, a word joiner, a byte order mark, direction marks, a Hangul filler.
+  - Kept are a ZWJ, any grapheme extender (variation selectors) and direction controls, which the next step
+    refuses.
+  - Every `Zs` becomes U+0020, a run of spaces collapses to one, and the result is trimmed.
+  - The length rule, the duplicate check (`ExerciseSearch.key` of the stored name) and the stored name and short
+    name all use it.
+  - `ExerciseSearch.key` is unchanged, as ruled.
+- **Refused (`controlCharacter`):** `Cc`; `Zl` and `Zp` inside the name (at the ends they are trimmed as line
+  breaks); direction embeddings, overrides and isolates (U+202A–U+202E, U+2066–U+2069), so U+202E is refused under
+  S3-1; and any other `Cf` that is not default-ignorable (U+0600, for example).
+- **How I resolved the ruling:**
+  - *Bidi controls.* "Refuse, or trim at the ends" and "drop interior default-ignorables" overlap on them. I refuse
+    them wherever they stand, which G2's `directionOverride_isDuplicate` (refused) needs. A name of them alone is
+    still blank (G2's `invisibleOnly_isBlank`).
+  - *ZWJ and variation selectors.* These are default-ignorable but are kept, because dropping them would split
+    emoji sequences: G2's grapheme pin counts the family emoji as one character.
+
+**S3-4.** Besides 2–40 graphemes, a name of more than 160 scalars is refused with `nameLength`. The comment on
+`nameScalars` explains why. G2's pin `combiningMarks_areUnbounded` held the old behaviour; it is now
+`combiningMarks_overTheScalarCap_areRefused` (2,002 scalars refused; exactly 160 kept). This is a sanctioned edit,
+since the ruling changes the behaviour.
+
+**S3-5.** `CustomExerciseDraft.init(_ exercise:)` subtracts the primary muscle from the secondaries.
+
+**S3-6.**
+- `CreateExerciseSheet` takes `announce` (default `AccessibilityNotification.Announcement`), as `ProgramRoot` does.
+- The store counts the problems Save finds (`problemNumber`, in the model), so each one is announced, including the
+  same line twice.
+- When the problem is the name's, the screen scrolls to the top (`ScrollPosition`), where the name field stands.
+- G2's source check is replaced, as ruled, by a hosted behavioural test (iOS). It announces "Enter a name." twice,
+  then "Couldn't save the exercise. Try again.".
+- The scroll has no automated test.
+
+**S3-7.** `CreateExerciseModel.Chip.id` is the value's raw value ("shoulders"), not its place.
+
+**Tests.**
+- Every `withKnownIssue` in G2's two files is gone, and each test passes as a plain test with its assertions as
+  written. The one exception is S3-4's pin, above.
+- My `CustomExerciseDraftTests` gain 3 tests: the stored name, invisible names and separators, and S3-5.
+- The property test's oracle follows the new rule, written as a plain reading of it. It collapses spaces by scalar,
+  because a space under a combining mark is still a space. Its scalar pieces now include format characters,
+  separators, thin and ideographic spaces, a Hangul filler and U+0600. It passes at 200 seeds and at 2,000.
+- No reference changed.
+
+**New wording:** none. "Enter a name." and "That name holds a character that can't be saved." cover the new cases.
+
+**Product lines** (same rules as before): this round adds 83 and removes 15, net +68. Against `235e845` the slice
+is now **922 added, 152 removed, net 770**.
+
+**Runs.**
+- Host: `LedgerDomainTests` draft and history suites (51 tests) and `FeatureLibraryTests` (125 tests) pass.
+- Simulator, PR plan, PR sweep: `FeatureLibraryTests` and `LedgerDomainTests`, 1,529 tests: 0 failed, 6 skipped.
+
+**The gate.** `scripts/check.sh` through the lock on `ff30d8c` exited 0 with "check.sh OK" in 1,934 s.
+- Lint 73 s, iOS build 13 s, string catalogs 1 s, iOS tests 1,537 s, watchOS build 40 s, watchOS tests 267 s,
+  coverage 2 s.
+- Coverage overall 98.53 %, FeatureLibrary 96.98 %, LedgerDomain 99.42 %.
+- The only commit after `ff30d8c` is these notes.
+
+### S3 fix round 2 (G1, 2026-10-26): G3's review R1-1 to R1-6, as the orchestrator ruled
+
+**Commit:** `6482559` fix(library). The review is in `review.md`, "S3 — G3 review (round 1)".
+
+- **R1-1 (the joiner).**
+  - `storedName` keeps a U+200D only where `joinsEmoji` holds: the scalar before it is an emoji (skin tones and
+    selectors that extend it are skipped), and so is the scalar after it. "Emoji" is `isEmoji` outside ASCII, so
+    digits, "#" and "*" don't count. Anywhere else the joiner is dropped, as a word joiner is.
+  - G3's three names ("Bench Press\u{200D}", "\u{200D}Bench Press", "Bench\u{200D} Press") are added to G2's
+    `drawsAsAnother_isDuplicate`, and all three pass.
+  - Emoji sequences keep their joiners: the family emoji is still one character (G2's pin), and so is
+    "Carry 👨‍👩‍👧" (my test).
+  - The property oracle follows the rule, with "🏋️", a bare U+200D and "♂️" added to its pieces. It passes at 200
+    and at 2,000 seeds.
+- **R1-6 (one reading of "draws nothing").** `drawsNothing` is now a property derived from `storedName`: every scalar
+  of it is default-ignorable or whitespace. The second filter is gone.
+- **R1-2 (the Library's observation).**
+  - **The fetch is two statements.** `fetchRecent(limit:in:)` reads the recent exercises with
+    `COUNT(DISTINCT workout.id) AS sessions` beside `MAX(started_at)` in one `GROUP BY`. `recentlyLogged` maps it,
+    and `fetchSessionCount` stays for the async `sessionCount`. Then the best sets.
+  - **The Nightly suite times it.** `StatsQueriesPerformanceTests` has an "observeLibraryStats' fetch" line under
+    `PerformanceBudget.statsQuery` (50 ms p95), and it passes on the host.
+  - **The live workout's set taps never wake it.** A tap appends to `workout_event`, which the observation does not
+    read. GRDB tracks the tables a fetch reads, so it re-fetches only when `workout`, `workout_exercise` or
+    `logged_set` change. That happens on a finish, a History edit or delete, or a synced finished workout. Those
+    tables already are the narrowest correct region: an edit of an older workout writes `logged_set`, and N20 must
+    see it. So I narrowed nothing.
+  - **Measured as G3 measured it** (host, Debug, the Nightly suite's 20,000-set seed, 20 writes averaged after a
+    warm-up, scratch probe not committed):
+
+    | | without the observer | with it |
+    |---|--:|--:|
+    | `updateSets` (an older workout's edit), before the fold | 3.3 ms | 24.0 ms |
+    | `updateSets`, after the fold | 3.4 ms | 23.2 ms |
+    | a live set tap (`GRDBWorkoutEventStore.append`) | 0.10 ms | 0.11 ms |
+
+    The fetch's median went from 19.1 ms to 17.6 ms. Of that, `bestSets`' window scan is 13.7 ms and the
+    recent-with-sessions read 3.9 ms.
+  - **So the premise "about 22 ms on every set write in a live workout" does not hold**: a set tap costs the same with
+    the observer as without it. The remaining cost (about 20 ms per finish, edit or delete while the Library's task
+    runs) is the `bestSets` scan, which S1 owns. The cuts left are an index or `DatabasePool` (ADR-level) or a
+    rewrite of the S1 query with tie-break risk. I made none of them.
+- **R1-3.** `WatchedExercises` keeps every held read in an array, and `releaseRead()` resumes them all.
+  `doubleTap_savesOnce` runs the second `save()` in a task, releases, then awaits both.
+  - Mutant `!isSaveRunning` removed: it fails in 13 ms ("saves.count == 1"), where it used to hang.
+- **R1-4.** `CreateExerciseSheet` sets `.interactiveDismissDisabled(store.phase == .saving)`, as FinishSheet does.
+  When no save is running, the swipe behaves as before.
+- **R1-5.**
+  - **(a) Format arguments, not a rewording.** The key is now "Name must be %@–%@ characters.". The bounds come
+    from `CustomExerciseDraft.nameLength`, written in the locale's digits: "2–40" in en_US, "٢–٤٠" in ar_EG, both
+    tested. The 160-scalar case still reads this line, which G3 accepts as ruled.
+  - **(b) "Core" for the pattern has its own key: "Core work".** The pattern needed different English: standards §7
+    and `StringCatalog` require a key to be its English text, so a second "Core" key cannot exist. "Core work" is new
+    wording for Pete. The muscle's "Core" comment is back to the muscle alone.
+  - The 7 references were re-recorded for that chip alone. I diffed every pixel against the old images: each
+    change lies in the last pattern chip's box (for example x 115–180, y 754–781 of 402×889), and I looked at the
+    filled light and `.accessibility3` images.
+
+**Product lines** (same rules as before): this round adds 63 and removes 26. Against `235e845` the slice is now
+**959 added, 152 removed, net 807**.
+
+**Runs.**
+- Host: LedgerDomain draft suites (26 tests, also at 2,000 seeds); FeatureLibrary (126 tests); the stats contract,
+  in-memory and `HistoryModel` contracts, Library stores, and `LibraryStatsObservation` (G2's GRDB-against-fakes
+  differential); `StatsQueriesPerformanceTests` under `LEDGER_TEST_LANE=nightly`. All pass.
+- Simulator, PR plan:
+  - the references were recorded, then a compare run of `FeatureLibraryTests`: 154 tests, 151 passed, 0 failed.
+
+**The gate.** `scripts/check.sh` through the lock on `6482559`: exit 0, "check.sh OK", 1,904 s.
+- Lint 73 s, iOS build 13 s, string catalogs 0 s (FeatureLibrary: 90 keys), iOS tests 1,528 s, watchOS build 21 s,
+  watchOS tests 267 s, coverage 1 s.
+- Coverage: overall 98.53 %, FeatureLibrary 97.00 %, LedgerPersistence 99.18 %.
+- The only commit after `6482559` is these notes.

@@ -25,6 +25,8 @@ nonisolated enum ExerciseHistoryPresentation {
             eyebrow: [LibraryCopy.equipment(exercise.equipment), LibraryCopy.muscle(exercise.primaryMuscle)]
                 .joined(separator: LibraryPresentation.separator),
             title: exercise.name,
+            // Criterion 10: only the lifter's own exercise is edited; a catalog one has no "Edit".
+            edit: exercise.isCustom ? LibraryCopy.edit : nil,
             stats: stats(history, input),
             chart: chart(history.weeks, input),
             log: ExerciseHistoryModel.Log(

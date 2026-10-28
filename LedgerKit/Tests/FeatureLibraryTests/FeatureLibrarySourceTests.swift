@@ -39,7 +39,7 @@ nonisolated struct FeatureLibrarySourceTests {
 
     static let storeFiles = [
         "LibraryStore.swift", "LibraryStore+Sources.swift", "LibraryRoot.swift", "ExerciseHistoryStore.swift",
-        "ExerciseHistoryRoot.swift"
+        "ExerciseHistoryRoot.swift", "CreateExerciseStore.swift", "CreateExerciseSheet.swift"
     ]
 
     static func sources() throws -> [String: String] {
@@ -127,7 +127,7 @@ nonisolated struct FeatureLibrarySourceTests {
         }
         let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
         #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == [
-            "Views/ExerciseHistoryScreen.swift", "Views/LibraryScreen.swift"
+            "Views/CreateExerciseScreen.swift", "Views/ExerciseHistoryScreen.swift", "Views/LibraryScreen.swift"
         ])
     }
 

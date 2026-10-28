@@ -7,7 +7,9 @@ import SwiftUI
 ///
 /// String-only: the model holds final strings, formatted and localised by the caller, and this view
 /// decides nothing about a workout. A tile whose `isAccented` is set has its label in orange (the
-/// prototype's "TIME"), and so has the records line; nothing on it is a control.
+/// prototype's "TIME"), and so has the records line. Nothing on it is a control unless `onRow` is given:
+/// then each exercise's row is a button, drawn as before, that hands back its place in `rows` (F12 S3: a
+/// row of the receipt opens the exercise's history).
 ///
 /// At accessibility text sizes the tiles stand one per row and a row's target stands under its name, so no
 /// word has to break; the note beside "LOGGED" is then not drawn, since the targets are no longer on the
@@ -15,8 +17,8 @@ import SwiftUI
 /// shrinks rather than wrap ("1,234,567"). Chips wrap (`WrapLayout`).
 ///
 /// VoiceOver reads each tile as one stop (its `spoken`, "TIME, 24 minutes, 22 seconds"), the records line,
-/// "LOGGED" as a heading, then each row as one stop (its `spoken`). The note beside "LOGGED" describes the
-/// picture and is hidden from VoiceOver.
+/// "LOGGED" as a heading, then each row as one stop (its `spoken`), a button when `onRow` is given. The note
+/// beside "LOGGED" describes the picture and is hidden from VoiceOver.
 public struct ReceiptLayout: View {
     /// Everything the receipt shows, in order.
     public nonisolated struct Model: Equatable, Sendable {
@@ -72,10 +74,13 @@ public struct ReceiptLayout: View {
     }
 
     private let model: Model
+    private let onRow: ((Int) -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    public init(model: Model) {
+    /// - Parameter onRow: makes each row a button, handed the row's place in `model.rows` when tapped.
+    public init(model: Model, onRow: ((Int) -> Void)? = nil) {
         self.model = model
+        self.onRow = onRow
     }
 
     public var body: some View {
@@ -136,7 +141,7 @@ public struct ReceiptLayout: View {
                 if place > 0 {
                     HairlineRule()
                 }
-                ReceiptRowView(row: row, isStacked: isStacked)
+                ReceiptRowView(row: row, isStacked: isStacked, onTap: onRow.map { onRow in { onRow(place) } })
             }
         }
         .padding(.horizontal, LedgerSpacing.l)
@@ -170,12 +175,27 @@ private struct ReceiptTile: View {
 }
 
 /// One exercise of the receipt: the name and the target on a line (the target under the name when
-/// `isStacked`), then the chips.
+/// `isStacked`), then the chips; one stop, and a button when it has `onTap`.
 private struct ReceiptRowView: View {
     let row: ReceiptLayout.Row
     let isStacked: Bool
+    let onTap: (() -> Void)?
 
     var body: some View {
+        if let onTap {
+            Button(action: onTap) {
+                content
+            }
+            .buttonStyle(LedgerPressStyle())
+            .accessibilityLabel(Text(verbatim: row.spoken))
+        } else {
+            content
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(verbatim: row.spoken))
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         let line = isStacked
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.xs))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: LedgerSpacing.m))
@@ -204,14 +224,15 @@ private struct ReceiptRowView: View {
         }
         .padding(.vertical, LedgerSpacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(verbatim: row.spoken))
+        .contentShape(Rectangle())
     }
 }
 
 /// A receipt with a record and an exercise with nothing logged, for the preview, the snapshot tests and
-/// the gallery.
+/// the gallery; with `onRow`, its rows are buttons.
 struct ReceiptLayoutGallery: View {
+    var onRow: ((Int) -> Void)?
+
     nonisolated static let model = ReceiptLayout.Model(
         tiles: [
             ReceiptLayout.Tile(label: "TIME", value: "24:22", spoken: "TIME, 24 minutes, 22 seconds", isAccented: true),
@@ -244,6 +265,6 @@ struct ReceiptLayoutGallery: View {
     )
 
     var body: some View {
-        ReceiptLayout(model: Self.model)
+        ReceiptLayout(model: Self.model, onRow: onRow)
     }
 }

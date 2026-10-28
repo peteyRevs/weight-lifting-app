@@ -230,6 +230,9 @@ extension SaveCover {
             return ended?.phase == .discarded ? nil : "closed as discarded; \(workout)"
         case .route(.minimized):
             return live != nil ? nil : "closed as minimized; \(workout)"
+        case .route(.exercise):
+            // F12 S3 (sanctioned): a receipt row closes the cover as saved, with an exercise's history to show.
+            return ended?.phase == .finished ? nil : "closed to an exercise's history; \(workout)"
         case .nothingToShow:
             return live == nil ? nil : "closed with nothing to show; \(workout)"
         case nil:

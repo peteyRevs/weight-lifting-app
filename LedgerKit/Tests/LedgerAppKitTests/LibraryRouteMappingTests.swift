@@ -1,4 +1,5 @@
 import FeatureLibrary
+import FeatureWorkout
 @testable import LedgerAppKit
 import LedgerDomain
 import LedgerTestSupport
@@ -6,6 +7,7 @@ import Testing
 
 /// F12 S1 and S2, criteria 3 and 11: where the Library's routes go (`Routes+Library.swift`). A row's history is
 /// pushed on the selected tab's stack, the one that asked for it, one screen per route; a session opens History.
+/// F12 S3, N18: a row of the workout's receipt shows the history on Today's stack (`Routes+Workout.swift`).
 @MainActor
 @Suite("Library routes")
 struct LibraryRouteMappingTests {
@@ -42,5 +44,15 @@ struct LibraryRouteMappingTests {
         #expect(router.selectedTab == .history)
         #expect(router[path: .library] == [.exercise(Self.bench)], "the history stays where the lifter left it")
         #expect(router[path: .history] == [])
+    }
+
+    @Test("N18. A receipt row's route shows Today with the exercise's history pushed; other stacks are kept")
+    func receiptRow_pushesTheHistoryOnToday() {
+        let router = AppRouter()
+        router.open(.settings, in: .library)
+        router.resolve(WorkoutRoute.exercise(Self.bench))
+        #expect(router.selectedTab == .today)
+        #expect(router[path: .today] == [.exercise(Self.bench)])
+        #expect(router[path: .library] == [.settings])
     }
 }

@@ -7,6 +7,8 @@ import LedgerDesign
 nonisolated struct ReceiptScreenModel: Equatable, Sendable {
     let header: ReceiptHeaderModel
     let page: ReceiptLayout.Model
+    /// What a tap on each of `page.rows` sends, in the same order: its exercise's history (F12 S3, N18).
+    let rowActions: [WorkoutAction]
 }
 
 /// The receipt's header: the day the workout started, its name and "Done".

@@ -68,8 +68,9 @@ extension ExerciseHistoryAdversarialTests {
         return (records, bests)
     }
 
+    /// N19 (S3): the sets that count toward bests, working and added (decision #25).
     static func topWorking(_ session: ExerciseSession) -> Weight? {
-        session.sets.filter { $0.kind == .working }.map(\.weight).max()
+        session.sets.filter { $0.isDone && ($0.kind == .working || $0.kind == .added) }.map(\.weight).max()
     }
 
     /// The first broken property of `seed`'s history, or nil.
@@ -107,7 +108,8 @@ extension ExerciseHistoryAdversarialTests {
     ) -> String? {
         let sessions = generated.sessions
         let (entry, session) = (history.log[index], sessions[index])
-        let earlier = sessions.indices.contains(index + 1) ? topWorking(sessions[index + 1]) : nil
+        // N19 (S3): the latest earlier session that has a set counting toward bests.
+        let earlier = sessions[(index + 1)...].lazy.compactMap(topWorking).first
         let isRecord = records.contains(session.workoutID)
         if (entry.tag == .record) != isRecord {
             return "entry \(index): \(entry.tag), records \(isRecord)"

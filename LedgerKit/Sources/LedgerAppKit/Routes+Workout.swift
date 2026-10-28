@@ -12,6 +12,10 @@ extension AppRouter {
         case .saved:
             // Today shows the session as logged (F10 criterion 10).
             selectedTab = .today
+        case let .exercise(id):
+            // A row of the receipt (F12 S3, N18; Pete's question 2, A): Today, as for "Done", one step deeper.
+            // A push on the stack under the cover is no presentation, so it may happen as the cover goes down.
+            open(.exercise(id), in: .today)
         }
     }
 }

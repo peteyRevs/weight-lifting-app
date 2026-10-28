@@ -11,4 +11,7 @@ public nonisolated enum WorkoutRoute: Hashable, Sendable {
     case saved(WorkoutID)
     /// The workout was discarded: nothing is live and nothing reached history.
     case discarded
+    /// A row of the saved workout's receipt (F12 S3, N18; Pete's question 2, A): the workout is in history, as for
+    /// `saved`, and the lifter asked for this exercise's history.
+    case exercise(ExerciseID)
 }

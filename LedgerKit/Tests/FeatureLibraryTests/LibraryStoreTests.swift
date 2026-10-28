@@ -121,7 +121,7 @@ struct LibraryStoreTests {
         #expect(scene.store.pendingRoute?.number == 2, "a tap after the app took the first is a new route")
     }
 
-    @Test("New exercise is recorded for S3's sheet; it routes nowhere and changes no model")
+    @Test("New exercise puts its sheet up and its close takes it down; neither routes nor changes the model")
     func newExercise_isRecorded_andRoutesNowhere() async throws {
         let scene = LibraryScene()
         let run = await scene.running()
@@ -130,6 +130,9 @@ struct LibraryStoreTests {
         scene.store.send(before.newExercise.action)
         #expect(scene.store.isNewExerciseShown)
         #expect(scene.store.pendingRoute == nil)
+        #expect(try scene.model == before)
+        scene.store.send(.newExerciseClosed)
+        #expect(!scene.store.isNewExerciseShown)
         #expect(try scene.model == before)
     }
 
@@ -160,7 +163,8 @@ struct LibraryStoreTests {
         #expect(scene.store.state == .failed, "a filter does not draw over the failed state")
     }
 
-    @Test("A stats read that fails shows the failed state")
+    /// F12 S3, N20: the stats are an observation, which ends when its read fails, as GRDB's does.
+    @Test("A stats observation whose read fails shows the failed state")
     func statsReadFails_showsFailed() async {
         let scene = LibraryScene { $0.statsQueries = UnreadableBests(base: $0.statsQueries) }
         let run = await scene.running()
@@ -186,7 +190,8 @@ nonisolated struct EndedSettings: SettingsRepository {
     }
 }
 
-/// The stats of `base`, but `bestSets` throws: a read of the Library's that fails.
+/// The stats of `base`, but the Library's can't be read: `bestSets` throws, and the Library's observation ends at
+/// once, as a database observation does when its read fails.
 nonisolated struct UnreadableBests: StatsQueries {
     struct Unreadable: Error {}
 
@@ -194,6 +199,10 @@ nonisolated struct UnreadableBests: StatsQueries {
 
     func bestSets() async throws -> [ExerciseID: BestSet] {
         throw Unreadable()
+    }
+
+    func observeLibraryStats(recentLimit _: Int) -> AsyncStream<LibraryStats> {
+        AsyncStream { $0.finish() }
     }
 
     func lastPerformance(exerciseID: ExerciseID) async throws -> LastPerformance? {

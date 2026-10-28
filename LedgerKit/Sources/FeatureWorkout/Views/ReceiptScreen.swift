@@ -15,7 +15,7 @@ struct ReceiptScreen: View {
         VStack(spacing: 0) {
             ReceiptPinnedHeader(model: model.header, send: send)
             ScrollView {
-                ReceiptPage(model: model.page)
+                ReceiptPage(model: model.page, rowActions: model.rowActions, send: send)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -36,13 +36,20 @@ struct ReceiptPinnedHeader: View {
     }
 }
 
-/// What the receipt scrolls: `LedgerDesign`'s `ReceiptLayout`, inset as the cover's page is.
+/// What the receipt scrolls: `LedgerDesign`'s `ReceiptLayout`, inset as the cover's page is. Each exercise's row
+/// sends its action (F12 S3, N18: the exercise's history).
 struct ReceiptPage: View {
     let model: ReceiptLayout.Model
+    let rowActions: [WorkoutAction]
+    let send: (WorkoutAction) -> Void
 
     var body: some View {
-        ReceiptLayout(model: model)
-            .padding(.horizontal, LedgerSpacing.screen)
-            .padding(.bottom, LedgerSpacing.xl)
+        ReceiptLayout(model: model) { place in
+            if rowActions.indices.contains(place) {
+                send(rowActions[place])
+            }
+        }
+        .padding(.horizontal, LedgerSpacing.screen)
+        .padding(.bottom, LedgerSpacing.xl)
     }
 }

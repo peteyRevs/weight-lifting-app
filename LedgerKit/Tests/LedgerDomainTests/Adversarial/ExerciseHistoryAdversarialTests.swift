@@ -249,15 +249,16 @@ extension ExerciseHistoryAdversarialTests {
         #expect(history.log.first?.tag == .heavier(Weight(grams: Weight.pounds(100).grams - 45000)))
     }
 
-    /// As built: "+Δ" compares with the session just before, so one whose predecessor has no working set (added
-    /// sets or warm-ups only) is "—" even when it is heavier than the session before that. Pinned; F12-S2-5.
-    @Test("A predecessor with no working set gives no step, even over the session before it")
-    func tags_predecessorWithoutWorkingSets_isSame() {
+    /// F12-S2-5, changed by N19 (S3 amendments): "+Δ" compares with the latest earlier session that has a set
+    /// counting toward bests, so a predecessor of warm-ups and drop sets alone no longer hides a step up. (As built
+    /// in S2 this was pinned as "—"; the orchestrator's S3 amendment changed the rule, and this pin with it.)
+    @Test("A predecessor with no set that counts is passed over: the step is from the session before it")
+    func tags_predecessorWithoutCountedSets_isPassedOver() {
         let first = Self.session(1, on: Fixtures.date(2026, 9, 1), [(200, 5, .working)])
-        let addedOnly = Self.session(2, on: Fixtures.date(2026, 9, 5), [(210, 3, .added)])
+        let warmupsOnly = Self.session(2, on: Fixtures.date(2026, 9, 5), [(210, 3, .warmup), (180, 8, .drop)])
         let third = Self.session(3, on: Fixtures.date(2026, 9, 8), [(210, 5, .working)])
-        let history = Self.make([third, addedOnly, first], now: Fixtures.now, calendar: Self.weeks(.monday))
-        #expect(history.log.map(\.tag) == [.same, .same, .same])
+        let history = Self.make([third, warmupsOnly, first], now: Fixtures.now, calendar: Self.weeks(.monday))
+        #expect(history.log.map(\.tag) == [.heavier(.pounds(10)), .same, .same])
     }
 
     @Test("Of two sessions that started together, the later in the list is the one before")

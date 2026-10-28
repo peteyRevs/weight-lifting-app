@@ -19,8 +19,8 @@ nonisolated struct LibraryPendingRoute: Hashable, Sendable {
 /// lag behind a store that waited. A keystroke filters rows written when the sources last changed
 /// (`LibraryPresentation.rows`); it formats none.
 ///
-/// **Work** runs from `LibraryRoot`'s task: `run()` follows the sources (`+Sources`). A source that ends, or a
-/// read that fails, is logged and shows the failed state; the next change or the next run reads again.
+/// **Work** runs from `LibraryRoot`'s task: `run()` follows the sources (`+Sources`). A source that ends (an
+/// observation whose read failed among them) is logged and shows the failed state; the next run follows again.
 ///
 /// **Once loaded it is never loading again.** A new run (the tab came back, the app became active) keeps the
 /// model on screen until its own first one is ready, so the field and the chips never flash away.
@@ -41,8 +41,7 @@ final class LibraryStore {
     private(set) var filter = LibraryFilter()
     /// The route the root hands the app next; nil once the app's handler has returned.
     private(set) var pendingRoute: LibraryPendingRoute?
-    /// "New exercise" was tapped. F12 S3 presents its sheet from this flag and sets it back when the sheet goes
-    /// down; until then nothing reads it, and the button opens nothing.
+    /// "New exercise" was tapped and its sheet is up: `LibraryRoot` presents `CreateExerciseSheet` while it holds.
     private(set) var isNewExerciseShown = false
 
     /// What the sources last said in this run (`+Sources`), and the rows written from them.
@@ -52,7 +51,6 @@ final class LibraryStore {
 
     @ObservationIgnored @Dependency(\.exerciseRepository) var exercises
     @ObservationIgnored @Dependency(\.settingsRepository) var settings
-    @ObservationIgnored @Dependency(\.workoutRepository) var workouts
     @ObservationIgnored @Dependency(\.statsQueries) var stats
     @ObservationIgnored @Dependency(\.locale) var locale
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
@@ -76,6 +74,9 @@ final class LibraryStore {
             filter = LibraryFilter()
         case .newExercise:
             isNewExerciseShown = true
+            return
+        case .newExerciseClosed:
+            isNewExerciseShown = false
             return
         case let .route(route):
             emit(route)

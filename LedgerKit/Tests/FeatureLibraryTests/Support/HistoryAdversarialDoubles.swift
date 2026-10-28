@@ -120,6 +120,10 @@ nonisolated struct GatedRecords: StatsQueries {
     func observeExerciseSessions(exerciseID: ExerciseID) -> AsyncStream<[ExerciseSession]> {
         base.observeExerciseSessions(exerciseID: exerciseID)
     }
+
+    func observeLibraryStats(recentLimit: Int) -> AsyncStream<LibraryStats> {
+        base.observeLibraryStats(recentLimit: recentLimit)
+    }
 }
 
 /// Exercises whose live list the test sends: the repository has no delete (F29), so this is how one is taken away
