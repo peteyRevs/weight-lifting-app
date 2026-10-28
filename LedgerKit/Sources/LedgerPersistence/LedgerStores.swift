@@ -8,6 +8,8 @@ public struct LedgerStores: Sendable {
     public let queue: DatabaseQueue
     /// This install's device (`LocalDevice`).
     public let deviceID: DeviceID
+    /// Opening inserted this device's row: the install is new (F14-S1-5).
+    public let isNewInstall: Bool
     public let exercises: GRDBExerciseRepository
     public let programs: GRDBProgramRepository
     public let workouts: GRDBWorkoutRepository
@@ -16,9 +18,15 @@ public struct LedgerStores: Sendable {
     public let stats: GRDBStatsQueries
 
     /// The stores over `queue`, each given `now` (the injected date).
-    public init(_ queue: DatabaseQueue, deviceID: DeviceID, now: @escaping @Sendable () -> Date) {
+    public init(
+        _ queue: DatabaseQueue,
+        deviceID: DeviceID,
+        isNewInstall: Bool = false,
+        now: @escaping @Sendable () -> Date
+    ) {
         self.queue = queue
         self.deviceID = deviceID
+        self.isNewInstall = isNewInstall
         exercises = GRDBExerciseRepository(queue, now: now)
         programs = GRDBProgramRepository(queue, now: now)
         workouts = GRDBWorkoutRepository(queue, now: now)
@@ -44,8 +52,8 @@ public struct LedgerStores: Sendable {
         newID: @Sendable () -> UUID
     ) throws -> LedgerStores {
         let database = try LedgerDatabase.open(at: url)
-        let device = try LocalDevice.id(in: database, kind: kind, now: now(), newID: newID)
-        return LedgerStores(database, deviceID: device, now: now)
+        let device = try LocalDevice.open(in: database, kind: kind, now: now(), newID: newID)
+        return LedgerStores(database, deviceID: device.id, isNewInstall: device.isNew, now: now)
     }
 
     /// Where an app keeps its database: `Application Support/Database/ledger.sqlite`, a directory of its own for

@@ -179,7 +179,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
 - **8:** every toggle reads its label, its subtitle and on or off (`LedgerToggleStyle` is already SwiftUI's switch to VoiceOver).
 
 **New criteria**
-- **N1. Saving:** each change is one `save` of the whole `Settings`, made from the latest value the store holds. Saves run one at a time, and a change made while one runs is saved next, folded with any others (the last value wins). The control shows the lifter's value at once and doesn't flicker back when `observe()` echoes an earlier save. A failed save shows "Couldn't save that change." and reverts the control to the stored value.
+- **N1. Saving:** each change is one `save` of the whole `Settings`, made from the latest value the store holds. Saves run one at a time, and a change made while one runs is saved next, folded with any others (the last value wins). The control shows the lifter's value at once and doesn't flicker back when `observe()` echoes an earlier save. A failed save shows "Couldn't save that change." and reverts the control to the stored value. (Ruled 2026-10-28, F14-S1-1: when a save fails, the whole screen reverts to the last committed value, the value the store knows was written, and the changes queued behind the failed save are dropped with it.)
 - **N2. Unreadable settings** (F05 input): when `observe()` ends without a value, or `load()` throws, the screen draws `Settings.default`. Nothing is saved until the lifter changes something. That first change saves the whole value (overwriting the unreadable row, as F05 allows), and the store then subscribes again.
 - **N3. Regional defaults** (Q2 = A):
   - `Settings.regional(locale:calendar:)` gives:

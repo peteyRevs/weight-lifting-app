@@ -96,9 +96,7 @@ struct SettingsReachAdversarialTests {
                 flickers += 1
             }
         }
-        withKnownIssue("F14-S1-3: a late echo of an earlier save draws over the lifter's value", isIntermittent: true) {
-            #expect(flickers == 0, "seed \(seed): the screen left the lifter's value \(flickers) times")
-        }
+        #expect(flickers == 0, "seed \(seed): the screen left the lifter's value \(flickers) times")
         await until { store.pending == nil }
         let row = try await repository.load()
         let rowIsLifters = row == lifter

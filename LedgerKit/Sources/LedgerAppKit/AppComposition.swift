@@ -245,8 +245,9 @@ extension AppComposition {
         var failedFinishes: Int?
         /// Whether a UI test asked for the seed program (`UITestProgram`).
         var seedsUITestProgram = false
-        /// What a new install's settings start from (decision #15): the region's, in the app. Nil seeds nothing,
-        /// so a test's composition keeps `Settings.default` unless it asks for a region.
+        /// What a new install's settings start from (decision #15): the region's in the app, a US iPhone's under a UI
+        /// test (`UITestRegion`). Nil seeds nothing, so a test's composition keeps `Settings.default` unless it asks
+        /// for a region.
         var regionalSettings: LedgerDomain.Settings?
 
         static func live(arguments: [String]) -> Environment {
@@ -258,8 +259,9 @@ extension AppComposition {
                 let activator = CompanionSessionActivator()
             #endif
             let offset = UITestClock.liveOffset(arguments: arguments)
+            let isUITest = arguments.contains("-LEDGER_UITEST")
             return Environment(
-                databaseURL: arguments.contains("-LEDGER_UITEST")
+                databaseURL: isUITest
                     ? URL.temporaryDirectory.appending(path: "LedgerUITest-\(UUID().uuidString)/ledger.sqlite")
                     : LedgerStores.defaultURL,
                 now: { Date().addingTimeInterval(offset ?? 0) },
@@ -281,7 +283,7 @@ extension AppComposition {
                 clockOffset: offset,
                 failedFinishes: UITestSaveFailures.liveCount(arguments: arguments),
                 seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments),
-                regionalSettings: .regional(locale: .autoupdatingCurrent, calendar: .autoupdatingCurrent)
+                regionalSettings: UITestRegion.liveSettings(isUITest: isUITest)
             )
         }
     }

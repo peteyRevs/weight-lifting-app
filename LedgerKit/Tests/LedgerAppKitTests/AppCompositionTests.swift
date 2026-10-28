@@ -129,6 +129,15 @@ struct AppCompositionTests {
         #expect(Harness().composition().environment.regionalSettings == nil)
     }
 
+    @Test("F14-S1-6. A UI test's launch seeds a US iPhone's settings, pounds and weeks from Sunday, in any region")
+    func uiTestEnvironment_seedsAUSiPhonesSettings() {
+        let uiTest = AppComposition.Environment.live(arguments: ["Ledger", "-LEDGER_UITEST", "1"])
+        var expected = Settings.default
+        expected.weekStart = .sunday
+        #expect(uiTest.regionalSettings == expected)
+        #expect(UITestRegion.settings == expected)
+    }
+
     @Test("Boots in the app and in a UI-tested app (-LEDGER_UITEST), never in a process hosting unit tests (S2-N1)")
     func boots_unlessHostingUnitTests() {
         #expect(AppComposition.boots(arguments: ["Ledger"], isTesting: false))

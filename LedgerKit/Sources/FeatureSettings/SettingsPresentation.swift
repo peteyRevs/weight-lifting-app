@@ -137,8 +137,8 @@ nonisolated enum SettingsPresentation {
         return [head, tail].compactMap(\.self).joined(separator: separator)
     }
 
-    /// `text` when it holds more than spaces.
+    /// `text` without the spaces and line breaks around it, when anything is left (F14-S1-7).
     private static func present(_ text: String?) -> String? {
-        text.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        text.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
     }
 }

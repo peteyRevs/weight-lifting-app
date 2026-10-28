@@ -16,7 +16,7 @@ struct SettingsSaveQueueAdversarialTests {
         return settings
     }
 
-    // MARK: Pins (pass today)
+    // MARK: Pins
 
     @Test("Pin. A failed save after a successful one leaves the row at the successful one, and nothing else is saved")
     func failAfterSuccess_rowKeepsTheSuccess() async {
@@ -63,11 +63,11 @@ struct SettingsSaveQueueAdversarialTests {
 
     // MARK: Findings
 
-    /// F14-S1-1. A change made while a save runs is folded into the next save; when the running save fails, the
-    /// folded change is dropped with it, though it was never tried, and the screen says only "Couldn't save that
-    /// change.".
-    @Test("F14-S1-1. A change made during a save that then fails is still tried")
-    func changeDuringAFailingSave_isTried() async {
+    /// F14-S1-1 (ruled, 2026-10-28). A change made while a save runs is folded into the next save; when the running
+    /// save fails, the whole screen goes back to what is committed and the changes queued behind it are dropped with
+    /// it, untried, under "Couldn't save that change." (N1).
+    @Test("F14-S1-1. A save that fails drops the change made during it and puts back what is committed")
+    func changeDuringAFailingSave_isDroppedWithIt() async {
         let scene = ScriptedSettingsScene()
         let task = await scene.running()
         defer { task.cancel() }
@@ -77,18 +77,19 @@ struct SettingsSaveQueueAdversarialTests {
         scene.repository.resolveNext(commit: false)
         await scene.until("the failure is drawn") { scene.store.model?.problem != nil }
         // Let any save that is coming start.
-        await scene.until("the store settles") { scene.store.stored == scene.repository.row }
         for _ in 0 ..< 1000 {
             await Task.yield()
         }
-        withKnownIssue("F14-S1-1: the Plate math change, made while the units' save ran, is dropped untried") {
-            #expect(scene.repository.saves.count == 2)
-            #expect(scene.repository.saves.last?.plateMathEnabled == false)
-        }
-        scene.repository.resolveNext(commit: true)
+        #expect(scene.repository.saves.count == 1, "the queued change is not tried")
+        #expect(scene.repository.heldValues.isEmpty)
+        let shownIsCommitted = scene.store.shown == Fixtures.settingsLb
+        #expect(shownIsCommitted, "units and Plate math both show what is committed")
+        #expect(scene.store.pending == nil)
+        #expect(scene.store.model?.problem == "Couldn't save that change.")
     }
 
-    /// F14-S1-2. A failed save puts back `stored`, the observation's last value. When an earlier save of the same
+    /// F14-S1-2 (fixed in S1a fix round 1; the test describes the defect it pins against). A failed save puts back
+    /// `stored`, the observation's last value. When an earlier save of the same
     /// run has committed and its echo has not arrived yet, `stored` is older than the row: the screen shows a
     /// value that is not saved, and the lifter's next change saves it, undoing the committed change.
     @Test("F14-S1-2. After a failure the screen shows the row, not an older echo, and the next change keeps the row")
@@ -104,14 +105,10 @@ struct SettingsSaveQueueAdversarialTests {
         scene.repository.resolveNext(commit: false)
         await scene.until("the failure is drawn") { scene.store.model?.problem != nil }
         #expect(scene.repository.row.units == .kg)
-        withKnownIssue("F14-S1-2: the failure draws the observation's older lb, though kg is saved") {
-            #expect(scene.store.shown?.units == .kg)
-        }
+        #expect(scene.store.shown?.units == .kg)
         scene.store.send(.setPlateMath(false))
         await scene.untilHeld()
-        withKnownIssue("F14-S1-2: the next change saves lb over the committed kg") {
-            #expect(scene.repository.heldValues.first?.units == .kg)
-        }
+        #expect(scene.repository.heldValues.first?.units == .kg)
         scene.repository.resolveNext(commit: true)
         while scene.repository.echoesWaiting > 0 {
             scene.repository.deliverNextEcho()
@@ -119,7 +116,8 @@ struct SettingsSaveQueueAdversarialTests {
         }
     }
 
-    /// F14-S1-3. A save that leaves `pending` equal to `stored` clears `pending` at once, because no echo will
+    /// F14-S1-3 (fixed in S1a fix round 1; the test describes the defect it pins against). A save that leaves `pending`
+    /// equal to `stored` clears `pending` at once, because no echo will
     /// come for it. But the echo of an EARLIER save of the run may still be on its way: it then arrives with
     /// nothing pending and is drawn, so the control flickers back to a value the lifter already changed (N1).
     @Test("F14-S1-3. A late echo of an earlier save never draws over the lifter's last value")
@@ -138,15 +136,14 @@ struct SettingsSaveQueueAdversarialTests {
         #expect(scene.store.model?.units.options[0].isSelected == true, "LB, the lifter's last tap")
         scene.repository.deliverNextEcho() // kg's late echo
         await scene.until("the echo is read") { scene.store.stored?.units == .kg }
-        withKnownIssue("F14-S1-3: the control flickers back to KG until lb's echo arrives") {
-            #expect(scene.store.model?.units.options[0].isSelected == true)
-        }
+        #expect(scene.store.model?.units.options[0].isSelected == true)
         scene.repository.deliverNextEcho()
         await scene.until("lb's echo is read") { scene.store.stored?.units == .lb }
         #expect(scene.store.model?.units.options[0].isSelected == true)
     }
 
-    /// F14-S1-4. The root's task restarts on the same `@State` store (a tab switched away and back). The first
+    /// F14-S1-4 (fixed in S1a fix round 1; the test describes the defect it pins against). The root's task restarts on
+    /// the same `@State` store (a tab switched away and back). The first
     /// run, cancelled mid-save, cannot end until that save returns; the second run starts a save of its own
     /// beside it (R7: one at a time), and when the first ends it sets `saveMark` and `followMark` to nil, which
     /// are now the second run's. Every later change is drawn and never saved while the screen stays up.
@@ -159,13 +156,11 @@ struct SettingsSaveQueueAdversarialTests {
         first.cancel()
         let second = Task { await scene.store.run() }
         defer { second.cancel() }
-        // The second run's start: it finds the change pending. Bounded: with the defect fixed no second save comes.
+        // The second run's start: it finds the change pending. Bounded: no second save comes while the first runs.
         for _ in 0 ..< 200_000 where scene.repository.heldValues.count < 2 {
             await Task.yield()
         }
-        withKnownIssue("F14-S1-4: the second run saves beside the first's held save") {
-            #expect(scene.repository.mostAtOnce == 1)
-        }
+        #expect(scene.repository.mostAtOnce == 1)
         while !scene.repository.heldValues.isEmpty {
             scene.repository.resolveNext(commit: true)
             await Task.yield()
@@ -177,10 +172,8 @@ struct SettingsSaveQueueAdversarialTests {
         for _ in 0 ..< 200_000 where scene.repository.saves.count == before {
             await Task.yield()
         }
-        withKnownIssue("F14-S1-4: the first run's end cleared the second run's marks; Friday is never saved") {
-            #expect(scene.store.saveMark != nil)
-            #expect(scene.repository.saves.count > before)
-        }
+        #expect(scene.store.saveMark != nil)
+        #expect(scene.repository.saves.count > before)
         scene.repository.resolveNext(commit: true)
     }
 }

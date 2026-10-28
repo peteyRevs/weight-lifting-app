@@ -49,4 +49,35 @@ extension DatabaseLaunchTests {
         #expect(subject.events == [.began(.openDatabase), .began(.seedCatalog), .began(.loadSettings)])
         #expect(subject.launch.settings == .default)
     }
+
+    @Test("F14-S1-5. A database whose device row is there and whose settings row is not is not a new install: no seed")
+    func deviceRowWithoutSettings_isNotSeeded() async throws {
+        let subject = Subject(regionalSettings: Self.kilograms)
+        defer { subject.remove() }
+        try subject.arrange { database in
+            try database.execute(
+                sql: "INSERT INTO device (id, kind, name, created_at) VALUES (?, 'phone', 'iPhone', 'then')",
+                arguments: [UUID().uuidString]
+            )
+        }
+        subject.launch.open()
+        #expect(subject.launch.stores?.isNewInstall == false)
+        await subject.launch.resume(isForeground: true)
+        #expect(subject.launch.settings == .default)
+        let rows = try await #require(subject.launch.stores).queue.read {
+            try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM settings")
+        }
+        #expect(rows == 0, "nothing was written: the install keeps what it ran on")
+    }
+
+    @Test("F14-S1-5. Only the launch that inserts this device's row is a new install's")
+    func onlyTheFirstLaunch_isANewInstall() {
+        let subject = Subject(regionalSettings: Self.kilograms)
+        defer { subject.remove() }
+        subject.launch.open()
+        #expect(subject.launch.stores?.isNewInstall == true)
+        let next = Subject(regionalSettings: Self.kilograms, in: subject.directory)
+        next.launch.open()
+        #expect(next.launch.stores?.isNewInstall == false)
+    }
 }

@@ -83,9 +83,7 @@ struct SettingsSeedAdversarialTests {
         let after = DatabaseLaunchTests.Subject(regionalSettings: Self.kilograms, in: before.directory)
         after.launch.open()
         await after.launch.resume(isForeground: true)
-        withKnownIssue("F14-S1-5: the update's first launch seeds the region's settings over an onboarded install") {
-            #expect(after.launch.settings.units == .lb)
-            #expect(after.launch.settings.weekStart == .monday)
-        }
+        #expect(after.launch.settings.units == .lb)
+        #expect(after.launch.settings.weekStart == .monday)
     }
 }

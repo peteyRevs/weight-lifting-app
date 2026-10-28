@@ -30,17 +30,28 @@ public enum LocalDevice {
         now: Date,
         newID: @Sendable () -> UUID
     ) throws -> DeviceID {
+        try open(in: queue, kind: kind, now: now, newID: newID).id
+    }
+
+    /// `id(in:kind:now:newID:)`, and whether this call inserted the row: true only on a new install's first launch
+    /// (F14-S1-5, ruled: the region's settings are seeded then, and never over an install made before F14).
+    public static func open(
+        in queue: DatabaseQueue,
+        kind: Kind,
+        now: Date,
+        newID: @Sendable () -> UUID
+    ) throws -> (id: DeviceID, isNew: Bool) {
         try queue.write { database in
             let sql = "SELECT id FROM device WHERE kind = ? ORDER BY created_at, id LIMIT 1"
             if let stored = try String.fetchOne(database, sql: sql, arguments: [kind.rawValue]) {
-                return try ColumnCodec.identifier(stored)
+                return try (ColumnCodec.identifier(stored), false)
             }
             let id = DeviceID(newID())
             try database.execute(
                 sql: "INSERT INTO device (id, kind, name, created_at) VALUES (?, ?, ?, ?)",
                 arguments: [ColumnCodec.text(id), kind.rawValue, kind.name, ColumnCodec.timestamp(now)]
             )
-            return id
+            return (id, true)
         }
     }
 }

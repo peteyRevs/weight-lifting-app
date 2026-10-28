@@ -65,8 +65,6 @@ struct SettingsPresentationAdversarialTests {
     @Test("F14-S1-7. About values are drawn without the spaces around them")
     func about_trimsItsValues() {
         let line = Self.model(about: AppAbout(name: "App ", version: " 1.2.3", build: "45\n")).about
-        withKnownIssue("F14-S1-7: the About line keeps a value's surrounding spaces") {
-            #expect(line == "App 1.2.3 · build 45")
-        }
+        #expect(line == "App 1.2.3 · build 45")
     }
 }

@@ -17,12 +17,17 @@ nonisolated struct SettingsPendingRoute: Hashable, Sendable {
 ///
 /// **Intents are synchronous and decide nothing.** A change is applied to the settings on screen and the model is
 /// made again before `send` returns, so a control shows the lifter's value at once (N1). The change waits in
-/// `pending` until the store's observation gives it back: an earlier save's value that the observation gives in
-/// the meantime is kept as the stored one, and never drawn over the lifter's.
+/// `pending` until it is written.
 ///
-/// **Saves** run from `SettingsRoot`'s task (`+Sources`), one at a time, each of the whole `Settings`. A change
-/// made while one runs is saved next, folded with any others: the last value wins. A save that fails shows
-/// "Couldn't save that change." and puts the stored settings back on screen.
+/// **What is committed** is the last value the store knows is in the row: the newest of its own saves whose echo
+/// the observation has not given back yet (`unechoed`, oldest first), else the observation's last value (`stored`).
+/// An echo of an earlier save only drops that save, and those before it, from `unechoed`; while a later one is still
+/// there, the screen keeps showing the later one, so a late echo never draws over a newer value (F14-S1-3).
+///
+/// **Saves** run one at a time, whichever run of `SettingsRoot`'s task starts them (`+Sources`; F14-S1-4), each of
+/// the whole `Settings`. A change made while one runs is saved next, folded with any others: the last value wins. A
+/// save that fails shows "Couldn't save that change." and puts the whole screen back to what is committed: the
+/// changes queued behind it are dropped with it (F14-S1-1, ruled; F14-S1-2).
 ///
 /// **Unreadable settings** (N2; the F05 input): when the observation ends, the screen draws what it last had, or
 /// `Settings.default`, and nothing is saved until the lifter changes something. That change saves the whole value,
@@ -42,16 +47,20 @@ final class SettingsStore {
 
     /// What the settings' observation last gave; `Settings.default` once it ended without a value.
     var stored: Settings?
-    /// The lifter's changes not yet given back by the observation: being saved, waiting to be, or saved.
+    /// The lifter's latest change while it is not yet written: being saved, or waiting to be.
     var pending: Settings?
-    /// The value the last save in this run wrote, until the observation gives it back.
-    @ObservationIgnored var written: Settings?
+    /// The values this store wrote that the observation has not given back yet, oldest first.
+    @ObservationIgnored var unechoed: [Settings] = []
     @ObservationIgnored var saveFailed = false
     /// The observation ended: the settings are followed again after the next save.
     var isUnreadable = false
-    /// Marks the run's saver and follower, while a run is on (`+Sources`).
+    /// A save is running, in whichever run started it: no other starts until it returns.
+    @ObservationIgnored var isSaving = false
+    /// Marks the current run's saver and follower (`+Sources`), and that run's number: a run that ends clears the
+    /// marks only while they are still its own.
     @ObservationIgnored var saveMark: AsyncStream<Void>.Continuation?
     @ObservationIgnored var followMark: AsyncStream<Void>.Continuation?
+    @ObservationIgnored var runNumber = 0
     @ObservationIgnored private var routeNumber = 0
     @ObservationIgnored let about: AppAbout
 
@@ -69,9 +78,14 @@ final class SettingsStore {
         self.about = about
     }
 
-    /// The settings on screen: the lifter's latest change, else the stored ones.
+    /// The last value the store knows is in the row: its newest save not yet echoed, else the observation's last.
+    var committed: Settings? {
+        unechoed.last ?? stored
+    }
+
+    /// The settings on screen: the lifter's latest change, else what is committed.
     var shown: Settings? {
-        pending ?? stored
+        pending ?? committed
     }
 
     // MARK: Intents
