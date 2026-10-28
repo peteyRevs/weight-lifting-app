@@ -216,9 +216,11 @@ extension DatabaseLaunchTests {
         private(set) var opened: [DeviceID] = []
         /// Called once, when the seed step begins.
         var whenSeedBegins: (() -> Void)?
+        private let regionalSettings: Settings?
         private(set) lazy var launch = DatabaseLaunch(
             at: url,
             kind: .phone,
+            regionalSettings: regionalSettings,
             now: { DatabaseLaunchTests.now },
             newID: { DatabaseLaunchTests.deviceUUID },
             logger: Logger(.disabled),
@@ -232,8 +234,10 @@ extension DatabaseLaunchTests {
             onOpen: { [weak self] in self?.opened.append($0.deviceID) }
         )
 
-        init(_ name: String = #function) {
-            directory = TemporaryDirectory("DatabaseLaunch\(name)")
+        /// `regionalSettings` are the phone's (F14); `directory` is given for a second launch of one file.
+        init(_ name: String = #function, regionalSettings: Settings? = nil, in directory: TemporaryDirectory? = nil) {
+            self.directory = directory ?? TemporaryDirectory("DatabaseLaunch\(name)")
+            self.regionalSettings = regionalSettings
         }
 
         var url: URL {

@@ -26,6 +26,7 @@ public final class AppComposition {
     private(set) lazy var database = DatabaseLaunch(
         at: environment.databaseURL,
         kind: .phone,
+        regionalSettings: environment.regionalSettings,
         now: environment.now,
         newID: environment.newID,
         logger: environment.logger.log,
@@ -244,6 +245,9 @@ extension AppComposition {
         var failedFinishes: Int?
         /// Whether a UI test asked for the seed program (`UITestProgram`).
         var seedsUITestProgram = false
+        /// What a new install's settings start from (decision #15): the region's, in the app. Nil seeds nothing,
+        /// so a test's composition keeps `Settings.default` unless it asks for a region.
+        var regionalSettings: LedgerDomain.Settings?
 
         static func live(arguments: [String]) -> Environment {
             let launchLogger = LedgerLogger(category: "launch")
@@ -276,7 +280,8 @@ extension AppComposition {
                 processStart: ProcessStart.date()?.addingTimeInterval(offset ?? 0),
                 clockOffset: offset,
                 failedFinishes: UITestSaveFailures.liveCount(arguments: arguments),
-                seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments)
+                seedsUITestProgram: UITestProgram.liveSeeds(arguments: arguments),
+                regionalSettings: .regional(locale: .autoupdatingCurrent, calendar: .autoupdatingCurrent)
             )
         }
     }

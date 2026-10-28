@@ -39,6 +39,22 @@ public struct GRDBSettingsRepository: SettingsRepository {
         }
     }
 
+    /// Inserts the one row when there is none (`ON CONFLICT DO NOTHING`): a stored row, readable or not, keeps
+    /// its payload, its version and its `updated_at`.
+    public func seedIfAbsent(_ settings: Settings) async throws {
+        let payload = try SettingsCodec.encode(settings)
+        let updatedAt = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            try database.execute(
+                sql: """
+                INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                arguments: [Self.rowID, SettingsCodec.version, payload, updatedAt]
+            )
+        }
+    }
+
     /// The settings now, then after every save that changes them. The stream ends, with the error logged,
     /// when the row cannot be read (`load()` says why); F07 and F14 then fall back to the defaults in
     /// memory without saving over the row.

@@ -74,7 +74,8 @@ struct UnimplementedStubTests {
         let stub = SettingsRepositoryKey.liveValue
         await Self.expectUnimplemented("settingsRepository", [
             { _ = try await stub.load() },
-            { try await stub.save(.default) }
+            { try await stub.save(.default) },
+            { try await stub.seedIfAbsent(.default) }
         ])
         #expect(await Self.isEmpty(stub.observe()))
     }

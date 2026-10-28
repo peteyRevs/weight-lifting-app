@@ -121,6 +121,14 @@ struct AppCompositionTests {
         #expect(first.databaseURL.lastPathComponent == "ledger.sqlite")
     }
 
+    @Test("F14 N3. The live environment hands the launch the region's settings; a test's seeds none")
+    func liveEnvironment_seedsTheRegionsSettings() {
+        let live = AppComposition.Environment.live(arguments: ["Ledger"])
+        let region = Settings.regional(locale: .autoupdatingCurrent, calendar: .autoupdatingCurrent)
+        #expect(live.regionalSettings == region)
+        #expect(Harness().composition().environment.regionalSettings == nil)
+    }
+
     @Test("Boots in the app and in a UI-tested app (-LEDGER_UITEST), never in a process hosting unit tests (S2-N1)")
     func boots_unlessHostingUnitTests() {
         #expect(AppComposition.boots(arguments: ["Ledger"], isTesting: false))

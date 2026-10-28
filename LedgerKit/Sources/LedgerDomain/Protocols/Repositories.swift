@@ -148,6 +148,10 @@ public protocol SettingsRepository: Sendable {
     func load() async throws -> Settings
     func save(_ settings: Settings) async throws
     func observe() -> AsyncStream<Settings>
+    /// Saves `settings` only when none are stored (F14, decision #15: the region's defaults on first launch). A
+    /// stored row is never touched, even one this app cannot read: a later version, or the lifter, may still
+    /// read it.
+    func seedIfAbsent(_ settings: Settings) async throws
 }
 
 /// History aggregates (spec §6.1 "History", §7.7; decisions #3, #4, #15), over the workouts a

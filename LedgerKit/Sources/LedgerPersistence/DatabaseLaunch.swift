@@ -45,6 +45,7 @@ public final class DatabaseLaunch {
 
     @ObservationIgnored private let databaseURL: URL
     @ObservationIgnored private let kind: LocalDevice.Kind
+    @ObservationIgnored private let regionalSettings: Settings?
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let newID: @Sendable () -> UUID
     @ObservationIgnored private let logger: Logger
@@ -57,12 +58,16 @@ public final class DatabaseLaunch {
     @ObservationIgnored private var ended: Set<LaunchStep> = []
 
     /// - Parameters:
+    ///   - regionalSettings: what the settings step saves before it loads, when no settings are stored
+    ///     (`Settings.regional(locale:calendar:)`, decision #15): the iPhone's. The watch passes nil, and seeds
+    ///     nothing: its settings come from the phone (F19).
     ///   - record: receives each `LaunchEvent` as it happens.
     ///   - onOpen: called once the database is open, before `state` becomes `.ready`: the composition root binds
     ///     the stores to the dependency keys there.
     public init(
         at databaseURL: URL,
         kind: LocalDevice.Kind,
+        regionalSettings: Settings? = nil,
         now: @escaping @Sendable () -> Date,
         newID: @escaping @Sendable () -> UUID,
         logger: Logger,
@@ -71,6 +76,7 @@ public final class DatabaseLaunch {
     ) {
         self.databaseURL = databaseURL
         self.kind = kind
+        self.regionalSettings = regionalSettings
         self.now = now
         self.newID = newID
         self.logger = logger
@@ -171,8 +177,17 @@ public final class DatabaseLaunch {
         }
     }
 
+    /// Seeds the regional settings when none are stored, then loads. A seed that fails is logged and the step goes
+    /// on: what `load()` gives is what it would have given without the seed.
     private func loadSettings(_ stores: LedgerStores) async {
         record(.began(.loadSettings))
+        if let regionalSettings {
+            do {
+                try await stores.settings.seedIfAbsent(regionalSettings)
+            } catch {
+                logger.error("The regional settings were not seeded: \(String(describing: error))")
+            }
+        }
         do {
             settings = try await stores.settings.load()
         } catch {
