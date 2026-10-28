@@ -82,7 +82,7 @@ nonisolated enum HistoryPresentation {
         }
 
         /// "58 min", spoken "58 minutes": whole minutes, rounded down. A workout under a minute (a quick save, or one
-        /// whose end a clock moved before its start) reads "<1 min", spoken "Under a minute", never "0 min"
+        /// whose end a clock moved before its start) reads "<1 min", spoken "under a minute", never "0 min"
         /// (F13-S1-2).
         mutating func length(_ elapsed: Duration) -> (drawn: String, spoken: String) {
             let count = Int(clamping: elapsed.components.seconds / 60)

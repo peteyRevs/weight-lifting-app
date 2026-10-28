@@ -16,6 +16,10 @@ public extension WorkoutRepositoryContract {
         Clause(
             "observeHistoryEntries follows a finish, an edit and a delete, the oldest too, and no log append",
             observeHistoryEntries
+        ),
+        Clause(
+            "observeHistoryEntries emits nothing for a write to a workout that leaves every entry as it was",
+            observeHistoryEntriesIgnoresEqualWrites
         )
     ]
 }
@@ -114,6 +118,37 @@ extension WorkoutRepositoryContract {
             issues.append(ContractCheck.expect(value.map { _ in "a value" }, nil, "a value after a log append"))
         }
         return issues.lazy.compactMap(\.self).first
+    }
+
+    /// N2's "and for no other write" (review R1-1): writes that change a workout but no entry emit nothing within
+    /// `StatsQueriesContract.quiet`. The workout is stored again with other units, which rewrites its `workout` row
+    /// (an observation of that table wakes) though no field of its entry changes; then a set that is not done gets
+    /// another weight, which counts toward no total. A later real change still emits, so the stream is alive.
+    static func observeHistoryEntriesIgnoresEqualWrites(_ stores: HistoryStores) async throws -> String? {
+        let workout = Seeders.workout(number: 1, endedAt: EventBuilders.start, [
+            Seeders.ExerciseLog(bench, [.init(185, 5), .init(185, 5, done: false)])
+        ])
+        try await stores.materialize(workout)
+        let values = StreamArrivals(stores.workouts.observeHistoryEntries())
+        defer { values.cancel() }
+        let first = await values.next()
+        var inKilograms = workout
+        inKilograms.units = .kg
+        try await stores.materialize(inKilograms)
+        let afterUnits = await values.next(within: StatsQueriesContract.quiet)
+        var sets = workout.exercises[0].sets
+        sets[1].weight = .pounds(205)
+        try await stores.workouts.updateSets(workoutExerciseID: workout.exercises[0].id, sets: sets)
+        let afterUndone = await values.next(within: StatsQueriesContract.quiet)
+        try await stores.workouts.delete(id: workout.id)
+        let afterDelete = await values.next()
+        let read = try await stores.workouts.historyEntries()
+        return ContractCheck.first(
+            ContractCheck.expect(first?.count, 1, "the first value"),
+            ContractCheck.expect(afterUnits.map { _ in "a value" }, nil, "a value after a write in other units"),
+            ContractCheck.expect(afterUndone.map { _ in "a value" }, nil, "a value after an undone set's weight"),
+            ContractCheck.expect(afterDelete, read, "the value after a delete")
+        )
     }
 
     /// Each of `workouts`' entries as `workout(id:)` reads it, counting the records the stats list for it.

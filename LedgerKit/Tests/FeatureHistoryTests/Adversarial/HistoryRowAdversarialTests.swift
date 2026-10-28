@@ -72,7 +72,7 @@ struct HistoryRowAdversarialTests {
 
     /// F13-S1-2: a workout shorter than a minute (a quick test save, the nightly UI test's own sample workout, or one
     /// whose end a clock moved before its start) read "0 min", "0 minutes". Fixed in fix round 1 (orchestrator's
-    /// ruling): it reads "<1 min", spoken "Under a minute"; a minute reads "1 min" again.
+    /// ruling): it reads "<1 min", spoken "under a minute"; a minute reads "1 min" again.
     @Test("F13-S1-2. A workout of 59 s, or of 0 s, does not read \"0 min\"")
     func underAMinute_doesNotReadZero() throws {
         let short = try Self.row(Self.entry(1, seconds: 59))
@@ -82,7 +82,7 @@ struct HistoryRowAdversarialTests {
         #expect(!none.meta.contains(" 0 min"), "\(none.meta)")
         #expect(!short.spokenValue.contains("0 minutes"), "\(short.spokenValue)")
         #expect(short.meta == "Wed · <1 min · 24,180 lb")
-        #expect(none.spokenValue == "Wednesday, Under a minute, 24,180 pounds, 1 PR")
+        #expect(none.spokenValue == "Wednesday, under a minute, 24,180 pounds, 1 PR")
         #expect(minute.meta == "Wed · 1 min · 24,180 lb")
     }
 

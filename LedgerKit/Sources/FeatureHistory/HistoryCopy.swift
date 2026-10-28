@@ -44,10 +44,10 @@ nonisolated enum HistoryCopy {
         )
     }
 
-    /// The same, as VoiceOver reads it.
+    /// The same, as VoiceOver reads it, in lower case as the words around it ("Wednesday, under a minute, …").
     static var spokenUnderAMinute: String {
         String(
-            localized: "Under a minute",
+            localized: "under a minute",
             bundle: .module,
             comment: "Spoken length of a past workout that lasted under a minute"
         )

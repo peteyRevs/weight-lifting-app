@@ -146,17 +146,6 @@
         }
       }
     },
-    "Under a minute" : {
-      "comment" : "Spoken length of a past workout that lasted under a minute",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Under a minute"
-          }
-        }
-      }
-    },
     "Your workouts are still on this iPhone. Open the app again to try once more." : {
       "comment" : "Under the title shown when History's workouts cannot be read",
       "localizations" : {
@@ -164,6 +153,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your workouts are still on this iPhone. Open the app again to try once more."
+          }
+        }
+      }
+    },
+    "under a minute" : {
+      "comment" : "Spoken length of a past workout that lasted under a minute",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "under a minute"
           }
         }
       }

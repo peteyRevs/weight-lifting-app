@@ -2,6 +2,7 @@
     import Dependencies
     @testable import LedgerAppKit
     import LedgerDesign
+    import LedgerDomain
     import LedgerSnapshotTesting
     import LedgerTestSupport
     import SwiftUI
@@ -70,9 +71,10 @@
             let router = AppRouter()
             Self.hosting(router) { read in
                 #expect(Self.labels(read()) == [])
-                router.selectedTab = .program
-                router.open(.settings, in: .program)
-                #expect(Self.labels(read()) == ["Settings"])
+                // F13 owns `.workout`'s placeholder, titled as the History tab, until S2 (review R1-3: not F14's
+                // Settings placeholder, which F14 replaces).
+                router.open(.workout(WorkoutID(Fixtures.uuid(463))), in: .program)
+                #expect(Self.labels(read()) == ["History"])
                 router.selectedTab = .today
                 #expect(Self.labels(read()) == [])
             }

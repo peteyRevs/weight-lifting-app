@@ -80,27 +80,51 @@
             #expect(faults.isEmpty, "\(faults.prefix(4).joined(separator: "\n"))")
         }
 
-        @Test(
-            "8. A long name wraps and is never truncated: its row is as tall as all its lines",
-            arguments: Setting.all
-        )
-        func longName_wrapsWhole(_ setting: Setting) throws {
-            let name = "Upper A — Push focus, with the long accessory work and the extra finisher"
-            let model = try HistoryPreview.populated.model()
-            let row = try #require(model.rows.first)
-            let long = HistoryModel.Row(
+        /// A row as long as criterion 8 needs: a name of three lines or more at the phone's width, and no badge, so
+        /// the name and the meta have the row's whole width at every size.
+        static func longRow() throws -> HistoryModel.Row {
+            let row = try #require(HistoryPreview.populated.model().rows.first)
+            return HistoryModel.Row(
                 id: row.id,
-                name: name,
+                name: "Upper A — Push focus, with the long accessory work, the extra finisher and a cool-down",
                 meta: row.meta,
-                badge: "3 PRs",
+                badge: nil,
                 spokenValue: row.spokenValue,
                 route: row.route
             )
-            let page = HistoryRow(row: long) { _ in }.frame(width: SnapshotConfig.phoneWidth - 2 * LedgerSpacing.screen)
-            let drawn = try #require(Self.placed(page, setting).first).frame
+        }
+
+        /// Whether `row`, drawn at the text column's width, is as tall as its whole name and its whole meta, each
+        /// measured as its own `Text` at that width, with the row's spacing and padding (review R1-2): a name cut
+        /// short leaves the row shorter than that at every size where it would wrap.
+        static func holdsEveryLine(_ row: some View, of model: HistoryModel.Row, _ setting: Setting) throws -> Bool {
             let width = SnapshotConfig.phoneWidth - 2 * LedgerSpacing.screen
-            let text = try #require(Self.placed(Text(name).ledgerFont(.body).frame(width: width), setting).first).frame
-            #expect(drawn.height >= text.height - 0.5, "the row is \(drawn.height) for a name of \(text.height)")
+            let drawn = try #require(placed(row.frame(width: width), setting).first).frame
+            let name = try #require(placed(Text(model.name).ledgerFont(.body).frame(width: width), setting).first)
+            let meta = try #require(placed(Text(model.meta).ledgerFont(.label).frame(width: width), setting).first)
+            let needed = name.frame.height + LedgerSpacing.xs + meta.frame.height + 2 * LedgerSpacing.l
+            return drawn.height >= needed - 1
+        }
+
+        @Test(
+            "8. A long name wraps and is never truncated: the row holds every line of its name and its meta",
+            arguments: Setting.all
+        )
+        func longName_wrapsWhole(_ setting: Setting) throws {
+            let row = try Self.longRow()
+            let holds = try Self.holdsEveryLine(HistoryRow(row: row) { _ in }, of: row, setting)
+            #expect(holds, "\(setting.testDescription)")
+        }
+
+        /// The guard's control (review R1-2): the same row with its name cut to one line fails it, at the default size
+        /// and at the largest, both in the PR sweep.
+        @Test("8. Control: a row whose text is cut to one line fails the guard", arguments: [
+            Setting(size: .large), Setting(size: .accessibility5)
+        ])
+        func longName_cutToOneLine_failsTheGuard(_ setting: Setting) throws {
+            let row = try Self.longRow()
+            let holds = try Self.holdsEveryLine(HistoryRow(row: row) { _ in }.lineLimit(1), of: row, setting)
+            #expect(!holds, "a one-line name must fail at \(setting.testDescription)")
         }
     }
 #endif
