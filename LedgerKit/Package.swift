@@ -156,7 +156,12 @@ let package = Package(
             swiftSettings: uiSettings
         ),
         .target(name: "FeatureHistory", dependencies: featureSpine, swiftSettings: uiSettings),
-        .target(name: "FeatureSettings", dependencies: featureSpine, swiftSettings: uiSettings),
+        .target(
+            name: "FeatureSettings",
+            dependencies: featureSpine,
+            resources: [.process("Resources")],
+            swiftSettings: uiSettings
+        ),
         .target(
             name: "FeatureWorkout",
             dependencies: featureSpine + ["LedgerActivityKit"],

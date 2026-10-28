@@ -1,0 +1,292 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Apple Health" : {
+      "comment" : "Settings row: the link to Apple Health",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        }
+      }
+    },
+    "Applies to every log and chart" : {
+      "comment" : "Under Units in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applies to every log and chart"
+          }
+        }
+      }
+    },
+    "Auto rest timer" : {
+      "comment" : "Settings switch: start the rest timer when a set is logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto rest timer"
+          }
+        }
+      }
+    },
+    "Buzz the wrist when rest ends" : {
+      "comment" : "Under the Watch haptic at zero switch in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buzz the wrist when rest ends"
+          }
+        }
+      }
+    },
+    "Couldn't save that change." : {
+      "comment" : "Shown on Settings when a change could not be saved; the setting goes back to what it was",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save that change."
+          }
+        }
+      }
+    },
+    "DATA" : {
+      "comment" : "Heading of Settings' rows about the lifter's data: Apple Health",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DATA"
+          }
+        }
+      }
+    },
+    "Default rest" : {
+      "comment" : "Settings row: the rest between sets a new exercise starts with",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default rest"
+          }
+        }
+      }
+    },
+    "Diagnostics" : {
+      "comment" : "Settings row in test builds only: opens the developer menu",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diagnostics"
+          }
+        }
+      }
+    },
+    "For the week strip and the week's totals" : {
+      "comment" : "Under Week starts on in Settings: what the first day of the week changes",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For the week strip and the week's totals"
+          }
+        }
+      }
+    },
+    "KG" : {
+      "comment" : "Units option in Settings: kilograms, abbreviated",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KG"
+          }
+        }
+      }
+    },
+    "LB" : {
+      "comment" : "Units option in Settings: pounds, abbreviated",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LB"
+          }
+        }
+      }
+    },
+    "Not connected" : {
+      "comment" : "Status beside Apple Health in Settings: the app does not write to Apple Health",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not connected"
+          }
+        }
+      }
+    },
+    "Plate math" : {
+      "comment" : "Settings switch: show the plates to load on each side of the bar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plate math"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "comment" : "Title of the Settings screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        }
+      }
+    },
+    "Show the plates per side on each set" : {
+      "comment" : "Under the Plate math switch in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the plates per side on each set"
+          }
+        }
+      }
+    },
+    "Start the clock when a set is logged" : {
+      "comment" : "Under the Auto rest timer switch in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start the clock when a set is logged"
+          }
+        }
+      }
+    },
+    "TRAINING" : {
+      "comment" : "Heading of Settings' training preferences",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TRAINING"
+          }
+        }
+      }
+    },
+    "Units" : {
+      "comment" : "Settings row: pounds or kilograms; also the spoken name of its two-option control",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Units"
+          }
+        }
+      }
+    },
+    "Used for new exercises" : {
+      "comment" : "Under Default rest in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used for new exercises"
+          }
+        }
+      }
+    },
+    "Version %@" : {
+      "comment" : "Foot of Settings when the app's name is unknown: the version number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@"
+          }
+        }
+      }
+    },
+    "Version unknown" : {
+      "comment" : "Foot of Settings when the app's version and build cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version unknown"
+          }
+        }
+      }
+    },
+    "Watch haptic at zero" : {
+      "comment" : "Settings switch: the Apple Watch taps the wrist when the rest timer reaches zero",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch haptic at zero"
+          }
+        }
+      }
+    },
+    "Week starts on" : {
+      "comment" : "Settings row: the weekday a week starts on, chosen from a menu of the seven",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Week starts on"
+          }
+        }
+      }
+    },
+    "build %@" : {
+      "comment" : "Foot of Settings, after the app's name and version: the build number",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "build %@"
+          }
+        }
+      }
+    },
+    "kilograms" : {
+      "comment" : "Spoken name of the KG option in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kilograms"
+          }
+        }
+      }
+    },
+    "pounds" : {
+      "comment" : "Spoken name of the LB option in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pounds"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
