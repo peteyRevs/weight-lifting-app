@@ -288,3 +288,19 @@ Commit `2154cfb` fix(history): pin equal writes, guard every line of a row, lowe
   - R1-7: the detail root needs `.id(destination)` in `AppTabs.screen(for:)`.
 - **Net product lines this round:** 1 added, 1 removed, **net 0**: the key's spelling. The rest is tests,
   `LedgerTestSupport` and notes. The slice total against `98b340d` stays **net 710**.
+- **Full gate on `57ec63a` (final code): exit 0, "check.sh OK", 1,968 s.**
+
+  | Step | Time |
+  |---|--:|
+  | lint | 71 s |
+  | iOS build | 16 s |
+  | string catalogs (FeatureHistory: 13 keys) | 1 s |
+  | iOS tests (17 targets passed) | 1,585 s |
+  | watchOS build | 17 s |
+  | watchOS tests (8 targets passed) | 275 s |
+  | coverage | 1 s |
+
+  - Coverage: FeatureHistory 418/420 (99.52 %; the two lines differ from run to run with task timing), overall
+    98.57 %.
+  - An earlier gate on `2154cfb`, without the `seedIfAbsent` addendum, also exited 0, in 1,994 s.
+  - The only commit after `57ec63a` is this paragraph.
