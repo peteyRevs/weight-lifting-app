@@ -71,16 +71,19 @@ struct HistoryRowAdversarialTests {
     }
 
     /// F13-S1-2: a workout shorter than a minute (a quick test save, the nightly UI test's own sample workout, or one
-    /// whose end a clock moved before its start) reads "0 min", "0 minutes".
+    /// whose end a clock moved before its start) read "0 min", "0 minutes". Fixed in fix round 1 (orchestrator's
+    /// ruling): it reads "<1 min", spoken "Under a minute"; a minute reads "1 min" again.
     @Test("F13-S1-2. A workout of 59 s, or of 0 s, does not read \"0 min\"")
     func underAMinute_doesNotReadZero() throws {
         let short = try Self.row(Self.entry(1, seconds: 59))
         let none = try Self.row(Self.entry(2, seconds: 0))
-        withKnownIssue("F13-S1-2: whole minutes rounded down read \"0 min\" under a minute") {
-            #expect(!short.meta.contains(" 0 min"), "\(short.meta)")
-            #expect(!none.meta.contains(" 0 min"), "\(none.meta)")
-            #expect(!short.spokenValue.contains("0 minutes"), "\(short.spokenValue)")
-        }
+        let minute = try Self.row(Self.entry(3, seconds: 60))
+        #expect(!short.meta.contains(" 0 min"), "\(short.meta)")
+        #expect(!none.meta.contains(" 0 min"), "\(none.meta)")
+        #expect(!short.spokenValue.contains("0 minutes"), "\(short.spokenValue)")
+        #expect(short.meta == "Wed · <1 min · 24,180 lb")
+        #expect(none.spokenValue == "Wednesday, Under a minute, 24,180 pounds, 1 PR")
+        #expect(minute.meta == "Wed · 1 min · 24,180 lb")
     }
 
     // MARK: - Weeks
@@ -131,16 +134,15 @@ struct HistoryRowAdversarialTests {
 
     /// F13-S1-1: A6's spoken weight takes its unit word from Foundation in the lifter's locale, where every other word
     /// of the row comes from the module's catalog in the language it answers in (`forCountedText`), English. So one
-    /// VoiceOver phrase mixes languages: "Mittwoch, 58 minutes, 24.180 Pfund, 1 PR".
+    /// VoiceOver phrase mixed languages: "Mittwoch, 58 minutes, 24.180 Pfund, 1 PR". Fixed in fix round 1
+    /// (orchestrator's ruling): the unit's word is in the catalog's language, with the locale's region and digits.
     @Test("F13-S1-1. Outside English, the row's spoken unit is in the language of its other words", arguments: [
         "de_DE", "ja_JP", "ar_EG", "fr_FR"
     ])
     func spokenValue_speaksOneLanguage(identifier: String) throws {
         let row = try Self.row(Self.entry(1), locale: Locale(identifier: identifier))
         #expect(row.spokenValue.contains("minutes"), "the catalog's English: \(row.spokenValue)")
-        withKnownIssue("F13-S1-1: the unit word follows the locale's language, the rest the catalog's") {
-            #expect(row.spokenValue.contains("pounds"), "\(row.spokenValue)")
-        }
+        #expect(row.spokenValue.contains("pounds"), "\(row.spokenValue)")
     }
 
     /// F13-S1-3: the drawn meta takes its minutes and badge in the locale's digits (`forCountedText` keeps the
@@ -153,6 +155,8 @@ struct HistoryRowAdversarialTests {
         let ascii = text.unicodeScalars.contains { ("0" ... "9").contains($0) }
         let arabic = text.unicodeScalars.contains { ("\u{660}" ... "\u{669}").contains($0) }
         #expect(arabic, "the minutes and the badge follow the locale: \(text)")
+        // Left as built (orchestrator's ruling): an app-wide pattern Today's RECENT shares. Follow-up: "one numbering
+        // system per row (app-wide localisation chore)".
         withKnownIssue("F13-S1-3: the volume is written in ASCII digits beside Arabic-Indic ones") {
             #expect(!ascii, "\(text)")
         }

@@ -80,6 +80,17 @@
         }
       }
     },
+    "<1 min" : {
+      "comment" : "On a past workout's row: its length when it lasted under a minute",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "<1 min"
+          }
+        }
+      }
+    },
     "Can't show your history right now" : {
       "comment" : "Title shown in place of History when its workouts cannot be read",
       "localizations" : {
@@ -131,6 +142,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No workouts yet."
+          }
+        }
+      }
+    },
+    "Under a minute" : {
+      "comment" : "Spoken length of a past workout that lasted under a minute",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Under a minute"
           }
         }
       }

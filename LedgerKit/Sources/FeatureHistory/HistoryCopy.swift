@@ -35,6 +35,24 @@ nonisolated enum HistoryCopy {
         )
     }
 
+    /// A workout shorter than a minute, on its row, in place of "0 min" (F13-S1-2).
+    static var underAMinute: String {
+        String(
+            localized: "<1 min",
+            bundle: .module,
+            comment: "On a past workout's row: its length when it lasted under a minute"
+        )
+    }
+
+    /// The same, as VoiceOver reads it.
+    static var spokenUnderAMinute: String {
+        String(
+            localized: "Under a minute",
+            bundle: .module,
+            comment: "Spoken length of a past workout that lasted under a minute"
+        )
+    }
+
     /// "24,180 lb": a workout's volume, on its row.
     static func volume(_ volume: String, units: Units, locale: Locale) -> String {
         switch units {

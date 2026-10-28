@@ -23,6 +23,12 @@ struct HistoryCopyTests {
         #expect(HistoryCopy.spokenMinutes(58, locale: Fixtures.locale) == "58 minutes")
     }
 
+    @Test("Under a minute is drawn and spoken without a zero (F13-S1-2)")
+    func underAMinute_drawnAndSpoken() {
+        #expect(HistoryCopy.underAMinute == "<1 min")
+        #expect(HistoryCopy.spokenUnderAMinute == "Under a minute")
+    }
+
     @Test("A counted text takes the catalog's plural form, not the locale's language's")
     func countedText_takesTheCatalogsPluralForm() {
         #expect(HistoryCopy.spokenMinutes(0, locale: Locale(identifier: "fr_FR")) == "0 minutes")

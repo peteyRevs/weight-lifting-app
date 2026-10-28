@@ -117,4 +117,13 @@ struct HistoryPresentationTests {
         #expect(row.meta == "Wed · 1 min · 1 lb")
         #expect(row.spokenValue == "Wednesday, 1 minute, 1 pound")
     }
+
+    @Test("F13-S1-1. Outside English the spoken volume is in the catalog's language, with the region's digits")
+    func spokenVolume_inGerman_speaksTheCatalogsLanguage() throws {
+        let workout = HistoryFixtures.workout(1, startedAt: Fixtures.date(2026, 9, 9, hour: 7), sets: 26, pounds: 186)
+        var input = HistoryFixtures.input([HistoryEntry(workout, prCount: 0)])
+        input.locale = Locale(identifier: "de_DE")
+        let row = try #require(HistoryPresentation.make(input).rows.first)
+        #expect(row.spokenValue.hasSuffix(", 58 minutes, 24.180 pounds"), "\(row.spokenValue)")
+    }
 }

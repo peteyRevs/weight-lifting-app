@@ -43,7 +43,7 @@ nonisolated enum HistoryPresentation {
         counted: inout CountedTexts,
         input: HistoryInput
     ) -> HistoryModel.Row {
-        let minutes = counted.minutes(Int(clamping: entry.elapsed.components.seconds / 60))
+        let minutes = counted.length(entry.elapsed)
         let units = input.units
         let badge = entry.prCount > 0 ? counted.records(entry.prCount) : nil
         let meta = [
@@ -54,7 +54,8 @@ nonisolated enum HistoryPresentation {
         let spoken = [
             dates.weekday(entry.startedAt),
             minutes.spoken,
-            entry.volume.spoken(in: units, locale: input.locale),
+            // In the catalog's language, as the row's other words (F13-S1-1).
+            entry.volume.spoken(in: units, locale: counted.locale),
             badge
         ]
         return HistoryModel.Row(
@@ -70,20 +71,27 @@ nonisolated enum HistoryPresentation {
     /// The counted texts of one model, each looked up once for each number (N4): a counted lookup costs a catalog
     /// read, and a thousand workouts hold a few dozen lengths and record counts.
     struct CountedTexts {
+        /// The locale the module's catalog answers in (`forCountedText`), found once: every counted text and the
+        /// spoken volume take it, so a row speaks one language.
         let locale: Locale
         private var lengths: [Int: (drawn: String, spoken: String)] = [:]
         private var badges: [Int: String] = [:]
 
         init(locale: Locale) {
-            self.locale = locale
+            self.locale = locale.forCountedText
         }
 
-        /// "58 min", spoken "58 minutes".
-        mutating func minutes(_ count: Int) -> (drawn: String, spoken: String) {
+        /// "58 min", spoken "58 minutes": whole minutes, rounded down. A workout under a minute (a quick save, or one
+        /// whose end a clock moved before its start) reads "<1 min", spoken "Under a minute", never "0 min"
+        /// (F13-S1-2).
+        mutating func length(_ elapsed: Duration) -> (drawn: String, spoken: String) {
+            let count = Int(clamping: elapsed.components.seconds / 60)
             if let known = lengths[count] {
                 return known
             }
-            let texts = (HistoryCopy.minutes(count, locale: locale), HistoryCopy.spokenMinutes(count, locale: locale))
+            let texts = count < 1
+                ? (HistoryCopy.underAMinute, HistoryCopy.spokenUnderAMinute)
+                : (HistoryCopy.minutes(count, locale: locale), HistoryCopy.spokenMinutes(count, locale: locale))
             lengths[count] = texts
             return texts
         }
