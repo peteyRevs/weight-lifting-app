@@ -204,3 +204,43 @@ presentation first (about 380), then the store, views and app (about 310); the t
 - The only commit after `093a4ec` is these notes. The nightly suites (`HistoryQueriesPerformanceTests`,
   `HistoryPerformanceTests`, UI `WorkoutHistory` and the edited `HistoryVoiceOverAdversarial`) were not run on the
   simulator; both performance suites passed on the host with the nightly lane on.
+
+### S1 fix round 1 (G1, 2026-10-28): G2's F13-S1-1 to -3, as the orchestrator ruled
+
+Commit `0bbf19e` fix(history): one language per spoken row, and "<1 min" for a workout under a minute.
+
+- **F13-S1-1, fixed.** The spoken volume is now spoken in the locale the module's catalog answers in
+  (`forCountedText`), with the lifter's region and digits. `HistoryPresentation.CountedTexts` works that locale out
+  once per model, and every counted text and the spoken volume use it. `SpokenWeight.swift`'s doc now says a caller
+  passes its catalog's `forCountedText(in:)` locale; the Domain API is unchanged. de_DE reads "58 minutes, 24.180
+  pounds". G2's `spokenValue_speaksOneLanguage` (de_DE, ja_JP, ar_EG, fr_FR) passes as a plain test. The new
+  `HistoryPresentationTests.spokenVolume_inGerman_speaksTheCatalogsLanguage` pins the German row.
+- **F13-S1-2, fixed in History only.** A workout under 60 s, or one clamped to 0 s, reads "<1 min" on screen and
+  "Under a minute" when spoken; 60 s still reads "1 min". There are two new keys, `HistoryCopy.underAMinute` and
+  `spokenUnderAMinute`, so FeatureHistory now has 13 keys. **New wording for Pete:** "<1 min" and "Under a
+  minute". G2's `underAMinute_doesNotReadZero` passes as a plain test, now with the exact texts.
+  `HistoryCopyTests.underAMinute_drawnAndSpoken` is new.
+  - **Today is separate code:** `TodayPresentation.recentRow` formats through FeatureToday's own
+    `TodayCopy.duration(minutes:)`, so it is not shared with History. A workout from an earlier day that lasted
+    under a minute still reads "0 min" in Today's RECENT; one from today reads its clock time. **Follow-up:** Today's
+    RECENT takes the same "<1 min" rule.
+- **F13-S1-3, left as built.** The test stays under `withKnownIssue`. Its comment names the follow-up "one numbering
+  system per row (app-wide localisation chore)".
+- **F13-S1-6** is noted for S2 (above, "Inputs for S2 and S3"). Neither `ProgramUpdateCancelAdversarialTests` nor any
+  other file outside these was touched.
+- **Net product lines:** 22 added, 5 removed, **net 17** in this round. The slice's total against `98b340d` is now 720
+  added, 10 removed, **net 710**.
+- **Host:** `FeatureHistoryTests` and `SpokenWeightTests` are green (51 + 4 tests, with the one known issue, F13-S1-3).
+- **Full gate on `0bbf19e`: exit 0, "check.sh OK", 2,187 s.**
+
+  | Step | Time |
+  |---|--:|
+  | lint | 90 s |
+  | iOS build | 25 s |
+  | string catalogs (FeatureHistory: 13 keys) | 1 s |
+  | iOS tests (17 targets passed) | 1,748 s |
+  | watchOS build | 28 s |
+  | watchOS tests (8 targets passed) | 293 s |
+  | coverage | 2 s |
+
+  Coverage: FeatureHistory 420/420 (100 %), overall 98.58 %.
