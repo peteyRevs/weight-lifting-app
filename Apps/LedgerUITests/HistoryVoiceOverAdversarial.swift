@@ -43,17 +43,19 @@ final class HistoryVoiceOverAdversarial: XCTestCase {
         XCTAssertTrue(tree.contains { $0.label.hasPrefix("W8, ") }, "the current week is a row of the list")
     }
 
-    /// Criterion 11: a session of the log opens its workout, which until F13 selects the History tab, once.
+    /// Criterion 11: a session of the log opens its workout. Sanctioned edit of F13 S1: the workout's detail is
+    /// pushed over the history on the Library's own stack (F13 question 1, built to A), a placeholder until F13 S2,
+    /// where it selected the History tab until then.
     @MainActor
-    func test_history_sessionTap_selectsTheHistoryTab() {
+    func test_history_sessionTap_pushesTheWorkoutOnTheLibrary() {
         let app = openHistory(textSize: nil)
         let session = app.buttons.matching(NSPredicate(format: "value CONTAINS '×'")).firstMatch
         XCTAssertTrue(session.waitForExistence(timeout: 5), "the saved session is a button")
         session.tap()
-        let history = app.tabBars.buttons["History"]
-        XCTAssertTrue(history.waitForExistence(timeout: 5))
-        let selected = expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: history)
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed, "the History tab is selected")
+        XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "the workout is pushed")
+        XCTAssertTrue(app.tabBars.buttons["Library"].isSelected, "on the Library's stack")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["library.history.title"].waitForExistence(timeout: 5), "back to the history")
     }
 
     // MARK: Helpers

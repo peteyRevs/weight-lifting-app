@@ -1,0 +1,151 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ kg" : {
+      "comment" : "On a past workout's row: the weight it moved, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "comment" : "On a past workout's row: the weight it moved, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%lld PRs" : {
+      "comment" : "Badge on a past workout's row: how many personal records it set",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld PR"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld PRs"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "comment" : "On a past workout's row: its length in whole minutes, abbreviated",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld min"
+          }
+        }
+      }
+    },
+    "%lld minutes" : {
+      "comment" : "Spoken length of a past workout, in whole minutes",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minute"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Can't show your history right now" : {
+      "comment" : "Title shown in place of History when its workouts cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't show your history right now"
+          }
+        }
+      }
+    },
+    "Finish a workout and it shows up here." : {
+      "comment" : "Under: No workouts yet. in History",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish a workout and it shows up here."
+          }
+        }
+      }
+    },
+    "Go to Today" : {
+      "comment" : "Button under the empty History: it shows the Today tab",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to Today"
+          }
+        }
+      }
+    },
+    "History" : {
+      "comment" : "Title of the History tab's screen",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "History"
+          }
+        }
+      }
+    },
+    "No workouts yet." : {
+      "comment" : "Title shown in History before any workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No workouts yet."
+          }
+        }
+      }
+    },
+    "Your workouts are still on this iPhone. Open the app again to try once more." : {
+      "comment" : "Under the title shown when History's workouts cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your workouts are still on this iPhone. Open the app again to try once more."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

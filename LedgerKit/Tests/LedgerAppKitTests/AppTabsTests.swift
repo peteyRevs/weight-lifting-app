@@ -22,6 +22,10 @@
     /// it draws is `FeatureLibraryTests`'; that the running app shows it, titled `library.title`, is the `Tabs` UI
     /// test's.
     ///
+    /// Since F13 S1 the History tab is `FeatureHistory`'s root, which does the same: it has no element here (sanctioned
+    /// edit, C3). That the running app shows it, titled `history.title`, is the `Tabs` UI test's. A workout's detail
+    /// is a placeholder under the History title until F13 S2.
+    ///
     /// Since F09 S5 the Today tab is `FeatureToday`'s root. It reads the stores and the session, so the shell is
     /// hosted on empty in-memory stores and a session with nothing live; and all of it scrolls, so the shell is
     /// read outside scroll views (testing-strategy §2.6: the subject is the shell, whose own parts are pinned),
@@ -47,7 +51,7 @@
         @Test(
             "Each placeholder tab shows its own screen, titled as the tab; Today's root is all one scroll view",
             arguments: [
-                (AppTab.today, String?.none), (.program, nil), (.library, nil), (.history, "History")
+                (AppTab.today, String?.none), (.program, nil), (.library, nil), (.history, nil)
             ]
         )
         func selectedTab_showsItsOwnScreen(tab: AppTab, title: String?) {
@@ -66,8 +70,9 @@
             let router = AppRouter()
             Self.hosting(router) { read in
                 #expect(Self.labels(read()) == [])
-                router.selectedTab = .history
-                #expect(Self.labels(read()) == ["History"])
+                router.selectedTab = .program
+                router.open(.settings, in: .program)
+                #expect(Self.labels(read()) == ["Settings"])
                 router.selectedTab = .today
                 #expect(Self.labels(read()) == [])
             }

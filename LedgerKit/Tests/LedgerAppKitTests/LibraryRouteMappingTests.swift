@@ -36,13 +36,16 @@ struct LibraryRouteMappingTests {
         #expect(router[path: .library] == [])
     }
 
-    @Test("11. A session of the log opens the History tab until F13's detail, and pushes nothing")
-    func openWorkout_selectsTheHistoryTab() {
+    /// Sanctioned edit of F13 S1 (C3): the workout's detail is pushed over the exercise's history (F13 question 1,
+    /// built to A), where the session selected the History tab until then.
+    @Test("11. A session of the log pushes its workout's detail over the history, on the same tab")
+    func openWorkout_pushesItsDetailOverTheHistory() {
         let router = AppRouter()
+        let session = WorkoutID(Fixtures.uuid(453))
         router.open(.exercise(Self.bench), in: .library)
-        router.resolve(LibraryRoute.openWorkout(WorkoutID(Fixtures.uuid(453))))
-        #expect(router.selectedTab == .history)
-        #expect(router[path: .library] == [.exercise(Self.bench)], "the history stays where the lifter left it")
+        router.resolve(LibraryRoute.openWorkout(session))
+        #expect(router.selectedTab == .library)
+        #expect(router[path: .library] == [.exercise(Self.bench), .workout(session)], "back returns to the history")
         #expect(router[path: .history] == [])
     }
 

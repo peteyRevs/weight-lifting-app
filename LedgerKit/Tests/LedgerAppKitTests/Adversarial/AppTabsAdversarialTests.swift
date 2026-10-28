@@ -28,8 +28,10 @@
         /// a window with no scene follows nothing and draws the ground alone, so it has no heading here either.
         ///
         /// Sanctioned edit of F12 S1 (C4): the Library tab's root is `FeatureLibrary`'s, which does the same.
+        ///
+        /// Sanctioned edit of F13 S1 (C3): the History tab's root is `FeatureHistory`'s, which does the same.
         static func rootHeaders(of tab: AppTab) -> [String] {
-            [.today, .program, .library].contains(tab) ? [] : roots.filter { $0.tab == tab }.map(\.title)
+            [.today, .program, .library, .history].contains(tab) ? [] : roots.filter { $0.tab == tab }.map(\.title)
         }
 
         /// The labels of the headers VoiceOver finds, top to bottom: one per screen that is on screen.
@@ -97,7 +99,7 @@
                 router[path: .history].removeLast()
                 #expect(Self.headers(read()) == ["Settings"], "one pop of two pushes")
                 router[path: .history] = []
-                #expect(Self.headers(read()) == ["History"])
+                #expect(Self.headers(read()) == Self.rootHeaders(of: .history))
                 #expect((read().first?.accessibilityFrame.minY ?? 0) == rootTop, "the root hides the bar again")
             }
         }

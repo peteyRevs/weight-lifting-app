@@ -1,3 +1,4 @@
+import FeatureHistory
 import FeatureLibrary
 import FeatureProgram
 import FeatureToday
@@ -10,9 +11,9 @@ import SwiftUI
 /// contrast in both themes, and each stack sets the tint back to the system's, so that nothing a tab draws is
 /// tinted unless the screen tints it (product decision #17: the accent once per screen).
 ///
-/// Today draws `FeatureToday`'s root, Program `FeatureProgram`'s builder and Library `FeatureLibrary`'s root, each
-/// handed where its routes go; the builder is also handed the week the router was last asked to select. History
-/// shows a `PlaceholderScreen` until F13 replaces it, one line.
+/// Today draws `FeatureToday`'s root, Program `FeatureProgram`'s builder, Library `FeatureLibrary`'s root and History
+/// `FeatureHistory`'s, each handed where its routes go; the builder is also handed the week the router was last asked
+/// to select.
 struct AppTabs: View {
     @Bindable var router: AppRouter
     /// Where Today's routes go: `MainRoot` resolves them with the router and the workout's presenter.
@@ -21,6 +22,8 @@ struct AppTabs: View {
     var onProgramRoute: @MainActor (ProgramRoute) -> Void = { _ in }
     /// Where the Library's routes go: `MainRoot` resolves them with the router.
     var onLibraryRoute: @MainActor (LibraryRoute) -> Void = { _ in }
+    /// Where the History tab's routes go: `MainRoot` resolves them with the router.
+    var onHistoryRoute: @MainActor (HistoryRoute) -> Void = { _ in }
     /// Debug builds: opens the debug menu (F07 criterion 7).
     var onTodayTitleLongPress: () -> Void = {}
 
@@ -36,7 +39,7 @@ struct AppTabs: View {
                 stack(.library) { LibraryRoot(onRoute: onLibraryRoute) }
             }
             Tab(AppCopy.title(of: .history), systemImage: "clock", value: AppTab.history) {
-                stack(.history) { PlaceholderScreen(AppCopy.title(of: .history), identifier: "history.title") }
+                stack(.history) { HistoryRoot(onRoute: onHistoryRoute) }
             }
         }
         .tint(LedgerColor.accentText)
@@ -67,6 +70,9 @@ struct AppTabs: View {
         case let .exercise(id):
             ExerciseHistoryRoot(exercise: id, onRoute: onLibraryRoute)
                 .id(destination)
+        case .workout:
+            // F13 S2 draws the workout's detail here; until then, a placeholder under the History title.
+            PlaceholderScreen(AppCopy.title(of: .history), identifier: "history.workout.title")
         }
     }
 }
