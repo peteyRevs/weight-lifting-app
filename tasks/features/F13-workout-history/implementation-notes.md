@@ -557,3 +557,62 @@ delete is never lost. All in `WorkoutDetailStore.swift`, plus tests.
     - PR plan: `FeatureHistoryTests`, 110 tests, 108 passed, 1 skipped, 1 expected failure (F13-S1-3), 0 failed.
     - Nightly plan: `LedgerUITests/WorkoutHistory`, 4 of 4 passed, the new test included.
   - The full gate was not run, as ruled.
+
+### S2 fix round 2 (G1, 2026-10-29): G3's S2-R1-1 to -5, as the orchestrator ruled
+
+Commit `1180741` fix(history): a delete cancelled behind a busy writer is run again, and the route origin is pinned.
+
+**S2-R1-1, fixed.** In `delete()`, a run cancelled before its write sets `.confirmed` and makes the next `deletion`.
+The root's `.task(id:)` therefore runs the delete once the screen is up. That holds even when the screen came back
+while the cancelled run still waited for GRDB's writer and its own re-run had returned.
+- `GatedWorkouts` (G2's support) gains `.busyWriter`. It waits for `open()` while ignoring cancellation, then checks
+  cancellation, as GRDB's writer queue does.
+- New test: `WorkoutDetailStoreTests.delete_cancelledBehindABusyWriter_runsAgain`.
+
+**S2-R1-2, fixed.**
+- `HistoryRouteMappingTests.workout_fromAnUnselectedTab_landsOnItsOwnStack` covers r1.
+- `LibraryRouteMappingTests.exercise_fromAnUnselectedTab_landsOnItsOwnStack` covers r4.
+- s2 was cheap to pin with a hosted test: the new `AppTabsRouteOriginTests.detailOnToday_sendsFromToday` (iOS) hosts
+  the shell with the scene told it is active and a detail pushed on Today, over empty stores. The detail finds no
+  workout and closes, and the close must arrive from `.today`.
+
+**S2-R1-3, fixed.**
+- `Deleting` is `idle`, `confirmed`, `running`. A successful delete returns to `.idle`, and the detail is `.gone`,
+  which already refuses "Delete". If the workout came back (F17's late envelope), Delete would work again.
+- New test: `runCancelled_keepsTheReceipt` (m12).
+- The two new store tests sit in an extension of the suite, which keeps the struct under the lint's 150 lines.
+
+**S2-R1-4, deferred to S3.** Move `spokenElapsed` and `startDay`, both catalog-free, beside `ClockText` and share
+them with F10's receipt.
+
+**S2-R1-5, fixed (tests only).**
+- `WorkoutDetailDamageAdversarialTests.recordChangedAlone_emits` (GRDB): a record's `previous` is changed alone, with
+  the count, workout, exercise and set rows unchanged. The stream must emit the new record.
+- An edit through the repository could not kill g2, because every replay that moves a record also writes rows of
+  tables the observation reads. So the change is written directly.
+- `ownDamage_endsTheStream` now deletes with `try` and expects the list to lose the workout, in all four damage
+  cases.
+
+**Kills, proved in scratchpad copies.** LedgerKit was rsynced for the host mutants, and the whole worktree for s2.
+Each mutant was rebuilt and run, then restored and checked with `diff -q`. Both copies, `.build` and `.derivedData`
+included, were deleted afterwards.
+
+| Mutant | Killed by |
+|---|---|
+| k1: no `deletion` bump on cancellation | `delete_cancelledBehindABusyWriter_runsAgain` ("deletion == 2") |
+| m12: `follow`'s end runs when cancelled | `runCancelled_keepsTheReceipt` |
+| r1: `Routes+History` `.workout` on `selectedTab` | `workout_fromAnUnselectedTab_landsOnItsOwnStack` |
+| r4: `Routes+Library` `.exercise` on `selectedTab` | `exercise_fromAnUnselectedTab_landsOnItsOwnStack` |
+| g2: GRDB region without `personal_record` | `recordChangedAlone_emits` (also G2's record-damage case) |
+| s2: `AppTabs` hands the detail `.history` (simulator, through the lock) | `detailOnToday_sendsFromToday` ("tab: .history") |
+
+**Net product lines.** 2 this round (`WorkoutDetailStore.swift`), so the slice is **net 669** against `e10cbe0`.
+
+**Runs.**
+- Host: FeatureHistoryTests (89 tests, the one known issue F13-S1-3), the persistence detail suites and clauses, and
+  the History and Library route mapping suites. All green.
+- Simulator, PR plan, through the lock, run twice, the second after a format-only edit of the new test:
+  FeatureHistoryTests, `AppTabsRouteOriginTests`, `HistoryRouteMappingTests` and `LibraryRouteMappingTests` gave 124
+  tests, 122 passed, 1 skipped, 1 expected failure (F13-S1-3), 0 failed. The first run also included `AppTabsTests`:
+  130 tests, 0 failed.
+- The full gate was not run, as ruled.
