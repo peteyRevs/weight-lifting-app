@@ -490,3 +490,156 @@ pre-save read is the row anyway. Keeping `!isSaving` is the conservative choice.
 
 **Runs:** FeatureSettingsTests passed 8 of 8 back-to-back (45 tests). The fakes' other consumers are listed above. The
 probes and the faithful-double patch lived only in scratch. No simulator run; the orchestrator runs the gate.
+
+## S1b round 1
+
+**S1b — G3 review (round 1, 2026-10-29), of `git diff e10cbe0..76945c7`** (S1b as built `ae9a84a`, R3-1 to R3-4
+`346fe53`, the gallery reference `3571ecd`, notes `d02995b`, G2's tests `a57d9cd`, fix round 1 `76945c7`). I checked it
+against the brief's S1 criteria (1, 2, 4, 7, 8, N1–N10) and the rulings. This review is read-only: I probed and mutated
+a `git archive` copy in my scratchpad, and its build products are deleted. No product or test file in the worktree
+changed.
+
+**Verdict: APPROVED WITH MINORS.** No product defect found. One Minor (a wiring test gap, Debug-only behaviour) and
+three Nits. None blocks the merge; R1-1 is worth a small test before or soon after.
+
+**What holds (verified):**
+- **The views keep the store's contract.**
+  - They read only `model` and `pendingRoute`, and send only `SettingsAction`s.
+  - Pending versus written is invisible to them, as it should be: `model` is made from `shown`
+    (`pending ?? written ?? stored`), so a control shows the lifter's value at once and an echo never flickers it.
+  - Loading: the root draws `SettingsHeader` alone while `model` is nil. G2's test shows it stands exactly where the
+    page's title will. An unreadable row leaves loading for `Settings.default`.
+  - The problem line sits under the title only while `model.problem` is set, and the next change clears it.
+- **The announce fix (F14-S1b-2)** is `ProgramRoot`'s idiom line for line: an injectable `announce`, defaulting to
+  `AccessibilityNotification.Announcement`, and `.onChange(of: store.model?.problem)` announcing only a non-nil
+  line.
+  - A second failure is announced again, because every change that reaches the saver clears `saveFailed` first.
+  - Nothing re-announces while the line stays: an echo or fresh read publishes no new `problem`.
+  - `failedSave_isAnnounced` is behavioural. It kills both "never announces" (V1) and "announces the cleared line"
+    (V2), so G1's unverified kill is now verified.
+- **`AppAbout(bundle:)` (F14-S1b-1).** A blank value counts as absent before `??`, for every key, so a blank display
+  name falls back to `CFBundleName`. The presentation trims what is kept. H1–H3 are killed.
+- **`#if DEBUG`.**
+  - `SettingsRoute.debugMenu`, the presentation's Diagnostics link, `resolve`'s case and the previews are all
+    Debug-only.
+  - In Release, `SettingsRoute` is uninhabited, `resolve` switches over no case, and `model.diagnostics` is always nil.
+    G2 built `-c release` cleanly.
+  - The page's `if let diagnostics` branch and `SettingsCopy.diagnostics` still compile in Release but can never be
+    reached. That meets N7 in behaviour, and putting `#if` into the view would be worse.
+- **Wiring and routes.**
+  - `AppTabs` draws `SettingsRoot(about: .main, …)` under the stack's bar, so the back button is kept (N8).
+  - `MainRoot` resolves `.debugMenu` by raising its existing sheet.
+  - `resolve` moves no tab and no stack (pinned).
+  - The F13 merge lines (History beside Settings) are both kept.
+- **`SegmentedChoice` as a component.**
+  - Its API mirrors `FilterChipRow`'s, the house idiom for string-only choice controls: closures for title, spoken
+    label and selection, and `onSelect` hands back the caller's own option.
+  - It is ink, never orange, dims when disabled, and is fixed-size with 44 pt options.
+  - To VoiceOver it is a container named by `label`, with buttons carrying `.isSelected` and the hint.
+  - Its doc comment is accurate.
+  - `isSelected` as a predicate cannot enforce "exactly one", but `FilterChipRow` makes the same trade-off and the
+    model documents the invariant. That is not a finding.
+- **Simplicity and idiom.**
+  - The files are small and decide nothing. Every string comes from the model, and the source tests enforce it.
+  - The comment density matches the surrounding modules.
+  - `SettingsRowLabel` and `SwitchRow` each spell out title-over-detail (the switch's label must stay accessible,
+    unlike `SettingsRowLabel`), which is acceptable.
+  - `SettingsViewStops` is the fifth copy of `ViewStop` across the feature test targets. That is pre-existing
+    practice; hoisting it into `LedgerTestSupport` is a cross-feature follow-up, not this slice's.
+- **R3-1 to R3-3: the windows are real GRDB orders.**
+  - **R3-1.** GRDB delivers one observation's values in order on one scheduler: the initial fetch (A), then the
+    fetch after B's commit. With the consumer suspended at `for await`, A is handed over directly rather than
+    coalesced by `.bufferingNewest(1)`. So "D receives A, then B's echo" is the order production produces, and the
+    double now queues behind the held first value to match.
+    - The `withObservationTracking` check is the right way to see a transient flash that the final state hides.
+    - M1 is killed 3/3.
+  - **R3-2.** D's first value can land after the second save's saver has started: the tap's `send`, the saver's
+    resume and GRDB's delivery are independent main-actor jobs. So holding the read until `untilHeld()` is a
+    reachable order, now deterministic. M7 is killed 3/3, through the whole FeatureSettingsTests run.
+  - **R3-3.** The mechanism is real: `follow` bumps `observationNumber` in the same job that finishes `retired`, and
+    the old loop's cancellation lands jobs later. But see R1-4 on how wide the test holds it. M4 is killed 3/3.
+  - **R3-4.** The comment is moved, and nothing else.
+
+---
+
+**F14-S1b-R1-1 (Minor, test gap). Nothing pins that Settings' Diagnostics reaches `MainRoot`'s sheet.**
+- **Failure scenario:** a refactor of `AppTabs` or `MainRoot`, such as the next lane's merge of a route line (K1),
+  drops either:
+  - `onSettingsRoute: { router.resolve($0) { isDebugMenuShown = true } }` in `MainRoot`, or
+  - `onRoute: onSettingsRoute` in `AppTabs`.
+
+  Both fall back to the `{ _ in }` default, so tapping "Diagnostics" in a Debug build does nothing, and every test
+  stays green.
+- **Measured:**
+  - H5 (`MainRoot`'s argument removed) and H6 (`AppTabs` passes `{ _ in }`) both **survive** all 341
+    LedgerAppKitTests.
+  - No hosted or UI test activates Diagnostics through the app: `SettingsRouteMappingTests` calls `resolve` directly,
+    and `AppTabsTests` only pushes `.settings`.
+  - Today's long press, the other way into the same sheet, has UI tests (`DebugMenu`, `TabsAdversarial`).
+- **Fix:** add one step to the nightly `Settings` UI test or to `DebugMenu.swift`: Today → gear → "Diagnostics" → the
+  Debug menu's sheet appears. Alternatively, add a hosted `AppTabs` test that pushes `.settings`, activates
+  "Diagnostics" and checks that the injected `onSettingsRoute` received `.debugMenu`. The UI step covers both lines.
+
+**F14-S1b-R1-2 (Nit, test placement). `SegmentedChoice`'s group semantics are pinned only by a FeatureSettings test.**
+- V9 removes `.accessibilityElement(children: .contain)` and `.accessibilityLabel(label)`. All 7 LedgerDesign
+  `SegmentedChoice` tests pass under it. It is killed only by G2's
+  `SettingsScreenAdversarialTests.unitsOptions_sitInAGroupNamedUnits`.
+- **Failure scenario:** a second feature adopts the control (S2's plate inventory unit, say), and Settings later
+  stops using it. An edit that drops the group would then pass the whole suite, and VoiceOver would stop naming the
+  choice.
+- **Fix:** move G2's UIKit parent-group probe, or a copy of it, into `SegmentedChoiceTests`, so the design system
+  pins its own documented contract.
+
+**F14-S1b-R1-3 (Nit, docs). Stale comment in `SettingsStore.swift:15-16`.**
+- It reads: "`SettingsRoot`, the screen over it, is S1b's; until then only the tests make one." S1b has landed, and
+  the app makes one.
+- **Fix:** drop the second clause.
+
+**F14-S1b-R1-4 (Nit, test fidelity). R3-3 holds the retire window open far wider than production can.**
+- The first observation stays uncancelled across a whole second save and a third observation's fresh read, then
+  receives A's echo. In production, cancellation lands a few main-actor jobs after `finish()`, long before another
+  GRDB write and restart.
+- The guard still matters, and the test still kills M4. The reachable form of the hazard is narrower: the old
+  observation's late value lands just after the *next* observation's first value. With a change from elsewhere in
+  between, that would draw an older row over a newer one.
+- **Fix (optional):** say this in the test's doc comment, so the scenario isn't read as a production order, or
+  re-shape the test to that narrower order (old echo after observation 2's first value, with an outside write).
+
+---
+
+**Mutation table, round 1.**
+- **Host:** `swift test` on a `git archive` copy of `76945c7`.
+- **Simulator:** iPhone 17, iOS 27.0, PR plan, `build-for-testing` outside the lock, then
+  `test-without-building` through `sim-lock.py`, running FeatureSettingsTests and LedgerDesign's `SegmentedChoice`
+  tests, snapshots and adversarial suite.
+- **Baselines:** host 54 + 8 tests green; simulator 72 + 6 green.
+- **Clean-up:** after every mutant, `diff -r` of Sources against the worktree was empty.
+
+| # | Mutation | Where | Result |
+|---|---|---|---|
+| V1 | announce never called | `SettingsRoot` `onChange` | Killed (`failedSave_isAnnounced`, 3 issues) |
+| V2 | `announce(problem ?? "")`, so a cleared line is announced | `SettingsRoot` `onChange` | Killed (`failedSave_isAnnounced`) |
+| V3 | `.task(id: pendingRoute)` → `.task` | `SettingsRoot` | Killed (`root_runsTheStore_savesAndHandsARouteOnce`) |
+| V4 | loading draws `Color.clear`, not the title | `SettingsRoot` | Killed (`loading_drawsTheTitle`, `loadingTitle_standsWhereThePagesWill` ×5) |
+| V5 | problem line never drawn | `SettingsPage` | Killed (tree ×4, `failedSave_showsTheLine`, Arabic ×5) |
+| V6 | `.isSelected` trait never added | `SegmentedChoice` | Killed (`options_readTheirNames…` ×2, Settings tree ×12) |
+| V7 | `onSelect(options[0])` | `SegmentedChoice` | Killed (`activating_handsTheChosenOption`, `controls_sendTheirModelsActions`) |
+| V8 | ink pill drawn on the unselected option | `SegmentedChoice` | Killed (component snapshots ×6, Settings snapshots) |
+| V9 | group container and label removed | `SegmentedChoice` | Killed only by G2's `unitsOptions_sitInAGroupNamedUnits`; survives LedgerDesign's own tests (R1-2) |
+| V10 | switch binding reads `true` | `SwitchRow` | Killed (tree, rapid-tap test, snapshot) |
+| V11 | menu's `accessibilityValue` removed | `WeekStartRow` | Killed (tree ×12, Persian week, Arabic) |
+| V12 | never stacks at accessibility sizes | `SettingsRowLayout` | Killed (`controls_moveUnderTheirLabels`, snapshots) |
+| V13 | rest's hint removed | `RestRow` | Killed (tree ×12) |
+| V14 | Diagnostics row sends nothing | `SettingsPage` | Killed (`controls_sendTheirModelsActions`) |
+| H1 | blank check removed | `AppAbout(bundle:)` | Killed (`about_blankDisplayName…` ×3, 6 issues) |
+| H2 | `CFBundleName` before the display name | `AppAbout(bundle:)` | Killed (`about_everyKey`) |
+| H3 | `.whitespacesAndNewlines` → `.whitespaces` | `AppAbout(bundle:)` | Killed (the `"\n"` case) |
+| H4 | `showDebugMenu()` not called | `Routes+Settings` | Killed (`debugMenu_raisesTheSheet`, `debugMenu_leavesHistoryAlone`) |
+| H5 | `onSettingsRoute:` argument removed | `MainRoot` | **Survives** all 341 LedgerAppKitTests (R1-1) |
+| H6 | `AppTabs` passes `{ _ in }` to `SettingsRoot` | `AppTabs` | **Survives** all 341 LedgerAppKitTests (R1-1) |
+| M1 | `isFirst && writes == writesBefore` → `isFirst` | store (R3-1) | Killed 3/3 (`firstValueReadBeforeASave_isNotTheRow`) |
+| M4 | `number == observationNumber` dropped per value | store (R3-3) | Killed 3/3 (`retiredObservationsValue_isNeverReceived`) |
+| M7 | failure leaves `hasWrittenOrFailed` false | store (R3-2) | Killed 3/3 in the full FeatureSettingsTests run (`failureBeforeTheFreshRead_stillReadsTheRow`) |
+
+**Runs:** H5 and H6 were not run on the simulator or in the UI tests. A grep shows that no test in either references
+`onSettingsRoute` or activates Settings' Diagnostics. The full gate is the coordinator's.
