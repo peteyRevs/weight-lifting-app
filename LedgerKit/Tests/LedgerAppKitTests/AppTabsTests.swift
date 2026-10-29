@@ -24,8 +24,8 @@
     /// test's.
     ///
     /// Since F13 S1 the History tab is `FeatureHistory`'s root, which does the same: it has no element here (sanctioned
-    /// edit, C3). That the running app shows it, titled `history.title`, is the `Tabs` UI test's. A workout's detail
-    /// is a placeholder under the History title until F13 S2.
+    /// edit, C3). That the running app shows it, titled `history.title`, is the `Tabs` UI test's. Since F13 S2 a
+    /// workout's detail is `FeatureHistory`'s root too, and has no element here either (sanctioned edit).
     ///
     /// Since F09 S5 the Today tab is `FeatureToday`'s root. It reads the stores and the session, so the shell is
     /// hosted on empty in-memory stores and a session with nothing live; and all of it scrolls, so the shell is
@@ -71,10 +71,11 @@
             let router = AppRouter()
             Self.hosting(router) { read in
                 #expect(Self.labels(read()) == [])
-                // F13 owns `.workout`'s placeholder, titled as the History tab, until S2 (review R1-3: not F14's
-                // Settings placeholder, which F14 replaces).
-                router.open(.workout(WorkoutID(Fixtures.uuid(463))), in: .program)
-                #expect(Self.labels(read()) == ["History"])
+                // Sanctioned edit of F13 S2: `.workout` now draws the detail's root, which has no element here, so
+                // the pushed screen is Settings' placeholder again. F14, which replaces that placeholder, re-points
+                // this test at whatever destination still draws an element (review R1-3).
+                router.open(.settings, in: .program)
+                #expect(Self.labels(read()) == ["Settings"])
                 router.selectedTab = .today
                 #expect(Self.labels(read()) == [])
             }

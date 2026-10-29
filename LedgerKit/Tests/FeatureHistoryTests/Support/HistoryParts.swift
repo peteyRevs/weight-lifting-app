@@ -19,4 +19,24 @@
             }
         }
     }
+
+    /// What a state of the detail's preview registry scrolls, without the scroll view its screen puts the page in, on
+    /// the screen's ground: the page of a workout's detail, or of one that can't be read.
+    struct DetailParts: View {
+        let preview: DetailPreview
+        var send: (HistoryRoute) -> Void = { _ in }
+        var onDelete: () -> Void = {}
+
+        var body: some View {
+            Group {
+                if preview == .unreadable {
+                    UnreadableWorkoutPage(model: WorkoutDetailPresentation.unreadable, onDelete: onDelete)
+                } else if let model = try? preview.model() {
+                    // `try?`: the fixture's error is `PreviewTests`' to report.
+                    WorkoutDetailPage(model: model, send: send, onDelete: onDelete)
+                }
+            }
+            .background(LedgerColor.ground)
+        }
+    }
 #endif

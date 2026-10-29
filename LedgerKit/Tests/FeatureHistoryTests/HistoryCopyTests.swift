@@ -47,4 +47,22 @@ struct HistoryCopyTests {
         #expect(HistoryCopy
             .failedBody == "Your workouts are still on this iPhone. Open the app again to try once more.")
     }
+
+    @Test("S2. The receipt's counted texts, with one and with several, as F10's catalog has them")
+    func receipt_countedTexts() {
+        #expect(HistoryCopy.setsLogged(done: "1", of: 1, locale: Fixtures.locale) == "1 of 1 set logged")
+        #expect(HistoryCopy.setsLogged(done: "23", of: 25, locale: Fixtures.locale) == "23 of 25 sets logged")
+        #expect(HistoryCopy.newRecords(1, locale: Fixtures.locale) == "1 new PR this session")
+        #expect(HistoryCopy.newRecords(3, locale: Fixtures.locale) == "3 new PRs this session")
+        #expect(HistoryCopy.moved("10,968", units: .kg, locale: Fixtures.locale) == "10,968 kg moved")
+        #expect(HistoryCopy.movedTile(units: .kg) == "KG MOVED")
+    }
+
+    @Test("S2. A failed delete's alert and the unreadable workout's line")
+    func deleteFailed_andUnreadable_readTheirLines() {
+        #expect(HistoryCopy.deleteFailedTitle == "Couldn't delete this workout")
+        #expect(HistoryCopy.deleteFailedBody == "It's still in your history. Try again in a moment.")
+        #expect(HistoryCopy.okay == "OK")
+        #expect(HistoryCopy.unreadableBody == "It stays in your history. You can still delete it.")
+    }
 }
