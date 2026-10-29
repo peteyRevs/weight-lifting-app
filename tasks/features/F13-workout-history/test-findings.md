@@ -162,3 +162,223 @@ receipt.**
 - `swiftformat --lint` and `swiftlint lint --strict` on the four files: clean.
 - **Not done:** a mutant run of the differential test (flipping the tie order in the SQL). The temporary product edit
   would have raced the queued simulator build, and the tool denied it once, so the product code stayed untouched.
+
+## S2
+
+G2 findings, 2026-10-29. Slice under test: `feat/F13-history-detail` at `cce902e` (`e10cbe0..HEAD`: `fac1f94`,
+`cfb9bd5` and the notes). No product code was changed.
+
+**Outcome: no Critical or Major defect.** The observation, delete, routes, N13 parity and R1-5 held under attack.
+- **Minor (one):** F13-S2-1. A settings observation that ends turns every detail into "This workout can't be read",
+  with Delete offered.
+- **Nit (two):** F13-S2-2, which has the same root cause as F13-S2-1, and F13-S2-3, the delete's run-once guard.
+- Each of the three is pinned under `withKnownIssue`.
+- **Info (three):** F13-S2-4 to F13-S2-6.
+
+### What was attacked, and what held
+
+- **`observeWorkout(id:)` on GRDB against the fake** (`WorkoutDetailObservationAdversarialTests`).
+  - F05's `HistoryScript` ran 24 seeds × 14 steps of finishes (valid and refused), `updateSets` and deletes, while all
+    six of the script's workouts were observed on GRDB.
+  - After every step each GRDB read (`fetchRecordedWorkout`) equals the fake's value, records and their order
+    included.
+  - Each stream emitted exactly the changed values, once each. Nothing came in the 150 ms after the last step.
+  - Records of two lifts come in the same order from both sides. A workout holds at most one weight-at-reps record per
+    lift, so `ORDER BY exercise_id, kind` is a total order.
+- **Records recompute after a delete.**
+  - Setup: a 150 baseline, a 225 holder, then 200 and 210.
+  - Deleting the holder emits 200's detail with an estimated 1RM and a weight at 5 (it now beats 150), and 210's with
+    both.
+  - `personalRecords` lists exactly those two workouts, and the list's badges read [2, 2, 0].
+  - A lift's first session holds no record by rule, which the fixtures had to allow for.
+- **Writes that change nothing emit nothing** (`WorkoutDetailDamageAdversarialTests`):
+  - the same sets written again
+  - the same workout re-materialised (a sync's resend)
+  - set taps (`workout_event`) logged against the workout's own id
+  - a settings save
+
+  Its own delete still emits nil.
+- **Damage.**
+  - Damage to another workout (its `started_at`, a set's weight, a record's kind) leaves the stream running.
+  - Damage to the workout's own row, an exercise's `equipment`, a set or a record ends the stream (N10), and a later
+    delete emits nothing.
+  - A workout damaged before it is observed ends at once without a value, while the list still shows it (A5). Its
+    detail is reachable and says N10, as ruled.
+- **Delete once** (`WorkoutDetailStoreAdversarialTests`).
+  - A confirmation during an in-flight delete is dropped, and the repository is asked once.
+  - A failed delete keeps the screen. A later delete elsewhere still closes it.
+  - The observation's nil arriving before `delete(id:)` returns hands only close routes (F13-S2-5).
+- **A delete elsewhere.**
+  - Two details of one workout (two tabs) and one detail of another were run together.
+  - Deleting the first workout closes both of its details, one route each, and leaves the other detail loaded with
+    nothing pending.
+  - A row's route still waiting is replaced by the close.
+- **Routes** (`HistoryDetailAdversarialTests`, router level).
+  - A late `.exercise` from History and a late `.openWorkout` from a session log land on their own stack after a tab
+    switch.
+  - The same workout on two tabs: each tab's close pops only its own detail, and a second close pops nothing.
+  - `[detail, exercise, detail]` (a session log reopening it): two closes pop the top detail only. After the lifter
+    pops the exercise history, the lower detail's close pops it.
+  - A detail under its row's exercise history: the close pops nothing until the history comes off, then pops the
+    detail.
+  - A close of another workout pops nothing.
+- **N13 in both units, seven locales** (`WorkoutDetailParityAdversarialTests`).
+  - 120 random finished workouts:
+    - every set kind, sets edited off their target, sets not done
+    - 102.3 lb, 90.7 kg and 1,234,567 lb
+    - no exercise at all
+    - times of 0 s, 59 s and 10 h
+    - none, one or several records
+  - Each was checked in lb and kg, under en_US, en_GB, de_DE, fr_FR, ar_EG, ja_JP and hi_IN.
+  - In every case the detail equals `WorkoutPresentation.receipt` of the same workout drawn in that unit, string for
+    string: tiles, records line, rows, day and name.
+  - A pound workout of 200 lb drawn in kilograms reads 90.7 everywhere.
+  - Units switched kg → lb → kg live redraw the detail to the presentation's model each time, and no record moves.
+- **R1-5** (`SpokenWeightRoundTripAdversarialTests`, 53,952 cases).
+  - The weights:
+    - quarter pounds and quarter kilograms to 1,000
+    - pounds and half pounds converted
+    - 400 random 10⁻⁷ g weights
+    - the edges: 90.7, 90.72, 90.718474, 2.249, 2.2449, 2.2451, 0.124 to 0.126, 99.95, 999.975, 1,234,567.25, 1e-7
+      and 9,999,999,999.75, in both units
+  - `formatted(in:)` reads back as `shownValue(in:)`, digit for digit.
+  - The spoken text, with its unit's word removed, parses back to `shownValue` in 12 locales. Those include de_CH,
+    en_IN (lakh grouping), ar_EG, fa_IR, Devanagari and Thai digits.
+  - The only text without digits is Arabic's dual "رطلان" (two pounds), which is correct.
+  - 200 lb reads "90.7 kilograms" and "90,7 Kilogramm"; 90.7 kg reads "200 pounds".
+- **Accessibility.**
+  - The VoiceOver order of every state, the 44 pt targets and the AX3 stacking are the implementer's suites. I read
+    them, and they pin the tree exactly.
+  - Added (`WorkoutDetailMirrorAdversarialTests`, simulator), with and without records and in the unreadable state,
+    at `.large` and at `.accessibility5` with Bold Text, right to left:
+    - the stops and their order equal left to right
+    - the day, the name and "Delete workout" are mirrored to within 1 pt
+  - The delete alert's words are model strings pinned by `HistoryCopyTests`. The hosted reader cannot open a SwiftUI
+    alert, so the alert is not read here (the nightly UI test answers it).
+
+### Findings
+
+**F13-S2-1 — Minor. A settings observation that ends makes every detail say "This workout can't be read", with
+Delete offered.**
+- **Repro.**
+  - Give the detail's store a `SettingsRepository` whose `observe()` ends. `GRDBSettingsRepository.observe()` does,
+    at once and on every run, for a settings row this app can't read, such as a later version's payload.
+  - Open any readable workout.
+  - Also: let the settings yield their first value, so the receipt is drawn, then end the stream.
+- **Expected.**
+  - The workout is shown. `GRDBSettingsRepository`'s documentation says F07 and F14 "fall back to the defaults in
+    memory" when that stream ends.
+  - At the least, the screen does not blame the workout.
+- **Actual.**
+  - `state == .unreadable`: "This workout can't be read. It stays in your history. You can still delete it."
+  - The receipt already drawn is replaced the same way.
+  - The words blame a workout that reads fine, and point at Delete, which can't be undone.
+  - The condition persists for as long as the settings row stays unreadable, so it holds for every workout and every
+    visit.
+- **Cause.** `rebuild()` maps any ended source to `.unreadable` (decision 4 in the as-built notes: "a settings failure
+  is then worded as the workout's; it was judged too rare for its own state").
+- **Judgement.**
+  - This is wrong. It is rare, but the failure it describes is persistent, and the remedy it suggests destroys data.
+  - S1's list shows a generic failed state for the same case, so this is less reachable from History. It is still
+    reachable from Today's "View session" and from a Library session log.
+- **Tests.** `WorkoutDetailSettingsAdversarialTests.settingsEndAtOnce_doesNotBlameTheWorkout` and
+  `.settingsEndAfterFirstValue_doesNotBlameTheWorkout`, known issues.
+- **Suggested fix.** In `WorkoutDetailStore.follow`, keep the ended flag per source:
+  - The settings' end falls back to `Settings.default` units, or to the last value seen.
+  - Only the workout's own end shows N10.
+
+**F13-S2-2 — Nit. Once a source has ended, a delete elsewhere no longer closes the detail.**
+- **Repro.** Settings that end at once, as in F13-S2-1. Then delete the workout in the store (another tab, or the
+  watch's sync).
+- **Expected.** `.gone`, and `.closeWorkout(id)` handed to the app.
+- **Actual.**
+  - The detail stays on "This workout can't be read. It stays in your history." for a workout that is gone.
+  - Tapping Delete then deletes nothing (a no-op on GRDB and in memory) and closes it.
+- **Cause.** `rebuild()` checks `sources.hasEnded` before it looks at the workout's nil.
+- **Test.** `WorkoutDetailSettingsAdversarialTests.settingsEnded_thenDeletedElsewhere_closes`, known issue.
+- **Suggested fix.** F13-S2-1's fix removes it. Otherwise, handle `sources.workout == .some(nil)` before the ended
+  check.
+
+**F13-S2-3 — Nit. The delete's run-once guard reads the wrong flag.**
+- **Cause.**
+  - `delete()` runs while `isDeleting` is true, which means "a delete was confirmed", not "this confirmation has not
+    run yet".
+  - Its `defer` resets the flag whether the delete succeeded, failed or was cancelled.
+  - The root runs it from `.task(id: store.deletion)`, which SwiftUI cancels when the view disappears and runs again,
+    with the same id, when the view reappears.
+- **Repro (store level, a repository gated before its write).**
+  - (a) Confirm, then start `delete()` and cancel it while it waits. This is the view going away (a tab switch or a
+    back swipe) before the write starts; GRDB throws `CancellationError` there. Then run `delete()` again, as the
+    reappearing view's task does.
+  - (b) Confirm, start `delete()`, and start it again while the first is in flight.
+- **Expected.**
+  - (a) The workout is deleted, or the lifter is told.
+  - (b) The repository is asked once.
+- **Actual.**
+  - (a) Nothing is deleted and nothing is said. The workout is still there when the lifter comes back.
+  - (b) The repository is asked twice. The second delete is a no-op on GRDB, but it is a second write and record
+    replay.
+- **Reach.** Both need the view to go and come back within the few milliseconds of the write, hence Nit.
+- **Tests.** `WorkoutDetailStoreAdversarialTests.deleteCancelled_isNotLostSilently` and
+  `.deleteRunTwice_whileInFlight_deletesOnce`, known issues.
+- **Suggested fix.**
+  - Key the run on the confirmation: keep `confirmedDeletion: Int?` and `ranDeletion: Int?`, and run only when they
+    differ.
+  - On a cancellation, leave the confirmation pending so the next run performs it. Or run the delete in an unowned
+    `Task`, since a confirmed delete should not depend on the view staying up.
+
+**F13-S2-4 — Info. A late route also selects its tab.**
+- `resolve(_:from:)` calls `open(_:in:)`, which sets `selectedTab`. A route delivered after a tab switch therefore
+  lands on its own stack, as fixed, and also brings the lifter back to that tab.
+- No current path delivers late: a hidden root's task runs again only when its tab is shown.
+- Pinned as built in `HistoryDetailAdversarialTests.lateRoute_landsOnItsOwnStack`.
+
+**F13-S2-5 — Info. Two closes can reach the app for one delete.**
+- When the observation's nil reaches the store before `delete(id:)` returns, and the root hands that close over first,
+  the delete's own `close()` makes a second `.closeWorkout(id)`.
+- This is harmless:
+  - By then the view is popped and its route task cancelled.
+  - The router pops only a `.workout(id)` on top, so a second close pops nothing (shown on `[detail, exercise,
+    detail]`).
+- Pinned in `WorkoutDetailStoreAdversarialTests.nilBeforeDeleteReturns_closesOnly`.
+
+**F13-S2-6 — Info. Closing a covered detail relies on SwiftUI re-running its task, which no test exercises.**
+- **The design.**
+  - When a detail is under its row's exercise history (or under itself, via a session log) and its workout is
+    deleted, the covered detail's close pops nothing.
+  - The detail goes only when the lifter comes back to it: its `.task` runs again, finds it gone and closes (decision
+    3). That depends on NavigationStack sending a covered view `onDisappear`/`onAppear`, which it does today.
+- **What is tested.** The router half above, and `runAgain_onAGoneWorkout_closesAgain` for the store.
+- **What is not.** The SwiftUI half. The nightly UI tests delete only from a detail on top.
+- **A side effect.** A covered detail whose task was cancelled still holds its last `.loaded` model. Coming back, the
+  deleted workout's receipt, with a live Delete, shows for a frame before the close.
+- **Suggestion.** One nightly UI test: open a workout's detail on History, push its row's exercise history, open the
+  same workout from Today's "View session", delete it there, return to History and go back. The detail must pop.
+
+### Tests added
+
+| File | Suite | Tests | Known issues |
+|---|---|--:|---|
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/WorkoutDetailObservationAdversarialTests.swift` | Adversarial F13 S2 · observeWorkout on GRDB and in memory | 3 | — |
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/WorkoutDetailDamageAdversarialTests.swift` | Adversarial F13 S2 · observeWorkout against writes and damage | 4 (incl. 4 arguments) | — |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/WorkoutDetailStoreAdversarialTests.swift` | Adversarial F13 S2 · the detail's store | 7 | F13-S2-3 (2) |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/WorkoutDetailSettingsAdversarialTests.swift` | Adversarial F13 S2 · the detail when the settings end | 4 | F13-S2-1 (2), F13-S2-2 |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/WorkoutDetailMirrorAdversarialTests.swift` | Adversarial F13 S2 · the detail right to left (iOS) | 1 (4 arguments) | — |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/WorkoutDetailAdversarialSupport.swift` | support: `GatedDetailScene`, `GatedWorkouts`, `EndingSettings`, `settles` | — | — |
+| `LedgerKit/Tests/LedgerAppKitTests/Adversarial/HistoryDetailAdversarialTests.swift` | Adversarial F13 S2 · the detail's routes | 5 | — |
+| `LedgerKit/Tests/LedgerAppKitTests/Adversarial/WorkoutDetailParityAdversarialTests.swift` | Adversarial F13 S2 · the detail is the receipt | 2 | — |
+| `LedgerKit/Tests/LedgerDomainTests/Adversarial/SpokenWeightRoundTripAdversarialTests.swift` | Adversarial F13 S2 · R1-5, the spoken weight's round trip | 3 | — |
+
+### Runs
+
+- **Host, `swift test`:**
+  - The filter `FeatureHistoryTests\.|LedgerAppKitTests\.(SwiftSource|CopyAudit|StringCatalog|CopyFile|HistoryDetail|WorkoutDetailParity|HistoryRouteMapping|ReceiptParity)|WorkoutDetailObservationAdversarialTests|WorkoutDetailDamageAdversarialTests|SpokenWeight`
+    passed in every target:
+    - FeatureHistoryTests: 87 tests, 7 known issues (F13-S1-3 and this round's six).
+    - LedgerAppKitTests: 117 tests.
+    - LedgerPersistenceTests: 7.
+    - LedgerDomainTests: 8.
+  - The GRDB property test takes 24 s on the host.
+- **Simulator** (through the lock, iPhone 17, iOS 27.0, PR plan): `f13s2-targeted.sh PR none` with the eight new
+  suites. Exit 0: 30 passed, 5 expected failures (the known issues), 0 failed.
+- `swiftformat --lint` and `swiftlint lint --strict` on the nine files: clean.
