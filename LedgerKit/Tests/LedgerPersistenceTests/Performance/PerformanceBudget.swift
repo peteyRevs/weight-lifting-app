@@ -24,6 +24,9 @@ enum PerformanceBudget {
     /// F12 S2, N11: `ExerciseHistory.make` folding one exercise's 2,000 sets in 400 sessions, at the 95th
     /// percentile of `statsRuns` runs.
     static let historyFold: Duration = .milliseconds(5)
+    /// F13 S1, N4: `historyEntries()` over 1,000 workouts, the History list's one read, at the 95th percentile of
+    /// `statsRuns` runs.
+    static let historyList: Duration = .milliseconds(20)
     /// How many timed runs of a stats query, after one untimed warm-up: enough for a 95th percentile (the 19th
     /// fastest of 20).
     static let statsRuns = 20

@@ -64,6 +64,14 @@ private struct BriefWorkoutRepository: WorkoutRepository {
     func observeRecent(limit _: Int) -> AsyncStream<[WorkoutState]> {
         AsyncStream { $0.finish() }
     }
+
+    func historyEntries() async throws -> [HistoryEntry] {
+        []
+    }
+
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 private struct BriefSettingsRepository: SettingsRepository {

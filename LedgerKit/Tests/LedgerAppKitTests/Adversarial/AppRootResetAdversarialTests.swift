@@ -21,7 +21,8 @@
         /// tab is the builder, over the program onboarding saved, whose page is inside its scroll view, so it reads
         /// nothing there (as Today does); History is still a placeholder with its title. Sanctioned edit of F12 S1
         /// (C4): the Library tab is `FeatureLibrary`'s root, which in a window with no scene draws the ground alone.
-        static let titles: [AppTab: [String]] = [.program: [], .library: [], .history: ["History"]]
+        /// Sanctioned edit of F13 S1 (C3): so is the History tab, `FeatureHistory`'s root.
+        static let titles: [AppTab: [String]] = [.program: [], .library: [], .history: []]
 
         /// The tab bar's title of `tab` (review round 2, SF-A): Program and Today read alike outside scroll views,
         /// so the drawn selection tells them apart.

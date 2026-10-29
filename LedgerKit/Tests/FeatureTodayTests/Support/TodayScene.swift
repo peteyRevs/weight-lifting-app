@@ -106,7 +106,7 @@ final nonisolated class ProbedWorkouts: WorkoutRepository {
         var gate: ReadGate?
     }
 
-    private let base: any WorkoutRepository
+    let base: any WorkoutRepository
     private let state = Mutex(State())
 
     init(base: any WorkoutRepository) {

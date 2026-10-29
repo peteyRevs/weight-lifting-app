@@ -71,6 +71,19 @@ extension HistoryModel: WorkoutRepository {
         }
         return stream
     }
+
+    /// The live workouts' entries with the records each holds (F13 S1). The History list's clauses run on the
+    /// stores, not on this model.
+    func historyEntries() async throws -> [HistoryEntry] {
+        state.withLock { state in
+            live(state).map { HistoryEntry($0, prCount: state.entries[$0.id]?.records.count ?? 0) }
+        }
+    }
+
+    /// Not modelled: a stream that ends at once, as a failed observation's does.
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 extension HistoryModel: ProgramRepository {

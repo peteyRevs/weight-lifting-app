@@ -134,6 +134,15 @@ public protocol WorkoutRepository: Sendable {
     func delete(id: WorkoutID) async throws
     /// `recent(limit:)` now, then after every change that alters it, and for no other write.
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]>
+    /// One entry per stored workout, newest first as `recent` lists them (F13 S1, N1), read from the workout's own
+    /// row: its totals as stored, and `prCount` the records it holds now. A workout whose own row this app cannot
+    /// read is logged and left out; one whose exercises or sets are damaged is listed, so the lifter can still
+    /// find it (and its detail says so).
+    func historyEntries() async throws -> [HistoryEntry]
+    /// `historyEntries()` now, then after every change that alters it, and for no other write: a workout finished,
+    /// edited or deleted, the oldest included, and a later workout whose record count an edit changed (N2). A live
+    /// workout's set taps write its event log only, and emit nothing.
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]>
 }
 
 public extension WorkoutRepository {

@@ -247,3 +247,15 @@ extension WorkoutRepositoryTests {
         #expect(try await repositories.texts(Self.liveCounts) == ["1 5 19 0 16"])
     }
 }
+
+/// The History list's clauses (F13 S1, N1 and N2), on the same database.
+extension WorkoutRepositoryTests {
+    @Test(
+        "The GRDB repository keeps the History list's clause (F13 S1)",
+        arguments: WorkoutRepositoryContract.historyClauses
+    )
+    func historyClause_holds(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories.withProgramExercises().history)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+}

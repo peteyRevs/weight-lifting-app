@@ -90,6 +90,14 @@ struct UnimplementedWorkoutRepository: WorkoutRepository {
     func observeRecent(limit _: Int) -> AsyncStream<[WorkoutState]> {
         stub.emptyStream()
     }
+
+    func historyEntries() async throws -> [HistoryEntry] {
+        throw stub.failure()
+    }
+
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        stub.emptyStream()
+    }
 }
 
 struct UnimplementedSettingsRepository: SettingsRepository {

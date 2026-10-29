@@ -121,8 +121,8 @@ struct WorkoutRows {
     }
 
     /// Throws `malformedColumn("table.id")` unless the row's id is stored as text, in the spelling the app
-    /// writes (`uuidString`, uppercase).
-    private static func requireTextID(of row: Row, in table: String) throws(LedgerPersistenceError) {
+    /// writes (`uuidString`, uppercase). The History list's read requires it too (`HistoryEntry(row:)`).
+    static func requireTextID(of row: Row, in table: String) throws(LedgerPersistenceError) {
         guard case let .string(text) = (row["id"] as DatabaseValue).storage else {
             throw .malformedColumn("\(table).id")
         }
