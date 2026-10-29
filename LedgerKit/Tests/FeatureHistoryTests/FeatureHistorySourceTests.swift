@@ -6,8 +6,8 @@ import Testing
 /// checks them (its store conventions, and `FeatureProgramSourceTests`): no file reads the device's clock, calendar,
 /// locale or time zone; no file starts a task of its own; the store and the root keep no timer and format nothing;
 /// the presentation, copy and models never turn a weight into a `Double`; every lookup is in `HistoryCopy*.swift`;
-/// the views draw with SwiftUI and `LedgerDesign` alone and decide nothing; only the screen holds a scroll view; and
-/// nothing on the list is orange (N6).
+/// the views draw with SwiftUI and `LedgerDesign` alone and decide nothing; only the screens hold a scroll view; and
+/// no file names the accent (N6). F13 S2 adds the detail's store, root, presentation and screens to the same rules.
 ///
 /// The check reads code and the code inside a string interpolation; it does not read comments or a literal's own
 /// text. It reads spellings, not types: what is reached through a name of the module's own is for review to find.
@@ -33,11 +33,15 @@ nonisolated struct FeatureHistorySourceTests {
     /// What a view must not reach for: the copy and the presentation (a text or a decision of its own), a
     /// format, a filter or an order of its own, the clock, the calendar and the locale.
     static let decisions = [
-        "HistoryCopy", "HistoryPresentation", "HistoryWeeks", ".formatted(", "String(format", ".filter(",
+        "HistoryCopy", "HistoryPresentation", "HistoryWeeks", "WorkoutDetailPresentation", "WorkoutEngine",
+        "ReceiptRow(", ".formatted(", "String(format", ".filter(",
         ".sorted(", ".sort(", "Locale", "Calendar", "Date", "@Dependency"
     ]
 
-    static let storeFiles = ["HistoryStore.swift", "HistoryStore+Sources.swift", "HistoryRoot.swift"]
+    static let storeFiles = [
+        "HistoryStore.swift", "HistoryStore+Sources.swift", "HistoryRoot.swift", "WorkoutDetailStore.swift",
+        "WorkoutDetailRoot.swift"
+    ]
 
     static func sources() throws -> [String: String] {
         let sources = try CopyAudit.sources(ofModule: "FeatureHistory")
@@ -109,7 +113,7 @@ nonisolated struct FeatureHistorySourceTests {
         #expect(found.isEmpty, "\(found.prefix(5))")
     }
 
-    @Test("Every view imports SwiftUI and LedgerDesign and nothing else; only the screen holds a scroll view")
+    @Test("Every view imports SwiftUI and LedgerDesign and nothing else; only the screens hold a scroll view")
     func views_importOnlySwiftUIAndTheDesignSystem_andOneScrollView() throws {
         let views = try Self.sources().filter { Self.isView($0.key) }
         #expect(views.count >= 3)
@@ -119,11 +123,14 @@ nonisolated struct FeatureHistorySourceTests {
             #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
         }
         let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
-        #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == ["Views/HistoryScreen.swift"])
+        let files = Set(scrolling.map { $0.components(separatedBy: ":").first ?? "" })
+        #expect(files == ["Views/HistoryScreen.swift", "Views/WorkoutDetailScreen.swift"])
     }
 
-    /// F13 question 6, built to A: the records' badge is ink, so no screen of the list wears orange.
-    @Test("N6. Nothing on the History list wears the accent")
+    /// F13 question 6, built to A: the records' badge is ink, so no screen of the list wears orange. The detail's only
+    /// orange is the receipt's own (the TIME label and the records line), drawn by `ReceiptLayout`, and its "Delete
+    /// workout" is ink (S2, N6): `WorkoutDetailOrangeAuditTests` measures it.
+    @Test("N6. No file of the module names the accent")
     func views_wearNoAccent() throws {
         #expect(try Self.uses(of: ["LedgerColor.accent", ".accent", "tint:"]) == [])
     }

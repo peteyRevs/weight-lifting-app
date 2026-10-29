@@ -84,8 +84,8 @@ struct MainRoot: View {
             router: router,
             onTodayRoute: { router.resolve($0, workout: workout) },
             onProgramRoute: { router.resolve($0) },
-            onLibraryRoute: { router.resolve($0) },
-            onHistoryRoute: { router.resolve($0) },
+            onLibraryRoute: { router.resolve($0, from: $1) },
+            onHistoryRoute: { router.resolve($0, from: $1) },
             onTodayTitleLongPress: { isDebugMenuShown = true }
         )
         #if DEBUG

@@ -109,6 +109,10 @@ final nonisolated class FailingOnceHistory: WorkoutRepository {
         return number == 1 ? AsyncStream { $0.finish() } : base.observeHistoryEntries()
     }
 
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        base.observeWorkout(id: id)
+    }
+
     func historyEntries() async throws -> [HistoryEntry] {
         try await base.historyEntries()
     }

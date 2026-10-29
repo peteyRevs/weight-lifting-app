@@ -12,6 +12,17 @@
         }
       }
     },
+    "%@ kg moved" : {
+      "comment" : "The total weight lifted in the workout so far, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg moved"
+          }
+        }
+      }
+    },
     "%@ lb" : {
       "comment" : "On a past workout's row: the weight it moved, in pounds",
       "localizations" : {
@@ -19,6 +30,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ lb"
+          }
+        }
+      }
+    },
+    "%@ lb moved" : {
+      "comment" : "The total weight lifted in the workout so far, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb moved"
+          }
+        }
+      }
+    },
+    "%@ of %lld sets logged" : {
+      "comment" : "The sets logged in the workout so far, then all its sets",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld set logged"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%@ of %lld sets logged"
+                }
+              }
+            }
           }
         }
       }
@@ -80,6 +125,29 @@
         }
       }
     },
+    "%lld new PRs this session" : {
+      "comment" : "The number of personal records the saved workout set",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new PR this session"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld new PRs this session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "<1 min" : {
       "comment" : "On a past workout's row: its length when it lasted under a minute",
       "localizations" : {
@@ -98,6 +166,61 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Can't show your history right now"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "comment" : "The alert's button that deletes nothing",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Couldn't delete this workout" : {
+      "comment" : "Title of the alert shown when a past workout could not be deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't delete this workout"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "comment" : "The alert's destructive button: deletes the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "Delete this workout?" : {
+      "comment" : "Title of the alert that asks before a past workout is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this workout?"
+          }
+        }
+      }
+    },
+    "Delete workout" : {
+      "comment" : "Button under a past workout's detail: asks before it deletes the workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete workout"
           }
         }
       }
@@ -135,6 +258,83 @@
         }
       }
     },
+    "It stays in your history. You can still delete it." : {
+      "comment" : "Under: This workout can't be read.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It stays in your history. You can still delete it."
+          }
+        }
+      }
+    },
+    "It's removed from your history, records and stats. This can't be undone." : {
+      "comment" : "Under: Delete this workout? in the alert",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It's removed from your history, records and stats. This can't be undone."
+          }
+        }
+      }
+    },
+    "It's still in your history. Try again in a moment." : {
+      "comment" : "Under: Couldn't delete this workout",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It's still in your history. Try again in a moment."
+          }
+        }
+      }
+    },
+    "KG MOVED" : {
+      "comment" : "Label of the receipt's tile for the weight lifted, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KG MOVED"
+          }
+        }
+      }
+    },
+    "LB MOVED" : {
+      "comment" : "Label of the receipt's tile for the weight lifted, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LB MOVED"
+          }
+        }
+      }
+    },
+    "LOGGED" : {
+      "comment" : "Heading of the receipt's list of exercises and what was logged",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LOGGED"
+          }
+        }
+      }
+    },
+    "Logged %@" : {
+      "comment" : "Spoken: the sets logged for an exercise of the receipt",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logged %@"
+          }
+        }
+      }
+    },
     "No workouts yet." : {
       "comment" : "Title shown in History before any workout",
       "localizations" : {
@@ -142,6 +342,83 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No workouts yet."
+          }
+        }
+      }
+    },
+    "Nothing logged" : {
+      "comment" : "Spoken: an exercise of the receipt with no set logged, drawn as a dash",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing logged"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "comment" : "Closes the alert shown when a delete failed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Prescribed %@" : {
+      "comment" : "Spoken: what was prescribed for an exercise of the receipt",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prescribed %@"
+          }
+        }
+      }
+    },
+    "Prescribed on the right" : {
+      "comment" : "Beside LOGGED: each exercise's prescription stands at the trailing edge of its row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prescribed on the right"
+          }
+        }
+      }
+    },
+    "SETS" : {
+      "comment" : "Label of the receipt's tile for the sets done of all the workout's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETS"
+          }
+        }
+      }
+    },
+    "TIME" : {
+      "comment" : "Label of the receipt's tile for how long the workout took",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TIME"
+          }
+        }
+      }
+    },
+    "This workout can't be read." : {
+      "comment" : "Shown in place of a past workout's detail when the workout cannot be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This workout can't be read."
           }
         }
       }

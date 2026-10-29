@@ -13,17 +13,19 @@ import SwiftUI
 ///
 /// Today draws `FeatureToday`'s root, Program `FeatureProgram`'s builder, Library `FeatureLibrary`'s root and History
 /// `FeatureHistory`'s, each handed where its routes go; the builder is also handed the week the router was last asked
-/// to select.
+/// to select. The Library's and History's screens can stand on any tab's stack, so their routes go with the tab
+/// whose stack drew them (F13-S1-6): a route handed over late still lands on the stack it came from.
 struct AppTabs: View {
     @Bindable var router: AppRouter
     /// Where Today's routes go: `MainRoot` resolves them with the router and the workout's presenter.
     var onTodayRoute: @MainActor (TodayRoute) -> Void = { _ in }
     /// Where the Program screens' routes go: `MainRoot` resolves them with the router.
     var onProgramRoute: @MainActor (ProgramRoute) -> Void = { _ in }
-    /// Where the Library's routes go: `MainRoot` resolves them with the router.
-    var onLibraryRoute: @MainActor (LibraryRoute) -> Void = { _ in }
-    /// Where the History tab's routes go: `MainRoot` resolves them with the router.
-    var onHistoryRoute: @MainActor (HistoryRoute) -> Void = { _ in }
+    /// Where the Library's routes go, with the tab whose screen sent them: `MainRoot` resolves them with the router.
+    var onLibraryRoute: @MainActor (LibraryRoute, AppTab) -> Void = { _, _ in }
+    /// Where the History screens' routes go, with the tab whose screen sent them: `MainRoot` resolves them with the
+    /// router.
+    var onHistoryRoute: @MainActor (HistoryRoute, AppTab) -> Void = { _, _ in }
     /// Debug builds: opens the debug menu (F07 criterion 7).
     var onTodayTitleLongPress: () -> Void = {}
 
@@ -36,10 +38,10 @@ struct AppTabs: View {
                 stack(.program) { ProgramRoot(week: router.programWeek, onRoute: onProgramRoute) }
             }
             Tab(AppCopy.title(of: .library), systemImage: "dumbbell", value: AppTab.library) {
-                stack(.library) { LibraryRoot(onRoute: onLibraryRoute) }
+                stack(.library) { LibraryRoot { onLibraryRoute($0, .library) } }
             }
             Tab(AppCopy.title(of: .history), systemImage: "clock", value: AppTab.history) {
-                stack(.history) { HistoryRoot(onRoute: onHistoryRoute) }
+                stack(.history) { HistoryRoot { onHistoryRoute($0, .history) } }
             }
         }
         .tint(LedgerColor.accentText)
@@ -52,14 +54,15 @@ struct AppTabs: View {
             root()
                 .tabRootChrome()
                 .navigationDestination(for: AppDestination.self) { destination in
-                    screen(for: destination)
+                    screen(for: destination, in: tab)
                 }
         }
         .tabContentTint()
     }
 
+    /// The screen of `destination`, on `tab`'s stack.
     @ViewBuilder
-    private func screen(for destination: AppDestination) -> some View {
+    private func screen(for destination: AppDestination, in tab: AppTab) -> some View {
         switch destination {
         case .settings:
             PlaceholderScreen(AppCopy.settingsTitle, identifier: "settings.title")
@@ -68,11 +71,11 @@ struct AppTabs: View {
             DayEditorRoot(day: day, weekIndex: weekIndex, onRoute: onProgramRoute)
                 .id(destination)
         case let .exercise(id):
-            ExerciseHistoryRoot(exercise: id, onRoute: onLibraryRoute)
+            ExerciseHistoryRoot(exercise: id) { onLibraryRoute($0, tab) }
                 .id(destination)
-        case .workout:
-            // F13 S2 draws the workout's detail here; until then, a placeholder under the History title.
-            PlaceholderScreen(AppCopy.title(of: .history), identifier: "history.workout.title")
+        case let .workout(id):
+            WorkoutDetailRoot(workout: id) { onHistoryRoute($0, tab) }
+                .id(destination)
         }
     }
 }
