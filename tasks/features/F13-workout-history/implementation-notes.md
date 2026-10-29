@@ -304,3 +304,214 @@ Commit `2154cfb` fix(history): pin equal writes, guard every line of a row, lowe
     98.57 %.
   - An earlier gate on `2154cfb`, without the `seedIfAbsent` addendum, also exited 0, in 1,994 s.
   - The only commit after `57ec63a` is this paragraph.
+
+## S2 — as built (G1 implementer, 2026-10-29)
+
+Branch `feat/F13-history-detail`, from `main` at `e10cbe0` (F13 S1 #77 and F14 S1a #78 in). The specification is the
+plan amendments' S2 (criteria 3, 5, 6 (screen part), 7 and 8 (detail parts) as restated, N8–N10, N13, N14, N6's detail
+part), the rulings before G1, and the carried items F13-S1-6, R1-5, R1-6 and R1-7. Pete's questions are built to the
+planner's defaults (Q1 A, Q5 A, Q8 A for this slice), each in one place.
+
+### Commits
+
+- `fac1f94` feat(history): one workout observed with its records, and spoken weights read from their number.
+- `cfb9bd5` feat(history): a past workout's detail with its receipt, rows that open their history, and delete.
+- this notes commit (docs only).
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- **Domain.** `Model/RecordedWorkout.swift` (a `WorkoutState` with its `[PersonalRecord]`).
+  `WorkoutRepository.observeWorkout(id:) -> AsyncStream<RecordedWorkout?>` (N8, A1): the workout as `workout(id:)`
+  reads it with its records, now and after every change to either (an earlier workout's edit that moves its records
+  included), `nil` while it is not stored, and a workout that can't be read ends the stream. Records are ordered by
+  exercise id text, then the estimated 1RM first, on both implementations.
+- **Persistence.** `GRDBWorkoutRepository+History.swift`: `observeWorkout(id:)` is a `ValueObservation` with
+  `removeDuplicates` over `WorkoutRows.fetch(.one(id), strict: true)` plus `personal_record WHERE workout_id = ?`
+  (`idx_pr_workout`), read strictly so damage ends the stream (N10).
+- **Fakes and stub.** `InMemoryHistory.recorded(_:)`, `InMemoryWorkoutRepository.observeWorkout(id:)`,
+  `UnimplementedWorkoutRepository.observeWorkout(id:)` (an empty stream).
+- **Contract.** `LedgerTestSupport/Persistence/WorkoutRepositoryContract+Detail.swift`, `detailClauses` (3), run on
+  GRDB (`WorkoutRepositoryTests.detailClause_holds`) and in memory (`InMemoryContractTests`): nil before the
+  workout is stored and nothing for another workout's save; the value after its own edit, after an earlier workout's
+  edit takes its records away, and nil after its delete, each equal to `workout(id:)` plus the stats' records read
+  then; nothing within `StatsQueriesContract.quiet` for another workout's save or delete or a log append.
+- **R1-5.** `Weight.shownValue(in:)` is the `Decimal` `formatted(in:)` prints (public, for S3's steppers);
+  `Weight.spoken` reads it instead of parsing the text back, and `Volume.spoken` reads `value(in:)` (no longer
+  private).
+- **FeatureHistory**, new: `HistoryCopy+Detail.swift` (the receipt's 13 keys again, A3; delete, its alert, the
+  failure alert, the unreadable state: 23 keys, the catalog now 36), `WorkoutDetailModel` (with `Deletion` and
+  `Unreadable`), `WorkoutDetailPresentation` (with `WorkoutDetailInput`), `WorkoutDetailStore`, `WorkoutDetailRoot`;
+  `Views/WorkoutDetailScreen.swift` (`WorkoutDetailScreen`, `UnreadableWorkout`), `Views/WorkoutDetailPage.swift`
+  (`WorkoutDetailPage`, `UnreadableWorkoutPage`, `DeleteWorkoutButton`), `Views/Detail+Previews.swift` (4 states).
+  `HistoryRoute` gains `.exercise(id)` and `.closeWorkout(id)`. `HistoryPreviewData.recorded(_:)` is the one builder
+  of a history with its records; `entries(_:)` folds it.
+- **LedgerAppKit.** `AppTabs.screen(for:in:)` draws `WorkoutDetailRoot(workout:)` with `.id(destination)` (R1-7).
+  **F13-S1-6:** `onLibraryRoute` and `onHistoryRoute` carry the tab whose stack drew the screen
+  (`(Route, AppTab) -> Void`), and `resolve(_:from:)` pushes there; `.closeWorkout(id)` pops only a `.workout(id)` on
+  top of that tab's stack, as `.closeDay` does. `MainRoot` passes `$1` through.
+- **Tests.** FeatureHistoryTests: `WorkoutDetailPresentationTests`, `WorkoutDetailStoreTests`, `WorkoutDetailRootTests`,
+  `WorkoutDetailAccessibilityTests`, `WorkoutDetailLayoutTests`, `WorkoutDetailOrangeAuditTests`,
+  `WorkoutDetailSnapshotTests`, `Support/DetailTesting.swift` (`DetailScene`, `DetailFixtures`, `DetailWorkouts`),
+  `DetailParts` in `Support/HistoryParts.swift`; `HistoryCopyTests`, `PreviewTests`, `FeatureHistorySourceTests`
+  extended. LedgerAppKitTests: `ReceiptParityTests` (N13), `HistoryRouteMappingTests` rewritten. LedgerDomainTests:
+  `SpokenWeightTests.shownValue_isTheDrawnNumber`. Nightly UI: `Apps/LedgerUITests/WorkoutHistory.swift`.
+
+No change to the project file, a test plan, `Package.swift` or `.github/`.
+
+### Criteria → tests
+
+Suites: `WorkoutDetailPresentationTests` (P), `WorkoutDetailStoreTests` (S), `WorkoutDetailRootTests` (R),
+`WorkoutDetailAccessibilityTests` (AX), `WorkoutDetailLayoutTests` (L), `WorkoutDetailOrangeAuditTests` (O),
+`WorkoutDetailSnapshotTests` (SN), `HistoryCopyTests` (C), `ReceiptParityTests` (PAR), `HistoryRouteMappingTests` (RM),
+`WorkoutRepositoryContract.detailClauses` (K), UI `WorkoutHistory` (nightly).
+
+| Criterion | Tests |
+|---|---|
+| 3. Receipt, header, rows | P `newest_inPounds_isTheReceipt`, `rows_areTheDomains_andRouteToTheirExercise`, `records_noneAndOne`, `skippedExercise_andPastAnHour`. S `run_firstModel_isThePresentations`, `rowTapped_twice_isOneRoute`. R `root_runsTheStore_andHandsARouteOnce`. AX tree, controls. RM `exercise_pushesTheHistoryOverTheDetail`. SN. UI |
+| 5. Delete | S `delete_confirmedTwice_deletesOnce`, `delete_failed_keepsTheScreen`, `delete_notConfirmed_deletesNothing`, `deletedElsewhere_closes`. R `root_deletesOnce_andCloses`, `root_failedDelete_keepsTheDetail`. RM `closeWorkout_popsOnlyTheDetailOnTop`. UI (from History, and from Today: R4) |
+| 6. Screen part | RM `workout_pushesItsDetailOnTheHistorysStack`, `lateRoute_landsOnItsOwnTab` (F13-S1-6) |
+| 7. kg (detail) | P `kilograms_drawEveryWeightInKilograms`. S `unitsChanged_redrawsTheWeights`. AX `tree_readsTheLiftersUnits`. SN kilograms |
+| 8. AX3 (detail) | L `accessibilitySizes_stackTheTiles`, `longName_wrapsWhole`, `parts_layOutSanely`. SN with records at `.accessibility3` |
+| N8 | K (3 clauses, GRDB and in memory). S `workoutEdited_redraws`, `earlierWorkoutEdited_takesTheRecordsAway` |
+| N9 | S and R as for 5; `runAgain_onAGoneWorkout_closesAgain` |
+| N10 | S `unreadable_saysSo_andDeletes`. AX and L `unreadable` state. O `delete_wearsNone` |
+| N13 | PAR `detail_isTheReceipt` over F10's three receipt previews and History's two, `workouts_coverWhatTheReceiptShows` |
+| N14 | P `date_isInTheCalendarsTimeZone` |
+| N6 (detail) | O `orange_isTheReceiptsOwn`, `delete_wearsNone`; source test: no file names the accent |
+
+### Decisions and deviations
+
+1. **The model is built on the main actor**, at each change, without the list's channel and `@concurrent` builder:
+   a detail is a few dozen rows. The two sources are followed in one task group as the list's are.
+2. **The detail draws its own heading** (the day in caption ink over the name in `.title`, `history.workout.title`),
+   as an exercise's history does, under the pushed screen's bar with its back button; there is no "Done" (F10's
+   header is the cover's). It scrolls whole: no pinned part.
+3. **`.gone` draws the ground** while the app pops the detail. If the detail is not on top (an exercise's history was
+   pushed over it), the close pops nothing; when that screen comes off, the detail's task runs again, finds the
+   workout gone, and asks to close again (`runAgain_onAGoneWorkout_closesAgain`).
+4. **Any source that ends shows the unreadable state**, the settings' too, as the list shows its failed state for
+   either. A settings failure is then worded as the workout's; it was judged too rare for its own state.
+5. **A delete's close replaces a waiting row route** (the row's history has nothing to open over).
+6. **F13-S1-6 is fixed in the shell**, not in the stores: the route closure each stack builds carries its tab, so a
+   route delivered late still lands where it came from. The resolve then also selects that tab (`open(_:in:)`).
+7. **`AppTabsTests.selectingATab_swapsTheScreen` is re-pointed at Settings' placeholder**: the detail's root, like
+   every feature root in a scene-less window, draws nothing there. F14 S1b, which replaces that placeholder, must
+   re-point it again (A10).
+8. **Line count under the band.** The slice is 649 net against the 700–900 aim (plan: about 790); the copy (161) and
+   the store (130) came in as planned, the views and the presentation smaller. Nothing was compressed; S3 stays as
+   planned.
+
+### New wording for Pete
+
+All in `HistoryCopy+Detail.swift`. From the plan (Q8 A): "Delete workout", "Delete this workout?", "It's removed from
+your history, records and stats. This can't be undone.", "Delete", "Cancel"; "This workout can't be read." (N10).
+**Not in the brief or plan:** the failed delete's alert, "Couldn't delete this workout" / "It's still in your history.
+Try again in a moment." / "OK"; the unreadable state's line, "It stays in your history. You can still delete it." The
+receipt's words are F10's, unchanged.
+
+### Sanctioned edits outside the slice
+
+| File | Edit | Why |
+|---|---|---|
+| `LedgerAppKitTests/AppTabsTests.swift` | `selectingATab_swapsTheScreen` pushes `.settings` on Program; doc paragraph | `.workout` draws the detail's root (no element in a scene-less window) |
+| `LedgerAppKitTests/LibraryRouteMappingTests.swift` | each `resolve` passes `from:` the tab that asked; doc and one test name | F13-S1-6 |
+| `WorkoutRepository` conformers: `ProbedWorkoutRepository`, `LinkedSaveLogAdversarialTests.OldWrapper` (in an extension, the suite is at the lint's 150 lines), `HistoryModel+Repositories`, `S13LoggedWorkouts`, `ScriptedWorkouts`, `ProbedWorkouts+History`, `SabotagedWorkoutRepository`, `SiegeWorkoutRepository`, `SeparateWorkoutRepository`, `BriefWorkoutRepository`, `EndedHistory`, `FailingOnceHistory` | `observeWorkout(id:)`: forwards, or an ended stream | A protocol requirement (N8) |
+| `LedgerDependenciesTests/UnimplementedStubTests.swift` | the workout stub's `observeWorkout` ends at once | Same |
+| `LedgerPersistenceTests/WorkoutRepositoryTests.swift`, `InMemoryContractTests.swift` | one parameterised test each for `detailClauses` | K |
+| `LedgerDomainTests/Units/SpokenWeightTests.swift` | one test | R1-5 |
+
+F13's own tests changed: `HistoryRouteMappingTests` (rewritten for `from:`, plus late route, exercise, close),
+`FeatureHistorySourceTests` (the detail's store and root under the store rules, two screens may scroll, the views may
+not name the presentation, `WorkoutEngine` or `ReceiptRow(`), `PreviewTests`, `HistoryCopyTests`, `HistoryTesting`
+(R1-6: `HistoryFixtures.entries` calls `HistoryPreviewData.entries`).
+
+### Product lines
+
+Non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps`, excluding `LedgerTestSupport` and the UI tests, against
+`e10cbe0`: **net 649**.
+
+| File | Net |
+|---|--:|
+| `FeatureHistory/HistoryCopy+Detail.swift` | 161 |
+| `FeatureHistory/WorkoutDetailStore.swift` | 130 |
+| `FeatureHistory/WorkoutDetailPresentation.swift` | 99 |
+| `FeatureHistory/Views/WorkoutDetailPage.swift` | 58 |
+| `FeatureHistory/Views/Detail+Previews.swift` | 49 |
+| `FeatureHistory/WorkoutDetailRoot.swift` | 45 |
+| `FeatureHistory/Views/WorkoutDetailScreen.swift` | 25 |
+| `FeatureHistory/WorkoutDetailModel.swift` | 22 |
+| `LedgerPersistence/…/GRDBWorkoutRepository+History.swift` | 18 |
+| `LedgerFakes` (in-memory history 11, repository 3), `LedgerDependencies` stub (3) | 17 |
+| `LedgerDomain` (`RecordedWorkout` 9, `Weight` 3, `Repositories` 1, `SpokenWeight`/`Volume` 0) | 13 |
+| `LedgerAppKit` (`Routes+History` 6, `AppTabs` 1, `MainRoot`/`Routes+Library` 0) | 7 |
+| `FeatureHistory/Views/History+Previews.swift` | 3 |
+| `FeatureHistory/HistoryRoute.swift` | 2 |
+
+Under the 500-line target? No: the PR is over it. The split considered is the two commits: the observation, its
+contract and R1-5 first (about 50 product lines, nothing on screen), then the detail (about 600); the first alone
+would ship an API with no caller.
+
+### Runs
+
+- Host, `swift test`: `FeatureHistoryTests` (76 tests in 12 suites, the one known issue F13-S1-3), the persistence
+  history and detail clauses (GRDB and in memory), `SpokenWeightTests`, `UnimplementedStubTests`, the route mapping
+  suites and `ReceiptParityTests`: all green.
+- Simulator, targeted through the lock on the PR plan (`TEST_RUNNER_LEDGER_SWEEP=pr`, record missing):
+  `FeatureHistoryTests` and `LedgerAppKitTests`, 478 tests: 473 passed, 1 skipped, and the snapshot tests failed only
+  as they recorded the 8 references.
+
+### References (8 new, I looked at each)
+
+With records, without and in kilograms, light and dark at `.large`; with records at `.accessibility3` in light and
+dark. The day over the name, TIME's orange label and the orange records line ("8 new PRs this session") as F10's
+receipt draws them, the rows with their targets on the right and their chips, "Delete workout" in muted ink at the
+foot. In kilograms every target, chip and the tile read kg ("5 × 90.7×5", "6,282"). At `.accessibility3` the tiles
+stand one per row, each target under its name, and the name wraps whole. No existing reference changed.
+
+### The gate and the nightly UI tests
+
+- **Full gate on `cfb9bd5`: exit 0, "check.sh OK", 2,276 s.**
+
+  | Step | Time |
+  |---|--:|
+  | format | 5 s |
+  | lint | 102 s |
+  | iOS build | 9 s |
+  | string catalogs (FeatureHistory: 36 keys) | 1 s |
+  | iOS tests (17 targets passed, PR plan) | 1,817 s |
+  | watchOS build | 50 s |
+  | watchOS tests (8 targets passed) | 287 s |
+  | coverage | 2 s |
+
+  Coverage: FeatureHistory 941 / 955 (98.53 %), LedgerDomain 99.44 %, overall 98.58 %.
+- **Nightly UI, targeted through the lock on the Nightly plan:** `LedgerUITests/WorkoutHistory` (3 tests: list →
+  detail → a row's exercise history → back → back; delete from History empties the list; delete from a detail pushed
+  on Today from "View session" leaves RECENT with "No sessions yet", risk R4) and `HistoryVoiceOverAdversarial` (3,
+  its session tap still finds `history.workout.title`): 6 of 6 passed.
+- The only commit after `cfb9bd5` is these notes.
+
+### Questions for Pete
+
+Built to the planner's defaults; each can change in one place.
+
+1. **Q1, where a past workout opens:** built to A, on the tab you tapped it from; back returns there.
+2. **Q5, units on old workouts:** built to A, the detail draws every weight in your current units (a pound workout
+   read in kilograms shows "5 × 90.7×5").
+3. **Q8, deleting:** built to A, one alert, "Delete this workout?" / "It's removed from your history, records and stats.
+   This can't be undone.", "Delete" and "Cancel".
+4. **New wording** (above): the failed delete's alert, "Couldn't delete this workout" / "It's still in your history.
+   Try again in a moment."; the unreadable workout's line, "It stays in your history. You can still delete it."
+   *Recommendation:* accept.
+5. **The records line counts every record kind**, as the receipt and the list's badge do (S1's question 1): a
+   progressing day reads "8 new PRs this session". *Recommendation:* keep the three in step, whichever way you rule.
+6. Q2–Q4 belong to S3 (the edit sheet) and are unchanged.
+
+### Inputs for S3
+
+- `WorkoutDetailStore`/`WorkoutDetailRoot` take the toolbar's "Edit" and the sheet; `DetailScene`, `DetailWorkouts`
+  and `DetailFixtures` in FeatureHistoryTests are reusable.
+- `Weight.shownValue(in:)` is public for the steppers' spoken values.
+- `WorkoutRepository` gained `observeWorkout(id:)`: a new conformer needs it.
+- F14 S1b replaces Settings' placeholder, on which `AppTabsTests.selectingATab_swapsTheScreen` now leans again.
