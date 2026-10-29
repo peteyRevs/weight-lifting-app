@@ -358,7 +358,7 @@ FeatureSettings 99.20 % (502 / 506), overall 98.55 %.
 
 ### S1a fix round 3 (G1, 2026-10-28)
 
-Against G3's round 2 (`ba60919`, "## Round 2") and the orchestrator's rulings. One code commit, then this notes
+Against G3's round 2 (`ba60919`, "## Round 2") and the orchestrator's rulings. Code and notes in one commit, `262bb8f`; this sentence fixed in the commit after
 commit. No sim gate in this round: the orchestrator runs it.
 
 **R2-1: a retired observation is closed at once.**
