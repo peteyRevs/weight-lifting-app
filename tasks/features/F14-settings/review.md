@@ -215,3 +215,164 @@ as they can be.
   under M5.
 - `git merge-tree --write-tree HEAD feat/F13-workout-history`: two conflicts (R1-4).
 - No simulator run. The orchestrator runs the gate.
+
+## Round 2
+
+**S1a — G3 review (round 2, 2026-10-28), of `git diff 2df12aa..5762717` (code `c8a52ac`, notes `5762717`).**
+
+**Verdict: APPROVED WITH MINORS.** R1-1, R1-2, R1-3, R1-5, R1-6 and R1-7 are fixed. Two Minors (R2-1, R2-2) and a
+Nit (R2-3) remain. None of them breaks a promise the lifter can reach today. R2-1 should be fixed or ruled before
+merge. R2-2 is a test gap with the test written below, and R2-3 is a one-condition simplification. R1-4 (the F13
+merge) is outside this diff and still the orchestrator's call.
+
+**What holds (verified, not taken from the notes):**
+- **R1-1, the restart design.** I traced every interleaving I could build:
+  - Restart and retire both run on the main actor: `observationNumber` is bumped by the follower, and each value is
+    checked against it before `receive`. A retired observation can never write `stored` or `isUnreadable`, at its
+    values or at its end. M4 kills on the in-order A, B, A test.
+  - **Stale-forever check.** Every save that returns, and every failure, ends with a restart mark (M6, M8 killed).
+    A fresh first value is suppressed only while a save runs or since one returned. That save's own idle then marks
+    the follower again. So the chain ends in a first value that is taken, with one exception: R2-3, where `pending`
+    is set and no save follows. A change made elsewhere is therefore never hidden past the next restart, outside
+    R2-3.
+  - **Cancelled runs.** A cancelled run's returning save yields the *current* run's `followMark` (it is read when the
+    defer runs). With no run on, the next `run()` marks the follower at its start. A cancelled save that throws
+    hands off to the current saver, as in round 1.
+  - **Cancellation and hangs.** `AsyncStream` iteration returns nil on cancellation, and the end guard's
+    `Task.isCancelled` keeps a cancelled observation from logging "could not be read". `run()`'s group drains:
+    - the saver's `for await` ends
+    - the follower's `for await marks` ends
+    - each `observe` child ends at cancellation
+
+    No hang was found. The leak in R2-1 lasts only while a run lives.
+  - **`ScriptedSettings` against GRDB (asked).** Routing a held echo only to the observations open at its commit
+    matches GRDB:
+    - An observation started after a commit sees it in its initial fetch, and gets no separate notification for it.
+      `DatabaseQueue` registers the observer and fetches in one access.
+    - `removeDuplicates` is modelled by `lastSent`.
+
+    It differs from GRDB in two ways:
+    - (a) The double yields an observation's first value at subscription. GRDB fetches it and delivers it later
+      through `.task`. This is why M1 and M11 cannot be killed (R2-2).
+    - (b) `deliverNextEcho()` after `writeElsewhere(_:)` delivers an older value after a newer one. GRDB's serial
+      delivery never does that. This is stricter than real life and harmless.
+- **R1-2.** `restart_handsTheQueuedChangeToTheNewRun` kills round 1's M5 (the defer's `saveMark?.yield()` removed):
+  `nextIsFriday` and `rowIsFriday` fail, with 4 issues. M3's branch went with the FIFO.
+- **R1-3, atomic.** `LedgerStores.open` runs `LocalDevice.open(in:)` and `seedIfAbsent(_:at:in:)` in one
+  `database.write`, which is one transaction. A thrown seed rolls back the device row. Two mutations, both killed:
+  - **RA:** the seed moved to a second `write`. `deviceRowAndSeed_areOneWrite` fails (`deviceRows == 0` and
+    `seeded`).
+  - **RB:** `device.isNew` dropped. The pre-F14 tests fail, in `DatabaseLaunchTests+Regional` and in
+    `SettingsSeedAdversarialTests`.
+
+  No caller is left on the removed APIs. `git grep` finds no `isNewInstall`, no `LocalDevice.open(in: queue…)`
+  (now internal, taking a `Database`), and no `LedgerStores(…, isNewInstall:)` in any target or in the app projects.
+  The remaining `LedgerStores(` callers use `(queue, deviceID:, now:)`, which is unchanged.
+- **R1-5.** The listed sites now bind a Bool. **R1-7:** the bound is 1,000 yields.
+- **R1-6.** The `"%@ %@"` key carries a comment that gives the translator `%1$@`/`%2$@`. The reason for keeping
+  `locale:` is true: `docs/engineering-standards.md` lines 219–231 and 377 require `locale:` on every lookup whose key
+  carries a value, and `ModuleCopyTests` audits it. Not reopened.
+
+---
+
+**F14-S1a-R2-1 (Minor, resources). A retired observation stays open until the row's value next changes, and every
+failing save adds one.**
+- **Where:** `follow` / `observe`, `SettingsStore+Sources.swift:46-79`, and the defer at `:106-114`.
+- **Cause:** A retired observation ends only "at its next value". The repository's observation has
+  `.removeDuplicates()`, so a save that fails produces no value. The failure still restarts, so each failure leaves
+  one more GRDB `ValueObservation` registered on the `DatabaseQueue`. Each of them refetches the row after every
+  commit to `settings`, until the row changes or the run ends.
+- **Failure scenario:**
+  - The database refuses writes (disk full, or a read-only file after a restore).
+  - The lifter taps 50 times on the open screen. Every tap fails.
+  - 51 live observations are left, and the next successful commit wakes all of them at once.
+- **Probe P2:** 20 failing saves of KG over `ScriptedSettings` leave `observationCount == 21`; the start is 1.
+- **Normal flow stays bounded:** after a successful save, the retired observation either takes its echo after the
+  bump and returns, or lingers until the next distinct value. At most one is left over.
+- **Fix:**
+  - Preferred: cancel the retired observation itself. Run each observation in an unstructured `Task` whose handle
+    the store keeps. Cancel it on retire, and forward the group's cancellation with
+    `withTaskCancellationHandler { await handle.value } onCancel: { handle.cancel() }`, so nothing outlives the
+    screen.
+  - Otherwise: rule the leak acceptable, correct the doc comment ("ends at its next value" is true but unbounded),
+    and pin P2's count.
+
+**F14-S1a-R2-2 (Minor, tests). Two of the new load-bearing conditions survive mutation.**
+
+| Mutant | Result | Why |
+|---|---|---|
+| M1 `readsTheRowAfresh: isFirst` (drop `writes == writesBefore`) | **Survives** | the double's first value is synchronous |
+| M11 `writes += 1` removed | **Survives** | same as M1 |
+| M7 `hasWrittenOrFailed = true` dropped on the failure path | **Survives**; killed by P3 below | untested branch |
+
+- **M1 / M11, failure scenario (real GRDB, `.task` delivery):**
+  1. The idle saver restarts. Observation D starts, and GRDB fetches D's first value (row = A) on the queue.
+  2. The lifter taps B. The save of B commits and returns, and the saver goes idle.
+  3. D's pre-B first value is delivered after that, but before the follower handles the new mark.
+  4. Without the `writes` check, `written` is dropped and the screen flashes A over the lifter's B (the F14-S1-3
+     class). It lasts until the next observation's first value.
+
+  `ScriptedSettings` cannot express this, because its `observe()` yields the row at subscription. **Fix:** give the
+  double a way to hold an observation's first value, as GRDB does, and add a test that fails under M1.
+- **M7, failure scenario:**
+  1. Save A returns. The lifter taps B before the fresh observation's first value, so that value is suppressed and
+     `written == A`.
+  2. B's save fails. Without the restart, `written` stays A.
+  3. A change made elsewhere then never reaches the screen until the next successful save.
+
+  **Fix:** add P3, which passes on HEAD and fails under M7 with `shownIsTheRow`:
+  - save KG
+  - `until pending == nil`
+  - `send(.setWeekStart(.friday))`
+  - hold the save, then fail it
+  - `writeElsewhere(kilograms with Thursday)`
+  - expect `shown ==` that value
+
+**F14-S1a-R2-3 (Nit, simplicity and a theoretical stale window). `receive`'s `pending == nil` is not needed, and it
+is the one way out of the restart chain. `!isSaving` is the condition that matters.**
+- **Where:** `SettingsStore+Sources.swift:88`.
+- **Why `pending == nil` adds nothing:** given `!isSaving` and `writes == writesBefore`, every save of this store
+  either returned before the observation started, so the fresh read includes it, or never ran. The fresh value is
+  then what is committed, whatever is pending.
+- **Why `!isSaving` alone is redundant today (M2, an equivalent mutant):** `pending` is non-nil for the whole of a
+  save loop, and the failure path sets it to nil and returns without suspending.
+- **Failure scenario that keeping it opens:**
+  1. Two `send`s in one main-actor turn, a change and then its undo, land after the idle saver's restart mark and
+     before the fresh first value.
+  2. The first value is suppressed (`pending != nil`).
+  3. The saver then finds `pending == committed`, saves nothing, and does not restart.
+  4. `written` is stuck, and a change made elsewhere stays hidden until the lifter's next save.
+
+  Human taps cannot do this: one tap per turn starts a save, whose idle restarts. My probe P1 could not reach it
+  over the double either.
+- **Fix:** test `readsTheRowAfresh, !isSaving` and update the doc comment. Dropping `pending == nil` (M3) keeps every
+  suite green, P1 and P3 included.
+
+---
+
+**Mutation table, round 2** (host, scratch copy of `5762717`, `swift test --filter FeatureSettingsTests`; source
+restored and `diff -r Sources` empty after):
+
+| # | Mutation (`SettingsStore+Sources.swift`) | Result |
+|---|---|---|
+| M1 | `isFirst && writes == writesBefore` → `isFirst` | **Survives** (R2-2) |
+| M2 | drop `!isSaving` | Survives: equivalent given `pending == nil` (R2-3) |
+| M3 | drop `pending == nil` | Survives everything but P2's leak count: the condition is unneeded (R2-3) |
+| M4 | drop `number == observationNumber` on values | Killed (A, B, A in order) |
+| M5 | drop `number == observationNumber` at the end | Survives: only a duplicate unreadable log from a retired observation ending in the same error (harmless) |
+| M6 | no follow mark when idle | Killed (4 tests) |
+| M7 | failure does not set `hasWrittenOrFailed` | **Survives** the suite; killed by P3 (R2-2) |
+| M8 | write does not set `hasWrittenOrFailed` | Killed |
+| M9 | every value may clear `written`, not only the first | Survives: near-equivalent and benign |
+| M10 | `written` never cleared | Killed |
+| M11 | `writes += 1` removed | **Survives** (R2-2) |
+| M12 | restart even after an idle with no save | Survives: benign, costs one refetch |
+| R1-M5 | defer's hand-off `saveMark?.yield()` removed | Killed by `restart_handsTheQueuedChangeToTheNewRun` |
+| RA | seed in a second `write` (`LedgerStores.swift`) | Killed by `deviceRowAndSeed_areOneWrite` |
+| RB | seed without `device.isNew` | Killed (2 tests) |
+
+**Runs:**
+- `swift test --filter FeatureSettingsTests` on an unmodified copy: 42 tests / 7 suites, green.
+- `--filter "DatabaseLaunch|LocalDevice|SettingsRepository|SettingsSeed|AppComposition"`: 41 / 7 and 10 / 1, green.
+- Probes P1–P3 lived only in the scratch copy.
+- No simulator run. The orchestrator runs the gate.
