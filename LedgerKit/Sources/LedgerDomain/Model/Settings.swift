@@ -35,9 +35,9 @@ public struct Settings: Hashable, Codable, Sendable {
 
     /// The prototype defaults (spec §2 state seed): lb, 90 s rest, plate math, auto rest and
     /// watch buzz on, standard inventories for both units. `weekStart` is Monday here because the
-    /// domain cannot read the locale. Decision #15 (the week start from the iPhone's region on first
-    /// launch, `Weekday.first(of:)`) is not implemented yet: whether first launch reads the region is
-    /// F14's to decide (F08, Pete's decision 5 = C).
+    /// domain cannot read the locale: a new install on the iPhone starts from `regional(locale:calendar:)`
+    /// instead (decision #15, F14). These are what a store with no settings row loads, and what Settings
+    /// draws while the stored row cannot be read.
     public static let `default` = Settings(
         units: .lb,
         defaultRest: .defaultRest,
@@ -47,6 +47,18 @@ public struct Settings: Hashable, Codable, Sendable {
         weekStart: .monday,
         plateInventory: [.lb: .standard(.lb), .kg: .standard(.kg)]
     )
+
+    /// What a new install on the iPhone starts from (decision #15; F14, Pete's question 2, A): pounds where the
+    /// region measures in US units and kilograms everywhere else, and weeks that start on the region's first
+    /// weekday (`Weekday.first(of:)`: Sunday in the US, Monday in the UK and Germany). Everything else is
+    /// `default`'s. The launch writes it once, before onboarding, and only when no settings are stored
+    /// (`SettingsRepository.seedIfAbsent(_:)`).
+    public static func regional(locale: Locale, calendar: Calendar) -> Settings {
+        var settings = Settings.default
+        settings.units = locale.measurementSystem == .us ? .lb : .kg
+        settings.weekStart = Weekday.first(of: calendar)
+        return settings
+    }
 }
 
 // MARK: - Codable (tolerates missing keys)

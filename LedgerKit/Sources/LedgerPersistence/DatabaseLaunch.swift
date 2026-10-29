@@ -45,6 +45,7 @@ public final class DatabaseLaunch {
 
     @ObservationIgnored private let databaseURL: URL
     @ObservationIgnored private let kind: LocalDevice.Kind
+    @ObservationIgnored private let regionalSettings: Settings?
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let newID: @Sendable () -> UUID
     @ObservationIgnored private let logger: Logger
@@ -57,12 +58,18 @@ public final class DatabaseLaunch {
     @ObservationIgnored private var ended: Set<LaunchStep> = []
 
     /// - Parameters:
+    ///   - regionalSettings: what a new install's settings start from, written by the open in the same write that
+    ///     inserts this device's row (`LedgerStores.open`; `Settings.regional(locale:calendar:)`, decision #15;
+    ///     F14-S1-5 and F14-S1a-R1-3, ruled): the iPhone's. An install made before F14 has a device row and no
+    ///     settings row, and keeps `Settings.default`, which its program was built with. The watch passes nil, and
+    ///     seeds nothing: its settings come from the phone (F19).
     ///   - record: receives each `LaunchEvent` as it happens.
     ///   - onOpen: called once the database is open, before `state` becomes `.ready`: the composition root binds
     ///     the stores to the dependency keys there.
     public init(
         at databaseURL: URL,
         kind: LocalDevice.Kind,
+        regionalSettings: Settings? = nil,
         now: @escaping @Sendable () -> Date,
         newID: @escaping @Sendable () -> UUID,
         logger: Logger,
@@ -71,6 +78,7 @@ public final class DatabaseLaunch {
     ) {
         self.databaseURL = databaseURL
         self.kind = kind
+        self.regionalSettings = regionalSettings
         self.now = now
         self.newID = newID
         self.logger = logger
@@ -83,7 +91,13 @@ public final class DatabaseLaunch {
     public func open() {
         record(.began(.openDatabase))
         do {
-            let opened = try LedgerStores.open(at: databaseURL, kind: kind, now: now, newID: newID)
+            let opened = try LedgerStores.open(
+                at: databaseURL,
+                kind: kind,
+                regionalSettings: regionalSettings,
+                now: now,
+                newID: newID
+            )
             stores = opened
             onOpen(opened)
             state = .ready

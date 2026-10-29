@@ -7,25 +7,40 @@
     /// inventory's plates come back normalised, and a NaN weight throws `EncodingError`); `observe()` emits only a
     /// change.
     public final class InMemorySettingsRepository: SettingsRepository {
-        private let state: ObservedState<Settings>
+        /// The settings, and whether a row holds them: `seedIfAbsent(_:)` writes only when none does.
+        private struct Stored {
+            var settings: Settings
+            var isRow: Bool
+        }
 
-        /// Holding `settings`, kept as given (stored state); `Settings.default` is what a database with no settings
-        /// row loads.
-        public init(_ settings: Settings = .default) {
-            state = ObservedState(settings)
+        private let state: ObservedState<Stored>
+
+        /// Holding `settings`, kept as given, as a stored row; with none, holding no row, where load gives
+        /// `Settings.default`, as a database with no settings row does.
+        public init(_ settings: Settings? = nil) {
+            state = ObservedState(Stored(settings: settings ?? .default, isRow: settings != nil))
         }
 
         public func load() async throws -> Settings {
-            state.read(\.self)
+            state.read(\.settings)
         }
 
         public func save(_ settings: Settings) async throws {
             let stored = try SettingsCodec.decode(SettingsCodec.encode(settings), version: SettingsCodec.version)
-            state.write { $0 = stored }
+            state.write { $0 = Stored(settings: stored, isRow: true) }
+        }
+
+        public func seedIfAbsent(_ settings: Settings) async throws {
+            let stored = try SettingsCodec.decode(SettingsCodec.encode(settings), version: SettingsCodec.version)
+            state.write { current in
+                if !current.isRow {
+                    current = Stored(settings: stored, isRow: true)
+                }
+            }
         }
 
         public func observe() -> AsyncStream<Settings> {
-            state.observe(\.self)
+            state.observe(\.settings)
         }
     }
 #endif

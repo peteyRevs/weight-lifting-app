@@ -93,6 +93,8 @@ nonisolated struct FailingSettings: SettingsRepository {
 
     func save(_: Settings) async throws {}
 
+    func seedIfAbsent(_: Settings) async throws {}
+
     func observe() -> AsyncStream<Settings> {
         AsyncStream { $0.finish() }
     }

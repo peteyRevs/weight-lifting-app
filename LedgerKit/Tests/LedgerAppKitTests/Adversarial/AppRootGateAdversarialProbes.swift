@@ -145,6 +145,11 @@
             try await inner.save(settings)
         }
 
+        func seedIfAbsent(_ settings: LedgerDomain.Settings) async throws {
+            journal.note("settings.seedIfAbsent")
+            try await inner.seedIfAbsent(settings)
+        }
+
         func observe() -> AsyncStream<LedgerDomain.Settings> {
             inner.observe()
         }

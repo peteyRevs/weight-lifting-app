@@ -37,14 +37,27 @@ public struct LedgerStores: Sendable {
     ///
     /// A failure after the preflight (a migration that fails on the data, a damaged `device` row) can leave the
     /// migrations that succeeded before it applied, each in its own transaction, as GRDB's migrator commits them.
+    ///
+    /// `regionalSettings` are a new install's (decision #15; F14-S1-5 and F14-S1a-R1-3, ruled): they are written,
+    /// when no settings row is there, in the one write that inserts this device's row, so a launch that ends at any
+    /// point leaves either both or neither, and the next launch is a new install's again. An install that already
+    /// has its device row (one made before F14 among them) is never seeded.
     public static func open(
         at url: URL,
         kind: LocalDevice.Kind,
+        regionalSettings: Settings? = nil,
         now: @escaping @Sendable () -> Date,
         newID: @Sendable () -> UUID
     ) throws -> LedgerStores {
         let database = try LedgerDatabase.open(at: url)
-        let device = try LocalDevice.id(in: database, kind: kind, now: now(), newID: newID)
+        let instant = now()
+        let device = try database.write { transaction in
+            let device = try LocalDevice.open(in: transaction, kind: kind, now: instant, newID: newID)
+            if device.isNew, let regionalSettings {
+                try GRDBSettingsRepository.seedIfAbsent(regionalSettings, at: instant, in: transaction)
+            }
+            return device.id
+        }
         return LedgerStores(database, deviceID: device, now: now)
     }
 

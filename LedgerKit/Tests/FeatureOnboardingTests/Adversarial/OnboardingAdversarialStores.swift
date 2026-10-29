@@ -82,6 +82,11 @@ final nonisolated class ProbedSettings: SettingsRepository {
         try await base.save(settings)
     }
 
+    func seedIfAbsent(_ settings: Settings) async throws {
+        journal.note("settings.seedIfAbsent")
+        try await base.seedIfAbsent(settings)
+    }
+
     func observe() -> AsyncStream<Settings> {
         base.observe()
     }

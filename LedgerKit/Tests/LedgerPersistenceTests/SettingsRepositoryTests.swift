@@ -44,7 +44,8 @@ struct SettingsRepositoryTests {
     @Test("Before the first save, load returns the defaults")
     func load_beforeAnySave_returnsDefaults() async throws {
         let (repository, _) = try Self.repository()
-        #expect(try await repository.load() == .default)
+        let loadsTheDefaults = try await repository.load() == .default
+        #expect(loadsTheDefaults)
     }
 
     @Test("Saved settings load back equal, in one row stamped by the injected clock")
@@ -68,7 +69,8 @@ struct SettingsRepositoryTests {
     func observe_emitsCurrent_thenEachChange() async throws {
         let (repository, _) = try Self.repository()
         var values = repository.observe().makeAsyncIterator()
-        #expect(await values.next() == .default)
+        let firstIsTheDefaults = await values.next() == .default
+        #expect(firstIsTheDefaults)
         try await repository.save(Self.custom)
         #expect(await values.next() == Self.custom)
         var changed = Self.custom
@@ -119,5 +121,32 @@ struct SettingsRepositoryTests {
             emitted.append(settings)
         }
         #expect(emitted.isEmpty)
+    }
+
+    @Test(
+        "F14 N3. seedIfAbsent leaves a row this app cannot read as it is, every column",
+        arguments: ["payload_version = 2", "payload = '{\"units\": \"stone\"}'", "payload = x'80'"]
+    )
+    func seedIfAbsent_unreadableRow_isUntouched(_ damage: String) async throws {
+        let (repository, queue) = try Self.repository()
+        try await repository.save(Self.custom)
+        try await queue.write { try $0.execute(sql: "UPDATE settings SET \(damage), updated_at = 'then'") }
+        let row = "SELECT quote(payload_version) || ',' || quote(payload) || ',' || updated_at FROM settings"
+        let before = try await queue.read { try String.fetchOne($0, sql: row) }
+        try await repository.seedIfAbsent(.default)
+        let after = try await queue.read { try String.fetchOne($0, sql: row) }
+        #expect(after == before)
+    }
+
+    @Test("F14 N3. seedIfAbsent writes the row, at the version and the time of a save")
+    func seedIfAbsent_noRow_writesItLikeASave() async throws {
+        let (repository, queue) = try Self.repository()
+        try await repository.seedIfAbsent(Self.custom)
+        let version = try await queue.read { try Int.fetchOne($0, sql: "SELECT payload_version FROM settings") }
+        let updatedAt = try await queue.read { try String.fetchOne($0, sql: "SELECT updated_at FROM settings") }
+        #expect(version == SettingsCodec.version)
+        #expect(updatedAt == ColumnCodec.timestamp(Self.clock))
+        let loadsTheSeed = try await repository.load() == Self.custom
+        #expect(loadsTheSeed)
     }
 }

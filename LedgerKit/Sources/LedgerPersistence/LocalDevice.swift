@@ -30,17 +30,27 @@ public enum LocalDevice {
         now: Date,
         newID: @Sendable () -> UUID
     ) throws -> DeviceID {
-        try queue.write { database in
-            let sql = "SELECT id FROM device WHERE kind = ? ORDER BY created_at, id LIMIT 1"
-            if let stored = try String.fetchOne(database, sql: sql, arguments: [kind.rawValue]) {
-                return try ColumnCodec.identifier(stored)
-            }
-            let id = DeviceID(newID())
-            try database.execute(
-                sql: "INSERT INTO device (id, kind, name, created_at) VALUES (?, ?, ?, ?)",
-                arguments: [ColumnCodec.text(id), kind.rawValue, kind.name, ColumnCodec.timestamp(now)]
-            )
-            return id
+        try queue.write { database in try open(in: database, kind: kind, now: now, newID: newID).id }
+    }
+
+    /// `id(in:kind:now:newID:)` inside the caller's write, and whether it inserted the row: true only on a new
+    /// install's first launch. `LedgerStores.open` seeds the region's settings in that same write (F14-S1-5 and
+    /// F14-S1a-R1-3, ruled), so the row and the seed are written together or not at all.
+    static func open(
+        in database: Database,
+        kind: Kind,
+        now: Date,
+        newID: @Sendable () -> UUID
+    ) throws -> (id: DeviceID, isNew: Bool) {
+        let sql = "SELECT id FROM device WHERE kind = ? ORDER BY created_at, id LIMIT 1"
+        if let stored = try String.fetchOne(database, sql: sql, arguments: [kind.rawValue]) {
+            return try (ColumnCodec.identifier(stored), false)
         }
+        let id = DeviceID(newID())
+        try database.execute(
+            sql: "INSERT INTO device (id, kind, name, created_at) VALUES (?, ?, ?, ?)",
+            arguments: [ColumnCodec.text(id), kind.rawValue, kind.name, ColumnCodec.timestamp(now)]
+        )
+        return (id, true)
     }
 }
