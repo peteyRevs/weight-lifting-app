@@ -376,3 +376,117 @@ restored and `diff -r Sources` empty after):
 - `--filter "DatabaseLaunch|LocalDevice|SettingsRepository|SettingsSeed|AppComposition"`: 41 / 7 and 10 / 1, green.
 - Probes P1–P3 lived only in the scratch copy.
 - No simulator run. The orchestrator runs the gate.
+
+## Round 3
+
+**S1a — G3 review (round 3, 2026-10-28), of `git diff ba60919..b71502c` (code `262bb8f`, notes `b71502c`).**
+
+**Verdict: APPROVED WITH MINORS.** R2-1, R2-2 and R2-3 are fixed in the product code, and the fakes deadlock fix is
+correct. What remains is two test-quality Minors (R3-1, R3-2) and two Nits. None of them is a product defect. They
+can ride with S1b, or go in a small follow-up before merge, as the orchestrator prefers.
+
+**What holds (verified):**
+- **R2-1, closing retired observations.**
+  - `follow` finishes the old observation's `retired` stream before it bumps `observationNumber`.
+  - `observe(_:until:)` runs the observation and a waiter in a one-use group, and calls `cancelAll()` there once
+    `next()` returns. That group's only other child is the observation or the waiter, so nothing else is cancelled.
+    The follower's long-lived group is never cancelled, so round 2's "added tasks start cancelled" trap cannot occur.
+  - The ways an observation ends:
+    - **Retire:** the waiter ends, then the observation is cancelled, and its stream terminates, which cancels GRDB's
+      observer.
+    - **The observation ending by itself:** the waiter is cancelled.
+    - **The run cancelled:** every level is cancelled structurally.
+  - Finishing a stale `retireObservation` from a previous run is a no-op.
+  - No leak or hang was found. `failingSaves_leaveOneObservationOpen` holds, and both mutations are killed:
+    - R3a: `finish()` removed.
+    - R3b: `cancelAll()` removed.
+- **R2-3.** `receive` tests `readsTheRowAfresh, !isSaving`. The doc comment is right.
+- **The fakes deadlock fix (extra).** It is correct, and other features see no change in meaning.
+  - `onTermination` now only sets an `Atomic` flag.
+  - `ObservedState.write` filters ended observers under the `Mutex` before yielding. An ended observer is never
+    yielded to, and yielding to a terminated continuation would be a no-op anyway.
+  - The only difference is that an ended observer's closure is freed at the next write, not at once. No API exposes the
+    observer count.
+  - Re-run on the scratch copy, all green: FeatureToday (287), FeatureProgram (475), FeatureLibrary (126),
+    FeatureOnboarding (113) and LedgerAppKit (333).
+  - **Production is not exposed to the same deadlock.** I read GRDB's `ValueWriteOnlyObserver`. It reads
+    `onChange` under its `NSLock` and calls it outside the lock, and `cancel()` holds the lock only to clear the
+    callbacks. The bridge's `onTermination` → `cancellable.cancel()` therefore cannot form the same ABBA.
+- **The restart-mark hold in `firstValueReadBeforeASave_isNotTheRow` is a legitimate reproduction.**
+  - Taking `followMark` and handing it back later only reorders two main-actor jobs: the follower's resume and D's
+    value delivery. Under GRDB's `.task` delivery that order is reachable.
+  - No code path is bypassed, and the store's own `followMark.yield()` is what restarts afterwards.
+- **No hangs found.** FeatureSettingsTests (45 tests) passed in 8 of 8 back-to-back runs. Every mutant run finished.
+
+---
+
+**F14-S1a-R3-1 (Minor, test fidelity). With `holdsFirstValues`, a later commit's echo overtakes the held first value.
+So `firstValueReadBeforeASave_isNotTheRow` does not run the scenario it describes.**
+- **Where:** `ScriptedSettings.broadcast(_:to:)` sends to an observation whose first value is still in
+  `waitingFirstValues`.
+- **What GRDB does:** it delivers an observation's values in order on one serial scheduler: the initial fetch (A),
+  then the B commit's fetch.
+- **What runs in the test:**
+  - D receives B's echo first. My probe: just before A is delivered, `stored == B`, `written == B`.
+  - Then D receives A as a *later* value.
+  - Under M1 the kill comes from that impossible order: B's echo, taken as the first value, clears `written`, and the
+    late A then draws.
+- **The test still pins M1 in the faithful order.** I patched the double in scratch so broadcasts to an observation
+  with a held first value queue behind it. On that double:
+  - On HEAD, the suite (13 tests) passes.
+  - Under M1, the test still fails (`stillB`).
+- **Fix:** make the double faithful. While an observation's first value is held, append broadcasts for it to a
+  per-observer backlog, and send them right after the first value in `deliverNextFirstValue()`. Then check the test's
+  narrative still holds (A arrives first, while `writes != writesBefore`).
+
+**F14-S1a-R3-2 (Minor, test reliability). The M7 kill by `failureBeforeTheFreshRead_stillReadsTheRow` is
+schedule-dependent now that R2-3 removed `pending == nil`.**
+- **Why:** the test needs D's first value to be consumed while B's save is in flight (`isSaving`). If D runs before
+  the saver starts, the value is now taken, `written` is cleared, and M7 is harmless on that schedule.
+- **Measured under M7:**
+
+  | Run | Killed |
+  |---|---|
+  | The test alone | 20 of 20 |
+  | The whole FeatureSettingsTests | 9 of 10 |
+  | My first mutation pass | survived (the 1 in 10) |
+
+- **Fix:** run it with `holdsFirstValues: true`, and deliver D's first value only after `untilHeld()` for B. The read
+  then always lands while `isSaving`, deterministically.
+
+**F14-S1a-R3-3 (Nit, test gap). M4, dropping `number == observationNumber` from the per-value guard
+(`SettingsStore+Sources.swift:83`), now survives.**
+- **Why:** retire cancels the old observation quickly, so the in-order A, B, A test no longer reaches the gap.
+- **The guard is still needed:** between `retireObservation?.finish()` and the child's cancellation, which lands
+  later on the pool, a value already buffered or in flight would otherwise still be received.
+- **Fix (optional):** a test that holds the old observation's echo, and delivers it after the restart mark and before
+  the main actor turns.
+
+**F14-S1a-R3-4 (Nit, docs). In `ObservedState.swift`, `EndedFlag` was inserted between `ObservedState`'s doc comment
+and its declaration.**
+- The paragraph "An in-memory store's state behind a `Mutex`…" (`:4-11`) now documents `EndedFlag`, and
+  `ObservedState` has no doc comment.
+- **Fix:** move `EndedFlag` (with its own two lines) above that paragraph, or below `ObservedState`.
+
+Also noted, not a finding: M2 (drop `!isSaving`) survives, and it is now near-equivalent. During a save `pending` is
+set, so the screen shows `pending`. After the save returns, `written` is set again. After a failure, the fresh
+pre-save read is the row anyway. Keeping `!isSaving` is the conservative choice.
+
+---
+
+**Mutation table, round 3** (host, scratch copy synced to `b71502c`, `swift test --filter FeatureSettingsTests`;
+`diff -r` of Sources and Tests against the worktree empty after every run):
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | `isFirst && writes == writesBefore` → `isFirst` | Killed (`firstValueReadBeforeASave_isNotTheRow`, 2 issues); also killed with an order-faithful double (R3-1) |
+| M11 | `writes += 1` removed | Killed (same test, and R1-1's coalesced-echo test) |
+| M7 | failure leaves `hasWrittenOrFailed` false | Killed 20/20 alone, 9/10 in the suite; **survived** one full pass (R3-2) |
+| M2 | drop `!isSaving` | Survives: near-equivalent (above) |
+| M4 | drop `number == observationNumber` on values | **Survives** (R3-3) |
+| M6 | no follow mark when idle | Killed (5 tests) |
+| R3a | `retireObservation?.finish()` removed | Killed (`failingSaves_leaveOneObservationOpen`, 2 issues) |
+| R3b | `group.cancelAll()` removed in `observe(_:until:)` | Killed (same test, 2 issues) |
+
+**Runs:** FeatureSettingsTests passed 8 of 8 back-to-back (45 tests). The fakes' other consumers are listed above. The
+probes and the faithful-double patch lived only in scratch. No simulator run; the orchestrator runs the gate.
