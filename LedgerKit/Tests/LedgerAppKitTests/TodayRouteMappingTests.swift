@@ -56,13 +56,16 @@ struct TodayRouteMappingTests {
         #expect(workout.request == nil)
     }
 
-    @Test("A past workout goes to the History tab, until F13 pushes its detail there")
-    func openWorkout_selectsHistory() {
+    /// Sanctioned edit of F13 S1 (C3): the detail is pushed on Today's stack (F13 question 1, built to A), where it
+    /// selected the History tab until then.
+    @Test("A past workout's detail is pushed on Today's own stack, and the tab stays Today")
+    func openWorkout_pushesItsDetailOnToday() {
         let router = AppRouter()
         let workout = WorkoutLauncher()
         router.resolve(.openWorkout(Fixtures.sessionID), workout: workout)
-        #expect(router.selectedTab == .history)
-        #expect(AppTab.allCases.map { router[path: $0].count } == [0, 0, 0, 0])
+        #expect(router.selectedTab == .today)
+        #expect(router[path: .today] == [.workout(Fixtures.sessionID)])
+        #expect(AppTab.allCases.map { router[path: $0].count } == [1, 0, 0, 0])
         #expect(workout.request == nil)
     }
 

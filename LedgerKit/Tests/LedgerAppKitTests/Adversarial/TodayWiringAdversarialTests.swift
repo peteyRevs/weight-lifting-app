@@ -74,7 +74,9 @@ struct TodayWiringAdversarialTests {
                 #expect(router.selectedTab == tab && depths == [0, 1, 0, 1], "\(route)")
                 #expect(launcher.request?.number == 1, "\(route)")
             case .openWorkout:
-                #expect(router.selectedTab == .history && depths == [0, 1, 0, 1], "\(route)")
+                // Sanctioned edit (F13 S1, C3 and question 1, built to A): the workout's detail is pushed on Today's
+                // stack, where the route selected the History tab until then.
+                #expect(router.selectedTab == .today && depths == [1, 1, 0, 1], "\(route)")
                 #expect(launcher.request == nil)
             case .editWeek:
                 // Sanctioned edit (F11 S14, criterion 23 and Pete's question 2, A): "Edit this week" lands on

@@ -115,6 +115,14 @@ public struct ProbedWorkoutRepository: WorkoutRepository {
     public func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
         base.observeRecent(limit: limit)
     }
+
+    public func historyEntries() async throws -> [HistoryEntry] {
+        try await base.historyEntries()
+    }
+
+    public func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        base.observeHistoryEntries()
+    }
 }
 
 /// `active()`, the one call a session host makes, goes through the probe, and so does `update`, the write a

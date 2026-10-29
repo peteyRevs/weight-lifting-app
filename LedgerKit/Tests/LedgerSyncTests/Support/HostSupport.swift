@@ -125,6 +125,14 @@ struct SeparateWorkoutRepository: WorkoutRepository {
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
         base.observeRecent(limit: limit)
     }
+
+    func historyEntries() async throws -> [HistoryEntry] {
+        try await base.historyEntries()
+    }
+
+    func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+        base.observeHistoryEntries()
+    }
 }
 
 /// One subscriber's stream, read without waiting on a clock: a test makes a change it can recognise and

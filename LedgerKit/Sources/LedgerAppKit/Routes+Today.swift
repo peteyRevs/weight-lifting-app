@@ -13,10 +13,9 @@ extension AppRouter {
             workout.start(WorkoutSource(programID: program, weekIndex: weekIndex, dayTemplateID: day))
         case .resumeWorkout:
             workout.resume()
-        case .openWorkout:
-            // The workout's detail is F13's; until then, the History tab it will be pushed in (F13
-            // criterion 6).
-            selectedTab = .history
+        case let .openWorkout(id):
+            // A past workout opens on Today's own stack, so back returns to Today (F13 question 1, built to A).
+            open(.workout(id), in: .today)
         case let .editWeek(_, weekIndex):
             // The builder edits the active program, which is the one Today shows.
             editProgramWeek(weekIndex)

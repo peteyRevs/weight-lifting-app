@@ -18,6 +18,8 @@ nonisolated enum AppDestination: Hashable, Sendable {
     case day(DayTemplateID, weekIndex: Int)
     /// An exercise's history (F12 S2).
     case exercise(ExerciseID)
+    /// A past workout's detail (F13).
+    case workout(WorkoutID)
 }
 
 /// The shell's navigation state: the selected tab and each tab's stack. A feature never sees it: it emits a route,

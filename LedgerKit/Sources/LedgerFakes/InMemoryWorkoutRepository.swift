@@ -101,5 +101,15 @@
         public func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
             history.observe { $0.recent(limit) }
         }
+
+        /// Every live workout's entry, newest first, with the records it holds now (F13 S1).
+        public func historyEntries() async throws -> [HistoryEntry] {
+            history.read { $0.historyEntries }
+        }
+
+        /// `historyEntries()` now, then after every write that changes it (F13 S1).
+        public func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
+            history.observe { $0.historyEntries }
+        }
     }
 #endif

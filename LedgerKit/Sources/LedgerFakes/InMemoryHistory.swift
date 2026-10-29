@@ -46,6 +46,11 @@
             Array(live.prefix(max(0, limit)))
         }
 
+        /// The History list (F13 S1): each live workout's entry, newest first, counting the records it holds.
+        var historyEntries: [HistoryEntry] {
+            newestFirst.map { HistoryEntry($0.workout, prCount: $0.records.count) }
+        }
+
         /// A workout's place in history: its start, then its id text.
         static func place(of workout: WorkoutState) -> (Date, String) {
             (workout.startedAt, workout.id.rawValue.uuidString)
