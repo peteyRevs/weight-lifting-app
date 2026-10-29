@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.14.0...v0.15.0) (2026-10-29)
+
+
+### Features
+
+* **history:** the History tab lists past workouts by week, and a past workout opens where it was tapped (F13 S1) ([#77](https://github.com/peteyRevs/weight-lifting-app/issues/77)) ([dfb945a](https://github.com/peteyRevs/weight-lifting-app/commit/dfb945a87b730666e02019b6430b597169c89066))
+
 ## [0.14.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.13.0...v0.14.0) (2026-10-26)
 
 
