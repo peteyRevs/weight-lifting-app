@@ -603,3 +603,40 @@ Tests and UI tests: 33 files, +876 / −72 lines (raw).
 Q1–Q7 are still open. S1b builds Q2 = A (the region's units and week start on a new install), Q4 = A (Apple Health
 reads "Not connected" and does nothing) and Q7 = A ("Plate math" and "Watch haptic at zero" are shown now). Nothing
 new arose in S1b.
+
+### S1b fix round 1 (G1 implementer, 2026-10-29)
+
+G2's findings (`a57d9cd`, "## S1b" in `test-findings.md`), both fixed:
+
+- **F14-S1b-1 (a blank display name hides the bundle name).** `AppAbout(bundle:)` treats a value that is empty once
+  trimmed (whitespace and newlines) as absent, for every key, before the `??` fallback. A blank
+  `CFBundleDisplayName` now falls back to `CFBundleName`. `about_blankDisplayName_fallsBackToTheBundleName` ("",
+  "   ", "\n") is now a plain test, without `withKnownIssue`.
+- **F14-S1b-2 (a failed save isn't announced).**
+  - `SettingsRoot`'s test initializer takes `announce`, with `ProgramRoot`'s default: it posts
+    `AccessibilityNotification.Announcement`.
+  - `.onChange(of: store.model?.problem)` announces the line when it becomes non-nil.
+  - The store clears the line on the next change, so a second failure is announced again.
+- G2's source scan is replaced by a behavioural `failedSave_isAnnounced`, without `withKnownIssue`. It injects
+  `announce` into a hosted root, and checks that:
+  - loading announces nothing;
+  - the failed save announces "Couldn't save that change." once;
+  - the next, successful save announces nothing more.
+- The test's box, `HeardAnnouncements`, is `@Observable` at file scope, since `eventually` waits on observations. A
+  local `@Observable` class can't take the macro's extension.
+
+**Product lines:** +20 / −2, net 18 (`SettingsRoot` and `AppAbout`, non-blank, non-comment). Raw diff: product
++27 / −5, tests +27 / −19.
+
+**Runs:**
+- Host:
+  - `swift build --build-tests` is clean;
+  - FeatureSettingsTests: 54 tests, green;
+  - LedgerAppKitTests: 341 tests, green, with no known issues;
+  - swiftformat and swiftlint (strict) are clean on the four files.
+- Simulator, through the lock (PR plan, FeatureSettingsTests and LedgerAppKitTests): 453 of 453 passed, with no
+  expected failures.
+  - The first run of the new test timed out, because its box wasn't observable, so `eventually` never woke.
+  - The second run didn't compile: a local `@Observable` class.
+  - Both were fixed in the test, and the third run is the one above.
+- The full gate is left to the coordinator.

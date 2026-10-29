@@ -10,6 +10,12 @@
     import Testing
     import UIKit
 
+    /// What VoiceOver was told. Observable, since `eventually` waits on observations.
+    @MainActor @Observable
+    final class HeardAnnouncements {
+        var announcements: [String] = []
+    }
+
     /// F14 S1b, G2: the root, attacked. The title does not move from the loading frame to the loaded page; an
     /// unreadable row; a failed save on screen and to VoiceOver; the switches tapped five times while every save is
     /// held.
@@ -90,21 +96,25 @@
             }
         }
 
-        /// F14-S1b-2. N1 says a failed save shows "Couldn't save that change." and puts the control back. A
-        /// VoiceOver user who double-taps a switch hears it turn on; the line then appears at the top of the page,
-        /// away from the focus, and the switch turns back, and nothing is said. The app's other screens announce
-        /// such a line when it appears (`ProgramRoot` its notice, `CreateExerciseSheet` each problem, through an
-        /// injectable `announce`); `SettingsRoot` has no `announce` and posts no announcement, so this test can only
-        /// read the sources.
-        @Test("F14-S1b-2. The failed save's line is announced to VoiceOver when it appears")
-        func failedSave_isAnnounced() throws {
-            let sources = try CopyAudit.sources(ofModule: "FeatureSettings")
-            try #require(sources.count >= 10)
-            let announces = sources.values.contains { text in
-                text.contains("AccessibilityNotification.Announcement") || text.contains("announce(")
-            }
-            withKnownIssue("F14-S1b-2: SettingsRoot never announces \"Couldn't save that change.\"") {
-                #expect(announces, "FeatureSettings posts an announcement")
+        /// F14-S1b-2. A VoiceOver user who double-taps a switch hears it turn on; when the save fails, the switch
+        /// turns back and "Couldn't save that change." appears at the top of the page, away from the focus. The root
+        /// announces the line when it appears, as `ProgramRoot` announces its notice; a save that succeeds announces
+        /// nothing.
+        @Test("F14-S1b-2. The failed save's line is announced to VoiceOver when it appears, and only then")
+        func failedSave_isAnnounced() async throws {
+            let heard = HeardAnnouncements()
+            let scene = SettingsScene(failures: 1)
+            let root = SettingsRoot(store: scene.store) { _ in } announce: { heard.announcements.append($0) }
+            try await Self.hosting(root) { _ in
+                await eventually { scene.store.model != nil }
+                #expect(heard.announcements.isEmpty, "loading announces nothing")
+                try scene.store.send(scene.model.switches[0].action)
+                await eventually { !heard.announcements.isEmpty }
+                #expect(heard.announcements == ["Couldn't save that change."])
+                #expect(try scene.model.problem == "Couldn't save that change.")
+                try scene.store.send(scene.model.switches[1].action)
+                await eventually { scene.store.pending == nil && scene.store.model?.problem == nil }
+                #expect(heard.announcements == ["Couldn't save that change."], "a save that succeeds is not announced")
             }
         }
 

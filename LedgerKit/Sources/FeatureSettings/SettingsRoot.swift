@@ -12,19 +12,28 @@ import SwiftUI
 ///
 /// **A route is handed on once.** The screen's taps go to the store, which keeps one route waiting; the task below
 /// hands it to the app and the store forgets it when the app's handler has returned.
+///
+/// **A failed save is announced** to VoiceOver when its line appears, since the line stands at the top of the page,
+/// away from the focus (F14-S1b-2), as `ProgramRoot` announces its notice.
 public struct SettingsRoot: View {
     @State private var store: SettingsStore
     private let onRoute: @MainActor (SettingsRoute) -> Void
+    private let announce: @MainActor (String) -> Void
 
     public init(about: AppAbout, onRoute: @escaping @MainActor (SettingsRoute) -> Void) {
         self.init(store: SettingsStore(about: about), onRoute: onRoute)
     }
 
-    /// For the tests, which keep the store to read what it shows. `@State` keeps the first store it is given: a
-    /// store does no work when it is made.
-    init(store: SettingsStore, onRoute: @escaping @MainActor (SettingsRoute) -> Void) {
+    /// For the tests, which keep the store to read what it shows and hear what is announced. `@State` keeps the
+    /// first store it is given: a store does no work when it is made.
+    init(
+        store: SettingsStore,
+        onRoute: @escaping @MainActor (SettingsRoute) -> Void,
+        announce: @escaping @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
+    ) {
         _store = State(initialValue: store)
         self.onRoute = onRoute
+        self.announce = announce
     }
 
     public var body: some View {
@@ -34,6 +43,11 @@ public struct SettingsRoot: View {
             }
             .task(id: store.pendingRoute) {
                 store.deliverRoute(to: onRoute)
+            }
+            .onChange(of: store.model?.problem) { _, problem in
+                if let problem {
+                    announce(problem)
+                }
             }
     }
 

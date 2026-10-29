@@ -81,10 +81,8 @@ struct SettingsScreenWiringAdversarialTests {
             "CFBundleDisplayName": blank, "CFBundleName": "Internal",
             "CFBundleShortVersionString": "0.15.0", "CFBundleVersion": "1"
         ]))
-        withKnownIssue("F14-S1b-1: a blank CFBundleDisplayName hides CFBundleName") {
-            #expect(about.name == "Internal")
-            #expect(Self.line(about) == "Internal 0.15.0 · build 1")
-        }
+        #expect(about.name == "Internal")
+        #expect(Self.line(about) == "Internal 0.15.0 · build 1")
     }
 
     // MARK: Routes beside History
