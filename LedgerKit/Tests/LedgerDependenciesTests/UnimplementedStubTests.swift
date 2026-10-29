@@ -69,6 +69,7 @@ struct UnimplementedStubTests {
         ])
         #expect(await Self.isEmpty(stub.observeRecent(limit: 1)))
         #expect(await Self.isEmpty(stub.observeHistoryEntries()))
+        #expect(await Self.isEmpty(stub.observeWorkout(id: Self.workout)))
     }
 
     @Test("The settings repository's stub throws from every method; observe ends at once")

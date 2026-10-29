@@ -181,3 +181,10 @@ struct LinkedSaveLogAdversarialTests {
         #expect(program == nil, "the program change is not lost with the transaction: \(program ?? "")")
     }
 }
+
+/// F13 S2's requirement, outside the suite's body (which the lint holds to 150 lines).
+extension LinkedSaveLogAdversarialTests.OldWrapper {
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        base.observeWorkout(id: id)
+    }
+}

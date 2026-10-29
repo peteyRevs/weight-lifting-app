@@ -258,4 +258,13 @@ extension WorkoutRepositoryTests {
         let issue = try await clause.check(Repositories.withProgramExercises().history)
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
+
+    @Test(
+        "The GRDB repository keeps the workout detail's clause (F13 S2)",
+        arguments: WorkoutRepositoryContract.detailClauses
+    )
+    func detailClause_holds(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories.withProgramExercises().history)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
 }

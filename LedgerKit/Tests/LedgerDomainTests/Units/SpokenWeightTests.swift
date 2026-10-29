@@ -24,6 +24,13 @@ struct SpokenWeightTests {
         #expect(Weight.pounds(185).spoken(in: .kg, locale: Self.english) == "83.9 kilograms")
     }
 
+    @Test("The spoken number is the drawn one as a Decimal, never read back from the drawn text (review R1-5)")
+    func shownValue_isTheDrawnNumber() {
+        #expect(Weight.pounds(185).shownValue(in: .kg) == Decimal(string: "83.9"))
+        #expect(Weight.kilograms(46.25).shownValue(in: .kg) == Decimal(string: "46.25"))
+        #expect(Weight.pounds(1_234_567).spoken(in: .lb, locale: Self.english) == "1,234,567 pounds")
+    }
+
     @Test("A volume reads its whole number with the locale's grouping: 24,180 pounds, 1 pound, 0 pounds")
     func volume_readsItsWholeNumber() {
         let volume = Volume(weight: .pounds(186), reps: Reps(clamping: 130))

@@ -64,7 +64,7 @@ public struct Volume: Hashable, Codable, Sendable, Comparable, AdditiveArithmeti
         return NumberText.fixed(tenthsOfThousands, fractionDigits: 1, trimZeros: false, grouped: true)
     }
 
-    private func value(in units: Units) -> Decimal {
+    func value(in units: Units) -> Decimal {
         gramReps / units.gramsPerUnit
     }
 

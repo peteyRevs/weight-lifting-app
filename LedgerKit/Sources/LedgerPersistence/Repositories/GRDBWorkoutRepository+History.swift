@@ -3,7 +3,8 @@ import GRDB
 import LedgerDomain
 
 /// The History list's reads (F13 S1, N1 and N2): the `workout` rows alone, through `idx_workout_started`, with the
-/// totals each row stores "for queries that do not load the sets" and the `pr_count` `RecordReplay` keeps right.
+/// totals each row stores "for queries that do not load the sets" and the `pr_count` `RecordReplay` keeps right. And a
+/// past workout's detail (F13 S2, N8): one workout with its records, through `idx_pr_workout`.
 public extension GRDBWorkoutRepository {
     /// One entry per live finished workout, newest first by start, then id (product decision #26). A row this app
     /// cannot read (an id, a date or a case a later version wrote, or damage) is logged and left out, and stays
@@ -17,6 +18,16 @@ public extension GRDBWorkoutRepository {
     /// leaves every entry as it was emits nothing. A read that fails ends the stream.
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
         Self.historyObservation.stream(in: queue)
+    }
+
+    /// The workout `id` with its records now, then after every change to either; `nil` while it is not stored. The
+    /// observation reads `workout`, `workout_exercise`, `logged_set` and `personal_record`, so a write to another
+    /// workout wakes it, and emits nothing unless it changed this one's records. A workout this app cannot read, or a
+    /// record of it, fails the read, which ends the stream.
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        ValueObservation.tracking { database in try Self.fetchRecordedWorkout(id, in: database) }
+            .removeDuplicates()
+            .stream(in: queue)
     }
 }
 
@@ -34,6 +45,22 @@ extension GRDBWorkoutRepository {
         return try Row.fetchAll(database, sql: sql).compactMap { row in
             row.readable(as: WorkoutRecord.databaseTableName, HistoryEntry.init(row:))
         }
+    }
+}
+
+extension GRDBWorkoutRepository {
+    /// The workout `id` as `workout(id:)` reads it, strictly, with its live records by exercise id text, then kind
+    /// (the estimated 1RM's name sorts first).
+    static func fetchRecordedWorkout(_ id: WorkoutID, in database: Database) throws -> RecordedWorkout? {
+        guard let workout = try WorkoutRows.fetch(.one(id), in: database, strict: true).first else {
+            return nil
+        }
+        let records = try Row.fetchAll(
+            database,
+            sql: "SELECT * FROM personal_record WHERE workout_id = ? AND deleted_at IS NULL ORDER BY exercise_id, kind",
+            arguments: [ColumnCodec.text(id)]
+        )
+        return try RecordedWorkout(workout: workout, records: records.map { try PersonalRecordRecord(row: $0).record })
     }
 }
 

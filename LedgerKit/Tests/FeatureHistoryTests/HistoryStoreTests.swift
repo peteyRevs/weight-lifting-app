@@ -189,6 +189,10 @@ nonisolated struct EndedHistory: WorkoutRepository {
         AsyncStream { $0.finish() }
     }
 
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        base.observeWorkout(id: id)
+    }
+
     func historyEntries() async throws -> [HistoryEntry] {
         try await base.historyEntries()
     }
