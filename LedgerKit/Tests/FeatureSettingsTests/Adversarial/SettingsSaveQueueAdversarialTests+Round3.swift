@@ -124,6 +124,13 @@ extension SettingsSaveQueueAdversarialTests {
     /// on its way may still reach the old observation's loop; its number keeps it from being received. The test
     /// keeps the first observation's retire handle from the follower, so that window stays open: the old
     /// observation then hears A's held echo after the row was read afresh at B, and must not draw A over B.
+    ///
+    /// **This holds the window far wider than production can** (G3, F14-S1b-R1-4). The old observation stays open
+    /// across a whole second save and the next observation's fresh read; in the app, its cancellation lands a few
+    /// main-actor jobs after `finish()`, long before another write. It is not a production order. The guard still
+    /// matters for the order that is reachable, which is narrower: the old observation's late value lands just after
+    /// the next observation's first value. With a change from elsewhere in between, it would draw an older row over a
+    /// newer one. The wide window makes that late value certain to arrive, so the test kills M4 every run.
     @Test("R3-3. A value of a retired observation is never received")
     func retiredObservationsValue_isNeverReceived() async throws {
         let scene = ScriptedSettingsScene(holdsEchoes: true)

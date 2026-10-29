@@ -640,3 +640,61 @@ G2's findings (`a57d9cd`, "## S1b" in `test-findings.md`), both fixed:
   - The second run didn't compile: a local `@Observable` class.
   - Both were fixed in the test, and the third run is the one above.
 - The full gate is left to the coordinator.
+
+### S1b fix round 2 (G1 implementer, 2026-10-29)
+
+G3's round 1 (`6b24503`, "## S1b round 1" in `review.md`): approved with minors. All four are fixed.
+
+- **F14-S1b-R1-1 (nothing pins that Diagnostics reaches `MainRoot`'s sheet): a UI step, not a hosted test.**
+  - **Why not hosted.** The coordinator preferred a hosted `AppTabs`/`MainRoot` test, and I tried one. It ran on
+    `GateShell`, the real `MainRoot` and tabs over a database, pushed Settings on Today and looked for
+    "Diagnostics" inside scroll views. The test read no element at all. "Diagnostics" sits inside Settings'
+    `ScrollView`, and in a package test process a hosted SwiftUI scroll view hands UIKit no accessibility children
+    (testing-strategy §2.6, measured in F08 S2 and recorded in `AccessibilityElements.swift`). Reaching the row
+    hosted would need test-only seams in product code, so I reverted the attempt; no file of it remains.
+  - **What landed.** G3's other option: one step in the nightly `Apps/LedgerUITests/Settings.swift`. After KG is
+    chosen:
+    1. it taps "Diagnostics";
+    2. it expects the Debug menu (`debug.menu.diagnostics`) within 5 s;
+    3. it swipes the sheet down, and expects the menu gone and Settings still there.
+
+    The test then goes on to Today as before. It runs in 22.6 s, up from 14.8 s. The cost is that it runs nightly,
+    not in the PR plan; Today's long press into the same sheet is in the same position (`DebugMenu`,
+    `TabsAdversarial`).
+  - **Kills,** in a scratchpad copy of the worktree (sources rsynced, its own derivedData), through the lock, with
+    `-only-testing:LedgerUITests/Settings` on the Nightly plan:
+
+    | Mutant | Result |
+    |---|---|
+    | H5: `MainRoot`'s `onSettingsRoute:` argument deleted | **Killed** at "Diagnostics raised the Debug menu" |
+    | H6: `AppTabs` passes `{ _ in }` to `SettingsRoot` | **Killed** at "Diagnostics raised the Debug menu" |
+
+    Before each mutant, `diff -r` of `Sources` against the worktree showed only that mutant. The copy, with its
+    derivedData, was deleted afterwards.
+- **F14-S1b-R1-2.** `SegmentedChoiceTests.options_sitInASemanticGroupNamedByTheLabel` walks up UIKit's tree from
+  the "pounds" option, with a copy of G2's `parent(of:)` probe. It expects a container named "Units" whose type is
+  a semantic group. The suite's doc comment no longer leaves this to the DoD's manual check.
+  - **Kill:** V9 (`.accessibilityElement(children: .contain)` and `.accessibilityLabel(label)` removed), run in the
+    same scratch copy on LedgerDesignTests in the simulator, is **killed** by this test alone inside LedgerDesign.
+- **F14-S1b-R1-3.** `SettingsStore`'s doc comment now says that `SettingsRoot`, the screen over the store, makes
+  one. The stale "S1b's; until then only the tests make one" is gone.
+- **F14-S1b-R1-4.** R3-3's doc comment now says the test holds the window far wider than production can, and why.
+  The old observation stays open across a whole second save and a fresh read; in the app, its cancellation lands a
+  few main-actor jobs after `finish()`. The comment also gives the narrower order that is reachable: a late value
+  just after the next observation's first value, with an outside write between. The guard still matters there, and
+  the wide window makes the kill certain. The test itself is unchanged.
+
+**Product lines:** −1 (`SettingsStore`'s comment only; no code changed).
+
+**Runs:**
+- **Host:**
+  - `swift build --build-tests` is clean;
+  - FeatureSettingsTests: 54 tests, green;
+  - LedgerAppKitTests: 341 tests, green;
+  - swiftformat and swiftlint (strict) are clean on the changed files.
+- **Simulator, through the lock** (PR plan: LedgerAppKitTests, LedgerDesignTests and FeatureSettingsTests):
+  `options_sitInASemanticGroupNamedByTheLabel` passed. The only failure was the hosted Diagnostics attempt described
+  above, since reverted; the 6 expected failures are the known `DeviceKeys` issues. After the revert, LedgerAppKit's
+  tests are as at `6b24503`.
+- **Nightly UI test, through the lock:** `test_kilograms_chosenInSettings_reachToday` **passed** (22.6 s).
+- The full gate is left to the coordinator.

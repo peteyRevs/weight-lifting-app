@@ -2,7 +2,8 @@ import XCTest
 
 /// F14 S1, criterion 1, on screen: Settings in the running app, on the seed program (`-LEDGER_UITEST_PROGRAM seed`,
 /// F08) and at noon on Wednesday of its week 5 (`-LEDGER_UITEST_NOW`). Today's gear opens Settings; KG is chosen
-/// there; back on Today, without a relaunch, the week's volume tile reads in kilograms. Nightly only: the `PR` plan
+/// there; "Diagnostics" raises the Debug menu and it goes down again; back on Today, without a relaunch, the week's
+/// volume tile reads in kilograms. Nightly only: the `PR` plan
 /// selects `Smoke`.
 ///
 /// A fresh install in the simulator's region (en_US) starts in pounds (N3), which the test checks first. The
@@ -36,6 +37,16 @@ final class Settings: XCTestCase {
         XCTAssertTrue(kilograms.isSelected)
         XCTAssertFalse(pounds.isSelected)
         attachScreenshot(of: app, named: "Settings, kilograms")
+
+        // F14-S1b-R1-1: "Diagnostics" raises the Debug menu's sheet, through `AppTabs` handing Settings its
+        // `onSettingsRoute` and `MainRoot` resolving the route. A hosted test cannot reach the row, which is inside
+        // Settings' scroll view (testing-strategy §2.6).
+        app.buttons["Diagnostics"].tap()
+        let debugMenu = app.buttons["debug.menu.diagnostics"]
+        XCTAssertTrue(debugMenu.waitForExistence(timeout: 5), "Diagnostics raised the Debug menu")
+        app.navigationBars["Debug"].swipeDown(velocity: .fast)
+        XCTAssertTrue(debugMenu.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(title.exists, "the sheet went down over Settings, which stayed")
 
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: 5))
