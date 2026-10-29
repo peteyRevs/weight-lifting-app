@@ -78,7 +78,8 @@ struct MainRoot: View {
         }
     }
 
-    /// The tabs, with the Debug menu's sheet on them (the UI tests open it from `today.title`).
+    /// The tabs, with the Debug menu's sheet on them (the UI tests open it from `today.title`; Settings' Diagnostics
+    /// opens it too).
     private var tabs: some View {
         AppTabs(
             router: router,
@@ -86,6 +87,7 @@ struct MainRoot: View {
             onProgramRoute: { router.resolve($0) },
             onLibraryRoute: { router.resolve($0) },
             onHistoryRoute: { router.resolve($0) },
+            onSettingsRoute: { router.resolve($0) { isDebugMenuShown = true } },
             onTodayTitleLongPress: { isDebugMenuShown = true }
         )
         #if DEBUG

@@ -31,6 +31,9 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
     private let holdsFirstValues: Bool
     /// Each held first value with the observation it goes to (fix round 3).
     private var waitingFirstValues: [(value: Settings, to: Int)] = []
+    /// The values sent to an observation while its first value is held, oldest first: they reach it right after that
+    /// value, as GRDB delivers an observation's values in order (F14-S1a-R3-1).
+    private var queuedBehindFirstValue: [Int: [Settings]] = [:]
     /// Each held echo with the observations it goes to.
     private var waitingEchoes: [(value: Settings, to: Set<Int>)] = []
     private var observers: [Int: AsyncStream<Settings>.Continuation] = [:]
@@ -39,49 +42,27 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
     private var nextObserver = 0
 
     /// - Parameter holdsFirstValues: each observation's first value, the row as it is when the observation starts,
-    ///   waits for `deliverNextFirstValue()`, as GRDB fetches it at once and delivers it later (F14-S1a-R2-2).
+    ///   waits for `deliverNextFirstValue()`, as GRDB fetches it at once and delivers it later (F14-S1a-R2-2). The
+    ///   values sent to that observation meanwhile wait behind it.
     init(_ settings: Settings, holdsEchoes: Bool = false, holdsFirstValues: Bool = false) {
         current = settings
         self.holdsEchoes = holdsEchoes
         self.holdsFirstValues = holdsFirstValues
     }
 
-    /// Sends the oldest held first value to its observation, if that observation is still open.
+    /// Sends the oldest held first value to its observation, if that observation is still open, then the values
+    /// that waited behind it, in order.
     func deliverNextFirstValue() {
         lock.withLock {
             guard !waitingFirstValues.isEmpty else {
                 return
             }
             let first = waitingFirstValues.removeFirst()
-            observers[first.to]?.yield(first.value)
+            let behind = queuedBehindFirstValue.removeValue(forKey: first.to) ?? []
+            for value in [first.value] + behind {
+                observers[first.to]?.yield(value)
+            }
         }
-    }
-
-    var firstValuesWaiting: Int {
-        lock.withLock { waitingFirstValues.count }
-    }
-
-    /// The row now.
-    var row: Settings {
-        lock.withLock { current }
-    }
-
-    /// Every value `save` was called with, in order.
-    var saves: [Settings] {
-        lock.withLock { saved }
-    }
-
-    var mostAtOnce: Int {
-        lock.withLock { mostRunning }
-    }
-
-    /// The values of the saves waiting for the test, oldest first.
-    var heldValues: [Settings] {
-        lock.withLock { held.map(\.value) }
-    }
-
-    var echoesWaiting: Int {
-        lock.withLock { waitingEchoes.count }
     }
 
     /// Ends the oldest held save: committed (the row changes and its echo is sent or held) or refused.
@@ -120,19 +101,12 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
         }
     }
 
-    /// The observations open now: those whose stream has not ended.
-    var observationCount: Int {
-        lock.withLock {
-            dropEnded()
-            return observers.count
-        }
-    }
-
     /// Under the lock: forgets the observations whose stream has ended.
     private func dropEnded() {
         for (id, flag) in endedFlags where flag.isSet {
             observers[id] = nil
             lastSent[id] = nil
+            queuedBehindFirstValue[id] = nil
             endedFlags[id] = nil
         }
     }
@@ -191,12 +165,55 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
         return stream
     }
 
-    /// Under the lock. An observation that has ended is left out.
+    /// Under the lock. An observation that has ended is left out; one whose first value is held gets the value
+    /// after it.
     private func broadcast(_ value: Settings, to ids: Set<Int>) {
         dropEnded()
         for (id, observer) in observers where ids.contains(id) && lastSent[id] != value {
             lastSent[id] = value
-            observer.yield(value)
+            if waitingFirstValues.contains(where: { $0.to == id }) {
+                queuedBehindFirstValue[id, default: []].append(value)
+            } else {
+                observer.yield(value)
+            }
+        }
+    }
+}
+
+/// What the test reads of the double.
+extension ScriptedSettings {
+    var firstValuesWaiting: Int {
+        lock.withLock { waitingFirstValues.count }
+    }
+
+    /// The row now.
+    var row: Settings {
+        lock.withLock { current }
+    }
+
+    /// Every value `save` was called with, in order.
+    var saves: [Settings] {
+        lock.withLock { saved }
+    }
+
+    var mostAtOnce: Int {
+        lock.withLock { mostRunning }
+    }
+
+    /// The values of the saves waiting for the test, oldest first.
+    var heldValues: [Settings] {
+        lock.withLock { held.map(\.value) }
+    }
+
+    var echoesWaiting: Int {
+        lock.withLock { waitingEchoes.count }
+    }
+
+    /// The observations open now: those whose stream has not ended.
+    var observationCount: Int {
+        lock.withLock {
+            dropEnded()
+            return observers.count
         }
     }
 }

@@ -19,11 +19,6 @@ nonisolated enum AppCopy {
         }
     }
 
-    /// The title of the Settings screen's placeholder, until F14's screen draws its own.
-    static var settingsTitle: String {
-        String(localized: "Settings", bundle: .module, comment: "Title of the Settings screen")
-    }
-
     /// The title of product decision #29's screen: the database could not be opened.
     static var databaseUnavailableTitle: String {
         String(

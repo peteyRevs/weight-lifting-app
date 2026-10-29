@@ -45,17 +45,6 @@
         }
       }
     },
-    "Settings" : {
-      "comment" : "Title of the Settings screen",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
-          }
-        }
-      }
-    },
     "Today" : {
       "comment" : "Tab title, and the title of the Today screen",
       "localizations" : {
