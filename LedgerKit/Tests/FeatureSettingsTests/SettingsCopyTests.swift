@@ -17,6 +17,7 @@ struct SettingsCopyTests {
 
     @Test("N6. The About line's words carry their values")
     func about_carriesItsValues() {
+        #expect(SettingsCopy.nameAndVersion("App", "1.2.3", locale: Fixtures.locale) == "App 1.2.3")
         #expect(SettingsCopy.version("1.2.3", locale: Fixtures.locale) == "Version 1.2.3")
         #expect(SettingsCopy.build("45", locale: Fixtures.locale) == "build 45")
         #expect(SettingsCopy.versionUnknown == "Version unknown")
@@ -29,10 +30,10 @@ struct SettingsCopyTests {
     }
 
     /// That the bundle the build made resolves each key is `ModuleCopyTests`' (LedgerAppKitTests).
-    @Test("The catalog is sound and holds the module's 26 keys")
+    @Test("The catalog is sound and holds the module's 27 keys")
     func catalog_isSound() throws {
         let catalog = try StringCatalog(module: "FeatureSettings")
         #expect(catalog.problems.isEmpty, "\(catalog.problems)")
-        #expect(catalog.keys.count == 26)
+        #expect(catalog.keys.count == 27)
     }
 }

@@ -45,14 +45,28 @@ public struct GRDBSettingsRepository: SettingsRepository {
         let payload = try SettingsCodec.encode(settings)
         let updatedAt = ColumnCodec.timestamp(now())
         try await queue.write { database in
-            try database.execute(
-                sql: """
-                INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
-                ON CONFLICT (id) DO NOTHING
-                """,
-                arguments: [Self.rowID, SettingsCodec.version, payload, updatedAt]
-            )
+            try Self.seedIfAbsent(payload: payload, updatedAt: updatedAt, in: database)
         }
+    }
+
+    /// `seedIfAbsent(_:)` inside the caller's write: `LedgerStores.open` seeds a new install's settings in the
+    /// write that inserts its device row (F14-S1a-R1-3).
+    static func seedIfAbsent(_ settings: Settings, at date: Date, in database: Database) throws {
+        try seedIfAbsent(
+            payload: SettingsCodec.encode(settings),
+            updatedAt: ColumnCodec.timestamp(date),
+            in: database
+        )
+    }
+
+    private static func seedIfAbsent(payload: Data, updatedAt: String, in database: Database) throws {
+        try database.execute(
+            sql: """
+            INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            arguments: [rowID, SettingsCodec.version, payload, updatedAt]
+        )
     }
 
     /// The settings now, then after every save that changes them. The stream ends, with the error logged,

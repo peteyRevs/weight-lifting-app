@@ -42,9 +42,11 @@ struct SettingsStoreTests {
         #expect(shown != before, "the control shows the lifter's value before the save returns")
         await eventually { scene.store.pending == nil }
         let stored = try await scene.stored()
-        #expect(scene.watched.saves == [stored])
+        let savedOnceWhole = scene.watched.saves == [stored]
+        #expect(savedOnceWhole)
         #expect(stored != Fixtures.settingsLb)
-        #expect(try scene.model == shown)
+        let stillShown = try scene.model == shown
+        #expect(stillShown)
     }
 
     @Test("Criterion 1. KG saves units = kg and nothing else; a second tap on KG saves nothing")
@@ -57,7 +59,8 @@ struct SettingsStoreTests {
         scene.store.send(.setUnits(.kg))
         var expected = Fixtures.settingsLb
         expected.units = .kg
-        #expect(scene.watched.saves == [expected])
+        let savedTheUnitsAlone = scene.watched.saves == [expected]
+        #expect(savedTheUnitsAlone)
     }
 
     @Test("N1, R7. Changes made while a save runs wait for it, then are saved once, folded, the last value winning")
@@ -79,10 +82,13 @@ struct SettingsStoreTests {
         var folded = first
         folded.plateMathEnabled = false
         folded.weekStart = .tuesday
-        #expect(scene.watched.saves == [first, folded])
+        let savedFirstThenFolded = scene.watched.saves == [first, folded]
+        #expect(savedFirstThenFolded)
         #expect(scene.watched.mostAtOnce == 1)
-        #expect(try await scene.stored() == folded)
-        #expect(try scene.model == shown, "the echo of the first save never drew over the lifter's value")
+        let storedIsFolded = try await scene.stored() == folded
+        #expect(storedIsFolded)
+        let stillShown = try scene.model == shown
+        #expect(stillShown, "the echo of the first save never drew over the lifter's value")
     }
 
     @Test("N1. The observation's echo of an earlier save does not move a control back")
@@ -112,12 +118,14 @@ struct SettingsStoreTests {
         let failed = try scene.model
         #expect(failed.problem == "Couldn't save that change.")
         #expect(failed.switches[1].isOn, "the switch shows the stored value again")
-        #expect(try await scene.stored() == Fixtures.settingsLb)
+        let storedIsUnchanged = try await scene.stored() == Fixtures.settingsLb
+        #expect(storedIsUnchanged)
         scene.store.send(.setWatchBuzz(false))
         #expect(try scene.model.problem == nil)
         await eventually { scene.store.pending == nil }
         var saved = Fixtures.settingsLb
         saved.watchBuzz = false
-        #expect(try await scene.stored() == saved, "the failed change is not saved with the next")
+        let storedIsTheNext = try await scene.stored() == saved
+        #expect(storedIsTheNext, "the failed change is not saved with the next")
     }
 }

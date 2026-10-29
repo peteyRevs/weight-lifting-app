@@ -8,8 +8,6 @@ public struct LedgerStores: Sendable {
     public let queue: DatabaseQueue
     /// This install's device (`LocalDevice`).
     public let deviceID: DeviceID
-    /// Opening inserted this device's row: the install is new (F14-S1-5).
-    public let isNewInstall: Bool
     public let exercises: GRDBExerciseRepository
     public let programs: GRDBProgramRepository
     public let workouts: GRDBWorkoutRepository
@@ -18,15 +16,9 @@ public struct LedgerStores: Sendable {
     public let stats: GRDBStatsQueries
 
     /// The stores over `queue`, each given `now` (the injected date).
-    public init(
-        _ queue: DatabaseQueue,
-        deviceID: DeviceID,
-        isNewInstall: Bool = false,
-        now: @escaping @Sendable () -> Date
-    ) {
+    public init(_ queue: DatabaseQueue, deviceID: DeviceID, now: @escaping @Sendable () -> Date) {
         self.queue = queue
         self.deviceID = deviceID
-        self.isNewInstall = isNewInstall
         exercises = GRDBExerciseRepository(queue, now: now)
         programs = GRDBProgramRepository(queue, now: now)
         workouts = GRDBWorkoutRepository(queue, now: now)
@@ -45,15 +37,28 @@ public struct LedgerStores: Sendable {
     ///
     /// A failure after the preflight (a migration that fails on the data, a damaged `device` row) can leave the
     /// migrations that succeeded before it applied, each in its own transaction, as GRDB's migrator commits them.
+    ///
+    /// `regionalSettings` are a new install's (decision #15; F14-S1-5 and F14-S1a-R1-3, ruled): they are written,
+    /// when no settings row is there, in the one write that inserts this device's row, so a launch that ends at any
+    /// point leaves either both or neither, and the next launch is a new install's again. An install that already
+    /// has its device row (one made before F14 among them) is never seeded.
     public static func open(
         at url: URL,
         kind: LocalDevice.Kind,
+        regionalSettings: Settings? = nil,
         now: @escaping @Sendable () -> Date,
         newID: @Sendable () -> UUID
     ) throws -> LedgerStores {
         let database = try LedgerDatabase.open(at: url)
-        let device = try LocalDevice.open(in: database, kind: kind, now: now(), newID: newID)
-        return LedgerStores(database, deviceID: device.id, isNewInstall: device.isNew, now: now)
+        let instant = now()
+        let device = try database.write { transaction in
+            let device = try LocalDevice.open(in: transaction, kind: kind, now: instant, newID: newID)
+            if device.isNew, let regionalSettings {
+                try GRDBSettingsRepository.seedIfAbsent(regionalSettings, at: instant, in: transaction)
+            }
+            return device.id
+        }
+        return LedgerStores(database, deviceID: device, now: now)
     }
 
     /// Where an app keeps its database: `Application Support/Database/ledger.sqlite`, a directory of its own for

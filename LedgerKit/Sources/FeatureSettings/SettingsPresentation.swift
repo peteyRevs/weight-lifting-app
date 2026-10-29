@@ -128,7 +128,7 @@ nonisolated enum SettingsPresentation {
     static func about(_ about: AppAbout, locale: Locale) -> String {
         let name = present(about.name)
         let version = present(about.version)
-        let head = name.map { name in [name, version].compactMap(\.self).joined(separator: " ") }
+        let head = name.map { name in version.map { SettingsCopy.nameAndVersion(name, $0, locale: locale) } ?? name }
             ?? version.map { SettingsCopy.version($0, locale: locale) }
         let tail = present(about.build).map { SettingsCopy.build($0, locale: locale) }
         guard version != nil || tail != nil else {

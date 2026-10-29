@@ -19,10 +19,13 @@ nonisolated struct SettingsPendingRoute: Hashable, Sendable {
 /// made again before `send` returns, so a control shows the lifter's value at once (N1). The change waits in
 /// `pending` until it is written.
 ///
-/// **What is committed** is the last value the store knows is in the row: the newest of its own saves whose echo
-/// the observation has not given back yet (`unechoed`, oldest first), else the observation's last value (`stored`).
-/// An echo of an earlier save only drops that save, and those before it, from `unechoed`; while a later one is still
-/// there, the screen keeps showing the later one, so a late echo never draws over a newer value (F14-S1-3).
+/// **What is committed** is the last value the store knows is in the row: the last value it wrote, while the row has
+/// not been read afresh since (`written`), else the observation's last value (`stored`). When the saver goes idle it
+/// starts the observation over (F14-S1a-R1-1, ruled: option (a)): the new observation's first value is the row after
+/// every one of this store's writes, so it is taken as committed and `written` is forgotten, and the old
+/// observation, with any late echo of an earlier save still in it, ends. Until then an echo only updates `stored`,
+/// so a late echo never draws over a newer value (F14-S1-3), and a change made elsewhere during the saves is shown as
+/// soon as the row is read afresh.
 ///
 /// **Saves** run one at a time, whichever run of `SettingsRoot`'s task starts them (`+Sources`; F14-S1-4), each of
 /// the whole `Settings`. A change made while one runs is saved next, folded with any others: the last value wins. A
@@ -37,8 +40,8 @@ nonisolated struct SettingsPendingRoute: Hashable, Sendable {
 /// the first, so the initializer only keeps what it is given.
 @MainActor @Observable
 final class SettingsStore {
-    // `stored`, `pending` and `isUnreadable` are observed for the tests, which wait on them; the views read only the
-    // model and the route.
+    // `stored`, `pending`, `written` and `isUnreadable` are observed for the tests, which wait on them; the views read
+    // only the model and the route.
 
     /// What the screen draws; nil until the settings have been read, or found unreadable.
     private(set) var model: SettingsModel?
@@ -49,8 +52,8 @@ final class SettingsStore {
     var stored: Settings?
     /// The lifter's latest change while it is not yet written: being saved, or waiting to be.
     var pending: Settings?
-    /// The values this store wrote that the observation has not given back yet, oldest first.
-    @ObservationIgnored var unechoed: [Settings] = []
+    /// The last value this store wrote, until the row is read afresh (a new observation's first value).
+    var written: Settings?
     @ObservationIgnored var saveFailed = false
     /// The observation ended: the settings are followed again after the next save.
     var isUnreadable = false
@@ -61,6 +64,11 @@ final class SettingsStore {
     @ObservationIgnored var saveMark: AsyncStream<Void>.Continuation?
     @ObservationIgnored var followMark: AsyncStream<Void>.Continuation?
     @ObservationIgnored var runNumber = 0
+    /// The number of the observation the follower started last: a value of an older one is never received.
+    @ObservationIgnored var observationNumber = 0
+    /// How many saves have returned: an observation's first value reads the row afresh only if none has since it
+    /// started.
+    @ObservationIgnored var writes = 0
     @ObservationIgnored private var routeNumber = 0
     @ObservationIgnored let about: AppAbout
 
@@ -78,9 +86,10 @@ final class SettingsStore {
         self.about = about
     }
 
-    /// The last value the store knows is in the row: its newest save not yet echoed, else the observation's last.
+    /// The last value the store knows is in the row: what it wrote last, until the row is read afresh, else the
+    /// observation's last value.
     var committed: Settings? {
-        unechoed.last ?? stored
+        written ?? stored
     }
 
     /// The settings on screen: the lifter's latest change, else what is committed.

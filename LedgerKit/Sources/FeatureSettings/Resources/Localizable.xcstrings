@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ %@" : {
+      "comment" : "Foot of Settings: the app's name, then its version; reorder them with %1$@ and %2$@",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@"
+          }
+        }
+      }
+    },
     "Apple Health" : {
       "comment" : "Settings row: the link to Apple Health",
       "localizations" : {

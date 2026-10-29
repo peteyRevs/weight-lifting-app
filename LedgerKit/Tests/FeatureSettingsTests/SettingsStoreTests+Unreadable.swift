@@ -14,7 +14,8 @@ extension SettingsStoreTests {
         let scene = SettingsScene(settings: stored, unreadable: true)
         let task = await scene.running()
         defer { task.cancel() }
-        #expect(scene.store.shown == .default)
+        let showsTheDefaults = scene.store.shown == .default
+        #expect(showsTheDefaults)
         #expect(try scene.model.units.options.map(\.isSelected) == [true, false])
         #expect(scene.watched.saves.isEmpty)
     }
@@ -28,7 +29,8 @@ extension SettingsStoreTests {
         await eventually { scene.store.pending == nil && scene.store.isUnreadable == false }
         var saved = Settings.default
         saved.defaultRest = RestDuration(clampingSeconds: 60)
-        #expect(scene.watched.saves == [saved])
+        let savedWhole = scene.watched.saves == [saved]
+        #expect(savedWhole)
         // Followed again: a save made elsewhere reaches the screen.
         var elsewhere = saved
         elsewhere.weekStart = .saturday

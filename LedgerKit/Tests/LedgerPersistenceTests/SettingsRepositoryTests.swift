@@ -44,7 +44,8 @@ struct SettingsRepositoryTests {
     @Test("Before the first save, load returns the defaults")
     func load_beforeAnySave_returnsDefaults() async throws {
         let (repository, _) = try Self.repository()
-        #expect(try await repository.load() == .default)
+        let loadsTheDefaults = try await repository.load() == .default
+        #expect(loadsTheDefaults)
     }
 
     @Test("Saved settings load back equal, in one row stamped by the injected clock")
@@ -68,7 +69,8 @@ struct SettingsRepositoryTests {
     func observe_emitsCurrent_thenEachChange() async throws {
         let (repository, _) = try Self.repository()
         var values = repository.observe().makeAsyncIterator()
-        #expect(await values.next() == .default)
+        let firstIsTheDefaults = await values.next() == .default
+        #expect(firstIsTheDefaults)
         try await repository.save(Self.custom)
         #expect(await values.next() == Self.custom)
         var changed = Self.custom
@@ -144,6 +146,7 @@ struct SettingsRepositoryTests {
         let updatedAt = try await queue.read { try String.fetchOne($0, sql: "SELECT updated_at FROM settings") }
         #expect(version == SettingsCodec.version)
         #expect(updatedAt == ColumnCodec.timestamp(Self.clock))
-        #expect(try await repository.load() == Self.custom)
+        let loadsTheSeed = try await repository.load() == Self.custom
+        #expect(loadsTheSeed)
     }
 }

@@ -7,6 +7,11 @@ import Testing
 /// F14 S1a, G2: a `SettingsRepository` whose every save waits for the test to say how it ends, and whose
 /// observation can hold its echoes back, as GRDB's `.task`-scheduled observation delivers a commit's value some
 /// time after `write` has returned to the saver. Saves are recorded with the most that ever ran at once.
+///
+/// A held echo goes to the observations there were when its value was committed (fix round 2): an observation
+/// started later begins with the row as it is, and never hears of a commit made before it, as a GRDB observation
+/// starts with a fetch. `deliverNewestEcho()` sends only the newest held echo, as GRDB's `bufferingNewest(1)`
+/// coalesces; `writeElsewhere(_:)` is a write made by another writer (G3's probes, F14-S1a-R1-1).
 final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendable {
     struct Refused: Error {}
 
@@ -22,7 +27,8 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
     private var running = 0
     private var mostRunning = 0
     private let holdsEchoes: Bool
-    private var waitingEchoes: [Settings] = []
+    /// Each held echo with the observations it goes to.
+    private var waitingEchoes: [(value: Settings, to: Set<Int>)] = []
     private var observers: [Int: AsyncStream<Settings>.Continuation] = [:]
     private var lastSent: [Int: Settings] = [:]
     private var nextObserver = 0
@@ -61,14 +67,39 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
         next?.resume.resume(returning: commit)
     }
 
-    /// Sends the oldest held echo to every observer.
+    /// Sends the oldest held echo to the observations it goes to.
     func deliverNextEcho() {
         lock.withLock {
             guard !waitingEchoes.isEmpty else {
                 return
             }
-            broadcast(waitingEchoes.removeFirst())
+            let echo = waitingEchoes.removeFirst()
+            broadcast(echo.value, to: echo.to)
         }
+    }
+
+    /// Sends the newest held echo and drops the others, as an observation that coalesces its values does.
+    func deliverNewestEcho() {
+        lock.withLock {
+            guard let echo = waitingEchoes.last else {
+                return
+            }
+            waitingEchoes = []
+            broadcast(echo.value, to: echo.to)
+        }
+    }
+
+    /// Another writer puts `settings` in the row; its value goes to every observation at once.
+    func writeElsewhere(_ settings: Settings) {
+        lock.withLock {
+            current = settings
+            broadcast(settings, to: Set(observers.keys))
+        }
+    }
+
+    /// The observations open now.
+    var observationCount: Int {
+        lock.withLock { observers.count }
     }
 
     func load() async throws -> Settings {
@@ -89,9 +120,9 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
             if commits {
                 current = settings
                 if holdsEchoes {
-                    waitingEchoes.append(settings)
+                    waitingEchoes.append((settings, Set(observers.keys)))
                 } else {
-                    broadcast(settings)
+                    broadcast(settings, to: Set(observers.keys))
                 }
             }
         }
@@ -122,9 +153,9 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
         return stream
     }
 
-    /// Under the lock.
-    private func broadcast(_ value: Settings) {
-        for (id, observer) in observers where lastSent[id] != value {
+    /// Under the lock. An observation that has ended is left out.
+    private func broadcast(_ value: Settings, to ids: Set<Int>) {
+        for (id, observer) in observers where ids.contains(id) && lastSent[id] != value {
             lastSent[id] = value
             observer.yield(value)
         }
@@ -170,6 +201,13 @@ struct ScriptedSettingsScene {
         }
         Issue.record("never held: \(what)", sourceLocation: sourceLocation)
         return false
+    }
+
+    /// Turns the main actor 1,000 times: room for work that must not come, or that has no condition to wait on.
+    func yieldALot() async {
+        for _ in 0 ..< 1000 {
+            await Task.yield()
+        }
     }
 
     /// Waits for `count` saves to be held.

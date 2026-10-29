@@ -98,7 +98,8 @@ struct SettingsReachTests {
         await scene.settingsSaved()
         await until { Self.strip(scene.today)?.first?.date == "12" }
         #expect(Self.strip(scene.today)?.count == 7)
-        #expect(try await scene.memory.programs.active() == scene.program, "the block's weeks did not move")
+        let programIsUnchanged = try await scene.memory.programs.active() == scene.program
+        #expect(programIsUnchanged, "the block's weeks did not move")
     }
 
     /// Today's week strip, once it shows a model.

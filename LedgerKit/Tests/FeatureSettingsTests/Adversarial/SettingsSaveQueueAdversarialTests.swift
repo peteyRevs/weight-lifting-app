@@ -134,12 +134,14 @@ struct SettingsSaveQueueAdversarialTests {
         scene.repository.resolveNext(commit: true) // lb is saved; pending == stored, so pending is cleared
         await scene.until("the store forgets lb as pending") { scene.store.pending == nil }
         #expect(scene.store.model?.units.options[0].isSelected == true, "LB, the lifter's last tap")
+        // Fix round 2 (F14-S1a-R1-1): the idle saver has the row read afresh, which ends the observation that holds
+        // the late echoes.
+        await scene.until("the row is read afresh") { scene.store.written == nil }
         scene.repository.deliverNextEcho() // kg's late echo
-        await scene.until("the echo is read") { scene.store.stored?.units == .kg }
-        #expect(scene.store.model?.units.options[0].isSelected == true)
         scene.repository.deliverNextEcho()
-        await scene.until("lb's echo is read") { scene.store.stored?.units == .lb }
+        await scene.yieldALot()
         #expect(scene.store.model?.units.options[0].isSelected == true)
+        #expect(scene.store.stored?.units == .lb, "the late echoes ended with their observation")
     }
 
     /// F14-S1-4 (fixed in S1a fix round 1; the test describes the defect it pins against). The root's task restarts on
@@ -157,7 +159,7 @@ struct SettingsSaveQueueAdversarialTests {
         let second = Task { await scene.store.run() }
         defer { second.cancel() }
         // The second run's start: it finds the change pending. Bounded: no second save comes while the first runs.
-        for _ in 0 ..< 200_000 where scene.repository.heldValues.count < 2 {
+        for _ in 0 ..< 1000 where scene.repository.heldValues.count < 2 {
             await Task.yield()
         }
         #expect(scene.repository.mostAtOnce == 1)

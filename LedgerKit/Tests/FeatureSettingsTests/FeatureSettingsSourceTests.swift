@@ -78,7 +78,7 @@ nonisolated struct FeatureSettingsSourceTests {
     func lookups_standInTheCopyFiles() throws {
         let outside = try Self.uses(of: Self.lookups) { !$0.hasPrefix("SettingsCopy") }
         #expect(outside == [])
-        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 26)
+        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 27)
     }
 
     /// N6: the product's name and version come from the bundle. The previews' stand-in About values are set aside:

@@ -30,6 +30,20 @@ nonisolated extension SettingsCopy {
 
     // MARK: About
 
+    // The About line's values are the bundle's text, put in as they are, so the locale each lookup takes changes
+    // nothing today. It is kept because standards §7 has every lookup whose key carries a value pass its caller's
+    // locale (`ModuleCopyTests`' audit fails one that does not), so a value that is a number later is formatted in it.
+
+    /// "Ledger 0.14.0": the About line's first part, the app's name, then its version.
+    static func nameAndVersion(_ name: String, _ version: String, locale: Locale) -> String {
+        String(
+            localized: "\(name) \(version)",
+            bundle: .module,
+            locale: locale,
+            comment: "Foot of Settings: the app's name, then its version; reorder them with %1$@ and %2$@"
+        )
+    }
+
     /// "Version 0.14.0": the About line's first part when the app's name cannot be read.
     static func version(_ version: String, locale: Locale) -> String {
         String(

@@ -5,8 +5,9 @@ import LedgerDomain
 /// saves the lifter's changes, in one task group, so nothing outlives the screen.
 ///
 /// Each kind of work waits on a channel that keeps only the newest mark: a change marks the saver, which saves
-/// what is pending until nothing is, so changes made during a save are folded into the next one; the end of the
-/// observation, then a save, marks the follower, which follows the settings again.
+/// what is pending until nothing is, so changes made during a save are folded into the next one. The follower is
+/// marked at the start of the run and each time the saver goes idle after writing or failing: it then ends the
+/// observation it was following and starts a new one, whose first value is the row as it is now (F14-S1a-R1-1).
 ///
 /// **One save at a time across runs** (F14-S1-4). The task restarts on the same store (a tab switched away and
 /// back): the old run, cancelled, may still be waiting for its save. `isSaving` keeps the new run from starting a
@@ -37,37 +38,56 @@ extension SettingsStore {
         }
     }
 
-    /// Follows the stored settings each time it is marked: at the start of the run, and after a save that follows
-    /// an observation that ended.
+    /// Starts an observation of the settings each time it is marked: at the start of the run, and each time the saver
+    /// goes idle after writing or failing (F14-S1a-R1-1), which also follows the settings again after they could not
+    /// be read (N2). Each new observation retires the one before by its number: the old one receives nothing more,
+    /// and ends at its next value, which ends its stream. (A task group cannot cancel one child alone, and once
+    /// `cancelAll()` is called every task added after it starts cancelled.)
     private func follow(_ marks: AsyncStream<Void>) async {
-        for await _ in marks {
-            for await value in settings.observe() {
-                guard !Task.isCancelled else {
-                    return
-                }
-                receive(value)
+        await withTaskGroup(of: Void.self) { group in
+            for await _ in marks {
+                observationNumber += 1
+                let number = observationNumber
+                group.addTask { await self.observe(number) }
             }
-            guard !Task.isCancelled else {
-                return
-            }
-            // Logged here, once, and not by each change then drawn over the defaults.
-            logger.log.error("The settings could not be read: Settings shows what it last had, or the defaults")
-            isUnreadable = true
-            stored = stored ?? .default
-            show()
         }
     }
 
-    /// A value of the observation. When it is the echo of a save of this store's, that save and those before it are
-    /// echoed; any other value is a change made elsewhere, which is what is committed now.
-    private func receive(_ value: Settings) {
-        if let echoed = unechoed.firstIndex(of: value) {
-            unechoed.removeFirst(echoed + 1)
-        } else {
-            unechoed = []
+    /// Receives the values of the observation numbered `number` while it is the follower's latest. One that ends by
+    /// itself could not read the row: the screen keeps what it had, or the defaults.
+    ///
+    /// Its first value is the row read afresh only when no save has returned since it started: one that has may have
+    /// committed after the observation's first read, which is then older than the row.
+    private func observe(_ number: Int) async {
+        let writesBefore = writes
+        var isFirst = true
+        for await value in settings.observe() {
+            guard !Task.isCancelled, number == observationNumber else {
+                return
+            }
+            receive(value, readsTheRowAfresh: isFirst && writes == writesBefore)
+            isFirst = false
         }
+        guard !Task.isCancelled, number == observationNumber else {
+            return
+        }
+        // Logged here, once, and not by each change then drawn over the defaults.
+        logger.log.error("The settings could not be read: Settings shows what it last had, or the defaults")
+        isUnreadable = true
+        stored = stored ?? .default
+        show()
+    }
+
+    /// A value of the observation. An observation's first value is the row as it is now: when no save is running or
+    /// waiting, it is what is committed, and the store forgets what it wrote. Any later value (an echo of a save, or
+    /// a change made elsewhere) is the stored one, and is drawn only while the store has written nothing since the
+    /// row was last read afresh.
+    private func receive(_ value: Settings, readsTheRowAfresh: Bool) {
         stored = value
         isUnreadable = false
+        if readsTheRowAfresh, !isSaving, pending == nil {
+            written = nil
+        }
         show()
     }
 
@@ -75,17 +95,21 @@ extension SettingsStore {
     /// save runs at a time, whichever run started it, and a run whose task is cancelled starts no further save.
     ///
     /// A failure puts the screen back to what is committed and drops every pending change, the ones made during the
-    /// failed save too (F14-S1-1, ruled), with the failure's line.
+    /// failed save too (F14-S1-1, ruled), with the failure's line. Once idle after writing or failing, the saver has
+    /// the row read afresh.
     private func savePending() async {
         guard !isSaving else {
             return
         }
         isSaving = true
+        var hasWrittenOrFailed = false
         defer {
             isSaving = false
             if pending != nil, pending != committed {
                 // Left by a run cancelled between saves: the current run's saver takes it.
                 saveMark?.yield()
+            } else if hasWrittenOrFailed {
+                followMark?.yield()
             }
         }
         while let wanted = pending, wanted != committed, !Task.isCancelled {
@@ -98,19 +122,17 @@ extension SettingsStore {
                 logger.log.error("A change to the settings was not saved: \(String(describing: error))")
                 pending = nil
                 saveFailed = true
+                hasWrittenOrFailed = true
                 show()
                 return
             }
-            unechoed.append(wanted)
+            written = wanted
+            writes += 1
+            hasWrittenOrFailed = true
         }
-        guard let wanted = pending, wanted == committed else {
-            return
-        }
-        // Written: the screen shows what is committed, which is the lifter's value.
-        pending = nil
-        if isUnreadable {
-            // The row is readable again: the follower's new observation gives the saved value back.
-            followMark?.yield()
+        if let wanted = pending, wanted == committed {
+            // Written: the screen shows what is committed, which is the lifter's value.
+            pending = nil
         }
     }
 }

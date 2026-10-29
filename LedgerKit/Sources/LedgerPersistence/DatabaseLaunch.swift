@@ -58,11 +58,11 @@ public final class DatabaseLaunch {
     @ObservationIgnored private var ended: Set<LaunchStep> = []
 
     /// - Parameters:
-    ///   - regionalSettings: what the settings step saves before it loads on a new install's first launch, the one
-    ///     that inserts this device's row (`Settings.regional(locale:calendar:)`, decision #15; F14-S1-5, ruled):
-    ///     the iPhone's. An install made before F14 has a device row and no settings row, and keeps
-    ///     `Settings.default`, which its program was built with. The watch passes nil, and seeds nothing: its
-    ///     settings come from the phone (F19).
+    ///   - regionalSettings: what a new install's settings start from, written by the open in the same write that
+    ///     inserts this device's row (`LedgerStores.open`; `Settings.regional(locale:calendar:)`, decision #15;
+    ///     F14-S1-5 and F14-S1a-R1-3, ruled): the iPhone's. An install made before F14 has a device row and no
+    ///     settings row, and keeps `Settings.default`, which its program was built with. The watch passes nil, and
+    ///     seeds nothing: its settings come from the phone (F19).
     ///   - record: receives each `LaunchEvent` as it happens.
     ///   - onOpen: called once the database is open, before `state` becomes `.ready`: the composition root binds
     ///     the stores to the dependency keys there.
@@ -91,7 +91,13 @@ public final class DatabaseLaunch {
     public func open() {
         record(.began(.openDatabase))
         do {
-            let opened = try LedgerStores.open(at: databaseURL, kind: kind, now: now, newID: newID)
+            let opened = try LedgerStores.open(
+                at: databaseURL,
+                kind: kind,
+                regionalSettings: regionalSettings,
+                now: now,
+                newID: newID
+            )
             stores = opened
             onOpen(opened)
             state = .ready
@@ -179,18 +185,8 @@ public final class DatabaseLaunch {
         }
     }
 
-    /// On a new install, seeds the regional settings when none are stored, then loads. A seed that fails is logged
-    /// and the step goes on: what `load()` gives is what it would have given without the seed (`Settings.default`),
-    /// and no later launch seeds, since the install is no longer new.
     private func loadSettings(_ stores: LedgerStores) async {
         record(.began(.loadSettings))
-        if let regionalSettings, stores.isNewInstall {
-            do {
-                try await stores.settings.seedIfAbsent(regionalSettings)
-            } catch {
-                logger.error("The regional settings were not seeded: \(String(describing: error))")
-            }
-        }
         do {
             settings = try await stores.settings.load()
         } catch {
