@@ -204,10 +204,9 @@ this notes commit.
 **Why a list of unechoed saves (S1-3), and not "ignore echoes while anything is pending".** Ignoring echoes still
 needs to know when the last of this store's own echoes has arrived. Without that, the late echo of an earlier save
 lands once nothing is pending and is drawn, which is exactly G2's script. The list is that knowledge, kept as small
-as it can be: values, oldest first. An entry whose echo GRDB coalesced away, or whose value equals the observation's
-last (`removeDuplicates`), can stay in the list. That is harmless: the screen shows the list's newest entry, which is
-the last value written, and a change made elsewhere empties the list. Nothing in S1a writes settings from elsewhere.
-S3's erase will reach the store as such a change.
+as it can be: values, oldest first. **Corrected in fix round 2:** the claim here that a stale entry is "harmless" was
+wrong. G3 (F14-S1a-R1-1) showed that a change made elsewhere which equals a stale entry is taken for an echo, and the
+screen then shows a value that is not in the row. The list was replaced; see "S1a fix round 2".
 
 **G2's known issues are now plain tests**, with no expectation loosened. The doc comments of S1-2 to S1-4 say they
 are fixed. G2's comment on Saudi Arabia was already right (Sunday). No comment or test on this branch says Saturday
@@ -252,3 +251,107 @@ the composition, launch and presentation +1.
 2,100 s of steps. Steps: format 1 s, lint 99 s, iOS build 64 s, string catalogs 2 s, iOS tests 1,628 s, watchOS
 build 27 s, watchOS tests 275 s, coverage 2 s. Coverage: FeatureSettings 98.95 % (473 / 478), overall 98.54 %. The
 FeatureWorkout suites that failed on the host passed here.
+
+### S1a fix round 2 (G1, 2026-10-28)
+
+Against G3's review (`2df12aa`, "## S1a — G3 review (round 1)") and the orchestrator's rulings. Commit `c8a52ac`,
+then this notes commit.
+
+**R1-1: the row read afresh (option (a)).** This is the final design of the store's echo handling. It replaces round
+1's list.
+- `written` holds the last value this store wrote. `committed = written ?? stored`, and `shown = pending ?? committed`.
+- When the saver goes idle after writing or failing, it marks the follower. The follower starts a new observation
+  and retires the one before by its number (`observationNumber`): the old observation receives nothing more and ends
+  at its next value, which ends its stream. A task group cannot cancel one child alone, and after `cancelAll()` every
+  task added starts cancelled. I found that the hard way: the first try hung every test.
+- The new observation's first value is the row as it is now. It is taken as committed, and `written` is forgotten,
+  only when three things hold: no save is running, nothing is pending, and no save has returned since the
+  observation started (`writes`). A save that returned since may have committed after the observation's first read,
+  so that read is older than the row. Without this check, `lateEcho_afterTapBack_doesNotFlicker` failed 2 runs in 60
+  (a first read of KG delivered after LB's write). With it, 80 of 80 runs passed. A save that returned means another
+  fresh read follows when the saver goes idle again, so `written` is always forgotten in the end.
+- Between the fresh reads, an echo, or a change made elsewhere, updates `stored` only. A late echo of an earlier
+  save never draws over a newer value (F14-S1-3). A change made elsewhere during a burst of saves is shown at the
+  burst's fresh read; one made while the store is idle is shown at once.
+- What (a) removed: the FIFO (`unechoed`) and its index rule (G3's M9), and with them the `else { unechoed = [] }`
+  branch (M3). M3's test went with its branch. In its place, `changeElsewhere_afterAHeldEcho_isShown` pins the same
+  behaviour in the new design. N2's separate resubscription is gone too: every fresh read follows an unreadable row
+  again.
+- `ScriptedSettings`, G2's test double, now sends a held echo only to the observations there were when its value
+  was committed, as a GRDB observation starts with a fetch and never hears of an earlier commit. It also gains
+  `deliverNewestEcho()` (coalescing) and `writeElsewhere(_:)`, for G3's probes.
+- The store's doc comment and the round-1 notes no longer call a stale entry harmless.
+
+**R1-2: tests.** All of these are in `SettingsSaveQueueAdversarialTests+Round2.swift`:
+- `coalescedEcho_thenAChangeElsewhere_drawsTheRow`: G3's stale-entry probe. It passes.
+- `echoesABA_inOrder_neverDrawB`: G3's in-order A, B, A probe. It passes.
+- `changeElsewhere_afterAHeldEcho_isShown`: R1-2's first case, in the new design.
+- `restart_handsTheQueuedChangeToTheNewRun`: G3's test. **M5 is killed.** With the defer's `saveMark?.yield()`
+  replaced by a no-op, this test fails with 4 issues (I ran it, then restored the line).
+- **M3 no longer exists**: its branch went with the FIFO.
+
+**R1-3: the seed in the device row's write.**
+- `LedgerStores.open(at:kind:regionalSettings:now:newID:)` runs `LocalDevice.open(in: Database, …)` and, when the row
+  is new and regional settings are given, `GRDBSettingsRepository.seedIfAbsent(_:at:in:)` in the same `write`.
+- `LedgerStores.isNewInstall` is gone. `DatabaseLaunch` passes `regionalSettings` to the open, and `loadSettings`
+  only loads.
+- A seed the database refuses now takes the device row with it and fails the open (decision #29's screen). The
+  foreground retries, and that retry is again a new install's.
+- Tests in `DatabaseLaunchTests+Regional`:
+  - `deviceRowAndSeed_areOneWrite` replaces `regionalSeedFailure_carriesOn`. It pins that the "first launch died
+    after the device insert" state cannot be reached: a refused seed leaves no device row, and the retried open
+    seeds.
+  - `onlyTheFirstLaunch_isANewInstall` is removed with `isNewInstall`.
+  - Still covered, by these tests and G2's: the fresh install, an install with a device row and no settings row,
+    and a pre-F14 install with a program.
+
+**R1-4:** nothing to do in F14.
+
+**R1-5: Bool first, then `#expect`.** I bound every whole-`Settings`, model or `Program` comparison G3 listed:
+- `SettingsStoreTests` and `+Unreadable`;
+- `SettingsReachTests`;
+- `DatabaseLaunchTests+Regional` (rewritten);
+- `SettingsRepositoryTests` (my seed test, and F05's two lines at :47 and :71, which are sanctioned edits under this
+  ruling);
+- `AppCompositionTests`' two tests.
+
+**R1-6.** `"{name} {version}"` is now the catalog key `"%@ %@"` (`SettingsCopy.nameAndVersion`), with a comment that
+gives the order and says a translation may reorder with `%1$@`/`%2$@`. The catalog has 27 keys.
+
+**The `locale:` parameters are kept, against the ruling.** I dropped them, and `ModuleCopyTests`' audit failed all
+three lookups: "a lookup whose key carries a value and that passes no `locale:`" (standards §7). That rule is a gate.
+So the parameters stay, and `SettingsCopy+Names` says why. This is G3's alternative, "say why it is kept". If the
+orchestrator wants them gone, the audit's rule needs an exemption first.
+
+**R1-7:** the bounded wait in `restartDuringASave_keepsSaving` is 1,000 yields.
+
+**APIs S1b's rebase must know about:**
+- `SettingsStore`:
+  - `unechoed` is gone; `written` (observed) is back, with a new meaning.
+  - `committed` is `written ?? stored`.
+  - New members: `observationNumber`, `writes`.
+  - `stored` is any observation's last value.
+- `LedgerStores`: `isNewInstall` is gone, and `open` takes `regionalSettings:`.
+- `LocalDevice.open` is internal and takes a `Database`.
+- `GRDBSettingsRepository.seedIfAbsent(_:at:in:)` is new and internal.
+- `SettingsCopy`: `nameAndVersion(_:_:locale:)` is new.
+- None of these names appear in the draft's sources. Its `SettingsRootTests` waits on `pending == nil`, which still
+  means "written".
+
+**Runs (host).**
+- `FeatureSettingsTests` (42 tests): 80 of 80 runs passed after the `writes` check, and green again after the last
+  edits.
+- `grdb_burstsConverge` (6 seeds × 60 changes over GRDB): **30 of 30** runs passed.
+- The persistence, domain, dependencies, AppKit and FeatureSettings targets passed. Their known issues are the old
+  ones (`InMemoryStores` F7-10, and `LedgerDependenciesTests`' 18).
+- swiftformat and swiftlint (strict) are clean on every changed file.
+
+**Net product lines** (against `bd2d26c`): 698 added, 24 removed, **net 674**, plus 5 in `Package.swift` (679). This
+round alone is +94 / −66, net +28.
+
+#### The gate (fix round 2)
+
+`scripts/check.sh` (full: iOS and watchOS), through the simulator lock, on `c8a52ac`: **exit 0, "check.sh OK"**,
+1,932 s. Steps: lint 75 s, iOS build 33 s, string catalogs 1 s (7 catalogs, each matching its code, the new
+`"%@ %@"` among them), iOS tests 1,530 s, watchOS build 20 s, watchOS tests 269 s, coverage 2 s. Coverage:
+FeatureSettings 99.20 % (502 / 506), overall 98.55 %.
