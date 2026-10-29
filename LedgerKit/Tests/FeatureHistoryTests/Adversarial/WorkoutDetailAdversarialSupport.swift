@@ -104,12 +104,15 @@ final nonisolated class EndingSettings: SettingsRepository {
 
 /// The workouts of `base`, every delete counted. With a gate, a delete waits for `open()`: `.before` waits before it
 /// deletes (a cancelled wait throws `CancellationError` and deletes nothing, as GRDB's write does when its task is
-/// cancelled before it starts), `.after` deletes first and returns only once opened.
+/// cancelled before it starts), `.after` deletes first and returns only once opened. `.busyWriter` waits for `open()`
+/// whether or not its task is cancelled, then throws `CancellationError` if it was, as GRDB's writer queue does: the
+/// write's cancellation is seen only once its block starts (review S2-R1-1).
 final nonisolated class GatedWorkouts: WorkoutRepository {
     enum Gate: Sendable {
         case none
         case before
         case after
+        case busyWriter
     }
 
     let base: any WorkoutRepository
@@ -138,11 +141,11 @@ final nonisolated class GatedWorkouts: WorkoutRepository {
         openings.withLock { $0 += 1 }
     }
 
-    /// Waits for an opening, or for the task's cancellation.
-    private func wait() async {
+    /// Waits for an opening, or for the task's cancellation unless `ignoringCancellation`.
+    private func wait(ignoringCancellation: Bool = false) async {
         waiting.withLock { $0 += 1 }
         defer { waiting.withLock { $0 -= 1 } }
-        while !Task.isCancelled {
+        while ignoringCancellation || !Task.isCancelled {
             let isOpen = openings.withLock { openings in
                 guard openings > 0 else {
                     return false
@@ -153,7 +156,12 @@ final nonisolated class GatedWorkouts: WorkoutRepository {
             if isOpen {
                 return
             }
-            try? await Task.sleep(for: .milliseconds(5))
+            if Task.isCancelled {
+                // A cancelled task's sleep returns at once: block the thread briefly instead of spinning.
+                usleep(5000)
+            } else {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
         }
     }
 
@@ -169,6 +177,10 @@ final nonisolated class GatedWorkouts: WorkoutRepository {
         case .after:
             try await base.delete(id: id)
             await wait()
+        case .busyWriter:
+            await wait(ignoringCancellation: true)
+            try Task.checkCancellation()
+            try await base.delete(id: id)
         }
     }
 

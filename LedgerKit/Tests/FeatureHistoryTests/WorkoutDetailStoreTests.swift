@@ -169,3 +169,45 @@ struct WorkoutDetailStoreTests {
         #expect(scene.store.pendingRoute?.route == .closeWorkout(newest.id))
     }
 }
+
+/// Fix round 2 (review S2-R1-1 and S2-R1-3): what a cancelled run leaves.
+extension WorkoutDetailStoreTests {
+    /// Review S2-R1-1: the run is cancelled (the screen went) while it waits for a busy writer, which sees the
+    /// cancellation only once its block starts; the screen comes back meanwhile, and its run finds the delete still
+    /// running and returns. When the cancelled run ends, the delete is confirmed again under a new `deletion`, so the
+    /// root's task runs it once more, and it deletes.
+    @Test("S2-R1-1. A delete cancelled behind a busy writer, the screen back meanwhile, is run again and deletes")
+    func delete_cancelledBehindABusyWriter_runsAgain() async throws {
+        let newest = try Self.workout(11)
+        let scene = GatedDetailScene(newest.id, gate: .busyWriter)
+        let run = await scene.running()
+        defer { run.cancel() }
+        scene.store.confirmDelete()
+        let first = Task { await scene.store.delete() }
+        try #require(await settles { scene.workouts.isWaiting })
+        first.cancel()
+        // The screen is back: the root's task, keyed by the same `deletion`, runs while the first still waits.
+        await scene.store.delete()
+        scene.workouts.open()
+        await first.value
+        #expect(scene.store.deletion == 2, "the root's task is asked to run again")
+        // The root's next task (keyed by the new `deletion`); the writer is free this time.
+        scene.workouts.open()
+        await scene.store.delete()
+        #expect(try await scene.memory.workouts.workout(id: newest.id) == nil)
+        #expect(scene.store.state == .gone)
+    }
+
+    /// Review S2-R1-3 (m12): a run cancelled with the screen ends both observations; that end is the view's, not a
+    /// failure, and leaves the receipt as it was.
+    @Test("S2-R1-3. A run cancelled with the screen leaves the receipt; it never says the workout can't be read")
+    func runCancelled_keepsTheReceipt() async throws {
+        let scene = try DetailScene(Self.workout(11).id)
+        let run = await scene.running()
+        let shown = try scene.model
+        run.cancel()
+        await run.value
+        let isKept = scene.store.state == .loaded(shown)
+        #expect(isKept)
+    }
+}

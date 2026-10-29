@@ -38,6 +38,15 @@ struct HistoryRouteMappingTests {
         #expect(router[path: .library] == [])
     }
 
+    @Test("F13-S1-6. A row's detail sent from History while Today is selected is pushed on History's stack")
+    func workout_fromAnUnselectedTab_landsOnItsOwnStack() {
+        let router = AppRouter()
+        router.selectedTab = .today
+        router.resolve(HistoryRoute.workout(Self.upperA), from: .history)
+        #expect(router[path: .history] == [.workout(Self.upperA)])
+        #expect(router[path: .today] == [])
+    }
+
     @Test("3. A detail's row pushes its exercise's history over the detail, on the same tab")
     func exercise_pushesTheHistoryOverTheDetail() {
         let router = AppRouter()

@@ -105,10 +105,36 @@ struct WorkoutDetailDamageAdversarialTests {
         try await stack.damage(damage, [ColumnCodec.text(mine.id)])
         let after = await values.next(within: .seconds(5))
         #expect(after == nil, "\(damage): \(Self.describe(after))")
-        // Ended, not merely quiet: a later delete emits nothing either.
-        try? await stack.workouts.delete(id: mine.id)
+        // Ended, not merely quiet: a later delete emits nothing either. N10's "You can still delete it" holds: the
+        // delete succeeds and the list loses the workout (review S2-R1-5).
+        try await stack.workouts.delete(id: mine.id)
         let afterDelete = await values.next(within: .milliseconds(200))
         #expect(afterDelete == nil)
+        let listed = try await stack.workouts.historyEntries()
+        #expect(!listed.contains { $0.id == mine.id }, "\(damage): the deleted workout leaves the list")
+    }
+
+    /// Review S2-R1-5 (g2): the observation reads `personal_record` too. A record of the workout that changes while
+    /// the workout's own rows and its count stay as they are (here its `previous`, written alone) emits the new value.
+    @Test("A record of the workout changed alone, its count the same, emits the workout with the new record")
+    func recordChangedAlone_emits() async throws {
+        let stack = try await S3Kit.stack()
+        let baseline = S3Kit.workout(2, endedAt: S3Kit.day(-2), [S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(95, 5)])])
+        let mine = S3Kit.workout(1, endedAt: S3Kit.day(-1), [S3Kit.RowSpec(S3Kit.bench, [S3Kit.set(100, 5)])])
+        try await stack.materialize(baseline)
+        try await stack.materialize(mine)
+        let values = LibraryArrivals(stack.workouts.observeWorkout(id: mine.id))
+        defer { values.cancel() }
+        let first = try #require(await values.next(within: .seconds(5)) ?? nil)
+        try #require(!first.records.isEmpty, "100 over 95 holds records")
+        try await stack.damage(
+            "UPDATE personal_record SET previous_weight_e7g = previous_weight_e7g - 10000000 WHERE workout_id = ?",
+            [ColumnCodec.text(mine.id)]
+        )
+        let after = try #require(await values.next(within: .seconds(5)) ?? nil, "the record's change emits")
+        #expect(after.records.count == first.records.count)
+        let changed = after.records != first.records && after.workout == first.workout
+        #expect(changed, "only the records moved")
     }
 
     @Test("A workout damaged before it is observed ends the stream at once, without a value")

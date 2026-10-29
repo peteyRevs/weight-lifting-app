@@ -37,6 +37,16 @@ struct LibraryRouteMappingTests {
         #expect(router[path: .library] == [])
     }
 
+    /// F13 S2 (review S2-R1-2): the route lands on the tab that sent it, not the selected one.
+    @Test("F13-S1-6. A row's history sent from the Library while Today is selected is pushed on the Library's stack")
+    func exercise_fromAnUnselectedTab_landsOnItsOwnStack() {
+        let router = AppRouter()
+        router.selectedTab = .today
+        router.resolve(LibraryRoute.exercise(Self.bench), from: .library)
+        #expect(router[path: .library] == [.exercise(Self.bench)])
+        #expect(router[path: .today] == [])
+    }
+
     /// Sanctioned edit of F13 S1 (C3): the workout's detail is pushed over the exercise's history (F13 question 1,
     /// built to A), where the session selected the History tab until then.
     @Test("11. A session of the log pushes its workout's detail over the history, on the same tab")

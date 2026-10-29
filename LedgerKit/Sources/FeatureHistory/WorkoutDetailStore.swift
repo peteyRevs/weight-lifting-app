@@ -20,8 +20,9 @@ import Observation
 ///
 /// **Delete asks first, then runs once** (N9, F13-S2-3). The alert's "Delete" is accepted while no delete is waiting
 /// or running; it makes the next `deletion`, which is the id of the root's task, and `delete()` calls the repository
-/// once for it. A run cancelled before its write (the view went away) leaves the delete confirmed, and the root's
-/// task, run again when the view comes back, performs it; a run while another is in flight does nothing. A failure
+/// once for it. A run cancelled before its write (the view went away) confirms the delete again under the next
+/// `deletion`, so the root's task runs it once the view is up, even when the view came back while the cancelled run
+/// still waited for the writer (review S2-R1-1); a run while another is in flight does nothing. A failure
 /// is logged and said in an alert, and the screen stays; once deleted, the screen closes. A route waits until the app
 /// has taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
 @MainActor @Observable
@@ -70,10 +71,10 @@ final class WorkoutDetailStore {
         var workoutHasEnded = false
     }
 
-    /// Where the confirmed delete stands: nothing confirmed, confirmed and not yet written (also after a run that was
-    /// cancelled before its write), being written, or done.
+    /// Where the confirmed delete stands: nothing confirmed (or done: the detail is then `.gone`), confirmed and not
+    /// yet written (also after a run that was cancelled before its write), or being written.
     private enum Deleting {
-        case idle, confirmed, running, done
+        case idle, confirmed, running
     }
 
     // MARK: Intents
@@ -127,7 +128,7 @@ final class WorkoutDetailStore {
 
     /// Runs the confirmed delete, once: the repository's `delete(id:)`, then the screen closes. A failure keeps the
     /// screen and says so, and a later "Delete" may try again. A run cancelled with the screen before its write keeps
-    /// the delete confirmed, for the run the screen's return starts.
+    /// the delete confirmed under a new `deletion`, for the root's next task.
     func delete() async {
         guard deleting == .confirmed else {
             return
@@ -135,11 +136,12 @@ final class WorkoutDetailStore {
         deleting = .running
         do {
             try await workouts.delete(id: workoutID)
-            deleting = .done
+            deleting = .idle
             close()
         } catch {
             guard !(error is CancellationError && Task.isCancelled) else {
                 deleting = .confirmed
+                deletion = (deletion ?? 0) + 1
                 return
             }
             deleting = .idle
