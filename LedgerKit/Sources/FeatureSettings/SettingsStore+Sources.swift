@@ -40,16 +40,34 @@ extension SettingsStore {
 
     /// Starts an observation of the settings each time it is marked: at the start of the run, and each time the saver
     /// goes idle after writing or failing (F14-S1a-R1-1), which also follows the settings again after they could not
-    /// be read (N2). Each new observation retires the one before by its number: the old one receives nothing more,
-    /// and ends at its next value, which ends its stream. (A task group cannot cancel one child alone, and once
-    /// `cancelAll()` is called every task added after it starts cancelled.)
+    /// be read (N2). Each new observation retires the one before (F14-S1a-R2-1): the old one is cancelled at once,
+    /// which ends its stream, so at most two are open, and only while one hands over to the next. Every observation
+    /// is a child of this task, so cancelling the run cancels them all.
     private func follow(_ marks: AsyncStream<Void>) async {
         await withTaskGroup(of: Void.self) { group in
             for await _ in marks {
+                retireObservation?.finish()
                 observationNumber += 1
                 let number = observationNumber
-                group.addTask { await self.observe(number) }
+                let (retired, retire) = AsyncStream<Void>.makeStream()
+                retireObservation = retire
+                group.addTask { await self.observe(number, until: retired) }
             }
+        }
+    }
+
+    /// Runs the observation numbered `number` until it ends by itself or `retired` finishes, whichever comes first,
+    /// and then cancels the other. The group is this one observation's alone and ends here, so cancelling all of it
+    /// cancels nothing else; the follower's own group is never cancelled (every task added to a cancelled group
+    /// starts cancelled).
+    private func observe(_ number: Int, until retired: AsyncStream<Void>) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.observe(number) }
+            group.addTask {
+                for await _ in retired {}
+            }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -78,14 +96,15 @@ extension SettingsStore {
         show()
     }
 
-    /// A value of the observation. An observation's first value is the row as it is now: when no save is running or
-    /// waiting, it is what is committed, and the store forgets what it wrote. Any later value (an echo of a save, or
-    /// a change made elsewhere) is the stored one, and is drawn only while the store has written nothing since the
-    /// row was last read afresh.
+    /// A value of the observation. An observation's first value read after every save of this store returned
+    /// (`readsTheRowAfresh`) is the row as it is now: when no save is running, it is what is committed, whatever is
+    /// pending, and the store forgets what it wrote (F14-S1a-R2-3). Any later value (an echo of a save, or a change
+    /// made elsewhere) is the stored one, and is drawn only while the store has written nothing since the row was
+    /// last read afresh.
     private func receive(_ value: Settings, readsTheRowAfresh: Bool) {
         stored = value
         isUnreadable = false
-        if readsTheRowAfresh, !isSaving, pending == nil {
+        if readsTheRowAfresh, !isSaving {
             written = nil
         }
         show()

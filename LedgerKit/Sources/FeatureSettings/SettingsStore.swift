@@ -66,6 +66,8 @@ final class SettingsStore {
     @ObservationIgnored var runNumber = 0
     /// The number of the observation the follower started last: a value of an older one is never received.
     @ObservationIgnored var observationNumber = 0
+    /// Ends the follower's current observation when the next one starts (`+Sources`).
+    @ObservationIgnored var retireObservation: AsyncStream<Void>.Continuation?
     /// How many saves have returned: an observation's first value reads the row afresh only if none has since it
     /// started.
     @ObservationIgnored var writes = 0

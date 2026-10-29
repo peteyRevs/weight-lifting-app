@@ -355,3 +355,84 @@ round alone is +94 / −66, net +28.
 1,932 s. Steps: lint 75 s, iOS build 33 s, string catalogs 1 s (7 catalogs, each matching its code, the new
 `"%@ %@"` among them), iOS tests 1,530 s, watchOS build 20 s, watchOS tests 269 s, coverage 2 s. Coverage:
 FeatureSettings 99.20 % (502 / 506), overall 98.55 %.
+
+### S1a fix round 3 (G1, 2026-10-28)
+
+Against G3's round 2 (`ba60919`, "## Round 2") and the orchestrator's rulings. One code commit, then this notes
+commit. No sim gate in this round: the orchestrator runs it.
+
+**R2-1: a retired observation is closed at once.**
+- Each observation runs in its own child task of the follower: `observe(_:until:)`. That task holds a small task
+  group of two children:
+  - the observation itself;
+  - a waiter on its own `retired` stream.
+- When the next observation starts, the follower finishes the old one's `retired` stream
+  (`SettingsStore.retireObservation`). The waiter ends, the group's `next()` returns, and `cancelAll()` cancels the
+  observation, which ends its stream and its GRDB `ValueObservation`.
+- Cancelling the run cancels the follower and so every observation, structurally. No `withTaskCancellationHandler`
+  is needed, and no unstructured `Task`, which `FeatureSettingsSourceTests` forbids in this module ("no file starts a
+  task of its own").
+- **About `cancelAll`:** the ruling said to avoid it on a group. The trap from round 2 was `cancelAll()` on the
+  follower's long-lived group: every task added to a cancelled group afterwards starts cancelled. Here it is called
+  on a group that belongs to one observation and ends right after. Nothing is ever added to it again, so the trap
+  cannot occur. The follower's own group is never cancelled.
+- **Test:** G3's P2, as `failingSaves_leaveOneObservationOpen`. After 20 failing saves exactly one observation is
+  open, and never more than two at any turn sampled (1,000 turns after each failure).
+- **A deadlock this exposed in the in-memory fakes, fixed.** Closing observations for real means streams now end
+  while values are being yielded.
+  - `ObservedState` (LedgerFakes) and G2's `ScriptedSettings` both took their lock in a stream's `onTermination`.
+  - The runtime calls that handler holding the cancelled consumer task's lock. A write yielding under the store's lock
+    takes the same task's lock to resume it.
+  - That is an ABBA deadlock. In the first 60-run batch it hung the whole test process in 6 runs. `sample` showed the
+    two stacks: the main thread in `_swift_taskGroup_cancel_unlocked` → `onTermination` → mutex wait, and a pool
+    thread in `broadcast` → `yield` → the status-record lock.
+  - Both handlers now only set an `EndedFlag` (an `Atomic<Bool>`; new and public in LedgerFakes). The next write or
+    delivery drops the ended observers.
+  - GRDB's own streams were never affected.
+
+**R2-2: two conditions pinned.**
+- **(a)** `ScriptedSettings(holdsFirstValues:)` holds each observation's first value, which is read when the
+  observation starts, until `deliverNextFirstValue()`, as GRDB fetches it at once and delivers it later.
+  - `firstValueReadBeforeASave_isNotTheRow`:
+    1. A is saved. Its restart starts D, which reads A.
+    2. The test keeps the restart mark from the follower (it takes `followMark` and gives it back later), which holds
+       open the window G3 described: a GRDB delivery that lands during the saver's tail.
+    3. B is saved and returns.
+    4. D's read of A arrives. The screen must stay on B.
+  - With the mark handed straight to the follower, D is retired before its value is read, so the window cannot be
+    reached without holding it.
+- **(b)** `failureBeforeTheFreshRead_stillReadsTheRow` is G3's P3.
+
+**R2-3:** `receive` tests `readsTheRowAfresh, !isSaving`; `pending == nil` is gone, and the doc comment says why
+(the fresh read is the row whatever is pending).
+
+**Mutation kills.** Each mutant was run on a scratch copy of the worktree
+(`scratchpad/mut3/LedgerKit`), never in the worktree, against the test named:
+
+| Mutant | Test | Result |
+|---|---|---|
+| M1: `isFirst && writes == writesBefore` → `isFirst` | `firstValueReadBeforeASave_isNotTheRow` | **Killed**, 2 issues |
+| M11: `writes += 1` removed | `firstValueReadBeforeASave_isNotTheRow` | **Killed**, 2 issues |
+| M7: the failure path leaves `hasWrittenOrFailed` false | `failureBeforeTheFreshRead_stillReadsTheRow` | **Killed**, 1 issue |
+| R2-1: the retired observation is not finished (`retireObservation?.finish()` removed) | `failingSaves_leaveOneObservationOpen` | **Killed**, 2 issues |
+
+The unmutated copy passes all four tests. Under M1, the whole of FeatureSettingsTests also fails elsewhere: the
+oracle, R1-1, and N2's re-follow.
+
+**Runs (host).**
+- `FeatureSettingsTests`, 45 tests: **65 of 65** runs passed after the fakes fix.
+  - Each run was bounded by a 60 s alarm, so a hang counts as a failure.
+  - Before that fix, the first batch failed 7 of 10, by the hang above.
+- Passed: the persistence, dependencies, AppKit, Library, Program, Today, Onboarding, Workout and Sync host suites.
+  Their known issues are the old ones.
+- `grdb_burstsConverge`: 10 of 10.
+- swiftformat and swiftlint (strict) are clean on the changed files.
+
+**APIs S1b's rebase must know about:**
+- `SettingsStore.retireObservation`: new.
+- `LedgerFakes.EndedFlag`: new and public.
+- `ScriptedSettings`: gains `holdsFirstValues`, `deliverNextFirstValue()` and `firstValuesWaiting`.
+- Nothing the draft names has changed.
+
+**Net product lines** (against `bd2d26c`): 733 added, 34 removed, **net 699**, plus 5 in `Package.swift` (704). This
+round alone is +37 / −12, net +25: LedgerFakes' `ObservedState` +11 and the store +14.

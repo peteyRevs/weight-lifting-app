@@ -1,6 +1,7 @@
 @testable import FeatureSettings
 import Foundation
 import LedgerDomain
+import LedgerFakes
 import LedgerTestSupport
 import Testing
 
@@ -27,15 +28,37 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
     private var running = 0
     private var mostRunning = 0
     private let holdsEchoes: Bool
+    private let holdsFirstValues: Bool
+    /// Each held first value with the observation it goes to (fix round 3).
+    private var waitingFirstValues: [(value: Settings, to: Int)] = []
     /// Each held echo with the observations it goes to.
     private var waitingEchoes: [(value: Settings, to: Set<Int>)] = []
     private var observers: [Int: AsyncStream<Settings>.Continuation] = [:]
     private var lastSent: [Int: Settings] = [:]
+    private var endedFlags: [Int: EndedFlag] = [:]
     private var nextObserver = 0
 
-    init(_ settings: Settings, holdsEchoes: Bool = false) {
+    /// - Parameter holdsFirstValues: each observation's first value, the row as it is when the observation starts,
+    ///   waits for `deliverNextFirstValue()`, as GRDB fetches it at once and delivers it later (F14-S1a-R2-2).
+    init(_ settings: Settings, holdsEchoes: Bool = false, holdsFirstValues: Bool = false) {
         current = settings
         self.holdsEchoes = holdsEchoes
+        self.holdsFirstValues = holdsFirstValues
+    }
+
+    /// Sends the oldest held first value to its observation, if that observation is still open.
+    func deliverNextFirstValue() {
+        lock.withLock {
+            guard !waitingFirstValues.isEmpty else {
+                return
+            }
+            let first = waitingFirstValues.removeFirst()
+            observers[first.to]?.yield(first.value)
+        }
+    }
+
+    var firstValuesWaiting: Int {
+        lock.withLock { waitingFirstValues.count }
     }
 
     /// The row now.
@@ -97,9 +120,21 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
         }
     }
 
-    /// The observations open now.
+    /// The observations open now: those whose stream has not ended.
     var observationCount: Int {
-        lock.withLock { observers.count }
+        lock.withLock {
+            dropEnded()
+            return observers.count
+        }
+    }
+
+    /// Under the lock: forgets the observations whose stream has ended.
+    private func dropEnded() {
+        for (id, flag) in endedFlags where flag.isSet {
+            observers[id] = nil
+            lastSent[id] = nil
+            endedFlags[id] = nil
+        }
     }
 
     func load() async throws -> Settings {
@@ -136,25 +171,29 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
     /// The row now, then each echo, an echo equal to the last one sent left out (GRDB's `removeDuplicates`).
     func observe() -> AsyncStream<Settings> {
         let (stream, continuation) = AsyncStream<Settings>.makeStream()
+        let ended = EndedFlag()
         let id = lock.withLock {
             let id = nextObserver
             nextObserver += 1
             observers[id] = continuation
             lastSent[id] = current
-            continuation.yield(current)
+            if holdsFirstValues {
+                waitingFirstValues.append((current, id))
+            } else {
+                continuation.yield(current)
+            }
             return id
         }
-        continuation.onTermination = { [weak self] _ in
-            self?.lock.withLock {
-                self?.observers[id] = nil
-                self?.lastSent[id] = nil
-            }
-        }
+        // Takes no lock (fix round 3): the runtime ends a stream holding its consumer task's lock, and `broadcast`
+        // yields under `lock`, which takes that task's lock to resume it. The next delivery drops the observer.
+        continuation.onTermination = { _ in ended.set() }
+        lock.withLock { endedFlags[id] = ended }
         return stream
     }
 
     /// Under the lock. An observation that has ended is left out.
     private func broadcast(_ value: Settings, to ids: Set<Int>) {
+        dropEnded()
         for (id, observer) in observers where ids.contains(id) && lastSent[id] != value {
             lastSent[id] = value
             observer.yield(value)
@@ -169,8 +208,8 @@ struct ScriptedSettingsScene {
     let repository: ScriptedSettings
     let store: SettingsStore
 
-    init(_ settings: Settings = Fixtures.settingsLb, holdsEchoes: Bool = false) {
-        let scripted = ScriptedSettings(settings, holdsEchoes: holdsEchoes)
+    init(_ settings: Settings = Fixtures.settingsLb, holdsEchoes: Bool = false, holdsFirstValues: Bool = false) {
+        let scripted = ScriptedSettings(settings, holdsEchoes: holdsEchoes, holdsFirstValues: holdsFirstValues)
         repository = scripted
         store = withTestDependencies {
             $0.settingsRepository = scripted
