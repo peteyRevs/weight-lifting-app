@@ -436,3 +436,170 @@ oracle, R1-1, and N2's re-follow.
 
 **Net product lines** (against `bd2d26c`): 733 added, 34 removed, **net 699**, plus 5 in `Package.swift` (704). This
 round alone is +37 / −12, net +25: LedgerFakes' `ObservedState` +11 and the store +14.
+
+## S1b — as built (G1 implementer, 2026-10-29)
+
+Branch `feat/F14-settings-screen`, cut from `main` at `e10cbe0` (S1a #78 and F13 S1 #77 are in it). The draft patch
+(see "S1b, ready as a draft") was applied with `git apply --3way`. Pete's questions are still open: S1b builds Q2 = A,
+Q4 = A and Q7 = A, the recommended defaults.
+
+Commits:
+- `ae9a84a` feat(settings): the Settings screen, drawn from its store, with the design system's two-option control
+  (S1b).
+- `346fe53` test(settings): G3's round 3 (R3-1 to R3-4).
+- `3571ecd` test(design): the gallery's dark reference re-recorded.
+- this notes commit (docs only).
+
+### What landed (S1b)
+
+The draft as described in "S1b, ready as a draft", unchanged in substance:
+- `SettingsRoot` and `Views/`: `SettingsScreen`, `SettingsPage` with `SettingsHeader`, `SettingsSection`,
+  `TrainingRows`, `WeekStartRow` and `Settings+Previews`.
+- `LedgerDesign/Components/SegmentedChoice.swift`, with its gallery section, its tests and 6 component references.
+- `LedgerAppKit`:
+  - `AppAbout(bundle:)` and `.main`;
+  - `Routes+Settings.swift`;
+  - `AppTabs` draws `SettingsRoot`, and `MainRoot` passes `onSettingsRoute`;
+  - `AppCopy.settingsTitle` and its catalog key are gone.
+- FeatureSettings is in `snapshotTestTargets` and in `PreviewScan.registeredModules`.
+- Tests: the root, accessibility, layout, snapshot (8 references), preview and route-mapping tests, the view checks of
+  `FeatureSettingsSourceTests`, and the nightly UI test `Apps/LedgerUITests/Settings.swift`.
+
+**The rebase.** None of the store's names that the three fix rounds changed appear in the draft's sources.
+`SettingsRootTests` waits on `pending == nil`, which still means "written": the saver clears it once it has written.
+Four files conflicted, each with F13 S1's lines, and each was resolved by keeping both sides:
+- `Package.swift` (`snapshotTestTargets`);
+- `AppTabs` (`onHistoryRoute` and `onSettingsRoute`);
+- `MainRoot` (the two route handlers);
+- `PreviewScan` (`FeatureHistory` and `FeatureSettings`).
+
+`AppTabsTests` needed no edit.
+
+**G3's round 3 (S1a), in this slice:**
+- **R3-1.** With `holdsFirstValues`, `ScriptedSettings` now queues the values sent to an observation behind its held
+  first value. `deliverNextFirstValue()` sends them right after it, in order, as GRDB does.
+  - `firstValueReadBeforeASave_isNotTheRow` now runs G3's order. Before D's read is delivered, the test checks that
+    B's echo has not overtaken it (`stored` is still A).
+  - It then delivers A and B together, and checks with `withObservationTracking` that `model` never changes while
+    they are received. Under M1 the model changes to A for a moment; the old final check could not see that, because
+    B's echo lands right after.
+- **R3-2.** `failureBeforeTheFreshRead_stillReadsTheRow` runs with `holdsFirstValues`. The fresh read after the first
+  save is delivered only once the second save is held, so it always lands while `isSaving`. The test checks that
+  (`written` is still KG) before the save fails. It then waits for the failure's own fresh read: under M7 there is
+  none.
+- **R3-3.** New: `retiredObservationsValue_isNeverReceived`.
+  - The test keeps the first observation's `retireObservation` handle from the follower, so that observation stays
+    open after it is retired. This is the window G3 described (between `finish()` and the cancellation landing),
+    held open, as the R2-2 test holds `followMark`.
+  - A's echo is held for that observation. After B's save, the row is read afresh at B, and A's echo is then delivered
+    to the retired observation only. The screen must stay on B.
+- **R3-4.** `EndedFlag`, with its two lines, now sits above `ObservedState`'s doc comment.
+- `ScriptedSettings`' read-only accessors moved to an extension in the same file (type body length; nothing
+  compressed).
+
+**Mutation kills** (`swift test` on a scratch copy of `LedgerKit` at `346fe53`, never in the worktree; the copy was
+deleted afterwards). The unmutated copy passes all three tests.
+
+| Mutant | Test | Result |
+|---|---|---|
+| M1: `isFirst && writes == writesBefore` → `isFirst` | `firstValueReadBeforeASave_isNotTheRow` | **Killed** 5 of 5 (`!modelChanged`) |
+| M11: `writes += 1` removed | `firstValueReadBeforeASave_isNotTheRow` | **Killed** 5 of 5 |
+| M4: `number == observationNumber` dropped from the per-value guard | `retiredObservationsValue_isNeverReceived` | **Killed** 5 of 5 (`shownIsB`) |
+| M7: the failure leaves `hasWrittenOrFailed` false | `failureBeforeTheFreshRead_stillReadsTheRow` | **Killed** 10 of 10 runs of the whole FeatureSettingsTests (2 issues) |
+
+### Decisions and deviations
+
+1. **The draft is unchanged in substance.** The only edits are swiftformat's re-wrapping and the lint fixes:
+   - `SegmentedChoiceTests`' `Option` moved to file scope (nesting).
+   - `ModuleCopyTests`' `AppAbout.swift` exemption is one key per line.
+   - `SettingsAccessibilityTests`' `@Test` is wrapped.
+2. **R3-3 holds the retire handle instead of racing it.** Delivering a value between `finish()` and the cancellation
+   depends on a pool task's timing, so a test that races it would kill M4 only sometimes. With the handle held, the
+   window is the same and always open.
+3. **Disk space.** The first targeted simulator run failed with "No space left on device". To continue, I deleted
+   only regenerable build caches: my own scratch mutation copy, the `.build` folders of the finished scratch copies
+   `scratchpad/mut3` and `scratchpad/g3r2` (their sources and logs are kept), and this worktree's host `.build`. The
+   merged lanes' worktrees `F14-s1` (7.5 GB) and `F10-s7` (8 GB) still hold build products; I left them alone.
+4. **The simulator was rebooted once.** After the disk filled, it refused to install the UI test runner ("Failed to
+   acquire termination assertion"). A `simctl shutdown`, under the lock, cleared it.
+
+### New user-facing wording
+
+None. Every string S1b draws is one of S1a's 27 keys. `LedgerAppKit`'s catalog loses "Settings" (6 keys; it was
+`AppCopy.settingsTitle`), which the title now takes from FeatureSettings' catalog.
+
+### Sanctioned edits
+
+| File | Edit | Why |
+|---|---|---|
+| `LedgerAppKit/AppCopy.swift`, its catalog, `AppCopyTests`, `AppCopyAdversarialTests` | `settingsTitle` removed; six strings | The placeholder goes (as in the draft) |
+| `LedgerAppKitTests/ModuleCopyTests.swift` | 7 → 6 keys; `AppAbout.swift`'s four Info.plist keys exempted | N6 |
+| `LedgerAppKit/AppTabs.swift`, `MainRoot.swift` | Settings' root and route, beside F13's History route | K1: each lane takes the other's lines |
+| `Package.swift`, `PreviewScan.swift` | FeatureSettings added beside FeatureHistory | C4 |
+| `LedgerDesignTests/DesignGalleryTests.swift` and its dark reference | `SegmentedChoice` in the component list; the reference re-recorded (235 px taller: the new section only, looked at) | A5 |
+| `LedgerDesignTests/ComponentSnapshotTests.swift` | The `SegmentedChoice` references | A5 |
+| `LedgerFakes/Support/ObservedState.swift` | `EndedFlag` moved above `ObservedState`'s doc comment | R3-4 |
+| `FeatureSettingsTests/Adversarial/ScriptedSettingsAdversarialSupport.swift` | Values queue behind a held first value; accessors in an extension | R3-1 |
+
+### Product lines per file
+
+Measured the same way as S1a's table (non-blank, non-comment Swift lines in `LedgerKit/Sources` and `Apps`, with
+`LedgerTestSupport`, UI tests and catalogs excluded), against `e10cbe0`.
+
+| File | + | − |
+|---|--:|--:|
+| `LedgerDesign/Components/SegmentedChoice.swift` | 111 | |
+| `FeatureSettings/Views/TrainingRows.swift` | 66 | |
+| `FeatureSettings/Views/SettingsPage.swift` | 52 | |
+| `FeatureSettings/Views/SettingsSection.swift` | 51 | |
+| `FeatureSettings/Views/Settings+Previews.swift` | 50 | |
+| `FeatureSettings/Views/WeekStartRow.swift` | 39 | |
+| `FeatureSettings/SettingsRoot.swift` | 32 | |
+| `FeatureSettings/Views/SettingsScreen.swift` | 13 | |
+| `LedgerAppKit/AppAbout.swift` | 13 | |
+| `LedgerAppKit/Routes+Settings.swift` | 11 | |
+| `LedgerAppKit/AppTabs.swift` | 3 | 1 |
+| `LedgerAppKit/AppCopy.swift` | | 3 |
+| `LedgerAppKit/MainRoot.swift`, `LedgerDesign/Gallery/DesignGallery.swift` | 1 each | |
+| `Package.swift` | 1 | 1 |
+| `LedgerFakes/Support/ObservedState.swift` (R3-4: comments moved only) | 0 | 0 |
+| **Total** | **444 added** | **5 removed (net 439)** |
+
+Tests and UI tests: 33 files, +876 / −72 lines (raw).
+
+### Runs
+
+- **Host:** `swift build --build-tests` is clean, with no warnings in S1b's files. Suites:
+  - FeatureSettingsTests: 54 tests, green;
+  - LedgerAppKitTests: 335 tests, green;
+  - LedgerDesignTests and the rendering suites: 183 tests, green with the one old known issue (`DeviceKeys`).
+- **Lint and format:** swiftformat and swiftlint (strict) are clean on every changed file.
+- **Simulator, targeted** (PR plan, `LedgerDesignTests`, `FeatureSettingsTests`, `LedgerAppKitTests`): everything
+  passed except `designGallery_dark_matchesReference`, which recorded its missing reference, as intended. I then
+  looked at:
+  - the new gallery section, and ReceiptLayout below it, unchanged;
+  - the Settings references the draft had not looked at: lb dark large, kg light large and lb light accessibility3;
+  - the component references dark accessibility3 and light xLarge.
+- **Nightly UI test:** `LedgerUITests/Settings/test_kilograms_chosenInSettings_reachToday` **passed** (14.8 s).
+- **PR-sweep seconds** (the gate's `PR-iOS.xcresult`; the sum of each test case's duration): S1b's hosted suites take
+  about **0.6 s** in all. That is Previews 0.07, accessibility 0.12, layout 0.06, the 8 snapshots 0.21, the root 0.07,
+  `SegmentedChoice` and its references 0.07, and the routes 0.00. This is well under the plan's 6–9 s estimate. The
+  whole of FeatureSettingsTests is 1.4 s.
+
+### The gate
+
+`scripts/check.sh` (full: iOS and watchOS), through the simulator lock, on `3571ecd`:
+- **First run: exit 65, infrastructure.** About 12 minutes into the iOS tests, a FeatureProgramTests process crashed
+  in `library_previews_noPillIsCut`. After that the simulator could not spawn processes ("Process spawn via launchd
+  failed"), so every later bundle failed to launch. Nothing in FeatureProgram changed. This followed the full disk
+  above.
+- **Second run, on a freshly shut-down simulator: exit 0, "check.sh OK", 2,142 s.** Steps: format 1 s, lint 72 s,
+  iOS build 23 s, string catalogs 2 s (8 catalogs; LedgerAppKit's has 6 keys), iOS boot 1 s, iOS tests 1,674 s,
+  watchOS build 68 s, watchOS tests 298 s, coverage 3 s.
+- Coverage: FeatureSettings 98.81 % (1,001 / 1,013) against 70 %; overall 98.58 %.
+
+### Questions for Pete
+
+Q1–Q7 are still open. S1b builds Q2 = A (the region's units and week start on a new install), Q4 = A (Apple Health
+reads "Not connected" and does nothing) and Q7 = A ("Plate math" and "Watch haptic at zero" are shown now). Nothing
+new arose in S1b.
