@@ -84,6 +84,7 @@
                 GallerySection("LedgerToggleStyle") { LedgerToggleGallery() },
                 GallerySection("WrapLayout") { WrapLayoutGallery() },
                 GallerySection("FilterChipRow · SearchField") { FilterChipRowGallery() },
+                GallerySection("SegmentedChoice") { SegmentedChoiceGallery() },
                 // The receipt (F10 S7b) after them, for the same reason.
                 GallerySection("ReceiptLayout") { ReceiptLayoutGallery() }
             ]

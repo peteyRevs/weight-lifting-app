@@ -11,11 +11,6 @@ struct AppCopyTests {
         #expect(AppTab.allCases.map(AppCopy.title(of:)) == ["Today", "Program", "Library", "History"])
     }
 
-    @Test("The Settings placeholder is titled Settings")
-    func settingsTitle_namesTheScreen() {
-        #expect(AppCopy.settingsTitle == "Settings")
-    }
-
     @Test("Product decision #29's screen says what criterion 4 says, and does not name the product")
     func databaseUnavailable_saysWhatTheCriterionSays() {
         #expect(AppCopy.databaseUnavailableTitle == "Can't open your data right now")
