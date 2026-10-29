@@ -4,7 +4,8 @@ import XCTest
 /// is saved, then History lists it under its week as one button, the workout's name with its meta as its value; a tap
 /// pushes its detail on History's stack, whose row opens the exercise's history over it, and back returns to the
 /// detail, then to the list. Deleting it, from History or from a detail pushed on Today, empties the list and
-/// Today's RECENT (risk R4: a deleted workout never comes back on Today). Nightly only: the `PR` plan selects
+/// Today's RECENT (risk R4: a deleted workout never comes back on Today); a detail covered while its workout is
+/// deleted elsewhere pops when the lifter comes back to it (F13-S2-6). Nightly only: the `PR` plan selects
 /// `Smoke`.
 final class WorkoutHistory: XCTestCase {
     override func setUpWithError() throws {
@@ -77,6 +78,33 @@ final class WorkoutHistory: XCTestCase {
         XCTAssertFalse(recentRow.exists)
         XCTAssertFalse(viewSession.exists, "the deleted session is not shown as logged")
         attachScreenshot(of: app, named: "Today after a delete")
+    }
+
+    /// F13-S2-6: a detail covered by its row's exercise history, whose workout is deleted elsewhere (its detail on
+    /// Today), pops when the lifter comes back to it: its task runs again, finds the workout gone and closes it.
+    @MainActor
+    func test_coveredDetail_deletedElsewhere_popsOnReturn() {
+        let app = launchWithASavedWorkout()
+        app.tabBars.buttons["History"].tap()
+        let row = app.buttons.matching(NSPredicate(format: "value CONTAINS ' pounds'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5))
+        let exercise = app.buttons.matching(NSPredicate(format: "label CONTAINS ', Prescribed '")).firstMatch
+        XCTAssertTrue(exercise.waitForExistence(timeout: 5))
+        exercise.tap()
+        let exerciseTitle = app.staticTexts["library.history.title"]
+        XCTAssertTrue(exerciseTitle.waitForExistence(timeout: 5), "the detail is covered")
+        app.tabBars.buttons["Today"].tap()
+        let viewSession = app.buttons["View session"]
+        XCTAssertTrue(viewSession.waitForExistence(timeout: 10))
+        viewSession.tap()
+        deleteTheWorkout(in: app)
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(exerciseTitle.waitForExistence(timeout: 5), "History is as it was left")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["Go to Today"].waitForExistence(timeout: 10), "the gone detail popped itself")
+        XCTAssertFalse(app.staticTexts["history.workout.title"].exists)
     }
 
     /// The app with the sample workout saved, on Today.

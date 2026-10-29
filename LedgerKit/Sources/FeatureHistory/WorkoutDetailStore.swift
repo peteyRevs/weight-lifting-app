@@ -13,13 +13,17 @@ import Observation
 ///
 /// **The workout gone closes the screen.** A nil value (deleted here or elsewhere, N9) asks the app to pop the detail
 /// (`HistoryRoute.closeWorkout`), which it does only while the detail is on top; a run that finds it gone again, when
-/// the screen over it comes off, asks again. A source that ends (the workout's read failed, N10) shows "This workout
-/// can't be read." with Delete still offered; the next run follows again.
+/// the screen over it comes off, asks again. The workout's own observation that ends (its read failed, N10) shows
+/// "This workout can't be read." with Delete still offered; the next run follows again. The settings' observation
+/// that ends (a settings row this version can't read) blames nothing: the detail keeps the last settings it saw, or
+/// the defaults, as `GRDBSettingsRepository.observe()` asks of every feature (F13-S2-1).
 ///
-/// **Delete asks first, then runs once** (N9). The alert's "Delete" is accepted while no delete runs; it makes the
-/// next `deletion`, which is the id of the root's task, and `delete()` calls the repository once. A failure is logged
-/// and said in an alert, and the screen stays; once deleted, the screen closes. A route waits until the app has
-/// taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
+/// **Delete asks first, then runs once** (N9, F13-S2-3). The alert's "Delete" is accepted while no delete is waiting
+/// or running; it makes the next `deletion`, which is the id of the root's task, and `delete()` calls the repository
+/// once for it. A run cancelled before its write (the view went away) leaves the delete confirmed, and the root's
+/// task, run again when the view comes back, performs it; a run while another is in flight does nothing. A failure
+/// is logged and said in an alert, and the screen stays; once deleted, the screen closes. A route waits until the app
+/// has taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
 @MainActor @Observable
 final class WorkoutDetailStore {
     enum State: Equatable {
@@ -41,8 +45,7 @@ final class WorkoutDetailStore {
 
     @ObservationIgnored private var sources = Sources()
     @ObservationIgnored private var routeNumber = 0
-    /// A confirmed delete has not finished yet.
-    @ObservationIgnored private var isDeleting = false
+    @ObservationIgnored private var deleting = Deleting.idle
 
     @ObservationIgnored @Dependency(\.workoutRepository) private var workouts
     @ObservationIgnored @Dependency(\.settingsRepository) private var settings
@@ -63,7 +66,14 @@ final class WorkoutDetailStore {
         /// The workout with its records; `.some(nil)` once it is not stored.
         var workout: RecordedWorkout??
         var settings: Settings?
-        var hasEnded = false
+        /// The workout's own observation ended by itself: it can't be read (N10).
+        var workoutHasEnded = false
+    }
+
+    /// Where the confirmed delete stands: nothing confirmed, confirmed and not yet written (also after a run that was
+    /// cancelled before its write), being written, or done.
+    private enum Deleting {
+        case idle, confirmed, running, done
     }
 
     // MARK: Intents
@@ -88,10 +98,10 @@ final class WorkoutDetailStore {
 
     /// The alert's "Delete": accepted while no delete runs and the workout is still there.
     func confirmDelete() {
-        guard !isDeleting, state != .gone else {
+        guard deleting == .idle, state != .gone else {
             return
         }
-        isDeleting = true
+        deleting = .confirmed
         deletion = (deletion ?? 0) + 1
     }
 
@@ -101,33 +111,50 @@ final class WorkoutDetailStore {
         sources = Sources()
         let id = workoutID
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.follow(self.workouts.observeWorkout(id: id)) { $0.workout = .some($1) } }
-            group.addTask { await self.follow(self.settings.observe()) { $0.settings = $1 } }
+            group.addTask {
+                await self.follow(self.workouts.observeWorkout(id: id)) { $0.workout = .some($1) } ended: {
+                    $0.workoutHasEnded = true
+                }
+            }
+            group.addTask {
+                // Settings that can't be read fall back to the last seen, or the defaults (F13-S2-1).
+                await self.follow(self.settings.observe()) { $0.settings = $1 } ended: {
+                    $0.settings = $0.settings ?? .default
+                }
+            }
         }
     }
 
     /// Runs the confirmed delete, once: the repository's `delete(id:)`, then the screen closes. A failure keeps the
-    /// screen and says so; a delete cancelled with the screen says nothing.
+    /// screen and says so, and a later "Delete" may try again. A run cancelled with the screen before its write keeps
+    /// the delete confirmed, for the run the screen's return starts.
     func delete() async {
-        guard isDeleting else {
+        guard deleting == .confirmed else {
             return
         }
-        defer { isDeleting = false }
+        deleting = .running
         do {
             try await workouts.delete(id: workoutID)
+            deleting = .done
             close()
         } catch {
             guard !(error is CancellationError && Task.isCancelled) else {
+                deleting = .confirmed
                 return
             }
+            deleting = .idle
             logger.log.error("A workout could not be deleted: \(String(describing: error), privacy: .public)")
             showsDeleteFailure = true
         }
     }
 
     /// Keeps each value of an observation with `keep` and rebuilds. One that ends while the task still runs has
-    /// failed.
-    private func follow<Value: Sendable>(_ values: AsyncStream<Value>, keep: (inout Sources, Value) -> Void) async {
+    /// failed: `ended` says what that leaves.
+    private func follow<Value: Sendable>(
+        _ values: AsyncStream<Value>,
+        keep: (inout Sources, Value) -> Void,
+        ended: (inout Sources) -> Void
+    ) async {
         for await value in values {
             guard !Task.isCancelled else {
                 return
@@ -137,23 +164,25 @@ final class WorkoutDetailStore {
         }
         if !Task.isCancelled {
             logger.log.error("A store's observation ended while a workout's detail was on screen")
-            sources.hasEnded = true
+            ended(&sources)
             rebuild()
         }
     }
 
+    /// The workout gone closes the screen whatever else has happened (F13-S2-2); its observation ended says it can't
+    /// be read; otherwise, once both sources have spoken, the receipt.
     private func rebuild() {
-        guard !sources.hasEnded else {
+        if case .some(.none) = sources.workout {
+            close()
+            return
+        }
+        guard !sources.workoutHasEnded else {
             if state != .gone {
                 state = .unreadable(WorkoutDetailPresentation.unreadable)
             }
             return
         }
-        guard let found = sources.workout, let current = sources.settings else {
-            return
-        }
-        guard let recorded = found else {
-            close()
+        guard let found = sources.workout, let recorded = found, let current = sources.settings else {
             return
         }
         let model = WorkoutDetailPresentation.make(WorkoutDetailInput(

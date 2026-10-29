@@ -47,10 +47,8 @@ struct WorkoutDetailStoreAdversarialTests {
         #expect(!scene.store.showsDeleteFailure)
     }
 
-    /// F13-S2-3: `delete()`'s guard reads "a delete was confirmed" (`isDeleting`), not "this confirmation has not run
-    /// yet", so a second run of the root's `.task(id: deletion)` while the first is in flight (the view gone and back
-    /// within the write) asks the repository again. In memory the second delete of a gone workout is quiet; on GRDB
-    /// it is another write.
+    /// F13-S2-3: a second run of the root's `.task(id: deletion)` while the first is in flight (the view gone and back
+    /// within the write) does not ask the repository again (fixed in round 1).
     @Test("F13-S2-3: the delete task run again while its first run is in flight deletes once")
     func deleteRunTwice_whileInFlight_deletesOnce() async throws {
         let scene = GatedDetailScene(Self.newest.id, gate: .before)
@@ -67,14 +65,12 @@ struct WorkoutDetailStoreAdversarialTests {
         await first.value
         await second.value
         let deletedOnce = scene.workouts.deleteCount == 1
-        withKnownIssue("F13-S2-3: the run-once guard is `isDeleting`, which a second run in flight passes") {
-            #expect(deletedOnce)
-        }
+        #expect(deletedOnce)
     }
 
     /// F13-S2-3: the delete's task is the view's, so it is cancelled when the view goes (a tab switch, a back swipe)
-    /// before the write starts. The store then forgets the confirmation: no alert, the workout stays, and the same
-    /// task run again when the view comes back (same `deletion`) does nothing.
+    /// before the write starts. The confirmation stays pending, and the same task run again when the view comes back
+    /// (same `deletion`) performs it (fixed in round 1).
     @Test("F13-S2-3: a confirmed delete cancelled before its write is not lost silently")
     func deleteCancelled_isNotLostSilently() async throws {
         let scene = GatedDetailScene(Self.newest.id, gate: .before)
@@ -91,9 +87,8 @@ struct WorkoutDetailStoreAdversarialTests {
         await scene.store.delete()
         let stored = try await scene.memory.workouts.workout(id: Self.newest.id)
         let isDeletedOrSaid = stored == nil || scene.store.showsDeleteFailure
-        withKnownIssue("F13-S2-3: the cancelled run resets `isDeleting`; the re-run finds nothing to do") {
-            #expect(isDeletedOrSaid)
-        }
+        #expect(isDeletedOrSaid)
+        #expect(stored == nil, "the pending delete ran")
     }
 
     @Test("The observation's nil before the delete returns: the detail is gone, every route handed is its close")
