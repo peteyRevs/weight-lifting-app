@@ -515,3 +515,45 @@ Built to the planner's defaults; each can change in one place.
 - `Weight.shownValue(in:)` is public for the steppers' spoken values.
 - `WorkoutRepository` gained `observeWorkout(id:)`: a new conformer needs it.
 - F14 S1b replaces Settings' placeholder, on which `AppTabsTests.selectingATab_swapsTheScreen` now leans again.
+
+### S2 fix round 1 (G1, 2026-10-29): G2's F13-S2-1 to -6, as the orchestrator ruled
+
+Commit `3d7694a` fix(history): settings that end never blame the workout, a gone workout always closes, a confirmed
+delete is never lost. All in `WorkoutDetailStore.swift`, plus tests.
+
+- **F13-S2-1, fixed.** `follow` takes an `ended:` step per source. The settings' end keeps the last settings seen,
+  or `Settings.default` when none came (`GRDBSettingsRepository.observe()`'s contract). Only the workout's own end
+  (`workoutHasEnded`) shows "This workout can't be read." This replaces decision 4 above.
+  `WorkoutDetailSettingsAdversarialTests.settingsEndAtOnce_doesNotBlameTheWorkout` and
+  `.settingsEndAfterFirstValue_doesNotBlameTheWorkout` are plain tests now.
+- **F13-S2-2, fixed.** `rebuild()` looks at the workout's nil first, so a delete made elsewhere closes the detail
+  whatever else has ended. `settingsEnded_thenDeletedElsewhere_closes` is a plain test.
+- **F13-S2-3, fixed.** The delete is one state, `Deleting`: `idle`, `confirmed`, `running`, `done`.
+  - "Delete" is accepted only from `idle`.
+  - `delete()` runs only from `confirmed`.
+  - A run cancelled before its write goes back to `confirmed` with no reset, so the root's `.task(id: deletion)`
+    performs it when the view comes back.
+  - A run while another is in flight returns.
+  - A failure goes back to `idle`, said in the alert, and may be tried again.
+  - `deleteCancelled_isNotLostSilently` (which now also checks the workout is gone) and
+    `deleteRunTwice_whileInFlight_deletesOnce` are plain tests.
+- **F13-S2-4 and F13-S2-5, accepted as built.**
+  - A late route also selects the tab it lands on (`open(_:in:)`).
+  - One delete can hand the app two closes; the second pops nothing.
+- **F13-S2-6.**
+  - A covered detail, once its run sees the nil, is `.gone`, and `confirmDelete()` ignores a `.gone` detail. So a
+    Delete on the frame before the pop is a no-op once the nil has arrived. Confirmed before the nil arrives, it
+    deletes a gone workout, which does nothing, and then closes.
+  - New nightly UI test `WorkoutHistory.test_coveredDetail_deletedElsewhere_popsOnReturn`:
+    1. Open the detail on History and push its row's exercise history.
+    2. Delete the same workout from Today's "View session".
+    3. Return to History and go back.
+    4. The detail has popped itself, and the list is empty.
+- **Net product lines:** 18 this round (`WorkoutDetailStore.swift`), so the slice is **net 667** against `e10cbe0`.
+- **Runs.**
+  - Host: `FeatureHistoryTests` 87 tests in 14 suites, run three times. All green, with the one known issue
+    (F13-S1-3).
+  - Simulator, targeted through the lock:
+    - PR plan: `FeatureHistoryTests`, 110 tests, 108 passed, 1 skipped, 1 expected failure (F13-S1-3), 0 failed.
+    - Nightly plan: `LedgerUITests/WorkoutHistory`, 4 of 4 passed, the new test included.
+  - The full gate was not run, as ruled.
