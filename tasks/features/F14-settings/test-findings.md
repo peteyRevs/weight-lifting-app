@@ -207,3 +207,134 @@ test for blank, and returns the untrimmed value. Name `"App "`, version `" 1.2.3
   - domain: 1,417 tests passed;
   - AppKit: 332 tests passed, with 1 known issue.
 - `mise exec -- swiftformat --lint` and `mise exec -- swiftlint lint --strict` on the seven new files: clean.
+
+## S1b
+
+G2, adversarial tester, 2026-10-29. Branch `feat/F14-settings-screen` at `d02995b`. No product code was changed.
+
+### What was attacked, and what held
+
+- **VoiceOver.**
+  - The pinned tree held with German, Finnish, Tamil and Arabic words: one stop per row, 14 stops in the
+    save-failed state.
+  - The units' group held. Walking up UIKit's tree from "pounds" finds a container labelled "Units" whose
+    type is a semantic group, so VoiceOver can speak it. The design suite left this to a manual DoD check;
+    it is now pinned.
+  - A Persian week's Saturday is the menu's spoken value, with the days listed from Saturday.
+  - `SegmentedChoice` disabled: every option reads as dimmed, and activating one chooses nothing.
+- **Dynamic Type and right to left.** Nothing fell outside the page, had no size or overlapped another stop:
+  - German, Finnish and Tamil (whose Thursday, "வியாழக்கிழமை", is the longest weekday name) at xSmall,
+    large, xxxLarge, accessibility3 and accessibility5;
+  - Arabic, right to left, at the same sizes, with LB on the right and the stops in reading order.
+
+  The gallery's three-option `SegmentedChoice` ("Left", "Both", "Right") fits inside the page's margins up to
+  accessibility5. Mirrored right to left, each option is still a 44 pt target and keeps the hint.
+- **Reduce Motion.** Settings' only animation is `LedgerToggleStyle`'s, which drops it under Reduce Motion
+  (`withAnimation(reduceMotion ? nil : …)`, covered by `LedgerToggleStyleTests`). `SegmentedChoice` and the menu
+  don't animate. No new test.
+- **The root.**
+  - Loading title: the root's title before the settings are read stands exactly where the page's title will,
+    at every size, so the screen doesn't jump. A first attempt that hosted the two separately differed at
+    accessibility sizes. That was the hosted reader centring a view taller than its window, not the screen;
+    measured in one `ZStack`, they match.
+  - Unreadable row: the root leaves the loading title for `Settings.default`, shows no "Couldn't save" line,
+    and a change saves over the row.
+  - Failed save: the switch goes back, and "Couldn't save that change." is VoiceOver's second stop. But see
+    F14-S1b-2.
+  - Rapid toggling: each of the three switches was double-tapped five times through VoiceOver while every
+    save was held. Each ends flipped, on screen and as read. The taps fold into one save, never more than one
+    runs at once, and the row ends on the lifter's values.
+- **Reach.** Today, the Program builder and History ran over one set of stores while Settings took a burst of
+  five changes across units and week start, made during its saves. All three converged without navigating:
+  - Today: "kg moved", and the strip starts on Wednesday the 16th;
+  - Program: the week starts on Wednesday;
+  - History: the row's volume is in kg.
+
+  The test was stable over 15 host runs.
+- **Routes.**
+  - Diagnostics, resolved from Settings on Today's stack while History holds a workout, raises the sheet each
+    time. It moves no tab and no stack.
+  - Release: `swift build -c release --target LedgerAppKit` builds cleanly, with no warning in
+    `Routes+Settings.swift`, `SettingsRoute.swift`, `AppTabs` or `MainRoot`. `SettingsRoute` has no case there,
+    and `resolve`'s switch is empty.
+- **`AppAbout(bundle:)`**, from real bundles written to disk:
+  - Every key present: the display name beats `CFBundleName`.
+  - Display name missing: `CFBundleName` is used.
+  - No keys: "Version unknown".
+  - A number where a string belongs (`CFBundleVersion` as an integer): no value, and no crash.
+
+  But see F14-S1b-1.
+
+### Findings
+
+**F14-S1b-1 — Minor. A blank `CFBundleDisplayName` hides `CFBundleName`, and the About line loses the app's name.**
+- **Steps to reproduce:**
+  1. Give the bundle `CFBundleDisplayName` = "" (or spaces), `CFBundleName` = "Internal",
+     `CFBundleShortVersionString` = "0.15.0" and `CFBundleVersion` = "1".
+  2. Read `AppAbout(bundle:)`.
+- **Expected:** `name` is "Internal", and the line reads "Internal 0.15.0 · build 1". The doc says "The name is
+  `CFBundleDisplayName`, else `CFBundleName`", and the presentation already treats blank as absent (F14-S1-7).
+- **Actual:** `name` is "" (or the spaces). `value(…) ?? value(…)` only falls back on nil. The presentation then
+  trims the blank away, and the line reads "Version 0.15.0 · build 1".
+- **How it can happen:** the app sets the key from `$(PRODUCT_DISPLAY_NAME)` (`Config/Ledger.xcconfig`). That is
+  blank in any configuration or target that doesn't include `Base.xcconfig`'s definition.
+- **Test:** `SettingsScreenWiringAdversarialTests.about_blankDisplayName_fallsBackToTheBundleName`, for "", "   " and
+  "\n" (known issue, 6 expectations).
+- **Suggested fix:** in `AppAbout(bundle:)`, treat a value that is empty after trimming as nil before the `??`.
+
+**F14-S1b-2 — Minor (accessibility). A failed save is never announced to VoiceOver.**
+- **Steps to reproduce:**
+  1. With VoiceOver on, double-tap a switch (Plate math).
+  2. Let its save fail (`SettingsScene(failures: 1)`).
+- **Expected:** VoiceOver says "Couldn't save that change." when the line appears. The app's other screens do this:
+  `ProgramRoot` announces its notice when it appears or changes, and `CreateExerciseSheet` announces each problem,
+  both through an injectable `announce` that posts `AccessibilityNotification.Announcement`.
+- **Actual:** VoiceOver hears the switch turn on. Then the switch silently turns back off, and the line appears at
+  the top of the page, away from the focus. Nothing is said. `SettingsRoot` has no `announce` and posts nothing.
+  The line is in the tree (`failedSave_showsTheLine` holds), but only a lifter who swipes back to the top finds it.
+- **Test:** `SettingsRootAdversarialTests.failedSave_isAnnounced` (known issue). With no injection point it can
+  only read FeatureSettings' sources for an announcement. Once `SettingsRoot` takes `announce` as `ProgramRoot`
+  does, the test should become behavioural.
+- **Suggested fix:** give `SettingsRoot` an `announce` parameter, defaulting to
+  `AccessibilityNotification.Announcement($0).post()`. Call it from `.onChange(of: store.model?.problem)` when the
+  problem becomes non-nil.
+
+### Tests added
+
+- `LedgerKit/Tests/FeatureSettingsTests/Adversarial/SettingsScreenAdversarialSupport.swift`:
+  - `LiveSettingsPage`, the page over a running store;
+  - `SettingsWords`, the German, Finnish, Arabic and Tamil words, and the model drawn in them.
+- `LedgerKit/Tests/FeatureSettingsTests/Adversarial/SettingsScreenAdversarialTests.swift` (iOS):
+  - long words at five sizes;
+  - Arabic right to left;
+  - the Persian week;
+  - the units' semantic group.
+- `LedgerKit/Tests/FeatureSettingsTests/Adversarial/SettingsRootAdversarialTests.swift` (iOS):
+  - the loading title's place;
+  - the unreadable row;
+  - the failed save on screen;
+  - F14-S1b-2;
+  - five taps on each switch with saves held.
+- `LedgerKit/Tests/LedgerDesignTests/Adversarial/SegmentedChoiceAdversarialTests.swift` (iOS):
+  - three options up to accessibility5;
+  - right to left;
+  - disabled.
+- `LedgerKit/Tests/LedgerAppKitTests/Adversarial/SettingsScreenWiringAdversarialTests.swift` (host and iOS):
+  - `AppAbout(bundle:)` from bundles on disk, including F14-S1b-1;
+  - Diagnostics beside History's stack;
+  - the burst reaching Today, Program and History.
+
+### Runs
+
+- **Host (`LedgerKit/`):**
+  - `swift build --build-tests`: clean.
+  - `swift test --skip-build --filter "FeatureSettingsTests|SettingsScreenWiringAdversarialTests|SettingsReach"`:
+    passes. The wiring suite records its 6 known issues (F14-S1b-1). The reach and wiring tests passed in 15 of
+    15 repeated runs.
+  - `swift build -c release --target LedgerAppKit`: clean. The release products were deleted afterwards.
+- **Simulator (iPhone 17, iOS 27.0, PR plan, through the lock):** each run was `test-without-building` with
+  `-only-testing`, after a `build-for-testing` in place in `.derivedData`.
+  - FeatureSettingsTests (72 tests in 14 suites), plus `SegmentedChoiceAdversarialTests` and the wiring suite:
+    green except the loading-title test's first form, which was then rewritten as described above.
+  - `SettingsRootAdversarialTests` rerun on its own: 5 tests passed, with 1 known issue (F14-S1b-2).
+- **Lint and format:** `swiftformat --lint` and `swiftlint lint --strict` are clean on the five new files.

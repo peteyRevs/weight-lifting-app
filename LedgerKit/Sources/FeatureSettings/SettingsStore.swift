@@ -12,8 +12,7 @@ nonisolated struct SettingsPendingRoute: Hashable, Sendable {
 }
 
 /// The store of Settings (F14 S1; the M1 store convention): the settings the lifter sees, the saves that keep them,
-/// and the route waiting for the app. `SettingsRoot`, the screen over it, is S1b's; until then only the tests make
-/// one.
+/// and the route waiting for the app. `SettingsRoot`, the screen over it, makes one.
 ///
 /// **Intents are synchronous and decide nothing.** A change is applied to the settings on screen and the model is
 /// made again before `send` returns, so a control shows the lifter's value at once (N1). The change waits in

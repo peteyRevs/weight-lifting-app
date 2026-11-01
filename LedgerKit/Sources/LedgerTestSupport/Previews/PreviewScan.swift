@@ -8,8 +8,8 @@ public enum PreviewScan {
     /// registry, those two suites, and its name here.
     public static let registeredModules: Set<String> = [
         "FeatureHistory",
-        "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureToday", "FeatureWorkout", "LedgerAppKit",
-        "LedgerDesign", "LedgerWatchAppKit"
+        "FeatureLibrary", "FeatureOnboarding", "FeatureProgram", "FeatureSettings", "FeatureToday", "FeatureWorkout",
+        "LedgerAppKit", "LedgerDesign", "LedgerWatchAppKit"
     ]
 
     /// `LedgerKit/Sources`, found from this file's place in the repository.

@@ -13,17 +13,13 @@ nonisolated struct AppCopyAdversarialTests {
     /// sentence as criterion 4 was revised after round 1 ("The app tries again", where `main` names the product).
     static let databaseTitle = "Can't open your data right now"
     static let databaseBody = "Your workouts are still on this iPhone. The app tries again when you come back to it."
-    /// The prototype's tab labels (`design/prototype/LedgerTabs.dc.html`), the pushed placeholder, and the two above.
-    static let shellStrings = ["Today", "Program", "Library", "History", "Settings", databaseTitle, databaseBody]
+    /// The prototype's tab labels (`design/prototype/LedgerTabs.dc.html`) and the two above. (F14 S1: Settings draws
+    /// its own title, so the pushed placeholder's "Settings" left the shell.)
+    static let shellStrings = ["Today", "Program", "Library", "History", databaseTitle, databaseBody]
 
     @Test("Each tab's title is the prototype's label", arguments: zip(AppTab.allCases, shellStrings.prefix(4)))
     func tabTitle_isThePrototypesLabel(tab: AppTab, label: String) {
         #expect(AppCopy.title(of: tab) == label)
-    }
-
-    @Test("The pushed Settings placeholder is titled Settings")
-    func settingsTitle_isSettings() {
-        #expect(AppCopy.settingsTitle == "Settings")
     }
 
     @Test("The can't-open-your-data screen says, word for word, what criterion 4 says (product decision #29)")
@@ -32,7 +28,7 @@ nonisolated struct AppCopyAdversarialTests {
         #expect(AppCopy.databaseUnavailableBody == Self.databaseBody)
     }
 
-    @Test("The catalog holds the shell's seven strings and nothing else, each sound")
+    @Test("The catalog holds the shell's six strings and nothing else, each sound")
     func catalog_holdsTheShellsStringsOnly() throws {
         let catalog = try StringCatalog(module: "LedgerAppKit")
         #expect(catalog.keys == Set(Self.shellStrings))

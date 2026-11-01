@@ -72,8 +72,7 @@
             Self.hosting(router) { read in
                 #expect(Self.labels(read()) == [])
                 // Sanctioned edit of F13 S2: `.workout` now draws the detail's root, which has no element here, so
-                // the pushed screen is Settings' placeholder again. F14, which replaces that placeholder, re-points
-                // this test at whatever destination still draws an element (review R1-3).
+                // the pushed screen is Settings, whose title is one.
                 router.open(.settings, in: .program)
                 #expect(Self.labels(read()) == ["Settings"])
                 router.selectedTab = .today

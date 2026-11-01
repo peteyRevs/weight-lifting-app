@@ -19,7 +19,9 @@
                 "WatchPrimaryButton", "WatchRestRing", "WatchStatBlock",
                 "StepperField", "LedgerToggleStyle", "WrapLayout", "ReceiptLayout",
                 // F12 S1 (ruling R5): moved from FeatureProgram.
-                "FilterChipRow", "SearchField"
+                "FilterChipRow", "SearchField",
+                // F14 S1 (A5): Settings' units.
+                "SegmentedChoice"
             ]
             /// Every token type in `LedgerDesign/Tokens`.
             static let tokenTypes = [

@@ -1,6 +1,7 @@
 import FeatureHistory
 import FeatureLibrary
 import FeatureProgram
+import FeatureSettings
 import FeatureToday
 import LedgerDesign
 import SwiftUI
@@ -26,6 +27,8 @@ struct AppTabs: View {
     /// Where the History screens' routes go, with the tab whose screen sent them: `MainRoot` resolves them with the
     /// router.
     var onHistoryRoute: @MainActor (HistoryRoute, AppTab) -> Void = { _, _ in }
+    /// Where Settings' routes go: `MainRoot` resolves them with the router and the Debug menu's sheet.
+    var onSettingsRoute: @MainActor (SettingsRoute) -> Void = { _ in }
     /// Debug builds: opens the debug menu (F07 criterion 7).
     var onTodayTitleLongPress: () -> Void = {}
 
@@ -65,7 +68,7 @@ struct AppTabs: View {
     private func screen(for destination: AppDestination, in tab: AppTab) -> some View {
         switch destination {
         case .settings:
-            PlaceholderScreen(AppCopy.settingsTitle, identifier: "settings.title")
+            SettingsRoot(about: .main, onRoute: onSettingsRoute)
         case let .day(day, weekIndex):
             // A screen and a store per route (ruling R8): another day pushed in its place is drawn anew.
             DayEditorRoot(day: day, weekIndex: weekIndex, onRoute: onProgramRoute)

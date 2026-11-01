@@ -3,10 +3,10 @@ import LedgerTestSupport
 import Testing
 
 /// F14 S1, N9 and N6, read from the sources: the conventions F12 checks for the Library. No file reads the device's
-/// clock, calendar, locale or time zone; no file starts a task of its own; the store keeps no timer and formats
-/// nothing; every lookup is in `SettingsCopy*.swift`; and no source writes the product's name or a version (N6): the
-/// About line reads them from the app's bundle. The views' checks (they import SwiftUI and `LedgerDesign` alone and
-/// decide nothing, one scroll view, no orange) come with the views, in S1b.
+/// clock, calendar, locale or time zone; no file starts a task of its own; the store and the root keep no timer and
+/// format nothing; every lookup is in `SettingsCopy*.swift`; the views draw with SwiftUI and `LedgerDesign` alone and
+/// decide nothing; only the screen holds a scroll view; nothing on Settings is orange (C28); and no source writes the
+/// product's name or a version (N6): the About line reads them from the app's bundle.
 ///
 /// The check reads code and the code inside a string interpolation; it does not read comments or a literal's own
 /// text, except where it reads every literal for N6.
@@ -27,7 +27,14 @@ nonisolated struct FeatureSettingsSourceTests {
     /// The spellings of a lookup (standards §7).
     static let lookups = ["localized:", "NSLocalizedString", "LocalizedStringKey", "LocalizedStringResource"]
 
-    static let storeFiles = ["SettingsStore.swift", "SettingsStore+Sources.swift"]
+    /// What a view must not reach for: the copy and the presentation (a text or a decision of its own), a format,
+    /// a filter or an order of its own, the clock, the calendar and the locale.
+    static let decisions = [
+        "SettingsCopy", "SettingsPresentation", ".formatted(", "String(format", ".filter(", ".sorted(", ".sort(",
+        "Locale", "Calendar", "Date", "@Dependency"
+    ]
+
+    static let storeFiles = ["SettingsStore.swift", "SettingsStore+Sources.swift", "SettingsRoot.swift"]
 
     static func sources() throws -> [String: String] {
         let sources = try CopyAudit.sources(ofModule: "FeatureSettings")
@@ -54,12 +61,16 @@ nonisolated struct FeatureSettingsSourceTests {
         return Set(source.lines(ofCode: spelling) + interpolated).sorted()
     }
 
+    static func isView(_ path: String) -> Bool {
+        path.hasPrefix("Views/") && !path.hasSuffix("+Previews.swift")
+    }
+
     @Test("No file reads the clock, the current calendar, the current locale or the current time zone")
     func sources_neverReadTheClockOrTheCurrentCalendar() throws {
         #expect(try Self.uses(of: Self.ambient) == [])
     }
 
-    @Test("No file starts a task of its own; the store keeps no timer and formats nothing")
+    @Test("No file starts a task of its own; the store and the root keep no timer and format nothing")
     func sources_startNoWorkOfTheirOwn() throws {
         #expect(try Self.uses(of: Self.unstructured, inFiles: Self.storeFiles.contains) == [])
         let sources = try Self.sources()
@@ -79,6 +90,30 @@ nonisolated struct FeatureSettingsSourceTests {
         let outside = try Self.uses(of: Self.lookups) { !$0.hasPrefix("SettingsCopy") }
         #expect(outside == [])
         #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 27)
+    }
+
+    @Test("N9. No view reaches for the copy, the presentation, a format, a filter, an order, a clock or a locale")
+    func views_decideNothing() throws {
+        let found = try Self.uses(of: Self.decisions, inFiles: Self.isView)
+        #expect(found.isEmpty, "\(found.prefix(5))")
+    }
+
+    @Test("N9. Every view imports SwiftUI and LedgerDesign and nothing else; only the screen holds a scroll view")
+    func views_importOnlySwiftUIAndTheDesignSystem_andOneScrollView() throws {
+        let views = try Self.sources().filter { Self.isView($0.key) }
+        #expect(views.count >= 4)
+        for (path, text) in views {
+            let imports = SwiftSource(text).code.map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { $0.hasPrefix("import ") }
+            #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
+        }
+        let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
+        #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == ["Views/SettingsScreen.swift"])
+    }
+
+    @Test("N9, C28. Nothing on Settings wears the accent")
+    func views_wearNoAccent() throws {
+        #expect(try Self.uses(of: ["LedgerColor.accent", ".accent", "tint:", "Eyebrow.Tint"]) == [])
     }
 
     /// N6: the product's name and version come from the bundle. The previews' stand-in About values are set aside:

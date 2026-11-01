@@ -43,6 +43,15 @@ import Testing
             }
         }
 
+        /// F14 S1 (A5): two options with each chosen, and a choice of three.
+        @Suite("SegmentedChoiceSnapshots", .tags(.design, .snapshot))
+        struct SegmentedChoiceSnapshotTests {
+            @Test("SegmentedChoice matches its references", arguments: SnapshotAppearance.phoneMatrix)
+            func segmentedChoice_appearance_matchesReference(_ appearance: SnapshotAppearance) {
+                assertPhoneSnapshot(of: SegmentedChoiceGallery().phonePage(), appearance)
+            }
+        }
+
         @Suite("EyebrowSnapshots", .tags(.design, .snapshot))
         struct EyebrowSnapshotTests {
             @Test("Eyebrow matches its references", arguments: SnapshotAppearance.phoneMatrix)
