@@ -14,6 +14,8 @@ nonisolated struct WorkoutDetailModel: Equatable, Sendable {
     let receipt: ReceiptLayout.Model
     /// What a tap on each of `receipt.rows` sends, in the same order: its exercise's history.
     let rowRoutes: [HistoryRoute]
+    /// "Edit" in the bar: opens the sheet that fixes the sets (F13 S3, F13 question 2, built to A).
+    let edit: String
     let delete: Deletion
 
     /// "Delete workout", and the alert it opens first (F13 question 8, built to A): "Delete this workout?", what it

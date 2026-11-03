@@ -171,7 +171,7 @@
       }
     },
     "Cancel" : {
-      "comment" : "The alert's button that deletes nothing",
+      "comment" : "The button of an alert or of the edit sheet that changes nothing",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -188,6 +188,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't delete this workout"
+          }
+        }
+      }
+    },
+    "Couldn't save your changes. Try again in a moment." : {
+      "comment" : "At the foot of the sheet that fixes a past workout's sets, when they could not be stored",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your changes. Try again in a moment."
           }
         }
       }
@@ -221,6 +232,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Delete workout"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "comment" : "Button in the bar of a past workout's detail: opens the sheet that fixes its sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        }
+      }
+    },
+    "Edit sets" : {
+      "comment" : "Title of the sheet that fixes a past workout's sets",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit sets"
           }
         }
       }
@@ -347,7 +380,7 @@
       }
     },
     "Nothing logged" : {
-      "comment" : "Spoken: an exercise of the receipt with no set logged, drawn as a dash",
+      "comment" : "An exercise with no set logged: spoken on the receipt, drawn in the edit sheet",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -358,7 +391,7 @@
       }
     },
     "OK" : {
-      "comment" : "Closes the alert shown when a delete failed",
+      "comment" : "Closes an alert that said something went wrong",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -401,6 +434,39 @@
         }
       }
     },
+    "Save" : {
+      "comment" : "Stores the sets the sheet changed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "Set %lld reps" : {
+      "comment" : "Name of the stepper that fixes the reps of a logged set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld reps"
+          }
+        }
+      }
+    },
+    "Set %lld weight" : {
+      "comment" : "Name of the stepper that fixes the weight of a logged set",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set %lld weight"
+          }
+        }
+      }
+    },
     "TIME" : {
       "comment" : "Label of the receipt's tile for how long the workout took",
       "localizations" : {
@@ -419,6 +485,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This workout can't be read."
+          }
+        }
+      }
+    },
+    "This workout was deleted" : {
+      "comment" : "Title of the alert shown when a past workout was deleted while its sets were being fixed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This workout was deleted"
+          }
+        }
+      }
+    },
+    "Your changes weren't saved." : {
+      "comment" : "Under: This workout was deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your changes weren't saved."
           }
         }
       }

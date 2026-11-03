@@ -137,8 +137,12 @@ nonisolated enum LibraryPresentation {
             sessions.map { LibraryCopy.sessions($0, locale: input.locale) },
             exercise.isCustom ? LibraryCopy.custom : nil
         ].compactMap(\.self)
-        let best = input.bestSets[exercise.id]?.weight.formatted(in: input.units)
-        let spokenBest = best.map { LibraryCopy.spokenRecord($0, units: input.units, locale: input.locale) }
+        let weight = input.bestSets[exercise.id]?.weight
+        let best = weight?.formatted(in: input.units)
+        let spokenBest = weight.map {
+            let spoken = $0.spoken(in: input.units, locale: input.locale.forCountedText)
+            return LibraryCopy.spokenRecord(spoken, locale: input.locale)
+        }
         return LibraryModel.Row(
             id: exercise.id,
             name: exercise.name,

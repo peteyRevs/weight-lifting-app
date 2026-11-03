@@ -66,40 +66,26 @@ nonisolated extension LibraryCopy {
     }
 
     /// "Up 22 pounds over 8 weeks": what VoiceOver reads of the chart's change (F12-S2-4), `weight` being its size
-    /// without a sign, over the `weeks` from the first with a value to the last, both counted; the unit spoken as
-    /// the Library's rows speak it (F12-S2-R1-7).
-    static func spokenChange(_ weight: String, sign: Int, weeks: Int, units: Units, locale: Locale) -> String {
+    /// without a sign, already spoken with its unit in the form its number takes (F13 ruling A6), over the `weeks` from
+    /// the first with a value to the last, both counted (F12-S2-R1-7).
+    static func spokenChange(_ weight: String, sign: Int, weeks: Int, locale: Locale) -> String {
         let counted = locale.forCountedText
-        return switch (units, sign.signum()) {
-        case (.lb, 1):
+        return switch sign.signum() {
+        case 1:
             String(
-                localized: "Up \(weight) pounds over \(weeks) weeks",
+                localized: "Up \(weight) over \(weeks) weeks",
                 bundle: .module,
                 locale: counted,
-                comment: "VoiceOver's reading of the chart's gain in pounds over its weeks with a value"
+                comment: "VoiceOver's reading of the chart's gain, with its unit in words, over its weeks with a value"
             )
-        case (.lb, -1):
+        case -1:
             String(
-                localized: "Down \(weight) pounds over \(weeks) weeks",
+                localized: "Down \(weight) over \(weeks) weeks",
                 bundle: .module,
                 locale: counted,
-                comment: "VoiceOver's reading of the chart's loss in pounds over its weeks with a value"
+                comment: "VoiceOver's reading of the chart's loss, with its unit in words, over its weeks with a value"
             )
-        case (.kg, 1):
-            String(
-                localized: "Up \(weight) kilograms over \(weeks) weeks",
-                bundle: .module,
-                locale: counted,
-                comment: "VoiceOver's reading of the chart's gain in kilograms over its weeks with a value"
-            )
-        case (.kg, -1):
-            String(
-                localized: "Down \(weight) kilograms over \(weeks) weeks",
-                bundle: .module,
-                locale: counted,
-                comment: "VoiceOver's reading of the chart's loss in kilograms over its weeks with a value"
-            )
-        case (_, _):
+        default:
             String(
                 localized: "No change over \(weeks) weeks",
                 bundle: .module,

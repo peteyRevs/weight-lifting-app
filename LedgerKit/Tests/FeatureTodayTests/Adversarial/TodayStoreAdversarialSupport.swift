@@ -252,6 +252,10 @@ final nonisolated class ScriptedWorkouts: WorkoutRepository {
         throw NotScripted()
     }
 
+    func updateSets(_: [WorkoutExerciseID: [LoggedSet]], of _: WorkoutID) async throws {
+        throw NotScripted()
+    }
+
     func delete(id _: WorkoutID) async throws {
         throw NotScripted()
     }

@@ -109,7 +109,7 @@ final class WorkoutHistory: XCTestCase {
 
     /// The app with the sample workout saved, on Today.
     @MainActor
-    private func launchWithASavedWorkout() -> XCUIApplication {
+    func launchWithASavedWorkout() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-LEDGER_UITEST", "1", "-LEDGER_UITEST_NOW", "2026-08-17T12:00:00Z"]
         app.launchArguments += ["-LEDGER_UITEST_PROGRAM", "seed"]
@@ -157,7 +157,7 @@ final class WorkoutHistory: XCTestCase {
     }
 
     @MainActor
-    private func attachScreenshot(of app: XCUIApplication, named name: String) {
+    func attachScreenshot(of app: XCUIApplication, named name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways

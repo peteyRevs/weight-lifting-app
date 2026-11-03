@@ -15,6 +15,7 @@
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
             let cases = HistoryPreview.allCases.map(\.rawValue) + DetailPreview.allCases.map(\.rawValue)
+                + EditPreview.allCases.map(\.rawValue)
             #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(PreviewScan.registeredModules.contains("FeatureHistory"))
         }
@@ -27,6 +28,20 @@
         @Test("Every detail preview renders", arguments: DetailPreview.allCases)
         func detailPreview_renders(_ preview: DetailPreview) {
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+        }
+
+        @Test("Every edit preview renders", arguments: EditPreview.allCases)
+        func editPreview_renders(_ preview: EditPreview) {
+            #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+        }
+
+        @Test("Every edit preview shows the state it is named for")
+        func editPreviews_showTheirStates() throws {
+            #expect(try EditPreview.unchanged.model().foot.action == nil)
+            #expect(try EditPreview.changed.model().foot.action == .save)
+            #expect(try EditPreview.failed.model().foot.problem != nil)
+            let weight = try EditPreview.kilograms.model().exercises.first?.sets.first?.weight.value
+            #expect(weight?.hasSuffix(" kg") == true)
         }
 
         @Test("Every detail preview shows the state it is named for")

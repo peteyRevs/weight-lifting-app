@@ -25,6 +25,11 @@ import Observation
 /// still waited for the writer (review S2-R1-1); a run while another is in flight does nothing. A failure
 /// is logged and said in an alert, and the screen stays; once deleted, the screen closes. A route waits until the app
 /// has taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
+///
+/// **"Edit" opens the sheet over the workout as last read, in the units drawn** (F13 S3). While the sheet is up a nil
+/// from the observation waits: the detail stays under it, and closes once the sheet comes down (N12). After a save,
+/// "Edit" opens on the saved draft until the observation's next value arrives, so a sheet opened before the save's
+/// own value lands is not stale (F13-S3-3).
 @MainActor @Observable
 final class WorkoutDetailStore {
     enum State: Equatable {
@@ -41,6 +46,8 @@ final class WorkoutDetailStore {
     private(set) var pendingRoute: HistoryPendingRoute?
     /// The delete the root's `.task(id:)` runs; nil until "Delete" is first confirmed.
     private(set) var deletion: Int?
+    /// What the edit sheet is up over; nil while it is down.
+    private(set) var editing: EditSetsRequest?
     /// The alert that says a delete failed is up.
     var showsDeleteFailure = false
 
@@ -69,6 +76,8 @@ final class WorkoutDetailStore {
         var settings: Settings?
         /// The workout's own observation ended by itself: it can't be read (N10).
         var workoutHasEnded = false
+        /// The draft of the last save whose sheet came down since the workout's last value (F13-S3-3).
+        var lastSave: WorkoutState?
     }
 
     /// Where the confirmed delete stands: nothing confirmed (or done: the detail is then `.gone`), confirmed and not
@@ -113,7 +122,10 @@ final class WorkoutDetailStore {
         let id = workoutID
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                await self.follow(self.workouts.observeWorkout(id: id)) { $0.workout = .some($1) } ended: {
+                await self.follow(self.workouts.observeWorkout(id: id)) {
+                    $0.workout = .some($1)
+                    $0.lastSave = nil
+                } ended: {
                     $0.workoutHasEnded = true
                 }
             }
@@ -175,7 +187,9 @@ final class WorkoutDetailStore {
     /// be read; otherwise, once both sources have spoken, the receipt.
     private func rebuild() {
         if case .some(.none) = sources.workout {
-            close()
+            if editing == nil {
+                close()
+            }
             return
         }
         guard !sources.workoutHasEnded else {
@@ -208,5 +222,46 @@ final class WorkoutDetailStore {
         }
         routeNumber += 1
         pendingRoute = HistoryPendingRoute(number: routeNumber, route: close)
+    }
+}
+
+// MARK: - "Edit" (F13 S3)
+
+extension WorkoutDetailStore {
+    /// The edit sheet's item, as the root binds it: the request while the sheet is up. The system sets nil when it
+    /// takes the sheet down (a swipe), which closes it as "Cancel" does.
+    var editSheet: EditSetsRequest? {
+        get { editing }
+        set {
+            if newValue == nil {
+                editClosed(.cancelled)
+            }
+        }
+    }
+
+    /// "Edit": accepted while the workout is on screen and no delete is under way. It opens on the last save's draft
+    /// until the workout's next value arrives, then on what is shown.
+    func edit() {
+        guard case .loaded = state, deleting == .idle, editing == nil,
+              let found = sources.workout, let recorded = found, let current = sources.settings
+        else {
+            return
+        }
+        editing = EditSetsRequest(workout: sources.lastSave ?? recorded.workout, units: current.units)
+    }
+
+    /// The edit sheet came down, by its own buttons or by the system. A save keeps its draft for the next "Edit"; a
+    /// workout the sheet found gone closes the detail too, and one that went while it was up does now.
+    func editClosed(_ closing: EditSetsClosing) {
+        editing = nil
+        switch closing {
+        case .cancelled:
+            rebuild()
+        case let .saved(draft):
+            sources.lastSave = draft
+            rebuild()
+        case .workoutGone:
+            close()
+        }
     }
 }

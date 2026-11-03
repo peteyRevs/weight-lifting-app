@@ -119,8 +119,8 @@ struct WorkoutPresentationReceiptTests {
     @Test("The spoken time is rounded down to the second, as the tile's is")
     func spokenTime_isRoundedDown() {
         let locale = Fixtures.locale
-        #expect(WorkoutPresentation.spokenElapsed(.milliseconds(59900), locale: locale) == "59 seconds")
-        #expect(WorkoutPresentation.spokenElapsed(.seconds(3600), locale: locale) == "1 hour")
+        #expect(ClockText.spokenElapsed(.milliseconds(59900), locale: locale) == "59 seconds")
+        #expect(ClockText.spokenElapsed(.seconds(3600), locale: locale) == "1 hour")
         #expect(ClockText.elapsed(.milliseconds(59900)) == "0:59")
     }
 

@@ -267,4 +267,13 @@ extension WorkoutRepositoryTests {
         let issue = try await clause.check(Repositories.withProgramExercises().history)
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
+
+    @Test(
+        "The GRDB repository keeps the batched edit's clause (F13 S3)",
+        arguments: WorkoutRepositoryContract.batchedEditClauses
+    )
+    func batchedEditClause_holds(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Repositories.withProgramExercises().history)
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
 }

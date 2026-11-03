@@ -2,11 +2,12 @@ import LedgerDesign
 import SwiftUI
 
 /// A past workout's detail, drawn from its model: a scroll view around `WorkoutDetailPage`, on the ground, under the
-/// pushed screen's navigation bar and its back button. The whole screen scrolls, its heading too, as an exercise's
-/// history does; it has no pinned part of its own. That is its one layout at every text size.
+/// pushed screen's navigation bar, its back button and "Edit". The whole screen scrolls, its heading too, as an
+/// exercise's history does; it has no pinned part of its own. That is its one layout at every text size.
 struct WorkoutDetailScreen: View {
     let model: WorkoutDetailModel
     let send: (HistoryRoute) -> Void
+    var onEdit: () -> Void = {}
     /// The alert's "Delete".
     let onDelete: () -> Void
 
@@ -16,6 +17,12 @@ struct WorkoutDetailScreen: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(LedgerColor.ground)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(model.edit, action: onEdit)
+                    .accessibilityIdentifier("history.workout.edit")
+            }
+        }
     }
 }
 

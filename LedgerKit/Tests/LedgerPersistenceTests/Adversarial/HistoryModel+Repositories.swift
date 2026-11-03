@@ -48,6 +48,23 @@ extension HistoryModel: WorkoutRepository {
         }
     }
 
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of id: WorkoutID) async throws {
+        try write { state in
+            guard let entry = state.entries[id], !entry.isDeleted else {
+                throw LedgerPersistenceError.missingRow("workout \(id.rawValue.uuidString)")
+            }
+            var workout = entry.state
+            for (exercise, replacement) in sets {
+                guard let index = workout.exercises.firstIndex(where: { $0.id == exercise }) else {
+                    throw LedgerPersistenceError.missingRow("workout_exercise \(exercise.rawValue.uuidString)")
+                }
+                workout.exercises[index].sets = replacement
+            }
+            try store(workout, in: &state)
+            redetect(after: workout.id, in: &state)
+        }
+    }
+
     func delete(id: WorkoutID) async throws {
         try write { state in
             guard has(.hardDelete) else {

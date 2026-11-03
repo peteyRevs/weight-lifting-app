@@ -60,6 +60,7 @@ private struct BriefWorkoutRepository: WorkoutRepository {
     }
 
     func updateSets(workoutExerciseID _: WorkoutExerciseID, sets _: [LoggedSet]) async throws {}
+    func updateSets(_: [WorkoutExerciseID: [LoggedSet]], of _: WorkoutID) async throws {}
     func delete(id _: WorkoutID) async throws {}
     func observeRecent(limit _: Int) -> AsyncStream<[WorkoutState]> {
         AsyncStream { $0.finish() }

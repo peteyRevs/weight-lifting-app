@@ -115,6 +115,15 @@ extension InMemoryContractTests {
         #expect(issue == nil, "\(clause.name): \(issue ?? "")")
     }
 
+    @Test(
+        "InMemoryWorkoutRepository keeps the batched edit's clause (F13 S3)",
+        arguments: WorkoutRepositoryContract.batchedEditClauses
+    )
+    func workouts_keepTheBatchedEditClauses(_ clause: WorkoutRepositoryContract.Clause) async throws {
+        let issue = try await clause.check(Self.history())
+        #expect(issue == nil, "\(clause.name): \(issue ?? "")")
+    }
+
     @Test("InMemoryWorkoutEventStore keeps the storage clause", arguments: WorkoutEventStoreContract.storageClauses)
     func events_keepTheStorageClauses(_ clause: WorkoutEventStoreContract.Clause) async throws {
         let issue = try await clause.check(InMemoryWorkoutEventStore())

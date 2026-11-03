@@ -616,3 +616,290 @@ included, were deleted afterwards.
   tests, 122 passed, 1 skipped, 1 expected failure (F13-S1-3), 0 failed. The first run also included `AppTabsTests`:
   130 tests, 0 failed.
 - The full gate was not run, as ruled.
+
+## S3 — as built (G1 implementer, 2026-11-02)
+
+**Branch, a deviation:** the brief for this round named worktree `F13-s3` on `feat/F13-s3-edit-sets`. This agent is
+isolated in its own worktree, and the harness refused git there, so the work is on `worktree-agent-aac5de9c23090001b`,
+from the same `33048c5`. `feat/F13-s3-edit-sets` was left where it was, and can be fast-forwarded to this branch.
+
+The specification is the plan amendments' S3 (criteria 4, 7 and 8 (sheet parts) as restated, N6's sheet part, N11, N12,
+N15), the rulings before G1 (A4; A6 ruled into S3) and the deferred S2-R1-4.
+
+### Commits
+
+- `14e3c15` feat(history): fix a past workout's sets in a sheet, saved as one write, with spoken weights shared.
+- `6693b60` test(history): the edit sheet hosted.
+- this notes commit (docs only).
+
+### Pete's questions, built to their recommended defaults (unanswered)
+
+- **Q2 A:** "Edit" in the detail's bar opens every logged set in one sheet; a row still opens its exercise's history.
+- **Q3 A:** only the weight and reps of logged sets. No removing a set, no logging a skipped one.
+- **Q4 A:** a fix moves records, charts and stats, not the program's hold or advance. `SetEditing` reads no program.
+- **Q5 A:** everything in the lifter's current units; a pound workout read in kg steps to the next kg multiple.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- **Domain.** `Rules/SetEditing.swift` (N11). `Weight.nextMultiple(of:_:)`, moved from `DayEditing+Fields.swift`, which
+  now calls it. `WorkoutRepository.updateSets(_:of:)` (A4). `ClockText.spokenElapsed` and `ClockText.startDay`
+  (S2-R1-4); F10's receipt and the detail share them.
+- **Persistence and fakes.** `GRDBWorkoutRepository+History.swift`: `updateSets(_:of:)` and `replace`, which both
+  `updateSets` calls write through. `RecordReplay.Scope(editing:of:)` takes several exercises, each once, in one order.
+  In-memory and stub methods. `GRDBWorkoutRepository.now` went from `private` to internal for the extension.
+- **FeatureHistory.** `EditSetsModel`, `EditSetsPresentation`, `EditSetsStore`, `EditSetsSheet`, `HistoryCopy+Edit`,
+  `Views/EditSetsScreen`, `Views/EditSetsPage`, `Views/Edit+Previews` (4 states). The detail gets `edit` on its model,
+  `edit()` and `editClosed(workoutGone:)` on its store, and the sheet on its root. The catalog holds 44 keys.
+- **A6.** FeatureLibrary speaks weights through `Weight.spoken`: keys `PR %@`, `Up %@ over %lld weeks`, `Down %@ over
+  %lld weeks` replace six fixed "pounds"/"kilograms" keys, so "Up 1 pound" reads right.
+
+No change to the project file, a test plan, `Package.swift` or `.github/`.
+
+### Decisions and deviations
+
+1. **`updateSets(workoutExerciseID:sets:)` stays a protocol requirement, not a one-entry default** (plan A4 said
+   default). It names no workout and `updateSets(_:of:)` needs one, so a default can't be written. Both go through one
+   body on GRDB; a contract clause pins that the two give the same result.
+2. **File names:** `EditSetsSheet` is the root (as `CreateExerciseSheet`), `Views/EditSetsScreen` the scroll view.
+3. **The sheet takes the workout as the detail last read it**, and follows nothing while up. An edit arriving from
+   elsewhere during the sheet is overwritten for the exercises saved (last write wins). Nothing writes that way on one
+   device today; for F17/F28 to weigh.
+4. **A workout deleted under the sheet waits:** the detail keeps its state and closes when the sheet comes down, so it
+   is never popped from under a sheet. A save that hits `missingRow` raises an alert whose "OK" closes both.
+5. **A cancelled save returns to editing silently** (as `CreateExerciseStore`), with no automatic re-run as the detail's
+   delete has: the sheet's store goes with the sheet, and if the view lives, Save is on again.
+6. **A set's number is among the exercise's logged sets.** An exercise with none shows "Nothing logged".
+7. **A step and its way back restore the original only from a whole multiple of the step** (corrected in S3 fix
+   round 1, F13-S3-7; this first said it always holds in the workout's own units). Off a multiple, in the workout's
+   own units, there is no way back: 187 lb on 5 lb steps goes up to 190 and down to 185. A kg step on a pound workout
+   never returns either: 225 lb goes up and back down to 101.25 kg on 1.25 kg steps. In both cases Save stays on, the
+   sheet shows the new number, and only Cancel restores the original. No untouched set moves, and every result is a
+   whole 10⁻⁷ g (ADR-007). Follows from Q5 A.
+8. **Swiping away a changed sheet discards it, unasked:** N12 disables the swipe only while saving. Built as specified.
+9. **Eight references, not the plan's seven:** `assertLedgerSnapshot` draws both themes at `.accessibility3`.
+10. **Line count under the band:** 608 net against the 700–900 aim (plan about 685). A6 and S2-R1-4 removed code (FeatureLibrary
+    −18, FeatureWorkout −15, the detail's presentation −13). Nothing was compressed.
+11. **"One replay" is pinned indirectly:** one emission per observer and the right records on both exercises. No test
+    counts replays.
+12. **No S2 review nits rode along:** S2-R1-1, -2, -3 and -5 were already fixed in S2; only S2-R1-4 was left.
+
+### New wording for Pete
+
+All in `HistoryCopy+Edit.swift`: "Edit", "Edit sets", "Save", "Set 2 weight", "Set 2 reps". **Not in the brief or plan:**
+"Couldn't save your changes. Try again in a moment."; "This workout was deleted" / "Your changes weren't saved."
+*Recommendation:* accept.
+
+### Sanctioned edits outside the slice
+
+| File | Edit | Why |
+|---|---|---|
+| `WorkoutRepository` conformers in tests and `ProbedStores` | `updateSets(_:of:)`: forwards, a stub or (`HistoryModel+Repositories`) a model of it | A protocol requirement |
+| `UnimplementedStubTests`, `InMemoryContractTests`, `WorkoutRepositoryTests` | one line or one parameterised test each | Same; the contract |
+| `LibraryCopyTests` | `spokenRecord` takes a spoken weight; a new test for the change's singular | A6 |
+| `WorkoutPresentationReceiptTests` | calls `ClockText.spokenElapsed` | S2-R1-4 |
+| `WorkoutDetailOrangeAuditTests`, `WorkoutDetailLayoutTests`, `FeatureHistorySourceTests`, `PreviewTests`, `DetailTesting`, `HistoryParts`, `HistoryCopyTests` | the model's `edit`; the sheet under the same rules; `DetailWorkouts` counts saves | S3 |
+| `Apps/LedgerUITests/WorkoutHistory.swift` | two helpers no longer `private`, for `WorkoutHistory+Edit.swift` | The class is at the lint's 150 lines |
+
+### Product lines
+
+Non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps`, excluding `LedgerTestSupport` and the UI tests, against
+`33048c5`: **net 608**. Over the 500-line target. The split considered: the Domain rule, the batched write and the shared
+helpers first (about 130, nothing on screen), then the sheet; the first alone would ship an API with no caller.
+
+### Runs
+
+- **PR-sweep seconds:** the S3 suites plus `PreviewTests`, on the simulator through the lock with `TEST_RUNNER_LEDGER_SWEEP=pr`:
+  34 tests in 5.6 s (plan 4–7 s). `FeatureHistoryTests` whole: 139 tests in about 10 s, before the 3 hosted sheet tests.
+- **Nightly UI, through the lock:** `LedgerUITests/WorkoutHistory`, 5 of 5, including the new
+  `test_editASet_showsInTheDetailAndTheList`. Run on `14e3c15`'s code, before `6693b60`, which only adds tests.
+- **Host, nightly lane:** `RecordReplayPerformanceTests` passed with the new batched edit under the 250 ms budget, as did
+  `LibraryPerformanceTests` and `HistoryPerformanceTests`, after A6.
+- **Wall clock:** no new wall-clock assertion in a PR-plan test; the one budget is in the nightly suite.
+- **References:** 8 new. I opened four (changed light and dark AX3, failed dark, unchanged light), not all eight. Save is the
+  one orange, off in grey when unchanged, the failed line stands over it, and at AX3 the buttons stack under each field.
+  No existing reference changed.
+
+### The gate
+
+**Full gate on `6693b60`: exit 0, "check.sh OK", 2,003 s.**
+
+| Step | Time |
+|---|--:|
+| lint | 70 s |
+| iOS build | 17 s |
+| string catalogs (FeatureHistory: 44 keys) | 1 s |
+| iOS tests | 1,595 s |
+| watchOS build | 17 s |
+| watchOS tests | 302 s |
+| coverage | 1 s |
+
+Coverage: FeatureHistory 1,416 / 1,465 (96.65 %), LedgerDomain 99.43 %, overall 98.47 %.
+
+**Coverage fell for FeatureHistory**, from S2's 98.53 %. `SetEditing.swift` shows no uncovered line. What stays uncovered on the
+PR plan includes the sheet's public init, its "Cancel" closure, the alert's "OK", and the root's sheet closure and
+binding: a scene-less window presents no sheet. The nightly UI test exercises opening, stepping and saving, but neither
+"Cancel" nor the alert's "OK".
+
+**Not tested end to end:** the alert after a workout deleted under the sheet. The store and hosted tests stop at `.workoutGone`, and
+`editClosed(workoutGone:)` is tested separately. Not run: this slice on a device, and the app by hand.
+
+### Inputs for G2 and G3
+
+- `WorkoutRepository` gained `updateSets(_:of:)`: a new conformer needs it.
+- `EditScene`, `EditFixtures` and `EditParts` in FeatureHistoryTests are reusable.
+- `WorkoutDetailEditTests.deletedUnderTheSheet_closesAfterIt` shows the nil waits by a `Task.yield`, a weak negative check.
+
+### S3 fix round 1 (G1, 2026-11-02): G2's F13-S3-1 to -9, as the orchestrator ruled
+
+Commit `f0fcbbc` fix(history): Edit after a save opens on what was saved, reps in the receipt's digits, and the sheet's
+wiring tested. Then this notes commit.
+
+**F13-S3-3, fixed.** The sheet now says how it came down: `EditSetsClosing` is `.cancelled`, `.saved(draft)` or
+`.workoutGone`. It replaces `onClose(workoutGone: Bool)` and `editClosed(workoutGone:)`.
+- **The rule.** On `.saved`, the detail keeps the draft and the workout its observation showed at that moment.
+  "Edit" opens on that draft for as long as the observation still shows the same workout. Once any other value
+  arrives (the save's own, or an edit from elsewhere), "Edit" opens on what is shown.
+- **Why this rule.** The order of the save's value and the sheet's close doesn't matter. If the value lands first,
+  the draft and the shown workout carry the same sets until the next value. Two saves in a row before any value
+  lands chain correctly, because each compares against the value shown, not the request the sheet opened on.
+- **Tests.** `EditSetsAdversarialTests.reopenedBeforeTheNextValue_opensStale` is now the plain
+  `reopenedBeforeTheNextValue_opensTheSave`: the second sheet opens on the first's draft, the first fix stands, and a
+  third "Edit" opens on the second draft. The new `afterTheNextValue_opensWhatIsShown` covers the other half. Once the
+  stored value is shown, "Edit" opens on it, and an edit made elsewhere is what opens after that.
+
+**F13-S3-5, fixed.** `EditSetsPresentation.row` writes reps with `String(_:)`, as `WorkoutSummary`'s chips do and
+`WorkoutPresentation+Card` already did. In `ar_EG` the sheet shows "12", the same as the chip "187.5×12".
+`digits_matchTheReceipt` is a plain test over all six locales. No reference changed (en_US digits are the same).
+
+**F13-S3-1, fixed: FeatureHistory 99.31 % (1,459 / 1,469)** on the four targets' PR-plan run. The target was S2's
+merge-gate 99.09 %. G2's run measured 98.50 % (1,443 / 1,465). The full gate's figure is below.
+- **The sheet's item binding** is now `WorkoutDetailStore.editSheet`. Its get is `editing`, and its set of nil closes
+  as "Cancel" does. The root binds `$store.editSheet` with no closures of its own. `sheetItem_nilClosesIt` sets the
+  value and then nil. G2's `goneFlow_bothSignals_leaveOneClose` (F13-S3-9) now sends `editSheet = nil`.
+- **The sheet's content** is `WorkoutDetailRoot.editSheet(_:over:)`. `rootsSheet_cancelReachesTheDetail` builds it
+  over a running detail and activates "Cancel", and the detail's `editing` goes to nil.
+- **Other lines now covered.**
+  - The sheet's default `announce`: `appsAnnouncement_saysAFailure` hosts the sheet without an announce and lays it
+    out after a failed save.
+  - `EditSetsStore`'s log interpolation: `EditScene` takes a `logger`, enabled in that test.
+  - `EditSetsPage`'s step-down closure: `adjustableDown_stepsTheWeightDown`.
+- **Still uncovered from S3:**
+  - The root's one-line `.sheet` content closure, since a scene-less window presents no sheet.
+  - The sheet alert's "OK" closure, since no alert is presented without a scene.
+  - The nightly UI tests reach neither.
+
+**F13-S3-7, notes fixed.** Decision 7 above now says what G2 measured. Product behaviour is unchanged.
+
+**Accepted as built (orchestrator).**
+- **F13-S3-4: a stale snapshot overwrites a concurrent edit to the same exercise.** This is decision 3. Hand-off for
+  F17/F28: `SetEditing.changes` hands over whole exercises. A sibling set edited by another writer after the sheet
+  opened is reverted to the exact old `Decimal`. Exercises the sheet didn't change survive, because `replace`
+  re-reads inside the write. A merge needs per-set changes or a version check.
+- **F13-S3-6: "This workout was deleted" is said for a missing exercise.** That is unreachable today. It is an input
+  for F17.
+- **F13-S3-8: a swipe discards a changed draft without asking.** This is decision 8. **Question for Pete:** should
+  a swipe on a changed sheet ask before discarding? *Recommendation:* keep it as is. Cancel discards without asking
+  too, and only the unsaved draft is lost.
+- **F13-S3-9: `editSheet = nil` after `.workoutGone` rebuilds over `.gone`.** SwiftUI doesn't send it after the
+  store cleared the item, and one close still waits.
+
+**Sanctioned edits of G2's tests:**
+- These moved to `EditSetsClosing`: `EditSetsGoneAdversarialTests`, `EditSetsHostedAdversarialTests` (`closes` and
+  `LockIsolatedCloses`) and `EditSetsOnDiskAdversarialTests`. The on-disk save closes with `.saved(sheet.draft)`.
+- The two pinned tests are plain tests now, as ruled.
+- The F13-S3-9 test's doc said "F13-S3-8". It is corrected.
+
+**Net product lines.** 18 this round, so the slice is **net 626** against `33048c5` (S3 was 608). Nothing was
+compressed.
+
+**Runs.**
+- **Host:** `swift test` on FeatureHistoryTests and `EditSetsOnDisk` passed: 123 tests, with the one known issue
+  (F13-S1-3).
+- **Simulator, PR plan, through the lock:** FeatureHistory, LedgerAppKit, LedgerPersistence and LedgerDomain tests,
+  `TEST_RUNNER_LEDGER_SWEEP=pr`, run twice. Both exited 0. The second run (with the root's sheet test) gave
+  1,424 + 614 + 166 + 400 tests, with the known issues only.
+- **Lint:** `swiftformat --lint` and `swiftlint --strict` are clean on the 12 changed files.
+- **Full gate on `f0fcbbc`, clean build products** (`.derivedData/Build` and `Results` removed first), through the
+  lock: **exit 0, "check.sh OK", 2,213 s.**
+
+  | Step | Time |
+  |---|--:|
+  | lint (and format) | 77 s |
+  | iOS build | 110 s |
+  | string catalogs | 1 s |
+  | iOS tests | 1,662 s |
+  | watchOS build | 50 s |
+  | watchOS tests | 311 s |
+  | coverage | 2 s |
+
+  Coverage:
+  - **FeatureHistory 1,457 / 1,469 (99.18 %).** That is at or above S2's 99.09 %, and up from G1's 96.65 % and
+    G2's 98.50 %.
+  - The two lines fewer than the targeted run are `HistoryStore+Sources` (S1 code: `follow` and `rebuild`). They
+    depend on timing from run to run. S3's own uncovered lines are the same two in both runs.
+  - FeatureLibrary 97.03 %, LedgerDomain 99.43 %, overall 98.62 %.
+  - No FeatureWorkoutTests timeouts appeared in this run.
+
+### S3 fix round 2 (G1, 2026-11-02): G3's S3-R1-1 to -4, as the orchestrator ruled
+
+One fix commit, then this notes commit.
+
+**S3-R1-1, fixed.** `Apps/LedgerUITests/WorkoutHistory+Edit.swift`.
+- Before "Edit", the test reads the detail's moved tile (the element whose label ends in " lb moved").
+- After Save, it waits with `XCTNSPredicateExpectation` for Save to stop existing, then for the tile's label to
+  differ, all on the detail without navigating. Back on the list, it waits for the row's value to differ from the
+  value read before.
+- The two single reads right after the stepper's tap (the weight's value, Save enabled) are waits too. No value is
+  read once after a wait that returns at once. One private helper, `expect(_:_:_:timeout:)`, builds each wait.
+- Not mutation-checked: no run was made with the detail kept from updating.
+
+**S3-R1-3, fixed in code.** `WorkoutDetailStore`.
+- The last save's draft is now `Sources.lastSave`. The workout follower's value closure sets it to nil with each
+  value. `editClosed(.saved)` sets it, and `edit()` opens on `sources.lastSave ?? recorded.workout`. The equality
+  check against the shown workout is gone. The doc says "until the observation's next value arrives", and that is
+  now exactly what happens.
+- **Why it lives in `Sources`.** The follower's `keep` closure is formed in the task group's nonisolated child task,
+  so it can't write a main-actor property of the store. It can write the `inout Sources` it is handed. A re-run
+  resets `Sources`, and with it the draft. That changes nothing: `edit()` refuses until the run's first value, and
+  that value would clear the draft anyway.
+- **Orders checked:**
+  - **The close before the save's value.** The close sets the draft, and the value clears it. "Edit" opens on the
+    draft, then on what is shown (`reopenedBeforeTheNextValue_opensTheSave`, `afterTheNextValue_opensWhatIsShown`,
+    both unchanged).
+  - **The value before the close.** The value clears nothing, and the close then sets the draft, which equals what
+    is shown. The next value clears it. Covered by the new `valueBeforeTheClose_opensTheSaveThenWhatIsShown`.
+  - **Two saves before any value, merged by GRDB.** The second close replaces the draft, and the one merged value
+    clears it. "Edit" then opens on the stored workout, which equals the second draft. This is the new end of
+    `reopenedBeforeTheNextValue_opensTheSave`.
+  - **Two saves whose values are not merged.** The first save's late value clears the second's draft, so "Edit"
+    opens on S1 until S2 lands. The old rule did the same (S1 ≠ S0), so nothing changed. It is unlikely in practice,
+    because a human reopening, stepping and saving takes far longer than GRDB's fetch.
+- **A→B→A, tested without a second writer.** `backToTheShownValue_opensWhatIsShown` uses the scripted observation to
+  yield the stored workout, then the original again. "Edit" opens on the original, not the old draft. Against
+  `HEAD`'s store this test fails (`editing?.workout == Self.newest`), and it is the only one that does. All 10 in the suite pass on
+  the new code.
+
+**S3-R1-2, fixed.** These doc comments are re-flowed to 120 columns: `SetEditing.swift` (the type's doc and
+`step(of:loggedIn:readIn:)`), `WorkoutDetailScreen.swift` and `EditSetsSnapshotTests.swift`. In SetEditing, "below 1."
+is kept off a line's start, so it doesn't read as a Markdown list.
+
+**S3-R1-4, accepted (orchestrator), no change.** `Weight.nextMultiple`'s `step > 0` guard can't be reached from
+either caller. It is harmless, and its doc states the behaviour.
+
+**Net product lines:** −3 this round (the store), so the slice is **net 623** against `33048c5`. Nothing was
+compressed.
+
+**Runs.**
+- **Host:** `swift test --filter "EditSetsAdversarialTests|WorkoutDetailEdit"` exited 0, 15 tests. The mutation run
+  against `HEAD`'s store had 1 failure, as expected.
+- **Nightly UI, `-only-testing:LedgerUITests/WorkoutHistory`, through the lock:**
+  - Runs 1 and 2 exited **65**. They were build failures: `CVarArg...` needs `any` under ExistentialAny. I fixed it
+    to `String...`.
+  - Runs 3 and 4 exited **0**, 6 of 6 tests each. `test_editASet_showsInTheDetailAndTheList` took 34.2 s and 33.5 s.
+  - A comma's spacing was fixed after run 3 had started building. It is whitespace only.
+- **PR plan, `-only-testing:FeatureHistoryTests`, `TEST_RUNNER_LEDGER_SWEEP=pr`, through the lock:** exited **0**, 168
+  tests in 31 suites, with the one known issue (F13-S1-3).
+- **Lint:** `swiftformat --lint` and `swiftlint --strict` are clean on the 6 changed Swift files.
+- **Not run:** the full gate, which the orchestrator runs after merging main.

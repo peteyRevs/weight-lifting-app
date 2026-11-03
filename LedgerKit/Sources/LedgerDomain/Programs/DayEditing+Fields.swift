@@ -57,9 +57,7 @@ public extension DayEditing {
         return edited
     }
 
-    /// Rule 6: the multiple of the step next to the slot's start load on the side asked for, never below
-    /// zero. A load on a multiple moves one step; a load between two multiples (180 lb read in kilograms is
-    /// 81.6) goes to the one above or the one below (82.5 or 80). The load and the step fall back to the
+    /// Rule 6 (`Weight.nextMultiple(of:_:)`), on the slot's start load. The load and the step fall back to the
     /// exercise's start load and the equipment's step in `units`, as a prescription's do (spec §7.2).
     private static func steppedStartLoad(
         _ direction: StepDirection,
@@ -69,10 +67,7 @@ public extension DayEditing {
     ) -> Weight {
         let load = slot.resolvedStartLoad(exercise: exercise, units: units)
         let step = slot.resolvedStep(exercise: exercise, units: units)
-        let multiple = load.rounded(toStep: step, direction == .upward ? .up : .down)
-        let isPastLoad = direction == .upward ? multiple > load : multiple < load
-        let next = isPastLoad ? multiple : multiple.advanced(bySteps: direction == .upward ? 1 : -1, of: step)
-        return max(next, .zero)
+        return load.nextMultiple(of: step, direction)
     }
 
     private static func clamped(_ value: Int, to range: ClosedRange<Int>) -> Int {

@@ -51,10 +51,19 @@ struct LibraryCopyTests {
         }
     }
 
+    @Test("A6. The chart's change is spoken with the word already in its form: Up 1 pound over 2 weeks")
+    func spokenChange_takesItsSpokenWeight() {
+        let one = Weight.pounds(1).spoken(in: .lb, locale: Fixtures.locale)
+        #expect(LibraryCopy.spokenChange(one, sign: 1, weeks: 2, locale: Fixtures.locale) == "Up 1 pound over 2 weeks")
+        let many = Weight.kilograms(10).spoken(in: .kg, locale: Fixtures.locale)
+        #expect(LibraryCopy.spokenChange(many, sign: -1, weeks: 1, locale: Fixtures.locale)
+            == "Down 10 kilograms over 1 week")
+    }
+
     @Test("The spoken PR names its unit")
     func spokenRecord_namesItsUnit() {
-        #expect(LibraryCopy.spokenRecord("195", units: .lb, locale: Fixtures.locale) == "PR 195 pounds")
-        #expect(LibraryCopy.spokenRecord("88.5", units: .kg, locale: Fixtures.locale) == "PR 88.5 kilograms")
+        #expect(LibraryCopy.spokenRecord("195 pounds", locale: Fixtures.locale) == "PR 195 pounds")
+        #expect(LibraryCopy.spokenRecord("1 kilogram", locale: Fixtures.locale) == "PR 1 kilogram")
     }
 
     @Test("Every kind of equipment and every muscle group has its own name", arguments: Equipment.allCases)

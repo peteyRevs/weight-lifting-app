@@ -81,11 +81,12 @@ extension RecordReplay {
             )
         }
 
-        /// The scope of an edit of one exercise's sets in the stored `workout`: that exercise, from the workout
-        /// on. The workout's other exercises keep their sets, so their records cannot change.
-        init(editing exerciseID: ExerciseID, of workout: WorkoutState) throws(LedgerPersistenceError) {
+        /// The scope of an edit of some exercises' sets in the stored `workout`: those exercises, each once and in
+        /// one order, from the workout on. The workout's other exercises keep their sets, so their records cannot
+        /// change.
+        init(editing exerciseIDs: [ExerciseID], of workout: WorkoutState) throws(LedgerPersistenceError) {
             workoutID = workout.id
-            exercises = [ColumnCodec.text(exerciseID).databaseValue]
+            exercises = Set(exerciseIDs.map { ColumnCodec.text($0) }).sorted().map(\.databaseValue)
             start = try Position(workout)
         }
 

@@ -52,6 +52,7 @@
                 title: "Upper A — Push focus, with the long accessory work, the extra finisher and a cool-down",
                 receipt: model.receipt,
                 rowRoutes: model.rowRoutes,
+                edit: model.edit,
                 delete: model.delete
             )
         }

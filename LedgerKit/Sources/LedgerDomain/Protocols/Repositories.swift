@@ -128,6 +128,13 @@ public protocol WorkoutRepository: Sendable {
     /// transaction (product decision #27). An exercise of no stored workout throws `missingRow`; a set id used
     /// twice, or held by another workout, `duplicateIdentifier`.
     func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws
+    /// Replaces the sets of several exercises of one stored workout as one write (F13 S3, ruling A4): one transaction,
+    /// so all of it is stored or none; the records of every exercise named are detected again once, from this workout
+    /// onward; and each observer hears one change. A workout that is not stored, or an exercise that is not one of
+    /// its own, throws `missingRow` and stores nothing; a set id used twice, or held by another workout,
+    /// `duplicateIdentifier`. An empty map stores nothing. The call above stays beside it, not as a default of this
+    /// one: it names no workout, so each implementation finds the owner.
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of workout: WorkoutID) async throws
     /// Removes the workout, with its records, from every read and every stats query, and detects the records of
     /// its exercises again in the workouts after it; materialising it again brings it back. An unknown id does
     /// nothing.
