@@ -382,3 +382,195 @@ Delete offered.**
 - **Simulator** (through the lock, iPhone 17, iOS 27.0, PR plan): `f13s2-targeted.sh PR none` with the eight new
   suites. Exit 0: 30 passed, 5 expected failures (the known issues), 0 failed.
 - `swiftformat --lint` and `swiftlint lint --strict` on the nine files: clean.
+
+## S3 — G2 findings (2026-11-02)
+
+**Outcome: no Critical or Major defect, and no corruption of exact weights.** The batched write is one transaction
+with one replay. It is all-or-nothing when a row write or the replay fails halfway, and it leaves every other row and
+column alone, stamps included. Records after random edits equal a freshly materialised history. A delete racing a
+save never brings the workout back. Untouched sets keep their exact `Decimal`, including off-multiple and
+kg-in-pound weights.
+
+The findings: coverage is below the standard, and the notes misstate its baseline (Should fix). There are two Low
+findings with data effects: a quick reopen of the sheet is stale, and so is a sheet snapshot under a concurrent
+writer. One Low finding is about digits. The rest are Info.
+
+Slice under test: `feat/F13-s3-edit-sets` at `a787452` (base `33048c5`). No product code was changed.
+
+### Findings
+
+**F13-S3-1. Should fix: FeatureHistory coverage fell further than the notes say, and is still below S2's after G2's
+tests.**
+- **Baseline.** The S2 merge gate (`f13s2-merge-gate2.log`) measured FeatureHistory at **99.09 %** (985 / 994), not
+  98.53 %. The 98.53 % in the notes is S2's own G1 figure, from before its fix rounds.
+- **S3.** The G1 gate measured 96.65 % (1,416 / 1,465): a fall of 2.44 points, with 9 uncovered lines becoming 49.
+- **With G2's tests.** On iOS, FeatureHistory, LedgerAppKit, LedgerPersistence and LedgerDomain tests together, PR
+  plan: **98.50 %** (1,443 / 1,465).
+- **Still uncovered.**
+  - `WorkoutDetailRoot` 41 and 54–56: the `.sheet` content closure and the item binding's setter. A scene-less window
+    presents no sheet. The nightly UI tests reach them, but the PR plan doesn't.
+  - `EditSetsSheet` 23: the default `announce`.
+  - One line each in `EditSetsStore` and `EditSetsPage`.
+- **What to do.** Either the orchestrator waives the root's sheet lines (they need a scene), or the implementer
+  extracts the binding into a testable function on the store (for example `editingBinding`).
+- **FeatureLibrary.**
+  - Main measured 97.05 % (2,139 / 2,204, S2 merge gate) and 97.01 % on CI #81.
+  - On this branch, my PR run measured 97.03 % (2,124 / 2,189) and G1's gate 96.93 % (2,122 / 2,189).
+  - Uncovered lines are the same 65 as on main. The percentage dips because A6 removed 15 *covered* lines. G1's 67 is
+    run-to-run timing (two lines that differ by task timing).
+  - Not a regression in substance, but the number is lower than main's.
+
+**F13-S3-2. Low (fixed by tests): the sheet's "Nothing logged" and its Save tap were never exercised.**
+- No preview, tree, layout or hosted test drew an exercise with nothing logged (`EditSetsPage` 21–25 were uncovered).
+  No test tapped Save's closure (`EditSetsScreen` 41–43).
+- `EditSetsHostedAdversarialTests` now reads both:
+  - "Nothing logged" follows its heading, with no stepper under it.
+  - Save sends `.save` only when it has an action.
+
+**F13-S3-3. Low: Edit reopened before the observation's next value opens on the old sets, and its save undoes the
+first fix.**
+- **How.** `WorkoutDetailStore.edit()` builds the request from `sources.workout`, the observation's last value. After
+  a save, `editClosed` lets "Edit" open at once. Until GRDB's next value lands, the new sheet holds the pre-save sets.
+  Saving any change to the same exercise then writes the old values back.
+- **Repro.** `EditSetsAdversarialTests.reopenedBeforeTheNextValue_opensStale`, a scripted observation, pinned as
+  built.
+- **Reach.** The window is GRDB's observation latency (milliseconds) against the sheet's dismissal, so a tap is
+  unlikely to land in it. Not seen in the UI test.
+- **Fix if wanted.** Keep the saved draft in the detail until a value newer than the save arrives, or read
+  `workout(id:)` when "Edit" is tapped.
+
+**F13-S3-4. Low (as designed, decision 3): a stale snapshot overwrites a concurrent edit to the same exercise.**
+- **How.** `SetEditing.changes` hands over whole exercises. A sibling set of a changed exercise, edited by another
+  writer after the sheet opened, is reverted. Exercises the sheet didn't change survive, because `replace` re-reads
+  the workout inside the write.
+- **Repro.**
+  - `BatchedEditRaceAdversarialTests.staleSnapshot_overwritesTheSameExerciseOnly`.
+  - `EditSetsAdversarialTests.sheetSave_leavesOtherExercisesAlone`.
+- **Today.** No second writer exists on one device. F05 item 6 and F17 are where it bites: a late watch envelope, or a
+  sync merge.
+- **Exact weights.** The reverted values are the exact old `Decimal`s, not approximations.
+
+**F13-S3-5. Low: in Arabic locales the sheet's reps are Arabic digits beside a weight in Western digits; the receipt's
+are Western.**
+- **Cause.** `EditSetsPresentation.row` formats reps with `IntegerFormatStyle(locale:)`, but weights with
+  `Weight.formatted(in:)` (ASCII), as the receipt does.
+- **Result.** In `ar_EG` the sheet shows "187.5 lb" over "١٢", while the detail's chip reads "187.5×12".
+- **Repro.** `EditSetsAdversarialTests.digits_matchTheReceipt`, with a known issue for `ar_EG`. `hi_IN`, `ja_JP`,
+  `de_DE` and `fr_FR` match.
+
+**F13-S3-6. Info: "This workout was deleted" is said when only an exercise is gone, and the detail closes over a
+workout that still stands.**
+- **How.** `updateSets` throws `missingRow` for an unknown exercise too, and the store maps every `missingRow` to
+  `.workoutGone`.
+- **Today.** Unreachable, since nothing removes an exercise from a stored workout. An input for F17.
+- **Repro.** `EditSetsAdversarialTests.missingExercise_saysDeleted_whileTheWorkoutStands`, pinned as built.
+
+**F13-S3-7. Info: the notes' decision 7 is only half right.**
+- **The claim.** "In the workout's own units a step and its way back turn Save off."
+- **What holds.** That is true only from a multiple of the step. Off a multiple (187 lb on 5 lb), up goes to 190 and
+  down to 185.
+- **The kg case.** A pound workout stepped in kg never returns: 225 lb up then down is 101.25 kg on 1.25 kg steps.
+- **Nothing is silent.** In both cases Save stays on, the screen shows the new number, and only Cancel restores the
+  original. No untouched set moves, and every result is a whole 10⁻⁷ g, so storage is exact (ADR-007).
+- **Repro.**
+  - `SetEditingAdversarialTests.ownUnits_offAMultiple_hasNoWayBack`.
+  - `SetEditingAdversarialTests.kilogramsOnPounds_hasNoWayBack`.
+
+**F13-S3-8. Info: swiping away a changed sheet discards the draft, unasked (decision 8).**
+- **What is lost.** Only the unsaved draft; the stored workout is untouched.
+- **Repro.** The nightly UI test `test_editCancelAndSwipe_discardTheStep`: step, Cancel, reopen shows the stored value;
+  step, swipe down, reopen shows it again with Save off.
+- **Decision.** Whether to confirm before discarding is Pete's.
+
+**F13-S3-9. Info: `editClosed(workoutGone: false)` after `editClosed(workoutGone: true)` rebuilds over `.gone`.**
+- **When.** The binding's `set(nil)` would do this after the alert's OK. SwiftUI sends no `set` when the store cleared
+  the item, so it is not seen in practice.
+- **Effect.** The receipt would redraw for a frame until the nil lands. Exactly one close route is still waiting.
+- **Repro.** `EditSetsGoneAdversarialTests.goneFlow_bothSignals_leaveOneClose`.
+
+### What was attacked, and what held
+
+- **Exact weights (ADR-007).**
+  - Steps land on a whole multiple, on the side tapped, within one step, never below 0, and representable in
+    10⁻⁷ g: 4,000 random weights × 5 steps, lb and kg.
+  - From a multiple, up then down is exact (0–800 steps).
+  - Random walks of 40 steps move only the set and field tapped. Ids, kinds, `doneAt`, sets not logged, other
+    exercises and every workout field stay equal.
+  - On GRDB, 40 rounds of random steps in either unit read back `==` the draft. The list's volume is their exact sum.
+- **Untouched rows (GRDB).**
+  - All four tables were dumped column by column before and after a two-exercise edit (one of them in kg on a pound
+    workout).
+  - Untouched sets, every `workout_exercise` row and other workouts keep every column, `updated_at` included.
+    Other workouts may change only `pr_count`.
+  - Edited sets change only `weight_e7g`, `reps`, `e1rm_e7g` and `updated_at`. The edited workout changes only
+    `volume_e7g_reps`, `pr_count` and `updated_at`.
+- **One write, one replay.** SQLite's trace shows one `BEGIN IMMEDIATE`/`COMMIT`, exactly one replay walk naming all
+  three exercises, and one read of the stored records. This answers the notes' decision 11 directly.
+- **Atomicity.**
+  - Triggers aborted the write on the second exercise's set, on a record insert, and on a record update. Each time,
+    every row stayed as it was. With the trigger dropped, the same map saves.
+  - A set id held by another workout, or used twice in one call, is refused on GRDB (and in memory), and nothing
+    moves.
+- **Records after an edit.** 24 seeds × 8 random batched edits (steps in both units, large fixes both ways): records
+  per exercise and `historyEntries()` equal a fresh database that materialised the final workouts. More than 20
+  records were compared.
+- **Followers (C19).** A fix that keeps the volume (200 × 5 to 250 × 4) reaches the detail, `observeRecent`, the
+  Library's stats and the exercise's sessions.
+- **Races.**
+  - Delete against save, 40 rounds in both orders: the workout always ends deleted, with no live records. The save
+    either stored or threw `missingRow`. The newer workout gets its record back.
+  - Two saves on different exercises both land.
+  - A save cancelled after 0–30 yields stores all or nothing, on GRDB alone and through the sheet's store. The store
+    says `.saved` exactly when it stored, and never shows a failure line for a cancel.
+- **The gone flow, end to end.**
+  - In memory, the chain runs: delete, the detail hears the nil and waits, Save, `.workoutGone`, nothing moves behind
+    the alert, OK, `.gone`, one close route, and the save brings nothing back.
+  - On GRDB, `missingRow` reaches the alert, not the failure line.
+  - Cancel or a swipe after a delete closes the detail too.
+  - "The nil waits" is shown positively: after the nil, a later value from the same stream is seen, and still no
+    route. A control without a sheet closes at once. This replaces `deletedUnderTheSheet_closesAfterIt`'s
+    `Task.yield`.
+- **Saving.**
+  - Fail, fail, succeed is three writes, one per tap. A rerun task writes nothing. A saved sheet writes no more.
+  - While a write is held at a gate, steps, a second Save, Cancel and VoiceOver's escape are refused, and the model is
+    off.
+  - A failure line is announced each time, not only the first.
+  - A database that refuses the write gives the failure line, not "deleted", and the same draft then saves.
+- **VoiceOver.** Adjustable swipes reach the draft, and nothing moves at the limit or when disabled. Cancel's
+  activation closes with `workoutGone == false` and stores nothing. The app's own `init(request:)` draws the sheet.
+
+### Tests added
+
+| File | Suite | Tests | Known issues |
+|---|---|--:|---|
+| `LedgerKit/Tests/LedgerDomainTests/Adversarial/SetEditingAdversarialTests.swift` | Adversarial F13 S3 · SetEditing's arithmetic and what it leaves alone | 8 (incl. 5 arguments) | — |
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/BatchedEditAdversarialTests.swift` | Adversarial F13 S3 · the batched edit, at the rows | 7 | — |
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/BatchedEditRaceAdversarialTests.swift` | Adversarial F13 S3 · the batched edit against others | 6 | — |
+| `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/BatchedEditAdversarialSupport.swift` | support: `BatchedEditKit` (row dumps, trace, history) | — | — |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/EditSetsAdversarialTests.swift` | Adversarial F13 S3 · the sheet's saves and words | 7 (incl. 6 arguments) | F13-S3-5 |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/EditSetsGoneAdversarialTests.swift` | Adversarial F13 S3 · a workout deleted under the sheet | 5 | — |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/EditSetsHostedAdversarialTests.swift` | Adversarial F13 S3 · the sheet hosted (iOS) | 7 | — |
+| `LedgerKit/Tests/FeatureHistoryTests/Adversarial/EditSetsAdversarialSupport.swift` | support: `ScriptedWorkouts`, `EditAdversarialScene` | — | — |
+| `LedgerKit/Tests/LedgerAppKitTests/Adversarial/EditSetsOnDiskAdversarialTests.swift` | Adversarial F13 S3 · the sheet on the real database | 4 | — |
+| `Apps/LedgerUITests/WorkoutHistory+EditDiscard.swift` | `WorkoutHistory.test_editCancelAndSwipe_discardTheStep` (nightly) | 1 | — |
+
+### Runs
+
+- **Host, `swift test`.** The filter `SetEditingAdversarialTests|BatchedEdit|EditSets.*AdversarialTests` exited 0.
+  The F13-S3-5 known issue is expected.
+- **Simulator, PR plan, through the lock** (iPhone 17, iOS 27.0, `TEST_RUNNER_LEDGER_SWEEP=pr`):
+  - **The four targets that hold this slice's tests** (FeatureHistory, LedgerAppKit, LedgerPersistence and
+    LedgerDomain tests): exit 65 with 2,579 passed and 1 failed. The failure is `LoadableAdversarialTests` ("Loadable
+    is Sendable…"), which exceeded its 1-minute time limit. It is outside this slice.
+  - **The whole PR plan, twice:** exit 65 both times.
+    - About 33 failures, all `FeatureWorkoutTests` "never came in 10.0 seconds", plus that Loadable timeout and a
+      FeatureProgram time limit.
+    - The first run also failed my own `cancelledSave_isWholeOrNothing_andSilent`. That was a test bug: the second
+      exercise steps by 2.5 lb, not 5. It was fixed and passed in the second run.
+    - Every run began with a stall of about 78 s.
+  - **FeatureWorkoutTests on main's tree** (`git archive 33048c5`, same simulator, same lock): exit 65, with 32 of 471
+    failing the same way. These failures are this machine's simulator today, not S3. The orchestrator's gate should
+    be re-run on a quiet machine.
+- **Simulator, Nightly plan, through the lock:** `test_editCancelAndSwipe_discardTheStep` and
+  `test_editASet_showsInTheDetailAndTheList` exited 0, 2 of 2 passed.
+- **Lint:** `swiftformat --lint` and `swiftlint lint --strict` on the 11 new files are clean.
