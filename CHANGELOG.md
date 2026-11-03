@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.15.0...v0.16.0) (2026-10-29)
+
+
+### Features
+
+* **settings:** the Settings screen, with units, rest, week start and switches that save as you tap, and a two-option control in the design system (F14 S1b) ([#80](https://github.com/peteyRevs/weight-lifting-app/issues/80)) ([6bf5eb8](https://github.com/peteyRevs/weight-lifting-app/commit/6bf5eb8e59ab27bc8758b636f7339b429dc35704))
+
 ## [0.15.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.14.0...v0.15.0) (2026-10-29)
 
 
