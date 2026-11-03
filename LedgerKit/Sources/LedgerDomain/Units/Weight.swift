@@ -99,13 +99,19 @@ public extension Weight {
     ///
     /// Rendered from the `Decimal` digits (never through `Int`), so any magnitude prints correctly.
     func formatted(in units: Units) -> String {
+        DecimalText.encode(shownValue(in: units))
+    }
+
+    /// The number `formatted(in:)` prints, as an exact `Decimal`: a whole number of quarter units as it is, anything
+    /// else rounded to one decimal (F13 review R1-5: what `spoken(in:locale:)` reads, never parsed back from text).
+    func shownValue(in units: Units) -> Decimal {
         let value = value(in: units)
         let hundredths = value.rounded(scale: 2, .toNearestOrAwayFromZero)
         let quarters = hundredths * 4
         if quarters.rounded(scale: 0, .toNearestOrAwayFromZero) == quarters {
-            return DecimalText.encode(hundredths)
+            return hundredths
         }
-        return DecimalText.encode(value.rounded(scale: 1, .toNearestOrAwayFromZero))
+        return value.rounded(scale: 1, .toNearestOrAwayFromZero)
     }
 
     /// Decision #4 presentation of an estimated 1RM: the value rounded to a whole unit

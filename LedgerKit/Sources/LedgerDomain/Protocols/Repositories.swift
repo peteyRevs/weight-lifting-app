@@ -143,6 +143,11 @@ public protocol WorkoutRepository: Sendable {
     /// edited or deleted, the oldest included, and a later workout whose record count an edit changed (N2). A live
     /// workout's set taps write its event log only, and emit nothing.
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]>
+    /// The workout `id` with its records, as `workout(id:)` reads it, now, then after every change to it or to its
+    /// records, and for no other write (F13 S2, N8): an edit of it, or of an earlier workout that gives it a record or
+    /// takes one away. `nil` while it is not stored, so a delete emits `nil`. A workout this app cannot read ends the
+    /// stream, as a read that fails does.
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?>
 }
 
 public extension WorkoutRepository {

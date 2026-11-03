@@ -84,6 +84,10 @@ extension HistoryModel: WorkoutRepository {
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
         AsyncStream { $0.finish() }
     }
+
+    func observeWorkout(id _: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 extension HistoryModel: ProgramRepository {

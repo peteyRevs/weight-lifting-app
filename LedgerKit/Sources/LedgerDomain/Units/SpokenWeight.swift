@@ -15,7 +15,7 @@ public extension Weight {
     /// "185 pounds", "52.5 kilograms": `formatted(in:)`'s number, spoken. `locale` is the one the caller's catalog
     /// answers in (`forCountedText(in:)`).
     func spoken(in units: Units, locale: Locale) -> String {
-        SpokenMass.text(Decimal(string: formatted(in: units)) ?? 0, in: units, locale: locale)
+        SpokenMass.text(shownValue(in: units), in: units, locale: locale)
     }
 }
 
@@ -23,7 +23,7 @@ public extension Volume {
     /// "24,180 pounds": `formatted(in:)`'s whole number, spoken. `locale` is the one the caller's catalog answers in
     /// (`forCountedText(in:)`).
     func spoken(in units: Units, locale: Locale) -> String {
-        SpokenMass.text(Decimal((gramReps / units.gramsPerUnit).roundedToInt()), in: units, locale: locale)
+        SpokenMass.text(Decimal(value(in: units).roundedToInt()), in: units, locale: locale)
     }
 }
 

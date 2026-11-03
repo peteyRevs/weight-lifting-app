@@ -51,6 +51,20 @@
             newestFirst.map { HistoryEntry($0.workout, prCount: $0.records.count) }
         }
 
+        /// The live workout `id` with its records, by exercise id text, then in detection order (the estimated 1RM
+        /// first), as the database orders them (F13 S2); nil when it is not stored or is deleted.
+        func recorded(_ id: WorkoutID) -> RecordedWorkout? {
+            guard let entry = entries[id], !entry.isDeleted else {
+                return nil
+            }
+            let records = entry.records.enumerated().sorted { lhs, rhs in
+                let left = lhs.element.exerciseID.rawValue.uuidString
+                let right = rhs.element.exerciseID.rawValue.uuidString
+                return left != right ? left < right : lhs.offset < rhs.offset
+            }
+            return RecordedWorkout(workout: entry.workout, records: records.map(\.element))
+        }
+
         /// A workout's place in history: its start, then its id text.
         static func place(of workout: WorkoutState) -> (Date, String) {
             (workout.startedAt, workout.id.rawValue.uuidString)

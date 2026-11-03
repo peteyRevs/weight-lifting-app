@@ -232,6 +232,10 @@ final nonisolated class ScriptedWorkouts: WorkoutRepository {
         AsyncStream { $0.finish() }
     }
 
+    func observeWorkout(id _: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        AsyncStream { $0.finish() }
+    }
+
     func materialize(_: WorkoutState, slotUpdates _: [Slot], droppingLog _: Bool) async throws -> Bool {
         throw NotScripted()
     }

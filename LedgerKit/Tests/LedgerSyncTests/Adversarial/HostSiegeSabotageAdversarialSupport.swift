@@ -96,4 +96,8 @@ struct SabotagedWorkoutRepository: WorkoutRepository {
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
         base.observeHistoryEntries()
     }
+
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        base.observeWorkout(id: id)
+    }
 }

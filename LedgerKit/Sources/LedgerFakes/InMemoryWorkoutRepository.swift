@@ -111,5 +111,10 @@
         public func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
             history.observe { $0.historyEntries }
         }
+
+        /// The live workout `id` with its records now, then after every write that changes either (F13 S2).
+        public func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+            history.observe { $0.recorded(id) }
+        }
     }
 #endif

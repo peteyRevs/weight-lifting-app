@@ -70,16 +70,9 @@ nonisolated enum HistoryFixtures {
     }
 
     /// `workouts` (oldest first) as `historyEntries()` gives them, newest first, each with the records it set
-    /// against those before it (product decision #27).
+    /// against those before it (product decision #27): the previews' builder (review R1-6).
     static func entries(_ workouts: [WorkoutState]) -> [HistoryEntry] {
-        var bests = PersonalRecords.Bests()
-        var entries: [HistoryEntry] = []
-        for workout in workouts {
-            let records = PersonalRecords.detect(workout: workout, against: bests, now: workout.startedAt)
-            entries.append(HistoryEntry(workout, prCount: records.count))
-            bests.include(workout)
-        }
-        return entries.reversed()
+        HistoryPreviewData.entries(workouts)
     }
 
     /// The input of `entries`, in `units`, weeks from `weekStart`, at `Fixtures.now` in UTC and en_US.

@@ -98,6 +98,10 @@ struct UnimplementedWorkoutRepository: WorkoutRepository {
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
         stub.emptyStream()
     }
+
+    func observeWorkout(id _: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        stub.emptyStream()
+    }
 }
 
 struct UnimplementedSettingsRepository: SettingsRepository {

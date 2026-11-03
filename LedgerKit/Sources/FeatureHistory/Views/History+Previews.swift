@@ -47,14 +47,19 @@
         /// `workouts` (oldest first) as the History list's entries, newest first, each with the records it set
         /// against the workouts before it (product decision #27).
         static func entries(_ workouts: [WorkoutState]) -> [HistoryEntry] {
+            recorded(workouts).reversed().map { HistoryEntry($0.workout, prCount: $0.records.count) }
+        }
+
+        /// `workouts` (oldest first), each with the records it set against the workouts before it, in order.
+        static func recorded(_ workouts: [WorkoutState]) -> [RecordedWorkout] {
             var bests = PersonalRecords.Bests()
-            var entries: [HistoryEntry] = []
+            var recorded: [RecordedWorkout] = []
             for workout in workouts {
                 let records = PersonalRecords.detect(workout: workout, against: bests, now: workout.startedAt)
-                entries.append(HistoryEntry(workout, prCount: records.count))
+                recorded.append(RecordedWorkout(workout: workout, records: records))
                 bests.include(workout)
             }
-            return entries.reversed()
+            return recorded
         }
     }
 

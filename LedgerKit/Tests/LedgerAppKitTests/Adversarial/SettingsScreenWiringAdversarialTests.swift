@@ -92,7 +92,7 @@ struct SettingsScreenWiringAdversarialTests {
         let router = AppRouter()
         let workout = WorkoutID(Fixtures.uuid(4242))
         router.selectedTab = .history
-        router.resolve(HistoryRoute.workout(workout))
+        router.resolve(HistoryRoute.workout(workout), from: .history)
         let history = router[path: .history]
         #expect(history == [.workout(workout)])
         router.selectedTab = .today

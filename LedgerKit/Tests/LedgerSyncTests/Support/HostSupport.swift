@@ -133,6 +133,10 @@ struct SeparateWorkoutRepository: WorkoutRepository {
     func observeHistoryEntries() -> AsyncStream<[HistoryEntry]> {
         base.observeHistoryEntries()
     }
+
+    func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
+        base.observeWorkout(id: id)
+    }
 }
 
 /// One subscriber's stream, read without waiting on a clock: a test makes a change it can recognise and
