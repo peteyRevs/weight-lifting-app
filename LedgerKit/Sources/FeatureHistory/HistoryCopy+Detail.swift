@@ -117,7 +117,7 @@ nonisolated extension HistoryCopy {
         String(
             localized: "Nothing logged",
             bundle: .module,
-            comment: "Spoken: an exercise of the receipt with no set logged, drawn as a dash"
+            comment: "An exercise with no set logged: spoken on the receipt, drawn in the edit sheet"
         )
     }
 }
@@ -155,7 +155,11 @@ nonisolated extension HistoryCopy {
     }
 
     static var cancel: String {
-        String(localized: "Cancel", bundle: .module, comment: "The alert's button that deletes nothing")
+        String(
+            localized: "Cancel",
+            bundle: .module,
+            comment: "The button of an alert or of the edit sheet that changes nothing"
+        )
     }
 
     static var deleteFailedTitle: String {
@@ -175,7 +179,7 @@ nonisolated extension HistoryCopy {
     }
 
     static var okay: String {
-        String(localized: "OK", bundle: .module, comment: "Closes the alert shown when a delete failed")
+        String(localized: "OK", bundle: .module, comment: "Closes an alert that said something went wrong")
     }
 
     /// N10: the detail of a workout this app can't read.

@@ -25,6 +25,9 @@ import Observation
 /// still waited for the writer (review S2-R1-1); a run while another is in flight does nothing. A failure
 /// is logged and said in an alert, and the screen stays; once deleted, the screen closes. A route waits until the app
 /// has taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
+///
+/// **"Edit" opens the sheet over the workout as last read, in the units drawn** (F13 S3). While the sheet is up a nil
+/// from the observation waits: the detail stays under it, and closes once the sheet comes down (N12).
 @MainActor @Observable
 final class WorkoutDetailStore {
     enum State: Equatable {
@@ -41,6 +44,8 @@ final class WorkoutDetailStore {
     private(set) var pendingRoute: HistoryPendingRoute?
     /// The delete the root's `.task(id:)` runs; nil until "Delete" is first confirmed.
     private(set) var deletion: Int?
+    /// What the edit sheet is up over; nil while it is down.
+    private(set) var editing: EditSetsRequest?
     /// The alert that says a delete failed is up.
     var showsDeleteFailure = false
 
@@ -175,7 +180,9 @@ final class WorkoutDetailStore {
     /// be read; otherwise, once both sources have spoken, the receipt.
     private func rebuild() {
         if case .some(.none) = sources.workout {
-            close()
+            if editing == nil {
+                close()
+            }
             return
         }
         guard !sources.workoutHasEnded else {
@@ -208,5 +215,30 @@ final class WorkoutDetailStore {
         }
         routeNumber += 1
         pendingRoute = HistoryPendingRoute(number: routeNumber, route: close)
+    }
+}
+
+// MARK: - "Edit" (F13 S3)
+
+extension WorkoutDetailStore {
+    /// "Edit": accepted while the workout is on screen and no delete is under way.
+    func edit() {
+        guard case .loaded = state, deleting == .idle, editing == nil,
+              let found = sources.workout, let recorded = found, let current = sources.settings
+        else {
+            return
+        }
+        editing = EditSetsRequest(workout: recorded.workout, units: current.units)
+    }
+
+    /// The edit sheet came down, by its own buttons or by the system; a workout it found gone closes the detail too,
+    /// and one that went while it was up does now.
+    func editClosed(workoutGone: Bool) {
+        editing = nil
+        if workoutGone {
+            close()
+        } else {
+            rebuild()
+        }
     }
 }

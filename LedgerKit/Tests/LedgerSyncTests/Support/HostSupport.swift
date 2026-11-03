@@ -118,6 +118,10 @@ struct SeparateWorkoutRepository: WorkoutRepository {
         try await base.updateSets(workoutExerciseID: workoutExerciseID, sets: sets)
     }
 
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of workout: WorkoutID) async throws {
+        try await base.updateSets(sets, of: workout)
+    }
+
     func delete(id: WorkoutID) async throws {
         try await base.delete(id: id)
     }

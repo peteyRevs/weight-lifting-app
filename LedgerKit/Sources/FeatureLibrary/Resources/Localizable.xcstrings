@@ -332,8 +332,8 @@
         }
       }
     },
-    "Down %@ kilograms over %lld weeks" : {
-      "comment" : "VoiceOver's reading of the chart's loss in kilograms over its weeks with a value",
+    "Down %@ over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's loss, with its unit in words, over its weeks with a value",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -341,36 +341,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Down %@ kilograms over %lld week"
+                  "value" : "Down %@ over %lld week"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Down %@ kilograms over %lld weeks"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Down %@ pounds over %lld weeks" : {
-      "comment" : "VoiceOver's reading of the chart's loss in pounds over its weeks with a value",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Down %@ pounds over %lld week"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Down %@ pounds over %lld weeks"
+                  "value" : "Down %@ over %lld weeks"
                 }
               }
             }
@@ -742,24 +719,13 @@
         }
       }
     },
-    "PR %@ kilograms" : {
-      "comment" : "Spoken best weight, in kilograms",
+    "PR %@" : {
+      "comment" : "Spoken best weight, with its unit in words",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PR %@ kilograms"
-          }
-        }
-      }
-    },
-    "PR %@ pounds" : {
-      "comment" : "Spoken best weight, in pounds",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PR %@ pounds"
+            "value" : "PR %@"
           }
         }
       }
@@ -919,8 +885,8 @@
         }
       }
     },
-    "Up %@ kilograms over %lld weeks" : {
-      "comment" : "VoiceOver's reading of the chart's gain in kilograms over its weeks with a value",
+    "Up %@ over %lld weeks" : {
+      "comment" : "VoiceOver's reading of the chart's gain, with its unit in words, over its weeks with a value",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -928,36 +894,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Up %@ kilograms over %lld week"
+                  "value" : "Up %@ over %lld week"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "Up %@ kilograms over %lld weeks"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Up %@ pounds over %lld weeks" : {
-      "comment" : "VoiceOver's reading of the chart's gain in pounds over its weeks with a value",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up %@ pounds over %lld week"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Up %@ pounds over %lld weeks"
+                  "value" : "Up %@ over %lld weeks"
                 }
               }
             }

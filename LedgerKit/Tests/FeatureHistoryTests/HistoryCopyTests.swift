@@ -23,6 +23,12 @@ struct HistoryCopyTests {
         #expect(HistoryCopy.spokenMinutes(58, locale: Fixtures.locale) == "58 minutes")
     }
 
+    @Test("The edit sheet names each stepper by its set, in the lifter's digits")
+    func setSteppers_nameTheirSet() {
+        #expect(HistoryCopy.setWeight(2, locale: Fixtures.locale) == "Set 2 weight")
+        #expect(HistoryCopy.setReps(12, locale: Fixtures.locale) == "Set 12 reps")
+    }
+
     @Test("Under a minute is drawn and spoken without a zero (F13-S1-2)")
     func underAMinute_drawnAndSpoken() {
         #expect(HistoryCopy.underAMinute == "<1 min")

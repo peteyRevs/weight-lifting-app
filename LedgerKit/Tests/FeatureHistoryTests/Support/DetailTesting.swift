@@ -87,12 +87,20 @@ final nonisolated class DetailWorkouts: WorkoutRepository {
     let base: any WorkoutRepository
     let failsDeletes: Bool
     let endsObservation: Bool
+    let saveFailure: (any Error)?
     private let deletes = Mutex(0)
+    private let saves = Mutex(0)
 
-    init(base: any WorkoutRepository, failsDeletes: Bool, endsObservation: Bool) {
+    init(base: any WorkoutRepository, failsDeletes: Bool, endsObservation: Bool, saveFailure: (any Error)? = nil) {
         self.base = base
         self.failsDeletes = failsDeletes
         self.endsObservation = endsObservation
+        self.saveFailure = saveFailure
+    }
+
+    /// How many batched writes were asked for and not cancelled before they began, as GRDB's queue checks.
+    var saveCount: Int {
+        saves.withLock { $0 }
     }
 
     /// How many deletes were asked for.
@@ -130,6 +138,15 @@ final nonisolated class DetailWorkouts: WorkoutRepository {
 
     func updateSets(workoutExerciseID: WorkoutExerciseID, sets: [LoggedSet]) async throws {
         try await base.updateSets(workoutExerciseID: workoutExerciseID, sets: sets)
+    }
+
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of workout: WorkoutID) async throws {
+        try Task.checkCancellation()
+        saves.withLock { $0 += 1 }
+        if let saveFailure {
+            throw saveFailure
+        }
+        try await base.updateSets(sets, of: workout)
     }
 
     func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {

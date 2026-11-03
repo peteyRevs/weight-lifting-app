@@ -17,7 +17,7 @@ import os
 /// when the caller asks, the workout's event log (`workout_event`), which the save makes obsolete.
 public struct GRDBWorkoutRepository: WorkoutRepository {
     let queue: DatabaseQueue
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
 
     /// - Parameters:
     ///   - queue: the database. A save that drops a log drops it from this queue's `workout_event` and answers
@@ -127,17 +127,15 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
                 """,
                 arguments: [key]
             )
-            guard let owner,
-                  var workout = try WorkoutRows.fetch(.one(ColumnCodec.identifier(owner)), in: database, strict: true)
-                  .first,
-                  let index = workout.exercises.firstIndex(where: { $0.id == workoutExerciseID })
-            else {
+            guard let owner else {
                 throw LedgerPersistenceError.missingRow("workout_exercise \(key)")
             }
-            workout.exercises[index].sets = sets
-            let scope = try RecordReplay.Scope(editing: workout.exercises[index].exerciseID, of: workout)
-            try WorkoutRows(workout).write(database, at: timestamp)
-            try RecordReplay.redetect(scope, in: database, at: timestamp)
+            try Self.replace(
+                [workoutExerciseID: sets],
+                of: ColumnCodec.identifier(owner),
+                in: database,
+                at: timestamp
+            )
         }
     }
 
