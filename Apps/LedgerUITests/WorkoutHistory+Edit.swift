@@ -2,7 +2,7 @@ import XCTest
 
 extension WorkoutHistory {
     /// F13 S3, criterion 4: "Edit" opens every logged set; Save is off until a weight is stepped; once saved, the sheet
-    /// comes down and the detail and the list show the new volume, without navigating or relaunching.
+    /// comes down, the detail's moved tile changes without navigating, and back on the list the row's volume does too.
     @MainActor
     func test_editASet_showsInTheDetailAndTheList() throws {
         let app = launchWithASavedWorkout()
@@ -13,6 +13,10 @@ extension WorkoutHistory {
         row.tap()
         let edit = app.buttons["history.workout.edit"]
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        let moved = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH ' lb moved'")).firstMatch
+        XCTAssertTrue(moved.waitForExistence(timeout: 5))
+        let movedBefore = moved.label
         edit.tap()
         let save = app.buttons["history.edit.save"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
@@ -21,14 +25,19 @@ extension WorkoutHistory {
         XCTAssertTrue(weight.waitForExistence(timeout: 5))
         let weightBefore = try XCTUnwrap(weight.value as? String)
         weight.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
-        XCTAssertNotEqual(weight.value as? String, weightBefore, "the weight stepped")
-        XCTAssertTrue(save.isEnabled)
+        expect(weight, "value != %@", weightBefore, timeout: 5)
+        expect(save, "isEnabled == true", timeout: 5)
         attachScreenshot(of: app, named: "Edit sets, changed")
         save.tap()
-        XCTAssertTrue(app.staticTexts["history.workout.title"].waitForExistence(timeout: 5), "the sheet came down")
-        XCTAssertFalse(save.exists)
+        expect(save, "exists == false", timeout: 5)
+        expect(moved, "label != %@", movedBefore, timeout: 10)
         app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertNotEqual(row.value as? String, volumeBefore, "the list shows the edit")
+        expect(row, "value != %@", volumeBefore, timeout: 10)
+    }
+
+    /// Waits until `element` meets `format`, re-reading it until then.
+    private func expect(_ element: XCUIElement, _ format: String, _ arguments: String..., timeout: TimeInterval) {
+        let predicate = NSPredicate(format: format, argumentArray: arguments)
+        wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: element)], timeout: timeout)
     }
 }

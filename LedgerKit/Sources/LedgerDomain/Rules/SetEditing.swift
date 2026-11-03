@@ -5,10 +5,9 @@ import Foundation
 /// they are; so does every other field of the workout.
 ///
 /// Weights move as F11's start load does (rule 6, `Weight.nextMultiple(of:_:)`, F13 question 5, built to A): to the
-/// next
-/// multiple of the step in the lifter's units, on the side tapped, never below 0. Reps move by one and never below 1.
-/// The rule reads no program: a fix changes records, charts and stats, not a program's hold or advance (F13 question 4,
-/// built to A).
+/// next multiple of the step in the lifter's units, on the side tapped, never below 0. Reps move by one and never
+/// below 1. The rule reads no program: a fix changes records, charts and stats, not a program's hold or advance (F13
+/// question 4, built to A).
 public enum SetEditing {
     public enum Field: Hashable, Sendable {
         case weight, reps
@@ -20,8 +19,7 @@ public enum SetEditing {
     }
 
     /// The step of `exercise`'s weight for a lifter reading `units`: its own, a mass in the units the workout was
-    /// logged
-    /// in, while those are the lifter's and it can move a weight; otherwise the equipment's step in `units`.
+    /// logged in, while those are the lifter's and it can move a weight; otherwise the equipment's step in `units`.
     public static func step(of exercise: WorkoutExercise, loggedIn logged: Units, readIn units: Units) -> Weight {
         logged == units && exercise.step > .zero ? exercise.step : exercise.equipment.defaultStep(in: units)
     }

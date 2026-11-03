@@ -5,8 +5,7 @@
     import Testing
 
     /// F13 S3: the edit sheet against its references. Unchanged, changed and failed, light and dark at the default
-    /// size,
-    /// and changed at `.accessibility3` in light and dark too: eight references (the plan's seven, plus dark at
+    /// size, and changed at `.accessibility3` in light and dark too: eight references (the plan's seven, plus dark at
     /// `.accessibility3`, as `assertLedgerSnapshot` draws both themes).
     @Suite("Edit sets snapshots", .serialized, .tags(.feature, .snapshot))
     struct EditSetsSnapshotTests {

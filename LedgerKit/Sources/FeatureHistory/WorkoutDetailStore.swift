@@ -28,8 +28,8 @@ import Observation
 ///
 /// **"Edit" opens the sheet over the workout as last read, in the units drawn** (F13 S3). While the sheet is up a nil
 /// from the observation waits: the detail stays under it, and closes once the sheet comes down (N12). After a save,
-/// "Edit" opens on the saved draft until the observation shows a value other than the one it showed when the sheet
-/// came down, so a sheet opened before the save's own value lands is not stale (F13-S3-3).
+/// "Edit" opens on the saved draft until the observation's next value arrives, so a sheet opened before the save's
+/// own value lands is not stale (F13-S3-3).
 @MainActor @Observable
 final class WorkoutDetailStore {
     enum State: Equatable {
@@ -54,8 +54,6 @@ final class WorkoutDetailStore {
     @ObservationIgnored private var sources = Sources()
     @ObservationIgnored private var routeNumber = 0
     @ObservationIgnored private var deleting = Deleting.idle
-    /// The last save's draft, and the workout the observation showed when its sheet came down (F13-S3-3).
-    @ObservationIgnored private var lastSave: (shown: WorkoutState, draft: WorkoutState)?
 
     @ObservationIgnored @Dependency(\.workoutRepository) private var workouts
     @ObservationIgnored @Dependency(\.settingsRepository) private var settings
@@ -78,6 +76,8 @@ final class WorkoutDetailStore {
         var settings: Settings?
         /// The workout's own observation ended by itself: it can't be read (N10).
         var workoutHasEnded = false
+        /// The draft of the last save whose sheet came down since the workout's last value (F13-S3-3).
+        var lastSave: WorkoutState?
     }
 
     /// Where the confirmed delete stands: nothing confirmed (or done: the detail is then `.gone`), confirmed and not
@@ -122,7 +122,10 @@ final class WorkoutDetailStore {
         let id = workoutID
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                await self.follow(self.workouts.observeWorkout(id: id)) { $0.workout = .some($1) } ended: {
+                await self.follow(self.workouts.observeWorkout(id: id)) {
+                    $0.workout = .some($1)
+                    $0.lastSave = nil
+                } ended: {
                     $0.workoutHasEnded = true
                 }
             }
@@ -237,18 +240,14 @@ extension WorkoutDetailStore {
     }
 
     /// "Edit": accepted while the workout is on screen and no delete is under way. It opens on the last save's draft
-    /// while the observation shows what it showed when that save's sheet came down.
+    /// until the workout's next value arrives, then on what is shown.
     func edit() {
         guard case .loaded = state, deleting == .idle, editing == nil,
               let found = sources.workout, let recorded = found, let current = sources.settings
         else {
             return
         }
-        var workout = recorded.workout
-        if let lastSave, lastSave.shown == workout {
-            workout = lastSave.draft
-        }
-        editing = EditSetsRequest(workout: workout, units: current.units)
+        editing = EditSetsRequest(workout: sources.lastSave ?? recorded.workout, units: current.units)
     }
 
     /// The edit sheet came down, by its own buttons or by the system. A save keeps its draft for the next "Edit"; a
@@ -259,9 +258,7 @@ extension WorkoutDetailStore {
         case .cancelled:
             rebuild()
         case let .saved(draft):
-            if case let .some(.some(shown)) = sources.workout {
-                lastSave = (shown.workout, draft)
-            }
+            sources.lastSave = draft
             rebuild()
         case .workoutGone:
             close()

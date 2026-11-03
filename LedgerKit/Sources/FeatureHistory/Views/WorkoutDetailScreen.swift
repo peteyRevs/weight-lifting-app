@@ -3,8 +3,7 @@ import SwiftUI
 
 /// A past workout's detail, drawn from its model: a scroll view around `WorkoutDetailPage`, on the ground, under the
 /// pushed screen's navigation bar, its back button and "Edit". The whole screen scrolls, its heading too, as an
-/// exercise's
-/// history does; it has no pinned part of its own. That is its one layout at every text size.
+/// exercise's history does; it has no pinned part of its own. That is its one layout at every text size.
 struct WorkoutDetailScreen: View {
     let model: WorkoutDetailModel
     let send: (HistoryRoute) -> Void

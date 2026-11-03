@@ -114,6 +114,53 @@ extension EditSetsAdversarialTests {
         #expect(stored.exercises[0].sets[1] == again.draft.exercises[0].sets[1])
         scene.detail.edit()
         #expect(scene.detail.editing?.workout == again.draft, "still before the value: the last save")
+        scene.detail.editSheet = nil
+        await Self.shows(stored, scene) // GRDB merges both saves into one value
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == stored)
+        #expect(stored == again.draft)
+    }
+
+    @Test("F13-S3-3: the save's value landing before the sheet closes; Edit opens on the save until the next value")
+    func valueBeforeTheClose_opensTheSaveThenWhatIsShown() async throws {
+        let scene = Scene(scripted: true)
+        let run = scene.run()
+        defer { run.cancel() }
+        await Self.shows(Self.newest, scene)
+        scene.detail.edit()
+        let sheet = try scene.sheet(#require(scene.detail.editing))
+        sheet.send(.step(Self.newest.exercises[0].sets[0].id, .weight, .upward))
+        sheet.send(.save)
+        await sheet.save()
+        let stored = try #require(try await scene.memory.workouts.workout(id: Self.newest.id))
+        await Self.shows(stored, scene)
+        scene.detail.editClosed(.saved(sheet.draft))
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == sheet.draft)
+        scene.detail.editSheet = nil
+        let elsewhere = Self.raised(stored, to: 777)
+        await Self.shows(elsewhere, scene)
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == elsewhere)
+    }
+
+    @Test("F13-S3-3, S3-R1-3: after A, B, then A again from elsewhere, Edit opens on what is shown, not the old save")
+    func backToTheShownValue_opensWhatIsShown() async throws {
+        let scene = Scene(scripted: true)
+        let run = scene.run()
+        defer { run.cancel() }
+        await Self.shows(Self.newest, scene)
+        scene.detail.edit()
+        let sheet = try scene.sheet(#require(scene.detail.editing))
+        sheet.send(.step(Self.newest.exercises[0].sets[0].id, .weight, .upward))
+        sheet.send(.save)
+        await sheet.save()
+        scene.detail.editClosed(.saved(sheet.draft))
+        let stored = try #require(try await scene.memory.workouts.workout(id: Self.newest.id))
+        await Self.shows(stored, scene)
+        await Self.shows(Self.newest, scene) // another writer puts the old weight back
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == Self.newest, "not the draft saved before")
     }
 
     @Test("F13-S3-3: once the observation shows a new value, Edit opens on it, not on an older save")
