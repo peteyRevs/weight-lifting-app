@@ -841,3 +841,65 @@ compressed.
     depend on timing from run to run. S3's own uncovered lines are the same two in both runs.
   - FeatureLibrary 97.03 %, LedgerDomain 99.43 %, overall 98.62 %.
   - No FeatureWorkoutTests timeouts appeared in this run.
+
+### S3 fix round 2 (G1, 2026-11-02): G3's S3-R1-1 to -4, as the orchestrator ruled
+
+One fix commit, then this notes commit.
+
+**S3-R1-1, fixed.** `Apps/LedgerUITests/WorkoutHistory+Edit.swift`.
+- Before "Edit", the test reads the detail's moved tile (the element whose label ends in " lb moved").
+- After Save, it waits with `XCTNSPredicateExpectation` for Save to stop existing, then for the tile's label to
+  differ, all on the detail without navigating. Back on the list, it waits for the row's value to differ from the
+  value read before.
+- The two single reads right after the stepper's tap (the weight's value, Save enabled) are waits too. No value is
+  read once after a wait that returns at once. One private helper, `expect(_:_:_:timeout:)`, builds each wait.
+- Not mutation-checked: no run was made with the detail kept from updating.
+
+**S3-R1-3, fixed in code.** `WorkoutDetailStore`.
+- The last save's draft is now `Sources.lastSave`. The workout follower's value closure sets it to nil with each
+  value. `editClosed(.saved)` sets it, and `edit()` opens on `sources.lastSave ?? recorded.workout`. The equality
+  check against the shown workout is gone. The doc says "until the observation's next value arrives", and that is
+  now exactly what happens.
+- **Why it lives in `Sources`.** The follower's `keep` closure is formed in the task group's nonisolated child task,
+  so it can't write a main-actor property of the store. It can write the `inout Sources` it is handed. A re-run
+  resets `Sources`, and with it the draft. That changes nothing: `edit()` refuses until the run's first value, and
+  that value would clear the draft anyway.
+- **Orders checked:**
+  - **The close before the save's value.** The close sets the draft, and the value clears it. "Edit" opens on the
+    draft, then on what is shown (`reopenedBeforeTheNextValue_opensTheSave`, `afterTheNextValue_opensWhatIsShown`,
+    both unchanged).
+  - **The value before the close.** The value clears nothing, and the close then sets the draft, which equals what
+    is shown. The next value clears it. Covered by the new `valueBeforeTheClose_opensTheSaveThenWhatIsShown`.
+  - **Two saves before any value, merged by GRDB.** The second close replaces the draft, and the one merged value
+    clears it. "Edit" then opens on the stored workout, which equals the second draft. This is the new end of
+    `reopenedBeforeTheNextValue_opensTheSave`.
+  - **Two saves whose values are not merged.** The first save's late value clears the second's draft, so "Edit"
+    opens on S1 until S2 lands. The old rule did the same (S1 ≠ S0), so nothing changed. It is unlikely in practice,
+    because a human reopening, stepping and saving takes far longer than GRDB's fetch.
+- **A→B→A, tested without a second writer.** `backToTheShownValue_opensWhatIsShown` uses the scripted observation to
+  yield the stored workout, then the original again. "Edit" opens on the original, not the old draft. Against
+  `HEAD`'s store this test fails (`editing?.workout == Self.newest`), and it is the only one that does. All 10 in the suite pass on
+  the new code.
+
+**S3-R1-2, fixed.** These doc comments are re-flowed to 120 columns: `SetEditing.swift` (the type's doc and
+`step(of:loggedIn:readIn:)`), `WorkoutDetailScreen.swift` and `EditSetsSnapshotTests.swift`. In SetEditing, "below 1."
+is kept off a line's start, so it doesn't read as a Markdown list.
+
+**S3-R1-4, accepted (orchestrator), no change.** `Weight.nextMultiple`'s `step > 0` guard can't be reached from
+either caller. It is harmless, and its doc states the behaviour.
+
+**Net product lines:** −3 this round (the store), so the slice is **net 623** against `33048c5`. Nothing was
+compressed.
+
+**Runs.**
+- **Host:** `swift test --filter "EditSetsAdversarialTests|WorkoutDetailEdit"` exited 0, 15 tests. The mutation run
+  against `HEAD`'s store had 1 failure, as expected.
+- **Nightly UI, `-only-testing:LedgerUITests/WorkoutHistory`, through the lock:**
+  - Runs 1 and 2 exited **65**. They were build failures: `CVarArg...` needs `any` under ExistentialAny. I fixed it
+    to `String...`.
+  - Runs 3 and 4 exited **0**, 6 of 6 tests each. `test_editASet_showsInTheDetailAndTheList` took 34.2 s and 33.5 s.
+  - A comma's spacing was fixed after run 3 had started building. It is whitespace only.
+- **PR plan, `-only-testing:FeatureHistoryTests`, `TEST_RUNNER_LEDGER_SWEEP=pr`, through the lock:** exited **0**, 168
+  tests in 31 suites, with the one known issue (F13-S1-3).
+- **Lint:** `swiftformat --lint` and `swiftlint --strict` are clean on the 6 changed Swift files.
+- **Not run:** the full gate, which the orchestrator runs after merging main.
