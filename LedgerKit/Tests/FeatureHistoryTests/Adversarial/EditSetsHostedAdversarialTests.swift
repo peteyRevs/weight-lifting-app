@@ -17,7 +17,7 @@
     struct EditSetsHostedAdversarialTests {
         @MainActor @Observable
         final class Told {
-            var closes: [Bool] = []
+            var closes: [EditSetsClosing] = []
             var announced: [String] = []
         }
 
@@ -51,7 +51,7 @@
                 let cancel = elements.first { Self.label($0) == "Cancel" }
                 #expect(cancel?.accessibilityActivate() == true)
             }
-            #expect(told.closes == [false])
+            #expect(told.closes == [.cancelled])
             #expect(scene.workouts.saveCount == 0)
             #expect(try await scene.memory.workouts.workout(id: scene.workout.id) == scene.workout)
         }
@@ -108,7 +108,7 @@
                 await eventually { told.announced.count == 2 }
                 #expect(seen.saveCount == 2)
                 store.send(.save)
-                await eventually { told.closes == [false] }
+                await eventually { told.closes == [.saved(store.draft)] }
                 #expect(told.announced.count == 2)
                 #expect(seen.saveCount == 3)
             }
@@ -182,9 +182,9 @@
 
     /// What the app's own init's closure was told, for a test outside the main actor's closure type.
     private final class LockIsolatedCloses {
-        var values: [Bool] = []
+        var values: [EditSetsClosing] = []
 
-        func append(_ value: Bool) {
+        func append(_ value: EditSetsClosing) {
             values.append(value)
         }
     }

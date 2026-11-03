@@ -37,9 +37,8 @@ public struct WorkoutDetailRoot: View {
             .task(id: store.deletion) {
                 await store.delete()
             }
-            .sheet(item: editing) { request in
-                EditSetsSheet(request: request) { store.editClosed(workoutGone: $0) }
-            }
+            // "Edit"'s sheet (F13 S3): up while the store holds its request; the store hears how it came down.
+            .sheet(item: $store.editSheet) { Self.editSheet($0, over: store) }
             .alert(HistoryCopy.deleteFailedTitle, isPresented: $store.showsDeleteFailure) {
                 Button(HistoryCopy.okay) {}
             } message: {
@@ -47,14 +46,9 @@ public struct WorkoutDetailRoot: View {
             }
     }
 
-    /// "Edit"'s sheet (F13 S3): up while the store holds its request, and the store told when it goes down, by its own
-    /// buttons or by the system.
-    private var editing: Binding<EditSetsRequest?> {
-        Binding { store.editing } set: { request in
-            if request == nil {
-                store.editClosed(workoutGone: false)
-            }
-        }
+    /// "Edit"'s sheet over the detail's store, which hears how it came down.
+    static func editSheet(_ request: EditSetsRequest, over store: WorkoutDetailStore) -> EditSetsSheet {
+        EditSetsSheet(request: request, onClose: store.editClosed)
     }
 
     @ViewBuilder private var content: some View {

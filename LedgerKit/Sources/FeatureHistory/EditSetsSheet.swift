@@ -2,16 +2,16 @@ import LedgerDesign
 import SwiftUI
 
 /// The sheet that fixes a past workout's sets (F13 S3): the screen over its store, presented by `WorkoutDetailRoot`. It
-/// owns its store and runs the save from its task, so nothing outlives it. `onClose` takes it down, saying whether the
-/// workout is gone: "Cancel", VoiceOver's escape, a save that went through, and the "OK" of the alert that says the
-/// workout was deleted. While a save runs no swipe takes it down. A failed save's line is also announced to VoiceOver:
-/// it stands at the foot, perhaps behind the lifter's finger on "Save".
+/// owns its store and runs the save from its task, so nothing outlives it. `onClose` takes it down, saying how:
+/// "Cancel" or VoiceOver's escape, a save that went through (with the draft it stored), and the "OK" of the alert that
+/// says the workout was deleted. While a save runs no swipe takes it down. A failed save's line is also announced to
+/// VoiceOver: it stands at the foot, perhaps behind the lifter's finger on "Save".
 struct EditSetsSheet: View {
     @State private var store: EditSetsStore
-    private let onClose: (_ workoutGone: Bool) -> Void
+    private let onClose: (EditSetsClosing) -> Void
     private let announce: @MainActor (String) -> Void
 
-    init(request: EditSetsRequest, onClose: @escaping (_ workoutGone: Bool) -> Void) {
+    init(request: EditSetsRequest, onClose: @escaping (EditSetsClosing) -> Void) {
         self.init(store: EditSetsStore(request), onClose: onClose)
     }
 
@@ -19,7 +19,7 @@ struct EditSetsSheet: View {
     /// store it is given.
     init(
         store: EditSetsStore,
-        onClose: @escaping (_ workoutGone: Bool) -> Void,
+        onClose: @escaping (EditSetsClosing) -> Void,
         announce: @escaping @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
     ) {
         _store = State(initialValue: store)
@@ -31,7 +31,7 @@ struct EditSetsSheet: View {
         let model = store.model
         EditSetsScreen(model: model, send: store.send) {
             if store.canClose {
-                onClose(false)
+                onClose(.cancelled)
             }
         }
         .task(id: store.attempt) {
@@ -40,7 +40,7 @@ struct EditSetsSheet: View {
         .interactiveDismissDisabled(!model.isEnabled)
         .onChange(of: store.phase == .saved) { _, isSaved in
             if isSaved {
-                onClose(false)
+                onClose(.saved(store.draft))
             }
         }
         .onChange(of: model.foot.problem) { _, problem in
@@ -53,7 +53,7 @@ struct EditSetsSheet: View {
             isPresented: .constant(model.workoutGone != nil),
             presenting: model.workoutGone
         ) { gone in
-            Button(gone.okay) { onClose(true) }
+            Button(gone.okay) { onClose(.workoutGone) }
         } message: { gone in
             Text(gone.message)
         }

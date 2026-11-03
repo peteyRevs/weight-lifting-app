@@ -175,7 +175,7 @@ struct WorkoutDetailEditTests {
         var sets = Self.newest.exercises[0].sets
         sets[0].weight = .pounds(500)
         try await scene.memory.workouts.updateSets([Self.newest.exercises[0].id: sets], of: Self.newest.id)
-        scene.store.editClosed(workoutGone: false)
+        scene.store.editClosed(.cancelled)
         #expect(scene.store.editing == nil)
         await eventually { (try? scene.model.receipt.rows.first?.chips.first)?.contains("500") == true }
     }
@@ -203,7 +203,7 @@ struct WorkoutDetailEditTests {
         _ = await values.next()
         await Task.yield()
         #expect(scene.store.pendingRoute == nil, "the sheet is still up")
-        scene.store.editClosed(workoutGone: false)
+        scene.store.editClosed(.cancelled)
         await eventually { scene.store.state == .gone }
         #expect(scene.store.pendingRoute?.route == .closeWorkout(Self.newest.id))
     }
@@ -214,8 +214,24 @@ struct WorkoutDetailEditTests {
         let run = await scene.running()
         defer { run.cancel() }
         scene.store.edit()
-        scene.store.editClosed(workoutGone: true)
+        scene.store.editClosed(.workoutGone)
         #expect(scene.store.state == .gone)
         #expect(scene.store.pendingRoute?.route == .closeWorkout(Self.newest.id))
+    }
+
+    @Test("N12. The sheet's item is the request while it is up; the system's nil (a swipe) closes it as Cancel does")
+    func sheetItem_nilClosesIt() async throws {
+        let scene = DetailScene(Self.newest.id)
+        let run = await scene.running()
+        defer { run.cancel() }
+        scene.store.edit()
+        let request = try #require(scene.store.editSheet)
+        #expect(request.workout == Self.newest)
+        scene.store.editSheet = request
+        #expect(scene.store.editing == request, "only a nil closes it")
+        scene.store.editSheet = nil
+        #expect(scene.store.editing == nil)
+        #expect(scene.store.pendingRoute == nil)
+        #expect(try scene.model.edit == "Edit", "the receipt stays")
     }
 }

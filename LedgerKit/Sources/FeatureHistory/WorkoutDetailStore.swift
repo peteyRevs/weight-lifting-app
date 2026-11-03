@@ -27,7 +27,9 @@ import Observation
 /// has taken it, so a double tap on a row is one route. Making one does nothing: the root's tasks do the work.
 ///
 /// **"Edit" opens the sheet over the workout as last read, in the units drawn** (F13 S3). While the sheet is up a nil
-/// from the observation waits: the detail stays under it, and closes once the sheet comes down (N12).
+/// from the observation waits: the detail stays under it, and closes once the sheet comes down (N12). After a save,
+/// "Edit" opens on the saved draft until the observation shows a value other than the one it showed when the sheet
+/// came down, so a sheet opened before the save's own value lands is not stale (F13-S3-3).
 @MainActor @Observable
 final class WorkoutDetailStore {
     enum State: Equatable {
@@ -52,6 +54,8 @@ final class WorkoutDetailStore {
     @ObservationIgnored private var sources = Sources()
     @ObservationIgnored private var routeNumber = 0
     @ObservationIgnored private var deleting = Deleting.idle
+    /// The last save's draft, and the workout the observation showed when its sheet came down (F13-S3-3).
+    @ObservationIgnored private var lastSave: (shown: WorkoutState, draft: WorkoutState)?
 
     @ObservationIgnored @Dependency(\.workoutRepository) private var workouts
     @ObservationIgnored @Dependency(\.settingsRepository) private var settings
@@ -221,24 +225,46 @@ final class WorkoutDetailStore {
 // MARK: - "Edit" (F13 S3)
 
 extension WorkoutDetailStore {
-    /// "Edit": accepted while the workout is on screen and no delete is under way.
+    /// The edit sheet's item, as the root binds it: the request while the sheet is up. The system sets nil when it
+    /// takes the sheet down (a swipe), which closes it as "Cancel" does.
+    var editSheet: EditSetsRequest? {
+        get { editing }
+        set {
+            if newValue == nil {
+                editClosed(.cancelled)
+            }
+        }
+    }
+
+    /// "Edit": accepted while the workout is on screen and no delete is under way. It opens on the last save's draft
+    /// while the observation shows what it showed when that save's sheet came down.
     func edit() {
         guard case .loaded = state, deleting == .idle, editing == nil,
               let found = sources.workout, let recorded = found, let current = sources.settings
         else {
             return
         }
-        editing = EditSetsRequest(workout: recorded.workout, units: current.units)
+        var workout = recorded.workout
+        if let lastSave, lastSave.shown == workout {
+            workout = lastSave.draft
+        }
+        editing = EditSetsRequest(workout: workout, units: current.units)
     }
 
-    /// The edit sheet came down, by its own buttons or by the system; a workout it found gone closes the detail too,
-    /// and one that went while it was up does now.
-    func editClosed(workoutGone: Bool) {
+    /// The edit sheet came down, by its own buttons or by the system. A save keeps its draft for the next "Edit"; a
+    /// workout the sheet found gone closes the detail too, and one that went while it was up does now.
+    func editClosed(_ closing: EditSetsClosing) {
         editing = nil
-        if workoutGone {
-            close()
-        } else {
+        switch closing {
+        case .cancelled:
             rebuild()
+        case let .saved(draft):
+            if case let .some(.some(shown)) = sources.workout {
+                lastSave = (shown.workout, draft)
+            }
+            rebuild()
+        case .workoutGone:
+            close()
         }
     }
 }

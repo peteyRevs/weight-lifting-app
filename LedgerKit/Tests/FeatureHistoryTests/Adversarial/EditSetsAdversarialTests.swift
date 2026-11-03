@@ -87,37 +87,76 @@ extension EditSetsAdversarialTests {
         #expect(stored.exercises[1].sets == other)
     }
 
-    @Test("As built: Edit reopened before the observation's next value opens on the old sets, and undoes the first fix")
-    func reopenedBeforeTheNextValue_opensStale() async throws {
+    @Test("F13-S3-3: Edit reopened before the observation's next value opens on the saved sets; the first fix stays")
+    func reopenedBeforeTheNextValue_opensTheSave() async throws {
         let scene = Scene(scripted: true)
         let run = scene.run()
         defer { run.cancel() }
-        scene.workouts.observation.yield(scene.recorded(Self.newest))
-        await eventually {
-            if case .loaded = scene.detail.state {
-                true
-            } else {
-                false
-            }
-        }
+        await Self.shows(Self.newest, scene)
         scene.detail.edit()
-        let first = try #require(scene.detail.editing)
-        let sheet = scene.sheet(first)
+        let first = try scene.sheet(#require(scene.detail.editing))
         let (setOne, setTwo) = (Self.newest.exercises[0].sets[0], Self.newest.exercises[0].sets[1])
-        sheet.send(.step(setOne.id, .weight, .upward))
-        sheet.send(.save)
-        await sheet.save()
-        scene.detail.editClosed(workoutGone: false)
+        first.send(.step(setOne.id, .weight, .upward))
+        first.send(.save)
+        await first.save()
+        scene.detail.editClosed(.saved(first.draft))
         // GRDB's value is on its way, and has not landed.
         scene.detail.edit()
         let second = try #require(scene.detail.editing)
-        #expect(second.workout == Self.newest, "the second sheet shows what the first replaced")
+        #expect(second.workout == first.draft, "the second sheet shows what the first saved")
         let again = scene.sheet(second)
         again.send(.step(setTwo.id, .reps, .upward))
         again.send(.save)
         await again.save()
+        scene.detail.editClosed(.saved(again.draft))
         let stored = try #require(try await scene.memory.workouts.workout(id: Self.newest.id))
-        #expect(stored.exercises[0].sets[0] == setOne, "the first fix is gone")
+        #expect(stored.exercises[0].sets[0] == first.draft.exercises[0].sets[0], "the first fix stands")
+        #expect(stored.exercises[0].sets[1] == again.draft.exercises[0].sets[1])
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == again.draft, "still before the value: the last save")
+    }
+
+    @Test("F13-S3-3: once the observation shows a new value, Edit opens on it, not on an older save")
+    func afterTheNextValue_opensWhatIsShown() async throws {
+        let scene = Scene(scripted: true)
+        let run = scene.run()
+        defer { run.cancel() }
+        await Self.shows(Self.newest, scene)
+        scene.detail.edit()
+        let sheet = try scene.sheet(#require(scene.detail.editing))
+        sheet.send(.step(Self.newest.exercises[0].sets[0].id, .weight, .upward))
+        sheet.send(.save)
+        await sheet.save()
+        scene.detail.editClosed(.saved(sheet.draft))
+        let stored = try #require(try await scene.memory.workouts.workout(id: Self.newest.id))
+        await Self.shows(stored, scene)
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == stored)
+        scene.detail.editSheet = nil
+        #expect(scene.detail.editing == nil, "a swipe closes it")
+        let elsewhere = Self.raised(stored, to: 777)
+        await Self.shows(elsewhere, scene)
+        scene.detail.edit()
+        #expect(scene.detail.editing?.workout == elsewhere, "an edit made elsewhere is what opens")
+    }
+
+    /// Yields `workout` to the scripted observation and waits until the detail draws its first set.
+    private static func shows(_ workout: WorkoutState, _ scene: Scene) async {
+        scene.workouts.observation.yield(scene.recorded(workout))
+        let first = workout.exercises[0].sets[0].weight.formatted(in: .lb)
+        await eventually {
+            guard case let .loaded(model) = scene.detail.state else {
+                return false
+            }
+            return model.receipt.rows.first?.chips.first?.contains(first) == true
+        }
+    }
+
+    /// `workout` with its first set at `pounds`.
+    private static func raised(_ workout: WorkoutState, to pounds: Decimal) -> WorkoutState {
+        var raised = workout
+        raised.exercises[0].sets[0].weight = .pounds(pounds)
+        return raised
     }
 
     @Test("As built: an exercise gone from a workout that is still stored says \"This workout was deleted\"")
@@ -183,13 +222,6 @@ extension EditSetsAdversarialTests {
         ))
         let row = try #require(sheet.exercises.first?.sets.first)
         let chip = try #require(detail.receipt.rows.first?.chips.first)
-        let holds = chip.contains(row.reps.value)
-        if identifier == "ar_EG" {
-            withKnownIssue("F13-S3-5: the reps are Arabic digits beside Western weights; the receipt's are Western") {
-                #expect(holds, "reps \(row.reps.value) in chip \(chip)")
-            }
-        } else {
-            #expect(holds, "\(identifier): reps \(row.reps.value) in chip \(chip)")
-        }
+        #expect(chip.contains(row.reps.value), "\(identifier): reps \(row.reps.value) in chip \(chip)")
     }
 }

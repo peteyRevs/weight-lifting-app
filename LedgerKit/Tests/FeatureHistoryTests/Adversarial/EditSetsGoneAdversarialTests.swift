@@ -107,7 +107,7 @@ struct EditSetsGoneAdversarialTests {
         sheet.send(.step(set.id, .reps, .upward))
         sheet.send(.save)
         #expect(sheet.phase == .workoutGone, "nothing moves behind the alert")
-        scene.detail.editClosed(workoutGone: true)
+        scene.detail.editClosed(.workoutGone)
         #expect(scene.detail.editing == nil)
         #expect(scene.detail.state == .gone)
         #expect(Self.deliver(scene.detail) == [.closeWorkout(Self.newest.id)])
@@ -132,7 +132,7 @@ struct EditSetsGoneAdversarialTests {
         scene.workouts.observation.yield(nil)
         // A settings value goes through `rebuild`, and the nil is on its way: wait for the close the sheet's end asks.
         await settlesAfterNil(scene)
-        scene.detail.editClosed(workoutGone: false)
+        scene.detail.editClosed(.cancelled)
         #expect(scene.detail.state == .gone)
         #expect(Self.deliver(scene.detail) == [.closeWorkout(Self.newest.id)])
     }
@@ -153,9 +153,9 @@ struct EditSetsGoneAdversarialTests {
         }
     }
 
-    /// Info, F13-S3-8: a system `set(nil)` after OK would redraw the receipt over `.gone` until the nil lands, as
-    /// `editClosed(false)` rebuilds. SwiftUI sends no `set` when the store itself cleared the item. Either way one
-    /// close.
+    /// Info, F13-S3-9: a system `set(nil)` after OK would redraw the receipt over `.gone` until the nil lands, as
+    /// `editSheet = nil` closes as "Cancel" does, which rebuilds. SwiftUI sends no `set` when the store itself cleared
+    /// the item. Either way one close.
     @Test("A sheet that says gone, and a binding that then says nil, leave one close waiting")
     func goneFlow_bothSignals_leaveOneClose() async {
         let scene = Scene(scripted: true)
@@ -170,8 +170,8 @@ struct EditSetsGoneAdversarialTests {
             }
         }
         scene.detail.edit()
-        scene.detail.editClosed(workoutGone: true)
-        scene.detail.editClosed(workoutGone: false)
+        scene.detail.editClosed(.workoutGone)
+        scene.detail.editSheet = nil
         #expect(Self.deliver(scene.detail) == [.closeWorkout(Self.newest.id)])
         #expect(Self.deliver(scene.detail).isEmpty)
     }

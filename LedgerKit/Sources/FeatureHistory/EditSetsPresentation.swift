@@ -52,7 +52,8 @@ nonisolated enum EditSetsPresentation {
 
     private static func row(_ set: LoggedSet, number: Int, _ input: EditSetsInput) -> EditSetsModel.SetRow {
         let (units, locale) = (input.units, input.locale)
-        let reps = IntegerFormatStyle<Int>(locale: locale).format(set.reps.value)
+        // In the receipt's digits, as its chips write them (`WorkoutSummary`), whatever the locale (F13-S3-5).
+        let reps = String(set.reps.value)
         return EditSetsModel.SetRow(
             id: set.id,
             weight: field(

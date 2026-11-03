@@ -14,7 +14,12 @@ struct EditScene {
     let workout: WorkoutState
     let store: EditSetsStore
 
-    init(_ workout: WorkoutState = HistoryFixtures.twelve()[11], units: Units = .lb, saveFailure: (any Error)? = nil) {
+    init(
+        _ workout: WorkoutState = HistoryFixtures.twelve()[11],
+        units: Units = .lb,
+        saveFailure: (any Error)? = nil,
+        logger: LedgerLogger = .disabled
+    ) {
         let stores = InMemoryStores(seed: InMemoryStores.Seed(workouts: [workout], settings: Fixtures.settingsLb))
         let seen = DetailWorkouts(
             base: stores.workouts,
@@ -28,6 +33,7 @@ struct EditScene {
         store = withTestDependencies {
             $0.workoutRepository = seen
             $0.settingsRepository = stores.settings
+            $0.logger = logger
         } operation: {
             EditSetsStore(EditSetsRequest(workout: workout, units: units))
         }

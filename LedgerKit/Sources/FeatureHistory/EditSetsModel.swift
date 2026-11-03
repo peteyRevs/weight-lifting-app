@@ -16,6 +16,14 @@ nonisolated struct EditSetsRequest: Identifiable, Equatable, Sendable {
     }
 }
 
+/// How the edit sheet came down: "Cancel", VoiceOver's escape or a swipe; a save that stored its draft; or the "OK" of
+/// the alert that says the workout was deleted.
+nonisolated enum EditSetsClosing: Equatable, Sendable {
+    case cancelled
+    case saved(WorkoutState)
+    case workoutGone
+}
+
 /// Everything the edit sheet draws and speaks, as `EditSetsPresentation.make(_:)` builds it. Every string is final and
 /// every control carries what its tap means: the views draw the model and decide nothing.
 nonisolated struct EditSetsModel: Equatable, Sendable {

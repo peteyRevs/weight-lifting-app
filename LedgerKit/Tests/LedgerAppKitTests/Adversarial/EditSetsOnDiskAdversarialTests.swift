@@ -89,7 +89,7 @@
             await sheet.save()
             #expect(sheet.phase == .workoutGone)
             #expect(sheet.saveFailed == false)
-            detail.editClosed(workoutGone: true)
+            detail.editClosed(.workoutGone)
             #expect(detail.pendingRoute?.route == .closeWorkout(scene.workout.id))
             #expect(try await scene.workouts.workout(id: scene.workout.id) == nil)
         }
@@ -165,7 +165,7 @@
             sheet.send(.step(sets[0].id, .weight, .upward)) // 225 lb is 102.06 kg: to 102.5
             sheet.send(.save)
             await sheet.save()
-            detail.editClosed(workoutGone: false)
+            detail.editClosed(.saved(sheet.draft))
             #expect(sheet.phase == .saved)
             let read = try #require(try await scene.workouts.workout(id: scene.workout.id))
             #expect(read.units == .lb, "the workout's own units stay")
