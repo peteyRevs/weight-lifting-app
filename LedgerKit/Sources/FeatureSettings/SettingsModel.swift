@@ -25,6 +25,12 @@ nonisolated struct SettingsModel: Equatable, Sendable {
     let health: Status
     /// "Export data · CSV", under Apple Health.
     let export: Export
+    /// "Delete all data", under the export (criterion 6).
+    let deleteRow: DeleteAllRowModel
+    /// Its warning, while it is up.
+    let deleteWarning: DeleteAllWarning?
+    /// Its sheet, which asks for the typed word, while it is up.
+    let deleteSheet: DeleteAllSheetModel?
     /// "Diagnostics", in Debug builds only; nil in Release.
     let diagnostics: Link?
     /// "Ledger 0.14.0 · build 74": the foot of the page. Never empty.

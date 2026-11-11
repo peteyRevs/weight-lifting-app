@@ -160,19 +160,25 @@
                     },
                     selected: base.weekStart.selected
                 ),
-                switches: zip(base.switches, words.switches).map { row, text in
-                    SettingsModel.Switch(
-                        id: row.id, title: text.0, detail: text.1, isOn: row.isOn, action: row.action
-                    )
-                },
+                switches: switches(base, words),
                 plates: base.plates,
                 platesSheet: base.platesSheet,
                 data: words.data,
                 health: SettingsModel.Status(title: words.health, value: words.notConnected),
                 export: base.export,
+                deleteRow: base.deleteRow,
+                deleteWarning: base.deleteWarning,
+                deleteSheet: base.deleteSheet,
                 diagnostics: base.diagnostics.map { SettingsModel.Link(title: words.diagnostics, action: $0.action) },
                 about: words.about
             )
+        }
+
+        /// `base`'s switches, named in `words` (moved out of `model` in S3, for its length).
+        static func switches(_ base: SettingsModel, _ words: Words) -> [SettingsModel.Switch] {
+            zip(base.switches, words.switches).map { row, text in
+                SettingsModel.Switch(id: row.id, title: text.0, detail: text.1, isOn: row.isOn, action: row.action)
+            }
         }
 
         static func page(_ words: Words) -> some View {

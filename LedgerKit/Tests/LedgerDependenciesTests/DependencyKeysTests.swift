@@ -27,6 +27,7 @@ struct DependencyKeysTests {
         Read(key: "workoutEventStore") { @Dependency(\.workoutEventStore) var value; _ = value },
         Read(key: "settingsRepository") { @Dependency(\.settingsRepository) var value; _ = value },
         Read(key: "statsQueries") { @Dependency(\.statsQueries) var value; _ = value },
+        Read(key: "dataReset") { @Dependency(\.dataReset) var value; _ = value },
         Read(key: "healthStore") { @Dependency(\.healthStore) var value; _ = value },
         Read(key: "liveWorkoutTransport") { @Dependency(\.liveWorkoutTransport) var value; _ = value },
         Read(key: "companionTransport") { @Dependency(\.companionTransport) var value; _ = value },

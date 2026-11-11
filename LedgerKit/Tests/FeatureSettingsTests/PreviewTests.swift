@@ -15,6 +15,7 @@
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
             let cases = SettingsPreview.allCases.map(\.rawValue) + PlatesPreview.allCases.map(\.rawValue)
+                + DeleteAllPreview.allCases.map(\.rawValue)
             #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(PreviewScan.registeredModules.contains("FeatureSettings"))
         }
@@ -29,6 +30,11 @@
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
         }
 
+        @Test("Every Delete all data preview renders", arguments: DeleteAllPreview.allCases)
+        func deleteAllPreview_renders(_ preview: DeleteAllPreview) {
+            #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+        }
+
         @Test("Every preview shows the state it is named for")
         func previews_showTheirStates() {
             let pounds = SettingsPreview.pounds.model()
@@ -38,6 +44,10 @@
             #expect(kilograms.units.options.map(\.isSelected) == [false, true])
             #expect(kilograms.rest.value == "2:30" && kilograms.weekStart.value == "Monday")
             #expect(kilograms.switches.map(\.isOn) == [false, true, false])
+            #expect(kilograms.deleteRow.action == nil && pounds.deleteRow.action == .deleteAll)
+            #expect(DeleteAllPreview.empty.model()?.confirm == nil)
+            #expect(DeleteAllPreview.typed.model()?.confirm == .confirmDeleteAll)
+            #expect(DeleteAllPreview.failed.model()?.problem == "Nothing was deleted. Try again.")
             let failed = SettingsPreview.saveFailed.model()
             #expect(failed.problem == "Couldn't save that change." && failed.rest.decrement == nil)
             let switched = SettingsPreview.switchFailed.model()

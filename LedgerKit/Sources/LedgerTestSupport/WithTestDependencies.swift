@@ -62,8 +62,8 @@
     }
 
     public extension DependencyValues {
-        /// Binds the six store keys to one `InMemoryStores` built from `seed`, and returns it so the test can look
-        /// inside. Its stats answer with the date the test configured (findings F7-6, F7-11):
+        /// Binds the six store keys, and `dataReset` (F14 S3), to one `InMemoryStores` built from `seed`, and returns
+        /// it so the test can look inside. Its stats answer with the date the test configured (findings F7-6, F7-11):
         /// - inside `withTestDependencies`' operation, the `date` dependency, read on each query, so a `date` set
         ///   after this line in `configure`, or by a nested `withDependencies`, is the one they use;
         /// - after the operation (stores the test kept), the `date` its `configure` ended with, so they need no
@@ -79,6 +79,7 @@
             statsQueries = stores.stats
             settingsRepository = stores.settings
             workoutEventStore = stores.events
+            dataReset = stores.reset
             return stores
         }
 

@@ -17,6 +17,10 @@ nonisolated struct SettingsInput: Sendable {
     var plates: PlatesDraft?
     /// The log as a file to share, from the store.
     var export = WorkoutExport.unavailable
+    /// "Delete all data" from its warning on; nil while neither the warning nor the sheet is up.
+    var deleteAll: DeleteAllDraft?
+    /// A workout is in progress: "Delete all data" is off (N19).
+    var hasLiveWorkout = false
     /// The weekdays are named in this locale, and listed from this calendar's first weekday.
     var locale: Locale
     var calendar: Calendar

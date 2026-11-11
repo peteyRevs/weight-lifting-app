@@ -61,8 +61,10 @@ struct SettingsSavePropertyAdversarialTests {
         case let .setPlateMath(isOn): next.plateMathEnabled = isOn
         case let .setAutoRest(isOn): next.autoRest = isOn
         case let .setWatchBuzz(isOn): next.watchBuzz = isOn
-        // The sheet's actions change no setting until "Done", which the scripts never send.
-        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates: break
+        // The sheet's actions change no setting until "Done", which the scripts never send; nor does "Delete all data"
+        // until its erase (S3).
+        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates, .deleteAll,
+             .continueDeleteAll, .setDeleteText, .confirmDeleteAll, .cancelDeleteAll: break
         }
         return next
     }

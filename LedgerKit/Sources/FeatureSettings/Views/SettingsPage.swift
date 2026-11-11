@@ -4,8 +4,8 @@ import SwiftUI
 /// Everything Settings scrolls, and never a scroll view (the M1 convention): what the VoiceOver trees and the
 /// snapshot references are taken from. Top to bottom: the title, with the failed save's line under it when there is
 /// one, and "Try again" under a failed switch of units; TRAINING (Units, Default rest, Week starts on, the three
-/// switches and Bar and plates); DATA (Apple Health, Export data · CSV and, in Debug builds, Diagnostics); then the
-/// About line.
+/// switches and Bar and plates); DATA (Apple Health, Export data · CSV, Delete all data and, in Debug builds,
+/// Diagnostics); then the About line.
 ///
 /// Each section is hairline rows on the ground, as the Library's are, not the prototype's white cards (v2). Its
 /// 22 px between the title and the first section, and between sections, is `xl` (24), the scale's nearest step.
@@ -30,6 +30,7 @@ struct SettingsPage: View {
                         .foregroundStyle(LedgerColor.inkMuted)
                 }
                 ExportRow(model: model.export)
+                DeleteAllRow(model: model.deleteRow, send: send)
                 if let diagnostics = model.diagnostics {
                     HairlineRow(diagnostics.title) { send(diagnostics.action) } accessory: {
                         LedgerIconView(.chevron, sizedAs: .body)

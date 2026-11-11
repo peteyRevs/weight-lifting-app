@@ -73,5 +73,10 @@
         nonisolated func drop(_ workout: WorkoutID) {
             logs.withLock { $0[workout] = nil }
         }
+
+        /// Forgets every log, as "Delete all data" empties the table (`InMemoryDataReset`, F14 S3).
+        nonisolated func reset() {
+            logs.withLock { $0 = [:] }
+        }
     }
 #endif

@@ -69,6 +69,11 @@
         public let settings: InMemorySettingsRepository
         public let events: InMemoryWorkoutEventStore
 
+        /// "Delete all data" over these stores (F14 S3), seeding the bundled catalog.
+        public var reset: InMemoryDataReset {
+            InMemoryDataReset(self)
+        }
+
         /// - Parameter now: the stats' current time, which says which week is the current one.
         public init(seed: Seed = .empty, now: @escaping @Sendable () -> Date = { Fixtures.now }) {
             if !seed.missingExercises.isEmpty {

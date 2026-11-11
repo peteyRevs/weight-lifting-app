@@ -2,8 +2,9 @@ import Foundation
 import GRDB
 import LedgerDomain
 
-/// The six GRDB stores over one database queue, and this install's device id: what a composition root binds to
-/// the store keys and `deviceID` (architecture §13). The queue serialises every access, so the stores share it.
+/// The six GRDB stores over one database queue, the erase of "Delete all data" over it, and this install's device id:
+/// what a composition root binds to the store keys, `dataReset` and `deviceID` (architecture §13). The queue serialises
+/// every access, so the stores share it.
 public struct LedgerStores: Sendable {
     public let queue: DatabaseQueue
     /// This install's device (`LocalDevice`).
@@ -14,6 +15,8 @@ public struct LedgerStores: Sendable {
     public let events: GRDBWorkoutEventStore
     public let settings: GRDBSettingsRepository
     public let stats: GRDBStatsQueries
+    /// "Delete all data" over the same queue (F14 S3): what the `dataReset` key is bound to.
+    public let reset: GRDBDataReset
 
     /// The stores over `queue`, each given `now` (the injected date).
     public init(_ queue: DatabaseQueue, deviceID: DeviceID, now: @escaping @Sendable () -> Date) {
@@ -25,6 +28,7 @@ public struct LedgerStores: Sendable {
         events = GRDBWorkoutEventStore(queue, now: now)
         settings = GRDBSettingsRepository(queue, now: now)
         stats = GRDBStatsQueries(queue, now: now)
+        reset = GRDBDataReset(queue, now: now)
     }
 
     /// Opens and migrates the database at `url` (`LedgerDatabase.open(at:protection:)`, synchronous), then reads

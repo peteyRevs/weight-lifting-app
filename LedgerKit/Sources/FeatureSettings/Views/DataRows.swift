@@ -48,3 +48,26 @@ struct ExportRow: View {
         }
     }
 }
+
+/// "Delete all data" (criterion 6): a row that opens its warning, or, while a workout is in progress, the same row
+/// switched off, its line saying why (N19). VoiceOver reads one button: its title, then its line, dimmed when off. It
+/// wears no red: the system's alert carries the destructive colour (A5).
+struct DeleteAllRow: View {
+    let model: DeleteAllRowModel
+    let send: (SettingsAction) -> Void
+
+    var body: some View {
+        HairlineRow(model.title, detail: model.detail) {
+            if let action = model.action {
+                send(action)
+            }
+        } accessory: {
+            if model.action != nil {
+                LedgerIconView(.chevron, sizedAs: .body)
+                    .foregroundStyle(LedgerColor.inkMuted)
+            }
+        }
+        .disabled(model.action == nil)
+        .accessibilityIdentifier("settings.deleteAll")
+    }
+}

@@ -219,6 +219,7 @@ public final class AppComposition {
         values.workoutEventStore = stores.events
         values.settingsRepository = stores.settings
         values.statsQueries = stores.stats
+        values.dataReset = stores.reset
         values.deviceID = stores.deviceID
     }
 }

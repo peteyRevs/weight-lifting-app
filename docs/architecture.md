@@ -405,6 +405,14 @@ simulator).
 Live reads: `ValueObservation` → `AsyncSequence` of Domain values; stores
 consume them in `.task`.
 
+"Delete all data" (F14 S3, ruling A1) erases in place: `DataReset.eraseAll(restoring:)`
+(`GRDBDataReset`) empties every table but `device` in one write transaction, children first, then
+seeds the bundled catalog and writes a new install's settings in the same transaction, so a failure
+anywhere leaves every row as it was. The file is never deleted (decision #29) and the stores stay
+bound, so every open observation hears the empty state. After the commit, `VACUUM` and a
+`TRUNCATE` checkpoint wipe the deleted rows from the file and its `-wal`, best-effort. The erase is
+local only: F28 must extend it to the iCloud zone (K6).
+
 File protection: `completeUntilFirstUserAuthentication`; the watch store lives
 in the app container (R2 notes the historical 0xdead10cc suspend issue; we
 close write transactions promptly and never hold the DB across suspension).
@@ -536,7 +544,8 @@ onboarding has none. `MainRoot` resolves the routes (§4).
 
 `date`, `uuid`, `calendar`, `locale`, `continuousClock` (the library's), and
 `deviceID`, `exerciseRepository`, `programRepository`, `workoutRepository`,
-`workoutEventStore`, `settingsRepository`, `statsQueries`, `healthStore`,
+`workoutEventStore`, `settingsRepository`, `statsQueries`, `dataReset` (F14 S3's erase over the same
+stores), `healthStore`,
 `liveWorkoutTransport`, `companionTransport`, `haptics`, `notifications`,
 `announcements` (what VoiceOver is asked to say aloud, such as a rest that began or ended; F10 S7:
 posting one is ambient, so no feature posts its own),

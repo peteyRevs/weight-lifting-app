@@ -84,6 +84,14 @@ struct UnimplementedStubTests {
         #expect(await Self.isEmpty(stub.observe()))
     }
 
+    @Test("The data reset's stub throws (F14 S3)")
+    func dataReset() async {
+        let stub = DataResetKey.liveValue
+        await Self.expectUnimplemented("dataReset", [
+            { try await stub.eraseAll(restoring: .default) }
+        ])
+    }
+
     @Test("The event store's stub throws from every method")
     func workoutEventStore() async {
         let stub = WorkoutEventStoreKey.liveValue

@@ -92,25 +92,35 @@ public struct GRDBExerciseRepository: ExerciseRepository {
     /// the catalog no longer lists. An inexact start load throws `inexactWeight` and seeds nothing. Rows are
     /// written in the catalog's order.
     public func seedIfNeeded(_ catalog: [Exercise], version: Int) async throws {
-        // One record per id, in the catalog's order (F03 checks ids are unique; should a broken bundle repeat
-        // one, its last entry wins).
+        let records = Self.catalogRecords(catalog)
+        let timestamp = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            try Self.seed(records, version: version, at: timestamp, in: database)
+        }
+    }
+
+    /// One catalog record per id, in the catalog's order (F03 checks ids are unique; should a broken bundle repeat
+    /// one, its last entry wins): what `seed(_:version:at:in:)` writes.
+    static func catalogRecords(_ catalog: [Exercise]) -> [ExerciseRecord] {
         var seen = Set<ExerciseID>()
-        let records = catalog.reversed().filter { seen.insert($0.id).inserted }.reversed().map { entry in
+        return catalog.reversed().filter { seen.insert($0.id).inserted }.reversed().map { entry in
             var catalogEntry = entry
             catalogEntry.isCustom = false
             return ExerciseRecord(catalogEntry)
         }
-        let timestamp = ColumnCodec.timestamp(now())
-        try await queue.write { database in
-            guard try Self.appliedVersion(database).map({ $0 < version }) ?? true else {
-                return
-            }
-            let (written, replaced) = try Self.upgrade(records, in: database, to: version)
-            try ExerciseRecord.write(written, over: replaced, in: database, at: timestamp)
-            let mark = try database.cachedStatement(sql: "UPDATE exercise SET catalog_version = ? WHERE id = ?")
-            for record in written {
-                try mark.execute(arguments: [version, record.rowID])
-            }
+    }
+
+    /// `seedIfNeeded(_:version:)`'s write, inside the caller's transaction: the repository's seed and the erase of
+    /// "Delete all data" (`GRDBDataReset`, F14 S3), which seeds the catalog in the transaction that emptied the table.
+    static func seed(_ records: [ExerciseRecord], version: Int, at timestamp: String, in database: Database) throws {
+        guard try appliedVersion(database).map({ $0 < version }) ?? true else {
+            return
+        }
+        let (written, replaced) = try upgrade(records, in: database, to: version)
+        try ExerciseRecord.write(written, over: replaced, in: database, at: timestamp)
+        let mark = try database.cachedStatement(sql: "UPDATE exercise SET catalog_version = ? WHERE id = ?")
+        for record in written {
+            try mark.execute(arguments: [version, record.rowID])
         }
     }
 

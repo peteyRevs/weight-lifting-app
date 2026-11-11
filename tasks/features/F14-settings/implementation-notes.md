@@ -922,3 +922,106 @@ overall 98.54 %.
   test runs outside coverage); `ExportFile.write`'s `createFile` failure and its close-on-error branch;
   `clearExports`' catch (a temporary directory the app cannot remove); and `SettingsScreen`'s sheet binding setter
   (a sheet swiped away, which the hosted reader cannot present).
+
+## S3 — as built (G1 implementer, 2026-11-11)
+
+Branch `feat/F14-s3-delete-all`, cut from `main` at `8d462a2` (S2 is #88). The contract is the brief's "### S3: Delete
+all data" (criterion 6 as restated per C22–C26; N19–N24) with "Rulings before G1" (A1).
+
+**Pete's question 3, decided by the orchestrator (2026-11-10/11): A for both parts.** Confirming is a warning, then
+typing DELETE (the localized word, compared ignoring case and the spaces around it). While a workout is in progress
+"Delete all data" is unavailable: the lifter finishes or discards it first. What goes: every workout and set, the
+records, the programs, the custom exercises, the settings (back to a new install's) and any exported files on the
+phone. What stays: the built-in exercise list (seeded afresh) and the workouts already in Apple Health, which the
+lifter deletes in the Health app. The warning says all of it.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- **Domain.** `Protocols/DataReset.swift`: `eraseAll(restoring settings: Settings) async throws`, its contract in its
+  doc (all or nothing; the catalog read first; `device` kept; Apple Health untouched).
+- **Persistence.**
+  - `Repositories/GRDBDataReset.swift`. The catalog is read and the settings encoded before the write opens (N20).
+    One `queue.write` then empties `erasedTables`, every table but `device`, children before parents (`slot_miss`,
+    `slot`, `day_template`, `program_week`, `program`, `logged_set`, `personal_record`, `workout_health`,
+    `workout_exercise`, `workout`, `workout_event`, `exercise`, `settings`), seeds the catalog with the launch's own
+    seed and writes the settings row. After the commit, `vacuum()` and `checkpoint(.truncate)` run on the queue,
+    best-effort: a failure is logged under "persistence", a cancellation is not (N21).
+  - `GRDBExerciseRepository.seedIfNeeded` is now `catalogRecords(_:)` and `seed(_:version:at:in:)`, which the erase
+    calls inside its transaction (the plan's "seeding moved into a `Database`-level function").
+  - `GRDBSettingsRepository.replace(payload:updatedAt:in:)`: `save`'s upsert inside the caller's write.
+  - `LedgerStores.reset`.
+- **Fakes.** `InMemoryDataReset` over `InMemoryStores` (`InMemoryStores.reset`), with a `reset` on the exercise,
+  program, workout, event and settings stores. It checks everything that can refuse first (the catalog read, the
+  settings round-tripped through `SettingsCodec`, each catalog entry at the exercise store's boundary in its own reset,
+  which runs first), then resets the others, which cannot fail. Unlike the database it resets them one after another.
+- **Dependencies.** The `dataReset` key: `UnimplementedDataReset` as its live value, an `InMemoryDataReset` over
+  stores of its own as its preview value. `withTestDependencies`' `inMemoryStores(seed:)` binds it too.
+- **LedgerAppKit.** `AppComposition.bind` binds `dataReset` to `stores.reset`. No route: the gate already shows
+  onboarding when the active program goes (C23).
+- **FeatureSettings.**
+  - `DeleteAll/DeleteAllModel.swift` (`DeleteAllDraft`: warning or typing, the text, erasing, failed; the row, warning
+    and sheet models) and `DeleteAllPresentation.swift` (the row, the warning, the sheet, `matches(_:locale:)`).
+  - `SettingsStore+DeleteAll.swift`. The row opens the warning; "Continue" opens the sheet; "Delete everything" acts
+    only while the word matches and no erase runs, and marks the eraser, a third child of `run()`'s group beside the
+    saver and the follower. The erase asks the session once more (`current()`), then calls
+    `eraseAll(restoring: Settings.regional(locale:calendar:))` with the injected locale and calendar, then empties the
+    export's directory through the S2 writer (N22). A failure keeps the sheet with "Nothing was deleted. Try again.";
+    a cancellation reports nothing and lets the button act again. A fourth child follows `workoutSession.updates()`:
+    while a workout is live the row is off, and a warning or sheet not yet erasing is closed (N19).
+  - Views: `DeleteAllRow` in `DataRows.swift` (under Export), the system's alert and `DeleteAllSheet` on
+    `SettingsScreen`. The sheet is `SheetChrome` + a scrolling `DeleteAllPage` + a pinned `DeleteAllFoot`, as the
+    plates sheet is. The field takes capitals and no autocorrection; while the erase runs it is disabled and the sheet
+    cannot be swiped away.
+  - Copy: `SettingsCopy+DeleteAll.swift`, 13 keys (57 in all). "Cancel"'s comment now names Delete all data too.
+  - Previews: `DeleteAll+Previews.swift` (empty, typed, failed). The "Kilograms" Settings preview now has a workout in
+    progress, so the row's off state is drawn.
+- **Nightly UI test.** `Apps/LedgerUITests/SettingsDeleteAll.swift`: gear, Delete all data, Continue, DELETE, Delete
+  everything, onboarding, Skip setup, Today.
+- **Docs.** `architecture.md` §7 gains the erase's paragraph, §13 the `dataReset` key.
+
+### Decisions and deviations
+
+1. **The settings restored are `Settings.regional` of the store's injected locale and calendar.** In the app those
+   are the device's (`Locale.autoupdatingCurrent`, `Calendar.autoupdatingCurrent`, the dependencies' live values),
+   which is exactly what S1a seeds a new install with. The one difference: under `-LEDGER_UITEST`, S1a seeds a US
+   iPhone's settings whatever the simulator's region (`UITestRegion`), and the erase restores the simulator's region's.
+   Plumbing the composition's `regionalSettings` to `SettingsRoot` for that one case was not worth a second source.
+2. **N20's "duplicate id" failure is not reachable.** The catalog seed keeps the last entry of a repeated id (F03,
+   decision #24), so a duplicate never throws. The tests make the erase fail instead with a catalog entry whose start
+   load no column keeps exactly (`inexactWeight`, inside the transaction, after every delete), with a catalog that
+   cannot be read (before it), with settings that cannot be encoded, and, on GRDB, with a trigger that refuses a
+   statement midway through the deletes, the catalog's seed, or the settings row: every row count is unchanged.
+3. **Order on the disk: `VACUUM`, then the `TRUNCATE` checkpoint.** `VACUUM` rewrites every page through the WAL;
+   the checkpoint copies them into the file and truncates the `-wal`, which also drops the older frames that held the
+   deleted rows. Without the compaction `erase_leavesNoTraceOnDisk` fails on the WAL (checked: the mutant below).
+4. **No VoiceOver label on the sheet's field beyond SwiftUI's.** The field's label is "Type DELETE to confirm" and its
+   placeholder "DELETE"; the visible label above it is hidden from VoiceOver so it is not read twice.
+5. **The alert's binding ignores the system's dismissal.** Its two buttons send `cancelDeleteAll` and
+   `continueDeleteAll`; the alert goes when the model has no warning. A setter that sent Cancel could cancel the sheet
+   "Continue" had just opened, depending on the order SwiftUI runs them in.
+6. **`DataResetContract` seeds through the protocols** (both stores hold the same history) and runs on GRDB and the
+   linked in-memory stores in `LedgerPersistenceTests/DataResetTests`, as `SwitchUnitsTests` runs both.
+
+### New user-facing wording
+
+"Delete all data" · "Finish or discard your workout first" · "Delete all data?" · "This deletes every workout and
+set, your records, your programs and your custom exercises." · "Any exported files on this iPhone go too, and your
+settings go back to how they started." · "The built-in exercises stay." · "Workouts already saved to Apple Health stay
+there: delete them in the Health app." · "Continue" · "This can't be undone." · "DELETE" · "Type %@ to confirm" ·
+"Delete everything" · "Nothing was deleted. Try again." Only "Delete all data?", "Continue", the typed word and the
+failure line are the brief's; the rest are new.
+
+### Sanctioned edits
+
+| File | Edit | Why |
+|---|---|---|
+| `FeatureSettingsTests/Support/SettingsTesting.swift` | `SettingsScene` binds `workoutSession` (a `FakeWorkoutSessionClient` by default) and `dataReset` (its stores', or what `reset` makes of them) | N19: the store follows the session |
+| `ScriptedSettingsAdversarialSupport`, `SettingsReachAdversarialTests` | Bind a `FakeWorkoutSessionClient` | N19 |
+| `SettingsSavePropertyAdversarialTests` | The oracle's switch lists S3's actions | S3 actions |
+| `SettingsScreenAdversarialSupport`, `SettingsScreenAdversarialTests` | The model takes S3's three members; 16 → 17 stops; the Arabic order gains the row; the switches' mapping moved to a helper (function length) | S3 row |
+| `SettingsAccessibilityTests` | The tree gains the row (dimmed in "Kilograms"); 9 → 10 targets (11 with Try again) | S3 row |
+| `PreviewTests`, `SettingsCopyTests`, `FeatureSettingsSourceTests` | The sheet's previews; 44 → 57 keys and lookups; the sheet's scroll view | S3 |
+| `SettingsSnapshotTests`' 8 references | Re-recorded: the new row (dimmed in kilograms) | S3 row |
+| `LedgerDependenciesTests`: `DependencyKeysTests`, `UnimplementedStubTests`, `PreviewValueTests` | The `dataReset` key's test value, stub and preview value | A1 |

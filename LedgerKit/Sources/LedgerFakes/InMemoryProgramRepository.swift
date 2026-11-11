@@ -112,6 +112,12 @@
             state.observe(\.active)
         }
 
+        /// Forgets every program, deleted ones and their ids too, as "Delete all data" empties the tables
+        /// (`InMemoryDataReset`, F14 S3).
+        func reset() {
+            state.write { $0 = State() }
+        }
+
         /// What `SettingsRepository.switchUnits(_:)` writes to the programs, in one step: every live program with its
         /// weights converted to `units` (`UnitSwitch.convert`), stored as `save` stores it, which program is active
         /// left as it is, by the equipment the exercise store gives (none without one: every slot then moves on the

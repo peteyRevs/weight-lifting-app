@@ -99,6 +99,20 @@
             }
         }
 
+        /// Forgets every exercise, custom, deleted or the catalog's, and seeds `catalog` at `version`, as "Delete all
+        /// data" empties the table and seeds it in one transaction (`InMemoryDataReset`, F14 S3). An entry the database
+        /// would refuse throws before anything changes.
+        func reset(catalog: [Exercise], version: Int) throws(RepositoryError) {
+            try state.write { current throws(RepositoryError) in
+                var fresh = State()
+                for entry in Self.written(catalog, at: version, over: fresh) {
+                    try Self.checkRow(of: entry)
+                }
+                Self.seed(catalog, version: version, into: &fresh)
+                current = fresh
+            }
+        }
+
         /// Whether an exercise with `id` is stored: what a program slot's foreign key checks.
         func holds(_ id: ExerciseID) -> Bool {
             state.read { $0.rows[id] != nil }
