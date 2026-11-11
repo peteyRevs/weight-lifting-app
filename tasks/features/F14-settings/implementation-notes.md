@@ -822,3 +822,10 @@ sheet 71, `PlatesPresentation` 70, `CSVExport` 50, `ExportFile` 46.
   `SwitchUnitsTests`, `ModuleCopyTests` green with recording off.
 - swiftformat and swiftlint (strict) clean.
 - The nightly UI test `SettingsExport` was not run in this lane.
+
+### The gate
+
+`scripts/check.sh` (full: iOS and watchOS), through the simulator lock, on `a472372`: **exit 0, "check.sh OK"**,
+2,106 s. Steps: lint 82 s, iOS build 25 s, string catalogs 1 s, iOS tests 1,638 s, watchOS build 46 s, watchOS tests
+311 s, coverage 1 s. Coverage: FeatureSettings 96.97 % (1,569 / 1,618) against 70 %; LedgerDomain 99.34 %; overall
+98.49 %. This notes commit follows it and changes docs only.
