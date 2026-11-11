@@ -2202,3 +2202,108 @@ the UI tests, the full gate (the orchestrator's).
 Size: 651 product lines against `16a2e52` (+12). References changed in this round: 3, all expected by SF1.
 For Pete, unchanged from round 1 plus the two items the implementer listed: the note hidden at the
 accessibility sizes (SF1) and escape as "Done" (N7).
+
+## S8a — G3 round 1
+
+G3 reviewer, 2026-11-10, on `da6470d...94d0fbc` (plan `5bfb96c`/`5be8ab7`, implementation `2120e50`, G2 tests
+`94d0fbc`). `/code-review` at `high` first, then the seven review points. F10-S8a-G2-1 (`isWellFormed` and
+unstorable step/load) is excluded: its fix is in progress. Runs on an export of `94d0fbc` (no checkout):
+`swiftlint --strict` and `swiftformat --lint` clean (0 of 1,679 files); host `swift test`: every target green except the one by-design red, `FAILING F10-S8a-G2-1` (LedgerDomainTests 1,506 tests, 3 issues all in that test; Persistence 628, Sync 290 pass).
+
+### Blocking
+
+None.
+
+### Should fix
+
+**SF1 · Compare-and-set has an ABA hole after a first save, and the docs promise "never".**
+`LedgerKit/Sources/LedgerDomain/Protocols/Repositories.swift:101-102`, `docs/architecture.md:344-345`,
+`GRDBWorkoutRepository+ProgramUpdates.swift:80-86`, `InMemoryProgramRepository.swift:168`.
+The check compares with the build-time `originalExerciseID` only. Saved once (slot Bench → DB Bench), then the
+lifter edits the slot back to Bench, then the same workout is materialised again (the retry where the stores are
+not one database, a lost answer, an F17 rebuild): the slot holds Bench == original, so it is set to DB Bench
+again, the exact "repeated save sets back the lifter's later choice" the protocol and §6 now say cannot happen.
+G2's `save_slotEditedAndBack_applies` pins the *during-the-workout* away-and-back case as intended (option A as
+ruled), but no test covers the post-save case and the documentation overclaims.
+Fix (either): (a) scope the claim: "a slot that holds something other than the original keeps it; a slot
+returned to the original is the original" in `Repositories.swift`, architecture §6 and the ADR status note, plus a
+contract clause pinning the post-save ABA as accepted, and an F17 input; or (b) close it cheaply: apply
+`programUpdates` only on a workout's first materialisation (GRDB already knows in the same transaction whether
+the workout row existed; the fake likewise), which also makes `laterSaveKeepsTheLaterChoice`'s retry path
+independent of the slot's value. (b) is the stronger rule and is a few lines per store; (a) is the minimum.
+
+**SF2 · The forward-compat hazard of keeping payload version 1 is not recorded where F17 will read it.**
+`LedgerKit/Sources/LedgerDomain/Engine/WorkoutEvent.swift:32-44`, `tasks/features/F17-live-sync.md` (no S8
+input). Synthesised `Codable` encodes `nil` by omitting the key (old swaps are byte-identical: good) and an older
+build ignores the unknown `replacement` key. So a pre-S8 build reading a post-S8 log does **not** treat the row as
+unreadable (F05's "later payload version" rule, F17 brief :218-226, the only protection for a rolled-back
+TestFlight build): it replays a different workout (original equipment, step, Last, target and undone loads),
+materialises it into history with the wrong equipment/step, and compacts, deleting the rows the newer build reads
+right. Same for an older watch (F17). The plan's risk says "recorded for F17"; it is not in F17's brief, and the
+event's doc says only "the payload version stays 1". The ruling to keep version 1 stands; the hazard must be
+written down.
+Fix: add an "Inputs from F10 S8a" section to `F17-live-sync.md` (an older reader silently drops `replacement`;
+F17 must require one payload version on both devices, or write a swap *with* a replacement as version 2 while a
+swap without one stays version 1 — the per-row `payload_version` column already allows it), and one sentence in
+`WorkoutEvent.swift`'s doc of the case saying an older build ignores the key rather than refusing the row.
+
+**SF3 · ADR-004 §3 still states the superseded rule beside its new status note.**
+`docs/adr/ADR-004-event-sourced-workout-engine.md:303-304, 312-314, 316-317, 331`. The "Now." paragraph says the
+contract pins `laterSaveSetsTheSlotBack` (removed in this diff), and :313 says "of two workouts that swapped one
+slot, the later one's exercise stays" — now false (the earlier lands, the later is skipped, orchestrator ruling,
+pinned by `recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted`). "Until it is built…" (:331) is also past.
+The status note's "no encoded shape changed" is true for §3 but reads as if S8a changed no shape, while
+`exerciseSwapped` gained `replacement` the same day. An F17 planner reading §3 gets two contradicting rules.
+Fix: extend the status note: "Since S8a: of two workouts that swapped one slot, the earlier-started one's change
+lands and the later is skipped; the contract clause is `laterSaveKeepsTheLaterChoice`; the 'Now' text above and
+'Until it is built' describe the rule before S8a. No shape changed for this rule (the swap's own `replacement`
+key is S8's payload decision, version 1)." Also `LocalWorkoutSessionActor+Recovery.swift:16-17` ("the later one's
+… program changes are written last") should add "and a later swap of a slot the earlier one changed is skipped".
+
+### Nit
+
+- **N1 · The reducer's doc claims old logs replay the same; the toggle rule changed for them too.**
+  `WorkoutEngine+Reduce.swift:146`. Q4's "off removes" applies to pre-S8 logs (the plan says so); the comment
+  says "nothing else changes, so an old log replays the same". Fix: "…replays the same, except that a swap with the
+  toggle off now removes the slot's entry (Q4)".
+- **N2 · `SwappedExercise.load`'s doc and the reducer disagree on warm-up rows.** `SwappedExercise.swift:13`
+  says working and added sets; `WorkoutEngine+Reduce.swift:243` also gives the full load to undone `.warmup` rows
+  (G2 pins that). No builder makes warm-ups in M1, so no reach today. Fix: say "every undone set except a drop
+  set" in the doc, or leave warm-ups untouched in both reducer and oracle — decide now, before warm-ups ship.
+- **N3 · Peer-validation gaps beside G2-1 (F17's to rule).** `EventEnvelope.swift` `SwappedExercise.isWellFormed`:
+  `load` is not required to be on `step`'s grid (a peer's 17 kg on a 2 kg step leaves rows off-grid while the
+  drop row is rounded), and `lastPerformance`'s `sets`/`reps`/`load` are unchecked (a "−3×0 @ −10 lb" Last line).
+  Fix: fold into the G2-1 fix if cheap, else list in the F17 input of SF2.
+- **N4 · Q2 lives only in S8b.** The reducer re-attributes done sets to the replacement
+  (`swap_afterALoggedSet_keepsTheDoneSet` pins it). As planned; list it in the F17 input (SF2) so the watch path
+  holds the same guard.
+- **N5 · Fake does work for slots with no entry.** `InMemoryProgramRepository.swift:166-170`: `originals(slot.id)`
+  (a linear scan) runs for every slot; check `updates[slot.id]` first, matching the GRDB path's per-entry order.
+  (`SwapAlternatives.ranked` building the second tier when the curated tier already fills 8 is the same class;
+  catalog-sized, leave it.)
+
+### Review points
+
+1. Module boundaries: no new imports across layers; the GRDB split is the same module, `ProgramUpdate` is
+   private. Lint clean (`GRDBWorkoutRepository+ProgramUpdates.swift` brings the type body under the limit).
+2. Concurrency: no new tasks or clocks; the compare-and-set read and the `UPDATE` run in `materialize`'s one
+   `queue.write` transaction (`GRDBWorkoutRepository.swift` `writeProgramUpdates` after the misses), and the fake
+   in one `state.write`. Correct.
+3. Error handling: every skip is logged except "already holds it" (intentional, idempotent).
+4–5. Design / accessibility: nothing visible in S8a.
+6. Test quality: behaviour-level; the contract runs on both stores; seeded SplitMix64 scripts; no sleeps. The three
+   sanctioned edits were each required: `programUpdates_latestPerSlot` by Q4 (and it gained the on-on case, so no
+   coverage was lost); `laterSaveSetsTheSlotBack` pinned the exact rule §3 replaced and is succeeded by
+   `laterSaveKeepsTheLaterChoice`; the recovery test by the orchestrator's ruling, and it still pins start order
+   (the expected value would differ if listed order were used). `ModelOracle` stays independent (writes × 0.85
+   itself, mirrors "off removes", checks the Last date via its date list). Payload: old fixture proven to have no
+   key and to decode/replay as before; new fixture golden-pinned at version 1. Gap: SF1's post-save ABA.
+7. Brief compliance: criteria 1–12 each have tests (notes' table verified against the files); criterion 12's
+   docs are present but SF1 and SF3 make two of them inaccurate.
+
+Process note: the `/code-review` sub-agent ran `git checkout 94d0fbc` in the F10-s8 worktree (same commit) and
+switched straight back to `feat/F10-s8-swap`; I verified the branch, HEAD `94d0fbc` and the fix agent's four
+uncommitted files intact.
+
+**Verdict:** 0 Blocking, 3 Should fix, 5 Nit. Mergeable on the gate's rule once G2-1 lands; SF1–SF3 are doc and
+small store changes the orchestrator should take before merge, since F17 plans from these documents.
