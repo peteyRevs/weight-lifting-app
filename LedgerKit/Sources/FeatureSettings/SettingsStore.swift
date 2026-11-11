@@ -54,6 +54,10 @@ final class SettingsStore {
     /// The last value this store wrote, until the row is read afresh (a new observation's first value).
     var written: Settings?
     @ObservationIgnored var saveFailed = false
+    /// The units of the switch that failed last, when the failed save was one (ruling A4).
+    @ObservationIgnored var failedSwitch: Units?
+    /// The bar and plates in their sheet, while it is open (criterion 3).
+    var plates: PlatesDraft?
     /// The observation ended: the settings are followed again after the next save.
     var isUnreadable = false
     /// A save is running, in whichever run started it: no other starts until it returns.
@@ -72,10 +76,17 @@ final class SettingsStore {
     @ObservationIgnored var writes = 0
     @ObservationIgnored private var routeNumber = 0
     @ObservationIgnored let about: AppAbout
+    /// Where the export's file is written, and what is emptied when Settings goes away (N16).
+    @ObservationIgnored let exportDirectory: URL
+    /// Writes the exports one at a time (F14-S2 G3 S2).
+    @ObservationIgnored let exportWriter = ExportWriter()
 
     @ObservationIgnored @Dependency(\.settingsRepository) var settings
-    @ObservationIgnored @Dependency(\.locale) private var locale
-    @ObservationIgnored @Dependency(\.calendar) private var calendar
+    @ObservationIgnored @Dependency(\.locale) var locale
+    @ObservationIgnored @Dependency(\.calendar) var calendar
+    @ObservationIgnored @Dependency(\.date) var date
+    /// The workouts' store, read only when the export is written: drawing Settings never needs it.
+    @ObservationIgnored let workouts = Dependency(\.workoutRepository)
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
 
     /// The injected logger under the module's own category (standards §8).
@@ -83,8 +94,9 @@ final class SettingsStore {
         injectedLogger.category("settings")
     }
 
-    init(about: AppAbout) {
+    init(about: AppAbout, exportDirectory: URL = ExportFile.directory) {
         self.about = about
+        self.exportDirectory = exportDirectory
     }
 
     /// The last value the store knows is in the row: what it wrote last, until the row is read afresh, else the
@@ -105,16 +117,30 @@ final class SettingsStore {
             emit(route)
             return
         }
+        if sendToPlates(action) {
+            return
+        }
         // Nothing is drawn before the settings are read, so no control can have been tapped.
         guard let current = shown else {
             return
         }
-        let next = Self.applying(action, to: current)
-        guard next != current else {
+        change(to: Self.applying(action, to: current))
+    }
+
+    /// Shows `next` at once and has it saved, as every change is (N1); settings equal to those shown change nothing.
+    func change(to next: Settings) {
+        guard next != shown else {
+            if failedSwitch != nil, failedSwitch == next.units {
+                // "Try again" for units already shown: a switch reported failed after it was written (F14-S2 G3 N6).
+                saveFailed = false
+                failedSwitch = nil
+                show()
+            }
             return
         }
         pending = next
         saveFailed = false
+        failedSwitch = nil
         show()
         saveMark?.yield()
     }
@@ -129,7 +155,7 @@ final class SettingsStore {
         case let .setPlateMath(isOn): next.plateMathEnabled = isOn
         case let .setAutoRest(isOn): next.autoRest = isOn
         case let .setWatchBuzz(isOn): next.watchBuzz = isOn
-        case .route: break
+        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates: break
         }
         return next
     }
@@ -162,6 +188,9 @@ final class SettingsStore {
             settings: onScreen,
             about: about,
             saveFailed: saveFailed,
+            failedSwitch: failedSwitch,
+            plates: plates,
+            export: export(in: onScreen.units),
             locale: locale,
             calendar: calendar
         ))

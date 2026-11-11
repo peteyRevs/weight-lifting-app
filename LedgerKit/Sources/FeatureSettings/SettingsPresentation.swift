@@ -16,17 +16,35 @@ nonisolated enum SettingsPresentation {
         let settings = input.settings
         return SettingsModel(
             title: SettingsCopy.title,
-            problem: input.saveFailed ? SettingsCopy.saveFailed : nil,
+            problem: problem(input),
+            retry: input.failedSwitch.map { SettingsModel.Link(title: SettingsCopy.tryAgain, action: .setUnits($0)) },
             training: SettingsCopy.training,
             units: units(settings.units),
             rest: rest(settings.defaultRest, locale: input.locale),
             weekStart: weekStart(settings.weekStart, locale: input.locale, calendar: input.calendar),
             switches: switches(settings),
+            plates: PlatesPresentation.row(settings, locale: input.locale),
+            platesSheet: input.plates.map { PlatesPresentation.sheet($0, locale: input.locale) },
             data: SettingsCopy.data,
             health: SettingsModel.Status(title: SettingsCopy.appleHealth, value: SettingsCopy.notConnected),
+            export: SettingsModel.Export(
+                title: SettingsCopy.export,
+                spokenLabel: SettingsCopy.exportSpoken,
+                detail: SettingsCopy.exportDetail,
+                file: input.export
+            ),
             diagnostics: diagnostics,
             about: about(input.about, locale: input.locale)
         )
+    }
+
+    /// The line under the title: a failed switch of units says that nothing changed (ruling A4); any other failed
+    /// save, that the change was not saved.
+    static func problem(_ input: SettingsInput) -> String? {
+        guard input.saveFailed else {
+            return nil
+        }
+        return input.failedSwitch == nil ? SettingsCopy.saveFailed : SettingsCopy.switchFailed
     }
 
     static func units(_ chosen: LedgerDomain.Units) -> SettingsModel.Units {

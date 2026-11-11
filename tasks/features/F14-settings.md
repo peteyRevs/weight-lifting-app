@@ -251,15 +251,15 @@ Three sequential pull requests, each cut from `main` after the one before has me
 - "Export data · CSV" through the share sheet.
 
 **Criteria owned**
-- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in the active program is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 62.5 kg. Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched.
+- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in every live program, the active one and every other not deleted, is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 60 kg (corrected 2026-11-10, F14-S2-G2-3: 135 lb is 61.23 kg). Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched. (Amended 2026-11-10, ruled on F14-S2 G3 S4: every live program converts in the switch's one write, not only the active one, so a block activated later does not keep the old unit's grid. A program this app cannot read is skipped, logged and left as it is, F05's rule for an unreadable row, so it never stops the lifter changing units; ruled in fix round 3.)
 - **3 (restated per C12, C13):** with Plate math on, "Bar and plates" opens a sheet for the current unit's inventory, starting from the stored one (`standard` by default). With Plate math off, the row is drawn disabled and reads "Turn on Plate math to edit". Edits persist through N1. The other unit's inventory is left alone. "Reset to standard" restores `PlateInventory.standard(units)`.
 - **5 (restated per C18–C21, Q5):** the row presents the share sheet. The file is `{name per Q5}.csv`, and its bytes equal the UTF-8 encoding (N15) of `CSVExport.render` over every stored workout, oldest first, in the lifter's current unit.
 
 **New criteria**
 - **N11. Conversion order:**
   1. The settings are saved first.
-  2. Then `ProgramRepository.update(active)` applies `UnitSwitch.convert`, which is pure and idempotent: a load already on the new unit's grid is unchanged.
-  3. A failed conversion shows "Couldn't convert your program's weights." with "Try again", which runs the same conversion. No active program means no conversion.
+  2. Then `UnitSwitch.convert` is applied to every live program, which is pure and idempotent: a load already on the new unit's grid is unchanged. (Under ruling A4, steps 1 and 2 are one `SettingsRepository.switchUnits` write.)
+  3. A failed conversion shows "Couldn't change the units. Nothing was changed." with "Try again", which runs the same conversion. No program means no conversion; an unreadable program is skipped and left as it is; a failure of the database or of any write leaves the settings and every program as they were. (Amended 2026-11-10, F14-S2-G2-2: under ruling A4 the settings and the program are one write, so nothing is half-changed.)
   - `UnitSwitch` has 100% line coverage, and a property test checks that converting twice equals converting once.
 - **N12. Plate editor:**
   - The bar is a `StepperField`: 0–100 lb in 2.5 lb steps, or 0–45 kg in 1.25 kg steps.
@@ -284,7 +284,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
   - The directory is emptied before each export and when Settings goes away.
   - The write streams workout by workout to a `FileHandle`.
   - A failure is logged, and the share sheet reports it.
-- **N17. Budgets** (nightly `.performance`): 10,000 sets render and write in under 200 ms, and peak memory added stays under 5 MB.
+- **N17. Budgets** (nightly `.performance`): 10,000 sets render and write in under 200 ms (the median of 5 runs), and the footprint retained after the write stays under 5 MB. (Amended 2026-11-10, F14-S2 G3 N1: the memory figure is a smoke figure, not a peak; the time budget is the meaningful half.)
 - **N18. Hosting** (flag A2): the row is a `ShareLink` over a `Transferable` whose `FileRepresentation(exportedContentType: .commaSeparatedText)` writes the file when the lifter picks a destination. FeatureSettings needs no UIKit.
 
 **Files and estimates**
@@ -306,7 +306,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
 
 **Tests**
 - Domain:
-  - `UnitSwitchTests`: lb → kg and back, the 135 → 62.5 → 140 drift (Q1), kettlebells to 2 kg, explicit steps, nil fields, idempotence as a property.
+  - `UnitSwitchTests`: lb → kg and back, the 135 → 60 → 130 drift (Q1), kettlebells to 2 kg, explicit steps, nil fields, idempotence as a property.
   - `CSVExportTests`: the header per unit; escaping of commas, quotes and line breaks in names; N14 for each prefix character; kg and lb values; kinds; not done; e1RM above 12 reps; an empty log; dates across midnight and daylight saving (decision #26).
   - A round-trip property: random names, including emoji and RTL, written and then parsed by an RFC 4180 reader in LedgerTestSupport, give the same fields.
 - Store:
@@ -401,7 +401,7 @@ S3 sits under the 700-line band by its nature. Folding it into S2 would come to 
 Each will be built to its recommended default until Pete answers.
 
 1. **When you switch between pounds and kilograms, what happens to the weights already in your program?**
-   - A: Ledger rounds each one to the nearest weight you can load in the new unit: a 45 lb bar becomes 20 kg, 135 lb becomes 62.5 kg. Switching back can land one step away (62.5 kg comes back as 140 lb, not 135).
+   - A: Ledger rounds each one to the nearest weight you can load in the new unit: a 45 lb bar becomes 20 kg, 135 lb becomes 60 kg. Switching back can land one step away (60 kg comes back as 130 lb, not 135; corrected 2026-11-10, F14-S2-G2-3).
    - B: The weights stay exactly as they were, so a 45 lb bar shows as 20.41 kg and goes up 22.91, 25.41.
    - Either way, finished workouts never change, and are shown in the new unit (225 lb shows as 102.06 kg). A workout in progress keeps its unit until you finish it.
    - Recommended: A.

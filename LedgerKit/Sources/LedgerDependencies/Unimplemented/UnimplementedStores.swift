@@ -123,6 +123,10 @@ struct UnimplementedSettingsRepository: SettingsRepository {
         throw stub.failure()
     }
 
+    func switchUnits(_: Settings) async throws {
+        throw stub.failure()
+    }
+
     func observe() -> AsyncStream<Settings> {
         stub.emptyStream()
     }

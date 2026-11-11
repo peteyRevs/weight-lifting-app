@@ -16,6 +16,8 @@
         case kilograms = "Kilograms"
         /// The shortest rest, whose "−" is switched off, and the line of a save that failed.
         case saveFailed = "Couldn't save"
+        /// A switch to kilograms that failed, with "Try again", and Plate math off, so "Bar and plates" is off too.
+        case switchFailed = "Couldn't switch"
 
         func model() -> SettingsModel {
             SettingsPresentation.make(SettingsPreviewData.input(for: self))
@@ -44,11 +46,14 @@
                 settings.watchBuzz = false
             case .saveFailed:
                 settings.defaultRest = RestDuration(clampingSeconds: 30)
+            case .switchFailed:
+                settings.plateMathEnabled = false
             }
             return SettingsInput(
                 settings: settings,
                 about: about,
-                saveFailed: preview == .saveFailed,
+                saveFailed: preview == .saveFailed || preview == .switchFailed,
+                failedSwitch: preview == .switchFailed ? .kg : nil,
                 locale: Fixtures.locale,
                 calendar: Fixtures.calendar
             )
@@ -65,5 +70,9 @@
 
     #Preview("Couldn't save") {
         SettingsPreview.saveFailed.content
+    }
+
+    #Preview("Couldn't switch") {
+        SettingsPreview.switchFailed.content
     }
 #endif

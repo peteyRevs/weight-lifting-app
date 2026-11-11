@@ -28,15 +28,44 @@ public struct GRDBSettingsRepository: SettingsRepository {
         let payload = try SettingsCodec.encode(settings)
         let updatedAt = ColumnCodec.timestamp(now())
         try await queue.write { database in
-            try database.execute(
-                sql: """
-                INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
-                ON CONFLICT (id) DO UPDATE SET payload_version = excluded.payload_version,
-                    payload = excluded.payload, updated_at = excluded.updated_at
-                """,
-                arguments: [Self.rowID, SettingsCodec.version, payload, updatedAt]
-            )
+            try Self.upsert(payload: payload, updatedAt: updatedAt, in: database)
         }
+    }
+
+    /// Upserts the row as `save` does and, in the same transaction, converts every live program
+    /// (`GRDBProgramRepository.convertLive`) when the units stored before were not `settings.units` or could not be
+    /// read (F14 S2, ruling A4). Whatever throws, the programs' checks included, rolls all of it back.
+    public func switchUnits(_ settings: Settings) async throws {
+        let payload = try SettingsCodec.encode(settings)
+        let updatedAt = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            // A row whose payload this app cannot read says nothing of the units the programs are in: they are
+            // converted, as the lifter asked. A failure of the database itself is no such row, and fails the switch
+            // (F14-S2 G3 N4).
+            let before: Settings?
+            do {
+                before = try Self.fetch(database)
+            } catch let error as DatabaseError {
+                throw error
+            } catch {
+                before = nil
+            }
+            try Self.upsert(payload: payload, updatedAt: updatedAt, in: database)
+            if before?.units != settings.units {
+                try GRDBProgramRepository.convertLive(to: settings.units, in: database, at: updatedAt)
+            }
+        }
+    }
+
+    private static func upsert(payload: Data, updatedAt: String, in database: Database) throws {
+        try database.execute(
+            sql: """
+            INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
+            ON CONFLICT (id) DO UPDATE SET payload_version = excluded.payload_version,
+                payload = excluded.payload, updated_at = excluded.updated_at
+            """,
+            arguments: [rowID, SettingsCodec.version, payload, updatedAt]
+        )
     }
 
     /// Inserts the one row when there is none (`ON CONFLICT DO NOTHING`): a stored row, readable or not, keeps

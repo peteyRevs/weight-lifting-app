@@ -32,7 +32,8 @@
             ] ??
                 SettingsWords.german
             let stops = SettingsWords.page(words).placedStops(SnapshotAppearance(.dark, size))
-            #expect(stops.count == 14, "\(language) at \(size): \(stops.count) stops")
+            // S1's 14, and S2's Bar and plates and Export data, CSV.
+            #expect(stops.count == 16, "\(language) at \(size): \(stops.count) stops")
             let faults = SettingsLayoutTests.faults(in: stops)
             #expect(faults.isEmpty, "\(language) at \(size): \(faults.prefix(4).joined(separator: "\n"))")
         }
@@ -48,9 +49,12 @@
             let expected = [SettingsWords.arabic.title, SettingsWords.arabic.problem, SettingsWords.arabic.training] +
                 SettingsWords.arabic.spoken
                 + [SettingsWords.arabic.rest, SettingsWords.arabic.week] + SettingsWords.arabic.switches.map(\.0)
+                // S2's two rows keep the previews' English (`SettingsWords.model`).
+                + ["Bar and plates, 45 lb bar"]
                 + [
                     SettingsWords.arabic.data,
                     "\(SettingsWords.arabic.health), \(SettingsWords.arabic.notConnected)",
+                    "Export data, CSV",
                     SettingsWords.arabic.diagnostics
                 ]
                 + [SettingsWords.arabic.about]

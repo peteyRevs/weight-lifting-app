@@ -89,7 +89,7 @@ nonisolated struct FeatureSettingsSourceTests {
     func lookups_standInTheCopyFiles() throws {
         let outside = try Self.uses(of: Self.lookups) { !$0.hasPrefix("SettingsCopy") }
         #expect(outside == [])
-        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 27)
+        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 44)
     }
 
     @Test("N9. No view reaches for the copy, the presentation, a format, a filter, an order, a clock or a locale")
@@ -98,7 +98,7 @@ nonisolated struct FeatureSettingsSourceTests {
         #expect(found.isEmpty, "\(found.prefix(5))")
     }
 
-    @Test("N9. Every view imports SwiftUI and LedgerDesign and nothing else; only the screen holds a scroll view")
+    @Test("N9. Every view imports SwiftUI and LedgerDesign and nothing else; only the screens hold a scroll view")
     func views_importOnlySwiftUIAndTheDesignSystem_andOneScrollView() throws {
         let views = try Self.sources().filter { Self.isView($0.key) }
         #expect(views.count >= 4)
@@ -108,7 +108,11 @@ nonisolated struct FeatureSettingsSourceTests {
             #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
         }
         let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
-        #expect(scrolling.map { $0.components(separatedBy: ":").first ?? "" } == ["Views/SettingsScreen.swift"])
+        // Settings, and the plates sheet over it (S2), each scroll in one place.
+        #expect(
+            scrolling.map { $0.components(separatedBy: ":").first ?? "" }
+                == ["Views/PlateInventorySheet.swift", "Views/SettingsScreen.swift"]
+        )
     }
 
     @Test("N9, C28. Nothing on Settings wears the accent")

@@ -698,3 +698,227 @@ G3's round 1 (`6b24503`, "## S1b round 1" in `review.md`): approved with minors.
   tests are as at `6b24503`.
 - **Nightly UI test, through the lock:** `test_kilograms_chosenInSettings_reachToday` **passed** (22.6 s).
 - The full gate is left to the coordinator.
+
+## S2 — as built (G1 implementer, 2026-11-10)
+
+Branch `feat/F14-s2-plates-export`, cut from `main` at `da6470d`. The contract is the brief's "### S2" (criteria 1's
+program part, 3 and 5; N11–N18) with "Rulings before G1"; ruling A4 replaces N11's two writes (below).
+
+**Pete's questions, decided by the orchestrator (2026-11-10):** Q1 = A (a switch rounds the program's loads to the new
+unit's grid), Q4 = A (Apple Health reads "Not connected" and does nothing), Q5 = A (`workouts-YYYY-MM-DD.csv`, every
+weight in the current unit with the unit in the column title, every set with a `done` column), Q6 = A (the bar with −
+and +, plates on or off from a fixed list per unit, "Reset to standard", each unit its own), Q7 = A (the later
+features' switches are shown now). Q2 and Q3 are as S1 and S3 build them.
+
+### What landed
+
+Paths under `LedgerKit/`.
+
+- **Domain.**
+  - `Rules/UnitSwitch.convert(_:to:equipment:)`: each explicit start load rounded to the nearest default step of its
+    exercise's equipment in the new unit; each explicit step the same, never below one default step; `nil` stays
+    `nil`. An exercise the map lacks moves on the finest grid (`Equipment.machine`'s: 1.25 kg, 2.5 lb). Idempotent.
+  - `Export/CSVExport`: `header(units:)`, `lines(for:units:calendar:)`, `render(workouts:units:calendar:)` and
+    `byteOrderMark` (N13–N15). Quoting and the formula guard work on Unicode scalars: "\r\n" is one `Character`, and a
+    quote followed by a combining mark is one too.
+  - `SettingsRepository.switchUnits(_:)` (ruling A4): the settings and the active program's converted weights, one
+    write, both or neither. The program is converted only when the stored units differ from the new ones (or cannot
+    be read): a conversion is idempotent but not neutral, so a load set on purpose between two grid steps in the unit
+    it is in would otherwise be rounded.
+- **Persistence.** `GRDBSettingsRepository.switchUnits` reads the stored units, upserts the row and calls
+  `GRDBProgramRepository.convertActive(to:in:at:)` in the same `queue.write`. That reads the active program and every
+  exercise's equipment (deleted ones too) and writes `ProgramRows` as `update` does: only the rows that changed.
+- **Fakes and stubs.** `InMemorySettingsRepository(_:programs:)`; `InMemoryStores` links it to its programs. Its
+  `switchUnits` checks the settings first, then converts (which may refuse, and then nothing is written), then stores
+  the settings, which cannot fail. `InMemoryProgramRepository.convertActive(to:)`, `InMemoryExerciseRepository
+  .equipment()`. `UnimplementedSettingsRepository.switchUnits` throws.
+- **FeatureSettings.**
+  - The store's saver calls `switchUnits` when the change's units differ from what is committed, else `save`. A failed
+    switch sets `failedSwitch`: the line reads "Couldn't change the units. Nothing was changed." with "Try again",
+    which sends `.setUnits` of the failed units again. Any other failed save keeps S1's line and has no retry.
+  - "Bar and plates" (`Plates/`, `SettingsStore+Plates`, `Views/PlateInventorySheet`, `Views/DataRows`): the row
+    reads "45 lb bar" and opens the sheet while Plate math is on; off, it is dimmed, without its chevron, and reads
+    "Turn on Plate math to edit". The sheet edits a `PlatesDraft` of the current unit's inventory; "Done" saves the
+    draft into that unit's inventory through N1's pipeline; "Cancel" or a swipe drops it; "Reset to standard" puts back
+    `PlateInventory.standard(units)`. The bar is a `StepperField` (0–100 lb by 2.5, 0–45 kg by 1.25; a bar off the grid
+    steps to the multiples beside it). The plates are a `FilterChipRow` with `allowsMany` over the unit's fixed list,
+    with any stored size off the list shown among them. With every plate off the sheet says "No plates: no plate line
+    will show".
+  - "Export data · CSV" (`Export/`, `SettingsStore+Export`): a `ShareLink` over `WorkoutExport`, a `Transferable`
+    whose `FileRepresentation(exportedContentType: .commaSeparatedText)` writes the file when the lifter picks a
+    destination (A2). The writer reads `workouts(in: .distantPast ..< .distantFuture)` and streams BOM, header and each
+    workout's lines, oldest first, to a `FileHandle` in `temporaryDirectory/Export/`, emptied first. The store's run
+    empties the directory when it ends (Settings goes away). A failure is logged and thrown to the system's sheet.
+    The workouts' dependency is read only when the file is written (`Dependency(\.workoutRepository)` kept whole), so
+    drawing Settings needs no workout store.
+  - Copy: 17 keys (44 in all). Previews: "Couldn't switch" (Settings) and three of the sheet.
+- **UI test (nightly).** `Apps/LedgerUITests/SettingsExport.swift`: gear, "Export data, CSV", the activity list
+  appears.
+
+### Decisions and deviations
+
+1. **Ruling A4 over N11.** One call, `SettingsRepository.switchUnits(_:)`, a protocol requirement beside `save` (as
+   S1's `seedIfAbsent`), not a new protocol and dependency key: it is one call on the settings' own repository, and
+   GRDB's settings and programs share one queue. N11's wording is reworked: a failed switch leaves both as they were
+   and shows "Couldn't change the units. Nothing was changed." with "Try again".
+2. **The brief's 135 lb example is wrong.** 135 lb is 61.23 kg, nearest 60 on a 2.5 kg grid, not 62.5. 180 lb is 82.5 kg.
+   The drift pinned by `UnitSwitchTests` is 135 lb → 60 kg → 130 lb (R6: one step), and 45 lb → 20 kg → 45 lb.
+3. **Weights in the CSV are rounded to hundredths** (N13's "rounded to hundredths"; Q1's "102.06 kg"), not to
+   `formatted(in:)`'s one decimal for a converted value.
+4. **The plates' chips are switches to VoiceOver** (`FilterChipRow` with `allowsMany`): on or off as their value. The
+   hosted reader does not report them as selected, so the tree pins the value only.
+5. **The export's directory name is exempted** in `ModuleCopyTests` (`"Export"` in `Export/ExportFile.swift`): a path,
+   never drawn. The file's name is copy (`"workouts-%@.csv"`).
+6. **N17's memory figure** is the process footprint after the write against before it, not a peak: the streamed write
+   leaves no large buffer behind, and a true peak needs a sampler. The test is nightly; on the Mac host it wrote
+   10,000 sets in 0.165 s.
+7. **Export row at accessibility sizes** keeps its chevron beside the label (the row is a `ShareLink`'s label, not a
+   `HairlineRow`); the references were looked at.
+
+### New user-facing wording
+
+"Couldn't change the units. Nothing was changed." · "Try again" · "Bar and plates" · "%@ bar" ("45 lb bar") · "Turn on
+Plate math to edit" · "%@ lb", "%@ kg" · "Bar" · "Plates you own" · "No plates: no plate line will show" · "Reset to
+standard" · "Done" · "Cancel" · "Export data · CSV", spoken "Export data, CSV" · "Every set you logged, in your current
+units" · "workouts-%@.csv". The DATA heading's translator comment now names the export.
+
+### Sanctioned edits
+
+| File | Edit | Why |
+|---|---|---|
+| Eleven `SettingsRepository` doubles (`OnboardingAdversarialStores`, `StoreDoubles`, `LibraryStoreTests`, `ProgramStoreScene`, `TodayStoreAdversarialSupport`, `HistoryStoreTests`, `WorkoutDetailAdversarialSupport`, `ProtocolsAdversarialTests`, `StartWorkoutUseCaseAdversarialSupport`, `AppRootGateAdversarialProbes`, `ScriptedSettings`) | One `switchUnits` each, as its `seedIfAbsent` (`ScriptedSettings` scripts it as a save) | A4: a protocol requirement |
+| `FeatureSettingsTests/Support/SettingsTesting.swift` | `WatchedSettings` records switches; `SettingsScene` takes a seed, binds the workouts and an export directory of its own; `TestLane`, `.performance` | S2 |
+| `SettingsSaveQueueAdversarialTests` (F14-S1-1's test) | The failed save there is a switch of units, so its line is now the switch's | A4 |
+| `SettingsSavePropertyAdversarialTests` | The oracle's switch lists the sheet's actions | S2 actions |
+| `SettingsScreenAdversarialSupport`, `SettingsScreenAdversarialTests` | The model takes S2's rows (in English); 14 → 16 stops; the Arabic order gains the two rows | S2 rows |
+| `SettingsAccessibilityTests`, `PreviewTests`, `SettingsCopyTests`, `FeatureSettingsSourceTests` | The trees gain the plates row, the export and Try again; 7 → 9 targets (10 with Try again); the plates previews; 27 → 44 keys; the sheet's scroll view | S2 |
+| `LedgerAppKitTests/ModuleCopyTests.swift` | FeatureSettings' exemption: `"Export"` | Decision 5 |
+| `SettingsSnapshotTests`' 8 references | Re-recorded: the two new rows (kilograms: Bar and plates off) | S2 rows |
+
+### Tests added
+
+- Domain: `UnitSwitchTests` (8, the idempotence property over `PropertySeed.all`), `CSVExportTests` (9, the RFC 4180
+  round trip over `PropertySeed.all` with emoji, Arabic, Hebrew, RLM, combining marks, CR/LF and formula starts).
+  `LedgerTestSupport/Export/CSVReader` is the RFC 4180 reader.
+- Persistence: `SwitchUnitsTests` on GRDB and the linked in-memory stores (converts, same units convert nothing, no
+  program, an unreadable program rolls the settings back, one commit).
+- FeatureSettings: `SettingsUnitsStoreTests` (5), `SettingsPlatesExportStoreTests` (6: edit and save, the other unit
+  untouched, cancel and reset, off while Plate math is off, the export's bytes equal BOM + `render` over a two-week
+  history oldest first with a stale file cleared, the directory emptied when the run ends, kilograms),
+  `PlatesPresentationTests` (4), `PlateInventorySheetTests` (hosted: the exact tree per state and size, each control's
+  action, layout) and its 6 references (looked at), `ExportPerformanceTests` (nightly).
+
+### Product lines
+
+Non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps`, `LedgerTestSupport`, UI tests and catalogs excluded,
+against `da6470d`: **754 added, 28 removed, net 726** (plan: about 710). The largest: `SettingsCopy+Plates` 89, the
+sheet 71, `PlatesPresentation` 70, `CSVExport` 50, `ExportFile` 46.
+
+### Runs
+
+- Host: `swift build --build-tests` clean; FeatureSettingsTests (71, with the nightly lane's performance test), the
+  domain, persistence (settings, programs, contracts, switch) and `ModuleCopyTests` suites green.
+- Simulator, through the lock: FeatureSettingsTests (94 tests), `CSVExportTests`, `UnitSwitchTests`,
+  `SwitchUnitsTests`, `ModuleCopyTests` green with recording off.
+- swiftformat and swiftlint (strict) clean.
+- The nightly UI test `SettingsExport` was not run in this lane.
+
+### The gate
+
+`scripts/check.sh` (full: iOS and watchOS), through the simulator lock, on `a472372`: **exit 0, "check.sh OK"**,
+2,106 s. Steps: lint 82 s, iOS build 25 s, string catalogs 1 s, iOS tests 1,638 s, watchOS build 46 s, watchOS tests
+311 s, coverage 1 s. Coverage: FeatureSettings 96.97 % (1,569 / 1,618) against 70 %; LedgerDomain 99.34 %; overall
+98.49 %. This notes commit follows it and changes docs only.
+
+### S2 fix round 1 (G1, 2026-11-10)
+
+Against G2 round 1 (`4ae944b`, "## S2 — G2 round 1" in `test-findings.md`) and the orchestrator's rulings.
+
+- **F14-S2-G2-1 (fixed).** `PlatesDraft.opened` keeps the sizes the sheet opened with (set at `.editPlates` from the
+  stored inventory); `PlatesPresentation.sheet` lists the unit's sizes ∪ `opened` ∪ the draft's plates. An off-list
+  size switched off stays listed, off, for the whole sheet session, so it can be switched on again without Cancel.
+  The list no longer changes within a session, so the chips' ids (their places) stay stable. G2's
+  `offListSize_switchedOff_staysListed` passes with only its known-issue marker removed.
+- **F14-S2-G2-2 (ruled: keep the code).** N11.3 in the brief now reads "Couldn't change the units. Nothing was
+  changed."; G2's `failedSwitch_lineMatchesTheContract` expects that line, without its marker.
+- **F14-S2-G2-3 (docs).** The brief's criterion 1, its `UnitSwitchTests` line and Q1 say 135 lb → 60 kg → 130 lb.
+
+Product lines: +5 / −1 (net 730 for the slice).
+
+### S2 fix round 1, the gate
+
+`scripts/check.sh` (full), through the lock, on `ddd11bf`: **exit 0**, 2,330 s. FeatureSettings 96.97 % (1,572 / 1,621).
+
+### S2 fix round 2 (G1, 2026-11-10)
+
+Against G3 round 1 (`f1c2718`, "## S2 — G3 round 1" in `review.md`) and the orchestrator's rulings.
+
+- **S1 (fixed).** `SettingsRepositoryContract` gains three clauses, run on GRDB and the in-memory store: a switch
+  saves and is observed; a switch to the stored units is a save; a switch refuses what `save` refuses (a NaN bar) and
+  writes nothing. The conversion stays `SwitchUnitsTests`' (it needs a program store).
+- **S2 (fixed).** `ExportWriter`, an actor the store keeps, runs every write and the emptying of the directory when
+  Settings goes away, one at a time, so two exports never empty the directory under each other. G2's
+  `export_twoAtOnce` is deterministic by construction. The write also checks for cancellation between workouts
+  (standards §4).
+- **S3 (fixed).** The plates sheet is `.sheet(item:)` over `PlatesModel` (now `Identifiable` by its units), so it
+  keeps its last content while it goes down. No reference changed.
+- **S4 (ruled: every program).** `switchUnits` converts every live program, active or not, in its one write
+  (`GRDBProgramRepository.convertLive`, `InMemoryProgramRepository.convertLive`); which program is active is left as
+  it is. The brief's criterion 1 and N11 are amended. G2's `inactiveProgram_untouched` became
+  `inactiveProgram_convertedToo` (both programs converted), and `refusedSecondProgram_rollsBackEverything` refuses
+  the second program's slot writes with a trigger: the settings row and both programs stay byte for byte. A program
+  that cannot be read now fails the whole switch, the inactive ones included; the line and "Try again" say so.
+- **Coverage.** `SettingsReviewFixTests.export_failedRead_throwsAndWritesNothing` (the store's export over a
+  workouts store whose read fails: it throws, and no file is left) and `unavailableExport_throws`; the hosted
+  `PlateInventorySheetChromeTests` (the chrome's title and Cancel; "Bar and plates" sends `editPlates`). The log
+  line itself is not asserted in the PR lane: reading the process's log back is the nightly pattern
+  (`OnboardingStoreLoggingTests`). What stays uncovered is system-only: `WorkoutExport.transferRepresentation`'s
+  closure (only the system's share sheet calls it; the nightly UI test runs outside coverage), `ExportFile.write`'s
+  `createFile` failure and its close-on-error branch, `clearExports`' catch, and the sheet's swipe-down setter in
+  `SettingsScreen` (a presented sheet, outside the hosted reader).
+- **Nits.**
+  - N1: the brief's N17 is amended (a smoke figure: the footprint retained after the write); the time is the median
+    of 5 runs after a warm-up.
+  - N2: the export's doc says a workout this version cannot read is left out and logged, as History does.
+  - N3: the file is named for the day it is written (`ExportRequest.plan()` in the write); the share sheet's preview
+    title is the redraw's.
+  - N4: `switchUnits` rethrows a `DatabaseError` from its read of the stored units; only an unreadable payload
+    converts.
+  - N5: the fake's switch compares, converts and stores under the settings' lock, in one step.
+  - N6: a failed switch closes a plates sheet opened in the units it put back; "Try again" for units already shown
+    clears the line and saves nothing. Both tested.
+  - N7: `render` uses `reduce(into:)`.
+  - N8: the chrome is tested hosted; the presentation itself (`SettingsScreen`'s sheet) is not, as the hosted reader
+    cannot see a presented sheet. **Skipped in part, for that reason.**
+- **For the chrome's test**, the sheet's frame is `PlatesChrome` (title, Cancel, page, foot); the sheet puts its page in
+  a scroll view inside it, and the test reads the frame around the page alone.
+
+Product lines for the slice after both rounds (against `da6470d`): 830 added, 31 removed, **net 799**. This round:
++76 / −3, mostly `ExportWriter` and `ExportRequest`, `convertLive`, `PlatesChrome` and the failure helper.
+
+Simulator, through the lock: FeatureSettingsTests (128) and the switch suites green with recording off; no reference
+changed.
+
+### S2 fix round 2, the gate
+
+`scripts/check.sh` (full), through the lock, on `81eef98`: **exit 0**, 2,010 s. FeatureSettings 98.01 % (1,630 / 1,663);
+overall 98.54 %.
+
+### S2 fix round 3 (G1, 2026-11-11)
+
+- **Ruled: an unreadable program never fails a switch.** `GRDBProgramRepository.convertLive` reads each live program
+  in a `do`; a program this app cannot read (a malformed id, a damaged column, a slot or program its `init`s refuse)
+  is logged under "persistence" and left as it is, F05's rule for an unreadable row, and every readable program is
+  converted and the settings saved in the same transaction. A `DatabaseError` on the read, or any failure of a write,
+  still fails the whole switch. The in-memory store holds programs as values, so it has no unreadable one.
+- **Tests.** `SwitchUnitsTests.unreadableProgram_isSkipped` replaces `unreadableProgram_rollsBackTheSettings`: the
+  damaged seed program's slots keep every byte and the settings switch. `SwitchUnitsAdversarialTests
+  .unreadableProgram_skipped_readableConverted`: one unreadable and one readable program; the switch succeeds, the
+  readable converts, the unreadable one's slot rows are unchanged. G2's trigger tests (a refused write) still roll
+  everything back.
+- **The brief:** criterion 1 and N11.3 say so.
+- **Coverage, accepted at 98.01 % (orchestrator, 2026-11-11).** What stays uncovered is reachable only by the
+  system: `WorkoutExport.transferRepresentation`'s closure (only the system's share sheet calls it, and the nightly UI
+  test runs outside coverage); `ExportFile.write`'s `createFile` failure and its close-on-error branch;
+  `clearExports`' catch (a temporary directory the app cannot remove); and `SettingsScreen`'s sheet binding setter
+  (a sheet swiped away, which the hosted reader cannot present).
