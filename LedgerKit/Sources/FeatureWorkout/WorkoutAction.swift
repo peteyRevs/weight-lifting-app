@@ -26,6 +26,20 @@ nonisolated enum WorkoutAction: Equatable, Sendable {
     case done
     /// A row of the receipt (F12 S3, N18): the cover closes as saved, and the app shows the exercise's history.
     case openExercise(ExerciseID)
+    /// The card's "Swap exercise" and the swap sheet's own controls (F10 S8b).
+    case swap(WorkoutSwapIntent)
+}
+
+/// What the swap button and the swap sheet ask for (F10 S8b). "Use" is a tap that changes the workout, and goes
+/// through the tap queue as `WorkoutEdit.swap`.
+nonisolated enum WorkoutSwapIntent: Equatable, Sendable {
+    /// The card's "Swap exercise": opens the sheet for the exercise the card showed, named by its place and its
+    /// id, and only while the shown exercise is still that one (F10 S8b, review SF1).
+    case open(exerciseIndex: Int, exerciseID: ExerciseID)
+    /// The sheet's "Cancel", its swipe down and VoiceOver's escape: it goes, and nothing changes.
+    case cancel
+    /// The sheet's "Also update program" switch, turned on or off.
+    case updateProgram(Bool)
 }
 
 /// Why the cover closes. Set once; `WorkoutRoot` hands it to the launcher.
@@ -54,4 +68,6 @@ nonisolated enum WorkoutDialog: Equatable, Sendable {
     case editFailed
     /// The save did not go through: the workout is as the session shows it.
     case saveFailed
+    /// "Swap exercise" (F10 S8b): the alternatives to the shown exercise.
+    case swap
 }

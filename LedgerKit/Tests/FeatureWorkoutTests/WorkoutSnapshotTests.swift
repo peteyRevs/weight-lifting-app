@@ -1,5 +1,6 @@
 #if DEBUG
     @testable import FeatureWorkout
+    import LedgerDesign
     import LedgerSnapshotTesting
     import SwiftUI
     import Testing
@@ -65,6 +66,22 @@
         @Test("No history yet: no Repeat")
         func cover_noHistory_matchesReferences() {
             assertLedgerSnapshot(of: cover(.started), devices: [.phone], typeSizes: [.large])
+        }
+
+        /// F10 S8b (review SF3): the card's title row alone, where "Swap exercise" is a large share of the
+        /// image, so that a reference fails when the button is missing, moved or restyled; on the whole cover a
+        /// 44 pt outline is under the comparison's 0.5 % of pixels.
+        @Test("The card's title row: the place and the name, with Swap exercise at the trailing edge")
+        func card_titleRow_matchesReferences() throws {
+            guard case let .workout(workout) = WorkoutPreview.started.model, let card = workout.page.card else {
+                throw WorkoutPreview.Unreadable()
+            }
+            let row = ExerciseCardTitleRow(model: card) { _ in }
+                .padding(.horizontal, LedgerSpacing.screen)
+                .padding(.vertical, LedgerSpacing.s)
+                .background(LedgerColor.ground)
+                .frame(width: SnapshotConfig.phoneWidth)
+            assertLedgerSnapshot(of: row, devices: [.phone], typeSizes: [.large])
         }
     }
 #endif

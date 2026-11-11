@@ -30,6 +30,9 @@ nonisolated enum WorkoutEdit: Equatable, Sendable {
     case extendRest
     /// "Skip rest": the rest ends, and its panel goes.
     case skipRest
+    /// "Use" on the swap sheet (F10 S8b): the exercise at `exerciseIndex` becomes the choice, and the
+    /// program's slot too when `alsoUpdateProgram` (it changes when the workout is saved).
+    case swap(exerciseIndex: Int, choice: SwapChoice, alsoUpdateProgram: Bool)
 }
 
 /// A tap as it waits for the pump: the edit, and the injected date when it was made.
@@ -94,10 +97,10 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
             plan.addSet(to: exerciseIndex, in: state, id: newSetID)
         case let .jump(exerciseIndex):
             plan.jump(to: exerciseIndex, in: state)
-        case .extendRest:
-            plan.extendRest(in: state, at: now)
-        case .skipRest:
-            plan.skipRest(in: state)
+        case .extendRest, .skipRest:
+            plan.answerRestPanel(extends: edit == .extendRest, in: state, at: now)
+        case let .swap(exerciseIndex, choice, alsoUpdateProgram):
+            plan.swap(choice, at: exerciseIndex, alsoUpdateProgram: alsoUpdateProgram, in: state)
         }
         return plan
     }

@@ -13,7 +13,7 @@ struct WorkoutPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xxl) {
             if let card = model.card {
-                ExerciseCard(model: card) { send(.edit($0)) }
+                ExerciseCard(model: card, send: send)
             }
             if let remaining = model.remaining {
                 RemainingList(model: remaining) { send(.edit($0)) }

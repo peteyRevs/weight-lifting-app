@@ -2180,3 +2180,107 @@ toggle test and 140 of 200 scripts fail.
   `.memory`). The protocol promises no order; noted only because a test comparing `envelopes(for:)` with `==` is
   flaky on the fake.
 - Ruling 2 holds in both orders: whichever workout is materialised first lands, the other is skipped.
+
+## S8b — G2 round 1
+
+G2 tester, 2026-11-11, on `7381cd9` (`feat/F10-s8b-swap-sheet`). I wrote the tests from the S8 contract (S8b
+criteria 13 to 34, rulings Q1 to Q9), the brief and the v2 swap sheet before I read the implementer's tests or
+notes. I changed no product code. One mutant was run and reverted (below).
+
+New tests (`LedgerKit/Tests/FeatureWorkoutTests/Adversarial/`):
+- `WorkoutSwapAdversarialDoubles.swift`, `WorkoutSwapAdversarialSupport.swift`: an exercise repository and
+  stats that count every read and can be told to throw or to hold the next `all()`; the shipped catalog by name;
+  `SwapG2Bench`, a store on `PumpSession` (the real engine) whose root tasks are run by the test.
+- `WorkoutSwapAdversarialTests` (+`Failures`, `Taps`, `Cover`, `Moves`), 25 tests. They cover:
+  - **Q2 in every route.** A logged set hides the button and the intent does nothing. A set un-logged elsewhere
+    brings the button back. A set logged by another hand while the sheet is up takes the sheet down, and a row
+    kept from that sheet then does nothing. A set logged by another hand between "Use" and its turn means the
+    swap does nothing and shows no alert, while the tap before "Use" still applies. A log of your own queued
+    before "Use" also means the swap does nothing.
+  - **The list.** Q9 exclusions, curated first, the 8 cap, a curated exercise missing from the catalog, and
+    "nothing to offer" (an unknown exercise, an empty catalog, everything already excluded).
+  - **Failures.** `all()`, `exercise(id:)` or one `lastPerformance` throws. A refused swap shows the alert,
+    drops the taps behind it, keeps the card and leaves no program change.
+  - **Taps and late reads.** A double tap or two rows tapped in a row, a second open, "Use" then reopening
+    before the swap lands, an older attempt's read answering last with a failure, and the same attempt's read
+    run twice.
+  - **The toggle (Q4).** Hidden for a workout with no program. Opens on when a change already exists. Turning it
+    off removes the change. Turning it on while the alternatives load still counts.
+  - **The cover after a swap.** Name, place, Last or "No history yet", Repeat, row loads, TARGET (Q5), the shown
+    row, the stepper's step, REMAINING.
+  - **Kettlebell (decision #22).** In kg the row reads 12 and "+" goes to 14 by 2 kg; in lb the row reads 25
+    and "+" moves by 5.
+  - **Q7 and endings.** A bodyweight row reads "Bodyweight" alone. Ending the workout elsewhere, the session's
+    updates ending, or another hand swapping the shown exercise all take the sheet down.
+  - **Bests.** The swapped-in exercise's bests are read once and merged. Swapping back reads nothing. A failed
+    read is not retried.
+- `WorkoutSwapRankingAdversarialTests` (+`Plan`), 4 tests: 40 seeded workouts (`RestSeeds`, so 2,000 nightly)
+  of random catalog exercises in lb or kg, with an off-step history for about a third of the catalog. Each
+  checks the rows against the contract's ranking, which I wrote out separately (not `SwapAlternatives`): order,
+  Q9, the cap, completeness, each sub (Q1, Q7), what each row sends, and one last-session read per row. The rest
+  are the plan's stale cases (index −1, 5, `Int.max`, `Int.min`, another exercise, a done set) and the words
+  (each key `translated` in the catalog, Q6's line, the equipment names).
+- `WorkoutSwapTreeAdversarialTests` (hosted), 3 tests at `.large`, `.xxxLarge`, `.accessibility3` and
+  `.accessibility5`. They check the sheet's VoiceOver tree, including that the switch reads differently on and
+  off. A cut, overlap and 44 pt check runs over every setting (375 and 402 pt, Bold Text, right to left) with a
+  63-character row name. The card's title row is checked with a normal name and a name that wraps.
+
+Mutant (reverted, `git status` clean after): the plan's Q2 check removed in `WorkoutEdit+Swap.swift`. Three of
+the Q2 store tests and the plan test fail.
+
+### Result
+
+| Run | Result |
+|---|---|
+| Host, `swift test --filter "WorkoutSwapAdversarialTests\|WorkoutSwapRankingAdversarialTests"` | 32 tests: **30 pass, 2 fail** (F10-S8b-G2-1, by design) |
+| Simulator (lock), iPhone 17, iOS 27.0, `Nightly`, `-only-testing` of the three suites above and `LedgerUITests/WorkoutSwap` | the same 30 of 32, plus the hosted suite: **2 of 3 pass, 1 fails** (F10-S8b-G2-2, by design) |
+| **Nightly UI test `WorkoutSwap`** | **passed** (22.8 s) |
+
+| Id | Severity | Finding | Failing test |
+|---|---|---|---|
+| F10-S8b-G2-1 | Minor | Q9 is checked only when the list is read. Another hand can put an offered exercise into the workout, and "Use" then adds it a second time | `WorkoutSwapRankingAdversarialTests.failing_plan_refusesAnExerciseAlreadyInTheWorkout`, `WorkoutSwapAdversarialTests.failing_peerTakesAnOfferedExercise_useDuplicates` |
+| F10-S8b-G2-2 | Minor | At `.xxxLarge`, when a long name wraps, VoiceOver reads "Swap exercise" before the exercise's name | `WorkoutSwapTreeAdversarialTests.failing_card_titleRow` |
+
+### F10-S8b-G2-1 · Minor · Q9 / criterion 19 · "Use" can put one exercise in the workout twice
+
+- **Rule.** Q9: "one exercise never appears twice in a workout, its receipt and its history." The store checks it
+  once, in `loadSwap` (`excluding: Set(state.exercises.map(\.exerciseID))`). The plan (`WorkoutEditPlan.swap`)
+  re-checks the index, the id and Q2 at its turn, but not Q9, and `closeSwapIfStale` follows only the swapped
+  exercise.
+- **Repro.** Open the sheet for Bench (exercise 0). Its rows include Dumbbell Bench Press. Another hand applies
+  `exerciseSwapped(exerciseIndex: 3, exerciseID: <Dumbbell Bench Press>, …)`. The sheet stays up with that row.
+  Tap it. The workout now holds Dumbbell Bench Press at places 0 and 3. At plan level:
+  `WorkoutEditPlan.make(.swap(0, choice: DB Bench, …))` on a state that already holds DB Bench at place 3 gives
+  one `exerciseSwapped`.
+- **Reach.** Only through another device (F17's watch) or a log replayed while the sheet is up. One phone cannot
+  reach it, because the sheet covers the page and only the shown exercise can be swapped. This is the same class
+  as the planner's "Q2 against a peer" risk.
+- **Suggested fix.** In `WorkoutEditPlan.swap`, refuse a choice whose `exerciseID` is held by another exercise
+  of `state` (one line). Optionally, let `closeSwapIfStale` also close the sheet when that happens.
+
+### F10-S8b-G2-2 · Minor · criterion 32 · VoiceOver reads the button before the name at `.xxxLarge`
+
+- **Rule.** Criterion 32 sets the card's order: the title (a heading), then "Swap exercise".
+- **Repro.** Hosted `ExerciseCard` at `.xxxLarge`, with the name "Single-Arm Half-Kneeling Landmine Press With A
+  Two-Second Pause" (a custom exercise can have any name). In all 8 settings (375 and 402 pt, plain and Bold
+  Text, both directions), VoiceOver reads "Exercise 1 of 5", "Swap exercise", then the name. The other three
+  sizes, and "Barbell Bench Press" at every size, read in the right order.
+- **Why.** Below the accessibility sizes the row is an `HStack(alignment: .top)`. The button stands level with
+  the eyebrow, so its top is above the name's first line, and VoiceOver orders by position. At `.xxxLarge` the
+  wrapped name is tall enough for this to happen.
+- **Suggested fix.** Make the title row an `.accessibilityElement(children: .contain)` and give the title
+  `.accessibilitySortPriority`, or switch to the stacked layout one size earlier. Add the long name to the
+  implementer's tree test.
+
+### Notes (no finding)
+
+- **My own wrong expectations, corrected:** dumbbell steps by 2.5 lb, not 5. Weighted Dip is bodyweight with a
+  10 lb start, so its row reads "Bodyweight · 10 lb". `SheetChrome`'s title uses its own font, so it is not this
+  module's to cut-check. On the card, the button lines up with the top of the eyebrow, not the title, so "never
+  under" is checked as the title not starting below the button where the two overlap horizontally.
+- **Not checked, a risk:** a refused swap shows its alert while the sheet is still animating away ("Use" clears
+  `dialog` at once). If SwiftUI drops that presentation, `dialog` stays `.editFailed` and "Swap exercise" does
+  nothing until the alert is answered. I could not drive a refusal in the running app. The store-level behaviour
+  is right (`failure_swapRefused`).
+- **Escape** (criterion 20) is `SheetChrome`'s `.accessibilityAction(.escape)`, which sends `.cancelSwap`. I did
+  not perform it in a test.

@@ -2307,3 +2307,155 @@ uncommitted files intact.
 
 **Verdict:** 0 Blocking, 3 Should fix, 5 Nit. Mergeable on the gate's rule once G2-1 lands; SF1–SF3 are doc and
 small store changes the orchestrator should take before merge, since F17 plans from these documents.
+
+## S8b — G3 round 1
+
+G3 reviewer, 2026-11-11, on `ca54ad6...dd73470` (implementation `7381cd9`, G2 tests `dd73470`), read from an
+export of `dd73470` (no checkout). `/code-review` at `high` first, then the seven review points. Excluded, their fix
+is in progress: F10-S8b-G2-1 (Q9 not re-checked at "Use") and F10-S8b-G2-2 (VoiceOver reads the button before the
+name at `.xxxLarge`).
+
+Host `swift test --filter FeatureWorkoutTests` on the export: every swap suite passes except G2's two
+`FAILING (F10-S8b-G2-1)` tests, which fail by design. Some S5–S7 adversarial suites (`WorkoutPumpAdversarialSession`
+`eventually` waits, `WorkoutSaveAdversarial*`) timed out during that run, while the machine was under load from
+concurrent builds (load average 12–13). See "Runs" below. I looked at the eight PNGs beside v2's swap sheet
+(`Ledger v2.dc.html` 151–161, 241–257).
+
+### Blocking
+
+None.
+
+### Should fix
+
+**SF1 · `.openSwap` doesn't name its exercise, so the sheet can open for a different one than the card the lifter
+tapped.** `Views/ExerciseCard.swift:54`, `WorkoutAction.swift:30`, `WorkoutStore+Swap.swift:43-58`.
+The other card actions carry their place (`addSet(exerciseIndex:)`, `repeatLast(exerciseIndex:)`). `openSwap()`
+instead opens for whatever `shownExercise(of:selection:)` is when the action arrives. If the shown exercise moves
+between the tap and the action (today: the last set of Bench logged by another hand, then F17's watch; the plan's
+"Q2 against a peer" class), the sheet opens for Row, and its title is only "Swap exercise". "Use" then swaps Row,
+which the lifter never chose. That is worse than G2-1's duplicate, and the fix is cheaper.
+Fix: `case openSwap(exerciseIndex: Int, exerciseID: ExerciseID)` (the card model already holds both). `openSwap`
+opens only when that place is still the shown exercise, still holds that id, and `canSwap`. Add one store test where
+the shown exercise moves before `.openSwap`, and the sheet does not open.
+
+**SF2 · A refused swap's alert is requested while the swap sheet is still animating away. Nothing shows it
+appears, and if SwiftUI drops it, "Swap exercise" goes dead.** `WorkoutStore+Pump.swift:33-40` (clears `dialog` at
+"Use"), `:150` (`dialog = .editFailed`), `WorkoutRoot.swift:38-41, 54-58`. A local session answers in
+milliseconds and a sheet's dismissal takes about 0.3 s, so the refusal lands during the dismissal nearly every
+time. If the presentation is dropped, `dialog` stays `.editFailed` with nothing on screen, and `openSwap`'s
+`guard dialog == nil` refuses every later swap until "Finish" overwrites the dialog. G2 left this as an unchecked
+risk, and the notes' "Not verified" doesn't name it. This is the one path in S8b where the store's tests can't
+vouch for what the screen shows.
+Fix: prove it, or sequence it.
+- (a) Add a DEBUG launch argument beside `LEDGER_UITEST_FAIL_FINISH` that makes the next applied edit refuse, plus
+  a nightly UI check: "Use", then the "Couldn't save that change" alert is up and "OK" works.
+- (b) Or, structurally, give the swap `.sheet` an `onDismiss:` that sends the store a "sheet gone" signal, and hold
+  a refusal that arrives while `swap` is dismissing until that signal.
+
+If (a) shows the alert appears, (a) alone closes this finding.
+
+**SF3 · No snapshot can fail on the card's new button.** `WorkoutSnapshotTests.swift:66` (`cover_noHistory`). The
+notes say the reference still passed *with* the button drawn: a 44 pt circle is under the 0.5 % pixel budget
+(`precision: 0.995`, testing-strategy §2). So the reference passes with the button missing, moved, or restyled
+(its outline, its icon, the top alignment with the eyebrow that v2 draws). The tree and layout tests pin that the
+button exists and where it is, but nothing pins how it looks, and the plan's 12 changed whole-cover references
+came to only this one (correctly, by Q2).
+Fix: add a card-scoped reference (the `ExerciseCard` of `WorkoutPreview.started`, or its title row alone) in light
+and dark at `.large`, where the button is a large share of the pixels. Run the recording once with the button
+removed and confirm it fails. That makes 8 new references, still under the plan's 20.
+
+### Nit
+
+- **N1 · The lint refactors are behaviour-preserving, but two of them trade exhaustiveness for a `default: break`.**
+  `WorkoutStore+Swap.swift:24-37` (`answerSwap`) and `WorkoutEdit+Rest.swift:8-14` (`answerRestPanel`). Checked:
+  `closeReceipt(showing: nil)` is the old `closeReceipt()` (default argument). `answerRestPanel` maps `.extendRest`
+  and `.skipRest` exactly as before. `loseTheSession()` is the old tail, plus `.swap` in `dismiss`. A case later
+  routed to these helpers and not handled compiles and does nothing.
+  Fix (any one): nest them (`WorkoutAction.swap(SwapIntent)` with `open`/`cancel`/`updateProgram(Bool)`, and
+  `WorkoutEdit.rest(RestAnswer)`), so the inner switches are exhaustive with no `default`; or call `openSwap()`,
+  `dismiss([.swap])` and a `setUpdateProgram(_:)` straight from `send`'s switch.
+- **N2 · The check "the place still holds the exercise the sheet was opened for, and it can be swapped" is written
+  twice, and a third site skips the id.** `closeSwapIfStale` (`WorkoutStore+Swap.swift:62-72`) and
+  `WorkoutEditPlan.swap` (`WorkoutEdit+Swap.swift:22-28`) both have it. `loadSwap` (`:80-86`) checks the index and
+  not the id, so a place that changed between "Swap exercise" and the read gets rows for the wrong exercise. The
+  sheet is down by then, so nothing visible happens. G2-1's Q9 check would be a third copy.
+  Fix: one `SwapState`/`SwapChoice` predicate (for example `isCurrent(in: WorkoutState) -> Bool`) used by all three,
+  with `loadSwap` checking the id too.
+- **N3 · A cancelled read can show a failure.** `WorkoutStore+Swap.swift:91` (and the same pattern at `:156`,
+  from S7b). An error from a cancelled task is dropped only when it is a `CancellationError`. If a store throws
+  another error on cancellation (an interrupted statement), the restarted task's good answer for the same attempt
+  is then dropped by the `.loading` guard, and the sheet says "Couldn't load alternatives." (criterion 26).
+  Fix: after the `await`, return whenever `Task.isCancelled`, whatever the error. Its replacement task answers.
+- **N4 · "Use" puts dialog policy into the shared tap queue.** `WorkoutStore+Pump.swift:33-40`. `enqueue` now
+  inspects and clears `dialog` for one edit kind.
+  Fix: route "Use" through `answerSwap` (check `dialog == .swap`, clear it, then call the plain `enqueue`), so the
+  queue stays "queues a tap". This pairs with SF1/N1.
+- **N5 · `openSwap` checks Q2 against the workout the stream has shown, not the pump's newer `ahead`.**
+  `WorkoutStore+Swap.swift:43-47`. If the lifter logs a set and taps "Swap exercise" within the same few
+  milliseconds, the sheet opens, starts its reads, and then `closeSwapIfStale` takes it down. That is harmless but
+  a flash. Fix: check `ahead ?? shown` as well. It's optional, because the plan (Q2 at its turn) is what keeps the
+  data right.
+- **N6 · The swap button keeps full ink while the page is disabled.** `Views/ExerciseCard.swift:53-56`.
+  `IconPillButton` has no disabled look, so during a Minimize that waits (`isBusy`, page `.disabled`) it looks
+  live while "Repeat" and "+ Add set" dim.
+  Fix: `swap: canSwap(exercise) && !isBusy ? … : nil` in `WorkoutPresentation+Card.swift:89`, which also matches the
+  "no dead button" rule of criterion 13.
+- **N7 · Small duplications and serial reads.** `SwapSheet+Previews.swift:47-63` repeats the store's
+  ranked-to-`SwapChoice` mapping (`WorkoutStore+Swap.swift:104-120`). Extract a pure
+  `SwapChoice.choices(ranked:lasts:replacing:units:)` used by both, so previews and references can't drift from
+  what the store builds. `exercise(id:)` could also be a lookup in the `all()` already read, which saves one read.
+  The up-to-8 `lastPerformance` reads are serial, which is fine for local GRDB. Leave them unless the sheet's empty
+  time shows on device.
+- **N8 · `SwapSheet` borrows `FinishSheet.detents`.** `Views/SwapSheet.swift:21`. The full-height decision is
+  right: it is S7a's finding (a half-height sheet shrinks the 44 pt cancel), it is listed as deviation 1, and at
+  `.accessibility3` the eight rows need the height anyway. But it couples two unrelated sheets. Move the constant
+  to a neutral name (for example `WorkoutSheet.detents`, with S7a's reason) and have both use it. Pete should see
+  that the sheet stands full height where v2 draws a content-height bottom sheet: add it to the product-owner list
+  with the invented copy.
+
+### Review points
+
+1. **Module boundaries:** clean. FeatureWorkout uses the `exerciseRepository` dependency that was already bound,
+   and `LedgerDesign`, `LedgerAppKit`, the schema and the project file are untouched.
+2. **Concurrency:** no unstructured task in product code. Both reads run from the root's `.task(id:)`. Stale
+   attempts are dropped (`attempt == swapAttempt`). The plan re-checks the id and Q2 on the newest workout at its
+   turn, so Q2 holds at the button, at `openSwap` and in the plan, with `closeSwapIfStale` at every update. No race
+   lets a swap land on an exercise with a done set. SF1, N3 and N5 are about which sheet opens or what it says,
+   not about the data.
+3. **Error handling:** read failures are logged and shown, with no guessed load. A refusal goes through S5's
+   alert. Failed bests reads are logged and not retried. SF2 is the gap.
+4. **Design fidelity:** compared with v2, the title/Cancel line, the muted line, the hairline rows with the name
+   over the sub, "Use" in orange on the trailing side and the closing rule all match. The card's round outline
+   button is top-aligned with the eyebrow, as v2's `align-items:flex-start` has it. Deviations, all in the notes:
+   SheetChrome's ghost "Cancel", the brief's switch row, full height (N8), and at `.accessibility3` "Cancel" under
+   the title and "Use" under its sub. Tokens only. The orange is "Use" alone (Q8).
+5. **Accessibility:** the sheet's tree matches criterion 32. The rows read as one button each, the switch has a
+   value, and escape is "Cancel". The 44 pt and cut sweeps are in G2's hosted suite. G2-2 is excluded.
+   "Dumbbell · 15 lb" is read as written, which criterion 32 pins word for word, so it is not a finding.
+6. **Test quality:** gated doubles and no sleeps. G2's mutant on the plan's Q2 check was caught. SF3 is the one
+   weak guard.
+7. **Brief compliance:** every one of criteria 13–34 maps to a test in the notes' table. Criterion 28's UI test
+   passed nightly under G2. The sanctioned edits are additive and audited: `WorkoutWordsAdversarialTests` has 15
+   keys added under an "F10 S8b" comment, and `WorkoutCopyTests` goes 82 → 97. Each new key is `translated`, its
+   comment is equal to the code's, and the equipment names are word for word FeatureLibrary's (standards §7).
+   Invented copy ("Same movement pattern.", "Couldn't load alternatives.", "No alternatives for this exercise.") is
+   listed for Pete.
+
+### Runs
+
+Host `swift test --filter FeatureWorkoutTests`, on an export of `dd73470` in the scratchpad, while the machine was
+loaded by concurrent builds:
+- **Swap suites:** every test passes except G2's two `FAILING (F10-S8b-G2-1)` tests, which fail by design. That
+  covers `WorkoutSwap*Adversarial*`, `WorkoutStoreSwap*`, `WorkoutPresentationSwapTests` and
+  `WorkoutEditPlanSwapTests`.
+- **Older suites:** 28 tests in S5–S7 adversarial suites failed on `eventually` timeouts in their setup
+  (`WorkoutPumpAdversarialSession.swift:244`, `WorkoutSaveAdversarialCover.swift:50`). S8b doesn't touch that
+  code. Then the run stopped producing output partway through a `WorkoutSaveAdversarial` test and was still stuck
+  there 60 minutes later. I wasn't permitted to stop it and rerun those suites when the load dropped, so I have
+  **not** established that they are load-only.
+- **Action for the orchestrator:** before merge, rerun `swift test --filter FeatureWorkoutTests` on the fixed head
+  with the machine idle. If any S5–S7 suite still fails, that is a new Blocking finding against the S8b diff, most
+  likely from the `follow()` or `enqueue` changes.
+
+**Verdict:** 0 Blocking, 3 Should fix, 8 Nit. Mergeable on the gate's rule once G2-1 and G2-2 land. SF1 and SF2
+are small and should go in with that fix round. SF3 is two references.

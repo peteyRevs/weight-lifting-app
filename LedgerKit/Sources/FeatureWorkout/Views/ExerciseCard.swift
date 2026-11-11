@@ -6,22 +6,14 @@ import SwiftUI
 /// v2 draws it on the ground with no card behind it, and so does this.
 ///
 /// The page's one orange is the shown row's (`SetRow`'s `active` state: its label, its rule and its check's
-/// ring); the eyebrow, "TARGET" and "Repeat" are ink.
+/// ring); the eyebrow, "TARGET", "Repeat" and the swap button are ink.
 struct ExerciseCard: View {
     let model: ExerciseCardModel
-    let send: (WorkoutEdit) -> Void
+    let send: (WorkoutAction) -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xl) {
-            VStack(alignment: .leading, spacing: LedgerSpacing.s) {
-                Text(model.eyebrow)
-                    .ledgerFont(.caption)
-                    .foregroundStyle(LedgerColor.inkMuted)
-                Text(model.title)
-                    .ledgerFont(.heading)
-                    .foregroundStyle(LedgerColor.ink)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("workout.card.title")
-            }
+            ExerciseCardTitleRow(model: model, send: send)
             // More room between the two facts than inside one (`FactLine` stacks with `xs`), so that at every
             // size "Last" stands nearer its own value than the target's.
             VStack(alignment: .leading, spacing: LedgerSpacing.m) {
@@ -29,9 +21,9 @@ struct ExerciseCard: View {
                 last
             }
             VStack(alignment: .leading, spacing: 0) {
-                SetRowList(model: model, send: send)
+                SetRowList(model: model) { send(.edit($0)) }
                 PillButton(model.addSet, style: .ghost, flush: .leading) {
-                    send(.addSet(exerciseIndex: model.exerciseIndex))
+                    send(.edit(.addSet(exerciseIndex: model.exerciseIndex)))
                 }
                 .accessibilityIdentifier("workout.card.addSet")
             }
@@ -45,10 +37,52 @@ struct ExerciseCard: View {
             FactLine(label: model.lastLabel, value: model.last)
             Spacer(minLength: 0)
             if let title = model.repeatLast {
-                PillButton(title) { send(.repeatLast(exerciseIndex: model.exerciseIndex)) }
+                PillButton(title) { send(.edit(.repeatLast(exerciseIndex: model.exerciseIndex))) }
                     .accessibilityIdentifier("workout.card.repeat")
             }
         }
+    }
+}
+
+/// The place and the name, with "Swap exercise" at the trailing edge, level with the top of the place
+/// (v2), while the exercise can be swapped. At the accessibility sizes the button stands under the name,
+/// so the name keeps the whole width and never wraps under the button.
+///
+/// VoiceOver reads the place and the name, then the button, whatever the layout puts higher (criterion 32;
+/// F10-S8b-G2-2): the row is a container, the place and name one group in it, and the button sorts after
+/// that group (priority −1 against the default 0), not by position (a wrapped name starts below the
+/// button's top). Only the button carries a priority, so a card without it reads as before.
+struct ExerciseCardTitleRow: View {
+    let model: ExerciseCardModel
+    let send: (WorkoutAction) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.m))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: LedgerSpacing.m))
+        return layout {
+            VStack(alignment: .leading, spacing: LedgerSpacing.s) {
+                Text(model.eyebrow)
+                    .ledgerFont(.caption)
+                    .foregroundStyle(LedgerColor.inkMuted)
+                Text(model.title)
+                    .ledgerFont(.heading)
+                    .foregroundStyle(LedgerColor.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("workout.card.title")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            if let swap = model.swap {
+                IconPillButton(swap, icon: .swap) {
+                    send(.swap(.open(exerciseIndex: model.exerciseIndex, exerciseID: model.exerciseID)))
+                }
+                .accessibilityIdentifier("workout.card.swap")
+                .accessibilitySortPriority(-1)
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 
