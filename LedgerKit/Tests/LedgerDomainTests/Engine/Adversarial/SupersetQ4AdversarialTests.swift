@@ -162,14 +162,16 @@ extension SupersetQ4AdversarialTests {
         #expect(relogged.state.rest == RestTimer(endsAt: Engine.at(130), total: .seconds(90)))
     }
 
-    @Test("Q4 as ruled: un-logging A1 and logging it again (not-done → done, not last) ends B1's rest")
-    func q4_unlogAndRelogOfANonLastRow_endsTheRest() throws {
+    @Test("Q4 refined: un-logging A1 and logging it again completes round 1, so B1's rest runs on")
+    func q4_unlogAndRelogOfANonLastRow_keepsTheRest() throws {
         let session = EventBuilders.session(EventBuilders.supersetExercises)
         let round = [Engine.logged(0, 0, at: 10), Engine.logged(1, 0, at: 20)]
         let unlog = WorkoutEvent.setUnlogged(exerciseIndex: 0, setID: Engine.set(0, 0))
         let result = try Engine.run(round + [unlog, Engine.logged(0, 0, pounds: 60, at: 40)], on: session)
-        #expect(result.state.rest == nil)
-        #expect(Self.own(result.effects) == [.haptic(.setLogged), .cancelRestNotification])
+        // F10 S9 fix round 2 (sanctioned edit, Q4 refined): the re-logged A1 completes round 1, so B1's rest
+        // runs on and nothing is cancelled.
+        #expect(result.state.rest == RestTimer(endsAt: Engine.at(110), total: .seconds(90)))
+        #expect(Self.own(result.effects) == [.haptic(.setLogged)])
     }
 
     @Test("Q4: a done → done re-log of A1 during the rest keeps it, whatever its values")

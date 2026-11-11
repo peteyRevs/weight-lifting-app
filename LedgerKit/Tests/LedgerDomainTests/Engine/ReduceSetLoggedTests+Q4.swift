@@ -75,6 +75,34 @@ extension ReduceSetLoggedTests {
         #expect(manual.state.rest == RestTimer(endsAt: Engine.at(40), total: .seconds(30)))
     }
 
+    @Test("Q4 refined: B1 then the forgotten A1: A1 completes the round, so B1's rest and its notification stand")
+    func outOfOrder_completingRow_keepsTheRest() throws {
+        let outOfOrder = [Engine.logged(1, 0, at: 10), Engine.logged(0, 0, at: 30)]
+        let afterB1 = try Engine.run(Array(outOfOrder.prefix(1)), on: Self.superset)
+        let pending = RestTimer(endsAt: Engine.at(100), total: .seconds(90))
+        #expect(afterB1.state.rest == pending)
+        #expect(Self.own(afterB1.effects).contains(.scheduleRestNotification(endsAt: Engine.at(100))))
+        let afterA1 = try Engine.run(outOfOrder, on: Self.superset)
+        #expect(afterA1.state.rest == pending, "the rest runs on")
+        #expect(Self.own(afterA1.effects) == [.haptic(.setLogged)], "no second rest, nothing cancelled")
+        // Logged once the rest is over, A1 leaves the ended rest, which is no longer shown.
+        let late = try Engine.run([Engine.logged(1, 0, at: 10), Engine.logged(0, 0, at: 500)], on: Self.superset)
+        #expect(late.state.rest == pending)
+        #expect(late.state.shownRest == nil)
+    }
+
+    @Test("Q4 refined: with auto rest off, B1 logged before A1 leaves its round open and ends a manual rest")
+    func outOfOrder_autoRestOff_openRoundEndsTheRest() throws {
+        let off = EventBuilders.session(EventBuilders.supersetExercises, autoRest: false)
+        let result = try Engine.run([Engine.extend(tapped: 10), Engine.logged(1, 0, at: 20)], on: off)
+        #expect(result.state.rest == nil)
+        #expect(Self.own(result.effects) == [.haptic(.setLogged), .cancelRestNotification])
+        let completed = try Engine.run(
+            [Engine.logged(1, 0, at: 5), Engine.extend(tapped: 10), Engine.logged(0, 0, at: 20)], on: off
+        )
+        #expect(completed.state.rest == RestTimer(endsAt: Engine.at(40), total: .seconds(30)), "A1 completes it")
+    }
+
     @Test("Q4 against the oracle: after every event of seeded superset scripts, the rest is the oracle's")
     func seededScripts_restMatchesTheOracle() {
         let session = EventBuilders.session(EventBuilders.supersetExercises)

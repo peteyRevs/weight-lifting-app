@@ -154,8 +154,13 @@ struct Model {
         let rounds = buildRounds(of: members)
         let row = Row(exercise: exerciseIndex, set: setIndex)
         let endsItsRound = rounds.contains { $0.last == row }
-        if !endsItsRound {
-            // F10 S9, ruling Q4: a member that starts no rest ends the one the workout holds.
+        // F10 S9, ruling Q4 as refined: a row that starts no rest and leaves its round with an undone row ends
+        // the rest the workout holds; a row that completes its round, in any order, leaves it.
+        var leavesTheRoundOpen = false
+        for round in rounds where round.contains(row) {
+            leavesTheRoundOpen = round.contains { isUndone($0) }
+        }
+        if !(workout.autoRest && endsItsRound), leavesTheRoundOpen {
             workout.rest = nil
         }
         if workout.autoRest, endsItsRound {

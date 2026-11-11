@@ -90,7 +90,6 @@ struct SetLoggedCursorAdversarialTests {
         var state = Adv.state(after: [Adv.start(EventBuilders.session(specs))])
         for (step, (exercise, set)) in order.enumerated() {
             let seconds = Double(10 * (step + 1))
-            let previousRest = state?.rest
             state = Self.log(state, exercise, set, at: seconds, seq: UInt64(step + 2)).state
             if lastOfRound.contains(step) {
                 #expect(
@@ -100,7 +99,6 @@ struct SetLoggedCursorAdversarialTests {
             } else {
                 // F10 S9, ruling Q4 (sanctioned edit): a member that starts no rest ends the one held.
                 #expect(state?.rest == nil, "step \(step): only the round's last member rests; the others end it")
-                _ = previousRest
             }
             let next = step + 1 < order.count ? Adv.cursor(order[step + 1].0, order[step + 1].1) : Adv.cursor(3, 0)
             #expect(state?.cursor == next, "step \(step)")
