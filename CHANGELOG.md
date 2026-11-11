@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.18.0...v0.19.0) (2026-11-11)
+
+
+### Features
+
+* **workout:** swap an exercise from its card, from a sheet of alternatives (F10 S8b) ([#89](https://github.com/peteyRevs/weight-lifting-app/issues/89)) ([18f1201](https://github.com/peteyRevs/weight-lifting-app/commit/18f120157ae7643b2bb299867f4d1dda8d84e8cf))
+
 ## [0.18.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.17.0...v0.18.0) (2026-11-11)
 
 
