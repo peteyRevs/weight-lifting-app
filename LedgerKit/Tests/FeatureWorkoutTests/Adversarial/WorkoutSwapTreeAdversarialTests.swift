@@ -128,10 +128,10 @@
         /// F10-S8b-G2-2: at `.xxxLarge`, a name that wraps puts "Swap exercise" before the title in VoiceOver's
         /// order (the button stands level with the place, above the title's first line).
         @Test(
-            "FAILING (F10-S8b-G2-2): the card reads the title (heading), then Swap exercise (button, 44 pt)",
+            "F10-S8b-G2-2: the card reads the title (heading), then Swap exercise (button, 44 pt)",
             arguments: sizes
         )
-        func failing_card_titleRow(size: DynamicTypeSize) throws {
+        func card_titleRow(size: DynamicTypeSize) throws {
             for name in ["Barbell Bench Press", Self.longName] {
                 let card = try Self.card(name: name)
                 let view = ExerciseCard(model: card, send: { _ in })

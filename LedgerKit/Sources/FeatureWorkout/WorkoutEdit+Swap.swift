@@ -6,8 +6,9 @@ import LedgerDomain
 nonisolated extension WorkoutEditPlan {
     /// One `exerciseSwapped` that brings the choice's replacement, as the sheet showed it, and the toggle.
     /// It is planned at its turn, on the newest workout: if the exercise at that place is no longer the one the
-    /// sheet was opened for, or now has a set logged (S8 ruling Q2), or the place is gone, it comes to
-    /// nothing. The selection is left as it was: no set of the exercise is logged, so its shown row is still
+    /// sheet was opened for, or now has a set logged (S8 ruling Q2), or the place is gone, or the chosen
+    /// exercise now stands at another place of the workout (Q9: never one exercise twice; F10-S8b-G2-1), it
+    /// comes to nothing. The selection is left as it was: no set of the exercise is logged, so its shown row is still
     /// the one the lifter saw.
     mutating func swap(
         _ choice: SwapChoice,
@@ -19,7 +20,9 @@ nonisolated extension WorkoutEditPlan {
             return
         }
         let exercise = state.exercises[exerciseIndex]
-        guard exercise.exerciseID == choice.replacing, WorkoutPresentation.canSwap(exercise) else {
+        guard exercise.exerciseID == choice.replacing, WorkoutPresentation.canSwap(exercise),
+              !WorkoutPresentation.holds(choice.exerciseID, besides: exerciseIndex, in: state)
+        else {
             return
         }
         events.append(.exerciseSwapped(

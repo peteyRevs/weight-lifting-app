@@ -58,7 +58,10 @@ extension WorkoutStore {
     }
 
     /// Takes the sheet down when the workout `live` leaves its exercise unswappable: a set of it logged, by
-    /// a tap that waited or by another hand, or another exercise in its place (criterion 25).
+    /// a tap that waited or by another hand, or another exercise in its place (criterion 25); and when an
+    /// exercise it offers now stands elsewhere in the workout, which "Use" would refuse (Q9, F10-S8b-G2-1). The
+    /// plan refuses either at "Use"'s turn as well; closing the sheet keeps a row that can no longer apply
+    /// from being shown.
     func closeSwapIfStale(on live: WorkoutState) {
         guard dialog == .swap, let swap else {
             return
@@ -66,7 +69,13 @@ extension WorkoutStore {
         let isSwappable = live.exercises.indices.contains(swap.exerciseIndex)
             && live.exercises[swap.exerciseIndex].exerciseID == swap.exerciseID
             && WorkoutPresentation.canSwap(live.exercises[swap.exerciseIndex])
-        if !isSwappable {
+        var isOfferTaken = false
+        if case let .loaded(choices) = swap.alternatives {
+            isOfferTaken = choices.contains {
+                WorkoutPresentation.holds($0.exerciseID, besides: swap.exerciseIndex, in: live)
+            }
+        }
+        if !isSwappable || isOfferTaken {
             dialog = nil
         }
     }

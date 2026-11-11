@@ -46,8 +46,8 @@ extension WorkoutSwapRankingAdversarialTests {
         #expect(Self.plan(.swap(exerciseIndex: 0, choice: choice, alsoUpdateProgram: false), logged).isEmpty)
     }
 
-    @Test("FAILING (F10-S8b-G2-1): the plan swaps in an exercise the workout already holds elsewhere")
-    func failing_plan_refusesAnExerciseAlreadyInTheWorkout() throws {
+    @Test("F10-S8b-G2-1: the plan refuses an exercise the workout already holds elsewhere")
+    func plan_refusesAnExerciseAlreadyInTheWorkout() throws {
         var state = try SwapG2Catalog.workout()
         let dumbbell = try SwapG2Catalog.named("Dumbbell Bench Press")
         let choice = try Self.choice(for: state, dumbbell.name)

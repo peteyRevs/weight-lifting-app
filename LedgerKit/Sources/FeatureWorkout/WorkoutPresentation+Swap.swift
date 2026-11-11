@@ -9,6 +9,12 @@ nonisolated extension WorkoutPresentation {
         !exercise.sets.contains { $0.isDone }
     }
 
+    /// Whether `exerciseID` stands at a place of `state` other than `index` (Q9: a swap never puts one exercise
+    /// in the workout twice).
+    static func holds(_ exerciseID: ExerciseID, besides index: Int, in state: WorkoutState) -> Bool {
+        state.exercises.indices.contains { $0 != index && state.exercises[$0].exerciseID == exerciseID }
+    }
+
     /// The swap sheet of `swap` over `state` (criteria 14 to 16, 23 and 24). The rows' numbers are the ones
     /// "Use" applies, formatted by the Domain in the workout's units; the switch is drawn only where it can
     /// change something, an exercise from a program's slot, and opens as the store holds it.

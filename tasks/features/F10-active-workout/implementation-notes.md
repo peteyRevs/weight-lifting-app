@@ -6395,3 +6395,22 @@ FeatureWorkout +549 −23: **526 net** (plan 507, expected 650–810; stop at 80
 ### Not verified
 
 - The sheet's presentation in the running app (detent, swipe down, escape on a device), and VoiceOver on a device.
+
+### S8b fix round 1 (G1 implementer, 2026-11-11)
+
+On G2's `dd73470` ("S8b — G2 round 1") and the orchestrator's rulings (fix both).
+
+| Finding | What changed | Tests |
+|---|---|---|
+| **F10-S8b-G2-1** (Minor): Q9 checked only when the list was read | The plan's swap check (`WorkoutEditPlan.swap`) also refuses a choice the workout, as it stands at "Use"'s turn, holds at another place (`WorkoutPresentation.holds(_:besides:in:)`), so it comes to nothing as a Q2 refusal does: no event, no alert. As for Q2, the sheet goes down at the update that makes a row stale: `closeSwapIfStale` also closes it when an exercise it offers now stands elsewhere in the workout | the tester's `peerTakesAnOfferedExercise_useDuplicates`, `plan_refusesAnExerciseAlreadyInTheWorkout`, unedited but for the rename; mine: `WorkoutEditPlanSwapTests.exerciseHeldElsewhere_comesToNothing`, `WorkoutStoreSwapFailureTests.offeredExerciseTakenElsewhere_closesTheSheet` |
+| **F10-S8b-G2-2** (Minor): at `.xxxLarge` a wrapped name was read after "Swap exercise" | The order is structural: the title row is an accessibility container (`.contain`), the place and name are one contained group, and the button sorts after it (priority −1 against the default 0), whatever the layout puts higher. Only the button carries a priority: a first try that raised the group to 1 lifted the name above the header on cards without the button (the cover trees caught it) | the tester's `WorkoutSwapTreeAdversarialTests.card_titleRow` (four sizes × every setting, two names); the cover's pinned trees unchanged |
+
+**Sanctioned edits (listed):** the three tests' `FAILING (…)` display prefixes and `failing_` function prefixes
+are removed (`WorkoutSwapAdversarialTests+Moves.peerTakesAnOfferedExercise_useDuplicates`,
+`WorkoutSwapRankingAdversarialTests+Plan.plan_refusesAnExerciseAlreadyInTheWorkout`,
+`WorkoutSwapTreeAdversarialTests.card_titleRow`); the two G2-1 display names now say what holds ("makes no
+duplicate", "refuses"). Bodies unedited.
+
+**Product lines**: +14 (FeatureWorkout 540 net against `ca54ad6`).
+
+**Runs**: host `FeatureWorkoutTests` 536 tests in 70 suites passed. The full gate: in the report.

@@ -52,8 +52,8 @@ extension WorkoutSwapAdversarialTests {
     /// they were when it was read; nothing checks again at "Use". Another hand (the watch, F17) that swaps a
     /// later exercise into one of the offered rows meanwhile leaves the row live, and "Use" then puts the same
     /// exercise in two places.
-    @Test("FAILING (F10-S8b-G2-1): another hand puts an offered exercise in the workout; Use makes a duplicate")
-    func failing_peerTakesAnOfferedExercise_useDuplicates() async throws {
+    @Test("F10-S8b-G2-1: another hand puts an offered exercise in the workout; Use makes no duplicate")
+    func peerTakesAnOfferedExercise_useDuplicates() async throws {
         let bench = try await Bench.make()
         await bench.open()
         let dumbbell = try SwapG2Catalog.named("Dumbbell Bench Press")

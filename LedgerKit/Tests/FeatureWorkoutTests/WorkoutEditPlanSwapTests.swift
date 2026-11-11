@@ -63,6 +63,14 @@ struct WorkoutEditPlanSwapTests {
         #expect(Self.plan(logged).events.isEmpty)
     }
 
+    @Test("A choice the workout now holds at another place comes to nothing (Q9, F10-S8b-G2-1)")
+    func exerciseHeldElsewhere_comesToNothing() {
+        var taken = Self.seed
+        taken.exercises[3].exerciseID = Self.choice.exerciseID
+        #expect(Self.plan(taken).events.isEmpty)
+        #expect(!Self.plan().events.isEmpty, "held at no other place, it is swapped in")
+    }
+
     @Test("A choice for a place the workout no longer has comes to nothing")
     func goneIndex_comesToNothing() {
         #expect(Self.plan(at: 5).events.isEmpty)

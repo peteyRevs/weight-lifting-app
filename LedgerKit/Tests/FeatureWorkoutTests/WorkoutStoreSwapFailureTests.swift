@@ -107,7 +107,23 @@ struct WorkoutStoreSwapFailureTests {
         task.cancel()
     }
 
-    // MARK: Criterion 25: the workout ends under the sheet
+    // MARK: Criterion 25: the workout moves or ends under the sheet
+
+    @Test("An offered exercise put into the workout elsewhere takes the sheet down; its row then does nothing")
+    func offeredExerciseTakenElsewhere_closesTheSheet() async throws {
+        let scene = try Scene.onFake(live: Fixtures.seedSession())
+        let (store, task) = await Swap.following(scene)
+        let row = try await #require(Swap.open(store).rows.first)
+        try await scene.fake?.apply(.exerciseSwapped(
+            exerciseIndex: 3, exerciseID: row.id, name: row.name, alsoUpdateProgram: false
+        ))
+        await eventually { store.dialog == nil }
+        store.send(.edit(row.choose))
+        await store.drain()
+        #expect(await Swap.swaps(scene).count == 1, "only the other hand's swap")
+        #expect(store.model.page?.card?.title == "Barbell Bench Press")
+        task.cancel()
+    }
 
     @Test("A workout ended elsewhere closes the sheet and the cover")
     func endedElsewhere_closesBoth() async throws {
