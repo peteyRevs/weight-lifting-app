@@ -167,11 +167,11 @@ struct SwapReduceEdgeAdversarialTests {
         #expect(state.exercises[0].sets.allSatisfy { $0.weight == .zero })
     }
 
-    /// FAILING (F10-S8a-G2-1): a replacement that passes `isWellFormed` can still leave a weight the store
+    /// F10-S8a-G2-1 (fixed in fix round 1): a replacement that passes `isWellFormed` can still leave a weight the store
     /// cannot write: a step so small that the drop's quotient overflows `Decimal` (NaN), or one finer than
     /// 10⁻⁷ g. The engine accepts it, the event store keeps it, and the workout can never be saved (F10-S2-1).
-    @Test("FAILING F10-S8a-G2-1: an accepted replacement leaves every weight a finite whole number of 10⁻⁷ g")
-    func failing_wellFormedReplacement_leavesStorableWeights() throws {
+    @Test("F10-S8a-G2-1: an accepted replacement leaves every weight a finite whole number of 10⁻⁷ g")
+    func wellFormedReplacement_leavesStorableWeights() throws {
         let start = SwapAdv.session()
         let hostile: [(String, SwappedExercise)] = try [
             ("huge load, tiny step", SwapAdv.replacement(

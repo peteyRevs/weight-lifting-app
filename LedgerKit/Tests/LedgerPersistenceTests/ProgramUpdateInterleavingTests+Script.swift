@@ -23,6 +23,8 @@ extension ProgramUpdateInterleavingTests {
     struct Model: Sendable {
         var program: Program
         var isDeleted = false
+        /// The workouts saved so far: only a workout's first save writes its swaps (F10 S8a, G3 SF1, ruled).
+        var saved: Set<WorkoutID> = []
 
         /// What `active()` must answer.
         var active: Program? {
@@ -162,7 +164,7 @@ extension ProgramUpdateInterleavingTests {
     /// program back, and writes its copy over everything stored since.
     static func wholeSave(_ opening: Program) -> Step {
         Step(label: "save the opening program") { model in
-            model = Model(program: opening)
+            model = Model(program: opening, saved: model.saved) // the workouts stay saved
             return "saved"
         } body: { side in
             try await side.programs.save(opening)
@@ -227,7 +229,8 @@ extension ProgramUpdateInterleavingTests {
         let saved = workout
         let label = "materialize \(number), \(saved.programUpdates.count) swaps, \(misses.count) misses"
         return Step(label: label) { model in
-            model.write(misses: misses, swaps: saved.programUpdates)
+            let isFirstSave = model.saved.insert(saved.id).inserted
+            model.write(misses: misses, swaps: isFirstSave ? saved.programUpdates : [:])
             return "saved"
         } body: { side in
             try await side.workouts.materialize(saved, slotUpdates: misses)

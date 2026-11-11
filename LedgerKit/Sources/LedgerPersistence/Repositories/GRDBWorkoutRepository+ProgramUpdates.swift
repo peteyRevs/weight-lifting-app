@@ -17,8 +17,22 @@ extension GRDBWorkoutRepository {
     /// (`ProgramRows.holdsExercise(_:in:)`, the one rule for both). Any other entry is logged and skipped: the
     /// program was edited or deleted during the workout or since, and the workout is still stored. A slot that
     /// already holds the exercise is left alone, so a second materialisation runs no statement that writes.
-    static func writeProgramUpdates(of workout: WorkoutState, in database: Database, at timestamp: String) throws {
+    ///
+    /// Only a workout's first save writes them (`isFirstSave`: no row of the workout, live or deleted, was stored
+    /// before this transaction; F10 S8a, SF1). A later save of the same workout (a retry, a rebuild, a lost
+    /// answer) never touches the program, so a slot the lifter set back to the original after the first save
+    /// keeps it.
+    static func writeProgramUpdates(
+        of workout: WorkoutState,
+        in database: Database,
+        at timestamp: String,
+        isFirstSave: Bool
+    ) throws {
         guard !workout.programUpdates.isEmpty else {
+            return
+        }
+        guard isFirstSave else {
+            Logger.persistence.notice("Program updates skipped: the workout was saved before")
             return
         }
         guard let program = workout.source.map({ ColumnCodec.text($0.programID) }) else {
@@ -43,6 +57,13 @@ extension GRDBWorkoutRepository {
                 arguments: [update.exercise, timestamp, update.slot]
             )
         }
+    }
+}
+
+extension GRDBWorkoutRepository {
+    /// Whether the store holds a row of workout `id`, live or deleted.
+    static func holdsWorkout(_ id: WorkoutID, in database: Database) throws -> Bool {
+        try Int.fetchOne(database, sql: "SELECT 1 FROM workout WHERE id = ?", arguments: [ColumnCodec.text(id)]) != nil
     }
 }
 

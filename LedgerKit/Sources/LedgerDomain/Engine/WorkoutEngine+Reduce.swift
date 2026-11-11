@@ -143,7 +143,8 @@ private extension WorkoutState {
     /// the replacement's equipment, step and last performance, its target load becomes the replacement's load,
     /// and every set not done takes that load (a drop set its drop, `SessionBuilder.dropLoad(of:step:)`); done
     /// sets, reps, rest, RPE, the target's sets and reps, the slot, the original exercise and the superset flag
-    /// stay. Without one (every swap written before S8) nothing else changes, so an old log replays the same.
+    /// stay. Without one (every swap written before S8) nothing else changes, so an old log replays the same,
+    /// except that a swap with the toggle off now removes the slot's entry (Q4).
     ///
     /// The slot's program change follows the toggle: on records this exercise, off removes an earlier entry
     /// (Q4). An exercise with no slot records none.

@@ -6193,3 +6193,49 @@ LedgerTestSupport +142 net (contract clauses 139, `ModelOracle` +29).
   lines, 99.44 % (threshold 95 %).
 - For the tester: `isWellFormed` does not refuse an inexact step or load (not a whole number of 10⁻⁷ g), as no
   other payload weight is checked for it; such a value would reach the save's `inexactWeight` refusal.
+
+### S8a fix round 1 (G1 implementer, 2026-11-10)
+
+On G2's `94d0fbc` ("S8a — G2 round 1") and the orchestrator's ruling.
+
+| Finding | What changed | Tests |
+|---|---|---|
+| **F10-S8a-G2-1** (Minor), ruled FIX | `EventEnvelope.isWellFormed` also refuses a replacement whose step, load or drop load (`SessionBuilder.dropLoad`) a store cannot keep. The predicate is the store's own: `Weight.isStorable`, a `Bool` reading of `checkStorable()` (`StorageBoundary`, ADR-007), not a second definition. The drop is computed only once the step is storable and above zero and the load storable, so its quotient cannot overflow `Decimal`; a drop that would round past the `Int64` range is refused too. `ModelOracle.accepts` mirrors it. Brief criterion 7 amended | the tester's `wellFormedReplacement_leavesStorableWeights` passes; `WorkoutEngineSwapTests.malformed_isIgnored` gains five cases (a 10⁻⁹ g step, a ⅛ lb load, 10³⁰ g, 10⁻¹²⁰ g against 10¹²⁰ g, and a storable step and load whose drop leaves the range) |
+
+**Sanctioned edits (listed).**
+- `SwapReduceEdgeAdversarialTests.failing_wellFormedReplacement_leavesStorableWeights` is renamed
+  `wellFormedReplacement_leavesStorableWeights`, and the "FAILING" prefix leaves its display name and doc
+  comment; its body is unedited.
+- `SwapPropertyAdversarialTests` and `SwapAdversarialSupport`: the tester's scripts swap in inexact loads (x/7 g,
+  185.125 lb) that the ruling now refuses. Their model gains the ruled rule (`SwapAdv.isRefused`, on the tester's
+  own `isWholeE7g` and the plan's drop rule): such a swap must leave the state unchanged. Nothing else in them
+  changed.
+
+**Product lines**: +9 (LedgerDomain: `isStorable` 3, `isWellFormed` 6).
+
+### S8a fix round 2 (G1 implementer, 2026-11-10)
+
+On G3's `1f799f4` ("S8a — G3 round 1") and the orchestrator's rulings. One gate covers rounds 1 and 2.
+
+| Item | Ruling | What changed | Tests |
+|---|---|---|---|
+| SF1 | FIX (b) | A workout's `programUpdates` are written by its **first** save only. GRDB reads, in `materialize`'s transaction and before the rows are written, whether any row of the workout (live or deleted) was stored (`holdsWorkout`); the fake asks its history the same in its one write. A later save logs "skipped: the workout was saved before". Protocol doc, GRDB doc, architecture §5/§6 and the ADR note say so | contract `onlyTheFirstSaveChangesTheProgram` (the reviewer's ABA: swap saved, slot set back, saved again, slot stays), GRDB and fake |
+| SF2 | keep version 1 | ADR-004 §3 note and `tasks/features/F17-live-sync.md` "Inputs from F10 S8a": no installed base, so version 1 stays; after the first TestFlight build any added payload field raises `payload_version`; an older reader ignores the key. `WorkoutEvent`'s case doc says it too | — |
+| SF3 | FIX | ADR-004 §3 status note: first-save-only and compare-and-set, the earlier swap lands and the later is skipped (citing `recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted` and the two contract clauses), and the "Now"/"Until it is built" text marked as pre-S8a. `LocalWorkoutSessionActor+Recovery.swift`'s doc adds the skipped later swap | — |
+| N1 | fixed | the reducer's doc: an old log replays the same except that a toggle-off swap now removes the entry (Q4) | — |
+| N2 | fixed (doc) | `SwappedExercise.load`: every undone set except a drop set, warm-ups included, as the reducer and the oracle do and G2 pins. Leaving warm-ups untouched is a product call for when warm-ups ship; recorded here | — |
+| N3 | listed, not built | off-grid load and an unchecked Last line from a peer: in F17's inputs (peer validation is F17's to rule; a phone-built replacement always satisfies both) | — |
+| N4 | listed | Q2 lives in S8b's screen and plan only; in F17's inputs so the watch holds the same guard | — |
+| N5 | fixed | the fake checks `updates[slot.id]` before the original's scan. The same class in `SwapAlternatives.ranked` (second tier built when the curated tier fills 8) is left, as the reviewer says: catalog-sized | — |
+
+**Sanctioned edits (listed).** SF1 turns round what three testers' tests pinned about saving one workout twice:
+- `LinkedSaveTwiceAdversarialTests.saveAgain_anotherExerciseForTheSlot_theLaterStands` →
+  `…_theFirstStands`: the first save's exercise stands.
+- `LinkedSaveTwiceAdversarialTests.saveAgain_afterTheProgramWasEdited_appliesTheUpdateAgain` →
+  `…_leavesTheEdit`: saving again leaves the lifter's edit.
+- The models of `LinkedSaveModelAdversarialSupport` (differential) and `ProgramUpdateInterleavingTests+Script`
+  write a workout's swaps on its first save only (the interleaving model keeps its saved set across a whole
+  program save). Nothing else in them changed.
+
+**Product lines** (net, against `5be8ab7`): LedgerDomain +106, LedgerPersistence +41, LedgerFakes +16:
+**163** (136 after S8a, +9 round 1, +18 round 2). LedgerTestSupport +172.

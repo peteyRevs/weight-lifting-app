@@ -81,6 +81,22 @@ enum SwapAdv {
         return after
     }
 
+    /// The drop row's load under the plan's rule: `load × 0.85` rounded to the step (ties away from zero).
+    static func drop(_ swap: SwappedExercise) -> Weight {
+        let count = (swap.load.grams * SwapAdv.dec("0.85") / swap.step.grams)
+            .rounded(scale: 0, .toNearestOrAwayFromZero)
+        return Weight(grams: count * swap.step.grams)
+    }
+
+    /// F10-S8a-G2-1's ruling (S8a fix round 1): a replacement whose step, load or drop a store cannot keep
+    /// (not a whole number of 10⁻⁷ g within `Int64`) is malformed, and the swap is ignored.
+    static func isRefused(_ swap: SwappedExercise?) -> Bool {
+        guard let swap else {
+            return false
+        }
+        return !isWholeE7g(swap.step) || !isWholeE7g(swap.load) || !isWholeE7g(drop(swap))
+    }
+
     /// `state` after `events`, each reduced in turn on a log that begins with `started(state)`.
     static func fold(_ state: WorkoutState, _ events: [WorkoutEvent]) -> WorkoutState? {
         let log = EventBuilders.log(from: [.started(state)] + events)

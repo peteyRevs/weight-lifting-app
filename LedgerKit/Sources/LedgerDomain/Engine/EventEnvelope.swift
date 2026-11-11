@@ -63,8 +63,10 @@ public extension EventEnvelope {
     ///   `endedAt`, the rest's `endsAt`, every set's `doneAt` and every `lastPerformance.date`);
     /// - a rest length (`restStarted.total`, `restExtended.amount`, a snapshot rest's `total`) is
     ///   negative or beyond `WorkoutEngine.longestRest`;
-    /// - a swap's `replacement` has a step that is not above zero, a load below zero, or a last
-    ///   performance whose date is not finite (F10 S8).
+    /// - a swap's `replacement` has a step that is not above zero, a load below zero, a step, a load or a
+    ///   drop load (`SessionBuilder.dropLoad(of:step:)`) that a store cannot keep (`Weight.isStorable`: a
+    ///   whole number of 10⁻⁷ g within `Int64`, ADR-007), or a last performance whose date is not finite
+    ///   (F10 S8, G2-1). So a swap never writes a weight the save would refuse.
     ///
     /// There is no time window (Pete, 2026-09-29): a finite date is accepted however far it lies from
     /// `wallClock` or from any other date, such as a "Still lifting?" finish days after the last set
@@ -76,7 +78,7 @@ public extension EventEnvelope {
 
 private extension WorkoutEvent {
     /// Every date it carries is finite, every rest length lies in `0 ... WorkoutEngine.longestRest`, and a
-    /// swap's replacement has a step above zero and a load not below it.
+    /// swap's replacement has a step above zero, a load not below it, and only weights a store can keep.
     var isWellFormed: Bool {
         switch self {
         case let .started(snapshot):
@@ -99,8 +101,15 @@ private extension WorkoutEvent {
 }
 
 private extension SwappedExercise {
+    /// Checked in this order so the drop is computed only from a storable step above zero and a storable load,
+    /// whose quotient cannot overflow `Decimal`.
     var isWellFormed: Bool {
-        step > .zero && load >= .zero && lastPerformance.map(\.date.isFinite) ?? true
+        guard step > .zero, load >= .zero, step.isStorable, load.isStorable,
+              lastPerformance.map(\.date.isFinite) ?? true
+        else {
+            return false
+        }
+        return SessionBuilder.dropLoad(of: load, step: step).isStorable
     }
 }
 

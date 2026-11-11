@@ -170,8 +170,21 @@ extension WorkoutEngineSwapTests {
         SwappedExercise(equipment: .dumbbell, step: .pounds(-2.5), load: .pounds(60), lastPerformance: nil),
         SwappedExercise(equipment: .dumbbell, step: .pounds(2.5), load: .pounds(-0.5), lastPerformance: nil),
         SwappedExercise(equipment: .dumbbell, step: .pounds(2.5), load: .pounds(60), lastPerformance: lastDone(.nan)),
+        // G2-1: weights a store cannot keep, and a drop that would leave the Int64 range.
+        SwappedExercise(equipment: .dumbbell, step: grams("0.000000001"), load: .zero, lastPerformance: nil),
+        SwappedExercise(equipment: .dumbbell, step: .pounds(2.5), load: .pounds(185.125), lastPerformance: nil),
+        SwappedExercise(equipment: .dumbbell, step: .pounds(2.5), load: grams("1e30"), lastPerformance: nil),
+        SwappedExercise(equipment: .dumbbell, step: grams("1e-120"), load: grams("1e120"), lastPerformance: nil),
+        SwappedExercise(
+            equipment: .dumbbell, step: grams("313594649253.0062"), load: grams("922337203685.4775807"),
+            lastPerformance: nil
+        ),
         SwappedExercise(equipment: .cable, step: .pounds(2.5), load: .pounds(60), lastPerformance: lastDone(-.infinity))
     ]
+
+    static func grams(_ text: String) -> Weight {
+        Weight(grams: Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) ?? .nan)
+    }
 
     static func lastDone(_ seconds: TimeInterval) -> LastPerformance {
         LastPerformance(date: Date(timeIntervalSinceReferenceDate: seconds), sets: 3, reps: 10, load: .pounds(60))

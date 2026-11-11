@@ -26,6 +26,9 @@ struct SwapPropertyAdversarialTests {
         guard before.exercises.indices.contains(index) else {
             return after == before ? nil : "out of range \(index) changed the state"
         }
+        guard !SwapAdv.isRefused(replacement) else { // F10-S8a-G2-1's ruling (S8a fix round 1)
+            return after == before ? nil : "an unstorable replacement changed the state"
+        }
         var expected = before
         expected.exercises[index] = SwapAdv.expected(before.exercises[index], id: id, name: name, replacement)
         if let slot = before.exercises[index].slotID {
@@ -102,6 +105,11 @@ struct SwapPropertyAdversarialTests {
             lastPerformance: nil
         )
         let after = try #require(SwapAdv.fold(start, events + [SwapAdv.swap(index, swap)]))
+        guard !SwapAdv.isRefused(swap) else { // F10-S8a-G2-1's ruling (S8a fix round 1): ignored
+            let unchanged = after == current
+            #expect(unchanged, "\(seed): an unstorable replacement changed the state")
+            return
+        }
         let drop = SessionBuilder.dropLoad(of: swap.load, step: swap.step)
         let wrong = after.exercises[index].sets.filter { !$0.isDone }
             .count { $0.weight != ($0.kind == .drop ? drop : swap.load) }

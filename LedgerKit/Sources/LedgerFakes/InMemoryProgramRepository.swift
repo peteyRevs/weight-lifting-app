@@ -164,9 +164,12 @@
             for day in program.days.indices {
                 for index in program.days[day].slots.indices {
                     let slot = program.days[day].slots[index]
+                    guard let exercise = updates[slot.id] else {
+                        continue
+                    }
                     // Compare-and-set; an entry with no original (no swap writes one) has nothing to compare.
                     let holdsTheOriginal = (originals(slot.id) ?? slot.exerciseID) == slot.exerciseID
-                    if let exercise = updates[slot.id], holdsTheOriginal, exercises?.holds(exercise) ?? true {
+                    if holdsTheOriginal, exercises?.holds(exercise) ?? true {
                         program.days[day].slots[index].exerciseID = exercise
                     }
                 }

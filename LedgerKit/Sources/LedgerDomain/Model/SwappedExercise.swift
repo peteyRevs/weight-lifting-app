@@ -10,8 +10,8 @@ public struct SwappedExercise: Hashable, Codable, Sendable {
     public let equipment: Equipment
     /// The replacement's default step in the workout's units (decision #22): the "+" and "−" of its sets.
     public let step: Weight
-    /// What each undone working and added set takes, and the exercise's target load (Q1, Q5); an undone drop set
-    /// takes `SessionBuilder.dropLoad(of:step:)` of it.
+    /// What every undone set takes except a drop set (working, added and warm-up alike), and the exercise's
+    /// target load (Q1, Q5); an undone drop set takes `SessionBuilder.dropLoad(of:step:)` of it.
     public let load: Weight
     /// The replacement's most recent session, the "Last" line; `nil` when it was never done.
     public let lastPerformance: LastPerformance?

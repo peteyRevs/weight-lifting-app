@@ -35,7 +35,8 @@ public enum WorkoutEvent: Hashable, Codable, Sendable {
     /// `replacement` (F10 S8) carries the replacement's equipment, step, last performance and the load its
     /// undone sets take, so one event swaps the exercise whole. It is `nil` in every swap written before S8,
     /// which then changes only the id and the name: a version-1 payload without the key decodes to `nil`, and
-    /// the payload version stays 1.
+    /// the payload version stays 1 (no build has shipped). A build older than S8 would ignore the key rather
+    /// than refuse the row; after the first TestFlight build an added field raises the version (ADR-004 §3).
     case exerciseSwapped(
         exerciseIndex: Int,
         exerciseID: ExerciseID,

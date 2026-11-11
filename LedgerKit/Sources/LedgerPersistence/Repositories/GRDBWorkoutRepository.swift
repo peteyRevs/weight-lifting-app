@@ -48,9 +48,10 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     ///   since. A slot that is not stored, or is deleted (the program was edited or deleted during the
     ///   workout), is logged and skipped: the workout is still stored.
     /// - Each entry of `workout.programUpdates` sets one slot's exercise (`writeProgramUpdates`), or is logged
-    ///   and skipped. It is compare-and-set (ADR-004 amendment §3): applied only while the slot still holds the
-    ///   exercise the workout was built from (`WorkoutState.originalExercise(ofSlot:)`), so an older workout
-    ///   stored again with its entries never sets back a slot that was changed since.
+    ///   and skipped. Only the workout's first save writes them (F10 S8a, SF1), and only while the slot still
+    ///   holds the exercise the workout was built from (`WorkoutState.originalExercise(ofSlot:)`,
+    ///   compare-and-set, ADR-004 amendment §3): so a save never sets back a slot changed since, during the
+    ///   workout or after its first save.
     /// - With `droppingLog`, every row of the workout's log in `workout_event` is deleted, last
     ///   (`GRDBWorkoutEventStore.deleteLog(of:in:)`, the statement `compact(workout:)` runs).
     ///
@@ -74,12 +75,13 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
         let rows = WorkoutRows(workout)
         let timestamp = ColumnCodec.timestamp(now())
         try await queue.write { database in
+            let isFirstSave = try !Self.holdsWorkout(workout.id, in: database)
             var scope = try RecordReplay.Scope(ofStored: workout.id, in: database)
             try scope.include(workout)
             try rows.write(database, at: timestamp)
             try RecordReplay.redetect(scope, in: database, at: timestamp)
             try Self.writeMisses(of: slotUpdates, in: database, at: timestamp)
-            try Self.writeProgramUpdates(of: workout, in: database, at: timestamp)
+            try Self.writeProgramUpdates(of: workout, in: database, at: timestamp, isFirstSave: isFirstSave)
             if droppingLog {
                 try GRDBWorkoutEventStore.deleteLog(of: workout.id, in: database)
             }

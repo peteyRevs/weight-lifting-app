@@ -1122,7 +1122,10 @@ public struct SwappedExercise: Hashable, Codable, Sendable {
 5. **Done sets are never touched by a swap**, with or without a replacement (pinned under seeded scripts).
 6. **The toggle:** on writes the slot's entry, off removes it, an exercise with no `slotID` writes none.
 7. **Malformed replacements are ignored** as the payload section lists; the state and the log are as
-   before (the host stores nothing and takes no `seq`, S2 criterion 2).
+   before (the host stores nothing and takes no `seq`, S2 criterion 2). Also malformed (F10-S8a-G2-1, ruled
+   2026-11-10): a step, a load or the drop load they give (`SessionBuilder.dropLoad`) that a store cannot keep
+   (`Weight.isStorable`: a whole number of 10⁻⁷ g within `Int64`, ADR-007), so a swap never writes a weight the
+   save would refuse, and the drop is computed only from storable values (no `Decimal` overflow).
 8. **Encoding:** the version-1 fixture decodes to `replacement == nil` and replays to the state it did; an
    envelope with a replacement round-trips through the GRDB event store; the payload version is 1.
 9. **History is honest:** a saved workout with a swap stores the replacement's id, name, equipment and step,
