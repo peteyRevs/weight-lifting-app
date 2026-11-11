@@ -1081,3 +1081,6 @@ string catalogs 1, iOS tests 1,605, watchOS build 45, watchOS tests 304, coverag
 (2,089 / 2,154; S2 left it at 98.01 %: the gap is the system-only lines above), LedgerPersistence 99.06 %,
 LedgerFakes 99.07 %, LedgerDependencies 96.62 %, LedgerDomain 99.36 %, overall 98.44 %. The commit after it adds
 `row_opensTheWarning` and these notes; its gate is below.
+
+`scripts/check.sh` (full), through the lock, on `8c8033d`: **exit 0, "check.sh OK"**, 2,022 s. FeatureSettings 97.16 %
+(2,093 / 2,154), overall 98.45 %. The commit after it records this paragraph and changes docs only.
