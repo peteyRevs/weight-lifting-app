@@ -1333,3 +1333,13 @@ The superset block and its swap button (S9); the watch's swap and version skew (
 inventory (Q6); telling the lifter that a program change was skipped at save (S3 open question 6); search
 beyond the ranked list; any change to `LedgerDesign`, `LedgerAppKit`, the schema, the project file or a test
 plan.
+
+### Rulings on the S8 plan (orchestrator, 2026-11-10; Pete delegated product calls)
+
+- Q1–Q9 are decided as the planner recommends. Q2 (swap only before any set of the exercise is logged) is the
+  simpler rule: a lifter whose rack is taken mid-exercise logs the rest under the original. Splitting a slot
+  partway goes on the follow-up list, not into S8.
+- The payload is decided as the planner proposes: an optional `replacement` on `exerciseSwapped`, version 1
+  stays, and an old-JSON decode test is required. The status note under ADR-004 §3 goes in with S8a.
+- Split: S8a (Domain and save) is one PR. S8b (button, sheet, store) is cut from main after S8a merges. S8b
+  stops at about 800 lines.
