@@ -898,3 +898,27 @@ Product lines for the slice after both rounds (against `da6470d`): 830 added, 31
 
 Simulator, through the lock: FeatureSettingsTests (128) and the switch suites green with recording off; no reference
 changed.
+
+### S2 fix round 2, the gate
+
+`scripts/check.sh` (full), through the lock, on `81eef98`: **exit 0**, 2,010 s. FeatureSettings 98.01 % (1,630 / 1,663);
+overall 98.54 %.
+
+### S2 fix round 3 (G1, 2026-11-11)
+
+- **Ruled: an unreadable program never fails a switch.** `GRDBProgramRepository.convertLive` reads each live program
+  in a `do`; a program this app cannot read (a malformed id, a damaged column, a slot or program its `init`s refuse)
+  is logged under "persistence" and left as it is, F05's rule for an unreadable row, and every readable program is
+  converted and the settings saved in the same transaction. A `DatabaseError` on the read, or any failure of a write,
+  still fails the whole switch. The in-memory store holds programs as values, so it has no unreadable one.
+- **Tests.** `SwitchUnitsTests.unreadableProgram_isSkipped` replaces `unreadableProgram_rollsBackTheSettings`: the
+  damaged seed program's slots keep every byte and the settings switch. `SwitchUnitsAdversarialTests
+  .unreadableProgram_skipped_readableConverted`: one unreadable and one readable program; the switch succeeds, the
+  readable converts, the unreadable one's slot rows are unchanged. G2's trigger tests (a refused write) still roll
+  everything back.
+- **The brief:** criterion 1 and N11.3 say so.
+- **Coverage, accepted at 98.01 % (orchestrator, 2026-11-11).** What stays uncovered is reachable only by the
+  system: `WorkoutExport.transferRepresentation`'s closure (only the system's share sheet calls it, and the nightly UI
+  test runs outside coverage); `ExportFile.write`'s `createFile` failure and its close-on-error branch;
+  `clearExports`' catch (a temporary directory the app cannot remove); and `SettingsScreen`'s sheet binding setter
+  (a sheet swiped away, which the hosted reader cannot present).

@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import LedgerDomain
+import os
 
 /// `ProgramRepository` over `program`, `program_week`, `day_template`, `slot` and `slot_miss` (`ProgramRows`).
 /// At most one live program is active. Deleted rows (`deleted_at`) are never read.
@@ -141,8 +142,9 @@ public struct GRDBProgramRepository: ProgramRepository {
     /// Every live program, active or not, with its weights converted to `units` (`UnitSwitch.convert`; F14 S2, ruled
     /// on G3's S4: a block activated later must not keep the old unit's grid), written in the caller's transaction as
     /// `update` writes a change: only the rows that changed, and which program is active left as it is. Each slot is
-    /// converted by its exercise's equipment, deleted exercises included. A program that cannot be read throws, and
-    /// the caller's transaction then writes nothing. No program writes nothing.
+    /// converted by its exercise's equipment, deleted exercises included. A program this app cannot read is logged and
+    /// left as it is (F05's rule; F14 S2 fix round 3); a failure of the database or of a write throws, and the
+    /// caller's transaction then writes nothing. No program writes nothing.
     static func convertLive(to units: Units, in database: Database, at timestamp: String) throws {
         let ids = try String.fetchAll(database, sql: "SELECT id FROM program WHERE deleted_at IS NULL ORDER BY id")
         guard !ids.isEmpty else {
@@ -151,8 +153,21 @@ public struct GRDBProgramRepository: ProgramRepository {
         let rows = try Row.fetchAll(database, sql: "SELECT id, equipment FROM exercise")
         let equipment = Dictionary(rows.compactMap(exerciseEquipment)) { first, _ in first }
         for text in ids {
-            let id: ProgramID = try ColumnCodec.identifier(text)
-            guard let program = try ProgramRows.program(id, in: database) else {
+            let program: Program
+            do {
+                let id: ProgramID = try ColumnCodec.identifier(text)
+                guard let read = try ProgramRows.program(id, in: database) else {
+                    continue
+                }
+                program = read
+            } catch let error as DatabaseError {
+                throw error
+            } catch {
+                // F05's rule for a row this app cannot read: leave it as it is, for a later version or a repair, and
+                // never let it stop the lifter changing units (F14 S2 fix round 3).
+                Logger.persistence.error(
+                    "A unit switch left program \(text, privacy: .public) as it is: it cannot be read: \(error)"
+                )
                 continue
             }
             let converted = UnitSwitch.convert(program, to: units, equipment: equipment)

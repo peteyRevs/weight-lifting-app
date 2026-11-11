@@ -207,4 +207,27 @@ extension SwitchUnitsAdversarialTests {
         let settingsKept = try await Self.settingsRow(queue) == settingsBefore
         #expect(settingsKept)
     }
+
+    /// F14 S2 fix round 3 (ruled): an unreadable program is skipped, as F05 skips an unreadable row; the readable one
+    /// converts and the settings are saved, in the one transaction.
+    @Test("One unreadable and one readable program: the switch succeeds, the readable converts, the other is untouched")
+    func unreadableProgram_skipped_readableConverted() async throws {
+        let damaged = try S2Kit.program(2, weeks: 2, days: 1, slotsPerDay: 3, isActive: false)
+        let active = try S2Kit.program(1, weeks: 2, days: 1, slotsPerDay: 3)
+        let bench = try await Self.bench(programs: [damaged, active])
+        let queue = bench.stack.queue
+        let damagedID = damaged.id.rawValue.uuidString
+        let ofDamaged = "day_template_id IN (SELECT id FROM day_template WHERE program_id = '\(damagedID)')"
+        try await queue.write { try $0.execute(sql: "UPDATE slot SET sets = 99 WHERE \(ofDamaged)") }
+        let rows = "SELECT * FROM slot WHERE \(ofDamaged) ORDER BY id"
+        let before = try await queue.read { try Row.fetchAll($0, sql: rows).map(\.description) }
+        try await bench.settings.switchUnits(Self.settings(.kg))
+        #expect(try await bench.settings.load().units == .kg)
+        let converted = try await bench.stack.programs.active()
+            == UnitSwitch.convert(active, to: .kg, equipment: Self.equipment)
+        #expect(converted)
+        let after = try await queue.read { try Row.fetchAll($0, sql: rows).map(\.description) }
+        let untouched = after == before
+        #expect(untouched, "the unreadable program's slots keep every byte")
+    }
 }

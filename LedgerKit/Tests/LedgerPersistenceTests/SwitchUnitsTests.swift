@@ -94,15 +94,19 @@ struct SwitchUnitsTests {
         #expect(try await stores.programs.active() == nil)
     }
 
-    @Test("GRDB: an active program that cannot be read fails the switch, and the settings stay as they were")
-    func unreadableProgram_rollsBackTheSettings() async throws {
+    /// F14 S2 fix round 3 (ruled): a program this app cannot read never stops the lifter changing units (F05's rule).
+    @Test("GRDB: an active program that cannot be read is left as it is, and the settings are switched")
+    func unreadableProgram_isSkipped() async throws {
         let stores = try await Self.stores(.grdb)
         let queue = try #require(stores.queue)
         try await queue.write { try $0.execute(sql: "UPDATE slot SET sets = 99") }
-        await #expect(throws: (any Error).self) {
-            try await stores.settings.switchUnits(Self.kilograms)
-        }
-        #expect(try await stores.settings.load().units == .lb)
+        let slots = "SELECT quote(start_load_e7g) || ',' || sets FROM slot ORDER BY id"
+        let before = try await queue.read { try String.fetchAll($0, sql: slots) }
+        try await stores.settings.switchUnits(Self.kilograms)
+        #expect(try await stores.settings.load().units == .kg)
+        let after = try await queue.read { try String.fetchAll($0, sql: slots) }
+        let untouched = after == before
+        #expect(untouched)
     }
 
     @Test("GRDB: the settings row and the program's slots are written in one transaction")
