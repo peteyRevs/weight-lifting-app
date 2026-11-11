@@ -22,7 +22,9 @@ nonisolated struct PlatesRowModel: Equatable, Sendable {
 
 /// The "Bar and plates" sheet (N12), as `PlatesPresentation.sheet` makes it: every string final, every control with
 /// the action its tap means.
-nonisolated struct PlatesModel: Equatable, Sendable {
+nonisolated struct PlatesModel: Equatable, Sendable, Identifiable {
+    /// The unit the sheet edits: what keeps it one sheet while it is up (`.sheet(item:)`).
+    let id: Units
     let title: String
     let cancel: String
     let bar: Bar

@@ -55,6 +55,7 @@ nonisolated enum PlatesPresentation {
             )
         }
         return PlatesModel(
+            id: units,
             title: SettingsCopy.barAndPlates,
             cancel: SettingsCopy.cancel,
             bar: bar(inventory.bar, units, locale: locale),

@@ -251,15 +251,15 @@ Three sequential pull requests, each cut from `main` after the one before has me
 - "Export data · CSV" through the share sheet.
 
 **Criteria owned**
-- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in the active program is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 60 kg (corrected 2026-11-10, F14-S2-G2-3: 135 lb is 61.23 kg). Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched.
+- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in every live program, the active one and every other not deleted, is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 60 kg (corrected 2026-11-10, F14-S2-G2-3: 135 lb is 61.23 kg). Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched. (Amended 2026-11-10, ruled on F14-S2 G3 S4: every live program converts in the switch's one write, not only the active one, so a block activated later does not keep the old unit's grid.)
 - **3 (restated per C12, C13):** with Plate math on, "Bar and plates" opens a sheet for the current unit's inventory, starting from the stored one (`standard` by default). With Plate math off, the row is drawn disabled and reads "Turn on Plate math to edit". Edits persist through N1. The other unit's inventory is left alone. "Reset to standard" restores `PlateInventory.standard(units)`.
 - **5 (restated per C18–C21, Q5):** the row presents the share sheet. The file is `{name per Q5}.csv`, and its bytes equal the UTF-8 encoding (N15) of `CSVExport.render` over every stored workout, oldest first, in the lifter's current unit.
 
 **New criteria**
 - **N11. Conversion order:**
   1. The settings are saved first.
-  2. Then `ProgramRepository.update(active)` applies `UnitSwitch.convert`, which is pure and idempotent: a load already on the new unit's grid is unchanged.
-  3. A failed conversion shows "Couldn't change the units. Nothing was changed." with "Try again", which runs the same conversion. No active program means no conversion. (Amended 2026-11-10, F14-S2-G2-2: under ruling A4 the settings and the program are one write, so nothing is half-changed.)
+  2. Then `UnitSwitch.convert` is applied to every live program, which is pure and idempotent: a load already on the new unit's grid is unchanged. (Under ruling A4, steps 1 and 2 are one `SettingsRepository.switchUnits` write.)
+  3. A failed conversion shows "Couldn't change the units. Nothing was changed." with "Try again", which runs the same conversion. No program means no conversion; a failure in any program leaves the settings and every program as they were. (Amended 2026-11-10, F14-S2-G2-2: under ruling A4 the settings and the program are one write, so nothing is half-changed.)
   - `UnitSwitch` has 100% line coverage, and a property test checks that converting twice equals converting once.
 - **N12. Plate editor:**
   - The bar is a `StepperField`: 0–100 lb in 2.5 lb steps, or 0–45 kg in 1.25 kg steps.
@@ -284,7 +284,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
   - The directory is emptied before each export and when Settings goes away.
   - The write streams workout by workout to a `FileHandle`.
   - A failure is logged, and the share sheet reports it.
-- **N17. Budgets** (nightly `.performance`): 10,000 sets render and write in under 200 ms, and peak memory added stays under 5 MB.
+- **N17. Budgets** (nightly `.performance`): 10,000 sets render and write in under 200 ms (the median of 5 runs), and the footprint retained after the write stays under 5 MB. (Amended 2026-11-10, F14-S2 G3 N1: the memory figure is a smoke figure, not a peak; the time budget is the meaningful half.)
 - **N18. Hosting** (flag A2): the row is a `ShareLink` over a `Transferable` whose `FileRepresentation(exportedContentType: .commaSeparatedText)` writes the file when the lifter picks a destination. FeatureSettings needs no UIKit.
 
 **Files and estimates**

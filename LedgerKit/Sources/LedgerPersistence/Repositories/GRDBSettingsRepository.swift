@@ -32,18 +32,27 @@ public struct GRDBSettingsRepository: SettingsRepository {
         }
     }
 
-    /// Upserts the row as `save` does and, in the same transaction, converts the active program
-    /// (`GRDBProgramRepository.convertActive`) when the units stored before were not `settings.units` or could not
-    /// be read (F14 S2, ruling A4). Whatever throws, the program's checks included, rolls both back.
+    /// Upserts the row as `save` does and, in the same transaction, converts every live program
+    /// (`GRDBProgramRepository.convertLive`) when the units stored before were not `settings.units` or could not be
+    /// read (F14 S2, ruling A4). Whatever throws, the programs' checks included, rolls all of it back.
     public func switchUnits(_ settings: Settings) async throws {
         let payload = try SettingsCodec.encode(settings)
         let updatedAt = ColumnCodec.timestamp(now())
         try await queue.write { database in
-            // An unreadable row says nothing of the units the program is in: it is converted, as the lifter asked.
-            let before = try? Self.fetch(database)
+            // A row whose payload this app cannot read says nothing of the units the programs are in: they are
+            // converted, as the lifter asked. A failure of the database itself is no such row, and fails the switch
+            // (F14-S2 G3 N4).
+            let before: Settings?
+            do {
+                before = try Self.fetch(database)
+            } catch let error as DatabaseError {
+                throw error
+            } catch {
+                before = nil
+            }
             try Self.upsert(payload: payload, updatedAt: updatedAt, in: database)
             if before?.units != settings.units {
-                try GRDBProgramRepository.convertActive(to: settings.units, in: database, at: updatedAt)
+                try GRDBProgramRepository.convertLive(to: settings.units, in: database, at: updatedAt)
             }
         }
     }

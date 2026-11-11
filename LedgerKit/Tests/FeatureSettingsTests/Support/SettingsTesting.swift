@@ -170,7 +170,8 @@ struct SettingsScene {
         failures: Int = 0,
         holdsSaves: Bool = false,
         unreadable: Bool = false,
-        seed: InMemoryStores.Seed = .empty
+        seed: InMemoryStores.Seed = .empty,
+        workouts: (any WorkoutRepository)? = nil
     ) {
         var stored = seed
         stored.settings = settings
@@ -188,7 +189,7 @@ struct SettingsScene {
         exportDirectory = directory
         store = withTestDependencies {
             $0.settingsRepository = probe
-            $0.workoutRepository = stores.workouts
+            $0.workoutRepository = workouts ?? stores.workouts
         } operation: {
             SettingsStore(about: SettingsFixtures.about, exportDirectory: directory)
         }

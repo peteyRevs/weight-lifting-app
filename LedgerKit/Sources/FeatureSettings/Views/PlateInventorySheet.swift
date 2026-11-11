@@ -11,19 +11,33 @@ struct PlateInventorySheet: View {
     let send: (SettingsAction) -> Void
 
     var body: some View {
+        PlatesChrome(model: model, send: send) {
+            ScrollView {
+                PlatesPage(model: model, send: send)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .presentationDetents([.large])
+    }
+}
+
+/// The sheet's frame around `page`: the title with "Cancel", which sends `cancelPlates`, then the page, then the
+/// pinned foot. The sheet puts the page in its scroll view; the tests read the frame around the page alone.
+struct PlatesChrome<Page: View>: View {
+    let model: PlatesModel
+    let send: (SettingsAction) -> Void
+    @ViewBuilder let page: Page
+
+    var body: some View {
         SheetChrome(
             model.title,
             cancel: model.cancel,
             cancelIdentifier: "settings.plates.cancel",
             onCancel: cancel
         ) {
-            ScrollView {
-                PlatesPage(model: model, send: send)
-            }
-            .scrollBounceBehavior(.basedOnSize)
+            page
             PlatesFoot(done: model.done, send: send)
         }
-        .presentationDetents([.large])
     }
 
     private func cancel() {

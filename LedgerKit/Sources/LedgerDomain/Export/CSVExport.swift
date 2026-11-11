@@ -54,7 +54,7 @@ public enum CSVExport {
 
     /// The header and every workout's rows, in the order given.
     public static func render(workouts: [WorkoutState], units: Units, calendar: Calendar) -> String {
-        workouts.reduce(header(units: units)) { $0 + lines(for: $1, units: units, calendar: calendar) }
+        workouts.reduce(into: header(units: units)) { $0 += lines(for: $1, units: units, calendar: calendar) }
     }
 
     /// `weight` in `units`, rounded to hundredths, as plain digits.

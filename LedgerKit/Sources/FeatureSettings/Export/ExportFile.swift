@@ -33,6 +33,8 @@ nonisolated enum ExportFile {
         do {
             try handle.write(contentsOf: Data((CSVExport.byteOrderMark + CSVExport.header(units: units)).utf8))
             for workout in workouts.sorted(by: isOlder) {
+                // The system may cancel a transfer: stop between workouts (standards §4).
+                try Task.checkCancellation()
                 try handle
                     .write(contentsOf: Data(CSVExport.lines(for: workout, units: units, calendar: plan.calendar).utf8))
             }
@@ -57,5 +59,18 @@ nonisolated enum ExportFile {
         first.startedAt == second.startedAt
             ? first.id.rawValue.uuidString < second.id.rawValue.uuidString
             : first.startedAt < second.startedAt
+    }
+}
+
+/// Writes the exports one at a time, and empties their directory between them (F14-S2 G3 S2): `ExportFile.write`
+/// empties the directory, then makes the file, so two run at once could empty it under each other. The store keeps
+/// one, and every export and the emptying when Settings goes away go through it.
+actor ExportWriter {
+    func write(_ workouts: [WorkoutState], as plan: ExportFile.Plan) throws -> URL {
+        try ExportFile.write(workouts, as: plan)
+    }
+
+    func clear(_ directory: URL) throws {
+        try ExportFile.clear(directory)
     }
 }

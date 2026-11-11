@@ -5,7 +5,7 @@ import LedgerDomain
 import LedgerTestSupport
 import Testing
 
-/// F14 S2, G2 round 1: `SettingsRepository.switchUnits` (ruling A4, N11): the settings and the active program's
+/// F14 S2, G2 round 1: `SettingsRepository.switchUnits` (ruling A4, N11): the settings and the programs'
 /// converted weights in one transaction. Attacked with a trigger that refuses the program's write (and one that
 /// refuses the settings'), then the retry; the same units (no conversion, even off the grid); inactive programs; no
 /// program; the equipment read from the exercise rows; and a differential against the in-memory stores.
@@ -102,20 +102,6 @@ struct SwitchUnitsAdversarialTests {
         #expect(try await ProgramRoundTripAdversarialTests.dump(bench.stack.queue) == before)
     }
 
-    @Test("Only the active program is converted; an inactive one keeps its weights")
-    func inactiveProgram_untouched() async throws {
-        let inactive = try S2Kit.program(2, weeks: 2, days: 1, slotsPerDay: 3, isActive: false)
-        let active = try S2Kit.program(1, weeks: 2, days: 1, slotsPerDay: 3)
-        let bench = try await Self.bench(programs: [inactive, active])
-        try await bench.settings.switchUnits(Self.settings(.kg))
-        #expect(try await bench.stack.programs.program(id: inactive.id) == inactive)
-        #expect(try await bench.stack.programs.active() == UnitSwitch.convert(
-            active,
-            to: .kg,
-            equipment: Self.equipment
-        ))
-    }
-
     @Test("With no active program, only the settings are written")
     func noProgram_onlySettings() async throws {
         let bench = try await Self.bench(programs: [])
@@ -175,5 +161,50 @@ struct SwitchUnitsAdversarialTests {
             #expect(database == inMemory, "after switching to \(units)")
             #expect(try await memory.settings.load().units == units)
         }
+    }
+}
+
+/// Ruled on G3's S4 (F14 S2 fix round 2): every live program converts, in the one transaction.
+extension SwitchUnitsAdversarialTests {
+    /// Ruled on G3's S4 (2026-11-10): every live program converts in the switch's one transaction, not only the
+    /// active one, so a block activated later does not keep the old unit's grid. (G2's test pinned the active one
+    /// alone, as criterion 1 then read.)
+    @Test("Every live program is converted, the inactive one too; which one is active is unchanged")
+    func inactiveProgram_convertedToo() async throws {
+        let inactive = try S2Kit.program(2, weeks: 2, days: 1, slotsPerDay: 3, isActive: false)
+        let active = try S2Kit.program(1, weeks: 2, days: 1, slotsPerDay: 3)
+        let bench = try await Self.bench(programs: [inactive, active])
+        try await bench.settings.switchUnits(Self.settings(.kg))
+        let inactiveConverted = try await bench.stack.programs.program(id: inactive.id)
+            == UnitSwitch.convert(inactive, to: .kg, equipment: Self.equipment)
+        #expect(inactiveConverted)
+        let activeConverted = try await bench.stack.programs.active()
+            == UnitSwitch.convert(active, to: .kg, equipment: Self.equipment)
+        #expect(activeConverted)
+    }
+
+    @Test("A refused write of the second program leaves the settings and both programs as they were")
+    func refusedSecondProgram_rollsBackEverything() async throws {
+        let inactive = try S2Kit.program(2, weeks: 2, days: 1, slotsPerDay: 3, isActive: false)
+        let active = try S2Kit.program(1, weeks: 2, days: 1, slotsPerDay: 3)
+        let bench = try await Self.bench(programs: [inactive, active])
+        let queue = bench.stack.queue
+        let programsBefore = try await ProgramRoundTripAdversarialTests.dump(queue)
+        let settingsBefore = try await Self.settingsRow(queue)
+        let inactiveID = inactive.id.rawValue.uuidString
+        try await queue.write { database in
+            try database.execute(sql: """
+            CREATE TRIGGER refuse_inactive BEFORE UPDATE ON slot
+            WHEN (SELECT program_id FROM day_template WHERE id = OLD.day_template_id) = '\(inactiveID)'
+            BEGIN SELECT RAISE(ABORT, 'refused'); END
+            """)
+        }
+        await #expect(throws: (any Error).self) {
+            try await bench.settings.switchUnits(Self.settings(.kg))
+        }
+        let programsKept = try await ProgramRoundTripAdversarialTests.dump(queue) == programsBefore
+        #expect(programsKept)
+        let settingsKept = try await Self.settingsRow(queue) == settingsBefore
+        #expect(settingsKept)
     }
 }

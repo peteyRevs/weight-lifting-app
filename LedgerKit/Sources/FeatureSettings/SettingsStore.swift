@@ -78,6 +78,8 @@ final class SettingsStore {
     @ObservationIgnored let about: AppAbout
     /// Where the export's file is written, and what is emptied when Settings goes away (N16).
     @ObservationIgnored let exportDirectory: URL
+    /// Writes the exports one at a time (F14-S2 G3 S2).
+    @ObservationIgnored let exportWriter = ExportWriter()
 
     @ObservationIgnored @Dependency(\.settingsRepository) var settings
     @ObservationIgnored @Dependency(\.locale) var locale
@@ -128,6 +130,12 @@ final class SettingsStore {
     /// Shows `next` at once and has it saved, as every change is (N1); settings equal to those shown change nothing.
     func change(to next: Settings) {
         guard next != shown else {
+            if failedSwitch != nil, failedSwitch == next.units {
+                // "Try again" for units already shown: a switch reported failed after it was written (F14-S2 G3 N6).
+                saveFailed = false
+                failedSwitch = nil
+                show()
+            }
             return
         }
         pending = next

@@ -35,7 +35,7 @@ extension SettingsStore {
         if runNumber == number {
             self.saveMark = nil
             self.followMark = nil
-            clearExports()
+            await clearExports()
         }
     }
 
@@ -148,11 +148,8 @@ extension SettingsStore {
                     return
                 }
                 logger.log.error("A change to the settings was not saved: \(String(describing: error))")
-                pending = nil
-                saveFailed = true
-                failedSwitch = isSwitch ? wanted.units : nil
+                fail(switchingTo: isSwitch ? wanted.units : nil)
                 hasWrittenOrFailed = true
-                show()
                 return
             }
             written = wanted
@@ -163,5 +160,18 @@ extension SettingsStore {
             // Written: the screen shows what is committed, which is the lifter's value.
             pending = nil
         }
+    }
+
+    /// A save failed: every pending change is dropped and the screen shows what is committed, with the failure's line,
+    /// and "Try again" when it was a switch to `units`. A plates sheet opened in the units the failed switch puts back
+    /// is closed (F14-S2 G3 N6).
+    private func fail(switchingTo units: Units?) {
+        pending = nil
+        saveFailed = true
+        failedSwitch = units
+        if let draft = plates, draft.units != committed?.units {
+            plates = nil
+        }
+        show()
     }
 }

@@ -8,7 +8,7 @@
     /// event log is dropped in that step when the save is asked to
     /// (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`); and a program saved with a slot naming an
     /// exercise the exercise store does not hold is refused (`unknownExercise`), as the slot's foreign key
-    /// refuses it; and a switch of units converts the active program with the settings
+    /// refuses it; and a switch of units converts the live programs with the settings
     /// (`SettingsRepository.switchUnits(_:)`). Built from a `Seed`, which is
     /// stored state: kept as given, without a save's checks (like a database restored as it was). A seed whose
     /// programs name exercises its catalog lacks is a state no database can hold (the slots' foreign key), so it

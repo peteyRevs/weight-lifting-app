@@ -75,6 +75,41 @@
         }
     }
 
+    /// F14-S2 G3 N8: the sheet's frame, `SheetChrome`'s title and "Cancel", around its page (the hosted reader cannot
+    /// read inside the sheet's scroll view), and the row that opens it.
+    @Suite("Plates sheet chrome and row", .serialized, .tags(.feature))
+    struct PlateInventorySheetChromeTests {
+        static func ignore(_: SettingsAction) {}
+
+        @Test("The sheet's title is a heading, and Cancel sends cancelPlates")
+        func chrome_titleAndCancel() {
+            var sent: [SettingsAction] = []
+            let model = PlatesPreview.pounds.model()
+            let record: (SettingsAction) -> Void = { sent.append($0) }
+            let chrome = PlatesChrome(model: model, send: record) {
+                PlatesPage(model: model, send: Self.ignore)
+            }
+            let stops = chrome.withAccessibilityElements { elements in
+                let read = elements.map(ViewStop.init(reading:))
+                elements.first { $0.accessibilityLabel == model.cancel }.map { _ = $0.accessibilityActivate() }
+                return read
+            }
+            #expect(stops.first == .heading(model.title))
+            #expect(stops.contains(.button(model.cancel)))
+            #expect(sent == [.cancelPlates])
+        }
+
+        @Test("Bar and plates, with Plate math on, sends editPlates")
+        func platesRow_opensTheSheet() {
+            var sent: [SettingsAction] = []
+            SettingsParts(preview: .pounds, send: { sent.append($0) }).withAccessibilityElements { elements in
+                let row = elements.first { $0.accessibilityLabel?.hasPrefix("Bar and plates") == true }
+                _ = row?.accessibilityActivate()
+            }
+            #expect(sent == [.editPlates])
+        }
+    }
+
     /// F14 S2: the plates sheet against its references, at the iPhone 17 width and its own height. Pounds and
     /// kilograms in light and dark at the default size, and pounds at an accessibility size: six references.
     @Suite("Plates sheet snapshots", .serialized, .tags(.feature, .snapshot))

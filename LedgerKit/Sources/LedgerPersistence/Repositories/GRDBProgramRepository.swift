@@ -138,17 +138,26 @@ public struct GRDBProgramRepository: ProgramRepository {
         return try ProgramRows.program(ColumnCodec.identifier(id), in: database)
     }
 
-    /// The active program with its weights converted to `units` (`UnitSwitch.convert`), written in the caller's
-    /// transaction as `update` writes a change: only the rows that changed. Each slot is converted by its exercise's
-    /// equipment, deleted exercises included. No active program writes nothing.
-    static func convertActive(to units: Units, in database: Database, at timestamp: String) throws {
-        guard let program = try fetchActive(database) else {
+    /// Every live program, active or not, with its weights converted to `units` (`UnitSwitch.convert`; F14 S2, ruled
+    /// on G3's S4: a block activated later must not keep the old unit's grid), written in the caller's transaction as
+    /// `update` writes a change: only the rows that changed, and which program is active left as it is. Each slot is
+    /// converted by its exercise's equipment, deleted exercises included. A program that cannot be read throws, and
+    /// the caller's transaction then writes nothing. No program writes nothing.
+    static func convertLive(to units: Units, in database: Database, at timestamp: String) throws {
+        let ids = try String.fetchAll(database, sql: "SELECT id FROM program WHERE deleted_at IS NULL ORDER BY id")
+        guard !ids.isEmpty else {
             return
         }
         let rows = try Row.fetchAll(database, sql: "SELECT id, equipment FROM exercise")
         let equipment = Dictionary(rows.compactMap(exerciseEquipment)) { first, _ in first }
-        let converted = UnitSwitch.convert(program, to: units, equipment: equipment)
-        try write(ProgramRows(converted), isActive: converted.isActive, in: database, at: timestamp)
+        for text in ids {
+            let id: ProgramID = try ColumnCodec.identifier(text)
+            guard let program = try ProgramRows.program(id, in: database) else {
+                continue
+            }
+            let converted = UnitSwitch.convert(program, to: units, equipment: equipment)
+            try write(ProgramRows(converted), isActive: converted.isActive, in: database, at: timestamp)
+        }
     }
 
     /// An exercise row's id and equipment; nil for a row this app cannot read, whose slots then move on the finest

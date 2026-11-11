@@ -844,3 +844,57 @@ Against G2 round 1 (`4ae944b`, "## S2 — G2 round 1" in `test-findings.md`) and
 - **F14-S2-G2-3 (docs).** The brief's criterion 1, its `UnitSwitchTests` line and Q1 say 135 lb → 60 kg → 130 lb.
 
 Product lines: +5 / −1 (net 730 for the slice).
+
+### S2 fix round 1, the gate
+
+`scripts/check.sh` (full), through the lock, on `ddd11bf`: **exit 0**, 2,330 s. FeatureSettings 96.97 % (1,572 / 1,621).
+
+### S2 fix round 2 (G1, 2026-11-10)
+
+Against G3 round 1 (`f1c2718`, "## S2 — G3 round 1" in `review.md`) and the orchestrator's rulings.
+
+- **S1 (fixed).** `SettingsRepositoryContract` gains three clauses, run on GRDB and the in-memory store: a switch
+  saves and is observed; a switch to the stored units is a save; a switch refuses what `save` refuses (a NaN bar) and
+  writes nothing. The conversion stays `SwitchUnitsTests`' (it needs a program store).
+- **S2 (fixed).** `ExportWriter`, an actor the store keeps, runs every write and the emptying of the directory when
+  Settings goes away, one at a time, so two exports never empty the directory under each other. G2's
+  `export_twoAtOnce` is deterministic by construction. The write also checks for cancellation between workouts
+  (standards §4).
+- **S3 (fixed).** The plates sheet is `.sheet(item:)` over `PlatesModel` (now `Identifiable` by its units), so it
+  keeps its last content while it goes down. No reference changed.
+- **S4 (ruled: every program).** `switchUnits` converts every live program, active or not, in its one write
+  (`GRDBProgramRepository.convertLive`, `InMemoryProgramRepository.convertLive`); which program is active is left as
+  it is. The brief's criterion 1 and N11 are amended. G2's `inactiveProgram_untouched` became
+  `inactiveProgram_convertedToo` (both programs converted), and `refusedSecondProgram_rollsBackEverything` refuses
+  the second program's slot writes with a trigger: the settings row and both programs stay byte for byte. A program
+  that cannot be read now fails the whole switch, the inactive ones included; the line and "Try again" say so.
+- **Coverage.** `SettingsReviewFixTests.export_failedRead_throwsAndWritesNothing` (the store's export over a
+  workouts store whose read fails: it throws, and no file is left) and `unavailableExport_throws`; the hosted
+  `PlateInventorySheetChromeTests` (the chrome's title and Cancel; "Bar and plates" sends `editPlates`). The log
+  line itself is not asserted in the PR lane: reading the process's log back is the nightly pattern
+  (`OnboardingStoreLoggingTests`). What stays uncovered is system-only: `WorkoutExport.transferRepresentation`'s
+  closure (only the system's share sheet calls it; the nightly UI test runs outside coverage), `ExportFile.write`'s
+  `createFile` failure and its close-on-error branch, `clearExports`' catch, and the sheet's swipe-down setter in
+  `SettingsScreen` (a presented sheet, outside the hosted reader).
+- **Nits.**
+  - N1: the brief's N17 is amended (a smoke figure: the footprint retained after the write); the time is the median
+    of 5 runs after a warm-up.
+  - N2: the export's doc says a workout this version cannot read is left out and logged, as History does.
+  - N3: the file is named for the day it is written (`ExportRequest.plan()` in the write); the share sheet's preview
+    title is the redraw's.
+  - N4: `switchUnits` rethrows a `DatabaseError` from its read of the stored units; only an unreadable payload
+    converts.
+  - N5: the fake's switch compares, converts and stores under the settings' lock, in one step.
+  - N6: a failed switch closes a plates sheet opened in the units it put back; "Try again" for units already shown
+    clears the line and saves nothing. Both tested.
+  - N7: `render` uses `reduce(into:)`.
+  - N8: the chrome is tested hosted; the presentation itself (`SettingsScreen`'s sheet) is not, as the hosted reader
+    cannot see a presented sheet. **Skipped in part, for that reason.**
+- **For the chrome's test**, the sheet's frame is `PlatesChrome` (title, Cancel, page, foot); the sheet puts its page in
+  a scroll view inside it, and the test reads the frame around the page alone.
+
+Product lines for the slice after both rounds (against `da6470d`): 830 added, 31 removed, **net 799**. This round:
++76 / −3, mostly `ExportWriter` and `ExportRequest`, `convertLive`, `PlatesChrome` and the failure helper.
+
+Simulator, through the lock: FeatureSettingsTests (128) and the switch suites green with recording off; no reference
+changed.
