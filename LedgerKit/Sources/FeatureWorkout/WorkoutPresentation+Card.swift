@@ -120,7 +120,7 @@ nonisolated extension WorkoutPresentation {
         let units = state.units
         let active = activeSet(of: index, in: state, selection)
         let rows = setRows(of: exercise, at: index, active: active, units: units, locale: context.locale)
-        let last = exercise.lastPerformance
+        let last = lastWorkout(of: exercise, units: units, calendar: context.calendar)
         return ExerciseCardModel(
             exerciseIndex: index,
             exerciseID: exercise.exerciseID,
@@ -130,17 +130,35 @@ nonisolated extension WorkoutPresentation {
             targetLabel: WorkoutCopy.target,
             target: target(of: exercise, units: units, locale: context.locale),
             lastLabel: WorkoutCopy.last,
-            last: last?.line(units: units, calendar: context.calendar) ?? WorkoutCopy.noHistoryYet,
-            repeatLast: last == nil ? nil : WorkoutCopy.repeatLast,
-            columns: ExerciseCardModel.Columns(
-                number: WorkoutCopy.numberColumn,
-                weight: WorkoutCopy.unit(units),
-                reps: WorkoutCopy.repsColumn
-            ),
+            last: last.line,
+            repeatLast: last.repeatLast,
+            columns: columns(units),
             rows: rows,
             steppers: active.flatMap { steppers(for: $0, of: index, in: state, locale: context.locale) },
             addSet: WorkoutCopy.addSet
         )
+    }
+
+    /// "#", "lb" or "kg", "reps": the headings of a card's and a block's rows (review N4).
+    static func columns(_ units: Units) -> ExerciseCardModel.Columns {
+        ExerciseCardModel.Columns(
+            number: WorkoutCopy.numberColumn,
+            weight: WorkoutCopy.unit(units),
+            reps: WorkoutCopy.repsColumn
+        )
+    }
+
+    /// What the exercise did last time ("Aug 12 · 5×5 @ 180 lb", or "No history yet"), and "Repeat" only when
+    /// there is a last workout to repeat: a card's and a block's current member's alike (review N4).
+    static func lastWorkout(
+        of exercise: WorkoutExercise,
+        units: Units,
+        calendar: Calendar
+    ) -> (line: String, repeatLast: String?) {
+        guard let last = exercise.lastPerformance else {
+            return (WorkoutCopy.noHistoryYet, nil)
+        }
+        return (last.line(units: units, calendar: calendar), WorkoutCopy.repeatLast)
     }
 
     /// The steppers under the row `setID` of the exercise at `index`: its exercise's step in the workout's

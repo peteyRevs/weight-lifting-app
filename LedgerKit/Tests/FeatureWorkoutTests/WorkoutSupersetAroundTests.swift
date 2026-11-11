@@ -14,6 +14,7 @@ import Testing
 @Suite("Around a superset's block", .tags(.feature))
 struct WorkoutSupersetAroundTests {
     typealias Block = WorkoutPresentationSupersetTests
+    typealias Cards = WorkoutPresentationCardTests
 
     static func panel(_ state: WorkoutState, selection: WorkoutSelection? = nil) -> RestPanelModel? {
         WorkoutPresentation.rest(
@@ -89,7 +90,9 @@ struct WorkoutSupersetAroundTests {
         )
         state.exercises[2].sets.append(added)
         let done = Block.logged([(0, 0), (0, 1), (0, 2), (1, 0), (2, 0), (1, 1), (2, 1), (1, 2), (2, 2)], in: state)
-        let plan = WorkoutEditPlan.make(.jump(exerciseIndex: 2), in: done, selection: nil, now: Fixtures.now) {
+        // From the bench press's card ("REMAINING"): with B shown, its legend tap would change nothing (N5).
+        let fromBench = WorkoutSelection(exerciseIndex: 0, setID: nil)
+        let plan = WorkoutEditPlan.make(.jump(exerciseIndex: 2), in: done, selection: fromBench, now: Fixtures.now) {
             SetID(EventBuilders.uuid(0xADE))
         }
         #expect(plan.events == [.exerciseSelected(exerciseIndex: 2, setIndex: 4)])
@@ -102,7 +105,83 @@ struct WorkoutSupersetAroundTests {
         }
         #expect(soloPlan.events == [.exerciseSelected(exerciseIndex: 2, setIndex: 3)], "the drop set, in set order")
     }
+}
 
+// MARK: Review SF1, N5 and SF2: legend taps and the shown place
+
+extension WorkoutSupersetAroundTests {
+    static func plan(_ edit: WorkoutEdit, in state: WorkoutState, selection: WorkoutSelection?) -> WorkoutEditPlan {
+        WorkoutEditPlan.make(edit, in: state, selection: selection, now: Fixtures.now) {
+            SetID(EventBuilders.uuid(0xADE))
+        }
+    }
+
+    /// Review SF1: A3 chosen, B finished; B's legend row changes nothing, and A3 keeps its steppers.
+    @Test("A legend tap on a finished member keeps a chosen row, and its steppers")
+    func legendTap_finishedMember_keepsTheChosenRow() throws {
+        let state = Block.logged([(0, 0), (0, 1), (0, 2), (1, 0), (2, 0), (1, 1), (2, 1), (2, 2)], in: Block.workout())
+        let chosen = WorkoutSelection(exerciseIndex: 1, setID: state.exercises[1].sets[2].id)
+        let plan = Self.plan(.jump(exerciseIndex: 2), in: state, selection: chosen)
+        #expect(plan.events.isEmpty)
+        #expect(plan.selection == chosen)
+        #expect(try Block.block(state, selection: plan.selection).steppers?.setID == chosen.setID)
+    }
+
+    /// Review SF1: with every row of the block logged, a legend tap on the other member moves no segment.
+    @Test("In a finished block a legend tap on the other member changes neither the selection nor the header")
+    func legendTap_finishedBlock_headerStays() {
+        let rows = (0 ..< 3).flatMap { [(1, $0), (2, $0)] }
+        let state = Block.logged(rows, in: Block.workout())
+        let onA = WorkoutSelection(exerciseIndex: 1, setID: nil)
+        let before = WorkoutPresentation.header(state, isBusy: false, locale: Fixtures.locale, selection: onA)
+        let plan = Self.plan(.jump(exerciseIndex: 2), in: state, selection: onA)
+        #expect(plan.events.isEmpty)
+        #expect(plan.selection == onA)
+        let after = WorkoutPresentation.header(state, isBusy: false, locale: Fixtures.locale, selection: plan.selection)
+        #expect(after.progressValue == before.progressValue && after.segments == before.segments)
+    }
+
+    /// Review SF1: "REMAINING" lists a finished member only when nothing is shown; its tap shows the block.
+    @Test("With nothing shown, a REMAINING tap on a finished member shows its block")
+    func remainingTap_finishedMember_nothingShown_showsTheBlock() {
+        var state = Block.logged([(2, 0), (2, 1), (2, 2)], in: Block.workout())
+        state.cursor = nil
+        #expect(WorkoutPresentation.shownExercise(of: state, selection: nil) == nil)
+        let plan = Self.plan(.jump(exerciseIndex: 2), in: state, selection: nil)
+        #expect(plan.selection == WorkoutSelection(exerciseIndex: 2, setID: nil))
+        #expect(Cards.page(state, selection: plan.selection).block != nil)
+    }
+
+    /// Review N5: a legend tap on the member that holds the shown row changes nothing, a chosen row included.
+    @Test("A legend tap on the current member keeps the row the lifter chose")
+    func legendTap_currentMember_isNoOp() {
+        let state = Block.logged([(1, 0), (2, 0)], in: Block.workout())
+        let chosen = WorkoutSelection(exerciseIndex: 1, setID: state.exercises[1].sets[2].id)
+        let plan = Self.plan(.jump(exerciseIndex: 1), in: state, selection: chosen)
+        #expect(plan.events.isEmpty)
+        #expect(plan.selection == chosen)
+        // The other member is still jumped to.
+        let toB = Self.plan(.jump(exerciseIndex: 2), in: state, selection: chosen)
+        #expect(toB.events == [.exerciseSelected(exerciseIndex: 2, setIndex: 1)])
+    }
+
+    /// Review SF2: the page scrolls to its top when its shown place changes: a card's exercise, a block's
+    /// first member.
+    @Test("The shown place is the card's exercise or the block's first member, whichever member is current")
+    func shownPlace_cardOrBlocksFirstMember() {
+        let state = Block.workout()
+        #expect(Cards.page(state).shownPlace == 0)
+        let onA = Cards.page(state, selection: WorkoutSelection(exerciseIndex: 1, setID: nil))
+        let onB = Cards.page(state, selection: WorkoutSelection(exerciseIndex: 2, setID: state.exercises[2].sets[0].id))
+        #expect(onA.block?.legend.first { $0.isCurrent }?.exerciseIndex == 1)
+        #expect(onB.block?.legend.first { $0.isCurrent }?.exerciseIndex == 2)
+        #expect(onA.shownPlace == 1 && onB.shownPlace == 1)
+    }
+}
+
+// MARK: Criteria 17 and 9
+
+extension WorkoutSupersetAroundTests {
     // MARK: Criterion 17: the receipt
 
     @Test("The receipt lists a superset's members as rows of their own, in workout order, with their chips")

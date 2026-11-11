@@ -6654,3 +6654,40 @@ nothing, so one more round cannot be added to a finished superset from the block
 answer both, and is out of this slice.
 
 **Product lines:** +4 (481 → 485 net against `18f1201`: FeatureWorkout +525 −46, LedgerDomain +19 −13).
+
+### S9 fix round 2 (G1 implementer, 2026-11-11)
+
+On G3's review of `c0741fe` and the orchestrator's ruling `19b55c7` ("Ruling after S9's review: Q4 refined").
+
+| Item | What changed | Tests |
+|---|---|---|
+| **Q4 refined** (G3 N2) | `logSet`: a not-done → done row that starts no rest ends the rest only while its round still has an undone row once it is logged. A row that completes its round, in any order, leaves the rest as it is. Logged out of order (B1, then the forgotten A1), it starts none of its own. The round's last row starts the group rest as before, an open round included (B1 first). Solo sets, re-logs and un-logs are unchanged. `ModelOracle.logSet` is the same rule | `ReduceSetLoggedTests+Q4.outOfOrder_completingRow_keepsTheRest` (rest and its pending notification stand, no second rest, nothing cancelled; logged after the rest's end it is hidden), `outOfOrder_autoRestOff_openRoundEndsTheRest`; the oracle's seeded scripts |
+| **SF1** | `jump` (now `WorkoutEdit+Jump.swift`, for the plan's length): a member with no open row, in the block that holds the shown exercise, changes nothing; selection untouched. A "REMAINING" tap on a finished member with nothing shown still shows its block | `WorkoutSupersetAroundTests.legendTap_finishedMember_keepsTheChosenRow` (A3 chosen, B finished: A3 and its steppers stay), `legendTap_finishedBlock_headerStays`, `remainingTap_finishedMember_nothingShown_showsTheBlock` |
+| **N5** | A legend tap on the member that holds the shown row changes nothing; a chosen row stays chosen | `legendTap_currentMember_isNoOp` |
+| **SF2** | `WorkoutPageModel.shownPlace` (the card's exercise, or the block's first member) keys `WorkoutScreen`'s scroll to the top | `shownPlace_cardOrBlocksFirstMember`; *sim* `SupersetBlockTests.scroll_followsTheShownPlace` (card → block, a member change in the block does not move the page, block → block, block → card) |
+| **N1** | The dead `previousRest` lines are gone from `SetLoggedCursorAdversarialTests.threeMemberSuperset_unequalCounts` | — |
+| **N4** | `WorkoutPresentation.columns(_:)` and `lastWorkout(of:units:calendar:)` are shared by the card and the block's current member | the card and block suites |
+| N3 | Skipped (ruling) | — |
+| N6 | For the PR body: `WorkoutSuperset` runs nightly, as test plans cannot change in this slice | — |
+
+**The seven Q4 edits, re-checked against the refinement.** Each one logs a member that leaves its round open, so
+the refinement changes none of them. They stand:
+- `ShownRestTests.supersetMember_thatStartsNoRest`: A2 after round 1.
+- The two `ShownRestAdversarialTests`: A2.
+- `threeMemberSuperset_unequalCounts`: A2, B2, A3 and the others that leave a round open.
+- `addedSet_changesLastOfRound`: A2, with B2 still open.
+- `supersetDropRound`: AD, with BD still open.
+- `manualRest_endsAtNonLastMember`: A1, with B1 open.
+
+G2's `SupersetQ4AdversarialTests`, `HostSupersetRestAdversarialTests` and `SupersetRestBuzzAdversarialTests` pass
+unedited, except one:
+
+- **Edited:** `SupersetQ4AdversarialTests.q4_unlogAndRelogOfANonLastRow_endsTheRest` →
+  `q4_unlogAndRelogOfANonLastRow_keepsTheRest`. Its rest assertion is now B1's running rest, and its effects
+  assertion is the haptic alone, because the re-logged A1 completes round 1. Its body is otherwise unedited.
+
+**Other test edits:** mine, `WorkoutSupersetAroundTests.jump_memberInDisplayOrder_soloInSetOrder` now jumps from
+the bench press's card. With B holding the shown row, its legend tap is N5's no-op.
+
+**Product lines:** 509 net against `18f1201` (FeatureWorkout +567 −66, LedgerDomain +22 −14); +24 this round.
+`ModelOracle` +8, not counted.

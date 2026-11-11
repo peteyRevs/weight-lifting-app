@@ -27,6 +27,12 @@ nonisolated struct WorkoutPageModel: Equatable, Sendable {
         return nil
     }
 
+    /// What is shown, by place: the card's exercise, or the block's first member (review SF2). It changes when
+    /// another card or block is shown, and not when the current member changes inside a block.
+    var shownPlace: Int? {
+        card?.exerciseIndex ?? block?.legend.first?.exerciseIndex
+    }
+
     /// The shown block; nil while a card, or nothing, is shown.
     var block: SupersetBlockModel? {
         if case let .block(block) = content {

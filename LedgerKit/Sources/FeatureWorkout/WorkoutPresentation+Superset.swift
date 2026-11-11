@@ -61,11 +61,7 @@ nonisolated extension WorkoutPresentation {
                 spokenRestTime(groupRest.duration, locale: locale), letter: lastLetter, locale: locale
             ),
             current: shown.map { current($0.exerciseIndex, in: state, context) },
-            columns: ExerciseCardModel.Columns(
-                number: WorkoutCopy.numberColumn,
-                weight: WorkoutCopy.unit(state.units),
-                reps: WorkoutCopy.repsColumn
-            ),
+            columns: columns(state.units),
             rows: rows(of: block, in: state, shown: shownSet, locale: locale),
             steppers: shown.flatMap { row in
                 shownSet.flatMap { steppers(for: $0, of: row.exerciseIndex, in: state, locale: locale) }
@@ -141,12 +137,12 @@ nonisolated extension WorkoutPresentation {
         in state: WorkoutState,
         _ context: Context
     ) -> SupersetBlockModel.CurrentMember {
-        let last = state.exercises[index].lastPerformance
+        let last = lastWorkout(of: state.exercises[index], units: state.units, calendar: context.calendar)
         return SupersetBlockModel.CurrentMember(
             exerciseIndex: index,
             lastLabel: WorkoutCopy.last,
-            last: last?.line(units: state.units, calendar: context.calendar) ?? WorkoutCopy.noHistoryYet,
-            repeatLast: last == nil ? nil : WorkoutCopy.repeatLast
+            last: last.line,
+            repeatLast: last.repeatLast
         )
     }
 }
