@@ -1021,3 +1021,315 @@ announcements (criteria 20 to 23, about 110 lines, a pull request of their own);
   the notes for the product owner.
 - **Stop rule.** If S7a's product lines pass about 800, the rest announcements and their client (criteria 20
   to 23) leave for a later slice and the implementer says so; never more than 1,000.
+
+## Plan amendments — slice S8 (planner, 2026-11-10, against main da6470d)
+
+The plan's S8: a lifter swaps the shown exercise for another from a sheet, for this workout or also in the
+program. Cut from `main` at `da6470d`, which holds S1 to S7b, F12 and F13. Where this section and anything above
+disagree, this section wins; the product questions at its end hold their recommended defaults until the
+orchestrator rules. The notes' "S8 — swap", "Inputs for S4, S7, S8 and F13" (S3), "Inputs for S7, S8, S9 and F23"
+(S6) and S7b's "Inputs for later slices" are part of this contract.
+
+**Two pull requests, one after the other** (no stacked PRs). Counted honestly the slice is about 640 planned
+product lines, and slices with a store have landed 25–90 % over plan, so one PR would end near 1,000.
+**S8a** (this branch, `feat/F10-s8-swap`, about 130 lines): the swap's Domain and its save, nothing visible.
+**S8b** (`feat/F10-s8b-swap-sheet`, cut after S8a merges, about 505 lines): the button, the sheet and the store.
+Criteria 1 to 12 are S8a's, 13 to 34 are S8b's.
+
+### Brief vs main
+
+| The brief (or the plan) says | `main` has | S8 does |
+|---|---|---|
+| Swap is `exerciseSwapped`, then one `setTargetChanged` per undone set (brief :53) | `exerciseSwapped(exerciseIndex:exerciseID:name:alsoUpdateProgram:)` changes only the id and the name (`Engine/WorkoutEngine+Reduce.swift:144-154`) | **One event** that carries the replacement's snapshot and re-targets the undone sets itself (payload decision below): one tap, one `seq`, never a half-swapped workout, and the watch (F17) gets it whole |
+| The store resolves equipment and step through `ExerciseRepository` (brief risks 2 and 3) | `equipment`, `step` and `lastPerformance` stay the original's in the state, and history stores that equipment and step (`Records/WorkoutRecords.swift`), which F13's steppers read (`Rules/SetEditing.swift:24`) | The event sets them: the live stepper, "Last", "Repeat", history and F13 all see the replacement's |
+| `ProgramRepository.replaceSlotExercise` (brief :53, criterion 8) | No such call; `materialize` applies `programUpdates` in its transaction (S3) | Unchanged: the program changes when the workout is saved (Pete #1, default A) |
+| A later swap of a slot with the toggle off leaves the earlier entry (S3 input) | `programUpdates[slot]` is only ever written | The toggle opens in the slot's state and turning it off clears the entry (Q4) |
+| ADR-004 §3: make the program change compare-and-set "with O10", by a payload or a snapshot change | `WorkoutExercise.originalExerciseID` (`Model/WorkoutExercise.swift:14`) already holds what the slot held when the workout was built, and is in the `started` snapshot | Compare-and-set reads it: **no encoded shape changes** for this part |
+| Criterion 8: curated, then pattern + muscle, then **same primary muscle** | `ExerciseCatalog`'s doc (`Catalog/ExerciseCatalog.swift:8-9`, F03): "a swap offers only alternatives with the same pattern" | Curated, then pattern + muscle; the third tier is Q3 |
+| Copy: "Same movement pattern, equipment you have." | Settings holds no equipment the lifter has (`Model/Settings.swift`) | Q6 |
+| Spec rule 27: name only; load, step and Last kept; no swap in a superset | Decision #13 overrides: the replacement brings its load; swap allowed in supersets | As #13, with Q1's start load |
+| Bests are read once per store (S7b, `WorkoutStore+Receipt.swift:89`) | A swapped-in exercise has no bests, so it can never set a live record | S8b reads the new exercise's bests and merges them (S7b's input) |
+| v2 prototype: no toggle, "Use" orange on every row, any number of rows; v1: up to 3 rows | — | The brief's toggle and at most 8 rows; "Use" as the prototype draws it (Q8) |
+| Supersets | The engine runs them; the cover draws each member as a solo card until S9 | Criterion 31 |
+
+### The swap event's payload (O10, decided here)
+
+```swift
+// LedgerDomain/Engine/WorkoutEvent.swift
+case exerciseSwapped(exerciseIndex: Int, exerciseID: ExerciseID, name: String, alsoUpdateProgram: Bool,
+                     replacement: SwappedExercise? = nil)
+
+// LedgerDomain/Model/SwappedExercise.swift (new)
+public struct SwappedExercise: Hashable, Codable, Sendable {
+    public let equipment: Equipment
+    public let step: Weight          // the replacement's default step in the workout's units (#22)
+    public let load: Weight          // what its undone working and added sets take (Q1)
+    public let lastPerformance: LastPerformance?
+}
+```
+
+- **What it carries and why.** The replacement's equipment, step and last performance, which the phone looks up
+  and the watch cannot (it has no history), and the load the undone sets take, so that the re-target is part of
+  the swap and not a burst of events. The device that swaps computes all four with one Domain rule
+  (`SwapAlternatives.replacement(…)`, criterion 3); the reducer only copies them.
+- **The reducer, with a replacement:** the exercise takes the id, name, equipment, step and last performance;
+  every set not done takes `load` (a drop set takes `SessionBuilder`'s drop rule of it: × 0.85, rounded to the
+  step, extracted so both use one function); `targetLoad` becomes `load` (Q5); done sets, reps, rest, RPE,
+  targets' sets and reps, `slotID`, `originalExerciseID` and the superset flag are unchanged.
+  **Without one** (every log written before S8a) the reducer does exactly what it does today, so a stored log
+  replays the same.
+- **The toggle.** `alsoUpdateProgram: true` writes `programUpdates[slot]`; `false` now removes it (Q4). This
+  is the one rule change that applies to old logs too; it matters only for a log that is live across the
+  update and holds an on-then-off pair for one slot.
+- **Malformed:** `isWellFormed` also refuses a replacement whose step is not above zero, whose load is below
+  zero, or whose last performance has a date that is not finite (ADR-004 "Malformed envelopes").
+- **Encoding.** The new value is optional with a default, so every call site still compiles and a version-1
+  payload (`payload-v001/event-exerciseSwapped.json`) decodes with `replacement == nil`; the payload version
+  stays 1. A test proves the decode (Swift's synthesised `Codable` for an enum case decodes a missing optional
+  associated value as nil; if it does not, `WorkoutEvent` gets a hand-written decode of that case, about 15
+  lines, and the implementer says so). A new fixture beside the old one pins the shape with a replacement.
+- **Compare-and-set** (ADR-004 §3, option A; Pete's working default from #32): an entry of `programUpdates` is
+  applied only while the slot still holds the `originalExerciseID` of the workout's exercise for that slot;
+  otherwise it is logged and skipped, and the lifter's later choice stays. The repository already reads the
+  slot's exercise in that query (`GRDBWorkoutRepository.writeProgramUpdates`); the fake follows.
+- **ADR-004: no amendment.** Nothing of the envelope, the clock, the host loop, the versioning rule or the
+  save changes; payloads are documented in code, and the ADR's event list was a sketch (labels already differ,
+  `WorkoutEvent.swift:15-16`). §3's open choice is settled as its recommendation, without the shape change it
+  expected. Recommended: a two-line **status note** under §3 ("Built in F10 S8a as option A, reading
+  `originalExerciseID`; no encoded shape changed") and the rule in architecture §6, so F17's planner does not
+  read §3 as open. The orchestrator may drop the note; nothing in S8 depends on it.
+
+### Acceptance criteria
+
+**S8a — the Domain and the save**
+
+1. **Alternatives** (criterion 8 of the brief, as Q3 rules): `SwapAlternatives.ranked(for:in:excluding:)` in
+   `LedgerDomain/Rules` returns the current exercise's `curatedAlternatives` in their listed order (those in the
+   catalog), then the exercises with the same `pattern` and `primaryMuscle` in name order
+   (`ExerciseSearch.isInNameOrder`); deduped by id; never the exercise itself nor an id in `excluding` (the
+   workout's other exercises, Q9); at most 8. Barbell Bench Press on the shipped catalog gives its 4 curated, then
+   "Barbell Floor Press", "Cable Chest Press", "Decline Bench Press", "Decline Push-Up".
+2. **A custom exercise** (no curated list) gets pattern + muscle only; a curated id the catalog no longer holds
+   is skipped; an empty catalog gives none. Pure and total.
+3. **The replacement's numbers:** `SwapAlternatives.replacement(of: WorkoutExercise, with: Exercise, last:
+   LastPerformance?, units: Units) -> SwappedExercise`: `step = equipment.defaultStep(in: units)`; `load` = the
+   last performance's load rounded to that step if there is one, else by Q1 (default C: same equipment → the
+   original's `targetLoad`, rounded to the step; other equipment → `startLoad(in: units)`). Never below zero.
+   Examples (lb): Bench 185 → Incline Bench, never done → 185; → Dumbbell Bench, never done → 15; → Dumbbell
+   Bench, last 60 → 60. kg: → Kettlebell Floor Press, never done → its start load on a 2 kg step.
+4. **The reducer** applies a replacement as the payload section says, and an event without one as today. An
+   index out of range changes nothing.
+5. **Done sets are never touched by a swap**, with or without a replacement (pinned under seeded scripts).
+6. **The toggle:** on writes the slot's entry, off removes it, an exercise with no `slotID` writes none.
+7. **Malformed replacements are ignored** as the payload section lists; the state and the log are as
+   before (the host stores nothing and takes no `seq`, S2 criterion 2).
+8. **Encoding:** the version-1 fixture decodes to `replacement == nil` and replays to the state it did; an
+   envelope with a replacement round-trips through the GRDB event store; the payload version is 1.
+9. **History is honest:** a saved workout with a swap stores the replacement's id, name, equipment and step,
+   the original in `original_exercise_id`, and its "Last" line and records follow the replacement.
+10. **Compare-and-set:** the program's slot takes the swap's exercise only while it still holds the workout's
+    `originalExerciseID` for that slot; a slot changed since (the program edited during the workout, a waiting
+    end saved later, a second save) keeps its exercise and the entry is logged and skipped; the workout and the
+    other updates are still stored; saving twice changes nothing. In GRDB and in the fake, through the shared
+    contract (`laterSaveSetsTheSlotBack` turns round: a sanctioned edit, listed).
+11. **The host** finishing a workout whose slot was edited during it keeps the edit; a discarded workout still
+    changes nothing.
+12. **Docs:** architecture §5's `WorkoutState` row and §6 (compare-and-set, the toggle); the protocol's
+    documentation of `materialize`; product-decisions #13 amended by Q1 when ruled; ADR-004 §3's status note
+    if the orchestrator keeps it.
+
+**S8b — the button, the sheet, the store**
+
+13. **The button.** The card's title row holds an `IconPillButton` with `LedgerIcon.swap`, label "Swap exercise",
+    identifier `workout.card.swap`, at the trailing edge beside the title (v2 151–161), 44 pt. It shows when the
+    shown exercise has no done set (Q2); otherwise it is not drawn (no dead button). `isBusy` disables it.
+14. **The sheet** (`Views/SwapSheet`, on `SheetChrome`): the title "Swap exercise" (a heading), "Cancel", the line
+    (Q6), the toggle "Also update program" (`LedgerToggleStyle`, identifier `workout.swap.updateProgram`), then up
+    to 8 rows (`HairlineRow`), each the exercise's name, its sub "Dumbbell · 15 lb" (`%@ · %@ lb` / `kg`; the
+    equipment alone when the load is zero, Q7) and "Use"; the whole row is the button, identifier
+    `workout.swap.row.<n>`. The rows scroll inside the sheet (§2.6).
+15. **The rows' loads are the loads the sets will take** (criterion 3), formatted by the Domain in the workout's
+    units; what the sheet shows is what "Use" applies.
+16. **The toggle** is drawn only for an exercise with a `slotID` in a workout with a `source`; it opens on when
+    `programUpdates` already holds the slot (an earlier swap asked for it), off otherwise.
+17. **Opening loads once.** `send(.openSwap)` sets `dialog = .swap` and the next `swapAttempt`; the root's
+    `.task(id: store.swapAttempt)` runs `store.loadSwap()`: `exerciseRepository.exercise(id:)` of the shown
+    exercise, `all()`, `ranked`, then `stats.lastPerformance(exerciseID:)` for each shown row. While it loads,
+    the sheet shows its chrome, the line and no rows (no spinner text). No unstructured task.
+18. **"Use"** sends `.edit(.swap(exerciseIndex:, choice:))` through the one tap queue (S5 criteria 7 and 13): the
+    sheet goes down at once; the pump plans one `exerciseSwapped` with the choice's replacement and toggle on the
+    newest workout. The card shows the replacement's name, "Last" line (or "No history yet" with no "Repeat"),
+    and its undone rows at the new load; the shown row stays the exercise's first undone row.
+19. **The plan refuses a stale choice:** if, at its turn, the exercise at that index no longer holds the id the
+    sheet was opened for, or now has a done set, or the index is gone, the swap comes to nothing.
+20. **Cancel**, a swipe down and VoiceOver's escape close the sheet and apply nothing.
+21. **One swap per tap:** a double tap on "Use" applies one event; a second sheet cannot open while the first
+    is up; taps queued before "Use" are applied first, in order.
+
+**Error paths**
+
+22. **A swap the session refuses** shows S5's "Couldn't save that change" alert; the taps queued behind it are
+    dropped (S5 ruling 13); the card stays as the session last said; the program is not touched.
+23. **Alternatives that cannot be read** (`all()` or `exercise(id:)` throws, or any `lastPerformance` read
+    throws) are logged; the sheet shows "Couldn't load alternatives." and no row; "Cancel" closes; opening the
+    sheet again reads again. A failed last-performance read never falls back to a guessed load.
+24. **Nothing to offer:** the shown exercise is not stored (a deleted custom exercise), the catalog was never
+    seeded (decision #28), or no alternative is left after `excluding`: the sheet shows "No alternatives for
+    this exercise." and no toggle.
+25. **The workout moves under the sheet:** an update that leaves the shown exercise unswappable (a set logged
+    by a queued tap or elsewhere, a swap from elsewhere) takes the sheet down; a workout ended elsewhere closes
+    the sheet and the cover as S4's rows S9 and S10 say; "Finish" is not reachable while the sheet is up.
+26. **The cover's tasks start again mid-load:** the load runs again for the same attempt; a stale answer
+    (an older attempt's) is dropped; nothing is shown twice.
+
+**Records and the save**
+
+27. **Bests for the replacement** (S7b's input): after a swap brings an exercise the bests were not read for,
+    the store reads `bests(before:for: [new id])` once and merges them into `bests`; a record on the
+    replacement then plays `.personalRecord` once, by S7b criterion 36's rule. A failed read is logged; the
+    replacement sets no live record; nothing is shown.
+28. **The receipt and history** show the replacement's name and its chips; "Also update program" lands with
+    "Save workout" and not with "Discard" (host over the in-memory stores).
+
+**Supersets, words, accessibility**
+
+29. **Words:** lookups only in `WorkoutCopy+Swap.swift`; every key in the catalog, `translated`; the module's
+    source tests pass unedited (no `Task {`, no `Date()`, no `Timer`, no `.formatted(`).
+30. **Orange:** the sheet's accent is "Use" (brief criterion 13); the toggle's on track uses the design system's
+    style. Say in the notes what is orange while the sheet is up (Q8).
+31. **A superset member** (S9 has not landed): its card is a solo card, so the button shows on it and swaps that
+    member alone; `isSupersetWithPrevious`, the block's rounds and its group rest are unchanged (an engine test
+    and a store test pin it). S9 moves the button into the block.
+32. **VoiceOver**, pinned as trees: card: the title (heading), then "Swap exercise" (button). Sheet: "Swap
+    exercise" (heading); "Cancel"; the line; "Also update program" (switch, its value); each row one stop read
+    "Dumbbell Bench Press, Dumbbell · 15 lb, Use" (button); escape is "Cancel".
+33. **Sizes and settings:** nothing cut, overlapping or out of reach from `.large` to `.accessibility5` on 375 pt
+    (home-button and notch) and the iPhone 17, light and dark, Bold Text, Increase Contrast, right to left, by
+    the cut check of `ProgramViewsCutAdversarialTests`' kind; at the accessibility sizes the title wraps beside
+    or above the button, never under it, and a row's "Use" stands under its sub; every target 44 pt. The swap
+    icon is not mirrored until Pete answers the open RTL question (as on `main`).
+34. **Tests and lanes** as below; the nightly `WorkoutLogging` and the S4–S7 UI tests pass unedited.
+
+### Texts
+
+From the brief (:55), word for word: "Swap exercise" (button label and sheet title), "Cancel", "Use", "Also
+update program", "%@ · %@ lb" and "%@ · %@ kg" (two keys, as "lb moved" is; the first `%@` the equipment, the
+second the Domain's formatted load), and the line (Q6). The equipment names, new to this module's catalog
+(standards §7: each module its own copy; FeatureLibrary's wording): "Barbell", "Dumbbell", "Cable", "Machine",
+"Bodyweight", "Kettlebell", "Band". Already in the catalog: "Couldn't save that change", "OK".
+
+**Invented — listed for the product owner:** "No alternatives for this exercise." (criterion 24), "Couldn't load
+alternatives." (criterion 23), and the line if Q6 rules "Same movement pattern."
+
+### Files and lines (product lines: Swift, not blank, not comment)
+
+| S8a | Lines | S8b | Lines |
+|---|---|---|---|
+| `LedgerDomain/Model/SwappedExercise.swift` (new) | 20 | `FeatureWorkout/WorkoutEdit.swift` (`.swap`, its plan) | 25 |
+| `Engine/WorkoutEvent.swift` | 3 | `SwapSheetModel.swift` (new) | 35 |
+| `Engine/WorkoutEngine+Reduce.swift` | 25 | `WorkoutPresentation+Swap.swift` (new) | 65 |
+| `Engine/EventEnvelope.swift` (`isWellFormed`) | 6 | `WorkoutPresentation+Card.swift`, `WorkoutPageModel.swift` (the button) | 12 |
+| `Rules/SwapAlternatives.swift` (new: `ranked`, `replacement`) | 60 | `WorkoutCopy+Swap.swift` (new) | 80 |
+| `Rules/SessionBuilder.swift` (the drop rule shared) | 4 | `WorkoutStore+Swap.swift` (new: open, load, use, cancel, follow) | 100 |
+| `LedgerPersistence/Repositories/GRDBWorkoutRepository.swift` (compare-and-set) | 12 | `WorkoutStore.swift`, `WorkoutAction.swift` (state, actions, `.swap` dialog) | 25 |
+| | | `WorkoutStore+Receipt.swift` (bests for a new exercise) | 20 |
+| | | `Views/SwapSheet.swift` (new) | 80 |
+| | | `Views/ExerciseCard.swift` (title row) | 12 |
+| | | `WorkoutRoot.swift` (sheet, load task) | 18 |
+| | | `SwapSheet+Previews.swift` (new) | 35 |
+| **Planned** | **130** (+ ~12 `LedgerFakes`; `ModelOracle` in `LedgerTestSupport`) | **Planned** | **507** |
+| **Expected at the overrun seen** | **170–210** | **Expected** | **650–810** |
+
+`LedgerDesign` gains nothing (`IconPillButton`, `LedgerIcon.swap`, `SheetChrome`, `HairlineRow`,
+`LedgerToggleStyle` exist). No migration; no `LedgerAppKit` change (the dependencies are bound). **Stop rule:**
+each implementer reports the count at each stage; S8b stops past about 800 and proposes its split (the store and
+the presentation against the views and previews); never past 1,000.
+
+### Test plan (names per testing-strategy §6)
+
+- **S8a unit, `LedgerDomainTests`:** `SwapAlternativesTests` (curated first in listed order; then pattern and
+  muscle in name order; never itself; `excluding`; dedupe of a curated id that also matches; at most 8; custom;
+  a curated id not in the catalog; empty catalog; Bench's eight on the shipped catalog). `SwapReplacementTests`
+  (last load rounded to the step; Q1's same-equipment and other-equipment cases; kettlebell kg step 2; a pound
+  history in a kilogram workout; a bodyweight zero; never negative). `WorkoutEngineSwapTests` (each field the
+  reducer copies; undone working, added and drop sets; done sets untouched; target load; no replacement = today's
+  behaviour; toggle on, off, ad hoc; out-of-range index; superset flag kept; each malformed replacement
+  ignored). `PayloadV1` decode of the old fixture and a round trip with a replacement in
+  `LedgerPersistenceTests`.
+- **S8a contract:** `WorkoutRepositoryContract` clauses (applied while the slot holds the original; skipped and
+  logged when changed; swap back to the original is no change; saving twice; history stores the replacement's
+  equipment and step) on GRDB and the fake; `LocalWorkoutSessionActorProgramTests`: an edit during the workout
+  survives the finish.
+- **S8a adversarial seeds (for the tester):** SplitMix64 scripts of swaps (with and without a replacement,
+  toggles flipping, the same slot twice, swap back to the original) interleaved with logs, un-logs, steps,
+  repeats and added sets, checked against `ModelOracle`: replay equals the fold; done sets never change at a
+  swap; every undone set equals the swap's load or its drop; `programUpdates` matches the last swap per slot;
+  materialising twice, and after a slot edit, keeps the lifter's choice. Payload fuzz: extreme and inexact
+  weights, a zero or negative step, non-finite dates. The host and fake differential scripts gain swaps with
+  replacements (`HostSiegeScriptAdversarialSupport`, `SessionSeamScriptAdversarialSupport`), PR-lane seed
+  counts unchanged (S3 criterion 9).
+- **S8b unit, `FeatureWorkoutTests`:** `WorkoutPresentationSwapTests` (word for word, pounds and kilograms;
+  bodyweight; the toggle hidden and its opening state; empty and failure lines; the button's rule).
+  `WorkoutEditPlanSwapTests` (one event; each stale case of criterion 19). `WorkoutStoreSwapTests` (criteria
+  17–28 one by one, against `FakeWorkoutSessionClient`, the host over `InMemoryStores` for the save and the
+  discard, and the test target's doubles for a refused apply and a held load).
+- **S8b hosted accessibility:** the two trees of criterion 32 in `WorkoutAccessibilityTrees`; a cut check for the
+  sheet and the card's title row (criterion 33); 44 pt targets; the escape action.
+- **Snapshots** (from `SwapSheetParts` and the page, pinned simulators): new `SwapSheet` rows × {light, dark} ×
+  {`.large`, `.xLarge`} (4), rows dark `.accessibility3` (1), empty light `.large` (1) = **6 new**. Changed: the
+  whole-cover references that draw a card (`cover_logging` × 4, its `accessibility3` and Increase Contrast,
+  `cover_dropSet` × 2, `cover_noHistory` × 2, `RestPanelTests/screen_resting` × 2) = **12**, each looked at; the
+  header references do not change. Under 20.
+- **UI, PR lane** (`Apps/LedgerUITests/WorkoutSwap.swift`): start the sample workout, "Swap exercise", row 0, the
+  title reads the row's name, log a set, "Finish", "Save workout", the receipt lists the replacement. Each check
+  reads the thing it names (S4 ruling 17).
+
+### Risks
+
+- **The optional associated value's decode** (payload section): proven by a test before anything else in S8a.
+- **Versions on two devices** (F17): an older peer would decode a swap with a replacement and drop it, and the
+  two states would differ. F17 must require one payload version on both devices, or raise it; recorded for F17.
+- **Q2 against a peer:** a set logged on the watch while the phone's sheet is up makes the plan refuse the swap
+  (criterion 19) silently. One phone cannot reach it; F17 decides what to tell the lifter.
+- **Swap back to the original** takes the default step, not a slot's custom step (`Slot.step`), which the state
+  does not keep; rare, and "+"/"−" still work.
+- **Compare-and-set skips a swap made after a program edit during the same workout** (the slot no longer holds
+  the original): logged; the lifter's edit stays. Accepted.
+- **"Use" orange on every row** against "orange once per surface" (Q8).
+- **Store growth:** the store files are long; `WorkoutStore+Swap.swift` takes the swap whole, and the store's
+  type-body lint is watched.
+
+### Product questions (the orchestrator rules; the default holds until then)
+
+- **Q1. Start load of a replacement with no history** (Pete #3, never answered; decision #13 says "else the
+  original's load"). Recommended and default: **C, by equipment**: Bench 185 → Incline Bench (barbell) shows 185;
+  → Dumbbell Bench shows 15 per hand (its catalog start), not 185 per dumbbell. Amends #13's text.
+- **Q2. Swap once a set of the exercise is logged?** The engine swaps the whole exercise, so done Bench sets at
+  185 would be stored as Dumbbell Bench sets at 185: a false "Last" and a false baseline for records (#27).
+  Recommended and default: **the button shows only while no set of the exercise is done**. Example: after
+  logging Bench set 1, no "Swap exercise"; un-logging it brings the button back.
+- **Q3. A third tier "same primary muscle, any pattern"?** Brief: yes; F03's catalog rule: same pattern only.
+  Recommended and default: **no**: Bench offers presses and dips, never a cable fly; the list may be shorter than
+  8 (Bench still fills 8 from tiers 1–2).
+- **Q4. The toggle on a second swap of one slot.** Recommended and default: **it opens on when the slot already
+  carries a program change; switching it off removes that change.** Example: Bench → Dumbbell Bench with it on,
+  then → Incline Bench: the toggle opens on; left on, the program says Incline Bench; turned off, it keeps Bench.
+- **Q5. The TARGET line after a swap.** Recommended and default: **its load follows the replacement's**:
+  "5 × 5 @ 15 lb · RPE 8" after Bench 185 → Dumbbell Bench, and the receipt's "Prescribed" says the same; sets,
+  reps and RPE stay the slot's.
+- **Q6. The sheet's line.** "equipment you have" claims a filter that does not exist. Recommended and default:
+  **"Same movement pattern."**; the brief's line if Pete adds an equipment list later.
+- **Q7. A row whose load is zero** (Push-Up, Dip): recommended and default **"Bodyweight"** alone, not
+  "Bodyweight · 0 lb".
+- **Q8. "Use" in orange on each row** (v2 draws it so) or only the text in ink with the row as the button.
+  Recommended and default: **orange on each row, as v2**, listed with S5's orange question for Pete.
+- **Q9. Exercises already in the workout** are left out of the list. Recommended and default: **left out**:
+  swapping Bench while Incline DB Press is exercise 3 does not offer Incline DB Press, so one exercise never
+  appears twice in a workout, its receipt and its history.
+
+### Not in this slice
+
+The superset block and its swap button (S9); the watch's swap and version skew (F17, F18); an equipment
+inventory (Q6); telling the lifter that a program change was skipped at save (S3 open question 6); search
+beyond the ranked list; any change to `LedgerDesign`, `LedgerAppKit`, the schema, the project file or a test
+plan.
