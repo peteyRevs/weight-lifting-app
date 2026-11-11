@@ -1115,3 +1115,11 @@ Against G2's round (`dc13af9`: `DataResetAdversarialTests`, `DeleteAllAdversaria
 program, settings and any workouts it has not yet sent; F19 must carry the erase to the watch (push an empty context
 and drop its queued envelopes, and refuse an erase while either device reports a live workout, K7), or the next sync
 brings deleted workouts and the old program back. F28 has the same duty for iCloud (K6).
+
+**Product lines this round:** +6 / −0 in `GRDBDataReset` and `SettingsStore+DeleteAll` (non-blank, non-comment);
+the slice is now net 639.
+
+**The gate (fix round 1):** `scripts/check.sh` (full), through the lock, on `abcd33d`: **exit 0, "check.sh OK"**,
+2,060 s (log `scratchpad/f14-s3-fix1-gate.log`). FeatureSettings 97.21 % (2,096 / 2,156), LedgerPersistence 99.09 %,
+overall 98.46 %. G2's `cancelledAfterCommit_stillLeavesNoTraceOnDisk` passes unedited. This notes commit follows it
+and changes docs only.
