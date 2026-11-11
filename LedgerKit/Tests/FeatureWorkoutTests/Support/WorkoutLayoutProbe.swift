@@ -140,10 +140,43 @@
                 }
                 parts.append(LayoutPart(card.addSet) { PillButton(card.addSet, style: .ghost, flush: .leading) {} })
             }
+            if let block = model.block {
+                parts += blockParts(of: block)
+            }
             for row in model.remaining?.rows ?? [] {
                 parts.append(LayoutPart("\(row.name), \(row.scheme)") {
                     HairlineRow(row.name, action: {}, accessory: { Text(row.scheme).ledgerFont(.caption) })
                 })
+            }
+            return parts
+        }
+
+        /// F10 S9: the parts of a superset's block: the place, the round, each legend row (by itself without
+        /// its swap button, which is a stop of its own), the rest line, the current member's "Last" and
+        /// "Repeat", and "+ Add set".
+        static func blockParts(of block: SupersetBlockModel) -> [LayoutPart] {
+            var parts = [
+                LayoutPart(block.eyebrow) { Text(block.eyebrow).ledgerFont(.caption) },
+                LayoutPart(block.title) { Text(block.title).ledgerFont(.heading) }
+            ]
+            for row in block.legend {
+                let alone = SupersetBlockModel.LegendRow(
+                    exerciseIndex: row.exerciseIndex, exerciseID: row.exerciseID, letter: row.letter, name: row.name,
+                    target: row.target, isCurrent: row.isCurrent, swap: nil, spoken: row.spoken
+                )
+                parts.append(LayoutPart(row.spoken) { SupersetLegendRow(row: alone) { _ in } })
+            }
+            parts.append(LayoutPart(block.restLineSpoken) {
+                Text(block.restLine).ledgerFont(.caption).accessibilityLabel(block.restLineSpoken)
+            })
+            if let current = block.current {
+                parts.append(LayoutPart("\(current.lastLabel), \(current.last)") {
+                    FactLine(label: current.lastLabel, value: current.last)
+                })
+                if let title = current.repeatLast {
+                    parts.append(LayoutPart(title) { PillButton(title) {} })
+                }
+                parts.append(LayoutPart(block.addSet) { PillButton(block.addSet, style: .ghost, flush: .leading) {} })
             }
             return parts
         }

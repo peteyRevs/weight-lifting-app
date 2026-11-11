@@ -15,7 +15,7 @@
         /// An iPhone 17's screen, the phone the references are drawn for.
         nonisolated static let phone = CGSize(width: SnapshotConfig.phoneWidth, height: 874)
         nonisolated static let workouts: [WorkoutPreview] = [
-            .started, .minutes, .hour, .logging, .resting, .restOver, .dropSet, .discarding
+            .started, .minutes, .hour, .logging, .resting, .restOver, .dropSet, .supersetRound2, .discarding
         ]
 
         static func screen(_ preview: WorkoutPreview, send: @escaping (WorkoutAction) -> Void = { _ in }) -> some View {

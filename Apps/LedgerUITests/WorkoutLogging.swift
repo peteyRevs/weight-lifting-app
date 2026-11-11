@@ -49,12 +49,15 @@ final class WorkoutLogging: XCTestCase {
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 2 of 5")
         XCTAssertTrue(app.staticTexts["Exercise 2 of 5"].exists)
 
-        // A row of "REMAINING" jumps to its exercise, whose name is on screen.
+        // A row of "REMAINING" jumps to its exercise, whose name is on screen. F10 S9 (edited for criterion 4):
+        // Lat Pulldown is a superset's first member, so its block is shown, with Lat Pulldown current.
         app.buttons["workout.remaining.row.3"].tap()
-        wait(for: title, toBe: "Lat Pulldown")
-        XCTAssertTrue(title.isHittable, "the name of the exercise jumped to is on screen")
+        let block = app.staticTexts["workout.block.title"]
+        wait(for: block, toBe: "Round 1 of 3")
+        XCTAssertTrue(block.isHittable, "the block jumped to is on screen")
+        XCTAssertTrue(app.buttons["workout.block.legend.A"].isSelected, "Lat Pulldown is the current member")
         XCTAssertEqual(app.otherElements["workout.header.progress"].value as? String, "Exercise 4 of 5")
-        XCTAssertTrue(app.buttons["Log set 1"].exists)
+        XCTAssertTrue(app.buttons["Log set A1"].exists)
         attachScreenshot(of: app, named: "Workout page, after a jump")
 
         discard(in: app)
@@ -141,11 +144,14 @@ final class WorkoutLogging: XCTestCase {
         skipRest(in: app)
 
         // The last exercise's row is off screen: tapping it scrolls to it and jumps.
+        // F10 S9 (edited for criteria 4 and 14): the last exercise is a superset's second member, so its block
+        // is shown with it current, and the earlier exercises with a set left are listed (Q5).
         app.buttons["workout.remaining.row.4"].tap()
-        wait(for: app.staticTexts["workout.card.title"], toBe: "Cable Lateral Raise")
-        XCTAssertTrue(app.staticTexts["workout.card.title"].isHittable, "the page stands at its top after the jump")
-        XCTAssertTrue(app.staticTexts["Exercise 5 of 5"].isHittable)
-        XCTAssertFalse(app.staticTexts["REMAINING"].exists, "nothing remains after the last exercise")
+        wait(for: app.staticTexts["workout.block.title"], toBe: "Round 1 of 3")
+        XCTAssertTrue(app.staticTexts["workout.block.title"].isHittable, "the page stands at its top after the jump")
+        XCTAssertTrue(app.staticTexts["Superset · block 4 of 4"].isHittable)
+        XCTAssertTrue(app.buttons["workout.block.legend.B"].isSelected, "Cable Lateral Raise is the current member")
+        XCTAssertTrue(app.buttons["workout.remaining.row.0"].exists, "the bench press has sets left")
         XCTAssertTrue(app.buttons["workout.header.minimize"].isHittable, "the header stayed where it was")
         attachScreenshot(of: app, named: "Workout page, accessibility size, last exercise")
 

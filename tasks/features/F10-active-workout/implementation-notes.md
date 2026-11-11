@@ -6455,3 +6455,165 @@ the test run with recording off failed in both appearances; the file restored fr
 lock: `WorkoutSnapshotTests`, `SwapSheetTests`, `SwapSheetLayoutTests`, `WorkoutAccessibilityTests` and G2's
 `WorkoutSwapTreeAdversarialTests`, 28 tests, all passed but the two references (recorded on that run). The full
 gate: in the report.
+
+## S9 — supersets, as built (G1 implementer, 2026-11-11)
+
+Against `18f1201` with the plan commits `aaa9a3f` and `6c7ba85`: "Plan amendments — slice S9", criteria 1 to 23,
+Q1–Q3 and Q5–Q12 at the planner's defaults, and Q4 accepted ("Rulings on the S9 plan"). One pull request.
+
+### What was built
+
+- **Domain** (criteria 1–3). `SupersetRounds.rounds(block:exercises:)` is public (working rounds, then drop
+  rounds) and `round(of:block:exercises:)` is new (0-based, nil for a row the block does not hold);
+  `displayOrder` and `isLastOfRound` read them as before. **Q4** in `WorkoutState.logSet`: a not-done → done row
+  that is not the last of its round clears a rest the state holds (running, over or a manual "+30s") and returns
+  `.cancelRestNotification` after `.haptic(.setLogged)`. A re-log, an un-log, a solo set and a set that ends its
+  round are unchanged, so a solo set with auto rest off still leaves a manual rest alone (orchestrator,
+  2026-11-11). `shownRest`'s doc now says the superset case is the engine's; its remaining case is a solo set
+  logged after a "+30s" rest with auto rest off. `ModelOracle` follows. No payload change.
+- **The page chooses** (criterion 4). `WorkoutPageModel.content` is `.card` or `.block`; `card` and `block` are
+  read-only views of it, so the S5–S8 tests that read `page.card` are unedited. A one-member block is the solo
+  card, unchanged.
+- **The shown row** (criterion 8). `WorkoutPresentation.shownRow(of:in:_:)` returns the chosen row while it is
+  undone, else the cursor's while it is in the block and undone, else the block's first undone row in display
+  order. `shownExercise` names that row's member, so a chosen member with nothing left gives way.
+  `activeSet(of:)` gives a member a shown row only while it holds the block's, so the step plan's "select first"
+  (rule 28) is unchanged and selects B's row when B's stepper is tapped while A is shown.
+- **The block's model** (`WorkoutPresentation+Superset.swift`, criteria 5–13). It has the eyebrow (the block's
+  place, a solo exercise counted as a block), "Round r of n" (the round of the first undone row, drop rounds
+  counted, "n of n" when all are done) and the legend: letter, name, target without RPE, the current member, and
+  "Swap <name>" while the member has no done set and the page answers. Under the legend: "Rest 1:15 after B" and
+  its spoken form, then the current member's Last and Repeat. The rows are in display order, built by
+  `setRows(…, letter:)`: "A1", "BD", spoken name first, check "Log set A2". The steppers sit under the shown row
+  in its member's step, and "+ Add set" is for the current member. `SetRowModel` and `SteppersModel` carry
+  `exerciseIndex`; `SetRowList` takes rows, columns and steppers.
+- **The view** (`Views/SupersetBlock.swift`). It draws the eyebrow, the title (heading), the legend
+  (`SupersetLegendRow`: one button, ink-filled for the current member with an orange letter, the others on the
+  surface; at the accessibility sizes the target under the name and the swap button under the row), the rest
+  line, Last + Repeat, the rows and "+ Add set". The swap button is a sibling of the row's button and sorts after
+  it (−1), as `ExerciseCardTitleRow` does. Identifiers: `workout.block.title`, `workout.block.legend.<letter>`,
+  `workout.block.swap.<letter>`, `workout.block.repeat`, `workout.block.addSet`.
+- **Around the block.** "REMAINING" lists every exercise outside the shown card or block with a set left, earlier
+  ones included, in workout order (criterion 14, Q5, Q6). The rest panel names a block row "A2 · 100 lb × 12",
+  spoken as the row is (criterion 15, Q7). The header is unchanged in shape (Q8). The receipt's `zip` comment
+  says why the shapes agree, and a test pins a superset workout's rows (criterion 17, Q9). `openSwap` accepts any
+  member of the shown block (criterion 9). There is no new `WorkoutEdit` case (criterion 19).
+
+### Criteria → tests
+
+Host unless marked *sim* or *UI* (nightly UI test).
+
+| # | Tests |
+|---|---|
+| 1 | `ReduceSetLoggedTests` :26/:131 and `SetLoggedCursorAdversarialTests` :48 unedited; every cursor assertion unedited (see "Forced by Q4") |
+| 2 | `SupersetRoundsRoundsTests` (working then drop, a short member drops out, `round(of:)` of each row, out of range, empty) |
+| 3 | `ReduceSetLoggedTests+Q4` (`memberLoggedDuringRest_endsItAndCancels`, `memberLoggedAfterRestOver_endsIt`, `unlogAfterThat_bringsNoRestBack`, `relogOfDoneRow_keepsRest`, `soloAndRoundEnd_unchanged`, `seededScripts_restMatchesTheOracle`: 40 seeds × 14 events against `ModelOracle`) |
+| 4, 5 | `WorkoutPresentationSupersetTests.eyebrow_blockOfBlocks`, `oneMemberBlock_isTheSoloCard` |
+| 6 | `supersetRoundTitle` (round 2, drop round "4 of 4", all done) |
+| 7, 13 | `legend_targets_lbAndKg`, `legend_marksCurrent_BAfterA2`, `restLine_andItsSpokenForm`; *sim* `cover_supersetRound2` references |
+| 8 | `shownRow_chosenMemberWithNothingLeft_givesWay`, `legend_marksCurrent_BAfterA2` (header too) |
+| 9 | `swap_perMember_noneWithADoneSet`; `WorkoutSupersetAroundTests.swap_fromAMemberThatIsNotShown`; `WorkoutStoreSwapProgramTests.supersetMember_isSwappedAlone` (now from the legend); *sim* `SupersetBlockTests.controls_sendTheirActions` |
+| 10, 11 | `rowLabels_soloDropSuperset` (A4 → "B4" before "BD"), `rows_spokenAndNamed`, `steppers_inTheMembersStep`; `WorkoutSupersetAroundTests.stepOnB_whileAShown_selectsB`; *sim* `SupersetBlockTests.steppers_actOnTheShownMembersRow` |
+| 12 | `current_lastAndRepeat` |
+| 14 | `WorkoutPresentationRemainingTests` (`remaining_listsTheOtherExercises`, `remaining_lastExercise_listsEarlierUnfinished`, `remaining_noMemberOfTheShownBlock`); G2's `page_isTotal` |
+| 15 | `WorkoutSupersetAroundTests.restLine_namesTheBlocksRow`, `restLine_dropRow_andSolo` |
+| 16 | `legend_marksCurrent_BAfterA2`; *sim* the trees' header stops |
+| 17 | `WorkoutSupersetAroundTests.receipt_supersetWorkout_oneRowPerMember` |
+| 18 | `legendJump_toAFinishedMember_leavesTheShownRow`; the plan's log/un-log rules unchanged (S5 suites) |
+| 19 | `WorkoutWalkAdversarialTests.superset_walkedRoundByRound` (every check through the one queue) |
+| 20 | *sim* `WorkoutAccessibilityTests.tree_isExactlyTheTable` for `hour`, `dropSet`, `supersetRound2` (`WorkoutAccessibilityTrees+Block.swift`), light `.large` and dark `.accessibility3` |
+| 21 | *sim* `SupersetBlockLayoutTests` (cut check, nothing leaves or overlaps, 44 pt, name never under the swap button, "B10"/"BD"/"A12" fit the label column) |
+| 22 | `WorkoutCopyTests`, `WorkoutWordsAdversarialTests` (109 keys), `ModuleCopyTests`, the gate's catalog check; `FeatureWorkoutSourceTests` unedited |
+| 23 | the S4–S8 suites; *UI* `WorkoutSuperset` (new) and the edited nightly tests below |
+
+### Texts
+
+From the brief: "Superset · block %lld of %lld", "Round %lld of %lld", "Rest %@ after %@", the row labels (the
+Domain's letter plus the digits or the catalog's "D"), "Last", "Repeat", "+ Add set". Invented and accepted by the
+rulings (for Pete): "%lld × %lld @ %@ lb" / "kg" (legend target), the spoken rest line (same key with the time in
+words), "%@ · %@ lb × %lld" / "kg" ("A2 · 100 lb × 12"), "Log set %@" / "Undo set %@", "%@, set %lld" and "%@,
+drop set", "Swap %@". The catalog holds 109 keys (97 + 12).
+
+### What is orange with the block up (criterion 13, for Pete with S5's orange question)
+
+The shown row (its label, its rule and its check's ring, as on the card) and the current member's letter on its
+ink-filled legend row (v1's mark). Nothing else: the eyebrow, the rest line, "Repeat" and the swap buttons are ink.
+
+### Deviations and decisions
+
+1. **"Swap exercise" is not drawn in the block.** The icon button has no text; its VoiceOver name is
+   "Swap Lat Pulldown" (criteria 9 and 20), so `LegendRow.swap` carries the spoken name alone.
+2. **No `addSetExerciseIndex`** in the model: `CurrentMember.exerciseIndex` names the member that "+ Add set" adds
+   to, and both exist only while a member is current.
+3. **The legend's other rows are on `LedgerColor.surface`** (v1's paper over its white card; our page is the
+   ground). The current row's target is in `ground` at full strength: v1's 62 % white on ink would be a raw
+   colour (`ledger_raw_color`).
+4. **`dropSet`'s preview chooses B2.** A member chosen with no row now gives way to the block's first undone row
+   (A1, in pounds converted to kilograms, "1.1 KG" steps), so the case chooses the raise's second row, as a tap on
+   it does, and stays about the drop set in kilograms.
+5. **The row-label column** was not widened: "B10", "BD" and "A12" fit the 22/12 em column at every size, plain
+   and bold (*sim* `rowLabels_fitTheirColumn`), so `LedgerDesign` is unchanged.
+6. **The legend row is a plain `Button` with its spoken label.** A first version also made it one element with
+   `.accessibilityElement(children: .ignore)`; that kept the tree right but lost the button's action, so
+   VoiceOver's activation sent nothing (`SupersetBlockTests.controls_sendTheirActions` caught it).
+7. **Lint, not compression.** `setRows`' closure passed the length limit, so the words of a row moved into
+   `rowWords(number:isDone:member:locale:)` (with `RowWords`), which also replaced `checkLabel`. The block's model
+   is split into `rows`, `round`, `legend` and `current`, and the view into `legend` and `last(of:)`.
+
+### Forced by Q4 (Domain test edits; the orchestrator approved the four beyond the plan, 2026-11-11)
+
+1. `ShownRestTests.supersetMember_thatStartsNoRest`: a member logged during or after the rest now leaves `rest`
+   and `shownRest` nil (sanctioned).
+2. `ShownRestAdversarialTests.supersetMember_unlogged_asBuilt` → `supersetMember_unlogged_bringsNoRestBack`:
+   un-logging brings no rest back (sanctioned).
+3. `ShownRestAdversarialTests.supersetMember_loggedDuringTheRest_asBuilt` → `supersetMember_loggedDuringTheRest_endsIt`
+   (sanctioned).
+4. `SetLoggedCursorAdversarialTests.threeMemberSuperset_unequalCounts`: the rest after a non-last member is nil,
+   not the previous rest. **Criterion 1's "unedited" claim was wrong for this test**: its cursor assertions are
+   unedited, its rest assertion pinned the old rule.
+5. `SetLoggedCursorAdversarialTests.addedSet_changesLastOfRound`: A2 ends B1's rest (nil).
+6. `CursorEdgeAdversarialTests.supersetDropRound`: AD ends the round's rest (nil).
+7. `RestAdversarialTests.manualRest_survivesNonLastMember` → `manualRest_endsAtNonLastMember`: a manual rest ends
+   at a member that is not last of its round. `manualRest_autoRestOff` is unedited.
+
+`ModelOracle.logSet` (sanctioned): a row that is not the last of its round sets `rest = nil`.
+
+### Other edits to existing tests (each for a criterion; listed for the audit)
+
+- `WorkoutWalkAdversarialTests` (sanctioned, criterion 23): the two superset tests walk the block
+  (`blockDisagreement`, `logWhatTheBlockShows`, labels "A1"…"B3"), in an extension for the type-length rule.
+- `WorkoutPageAdversarialTests.page_isTotal` (criteria 4, 14, Q5): a block lists none of its members, and the
+  list holds every other exercise with a set left.
+- `WorkoutStoreSwapProgramTests.supersetMember_isSwappedAlone` (sanctioned): opened from the legend row.
+- `WorkoutPageViewsAdversarialTests.orange_isOnlyInTheSetRows` (criterion 13): `dropSet` draws a block, so the
+  allowed orange is its rows' and the current legend row's (the letter).
+- `WorkoutRestPanelAdversarialTests.models_areTheOnesMeant` (criterion 15): the drop-set panel's line is the
+  member's "BD · …", not "Drop set · …".
+- `WorkoutWordsAdversarialTests` and `WorkoutCopyTests`: 12 keys, 97 → 109.
+- Mine: `WorkoutPresentationRemainingTests` (Q5), `PreviewTests` (`dropSet` is a block; the new case),
+  `WorkoutAccessibilityTrees` (`hour` and `dropSet` are blocks; `hour` shows no rest panel since its last log, A2,
+  ended the rest; the new case's panel), `WorkoutLayoutProbe` (the block's parts), `WorkoutScreenTests` (the new
+  case), `WorkoutSnapshotTests` (two tests, the drop set's title).
+- Nightly UI tests that jumped to Lat Pulldown or Cable Lateral Raise and read `workout.card.title`:
+  `WorkoutLogging` (both tests), `WorkoutLoggingAdversarial.test_jumpFromRemaining_showsTheNewExercisesName` and
+  `WorkoutRest.test_rest_atAnAccessibilitySize_thePageScrollsClearOfThePanel` now read `workout.block.title`, the
+  current legend row and the block's eyebrow; the accessibility-size `WorkoutLogging` test expects "REMAINING" to
+  hold the bench press (Q5).
+
+### References
+
+New, 5, in `FeatureWorkoutTests/__Snapshots__/WorkoutSnapshotTests/` (iPhone 17, iOS 27.0):
+`cover_supersetRound2` light and dark at `.large` and `.xLarge`, and dark `.accessibility3`. Changed, 2:
+`cover_dropSet` light and dark (its superset's block, with B2 shown in kilograms, "BD", and the earlier exercises
+under "REMAINING"). Each was looked at. Against v1's legend: the current member's row is ink-filled with the
+orange letter, the other on a light fill with a muted letter, and the target sits at the trailing end. At
+`.accessibility3` the target stands under the name. The header references are unchanged.
+
+### Inputs for later
+
+- **F17/F18 (watch):** Q4 is a reducer rule both devices share; a peer on an older build would keep the rest a
+  member logged. The watch's superset path is F17's, and it can reuse `SupersetRounds.rounds`/`round(of:)`.
+- **F13:** correcting a finished exercise mid-workout stays in History (Q5).
+- **Follow-up:** `WorkoutUpdatesAdversarialTests`, `WorkoutSwapAdversarialTests` and the walk suite's
+  `eventually` waits (10 s) time out when the whole host suite runs in parallel on a loaded machine; each passes
+  alone and with `--no-parallel`. They were seen on this branch, and nothing in S9 touches them.

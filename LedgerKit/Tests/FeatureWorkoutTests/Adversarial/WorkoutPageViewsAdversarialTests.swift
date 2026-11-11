@@ -186,7 +186,10 @@
         )
         func orange_isOnlyInTheSetRows(_ preview: WorkoutPreview, scheme: ColorScheme) throws {
             let model = try WorkoutPageLayoutTests.page(preview)
-            let card = try #require(model.card)
+            // F10 S9 (edited for criterion 13): `dropSet` draws a superset's block, whose current legend row
+            // carries the orange letter as well.
+            let rows = try #require(model.card?.rows ?? model.block?.rows)
+            let current = model.block?.legend.filter(\.isCurrent).map(\.spoken) ?? []
             let page = WorkoutPage(model: model) { _ in }
             let width = SnapshotConfig.phoneWidth
             let image = try #require(RenderedImage.render(
@@ -199,7 +202,7 @@
             let orange = Self.orangeRows(of: image).map { CGFloat($0) / scale }
             #expect(!orange.isEmpty, "the check cannot see orange in this appearance")
             // Where orange may be: the shown row (with the rule over it) and the rows that are logged.
-            let allowed = card.rows.filter { $0.state != .pending }.map(\.summary)
+            let allowed = rows.filter { $0.state != .pending }.map(\.summary) + current
             // The reader hosts the page wherever it likes: a marker over the page says where its top is.
             let marked = VStack(spacing: 0) {
                 Color.clear.frame(height: 1).accessibilityElement().accessibilityLabel(Text(verbatim: "Top"))

@@ -94,7 +94,6 @@ struct SupersetLegendRow: View {
                 label
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.spoken)
             .accessibilityAddTraits(row.isCurrent ? [.isButton, .isSelected] : .isButton)
             .accessibilityIdentifier("workout.block.legend.\(row.letter)")
