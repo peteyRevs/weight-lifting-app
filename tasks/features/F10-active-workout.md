@@ -1628,3 +1628,12 @@ The product owner delegated these calls (autopilot since 2026-11-10); each can b
   finished exercise mid-workout stays out (History, F13).
 - **One PR.** The implementer reports the net product count after the presentation stage and stops past ~850 net
   product lines to propose the S9a/S9b split above; never past 1,000. No compressing code or comments to fit.
+
+### Ruling after S9's review (orchestrator, 2026-11-11): Q4 refined
+
+G3's N2: a round logged out of order (B1, then the forgotten A1) cancelled its own group rest, since A1 is "not the
+last of its round" by position. Refined rule, replacing Q4's: **a not-done → done row ends the running rest only
+while its round still has an undone row after it is logged.** A row that completes its round, in any order, leaves
+the rest as it is (it starts none of its own when another row of the round already did). Solo sets, re-logs and
+un-logs are unchanged. `ModelOracle` follows; the seven Q4 test edits stand where they still hold and are adjusted,
+with a listed reason, where this refinement changes their outcome.
