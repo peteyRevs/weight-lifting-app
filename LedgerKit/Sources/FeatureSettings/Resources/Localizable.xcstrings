@@ -441,13 +441,13 @@
         }
       }
     },
-    "The built-in exercises stay." : {
-      "comment" : "Delete all data warning, its third sentence: the catalog is kept",
+    "The built-in exercise list is restored." : {
+      "comment" : "Delete all data warning, its third sentence: the built-in catalog is put back as it ships",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The built-in exercises stay."
+            "value" : "The built-in exercise list is restored."
           }
         }
       }

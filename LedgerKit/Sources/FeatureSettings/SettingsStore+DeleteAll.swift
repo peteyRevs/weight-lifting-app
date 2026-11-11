@@ -52,14 +52,17 @@ extension SettingsStore {
     }
 
     /// "Delete everything": the erase asked for, once, when the sheet's button acts (the typed word matches and no
-    /// erase runs).
+    /// erase runs). With no run of the screen's task to erase, nothing is asked for and nothing is marked as erasing,
+    /// so the button never sticks.
     private func confirmErase() {
-        guard let draft = deleteAll, DeleteAllPresentation.sheet(draft, locale: locale)?.confirm != nil else {
+        guard let eraseMark, let draft = deleteAll,
+              DeleteAllPresentation.sheet(draft, locale: locale)?.confirm != nil
+        else {
             return
         }
         deleteAll?.isErasing = true
         deleteAll?.failed = false
-        eraseMark?.yield()
+        eraseMark.yield()
     }
 
     /// Runs the erase each time it is asked for, in `run()`'s group.

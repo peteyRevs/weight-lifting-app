@@ -24,8 +24,8 @@ struct DeleteAllPresentationTests {
         #expect(warning.title == "Delete all data?")
         #expect(warning.message == """
         This deletes every workout and set, your records, your programs and your custom exercises. Any exported files \
-        on this iPhone go too, and your settings go back to how they started. The built-in exercises stay. Workouts \
-        already saved to Apple Health stay there: delete them in the Health app.
+        on this iPhone go too, and your settings go back to how they started. The built-in exercise list is restored. \
+        Workouts already saved to Apple Health stay there: delete them in the Health app.
         """)
         #expect(warning.cancel == SettingsModel.Link(title: "Cancel", action: .cancelDeleteAll))
         #expect(warning.proceed == SettingsModel.Link(title: "Continue", action: .continueDeleteAll))

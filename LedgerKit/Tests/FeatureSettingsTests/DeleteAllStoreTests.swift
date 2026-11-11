@@ -144,4 +144,20 @@ struct DeleteAllStoreTests {
         let workouts = try await scene.memory.workouts.recent(limit: 100)
         #expect(!workouts.isEmpty, "the held erase was cancelled before it began")
     }
+
+    @Test("Delete everything with no run of the screen's task asks for nothing, and the button does not stick")
+    func confirmWithoutARun_erasesNothing() async throws {
+        let (scene, reset) = try DeleteAllScene.erasingTheScenesStores()
+        scene.store.send(.deleteAll)
+        scene.store.send(.continueDeleteAll)
+        scene.store.send(.setDeleteText("DELETE"))
+        scene.store.send(.confirmDeleteAll)
+        #expect(scene.store.deleteAll?.isErasing == false)
+        #expect(reset.calls.isEmpty)
+        let task = await scene.running()
+        defer { task.cancel() }
+        scene.store.send(.confirmDeleteAll)
+        await eventually { scene.store.deleteAll == nil }
+        #expect(reset.calls.count == 1)
+    }
 }

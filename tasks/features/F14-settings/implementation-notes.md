@@ -1008,7 +1008,7 @@ Paths under `LedgerKit/`.
 
 "Delete all data" · "Finish or discard your workout first" · "Delete all data?" · "This deletes every workout and
 set, your records, your programs and your custom exercises." · "Any exported files on this iPhone go too, and your
-settings go back to how they started." · "The built-in exercises stay." · "Workouts already saved to Apple Health stay
+settings go back to how they started." · "The built-in exercise list is restored." · "Workouts already saved to Apple Health stay
 there: delete them in the Health app." · "Continue" · "This can't be undone." · "DELETE" · "Type %@ to confirm" ·
 "Delete everything" · "Nothing was deleted. Try again." Only "Delete all data?", "Continue", the typed word and the
 failure line are the brief's; the rest are new.
@@ -1084,3 +1084,34 @@ LedgerFakes 99.07 %, LedgerDependencies 96.62 %, LedgerDomain 99.36 %, overall 9
 
 `scripts/check.sh` (full), through the lock, on `8c8033d`: **exit 0, "check.sh OK"**, 2,022 s. FeatureSettings 97.16 %
 (2,093 / 2,154), overall 98.45 %. The commit after it records this paragraph and changes docs only.
+
+### S3 fix round 1 (G1, 2026-11-11)
+
+Against G2's round (`dc13af9`: `DataResetAdversarialTests`, `DeleteAllAdversarialTests`,
+`DeleteAllSheetAdversarialTests`) and the orchestrator's rulings. None of G2's tests was edited.
+
+- **F14-S3-G2-1 (ruled Blocking): the compaction died with the caller's task.** In the app the erase's commit empties
+  the active program, the gate turns to onboarding and SwiftUI cancels `SettingsRoot`'s task, which runs the erase.
+  GRDB then skipped or interrupted `VACUUM` and the checkpoint, `compact()` swallowed the `CancellationError`, and the
+  deleted names stayed in the `-wal`: `cancelledAfterCommit_stillLeavesNoTraceOnDisk` failed.
+  - **Fix:** `GRDBDataReset.eraseAll` runs `compact()` in an unstructured `Task` of its own and awaits its value. A
+    `Task { }` does not inherit its creator's cancellation, so once the transaction has committed nothing the caller
+    does can cut the compaction short; the call still returns only when the disk is clean. I chose this over handing
+    the compaction to a long-lived owner in Persistence (an actor or the launch): the erase stays one call that ends
+    with the disk clean, the caller still waits for it, and nothing outlives it. It is not fire-and-forget: it is
+    awaited, and it is Persistence's, not a store's (standards §4).
+  - The `CancellationError` branch is gone: the compaction's task is never cancelled, so any error is SQLite's or the
+    file system's and is logged at error level. The wrong comment ("the next erase, or SQLite's own checkpoints,
+    reclaim the pages") went with it; the catch's comment now says what such a failure leaves.
+  - The erase still reports success once committed, as the protocol says; compaction can now end early only through
+    a real I/O failure, which is logged.
+- **Robustness: Delete everything with no run.** `.confirmDeleteAll` while no `run()` is active (`eraseMark` nil) now
+  does nothing, so `isErasing` never sticks. New test: `DeleteAllStoreTests.confirmWithoutARun_erasesNothing` (nothing
+  asked for, the button not stuck, then a run and a tap erase once).
+- **Copy:** "The built-in exercises stay." is now **"The built-in exercise list is restored."** (it is reseeded). The
+  catalog key and comment follow; `DeleteAllPresentationTests` expects the new sentence.
+
+**Input for F19 (watch sync).** "Delete all data" erases the phone's database only. The watch keeps its cached
+program, settings and any workouts it has not yet sent; F19 must carry the erase to the watch (push an empty context
+and drop its queued envelopes, and refuse an erase while either device reports a live workout, K7), or the next sync
+brings deleted workouts and the old program back. F28 has the same duty for iCloud (K6).

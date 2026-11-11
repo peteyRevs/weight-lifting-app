@@ -16,6 +16,12 @@ import os
 /// `TRUNCATE` checkpoint copies the rebuilt pages into the file and empties the `-wal`, whose older frames hold them
 /// too. Both run after the commit, on the queue, never on the main actor. They are best-effort: a failure is logged,
 /// and the erase, already committed, stands.
+///
+/// **The compaction outlives the caller's cancellation** (F14-S3-G2-1). In the app the commit itself ends the caller's
+/// task: it empties the active program, the gate turns to onboarding and SwiftUI cancels Settings' task. GRDB would
+/// then skip or interrupt `VACUUM` and the checkpoint, and the deleted rows would stay in the `-wal`. So the erase
+/// awaits the compaction in a task of its own, which does not inherit the caller's cancellation: the call returns once
+/// the disk is clean, and only a real failure of SQLite or the file system, logged, leaves it otherwise.
 public struct GRDBDataReset: DataReset {
     /// Every table the erase empties, children before their parents: everything but `device`, this install's own row
     /// (C26). `MigrationTests`' sibling, `DataResetTests.erasedTables_areEveryTableButDevice`, fails when a migration
@@ -62,7 +68,9 @@ public struct GRDBDataReset: DataReset {
             try GRDBExerciseRepository.seed(records, version: version, at: timestamp, in: database)
             try GRDBSettingsRepository.replace(payload: payload, updatedAt: timestamp, in: database)
         }
-        await compact()
+        // Not the caller's task: once the transaction has committed, its cancellation must not reach the compaction.
+        let compaction = Task { await compact() }
+        await compaction.value
     }
 
     /// Rebuilds the file and empties the `-wal` (N21), logging a failure: the erase is already committed.
@@ -72,10 +80,9 @@ public struct GRDBDataReset: DataReset {
             try await queue.writeWithoutTransaction { database in
                 _ = try database.checkpoint(.truncate)
             }
-        } catch is CancellationError {
-            // The lifter's task ended after the commit: the next erase, or SQLite's own checkpoints, reclaim the
-            // pages. A cancellation is not a failure to log (standards §8).
         } catch {
+            // The compaction's own task is never cancelled, so this is SQLite's or the file system's failure: the
+            // deleted rows may stay in the freed pages or the `-wal` until the next erase compacts the file.
             Logger.persistence.error("Delete all data: the file could not be compacted after the erase: \(error)")
         }
     }

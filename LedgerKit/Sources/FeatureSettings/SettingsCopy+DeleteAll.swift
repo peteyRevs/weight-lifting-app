@@ -49,9 +49,9 @@ nonisolated extension SettingsCopy {
 
     static var deleteAllCatalogStays: String {
         String(
-            localized: "The built-in exercises stay.",
+            localized: "The built-in exercise list is restored.",
             bundle: .module,
-            comment: "Delete all data warning, its third sentence: the catalog is kept"
+            comment: "Delete all data warning, its third sentence: the built-in catalog is put back as it ships"
         )
     }
 
