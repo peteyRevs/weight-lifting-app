@@ -1,0 +1,27 @@
+# PR CI's iOS test shards (docs/ci-cd.md, "Shards"): `check.sh --ios-only --shard <n>/2` runs shard <n>'s
+# test targets of TestPlans/PR.xctestplan, skipping every other shard's. One "<shard> <test target>" per line.
+# Every target the PR plan enables is in exactly one shard (scripts/tests/adversarial/pr-shards.adv.sh), so a
+# target added to the plan fails that suite until it is placed here. A target in no shard would run in every
+# shard, and its own check-test-results.sh would name it.
+#
+# Balanced by each target's wall time on the runner (the "Launch <target>" sections of the action log,
+# `xcrun xcresulttool get log --type action`), seconds in run 43059048691 attempt 1 (#91) / 42983186099
+# attempt 1 (#88). Shard 1: 1,280 / 1,298 s. Shard 2: 1,270 / 1,033 s. Rebalance from a newer bundle when
+# one shard's tests run clearly longer than the other's.
+1 FeatureProgramTests      #  721 /  681
+1 LedgerPersistenceTests   #  289 /  292
+1 LedgerDesignTests        #  185 /  217
+1 LedgerDomainTests        #   85 /  108
+2 FeatureWorkoutTests      #  582 /  494
+2 LedgerUITests            #  158 /  106 (the plan selects Smoke)
+2 FeatureTodayTests        #  144 /  130
+2 LedgerAppKitTests        #  112 /   99
+2 FeatureLibraryTests      #   52 /   35
+2 FeatureHistoryTests      #   52 /   30
+2 LedgerSyncTests          #   49 /   54
+2 FeatureOnboardingTests   #   38 /   37
+2 FeatureSettingsTests     #   36 /   16
+2 LedgerTests              #   26 /   21
+2 LedgerDependenciesTests  #   17 /    7
+2 LedgerHealthTests        #    3 /    2
+2 LedgerActivityKitTests   #    1 /    2

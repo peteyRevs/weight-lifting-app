@@ -1,6 +1,8 @@
-# The PR gate (docs/ci-cd.md §2): scripts/check.sh as a developer runs it, split in two to spend fewer paid
-# macOS minutes (Pete, 2026-09-27 and 2026-09-30): a Linux job runs the static checks, then one macOS job
-# builds and tests iOS. Docs-only PRs start neither; new pushes cancel old runs.
+# The PR gate (docs/ci-cd.md §2): scripts/check.sh as a developer runs it, split to spend fewer paid macOS
+# minutes (Pete, 2026-09-27 and 2026-09-30) and, since 2026-11-11, less wall time: a Linux job runs the
+# static checks, then two macOS Check jobs build iOS and each test half of the PR plan's targets
+# (scripts/pr-shards.txt), then Coverage checks both halves together and gates coverage. Docs-only PRs
+# start none of them; new pushes cancel old runs.
 name: PR
 
 on:
@@ -74,15 +76,23 @@ jobs:
         run: scripts/check.sh --static-only
 
   check:
-    name: Check
+    # Two shards (docs/ci-cd.md, "Shards"; tasks/features/F15-ios-ui-tests.md §2.4 a): one PR job's tests
+    # took 2,251-2,581 s in #91's two attempts (a 3,128 s step at best, of a 4,500 s deadline), and #88
+    # reached the deadline. Each shard builds as the unsharded job did, then tests its own targets; Coverage
+    # checks both shards' bundles together and gates their coverage.
+    name: Check (shard ${{ matrix.shard }}/2)
     # After Static checks: a lint failure then costs no macOS minutes. Check is skipped, and the run is red.
     needs: [scope, static]
     if: needs.scope.outputs.code != 'false' # a missing output runs Check
+    strategy:
+      fail-fast: false # a red shard leaves the other to finish: both report, and shard 1 saves the cache
+      matrix:
+        shard: [1, 2] # scripts/pr-shards.txt's shards; the job name and --shard say /2 (WF72)
     # Xcode 27 is only on this label, a public preview image (actions/runner-images#14404). macos-26
     # still has 26.6, but rolling back to it means reverting F32 as a whole: its lockfiles and snapshots
     # are Xcode 27's, and every later merge makes that harder (ADR-006 amendment).
     runs-on: xcode-27
-    timeout-minutes: 82 # the step's 77, plus checkout, Xcode, mise, both caches and the failure upload
+    timeout-minutes: 67 # the step's 62, plus checkout, Xcode, mise, both caches and the uploads
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -121,22 +131,17 @@ jobs:
       # after a cold 684 s iOS build. watchOS stays in the full local gate, green before every merge
       # (docs/ci-cd.md §4), and in the nightly. Static checks ran on Linux; only the suites that need
       # macOS run here.
-      - name: Format, iOS, coverage, macOS script tests (check.sh --ios-only --skip-static)
-        timeout-minutes: 77 # fails the step before the job times out, so the bundles still upload
+      - name: Format, macOS script tests, iOS build, one shard's tests (check.sh --ios-only --skip-static --shard)
+        timeout-minutes: 62 # fails the step before the job times out, so the bundles still upload
         env:
-          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). Until
-          # 2026-10-26, 3840: a first run now restores main's cache (main-cache.yml) and builds warm, as #65's and #66's re-runs
-          # did (441-758 s, 2026-10-19/20, after 87-150 s of script tests); those re-runs tested for
-          # 2,099-2,210 s, about 1,960 s less this chore's sweeps (tasks/chores/ci-test-time.md): about
-          # 2,870 s at most. The deadline still covers a cold build (1,424 s, when no cache matches the
-          # lockfiles): 1,424 + 150 + 1,960 is about 3,534 s, plus 5 min. Standard minutes are free on this
-          # public repository, so headroom costs nothing until something hangs; were it private again, a
-          # hang would bill about 12 minutes more than at 3,120 s (docs/ci-cd.md, "Deadline": revisit).
-          # 2026-10-21: #67 tested for 2,407 s warm; tasks/chores/ci-test-time-2.md brings that to about
-          # 1,900-2,100 s, so a cold first run is about 150 + 1,450 + 2,100 = 3,700 s at worst.
-          # 2026-10-26: #72 built for 1,062 and 1,630 s with its cache restored, and was stopped at 3,840 s.
-          # The runner's worst seen, 1,630 + 150 + 2,402 (#67's tests), is about 4,180 s, plus 5 min: 4,500.
-          LEDGER_XCODEBUILD_DEADLINE: 4500
+          # s: 2 min before the step's timeout, check.sh interrupts xcodebuild (bundle finalized). Since
+          # 2026-11-11 each shard tests about half: by each target's runner time in #91's and #88's bundles
+          # (scripts/pr-shards.txt), 1,280-1,298 s and 1,033-1,270 s. A shard's worst is then the runner's
+          # slowest build seen (1,630 s, #72, cache restored), 165 s of format and script tests, 12 s of
+          # catalogs and boot, and 1,300 s of tests: about 3,110 s. 3,600 s leaves about 490 s, 38 % more
+          # test time than either half has taken, for a target's growth before scripts/pr-shards.txt is
+          # rebalanced. A cold build (1,424 s) is inside the slowest one. Until 2026-11-11, one job: 4,500.
+          LEDGER_XCODEBUILD_DEADLINE: 3600
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
           # Seeded property tests run their first 40 seeds here, not the PR plan's 200: xcodebuild hands a
           # TEST_RUNNER_ variable to the test runner without the prefix, where it replaces the plan's value.
@@ -150,12 +155,23 @@ jobs:
           # most of the test step. The full local gate, green before every merge, and the nightly set no
           # LEDGER_SWEEP and run every size and setting (docs/ci-cd.md, "Sweeps on the runner").
           TEST_RUNNER_LEDGER_SWEEP: pr
-        run: scripts/check.sh --ios-only --skip-static
+        run: scripts/check.sh --ios-only --skip-static --shard ${{ matrix.shard }}/2
+      # Coverage reads this shard's test bundle. Not per attempt: "Re-run failed jobs" re-runs a red shard
+      # and Coverage, not a green shard, so Coverage must find the green one's bundle under the same name.
+      - name: Upload this shard's test bundle for Coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: PR-iOS-shard${{ matrix.shard }}
+          path: .derivedData/Results/PR-iOS-shard${{ matrix.shard }}.xcresult
+          include-hidden-files: true # under .derivedData/
+          if-no-files-found: error
+          overwrite: true # a re-run replaces its earlier attempt's bundle
+          retention-days: 7
       - name: Upload result bundles and snapshot diffs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: results-${{ github.run_id }}-${{ github.run_attempt }}
+          name: results-${{ github.run_id }}-${{ github.run_attempt }}-shard${{ matrix.shard }}
           path: |
             .derivedData/Results
             .derivedData/SnapshotArtifacts
@@ -164,9 +180,38 @@ jobs:
           retention-days: 7
       # After a red run too, so the push that fixes it starts warm; the cache holds only finished
       # compilations, each under its inputs' hash. Not when cancelled: a newer push is already running.
+      # Shard 1 alone: both shards build the same thing under the same key, and only one save can take it.
       - name: Save compiled output
-        if: ${{ !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }}
+        if: ${{ matrix.shard == 1 && !cancelled() && steps.compilation-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .derivedData/CompilationCache.noindex
           key: ${{ steps.compilation-cache.outputs.cache-primary-key }}
+
+  coverage:
+    name: Coverage
+    # check.sh step 5 for the shards (scripts/check-shards.sh): each shard's bundle ran exactly its targets,
+    # the shards together ran every target of the PR plan once, and the coverage gate over both bundles,
+    # at the same thresholds. After both shards passed; a red shard skips it, and the run is red.
+    needs: [scope, check]
+    if: needs.scope.outputs.code != 'false' # as Check
+    runs-on: xcode-27 # xcresulttool and xccov from the Xcode that wrote the bundles
+    timeout-minutes: 15 # two bundle downloads (a whole run's was 243 MB) and a minute of reading them
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select Xcode from .xcode-version
+        run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
+      - name: Check the Xcode against .xcode-version (as check.sh step 0)
+        run: scripts/check-xcode-version.sh
+      - name: Download shard 1's test bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: PR-iOS-shard1
+          path: .derivedData/Results/PR-iOS-shard1.xcresult
+      - name: Download shard 2's test bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: PR-iOS-shard2
+          path: .derivedData/Results/PR-iOS-shard2.xcresult
+      - name: Both shards' results and coverage (check-shards.sh)
+        run: scripts/check-shards.sh

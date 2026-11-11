@@ -24,9 +24,10 @@ authoritative; the plan differs:
 - Test runs pass `-collect-test-diagnostics never`: on a failure Xcode 27 runs `simctl diagnose`, which
   timed out after 600 s per platform (F32). The result bundle keeps the failures, logs and attachments.
 - **Free minutes (Pete, 2026-09-27); paid from 2026-09-30; free again since the repository went public
-  (2026-10-20: standard runners).** `pr.yml` has one macOS job, `Check` (`check.sh --ios-only
-  --skip-static`). It runs after two Linux jobs: `Scope` skips
-  both later jobs when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
+  (2026-10-20: standard runners).** `pr.yml`'s macOS jobs are `Check`, since 2026-11-11 two shards
+  (`Check (shard 1/2)` and `Check (shard 2/2)`, each `check.sh --ios-only --skip-static --shard <n>/2`), and
+  `Coverage` after both ("Shards", below). They run after two Linux jobs: `Scope` skips
+  every later job when only files under `docs/`, `tasks/` or `design/`, or `*.md` at the repository root,
   change (renames count at both paths). `Static checks` comes next (below). `main-cache.yml` builds on
   each code push to `main` to save `main`'s caches ("What is main-scoped", below). Nightly is manual;
   release-please runs on Linux, and CI never runs on its release PR. §4: no protection.
@@ -129,10 +130,53 @@ authoritative; the plan differs:
     the rows under it, and the rest panel's room; and `PixelBuffer` draws straight into its pixels' storage
     (the per-pixel copy cost as much as a drawing unoptimized). The PR plan's cases on a developer Mac: 931 →
     801 s, a floor taken on a loaded host (196 s saved where faster).
-  - *Deadline (2026-10-26).* `LEDGER_XCODEBUILD_DEADLINE` is 4,500 s; the step's timeout is 77 min, 2 min
-    after the deadline, and the job's 82. #72 (F12 S2) restored its compilation cache and still built for
-    1,062 s, then 1,630 s on a re-run (646–920 s on the four PRs before it), and the re-run was stopped at
-    3,840 s in its tests. The runner's worst seen, 1,630 s of build, 150 s of script tests and #67's 2,402 s of
+  - *Shards (2026-11-11; `tasks/features/F15-ios-ui-tests.md`, plan amendments §2.4 a and Q10).* One
+    `Check` job had reached its deadline (#88), and #91 took 72 min, its re-run's tests 2,251 of 3,128 s. `Check` is now a matrix of
+    two jobs (`fail-fast: false`), each on `xcode-27` with the same checkout, Xcode, mise, package cache and
+    compilation-cache restore as before. Each runs `check.sh --ios-only --skip-static --shard <n>/2`: steps
+    0–2 as before, the same iOS build (`--build-only`'s arguments, its result bundle's name aside, so both
+    shards and `main-cache.yml` share cache keys; check-wiring W84), then the tests of the targets `scripts/pr-shards.txt` gives shard
+    `<n>`, the other shard's passed to `xcodebuild` as `-skip-testing`. `check-test-results.sh` then checks
+    that the bundle ran exactly those targets and they passed; step 5 is skipped. Each green shard uploads
+    its bundle as the artifact `PR-iOS-shard<n>` (overwritten by a re-run, since "Re-run failed jobs" does
+    not re-run a green shard); a red one uploads `results-<run>-<attempt>-shard<n>` as before. Only shard 1
+    saves the compilation cache: both build the same thing under one key. `Coverage` (`xcode-27`, 15 min)
+    needs both shards, selects and checks the Xcode as `check.sh` step 0 does, downloads both bundles and
+    runs `scripts/check-shards.sh`: each bundle against its shard's targets, the shards' targets together
+    against the PR plan (every enabled target once), then `coverage-gate.sh --ios-only` over both bundles,
+    at the same thresholds. `gh pr checks` lists `Scope`,
+    `Static checks`, `Check (shard 1/2)`, `Check (shard 2/2)` and `Coverage`.
+    - *The split.* By each target's wall time on the runner, the "Launch <target>" sections of the action
+      log (`xcrun xcresulttool get log --type action`), in the only two full bundles kept (#91's first
+      attempt and #88's, failure uploads): shard 1 is FeatureProgramTests, LedgerPersistenceTests,
+      LedgerDesignTests and LedgerDomainTests, 1,280 / 1,298 s; shard 2 the other 13 targets, 1,270 / 1,033
+      s. Per shard, then: about 165 s of format and script tests, the build (452–1,630 s), and 1,300 s of
+      tests, about 2,000 s warm against one job's 3,128 s. When one shard's tests run clearly longer, move
+      a target in `scripts/pr-shards.txt` by a newer bundle's times. A target added to the PR plan fails
+      `pr-shards.adv.sh` until it is placed in a shard.
+    - *Coverage.* In one run every test target's copy of a source file reports the same covered lines,
+      those any test of the run executed (#91's report: 109 files measured in several targets, every one
+      identical), so the unsharded gate counts the union of all tests. A shard's bundle counts its own
+      shard's, and `coverage-gate.sh` keeps each file's best measurement over both bundles: never more
+      covered than one run would count, so the gate is at least as strict, never weaker. A union was tried
+      and dropped: `xcrun xcresulttool merge` keeps only the first bundle's coverage (`xccov` then cannot
+      read the merged report), and `xcrun xccov merge` of #91's report with itself moved modules both ways
+      (LedgerDomain 99.36 → 99.96 %, FeatureLibrary 96.98 → 96.48 %), so it is no union of the same
+      measure. Measured on a developer Mac (2026-11-11, plan seeds and full sweeps): both shards green on
+      their own (shard 1 tested for 785 s, shard 2 for 907 s), and `check-shards.sh` over them gated
+      98.41 % overall against the unsharded full gate's 98.44 % on the same Mac: 10 covered lines fewer,
+      in four modules (at most 0.12 points), none more, as the gate's rule says.
+    - *Cost.* Two macOS test jobs and a short Coverage job per PR: free while the repository is public; if
+      it goes private again, about 1.3 times today's minutes for about half the wall time.
+  - *Deadline (2026-11-11).* `LEDGER_XCODEBUILD_DEADLINE` is 3,600 s per shard; the step's timeout is 62
+    min, 2 min after the deadline, and the job's 67. A shard's worst is the runner's slowest build seen
+    (1,630 s, below), 165 s of format and script tests, 12 s of catalogs and boot and 1,300 s of tests,
+    about 3,110 s; the deadline leaves about 490 s, 38 % more than either shard's tests have taken, for a
+    target's growth before the shards are rebalanced. A cold build (1,424 s) is inside the slowest seen.
+  - *Deadline until 2026-11-11 (one Check job).* `LEDGER_XCODEBUILD_DEADLINE` was 4,500 s; the step's
+    timeout 77 min, 2 min after the deadline, and the job's 82. #72 (F12 S2) restored its compilation
+    cache and still built for 1,062 s, then 1,630 s on a re-run (646–920 s on the four PRs before it), and
+    the re-run was stopped at 3,840 s in its tests. The runner's worst seen, 1,630 s of build, 150 s of script tests and #67's 2,402 s of
     tests, is about 4,180 s; the deadline is 5 min past that. Minutes are free while the repository is public.
   - *Deadline until 2026-10-26 (`tasks/chores/ci-test-time.md`).* 3,840 s; the
     step's timeout was 66 min, 2 min after the deadline, and the job's 71. On 2026-10-19 and -20 both PRs'
@@ -161,8 +205,9 @@ authoritative; the plan differs:
     is Apple silicon (the `xcode-27` image is arm64); an Intel Mac could no longer run the gate. The
     nightly's own `xcodebuild` calls still build both: slower, but it is manual and tests the same arm64 slices.
 - **PR CI runs iOS only (Pete, 2026-09-30).** `Check` runs `scripts/check.sh --ios-only` (with
-  `--skip-static` since the split above; step 2 then runs in `Static checks`): steps 0–3
-  and 5, no watchOS step, and the coverage gate reads the iOS bundle alone. Why: F32's first `xcode-27`
+  `--skip-static` since the split above; step 2 then runs in `Static checks`, and `--shard` since
+  2026-11-11; step 5 then runs in `Coverage`): steps 0–3 and 5, no watchOS step, and the coverage gate
+  reads iOS bundles alone. Why: F32's first `xcode-27`
   run (36652681235) passed lint, the script tests and all 17 iOS test targets, then reached
   `LEDGER_XCODEBUILD_DEADLINE` (1,500 s) in the watchOS tests and stopped, exit 75, as designed. Its iOS
   build took 684 s, including a cold package resolve. watchOS is still tested before every merge by
