@@ -16,11 +16,7 @@ nonisolated extension WorkoutEditPlan {
         alsoUpdateProgram: Bool,
         in state: WorkoutState
     ) {
-        guard state.exercises.indices.contains(exerciseIndex) else {
-            return
-        }
-        let exercise = state.exercises[exerciseIndex]
-        guard exercise.exerciseID == choice.replacing, WorkoutPresentation.canSwap(exercise),
+        guard WorkoutPresentation.canSwap(choice.replacing, at: exerciseIndex, in: state),
               !WorkoutPresentation.holds(choice.exerciseID, besides: exerciseIndex, in: state)
         else {
             return

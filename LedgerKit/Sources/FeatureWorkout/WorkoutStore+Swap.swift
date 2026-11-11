@@ -21,37 +21,38 @@ extension WorkoutStore {
         return WorkoutPresentation.swapSheet(swap, in: state, locale: locale)
     }
 
-    /// The sheet's three actions.
-    func answerSwap(_ action: WorkoutAction) {
-        switch action {
-        case .openSwap:
-            openSwap()
-        case .cancelSwap:
+    /// The swap button's and the sheet's intents.
+    func answerSwap(_ intent: WorkoutSwapIntent) {
+        switch intent {
+        case let .open(exerciseIndex, exerciseID):
+            openSwap(exerciseIndex, exerciseID)
+        case .cancel:
             dismiss([.swap])
         case let .updateProgram(isOn):
             if dialog == .swap {
                 swap?.alsoUpdateProgram = isOn
             }
-        default:
-            break
         }
     }
 
-    /// Opens the sheet for the shown exercise, while none of its sets is logged (S8 ruling Q2) and nothing
-    /// else is shown over the cover. The switch opens on when the exercise's slot already carries a program
-    /// change (Q4).
-    private func openSwap() {
-        guard dialog == nil, case let .loaded(state) = workout,
-              let index = WorkoutPresentation.shownExercise(of: state, selection: selection),
-              WorkoutPresentation.canSwap(state.exercises[index])
+    /// Opens the sheet for the exercise the card showed, `exerciseID` at `index`, while it is still the shown
+    /// exercise and none of its sets is logged (S8 ruling Q2), and nothing else is shown over the cover. An
+    /// exercise that moved between the tap and now opens nothing (review SF1). Q2 is checked on the newest
+    /// workout, a change the stream has not shown yet included (review N5). The switch opens on when the
+    /// exercise's slot already carries a program change (Q4).
+    private func openSwap(_ index: Int, _ exerciseID: ExerciseID) {
+        guard dialog == nil, case let .loaded(shown) = workout,
+              WorkoutPresentation.shownExercise(of: shown, selection: selection) == index,
+              WorkoutPresentation.canSwap(exerciseID, at: index, in: shown),
+              WorkoutPresentation.canSwap(exerciseID, at: index, in: ahead ?? shown)
         else {
             return
         }
-        let exercise = state.exercises[index]
+        let exercise = shown.exercises[index]
         swap = SwapState(
             exerciseIndex: index,
             exerciseID: exercise.exerciseID,
-            alsoUpdateProgram: exercise.slotID.map { state.programUpdates[$0] != nil } ?? false
+            alsoUpdateProgram: exercise.slotID.map { shown.programUpdates[$0] != nil } ?? false
         )
         swapAttempt += 1
         dialog = .swap
@@ -66,9 +67,7 @@ extension WorkoutStore {
         guard dialog == .swap, let swap else {
             return
         }
-        let isSwappable = live.exercises.indices.contains(swap.exerciseIndex)
-            && live.exercises[swap.exerciseIndex].exerciseID == swap.exerciseID
-            && WorkoutPresentation.canSwap(live.exercises[swap.exerciseIndex])
+        let isSwappable = WorkoutPresentation.canSwap(swap.exerciseID, at: swap.exerciseIndex, in: live)
         var isOfferTaken = false
         if case let .loaded(choices) = swap.alternatives {
             isOfferTaken = choices.contains {
@@ -87,7 +86,7 @@ extension WorkoutStore {
     /// read (criterion 23).
     func loadSwap() async {
         guard let asked = swap, case .loading = asked.alternatives, case let .loaded(state) = workout,
-              state.exercises.indices.contains(asked.exerciseIndex)
+              WorkoutPresentation.canSwap(asked.exerciseID, at: asked.exerciseIndex, in: state)
         else {
             return
         }
@@ -97,7 +96,9 @@ extension WorkoutStore {
         do {
             result = try await .loaded(choices(replacing: current, in: state))
         } catch {
-            guard !(error is CancellationError && Task.isCancelled) else {
+            // A read whose task was cancelled says nothing, whatever it threw: the task that replaces it
+            // answers for the same attempt (review N3).
+            guard !Task.isCancelled else {
                 return
             }
             logger.log.error("The alternatives could not be read: \(String(describing: error), privacy: .public)")
@@ -117,17 +118,11 @@ extension WorkoutStore {
         }
         let others = Set(state.exercises.map(\.exerciseID))
         let ranked = try await SwapAlternatives.ranked(for: stored, in: exercises.all(), excluding: others)
-        var choices: [SwapChoice] = []
+        var lasts: [LastPerformance?] = []
         for exercise in ranked {
-            let last = try await stats.lastPerformance(exerciseID: exercise.id)
-            choices.append(SwapChoice(
-                replacing: current.exerciseID,
-                exerciseID: exercise.id,
-                name: exercise.name,
-                replacement: SwapAlternatives.replacement(of: current, with: exercise, last: last, units: state.units)
-            ))
+            try await lasts.append(stats.lastPerformance(exerciseID: exercise.id))
         }
-        return choices
+        return SwapChoice.choices(ranked, lasts: lasts, replacing: current, units: state.units)
     }
 
     /// The exercises of the workout on screen whose bests were never asked for: those a swap brought in,
@@ -162,7 +157,7 @@ extension WorkoutStore {
             let held = records(of: state).filter { unread.contains($0.exerciseID) }
             heldRecords.formUnion(held.map(HeldRecord.init))
         } catch {
-            guard !(error is CancellationError && Task.isCancelled) else {
+            guard !Task.isCancelled else {
                 return
             }
             logger.log.error("The bests could not be read: \(String(describing: error), privacy: .public)")

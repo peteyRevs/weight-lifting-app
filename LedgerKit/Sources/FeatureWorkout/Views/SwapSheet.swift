@@ -1,6 +1,14 @@
 import LedgerDesign
 import SwiftUI
 
+/// What the cover's sheets share ("End workout?", "Swap exercise").
+nonisolated enum WorkoutSheet {
+    /// Every sheet of the cover stands at full height. At half height the system draws a sheet inset and
+    /// smaller (about 96 % in the app, iOS 27), which takes `SheetChrome`'s 44 pt cancel under 44 pt (F10 S7a,
+    /// fix round 1); the swap sheet's eight rows need the height at the accessibility sizes as well (S8b).
+    static let detents: Set<PresentationDetent> = [.large]
+}
+
 /// "Swap exercise" (F10 S8b; v2 "Active workout", the swap sheet): the sheet the card's swap button opens. A
 /// sheet whose content scrolls is a screen that scrolls: its pinned part is `SwapSheetFrame` (the title and
 /// "Cancel"), and what scrolls is `SwapSheetPage`. That is its one layout at every text size. `WorkoutRoot`
@@ -16,9 +24,7 @@ struct SwapSheet: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        // Full height, as "End workout?" stands, for the same reason: at half height the system draws the
-        // sheet smaller, which takes the frame's 44 pt cancel under 44 pt.
-        .presentationDetents(FinishSheet.detents)
+        .presentationDetents(WorkoutSheet.detents)
     }
 }
 
@@ -34,7 +40,7 @@ struct SwapSheetFrame<Content: View>: View {
             model.title,
             cancel: model.cancel,
             cancelIdentifier: "workout.swap.cancel",
-            onCancel: { send(.cancelSwap) },
+            onCancel: { send(.swap(.cancel)) },
             content: { content }
         )
     }
@@ -62,7 +68,7 @@ struct SwapSheetPage: View {
                     .accessibilityIdentifier("workout.swap.message")
             }
             if let toggle = model.toggle {
-                Toggle(isOn: Binding { toggle.isOn } set: { send(.updateProgram($0)) }) {
+                Toggle(isOn: Binding { toggle.isOn } set: { send(.swap(.updateProgram($0))) }) {
                     Text(toggle.label)
                         .ledgerFont(.body)
                         .foregroundStyle(LedgerColor.ink)

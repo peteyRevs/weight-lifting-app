@@ -39,7 +39,7 @@ struct WorkoutStoreSwapFailureTests {
         let failed = try await Swap.open(store)
         #expect(failed.message == "Couldn't load alternatives.")
         #expect(failed.rows.isEmpty && failed.toggle == nil)
-        store.send(.cancelSwap)
+        store.send(.swap(.cancel))
         await exercises.heal()
         let healed = try await Swap.open(store)
         #expect(healed.rows.count == 8)
@@ -75,11 +75,11 @@ struct WorkoutStoreSwapFailureTests {
         let scene = try Scene.onFake(live: Fixtures.seedSession())
         let exercises = SwapExercises(base: scene.stores.exercises, gate: gate)
         let (store, task) = await Swap.following(scene) { $0.exerciseRepository = exercises }
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         let stale = Task { await store.loadSwap() }
         await gate.waitForArrival()
-        store.send(.cancelSwap)
-        store.send(.openSwap)
+        store.send(.swap(.cancel))
+        store.send(store.cardOpensSwap)
         await gate.open()
         await stale.value
         #expect(store.swapSheet?.rows.isEmpty == true, "the first attempt's answer is not shown")
@@ -94,7 +94,7 @@ struct WorkoutStoreSwapFailureTests {
         let scene = try Scene.onFake(live: Fixtures.seedSession())
         let exercises = SwapExercises(base: scene.stores.exercises, gate: gate)
         let (store, task) = await Swap.following(scene) { $0.exerciseRepository = exercises }
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         let first = Task { await store.loadSwap() }
         await gate.waitForArrival()
         first.cancel()

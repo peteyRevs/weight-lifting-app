@@ -98,7 +98,7 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
         case let .jump(exerciseIndex):
             plan.jump(to: exerciseIndex, in: state)
         case .extendRest, .skipRest:
-            plan.answerRestPanel(edit, in: state, at: now)
+            plan.answerRestPanel(extends: edit == .extendRest, in: state, at: now)
         case let .swap(exerciseIndex, choice, alsoUpdateProgram):
             plan.swap(choice, at: exerciseIndex, alsoUpdateProgram: alsoUpdateProgram, in: state)
         }

@@ -88,7 +88,7 @@ struct SwapG2Bench {
 
     /// The card's "Swap exercise", then the read its task runs.
     func open() async {
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         await store.loadSwap()
     }
 

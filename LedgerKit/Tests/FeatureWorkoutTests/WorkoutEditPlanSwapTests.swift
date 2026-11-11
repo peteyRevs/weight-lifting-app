@@ -76,11 +76,4 @@ struct WorkoutEditPlanSwapTests {
         #expect(Self.plan(at: 5).events.isEmpty)
         #expect(Self.plan(at: -1).events.isEmpty)
     }
-
-    @Test("Any other edit is not the rest panel's: the panel's answer to it is nothing")
-    func restPanel_answersOnlyItsOwn() {
-        var plan = WorkoutEditPlan()
-        plan.answerRestPanel(.addSet(exerciseIndex: 0), in: Self.seed, at: Fixtures.now)
-        #expect(plan.events.isEmpty)
-    }
 }

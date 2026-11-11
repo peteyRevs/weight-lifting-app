@@ -40,7 +40,7 @@ struct WorkoutSwapAdversarialTests {
         await bench.settle()
         #expect(bench.card?.swap == nil, "no dead button once a set of the exercise is logged")
         let attempt = bench.store.swapAttempt
-        bench.store.send(.openSwap)
+        bench.store.send(bench.store.cardOpensSwap)
         #expect(bench.store.dialog == nil)
         #expect(bench.store.swapAttempt == attempt)
 

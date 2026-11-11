@@ -27,8 +27,8 @@ extension WorkoutStore {
             enqueue(edit)
         case .done, .openExercise:
             closeReceipt(showing: action.openedExercise)
-        case .openSwap, .cancelSwap, .updateProgram:
-            answerSwap(action)
+        case let .swap(intent):
+            answerSwap(intent)
         }
     }
 

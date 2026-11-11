@@ -44,16 +44,10 @@
                 throw WorkoutPreview.Unreadable()
             }
             let others = Set(workout.exercises.map(\.exerciseID))
-            return SwapAlternatives.ranked(for: stored, in: catalog, excluding: others).map { exercise in
-                SwapChoice(
-                    replacing: bench.exerciseID,
-                    exerciseID: exercise.id,
-                    name: exercise.name,
-                    replacement: SwapAlternatives.replacement(
-                        of: bench, with: exercise, last: nil, units: workout.units
-                    )
-                )
-            }
+            let ranked = SwapAlternatives.ranked(for: stored, in: catalog, excluding: others)
+            return SwapChoice.choices(
+                ranked, lasts: ranked.map { _ in nil }, replacing: bench, units: workout.units
+            )
         }
 
         /// The sheet's model; nil when the fixture does not build, which fails `PreviewTests`.

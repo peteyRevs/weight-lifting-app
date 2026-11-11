@@ -10,11 +10,10 @@ import SwiftUI
 struct ExerciseCard: View {
     let model: ExerciseCardModel
     let send: (WorkoutAction) -> Void
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xl) {
-            titleRow
+            ExerciseCardTitleRow(model: model, send: send)
             // More room between the two facts than inside one (`FactLine` stacks with `xs`), so that at every
             // size "Last" stands nearer its own value than the target's.
             VStack(alignment: .leading, spacing: LedgerSpacing.m) {
@@ -31,15 +30,34 @@ struct ExerciseCard: View {
         }
     }
 
-    /// The place and the name, with "Swap exercise" at the trailing edge, level with the top of the place
-    /// (v2), while the exercise can be swapped. At the accessibility sizes the button stands under the name,
-    /// so the name keeps the whole width and never wraps under the button.
-    ///
-    /// VoiceOver reads the place and the name, then the button, whatever the layout puts higher (criterion 32;
-    /// F10-S8b-G2-2): the row is a container, the place and name one group in it, and the button sorts after
-    /// that group (priority −1 against the default 0), not by position (a wrapped name starts below the
-    /// button's top). Only the button carries a priority, so a card without it reads as before.
-    private var titleRow: some View {
+    /// "Last", the line, and "Repeat" when there is a last workout to repeat. The line and its label are one
+    /// stop; the button is its own.
+    private var last: some View {
+        HStack(spacing: LedgerSpacing.m) {
+            FactLine(label: model.lastLabel, value: model.last)
+            Spacer(minLength: 0)
+            if let title = model.repeatLast {
+                PillButton(title) { send(.edit(.repeatLast(exerciseIndex: model.exerciseIndex))) }
+                    .accessibilityIdentifier("workout.card.repeat")
+            }
+        }
+    }
+}
+
+/// The place and the name, with "Swap exercise" at the trailing edge, level with the top of the place
+/// (v2), while the exercise can be swapped. At the accessibility sizes the button stands under the name,
+/// so the name keeps the whole width and never wraps under the button.
+///
+/// VoiceOver reads the place and the name, then the button, whatever the layout puts higher (criterion 32;
+/// F10-S8b-G2-2): the row is a container, the place and name one group in it, and the button sorts after
+/// that group (priority −1 against the default 0), not by position (a wrapped name starts below the
+/// button's top). Only the button carries a priority, so a card without it reads as before.
+struct ExerciseCardTitleRow: View {
+    let model: ExerciseCardModel
+    let send: (WorkoutAction) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.m))
             : AnyLayout(HStackLayout(alignment: .top, spacing: LedgerSpacing.m))
@@ -57,25 +75,14 @@ struct ExerciseCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
             if let swap = model.swap {
-                IconPillButton(swap, icon: .swap) { send(.openSwap) }
-                    .accessibilityIdentifier("workout.card.swap")
-                    .accessibilitySortPriority(-1)
+                IconPillButton(swap, icon: .swap) {
+                    send(.swap(.open(exerciseIndex: model.exerciseIndex, exerciseID: model.exerciseID)))
+                }
+                .accessibilityIdentifier("workout.card.swap")
+                .accessibilitySortPriority(-1)
             }
         }
         .accessibilityElement(children: .contain)
-    }
-
-    /// "Last", the line, and "Repeat" when there is a last workout to repeat. The line and its label are one
-    /// stop; the button is its own.
-    private var last: some View {
-        HStack(spacing: LedgerSpacing.m) {
-            FactLine(label: model.lastLabel, value: model.last)
-            Spacer(minLength: 0)
-            if let title = model.repeatLast {
-                PillButton(title) { send(.edit(.repeatLast(exerciseIndex: model.exerciseIndex))) }
-                    .accessibilityIdentifier("workout.card.repeat")
-            }
-        }
     }
 }
 

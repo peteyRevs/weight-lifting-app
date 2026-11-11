@@ -9,6 +9,14 @@ nonisolated extension WorkoutPresentation {
         !exercise.sets.contains { $0.isDone }
     }
 
+    /// Whether the place `index` of `state` still holds `exerciseID` and it can be swapped: what the sheet was
+    /// opened for is still there, with no set logged. The one check of the card's button, of the sheet's read,
+    /// of the sheet staying up and of "Use" at its turn (review N2).
+    static func canSwap(_ exerciseID: ExerciseID, at index: Int, in state: WorkoutState) -> Bool {
+        state.exercises.indices.contains(index) && state.exercises[index].exerciseID == exerciseID
+            && canSwap(state.exercises[index])
+    }
+
     /// Whether `exerciseID` stands at a place of `state` other than `index` (Q9: a swap never puts one exercise
     /// in the workout twice).
     static func holds(_ exerciseID: ExerciseID, besides index: Int, in state: WorkoutState) -> Bool {

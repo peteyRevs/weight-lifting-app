@@ -4,12 +4,12 @@ import LedgerDomain
 /// What the rest panel's two buttons come to (F10 S6, criterion 5): one event each. In a file of its own
 /// for the plan's length.
 nonisolated extension WorkoutEditPlan {
-    /// "+30s" or "Skip rest", each as below; any other edit is not the panel's and comes to nothing.
-    mutating func answerRestPanel(_ edit: WorkoutEdit, in state: WorkoutState, at now: Date) {
-        switch edit {
-        case .extendRest: extendRest(in: state, at: now)
-        case .skipRest: skipRest(in: state)
-        default: break
+    /// "+30s" when `extends`, else "Skip rest", each as below.
+    mutating func answerRestPanel(extends: Bool, in state: WorkoutState, at now: Date) {
+        if extends {
+            extendRest(in: state, at: now)
+        } else {
+            skipRest(in: state)
         }
     }
 

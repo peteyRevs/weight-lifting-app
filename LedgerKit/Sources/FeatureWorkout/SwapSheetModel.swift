@@ -43,6 +43,25 @@ nonisolated struct SwapChoice: Equatable, Sendable {
     let exerciseID: ExerciseID
     let name: String
     let replacement: SwappedExercise
+
+    /// The choices `ranked` offers in place of `current`, each with what it brings (`SwapAlternatives
+    /// .replacement`) from its last session in `lasts`, read in the same order: what the store builds, and what
+    /// the previews and references draw (review N7).
+    static func choices(
+        _ ranked: [Exercise],
+        lasts: [LastPerformance?],
+        replacing current: WorkoutExercise,
+        units: Units
+    ) -> [SwapChoice] {
+        zip(ranked, lasts).map { exercise, last in
+            SwapChoice(
+                replacing: current.exerciseID,
+                exerciseID: exercise.id,
+                name: exercise.name,
+                replacement: SwapAlternatives.replacement(of: current, with: exercise, last: last, units: units)
+            )
+        }
+    }
 }
 
 /// The swap sheet as the store holds it: the exercise it was opened for, by its place and its id, what was

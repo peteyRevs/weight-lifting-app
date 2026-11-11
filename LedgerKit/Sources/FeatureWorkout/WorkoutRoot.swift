@@ -10,6 +10,9 @@ import SwiftUI
 /// the launcher, which takes the cover down and hands the app its route.
 struct WorkoutRoot: View {
     @State private var store: WorkoutStore
+    /// From the swap sheet's first appearance until the system says it is gone (its `onDismiss`): an alert
+    /// asked for meanwhile waits for it (review SF2).
+    @State private var isSwapSheetOnScreen = false
     private let onExit: @MainActor (WorkoutExit) -> Void
 
     init(onExit: @escaping @MainActor (WorkoutExit) -> Void) {
@@ -35,10 +38,17 @@ struct WorkoutRoot: View {
         .sheet(isPresented: shows(.finish, else: .keepLifting)) {
             StoreFinishSheet(store: store)
         }
-        // "Swap exercise" (F10 S8b). A swipe down and VoiceOver's escape are "Cancel".
-        .sheet(isPresented: shows(.swap, else: .cancelSwap)) {
-            StoreSwapSheet(store: store)
-        }
+        // "Swap exercise" (F10 S8b). A swipe down and VoiceOver's escape are "Cancel". A refused "Use" asks
+        // for its alert while the sheet is still going down; the alert is presented once the sheet is gone,
+        // so that the system never drops it and leaves the store waiting on an alert nobody sees (review SF2).
+        .sheet(
+            isPresented: shows(.swap, else: .swap(.cancel)),
+            onDismiss: { isSwapSheetOnScreen = false },
+            content: {
+                StoreSwapSheet(store: store)
+                    .onAppear { isSwapSheetOnScreen = true }
+            }
+        )
         // The failed save's alert, carried by a view whose identity is the save's attempt: after "Try
         // again" the alert of the next failure is a new presentation, never the one that is still going.
         // Only its two buttons take it down; the system's own word that it went is not passed on, since it
@@ -47,12 +57,15 @@ struct WorkoutRoot: View {
             SaveFailedAlert(store: store, model: unsaved)
                 .id(store.saveAttempt)
         }
-        .alert(failure.title, isPresented: shows(.discardFailed, else: .dismissed(.discardFailed))) {
+        .alert(
+            failure.title,
+            isPresented: shows(.discardFailed, else: .dismissed(.discardFailed), afterTheSwapSheet: true)
+        ) {
             Button(failure.dismiss) { store.send(.dismissFailure) }
         } message: {
             Text(failure.message)
         }
-        .alert(refusal.title, isPresented: shows(.editFailed, else: .dismissed(.editFailed))) {
+        .alert(refusal.title, isPresented: shows(.editFailed, else: .dismissed(.editFailed), afterTheSwapSheet: true)) {
             Button(refusal.dismiss) { store.send(.dismissFailure) }
         } message: {
             Text(refusal.message)
@@ -89,15 +102,33 @@ struct WorkoutRoot: View {
     }
 
     /// Whether `dialog` is the one showing. When the system takes it down by itself, the store is sent
-    /// `dismissal`, which takes down that dialog and no other.
-    private func shows(_ dialog: WorkoutStore.Dialog, else dismissal: WorkoutAction) -> Binding<Bool> {
+    /// `dismissal`, which takes down that dialog and no other. An alert presented `afterTheSwapSheet` waits
+    /// while the swap sheet is on screen (`isPresented(_:dialog:isSwapSheetOnScreen:)`).
+    private func shows(
+        _ dialog: WorkoutStore.Dialog,
+        else dismissal: WorkoutAction,
+        afterTheSwapSheet: Bool = false
+    ) -> Binding<Bool> {
         Binding {
-            store.dialog == dialog
+            afterTheSwapSheet
+                ? Self.isPresented(dialog, dialog: store.dialog, isSwapSheetOnScreen: isSwapSheetOnScreen)
+                : store.dialog == dialog
         } set: { isShown in
             if !isShown {
                 store.send(dismissal)
             }
         }
+    }
+
+    /// Whether the alert of `alert` is presented: the store asks for it, and the swap sheet is not on screen,
+    /// not even going down. Two presentations asked for in one turn, a sheet's dismissal and an alert, can
+    /// leave the alert unshown; this asks for the alert only once the sheet is gone (review SF2).
+    static func isPresented(
+        _ alert: WorkoutStore.Dialog,
+        dialog: WorkoutStore.Dialog?,
+        isSwapSheetOnScreen: Bool
+    ) -> Bool {
+        dialog == alert && !isSwapSheetOnScreen
     }
 }
 

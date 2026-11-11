@@ -18,7 +18,7 @@ extension WorkoutSwapAdversarialTests {
         #expect(sheet.message == "Couldn't load alternatives.")
         #expect(sheet.rows.isEmpty)
         #expect(sheet.toggle == nil)
-        bench.store.send(.cancelSwap)
+        bench.store.send(.swap(.cancel))
         #expect(bench.store.dialog == nil)
         await bench.exercises.failAll(false)
         await bench.open()
@@ -49,7 +49,7 @@ extension WorkoutSwapAdversarialTests {
     func failure_swapRefused() async throws {
         let bench = try await Bench.make()
         await bench.open()
-        bench.store.send(.updateProgram(true))
+        bench.store.send(.swap(.updateProgram(true)))
         await bench.session.refuse(calls: [1])
         #expect(bench.use("Dumbbell Bench Press"))
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: bench.set(0, 0))))

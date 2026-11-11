@@ -11,10 +11,6 @@ struct FinishSheet: View {
     let model: WorkoutFinishModel
     let send: (WorkoutAction) -> Void
 
-    /// The sheet stands at full height. At half height the system draws a sheet inset and smaller (about
-    /// 96 % in the app, iOS 27), which takes the frame's 44 pt cancel under 44 pt (F10 S7a, fix round 1).
-    static let detents: Set<PresentationDetent> = [.large]
-
     var body: some View {
         FinishSheetFrame(model: model, send: send) {
             ScrollView {
@@ -23,7 +19,7 @@ struct FinishSheet: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .interactiveDismissDisabled(!model.isEnabled)
-        .presentationDetents(Self.detents)
+        .presentationDetents(WorkoutSheet.detents)
     }
 }
 

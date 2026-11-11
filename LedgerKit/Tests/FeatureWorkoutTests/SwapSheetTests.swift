@@ -72,8 +72,8 @@
                 }
                 return elements.first?.accessibilityPerformEscape() ?? false
             }
-            let expected: [WorkoutAction] = [.cancelSwap, .updateProgram(true)]
-                + model.rows.map { .edit($0.choose) } + [.cancelSwap]
+            let expected: [WorkoutAction] = [.swap(.cancel), .swap(.updateProgram(true))]
+                + model.rows.map { .edit($0.choose) } + [.swap(.cancel)]
             #expect(escaped)
             #expect(sent.count == expected.count)
             for (index, pair) in zip(sent, expected).enumerated() {
@@ -81,8 +81,8 @@
             }
         }
 
-        @Test("The card's Swap exercise follows the name, and sends openSwap; with a set logged it is not drawn")
-        func cardButton_sendsOpenSwap() {
+        @Test("The card's Swap exercise follows the name and names its exercise; with a set logged it is not drawn")
+        func cardButton_sendsOpenSwap() throws {
             var sent: [WorkoutAction] = []
             WorkoutParts(preview: .started) { sent.append($0) }.withAccessibilityElements { elements in
                 let labels = elements.map(\.accessibilityLabel)
@@ -92,7 +92,8 @@
                     _ = element.accessibilityActivate()
                 }
             }
-            #expect(sent == [.openSwap])
+            let bench = try WorkoutPreview.started.workout().exercises[0].exerciseID
+            #expect(sent == [.swap(.open(exerciseIndex: 0, exerciseID: bench))])
             let logging = WorkoutParts(preview: .logging).accessibilityElements().map(\.label)
             #expect(!logging.contains("Swap exercise"))
         }

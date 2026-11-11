@@ -19,12 +19,14 @@ nonisolated struct WorkoutPageModel: Equatable, Sendable {
 nonisolated struct ExerciseCardModel: Equatable, Sendable {
     /// The exercise's place in the workout, which every edit of the card names.
     let exerciseIndex: Int
+    /// The exercise at that place, which "Swap exercise" names with its place (F10 S8b, review SF1).
+    let exerciseID: ExerciseID
     /// "Exercise 2 of 5".
     let eyebrow: String
     /// The exercise's name, as the workout holds it: data, not copy.
     let title: String
     /// "Swap exercise", the round button beside the name; nil once a set of the exercise is logged (F10 S8b,
-    /// ruling Q2), and then no button is drawn.
+    /// ruling Q2) and while the page answers nothing (review N6), and then no button is drawn.
     let swap: String?
     /// "TARGET".
     let targetLabel: String

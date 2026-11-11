@@ -139,3 +139,15 @@ actor SwapStats: StatsQueries {
         try await base.recentlyLogged(limit: limit)
     }
 }
+
+extension WorkoutStore {
+    /// What the shown card's "Swap exercise" sends: the shown exercise's place and id (review SF1), whether or
+    /// not the button is drawn, so that a test can send it where the button is not; with no card shown, a place
+    /// no workout has.
+    var cardOpensSwap: WorkoutAction {
+        guard let card = model.page?.card else {
+            return .swap(.open(exerciseIndex: -1, exerciseID: ExerciseID(Fixtures.uuid(0))))
+        }
+        return .swap(.open(exerciseIndex: card.exerciseIndex, exerciseID: card.exerciseID))
+    }
+}

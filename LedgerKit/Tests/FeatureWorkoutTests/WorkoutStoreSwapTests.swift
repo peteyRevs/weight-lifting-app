@@ -32,7 +32,7 @@ struct WorkoutStoreSwapTests {
 
     /// Opens the sheet and reads its alternatives, as a tap and the root's task do.
     static func open(_ store: WorkoutStore) async throws -> SwapSheetModel {
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         await store.loadSwap()
         return try #require(store.swapSheet)
     }
@@ -54,7 +54,7 @@ struct WorkoutStoreSwapTests {
         let scene = try Scene.onFake(live: Fixtures.seedSession())
         let exercises = SwapExercises(base: scene.stores.exercises)
         let (store, task) = await Self.following(scene) { $0.exerciseRepository = exercises }
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         #expect(store.dialog == .swap)
         #expect(store.swapAttempt == 1)
         #expect(store.swapSheet?.rows.isEmpty == true, "nothing is read before the task runs")
@@ -63,7 +63,7 @@ struct WorkoutStoreSwapTests {
         #expect(sheet.rows.count == 8)
         #expect(sheet.rows.first?.name == "Dumbbell Bench Press")
         #expect(sheet.toggle?.isOn == false)
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         await store.loadSwap()
         #expect(store.swapAttempt == 1, "a second sheet cannot open while the first is up")
         #expect(await exercises.catalogReads == 1)
@@ -76,7 +76,7 @@ struct WorkoutStoreSwapTests {
         let scene = try Scene.onFake(live: Fixtures.seedSession())
         let exercises = SwapExercises(base: scene.stores.exercises, gate: gate)
         let (store, task) = await Self.following(scene) { $0.exerciseRepository = exercises }
-        store.send(.openSwap)
+        store.send(store.cardOpensSwap)
         let load = Task { await store.loadSwap() }
         await gate.waitForArrival()
         let held = try #require(store.swapSheet)
@@ -116,8 +116,8 @@ struct WorkoutStoreSwapTests {
         let scene = try Scene.onFake(live: Fixtures.seedSession())
         let (store, task) = await Self.following(scene)
         let row = try await #require(Self.open(store).rows.first)
-        store.send(.updateProgram(true))
-        store.send(.cancelSwap)
+        store.send(.swap(.updateProgram(true)))
+        store.send(.swap(.cancel))
         #expect(store.dialog == nil)
         store.send(.edit(row.choose))
         await store.drain()

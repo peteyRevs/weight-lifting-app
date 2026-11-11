@@ -27,7 +27,7 @@ extension WorkoutSwapAdversarialTests {
         let bench = try await Bench.make()
         await bench.open()
         let attempt = bench.store.swapAttempt
-        bench.store.send(.openSwap)
+        bench.store.send(bench.store.cardOpensSwap)
         #expect(bench.store.swapAttempt == attempt)
         #expect(bench.sheet?.rows.count == 8)
     }
@@ -37,7 +37,7 @@ extension WorkoutSwapAdversarialTests {
         let bench = try await Bench.make()
         await bench.open()
         #expect(bench.use("Dumbbell Bench Press"))
-        bench.store.send(.openSwap)
+        bench.store.send(bench.store.cardOpensSwap)
         await bench.store.loadSwap()
         let stale = bench.sheet?.rows.first { $0.name == "Machine Chest Press" }
         await bench.settle()
@@ -54,10 +54,10 @@ extension WorkoutSwapAdversarialTests {
     func load_olderAttemptAnswersLast() async throws {
         let bench = try await Bench.make()
         await bench.exercises.holdNextAll(throwing: true)
-        bench.store.send(.openSwap)
+        bench.store.send(bench.store.cardOpensSwap)
         let first = Task { await bench.store.loadSwap() }
         await bench.exercises.waitUntilHeld()
-        bench.store.send(.cancelSwap)
+        bench.store.send(.swap(.cancel))
         await bench.open()
         #expect(bench.sheet?.rows.count == 8)
         await bench.exercises.release()
@@ -70,7 +70,7 @@ extension WorkoutSwapAdversarialTests {
     func load_sameAttemptTwice() async throws {
         let bench = try await Bench.make()
         await bench.exercises.holdNextAll(throwing: true)
-        bench.store.send(.openSwap)
+        bench.store.send(bench.store.cardOpensSwap)
         let first = Task { await bench.store.loadSwap() }
         await bench.exercises.waitUntilHeld()
         await bench.store.loadSwap()
@@ -94,7 +94,7 @@ extension WorkoutSwapAdversarialTests {
         let bench = try await Bench.make()
         await bench.open()
         #expect(bench.sheet?.toggle == SwapSheetModel.Toggle(label: "Also update program", isOn: false))
-        bench.store.send(.updateProgram(true))
+        bench.store.send(.swap(.updateProgram(true)))
         #expect(bench.sheet?.toggle?.isOn == true)
         #expect(bench.use("Dumbbell Bench Press"))
         await bench.settle()
@@ -104,7 +104,7 @@ extension WorkoutSwapAdversarialTests {
 
         await bench.open()
         #expect(bench.sheet?.toggle?.isOn == true, "Q4: opens on while the slot carries a change")
-        bench.store.send(.updateProgram(false))
+        bench.store.send(.swap(.updateProgram(false)))
         #expect(bench.use("Machine Chest Press"))
         await bench.settle()
         #expect(await bench.session.current()?.programUpdates[slot] == nil, "Q4: off removes it")
@@ -114,8 +114,8 @@ extension WorkoutSwapAdversarialTests {
     @Test("The toggle turned on while the read is out is what the rows then carry")
     func toggle_whileLoading() async throws {
         let bench = try await Bench.make()
-        bench.store.send(.openSwap)
-        bench.store.send(.updateProgram(true))
+        bench.store.send(bench.store.cardOpensSwap)
+        bench.store.send(.swap(.updateProgram(true)))
         await bench.store.loadSwap()
         #expect(bench.sheet?.toggle?.isOn == true)
         guard case let .swap(_, _, alsoUpdateProgram) = bench.sheet?.rows.first?.choose else {
