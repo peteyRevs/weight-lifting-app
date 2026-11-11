@@ -96,9 +96,14 @@ public protocol WorkoutRepository: Sendable {
     ///   only touch a stored slot of the workout's own program (`source.programID`), and only name a stored
     ///   exercise: an entry of an ad-hoc workout, or one naming a slot that is not stored, a slot of another
     ///   program or an exercise that is not stored, is skipped. A skipped entry never fails the save.
-    /// - An entry is applied by every materialisation: one made after the lifter changed that slot sets it
-    ///   back to the swap's exercise. So store an older workout again without its `programUpdates`, as
-    ///   without its slots.
+    /// - The entries are written by the workout's first save only (F10 S8a): a later save of the same workout
+    ///   (a retry, a lost answer, a rebuild) never touches the program. And an entry is compare-and-set
+    ///   (ADR-004 amendment §3): it is applied only while the slot still holds the exercise the workout was
+    ///   built from (`workout.originalExercise(ofSlot:)`); a slot changed during the workout, or before a
+    ///   waiting end is saved, keeps its exercise, and the entry is skipped. So a late or repeated save never
+    ///   sets back the lifter's later choice, even one that returned the slot to its original. An entry no
+    ///   exercise of the workout came from, which no swap writes, has nothing to compare and is held only to
+    ///   the rules above it.
     ///
     /// **The log.** A workout's log is that workout before it was saved (ADR-004 rule 5), and the save is what
     /// ends its use: that is why this repository may drop it. It drops that one log, never reads an envelope

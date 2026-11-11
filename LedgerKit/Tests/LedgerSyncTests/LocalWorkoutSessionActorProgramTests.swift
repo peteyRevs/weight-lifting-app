@@ -83,6 +83,27 @@ struct LocalWorkoutSessionActorProgramTests {
         #expect(try await subject.stores.workouts.recent(limit: 5).isEmpty)
     }
 
+    /// F10 S8 criterion 11: the swap's change is compare-and-set, so the lifter's edit of the slot during the
+    /// workout stands; a discard still changes nothing.
+    @Test("A slot edited during the workout keeps the edit when the workout is saved; a discard changes nothing")
+    func finish_afterTheSlotWasEdited_keepsTheEdit() async throws {
+        for discards in [false, true] {
+            let (subject, workout) = try await Self.swapped()
+            var edited = try await Self.program(in: subject)
+            edited.days[0].slots[0].exerciseID = Fixtures.CatalogID.inclineDBPress
+            try await subject.stores.programs.save(edited)
+            if discards {
+                try await subject.host.discard(endedAt: Self.end)
+            } else {
+                _ = try await subject.host.finish(endedAt: Self.end)
+            }
+            let slot = try await Self.program(in: subject).days[0].slots[0]
+            let isSaved = try await Self.isSaved(workout, in: subject)
+            #expect(slot.exerciseID == Fixtures.CatalogID.inclineDBPress, "discards: \(discards)")
+            #expect(isSaved == !discards)
+        }
+    }
+
     @Test("A save that fails changes no program; the retry, or the next launch, saves the workout and the change")
     func finish_saveFails_theProgramWaitsWithTheWorkout() async throws {
         let (subject, workout) = try await Self.swapped()
@@ -138,9 +159,14 @@ struct LocalWorkoutSessionActorProgramTests {
         return EventBuilders.log(from: events, startingAt: start, workoutID: session.id)
     }
 
-    /// F10 S3 review N5: two finished workouts found at one launch are saved in the order they started, so
-    /// the later one's swap is the one the program keeps, whichever log the store lists first.
-    @Test("Two finished logs at one launch: the later workout's swap lands last", arguments: [true, false])
+    /// F10 S3 review N5: two finished workouts found at one launch are saved in the order they started,
+    /// whichever log the store lists first. Since S8 a swap's program change is compare-and-set (ADR-004
+    /// amendment §3): both began while the slot held the bench press, so the earlier one's swap lands and the
+    /// later one's finds the slot changed and is skipped (before S8 the later one's overwrote it).
+    @Test(
+        "Two finished logs at one launch: saved in start order; the earlier swap lands, the later one is skipped",
+        arguments: [true, false]
+    )
     func recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted(laterListedFirst: Bool) async throws {
         let earlier = try Self.swapLog(7001, afterDays: 0, to: Fixtures.CatalogID.overheadPress)
         let later = try Self.swapLog(7002, afterDays: 1, to: Fixtures.CatalogID.inclineDBPress)
@@ -159,7 +185,7 @@ struct LocalWorkoutSessionActorProgramTests {
         #expect(resumed?.id == nil)
         #expect(try await stores.workouts.recent(limit: 5).map(\.id) == listed.reversed())
         let slot = try #require(await stores.programs.active()).days[0].slots[0]
-        #expect(slot.exerciseID == Fixtures.CatalogID.inclineDBPress, "the earlier workout's swap was written last")
+        #expect(slot.exerciseID == Fixtures.CatalogID.overheadPress, "the later workout's swap was not skipped")
         #expect(await stores.events.uncompactedWorkoutIDs() == [])
     }
 }

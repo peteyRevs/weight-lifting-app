@@ -20,8 +20,8 @@ extension WorkoutEngine {
             state?.add(set, to: exerciseIndex)
         case let .allSetsRepeated(exerciseIndex, weight, reps):
             state?.repeatAll(of: exerciseIndex, weight: weight, reps: reps)
-        case let .exerciseSwapped(exerciseIndex, exerciseID, name, alsoUpdateProgram):
-            state?.swap(exerciseIndex, to: exerciseID, name: name, inProgram: alsoUpdateProgram)
+        case let .exerciseSwapped(exerciseIndex, exerciseID, name, alsoUpdateProgram, replacement):
+            state?.swap(exerciseIndex, to: exerciseID, name: name, inProgram: alsoUpdateProgram, with: replacement)
         case .restStarted, .restExtended, .restSkipped, .finished, .discarded:
             applyClockEvent(event, to: &state)
         }
@@ -139,16 +139,32 @@ private extension WorkoutState {
         return []
     }
 
-    /// Rules 8 and 27: the exercise's ID and name change; its sets, rest, step, RPE and targets stay.
-    /// With "Also update program" the slot's new exercise is recorded for F05 (decision #13).
-    mutating func swap(_ exerciseIndex: Int, to exerciseID: ExerciseID, name: String, inProgram: Bool) -> [Effect] {
+    /// Rule 8 and decision #13 (F10 S8): the exercise's ID and name change. With a `replacement` it also takes
+    /// the replacement's equipment, step and last performance, its target load becomes the replacement's load,
+    /// and every set not done takes that load (a drop set its drop, `SessionBuilder.dropLoad(of:step:)`); done
+    /// sets, reps, rest, RPE, the target's sets and reps, the slot, the original exercise and the superset flag
+    /// stay. Without one (every swap written before S8) nothing else changes, so an old log replays the same,
+    /// except that a swap with the toggle off now removes the slot's entry (Q4).
+    ///
+    /// The slot's program change follows the toggle: on records this exercise, off removes an earlier entry
+    /// (Q4). An exercise with no slot records none.
+    mutating func swap(
+        _ exerciseIndex: Int,
+        to exerciseID: ExerciseID,
+        name: String,
+        inProgram: Bool,
+        with replacement: SwappedExercise?
+    ) -> [Effect] {
         guard exercises.indices.contains(exerciseIndex) else {
             return []
         }
         exercises[exerciseIndex].exerciseID = exerciseID
         exercises[exerciseIndex].name = name
-        if inProgram, let slotID = exercises[exerciseIndex].slotID {
-            programUpdates[slotID] = exerciseID
+        if let replacement {
+            exercises[exerciseIndex].take(replacement)
+        }
+        if let slotID = exercises[exerciseIndex].slotID {
+            programUpdates[slotID] = inProgram ? exerciseID : nil
         }
         return []
     }
@@ -214,6 +230,20 @@ private extension WorkoutState {
             return nil
         }
         return exercises[exerciseIndex].sets.firstIndex { $0.id == id }
+    }
+}
+
+private extension WorkoutExercise {
+    /// A swap's `replacement`, copied in (see `WorkoutState.swap`).
+    mutating func take(_ replacement: SwappedExercise) {
+        equipment = replacement.equipment
+        step = replacement.step
+        lastPerformance = replacement.lastPerformance
+        targetLoad = replacement.load
+        let drop = SessionBuilder.dropLoad(of: replacement.load, step: replacement.step)
+        for index in sets.indices where !sets[index].isDone {
+            sets[index].weight = sets[index].kind == .drop ? drop : replacement.load
+        }
     }
 }
 

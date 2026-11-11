@@ -65,9 +65,38 @@ extension Model {
         }
         workout.exercises[exerciseIndex].exerciseID = exerciseID
         workout.exercises[exerciseIndex].name = name
-        if alsoUpdateProgram, let slotID = workout.exercises[exerciseIndex].slotID {
-            workout.programUpdates[slotID] = exerciseID
+        if let slotID = workout.exercises[exerciseIndex].slotID {
+            if alsoUpdateProgram {
+                workout.programUpdates[slotID] = exerciseID
+            } else {
+                workout.programUpdates.removeValue(forKey: slotID)
+            }
         }
+    }
+
+    /// F10 S8: a swap's replacement brings its equipment, step, last performance and target load; each row
+    /// not yet done takes the load, a drop row 85 % of it rounded to the step. Done rows keep their weight.
+    mutating func take(_ replacement: SwappedExercise, at exerciseIndex: Int) {
+        guard exerciseIndex >= 0, exerciseIndex < workout.exercises.count else {
+            return
+        }
+        workout.exercises[exerciseIndex].equipment = replacement.equipment
+        workout.exercises[exerciseIndex].step = replacement.step
+        workout.exercises[exerciseIndex].lastPerformance = replacement.lastPerformance
+        workout.exercises[exerciseIndex].targetLoad = replacement.load
+        let drop = Self.drop(of: replacement)
+        for setIndex in 0 ..< workout.exercises[exerciseIndex].sets.count {
+            let row = workout.exercises[exerciseIndex].sets[setIndex]
+            if row.doneAt == nil {
+                workout.exercises[exerciseIndex].sets[setIndex].weight = row.kind == .drop ? drop : replacement.load
+            }
+        }
+    }
+
+    /// A swap's drop row: 85 % of its load, rounded to its step.
+    static func drop(of replacement: SwappedExercise) -> Weight {
+        let eightyFivePercent = Decimal(sign: .plus, exponent: -2, significand: 85)
+        return Weight(grams: replacement.load.grams * eightyFivePercent).rounded(toStep: replacement.step)
     }
 
     /// "+30s": grows the rest the tapping device showed, else a fresh rest from the tap, except that a
@@ -107,7 +136,8 @@ extension Model {
 
 extension ModelOracle {
     /// `false` for an envelope the rules skip: a stamp or any date it carries that is not a finite
-    /// number, or a rest length below zero or above an hour. There is no time window.
+    /// number, a rest length below zero or above an hour, or a swap's replacement with a weight out of
+    /// bounds. There is no time window.
     static func accepts(_ envelope: EventEnvelope) -> Bool {
         let dates = [envelope.wallClock] + payloadDates(of: envelope.event)
         for date in dates where !date.timeIntervalSinceReferenceDate.isFinite {
@@ -115,6 +145,16 @@ extension ModelOracle {
         }
         for length in restLengths(of: envelope.event) where length < .zero || length > Model.restLimit {
             return false
+        }
+        if case let .exerciseSwapped(_, _, _, _, replacement?) = envelope.event {
+            // A step above zero and a load not below it, and every weight the swap writes one a store keeps
+            // (F10-S8a-G2-1); the drop is computed only once the step and the load are storable.
+            guard replacement.step > .zero, replacement.load >= .zero,
+                  replacement.step.isStorable, replacement.load.isStorable
+            else {
+                return false
+            }
+            return Model.drop(of: replacement).isStorable
         }
         return true
     }
@@ -142,6 +182,8 @@ extension ModelOracle {
             return [tappedAt]
         case let .finished(endedAt), let .discarded(endedAt):
             return [endedAt]
+        case let .exerciseSwapped(_, _, _, _, replacement):
+            return [replacement?.lastPerformance?.date].compactMap(\.self)
         default:
             return []
         }

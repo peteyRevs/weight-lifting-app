@@ -41,6 +41,13 @@ public extension Weight {
     func checkStorable() throws(RepositoryError) {
         _ = try StorageBoundary.units(ofGrams: grams)
     }
+
+    /// Whether a store can keep the weight exactly: `checkStorable()` as a test, for a rule that refuses rather
+    /// than throws (a swap's replacement, `EventEnvelope.isWellFormed`).
+    var isStorable: Bool {
+        // The error only says which grams were refused; the answer is whether one was thrown.
+        (try? checkStorable()) != nil
+    }
 }
 
 public extension Volume {

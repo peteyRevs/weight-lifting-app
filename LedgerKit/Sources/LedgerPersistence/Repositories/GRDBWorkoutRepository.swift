@@ -48,8 +48,10 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
     ///   since. A slot that is not stored, or is deleted (the program was edited or deleted during the
     ///   workout), is logged and skipped: the workout is still stored.
     /// - Each entry of `workout.programUpdates` sets one slot's exercise (`writeProgramUpdates`), or is logged
-    ///   and skipped. Like the misses it is written by every materialisation: an older workout stored again
-    ///   with its entries sets a slot back that was changed since.
+    ///   and skipped. Only the workout's first save writes them (F10 S8a, SF1), and only while the slot still
+    ///   holds the exercise the workout was built from (`WorkoutState.originalExercise(ofSlot:)`,
+    ///   compare-and-set, ADR-004 amendment §3): so a save never sets back a slot changed since, during the
+    ///   workout or after its first save.
     /// - With `droppingLog`, every row of the workout's log in `workout_event` is deleted, last
     ///   (`GRDBWorkoutEventStore.deleteLog(of:in:)`, the statement `compact(workout:)` runs).
     ///
@@ -73,12 +75,13 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
         let rows = WorkoutRows(workout)
         let timestamp = ColumnCodec.timestamp(now())
         try await queue.write { database in
+            let isFirstSave = try !Self.holdsWorkout(workout.id, in: database)
             var scope = try RecordReplay.Scope(ofStored: workout.id, in: database)
             try scope.include(workout)
             try rows.write(database, at: timestamp)
             try RecordReplay.redetect(scope, in: database, at: timestamp)
             try Self.writeMisses(of: slotUpdates, in: database, at: timestamp)
-            try Self.writeProgramUpdates(of: workout, in: database, at: timestamp)
+            try Self.writeProgramUpdates(of: workout, in: database, at: timestamp, isFirstSave: isFirstSave)
             if droppingLog {
                 try GRDBWorkoutEventStore.deleteLog(of: workout.id, in: database)
             }
@@ -188,61 +191,6 @@ public struct GRDBWorkoutRepository: WorkoutRepository {
             )
             let misses = slot.misses.sorted().map { SlotMissRecord(slotID: slot.id, weekIndex: $0) }
             try SlotMissRecord.write(misses, over: stored, in: database, at: timestamp)
-        }
-    }
-
-    /// Sets the exercise of each slot `workout.programUpdates` names (decision #13), in slot-id order, and
-    /// nothing else of the slot: its numbers and its misses stay.
-    ///
-    /// An entry is applied only to a live slot, under a live day, of the workout's own live program, so a
-    /// workout of one program never rewrites another's (the takeover class of F05 review B1), and only when
-    /// its exercise has a row, as the slot's foreign key and a program save require
-    /// (`ProgramRows.holdsExercise(_:in:)`, the one rule for both). Any other entry is logged and skipped: the
-    /// program was edited or deleted during the workout, and the workout is still stored. A slot that already
-    /// holds the exercise is left alone, so a second materialisation runs no statement that writes.
-    private static func writeProgramUpdates(
-        of workout: WorkoutState,
-        in database: Database,
-        at timestamp: String
-    ) throws {
-        guard !workout.programUpdates.isEmpty else {
-            return
-        }
-        guard let program = workout.source.map({ ColumnCodec.text($0.programID) }) else {
-            Logger.persistence.notice("Program updates of an ad-hoc workout skipped: it has no program")
-            return
-        }
-        let updates = workout.programUpdates
-            .map { (slot: ColumnCodec.text($0.key), exercise: ColumnCodec.text($0.value)) }
-            .sorted { $0.slot < $1.slot }
-        for (slot, exercise) in updates {
-            // Whether the workout's own slot holds the exercise already; no row when the slot is not its own.
-            let ownSlot = """
-            SELECT slot.exercise_id IS ? FROM slot
-            JOIN day_template ON day_template.id = slot.day_template_id
-            JOIN program ON program.id = day_template.program_id
-            WHERE slot.id = ? AND program.id = ?
-                AND slot.deleted_at IS NULL AND day_template.deleted_at IS NULL AND program.deleted_at IS NULL
-            """
-            guard let isHeld = try Bool.fetchOne(database, sql: ownSlot, arguments: [exercise, slot, program]) else {
-                Logger.persistence.notice(
-                    "Program update of slot \(slot, privacy: .public) skipped: the workout's program has no such slot"
-                )
-                continue
-            }
-            guard !isHeld else {
-                continue
-            }
-            guard try ProgramRows.holdsExercise(exercise, in: database) else {
-                Logger.persistence.notice(
-                    "Program update of slot \(slot, privacy: .public) skipped: its exercise is not stored"
-                )
-                continue
-            }
-            try database.execute(
-                sql: "UPDATE slot SET exercise_id = ?, updated_at = ? WHERE id = ?",
-                arguments: [exercise, timestamp, slot]
-            )
         }
     }
 }

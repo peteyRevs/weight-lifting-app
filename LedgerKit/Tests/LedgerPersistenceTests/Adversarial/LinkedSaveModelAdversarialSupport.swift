@@ -37,7 +37,8 @@ struct LinkedModel {
 
     /// Criteria 1, 2 and 4. Returns whether the log went with the save: linked stores answer what was asked.
     mutating func save(_ workout: WorkoutState, slots: [Slot], droppingLog: Bool) -> Bool {
-        history.insert(workout.id)
+        // F10 S8a (G3 SF1, ruled): only a workout's first save writes its program changes.
+        let isFirstSave = history.insert(workout.id).inserted
         // Rule 13, as before S3: a listed slot that is stored takes the listed misses, whole.
         for slot in slots {
             for (id, program) in programs {
@@ -45,7 +46,7 @@ struct LinkedModel {
             }
         }
         // Criteria 1 and 2: only a stored slot of the workout's own program, only a stored exercise.
-        if let own = workout.source?.programID, let program = programs[own] {
+        if isFirstSave, let own = workout.source?.programID, let program = programs[own] {
             var updated = program
             for (slot, exercise) in workout.programUpdates where exercises.contains(exercise) {
                 updated = updated.changing(slot) { $0.exerciseID = exercise }

@@ -83,6 +83,22 @@ enum PayloadV1 {
             ),
             phone, seq: 6, at: at(40)
         )),
+        // F10 S8: a swap that carries its replacement, in version 1 (the key is new and optional).
+        Fixture(file: "event-exerciseSwapped-replacement", envelope: envelope(
+            .exerciseSwapped(
+                exerciseIndex: 0,
+                exerciseID: ExerciseID(uuid(0xE03)),
+                name: "Dumbbell Bench Press",
+                alsoUpdateProgram: false,
+                replacement: SwappedExercise(
+                    equipment: .dumbbell,
+                    step: .kilograms(1.25),
+                    load: .kilograms(27.5),
+                    lastPerformance: LastPerformance(date: at(-604_800), sets: 3, reps: 10, load: .kilograms(25))
+                )
+            ),
+            phone, seq: 8, at: at(45)
+        )),
         Fixture(file: "event-restStarted", envelope: envelope(
             .restStarted(endsAt: at(200.493_826_8), total: .seconds(150)), watch, seq: 3, at: at(50)
         )),

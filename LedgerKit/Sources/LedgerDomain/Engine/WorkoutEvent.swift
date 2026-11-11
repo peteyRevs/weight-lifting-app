@@ -29,9 +29,21 @@ public enum WorkoutEvent: Hashable, Codable, Sendable {
     case setAdded(exerciseIndex: Int, set: LoggedSet)
     /// Rule 7: "Repeat last" writes this weight and these reps into every set of the exercise.
     case allSetsRepeated(exerciseIndex: Int, weight: Weight, reps: Reps)
-    /// Rule 8 / decision #13: the exercise is replaced by `exerciseID` (named `name`) for this workout,
-    /// and also in the program when `alsoUpdateProgram` is on.
-    case exerciseSwapped(exerciseIndex: Int, exerciseID: ExerciseID, name: String, alsoUpdateProgram: Bool)
+    /// Rule 8 / decision #13: the exercise is replaced by `exerciseID` (named `name`) for this workout. With
+    /// `alsoUpdateProgram` on, the slot's program change is recorded; off, an earlier one is removed (F10 S8, Q4).
+    ///
+    /// `replacement` (F10 S8) carries the replacement's equipment, step, last performance and the load its
+    /// undone sets take, so one event swaps the exercise whole. It is `nil` in every swap written before S8,
+    /// which then changes only the id and the name: a version-1 payload without the key decodes to `nil`, and
+    /// the payload version stays 1 (no build has shipped). A build older than S8 would ignore the key rather
+    /// than refuse the row; after the first TestFlight build an added field raises the version (ADR-004 §3).
+    case exerciseSwapped(
+        exerciseIndex: Int,
+        exerciseID: ExerciseID,
+        name: String,
+        alsoUpdateProgram: Bool,
+        replacement: SwappedExercise? = nil
+    )
     /// Rule 9: a rest that ends at the absolute time `endsAt`, so every device shows the same countdown.
     case restStarted(endsAt: Date, total: Duration)
     /// Rule 9 / decision #7: "+30s" adds `amount`, as the lifter meant it. The originating device, which

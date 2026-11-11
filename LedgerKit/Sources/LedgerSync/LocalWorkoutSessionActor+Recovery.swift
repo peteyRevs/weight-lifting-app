@@ -14,7 +14,8 @@ public extension LocalWorkoutSessionActor {
     ///
     /// Every log is read before any ended one is completed, and the ended ones are completed in the order
     /// their workouts started, then by id, whatever order the store lists them in: of two finished workouts
-    /// the later one's misses and program changes are written last.
+    /// the later one's misses and program changes are written last, and a later swap of a slot the earlier one
+    /// changed is skipped (compare-and-set, F10 S8a).
     ///
     /// The clock continues from the store's newest stamp. Running it again changes nothing. It is queued
     /// like every operation, and the first protocol call runs it when the launch has not.

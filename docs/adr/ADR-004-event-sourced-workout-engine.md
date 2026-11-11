@@ -313,6 +313,26 @@ Two ended logs met in one recovery pass are completed in the order their workout
 whatever order the store lists them in. So of two workouts that swapped one slot, the later one's exercise
 stays.
 
+**Status (2026-11-10):** built in F10 S8a as option A, reading `WorkoutExercise.originalExerciseID` (already in
+the `started` snapshot), so no encoded shape changed for this rule (the swap's own new `replacement` key is
+S8's payload decision, below). Architecture §6 states the rule. Since S8a:
+
+- An entry is applied only while its slot holds the exercise the workout was built from, and only by the
+  workout's **first** save: a later save of the same workout (a retry, a lost answer, a rebuild) never touches
+  the program, so a slot the lifter set back to its original after that save keeps it. The contract clauses are
+  `laterSaveKeepsTheLaterChoice` and `onlyTheFirstSaveChangesTheProgram` (`WorkoutRepositoryContract+Swap`).
+- Of two workouts that swapped one slot and are completed in one recovery pass (start order), the
+  earlier-started one's change lands and the later one's is skipped, since the slot no longer holds what the
+  later one began with. Pinned by `LocalWorkoutSessionActorProgramTests`
+  `.recovery_twoFinishedLogs_areSavedInTheOrderTheyStarted`.
+- The "Now." text above, its `laterSaveSetsTheSlotBack` (removed) and "Until it is built" below describe the
+  rule before S8a.
+- **Payload version (orchestrator, 2026-11-10, SF2).** `exerciseSwapped` gained an optional `replacement` and
+  stays payload version 1: Ledger has no installed base yet (no TestFlight build), so no older reader exists. An
+  older build would not refuse such a row; it would ignore the key and replay a different workout. **Rule: after
+  the first TestFlight build, any field added to an event payload raises `payload_version`.** Recorded for F17
+  in its brief ("Inputs from F10 S8a").
+
 **Proposed, for approval: the rule F17 and the swap slice (F10 S8) follow.**
 
 | Option | The rule | What the swap's payload needs |
