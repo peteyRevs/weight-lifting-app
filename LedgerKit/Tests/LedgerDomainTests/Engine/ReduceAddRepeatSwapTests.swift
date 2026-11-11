@@ -93,16 +93,23 @@ struct ReduceAddRepeatSwapTests {
         #expect(effects.contains(.materialize(state)))
     }
 
-    @Test("The latest program swap per slot wins; a later one-off swap leaves it; an ad-hoc exercise records none")
+    /// F10 S8 (Q4) turned the third swap round: before S8 a later swap with the toggle off left the earlier
+    /// entry, so the program took an exercise the workout no longer did.
+    @Test("The latest program swap per slot wins; a later swap with the toggle off removes it; ad hoc records none")
     func programUpdates_latestPerSlot() throws {
         let row = ExerciseID(EventBuilders.uuid(0xE102))
         let slotID = try #require(try Engine.live().exercises[0].slotID)
+        let (twice, _) = try Engine.run([
+            .exerciseSwapped(exerciseIndex: 0, exerciseID: dip, name: "Dip", alsoUpdateProgram: true),
+            .exerciseSwapped(exerciseIndex: 0, exerciseID: row, name: "Row", alsoUpdateProgram: true)
+        ])
+        #expect(twice.programUpdates == [slotID: row])
         let (state, _) = try Engine.run([
             .exerciseSwapped(exerciseIndex: 0, exerciseID: dip, name: "Dip", alsoUpdateProgram: true),
             .exerciseSwapped(exerciseIndex: 0, exerciseID: row, name: "Row", alsoUpdateProgram: true),
             .exerciseSwapped(exerciseIndex: 0, exerciseID: dip, name: "Dip", alsoUpdateProgram: false)
         ])
-        #expect(state.programUpdates == [slotID: row])
+        #expect(state.programUpdates.isEmpty)
         #expect(state.exercises[0].exerciseID == dip)
 
         var adHoc = EventBuilders.seedSession()

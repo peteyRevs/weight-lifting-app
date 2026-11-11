@@ -313,6 +313,9 @@ Two ended logs met in one recovery pass are completed in the order their workout
 whatever order the store lists them in. So of two workouts that swapped one slot, the later one's exercise
 stays.
 
+**Status (2026-11-10):** built in F10 S8a as option A, reading `WorkoutExercise.originalExerciseID` (already in
+the `started` snapshot); no encoded shape changed. Architecture §6 states the rule.
+
 **Proposed, for approval: the rule F17 and the swap slice (F10 S8) follow.**
 
 | Option | The rule | What the swap's payload needs |

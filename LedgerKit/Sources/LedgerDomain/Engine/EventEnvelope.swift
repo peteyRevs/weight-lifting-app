@@ -62,7 +62,9 @@ public extension EventEnvelope {
     ///   `restStarted.endsAt`, `tappedAt`, `endedAt`), or any date in a `started` snapshot (`startedAt`,
     ///   `endedAt`, the rest's `endsAt`, every set's `doneAt` and every `lastPerformance.date`);
     /// - a rest length (`restStarted.total`, `restExtended.amount`, a snapshot rest's `total`) is
-    ///   negative or beyond `WorkoutEngine.longestRest`.
+    ///   negative or beyond `WorkoutEngine.longestRest`;
+    /// - a swap's `replacement` has a step that is not above zero, a load below zero, or a last
+    ///   performance whose date is not finite (F10 S8).
     ///
     /// There is no time window (Pete, 2026-09-29): a finite date is accepted however far it lies from
     /// `wallClock` or from any other date, such as a "Still lifting?" finish days after the last set
@@ -73,7 +75,8 @@ public extension EventEnvelope {
 }
 
 private extension WorkoutEvent {
-    /// Every date it carries is finite, and every rest length lies in `0 ... WorkoutEngine.longestRest`.
+    /// Every date it carries is finite, every rest length lies in `0 ... WorkoutEngine.longestRest`, and a
+    /// swap's replacement has a step above zero and a load not below it.
     var isWellFormed: Bool {
         switch self {
         case let .started(snapshot):
@@ -87,9 +90,17 @@ private extension WorkoutEvent {
             return set.doneAt?.isFinite ?? true
         case let .restStarted(date, length), let .restExtended(length, _, date):
             return date.isFinite && length.isRestLength
-        case .exerciseSelected, .setUnlogged, .setTargetChanged, .allSetsRepeated, .exerciseSwapped, .restSkipped:
+        case let .exerciseSwapped(_, _, _, _, replacement):
+            return replacement?.isWellFormed ?? true
+        case .exerciseSelected, .setUnlogged, .setTargetChanged, .allSetsRepeated, .restSkipped:
             return true
         }
+    }
+}
+
+private extension SwappedExercise {
+    var isWellFormed: Bool {
+        step > .zero && load >= .zero && lastPerformance.map(\.date.isFinite) ?? true
     }
 }
 

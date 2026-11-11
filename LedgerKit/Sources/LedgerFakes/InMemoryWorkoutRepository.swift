@@ -56,7 +56,8 @@
                 programs.writeSave(
                     misses: slotUpdates,
                     exercises: workout.programUpdates,
-                    inProgram: workout.source?.programID
+                    inProgram: workout.source?.programID,
+                    originals: workout.originalExercise(ofSlot:)
                 )
                 log?.drop(workout.id)
             }

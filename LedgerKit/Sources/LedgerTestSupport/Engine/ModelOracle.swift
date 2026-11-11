@@ -129,8 +129,11 @@ struct Model {
             addSet(exerciseIndex, set)
         case let .allSetsRepeated(exerciseIndex, weight, reps):
             repeatAll(exerciseIndex, weight, reps)
-        case let .exerciseSwapped(exerciseIndex, exerciseID, name, alsoUpdateProgram):
+        case let .exerciseSwapped(exerciseIndex, exerciseID, name, alsoUpdateProgram, replacement):
             swap(exerciseIndex, exerciseID, name, alsoUpdateProgram)
+            if let replacement {
+                take(replacement, at: exerciseIndex)
+            }
         default:
             break // a second `started` is ignored; `apply` handles every other event
         }

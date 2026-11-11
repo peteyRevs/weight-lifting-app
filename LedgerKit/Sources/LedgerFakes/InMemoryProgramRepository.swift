@@ -113,15 +113,21 @@
         }
 
         /// What `WorkoutRepository.materialize` writes to the programs, in one step, so no reader of this store
-        /// sees half of a save: the misses of its `slotUpdates`, then its workout's program updates.
-        func writeSave(misses slots: [Slot], exercises updates: [SlotID: ExerciseID], inProgram program: ProgramID?) {
+        /// sees half of a save: the misses of its `slotUpdates`, then its workout's program updates, each applied
+        /// only while its slot holds `originals(slot)` (`WorkoutState.originalExercise(ofSlot:)`).
+        func writeSave(
+            misses slots: [Slot],
+            exercises updates: [SlotID: ExerciseID],
+            inProgram program: ProgramID?,
+            originals: (SlotID) -> ExerciseID?
+        ) {
             guard !slots.isEmpty || !updates.isEmpty else {
                 return
             }
             state.write { current in
                 Self.writeMisses(of: slots, in: &current)
                 if let program, var stored = current.programs[program], !stored.isDeleted {
-                    writeExercises(updates, in: &stored.program)
+                    writeExercises(updates, in: &stored.program, originals: originals)
                     current.programs[program] = stored
                 }
             }
@@ -147,12 +153,20 @@
         /// Program updates (decision #13): each slot of `program` that `updates` names takes the listed
         /// exercise, and nothing else of it changes. As in the database, only a live slot of the workout's own
         /// program is touched (the caller passes none for an ad-hoc workout, or a program that is deleted or
-        /// not stored), and only by an exercise the exercise store holds, when there is one to ask; every other
-        /// entry is skipped.
-        private func writeExercises(_ updates: [SlotID: ExerciseID], in program: inout Program) {
+        /// not stored), only while it holds the exercise the workout began with, `originals(slot)`
+        /// (compare-and-set, ADR-004 amendment §3; an entry with no original has nothing to compare), and only
+        /// by an exercise the exercise store holds, when there is one to ask; every other entry is skipped.
+        private func writeExercises(
+            _ updates: [SlotID: ExerciseID],
+            in program: inout Program,
+            originals: (SlotID) -> ExerciseID?
+        ) {
             for day in program.days.indices {
                 for index in program.days[day].slots.indices {
-                    if let exercise = updates[program.days[day].slots[index].id], exercises?.holds(exercise) ?? true {
+                    let slot = program.days[day].slots[index]
+                    // Compare-and-set; an entry with no original (no swap writes one) has nothing to compare.
+                    let holdsTheOriginal = (originals(slot.id) ?? slot.exerciseID) == slot.exerciseID
+                    if let exercise = updates[slot.id], holdsTheOriginal, exercises?.holds(exercise) ?? true {
                         program.days[day].slots[index].exerciseID = exercise
                     }
                 }

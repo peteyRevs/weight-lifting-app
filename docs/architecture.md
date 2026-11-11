@@ -264,8 +264,8 @@ Entities (all `struct`, `Equatable`, `Sendable`, `Codable`):
 | `DayTemplate` | id, name, tag, slots: [Slot] |
 | `Slot` | id, exercise, sets (1–12), reps (1–30), repsHi (2–40), rpe (5–10 by 0.5), rest (30–300 s by 15), progression (`linear/double/fixed`), startLoad, step?, isSupersetWithPrevious, dropSets (0/1), misses: Set<Int> |
 | `Prescription` | load, sets, reps, rpe, rest, step, progression, isHeld, isDeload — computed by `ProgressionRules.prescribe(week:slot:)` per spec §7.2 |
-| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`), programUpdates: [SlotID: ExerciseID] (swaps with "Also update program"; live only, applied to the workout's own program when it is saved, §6) |
-| `WorkoutExercise` | id, exercise snapshot (id, name, equipment, step, rest, rpe, isSupersetWithPrevious), target (sets, reps, load), sets: [LoggedSet], lastPerformance? |
+| `WorkoutState` | id, source (program/week/day or ad-hoc), exercises: [WorkoutExercise], cursor (slot, set), rest: `RestTimer?` (`endsAt`, `total`), startedAt, finishedAt/discardedAt, phase (`idle/live/finished/discarded`), programUpdates: [SlotID: ExerciseID] (swaps with "Also update program", the latest swap of a slot deciding: on records, off removes; live only, applied to the workout's own program when it is saved, compare-and-set, §6) |
+| `WorkoutExercise` | id, slotID?, originalExerciseID (what the slot held at build), exercise snapshot (id, name, equipment, step, rest, rpe, isSupersetWithPrevious), target (sets, reps, load), sets: [LoggedSet], lastPerformance? A swap's `SwappedExercise` (F10 S8) replaces id, name, equipment, step, lastPerformance and target load, and the load of every undone set |
 | `LoggedSet` | id, weight, reps, kind (`working/drop/added/warmup`), doneAt? |
 | `WorkoutSummary` | elapsed, doneSets, totalSets, volume, prs: [PersonalRecord], rows for the receipt |
 | `PersonalRecord` | exercise, kind (`e1RM/weightAtReps`), value, previous |
@@ -277,6 +277,7 @@ Pure services in `LedgerDomain` (all unit-tested to ~100 %):
 - `ProgressionRules.prescribe` — linear / double / fixed / deload / held.
 - `SessionBuilder.build(program:week:day:history:)` — spec §7.3 incl. drop sets and last-performance lines.
 - `SupersetRounds` — display order A1 B1 A2 B2 … AD BD, "last of round" detection, group rest.
+- `SwapAlternatives` — a swap's offer (`ranked(for:in:excluding:)`: curated, then same pattern and primary muscle in name order, at most 8) and what the chosen exercise brings (`replacement(of:with:last:units:)`: its step, and its last load, else the original's target on the same equipment, else its start load; F10 S8).
 - `OneRepMax.brzycki(weight:reps:)` (r ≤ 12).
 - `PersonalRecords.detect(finished:history:)`.
 - `PlateMath.perSide(load:bar:plates:)`.
@@ -338,7 +339,11 @@ rules are ADR-004's amendment (hybrid logical clock, the clock rule, malformed e
   (`WorkoutRepository.materialize(_:slotUpdates:droppingLog:)`, F10 S3): the rows, the records it detects, the
   slots' misses from `MissTracking` on the program as stored then (when it is the active one), the program
   changes its swaps asked for (`WorkoutState.programUpdates`: a slot's exercise, only on the workout's own
-  program, and what cannot be applied is logged and skipped), and the end of its log. Only then does it publish
+  program, and what cannot be applied is logged and skipped), and the end of its log. A program change is
+  compare-and-set (ADR-004 amendment §3, built in F10 S8): it is applied only while the slot still holds the
+  exercise the workout was built from (`WorkoutState.originalExercise(ofSlot:)`), so a late or repeated save
+  never sets back a slot the lifter changed since. The toggle is the latest swap's: a later swap of the slot
+  with "Also update program" off removes the entry. Only then does it publish
   the ending update. So over the database a workout is in history and no longer live, or neither, and a
   discarded workout changes no program. A save that fails changes nothing: it leaves the end in the log and,
   in this process, the workout in front of every reader as it stood, where nothing can be started over it; the

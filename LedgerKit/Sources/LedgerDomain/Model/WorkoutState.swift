@@ -49,7 +49,9 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
     /// Settings units snapshotted at build time: the units of the receipt rows (rule 30, F04 `summary`).
     public var units: Units
     /// Decision #13: the exercise each slot should hold in the program after this workout, recorded by
-    /// swaps with "Also update program" (latest swap per slot wins). F05 applies them on materialisation.
+    /// swaps with "Also update program" (the latest swap of a slot decides: off removes the entry, F10 S8).
+    /// The save applies an entry only while the slot still holds `originalExercise(ofSlot:)` (compare-and-set,
+    /// ADR-004 amendment §3).
     public var programUpdates: [SlotID: ExerciseID]
 
     public init(
@@ -84,6 +86,16 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
         self.autoRest = autoRest
         self.units = units
         self.programUpdates = programUpdates
+    }
+
+    /// The exercise `slot` held when this workout was built: the original of the workout's exercise from that
+    /// slot, or `nil` when none came from it. A program update of the slot is applied only while the slot
+    /// still holds it (compare-and-set, ADR-004 amendment §3), so a save made after the lifter changed the slot
+    /// keeps the lifter's choice. A swap records an entry only for its exercise's slot, so every entry the
+    /// engine writes has one; an entry without one (a hand-built state) has nothing to compare and is applied
+    /// as before S8.
+    public func originalExercise(ofSlot slot: SlotID) -> ExerciseID? {
+        exercises.first { $0.slotID == slot }?.originalExerciseID
     }
 
     /// Sets ticked done, across every exercise and kind.
