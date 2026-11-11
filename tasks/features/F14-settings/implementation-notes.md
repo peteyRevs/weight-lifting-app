@@ -829,3 +829,18 @@ sheet 71, `PlatesPresentation` 70, `CSVExport` 50, `ExportFile` 46.
 2,106 s. Steps: lint 82 s, iOS build 25 s, string catalogs 1 s, iOS tests 1,638 s, watchOS build 46 s, watchOS tests
 311 s, coverage 1 s. Coverage: FeatureSettings 96.97 % (1,569 / 1,618) against 70 %; LedgerDomain 99.34 %; overall
 98.49 %. This notes commit follows it and changes docs only.
+
+### S2 fix round 1 (G1, 2026-11-10)
+
+Against G2 round 1 (`4ae944b`, "## S2 — G2 round 1" in `test-findings.md`) and the orchestrator's rulings.
+
+- **F14-S2-G2-1 (fixed).** `PlatesDraft.opened` keeps the sizes the sheet opened with (set at `.editPlates` from the
+  stored inventory); `PlatesPresentation.sheet` lists the unit's sizes ∪ `opened` ∪ the draft's plates. An off-list
+  size switched off stays listed, off, for the whole sheet session, so it can be switched on again without Cancel.
+  The list no longer changes within a session, so the chips' ids (their places) stay stable. G2's
+  `offListSize_switchedOff_staysListed` passes with only its known-issue marker removed.
+- **F14-S2-G2-2 (ruled: keep the code).** N11.3 in the brief now reads "Couldn't change the units. Nothing was
+  changed."; G2's `failedSwitch_lineMatchesTheContract` expects that line, without its marker.
+- **F14-S2-G2-3 (docs).** The brief's criterion 1, its `UnitSwitchTests` line and Q1 say 135 lb → 60 kg → 130 lb.
+
+Product lines: +5 / −1 (net 730 for the slice).

@@ -13,7 +13,8 @@ extension SettingsStore {
             guard let current = shown, current.plateMathEnabled else {
                 return true
             }
-            plates = PlatesDraft(units: current.units, inventory: PlatesPresentation.inventory(of: current))
+            let inventory = PlatesPresentation.inventory(of: current)
+            plates = PlatesDraft(units: current.units, inventory: inventory, opened: Set(inventory.plates))
         case let .setBar(bar):
             plates?.inventory.bar = bar
         case let .setPlate(size, isOn):

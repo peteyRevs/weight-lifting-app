@@ -251,7 +251,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
 - "Export data · CSV" through the share sheet.
 
 **Criteria owned**
-- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in the active program is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 62.5 kg. Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched.
+- **1, the program part (Q1 = A):** after lb → kg, each explicit start load in the active program is rounded to the nearest default step of its equipment in kg. 45 lb becomes 20 kg; 135 lb becomes 60 kg (corrected 2026-11-10, F14-S2-G2-3: 135 lb is 61.23 kg). Each explicit step is converted and rounded the same way, never below one default step. `nil` loads and steps stay `nil`. Past workouts are untouched.
 - **3 (restated per C12, C13):** with Plate math on, "Bar and plates" opens a sheet for the current unit's inventory, starting from the stored one (`standard` by default). With Plate math off, the row is drawn disabled and reads "Turn on Plate math to edit". Edits persist through N1. The other unit's inventory is left alone. "Reset to standard" restores `PlateInventory.standard(units)`.
 - **5 (restated per C18–C21, Q5):** the row presents the share sheet. The file is `{name per Q5}.csv`, and its bytes equal the UTF-8 encoding (N15) of `CSVExport.render` over every stored workout, oldest first, in the lifter's current unit.
 
@@ -259,7 +259,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
 - **N11. Conversion order:**
   1. The settings are saved first.
   2. Then `ProgramRepository.update(active)` applies `UnitSwitch.convert`, which is pure and idempotent: a load already on the new unit's grid is unchanged.
-  3. A failed conversion shows "Couldn't convert your program's weights." with "Try again", which runs the same conversion. No active program means no conversion.
+  3. A failed conversion shows "Couldn't change the units. Nothing was changed." with "Try again", which runs the same conversion. No active program means no conversion. (Amended 2026-11-10, F14-S2-G2-2: under ruling A4 the settings and the program are one write, so nothing is half-changed.)
   - `UnitSwitch` has 100% line coverage, and a property test checks that converting twice equals converting once.
 - **N12. Plate editor:**
   - The bar is a `StepperField`: 0–100 lb in 2.5 lb steps, or 0–45 kg in 1.25 kg steps.
@@ -306,7 +306,7 @@ Three sequential pull requests, each cut from `main` after the one before has me
 
 **Tests**
 - Domain:
-  - `UnitSwitchTests`: lb → kg and back, the 135 → 62.5 → 140 drift (Q1), kettlebells to 2 kg, explicit steps, nil fields, idempotence as a property.
+  - `UnitSwitchTests`: lb → kg and back, the 135 → 60 → 130 drift (Q1), kettlebells to 2 kg, explicit steps, nil fields, idempotence as a property.
   - `CSVExportTests`: the header per unit; escaping of commas, quotes and line breaks in names; N14 for each prefix character; kg and lb values; kinds; not done; e1RM above 12 reps; an empty log; dates across midnight and daylight saving (decision #26).
   - A round-trip property: random names, including emoji and RTL, written and then parsed by an RFC 4180 reader in LedgerTestSupport, give the same fields.
 - Store:
@@ -401,7 +401,7 @@ S3 sits under the 700-line band by its nature. Folding it into S2 would come to 
 Each will be built to its recommended default until Pete answers.
 
 1. **When you switch between pounds and kilograms, what happens to the weights already in your program?**
-   - A: Ledger rounds each one to the nearest weight you can load in the new unit: a 45 lb bar becomes 20 kg, 135 lb becomes 62.5 kg. Switching back can land one step away (62.5 kg comes back as 140 lb, not 135).
+   - A: Ledger rounds each one to the nearest weight you can load in the new unit: a 45 lb bar becomes 20 kg, 135 lb becomes 60 kg. Switching back can land one step away (60 kg comes back as 130 lb, not 135; corrected 2026-11-10, F14-S2-G2-3).
    - B: The weights stay exactly as they were, so a 45 lb bar shows as 20.41 kg and goes up 22.91, 25.41.
    - Either way, finished workouts never change, and are shown in the new unit (225 lb shows as 102.06 kg). A workout in progress keeps its unit until you finish it.
    - Recommended: A.

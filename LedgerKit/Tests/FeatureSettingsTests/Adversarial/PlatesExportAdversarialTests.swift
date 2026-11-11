@@ -72,9 +72,8 @@ struct PlatesExportAdversarialTests {
         scene.store.send(.setUnits(.kg))
         await eventually { scene.store.model?.retry != nil }
         let problem = try scene.model.problem
-        withKnownIssue("F14-S2-G2-2: the line reads \"Couldn't change the units. Nothing was changed.\"") {
-            #expect(problem == "Couldn't convert your program's weights.")
-        }
+        // F14-S2-G2-2, ruled: N11.3 is amended to the shipped line.
+        #expect(problem == "Couldn't change the units. Nothing was changed.")
     }
 
     @Test("A change made while the switch is held is saved with save, and the program is converted once")

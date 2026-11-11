@@ -41,8 +41,9 @@ nonisolated enum PlatesPresentation {
     static func sheet(_ draft: PlatesDraft, locale: Locale) -> PlatesModel {
         let units = draft.units
         let inventory = draft.inventory
-        // A size off the list (stored by a later version) is shown, so it can be kept or switched off.
-        let listed = Set(sizes(units)).union(inventory.plates).sorted(by: >)
+        // A size off the list (stored by a later version) is shown, so it can be kept or switched off, and stays shown
+        // once off for the whole of the sheet's session (F14-S2-G2-1).
+        let listed = Set(sizes(units)).union(draft.opened).union(inventory.plates).sorted(by: >)
         let plates = listed.enumerated().map { place, size in
             let isOn = inventory.plates.contains(size)
             return PlatesModel.Plate(

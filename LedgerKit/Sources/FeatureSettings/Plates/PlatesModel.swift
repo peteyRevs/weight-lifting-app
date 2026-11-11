@@ -5,6 +5,9 @@ import LedgerDomain
 nonisolated struct PlatesDraft: Hashable, Sendable {
     let units: Units
     var inventory: PlateInventory
+    /// The sizes the sheet opened with, so one off the unit's list (another version's) stays listed, and can be
+    /// switched on again, after it is switched off (F14-S2-G2-1).
+    var opened: Set<Weight> = []
 }
 
 /// "Bar and plates", the row of Settings (criterion 3): it opens the sheet while Plate math is on, and is drawn

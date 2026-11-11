@@ -125,9 +125,7 @@ extension PlatesExportAdversarialTests {
         scene.store.send(.editPlates)
         scene.store.send(.setPlate(.pounds(7.5), isOn: false))
         let listed = try Self.sheet(scene).plates.map(\.title)
-        withKnownIssue("F14-S2-G2-1: the size vanishes from the sheet once switched off") {
-            #expect(listed.contains("7.5 lb"))
-        }
+        #expect(listed.contains("7.5 lb"))
     }
 
     @Test("Every plate off shows the empty line; Reset to standard restores the unit's standard; Cancel saves nothing")
