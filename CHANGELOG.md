@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.16.0...v0.17.0) (2026-11-11)
+
+
+### Features
+
+* **history:** fix a past workout's sets in one sheet, saved as one write, with records and stats following (F13 S3) ([#84](https://github.com/peteyRevs/weight-lifting-app/issues/84)) ([da6470d](https://github.com/peteyRevs/weight-lifting-app/commit/da6470d384e388cadf97023a20bcae278b44f6e9))
+
 ## [0.16.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.15.0...v0.16.0) (2026-11-03)
 
 
