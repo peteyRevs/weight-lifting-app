@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.19.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.18.0...v0.19.0) (2026-11-11)
+
+
+### Features
+
+* **workout:** swap an exercise from its card, from a sheet of alternatives (F10 S8b) ([#89](https://github.com/peteyRevs/weight-lifting-app/issues/89)) ([18f1201](https://github.com/peteyRevs/weight-lifting-app/commit/18f120157ae7643b2bb299867f4d1dda8d84e8cf))
+
+## [0.18.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.17.0...v0.18.0) (2026-11-11)
+
+
+### Features
+
+* **domain:** a swap re-targets the undone sets and its program change lands with the workout's first save (F10 S8a) ([#86](https://github.com/peteyRevs/weight-lifting-app/issues/86)) ([ca54ad6](https://github.com/peteyRevs/weight-lifting-app/commit/ca54ad628677da3d708efa682439bd2de7bc587a))
+* **settings:** units carry your programs, the bar and plates, and CSV export (F14 S2) ([#88](https://github.com/peteyRevs/weight-lifting-app/issues/88)) ([8d462a2](https://github.com/peteyRevs/weight-lifting-app/commit/8d462a26bb7f599963e82617498c750fb6948f61))
+
 ## [0.17.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.16.0...v0.17.0) (2026-11-11)
 
 

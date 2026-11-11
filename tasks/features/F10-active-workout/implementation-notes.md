@@ -6239,3 +6239,219 @@ On G3's `1f799f4` ("S8a — G3 round 1") and the orchestrator's rulings. One gat
 
 **Product lines** (net, against `5be8ab7`): LedgerDomain +106, LedgerPersistence +41, LedgerFakes +16:
 **163** (136 after S8a, +9 round 1, +18 round 2). LedgerTestSupport +172.
+
+
+## S8b — the swap button, the swap sheet and its store, as built (G1 implementer, 2026-11-11)
+
+Against `ca54ad6` (main with S8a, #86). Criteria 13 to 34 of "Plan amendments — slice S8", with Q1–Q9 at the
+planner's defaults as ruled.
+
+### What is built
+
+- **The button** (criterion 13): `ExerciseCard`'s title row is the place and the name, with an `IconPillButton`
+  (`LedgerIcon.swap`, "Swap exercise", `workout.card.swap`) at the trailing edge, top-aligned with the place as
+  v2 draws it. `ExerciseCardModel.swap` is nil once a set of the shown exercise is logged
+  (`WorkoutPresentation.canSwap`, Q2), and then no button is drawn. At the accessibility sizes the button stands
+  under the name (as `SheetChrome` puts its cancel under the title), so the name keeps the width and never wraps
+  under the button. `ExerciseCard` now takes `WorkoutAction` (it sends `.openSwap`, and wraps its edits).
+- **The sheet** (14–16, 23, 24): `Views/SwapSheet.swift` is `SwapSheetFrame` (on `SheetChrome`: the title and
+  "Cancel", `workout.swap.cancel`, VoiceOver's escape) over `ScrollView { SwapSheetPage }`: the line, a message
+  when there is nothing to show ("Couldn't load alternatives." / "No alternatives for this exercise."), the
+  switch (`.toggleStyle(.ledger)`, `workout.swap.updateProgram`), then up to eight `HairlineRow`s
+  (`workout.swap.row.<n>`), each one button whose accessory is "Use" in `accentText`. The model
+  (`SwapSheetModel`, `WorkoutPresentation+Swap.swift`) carries every word and, per row, the `WorkoutEdit` its
+  "Use" sends: the `SwapChoice` (the exercise it replaces, the new id and name, and the `SwappedExercise` the
+  Domain worked out) and the switch as it stands. What a row shows is what it applies (15).
+- **The store** (`WorkoutStore+Swap.swift`, 17–27): `.openSwap` (only with no dialog up, a workout on screen
+  and the shown exercise swappable) sets `swap = SwapState(...)` (the exercise by place and id, `.loading`, the
+  switch opening from `programUpdates[slot]`, Q4), the next `swapAttempt` and `dialog = .swap`.
+  `WorkoutRoot`'s `.task(id: store.swapAttempt)` runs `loadSwap()`: `exercise(id:)`, `all()`, `ranked` without
+  the workout's exercises (Q9), then `lastPerformance` and `replacement` per row. Any read that throws is logged
+  and the sheet says so; no load is guessed. The first answer for an attempt is shown (`case .loading` guard),
+  an earlier attempt's is dropped. `swap` is kept after the sheet goes down so that it keeps its rows while it
+  animates away.
+- **"Use"** is `.edit(.swap(exerciseIndex:choice:alsoUpdateProgram:))` through the one tap queue: `enqueue`
+  accepts it only while `dialog == .swap` and takes the sheet down at once, so a double tap queues one. The
+  plan (`WorkoutEdit+Swap.swift`) makes one `exerciseSwapped` with the replacement, and nothing when the place
+  no longer holds the exercise the sheet was opened for, has a set logged, or is gone (19). The selection is left
+  as it was.
+- **The workout moves under the sheet** (25): `follow()` calls `closeSwapIfStale(on:)` at every live update;
+  a set logged (by a queued tap or elsewhere) or another exercise in the place takes the sheet down. An end
+  closes the sheet with the cover (`leave`), and updates that end close it too (`dismiss([.finish, .swap])`).
+- **Bests** (27): `readBests()` records the exercises it read for (`bestsAsked`); `unreadBests` (the live
+  workout's exercises minus those, once the bests are loaded) is the id of a second root task, which runs
+  `readSwappedBests()`: one `bests(before:for:)` for the new ids, merged into `bests`; records already held
+  are taken as held. A failed read is logged and marked asked: no retry, and an exercise without bests sets no
+  record (Decision #3's "no comparable prior record").
+
+### Criteria → tests
+
+Host unless marked *sim* (iPhone 17 simulator only) or *UI* (nightly UI test).
+
+| # | Tests |
+|---|---|
+| 13 | `WorkoutPresentationSwapTests.button_onlyBeforeASetIsLogged`; *sim* `SwapSheetTests.cardButton_sendsOpenSwap`, `WorkoutAccessibilityTests` (the `.started` tree now holds the button), `SwapSheetLayoutTests.titleRow_nameNeverUnderTheButton` |
+| 14, 15 | `WorkoutPresentationSwapTests.rows_wordForWord_pounds`, `row_sendsWhatItShows`, `rows_kilograms`; *sim* `SwapSheetTests.tree_isExactlyTheTable`, `sheet_isOneScrollViewUnderItsTitle` |
+| 16 | `WorkoutPresentationSwapTests.toggle_onlyForAProgramSlot`; `WorkoutStoreSwapProgramTests.toggle_opensFromTheSlot` |
+| 17 | `WorkoutStoreSwapTests.open_readsOnce`, `heldRead_showsNoRows`; `WorkoutPresentationSwapTests.loading_showsTheLineAlone` |
+| 18 | `WorkoutStoreSwapTests.use_appliesOneSwap_theCardFollows` (name, "No history yet", no "Repeat", rows and TARGET at 15 lb, the first row still shown) |
+| 19 | `WorkoutEditPlanSwapTests` (one event; stale id, a logged set, a gone place); `WorkoutStoreSwapTests.setLoggedUnderTheSheet` |
+| 20 | `WorkoutStoreSwapTests.cancel_appliesNothing` (Cancel and `.dismissed(.swap)`); *sim* `SwapSheetTests.controls_sendTheirActions` (the escape is Cancel) |
+| 21 | `WorkoutStoreSwapTests.use_appliesOneSwap_theCardFollows` (double tap), `open_readsOnce` (no second sheet), `queuedTaps_areAppliedFirst` |
+| 22 | `WorkoutStoreSwapFailureTests.refusedSwap_isShown` (the host over a store that refuses) |
+| 23 | `WorkoutStoreSwapFailureTests.failedRead_saysSo_reopenReadsAgain`, `failedLastRead_offersNothing` |
+| 24 | `WorkoutStoreSwapFailureTests.notStored_noAlternatives`; `WorkoutPresentationSwapTests.failedAndEmpty_lines` |
+| 25 | `WorkoutStoreSwapTests.setLoggedUnderTheSheet`; `WorkoutStoreSwapFailureTests.endedElsewhere_closesBoth` |
+| 26 | `WorkoutStoreSwapFailureTests.staleAttempt_isDropped`, `restartedRead_showsOnce` |
+| 27 | `WorkoutStoreSwapProgramTests.replacementBests_areReadOnce_recordFelt`, `replacementBests_failedRead` |
+| 28 | `WorkoutStoreSwapProgramTests.toggle_landsWithTheSave` (program slot, history, receipt), `toggle_notWithTheDiscard`; *UI* `WorkoutSwap` |
+| 29 | `WorkoutPresentationSwapTests.swapTexts_areWordForWord`, `equipment_names`; `ModuleCopyTests`; the gate's catalog check; `FeatureWorkoutSourceTests` unedited |
+| 30 | *sim* `SwapSheetLayoutTests.orange_isUseAlone` (light and dark) |
+| 31 | `WorkoutStoreSwapProgramTests.supersetMember_isSwappedAlone`; S8a's engine test |
+| 32 | *sim* `SwapSheetTests.tree_isExactlyTheTable` (five states, light `.large` and dark `.accessibility3`), `cardButton_sendsOpenSwap` |
+| 33 | *sim* `SwapSheetLayoutTests.sheet_noWordIsCut`, `sheet_nothingLeavesOrOverlaps`, `titleRow_nameNeverUnderTheButton` (the page sweep, 375/402 pt, Bold Text, right to left) |
+| 34 | the S4–S7 suites; UI tests unedited |
+
+### The sheet's VoiceOver tree (criterion 32)
+
+| Stop | Value | Traits |
+|---|---|---|
+| "Swap exercise" | | heading |
+| "Cancel" | | button (escape: the same) |
+| "Same movement pattern." | | text |
+| "No alternatives for this exercise." / "Couldn't load alternatives." (only then) | | text |
+| "Also update program" (only with rows, from a slot) | "0" / "1" | switch |
+| "Dumbbell Bench Press, Dumbbell · 15 lb, Use", … one per row | | button |
+
+The card: "Exercise 1 of 5", "Barbell Bench Press" (heading), "Swap exercise" (button), then as before.
+
+### Texts
+
+From the brief: "Swap exercise", "Cancel" (existing), "Use", "Also update program", "%@ · %@ lb", "%@ · %@ kg".
+Equipment names, FeatureLibrary's wording: "Barbell", "Dumbbell", "Cable", "Machine", "Bodyweight",
+"Kettlebell", "Band". **Invented, for the product owner:** "Same movement pattern." (Q6), "Couldn't load
+alternatives.", "No alternatives for this exercise." The catalog holds 97 keys (82 + 15).
+
+### What is orange while the sheet is up (criterion 30, Q8)
+
+"Use" on every row (`accentText`), as v2 draws it; nothing else on the sheet. The switch's track is ink. The
+cover under the sheet keeps its own orange (the shown row), dimmed behind the sheet.
+
+### Deviations and decisions
+
+1. **The sheet stands at full height** (`FinishSheet.detents`), not v2's content-height bottom sheet: at half
+   height the system draws the sheet smaller and takes the 44 pt cancel under 44 pt (S7a's finding).
+2. **No switch while the alternatives load**, nor with no row: the plan lists only the line while loading;
+   drawing the switch and then removing it for an empty answer would move the rows.
+3. **The message** ("Couldn't load…", "No alternatives…") stands under the line, which stays in every state.
+4. **Lint, not compression**: `send` and `WorkoutEditPlan.make` were at the cyclomatic limit. `.done` and
+   `.openExercise` share one case (`WorkoutAction.openedExercise`), and "+30s"/"Skip rest" go through
+   `answerRestPanel` (a two-case switch in `WorkoutEdit+Rest.swift`); `follow()`'s tail moved into
+   `loseTheSession()` for the function-length rule. Behaviour unchanged (the S5–S7 suites pass unedited).
+5. **Swap back to the original** takes the default step (S8a's risk), unchanged.
+
+### Edits to the testers' files (sanctioned, for the audit)
+
+- `Adversarial/WorkoutWordsAdversarialTests.catalog_holdsExactlyTheSlicesTexts`: the 15 new keys added under an
+  "F10 S8b" comment; display name "82" → "97".
+- `WorkoutAccessibilityTrees` (mine from S5, shared): `Card.canSwap`, and the button stop after the title;
+  only `.started` holds it.
+- `WorkoutCopyTests.noText_namesTheProduct`: 82 → 97.
+
+### For the follow-ups list (S8a's N3/N4 stand)
+
+- Q2 on the watch: F17's peer guard (N4) — the phone's plan refuses a stale choice silently (criterion 19).
+- Splitting a slot partway (the ruling's follow-up) is not built.
+
+### References
+
+New, 6, in `FeatureWorkoutTests/__Snapshots__/SwapSheetTests/` (iPhone 17, iOS 27.0): `sheet_rows` light and dark
+at `.large` and `.xLarge`, `sheet_rows_accessibility3` dark, `sheet_empty` light `.large`. Changed, 2:
+`WorkoutSnapshotTests/cover_noHistory` light and dark (the swap button beside the name). Every one looked at.
+Against v2's swap sheet: the title and "Cancel" on one line, the line in muted light type, hairline rows with
+the name over a muted sub and "Use" orange at the trailing end, a closing rule: as v2. Differences: v2's
+"Cancel" is plain text, ours is `SheetChrome`'s ghost pill (as "End workout?"); the switch row is the brief's,
+not in v2; v2 draws a dimmed blurred backdrop, the system sheet draws its own; at `.accessibility3` "Cancel"
+stands under the title and each "Use" under its sub (`SheetChrome`, `HairlineRow`). The card's button matches
+v2's 38 px round outline, at the design system's 44 pt.
+
+Only `cover_noHistory` changed among the whole-cover references: by Q2 the button is drawn only before a set of
+the exercise is logged, so `cover_logging`, `cover_dropSet` and `screen_resting` (each with a set logged) are
+unchanged, not the 12 the plan counted. `cover_noHistory` still passed within the snapshot tolerance with the
+button (a 44 pt circle is under 0.5 % of the image); it was re-recorded so the reference shows it.
+
+### Product lines (Swift, not blank, not comment; against `ca54ad6`)
+
+FeatureWorkout +549 −23: **526 net** (plan 507, expected 650–810; stop at 800). Tests and the UI test not counted.
+
+### Runs (2026-11-11)
+
+- Host `swift test --filter FeatureWorkoutTests`: 502 tests in 68 suites passed; `ModuleCopyTests` passed.
+- Simulator, `-only-testing:FeatureWorkoutTests` through the lock: every test passed but the six new references
+  (recorded on that run); then the two `cover_noHistory` references re-recorded.
+- `WorkoutSwap` (UI) builds with the gate; it runs nightly only (the `PR` plan selects `Smoke`). **Not run here.**
+- The full gate: in the report.
+
+### Not verified
+
+- The sheet's presentation in the running app (detent, swipe down, escape on a device), and VoiceOver on a device.
+
+### S8b fix round 1 (G1 implementer, 2026-11-11)
+
+On G2's `dd73470` ("S8b — G2 round 1") and the orchestrator's rulings (fix both).
+
+| Finding | What changed | Tests |
+|---|---|---|
+| **F10-S8b-G2-1** (Minor): Q9 checked only when the list was read | The plan's swap check (`WorkoutEditPlan.swap`) also refuses a choice the workout, as it stands at "Use"'s turn, holds at another place (`WorkoutPresentation.holds(_:besides:in:)`), so it comes to nothing as a Q2 refusal does: no event, no alert. As for Q2, the sheet goes down at the update that makes a row stale: `closeSwapIfStale` also closes it when an exercise it offers now stands elsewhere in the workout | the tester's `peerTakesAnOfferedExercise_useDuplicates`, `plan_refusesAnExerciseAlreadyInTheWorkout`, unedited but for the rename; mine: `WorkoutEditPlanSwapTests.exerciseHeldElsewhere_comesToNothing`, `WorkoutStoreSwapFailureTests.offeredExerciseTakenElsewhere_closesTheSheet` |
+| **F10-S8b-G2-2** (Minor): at `.xxxLarge` a wrapped name was read after "Swap exercise" | The order is structural: the title row is an accessibility container (`.contain`), the place and name are one contained group, and the button sorts after it (priority −1 against the default 0), whatever the layout puts higher. Only the button carries a priority: a first try that raised the group to 1 lifted the name above the header on cards without the button (the cover trees caught it) | the tester's `WorkoutSwapTreeAdversarialTests.card_titleRow` (four sizes × every setting, two names); the cover's pinned trees unchanged |
+
+**Sanctioned edits (listed):** the three tests' `FAILING (…)` display prefixes and `failing_` function prefixes
+are removed (`WorkoutSwapAdversarialTests+Moves.peerTakesAnOfferedExercise_useDuplicates`,
+`WorkoutSwapRankingAdversarialTests+Plan.plan_refusesAnExerciseAlreadyInTheWorkout`,
+`WorkoutSwapTreeAdversarialTests.card_titleRow`); the two G2-1 display names now say what holds ("makes no
+duplicate", "refuses"). Bodies unedited.
+
+**Product lines**: +14 (FeatureWorkout 540 net against `ca54ad6`).
+
+**Runs**: host `FeatureWorkoutTests` 536 tests in 70 suites passed. The full gate: in the report.
+
+### S8b fix round 2 (G1 implementer, 2026-11-11)
+
+On G3's `5f41adf` ("S8b — G3 round 1") and the orchestrator's rulings.
+
+| Item | Ruling | What changed | Tests |
+|---|---|---|---|
+| SF1 | FIX | The card's button sends `.swap(.open(exerciseIndex:exerciseID:))` (`ExerciseCardModel.exerciseID`, new); `openSwap` opens only while that place is the shown exercise, holds that id and can be swapped. "Use" already carried both (`SwapChoice.replacing` and the place), checked by the plan at its turn | `WorkoutStoreSwapReviewTests.shownExerciseMoved_opensNothing` (a jump, then a swap by another hand, between the tap and its action); *sim* `SwapSheetTests.cardButton_sendsOpenSwap` |
+| SF2 | FIX (b) | `WorkoutRoot` keeps `isSwapSheetOnScreen` (set at the sheet's `onAppear`, cleared in its `onDismiss`), and presents the refused-change and failed-discard alerts only once the swap sheet is gone (`WorkoutRoot.isPresented`). The store is unchanged: its `dialog` says what is asked for, the root sequences the two presentations, so the alert cannot be dropped by a sheet still going down | `WorkoutStoreSwapReviewTests.alert_waitsForTheSheet`, `refusedSwap_thenSwapOpensAgain` (refused, "OK", "Swap exercise" opens again with its rows) |
+| SF3 | FIX | `ExerciseCardTitleRow` (the card's title row, its own view) has references, light and dark at `.large`: `WorkoutSnapshotTests/card_titleRow` | the references, looked at; with the button removed the test fails (below) |
+| Full height | KEPT | **Orchestrator decision (2026-11-11):** the swap sheet stands at full height, not v2's content-height bottom sheet, so that `SheetChrome`'s cancel stays a 44 pt target; the eight rows need the height at the accessibility sizes too. For Pete with the invented copy | — |
+| N1 | fixed | The swap's intents are one nested action, `WorkoutAction.swap(WorkoutSwapIntent)` (`open`, `cancel`, `updateProgram`), answered by an exhaustive switch; `answerRestPanel(extends:)` takes a `Bool`, so neither helper has a `default` | the S6 rest suites and the swap suites |
+| N2 | fixed | One predicate, `WorkoutPresentation.canSwap(_:at:in:)` (the place still holds that id, with no set logged), used by `openSwap`, `loadSwap` (which now checks the id too), `closeSwapIfStale` and the plan | the swap suites |
+| N3 | fixed | `loadSwap` and `readSwappedBests` drop any error of a cancelled task (`guard !Task.isCancelled`); the task that replaces it answers | `WorkoutStoreSwapReviewTests.cancelledRead_showsNoFailure` |
+| N4 | **skipped** | "Use" stays `.edit(.swap)` through `enqueue`'s one-line guard. Moving it into `answerSwap` would make a row's raw `.edit(row.choose)` (which G2's suite sends throughout) bypass the sheet's guard, or need G2's tests rewritten; the guard is two lines and documented | — |
+| N5 | fixed | `openSwap` checks Q2 on `ahead ?? shown` as well as on the shown workout | `shownExerciseMoved_opensNothing` and the Q2 suites |
+| N6 | fixed | `swap` is nil while the page is busy (`card(…, isBusy:)`), so no live-looking button on a disabled page | `WorkoutStoreSwapReviewTests.busyPage_offersNoSwap` |
+| N7 | half | `SwapChoice.choices(_:lasts:replacing:units:)` builds the rows for the store and the previews. **Skipped:** looking the exercise up in `all()` instead of `exercise(id:)`: criterion 17 names the read, and G2 pins its failure | the swap suites |
+| N8 | fixed | `WorkoutSheet.detents` (with S7a's and S8b's reasons) is shared by both sheets; the full height is on Pete's list above | `WorkoutRootSaveAdversarialTests` (full height only) |
+
+**Sanctioned edits (listed):** G2's suite sent the flat actions this round nests: in
+`WorkoutSwapAdversarialSupport`, `WorkoutSwapAdversarialTests`, `+Taps` and `+Failures`, `send(.openSwap)` is now
+`send(store.cardOpensSwap)` (what the shown card's button sends, `Support/SwapDoubles.swift`),
+`send(.cancelSwap)` is `send(.swap(.cancel))` and `send(.updateProgram(x))` is `send(.swap(.updateProgram(x)))`;
+13 lines, nothing else. My `WorkoutEditPlanSwapTests.restPanel_answersOnlyItsOwn` is removed: the `default` it
+pinned is gone.
+
+**For Pete** (with "Same movement pattern.", "Couldn't load alternatives.", "No alternatives for this
+exercise."): the swap sheet stands at full height where v2 draws a content-height sheet.
+
+**SF3's references**, recorded on the iPhone 17 (iOS 27.0) and looked at: `card_titleRow_matchesReferences`
+light and dark `.large`, "Exercise 1 of 5" over "Barbell Bench Press" with the round outline button at the
+trailing edge, level with the place, as v2. Mutant: the button hidden (`if let swap = model.swap, swap.isEmpty`),
+the test run with recording off failed in both appearances; the file restored from a scratchpad copy.
+
+**Product lines**: FeatureWorkout 576 net against `ca54ad6` (+36 this round).
+
+**Runs**: host, the swap, copy, preview, plan and presentation suites: 177 tests passed. Simulator through the
+lock: `WorkoutSnapshotTests`, `SwapSheetTests`, `SwapSheetLayoutTests`, `WorkoutAccessibilityTests` and G2's
+`WorkoutSwapTreeAdversarialTests`, 28 tests, all passed but the two references (recorded on that run). The full
+gate: in the report.

@@ -92,11 +92,13 @@ extension WorkoutStore {
         guard case .idle = bests, case let .loaded(state) = workout else {
             return
         }
+        let asked = Set(state.exercises.map(\.exerciseID))
         do {
-            let read = try await stats.bests(before: state, for: Set(state.exercises.map(\.exerciseID)))
+            let read = try await stats.bests(before: state, for: asked)
             guard case .idle = bests else {
                 return
             }
+            bestsAsked = asked
             bests = .loaded(read)
             // The records of the workout the read was made for: one set while the read was out is felt at
             // the next update (F10 S7b, fix round 1).

@@ -73,7 +73,7 @@ nonisolated extension WorkoutPresentation {
             )
         }
         return WorkoutPageModel(
-            card: shown.map { card(of: $0, in: state, selection: selection, context) },
+            card: shown.map { card(of: $0, in: state, selection: selection, context, isBusy: isBusy) },
             remaining: rows.isEmpty ? nil : RemainingModel(title: WorkoutCopy.remaining, rows: rows),
             isEnabled: !isBusy
         )
@@ -87,7 +87,8 @@ nonisolated extension WorkoutPresentation {
         of index: Int,
         in state: WorkoutState,
         selection: WorkoutSelection?,
-        _ context: Context
+        _ context: Context,
+        isBusy: Bool = false
     ) -> ExerciseCardModel {
         let exercise = state.exercises[index]
         let units = state.units
@@ -96,8 +97,10 @@ nonisolated extension WorkoutPresentation {
         let last = exercise.lastPerformance
         return ExerciseCardModel(
             exerciseIndex: index,
+            exerciseID: exercise.exerciseID,
             eyebrow: WorkoutCopy.exercise(index + 1, of: state.exercises.count, locale: context.locale),
             title: exercise.name,
+            swap: canSwap(exercise) && !isBusy ? WorkoutCopy.swapExercise : nil,
             targetLabel: WorkoutCopy.target,
             target: target(of: exercise, units: units, locale: context.locale),
             lastLabel: WorkoutCopy.last,

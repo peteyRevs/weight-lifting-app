@@ -101,6 +101,28 @@
         }
       }
     },
+    "%@ · %@ kg" : {
+      "comment" : "An offered exercise's equipment, then the weight its sets will take, in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ kg"
+          }
+        }
+      }
+    },
+    "%@ · %@ lb" : {
+      "comment" : "An offered exercise's equipment, then the weight its sets will take, in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ lb"
+          }
+        }
+      }
+    },
     "%lld new PRs this session" : {
       "comment" : "The number of personal records the saved workout set",
       "localizations" : {
@@ -224,6 +246,61 @@
         }
       }
     },
+    "Also update program" : {
+      "comment" : "Switch: the program's day takes the chosen exercise too, when the workout is saved",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Also update program"
+          }
+        }
+      }
+    },
+    "Band" : {
+      "comment" : "Equipment: a resistance band",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Band"
+          }
+        }
+      }
+    },
+    "Barbell" : {
+      "comment" : "Equipment: a barbell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barbell"
+          }
+        }
+      }
+    },
+    "Bodyweight" : {
+      "comment" : "Equipment: none, the body's weight",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bodyweight"
+          }
+        }
+      }
+    },
+    "Cable" : {
+      "comment" : "Equipment: a cable machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cable"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "en" : {
@@ -261,6 +338,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't discard this workout"
+          }
+        }
+      }
+    },
+    "Couldn't load alternatives." : {
+      "comment" : "Shown in the swap sheet when the exercises to offer could not be read",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load alternatives."
           }
         }
       }
@@ -394,6 +482,17 @@
         }
       }
     },
+    "Dumbbell" : {
+      "comment" : "Equipment: dumbbells",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dumbbell"
+          }
+        }
+      }
+    },
     "Elapsed time" : {
       "comment" : "Spoken label of the workout's running time",
       "localizations" : {
@@ -481,6 +580,17 @@
         }
       }
     },
+    "Kettlebell" : {
+      "comment" : "Equipment: a kettlebell",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kettlebell"
+          }
+        }
+      }
+    },
     "LB MOVED" : {
       "comment" : "Label of the receipt's tile for the weight lifted, in pounds",
       "localizations" : {
@@ -547,6 +657,17 @@
         }
       }
     },
+    "Machine" : {
+      "comment" : "Equipment: a weight machine",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Machine"
+          }
+        }
+      }
+    },
     "Minimize" : {
       "comment" : "Button that closes the workout screen and keeps the workout running",
       "localizations" : {
@@ -554,6 +675,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Minimize"
+          }
+        }
+      }
+    },
+    "No alternatives for this exercise." : {
+      "comment" : "Shown in the swap sheet when no other exercise can be offered",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No alternatives for this exercise."
           }
         }
       }
@@ -699,6 +831,17 @@
         }
       }
     },
+    "Same movement pattern." : {
+      "comment" : "Says what the offered exercises have in common with the one being swapped",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same movement pattern."
+          }
+        }
+      }
+    },
     "Save workout" : {
       "comment" : "Ends the workout and keeps it in history",
       "localizations" : {
@@ -750,6 +893,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skip rest"
+          }
+        }
+      }
+    },
+    "Swap exercise" : {
+      "comment" : "Button that offers other exercises for this one, and the title of the sheet it opens",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swap exercise"
           }
         }
       }
@@ -835,6 +989,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Undo set %lld"
+          }
+        }
+      }
+    },
+    "Use" : {
+      "comment" : "Swaps this exercise in for the current one",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use"
           }
         }
       }

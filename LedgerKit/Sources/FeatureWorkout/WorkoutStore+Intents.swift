@@ -25,10 +25,10 @@ extension WorkoutStore {
             retrySave()
         case let .edit(edit):
             enqueue(edit)
-        case .done:
-            closeReceipt()
-        case let .openExercise(exercise):
-            closeReceipt(showing: exercise)
+        case .done, .openExercise:
+            closeReceipt(showing: action.openedExercise)
+        case let .swap(intent):
+            answerSwap(intent)
         }
     }
 
@@ -72,5 +72,13 @@ extension WorkoutAction {
         case .done, .openExercise: true
         default: false
         }
+    }
+
+    /// The exercise a row of the receipt opens; nil for "Done" and every other action.
+    var openedExercise: ExerciseID? {
+        if case let .openExercise(exercise) = self {
+            return exercise
+        }
+        return nil
     }
 }

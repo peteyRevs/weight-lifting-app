@@ -2,9 +2,9 @@
     @testable import FeatureWorkout
     import UIKit
 
-    /// The cover's intended VoiceOver trees (F10 S4 criterion 10, S5 criteria 1 and 9), as the implementation
-    /// notes write them: for every preview state, the stops in reading order with their labels, values and
-    /// traits. A live workout reads its header, then its page.
+    /// The cover's intended VoiceOver trees (F10 S4 criterion 10, S5 criteria 1 and 9, S8b criterion 32), as
+    /// the implementation notes write them: for every preview state, the stops in reading order with their
+    /// labels, values and traits. A live workout reads its header, then its page.
     enum WorkoutTrees {
         /// One set row as the tree's builder takes it: what VoiceOver says for the row, its state in the
         /// design system's words, and what its check will do.
@@ -43,6 +43,8 @@
         struct Card {
             let place: String
             let title: String
+            /// Whether "Swap exercise" follows the name: only while no set of the exercise is logged (F10 S8b).
+            var canSwap = false
             let target: String
             let last: String
             var canRepeat = false
@@ -80,7 +82,12 @@
             let adjustable = UIAccessibilityTraits.adjustable.union(off)
             var stops = [
                 Stop(card.place, text),
-                Stop(card.title, heading),
+                Stop(card.title, heading)
+            ]
+            if card.canSwap {
+                stops.append(Stop("Swap exercise", button))
+            }
+            stops += [
                 Stop("TARGET, \(card.target)", text),
                 Stop("Last, \(card.last)", text)
             ]
@@ -113,11 +120,13 @@
             "Cable Lateral Raise, 3 × 16"
         ]
 
-        /// The bench press's card, its five rows in `states` ("Done", "Current set", "Pending").
+        /// The bench press's card, its five rows in `states` ("Done", "Current set", "Pending"); "Swap
+        /// exercise" while none is done.
         static func bench(_ states: [String], last: String, canRepeat: Bool) -> Card {
             Card(
                 place: "Exercise 1 of 5",
                 title: "Barbell Bench Press",
+                canSwap: !states.contains("Done"),
                 target: "5 × 5 @ 200 lb · RPE 8",
                 last: last,
                 canRepeat: canRepeat,
