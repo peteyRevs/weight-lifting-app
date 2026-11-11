@@ -1180,3 +1180,7 @@ Against G3's review (1 Blocking, 3 Should-fix, 6 Nits) and the orchestrator's ru
   `MainRoot` makes a new router, Today selected and every stack empty.
 
 **Product lines this round:** +54 / −22, net +32 (`SheetChrome` +8 of them). The slice is now net 667.
+
+**The gate (fix round 2):** `scripts/check.sh` (full), through the lock, on `dd225f0`: **exit 0, "check.sh OK"**,
+2,033 s (log `scratchpad/f14-s3-fix2-gate.log`). FeatureSettings 97.40 % (2,137 / 2,194), LedgerPersistence 99.09 %,
+LedgerDesign 96.85 %, overall 98.47 %. This notes commit follows it and changes docs only.
