@@ -1612,3 +1612,19 @@ The watch's superset path and its version skew (F17, F18); a chosen exercise who
 giving way (F17, S5 round 2's input); correcting a finished exercise during the workout (Q5: History, F13); plate
 math (F25); an "add a round" control; letters on the receipt or in History; any change to the schema, the
 payload, `LedgerAppKit`, the project file or a test plan.
+
+### Rulings on the S9 plan (orchestrator, 2026-11-11)
+
+The product owner delegated these calls (autopilot since 2026-11-10); each can be overruled later.
+
+- **Q1–Q3, Q5–Q12: the planner's defaults stand** as written above. The texts the planner invented (legend
+  target keys, "A2 · … lb × n", "Log set %@" / "Undo set %@", the spoken row forms, "Swap %@") are accepted and
+  listed in the PR body for the product owner.
+- **Q4: accepted — a logged set that starts no rest ends the running rest, in the engine**, and the pending rest
+  notification is cancelled with it. The `ShownRestAdversarialTests.supersetMember_*_asBuilt` tests and
+  `ModelOracle` change as sanctioned edits; each edit is listed in the G1 report. This is a reducer rule a peer
+  shares, but no payload changes, so `payload_version` is untouched; F17 inherits the rule.
+- **Q5: the scope stays as stated:** earlier exercises with a set left come back under "REMAINING". Correcting a
+  finished exercise mid-workout stays out (History, F13).
+- **One PR.** The implementer reports the net product count after the presentation stage and stops past ~850 net
+  product lines to propose the S9a/S9b split above; never past 1,000. No compressing code or comments to fit.
