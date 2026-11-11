@@ -643,3 +643,296 @@ three Nits. None blocks the merge; R1-1 is worth a small test before or soon aft
 
 **Runs:** H5 and H6 were not run on the simulator or in the UI tests. A grep shows that no test in either references
 `onSettingsRoute` or activates Settings' Diagnostics. The full gate is the coordinator's.
+
+## S2 — G3 round 1
+
+**S2: G3 review (round 1, 2026-11-10), of `git diff da6470d...4ae944b`** (implementation `a472372`, notes `f40dc55`,
+G2's tests `4ae944b`). I checked it against the brief's "### S2" (criterion 1's program part, 3 and 5; N11–N18), the
+"Rulings before G1" (A2, A4), `docs/engineering-standards.md`, `docs/architecture.md` and the seven review points. I ran
+`/code-review` at high and triaged its findings below. The review is read-only: I read files with `git show 4ae944b:…`
+and ran the host tests on a `git archive` copy in my scratchpad. No file in the worktree changed except this one. I
+left out G2's three findings (F14-S2-G2-1 to -3), because the concurrent fix round owns them.
+
+**Verdict: APPROVED WITH SHOULD-FIXES. 0 Blocking, 4 Should fix, 8 Nits.** Ruling A4 is built as ruled: GRDB uses one
+`queue.write`, it is proven by a commit counter and by G2's refusing triggers, and the fake agrees. The CSV's shape,
+quoting, formula guard and BOM are correct and covered by two independent RFC 4180 readers. No module-boundary,
+UIKit, `Task.detached` or force-unwrap violation. The four Should-fixes are small, and two of them (S2 and S3) close
+flakiness or glitch vectors before they reach the nightly lane.
+
+### What holds (verified)
+
+- **`switchUnits`, one transaction (A4).**
+  - `GRDBSettingsRepository.switchUnits` (`:38–49`) does the read-before, the upsert and
+    `GRDBProgramRepository.convertActive` in one `queue.write`. A throw anywhere rolls both back: the program's own
+    `ProgramRows` checks, an unreadable active program, or a trigger. `grdb_oneTransaction` counts exactly one commit,
+    and G2 rolled back byte for byte with triggers on both tables.
+  - **GRDB and the fake agree on every observable rule**:
+    - With no row, both compare against `Settings.default`: GRDB's `fetch` returns `.default`, and the fake holds
+      `.default` with `isRow == false`.
+    - Same units convert nothing.
+    - With no active program, only the settings are written.
+    - Only the active program converts.
+    - Equipment includes deleted exercises (GRDB selects every `exercise` row; the fake reads `rows`).
+    - G2's lb → kg → lb → kg → kg differential passes.
+  - The fake checks the codec first, converts next (the only step that can throw), and writes the settings last.
+    That keeps "both or neither" for failures. Its two-lock race is Nit N5.
+  - `convertActive` writes through `write(ProgramRows(…))`, as `update` does, so only changed rows are touched and
+    `observeActive` hears one change.
+- **The 11 doubles.** Each forwards to its base, as its `seedIfAbsent` does (`ProbedSettings` and the AppRoot probe
+  also journal), or is a no-op or throwing stub that matches its own `save`. `ScriptedSettings` routes the switch
+  through `save`'s hold-and-refuse script, and `WatchedSettings` records switches separately. None changes an
+  existing test's meaning.
+- **`UnitSwitch.convert`** is pure, 36 lines, idempotent (property-tested at 200 seeds by G2), with steps floored at
+  one grid step and `nil` kept as `nil`. Assigning fields without `Slot.init` is safe, as the doc says: a rounded
+  non-negative load stays non-negative, and a step stays at least one grid step.
+- **CSV (N13–N15).**
+  - The header is per unit, and rows end with CRLF.
+  - Quoting is by Unicode scalar, so a quote followed by a combining mark is still doubled.
+  - The formula guard covers `= + - @ \t \r` on the three free-text columns only. `date`, `time`, `kind` and numbers
+    are never prefixed, and a negative weight stays a number.
+  - Weights are rounded to hundredths, away from zero, with no `-0`.
+  - The BOM is EF BB BF, written once by the writer and never by `render`.
+  - Dates use the lifter's calendar and come out as ISO Gregorian days, even under Buddhist, Persian and Japanese
+    calendars (G2).
+- **The ShareLink / Transferable lifecycle (A2, N16, N18).**
+  - `FileRepresentation(exportedContentType: .commaSeparatedText)` calls `write` only when a destination is
+    picked.
+  - `SentTransferredFile(url)` uses the default `allowAccessingOriginalFile: false`, so the system hands the
+    receiver a copy. Clearing `Export/` when Settings goes away (`run()`'s end, only for the latest run) therefore
+    cannot pull the file from under a transfer that is still going.
+  - The write runs off the main actor (a `nonisolated static` closure), and the workouts' dependency is captured
+    whole and resolved only then.
+  - FeatureSettings imports `CoreTransferable` and `UniformTypeIdentifiers`, never UIKit.
+  - The log message carries an error description, no health data.
+- **Accessibility.** The plate sheet's tree is pinned exactly at four sizes (xSmall to accessibility5):
+  - the bar is one adjustable element with a spoken value;
+  - "Plates you own" is a heading;
+  - each plate is a toggle named by its spoken weight;
+  - then the empty line, "Reset to standard" and "Done".
+
+  No stop is under 44 pt or overlaps another. The disabled "Bar and plates" row is one dimmed button whose line says
+  why. The export row is one button, "Export data, CSV", with its line as the hint. A failed switch's line differs
+  from S1's, so S1b's `onChange(of: problem)` announcement fires for it too.
+- **Copy.** All 17 new strings are in `SettingsCopy+Plates` and `SettingsCopy+Export`, each with a translator
+  comment. Spoken text is copy ("Export data, CSV"). The file name's comment warns translators to keep it a valid
+  name. The `"Export"` path literal exemption in `ModuleCopyTests` is a path that is never drawn. **Confirmed**
+  (standards §7: the reviewer confirms each exemption).
+- **Test quality.** The added tests contain no sleeps, `Task.yield` loops or `asyncAfter`. The hosted trees use exact
+  equality, and the store tests assert bytes and rows, not calls. The one flakiness vector is S2 below.
+- **Host run (my copy at `4ae944b`)**: `swift test --enable-code-coverage --filter "FeatureSettingsTests|SwitchUnits|UnitSwitch|CSVExport|SettingsRepository|InMemoryContract"`
+  (logs: `f14-s2-g3-host.log` in my scratchpad):
+  - **Result:** exit 0, with three test runs:
+    - 41 tests, 1 known issue;
+    - 49 tests;
+    - 94 tests in 14 suites, 2 known issues (G2-1 and G2-2, being fixed).
+  - **Host coverage of the new logic:**
+    - `UnitSwitch` 100 %;
+    - `CSVExport` 94.3 %;
+    - `PlatesPresentation` 100 %;
+    - `SettingsStore+Plates` 97.4 %;
+    - `SettingsStore+Export` 82.5 %;
+    - `ExportFile` 89.5 %;
+    - `WorkoutExport` 26.7 %.
+
+  I did not run the simulator. The G1 gate (`check.sh` full, exit 0) and G2's hosted runs are the evidence for the
+  views.
+
+### Blocking
+
+None.
+
+### Should fix
+
+**S1. The settings contract has no `switchUnits` clause.**
+- **Where:** `LedgerKit/Sources/LedgerTestSupport/Persistence/SettingsRepositoryContract.swift:12–20`.
+- **What's wrong:** ruling A3 set the pattern: a new `SettingsRepository` requirement comes with contract clauses
+  (`seedIfAbsent` got two). `switchUnits` got none. Its settings-only behaviour is pinned only by `SwitchUnitsTests`,
+  which builds the two concrete stores by hand:
+  - the settings are saved, and `observe` emits them;
+  - same units is an ordinary save;
+  - a NaN weight is refused, and nothing is written.
+
+  F28's iCloud-backed repository, or any third implementation, would not be held to it.
+- **Fix:** add three clauses that need no program store:
+  1. "switchUnits saves the settings and observe emits them";
+  2. "switchUnits with the stored units is a save";
+  3. "switchUnits refuses what save refuses, and writes nothing" (reuse `refusesNaN`'s settings).
+
+  The conversion half stays in `SwitchUnitsTests`, which needs a program store.
+
+**S2. Two exports at once race on one directory and one path, and G2's `export_twoAtOnce` can flake.**
+- **Where:** `LedgerKit/Sources/FeatureSettings/Export/ExportFile.swift:26–34`;
+  `Tests/FeatureSettingsTests/Adversarial/PlatesExportAdversarialTests+Export.swift:83`.
+- **What's wrong:** `write` runs `clear(directory)`, then `createDirectory`, then `createFile` at a fixed name, all
+  synchronously on the cooperative pool. Two calls can run truly in parallel: the share sheet loading the
+  representation twice, or share, cancel and share again during a slow write. If B's `clear` lands between A's
+  `createDirectory` and A's `createFile`, A's `createFile` returns false and A throws `fileWriteUnknown`. If it lands
+  after A opened its handle, A writes to an unlinked inode and returns a path that holds B's file. Fifteen green
+  repeats don't rule out a microsecond window. The test asserts the very outcome the race can break, so it is a
+  latent P1 flake under standards §9.
+- **Fix:** serialise the writer. For example, make `ExportFile`'s write go through a small `actor ExportWriter` held
+  by the store and captured by `WorkoutExport.write`, so clearing and writing are one critical section. Or write each
+  export to `Export/<uuid>/` with `@Dependency(\.uuid)` and clear only on the store's run end. Keep G2's test; it then
+  passes by construction.
+
+**S3. The plate sheet's content goes blank while it animates away.**
+- **Where:** `LedgerKit/Sources/FeatureSettings/Views/SettingsScreen.swift:18–26`.
+- **What's wrong:** the sheet is `.sheet(isPresented:)`, and its content is `if let sheet = model.platesSheet`. "Done"
+  and "Cancel" set `plates = nil` first, so the model's `platesSheet` is nil during the dismissal animation. SwiftUI
+  re-evaluates the content closure, and an empty sheet slides down. The hosted tests draw `PlatesParts`, not the
+  presentation, so no test sees it.
+- **Fix:** `.sheet(item:)` keeps the last item's content through the dismissal. Make `PlatesModel` (or a small
+  wrapper keyed on the draft's units) `Identifiable` and bind `item:` with the same `cancelPlates` setter. The custom
+  `isPresented` Binding then goes away.
+
+**S4. Only the active program is converted; every other program keeps the old unit's grid.**
+- **Where:** `LedgerKit/Sources/LedgerPersistence/Repositories/GRDBProgramRepository.swift:144`
+  (`convertActive`), `LedgerKit/Sources/LedgerFakes/InMemoryProgramRepository.swift:119`.
+- **What's wrong:** this follows criterion 1's words ("in the active program"), so it is not a defect against the
+  brief. But weights are stored as unit-free grams. A lifter with blocks A (active) and B switches lb → kg: A's
+  135 lb becomes 60 kg, while B keeps 61.235 kg loads and 2.27 kg steps. When B is activated later, Today and the Day
+  editor show off-grid weights, and nothing will ever convert them (the switch has already happened).
+- **Fix (needs the orchestrator's ruling, so not blocking):** either convert every live program in the same
+  transaction (`SELECT id FROM program WHERE deleted_at IS NULL`, the same loop, so cheap), or amend criterion 1 to
+  say other programs stay as they are, and record it as a known limitation for Pete.
+
+### Nits
+
+**N1. N17's memory measurement cannot catch the regression it names.**
+- **Where:** `Tests/FeatureSettingsTests/ExportPerformanceTests.swift:65–70`; deviation 6 in the notes.
+- **What's wrong:**
+  - **What it measures:** `phys_footprint` after the write minus before it, so freed transient allocations never
+    show.
+  - **What it leaves out:** the input `[WorkoutState]` is built before `before`, and the product's
+    `workouts(in: distantPast..<distantFuture)` read and the sorted copy (`ExportFile.swift:35`) are not measured at
+    all. The real peak grows with the whole history.
+  - **Why it can't fail:** even a true peak would not tell streaming from rendering. 10,000 rows of about 60 bytes is
+    about 0.6 MB as one `String`, well under 5 MB.
+- **Ruling on the deviation:** acceptable as a smoke figure. It isn't a budget proof, and the time budget is the
+  meaningful half.
+- **Fix:**
+  - **Brief:** amend N17 to "footprint retained after the write" (or drop the memory half).
+  - **If a real peak is wanted:** sample `phys_footprint` on a background task during the write, or measure the
+    whole export path through the store with an `XCTMemoryMetric` test.
+  - **Time budget:** 165 ms against 200 ms on the Mac host leaves a thin margin for a shared runner. Take the
+    median of 5 runs.
+
+**N2. The export silently omits damaged workouts.**
+- **Where:** `SettingsStore+Export.swift:32`.
+- **What's wrong:** `workouts(in:)` reads with `strict: false`, so a row this version cannot decode is logged and
+  dropped. The file says "Every set you logged". This is the same rule History uses, so it is acceptable for M1.
+- **Fix:** either have the writer log how many workouts were written against the stored count, or note the rule in
+  the row's doc. Worth a line in the notes.
+
+**N3. The file's name and the export are rebuilt on every `show()`.**
+- **Where:** `SettingsStore.swift:185`.
+- **What's wrong:** each redraw reads `date.now` and builds the localized name, and the name is frozen at the last
+  redraw. Settings left open past midnight shares `workouts-<yesterday>.csv`.
+- **Fix:** compute the name inside the `write` closure (the `SharePreview` title can stay the redraw's), or key the
+  export on the units only.
+
+**N4. `GRDBSettingsRepository.switchUnits` swallows every error of its read-before.**
+- **Where:** `GRDBSettingsRepository.swift:43`.
+- **What's wrong:** `try? Self.fetch(database)` has a comment, but it also hides a `DatabaseError` (I/O, corruption),
+  not only an unreadable payload. Those are converted as if the units had changed.
+- **Fix:** catch only `LedgerPersistenceError.malformedColumn` and decoding errors, and rethrow anything else.
+
+**N5. The fake's `switchUnits` compares and writes under two separate locks.**
+- **Where:** `InMemorySettingsRepository.swift:50–55`.
+- **What's wrong:** two concurrent switches (kg, lb) can both read lb. One converts the program to kg, and the other
+  then stores lb, so the program ends in kg under lb settings. GRDB serialises them. The store never runs two saves
+  at once, so no test hits it today. The doc says "no write can fail between them" but not that they cannot
+  interleave.
+- **Fix:** do the comparison, `programs?.convertActive` and the settings write inside one `state.write` closure.
+  Nesting programs' lock inside settings' lock is the only nesting, so there is no ordering hazard. Or say so in the
+  doc.
+
+**N6. A failed switch's draft and "Try again" edge cases.**
+- **Where:** `SettingsStore+Plates.swift:16, 45`; `SettingsStore.swift:130`.
+- **What's wrong:**
+  1. The lifter taps KG and opens the plate sheet at once, and the switch then fails. The sheet keeps editing kg
+     while the screen is back in lb. "Done" saves the kg inventory, which is correct by `draft.units`, and clears
+     the failure line through `change(to:)`.
+  2. If a switch ever throws after its commit, "Try again" sends `.setUnits(kg)` while `shown.units == .kg`.
+     `change(to:)` returns early, and the line stays. GRDB returns, rather than throws, after a commit, so this is
+     only theoretical today.
+- **Fix:**
+  - For the draft: close the sheet (`plates = nil`) when a failed switch reverts the units it was opened in.
+  - For "Try again": clear `failedSwitch` and `saveFailed` when `shown.units` already equals it.
+
+**N7. `CSVExport.render` is quadratic.**
+- **Where:** `CSVExport.swift:57`.
+- **What's wrong:** `reduce(header) { $0 + lines(…) }` copies the accumulated string on every workout. It is used by
+  tests only today, and they render 10,000-set logs.
+- **Fix:** `reduce(into: header(units:)) { $0 += lines(…) }`.
+
+**N8. The sheet's chrome is outside every hosted test.**
+- **Where:** `Tests/FeatureSettingsTests/PlateInventorySheetTests.swift`.
+- **What's wrong:** the tree and snapshots read `PlatesParts` (page and foot). `SheetChrome`'s title and "Cancel",
+  and the presentation through `SettingsScreen`, are tested nowhere in FeatureSettings. "Cancel" sending
+  `.cancelPlates` is covered only through the store.
+- **Fix:** one hosted test that draws `SettingsScreen` with `platesSheet` set and activates "Cancel". It would also
+  catch a regression of S3's binding.
+
+### Coverage (FeatureSettings 96.97 %, down from S1b's 98.81 %)
+
+**Acceptable.** Strictly, DoD §12 says "coverage does not decrease", and this slice lowers FeatureSettings by
+1.84 points. But the drop comes from code that unit tests cannot reach, not from untested behaviour:
+- **Where the drop comes from:** the slice adds 605 coverable lines, of which 37 are uncovered (S1b had 12 uncovered
+  of 1,013 lines; now 49 of 1,618).
+- **What the host shows uncovered among the new logic files:**
+  - `WorkoutExport.transferRepresentation` (`:21–25`): only the system's share sheet calls it, and the nightly UI
+    test runs outside coverage.
+  - `WorkoutExport.unavailable`'s throwing closure (`:28–30`).
+  - `ExportFile.write`'s `createFile` failure and its close-on-error branch (`:30, 41–43`).
+  - The store's export catch (`SettingsStore+Export.swift:35–37`) and `clearExports`' catch (`:46`).
+  - The remainder are views and their guard returns, which the iOS-hosted suites cover.
+- **New behaviour:** about 94 % covered, and every rule in it at 100 %.
+- **Threshold:** 70 %.
+
+**One cheap test would claw back the meaningful part.** Run the store's export over a `WorkoutRepository` whose
+`workouts(in:)` throws, and assert three things:
+1. `write()` rethrows;
+2. one error line is logged under "settings" (the injected logger);
+3. no file is left in the directory.
+
+That covers N16's "a failure is logged", which no test asserts today. Record the accepted decrease in the notes.
+
+### Review points
+
+1. **Module boundaries:** clean.
+   - `UnitSwitch` and `CSVExport` are in the Domain.
+   - GRDB stays in Persistence.
+   - FeatureSettings imports Domain, Dependencies, Design, CoreTransferable and UTType, and no UIKit (N18).
+   - `CSVReader` is in LedgerTestSupport.
+2. **Concurrency:**
+   - The write runs off the main actor, every captured value is `Sendable`, and there is no detached or
+     fire-and-forget task.
+   - The clock goes through `@Dependency(\.date)`.
+   - The only defect is S2's parallel writers. Optionally, `ExportFile.write`'s loop could call
+     `Task.checkCancellation()` (standards §4) when the system cancels a transfer.
+3. **Error handling:**
+   - Failures are logged under "settings".
+   - The switch's failure maps to its own line and retry.
+   - The export's failure goes to the system sheet (ruling A2).
+   - The `try?` uses have comments; see N4.
+4. **Design fidelity:** tokens only. Ink for "Done" (no accent, C28), ghost for Reset, `SheetChrome`,
+   `FilterChipRow` and `StepperField`. The references were re-recorded and looked at.
+5. **Accessibility:**
+   - The trees are pinned exactly.
+   - Every stop is at least 44 pt up to accessibility5.
+   - The disabled row says why.
+   - The export has a spoken label and a hint.
+   - The failed switch is announced.
+   - S3 is visual only.
+6. **Test quality:** behavioural, with no sleeps. S2's race is the one flakiness vector, and N8 is a gap.
+7. **Brief compliance:**
+   - **Criterion 1 (program part):** `UnitSwitchTests`, `SwitchUnitsTests`, `SettingsUnitsStoreTests`.
+   - **Criterion 3:** `SettingsPlatesExportStoreTests`, the sheet's tree and snapshots.
+   - **Criterion 5:** the export's bytes against BOM + `render`, oldest first; the nightly UI test.
+   - **N11:** reworked by A4; G2-2 amends its copy.
+   - **N12–N16:** tested.
+   - **N17:** nightly, with N1's caveat.
+   - **N18:** source test with no UIKit, plus the UI test.
+
+   Every criterion has a test.
