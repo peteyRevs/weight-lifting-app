@@ -108,6 +108,14 @@ final class WorkoutStore {
     @ObservationIgnored var deferredEnd: WorkoutState?
     /// The records the workout holds that were played, or held when the bests arrived: none is played twice.
     @ObservationIgnored var heldRecords: Set<HeldRecord> = []
+    /// The exercises whose bests were read, or asked for and refused: an exercise a swap brings in outside
+    /// it is read once (`readSwappedBests()`, F10 S8b).
+    var bestsAsked: Set<ExerciseID> = []
+    /// The swap sheet's exercise and what was read for it (`WorkoutStore+Swap.swift`); nil until the first
+    /// "Swap exercise".
+    var swap: SwapState?
+    /// The read the root's `.task(id:)` runs for the swap sheet: each "Swap exercise" makes the next.
+    var swapAttempt = 0
 
     @ObservationIgnored @Dependency(\.workoutSession) var session
     @ObservationIgnored @Dependency(\.date) var date
@@ -118,6 +126,7 @@ final class WorkoutStore {
     @ObservationIgnored @Dependency(\.announcements) var announcements
     @ObservationIgnored @Dependency(\.continuousClock) var clock
     @ObservationIgnored @Dependency(\.statsQueries) var stats
+    @ObservationIgnored @Dependency(\.exerciseRepository) var exercises
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
 
     /// The injected logger under the module's own category (standards §8); a disabled logger stays disabled.
@@ -211,6 +220,7 @@ extension WorkoutStore {
             }
             let missed = isHearingTheSession ? [] : missedHaptics(before: live)
             workout = .loaded(live)
+            closeSwapIfStale(on: live)
             if !isHearingTheSession {
                 isHearingTheSession = true
                 wake?.yield()
@@ -221,14 +231,19 @@ extension WorkoutStore {
         guard !Task.isCancelled, exit == nil else {
             return
         }
+        loseTheSession()
+    }
+
+    /// The session's updates ended while the cover was up: the store has lost its source and says so. The
+    /// taps still waiting are given up with it, and so is a "Minimize" that waited for them, so that the
+    /// failed screen's "Close" closes the cover (F10-S5-7). So are a save that waited for them, and either
+    /// sheet, which has no workout to ask about.
+    private func loseTheSession() {
         logger.log.error("The session's updates ended while the workout's cover was up")
-        // The store has lost its source: the taps still waiting are given up with it, and so is a "Minimize"
-        // that waited for them, so that the failed screen's "Close" closes the cover (F10-S5-7). So are a
-        // save that waited for them, and the sheet, which has no workout to ask about.
         emptyQueue()
         exitWhenDrained = nil
         isSaving = false
-        dismiss([.finish])
+        dismiss([.finish, .swap])
         workout = .failed(WorkoutStoreError.updatesEnded)
         settled?.wake.yield()
     }

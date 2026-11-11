@@ -98,6 +98,7 @@ nonisolated extension WorkoutPresentation {
             exerciseIndex: index,
             eyebrow: WorkoutCopy.exercise(index + 1, of: state.exercises.count, locale: context.locale),
             title: exercise.name,
+            swap: canSwap(exercise) ? WorkoutCopy.swapExercise : nil,
             targetLabel: WorkoutCopy.target,
             target: target(of: exercise, units: units, locale: context.locale),
             lastLabel: WorkoutCopy.last,

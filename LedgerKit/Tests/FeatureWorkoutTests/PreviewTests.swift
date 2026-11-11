@@ -7,8 +7,8 @@
     import Testing
 
     /// Every `#Preview` in FeatureWorkout is a case of `WorkoutPreview` or, for the "End workout?" sheet
-    /// (F10 S7), of `FinishSheetPreview`, or, for the receipt (F10 S7b), of `ReceiptPreview`, and every case
-    /// renders (the
+    /// (F10 S7), of `FinishSheetPreview`, or, for the receipt (F10 S7b), of `ReceiptPreview`, or, for the swap
+    /// sheet (F10 S8b), of `SwapSheetPreview`, and every case renders (the
     /// convention F07's criterion 8 set for each module with previews).
     @Suite("Previews (FeatureWorkout)", .serialized, .tags(.feature))
     struct PreviewTests {
@@ -18,7 +18,7 @@
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
             let cases = WorkoutPreview.allCases.map(\.rawValue) + FinishSheetPreview.allCases.map(\.rawValue)
-                + ReceiptPreview.allCases.map(\.rawValue)
+                + ReceiptPreview.allCases.map(\.rawValue) + SwapSheetPreview.allCases.map(\.rawValue)
             #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(cases.count == Set(cases).count)
         }
@@ -32,6 +32,19 @@
             #expect(models.map(\.canSave) == [true, false, true, false])
             #expect(models.map(\.isEnabled) == [true, true, true, false])
             #expect(models[2].summary.hasSuffix("kg moved"))
+        }
+
+        @Test("Every preview of the swap sheet renders, and shows the state it is named for")
+        func swapSheet_previewsRender() throws {
+            for preview in SwapSheetPreview.allCases {
+                #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+            }
+            let models = try SwapSheetPreview.allCases.map { try #require($0.model, "\($0.rawValue)") }
+            #expect(models.map(\.rows.count) == [8, 8, 0, 0, 0])
+            #expect(models.map { $0.toggle?.isOn } == [false, true, nil, nil, nil])
+            #expect(models.map(\.message) == [
+                nil, nil, nil, "No alternatives for this exercise.", "Couldn't load alternatives."
+            ])
         }
 
         @Test("Every preview of the receipt renders, and shows the state it is named for")

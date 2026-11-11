@@ -30,6 +30,14 @@ extension WorkoutStore {
         guard isShowingWorkout else {
             return
         }
+        if case .swap = edit {
+            // "Use" answers only on the sheet that is up, and takes it down at once: a second tap, made
+            // while it goes, queues no second swap (F10 S8b, criterion 21).
+            guard dialog == .swap else {
+                return
+            }
+            dialog = nil
+        }
         queue.append(WorkoutTap(edit: edit, tappedAt: date.now))
         wake?.yield()
     }

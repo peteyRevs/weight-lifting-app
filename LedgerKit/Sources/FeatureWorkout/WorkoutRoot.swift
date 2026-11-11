@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// The cover's content (F10 S4, S5): the live workout as the session shows it, with the "End workout?" sheet
-/// (F10 S7) and the alerts of a discard, a change and a save that failed. It owns the store and runs its
-/// work: following the session and applying the page's taps for as long as the cover is up, the discard,
-/// the save, and the shown rest's time (F10 S6), each from a `.task`, so all end with the view.
+/// (F10 S7), the swap sheet (F10 S8b) and the alerts of a discard, a change and a save that failed. It owns
+/// the store and runs its work: following the session and applying the page's taps for as long as the cover
+/// is up, the discard, the save, the shown rest's time (F10 S6), and the swap sheet's read and the bests of
+/// an exercise a swap brings in (F10 S8b), each from a `.task`, so all end with the view.
 ///
 /// It closes nothing itself. When the store says the cover is done (`WorkoutStore.exit`), `onExit` tells
 /// the launcher, which takes the cover down and hands the app its route.
@@ -33,6 +34,10 @@ struct WorkoutRoot: View {
         // VoiceOver's escape are "Keep lifting".
         .sheet(isPresented: shows(.finish, else: .keepLifting)) {
             StoreFinishSheet(store: store)
+        }
+        // "Swap exercise" (F10 S8b). A swipe down and VoiceOver's escape are "Cancel".
+        .sheet(isPresented: shows(.swap, else: .cancelSwap)) {
+            StoreSwapSheet(store: store)
         }
         // The failed save's alert, carried by a view whose identity is the save's attempt: after "Try
         // again" the alert of the next failure is a new presentation, never the one that is still going.
@@ -69,6 +74,12 @@ struct WorkoutRoot: View {
         }
         .task(id: store.bestsSubject) {
             await store.readBests()
+        }
+        .task(id: store.swapAttempt) {
+            await store.loadSwap()
+        }
+        .task(id: store.unreadBests) {
+            await store.readSwappedBests()
         }
         .onChange(of: store.exit) { _, exit in
             if let exit {
@@ -129,6 +140,18 @@ struct StoreFinishSheet: View {
     var body: some View {
         if let model = store.finishSheet {
             FinishSheet(model: model, send: store.send)
+        }
+    }
+}
+
+/// The swap sheet of the store's workout. Its body reads `WorkoutStore.swapSheet`, so the sheet shows its
+/// rows as soon as they are read, and the switch as it is turned.
+struct StoreSwapSheet: View {
+    let store: WorkoutStore
+
+    var body: some View {
+        if let model = store.swapSheet {
+            SwapSheet(model: model, send: store.send)
         }
     }
 }

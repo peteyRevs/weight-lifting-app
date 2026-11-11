@@ -6,12 +6,39 @@ import SwiftUI
 /// v2 draws it on the ground with no card behind it, and so does this.
 ///
 /// The page's one orange is the shown row's (`SetRow`'s `active` state: its label, its rule and its check's
-/// ring); the eyebrow, "TARGET" and "Repeat" are ink.
+/// ring); the eyebrow, "TARGET", "Repeat" and the swap button are ink.
 struct ExerciseCard: View {
     let model: ExerciseCardModel
-    let send: (WorkoutEdit) -> Void
+    let send: (WorkoutAction) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: LedgerSpacing.xl) {
+            titleRow
+            // More room between the two facts than inside one (`FactLine` stacks with `xs`), so that at every
+            // size "Last" stands nearer its own value than the target's.
+            VStack(alignment: .leading, spacing: LedgerSpacing.m) {
+                FactLine(label: model.targetLabel, value: model.target)
+                last
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                SetRowList(model: model) { send(.edit($0)) }
+                PillButton(model.addSet, style: .ghost, flush: .leading) {
+                    send(.edit(.addSet(exerciseIndex: model.exerciseIndex)))
+                }
+                .accessibilityIdentifier("workout.card.addSet")
+            }
+        }
+    }
+
+    /// The place and the name, with "Swap exercise" at the trailing edge, level with the top of the place
+    /// (v2), while the exercise can be swapped. At the accessibility sizes the button stands under the name,
+    /// so the name keeps the whole width and never wraps under the button.
+    private var titleRow: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: LedgerSpacing.m))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: LedgerSpacing.m))
+        return layout {
             VStack(alignment: .leading, spacing: LedgerSpacing.s) {
                 Text(model.eyebrow)
                     .ledgerFont(.caption)
@@ -22,18 +49,10 @@ struct ExerciseCard: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("workout.card.title")
             }
-            // More room between the two facts than inside one (`FactLine` stacks with `xs`), so that at every
-            // size "Last" stands nearer its own value than the target's.
-            VStack(alignment: .leading, spacing: LedgerSpacing.m) {
-                FactLine(label: model.targetLabel, value: model.target)
-                last
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                SetRowList(model: model, send: send)
-                PillButton(model.addSet, style: .ghost, flush: .leading) {
-                    send(.addSet(exerciseIndex: model.exerciseIndex))
-                }
-                .accessibilityIdentifier("workout.card.addSet")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let swap = model.swap {
+                IconPillButton(swap, icon: .swap) { send(.openSwap) }
+                    .accessibilityIdentifier("workout.card.swap")
             }
         }
     }
@@ -45,7 +64,7 @@ struct ExerciseCard: View {
             FactLine(label: model.lastLabel, value: model.last)
             Spacer(minLength: 0)
             if let title = model.repeatLast {
-                PillButton(title) { send(.repeatLast(exerciseIndex: model.exerciseIndex)) }
+                PillButton(title) { send(.edit(.repeatLast(exerciseIndex: model.exerciseIndex))) }
                     .accessibilityIdentifier("workout.card.repeat")
             }
         }

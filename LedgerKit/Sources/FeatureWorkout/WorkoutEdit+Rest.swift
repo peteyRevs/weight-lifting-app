@@ -4,6 +4,15 @@ import LedgerDomain
 /// What the rest panel's two buttons come to (F10 S6, criterion 5): one event each. In a file of its own
 /// for the plan's length.
 nonisolated extension WorkoutEditPlan {
+    /// "+30s" or "Skip rest", each as below; any other edit is not the panel's and comes to nothing.
+    mutating func answerRestPanel(_ edit: WorkoutEdit, in state: WorkoutState, at now: Date) {
+        switch edit {
+        case .extendRest: extendRest(in: state, at: now)
+        case .skipRest: skipRest(in: state)
+        default: break
+        }
+    }
+
     /// Rule 9 and decision #7: "+30s" carries what the panel showed at `now`, as the clock rule asks of the
     /// device that knows the screen (ADR-004): a rest still running, which the engine then extends, or
     /// "Rest over", after which it starts a rest of 30 s at `now`. With no rest shown there is no panel and

@@ -169,7 +169,7 @@ nonisolated struct WorkoutCopyTests {
     @Test("No text holds the product's name")
     func noText_namesTheProduct() throws {
         let catalog = try StringCatalog(module: "FeatureWorkout")
-        #expect(catalog.keys.count == 82)
+        #expect(catalog.keys.count == 97)
         #expect(!catalog.keys.contains { $0.localizedCaseInsensitiveContains("ledger") })
     }
 }

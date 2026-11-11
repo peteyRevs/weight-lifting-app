@@ -23,6 +23,9 @@ nonisolated struct ExerciseCardModel: Equatable, Sendable {
     let eyebrow: String
     /// The exercise's name, as the workout holds it: data, not copy.
     let title: String
+    /// "Swap exercise", the round button beside the name; nil once a set of the exercise is logged (F10 S8b,
+    /// ruling Q2), and then no button is drawn.
+    let swap: String?
     /// "TARGET".
     let targetLabel: String
     /// "5 × 5 @ 185 lb · RPE 8".
