@@ -379,3 +379,16 @@ Each will be built to its recommended default until it is answered.
 - `Apps/LedgerUITests/Smoke.swift`, `Support/LaunchedApp.swift`, `WorkoutSuperset.swift` (on #92), `WorkoutSwap.swift`, `TodayAuditAdversarial.swift`, `OnboardingAdversarial+Audit.swift` (the exclusion pattern)
 - `TestPlans/PR.xctestplan`, `TestPlans/Nightly.xctestplan`, `scripts/check.sh`, `.github/workflows/pr.yml`, `.github/workflows/nightly.yml` (the chores)
 - `LedgerKit/Tests/FeatureWorkoutTests/Adversarial/WorkoutAdversarialWaiting.swift`, `WorkoutRestAdversarialTests.swift` (the `chore(test)`)
+
+## Rulings on the F15 plan (orchestrator, 2026-11-11)
+
+The product owner delegated these calls (autopilot since 2026-11-10); each can be overruled later.
+
+- **Q1–Q12: the planner's defaults stand** as written above.
+- **Order:** (1) `chore(ci)` sharding the PR iOS tests into two parallel jobs plus coverage (Q10; the repo is public, so
+  the extra macOS job costs no money); (2) `chore(test)` for the flakes and the nightly, cut after F10 S9 (#92) merges so
+  `WorkoutLogging` :48 is re-run against it; (3) F15 S1; (4) F15 S2; (5) `chore(snapshots)` beside S2.
+- **Budgets:** S1 and S2 stop at ~950 lines (test code counted) and propose the split; never past 1,000; no
+  compressing code or comments to fit.
+- **Product fixes the audits find** (S2's reserve): fix in S2 when small and local; anything that changes a screen's
+  layout or copy is listed in the PR body for the product owner.
