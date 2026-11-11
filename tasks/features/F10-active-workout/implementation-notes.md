@@ -6609,6 +6609,25 @@ under "REMAINING"). Each was looked at. Against v1's legend: the current member'
 orange letter, the other on a light fill with a muted letter, and the target sits at the trailing end. At
 `.accessibility3` the target stands under the name. The header references are unchanged.
 
+### Product lines (Swift, not blank, not comment; against `18f1201`)
+
+FeatureWorkout +520 −45 = 475, LedgerDomain +19 −13 = 6: **481 net** (plan 523; stop at ~850). `ModelOracle`
+(`LedgerTestSupport`) +4, tests and the UI test not counted.
+
+### Runs (2026-11-11)
+
+- Host: `LedgerDomainTests` and `LedgerSyncTests` 1,564 tests passed; `FeatureWorkoutTests` and
+  `ModuleCopyTests` 560 tests passed (`--no-parallel`; see the follow-up below for the parallel run).
+- Simulator through the lock: `FeatureWorkoutTests` (686 tests) with recording on, which recorded the 5 new and 2
+  changed references and found the legend's lost activation and two G2 tests to edit; then the 7 touched suites
+  (54 tests) passed.
+- The full gate (`scripts/check.sh`) at `5503275`: exit 0. FeatureWorkout 98.78 %, LedgerDomain 99.39 %.
+- UI (Nightly plan, through the lock): `WorkoutSuperset`, both `WorkoutRest` tests, the three
+  `WorkoutLoggingAdversarial` tests and `WorkoutLogging.test_sampleWorkout_atAnAccessibilitySize_readsItsStopsInOrder`
+  passed. `WorkoutLogging.test_sampleWorkout_stepsLogsUndoesAddsAndJumps` fails at :48 ("the next exercise's name
+  is on screen", after the bench press's sixth set). That is before its superset part, and it **fails the same way
+  on `main` (`18f1201`)**, run in a scratch worktree: it predates S9, and is for the follow-ups list.
+
 ### Inputs for later
 
 - **F17/F18 (watch):** Q4 is a reducer rule both devices share; a peer on an older build would keep the rest a
