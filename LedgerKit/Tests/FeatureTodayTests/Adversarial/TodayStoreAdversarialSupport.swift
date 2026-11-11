@@ -120,6 +120,10 @@ nonisolated struct ScriptedSettings: SettingsRepository {
     func seedIfAbsent(_: Settings) async throws {
         throw NotScripted()
     }
+
+    func switchUnits(_: Settings) async throws {
+        throw NotScripted()
+    }
 }
 
 nonisolated struct ScriptedExercises: ExerciseRepository {

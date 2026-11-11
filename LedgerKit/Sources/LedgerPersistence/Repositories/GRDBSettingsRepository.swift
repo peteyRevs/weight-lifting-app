@@ -28,15 +28,35 @@ public struct GRDBSettingsRepository: SettingsRepository {
         let payload = try SettingsCodec.encode(settings)
         let updatedAt = ColumnCodec.timestamp(now())
         try await queue.write { database in
-            try database.execute(
-                sql: """
-                INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
-                ON CONFLICT (id) DO UPDATE SET payload_version = excluded.payload_version,
-                    payload = excluded.payload, updated_at = excluded.updated_at
-                """,
-                arguments: [Self.rowID, SettingsCodec.version, payload, updatedAt]
-            )
+            try Self.upsert(payload: payload, updatedAt: updatedAt, in: database)
         }
+    }
+
+    /// Upserts the row as `save` does and, in the same transaction, converts the active program
+    /// (`GRDBProgramRepository.convertActive`) when the units stored before were not `settings.units` or could not
+    /// be read (F14 S2, ruling A4). Whatever throws, the program's checks included, rolls both back.
+    public func switchUnits(_ settings: Settings) async throws {
+        let payload = try SettingsCodec.encode(settings)
+        let updatedAt = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            // An unreadable row says nothing of the units the program is in: it is converted, as the lifter asked.
+            let before = try? Self.fetch(database)
+            try Self.upsert(payload: payload, updatedAt: updatedAt, in: database)
+            if before?.units != settings.units {
+                try GRDBProgramRepository.convertActive(to: settings.units, in: database, at: updatedAt)
+            }
+        }
+    }
+
+    private static func upsert(payload: Data, updatedAt: String, in database: Database) throws {
+        try database.execute(
+            sql: """
+            INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)
+            ON CONFLICT (id) DO UPDATE SET payload_version = excluded.payload_version,
+                payload = excluded.payload, updated_at = excluded.updated_at
+            """,
+            arguments: [rowID, SettingsCodec.version, payload, updatedAt]
+        )
     }
 
     /// Inserts the one row when there is none (`ON CONFLICT DO NOTHING`): a stored row, readable or not, keeps

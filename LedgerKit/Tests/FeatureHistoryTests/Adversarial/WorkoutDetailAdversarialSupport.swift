@@ -83,6 +83,10 @@ final nonisolated class EndingSettings: SettingsRepository {
         try await base.seedIfAbsent(settings)
     }
 
+    func switchUnits(_ settings: Settings) async throws {
+        try await base.switchUnits(settings)
+    }
+
     func observe() -> AsyncStream<Settings> {
         switch ending {
         case .atOnce:

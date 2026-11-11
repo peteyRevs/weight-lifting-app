@@ -150,6 +150,11 @@
             try await inner.seedIfAbsent(settings)
         }
 
+        func switchUnits(_ settings: LedgerDomain.Settings) async throws {
+            journal.note("settings.switchUnits")
+            try await inner.switchUnits(settings)
+        }
+
         func observe() -> AsyncStream<LedgerDomain.Settings> {
             inner.observe()
         }

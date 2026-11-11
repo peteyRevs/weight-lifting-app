@@ -85,7 +85,8 @@ struct SettingsSaveQueueAdversarialTests {
         let shownIsCommitted = scene.store.shown == Fixtures.settingsLb
         #expect(shownIsCommitted, "units and Plate math both show what is committed")
         #expect(scene.store.pending == nil)
-        #expect(scene.store.model?.problem == "Couldn't save that change.")
+        // The failed save was a switch of units (S2, ruling A4), whose line says nothing changed.
+        #expect(scene.store.model?.problem == "Couldn't change the units. Nothing was changed.")
     }
 
     /// F14-S1-2 (fixed in S1a fix round 1; the test describes the defect it pins against). A failed save puts back

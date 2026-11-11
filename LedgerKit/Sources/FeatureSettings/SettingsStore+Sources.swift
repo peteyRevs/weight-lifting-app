@@ -35,6 +35,7 @@ extension SettingsStore {
         if runNumber == number {
             self.saveMark = nil
             self.followMark = nil
+            clearExports()
         }
     }
 
@@ -113,8 +114,10 @@ extension SettingsStore {
     /// Saves the pending change, then the one made during that save, until what is pending is committed. Only one
     /// save runs at a time, whichever run started it, and a run whose task is cancelled starts no further save.
     ///
-    /// A failure puts the screen back to what is committed and drops every pending change, the ones made during the
-    /// failed save too (F14-S1-1, ruled), with the failure's line. Once idle after writing or failing, the saver has
+    /// A change of units is saved with `switchUnits`, which converts the program in the same write (ruling A4); any
+    /// other with `save`. A failure puts the screen back to what is committed and drops every pending change, the ones
+    /// made during the failed save too (F14-S1-1, ruled), with the failure's line: a failed switch's says nothing
+    /// changed and offers to try it again. Once idle after writing or failing, the saver has
     /// the row read afresh.
     private func savePending() async {
         guard !isSaving else {
@@ -132,8 +135,14 @@ extension SettingsStore {
             }
         }
         while let wanted = pending, wanted != committed, !Task.isCancelled {
+            // A change of units converts the program's weights in the same write (criterion 1, ruling A4).
+            let isSwitch = wanted.units != committed?.units
             do {
-                try await settings.save(wanted)
+                if isSwitch {
+                    try await settings.switchUnits(wanted)
+                } else {
+                    try await settings.save(wanted)
+                }
             } catch {
                 guard !Task.isCancelled else {
                     return
@@ -141,6 +150,7 @@ extension SettingsStore {
                 logger.log.error("A change to the settings was not saved: \(String(describing: error))")
                 pending = nil
                 saveFailed = true
+                failedSwitch = isSwitch ? wanted.units : nil
                 hasWrittenOrFailed = true
                 show()
                 return

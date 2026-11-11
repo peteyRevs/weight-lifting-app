@@ -173,6 +173,11 @@ public protocol SettingsRepository: Sendable {
     /// stored row is never touched, even one this app cannot read: a later version, or the lifter, may still
     /// read it.
     func seedIfAbsent(_ settings: Settings) async throws
+    /// Saves `settings` and, in the same write, converts the active program to `settings.units`
+    /// (`UnitSwitch.convert`, each slot by its exercise's equipment): both or neither (F14 S2, ruling A4). The
+    /// program is converted only when the stored units are not `settings.units`, or cannot be read; with no active
+    /// program only the settings are saved. Settings' unit control calls this, and `save` for every other change.
+    func switchUnits(_ settings: Settings) async throws
 }
 
 /// History aggregates (spec §6.1 "History", §7.7; decisions #3, #4, #15), over the workouts a

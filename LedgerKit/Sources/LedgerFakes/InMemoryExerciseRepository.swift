@@ -104,6 +104,11 @@
             state.read { $0.rows[id] != nil }
         }
 
+        /// Every stored exercise's equipment: what a switch of units converts a program's slots by.
+        func equipment() -> [ExerciseID: Equipment] {
+            state.read { $0.rows.mapValues(\.exercise.equipment) }
+        }
+
         /// The `exercise` row as the database writes it: its start loads in pounds, then kilograms, then its text
         /// (U+0000 is refused, as SQLite would cut the text short at it).
         private static func checkRow(of exercise: Exercise) throws(RepositoryError) {

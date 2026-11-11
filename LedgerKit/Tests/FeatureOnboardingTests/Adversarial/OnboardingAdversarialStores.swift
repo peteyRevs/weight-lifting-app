@@ -87,6 +87,11 @@ final nonisolated class ProbedSettings: SettingsRepository {
         try await base.seedIfAbsent(settings)
     }
 
+    func switchUnits(_ settings: Settings) async throws {
+        journal.note("settings.switchUnits")
+        try await base.switchUnits(settings)
+    }
+
     func observe() -> AsyncStream<Settings> {
         base.observe()
     }

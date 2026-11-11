@@ -10,6 +10,18 @@ nonisolated enum SettingsAction: Hashable, Sendable {
     case setPlateMath(Bool)
     case setAutoRest(Bool)
     case setWatchBuzz(Bool)
+    /// "Bar and plates": opens its sheet over the current unit's inventory (criterion 3).
+    case editPlates
+    /// The sheet's bar, stepped to this weight.
+    case setBar(Weight)
+    /// A plate size of the sheet switched on or off.
+    case setPlate(Weight, isOn: Bool)
+    /// "Reset to standard": the unit's standard bar and plates, in the sheet.
+    case resetPlates
+    /// "Done": the sheet's bar and plates saved, as any change is saved, and the sheet closed.
+    case savePlates
+    /// "Cancel", or the sheet swiped away: closed, nothing saved.
+    case cancelPlates
     /// A tap that asks the app to go somewhere: "Diagnostics", in Debug builds.
     case route(SettingsRoute)
 }

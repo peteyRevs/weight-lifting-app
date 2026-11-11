@@ -43,6 +43,9 @@ nonisolated struct ModuleCopyTests {
     /// What each audited module sets aside (`CopyAudit.Exemptions`; standards §7: the reviewer confirms each).
     /// A shared file in the sense of M1 convention 4: a feature lane adds only its own module's entry.
     static let exemptions: [String: CopyAudit.Exemptions] = [
+        // The export's directory under the temporary directory (F14 S2, N16): a path the app writes and empties, never
+        // drawn; the lifter sees only the file's name, which is copy.
+        "FeatureSettings": CopyAudit.Exemptions(literals: ["Export/ExportFile.swift": ["Export"]]),
         // The Debug menu's "Start sample workout" row and the seed program it starts.
         "FeatureWorkout": CopyAudit.Exemptions(debugOnly: ["WorkoutLauncher+Sample.swift"]),
         "LedgerAppKit": CopyAudit.Exemptions(

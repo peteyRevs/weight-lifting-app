@@ -112,6 +112,21 @@
             state.observe(\.active)
         }
 
+        /// What `SettingsRepository.switchUnits(_:)` writes to the programs, in one step: the active program with its
+        /// weights converted to `units` (`UnitSwitch.convert`), stored as `save` stores it, by the equipment the
+        /// exercise store gives (none without one: every slot then moves on the finest grid). No active program
+        /// writes nothing; a refusal leaves the state as it was.
+        func convertActive(to units: Units) throws {
+            let equipment = exercises?.equipment() ?? [:]
+            try state.write { current in
+                guard let active = current.active else {
+                    return
+                }
+                let converted = UnitSwitch.convert(active, to: units, equipment: equipment)
+                try Self.store(converted, in: &current, exercises: exercises)
+            }
+        }
+
         /// What `WorkoutRepository.materialize` writes to the programs, in one step, so no reader of this store
         /// sees half of a save: the misses of its `slotUpdates`, then its workout's program updates.
         func writeSave(misses slots: [Slot], exercises updates: [SlotID: ExerciseID], inProgram program: ProgramID?) {

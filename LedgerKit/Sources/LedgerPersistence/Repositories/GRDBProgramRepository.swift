@@ -138,6 +138,31 @@ public struct GRDBProgramRepository: ProgramRepository {
         return try ProgramRows.program(ColumnCodec.identifier(id), in: database)
     }
 
+    /// The active program with its weights converted to `units` (`UnitSwitch.convert`), written in the caller's
+    /// transaction as `update` writes a change: only the rows that changed. Each slot is converted by its exercise's
+    /// equipment, deleted exercises included. No active program writes nothing.
+    static func convertActive(to units: Units, in database: Database, at timestamp: String) throws {
+        guard let program = try fetchActive(database) else {
+            return
+        }
+        let rows = try Row.fetchAll(database, sql: "SELECT id, equipment FROM exercise")
+        let equipment = Dictionary(rows.compactMap(exerciseEquipment)) { first, _ in first }
+        let converted = UnitSwitch.convert(program, to: units, equipment: equipment)
+        try write(ProgramRows(converted), isActive: converted.isActive, in: database, at: timestamp)
+    }
+
+    /// An exercise row's id and equipment; nil for a row this app cannot read, whose slots then move on the finest
+    /// grid (`UnitSwitch.unknownEquipment`).
+    private static func exerciseEquipment(_ row: Row) -> (ExerciseID, Equipment)? {
+        guard let text = String.fromDatabaseValue(row["id"]),
+              let id: ExerciseID = try? ColumnCodec.identifier(text),
+              let kind = String.fromDatabaseValue(row["equipment"]).flatMap(Equipment.init(rawValue:))
+        else {
+            return nil
+        }
+        return (id, kind)
+    }
+
     /// What `save` and `update` write, in the caller's transaction: `rows` over the stored ones and, for an
     /// active program, the one active flag.
     private static func write(_ rows: ProgramRows, isActive: Bool, in database: Database, at timestamp: String) throws {

@@ -27,6 +27,7 @@
             let week = model.weekStart
             return [.heading(model.title)]
                 + (model.problem.map { [ViewStop.text($0)] } ?? [])
+                + (model.retry.map { [ViewStop.button($0.title)] } ?? [])
                 + [.heading("TRAINING")]
                 + units.options.map {
                     ViewStop(kind: .button, label: $0.spokenLabel, hint: units.detail, isSelected: $0.isSelected)
@@ -34,8 +35,18 @@
                 + [ViewStop(kind: .adjustable, label: rest.title, value: rest.spokenValue, hint: rest.detail)]
                 + [ViewStop(kind: .button, label: week.title, value: week.value, hint: week.detail)]
                 + model.switches.map { .toggle($0.title, isOn: $0.isOn, hint: $0.detail) }
-                + [.heading("DATA"), .text("Apple Health, Not connected"), .button("Diagnostics")]
+                + [plates(model.plates)]
+                + [.heading("DATA"), .text("Apple Health, Not connected")]
+                + [
+                    .button("Export data, CSV", hint: "Every set you logged, in your current units"),
+                    .button("Diagnostics")
+                ]
                 + [.text(model.about)]
+        }
+
+        /// "Bar and plates": one button, its title and line, dimmed while Plate math is off (criterion 3).
+        static func plates(_ row: PlatesRowModel) -> ViewStop {
+            ViewStop(kind: .button, label: "\(row.title), \(row.detail)", isEnabled: row.action != nil)
         }
 
         @Test(
@@ -67,7 +78,8 @@
         func targets_areAtLeast44Points(_ preview: SettingsPreview, _ size: DynamicTypeSize) {
             let targets = SettingsParts(preview: preview).placedStops(SnapshotAppearance(.dark, size))
                 .filter { [.button, .toggle].contains($0.stop.kind) }
-            #expect(targets.count == 7)
+            // The two units, the week's menu, three switches, Bar and plates, Export and Diagnostics, and Try again.
+            #expect(targets.count == (preview == .switchFailed ? 10 : 9))
             for target in targets {
                 #expect(
                     target.frame.width >= 44 - 0.001 && target.frame.height >= 44 - 0.001,
@@ -81,8 +93,8 @@
             var sent: [SettingsAction] = []
             let week = SettingsPreview.kilograms.model().weekStart.title
             SettingsParts(preview: .kilograms, send: { sent.append($0) }).withAccessibilityElements { elements in
-                // Not the menu, whose activation would present the system's menu.
-                for element in elements where element.accessibilityLabel != week {
+                // Not the menu nor the export, whose activations would present the system's menu and share sheet.
+                for element in elements where ![week, "Export data, CSV"].contains(element.accessibilityLabel) {
                     let stop = ViewStop(reading: element)
                     if stop.kind == .button || stop.kind == .toggle {
                         _ = element.accessibilityActivate()
@@ -92,7 +104,7 @@
             #expect(sent == [
                 .setUnits(.lb), .setUnits(.kg), .setPlateMath(true), .setAutoRest(false), .setWatchBuzz(true),
                 .route(.debugMenu)
-            ])
+            ], "Bar and plates is off while Plate math is; the export is the system's share link")
         }
     }
 #endif
