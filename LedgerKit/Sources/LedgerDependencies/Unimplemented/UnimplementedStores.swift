@@ -83,6 +83,10 @@ struct UnimplementedWorkoutRepository: WorkoutRepository {
         throw stub.failure()
     }
 
+    func updateSets(_: [WorkoutExerciseID: [LoggedSet]], of _: WorkoutID) async throws {
+        throw stub.failure()
+    }
+
     func delete(id _: WorkoutID) async throws {
         throw stub.failure()
     }

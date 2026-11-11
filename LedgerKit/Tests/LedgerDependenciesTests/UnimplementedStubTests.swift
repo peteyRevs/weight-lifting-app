@@ -64,6 +64,7 @@ struct UnimplementedStubTests {
             { _ = try await stub.recent(limit: 1) },
             { _ = try await stub.workouts(in: .distantPast ..< .distantFuture) },
             { try await stub.updateSets(workoutExerciseID: session.exercises[0].id, sets: []) },
+            { try await stub.updateSets([:], of: session.id) },
             { try await stub.delete(id: Self.workout) },
             { _ = try await stub.historyEntries() }
         ])

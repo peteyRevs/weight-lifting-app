@@ -85,3 +85,45 @@ extension HistoryEntry {
         )
     }
 }
+
+// MARK: - One write for a multi-exercise edit (F13 S3, ruling A4)
+
+public extension GRDBWorkoutRepository {
+    /// Makes each entry of `sets` the sets of that exercise of the stored workout, in one write transaction with one
+    /// replay over every exercise named. Throws `missingRow`, before anything is written, when the workout is not
+    /// stored or an exercise is not its own.
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of workout: WorkoutID) async throws {
+        let timestamp = ColumnCodec.timestamp(now())
+        try await queue.write { database in
+            try Self.replace(sets, of: workout, in: database, at: timestamp)
+        }
+    }
+}
+
+extension GRDBWorkoutRepository {
+    /// What both `updateSets` calls write. `RecordReplay` starts from this workout and takes each exercise once.
+    static func replace(
+        _ sets: [WorkoutExerciseID: [LoggedSet]],
+        of id: WorkoutID,
+        in database: Database,
+        at timestamp: String
+    ) throws {
+        guard var workout = try WorkoutRows.fetch(.one(id), in: database, strict: true).first else {
+            throw LedgerPersistenceError.missingRow("workout \(ColumnCodec.text(id))")
+        }
+        var edited: [ExerciseID] = []
+        for (exercise, replacement) in sets {
+            guard let index = workout.exercises.firstIndex(where: { $0.id == exercise }) else {
+                throw LedgerPersistenceError.missingRow("workout_exercise \(ColumnCodec.text(exercise))")
+            }
+            workout.exercises[index].sets = replacement
+            edited.append(workout.exercises[index].exerciseID)
+        }
+        guard !edited.isEmpty else {
+            return
+        }
+        let scope = try RecordReplay.Scope(editing: edited, of: workout)
+        try WorkoutRows(workout).write(database, at: timestamp)
+        try RecordReplay.redetect(scope, in: database, at: timestamp)
+    }
+}

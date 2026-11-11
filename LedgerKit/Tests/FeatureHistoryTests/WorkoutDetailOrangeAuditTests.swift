@@ -36,6 +36,7 @@
                     rows: receipt.rows
                 ),
                 rowRoutes: model.rowRoutes,
+                edit: model.edit,
                 delete: model.delete
             )
         }

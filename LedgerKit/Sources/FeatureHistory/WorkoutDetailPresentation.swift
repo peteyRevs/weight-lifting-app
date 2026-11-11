@@ -25,38 +25,18 @@ nonisolated enum WorkoutDetailPresentation {
         let workout = input.recorded.workout
         let (units, locale) = (input.units, input.locale)
         let summary = WorkoutEngine.summary(workout, prs: input.recorded.records)
-        let digits = IntegerFormatStyle<Int>(locale: locale)
-        let done = digits.format(summary.doneSets)
-        let volume = summary.volume.formatted(in: units)
-        let tiles = [
-            ReceiptLayout.Tile(
-                label: HistoryCopy.timeTile,
-                value: ClockText.elapsed(summary.elapsed),
-                spoken: [HistoryCopy.timeTile, spokenElapsed(summary.elapsed, locale: locale)].joined(separator: ", "),
-                isAccented: true
-            ),
-            ReceiptLayout.Tile(
-                label: HistoryCopy.setsTile,
-                value: "\(done)/\(digits.format(summary.totalSets))",
-                spoken: HistoryCopy.setsLogged(done: done, of: summary.totalSets, locale: locale)
-            ),
-            ReceiptLayout.Tile(
-                label: HistoryCopy.movedTile(units: units),
-                value: volume,
-                spoken: HistoryCopy.moved(volume, units: units, locale: locale)
-            )
-        ]
         return WorkoutDetailModel(
-            date: startDay(of: workout, calendar: input.calendar, locale: locale),
+            date: ClockText.startDay(of: workout.startedAt, calendar: input.calendar, locale: locale),
             title: workout.name,
             receipt: ReceiptLayout.Model(
-                tiles: tiles,
+                tiles: tiles(summary, units: units, locale: locale),
                 records: summary.prs.isEmpty ? nil : HistoryCopy.newRecords(summary.prs.count, locale: locale),
                 logged: HistoryCopy.logged,
                 note: HistoryCopy.prescribedOnTheRight,
                 rows: workout.exercises.map { row($0, units: units, locale: locale) }
             ),
             rowRoutes: workout.exercises.map { .exercise($0.exerciseID) },
+            edit: HistoryCopy.edit,
             delete: deletion
         )
     }
@@ -80,6 +60,32 @@ nonisolated enum WorkoutDetailPresentation {
         )
     }
 
+    /// TIME, SETS and LB MOVED (KG MOVED), each as drawn and as spoken.
+    private static func tiles(_ summary: WorkoutSummary, units: Units, locale: Locale) -> [ReceiptLayout.Tile] {
+        let digits = IntegerFormatStyle<Int>(locale: locale)
+        let done = digits.format(summary.doneSets)
+        let volume = summary.volume.formatted(in: units)
+        let spoken = ClockText.spokenElapsed(summary.elapsed, locale: locale)
+        return [
+            ReceiptLayout.Tile(
+                label: HistoryCopy.timeTile,
+                value: ClockText.elapsed(summary.elapsed),
+                spoken: [HistoryCopy.timeTile, spoken].joined(separator: ", "),
+                isAccented: true
+            ),
+            ReceiptLayout.Tile(
+                label: HistoryCopy.setsTile,
+                value: "\(done)/\(digits.format(summary.totalSets))",
+                spoken: HistoryCopy.setsLogged(done: done, of: summary.totalSets, locale: locale)
+            ),
+            ReceiptLayout.Tile(
+                label: HistoryCopy.movedTile(units: units),
+                value: volume,
+                spoken: HistoryCopy.moved(volume, units: units, locale: locale)
+            )
+        ]
+    }
+
     /// One exercise: the Domain's name, target and chips in the lifter's units, and the row as VoiceOver reads it,
     /// "—" spoken "Nothing logged" when no set of it was done.
     private static func row(_ exercise: WorkoutExercise, units: Units, locale: Locale) -> ReceiptLayout.Row {
@@ -97,28 +103,5 @@ nonisolated enum WorkoutDetailPresentation {
             chips: row.actual,
             spoken: spoken.joined(separator: ", ")
         )
-    }
-
-    /// "24 minutes, 22 seconds", "1 hour, 1 minute, 5 seconds": the time as VoiceOver reads it, by the whole second,
-    /// rounded down as the tile's "24:22" is, held under what the format style can take, as F10's receipt does.
-    private static func spokenElapsed(_ elapsed: Duration, locale: Locale) -> String {
-        Duration.UnitsFormatStyle(
-            allowedUnits: [.hours, .minutes, .seconds],
-            width: .wide,
-            zeroValueUnits: .hide,
-            fractionalPart: .hide(rounded: .down)
-        )
-        .locale(locale)
-        .format(min(elapsed, .seconds(Int64.max)))
-    }
-
-    /// "Wednesday, September 16": the day `workout` started, in the calendar's time zone (N14); empty for a start
-    /// that is not a date.
-    private static func startDay(of workout: WorkoutState, calendar: Calendar, locale: Locale) -> String {
-        guard workout.startedAt.timeIntervalSinceReferenceDate.isFinite else {
-            return ""
-        }
-        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        return style.weekday(.wide).month(.wide).day().format(workout.startedAt)
     }
 }

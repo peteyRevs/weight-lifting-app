@@ -168,8 +168,10 @@ nonisolated extension ExerciseHistoryPresentation {
     /// counted, so from W5 it is 4 (F12-S2-R1-7).
     private static func spokenChange(_ change: Int, _ numbers: [Int?], _ input: ExerciseHistoryInput) -> String {
         let span = (numbers.lastIndex { $0 != nil } ?? 0) - (numbers.firstIndex { $0 != nil } ?? 0) + 1
-        let (size, units) = (String(abs(change)), input.units)
-        return LibraryCopy.spokenChange(size, sign: change, weeks: span, units: units, locale: input.locale)
+        let size = Decimal(abs(change))
+        let weight: Weight = input.units == .lb ? .pounds(size) : .kilograms(size)
+        let spoken = weight.spoken(in: input.units, locale: input.locale.forCountedText)
+        return LibraryCopy.spokenChange(spoken, sign: change, weeks: span, locale: input.locale)
     }
 
     /// The log's sets as it writes them, "180×5", each weight × reps once per model: a lifter repeats a few, and

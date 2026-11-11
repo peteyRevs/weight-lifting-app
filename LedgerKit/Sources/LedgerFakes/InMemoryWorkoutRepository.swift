@@ -91,6 +91,26 @@
             }
         }
 
+        public func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of id: WorkoutID) async throws {
+            try history.write { current throws(RepositoryError) in
+                guard let entry = current.entries[id], !entry.isDeleted else {
+                    throw .missingRow("workout \(id.rawValue.uuidString)")
+                }
+                var workout = entry.workout
+                for (exercise, replacement) in sets {
+                    guard let index = workout.exercises.firstIndex(where: { $0.id == exercise }) else {
+                        throw .missingRow("workout_exercise \(exercise.rawValue.uuidString)")
+                    }
+                    workout.exercises[index].sets = replacement
+                }
+                guard !sets.isEmpty else {
+                    return
+                }
+                try current.store(workout)
+                current.detectRecords()
+            }
+        }
+
         public func delete(id: WorkoutID) async throws {
             history.write { current in
                 current.entries[id]?.isDeleted = true

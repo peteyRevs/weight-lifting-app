@@ -37,6 +37,8 @@ public struct WorkoutDetailRoot: View {
             .task(id: store.deletion) {
                 await store.delete()
             }
+            // "Edit"'s sheet (F13 S3): up while the store holds its request; the store hears how it came down.
+            .sheet(item: $store.editSheet) { Self.editSheet($0, over: store) }
             .alert(HistoryCopy.deleteFailedTitle, isPresented: $store.showsDeleteFailure) {
                 Button(HistoryCopy.okay) {}
             } message: {
@@ -44,12 +46,17 @@ public struct WorkoutDetailRoot: View {
             }
     }
 
+    /// "Edit"'s sheet over the detail's store, which hears how it came down.
+    static func editSheet(_ request: EditSetsRequest, over store: WorkoutDetailStore) -> EditSetsSheet {
+        EditSetsSheet(request: request, onClose: store.editClosed)
+    }
+
     @ViewBuilder private var content: some View {
         switch store.state {
         case .loading, .gone:
             LedgerColor.ground.ignoresSafeArea()
         case let .loaded(model):
-            WorkoutDetailScreen(model: model, send: store.send, onDelete: store.confirmDelete)
+            WorkoutDetailScreen(model: model, send: store.send, onEdit: store.edit, onDelete: store.confirmDelete)
         case let .unreadable(model):
             UnreadableWorkout(model: model, onDelete: store.confirmDelete)
         }

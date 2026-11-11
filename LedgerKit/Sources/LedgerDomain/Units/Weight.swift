@@ -82,6 +82,20 @@ public extension Weight {
         Weight(grams: grams + Decimal(count) * step.grams)
     }
 
+    /// Rule 6, for any stepper that moves a weight (the Day editor's start load, a past set's weight): the multiple
+    /// of `step` next to this weight on the side asked for, never below zero. A weight on a multiple moves one step;
+    /// a weight between two multiples (180 lb read in kilograms is 81.6) goes to the one above or the one below (82.5
+    /// or 80). A step of zero or less leaves the weight where it is.
+    func nextMultiple(of step: Weight, _ direction: StepDirection) -> Weight {
+        guard step > .zero else {
+            return max(self, .zero)
+        }
+        let multiple = rounded(toStep: step, direction == .upward ? .up : .down)
+        let isPast = direction == .upward ? multiple > self : multiple < self
+        let next = isPast ? multiple : multiple.advanced(bySteps: direction == .upward ? 1 : -1, of: step)
+        return max(next, .zero)
+    }
+
     /// Rules 12 and 15 (`load × 0.85`): the exact product. Round it with `rounded(toStep:)`.
     func scaled(by factor: Decimal) -> Weight {
         Weight(grams: grams * factor)

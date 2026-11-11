@@ -336,3 +336,164 @@ The baseline is green, with only the known F7-10 and F13-S1-3 issues.
 - Net lines: `netlines.py e10cbe0`, giving 667.
 - Simulator, through `sim-lock.py`, which waited behind F14's gate. From the copy, with its own derived data, and with s1 and s2 applied together: `xcodebuild test-without-building -testPlan PR` (sweep `pr`) on `FeatureHistoryTests/WorkoutDetailRootTests`, `LedgerAppKitTests/AppTabsTests` and `LedgerAppKitTests/HistoryRouteMappingTests`. Exit 65: only the two root tests failed.
 - Removed the copy's `.build` and `.derivedData` at the end.
+
+## S3 — round 1, G3 review (2026-11-02)
+
+Reviewed `33048c5..ce8203d` on `feat/F13-s3-edit-sets`:
+- `14e3c15` and `6693b60`, the slice
+- `a787452`, the notes
+- G2's `4dd497a`
+- fix round 1, `f0fcbbc` and `ce8203d`
+
+The reference is the plan amendments' S3, the rulings before G1 (A4, A6 ruled in), and the deferred S2-R1-4. Pete's
+Q2–Q5 (built to A), notes decisions 3 and 8, and G2's F13-S3-4, -6, -8 and -9 (accepted as built) were taken as
+settled.
+
+**Verdict: APPROVED WITH MINORS.** No Blocking finding. S3-R1-1 (Should fix) is a test-only change to the nightly UI
+test, about five lines. The nits are comments and one optional simplification.
+
+### What was checked, and held
+
+**The reopen rule (F13-S3-3)**, `WorkoutDetailStore.swift:241-269`
+- `editClosed(.saved(draft))` stores `(shown, draft)`, `shown` being the workout the observation shows at that moment.
+  `edit()` opens on `draft` while the observation still shows `shown`, else on what is shown.
+- Traced each order:
+  - **The sheet closes before the save's value lands.** `shown` is the pre-save S0. "Edit" opens on D1 until S1 lands,
+    then on S1. Not stale.
+  - **The value lands first.** `shown` is S1, which reads back `==` D1 (G2's 40 GRDB rounds), so either choice opens
+    the same sets.
+  - **Two saves before any value.** The second sheet's `original` is D1, so its changes are taken against D1, and the
+    close stores `(S0, D2)`. GRDB coalescing S1 and S2 into one value changes nothing: the value differs from S0.
+  - **A delete after the save** leaves `sources.workout` as `.some(nil)`. `lastSave` is not set, and `rebuild()` closes.
+  - **A re-run** (tab away and back) resets `sources`. `edit()` waits for the first value, which is the stored one.
+- It can stick to an old draft only if a later value equals `shown` again (an A→B→A write). On one device, only this
+  sheet writes, and its own save overwrites `lastSave`. So that takes an outside writer (S3-R1-3).
+- The order of the save's value and the close doesn't matter, as the notes claim. The tests cover both halves.
+
+**The binding**, `WorkoutDetailStore.swift:230-237`, `WorkoutDetailRoot.swift:40,49-51`
+- The get is `editing`. A set of nil is `editClosed(.cancelled)`, the same path as "Cancel". A non-nil set is ignored.
+- A late `set(nil)` after `.saved` only rebuilds, and leaves `lastSave` alone. After `.workoutGone` it rebuilds over
+  `.gone` (F13-S3-9, accepted).
+- A swipe is disabled while saving (`interactiveDismissDisabled(!model.isEnabled)`). With the "deleted" alert up, the
+  sheet can't be swiped.
+- `editSheet(_:over:)` is a static builder, so the hosted test drives the closures the app uses.
+
+**The batched write (A4, deviation 1)**, `GRDBWorkoutRepository+History.swift:92-128`, `GRDBWorkoutRepository.swift:115-140`
+- One `queue.write`: one strict fetch of the workout, then every exercise is checked before anything is written
+  (`missingRow`, nothing stored).
+- One `WorkoutRows.write` of the whole workout, which leaves unchanged rows unchanged (G2's column dumps). Then one
+  `RecordReplay.redetect`.
+- One scope for every edited exercise. `Scope(editing:)` dedupes and sorts the `ExerciseID`s, so two
+  `workout_exercise` rows of one exercise replay it once, and the `Dictionary`'s random order doesn't matter.
+- The per-exercise call finds the owner, then writes through the same `replace` in its own transaction.
+- So the claim holds: one transaction and one replay. G2's SQLite trace confirms it (one `BEGIN IMMEDIATE`/`COMMIT`,
+  one replay walk).
+- An empty map still opens a write and reads the workout, but changes no row, so no observer hears it. Both
+  conformers throw `missingRow` for an unknown workout even with an empty map, so they agree.
+- Deviation 1 is right: a default can't find the owner without another requirement.
+
+**Exact weights (ADR-007) and the steppers**, `SetEditing.swift`, `Weight.swift:85-97`
+- `nextMultiple` is the old DayEditing body moved verbatim, plus a `step > 0` guard. The guard can't be reached from
+  either caller: `defaultStep` is never zero, and `SetEditing.step` checks `exercise.step > .zero`.
+- `Decimal` throughout: grams ÷ step, rounded to a whole number, × step. Every multiple of the steps in use (2.5 lb =
+  1,133.980925 g, 1.25 kg, …) is a whole 10⁻⁷ g, so storage stays exact.
+- `stepping` takes the step from the draft's `units`, which never change. `changes` hands over whole exercises
+  (decision 3).
+- Reps: `canStep` stops at 1 and at `Int.max`, and `steppedReps` guards the same edge again.
+- Nothing missed beyond G2's findings.
+
+**Visibility changes**
+- `GRDBWorkoutRepository.now` going from private to internal exposes nothing outside the module: the type is
+  public, and the property is not. The extension in `+History` needs it, and the main file is at 248 lines.
+- The two UI-test helpers (`launchWithASavedWorkout`, `attachScreenshot`) lost `private` so the `+Edit` and
+  `+EditDiscard` files can call them. The class is at the lint's limit. This is justified.
+
+**Deferred S2 items**
+- **S2-R1-4.** `ClockText.spokenElapsed` and `startDay(of:calendar:locale:)` are byte-for-byte the old bodies. They
+  live in LedgerDomain (where `ClockText` is), and the doc now says that these two take a locale and hold no key.
+  F10's receipt and the detail call them. No other caller of the old copies is left.
+- **A6.** `PR %@`, `Up %@ over %lld weeks` and `Down %@ over %lld weeks` replace six keys. The Library speaks
+  `Weight.spoken` with `forCountedText`, so the result reads "Up 1 pound". The catalog lost exactly the six keys.
+  `spokenChange` builds `.pounds(n)`/`.kilograms(n)` from an `Int`, which is exact.
+
+**Snapshots.** I viewed all eight, and cropped the top and the foot of both AX3 images to read them at full size.
+- **unchanged light/dark.** Five exercises, each a `subheading` heading over hairline-separated set blocks. Each label
+  is muted caption, the value is bold ink, and the 44 pt round "−"/"+" sit on the right. "Save" is off, in the grey
+  disabled pill: no orange on the screen.
+- **changed light/dark.** Set 1 reads 205 lb × 4, and "Save" is the one orange (N6). No other part is tinted.
+- **failed light/dark.** The failure line sits in ink caption above "Save", not red, so Save is still the one accent.
+  The line is not clipped.
+- **changed AX3 light/dark.** `SheetChrome` stacks "Cancel" under the title. The names wrap whole ("Barbell Bench /
+  Press", "Chest-Supported / Row"). Each `StepperField` stands its buttons under its value, and they stay round and
+  at least 44 pt. The pinned "Save" is at the foot.
+- Both themes use tokens only: the ground, ink, inkMuted, hairline and accent. Dark mode has no contrast fault. All
+  eight match the design system.
+
+**Code size.** `f13s3_net.py` (non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps`, without
+LedgerTestSupport and the UI tests) gives **net 626** against `33048c5`, as the notes say, and well under 1,000. No
+added line is over 120 columns, and nothing is compressed.
+
+**Other points**
+- Module imports are unchanged.
+- `EditSetsStore` is `@MainActor @Observable` and runs its save from the sheet's `.task(id:)`. A cancellation is told
+  apart by `Task.isCancelled`, as in S2.
+- No error is swallowed: a failure is logged and shown, and `missingRow` raises the alert.
+- The toolbar's "Edit" carries the system tint, as `ExerciseHistoryScreen`'s toolbar button does, so the detail's
+  orange audit still holds.
+
+### Findings
+
+**S3-R1-1 (Should fix). The nightly UI test claims the detail shows the edit, but it never checks it, and its list
+check reads once without waiting.**
+- **Where.** `Apps/LedgerUITests/WorkoutHistory+Edit.swift:4-5,28-32`.
+  - The doc and the plan's test plan ("the detail and list show it") name the detail. After Save, the test checks
+    only that the title exists and that Save is gone.
+  - Line 32 compares `row.value` once, right after `row.waitForExistence`. The row already existed under the detail,
+    so that wait returns at once, and the test does not wait for the list's observation to land.
+  - Line 29's `XCTAssertFalse(save.exists)` also reads once, during the sheet's dismissal animation.
+- **Why it matters.** Criterion 4's "the detail shows the change without navigating" has no end-to-end check. Two
+  single reads are a flakiness vector (review point 6). The test passed today.
+- **Fix.** Before Save, read the detail's moved tile (or Set 1's chip) value. After Save, wait with an
+  `XCTNSPredicateExpectation` for that value to change. Do the same for `save` to stop existing, and for `row.value`
+  to differ from `volumeBefore`.
+
+**S3-R1-2 (Nit). Three doc comments are broken mid-sentence by a re-wrap.**
+- `LedgerKit/Sources/LedgerDomain/Rules/SetEditing.swift:7-9`: "to the / next / multiple".
+- `LedgerKit/Sources/LedgerDomain/Rules/SetEditing.swift:22-24`: "the workout was / logged / in".
+- `LedgerKit/Sources/FeatureHistory/Views/WorkoutDetailScreen.swift:5-7`: "as an / exercise's / history".
+- The test file `LedgerKit/Tests/FeatureHistoryTests/EditSetsSnapshotTests.swift:7-9` has the same break ("default /
+  size,").
+- *Fix:* re-flow each one to 120 columns.
+
+**S3-R1-3 (Nit). The reopen rule's code and its doc say slightly different things.**
+- **Where.** `LedgerKit/Sources/FeatureHistory/WorkoutDetailStore.swift:28-32` and the notes say "until the next value
+  arrives". The code (`:248`) instead uses the draft while the shown workout `== lastSave.shown`, and never clears
+  `lastSave`.
+- **When it differs.** Only after an A→B→A sequence: a later value equal to the one shown at close, which needs an
+  outside writer (F17/F28). "Edit" would then open on an old draft, and its save would write that draft back.
+- **Fix, either one.**
+  - Set `lastSave = nil` in the workout follower's value closure (`:125`) and drop the equality test. Then a value
+    that lands before the close is still handled, since the close sets `lastSave` after it. That gives the same
+    behaviour in every one-device order, matches the doc word for word, and is no more code.
+  - Or keep the code and add "while the observation shows the same workout" to the doc, with an F17 hand-off line in
+    the notes.
+
+**S3-R1-4 (Nit). `Weight.nextMultiple`'s `step > 0` guard is unreachable.**
+- **Where.** `LedgerKit/Sources/LedgerDomain/Units/Weight.swift:89-91`.
+- **Why.** Neither caller can pass a zero step (see "Exact weights" above). The guard is harmless, and its doc
+  sentence states the behaviour.
+- *Fix:* none needed. If kept, a one-line test keeps the 100 % Domain coverage honest, since it may be counted only
+  through G2's property test.
+
+### Commands run
+
+- `git diff --stat 33048c5..HEAD`, with a full read of every product file in the diff.
+- `python3 -I <scratchpad>/f13s3_net.py`: total 626.
+- `awk 'length > 121'` over the added lines: only two lines, which are 120 characters with multi-byte characters.
+- All eight references opened. Both AX3 images were cropped with `ffmpeg -vf crop` to read their top and foot at 1:1.
+- **Nightly UI**, through `sim-lock.py` (iPhone 17, iOS 27.0):
+  `xcodebuild test -project Ledger.xcodeproj -scheme Ledger -testPlan Nightly -destination "platform=iOS Simulator,name=iPhone 17,OS=27.0" -derivedDataPath .derivedData -clonedSourcePackagesDirPath .derivedData/SourcePackages -onlyUsePackageVersionsFromResolvedFile -only-testing:LedgerUITests/WorkoutHistory`
+  - **Exit 0**, `** TEST SUCCEEDED **`: 6 of 6 tests in 187 s, on `ce8203d`'s code, the first nightly run since the
+    fix round.
+  - The 6 tests: `test_editASet_showsInTheDetailAndTheList`, `test_editCancelAndSwipe_discardTheStep`, and S1/S2's
+    four.

@@ -39,4 +39,20 @@
             .background(LedgerColor.ground)
         }
     }
+
+    /// What the edit sheet shows without the scroll view around its page: its frame, its page and its foot.
+    struct EditParts: View {
+        let preview: EditPreview
+        var send: (EditSetsAction) -> Void = { _ in }
+
+        var body: some View {
+            // `try?`: the fixture's error is `PreviewTests`' to report.
+            if let model = try? preview.model() {
+                SheetChrome(model.title, cancel: model.cancel, onCancel: {}, content: {
+                    EditSetsPage(model: model, send: send)
+                    EditSetsFoot(model: model.foot, send: send)
+                })
+            }
+        }
+    }
 #endif

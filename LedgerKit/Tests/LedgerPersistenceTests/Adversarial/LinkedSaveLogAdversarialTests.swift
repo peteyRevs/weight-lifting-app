@@ -184,6 +184,10 @@ struct LinkedSaveLogAdversarialTests {
 
 /// F13 S2's requirement, outside the suite's body (which the lint holds to 150 lines).
 extension LinkedSaveLogAdversarialTests.OldWrapper {
+    func updateSets(_ sets: [WorkoutExerciseID: [LoggedSet]], of workout: WorkoutID) async throws {
+        try await base.updateSets(sets, of: workout)
+    }
+
     func observeWorkout(id: WorkoutID) -> AsyncStream<RecordedWorkout?> {
         base.observeWorkout(id: id)
     }

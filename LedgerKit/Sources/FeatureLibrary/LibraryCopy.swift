@@ -111,24 +111,15 @@ nonisolated enum LibraryCopy {
         String(localized: "—", bundle: .module, comment: "In place of a value there is none of, or a session's tag")
     }
 
-    /// "PR 195 pounds": the best set's weight, as VoiceOver reads it at the end of a row.
-    static func spokenRecord(_ weight: String, units: Units, locale: Locale) -> String {
-        switch units {
-        case .lb:
-            String(
-                localized: "PR \(weight) pounds",
-                bundle: .module,
-                locale: locale,
-                comment: "Spoken best weight, in pounds"
-            )
-        case .kg:
-            String(
-                localized: "PR \(weight) kilograms",
-                bundle: .module,
-                locale: locale,
-                comment: "Spoken best weight, in kilograms"
-            )
-        }
+    /// "PR 195 pounds": the best set's weight, as VoiceOver reads it at the end of a row. `weight` is already spoken,
+    /// with its unit in the form its number takes (`Weight.spoken(in:locale:)`, F13 ruling A6).
+    static func spokenRecord(_ weight: String, locale: Locale) -> String {
+        String(
+            localized: "PR \(weight)",
+            bundle: .module,
+            locale: locale,
+            comment: "Spoken best weight, with its unit in words"
+        )
     }
 
     // MARK: Messages

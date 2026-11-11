@@ -26,7 +26,7 @@ nonisolated extension WorkoutPresentation {
             ReceiptLayout.Tile(
                 label: WorkoutCopy.timeTile,
                 value: ClockText.elapsed(summary.elapsed),
-                spoken: [WorkoutCopy.timeTile, spokenElapsed(summary.elapsed, locale: locale)].joined(separator: ", "),
+                spoken: spokenTimeTile(summary.elapsed, locale: locale),
                 isAccented: true
             ),
             ReceiptLayout.Tile(label: WorkoutCopy.setsTile, value: setCount(summary, locale: locale), spoken: sets),
@@ -38,7 +38,7 @@ nonisolated extension WorkoutPresentation {
         ]
         return ReceiptScreenModel(
             header: ReceiptHeaderModel(
-                date: startDay(of: finished, locale: locale, calendar: calendar),
+                date: ClockText.startDay(of: finished.startedAt, calendar: calendar, locale: locale),
                 title: finished.name,
                 done: WorkoutCopy.done
             ),
@@ -64,30 +64,9 @@ nonisolated extension WorkoutPresentation {
         return "\(digits.format(summary.doneSets))/\(digits.format(summary.totalSets))"
     }
 
-    /// "24 minutes, 22 seconds", "1 hour, 1 minute, 5 seconds": the time as VoiceOver reads it, by the
-    /// whole second, rounded down as the tile's "24:22" is, in `locale`. The format style traps on more
-    /// seconds than an `Int64` holds, which a saturated time (2^63 s, `WorkoutState.elapsed(at:)`) is, so
-    /// the time is held under that first.
-    static func spokenElapsed(_ elapsed: Duration, locale: Locale) -> String {
-        Duration.UnitsFormatStyle(
-            allowedUnits: [.hours, .minutes, .seconds],
-            width: .wide,
-            zeroValueUnits: .hide,
-            fractionalPart: .hide(rounded: .down)
-        )
-        .locale(locale)
-        .format(min(elapsed, .seconds(Int64.max)))
-    }
-
-    /// "Wednesday, September 16": the day `workout` started, in `calendar`'s time zone; empty for a start
-    /// that is not a date.
-    private static func startDay(of workout: WorkoutState, locale: Locale, calendar: Calendar) -> String {
-        guard workout.startedAt.timeIntervalSinceReferenceDate.isFinite else {
-            return ""
-        }
-        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        style = style.weekday(.wide).month(.wide).day()
-        return style.format(workout.startedAt)
+    /// "TIME, 24 minutes, 22 seconds".
+    private static func spokenTimeTile(_ elapsed: Duration, locale: Locale) -> String {
+        [WorkoutCopy.timeTile, ClockText.spokenElapsed(elapsed, locale: locale)].joined(separator: ", ")
     }
 
     /// One exercise of the receipt: the Domain's name, target and chips, and the row as VoiceOver reads it.
