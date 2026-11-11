@@ -68,6 +68,12 @@ public enum SessionBuilder {
         )
     }
 
+    /// Rule 15: a drop set's load, `load × 0.85` rounded to `step`. A built session's drop row and a swap's
+    /// (`WorkoutEngine`, F10 S8) both take it from here.
+    public static func dropLoad(of load: Weight, step: Weight) -> Weight {
+        load.scaled(by: ProgressionRules.reductionFactor).rounded(toStep: step)
+    }
+
     /// Rule 17: `live` when it is a live workout for the same program, week and day (resume it,
     /// keeping elapsed time and logged sets); otherwise `nil` (build a new one).
     public static func resumable(
@@ -93,9 +99,7 @@ public enum SessionBuilder {
         let reps = Reps(clamping: prescription.reps)
         var rows = (0 ..< prescription.sets).map { _ in (weight: prescription.load, kind: SetKind.working) }
         if slot.dropSets > 0 {
-            let dropLoad = prescription.load.scaled(by: ProgressionRules.reductionFactor)
-                .rounded(toStep: prescription.step)
-            rows.append((weight: dropLoad, kind: .drop))
+            rows.append((weight: dropLoad(of: prescription.load, step: prescription.step), kind: .drop))
         }
         return WorkoutExercise(
             id: id,

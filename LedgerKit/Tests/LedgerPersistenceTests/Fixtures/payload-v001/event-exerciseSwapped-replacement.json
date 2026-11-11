@@ -1,0 +1,31 @@
+{
+  "device" : "00000000-0000-0000-0000-000000000D01",
+  "event" : {
+    "exerciseSwapped" : {
+      "alsoUpdateProgram" : false,
+      "exerciseID" : "00000000-0000-0000-0000-000000000E03",
+      "exerciseIndex" : 0,
+      "name" : "Dumbbell Bench Press",
+      "replacement" : {
+        "equipment" : "dumbbell",
+        "lastPerformance" : {
+          "date" : 810624000,
+          "load" : {
+            "grams" : "25000"
+          },
+          "reps" : 10,
+          "sets" : 3
+        },
+        "load" : {
+          "grams" : "27500"
+        },
+        "step" : {
+          "grams" : "1250"
+        }
+      }
+    }
+  },
+  "seq" : 8,
+  "wallClock" : 811228845,
+  "workoutID" : "00000000-0000-0000-0000-000000000100"
+}

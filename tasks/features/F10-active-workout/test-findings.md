@@ -2099,3 +2099,84 @@ findings (see "Accepted limits").
 | `PR` plan through the lock, `-only-testing` `ReceiptLayoutTests`, `ReceiptLoggedCutAdversarialTests` | 0 | 8 tests in 2 suites, 128 s. "LOGGED" is cut-checked left to right in `receipt_noWordIsCut` and passes |
 
 Not checked: the full gate (the orchestrator's), the running app at 375 pt, VoiceOver and the buzz on a device.
+
+## S8a — G2 round 1
+
+G2 tester, 2026-11-10, on `2120e50` (`feat/F10-s8-swap`). Written before reading the implementer's tests or
+notes. No product code changed (two mutants were run and reverted, below). Host `swift test` only; no simulator.
+
+New tests:
+- `LedgerDomainTests/Engine/Adversarial/SwapPayloadAdversarialTests.swift`: the version-1 text decodes with
+  `replacement == nil` (key missing, and explicit `null`); a swap without a replacement encodes to exactly the
+  four version-1 keys; a replacement round-trips through `EnvelopeCodec` for every equipment, with and without a
+  Last; hostile JSON (NaN and +∞ Last date, zero, negative step, negative load) decodes and is then ignored by
+  `reduce` and `replay`; unknown equipment, a numeric or `NaN`/`1e3` gram text, a missing step all throw.
+- `.../SwapAdversarialTests.swift` (two suites): no replacement changes only id and name; working, added and
+  warm-up rows take the load, drop rows its drop; kettlebell kg step 2 (16 → 14, 17 → 14, 24 → 20, 1 → 0) and an
+  off-step load copied unrounded; done sets, superset flag, slot, original, rest, cursor untouched; out-of-range
+  index (−1, count, `Int.max`, `Int.min`) changes nothing but is persisted; odd ids and names copied; NaN,
+  zero and negative steps and loads and non-finite Last dates ignored in memory; bodyweight zero; the toggle
+  (on/off, off/on, back to the original, ad hoc); a swap after a logged set keeps it; a swap twice is once.
+- `.../SwapAdversarialSupport.swift`: `SwapAdv`, the plan's re-target rule written from the payload section.
+- `.../SwapPropertyAdversarialTests.swift`: 200 seeded 40-event scripts over two devices (swaps with and
+  without a replacement, toggles flipping, out-of-range indices, back to the original; logs, un-logs, steps,
+  repeats, added sets; inexact and off-step weights; lb and kg). Each swap step equals the model; done sets never
+  change; `programUpdates` equals the last toggle per slot; replay of the log shuffled and partly duplicated, and
+  after the codec, equals the fold. 50 more: after random edits, every undone row is the load or its drop.
+- `LedgerDomainTests/Adversarial/SwapAlternativesAdversarialTests.swift`: 200 random catalogs (duplicate ids,
+  curated ids not in the catalog, self in the curated list, exclusions): at most 8, unique, never itself or
+  excluded, curated prefix in order, only same pattern and muscle after it (Q3), none left out, deterministic;
+  the shipped catalog never mixes patterns; Q1's examples; a pound history in a kg workout (185 lb → 85 kg);
+  kettlebell kg; an off-step same-equipment target (81.6 → 82.5 kg); negative and NaN history or target clamp to
+  a finite zero or more.
+- `LedgerPersistenceTests/Adversarial/SwapSaveAdversarialTests.swift` (database and fakes): applied while the
+  slot holds the original; an edit during the workout survives, saving twice changes nothing; edited away and
+  back still applies; ruling 1 (no original → applied unchecked); ruling 2 (the first materialised wins, in both
+  orders); back to the original is no change; an unknown exercise is stored and the slot untouched; history keeps
+  the replacement's id, name, equipment, step, target and the original; a refused slot write (trigger) leaves
+  every table as it was and keeps the log, and the retry saves both; a replacement swap round-trips through the
+  event store.
+
+Mutants (reverted, `git status` clean after): compare-and-set disabled in GRDB and the fake → 3 of my save tests
+fail (edited meanwhile, ruling 2, back to the original); the toggle's "off removes" dropped from the reducer → the
+toggle test and 140 of 200 scripts fail.
+
+### Result
+
+34 tests (about 490 cases with arguments): **33 pass, 1 fails** (by design, below). Full `LedgerDomainTests` and
+`LedgerPersistenceTests`: 1,506 tests, only that one red.
+
+| Id | Severity | Finding | Failing test |
+|---|---|---|---|
+| F10-S8a-G2-1 | Minor | A replacement that passes `isWellFormed` can leave a NaN or unstorable weight in the state | `SwapReduceEdgeAdversarialTests.failing_wellFormedReplacement_leavesStorableWeights` |
+
+### F10-S8a-G2-1 · Minor · criterion 7 · a well-formed replacement can make the workout unsavable
+
+- **Rule.** Criterion 7 refuses a replacement whose step is not above zero, whose load is below zero, or whose
+  Last date is not finite. That is all the code checks (`SwappedExercise.isWellFormed`), so the code matches the
+  letter; the gap is in what the list leaves out.
+- **Repro.** Seed session with a drop row on exercise 0; reduce `exerciseSwapped(0, …, replacement:
+  SwappedExercise(equipment: .dumbbell, step: Weight(grams: 1e-120), load: Weight(grams: 1e120), lastPerformance:
+  nil))`. Both values are exact decimal text a peer can send (`DecimalText.parse` accepts them).
+- **Actual.** Accepted. `SessionBuilder.dropLoad` divides 1e120 by 1e-120, `Decimal` overflows to NaN, and the
+  drop row's weight is NaN: a value no other path makes from finite inputs, which `Weight.encode` throws on. Two
+  more cases accepted: a step of 10⁻⁹ g (every undone row 3 × 10⁻⁹ g, not a whole 10⁻⁷ g) and a load of 10³⁰ g
+  (beyond `Int64` units). The store then refuses the save with `inexactWeight`, which is F10-S2-1's wedge
+  (finish fails, discard fails, until relaunch; never reaches history).
+- **Reach.** None through the app: the phone builds the replacement with `SwapAlternatives.replacement`, whose
+  step is always an equipment default step. It is a hostile or buggy peer (F17) or a corrupted log. Same class as
+  F10-S2-1 (a set logged at ⅛ lb), but this one manufactures NaN inside the reducer from finite inputs.
+- **Suggested fix.** In `isWellFormed`, also refuse a step or load that is not a whole number of 10⁻⁷ g within
+  `Int64` (the store's rule, ADR-007), or a step outside the equipment default steps; one line each. Or rule it
+  out of scope and leave it to F10-S2-1's answer, and I mark the test as a known issue.
+
+### Notes (no finding)
+
+- **Q2 is not in the Domain.** The reducer swaps an exercise with done sets (done rows keep their weight, the
+  exercise's id changes under them). That is the plan: Q2 is the button's rule (criterion 13) and the plan's
+  stale-choice refusal (criterion 19), both S8b. Pinned by `swap_afterALoggedSet_keepsTheDoneSet` so S8b's
+  refusal is visibly the only guard; F17 must hold it on the watch.
+- **The fake event store returns a log in no fixed order** (my round-trip test first compared arrays and flaked on
+  `.memory`). The protocol promises no order; noted only because a test comparing `envelopes(for:)` with `==` is
+  flaky on the fake.
+- Ruling 2 holds in both orders: whichever workout is materialised first lands, the other is skipped.

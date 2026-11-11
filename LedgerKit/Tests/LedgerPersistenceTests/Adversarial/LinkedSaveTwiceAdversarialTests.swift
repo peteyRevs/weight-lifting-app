@@ -76,12 +76,14 @@ struct LinkedSaveTwiceAdversarialTests {
         #expect(rows == nil, "\(rows ?? "")")
     }
 
-    /// The same slot twice can only come from two saves: `programUpdates` holds one exercise a slot.
+    /// The same slot twice can only come from two saves: `programUpdates` holds one exercise a slot. Since F10
+    /// S8a (G3 SF1, ruled) only a workout's first save writes its program changes, so the first save's exercise
+    /// stands (before S8a the later one's did).
     @Test(
-        "The same workout saved again with another exercise for the slot: the later save's exercise stands",
+        "The same workout saved again with another exercise for the slot: the first save's exercise stands",
         arguments: Kind.allCases
     )
-    func saveAgain_anotherExerciseForTheSlot_theLaterStands(kind: Kind) async throws {
+    func saveAgain_anotherExerciseForTheSlot_theFirstStands(kind: Kind) async throws {
         let stores = try await LinkedStores.make(kind)
         let slot = try Fixture.slot(2)
         let (first, second) = (Fixture.other(than: slot, offset: 1), Fixture.other(than: slot, offset: 2))
@@ -89,7 +91,7 @@ struct LinkedSaveTwiceAdversarialTests {
         _ = await stores.save(Fixture.workout(1, updates: [slot.id: second]), droppingLog: false)
         var issue = try await LinkedDifference.of(
             stores.program(1),
-            Fixture.program(1).changing(slot.id) { $0.exerciseID = second },
+            Fixture.program(1).changing(slot.id) { $0.exerciseID = first },
             "program 1"
         )
         #expect(issue == nil, "\(issue ?? "")")
@@ -97,19 +99,20 @@ struct LinkedSaveTwiceAdversarialTests {
         _ = await stores.save(Fixture.workout(1), droppingLog: false)
         issue = try await LinkedDifference.of(
             stores.program(1),
-            Fixture.program(1).changing(slot.id) { $0.exerciseID = second },
+            Fixture.program(1).changing(slot.id) { $0.exerciseID = first },
             "program 1"
         )
         #expect(issue == nil, "\(issue ?? "")")
     }
 
-    /// The upsert is not a no-op once the program has moved on: F05's input 6 warned of this for misses, and it
-    /// holds for a swap as well. Nothing in S3 saves an old workout again except the retry of its own save.
+    /// The upsert is not a no-op once the program has moved on: F05's input 6 warned of this for misses. For a
+    /// swap it no longer holds: since F10 S8a (G3 SF1, ruled) only a workout's first save writes its program
+    /// changes, so saving it again leaves the lifter's later edit (before S8a it set the slot back).
     @Test(
-        "(documents) Saving an old workout again sets its slot back over a later edit of the program",
+        "(documents) Saving an old workout again leaves a later edit of the program",
         arguments: Kind.allCases
     )
-    func saveAgain_afterTheProgramWasEdited_appliesTheUpdateAgain(kind: Kind) async throws {
+    func saveAgain_afterTheProgramWasEdited_leavesTheEdit(kind: Kind) async throws {
         let stores = try await LinkedStores.make(kind)
         let slot = try Fixture.slot(2)
         let workout = Fixture.workout(1, updates: [slot.id: Fixture.other(than: slot)])
@@ -117,8 +120,7 @@ struct LinkedSaveTwiceAdversarialTests {
         try await stores.programs.save(Fixture.program(1))
         #expect(try await stores.program(1) == Fixture.program(1), "the lifter put the exercise back")
         _ = await stores.save(workout, droppingLog: false)
-        let again = try Fixture.program(1).changing(slot.id) { $0.exerciseID = Fixture.other(than: slot) }
-        let issue = try await LinkedDifference.of(stores.program(1), again, "program 1")
+        let issue = try await LinkedDifference.of(stores.program(1), Fixture.program(1), "program 1")
         #expect(issue == nil, "\(issue ?? "")")
     }
 }

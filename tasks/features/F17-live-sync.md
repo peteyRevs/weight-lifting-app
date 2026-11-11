@@ -254,3 +254,25 @@ onwards). Where they contradict this brief, they win, and the brief should be am
   stale.
 - `materialize` refuses a state that is not `.finished` with an `endedAt` (`notFinished`), and a date that is not
   finite (`nonFiniteDate`); `EventEnvelope.isWellFormed` already keeps such dates out of a replayed state.
+
+## Inputs from F10 S8a (2026-11-10)
+
+- **Payload versions (orchestrator ruling, G3 SF2).** `exerciseSwapped` gained an optional `replacement`
+  (`SwappedExercise`: equipment, step, load, last performance) and stays payload version 1, because no build has
+  shipped. A build that predates S8a reading such a row would not refuse it: it ignores the unknown key and
+  replays a different workout (the original's equipment, step, Last and loads), which it could save and compact.
+  **Rule: after the first TestFlight build, any field added to an event payload raises `payload_version`** (the
+  per-row column already allows one version per row). F17 must also require one payload version on both devices,
+  or refuse a peer's newer rows, so an older watch never folds a swap without its replacement.
+- **Peer validation to rule.** `isWellFormed` refuses a replacement with a step not above zero, a negative load,
+  any step, load or drop a store cannot keep, or a non-finite Last date (F10-S8a-G2-1). It does not require the
+  load to lie on the step's grid (a peer's 17 kg on a 2 kg step leaves undone rows off-grid while the drop is
+  rounded), nor check the Last line's sets, reps or load. A phone-built replacement always satisfies both
+  (`SwapAlternatives.replacement`); a peer's may not.
+- **Q2 lives in the screen, not the engine.** The reducer swaps an exercise that has done sets (they keep their
+  weights and take the new id; `swap_afterALoggedSet_keepsTheDoneSet`). The phone refuses that in S8b (the button
+  shows only before a set is done; the plan refuses a stale choice); the watch's swap must hold the same guard.
+- **Program changes.** A workout's `programUpdates` are applied by its first save only, and compare-and-set
+  (ADR-004 amendment §3, status note). A rebuild or a peer's save of a workout already in history changes no
+  program.
+

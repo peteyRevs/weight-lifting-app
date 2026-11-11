@@ -47,6 +47,8 @@
             }
             let log = droppingLog ? events : nil
             try history.write { current throws(RepositoryError) in
+                // Only a workout's first save changes the program (F10 S8a, SF1), as in the database.
+                let isFirstSave = current.entries[workout.id] == nil
                 try current.store(workout)
                 current.detectRecords()
                 // Last, once nothing can throw, in the database's order, and under this write's lock: no reader
@@ -55,8 +57,9 @@
                 // never the other way round).
                 programs.writeSave(
                     misses: slotUpdates,
-                    exercises: workout.programUpdates,
-                    inProgram: workout.source?.programID
+                    exercises: isFirstSave ? workout.programUpdates : [:],
+                    inProgram: workout.source?.programID,
+                    originals: workout.originalExercise(ofSlot:)
                 )
                 log?.drop(workout.id)
             }
