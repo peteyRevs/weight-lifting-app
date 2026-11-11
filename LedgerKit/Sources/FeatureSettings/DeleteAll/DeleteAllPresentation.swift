@@ -19,11 +19,10 @@ nonisolated enum DeleteAllPresentation {
             return nil
         }
         return DeleteAllWarning(
-            title: SettingsCopy.deleteAllQuestion,
             message: [
                 SettingsCopy.deleteAllWhatGoes,
-                SettingsCopy.deleteAllWhatElseGoes,
-                SettingsCopy.deleteAllCatalogStays,
+                SettingsCopy.deleteAllExports,
+                SettingsCopy.deleteAllSettingsAndCatalog,
                 SettingsCopy.deleteAllHealthStays
             ].joined(separator: " "),
             cancel: SettingsModel.Link(title: SettingsCopy.cancel, action: .cancelDeleteAll),
@@ -46,9 +45,16 @@ nonisolated enum DeleteAllPresentation {
             text: draft.text,
             problem: draft.failed ? SettingsCopy.deleteAllFailed : nil,
             confirmTitle: SettingsCopy.deleteEverything,
-            confirm: !draft.isErasing && matches(draft.text, locale: locale) ? .confirmDeleteAll : nil,
+            confirm: canConfirm(draft, locale: locale) ? .confirmDeleteAll : nil,
+            progress: draft.isErasing ? SettingsCopy.deleteAllRunning : nil,
             isErasing: draft.isErasing
         )
+    }
+
+    /// Whether "Delete everything" acts: the sheet is up, no erase runs, and the typed word matches. The sheet's model
+    /// and the store's confirm both ask this (F14-S3 G3 N4).
+    static func canConfirm(_ draft: DeleteAllDraft, locale: Locale) -> Bool {
+        draft.step == .typing && !draft.isErasing && matches(draft.text, locale: locale)
     }
 
     /// Whether `text`, without the spaces and line breaks around it, is the localized word ("DELETE"), in any case as

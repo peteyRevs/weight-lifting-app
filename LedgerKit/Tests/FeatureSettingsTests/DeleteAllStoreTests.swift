@@ -19,11 +19,13 @@ struct DeleteAllStoreTests {
         defer { task.cancel() }
         scene.store.send(.deleteAll)
         let warning = try #require(try scene.model.deleteWarning)
-        #expect(warning.title == "Delete all data?")
-        #expect(warning.cancel.action == .cancelDeleteAll && warning.proceed.action == .continueDeleteAll)
+        #expect(try scene.model.deleteWarningTitle == "Delete all data?")
+        #expect(warning.cancel.action == .cancelDeleteAll)
+        #expect(warning.proceed.action == .continueDeleteAll)
         #expect(try scene.model.deleteSheet == nil)
         scene.store.send(warning.cancel.action)
-        #expect(try scene.model.deleteWarning == nil && scene.model.deleteSheet == nil)
+        #expect(try scene.model.deleteWarning == nil)
+        #expect(try scene.model.deleteSheet == nil)
         #expect(reset.calls.isEmpty)
     }
 
@@ -36,7 +38,9 @@ struct DeleteAllStoreTests {
         scene.store.send(.continueDeleteAll)
         #expect(try scene.model.deleteWarning == nil)
         let sheet = try #require(try scene.model.deleteSheet)
-        #expect(sheet.prompt == "Type DELETE to confirm" && sheet.word == "DELETE" && sheet.confirm == nil)
+        #expect(sheet.prompt == "Type DELETE to confirm")
+        #expect(sheet.word == "DELETE")
+        #expect(sheet.confirm == nil)
         scene.store.send(.setDeleteText("DELETE"))
         scene.store.send(.cancelDeleteAll)
         #expect(try scene.model.deleteSheet == nil)
@@ -86,11 +90,13 @@ struct DeleteAllStoreTests {
         await DeleteAllScene.untilHeld(reset)
         // N23: a second tap, and the field and Cancel, do nothing while the erase runs.
         let sheet = try #require(try scene.model.deleteSheet)
-        #expect(sheet.confirm == nil && sheet.isErasing)
+        #expect(sheet.confirm == nil)
+        #expect(sheet.isErasing)
         scene.store.send(.confirmDeleteAll)
         scene.store.send(.setDeleteText("x"))
         scene.store.send(.cancelDeleteAll)
-        #expect(scene.store.deleteAll?.text == "DELETE" && scene.store.deleteAll?.isErasing == true)
+        #expect(scene.store.deleteAll?.text == "DELETE")
+        #expect(scene.store.deleteAll?.isErasing == true)
         reset.release()
         await eventually { scene.store.deleteAll == nil }
         #expect(reset.calls.count == 1)
@@ -100,7 +106,8 @@ struct DeleteAllStoreTests {
         let workouts = try await scene.memory.workouts.recent(limit: 100)
         let catalog = try await scene.memory.exercises.all().count
         let bundled = try ExerciseCatalog.seed().count
-        #expect(workouts.isEmpty && catalog == bundled)
+        #expect(workouts.isEmpty)
+        #expect(catalog == bundled)
         let stored = try await scene.stored() == DeleteAllScene.regional
         #expect(stored)
         await eventually { scene.store.stored == DeleteAllScene.regional }
@@ -118,7 +125,9 @@ struct DeleteAllStoreTests {
         await eventually { scene.store.deleteAll?.failed == true }
         let sheet = try #require(try scene.model.deleteSheet)
         #expect(sheet.problem == "Nothing was deleted. Try again.")
-        #expect(sheet.confirm == .confirmDeleteAll && sheet.text == "delete" && !sheet.isErasing)
+        #expect(sheet.confirm == .confirmDeleteAll)
+        #expect(sheet.text == "delete")
+        #expect(!sheet.isErasing)
         let workouts = try await scene.memory.workouts.recent(limit: 100)
         #expect(!workouts.isEmpty, "nothing was deleted")
         scene.store.send(.confirmDeleteAll)

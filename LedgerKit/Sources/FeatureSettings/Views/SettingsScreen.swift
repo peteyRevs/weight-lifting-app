@@ -20,7 +20,7 @@ struct SettingsScreen: View {
             PlateInventorySheet(model: plates, send: send)
         }
         .alert(
-            model.deleteWarning?.title ?? "",
+            model.deleteWarningTitle,
             isPresented: warning,
             presenting: model.deleteWarning
         ) { warning in

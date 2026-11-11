@@ -34,6 +34,7 @@ nonisolated enum SettingsPresentation {
                 file: input.export
             ),
             deleteRow: DeleteAllPresentation.row(hasLiveWorkout: input.hasLiveWorkout),
+            deleteWarningTitle: SettingsCopy.deleteAllQuestion,
             deleteWarning: DeleteAllPresentation.warning(input.deleteAll),
             deleteSheet: DeleteAllPresentation.sheet(input.deleteAll, locale: input.locale),
             diagnostics: diagnostics,

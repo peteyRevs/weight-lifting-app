@@ -13,6 +13,8 @@
         case typed = "Delete all data, typed"
         /// The word typed and the erase failed: the sheet says nothing was deleted.
         case failed = "Delete all data, failed"
+        /// The erase running: the spinner, and nothing acts.
+        case erasing = "Delete all data, erasing"
 
         var draft: DeleteAllDraft {
             switch self {
@@ -22,6 +24,8 @@
                 DeleteAllDraft(step: .typing, text: "delete ")
             case .failed:
                 DeleteAllDraft(step: .typing, text: "DELETE", failed: true)
+            case .erasing:
+                DeleteAllDraft(step: .typing, text: "DELETE", isErasing: true)
             }
         }
 
@@ -47,5 +51,9 @@
 
     #Preview("Delete all data, failed") {
         DeleteAllPreview.failed.content
+    }
+
+    #Preview("Delete all data, erasing") {
+        DeleteAllPreview.erasing.content
     }
 #endif

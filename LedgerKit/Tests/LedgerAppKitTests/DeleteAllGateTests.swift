@@ -62,3 +62,44 @@ struct DeleteAllGateTests {
         #expect(try await stores.workouts.recent(limit: 10).isEmpty, "Today starts with no history")
     }
 }
+
+#if os(iOS)
+    extension DeleteAllGateTests {
+        /// C23 and ruling R4, through Settings: the erase takes the active program away under a pushed Settings, and
+        /// `MainRoot`, hosted as `AppRootTests` hosts it, starts the shell over with a new router when onboarding
+        /// appears: Today selected, every stack empty.
+        @Test("Criterion 6.4. After the erase MainRoot starts over with a new router: Today, nothing pushed")
+        func erase_mainRootMakesANewRouter() async throws {
+            let harness = Harness()
+            defer { harness.remove() }
+            let (composition, gate) = try await harness.bootedWithAProgram()
+            let made = AppRootTests.Made()
+            let first = AppRouter()
+            first.open(.settings, in: .today)
+            #expect(AppRootTests.labels(of: composition, gate, first, made: made) == ["Settings"], "control: pushed")
+            let follow = Task { await gate.follow(composition, in: .active) }
+            defer { follow.cancel() }
+
+            let store = withTestDependencies { composition.bind(&$0) } operation: {
+                SettingsStore(about: AppAbout(name: nil, version: nil, build: nil))
+            }
+            let run = Task { await store.run() }
+            defer { run.cancel() }
+            await until { store.model != nil }
+            for action: SettingsAction in [
+                .deleteAll,
+                .continueDeleteAll,
+                .setDeleteText("DELETE"),
+                .confirmDeleteAll
+            ] {
+                store.send(action)
+            }
+            #expect(await gate.change(from: .main) == .onboarding)
+            #expect(AppRootTests.labels(of: composition, gate, first, made: made) == AppRootTests.onboarding)
+            let next = try #require(made.routers.last, "onboarding appeared and the shell did not start over")
+            #expect(next !== first)
+            #expect(next.selectedTab == .today)
+            #expect(AppTab.allCases.allSatisfy { next[path: $0].isEmpty }, "nothing is pushed on any tab")
+        }
+    }
+#endif

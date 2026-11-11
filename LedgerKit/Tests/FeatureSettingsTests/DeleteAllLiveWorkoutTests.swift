@@ -18,12 +18,14 @@ struct DeleteAllLiveWorkoutTests {
         defer { task.cancel() }
         await eventually { scene.store.hasLiveWorkout }
         let row = try scene.model.deleteRow
-        #expect(row.action == nil && row.detail == "Finish or discard your workout first")
+        #expect(row.action == nil)
+        #expect(row.detail == "Finish or discard your workout first")
         scene.store.send(.deleteAll)
         #expect(try scene.model.deleteWarning == nil)
         try await session.discard(endedAt: EventBuilders.start.addingTimeInterval(600))
         await eventually { !scene.store.hasLiveWorkout }
-        #expect(try scene.model.deleteRow.action == .deleteAll && scene.model.deleteRow.detail == nil)
+        #expect(try scene.model.deleteRow.action == .deleteAll)
+        #expect(try scene.model.deleteRow.detail == nil)
         #expect(reset.calls.isEmpty)
     }
 
@@ -53,7 +55,7 @@ struct DeleteAllLiveWorkoutTests {
         scene.store.send(.setDeleteText("DELETE"))
         scene.store.send(.confirmDeleteAll)
         await eventually { scene.store.deleteAll == nil }
-        #expect(scene.store.hasLiveWorkout)
+        // The erase closes the sheet; the row stays as the follower last heard (F14-S3 G3 N1).
         #expect(reset.calls.isEmpty)
         #expect(try await !scene.memory.workouts.recent(limit: 100).isEmpty)
     }

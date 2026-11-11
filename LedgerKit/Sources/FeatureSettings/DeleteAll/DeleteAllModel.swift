@@ -28,10 +28,9 @@ nonisolated struct DeleteAllRowModel: Equatable, Sendable {
     let action: SettingsAction?
 }
 
-/// The warning, the system's alert: its title, what goes and what stays, and its two buttons, "Cancel" beside
-/// "Continue", which is destructive.
+/// The warning, the system's alert: what goes and what stays, and its two buttons, "Cancel" beside "Continue", which
+/// is destructive. Its title is `SettingsModel.deleteWarningTitle`, which never changes.
 nonisolated struct DeleteAllWarning: Equatable, Sendable {
-    let title: String
     let message: String
     let cancel: SettingsModel.Link
     let proceed: SettingsModel.Link
@@ -57,6 +56,10 @@ nonisolated struct DeleteAllSheetModel: Equatable, Sendable, Identifiable {
     let confirmTitle: String
     /// The erase; nil, and the button dimmed, until the typed word matches, and while the erase runs.
     let confirm: SettingsAction?
-    /// The erase runs: the field and Cancel do nothing, and the sheet cannot be swiped away.
+    /// "Deleting…" while the erase runs; nil otherwise.
+    let progress: String?
+    /// The erase runs: the field and Cancel are switched off, the foot shows that it is working, and the sheet cannot
+    /// be
+    /// swiped away.
     let isErasing: Bool
 }

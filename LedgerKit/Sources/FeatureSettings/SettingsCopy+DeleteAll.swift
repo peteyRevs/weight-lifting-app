@@ -39,19 +39,20 @@ nonisolated extension SettingsCopy {
         )
     }
 
-    static var deleteAllWhatElseGoes: String {
+    /// Only the copies the app still holds: a file the lifter saved elsewhere is theirs (F14-S3 G3 SF2).
+    static var deleteAllExports: String {
         String(
-            localized: "Any exported files on this iPhone go too, and your settings go back to how they started.",
+            localized: "Exports the app still holds are deleted; files you saved elsewhere stay.",
             bundle: .module,
-            comment: "Delete all data warning, its second sentence: what else is deleted or reset"
+            comment: "Delete all data warning, its second sentence: exported files"
         )
     }
 
-    static var deleteAllCatalogStays: String {
+    static var deleteAllSettingsAndCatalog: String {
         String(
-            localized: "The built-in exercise list is restored.",
+            localized: "Your settings go back to how they started, and the built-in exercise list is restored.",
             bundle: .module,
-            comment: "Delete all data warning, its third sentence: the built-in catalog is put back as it ships"
+            comment: "Delete all data warning, its third sentence: settings reset, the built-in catalog put back"
         )
     }
 
@@ -96,6 +97,15 @@ nonisolated extension SettingsCopy {
             bundle: .module,
             locale: locale,
             comment: "Label of the Delete all data field; the word is the one to type (DELETE)"
+        )
+    }
+
+    /// What VoiceOver reads for the spinner while the erase runs.
+    static var deleteAllRunning: String {
+        String(
+            localized: "Deleting…",
+            bundle: .module,
+            comment: "Delete all data sheet: the spinner's spoken name while everything is being deleted"
         )
     }
 

@@ -34,6 +34,7 @@ struct DeleteAllChrome<Page: View>: View {
             model.title,
             cancel: model.cancel,
             cancelIdentifier: "settings.deleteAll.cancel",
+            cancelEnabled: !model.isErasing,
             onCancel: cancel
         ) {
             page
@@ -46,7 +47,8 @@ struct DeleteAllChrome<Page: View>: View {
     }
 }
 
-/// The sheet's pinned foot: a rule, then "Delete everything", full width and ink, dimmed while it does nothing.
+/// The sheet's pinned foot: a rule, the system's spinner named "Deleting…" while the erase runs, then "Delete
+/// everything", full width and ink, dimmed while it does nothing.
 struct DeleteAllFoot: View {
     let model: DeleteAllSheetModel
     let send: (SettingsAction) -> Void
@@ -54,6 +56,10 @@ struct DeleteAllFoot: View {
     var body: some View {
         VStack(spacing: LedgerSpacing.m) {
             HairlineRule()
+            if let progress = model.progress {
+                ProgressView()
+                    .accessibilityLabel(progress)
+            }
             PillButton(model.confirmTitle, fillsWidth: true) {
                 if let confirm = model.confirm {
                     send(confirm)
@@ -113,6 +119,9 @@ struct DeleteAllField: View {
             .submitLabel(.done)
             .focused($isEditing)
             .disabled(model.isErasing)
+            // A field with a placeholder is not named by its label view: say what to type (found on the simulator,
+            // F14-S3 G3 SF3).
+            .accessibilityLabel(model.prompt)
             .accessibilityIdentifier("settings.deleteAll.field")
             .padding(.horizontal, LedgerSpacing.m)
             .padding(.vertical, LedgerSpacing.s)

@@ -167,6 +167,7 @@
                 health: SettingsModel.Status(title: words.health, value: words.notConnected),
                 export: base.export,
                 deleteRow: base.deleteRow,
+                deleteWarningTitle: base.deleteWarningTitle,
                 deleteWarning: base.deleteWarning,
                 deleteSheet: base.deleteSheet,
                 diagnostics: base.diagnostics.map { SettingsModel.Link(title: words.diagnostics, action: $0.action) },

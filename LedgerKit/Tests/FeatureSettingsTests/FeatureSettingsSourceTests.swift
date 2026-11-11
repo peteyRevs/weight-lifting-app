@@ -89,7 +89,7 @@ nonisolated struct FeatureSettingsSourceTests {
     func lookups_standInTheCopyFiles() throws {
         let outside = try Self.uses(of: Self.lookups) { !$0.hasPrefix("SettingsCopy") }
         #expect(outside == [])
-        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 57)
+        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 58)
     }
 
     @Test("N9. No view reaches for the copy, the presentation, a format, a filter, an order, a clock or a locale")

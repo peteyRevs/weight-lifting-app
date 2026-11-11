@@ -1007,9 +1007,9 @@ Paths under `LedgerKit/`.
 ### New user-facing wording
 
 "Delete all data" · "Finish or discard your workout first" · "Delete all data?" · "This deletes every workout and
-set, your records, your programs and your custom exercises." · "Any exported files on this iPhone go too, and your
-settings go back to how they started." · "The built-in exercise list is restored." · "Workouts already saved to Apple Health stay
-there: delete them in the Health app." · "Continue" · "This can't be undone." · "DELETE" · "Type %@ to confirm" ·
+set, your records, your programs and your custom exercises." · "Exports the app still holds are deleted; files you
+saved elsewhere stay." · "Your settings go back to how they started, and the built-in exercise list is restored." ·
+"Workouts already saved to Apple Health stay there: delete them in the Health app." · "Deleting…" (fix round 2) · "Continue" · "This can't be undone." · "DELETE" · "Type %@ to confirm" ·
 "Delete everything" · "Nothing was deleted. Try again." Only "Delete all data?", "Continue", the typed word and the
 failure line are the brief's; the rest are new.
 
@@ -1123,3 +1123,60 @@ slice is now net 635.
 2,060 s (log `scratchpad/f14-s3-fix1-gate.log`). FeatureSettings 97.21 % (2,096 / 2,156), LedgerPersistence 99.09 %,
 overall 98.46 %. G2's `cancelledAfterCommit_stillLeavesNoTraceOnDisk` passes unedited. This notes commit follows it
 and changes docs only.
+
+### S3 fix round 2 (G1, 2026-11-11)
+
+Against G3's review (1 Blocking, 3 Should-fix, 6 Nits) and the orchestrator's rulings. G2's tests are not edited.
+
+- **S1 (Blocking): N24 has its test.** `LedgerPersistenceTests/Performance/DataResetPerformanceTests` (`.performance`,
+  `.slow`, gated on `TestLane.runsSlowTests`), budget `PerformanceBudget.eraseAll` = 1 s. The history is the record
+  replay suite's 400 workouts of 50 sets (20,000, checked), with the bundled catalog, a program and changed settings,
+  written once to a template file with its WAL checkpointed; each of 1 + 20 runs erases a fresh copy (file, `-wal`,
+  `-shm`: the launch's read-only preflight needs them) through `LedgerStores.open`, so every run times the deletes, the
+  reseed, `VACUUM` and the `TRUNCATE` checkpoint. **Measured p95: 74.7 ms (median 69.8 ms) on the iPhone 17
+  simulator** (Nightly plan, through the lock); 93.6 ms (median 88.5) on the Mac host. Well inside the budget.
+- **SF1: a failed erase is announced.** `SettingsRoot` announces `model.deleteSheet.problem` when it appears, through
+  the injected `announce`, as F14-S1b-2 does for `model.problem`. Test: `DeleteAllAnnouncementTests
+  .failedErase_isAnnounced` (hosted root: opening the sheet announces nothing, the failure is announced once, the
+  erase that then succeeds announces nothing).
+- **SF2: the warning no longer overstates the exports.** The ruled text "Exports Ledger still holds are deleted; files
+  you saved elsewhere stay." holds the product's name, which no catalog text may (standards §7, product decisions,
+  Naming; `ModuleCopyTests` fails it), so it reads **"Exports the app still holds are deleted; files you saved
+  elsewhere stay."** The settings move to the next sentence: **"Your settings go back to how they started, and the
+  built-in exercise list is restored."** `DeleteAllPresentationTests`, the catalog and the copy list follow.
+- **SF3: the VoiceOver check, on the simulator.** `Apps/LedgerUITests/SettingsDeleteAllVoiceOver.swift` (nightly) reads
+  the accessibility tree of each state, in order, attaches it, and runs `performAccessibilityAudit` (Dynamic Type,
+  element descriptions, hit regions) on the sheet. Both tests pass. What is read:
+  - Row, on: button "Delete all data". Row, off (a sample workout started and minimized): button "Delete all data,
+    Finish or discard your workout first", dimmed.
+  - Warning: "Delete all data?", the message (the four sentences above), button "Cancel", button "Continue".
+  - Sheet, empty: button "Cancel" and heading "Delete all data" (one line), "This can't be undone.", field "Type
+    DELETE to confirm" with the placeholder "DELETE", button "Delete everything", dimmed. Typed "delete": the field's
+    value "delete", "Delete everything" enabled. The audit found nothing.
+  - **Found and fixed:** the field's spoken label was empty. A `TextField` with a prompt is not named by its label view
+    on iOS, and the visible label above it is hidden from VoiceOver, so VoiceOver read only "DELETE, text field".
+    `DeleteAllField` now sets `.accessibilityLabel(model.prompt)`. The hosted reader never lists the field (R5), so
+    only the simulator could see this.
+  - Not walked on the simulator: the failed and erasing states, which the app cannot be put in without failure
+    injection; the hosted trees pin them, and SF1's test pins the announcement.
+- **N1.** `erase()` no longer writes `hasLiveWorkout`; it closes the sheet, and the follower switches the row off.
+  `DeleteAllLiveWorkoutTests.workoutFoundAtTheErase_deletesNothing` drops its `hasLiveWorkout` check accordingly.
+- **N2.** While the erase runs, Cancel is dimmed and inert: `SheetChrome` gains `cancelEnabled` (default true; the
+  escape gesture follows it), tested by `LedgerDesignTests/SheetChromeCancelTests`. The foot shows the system's spinner,
+  spoken "Deleting…" (one new key, 58 in all). A fourth preview, "Delete all data, erasing"; its tree: Cancel and
+  Delete everything dimmed, the spinner read as a stop of its own.
+- **N3.** The alert's title is the model's constant `deleteWarningTitle` ("Delete all data?"); `DeleteAllWarning` has no
+  title.
+- **N4.** `GRDBSettingsRepository.upsert` is internal, and the erase calls it; `replace` is gone.
+  `DeleteAllPresentation.canConfirm(_:locale:)` is what both the sheet's model and `confirmErase` ask, with a test.
+- **N5, not taken: the message stays four catalog strings.** One catalog string would be a one-line key of about 330
+  characters: SwiftLint's `line_length` fails it (error at 140, `--strict`), and the copy audit refuses a key that is
+  not a one-line literal, so it would need a new lint suppression, which the Definition of Done forbids. The join is
+  `DeleteAllPresentation`'s, with a space. If the orchestrator wants one string, the audit's one-line rule or the lint
+  needs an exemption first.
+- **N6.** The S3 tests I own (`DeleteAllStoreTests`, `DeleteAllLiveWorkoutTests`, `DeleteAllPresentationTests`, my line
+  of `PreviewTests`) have one condition per `#expect`. `DeleteAllGateTests.erase_mainRootMakesANewRouter` (iOS,
+  hosted as `AppRootTests` hosts `MainRoot`): Settings pushed, the erase through Settings' store, onboarding, and
+  `MainRoot` makes a new router, Today selected and every stack empty.
+
+**Product lines this round:** +54 / −22, net +32 (`SheetChrome` +8 of them). The slice is now net 667.

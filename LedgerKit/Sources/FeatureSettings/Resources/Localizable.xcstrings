@@ -45,17 +45,6 @@
         }
       }
     },
-    "Any exported files on this iPhone go too, and your settings go back to how they started." : {
-      "comment" : "Delete all data warning, its second sentence: what else is deleted or reset",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Any exported files on this iPhone go too, and your settings go back to how they started."
-          }
-        }
-      }
-    },
     "Apple Health" : {
       "comment" : "Settings row: the link to Apple Health",
       "localizations" : {
@@ -232,6 +221,17 @@
         }
       }
     },
+    "Deleting…" : {
+      "comment" : "Delete all data sheet: the spinner's spoken name while everything is being deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting…"
+          }
+        }
+      }
+    },
     "Diagnostics" : {
       "comment" : "Settings row in test builds only: opens the developer menu",
       "localizations" : {
@@ -283,6 +283,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Export data, CSV"
+          }
+        }
+      }
+    },
+    "Exports the app still holds are deleted; files you saved elsewhere stay." : {
+      "comment" : "Delete all data warning, its second sentence: exported files",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exports the app still holds are deleted; files you saved elsewhere stay."
           }
         }
       }
@@ -441,17 +452,6 @@
         }
       }
     },
-    "The built-in exercise list is restored." : {
-      "comment" : "Delete all data warning, its third sentence: the built-in catalog is put back as it ships",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The built-in exercise list is restored."
-          }
-        }
-      }
-    },
     "This can't be undone." : {
       "comment" : "Delete all data sheet: above the field for the typed word",
       "localizations" : {
@@ -580,6 +580,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Workouts already saved to Apple Health stay there: delete them in the Health app."
+          }
+        }
+      }
+    },
+    "Your settings go back to how they started, and the built-in exercise list is restored." : {
+      "comment" : "Delete all data warning, its third sentence: settings reset, the built-in catalog put back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your settings go back to how they started, and the built-in exercise list is restored."
           }
         }
       }

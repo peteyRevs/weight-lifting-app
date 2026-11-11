@@ -27,6 +27,8 @@ nonisolated struct SettingsModel: Equatable, Sendable {
     let export: Export
     /// "Delete all data", under the export (criterion 6).
     let deleteRow: DeleteAllRowModel
+    /// "Delete all data?": its warning's title, the same whether or not the warning is up.
+    let deleteWarningTitle: String
     /// Its warning, while it is up.
     let deleteWarning: DeleteAllWarning?
     /// Its sheet, which asks for the typed word, while it is up.

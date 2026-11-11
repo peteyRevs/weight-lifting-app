@@ -19,9 +19,13 @@
             try #require(preview.model())
         }
 
+        /// While the erase runs Cancel and Delete everything are dimmed, and the spinner is read by its name.
         static func tree(_ model: DeleteAllSheetModel) -> [ViewStop] {
-            [.heading(model.title), .button(model.cancel), .text(model.message)]
+            [.heading(model.title), model.isErasing ? .dimmedButton(model.cancel) : .button(model.cancel)]
+                + [.text(model.message)]
                 + (model.problem.map { [ViewStop.text($0)] } ?? [])
+                // The spinner has no trait the reader names: it reads as a stop of its own, its name its label.
+                + (model.progress.map { [ViewStop.field($0)] } ?? [])
                 + [model.confirm == nil ? .dimmedButton(model.confirmTitle) : .button(model.confirmTitle)]
         }
 
@@ -54,7 +58,9 @@
                         _ = element.accessibilityActivate()
                     }
                 }
-                let expected: [SettingsAction] = [.cancelDeleteAll] + (model.confirm.map { [$0] } ?? [])
+                let expected: [SettingsAction] = model.isErasing
+                    ? []
+                    : [.cancelDeleteAll] + (model.confirm.map { [$0] } ?? [])
                 #expect(sent == expected, "\(preview.rawValue)")
             }
         }

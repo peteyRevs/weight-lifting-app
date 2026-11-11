@@ -66,7 +66,7 @@ public struct GRDBDataReset: DataReset {
                 try database.execute(sql: "DELETE FROM \(table)")
             }
             try GRDBExerciseRepository.seed(records, version: version, at: timestamp, in: database)
-            try GRDBSettingsRepository.replace(payload: payload, updatedAt: timestamp, in: database)
+            try GRDBSettingsRepository.upsert(payload: payload, updatedAt: timestamp, in: database)
         }
         // Not the caller's task: once the transaction has committed, its cancellation must not reach the compaction.
         let compaction = Task { await compact() }

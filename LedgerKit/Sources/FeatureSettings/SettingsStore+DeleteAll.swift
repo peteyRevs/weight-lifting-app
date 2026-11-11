@@ -55,9 +55,7 @@ extension SettingsStore {
     /// erase runs). With no run of the screen's task to erase, nothing is asked for and nothing is marked as erasing,
     /// so the button never sticks.
     private func confirmErase() {
-        guard let eraseMark, let draft = deleteAll,
-              DeleteAllPresentation.sheet(draft, locale: locale)?.confirm != nil
-        else {
+        guard let eraseMark, let draft = deleteAll, DeleteAllPresentation.canConfirm(draft, locale: locale) else {
             return
         }
         deleteAll?.isErasing = true
@@ -95,7 +93,7 @@ extension SettingsStore {
         }
         do {
             if try await session.current() != nil {
-                hasLiveWorkout = true
+                // The follower hears of the workout and switches the row off; the erase only closes the sheet.
                 deleteAll = nil
                 show()
                 return
