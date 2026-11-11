@@ -138,13 +138,11 @@ struct ShownRestAdversarialTests {
         return state
     }
 
-    /// As built, and a question for the product owner (S9), not a ruling: a superset's member logged after
-    /// the rest's end takes "Rest over" away (the next logged set, brief criterion 6); un-logging that
-    /// member brings the ended rest back on screen, however long ago it ended. Rule 22 says an un-log
-    /// never cancels a rest; nothing says it shows one again. The cover draws a superset's members as solo
-    /// cards today, so this is reachable in the app before S9. When it is ruled, this test changes with it.
-    @Test("As built: un-logging the member logged after a rest's end brings Rest over back (question, S9)")
-    func supersetMember_unlogged_asBuilt() {
+    /// F10 S9, ruling Q4 (sanctioned edit of the S6 "as built" test): a superset's member logged after the
+    /// rest's end takes "Rest over" away, now because the engine ends the rest; un-logging that member
+    /// brings nothing back (rule 22: an un-log never starts or restores a rest).
+    @Test("Q4: un-logging the member logged after a rest's end brings no rest back")
+    func supersetMember_unlogged_bringsNoRestBack() {
         let second = Self.superset.exercises[0].sets[1]
         let logged = WorkoutEvent.setLogged(
             exerciseIndex: 0, setID: second.id, weight: second.weight, reps: second.reps, doneAt: Self.at(900)
@@ -152,17 +150,19 @@ struct ShownRestAdversarialTests {
         let gone = Self.afterFirstRound([logged])
         #expect(gone.shownRest == nil, "the next logged set takes Rest over away")
         let back = Self.afterFirstRound([logged, .setUnlogged(exerciseIndex: 0, setID: second.id)])
-        #expect(back.shownRest == RestTimer(endsAt: Self.at(160), total: .seconds(90)))
+        #expect(back.rest == nil)
+        #expect(back.shownRest == nil)
     }
 
-    /// As built, a second question for S9: a member logged while the rest runs leaves it shown, so at its
-    /// end "Rest over" stands although a set was logged since the rest began.
-    @Test("As built: a member logged while the rest runs does not take it away, running or over (question, S9)")
-    func supersetMember_loggedDuringTheRest_asBuilt() {
+    /// F10 S9, ruling Q4 (sanctioned edit of the S6 "as built" test): a member logged while the rest runs
+    /// ends it, so no "Rest over" stands through the next member.
+    @Test("Q4: a member logged while the rest runs ends it")
+    func supersetMember_loggedDuringTheRest_endsIt() {
         let second = Self.superset.exercises[0].sets[1]
         let during = Self.afterFirstRound([.setLogged(
             exerciseIndex: 0, setID: second.id, weight: second.weight, reps: second.reps, doneAt: Self.at(100)
         )])
-        #expect(during.shownRest == RestTimer(endsAt: Self.at(160), total: .seconds(90)))
+        #expect(during.rest == nil)
+        #expect(during.shownRest == nil)
     }
 }

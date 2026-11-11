@@ -153,7 +153,17 @@ struct Model {
         let members = blockMembers(of: exerciseIndex)
         let rounds = buildRounds(of: members)
         let row = Row(exercise: exerciseIndex, set: setIndex)
-        if workout.autoRest, rounds.contains(where: { $0.last == row }) {
+        let endsItsRound = rounds.contains { $0.last == row }
+        // F10 S9, ruling Q4 as refined: a row that starts no rest and leaves its round with an undone row ends
+        // the rest the workout holds; a row that completes its round, in any order, leaves it.
+        var leavesTheRoundOpen = false
+        for round in rounds where round.contains(row) {
+            leavesTheRoundOpen = round.contains { isUndone($0) }
+        }
+        if !(workout.autoRest && endsItsRound), leavesTheRoundOpen {
+            workout.rest = nil
+        }
+        if workout.autoRest, endsItsRound {
             var longest = 0
             for member in members {
                 longest = max(longest, workout.exercises[member].rest.seconds)

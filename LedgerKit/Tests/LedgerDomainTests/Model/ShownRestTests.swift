@@ -102,21 +102,23 @@ struct ShownRestTests {
         #expect(other.shownRest == rest)
     }
 
-    @Test("In a superset: a member logged while the rest runs keeps it; one logged after its end takes it away")
+    /// F10 S9, ruling Q4 (sanctioned edit): a member that starts no rest ends the rest in the engine, so the
+    /// superset case is the engine's and `shownRest` follows `rest`.
+    @Test("In a superset: a member that starts no rest ends the rest, logged while it runs or after its end")
     func supersetMember_thatStartsNoRest() {
         // A1 then B1 end the first round at 70 s: the group's rest, 90 s, ends at 160 s.
         let round = [Self.logged(0, 0, at: 60, in: Self.superset), Self.logged(1, 0, at: 70, in: Self.superset)]
         let rest = RestTimer(endsAt: Self.at(160), total: .seconds(90))
         #expect(Self.after(round, on: Self.superset).shownRest == rest)
-        // A2 starts no rest of its own. Logged while the rest runs, the rest is still shown, also after its end.
+        // A2 starts no rest of its own. Logged while the rest runs, it ends it.
         let during = Self.after(round + [Self.logged(0, 1, at: 100, in: Self.superset)], on: Self.superset)
-        #expect(during.rest == rest)
-        #expect(during.shownRest == rest)
-        // Logged after the rest's end, the engine still holds the ended rest, and it is no longer shown.
+        #expect(during.rest == nil)
+        #expect(during.shownRest == nil)
+        // Logged after the rest's end, it ends the ended rest as well.
         let afterward = Self.after(round + [Self.logged(0, 1, at: 200, in: Self.superset)], on: Self.superset)
-        #expect(afterward.rest == rest)
+        #expect(afterward.rest == nil)
         #expect(afterward.shownRest == nil)
-        // At the very moment of its end counts as after it.
+        // At the very moment of its end too.
         let atTheEnd = Self.after(round + [Self.logged(0, 1, at: 160, in: Self.superset)], on: Self.superset)
         #expect(atTheEnd.shownRest == nil)
     }

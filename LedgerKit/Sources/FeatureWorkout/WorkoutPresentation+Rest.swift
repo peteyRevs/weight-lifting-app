@@ -53,7 +53,8 @@ nonisolated extension WorkoutPresentation {
     }
 
     /// The shown row of the shown exercise, as the panel names it: its number among the rows that are not
-    /// drop sets, or "Drop set", then its weight in the workout's unit and its reps.
+    /// drop sets, or "Drop set", then its weight in the workout's unit and its reps. A superset's row is named
+    /// by its label, "A2 · 100 lb × 12", and read with its member's name first (F10 S9 criterion 15, Q7).
     private static func nextSet(
         of state: WorkoutState,
         selection: WorkoutSelection?,
@@ -65,10 +66,22 @@ nonisolated extension WorkoutPresentation {
         else {
             return nil
         }
-        let sets = state.exercises[shown].sets
-        let set = sets[index]
+        let set = state.exercises[shown].sets[index]
+        if let block = superset(holding: shown, in: state.exercises) {
+            let letter = SupersetRounds.letter(forMemberAt: block.exerciseIndices.firstIndex(of: shown) ?? 0)
+            let row = setRows(
+                of: state.exercises[shown], at: shown, active: active, units: state.units, locale: locale,
+                letter: letter
+            )[index]
+            return RestPanelModel.NextSet(
+                line: WorkoutCopy.nextRow(
+                    row.label, weight: row.weight, reps: set.reps.value, units: state.units, locale: locale
+                ),
+                spoken: row.summary
+            )
+        }
         let isDrop = set.kind == .drop
-        let number = sets[...index].count { $0.kind != .drop }
+        let number = state.exercises[shown].sets[...index].count { $0.kind != .drop }
         let weight = set.weight.formatted(in: state.units)
         let spoken = [
             isDrop ? WorkoutCopy.spokenDropSet : WorkoutCopy.spokenSet(number, locale: locale),

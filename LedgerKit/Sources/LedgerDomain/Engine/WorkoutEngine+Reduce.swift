@@ -67,6 +67,13 @@ private extension WorkoutState {
     /// Rule 3: the set is done at `doneAt` with the logged values (the latest envelope wins). Only the
     /// not-done → done transition (rule 18) starts rest, for the last row of a round when auto rest is
     /// on (rule 19), and advances the cursor (rule 20). That rest starts at `doneAt`.
+    ///
+    /// F10 S9, ruling Q4 as refined after the review: a not-done → done row that starts no rest and leaves an
+    /// undone row in its round ends the rest the state holds, running or over, and its notification is
+    /// cancelled: the lifter has moved on, so no "Rest over" stands, or buzzes, through the next member. A row
+    /// that completes its round, in any order, leaves the rest as it is: logged out of order (B1, then the
+    /// forgotten A1) it starts none of its own, the round's last row having started the group rest already.
+    /// A re-log, an un-log (rule 22) and a solo set (a round of one, complete once logged) are as before.
     mutating func logSet(_ id: SetID, of exerciseIndex: Int, weight: Weight, reps: Reps, doneAt: Date) -> [Effect] {
         guard let setIndex = row(of: id, in: exerciseIndex) else {
             return []
@@ -81,9 +88,14 @@ private extension WorkoutState {
         }
         let ref = SetRef(exerciseIndex: exerciseIndex, setIndex: setIndex)
         var effects: [Effect] = [.haptic(.setLogged)]
-        if autoRest, SupersetRounds.isLastOfRound(ref, block: blocks[blockIndex], exercises: exercises) {
-            let groupRest = SupersetRounds.groupRest(block: blocks[blockIndex], exercises: exercises).duration
+        let block = blocks[blockIndex]
+        let round = SupersetRounds.rounds(block: block, exercises: exercises).first { $0.contains(ref) } ?? []
+        let leavesTheRoundOpen = round.contains { !exercises[$0.exerciseIndex].sets[$0.setIndex].isDone }
+        if autoRest, SupersetRounds.isLastOfRound(ref, block: block, exercises: exercises) {
+            let groupRest = SupersetRounds.groupRest(block: block, exercises: exercises).duration
             effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest))
+        } else if leavesTheRoundOpen, rest != nil {
+            effects += skipRest()
         }
         cursor = nextCursor(after: ref, blocks: blocks, blockIndex: blockIndex) ?? cursor
         return effects

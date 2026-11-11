@@ -156,34 +156,6 @@
             remaining: Array(laterThanBench.dropFirst())
         )
 
-        static let raise = Card(
-            place: "Exercise 5 of 5",
-            title: "Cable Lateral Raise",
-            target: "3 × 16 @ 15 lb · RPE 9",
-            last: "No history yet",
-            rows: [
-                .done("Set 1, 15 pounds, 16 reps", undo: "Undo set 1"),
-                .current("Set 2, 15 pounds, 16 reps", log: "Log set 2"),
-                .pending("Set 3, 15 pounds, 16 reps", log: "Log set 3")
-            ],
-            steppers: Steppers("2.5 LB", "15 pounds", "16 reps")
-        )
-
-        static let raiseInKilograms = Card(
-            place: "Exercise 5 of 5",
-            title: "Cable Lateral Raise",
-            target: "3 × 16 @ 10 kg · RPE 9",
-            last: "No history yet",
-            unit: "kg",
-            rows: [
-                .done("Set 1, 10 kilograms, 16 reps", undo: "Undo set 1"),
-                .current("Set 2, 10 kilograms, 16 reps", log: "Log set 2"),
-                .pending("Set 3, 10 kilograms, 16 reps", log: "Log set 3"),
-                .pending("Drop set, 8.75 kilograms, 16 reps", log: "Log drop set")
-            ],
-            steppers: Steppers("1.25 KG", "10 kilograms", "16 reps")
-        )
-
         /// The page of `logging`, which `resting` and `restOver` show at other moments.
         static let loggingPage = page(bench(
             ["Done", "Done", "Current set", "Pending", "Pending"],
@@ -204,13 +176,16 @@
         }
 
         /// The panel of each state that shows a rest; a state that is not listed shows none. Every state
-        /// with a set logged shows one: the engine starts a rest at each logged set.
+        /// with a set logged shows one, but `hour` and `dropSet`: since F10 S9 (Q4) a superset's member that
+        /// starts no rest ends the rest, and `hour` last logged A2; `dropSet` logged no set through the engine.
         static let rests: [WorkoutPreview: [Stop]] = [
             .resting: rest("Resting", timeLeft: "1 minute, 15 seconds", next: "Set 3, 200 pounds, 5 reps"),
             .restOver: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
             .logging: rest("Rest over", timeLeft: "", next: "Set 3, 200 pounds, 5 reps"),
             .minutes: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps"),
-            .hour: rest("Rest over", timeLeft: "", next: "Set 2, 15 pounds, 16 reps"),
+            .supersetRound2: rest(
+                "Resting", timeLeft: "45 seconds", next: "Lat Pulldown, set 2, 102.5 pounds, 13 reps"
+            ),
             .discarding: rest("Rest over", timeLeft: "", next: "Set 2, 52.5 pounds, 11 reps", isEnabled: false)
         ]
 
@@ -221,7 +196,10 @@
                 canRepeat: false
             )),
             .minutes: header(progress: "Exercise 2 of 5") + page(incline),
-            .hour: header(progress: "Exercise 5 of 5") + page(raise),
+            .hour: header(progress: "Exercise 5 of 5") + page(upperASuperset(
+                ["Done", "Done", "Done", "Current set", "Pending", "Pending"],
+                current: 4, last: "No history yet", canRepeat: false
+            )),
             .logging: header(progress: "Exercise 1 of 5") + page(bench(
                 ["Done", "Done", "Current set", "Pending", "Pending"],
                 last: "Sep 9 · 5×5 @ 195 lb",
@@ -229,7 +207,11 @@
             )),
             .resting: header(progress: "Exercise 1 of 5") + loggingPage,
             .restOver: header(progress: "Exercise 1 of 5") + loggingPage,
-            .dropSet: header(progress: "Exercise 5 of 5") + page(raiseInKilograms),
+            .dropSet: header(progress: "Exercise 5 of 5") + page(raiseBlockInKilograms),
+            .supersetRound2: header(progress: "Exercise 4 of 5") + page(upperASuperset(
+                ["Done", "Done", "Current set", "Pending", "Pending", "Pending"],
+                current: 3, last: "Sep 9 · 3×13 @ 100 lb", canRepeat: true
+            )),
             .discarding: header(progress: "Exercise 2 of 5", isEnabled: false) + page(incline, isEnabled: false),
             .loading: [],
             .failed: [

@@ -131,12 +131,13 @@ public struct WorkoutState: Identifiable, Hashable, Codable, Sendable {
     /// The rest a screen shows (F10 S6): the running rest, and after it has ended the same rest, for
     /// "Rest over", until a set is logged, the rest is skipped or it is extended; otherwise nil.
     ///
-    /// No clock is read. `rest` is what the engine keeps: a skip clears it, "+30s" replaces it, and a logged
-    /// set that starts a rest replaces it too. One case is left: a set logged once the rest had ended that
-    /// starts no rest of its own (a superset's member that does not end its round), after which the engine
-    /// still holds the ended rest. A set whose `doneAt` is not before the rest's end tells that case: a set
-    /// logged while the rest ran is done before it ends. Un-logging a set never cancels a rest (rule 22),
-    /// and here it can only bring an ended one back.
+    /// No clock is read. `rest` is what the engine keeps: a skip clears it, "+30s" replaces it, a logged
+    /// set that starts a rest replaces it, and since F10 S9 (ruling Q4) a superset's member that starts no
+    /// rest clears it: the superset case is the engine's. One case is left: a set logged once the rest had
+    /// ended that starts no rest of its own because auto rest is off, after which the engine still holds
+    /// the ended rest. A set whose `doneAt` is not before the rest's end tells that case: a set logged while
+    /// the rest ran is done before it ends. Un-logging a set never cancels a rest (rule 22), and here it can
+    /// only bring an ended one back.
     public var shownRest: RestTimer? {
         guard phase == .live, let rest else {
             return nil

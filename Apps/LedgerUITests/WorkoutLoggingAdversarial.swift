@@ -72,14 +72,15 @@ final class WorkoutLoggingAdversarial: XCTestCase {
         XCTAssertTrue(title.isHittable, "the first exercise's name is on screen when the cover opens")
 
         app.buttons["workout.remaining.row.4"].tap()
-        let reads = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label == %@", "Cable Lateral Raise"), object: title
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [reads], timeout: 5), .completed)
+        // F10 S9 (edited for criterion 4): the last exercise is a superset's member, shown in its block, whose
+        // round is the title.
+        let block = app.staticTexts["workout.block.title"]
+        XCTAssertTrue(block.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["workout.block.legend.B"].isSelected, "Cable Lateral Raise is the current member")
         attachScreenshot(of: app, named: "After a jump at an accessibility size")
         // The cover's own page: Today's scroll view is still in the tree under the cover (since F09 S5), and
         // comes first in it, so `scrollViews.firstMatch` was Today's (G2, F10 S6).
-        let pages = app.scrollViews.containing(.staticText, identifier: "workout.card.title")
+        let pages = app.scrollViews.containing(.staticText, identifier: "workout.block.title")
         XCTAssertEqual(pages.count, 1, "the cover's page is one scroll view")
         let scroll = pages.firstMatch.frame
         XCTAssertLessThanOrEqual(
@@ -87,9 +88,9 @@ final class WorkoutLoggingAdversarial: XCTestCase {
             scroll.minY,
             "the page is under the header"
         )
-        XCTAssertGreaterThanOrEqual(title.frame.minY, scroll.minY, "the name is above the page's top edge")
-        XCTAssertTrue(title.isHittable, "the name of the exercise jumped to is not on screen")
-        XCTAssertTrue(app.staticTexts["Exercise 5 of 5"].isHittable, "nor is its place")
+        XCTAssertGreaterThanOrEqual(block.frame.minY, scroll.minY, "the round is above the page's top edge")
+        XCTAssertTrue(block.isHittable, "the round of the block jumped to is not on screen")
+        XCTAssertTrue(app.staticTexts["Superset · block 4 of 4"].isHittable, "nor is its place")
         discard(in: app)
     }
 }

@@ -82,6 +82,7 @@
                 "workout",
                 "workout",
                 "workout",
+                "workout",
                 "busy",
                 "loading",
                 "failed"
@@ -95,10 +96,15 @@
             let logging = try #require(WorkoutPreview.logging.model.page?.card)
             #expect(logging.rows.map(\.state) == [.done, .done, .active, .pending, .pending])
             #expect(logging.repeatLast == "Repeat")
+            // F10 S9: the drop set's exercise is a superset's second member, so its block is drawn.
             let dropSet = try #require(WorkoutPreview.dropSet.model.page)
-            #expect(dropSet.card?.rows.map(\.label) == ["1", "2", "3", "D"])
-            #expect(dropSet.card?.columns.weight == "kg")
-            #expect(dropSet.remaining == nil)
+            #expect(dropSet.block?.rows.map(\.label) == ["A1", "B1", "A2", "B2", "A3", "B3", "BD"])
+            #expect(dropSet.block?.columns.weight == "kg")
+            #expect(dropSet.remaining?.rows.map(\.exerciseIndex) == [0, 1, 2])
+            let round2 = try #require(WorkoutPreview.supersetRound2.model.page?.block)
+            #expect(round2.title == "Round 2 of 3")
+            #expect(round2.rows.map(\.state) == [.done, .done, .active, .pending, .pending, .pending])
+            #expect(round2.current?.repeatLast == "Repeat")
             #expect(WorkoutPreview.started.model.page?.card?.last == "No history yet")
         }
     }
