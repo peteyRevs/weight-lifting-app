@@ -153,7 +153,12 @@ struct Model {
         let members = blockMembers(of: exerciseIndex)
         let rounds = buildRounds(of: members)
         let row = Row(exercise: exerciseIndex, set: setIndex)
-        if workout.autoRest, rounds.contains(where: { $0.last == row }) {
+        let endsItsRound = rounds.contains { $0.last == row }
+        if !endsItsRound {
+            // F10 S9, ruling Q4: a member that starts no rest ends the one the workout holds.
+            workout.rest = nil
+        }
+        if workout.autoRest, endsItsRound {
             var longest = 0
             for member in members {
                 longest = max(longest, workout.exercises[member].rest.seconds)

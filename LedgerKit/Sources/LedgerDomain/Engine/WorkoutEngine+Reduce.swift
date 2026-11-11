@@ -67,6 +67,11 @@ private extension WorkoutState {
     /// Rule 3: the set is done at `doneAt` with the logged values (the latest envelope wins). Only the
     /// not-done → done transition (rule 18) starts rest, for the last row of a round when auto rest is
     /// on (rule 19), and advances the cursor (rule 20). That rest starts at `doneAt`.
+    ///
+    /// F10 S9, ruling Q4: a not-done → done row that is not the last of its round (a superset's member that
+    /// starts no rest) ends the rest the state holds, running or over, and its notification is cancelled:
+    /// the lifter has moved on, so no "Rest over" stands, or buzzes, through the next member. A re-log, an
+    /// un-log (rule 22), a solo set and a set that ends its round do not.
     mutating func logSet(_ id: SetID, of exerciseIndex: Int, weight: Weight, reps: Reps, doneAt: Date) -> [Effect] {
         guard let setIndex = row(of: id, in: exerciseIndex) else {
             return []
@@ -81,9 +86,12 @@ private extension WorkoutState {
         }
         let ref = SetRef(exerciseIndex: exerciseIndex, setIndex: setIndex)
         var effects: [Effect] = [.haptic(.setLogged)]
-        if autoRest, SupersetRounds.isLastOfRound(ref, block: blocks[blockIndex], exercises: exercises) {
+        let endsItsRound = SupersetRounds.isLastOfRound(ref, block: blocks[blockIndex], exercises: exercises)
+        if autoRest, endsItsRound {
             let groupRest = SupersetRounds.groupRest(block: blocks[blockIndex], exercises: exercises).duration
             effects += startRest(RestTimer(endsAt: doneAt.adding(groupRest), total: groupRest))
+        } else if !endsItsRound, rest != nil {
+            effects += skipRest()
         }
         cursor = nextCursor(after: ref, blocks: blocks, blockIndex: blockIndex) ?? cursor
         return effects

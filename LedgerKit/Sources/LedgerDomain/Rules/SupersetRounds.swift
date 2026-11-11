@@ -40,6 +40,29 @@ public enum SupersetRounds {
         rounds(block: block, exercises: exercises).contains { $0.last == ref }
     }
 
+    /// Rule 20's rounds (F10 S9): round `r` holds the `r`-th row that is not a drop set of every member that
+    /// has one, in member order; then the drop rows form rounds of their own, in the same way. A member with
+    /// fewer rows drops out of the later rounds. Pure and total: an out-of-range member is skipped, and a
+    /// block with no row has no round.
+    public static func rounds(block: Block, exercises: [WorkoutExercise]) -> [[SetRef]] {
+        let members = block.exerciseIndices.filter(exercises.indices.contains)
+        let rows = members.map { exerciseIndex in
+            let sets = exercises[exerciseIndex].sets.enumerated()
+            let ref = { SetRef(exerciseIndex: exerciseIndex, setIndex: $0) }
+            return (
+                regular: sets.filter { $0.element.kind != .drop }.map { ref($0.offset) },
+                drop: sets.filter { $0.element.kind == .drop }.map { ref($0.offset) }
+            )
+        }
+        return interleave(rows.map(\.regular)) + interleave(rows.map(\.drop))
+    }
+
+    /// The round, counted from 0, that holds `ref` in `rounds(block:exercises:)`; nil for a row the block
+    /// does not hold.
+    public static func round(of ref: SetRef, block: Block, exercises: [WorkoutExercise]) -> Int? {
+        rounds(block: block, exercises: exercises).firstIndex { $0.contains(ref) }
+    }
+
     /// Rule 19 / decision #7: a superset rests once per round for the longest member rest.
     /// An empty or out-of-range block falls back to the default rest.
     public static func groupRest(block: Block, exercises: [WorkoutExercise]) -> RestDuration {
@@ -78,20 +101,6 @@ public enum SupersetRounds {
 
     private static func members(of block: Block, in exercises: [WorkoutExercise]) -> [WorkoutExercise] {
         block.exerciseIndices.filter(exercises.indices.contains).map { exercises[$0] }
-    }
-
-    /// The rows of a block split into rounds: working rounds first, then drop rounds.
-    private static func rounds(block: Block, exercises: [WorkoutExercise]) -> [[SetRef]] {
-        let members = block.exerciseIndices.filter(exercises.indices.contains)
-        let rows = members.map { exerciseIndex in
-            let sets = exercises[exerciseIndex].sets.enumerated()
-            let ref = { SetRef(exerciseIndex: exerciseIndex, setIndex: $0) }
-            return (
-                regular: sets.filter { $0.element.kind != .drop }.map { ref($0.offset) },
-                drop: sets.filter { $0.element.kind == .drop }.map { ref($0.offset) }
-            )
-        }
-        return interleave(rows.map(\.regular)) + interleave(rows.map(\.drop))
     }
 
     /// Round `r` holds the `r`-th element of every column that has one, in column order.

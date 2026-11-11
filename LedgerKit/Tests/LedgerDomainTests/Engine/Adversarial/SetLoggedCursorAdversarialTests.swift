@@ -98,7 +98,9 @@ struct SetLoggedCursorAdversarialTests {
                     "step \(step)"
                 )
             } else {
-                #expect(state?.rest == previousRest, "step \(step): only the round's last member rests")
+                // F10 S9, ruling Q4 (sanctioned edit): a member that starts no rest ends the one held.
+                #expect(state?.rest == nil, "step \(step): only the round's last member rests; the others end it")
+                _ = previousRest
             }
             let next = step + 1 < order.count ? Adv.cursor(order[step + 1].0, order[step + 1].1) : Adv.cursor(3, 0)
             #expect(state?.cursor == next, "step \(step)")
@@ -132,7 +134,8 @@ struct SetLoggedCursorAdversarialTests {
         state = Self.log(state, 0, 0, at: 10, seq: 2).state
         state = Self.log(state, 1, 0, at: 20, seq: 3).state
         state = Self.log(state, 0, 1, at: 30, seq: 4).state
-        #expect(state?.rest?.endsAt == engineTime(110), "A2 is no longer last of round; B1's rest keeps running")
+        // F10 S9, ruling Q4 (sanctioned edit): A2 starts no rest, so it ends B1's.
+        #expect(state?.rest == nil, "A2 is no longer last of round; it ends B1's rest")
         #expect(state?.cursor == Adv.cursor(1, 1))
         state = Self.log(state, 1, 1, at: 40, seq: 5).state
         #expect(state?.rest == RestTimer(endsAt: engineTime(130), total: .seconds(90)))
