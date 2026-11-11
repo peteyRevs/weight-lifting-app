@@ -235,6 +235,7 @@ struct ScriptedSettingsScene {
         repository = scripted
         store = withTestDependencies {
             $0.settingsRepository = scripted
+            $0.workoutSession = FakeWorkoutSessionClient()
         } operation: {
             SettingsStore(about: SettingsFixtures.about)
         }

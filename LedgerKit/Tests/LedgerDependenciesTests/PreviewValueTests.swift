@@ -33,6 +33,18 @@ struct PreviewValueTests {
         }
     }
 
+    @Test("In a preview the data reset erases stores of its own, never the ones the screens read (F14 S3)")
+    func previewDataReset_erasesItsOwnStores() async throws {
+        try await withDependencies {
+            $0.context = .preview
+        } operation: {
+            @Dependency(\.dataReset) var reset
+            @Dependency(\.workoutRepository) var workouts
+            try await reset.eraseAll(restoring: .default)
+            #expect(try await workouts.recent(limit: 100).count == Fixtures.history(weeks: 8).count)
+        }
+    }
+
     @Test("In a preview the workout session is a fake with no workout (F10 S1 criterion 6)", .timeLimit(.minutes(1)))
     func previewSession_isAFakeWithNoWorkout() async throws {
         try await withDependencies {

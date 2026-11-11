@@ -78,6 +78,7 @@ struct SettingsReachAdversarialTests {
         try await repository.save(Fixtures.settingsLb)
         let store = withTestDependencies {
             $0.settingsRepository = repository
+            $0.workoutSession = FakeWorkoutSessionClient()
         } operation: {
             SettingsStore(about: AppAbout(name: nil, version: nil, build: nil))
         }

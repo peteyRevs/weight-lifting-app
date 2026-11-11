@@ -112,12 +112,23 @@
       }
     },
     "Cancel" : {
-      "comment" : "Bar and plates sheet: closes it without saving",
+      "comment" : "Bar and plates sheet, and Delete all data's warning and sheet: closes it, changing nothing",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "comment" : "Delete all data warning: goes on to the sheet that asks for the typed word",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
           }
         }
       }
@@ -155,6 +166,17 @@
         }
       }
     },
+    "DELETE" : {
+      "comment" : "The word typed to confirm Delete all data, in capitals; one word a keyboard types easily",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DELETE"
+          }
+        }
+      }
+    },
     "Default rest" : {
       "comment" : "Settings row: the rest between sets a new exercise starts with",
       "localizations" : {
@@ -162,6 +184,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Default rest"
+          }
+        }
+      }
+    },
+    "Delete all data" : {
+      "comment" : "Settings row that erases the whole log; also the title of the sheet that confirms it",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete all data"
+          }
+        }
+      }
+    },
+    "Delete all data?" : {
+      "comment" : "Title of the warning Delete all data opens",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete all data?"
+          }
+        }
+      }
+    },
+    "Delete everything" : {
+      "comment" : "Delete all data sheet: erases the whole log, once the word is typed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete everything"
+          }
+        }
+      }
+    },
+    "Deleting…" : {
+      "comment" : "Delete all data sheet: the spinner's spoken name while everything is being deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting…"
           }
         }
       }
@@ -221,6 +287,28 @@
         }
       }
     },
+    "Exports the app still holds are deleted; files you saved elsewhere stay." : {
+      "comment" : "Delete all data warning, its second sentence: exported files",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exports the app still holds are deleted; files you saved elsewhere stay."
+          }
+        }
+      }
+    },
+    "Finish or discard your workout first" : {
+      "comment" : "Under Delete all data in Settings while a workout is in progress, which keeps it off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish or discard your workout first"
+          }
+        }
+      }
+    },
     "For the week strip and the week's totals" : {
       "comment" : "Under Week starts on in Settings: what the first day of the week changes",
       "localizations" : {
@@ -272,6 +360,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Not connected"
+          }
+        }
+      }
+    },
+    "Nothing was deleted. Try again." : {
+      "comment" : "Delete all data sheet, after the erase failed: nothing changed",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing was deleted. Try again."
           }
         }
       }
@@ -353,6 +452,28 @@
         }
       }
     },
+    "This can't be undone." : {
+      "comment" : "Delete all data sheet: above the field for the typed word",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This can't be undone."
+          }
+        }
+      }
+    },
+    "This deletes every workout and set, your records, your programs and your custom exercises." : {
+      "comment" : "Delete all data warning, its first sentence: what is deleted",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deletes every workout and set, your records, your programs and your custom exercises."
+          }
+        }
+      }
+    },
     "Try again" : {
       "comment" : "Button on Settings: switch the units again",
       "localizations" : {
@@ -371,6 +492,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Turn on Plate math to edit"
+          }
+        }
+      }
+    },
+    "Type %@ to confirm" : {
+      "comment" : "Label of the Delete all data field; the word is the one to type (DELETE)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type %@ to confirm"
           }
         }
       }
@@ -437,6 +569,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Week starts on"
+          }
+        }
+      }
+    },
+    "Workouts already saved to Apple Health stay there: delete them in the Health app." : {
+      "comment" : "Delete all data warning, its last sentence: Apple Health is not touched",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workouts already saved to Apple Health stay there: delete them in the Health app."
+          }
+        }
+      }
+    },
+    "Your settings go back to how they started, and the built-in exercise list is restored." : {
+      "comment" : "Delete all data warning, its third sentence: settings reset, the built-in catalog put back",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your settings go back to how they started, and the built-in exercise list is restored."
           }
         }
       }

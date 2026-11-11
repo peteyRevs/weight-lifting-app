@@ -164,14 +164,17 @@ struct SettingsScene {
     let exportDirectory: URL
 
     /// `seed`'s catalog, programs and workouts are the stores' too (S2: the program a switch converts, the history the
-    /// export writes); its settings are `settings`.
+    /// export writes); its settings are `settings`. The store follows `session`, by default one with no workout in
+    /// progress (S3, N19), and "Delete all data" erases the stores, through what `reset` makes of them when given.
     init(
         settings: Settings = Fixtures.settingsLb,
         failures: Int = 0,
         holdsSaves: Bool = false,
         unreadable: Bool = false,
         seed: InMemoryStores.Seed = .empty,
-        workouts: (any WorkoutRepository)? = nil
+        workouts: (any WorkoutRepository)? = nil,
+        session: any WorkoutSessionClient = FakeWorkoutSessionClient(),
+        reset: ((InMemoryStores) -> any DataReset)? = nil
     ) {
         var stored = seed
         stored.settings = settings
@@ -187,9 +190,12 @@ struct SettingsScene {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "SettingsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         exportDirectory = directory
+        let erase = reset?(stores) ?? stores.reset
         store = withTestDependencies {
             $0.settingsRepository = probe
             $0.workoutRepository = workouts ?? stores.workouts
+            $0.workoutSession = session
+            $0.dataReset = erase
         } operation: {
             SettingsStore(about: SettingsFixtures.about, exportDirectory: directory)
         }

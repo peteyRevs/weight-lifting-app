@@ -22,6 +22,16 @@ nonisolated enum SettingsAction: Hashable, Sendable {
     case savePlates
     /// "Cancel", or the sheet swiped away: closed, nothing saved.
     case cancelPlates
+    /// "Delete all data": its warning (criterion 6), unless a workout is in progress (N19).
+    case deleteAll
+    /// The warning's "Continue": the sheet that asks for the typed word.
+    case continueDeleteAll
+    /// The sheet's field, as typed.
+    case setDeleteText(String)
+    /// "Delete everything": the erase, once the typed word matches, and only once (N23).
+    case confirmDeleteAll
+    /// The warning's "Cancel", the sheet's "Cancel", or the sheet swiped away: nothing is deleted.
+    case cancelDeleteAll
     /// A tap that asks the app to go somewhere: "Diagnostics", in Debug builds.
     case route(SettingsRoute)
 }

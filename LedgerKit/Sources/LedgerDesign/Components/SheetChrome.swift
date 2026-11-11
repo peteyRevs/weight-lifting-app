@@ -10,11 +10,13 @@ import SwiftUI
 /// VoiceOver reads the title as a heading, then the cancel button, then the content, and its escape
 /// gesture (a two-finger scrub) calls `onCancel`, as the cancel button does. `title` and `cancel` are
 /// shown as given; features pass copy from their catalog. `cancelIdentifier` names the cancel button for
-/// a UI test, where its words are not what the test should find it by.
+/// a UI test, where its words are not what the test should find it by. `cancelEnabled` false dims the cancel
+/// button and switches it and the escape gesture off, for a sheet whose work cannot be stopped once begun.
 public struct SheetChrome<Content: View>: View {
     private let title: String
     private let cancel: String
     private let cancelIdentifier: String?
+    private let cancelEnabled: Bool
     private let onCancel: () -> Void
     private let content: Content
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -23,12 +25,14 @@ public struct SheetChrome<Content: View>: View {
         _ title: String,
         cancel: String,
         cancelIdentifier: String? = nil,
+        cancelEnabled: Bool = true,
         onCancel: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.cancel = cancel
         self.cancelIdentifier = cancelIdentifier
+        self.cancelEnabled = cancelEnabled
         self.onCancel = onCancel
         self.content = content()
     }
@@ -55,8 +59,10 @@ public struct SheetChrome<Content: View>: View {
                 if let cancelIdentifier {
                     PillButton(cancel, style: .ghost, action: onCancel)
                         .accessibilityIdentifier(cancelIdentifier)
+                        .disabled(!cancelEnabled)
                 } else {
                     PillButton(cancel, style: .ghost, action: onCancel)
+                        .disabled(!cancelEnabled)
                 }
             }
             content
@@ -72,7 +78,11 @@ public struct SheetChrome<Content: View>: View {
             shape.strokeBorder(LedgerColor.hairline, lineWidth: LedgerHairline.width)
                 .mask(alignment: .top) { Rectangle().frame(height: LedgerRadius.sheet) }
         }
-        .accessibilityAction(.escape, onCancel)
+        .accessibilityAction(.escape) {
+            if cancelEnabled {
+                onCancel()
+            }
+        }
         .presentationBackground(LedgerColor.surface)
         .presentationCornerRadius(LedgerRadius.sheet)
     }

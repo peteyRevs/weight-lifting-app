@@ -14,7 +14,7 @@ import SwiftUI
 /// hands it to the app and the store forgets it when the app's handler has returned.
 ///
 /// **A failed save is announced** to VoiceOver when its line appears, since the line stands at the top of the page,
-/// away from the focus (F14-S1b-2), as `ProgramRoot` announces its notice.
+/// away from the focus (F14-S1b-2), as `ProgramRoot` announces its notice; so is a failed "Delete all data" (S3).
 public struct SettingsRoot: View {
     @State private var store: SettingsStore
     private let onRoute: @MainActor (SettingsRoute) -> Void
@@ -45,6 +45,13 @@ public struct SettingsRoot: View {
                 store.deliverRoute(to: onRoute)
             }
             .onChange(of: store.model?.problem) { _, problem in
+                if let problem {
+                    announce(problem)
+                }
+            }
+            .onChange(of: store.model?.deleteSheet?.problem) { _, problem in
+                // "Nothing was deleted. Try again." stands under the field, away from the focus on the button (S3, G3
+                // SF1).
                 if let problem {
                     announce(problem)
                 }

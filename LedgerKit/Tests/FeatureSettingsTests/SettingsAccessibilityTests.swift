@@ -39,6 +39,7 @@
                 + [.heading("DATA"), .text("Apple Health, Not connected")]
                 + [
                     .button("Export data, CSV", hint: "Every set you logged, in your current units"),
+                    deleteAll(model.deleteRow),
                     .button("Diagnostics")
                 ]
                 + [.text(model.about)]
@@ -47,6 +48,15 @@
         /// "Bar and plates": one button, its title and line, dimmed while Plate math is off (criterion 3).
         static func plates(_ row: PlatesRowModel) -> ViewStop {
             ViewStop(kind: .button, label: "\(row.title), \(row.detail)", isEnabled: row.action != nil)
+        }
+
+        /// "Delete all data": one button, with its line and dimmed while a workout is in progress (S3, N19).
+        static func deleteAll(_ row: DeleteAllRowModel) -> ViewStop {
+            ViewStop(
+                kind: .button,
+                label: [row.title, row.detail].compactMap(\.self).joined(separator: ", "),
+                isEnabled: row.action != nil
+            )
         }
 
         @Test(
@@ -78,8 +88,9 @@
         func targets_areAtLeast44Points(_ preview: SettingsPreview, _ size: DynamicTypeSize) {
             let targets = SettingsParts(preview: preview).placedStops(SnapshotAppearance(.dark, size))
                 .filter { [.button, .toggle].contains($0.stop.kind) }
-            // The two units, the week's menu, three switches, Bar and plates, Export and Diagnostics, and Try again.
-            #expect(targets.count == (preview == .switchFailed ? 10 : 9))
+            // The two units, the week's menu, three switches, Bar and plates, Export, Delete all data and Diagnostics,
+            // and Try again.
+            #expect(targets.count == (preview == .switchFailed ? 11 : 10))
             for target in targets {
                 #expect(
                     target.frame.width >= 44 - 0.001 && target.frame.height >= 44 - 0.001,
@@ -101,10 +112,13 @@
                     }
                 }
             }
-            #expect(sent == [
-                .setUnits(.lb), .setUnits(.kg), .setPlateMath(true), .setAutoRest(false), .setWatchBuzz(true),
-                .route(.debugMenu)
-            ], "Bar and plates is off while Plate math is; the export is the system's share link")
+            #expect(
+                sent == [
+                    .setUnits(.lb), .setUnits(.kg), .setPlateMath(true), .setAutoRest(false), .setWatchBuzz(true),
+                    .route(.debugMenu)
+                ],
+                "Bar and plates is off while Plate math is, Delete all data while a workout runs; export: share link"
+            )
         }
     }
 #endif

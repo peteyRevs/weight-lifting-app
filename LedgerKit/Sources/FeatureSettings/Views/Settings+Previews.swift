@@ -12,7 +12,8 @@
     enum SettingsPreview: String, CaseIterable {
         /// A US lifter's: pounds, weeks from Sunday, and every switch on (`Settings.regional`'s for en_US).
         case pounds = "Settings"
-        /// A lifter in kilograms, with a longer rest, weeks from Monday and two switches off.
+        /// A lifter in kilograms, with a longer rest, weeks from Monday and two switches off, and a workout in
+        /// progress, so "Delete all data" is off.
         case kilograms = "Kilograms"
         /// The shortest rest, whose "−" is switched off, and the line of a save that failed.
         case saveFailed = "Couldn't save"
@@ -54,6 +55,7 @@
                 about: about,
                 saveFailed: preview == .saveFailed || preview == .switchFailed,
                 failedSwitch: preview == .switchFailed ? .kg : nil,
+                hasLiveWorkout: preview == .kilograms,
                 locale: Fixtures.locale,
                 calendar: Fixtures.calendar
             )

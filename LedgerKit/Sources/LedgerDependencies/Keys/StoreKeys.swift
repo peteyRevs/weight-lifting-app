@@ -39,6 +39,12 @@ public extension DependencyValues {
         get { self[StatsQueriesKey.self] }
         set { self[StatsQueriesKey.self] = newValue }
     }
+
+    /// "Delete all data" over the same stores (F14 S3, ruling A1).
+    var dataReset: any DataReset {
+        get { self[DataResetKey.self] }
+        set { self[DataResetKey.self] = newValue }
+    }
 }
 
 enum ExerciseRepositoryKey: DependencyKey {
@@ -91,6 +97,16 @@ enum StatsQueriesKey: DependencyKey {
     #if DEBUG
         static var previewValue: any StatsQueries {
             PreviewStores.make().stats
+        }
+    #endif
+}
+
+enum DataResetKey: DependencyKey {
+    static let liveValue: any DataReset = UnimplementedDataReset()
+    #if DEBUG
+        /// An erase over stores of its own: a preview that erases empties only those.
+        static var previewValue: any DataReset {
+            PreviewStores.make().reset
         }
     #endif
 }

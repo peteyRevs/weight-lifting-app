@@ -121,6 +121,12 @@
             }
         }
 
+        /// Forgets every workout, deleted ones and their ids too, with their records, as "Delete all data" empties the
+        /// tables (`InMemoryDataReset`, F14 S3).
+        func reset() {
+            history.write { $0 = InMemoryHistory() }
+        }
+
         public func observeRecent(limit: Int) -> AsyncStream<[WorkoutState]> {
             history.observe { $0.recent(limit) }
         }

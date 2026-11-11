@@ -89,7 +89,7 @@ nonisolated struct FeatureSettingsSourceTests {
     func lookups_standInTheCopyFiles() throws {
         let outside = try Self.uses(of: Self.lookups) { !$0.hasPrefix("SettingsCopy") }
         #expect(outside == [])
-        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 44)
+        #expect(try Self.uses(of: ["localized:"]) { $0.hasPrefix("SettingsCopy") }.count == 58)
     }
 
     @Test("N9. No view reaches for the copy, the presentation, a format, a filter, an order, a clock or a locale")
@@ -108,10 +108,10 @@ nonisolated struct FeatureSettingsSourceTests {
             #expect(Set(imports).isSubset(of: ["import SwiftUI", "import LedgerDesign"]), "\(path): \(imports)")
         }
         let scrolling = try Self.uses(of: ["ScrollView", "TextEditor", "axis:.vertical"], inFiles: Self.isView)
-        // Settings, and the plates sheet over it (S2), each scroll in one place.
+        // Settings, and the plates sheet (S2) and Delete all data's sheet (S3) over it, each scroll in one place.
         #expect(
             scrolling.map { $0.components(separatedBy: ":").first ?? "" }
-                == ["Views/PlateInventorySheet.swift", "Views/SettingsScreen.swift"]
+                == ["Views/DeleteAllSheet.swift", "Views/PlateInventorySheet.swift", "Views/SettingsScreen.swift"]
         )
     }
 

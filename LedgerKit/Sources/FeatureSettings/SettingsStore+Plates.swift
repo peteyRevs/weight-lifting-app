@@ -30,7 +30,8 @@ extension SettingsStore {
             savePlates()
         case .cancelPlates:
             plates = nil
-        case .setUnits, .setDefaultRest, .setWeekStart, .setPlateMath, .setAutoRest, .setWatchBuzz, .route:
+        case .setUnits, .setDefaultRest, .setWeekStart, .setPlateMath, .setAutoRest, .setWatchBuzz, .route, .deleteAll,
+             .continueDeleteAll, .setDeleteText, .confirmDeleteAll, .cancelDeleteAll:
             return false
         }
         show()

@@ -163,3 +163,11 @@ struct UnimplementedWorkoutEventStore: WorkoutEventStore {
         throw stub.failure()
     }
 }
+
+struct UnimplementedDataReset: DataReset {
+    let stub = Unimplemented(key: "dataReset")
+
+    func eraseAll(restoring _: Settings) async throws {
+        throw stub.failure()
+    }
+}

@@ -57,7 +57,10 @@ public struct GRDBSettingsRepository: SettingsRepository {
         }
     }
 
-    private static func upsert(payload: Data, updatedAt: String, in database: Database) throws {
+    /// `save(_:)`'s write inside the caller's transaction, of a payload the caller encoded (`SettingsCodec.encode`):
+    /// also the erase of "Delete all data"'s, which stores a new install's settings in the transaction that deleted the
+    /// row (`GRDBDataReset`, F14 S3).
+    static func upsert(payload: Data, updatedAt: String, in database: Database) throws {
         try database.execute(
             sql: """
             INSERT INTO settings (id, payload_version, payload, updated_at) VALUES (?, ?, CAST(? AS TEXT), ?)

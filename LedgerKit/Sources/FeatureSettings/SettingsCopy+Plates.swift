@@ -103,8 +103,13 @@ nonisolated extension SettingsCopy {
         String(localized: "Done", bundle: .module, comment: "Bar and plates sheet: saves the bar and the plates")
     }
 
+    /// Also "Delete all data"'s, on its warning and its sheet (S3).
     static var cancel: String {
-        String(localized: "Cancel", bundle: .module, comment: "Bar and plates sheet: closes it without saving")
+        String(
+            localized: "Cancel",
+            bundle: .module,
+            comment: "Bar and plates sheet, and Delete all data's warning and sheet: closes it, changing nothing"
+        )
     }
 }
 

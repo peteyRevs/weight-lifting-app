@@ -56,6 +56,12 @@
             }
         }
 
+        /// Stores `settings`, already checked by the caller as `save` checks them, as the row "Delete all data" writes
+        /// (`InMemoryDataReset`, F14 S3).
+        func reset(to settings: Settings) {
+            state.write { $0 = Stored(settings: settings, isRow: true) }
+        }
+
         public func observe() -> AsyncStream<Settings> {
             state.observe(\.settings)
         }

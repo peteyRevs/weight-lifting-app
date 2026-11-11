@@ -58,6 +58,10 @@ final class SettingsStore {
     @ObservationIgnored var failedSwitch: Units?
     /// The bar and plates in their sheet, while it is open (criterion 3).
     var plates: PlatesDraft?
+    /// "Delete all data", from its warning until the erase is done or cancelled (criterion 6).
+    var deleteAll: DeleteAllDraft?
+    /// A workout is in progress: "Delete all data" waits until it is finished or discarded (N19).
+    var hasLiveWorkout = false
     /// The observation ended: the settings are followed again after the next save.
     var isUnreadable = false
     /// A save is running, in whichever run started it: no other starts until it returns.
@@ -66,6 +70,8 @@ final class SettingsStore {
     /// marks only while they are still its own.
     @ObservationIgnored var saveMark: AsyncStream<Void>.Continuation?
     @ObservationIgnored var followMark: AsyncStream<Void>.Continuation?
+    /// Marks the current run's eraser (`+DeleteAll`).
+    @ObservationIgnored var eraseMark: AsyncStream<Void>.Continuation?
     @ObservationIgnored var runNumber = 0
     /// The number of the observation the follower started last: a value of an older one is never received.
     @ObservationIgnored var observationNumber = 0
@@ -85,6 +91,9 @@ final class SettingsStore {
     @ObservationIgnored @Dependency(\.locale) var locale
     @ObservationIgnored @Dependency(\.calendar) var calendar
     @ObservationIgnored @Dependency(\.date) var date
+    /// The live workout's host, followed so "Delete all data" waits while a workout is in progress (N19).
+    @ObservationIgnored @Dependency(\.workoutSession) var session
+    @ObservationIgnored @Dependency(\.dataReset) var reset
     /// The workouts' store, read only when the export is written: drawing Settings never needs it.
     @ObservationIgnored let workouts = Dependency(\.workoutRepository)
     @ObservationIgnored @Dependency(\.logger) private var injectedLogger
@@ -117,7 +126,7 @@ final class SettingsStore {
             emit(route)
             return
         }
-        if sendToPlates(action) {
+        if sendToPlates(action) || sendToDeleteAll(action) {
             return
         }
         // Nothing is drawn before the settings are read, so no control can have been tapped.
@@ -155,7 +164,8 @@ final class SettingsStore {
         case let .setPlateMath(isOn): next.plateMathEnabled = isOn
         case let .setAutoRest(isOn): next.autoRest = isOn
         case let .setWatchBuzz(isOn): next.watchBuzz = isOn
-        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates: break
+        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates, .deleteAll,
+             .continueDeleteAll, .setDeleteText, .confirmDeleteAll, .cancelDeleteAll: break
         }
         return next
     }
@@ -191,6 +201,8 @@ final class SettingsStore {
             failedSwitch: failedSwitch,
             plates: plates,
             export: export(in: onScreen.units),
+            deleteAll: deleteAll,
+            hasLiveWorkout: hasLiveWorkout,
             locale: locale,
             calendar: calendar
         ))

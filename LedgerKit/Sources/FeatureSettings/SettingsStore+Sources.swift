@@ -2,7 +2,8 @@ import Foundation
 import LedgerDomain
 
 /// What `SettingsStore` does while `SettingsRoot`'s task runs (F14 S1, N1, N2): it follows the stored settings and
-/// saves the lifter's changes, in one task group, so nothing outlives the screen.
+/// saves the lifter's changes, and (S3) follows the live workout and runs "Delete all data"'s erase (`+DeleteAll`), in
+/// one task group, so nothing outlives the screen.
 ///
 /// Each kind of work waits on a channel that keeps only the newest mark: a change marks the saver, which saves
 /// what is pending until nothing is, so changes made during a save are folded into the next one. The follower is
@@ -17,10 +18,12 @@ extension SettingsStore {
     func run() async {
         let (saves, saveMark) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let (follows, followMark) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let (erases, eraseMark) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         runNumber += 1
         let number = runNumber
         self.saveMark = saveMark
         self.followMark = followMark
+        self.eraseMark = eraseMark
         followMark.yield()
         if pending != nil {
             // A change made while no run was on, or left by a run that ended.
@@ -28,6 +31,8 @@ extension SettingsStore {
         }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.follow(follows) }
+            group.addTask { await self.followWorkout() }
+            group.addTask { await self.erase(when: erases) }
             for await _ in saves {
                 await savePending()
             }
@@ -35,6 +40,7 @@ extension SettingsStore {
         if runNumber == number {
             self.saveMark = nil
             self.followMark = nil
+            self.eraseMark = nil
             await clearExports()
         }
     }
