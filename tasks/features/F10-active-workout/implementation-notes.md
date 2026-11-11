@@ -6636,3 +6636,21 @@ FeatureWorkout +520 −45 = 475, LedgerDomain +19 −13 = 6: **481 net** (plan 5
 - **Follow-up:** `WorkoutUpdatesAdversarialTests`, `WorkoutSwapAdversarialTests` and the walk suite's
   `eventually` waits (10 s) time out when the whole host suite runs in parallel on a loaded machine; each passes
   alone and with `--no-parallel`. They were seen on this branch, and nothing in S9 touches them.
+
+### S9 fix round 1 (G1 implementer, 2026-11-11)
+
+On G2's `0eccefd` ("SupersetBlockAdversarialTests") and the orchestrator's rulings.
+
+| Item | Ruling | What changed | Tests |
+|---|---|---|---|
+| **F10-S9-G2-1** (Minor): a jump to a superset's member (legend or "REMAINING") took its first open set in set order, so with B = [1, 2, 3, D, 4 (added)] and A1…B3 logged, a tap on B showed BD, not B4 | FIX | `WorkoutEditPlan.jump` takes a member's first open row in `SupersetRounds.displayOrder`, as the cursor (rule 20) and criterion 8's fallback do. A solo exercise keeps set order, as on `main` | G2's `legendJump_addedAfterDrop_showsDisplayOrderFirst`, unedited; mine: `WorkoutSupersetAroundTests.jump_memberInDisplayOrder_soloInSetOrder` (member B4; a solo drop set still before the set added after it) |
+| "Rest 1:30 after C" on an uneven last round | KEEP (criterion 7) | none | — |
+| A finished block draws no "+ Add set" | KEEP (criterion 12; "add a round" is out of scope) | none | — |
+
+**For Pete (follow-ups):** (1) the rest line names the block's last member ("after C") even where a member with
+fewer rows has left the last round, so that round's actual last member is another; (2) once every row of a block
+is logged no member is current and "+ Add set" is not drawn, and a legend tap on a finished member changes
+nothing, so one more round cannot be added to a finished superset from the block. An "add a round" control would
+answer both, and is out of this slice.
+
+**Product lines:** +4 (481 → 485 net against `18f1201`: FeatureWorkout +525 −46, LedgerDomain +19 −13).

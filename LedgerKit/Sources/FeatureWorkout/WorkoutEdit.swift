@@ -210,12 +210,20 @@ nonisolated struct WorkoutEditPlan: Equatable, Sendable {
     /// The exercise becomes the shown one, at its first set that is not logged. With none left it is shown
     /// with no row selected, and the engine's cursor stays where it is: "REMAINING" lists such an exercise
     /// only when the page shows no exercise at all (criterion 16), and its card then offers "+ Add set".
+    ///
+    /// A superset's member is shown at its first row not logged in the block's display order (rule 20), as
+    /// the cursor and the block's shown row take them: a set added after a drop set comes before it
+    /// (F10-S9-G2-1).
     private mutating func jump(to exerciseIndex: Int, in state: WorkoutState) {
         guard state.exercises.indices.contains(exerciseIndex) else {
             return
         }
         let sets = state.exercises[exerciseIndex].sets
-        guard let setIndex = sets.firstIndex(where: { !$0.isDone }) else {
+        let order = WorkoutPresentation.superset(holding: exerciseIndex, in: state.exercises).map { block in
+            SupersetRounds.displayOrder(block: block, exercises: state.exercises)
+                .filter { $0.exerciseIndex == exerciseIndex }.map(\.setIndex)
+        } ?? Array(sets.indices)
+        guard let setIndex = order.first(where: { !sets[$0].isDone }) else {
             selection = WorkoutSelection(exerciseIndex: exerciseIndex, setID: nil)
             return
         }

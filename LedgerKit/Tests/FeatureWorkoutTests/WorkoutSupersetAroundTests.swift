@@ -79,6 +79,30 @@ struct WorkoutSupersetAroundTests {
         #expect(after.legend.map(\.isCurrent) == [true, false])
     }
 
+    /// F10-S9-G2-1: a member is jumped to at its first open row in the block's order; a solo exercise keeps
+    /// its set order, so its drop set still comes before a set added after it.
+    @Test("A jump to a member takes the block's order (B4 before BD); a solo jump keeps set order")
+    func jump_memberInDisplayOrder_soloInSetOrder() {
+        var state = Block.workout(dropOnB: true)
+        let added = LoggedSet(
+            id: SetID(EventBuilders.uuid(0xADD)), weight: .pounds(15), reps: Reps(clamping: 15), kind: .added
+        )
+        state.exercises[2].sets.append(added)
+        let done = Block.logged([(0, 0), (0, 1), (0, 2), (1, 0), (2, 0), (1, 1), (2, 1), (1, 2), (2, 2)], in: state)
+        let plan = WorkoutEditPlan.make(.jump(exerciseIndex: 2), in: done, selection: nil, now: Fixtures.now) {
+            SetID(EventBuilders.uuid(0xADE))
+        }
+        #expect(plan.events == [.exerciseSelected(exerciseIndex: 2, setIndex: 4)])
+        #expect(plan.selection == WorkoutSelection(exerciseIndex: 2, setID: added.id))
+        var solo = state
+        solo.exercises[2].isSupersetWithPrevious = false
+        let soloDone = Block.logged([(2, 0), (2, 1), (2, 2)], in: solo)
+        let soloPlan = WorkoutEditPlan.make(.jump(exerciseIndex: 2), in: soloDone, selection: nil, now: Fixtures.now) {
+            SetID(EventBuilders.uuid(0xADE))
+        }
+        #expect(soloPlan.events == [.exerciseSelected(exerciseIndex: 2, setIndex: 3)], "the drop set, in set order")
+    }
+
     // MARK: Criterion 17: the receipt
 
     @Test("The receipt lists a superset's members as rows of their own, in workout order, with their chips")
