@@ -130,7 +130,7 @@ nonisolated enum SettingsCopy {
         String(
             localized: "DATA",
             bundle: .module,
-            comment: "Heading of Settings' rows about the lifter's data: Apple Health"
+            comment: "Heading of Settings' rows about the lifter's data: Apple Health and the export"
         )
     }
 

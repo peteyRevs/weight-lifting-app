@@ -275,6 +275,8 @@ nonisolated struct OnceSettings: SettingsRepository {
 
     func seedIfAbsent(_: Settings) async throws {}
 
+    func switchUnits(_: Settings) async throws {}
+
     func observe() -> AsyncStream<Settings> {
         AsyncStream { continuation in
             continuation.yield(Fixtures.settingsLb)

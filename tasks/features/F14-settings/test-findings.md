@@ -338,3 +338,114 @@ G2, adversarial tester, 2026-10-29. Branch `feat/F14-settings-screen` at `d02995
     green except the loading-title test's first form, which was then rewritten as described above.
   - `SettingsRootAdversarialTests` rerun on its own: 5 tests passed, with 1 known issue (F14-S1b-2).
 - **Lint and format:** `swiftformat --lint` and `swiftlint lint --strict` are clean on the five new files.
+
+## S2 — G2 round 1
+
+G2, adversarial tester, 2026-11-10. Branch `feat/F14-s2-plates-export` at `f40dc55` (implementation `a472372`). No
+product code was changed. The tests were written from the contract (S2, criteria 1, 3, 5, N11–N18, rulings A2/A4)
+before the implementer's tests or notes were read. The contract's "135 lb becomes 62.5 kg" is taken as 60 kg
+(61.23 kg on a 2.5 kg grid); see F14-S2-G2-3.
+
+### What was attacked, and what held
+
+- **`UnitSwitch.convert`** (hand-worked and seeded, 200 seeds per property):
+  - lb → kg on a barbell: 45 → 20, 135 → 60, 225 → 102.5, 315 → 142.5, 405 → 182.5, 2.5 → 0, 3 → 2.5; kg → lb:
+    20 → 45, 60 → 130, 62.5 → 140, 102.5 → 225. Kettlebells land on 2 kg and 5 lb bells (35 lb → 16 kg, 24 kg → 55 lb).
+  - Steps: 18 cases over barbell, kettlebell, dumbbell and an exercise the map lacks; every step finer than a grid
+    (1.25 lb, 0.5 kg, 1 kg) becomes exactly one default step. nil loads and steps stay nil. Ties go away from zero.
+  - Properties: converting twice equals once (both units); every load on its grid within half a step, never
+    negative; every step on its grid and at least one step; only loads and steps change, and the result decodes
+    (every `Slot` range holds); lb → kg → lb drifts at most half a kg step plus half a lb step.
+- **`switchUnits` on GRDB (A4):** a trigger refusing the slot update rolls the settings row back byte for byte, and
+  the program rows too; with the trigger dropped, "Try again" converts both. A trigger refusing the settings write
+  leaves the program. Same units: no program row is touched, even 46.25 lb. Only the active program converts; no
+  program writes only the settings; a kettlebell exercise row's equipment is used. An unreadable settings row
+  converts (as documented). GRDB and the in-memory stores agree through lb → kg → lb → kg → kg.
+- **The store:** KG converts in one `switchUnits`; a failure shows the line and "Try again" with LB selected again,
+  the row and the program untouched, and "Try again" converts. A change made while the switch is held is saved with
+  `save`, converting once; flipping LB and back to KG during the held save writes no extra switch. A failed
+  ordinary save offers no retry. Over an unreadable row, a rest change is not sent as a switch (the program's
+  46.25 lb stays).
+- **Plate editor:** the bar walks 45 → 0 in 18 steps and 0 → 100 in 40 (lb), 20 → 0 in 16 and 0 → 45 in 36 (kg),
+  exactly; an off-grid bar (44 lb) steps to 42.5/45; one above the top (110 lb) cannot go up. N12's size lists per
+  unit, heaviest first. Done leaves the other unit's stored inventory equal, and stores none for it when there was
+  none; in kg the lb inventory is untouched. Every plate off shows the empty line; Reset gives `standard`; Cancel
+  saves nothing; with Plate math off the row has no action, says "Turn on Plate math to edit", and `.editPlates`
+  opens nothing. An off-list 7.5 lb plate is shown and kept by Done. But see F14-S2-G2-1.
+- **CSV (`CSVExport`)**, read back by an RFC 4180 reader written apart from LedgerTestSupport's, over scalars:
+  - header per unit, BOM = EF BB BF, an empty log is the header only, workouts and exercises with no sets write no
+    row; eleven fields per row, CRLF throughout;
+  - `set` restarts per exercise; the four kinds; `done` 1/0; weights 225 lb → 102.06 kg, 1 lb → 0.45, 0 → 0, 12345,
+    no grouping; e1RM at 1 and 12 reps, empty at 13, 30 and not done; 225 × 5 → 253.13 lb / 114.82 kg;
+  - quoting of commas, quotes, CR, LF, CRLF, a quote followed by a combining mark, a trailing CR;
+  - N14 for = + - @ tab CR in workout, tag and exercise columns; not for a formula character later in a name, after
+    a leading space, or after a `'`; a negative weight (−50 lb) and its estimate are written as numbers, never
+    prefixed; −0.001 kg is written `0`, never `-0`;
+  - dates by the start day across midnight (New York, Kiritimati +14, Pago Pago −11, Kolkata over New Year), both
+    01:30s of New York's fall-back night and 01:59 → 03:00 in spring; Buddhist, Japanese, Persian and Umm al-Qura
+    calendars still write the ISO Gregorian day;
+  - seeded round trip (200 seeds) of names drawn from letters, `, " \r \n \r\n \t = + - @ '`, emoji with skin tones
+    and ZWJ, Arabic, Hebrew, RLM, RLO, combining marks, BOM: every field reads back scalar for scalar (with the
+    guard's `'`), and LedgerTestSupport's `CSVReader` agrees with this reader on 50 seeds.
+- **Export file:** the bytes equal the BOM plus `render` over every workout oldest first (two starting together:
+  smaller id first) in the units on screen; the name is `workouts-2026-09-16.csv`; an empty log gives BOM + header;
+  a stray file in the directory is gone after an export, and the directory is removed when the run ends; after KG
+  the file is in kg. Two writes at once both return a whole file (15 of 15 runs). A directory that cannot be made
+  throws and writes nothing. FeatureSettings imports no UIKit.
+- **VoiceOver (hosted, iPhone 17 simulator):** the export row is one enabled button, "Export data, CSV", hinted
+  "Every set you logged, in your current units", and its line is not a separate stop; with Plate math off, "Bar and
+  plates" is one dimmed button that says "Turn on Plate math to edit"; in the sheet the bar is one adjustable
+  "Bar" = "45 pounds", the plates are ten stops (the off-list 7.5 lb among them), and each says on or off.
+- **Nightly UI `SettingsExport`:** passed once through the lock (14.0 s); the share sheet appeared.
+
+### Findings
+
+**F14-S2-G2-1 — Minor. An off-list plate size disappears from the sheet once switched off.**
+- **Steps to reproduce:**
+  1. Store the lb inventory with plates 45 and 7.5 lb (a size off N12's list, as a later version may store).
+  2. Open "Bar and plates": 7.5 lb is shown, on (as N12 says).
+  3. Tap 7.5 lb to switch it off.
+- **Expected:** 7.5 lb stays in the list, off, so a mistaken tap can be undone, as every listed size can.
+- **Actual:** it vanishes. `PlatesPresentation.sheet` lists `sizes(units) ∪ draft.inventory.plates`, so a size that
+  is off and off the list is no longer listed. Only Cancel brings it back (and loses every other edit). The chips'
+  ids are their places, so every chip after it also changes identity under SwiftUI.
+- **Test:** `PlatesExportAdversarialTests.offListSize_switchedOff_staysListed` (known issue).
+- **Suggested fix:** keep the sizes the sheet opened with in `PlatesDraft` (e.g. `listed`, set at `.editPlates` from
+  the stored inventory) and list `sizes(units) ∪ listed`; give chips the size as id.
+
+**F14-S2-G2-2 — Nit. The failed switch's line is not N11's.**
+- N11.3 says "Couldn't convert your program's weights."; the screen says "Couldn't change the units. Nothing was
+  changed." The new words fit ruling A4 better (nothing is half-written), but the contract was not amended.
+- **Test:** `PlatesExportAdversarialTests.failedSwitch_lineMatchesTheContract` (known issue).
+- **Suggested fix:** amend N11.3 to the shipped copy, then drop the test's known issue (or delete the test).
+
+**F14-S2-G2-3 — Nit (docs). The contract and Pete's Q1 still say "135 lb becomes 62.5 kg".**
+- `tasks/features/F14-settings.md` criterion 1 (line 254) and question 1 (line 404, also "62.5 kg comes back as
+  140 lb"). 135 lb is 61.23 kg, which is 60 on a 2.5 kg grid, and 60 kg comes back as 130 lb. The code's doc and
+  the tests use 60 (`UnitSwitchAdversarialTests.barbell_poundsToKilograms`, `barbell_kilogramsToPounds`).
+- **Suggested fix:** correct both examples.
+
+No Critical or Major finding.
+
+### Tests added
+
+- `LedgerKit/Tests/LedgerDomainTests/Adversarial/UnitSwitchAdversarialTests.swift` and `+Properties.swift`: hand-worked
+  conversions, kettlebells, steps, nil, ties, empty shapes; four seeded properties.
+- `LedgerKit/Tests/LedgerDomainTests/Adversarial/CSVAdversarialReader.swift`: the independent RFC 4180 reader.
+- `LedgerKit/Tests/LedgerDomainTests/Adversarial/CSVExportAdversarialTests.swift`, `+Guard.swift`, `+Dates.swift`:
+  shape, values, e1RM, quoting, N14, negatives, dates, calendars; the seeded round trip and the readers' agreement.
+- `LedgerKit/Tests/LedgerPersistenceTests/Adversarial/SwitchUnitsAdversarialTests.swift`: A4 with refusing triggers
+  and retry, same units, inactive, no program, equipment, unreadable row, differential with the in-memory stores.
+- `LedgerKit/Tests/FeatureSettingsTests/Adversarial/PlatesExportAdversarialTests.swift`, `+Plates.swift`,
+  `+Export.swift`: the store's switch, retry and fold; the plate editor; the export's bytes, order, directory,
+  concurrency and failure (F14-S2-G2-1, -2 as known issues).
+- `LedgerKit/Tests/FeatureSettingsTests/Adversarial/PlatesExportViewAdversarialTests.swift` (iOS): VoiceOver stops.
+
+### Runs
+
+- **Host (`LedgerKit/`):** `swift build --build-tests` clean. The domain suites (32 tests, four properties at 200
+  seeds), the persistence suite (8) and the store suite (23, 2 known issues) pass. `export_twoAtOnce` passed 15 of
+  15 repeated runs.
+- **Simulator (iPhone 17, through the lock):** `build-for-testing` with the Nightly plan in `.derivedData`, then
+  `test-without-building`: `PlatesExportViewAdversarialTests` 4 of 4 pass; `LedgerUITests/SettingsExport` passes.
+- **Lint and format:** `swiftformat --lint` and `swiftlint lint --strict` clean on the eleven new files.

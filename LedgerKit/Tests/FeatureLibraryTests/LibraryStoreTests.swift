@@ -189,6 +189,10 @@ nonisolated struct EndedSettings: SettingsRepository {
         throw Unused()
     }
 
+    func switchUnits(_: Settings) async throws {
+        throw Unused()
+    }
+
     func observe() -> AsyncStream<Settings> {
         AsyncStream { $0.finish() }
     }

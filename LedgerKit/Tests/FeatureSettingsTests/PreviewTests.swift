@@ -14,12 +14,18 @@
             let names = try PreviewScan.previews(inModule: "FeatureSettings")
             #expect(!names.contains(nil), "a #Preview without a name cannot be listed")
             #expect(names.count == Set(names).count, "a name appears twice: \(names)")
-            #expect(Set(names.compactMap(\.self)) == Set(SettingsPreview.allCases.map(\.rawValue)))
+            let cases = SettingsPreview.allCases.map(\.rawValue) + PlatesPreview.allCases.map(\.rawValue)
+            #expect(Set(names.compactMap(\.self)) == Set(cases))
             #expect(PreviewScan.registeredModules.contains("FeatureSettings"))
         }
 
         @Test("Every preview renders", arguments: SettingsPreview.allCases)
         func preview_renders(_ preview: SettingsPreview) {
+            #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
+        }
+
+        @Test("Every plates preview renders", arguments: PlatesPreview.allCases)
+        func platesPreview_renders(_ preview: PlatesPreview) {
             #expect(renderPreview(size: CGSize(width: SnapshotConfig.phoneWidth, height: 874)) { preview.content })
         }
 
@@ -34,6 +40,11 @@
             #expect(kilograms.switches.map(\.isOn) == [false, true, false])
             let failed = SettingsPreview.saveFailed.model()
             #expect(failed.problem == "Couldn't save that change." && failed.rest.decrement == nil)
+            let switched = SettingsPreview.switchFailed.model()
+            #expect(switched.retry?.action == .setUnits(.kg) && switched.plates.action == nil)
+            #expect(PlatesPreview.pounds.model().plates.filter(\.isOn).count == 5)
+            #expect(PlatesPreview.kilograms.model().plates.count == 9, "the list's eight and the 0.25 kg plate")
+            #expect(PlatesPreview.noPlates.model().empty != nil && PlatesPreview.noPlates.model().bar.decrement == nil)
         }
     }
 #endif

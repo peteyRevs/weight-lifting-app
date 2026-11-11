@@ -61,7 +61,8 @@ struct SettingsSavePropertyAdversarialTests {
         case let .setPlateMath(isOn): next.plateMathEnabled = isOn
         case let .setAutoRest(isOn): next.autoRest = isOn
         case let .setWatchBuzz(isOn): next.watchBuzz = isOn
-        case .route: break
+        // The sheet's actions change no setting until "Done", which the scripts never send.
+        case .route, .editPlates, .setBar, .setPlate, .resetPlates, .savePlates, .cancelPlates: break
         }
         return next
     }

@@ -7,6 +7,8 @@ nonisolated struct SettingsModel: Equatable, Sendable {
     let title: String
     /// "Couldn't save that change.", under the title, after a save failed; nil otherwise.
     let problem: String?
+    /// "Try again", beside the line of a switch of units that failed; nil otherwise.
+    let retry: Link?
     /// TRAINING.
     let training: String
     let units: Units
@@ -14,9 +16,15 @@ nonisolated struct SettingsModel: Equatable, Sendable {
     let weekStart: WeekStart
     /// Plate math, Auto rest timer, Watch haptic at zero, in that order.
     let switches: [Switch]
+    /// "Bar and plates", under the switches.
+    let plates: PlatesRowModel
+    /// Its sheet, while it is open.
+    let platesSheet: PlatesModel?
     /// DATA.
     let data: String
     let health: Status
+    /// "Export data · CSV", under Apple Health.
+    let export: Export
     /// "Diagnostics", in Debug builds only; nil in Release.
     let diagnostics: Link?
     /// "Ledger 0.14.0 · build 74": the foot of the page. Never empty.
@@ -94,6 +102,15 @@ nonisolated struct SettingsModel: Equatable, Sendable {
     struct Status: Equatable, Sendable {
         let title: String
         let value: String
+    }
+
+    /// "Export data · CSV": a share link over the log as a file (N18).
+    struct Export: Equatable, Sendable {
+        let title: String
+        /// "Export data, CSV".
+        let spokenLabel: String
+        let detail: String
+        let file: WorkoutExport
     }
 
     /// A row that goes somewhere.

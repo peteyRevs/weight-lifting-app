@@ -12,6 +12,39 @@
         }
       }
     },
+    "%@ bar" : {
+      "comment" : "Under Bar and plates in Settings: the bar's weight with its unit, as 45 lb",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bar"
+          }
+        }
+      }
+    },
+    "%@ kg" : {
+      "comment" : "A bar's or a plate's weight in kilograms, in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kg"
+          }
+        }
+      }
+    },
+    "%@ lb" : {
+      "comment" : "A bar's or a plate's weight in pounds, in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ lb"
+          }
+        }
+      }
+    },
     "Apple Health" : {
       "comment" : "Settings row: the link to Apple Health",
       "localizations" : {
@@ -45,6 +78,28 @@
         }
       }
     },
+    "Bar" : {
+      "comment" : "Bar and plates sheet: the bar's weight, stepped",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bar"
+          }
+        }
+      }
+    },
+    "Bar and plates" : {
+      "comment" : "Settings row and sheet: the bar's weight and the plate sizes the lifter owns",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bar and plates"
+          }
+        }
+      }
+    },
     "Buzz the wrist when rest ends" : {
       "comment" : "Under the Watch haptic at zero switch in Settings",
       "localizations" : {
@@ -52,6 +107,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Buzz the wrist when rest ends"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "comment" : "Bar and plates sheet: closes it without saving",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Couldn't change the units. Nothing was changed." : {
+      "comment" : "Shown on Settings when switching units failed; the settings and the program are as they were",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't change the units. Nothing was changed."
           }
         }
       }
@@ -68,7 +145,7 @@
       }
     },
     "DATA" : {
-      "comment" : "Heading of Settings' rows about the lifter's data: Apple Health",
+      "comment" : "Heading of Settings' rows about the lifter's data: Apple Health and the export",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -96,6 +173,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diagnostics"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "comment" : "Bar and plates sheet: saves the bar and the plates",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "Every set you logged, in your current units" : {
+      "comment" : "Under Export data · CSV in Settings: what the file holds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every set you logged, in your current units"
+          }
+        }
+      }
+    },
+    "Export data · CSV" : {
+      "comment" : "Settings row: shares the whole log as a CSV file",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export data · CSV"
+          }
+        }
+      }
+    },
+    "Export data, CSV" : {
+      "comment" : "Spoken name of the Export data · CSV row in Settings",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export data, CSV"
           }
         }
       }
@@ -133,6 +254,17 @@
         }
       }
     },
+    "No plates: no plate line will show" : {
+      "comment" : "Bar and plates sheet, when every plate size is off: the set rows will show no plates",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No plates: no plate line will show"
+          }
+        }
+      }
+    },
     "Not connected" : {
       "comment" : "Status beside Apple Health in Settings: the app does not write to Apple Health",
       "localizations" : {
@@ -151,6 +283,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plate math"
+          }
+        }
+      }
+    },
+    "Plates you own" : {
+      "comment" : "Bar and plates sheet: above the plate sizes, each switched on or off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plates you own"
+          }
+        }
+      }
+    },
+    "Reset to standard" : {
+      "comment" : "Bar and plates sheet: puts back the usual bar and plate sizes of the unit",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset to standard"
           }
         }
       }
@@ -195,6 +349,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TRAINING"
+          }
+        }
+      }
+    },
+    "Try again" : {
+      "comment" : "Button on Settings: switch the units again",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "Turn on Plate math to edit" : {
+      "comment" : "Under Bar and plates in Settings, while the Plate math switch is off",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on Plate math to edit"
           }
         }
       }
@@ -294,6 +470,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "pounds"
+          }
+        }
+      }
+    },
+    "workouts-%@.csv" : {
+      "comment" : "Name of the exported file, with the day as YYYY-MM-DD; keep it a valid file name ending in .csv",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "workouts-%@.csv"
           }
         }
       }

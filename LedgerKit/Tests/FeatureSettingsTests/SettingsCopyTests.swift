@@ -30,10 +30,10 @@ struct SettingsCopyTests {
     }
 
     /// That the bundle the build made resolves each key is `ModuleCopyTests`' (LedgerAppKitTests).
-    @Test("The catalog is sound and holds the module's 27 keys")
+    @Test("The catalog is sound and holds the module's 44 keys")
     func catalog_isSound() throws {
         let catalog = try StringCatalog(module: "FeatureSettings")
         #expect(catalog.problems.isEmpty, "\(catalog.problems)")
-        #expect(catalog.keys.count == 27)
+        #expect(catalog.keys.count == 44)
     }
 }

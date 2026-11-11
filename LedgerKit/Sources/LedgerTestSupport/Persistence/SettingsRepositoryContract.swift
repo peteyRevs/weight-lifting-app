@@ -2,8 +2,9 @@ import Foundation
 import LedgerDomain
 
 /// `SettingsRepository`'s contract as named clauses (F07): the defaults before the first save, a save that
-/// replaces the one value whole, observation that emits each change once, and (F14) a seed that writes only where
-/// nothing is stored. Every implementation runs the
+/// replaces the one value whole, observation that emits each change once, (F14) a seed that writes only where
+/// nothing is stored, and a switch of units that saves as `save` saves (S2; converting the programs needs a program
+/// store, and is `SwitchUnitsTests`'). Every implementation runs the
 /// same clauses: `GRDBSettingsRepository` and `InMemorySettingsRepository`, each in `LedgerPersistenceTests`.
 /// What only a database can do (a row it cannot read, a later payload version) stays with the GRDB suite.
 public enum SettingsRepositoryContract {
@@ -17,7 +18,10 @@ public enum SettingsRepositoryContract {
         ),
         Clause("observe emits the settings now, then each change, and no save that changes nothing", observe),
         Clause("seedIfAbsent with no settings stored saves them, and observe emits them", seedsWhenAbsent),
-        Clause("seedIfAbsent leaves saved settings as they are, and a later save still replaces them", seedKeepsSaved)
+        Clause("seedIfAbsent leaves saved settings as they are, and a later save still replaces them", seedKeepsSaved),
+        Clause("switchUnits saves the settings, and observe emits them", switchSaves),
+        Clause("switchUnits with the units already stored is a save", switchSameUnitsSaves),
+        Clause("switchUnits refuses what save refuses, and writes nothing", switchRefusesNaN)
     ]
 
     /// Every field away from `Settings.default`, with inventories that need exact weights.
@@ -85,5 +89,38 @@ public enum SettingsRepositoryContract {
         return ContractCheck.expect(initial, .default, "the first value")
             ?? ContractCheck.expect(saved, custom, "the value after a save")
             ?? ContractCheck.expect(next, changed, "the value after an unchanged save, then a change")
+    }
+
+    /// F14 S2 (G3 S1): the settings half of `switchUnits`.
+    static func switchSaves(_ repository: any SettingsRepository) async throws -> String? {
+        var values = repository.observe().makeAsyncIterator()
+        let initial = await values.next()
+        try await repository.switchUnits(custom)
+        let switched = await values.next()
+        let loaded = try await repository.load()
+        return ContractCheck.expect(initial, .default, "the first value")
+            ?? ContractCheck.expect(switched, custom, "the value after the switch")
+            ?? ContractCheck.expect(loaded, custom, "load() after the switch")
+    }
+
+    static func switchSameUnitsSaves(_ repository: any SettingsRepository) async throws -> String? {
+        try await repository.save(custom)
+        var changed = custom
+        changed.autoRest = true
+        changed.weekStart = .friday
+        try await repository.switchUnits(changed)
+        return try await ContractCheck.expect(repository.load(), changed, "load() after a switch to the same units")
+    }
+
+    static func switchRefusesNaN(_ repository: any SettingsRepository) async throws -> String? {
+        try await repository.save(.default)
+        var settings = custom
+        settings.plateInventory[.kg] = PlateInventory(bar: Weight(grams: .nan), plates: [])
+        do {
+            try await repository.switchUnits(settings)
+            return "switched to settings holding a NaN bar"
+        } catch is EncodingError {
+            return try await ContractCheck.expect(repository.load(), .default, "load() after the refused switch")
+        }
     }
 }

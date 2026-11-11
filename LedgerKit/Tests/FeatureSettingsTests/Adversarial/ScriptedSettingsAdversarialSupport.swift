@@ -142,6 +142,11 @@ final nonisolated class ScriptedSettings: SettingsRepository, @unchecked Sendabl
 
     func seedIfAbsent(_: Settings) async throws {}
 
+    /// A switch of units is scripted as a save is: these tests are about the queue, not the program.
+    func switchUnits(_ settings: Settings) async throws {
+        try await save(settings)
+    }
+
     /// The row now, then each echo, an echo equal to the last one sent left out (GRDB's `removeDuplicates`).
     func observe() -> AsyncStream<Settings> {
         let (stream, continuation) = AsyncStream<Settings>.makeStream()

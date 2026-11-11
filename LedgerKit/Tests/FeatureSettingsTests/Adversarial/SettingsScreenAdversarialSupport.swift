@@ -136,6 +136,8 @@
             return SettingsModel(
                 title: words.title,
                 problem: words.problem,
+                // S2's rows keep the previews' English: these words are S1's.
+                retry: base.retry,
                 training: words.training,
                 units: SettingsModel.Units(
                     title: words.units,
@@ -163,8 +165,11 @@
                         id: row.id, title: text.0, detail: text.1, isOn: row.isOn, action: row.action
                     )
                 },
+                plates: base.plates,
+                platesSheet: base.platesSheet,
                 data: words.data,
                 health: SettingsModel.Status(title: words.health, value: words.notConnected),
+                export: base.export,
                 diagnostics: base.diagnostics.map { SettingsModel.Link(title: words.diagnostics, action: $0.action) },
                 about: words.about
             )

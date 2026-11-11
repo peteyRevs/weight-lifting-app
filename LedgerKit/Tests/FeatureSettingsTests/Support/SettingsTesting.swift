@@ -14,6 +14,16 @@ extension Tag {
     @Tag static var feature: Self
     /// Suites that compare against committed `__Snapshots__` references.
     @Tag static var snapshot: Self
+    /// Budgets measured in the nightly lane only (testing-strategy §6).
+    @Tag static var performance: Self
+}
+
+/// The lane a test plan runs in, from its `LEDGER_TEST_LANE` variable (testing-strategy §6).
+nonisolated enum TestLane {
+    /// Slow and performance tests run only in the nightly plans; the PR plans and `swift test` skip them.
+    static var runsSlowTests: Bool {
+        ProcessInfo.processInfo.environment["LEDGER_TEST_LANE"] == "nightly"
+    }
 }
 
 /// Waits until `condition` holds, by watching what it reads (Observation), never by time. A condition that never
@@ -39,6 +49,7 @@ final nonisolated class WatchedSettings: SettingsRepository, @unchecked Sendable
     private let base: InMemorySettingsRepository
     private let lock = NSLock()
     private var saved: [Settings] = []
+    private var switched: [Settings] = []
     private var failures: Int
     private var holdsSaves: Bool
     private var isUnreadable: Bool
@@ -87,6 +98,21 @@ final nonisolated class WatchedSettings: SettingsRepository, @unchecked Sendable
     }
 
     func save(_ settings: Settings) async throws {
+        try await write(settings) { try await self.base.save(settings) }
+    }
+
+    /// A switch of units is held and refused as a save is, and recorded among the saves and in `switches`.
+    func switchUnits(_ settings: Settings) async throws {
+        lock.withLock { switched.append(settings) }
+        try await write(settings) { try await self.base.switchUnits(settings) }
+    }
+
+    /// The settings `switchUnits` was called with, in order.
+    var switches: [Settings] {
+        lock.withLock { switched }
+    }
+
+    private func write(_ settings: Settings, _ store: @Sendable () async throws -> Void) async throws {
         let (holds, refuses) = lock.withLock {
             saved.append(settings)
             running += 1
@@ -112,7 +138,7 @@ final nonisolated class WatchedSettings: SettingsRepository, @unchecked Sendable
         if refuses {
             throw Refused()
         }
-        try await base.save(settings)
+        try await store()
         lock.withLock { isUnreadable = false }
     }
 
@@ -134,13 +160,22 @@ struct SettingsScene {
     let watched: WatchedSettings
     let store: SettingsStore
 
+    /// Where this scene's export is written: a directory of its own, so scenes run in parallel never meet.
+    let exportDirectory: URL
+
+    /// `seed`'s catalog, programs and workouts are the stores' too (S2: the program a switch converts, the history the
+    /// export writes); its settings are `settings`.
     init(
         settings: Settings = Fixtures.settingsLb,
         failures: Int = 0,
         holdsSaves: Bool = false,
-        unreadable: Bool = false
+        unreadable: Bool = false,
+        seed: InMemoryStores.Seed = .empty,
+        workouts: (any WorkoutRepository)? = nil
     ) {
-        let stores = InMemoryStores(seed: InMemoryStores.Seed(settings: settings))
+        var stored = seed
+        stored.settings = settings
+        let stores = InMemoryStores(seed: stored)
         let probe = WatchedSettings(
             stores.settings,
             failures: failures,
@@ -149,10 +184,14 @@ struct SettingsScene {
         )
         memory = stores
         watched = probe
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "SettingsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        exportDirectory = directory
         store = withTestDependencies {
             $0.settingsRepository = probe
+            $0.workoutRepository = workouts ?? stores.workouts
         } operation: {
-            SettingsStore(about: SettingsFixtures.about)
+            SettingsStore(about: SettingsFixtures.about, exportDirectory: directory)
         }
     }
 
