@@ -1023,5 +1023,61 @@ failure line are the brief's; the rest are new.
 | `SettingsScreenAdversarialSupport`, `SettingsScreenAdversarialTests` | The model takes S3's three members; 16 → 17 stops; the Arabic order gains the row; the switches' mapping moved to a helper (function length) | S3 row |
 | `SettingsAccessibilityTests` | The tree gains the row (dimmed in "Kilograms"); 9 → 10 targets (11 with Try again) | S3 row |
 | `PreviewTests`, `SettingsCopyTests`, `FeatureSettingsSourceTests` | The sheet's previews; 44 → 57 keys and lookups; the sheet's scroll view | S3 |
-| `SettingsSnapshotTests`' 8 references | Re-recorded: the new row (dimmed in kilograms) | S3 row |
+| `SettingsSnapshotTests`' 8 references | Re-recorded: the new row (its line under it in kilograms; looked at) | S3 row |
 | `LedgerDependenciesTests`: `DependencyKeysTests`, `UnimplementedStubTests`, `PreviewValueTests` | The `dataReset` key's test value, stub and preview value | A1 |
+
+### Tests added
+
+- Contract: `LedgerTestSupport/Persistence/DataResetContract` (+`Contents`), 5 clauses: the erase leaves the bundled
+  catalog, the given settings and nothing else (the custom exercise, the live log, the deleted workout gone); every id
+  is free again; observations open across the erase hear nil, `[]` and the restored settings; a second erase is
+  harmless; an unreadable catalog, a refused catalog entry and unsavable settings erase nothing.
+- Persistence, `DataResetTests` (+`Disk`): the contract on GRDB and the linked in-memory stores; the erased list is
+  every table of the schema but `device` (a new table must join it); row counts after the erase (health values,
+  records, soft-deleted rows gone; `device` and its id kept); a trigger refusing a statement midway through the
+  deletes, at the catalog's seed and at the settings row leaves every count and every read as before (N20); a task
+  cancelled at once leaves all or nothing (N23); the names of a custom exercise and a workout are in neither the file
+  nor its `-wal` after the erase, and the reopened file keeps the device and the restored settings (N21).
+- FeatureSettings: `DeleteAllPresentationTests` (the row, the warning's exact text, the sheet at each step, the word's
+  rule over 14 inputs), `DeleteAllStoreTests` (Cancel at each step, the word table, the erase once with the region's
+  settings and the export directory removed, a second tap and the field and Cancel ignored while it runs, a failure
+  keeping the sheet then a retry, a cancellation), `DeleteAllLiveWorkoutTests` (N19: the row off while a workout is
+  live and back when it ends, a workout started with the sheet up closes it, one found only by the erase's own check
+  deletes nothing), `DeleteAllSheetTests` (hosted: the exact tree per state and size, the one `UITextField` with its
+  placeholder and text, each control's action, the row's tap, layout) and 8 references in
+  `__Snapshots__/DeleteAllSheetTests/` (empty and failed at `.large`, typed at `.large` and `.accessibility3`, light
+  and dark; looked at).
+- LedgerAppKit, `DeleteAllGateTests`: a real composition on a temporary file, Settings' own store erasing through the
+  bound keys; the gate turns to onboarding, the stores hold the catalog and the region's settings, the device id is
+  kept, and Skip setup brings the tabs back with no history.
+- Nightly UI, `SettingsDeleteAll`: **passed** (19.3 s) through the lock, so the alert's "Continue" hands over to the
+  sheet on the simulator.
+
+**Mutant:** `GRDBDataReset` without `compact()` fails `erase_leavesNoTraceOnDisk` on the WAL (2 issues); restored.
+
+**Not covered, system-only:** `SettingsScreen`'s alert and delete sheet closures and binding setter (a presented alert
+or sheet, which the hosted reader cannot reach; the nightly UI test drives them), the field's binding setter (a hosted
+`UITextField` does not hand programmatic text to SwiftUI: I tried `insertText`, then `text` with `editingChanged` and
+the notification), and `GRDBDataReset.compact`'s catch.
+
+### Product lines
+
+Non-blank, non-comment Swift in `LedgerKit/Sources` and `Apps`, `LedgerTestSupport`, UI tests and catalogs excluded,
+against `8d462a2`: **649 added, 16 removed, net 633** (plan: about 540). The largest: `DeleteAllSheet` 120,
+`SettingsCopy+DeleteAll` 96 (13 lookups), `SettingsStore+DeleteAll` 85, `GRDBDataReset` 51. The 500-line target is
+passed; S3 was planned as its own PR so the data-loss change has its own review, and no smaller seam remains.
+
+### Runs
+
+- Host: `swift build --build-tests` clean; FeatureSettings, persistence (the contracts, `DataResetTests`), dependencies
+  and AppKit (`DeleteAllGateTests`, the reach suites) green.
+- Simulator, through the lock: FeatureSettingsTests (151), `DataResetTests`, `ModuleCopyTests`, `DeleteAllGateTests`,
+  LedgerDependenciesTests green after the references were recorded; the nightly `SettingsDeleteAll` passed.
+
+### The gate
+
+`scripts/check.sh` (full), through the lock, on `816928c`: **exit 0, "check.sh OK"**, 2,041 s (lint 68, iOS build 14,
+string catalogs 1, iOS tests 1,605, watchOS build 45, watchOS tests 304, coverage 2). Coverage: FeatureSettings 96.98 %
+(2,089 / 2,154; S2 left it at 98.01 %: the gap is the system-only lines above), LedgerPersistence 99.06 %,
+LedgerFakes 99.07 %, LedgerDependencies 96.62 %, LedgerDomain 99.36 %, overall 98.44 %. The commit after it adds
+`row_opensTheWarning` and these notes; its gate is below.

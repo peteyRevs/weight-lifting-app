@@ -59,6 +59,15 @@
             }
         }
 
+        @Test("Delete all data, with no workout in progress, sends deleteAll")
+        func row_opensTheWarning() {
+            var sent: [SettingsAction] = []
+            SettingsParts(preview: .pounds, send: { sent.append($0) }).withAccessibilityElements { elements in
+                _ = elements.first { $0.accessibilityLabel == "Delete all data" }?.accessibilityActivate()
+            }
+            #expect(sent == [.deleteAll])
+        }
+
         @Test(
             "In every state and size no stop is empty, outside the sheet, under 44 points or over another",
             arguments: DeleteAllPreview.allCases,
@@ -82,10 +91,12 @@
                 window.rootViewController = nil
             }
             host.view.layoutIfNeeded()
-            func fields(in view: UIView) -> [UITextField] {
-                ((view as? UITextField).map { [$0] } ?? []) + view.subviews.flatMap(fields(in:))
-            }
-            return fields(in: host.view).map { [$0.placeholder ?? "", $0.text ?? ""] }
+            return textFields(in: host.view).map { [$0.placeholder ?? "", $0.text ?? ""] }
+        }
+
+        /// Every `UITextField` under `view`.
+        static func textFields(in view: UIView) -> [UITextField] {
+            ((view as? UITextField).map { [$0] } ?? []) + view.subviews.flatMap(textFields(in:))
         }
     }
 
