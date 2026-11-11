@@ -138,6 +138,19 @@ struct WorkoutPageAdversarialTests {
             let page = WorkoutPresentation.page(state, selection: selection, isBusy: false, context)
             let header = WorkoutPresentation.header(state, isBusy: false, locale: context.locale, selection: selection)
             let listed = (page.remaining?.rows ?? []).map(\.exerciseIndex)
+            // F10 S9 (sanctioned edit, criteria 4 and 14, Q5): a superset's block lists none of its members,
+            // and every other exercise with a set not done, earlier ones included.
+            let stillToDo = { (shown: [Int]) in
+                state.exercises.indices.filter { index in
+                    !shown.contains(index) && state.exercises[index].sets.contains { !$0.isDone }
+                }
+            }
+            if let block = page.block {
+                let members = block.legend.map(\.exerciseIndex)
+                #expect(listed == stillToDo(members), "seed \(seed)")
+                #expect(block.rows.count(where: { $0.state == .active }) <= 1, "seed \(seed)")
+                continue
+            }
             guard let card = page.card else {
                 #expect(listed == Array(state.exercises.indices), "seed \(seed): with no card every exercise is listed")
                 #expect(header.progressValue.isEmpty, "seed \(seed)")
@@ -153,11 +166,9 @@ struct WorkoutPageAdversarialTests {
                 (card.steppers == nil) == exercise.sets.allSatisfy(\.isDone),
                 "seed \(seed): an open row, no steppers"
             )
-            // F10 S5 fix round 1 (sanctioned edit, criterion 16): only the later exercises with a set not done.
-            let stillToDo = state.exercises.indices.filter { index in
-                index > card.exerciseIndex && state.exercises[index].sets.contains { !$0.isDone }
-            }
-            #expect(listed == Array(stillToDo), "seed \(seed)")
+            // F10 S5 fix round 1 (sanctioned edit, criterion 16), then F10 S9 (Q5): every other exercise with a
+            // set not done.
+            #expect(listed == stillToDo([card.exerciseIndex]), "seed \(seed)")
             #expect(header.progressValue == card.eyebrow, "seed \(seed)")
             #expect(zip(card.rows, exercise.sets).allSatisfy { ($0.state == .done) == $1.isDone }, "seed \(seed)")
         }

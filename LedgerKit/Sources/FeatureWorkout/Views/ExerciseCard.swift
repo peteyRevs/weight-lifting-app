@@ -21,7 +21,7 @@ struct ExerciseCard: View {
                 last
             }
             VStack(alignment: .leading, spacing: 0) {
-                SetRowList(model: model) { send(.edit($0)) }
+                SetRowList(rows: model.rows, columns: model.columns, steppers: model.steppers) { send(.edit($0)) }
                 PillButton(model.addSet, style: .ghost, flush: .leading) {
                     send(.edit(.addSet(exerciseIndex: model.exerciseIndex)))
                 }

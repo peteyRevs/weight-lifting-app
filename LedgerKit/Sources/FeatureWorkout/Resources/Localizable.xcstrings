@@ -112,6 +112,17 @@
         }
       }
     },
+    "%@ · %@ kg × %lld" : {
+      "comment" : "The superset row that comes after the rest: its label, its weight in kilograms, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ kg × %lld"
+          }
+        }
+      }
+    },
     "%@ · %@ lb" : {
       "comment" : "An offered exercise's equipment, then the weight its sets will take, in pounds",
       "localizations" : {
@@ -119,6 +130,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · %@ lb"
+          }
+        }
+      }
+    },
+    "%@ · %@ lb × %lld" : {
+      "comment" : "The superset row that comes after the rest: its label, its weight in pounds, its reps",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@ lb × %lld"
+          }
+        }
+      }
+    },
+    "%@, drop set" : {
+      "comment" : "Spoken name of a superset's drop set row: the member's name first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, drop set"
+          }
+        }
+      }
+    },
+    "%@, set %lld" : {
+      "comment" : "Spoken name of a superset's row: the member's name, then the set's number, counted from 1",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, set %lld"
           }
         }
       }
@@ -180,6 +224,17 @@
         }
       }
     },
+    "%lld × %lld @ %@ kg" : {
+      "comment" : "A superset member's target: sets, reps, then the load in kilograms",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ kg"
+          }
+        }
+      }
+    },
     "%lld × %lld @ %@ kg · RPE %@" : {
       "comment" : "What the program prescribes: sets, reps, the load in kilograms, then the effort from 5 to 10",
       "localizations" : {
@@ -187,6 +242,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld × %lld @ %@ kg · RPE %@"
+          }
+        }
+      }
+    },
+    "%lld × %lld @ %@ lb" : {
+      "comment" : "A superset member's target: sets, reps, then the load in pounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld × %lld @ %@ lb"
           }
         }
       }
@@ -635,6 +701,17 @@
         }
       }
     },
+    "Log set %@" : {
+      "comment" : "Spoken label of the button that logs a superset's set: its label, the member's letter first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log set %@"
+          }
+        }
+      }
+    },
     "Log set %lld" : {
       "comment" : "Spoken label of the button that logs a set: the set's number, counted from 1",
       "localizations" : {
@@ -776,6 +853,17 @@
         }
       }
     },
+    "Rest %@ after %@" : {
+      "comment" : "A superset's rest: its length, then the letter of the member after which it starts",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest %@ after %@"
+          }
+        }
+      }
+    },
     "Rest over" : {
       "comment" : "Shown on the rest timer when it has reached zero",
       "localizations" : {
@@ -816,6 +904,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Resume it"
+          }
+        }
+      }
+    },
+    "Round %lld of %lld" : {
+      "comment" : "The superset's round being lifted, counted from 1, then the number of rounds",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Round %lld of %lld"
           }
         }
       }
@@ -893,6 +992,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skip rest"
+          }
+        }
+      }
+    },
+    "Superset · block %lld of %lld" : {
+      "comment" : "A superset's place among the workout's blocks, counted from 1, then the number of blocks",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Superset · block %lld of %lld"
+          }
+        }
+      }
+    },
+    "Swap %@" : {
+      "comment" : "Spoken label of the button that offers other exercises for this superset member",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swap %@"
           }
         }
       }
@@ -978,6 +1099,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Undo drop set"
+          }
+        }
+      }
+    },
+    "Undo set %@" : {
+      "comment" : "Spoken label of the button that un-logs a superset's set: its label, the member's letter first",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo set %@"
           }
         }
       }

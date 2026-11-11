@@ -7,15 +7,19 @@ import SwiftUI
 ///
 /// VoiceOver reads each row as the design system's set row does: the row, then its check; and each stepper
 /// as one adjustable stop whose value is the row's weight or reps.
+///
+/// Each row names its own exercise, so a superset's block (F10 S9) draws its members' rows in one list.
 struct SetRowList: View {
-    let model: ExerciseCardModel
+    let rows: [SetRowModel]
+    let columns: ExerciseCardModel.Columns
+    let steppers: SteppersModel?
     let send: (WorkoutEdit) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            SetRowHeader(number: model.columns.number, weight: model.columns.weight, reps: model.columns.reps)
+            SetRowHeader(number: columns.number, weight: columns.weight, reps: columns.reps)
             HairlineList {
-                ForEach(model.rows) { row in
+                ForEach(rows) { row in
                     SetRow(
                         number: row.label,
                         weight: row.weight,
@@ -23,17 +27,17 @@ struct SetRowList: View {
                         state: row.state,
                         checkLabel: row.checkLabel,
                         accessibilitySummary: row.summary,
-                        onSelect: { send(.select(exerciseIndex: model.exerciseIndex, setID: row.id)) },
+                        onSelect: { send(.select(exerciseIndex: row.exerciseIndex, setID: row.id)) },
                         onCheck: { send(row.check) }
                     )
-                    if let steppers = model.steppers, steppers.setID == row.id {
+                    if let steppers, steppers.setID == row.id {
                         SetRowSteppers(
                             weightStep: steppers.weightStep,
                             repStep: steppers.repStep,
                             weight: steppers.weight,
                             reps: steppers.reps,
-                            onWeight: { send(.stepWeight(exerciseIndex: model.exerciseIndex, setID: row.id, $0)) },
-                            onReps: { send(.stepReps(exerciseIndex: model.exerciseIndex, setID: row.id, $0)) }
+                            onWeight: { send(.stepWeight(exerciseIndex: steppers.exerciseIndex, setID: row.id, $0)) },
+                            onReps: { send(.stepReps(exerciseIndex: steppers.exerciseIndex, setID: row.id, $0)) }
                         )
                     }
                 }

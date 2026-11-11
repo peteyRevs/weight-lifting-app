@@ -36,13 +36,17 @@ extension WorkoutStore {
     }
 
     /// Opens the sheet for the exercise the card showed, `exerciseID` at `index`, while it is still the shown
-    /// exercise and none of its sets is logged (S8 ruling Q2), and nothing else is shown over the cover. An
-    /// exercise that moved between the tap and now opens nothing (review SF1). Q2 is checked on the newest
-    /// workout, a change the stream has not shown yet included (review N5). The switch opens on when the
-    /// exercise's slot already carries a program change (Q4).
+    /// exercise, or a member of the shown superset's block (F10 S9 criterion 9), and none of its sets is
+    /// logged (S8 ruling Q2), and nothing else is shown over the cover. An exercise that moved between the
+    /// tap and now opens nothing (review SF1). Q2 is checked on the newest workout, a change the stream has
+    /// not shown yet included (review N5). The switch opens on when the exercise's slot already carries a
+    /// program change (Q4).
     private func openSwap(_ index: Int, _ exerciseID: ExerciseID) {
         guard dialog == nil, case let .loaded(shown) = workout,
-              WorkoutPresentation.shownExercise(of: shown, selection: selection) == index,
+              let onScreen = WorkoutPresentation.shownExercise(of: shown, selection: selection),
+              onScreen == index
+              || WorkoutPresentation.superset(holding: onScreen, in: shown.exercises)?.exerciseIndices
+              .contains(index) == true,
               WorkoutPresentation.canSwap(exerciseID, at: index, in: shown),
               WorkoutPresentation.canSwap(exerciseID, at: index, in: ahead ?? shown)
         else {

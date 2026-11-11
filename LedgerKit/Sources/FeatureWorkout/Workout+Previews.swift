@@ -13,7 +13,9 @@
     /// The workout is the spec's Upper A (`Fixtures.seedSession()`), started at `Fixtures.now`; time stands
     /// still at each case's moment. Upper A is built with no history, so its cards read "No history yet";
     /// `logging` gives every exercise a last workout, and `dropSet` shows the last exercise in kilograms
-    /// with a drop set, where nothing remains after it.
+    /// with a drop set. Upper A ends with a superset (Lat Pulldown and Cable Lateral Raise), drawn as one
+    /// block (F10 S9): `dropSet` shows it with "BD", `hour` in its second round with B current, and
+    /// `supersetRound2` after A1 and B1, with a last workout, while the group's rest runs.
     ///
     /// The engine starts a rest at each logged set, so every case with a set logged shows the rest panel
     /// (F10 S6): at "Rest over" where its moment is past the rest's end, as in `logging`, whose second set
@@ -27,6 +29,7 @@
         case resting = "Resting"
         case restOver = "Rest over"
         case dropSet = "A drop set, in kilograms"
+        case supersetRound2 = "A superset, round 2"
         case discarding = "Discarding"
         case loading = "Loading"
         case failed = "Could not open"
@@ -42,6 +45,7 @@
             case .resting: (2, 2 * 60 + 75)
             case .restOver: (2, 2 * 60 + 155)
             case .dropSet: (0, 41 * 60 + 12)
+            case .supersetRound2: (14, 14 * 60 + 30)
             case .minutes, .discarding: (6, 24 * 60 + 22)
             case .hour: (15, 3600 + 65)
             }
@@ -56,17 +60,21 @@
         func workout() throws -> WorkoutState {
             var workout = try Fixtures.seedSession()
             switch self {
-            case .logging, .resting, .restOver: Self.giveHistory(to: &workout)
+            case .logging, .resting, .restOver, .supersetRound2: Self.giveHistory(to: &workout)
             case .dropSet: Self.endWithADropSetInKilograms(&workout)
             default: break
             }
             return try Self.logged(progress.sets, in: workout)
         }
 
-        /// The row the lifter chose: `dropSet` shows the last exercise, as a tap on its row of "REMAINING"
-        /// does; every other case shows the engine's cursor.
+        /// The row the lifter chose: `dropSet` shows the last exercise's second set, as a tap on its row
+        /// does (F10 S9: a member chosen with no row would give way to the block's first undone row, the
+        /// first member's); every other case shows the engine's cursor.
         var selection: WorkoutSelection? {
-            self == .dropSet ? WorkoutSelection(exerciseIndex: 4, setID: nil) : nil
+            guard self == .dropSet, let raise = try? workout().exercises.last, raise.sets.count > 1 else {
+                return nil
+            }
+            return WorkoutSelection(exerciseIndex: 4, setID: raise.sets[1].id)
         }
 
         /// What the screen is handed. A fixture that does not build shows as the failed state, and fails
@@ -194,6 +202,10 @@
 
     #Preview("A drop set, in kilograms") {
         WorkoutPreview.dropSet.content
+    }
+
+    #Preview("A superset, round 2") {
+        WorkoutPreview.supersetRound2.content
     }
 
     #Preview("Discarding") {

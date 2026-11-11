@@ -1,7 +1,8 @@
 import LedgerDesign
 import SwiftUI
 
-/// "REMAINING" (v2): the exercises after the shown one, each with its sets and reps. A tap on a row shows
+/// "REMAINING" (v2): the exercises outside the shown card or block with a set left, each with its sets and
+/// reps. A tap on a row shows
 /// that exercise. Each row is one button, read as its name and its scheme. v2's small number before each
 /// name is not drawn: `HairlineRow` has no leading column, and the header's segments already place the
 /// exercise.
