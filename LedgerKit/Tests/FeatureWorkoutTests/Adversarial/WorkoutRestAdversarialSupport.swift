@@ -215,7 +215,7 @@ final class RestCover {
     func settle() async {
         await eventually("the taps to be applied") { self.store.queue.isEmpty && !self.store.isDraining }
         let truth = await truth()
-        await eventually("the page to show the session's workout") {
+        await observed("the page to show the session's workout") {
             self.store.shown == truth || self.store.exit != nil
         }
         await sync()

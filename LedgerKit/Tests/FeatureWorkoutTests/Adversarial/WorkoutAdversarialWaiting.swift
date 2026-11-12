@@ -45,6 +45,50 @@ func eventually(
     return true
 }
 
+/// Waits until `condition` holds by watching what it reads (Observation), as the hosted root's
+/// `eventually(_:)` (`WorkoutScene.swift`) does, never by polling: for a condition on observable state alone
+/// (a store's `workout`, `exit`, `dialog`, and what is drawn from them). A busy machine runs what it waits for
+/// later, so a wall-clock bound would make the test's verdict the machine's speed (seen as "never came in
+/// 10 s" on a loaded Mac, F13 S3's findings). `hangGuard` is not that verdict: it only turns a wait that
+/// would hang into a failure that says what it waited for, short of the shortest time limit of a suite that
+/// waits here (one minute). A condition on what is not observable (an actor, a `LockIsolated`, the store's
+/// queue) waits by `eventually(_:limit:_:)`, which polls.
+@MainActor
+@discardableResult
+func observed(
+    _ what: String,
+    hangGuard: Duration = .seconds(50),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: @escaping @MainActor @Sendable () -> Bool
+) async -> Bool {
+    let watching = Task { await holds(condition) }
+    let guarding = Task {
+        try? await Task.sleep(for: hangGuard)
+        watching.cancel()
+    }
+    defer { guarding.cancel() }
+    let came = await withTaskCancellationHandler {
+        await watching.value
+    } onCancel: {
+        watching.cancel()
+    }
+    if !came {
+        let why = Task.isCancelled ? "cancelled while waiting for" : "the hang guard (\(hangGuard)) ended the wait for"
+        Issue.record("\(why): \(what)", sourceLocation: sourceLocation)
+    }
+    return came
+}
+
+/// Whether `condition` came to hold before the task was cancelled. `Observations` ends its sequence when the
+/// task iterating it is cancelled.
+@MainActor
+private func holds(_ condition: @escaping @MainActor @Sendable () -> Bool) async -> Bool {
+    for await held in Observations({ condition() }) where held {
+        return true
+    }
+    return false
+}
+
 /// Gives way often enough for anything already under way to land: for "nothing happened" only.
 @MainActor
 func giveWay() async {

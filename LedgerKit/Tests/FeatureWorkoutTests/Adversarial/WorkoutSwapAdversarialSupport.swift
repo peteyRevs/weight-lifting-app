@@ -75,7 +75,7 @@ struct SwapG2Bench {
             WorkoutStore()
         }
         let task = Task { await cover.follow() }
-        await eventually("the session's first update") { cover.shown != nil }
+        await observed("the session's first update") { cover.shown != nil }
         return SwapG2Bench(
             session: client,
             store: cover,
@@ -125,7 +125,7 @@ struct SwapG2Bench {
         await store.drain()
         await session.deliver()
         let truth = await session.current()
-        await eventually("the page to show the session's workout") { store.shown == truth }
+        await observed("the page to show the session's workout") { store.shown == truth }
     }
 
     func set(_ exercise: Int, _ row: Int) -> SetID {

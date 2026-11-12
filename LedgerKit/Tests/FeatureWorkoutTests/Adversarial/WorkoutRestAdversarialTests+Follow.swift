@@ -43,12 +43,12 @@ extension WorkoutRestAdversarialTests {
         let (session, store, haptics, rows) = (gated.session, gated.store, gated.haptics, gated.rows)
         try await session.elsewhere(Self.logged(rows[0]))
         var following = Task { await store.follow() }
-        await eventually("the first update") { store.shown?.doneSets == 1 }
+        await observed("the first update") { store.shown?.doneSets == 1 }
         #expect(await haptics.played == [], "a first follow plays nothing old")
         // The lifter's own set, felt from its update; then the tasks start again, twice.
         store.send(.edit(.log(exerciseIndex: 0, setID: rows[1].id)))
         await store.drain()
-        await eventually("the set on the page") { store.shown?.doneSets == 2 }
+        await observed("the set on the page") { store.shown?.doneSets == 2 }
         for _ in 0 ..< 2 {
             following.cancel()
             await following.value
@@ -67,21 +67,21 @@ extension WorkoutRestAdversarialTests {
         let gated = Gated()
         let (session, store, haptics, rows) = (gated.session, gated.store, gated.haptics, gated.rows)
         var following = Task { await store.follow() }
-        await eventually("the first update") { store.shown != nil }
+        await observed("the first update") { store.shown != nil }
         following.cancel()
         await following.value
         for row in rows.prefix(4) {
             try await session.elsewhere(Self.logged(row))
         }
         following = Task { await store.follow() }
-        await eventually("the four sets on the page") { store.shown?.doneSets == 4 }
+        await observed("the four sets on the page") { store.shown?.doneSets == 4 }
         await giveWay()
         #expect(await haptics.played == [.setLogged], "one for the change, as the engine feels a change of state")
         following.cancel()
         await following.value
         try await session.elsewhere(.setUnlogged(exerciseIndex: 0, setID: rows[0].id))
         following = Task { await store.follow() }
-        await eventually("the un-log on the page") { store.shown?.doneSets == 3 }
+        await observed("the un-log on the page") { store.shown?.doneSets == 3 }
         await giveWay()
         #expect(await haptics.played == [.setLogged])
         following.cancel()
@@ -100,16 +100,16 @@ extension WorkoutRestAdversarialTests {
         let gated = Gated()
         let (session, store, haptics, rows) = (gated.session, gated.store, gated.haptics, gated.rows)
         let first = Task { await store.follow() }
-        await eventually("the first update") { store.shown != nil }
+        await observed("the first update") { store.shown != nil }
         await haptics.hold()
         try await session.elsewhere(Self.logged(rows[0]))
-        await eventually("the first set on the page") { store.shown?.doneSets == 1 }
+        await observed("the first set on the page") { store.shown?.doneSets == 1 }
         try await session.elsewhere(Self.logged(rows[1]))
         await giveWay()
         // The first follow is still in the first set's haptic. The view goes and comes back.
         first.cancel()
         var second = Task { await store.follow() }
-        await eventually("the second follow to show both sets") { store.shown?.doneSets == 2 }
+        await observed("the second follow to show both sets") { store.shown?.doneSets == 2 }
         for _ in 0 ..< 4 {
             await haptics.release()
             await giveWay()
@@ -139,7 +139,7 @@ extension WorkoutRestAdversarialTests {
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         let keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
         await bench.clock.base.advance(by: .seconds(149))
@@ -159,7 +159,7 @@ extension WorkoutRestAdversarialTests {
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         var keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
         await bench.clock.base.advance(by: .seconds(149))
@@ -171,7 +171,7 @@ extension WorkoutRestAdversarialTests {
         #expect(await bench.played() == [.setLogged], "the rest was extended: its old end is not felt")
         // The page hears; the root starts the task again for the longer rest.
         await bench.session.keepStreamsBehind(false)
-        await eventually("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
+        await observed("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         #expect(bench.store.restPanel?.status == "Resting")
         keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
@@ -193,7 +193,7 @@ extension WorkoutRestAdversarialTests {
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         var keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
         await bench.clock.base.advance(by: .seconds(148))
@@ -209,7 +209,7 @@ extension WorkoutRestAdversarialTests {
         await bench.session.holdEveryApply(false)
         await bench.session.release()
         await draining.value
-        await eventually("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
+        await observed("the longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         #expect(bench.store.shownRest?.endsAt == Fixtures.now.addingTimeInterval(180), "extended, by the tap's instant")
         keeper = Task { await bench.store.keepRestTime() }
         await giveWay()
@@ -230,7 +230,7 @@ extension WorkoutRestAdversarialTests {
         let rows = bench.running.exercises[0].sets
         bench.store.send(.edit(.log(exerciseIndex: 0, setID: rows[0].id)))
         await bench.store.drain()
-        await eventually("the rest on the page") { bench.store.shownRest != nil }
+        await observed("the rest on the page") { bench.store.shownRest != nil }
         await bench.session.holdEveryAnswer()
         bench.store.send(.edit(.stepReps(exerciseIndex: 0, setID: rows[1].id, .increment)))
         let draining = Task { await bench.store.drain() }
@@ -238,7 +238,7 @@ extension WorkoutRestAdversarialTests {
         try await bench.session.elsewhere(
             .restExtended(amount: .seconds(30), extendsShownRest: true, tappedAt: bench.now)
         )
-        await eventually("the peer's longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
+        await observed("the peer's longer rest on the page") { bench.store.shownRest?.total == .seconds(180) }
         await bench.session.release()
         await draining.value
         #expect(bench.store.ahead?.rest?.total == .seconds(150), "the older answer is kept as the newest")

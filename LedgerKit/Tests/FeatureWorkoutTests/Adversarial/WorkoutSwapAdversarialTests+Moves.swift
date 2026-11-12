@@ -14,7 +14,7 @@ extension WorkoutSwapAdversarialTests {
         let bench = try await Bench.make()
         await bench.open()
         try await bench.session.elsewhere(.discarded(endedAt: Fixtures.now))
-        await eventually("the cover to close") { bench.store.exit != nil }
+        await observed("the cover to close") { bench.store.exit != nil }
         #expect(bench.store.dialog == nil)
     }
 
@@ -23,7 +23,7 @@ extension WorkoutSwapAdversarialTests {
         let bench = try await Bench.make()
         await bench.open()
         await bench.session.endStreams()
-        await eventually("the failed screen") {
+        await observed("the failed screen") {
             if case .failed = bench.store.workout {
                 return true
             }
