@@ -105,6 +105,25 @@ echo '{"version": 1}' >"$T/empty.xctestplan"
 run ok "$T/empty.xctestplan"
 expect_exit "R13 a plan with no testTargets fails" nonzero "$code" "$out"
 
+# check.sh --shard passes the shard's targets: exactly those must run and pass, each one the plan enables.
+shard() { out="$("$CHECK" "$T/$1.xcresult" "$T/PR.xctestplan" "${@:2}" 2>&1)"; code=$?; }
+bundle half LedgerUITests:Passed LedgerDomainTests:Passed
+shard half LedgerUITests LedgerDomainTests
+expect_exit "R15 a shard's bundle that ran exactly its targets, all passed, passes (a target outside it did not run)" 0 "$code" "$out"
+check "R15b ... and says it was one shard" grep -q '2 test targets ran and passed (PR, one shard)' <<<"$out"
+shard ok LedgerUITests LedgerDomainTests
+expect_exit "R16 a shard's bundle in which another shard's target ran too fails" 1 "$code" "$out"
+check "R16b ... naming it" grep -q 'ran outside its shard: LedgerDesignTests' <<<"$out"
+shard half LedgerUITests LedgerDomainTests LedgerDesignTests
+expect_exit "R17 a shard target that did not run fails" 1 "$code" "$out"
+check "R17b ... naming it" grep -q 'did not run: LedgerDesignTests' <<<"$out"
+shard half LedgerUITests LedgerDomainTests LedgerHealthTests
+expect_exit "R18 a shard target the plan disables fails, before the bundle is compared" 1 "$code" "$out"
+check "R18b ... naming it" grep -q 'not a test target that .*PR.xctestplan enables: LedgerHealthTests' <<<"$out"
+bundle halffailed LedgerUITests:Failed LedgerDomainTests:Passed
+shard halffailed LedgerUITests LedgerDomainTests
+expect_exit "R19 a failed bundle in a shard fails it" 1 "$code" "$out"
+
 # The committed plans: every target the plan enables must be a real test target,
 # so a typo cannot turn into "did not run" noise or, worse, a disabled target.
 for plan in PR PR-Watch Nightly Nightly-Watch; do
