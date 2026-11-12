@@ -14,12 +14,11 @@ nonisolated enum RestSeeds {
     }()
 }
 
-/// A test clock that says when the last sleep begun on it is due, so a test can tell a task that is asleep
-/// from one that was woken and has not yet slept again. Nothing waits on real time.
+/// A test clock that counts the sleeps begun on it, so a test can tell a task that is asleep again from one
+/// that was woken and has not yet slept. Nothing waits on real time. (`RestCover` runs on `RestCoverClock`.)
 nonisolated struct RestProbeClock: Clock {
     let base = TestClock<Duration>()
     let sleeps = LockIsolated(0)
-    let due = LockIsolated<TestClock<Duration>.Instant?>(nil)
 
     var now: TestClock<Duration>.Instant {
         base.now
@@ -34,24 +33,7 @@ nonisolated struct RestProbeClock: Clock {
         TestClock<Duration>.Instant().duration(to: base.now)
     }
 
-    /// Whether a sleep is registered with `base`, so that moving time to its end wakes it. `due` is set a
-    /// moment before: on the task's own thread, which can be pre-empted before `TestClock.sleep` registers
-    /// the sleep, and an `advance(to: due)` in that gap wakes nothing. `checkSuspension()` throws exactly
-    /// when a sleep is registered (swift-clocks 82440fa: `megaYield`, then `suspensions.isEmpty`); the
-    /// rest's task is the only sleeper on this clock.
-    var isAsleep: Bool {
-        get async {
-            do {
-                try await base.checkSuspension()
-                return false
-            } catch {
-                return true
-            }
-        }
-    }
-
     func sleep(until deadline: TestClock<Duration>.Instant, tolerance: Duration?) async throws {
-        due.setValue(deadline)
         sleeps.withValue { $0 += 1 }
         try await base.sleep(until: deadline, tolerance: tolerance)
     }
@@ -69,7 +51,7 @@ nonisolated struct RestProbeClock: Clock {
 final class RestCover {
     let scene: WorkoutScene
     let haptics = FakeHaptics()
-    let clock = RestProbeClock()
+    let clock = RestCoverClock()
     let skew = LockIsolated<TimeInterval>(0)
     private(set) var store: WorkoutStore
     private var following: Task<Void, Never>?
@@ -89,7 +71,7 @@ final class RestCover {
     private static func makeStore(
         _ scene: WorkoutScene,
         _ haptics: FakeHaptics,
-        _ clock: RestProbeClock,
+        _ clock: RestCoverClock,
         _ skew: LockIsolated<TimeInterval>
     ) -> WorkoutStore {
         scene.store {
@@ -99,7 +81,7 @@ final class RestCover {
         }
     }
 
-    private nonisolated static func wallClock(_ clock: RestProbeClock, _ skew: LockIsolated<TimeInterval>) -> Date {
+    private nonisolated static func wallClock(_ clock: RestCoverClock, _ skew: LockIsolated<TimeInterval>) -> Date {
         Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1) + skew.value)
     }
 
@@ -145,30 +127,25 @@ final class RestCover {
         await keeper?.value
         keptFor = store.shownRest
         isKeeperDone = false
-        let mark = clock.sleeps.value
-        keeper = Task { [store] in
+        let mark = clock.sleeps
+        keeper = Task { [store, clock] in
             await store.keepRestTime()
             self.isKeeperDone = true
+            clock.signal()
         }
-        await eventually("the rest's task asleep or ended") {
-            if self.isKeeperDone {
-                return true
-            }
-            return self.clock.sleeps.value > mark ? await self.clock.isAsleep : false
+        await keeperWait("the rest's task asleep or ended") {
+            self.isKeeperDone || (self.clock.sleeps > mark && self.clock.due != nil)
         }
     }
 
     /// Returns with the rest's task ended, or asleep in a wait that ends later than now and is registered
-    /// with the clock (`RestProbeClock.isAsleep`), so that `run` and `endPendingWait` wake it.
+    /// with the clock (`RestCoverClock.due`), so that `run` and `endPendingWait` wake it.
     private func asleepOrDone() async {
-        await eventually("the rest's task asleep again or ended") {
-            if self.isKeeperDone {
+        await keeperWait("the rest's task asleep again or ended") {
+            if self.isKeeperDone || self.clock.sleeps == 0 {
                 return true
             }
-            guard let due = self.clock.due.value else {
-                return true
-            }
-            return due > self.clock.base.now ? await self.clock.isAsleep : false
+            return self.clock.due.map { $0 > self.clock.now } ?? false
         }
     }
 
@@ -200,12 +177,12 @@ final class RestCover {
     /// 158397), or starts its next wait from a date read before the jump (a panel seconds behind until it
     /// next wakes, seed 142559). Neither is a phone that is awake.
     func run(_ seconds: Double) async {
-        let end = clock.base.now.advanced(by: .seconds(seconds))
-        while !isKeeperDone, let due = clock.due.value, due > clock.base.now, due < end {
-            await clock.base.advance(to: due)
+        let end = clock.now.advanced(by: .seconds(seconds))
+        while !isKeeperDone, let due = clock.due, due > clock.now, due < end {
+            clock.advance(to: due)
             await asleepOrDone()
         }
-        await clock.base.advance(to: end)
+        clock.advance(to: end)
         await asleepOrDone()
     }
 
@@ -223,10 +200,10 @@ final class RestCover {
     }
 
     private func endPendingWait() async {
-        guard !isKeeperDone, let due = clock.due.value, due > clock.base.now else {
+        guard !isKeeperDone, let due = clock.due, due > clock.now else {
             return
         }
-        await clock.base.advance(to: due)
+        clock.advance(to: due)
         await asleepOrDone()
     }
 
@@ -256,6 +233,35 @@ final class RestCover {
 }
 
 extension RestCover {
+    /// Waits until `condition`, on what the rest's task and the clock do, holds: looked at again each time
+    /// the clock registers a sleep or the task ends (`RestCoverClock.changed()`), never by polling. As
+    /// `eventually`, a wait that has not come in 10 s of the wall clock records an issue that names it.
+    private func keeperWait(
+        _ what: String,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async {
+        guard !condition() else {
+            return
+        }
+        let limit = Duration.seconds(10)
+        let deadline = ContinuousClock.now.advanced(by: limit)
+        let guarding = Task { [clock] in
+            guard await (try? Task.sleep(for: limit)) != nil else {
+                return
+            }
+            clock.signal()
+        }
+        defer { guarding.cancel() }
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("never came in \(limit): \(what)", sourceLocation: sourceLocation)
+                return
+            }
+            await clock.changed()
+        }
+    }
+
     /// What was played, once everything under way has landed.
     func played() async -> [Haptic] {
         await giveWay()
