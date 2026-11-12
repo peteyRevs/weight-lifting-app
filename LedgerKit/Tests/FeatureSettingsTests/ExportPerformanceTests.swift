@@ -15,7 +15,7 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct ExportPerformanceTests {
-    static let budget = PerformanceRunner.budget(.milliseconds(200))
+    static let budget: Duration = .milliseconds(200)
     static let memoryBudget = 5 * 1024 * 1024
 
     /// 400 workouts of 5 exercises of 5 sets: 10,000 sets, a week apart from 2018.
@@ -70,8 +70,8 @@ struct ExportPerformanceTests {
         }
         // A smoke figure (N17 as amended): what the writes retain, not their peak.
         let added = Self.footprint() - before
-        let median = runs.sorted()[2]
-        #expect(median < Self.budget, "\(runs)")
+        let verdict = PerformanceRunner.verdict(runs, budget: Self.budget, statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
         #expect(added < Self.memoryBudget, "\(added) bytes")
     }
 }

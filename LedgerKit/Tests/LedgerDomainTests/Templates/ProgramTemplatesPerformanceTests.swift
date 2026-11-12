@@ -21,6 +21,7 @@ struct ProgramTemplatesPerformanceTests {
         _ = try block.program(catalog: catalog)
         let clock = ContinuousClock()
         let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try block.program(catalog: catalog) } }.sorted()
-        #expect(timings[2] < PerformanceRunner.budget(.milliseconds(5)), "median \(timings[2])")
+        let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(5), statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 }

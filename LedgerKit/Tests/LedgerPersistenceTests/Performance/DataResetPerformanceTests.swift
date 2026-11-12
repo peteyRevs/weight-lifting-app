@@ -65,7 +65,8 @@ struct DataResetPerformanceTests {
             #expect(left == 0, "run \(run)")
         }
         let runs = Array(erases.dropFirst())
-        #expect(RecordReplayPerformanceTests.percentile95(runs) < PerformanceBudget.eraseAll, "\(runs)")
+        let verdict = PerformanceRunner.verdict(runs, budget: PerformanceBudget.eraseAll)
+        #expect(verdict.isWithinBudget, "\(verdict)")
         Attachment.record(RecordReplayPerformanceTests.line("eraseAll", runs), named: "erase-all.txt")
     }
 }

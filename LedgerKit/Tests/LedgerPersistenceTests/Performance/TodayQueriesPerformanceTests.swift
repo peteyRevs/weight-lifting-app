@@ -57,9 +57,9 @@ struct TodayQueriesPerformanceTests {
                 try await timings.append(clock.measure { try await read.run() })
             }
             timings.sort()
-            let percentile95 = timings[timings.count * 95 / 100 - 1]
-            report.append("\(read.name): p95 \(percentile95), median \(timings[timings.count / 2])")
-            #expect(percentile95 < PerformanceBudget.statsQuery, "\(read.name): \(timings)")
+            let verdict = PerformanceRunner.verdict(timings, budget: PerformanceBudget.statsQuery)
+            report.append("\(read.name): p95 \(verdict.percentile95), median \(verdict.median)")
+            #expect(verdict.isWithinBudget, "\(read.name): \(verdict)")
         }
         Attachment.record(report.joined(separator: "\n"), named: "today-reads.txt")
     }

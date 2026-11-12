@@ -72,6 +72,7 @@ case "$1 $2 $3" in
         esac
         echo "Finished" ;;
     "simctl shutdown "* | "simctl erase "*) ;;
+    "simctl create "*) echo "${XCRUN_CREATED:-C4EA7ED0-0000-4000-8000-000000000001}" ;;
     "xcresulttool get test-results")
         [ "$4" = summary ] || { echo "fake xcrun: unexpected: $*" >&2; exit 64; }
         if [ -n "${XCRUN_SUMMARY:-}" ]; then cat "$XCRUN_SUMMARY"; else echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}"; fi ;;

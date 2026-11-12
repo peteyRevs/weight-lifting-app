@@ -1,5 +1,6 @@
 import Foundation
 @testable import LedgerPersistence
+import LedgerTestSupport
 import Testing
 
 /// F05 risk "watchOS first-launch migration": opening and migrating a new database file takes under
@@ -25,6 +26,7 @@ struct MigrationTimingTests {
         let timings = all.dropFirst().sorted() // run 0 warms up
         let median = timings[timings.startIndex + timings.count / 2]
         Attachment.record("median \(median); warm-up \(all[0]); runs \(timings)", named: "first-launch-open.txt")
-        #expect(median < PerformanceBudget.firstLaunchOpen, "median \(median); warm-up \(all[0]); runs \(timings)")
+        let verdict = PerformanceRunner.verdict(timings, budget: PerformanceBudget.firstLaunchOpen, statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict); warm-up \(all[0])")
     }
 }

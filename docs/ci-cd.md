@@ -242,6 +242,8 @@ authoritative; the plan differs:
       concurrent macOS jobs, so some legs queue: the run's wall time grows, no leg's time does. The runner
       took 2.4–3.1 times this Mac's time per target (Domain 1,148 against 369 s, Sync 1,075 against 370),
       not the 1.3–1.5 assumed in round 1. Rebalance from a newer run's bundles when a leg's total nears 75 min.
+    - *Performance budgets.* Each leg sets `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: 2`: on the runner a
+      timing test holds its median to twice its budget (testing-strategy §2.2, "Budgets and the runner").
     - *Caches.* Each leg restores `main`'s package checkouts and compilation cache under Check's keys
       (`actions/cache/restore`, WF78) and runs `check.sh` with `LEDGER_COMPILATION_CACHE=YES`; only
       `main-cache.yml` saves them. A dispatch on `main` restores `main`'s newest cache.
@@ -256,7 +258,11 @@ authoritative; the plan differs:
       one at a time. Split into legs, no runner was lost in run 43170933804. In that run both watch legs'
       `xcodebuild` reported the image's iPhone 18 Pro Max, the phone the image pairs with the watch, though
       `sim-destination.sh` had unpaired it; leg 2's app-hosted targets failed "Cannot test target … on
-      'iPhone 18 Pro Max'", and the watch's `TodaySnapshotTests` reported "no cell to draw on iOS".
+      'iPhone 18 Pro Max'", and the watch's `TodaySnapshotTests` reported "no cell to draw on iOS". Locally the
+      same watch is unpaired and passes. So each watch leg now creates a new simulator of `check.sh`'s default
+      watch, of its device type and runtime, never paired or booted (`sim-destination.sh --fresh`, SD30–SD33),
+      passes it to `check.sh` as `LEDGER_WATCH_DEST`, and deletes it at the end (`continue-on-error`; WF80).
+      The local gate and the PR lane keep the named simulators.
     - *Deadline.* `LEDGER_XCODEBUILD_DEADLINE` is 7,800 s in every leg; the step's timeout is 132 min, 2 min
       after it, and the job's 145, for checkout, Xcode, mise and the tar and upload. A leg's tests take at
       most ~2,900 s, after a build of up to 1,864 s (#94's slowest) and ~100 s of tools, catalogs and boot:

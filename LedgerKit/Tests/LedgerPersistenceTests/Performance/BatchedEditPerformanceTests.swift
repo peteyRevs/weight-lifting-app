@@ -70,6 +70,7 @@ extension RecordReplayPerformanceTests {
             try await edits.append(clock.measure { try await workouts.updateSets(map, of: edited.id) })
         }
         let runs = Array(edits.dropFirst())
-        #expect(Self.percentile95(runs) < PerformanceBudget.historyWrite, "\(runs)")
+        let verdict = PerformanceRunner.verdict(runs, budget: PerformanceBudget.historyWrite)
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 }

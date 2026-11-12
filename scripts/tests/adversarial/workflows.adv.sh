@@ -329,8 +329,27 @@ $([[ "$(q nightly '[.jobs.test.steps[] | select(.uses // "" | test("actions/cach
 == "$(q pr '[.jobs.check.steps[] | select(.uses // "" | test("actions/cache(@|/restore)")) | .with] | sort_by(.path) | tojson')" ]] && echo keys) \
 $(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.LEDGER_COMPILATION_CACHE')" \
     "actions/cache/restore,actions/cache/restore keys YES"
+# A watch leg tests on a new, never-paired simulator of check.sh's default watch, and deletes it (run 43170933804).
+watch_default="$(sed -nE 's/^WATCH_DEST="\$\{LEDGER_WATCH_DEST:-(.*)\}"$/\1/p' "$ROOT/scripts/check.sh")"
+q nightly '.jobs.test.steps[] | select(.id == "watch-sim") | .run' >"$T/watch-sim.sh"
+q nightly '.jobs.test.steps[] | select(.name == "Delete the watch simulator") | .run' >"$T/watch-delete.sh"
+WS="$T/watch-sim" && mkdir -p "$WS/scripts" && cp "$ROOT/scripts/sim-destination.sh" "$WS/scripts/"
+fake_simctl "$WS/bin"
+: >"$WS/xcrun.log" && : >"$WS/output"
+created="$(cd "$WS" && PATH="$WS/bin:$PATH" XCRUN_LOG="$WS/xcrun.log" SIMCTL_JSON="$ROOT/scripts/tests/fixtures/simctl/xcode-27.json" \
+    GITHUB_OUTPUT="$WS/output" bash -eo pipefail "$T/watch-sim.sh" >/dev/null 2>&1 && cat "$WS/output")"
+check "WF80 a watch leg first creates a new simulator of check.sh's default watch (sim-destination.sh --fresh), on watch legs only" \
+    is "$(q nightly '.jobs.test.steps[] | select(.id == "watch-sim") | .if')|$(grep -cF -- "--fresh \"$watch_default\"" "$T/watch-sim.sh")|$created" \
+    "matrix.platform == 'watch'|1|destination=platform=watchOS Simulator,id=C4EA7ED0-0000-4000-8000-000000000001"
+check "WF80 ... check.sh tests on it (its LEDGER_WATCH_DEST; empty on an iOS leg, which keeps check.sh's default)" \
+    is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.LEDGER_WATCH_DEST')" '${{ steps.watch-sim.outputs.destination }}'
+: >"$WS/xcrun.log"
+(PATH="$WS/bin:$PATH" XCRUN_LOG="$WS/xcrun.log" DESTINATION="${created#destination=}" bash -eo pipefail "$T/watch-delete.sh")
+check "WF80 ... and at the end, unless cancelled, deletes that simulator, never turning the leg red" \
+    is "$(grep -E '^simctl (shutdown|delete)' "$WS/xcrun.log" | tr '\n' ';')|$(q nightly '.jobs.test.steps[] | select(.name == "Delete the watch simulator") | "\(.if) \(."continue-on-error")"')" \
+    "simctl shutdown C4EA7ED0-0000-4000-8000-000000000001;simctl delete C4EA7ED0-0000-4000-8000-000000000001;|\${{ !cancelled() && steps.watch-sim.outputs.destination != '' }} true"
 # Performance budgets on the runner (testing-strategy §2.2): the nightly's legs alone hold timings to twice them.
-check "WF79 only the nightly's legs set the performance runner factor, 2, for the test runner; no plan sets it" \
+check "WF79 only the nightly's legs set the performance runner factor, 2, for the test runner (a median against twice the budget); no plan sets it" \
     is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR') \
 $(cat "$WF"/*.yml | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR')" "2 1 0"
 # A leg that fails or reaches its deadline still uploads its bundles, as one tar (35,000 files did not extract).

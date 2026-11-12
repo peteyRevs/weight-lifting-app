@@ -18,6 +18,7 @@ struct ExerciseCatalogPerformanceTests {
         _ = try ExerciseCatalog.seed()
         let clock = ContinuousClock()
         let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try ExerciseCatalog.seed() } }.sorted()
-        #expect(timings[2] < PerformanceRunner.budget(.milliseconds(20)), "median \(timings[2])")
+        let verdict = PerformanceRunner.verdict(timings, budget: .milliseconds(20), statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
     }
 }

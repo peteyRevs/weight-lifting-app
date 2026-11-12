@@ -15,7 +15,7 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct HistoryPerformanceTests {
-    static let model = PerformanceRunner.budget(.milliseconds(30))
+    static let model: Duration = .milliseconds(30)
     static let runs = 5
 
     @Test("N4. The list's model over 1,000 workouts, four a week with records, takes under 30 ms")
@@ -38,7 +38,8 @@ struct HistoryPerformanceTests {
         let timings = (0 ..< Self.runs).map { _ in clock.measure(work) }.sorted()
         let median = timings[Self.runs / 2]
         #expect(built?.rows.count == 1000)
-        #expect(median < Self.model, "\(median)")
+        let verdict = PerformanceRunner.verdict(timings, budget: Self.model, statistic: .median)
+        #expect(verdict.isWithinBudget, "\(verdict)")
         Attachment.record("HistoryPresentation.make over 1,000 workouts: median \(median)", named: "history-list.txt")
     }
 }

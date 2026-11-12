@@ -62,6 +62,15 @@ jobs:
           path: .derivedData/CompilationCache.noindex
           key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
           restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
+      # The image pairs its Series 12 (46mm) with an iPhone 18 Pro Max, and once unpaired xcodebuild still sent
+      # the watch's app-hosted tests to that phone (run 43170933804). A watch leg tests on a new simulator of
+      # check.sh's default watch, never paired (sim-destination.sh --fresh), and deletes it at the end.
+      - name: Create a never-paired watch simulator (watch legs)
+        id: watch-sim
+        if: matrix.platform == 'watch'
+        run: |
+          destination="$(scripts/sim-destination.sh --fresh "platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0")"
+          echo "destination=$destination" | tee -a "$GITHUB_OUTPUT"
       # check.sh as the PR shards run it: step 0 checks the Xcode against .xcode-version, then this platform's
       # build, the simulator's boot and the leg's tests, by UDID and one at a time, and check-test-results.sh
       # over the leg's targets. No format, lint or coverage gate (the PR lane's).
@@ -74,9 +83,11 @@ jobs:
           # leaves room for check.sh's one retry of a runner that never connected, or a runner twice as slow.
           LEDGER_XCODEBUILD_DEADLINE: 7800
           LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
-          # Each timing budget is the reference machine's, a simulator on a developer Mac; this shared VM is
-          # held to twice it (testing-strategy §2.2, "Budgets and the runner"). xcodebuild hands a TEST_RUNNER_
-          # variable to the test runner without its prefix. The local nightly and every other job leave it unset.
+          LEDGER_WATCH_DEST: ${{ steps.watch-sim.outputs.destination }} # empty on an iOS leg: check.sh's default
+          # Each timing budget is the reference machine's, a simulator on a developer Mac. On this shared VM a
+          # timing test holds its median to twice its budget (testing-strategy §2.2, "Budgets and the runner").
+          # xcodebuild hands a TEST_RUNNER_ variable to the test runner without its prefix. The local nightly and
+          # every other job leave it unset.
           TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: 2
           PLATFORM: ${{ matrix.platform }}
           SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
@@ -99,6 +110,15 @@ jobs:
           path: nightly-results.tar
           if-no-files-found: ignore
           retention-days: 14
+      - name: Delete the watch simulator
+        if: ${{ !cancelled() && steps.watch-sim.outputs.destination != '' }}
+        continue-on-error: true # cleanup on a VM that is discarded anyway: it never turns a leg red
+        env:
+          DESTINATION: ${{ steps.watch-sim.outputs.destination }}
+        run: |
+          udid="${DESTINATION##*,id=}"
+          xcrun simctl shutdown "$udid" 2>/dev/null || true # already shut down, if the tests never booted it
+          xcrun simctl delete "$udid"
 
   dependencies:
     name: Dependency report
