@@ -59,7 +59,7 @@ struct WorkoutMinimizeAdversarialTests {
         await eventually("the second call to wait") { bench.session.waiting.value > 0 }
         #expect(bench.store.exit == nil, "one tap is still waiting")
         await bench.session.release()
-        await eventually("the cover to close") { bench.store.exit != nil }
+        await observed("the cover to close") { bench.store.exit != nil }
         #expect(bench.store.exit == .route(.minimized))
         #expect(await bench.session.current()?.doneSets == 2)
         pump.cancel()
@@ -96,7 +96,7 @@ struct WorkoutMinimizeAdversarialTests {
         await pump.value
         // The session finished the call that was under way; whatever was left waits for the next pump.
         let next = Task { await bench.store.pump() }
-        await eventually("the cover to close") { bench.store.exit != nil }
+        await observed("the cover to close") { bench.store.exit != nil }
         #expect(bench.store.exit == .route(.minimized))
         #expect(bench.store.dialog == nil)
         let applied = await bench.session.applied

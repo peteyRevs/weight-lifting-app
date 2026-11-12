@@ -254,7 +254,7 @@ extension WorkoutPumpAdversarialTests {
         await bench.session.holdEveryAnswer()
         bench.tap(.stepWeight(exerciseIndex: 0, setID: first, .increment))
         await bench.drainReleasing {
-            await eventually("the page to show the step") {
+            await observed("the page to show the step") {
                 bench.store.shown?.exercises[0].sets[0].weight == .pounds(190)
             }
         }
@@ -282,7 +282,7 @@ extension WorkoutPumpAdversarialTests {
         #expect(bench.store.dialog == nil, "the workout ended by another hand: no change of the lifter's failed")
         #expect(bench.store.exit == nil, "the page has not heard yet")
         await bench.session.deliver()
-        await eventually("the cover to close") { bench.store.exit != nil }
+        await observed("the cover to close") { bench.store.exit != nil }
         #expect(bench.store.exit == .route(.discarded))
         #expect(bench.store.dialog == nil)
         await bench.following.value

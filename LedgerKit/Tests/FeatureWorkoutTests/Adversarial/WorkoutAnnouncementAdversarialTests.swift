@@ -172,10 +172,10 @@ extension WorkoutAnnouncementAdversarialTests {
             $0.date = DateGenerator { Fixtures.now.addingTimeInterval(clock.elapsed / .seconds(1)) }
         }
         let following = Task { await store.follow() }
-        await eventually("the session's first update") { store.shown != nil }
+        await observed("the session's first update") { store.shown != nil }
         store.send(.edit(.log(exerciseIndex: 0, setID: running.exercises[0].sets[0].id)))
         await store.drain()
-        await eventually("the rest to be shown") { store.shownRest != nil }
+        await observed("the rest to be shown") { store.shownRest != nil }
         let keeper = Task { await store.keepRestTime() }
         await eventually("the rest's task to sleep") { clock.sleeps.value > 0 }
         #expect(await said.announced == ["Rest, 2 minutes, 30 seconds remaining"])

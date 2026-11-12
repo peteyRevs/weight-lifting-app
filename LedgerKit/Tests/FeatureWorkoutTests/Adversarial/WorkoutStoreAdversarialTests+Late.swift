@@ -24,7 +24,7 @@ extension WorkoutStoreAdversarialTests {
             _ = try await world.truth.finish(endedAt: Fixtures.now.addingTimeInterval(5))
             await world.session.release()
             await running.value
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(store.exit == .route(.saved(live.id)))
             #expect(store.dialog == nil)
         }
@@ -43,7 +43,7 @@ extension WorkoutStoreAdversarialTests {
             store.send(.finish)
             #expect(store.dialog == .finish)
             _ = try await world.truth.finish(endedAt: Fixtures.now.addingTimeInterval(5))
-            await eventually("the cover to close") { store.exit != nil }
+            await observed("the cover to close") { store.exit != nil }
             #expect(store.exit == .route(.saved(live.id)))
             #expect(store.dialog == nil)
 
@@ -111,7 +111,7 @@ extension WorkoutStoreAdversarialTests {
             // The same view appearing again runs its task again, on the store it kept.
             let again = Task { await store.follow() }
             defer { again.cancel() }
-            await eventually("the store to follow again after its task was restarted") { store.onScreen == next }
+            await observed("the store to follow again after its task was restarted") { store.onScreen == next }
         }
     }
 }

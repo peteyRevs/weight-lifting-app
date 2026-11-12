@@ -183,7 +183,7 @@ final class AdversarialRig {
         if store.discardAttempt != discardsRun {
             discardsRun = store.discardAttempt
             await store.discard()
-            await eventually("the discard to end or be refused") { store.exit != nil || !store.isDiscarding }
+            await observed("the discard to end or be refused") { store.exit != nil || !store.isDiscarding }
             return true
         }
         return false
@@ -195,7 +195,7 @@ final class AdversarialRig {
         covers += 1
         discardsRun = made.discardAttempt
         following = Task { await made.follow() }
-        await eventually("the cover's first update") {
+        await observed("the cover's first update") {
             if case .loaded = made.workout {
                 return true
             }
@@ -238,7 +238,7 @@ final class AdversarialRig {
     /// settles: for a change made by another hand.
     func absorb(_ live: WorkoutState?) async {
         if let store {
-            await eventually("the cover to follow the session") {
+            await observed("the cover to follow the session") {
                 if let live {
                     if case let .loaded(shown) = store.workout {
                         return shown == live
