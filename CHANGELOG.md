@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.20.0...v0.21.0) (2026-11-11)
+
+
+### Features
+
+* **workout:** draw a superset as one block, logged round by round (F10 S9) ([#92](https://github.com/peteyRevs/weight-lifting-app/issues/92)) ([71533ae](https://github.com/peteyRevs/weight-lifting-app/commit/71533ae6a4e06fdadefadf3c556a8344e3adb10c))
+
 ## [0.20.0](https://github.com/peteyRevs/weight-lifting-app/compare/v0.19.0...v0.20.0) (2026-11-11)
 
 

@@ -396,9 +396,14 @@ and attach screenshots for failures. A run with any failure blocks the tag.
   (strips `.o`/`.framework`/`.app`), takes the higher value when a target
   appears in both, recomputes per-target coverage from `files[]` after
   exclusions, and compares with `scripts/coverage-thresholds.json`.
-  PR CI's `check.sh --ios-only` passes `--ios-only` and the iOS bundle alone
-  (Pete, 2026-09-30). Only a required module listed in `watchOnly` may then be
-  unmeasured; without the flag, `watchOnly` changes nothing.
+  PR CI passes `--ios-only` and iOS bundles alone (Pete, 2026-09-30). Only a
+  required module listed in `watchOnly` may then be unmeasured; without the
+  flag, `watchOnly` changes nothing. Since 2026-11-11 PR CI tests in two shards
+  (`docs/ci-cd.md`, "Shards"), and its Coverage job (`scripts/check-shards.sh`)
+  passes both shards' bundles. Within one run every test target's copy of a
+  file reports the lines any test of the run covered, so a shard's bundle
+  reports its own shard's; the gate keeps each file's better shard, never
+  more than one unsharded run would count. The thresholds are the same.
 - Thresholds (line coverage): `LedgerDomain 95`, `LedgerPersistence 90`,
   `LedgerDependencies 90`, `LedgerFakes 90` (F07),
   `LedgerSync 90`, `LedgerHealth 80`, `LedgerActivityKit 70`, every
@@ -521,6 +526,13 @@ Expected runtime on an M-series Mac: ~9–12 min warm, ~15 min cold;
 `--renderer github-actions` on xcbeautify. `.derivedData/` is git-ignored and
 shared between local and CI so cache keys match.
 
+PR CI splits step 3's tests in two (`docs/ci-cd.md`, "Shards"):
+`check.sh --ios-only --shard <n>/2` builds as above, tests the targets that
+`scripts/pr-shards.txt` gives shard `<n>` (`-skip-testing` for the others),
+checks its bundle against those targets alone, and leaves step 5 to
+`scripts/check-shards.sh`, which checks both bundles together and runs the
+coverage gate over them. Without `--shard`, nothing changes.
+
 **String catalogs (F09).** Step 3 runs `scripts/check-string-catalogs.sh`
 right after the iOS build and before the iOS tests. During that build the
 Swift compiler writes the keys it extracted from each source file
@@ -580,6 +592,9 @@ list from §4, `testExecutionOrdering: random`, `testTimeoutsEnabled: true`,
 | `Nightly-Watch` | `LedgerWatch` | as `PR-Watch` + LedgerSyncTests | nothing | lane=nightly, seeds=2000 |
 | `Device` | `Ledger` | LedgerHealthTests | all but `HealthStoreContract` | lane=device |
 | `Device-Watch` | `LedgerWatch` | LedgerHealthTests | all but `HealthStoreContract` | lane=device |
+
+A target added to `PR` goes in one shard of `scripts/pr-shards.txt` too:
+`pr-shards.adv.sh` fails until it does, so CI never leaves it unrun.
 
 `PR.xctestplan` skeleton (the others differ only in the table above):
 

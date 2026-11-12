@@ -13,6 +13,7 @@ cp "${ADV_SIM_DESTINATION:-$ROOT/scripts/sim-destination.sh}" "$SB/scripts/sim-d
 cp "${ADV_SIM_BOOT:-$ROOT/scripts/sim-boot.sh}" "$SB/scripts/sim-boot.sh"                         # the real one
 cp "${ADV_CHECK_XCODE:-$ROOT/scripts/check-xcode-version.sh}" "$SB/scripts/check-xcode-version.sh" # the real one
 cp "${ADV_BOOTSTRAP:-$ROOT/scripts/bootstrap.sh}" "$SB/scripts/bootstrap.sh"                     # the real one (W41)
+cp "$ROOT/scripts/pr-shards.txt" "$SB/scripts/pr-shards.txt"                                       # the real one (W79)
 echo 27.0 >"$SB/.xcode-version" # the stub xcodebuild reports $XCODE_REPORTS, 27.0 by default
 fake_simctl "$SB/bin" # ... against the runner's simulators, logging to $LOG too: one ordered log
 export LOG="$ADV_TMP/calls.log" XCRUN_LOG="$ADV_TMP/calls.log"
@@ -76,7 +77,7 @@ stub "$SB/scripts/check-package-graph.sh" 'log package-graph; fail_if package-gr
 stub "$SB/scripts/check-package-pins.sh" 'log package-pins; fail_if package-pins'
 stub "$SB/scripts/check-catalog-version.sh" 'log catalog-version; fail_if catalog-version'
 stub "$SB/scripts/check-string-catalogs.sh" 'log "string-catalogs $*"; fail_if string-catalogs'
-stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; log "$id $1"; fail_if "$id"'
+stub "$SB/scripts/check-test-results.sh" 'id="check-test-results-$(basename "$2" .xctestplan)"; r="$1"; shift 2; log "$id $r${*:+ $*}"; fail_if "$id"'
 stub "$SB/scripts/coverage-gate.sh" 'log "coverage-gate $*"; fail_if coverage-gate'
 stub "$SB/scripts/tests/a.test.sh" 'log script-test-a; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-a'
 stub "$SB/scripts/tests/b.test.sh" 'log script-test-b; echo "${LEDGER_ADV_SUITES-unset}" >>"$LOG.suites"; fail_if script-test-b'
@@ -541,6 +542,54 @@ run --static-only; static_calls="$calls"
 run --fast
 check "W75 --lint-only, --static-only and --fast build nothing for iOS, so they do not run it" \
     is "$(grep -c string-catalogs <<<"$lint_calls$static_calls$calls")" "0"
+
+# ---- --shard (PR CI's Check jobs; docs/ci-cd.md, "Shards") ------------------------------------------
+# Each shard tests its own targets of scripts/pr-shards.txt and skips every other shard's; the build is the
+# unsharded one, so every shard and main-cache.yml share cache keys; coverage is check-shards.sh's.
+targets() { awk -v n="$1" '$1 == n { print $2 }' "$ROOT/scripts/pr-shards.txt" | tr '\n' ' ' | sed 's/ $//'; }
+skips() { awk -v n="$1" '$1 !~ /^#/ && NF && $1 != n { printf " -skip-testing:%s", $2 }' "$ROOT/scripts/pr-shards.txt"; }
+for n in 1 2; do
+    run --ios-only --skip-lint --shard "$n/2"
+    check "W79 --ios-only --skip-lint --shard $n/2: tools, the iOS build, catalogs, its tests and results; no coverage gate" \
+        is "$code $calls" "0 xcode-version mise-install swiftformat-version swiftlint-version \
+simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
+simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR "
+    check "W80 ... its results are checked against shard $n's targets alone, in its own bundle" \
+        is "$(grep '^check-test-results' "$LOG")" "check-test-results-PR .derivedData/Results/PR-iOS-shard$n.xcresult $(targets "$n")"
+    check "W81 ... its test run skips exactly every other shard's targets, after its own bundle path" \
+        is "$(grep '^test-without-building ' "$LOG.args" | grep -o ' -resultBundlePath .*' | grep -o ' -skip-testing:[^ ]*' | tr -d '\n')" "$(skips "$n")"
+    check "W82 ... and it says coverage is check-shards.sh's, in the output and the summary, ending \"check.sh (--ios-only --shard $n/2) OK\"" \
+        is "$(grep -c '==> 5 · coverage gate skipped (--shard)' <<<"$out") $(grep -cE '^ +[0-9]+s  coverage skipped \(--shard\)$' <<<"$out") \
+$(grep -c "check\.sh (--ios-only --shard $n/2) OK" <<<"$out") $(grep -c 'check\.sh (--ios-only) OK' <<<"$out")" "1 1 1 0"
+done
+stub "$SB/scripts/tests/adversarial.test.sh" 'log "adversarial-${LEDGER_ADV_SUITES-unset}"; fail_if adversarial' # as W62
+LEDGER_COMPILATION_CACHE=YES run --ios-only --skip-static --shard 2/2; shard_build="$(grep '^build-for-testing ' "$LOG.args")"
+rm "$SB/scripts/tests/adversarial.test.sh"
+check "W83 --ios-only --skip-static --shard 2/2 (CI): as W62, without the coverage gate" \
+    is "$code $calls" "0 xcode-version mise-install swiftformat-version swiftlint-version swiftformat-lint adversarial-macos \
+simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
+simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR "
+LEDGER_COMPILATION_CACHE=YES run --build-only
+# The build's result bundle is named for its shard; xcodebuild writes it, and no compile is given its path.
+unbundled() { sed -E 's/ -resultBundlePath [^ ]+//'; }
+check "W84 a shard builds with --build-only's arguments (main-cache.yml), its bundle's path aside, so every shard reads main's cache keys" \
+    is "$([[ -n "$shard_build" && "$(unbundled <"$LOG.args")" == "$(unbundled <<<"$shard_build")" ]] && echo same) \
+$(grep -o -- '-resultBundlePath [^ ]*' <<<"$shard_build")" "same -resultBundlePath .derivedData/Results/PR-iOS-shard2-build.xcresult"
+run --ios-only; unsharded="$(grep '^test-without-building ' "$LOG.args" | grep -c -- '-skip-testing')|$(grep '^check-test-results' "$LOG")"
+check "W85 without --shard nothing is skipped, and the results are checked against the whole plan in PR-iOS.xcresult" \
+    is "$unsharded" "0|check-test-results-PR .derivedData/Results/PR-iOS.xcresult"
+FAIL_AT=check-test-results-PR run --ios-only --skip-lint --shard 1/2
+check "W86 a shard whose results do not match fails there" is "$([[ $code -ne 0 ]] && echo failed) ${calls##* }" "failed "
+rejected=""
+for flags in "--shard 1/2" "--skip-lint --shard 1/2" "--ios-only --shard" "--ios-only --shard 3/2" "--ios-only --shard 0/2" \
+    "--ios-only --shard 1/3" "--ios-only --shard 1" "--ios-only --shard x/2" "--ios-only --shard 1/2/2" "--ios-only --shard /2" \
+    "--ios-only --record-snapshots --shard 1/2" "--build-only --shard 1/2" "--fast --shard 1/2" "--lint-only --shard 1/2" \
+    "--static-only --shard 1/2"; do
+    run $flags
+    rejected="$rejected$code$(grep -c '^error: ' <<<"$out")${calls:+ $calls} "
+done
+check "W87 --shard without --ios-only, with a mode that tests nothing or records, or without <n>/2, exits 2 before any step" \
+    is "$rejected" "21 21 21 21 21 21 21 21 21 21 21 21 21 21 21 "
 
 # ---- round 2: this suite is part of the gate ---------------------------------------
 # check.sh step 2 runs scripts/tests/*.test.sh; one of them must run this runner, be
