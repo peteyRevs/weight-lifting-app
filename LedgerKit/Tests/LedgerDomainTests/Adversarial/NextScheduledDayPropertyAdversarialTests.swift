@@ -135,9 +135,45 @@ extension NextScheduledDayPropertyAdversarialTests {
         while let next = scenario.weeks.nextScheduledDay(after: cursor, in: scenario.program) {
             visited.append(next)
             try #require(visited.count <= reference.sessions.count, "the chain does not end (\(seed))")
-            cursor = try Support.moment(next.date, 23, 59, 59, in: scenario.zone)
+            cursor = try Self.lastSecond(of: next.date, in: scenario.zone)
         }
-        #expect(visited == reference.sessions, "\(seed)")
+        let isEverySessionOnce = visited == reference.sessions
+        let differs = zip(visited, reference.sessions).enumerated().first { $0.element.0 != $0.element.1 }?.offset
+            ?? min(visited.count, reference.sessions.count)
+        #expect(
+            isEverySessionOnce,
+            "\(seed): \(visited.count) of \(reference.sessions.count) sessions; first difference at \(differs)"
+        )
+    }
+
+    /// The last second of `day` in `zone`: one second before the next day starts. 23:59:59 is not always
+    /// on `day`: America/Nuuk springs forward from 23:00 on a Saturday, so Foundation reads its 23:59:59
+    /// as the Sunday's 00:59:59, and a chain asked from there skipped that Sunday (seeds 10365988 and
+    /// 12955501 of the walk above, 2026-11-11).
+    static func lastSecond(of day: CivilDate, in zone: TimeZone) throws -> Date {
+        try Support.startOfDay(#require(day.adding(days: 1)), in: zone).addingTimeInterval(-1)
+    }
+
+    @Test("Asked at the last second of a Saturday whose clocks skip 23:00–24:00, the answer is that Sunday")
+    func nextScheduledDay_lastSecondBeforeASpringForwardMidnight_answersTheNextDay() throws {
+        let zone = try Fixtures.zone("America/Nuuk")
+        let saturday = Fixtures.civil(2026, 3, 28)
+        let sunday = Fixtures.civil(2026, 3, 29)
+        let program = try Support.program(
+            start: Fixtures.civil(2026, 3, 23),
+            weeks: [Support.week(0, [.saturday: Support.upperA.id, .sunday: Support.lowerA.id]), Support.week(1, [:])],
+            days: [Support.upperA, Support.lowerA]
+        )
+        let weeks = Support.weeks(start: program.startDate, weekStart: .monday, zone: zone)
+        let lastSecond = try Self.lastSecond(of: saturday, in: zone)
+        #expect(try Support.civilDay(of: lastSecond, in: zone) == saturday)
+        #expect(
+            weeks.nextScheduledDay(after: lastSecond, in: program)
+                == ScheduledDay(date: sunday, weekIndex: 0, dayTemplateID: Support.lowerA.id)
+        )
+        // Why the walk above asks from `lastSecond(of:in:)`: Saturday's 23:59:59 is already Sunday there.
+        let elevenFiftyNine = try Support.moment(saturday, 23, 59, 59, in: zone)
+        #expect(try Support.civilDay(of: elevenFiftyNine, in: zone) == sunday)
     }
 
     @Test("A later moment never gets an earlier answer.", arguments: PropertySeed.all)
