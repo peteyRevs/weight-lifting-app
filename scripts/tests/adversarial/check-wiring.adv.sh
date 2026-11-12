@@ -551,12 +551,13 @@ check "W75 --lint-only, --static-only and --fast build nothing for iOS, so they 
 # unsharded one, so every shard and main-cache.yml share cache keys; coverage is check-shards.sh's.
 # <n> [file]: shard <n>'s targets, each once (a suite entry's target included), in the file's order
 targets() { awk -v n="$1" '$1 == n { split($2, t, "/"); if (!seen[t[1]]++) print t[1] }' "$ROOT/scripts/${2:-pr}-shards.txt" | tr '\n' ' ' | sed 's/ $//'; }
-# <n> [file]: the test selection shard <n> passes: every other shard's entries skipped; or, when it holds a suite,
-# exactly its own entries, less the other shards' suites
+# <n> [file]: the test selection shard <n> passes: exactly its own entries, less the suites other shards hold of a
+# target it holds whole; never another shard's whole target
 selection() {
-    awk -v n="$1" '$1 !~ /^#/ && NF { if ($1 == n) { mine = mine " -only-testing:" $2; if ($2 ~ /\//) suites = 1 }
-        else { other = other " -skip-testing:" $2; if ($2 ~ /\//) theirs = theirs " -skip-testing:" $2 } }
-        END { printf "%s", suites ? mine theirs : other }' "${3:-$ROOT/scripts/${2:-pr}-shards.txt}"
+    awk -v n="$1" '$1 !~ /^#/ && NF { if ($1 == n) { mine = mine " -only-testing:" $2; whole[$2] = 1 }
+        else if ($2 ~ /\//) theirs[++count] = $2 }
+        END { for (i = 1; i <= count; i++) { split(theirs[i], t, "/"); if (t[1] in whole) mine = mine " -skip-testing:" theirs[i] }
+            printf "%s", mine }' "${3:-$ROOT/scripts/${2:-pr}-shards.txt}"
 }
 for n in 1 2; do
     run --ios-only --skip-lint --shard "$n/2"
@@ -566,7 +567,7 @@ simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-PR "
     check "W80 ... its results are checked against shard $n's targets alone, in its own bundle" \
         is "$(grep '^check-test-results' "$LOG")" "check-test-results-PR .derivedData/Results/PR-iOS-shard$n.xcresult $(targets "$n")"
-    check "W81 ... its test run skips exactly every other shard's targets, after its own bundle path" \
+    check "W81 ... its test run selects exactly its own targets, after its own bundle path" \
         is "$(grep '^test-without-building ' "$LOG.args" | grep -o ' -resultBundlePath .*' | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')" "$(selection "$n")"
     check "W82 ... and it says coverage is check-shards.sh's, in the output and the summary, ending \"check.sh (--ios-only --shard $n/2) OK\"" \
         is "$(grep -c '==> 5 · coverage gate skipped (--shard)' <<<"$out") $(grep -cE '^ +[0-9]+s  coverage skipped \(--shard\)$' <<<"$out") \
@@ -613,7 +614,7 @@ for ((n = 1; n <= ios_legs; n++)); do
 simctl-boot xcodebuild-build-for-testing-Ledger xcbeautify string-catalogs \
 simctl-bootstatus xcodebuild-test-without-building-Ledger xcbeautify check-test-results-Nightly \
 |check-test-results-Nightly .derivedData/Results/Nightly-iOS-shard$n.xcresult $(targets "$n" nightly)"
-    check "W88 ... the Nightly plan, at its 600 s allowance, skipping every other leg's entries (or only its own, with a suite), and it says so" \
+    check "W88 ... the Nightly plan, at its 600 s allowance, only its own entries (less other legs' suites of its whole targets), and it says so" \
         is "$(plan_args)$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')|\
 $(grep -c '==> 5 · coverage gate skipped (--nightly)' <<<"$out") $(grep -c "check\.sh (--nightly --ios-only --shard $n/$ios_legs) OK" <<<"$out")" \
         "-testPlan Nightly -default-test-execution-time-allowance 600 $(selection "$n" nightly)|1 1"
@@ -667,6 +668,28 @@ cp "$ADV_TMP/nightly-shards.saved" "$SB/scripts/nightly-shards.txt"
 check "W96 a shard of suites and a whole target skips the suites other shards hold of it, so none runs twice" \
     is "$code$mixed" "0 -only-testing:FeatureWorkoutTests -only-testing:LedgerPersistenceTests/HistoryModelAdversarialTests\
  -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests"
+
+# A leg of whole targets only, in a file with suites elsewhere (run 43204045964): it skipped every other leg's
+# entries, and xcodebuild read a skipped suite, -skip-testing:<target>/<suite>, as selecting the rest of <target>, so
+# legs 3, 4, 6 and 7 also ran the targets split across other legs, and hit their deadline. Each now selects only
+# its own targets, and skips only the suites other legs hold of a target it holds whole. The real file's legs too.
+printf '%s\n' "1 FeatureWorkoutTests/WorkoutRestAdversarialTests" "1 FeatureLibraryTests" "2 FeatureWorkoutTests" \
+    "3 FeatureProgramTests" "4 LedgerPersistenceTests/HistoryModelAdversarialTests" "4 LedgerDomainTests" \
+    "5 LedgerPersistenceTests" >"$SB/scripts/nightly-shards.txt"
+legs=""
+for n in 1 2 3 5; do
+    run --nightly --ios-only --skip-lint --shard "$n/5"
+    legs="$legs$code$(grep '^test-without-building ' "$LOG.args" | grep -oE ' -(skip|only)-testing:[^ ]*' | tr -d '\n')|"
+done
+cp "$ADV_TMP/nightly-shards.saved" "$SB/scripts/nightly-shards.txt"
+check "W97 a leg holding a target whole runs it, less the suite another leg holds; a leg of whole targets skips no other leg's target" \
+    is "$legs" "0 -only-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests -only-testing:FeatureLibraryTests|\
+0 -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests|\
+0 -only-testing:FeatureProgramTests|\
+0 -only-testing:LedgerPersistenceTests -skip-testing:LedgerPersistenceTests/HistoryModelAdversarialTests|"
+check "W97 ... and in nightly-shards.txt, leg 7 selects FeatureProgramTests alone, and leg 3 FeatureWorkoutTests less legs 1 and 2's suites" \
+    is "$(selection 7 nightly)|$(selection 3 nightly)" " -only-testing:FeatureProgramTests|\
+ -only-testing:FeatureWorkoutTests -skip-testing:FeatureWorkoutTests/WorkoutRestAdversarialTests -skip-testing:FeatureWorkoutTests/WorkoutSaveAdversarialTests"
 
 # ---- a test runner that never connected (the nightly's watch leg 1, run 43170933804) ----------------------
 # xcodebuild failed with "The test runner hung before establishing connection." and no test ran: check.sh tests

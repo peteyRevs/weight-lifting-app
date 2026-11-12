@@ -136,7 +136,7 @@ authoritative; the plan differs:
     compilation-cache restore as before. Each runs `check.sh --ios-only --skip-static --shard <n>/2`: steps
     0–2 as before, the same iOS build (`--build-only`'s arguments, its result bundle's name aside, so both
     shards and `main-cache.yml` share cache keys; check-wiring W84), then the tests of the targets `scripts/pr-shards.txt` gives shard
-    `<n>`, the other shard's passed to `xcodebuild` as `-skip-testing`. `check-test-results.sh` then checks
+    `<n>`, passed to `xcodebuild` as `-only-testing`. `check-test-results.sh` then checks
     that the bundle ran exactly those targets and they passed; step 5 is skipped. Each green shard packs
     its bundle into one tar (download-artifact failed to extract a bundle's ~35,000 files on the macOS runner)
     and uploads it as the artifact `PR-iOS-shard<n>` (overwritten by a re-run, since "Re-run failed jobs" does
@@ -228,8 +228,9 @@ authoritative; the plan differs:
       Executed … in" (XCTest) lines. iOS leg 1 tested FeatureWorkoutTests alone for 6,185 s and ended 128 s
       short of its deadline, and the chore(test) branch makes its rest walk about 1.8 times slower. So an
       entry may now be one suite of a target, `<target>/<suite>`: the leg holding the target whole skips
-      it (`-skip-testing`), and a leg holding suites runs exactly its entries (`-only-testing`; check-wiring
-      W88). `pr-shards.adv.sh` P12–P14 hold every target whole in exactly one leg, and each suite entry to
+      it (`-skip-testing:<target>/<suite>`), and every leg runs exactly its entries (`-only-testing`; check-wiring
+      W88, W97: a leg of whole targets that skipped every other leg's entries also ran the split targets, since
+      xcodebuild reads a skipped suite as selecting the rest of its target, run 43204045964). `pr-shards.adv.sh` P12–P14 hold every target whole in exactly one leg, and each suite entry to
       a suite its target declares, of a target whole in another leg, once; P13 keeps the PR shards whole
       (`check-shards.sh` reads entries as targets). Eight iOS legs now test for about 2,100–2,900 s each
       (`nightly-shards.txt` lists each entry's time): FeatureWorkoutTests' rest (1,493 s, ~2,690 after

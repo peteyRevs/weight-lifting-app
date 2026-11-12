@@ -1,7 +1,7 @@
 # The nightly's iOS legs (docs/ci-cd.md, "Nightly legs"): `check.sh --nightly --ios-only --shard <n>/8` runs leg
 # <n>'s entries of TestPlans/Nightly.xctestplan. One "<leg> <entry>" per line: a test target, or one suite of a
-# target, "<target>/<suite>" (a Swift Testing type, or an XCTest class), for a target too long for one leg. The leg
-# that holds a target whole skips its suites listed elsewhere; a leg that holds suites runs exactly its entries.
+# target, "<target>/<suite>" (a Swift Testing type, or an XCTest class), for a target too long for one leg. Every leg
+# runs exactly its entries (-only-testing), and the leg that holds a target whole skips its suites listed elsewhere.
 # Every target the plan enables is whole in exactly one leg, and each suite entry names a suite of a target whole
 # in another leg, once (scripts/tests/adversarial/pr-shards.adv.sh, which checks every shards file).
 #

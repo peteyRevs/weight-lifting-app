@@ -559,7 +559,7 @@ shared between local and CI so cache keys match.
 
 PR CI splits step 3's tests in two (`docs/ci-cd.md`, "Shards"):
 `check.sh --ios-only --shard <n>/2` builds as above, tests the targets that
-`scripts/pr-shards.txt` gives shard `<n>` (`-skip-testing` for the others),
+`scripts/pr-shards.txt` gives shard `<n>` (`-only-testing`),
 checks its bundle against those targets alone, and leaves step 5 to
 `scripts/check-shards.sh`, which checks both bundles together and runs the
 coverage gate over them. Without `--shard`, nothing changes.

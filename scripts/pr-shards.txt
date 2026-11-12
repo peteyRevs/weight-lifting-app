@@ -1,8 +1,7 @@
 # PR CI's iOS test shards (docs/ci-cd.md, "Shards"): `check.sh --ios-only --shard <n>/2` runs shard <n>'s
-# test targets of TestPlans/PR.xctestplan, skipping every other shard's. One "<shard> <test target>" per line.
+# test targets of TestPlans/PR.xctestplan, and only those (-only-testing). One "<shard> <test target>" per line.
 # Every target the PR plan enables is in exactly one shard (scripts/tests/adversarial/pr-shards.adv.sh), so a
-# target added to the plan fails that suite until it is placed here. A target in no shard would run in every
-# shard, and its own check-test-results.sh would name it.
+# target added to the plan fails that suite until it is placed here. A target in no shard would run in none.
 #
 # Balanced by each target's wall time on the runner (the "Launch <target>" sections of the action log,
 # `xcrun xcresulttool get log --type action`), seconds in run 43059048691 attempt 1 (#91) / 42983186099

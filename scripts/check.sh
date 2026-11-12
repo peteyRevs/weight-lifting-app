@@ -96,10 +96,15 @@ LANE=PR IOS_PLAN=PR WATCH_PLAN=PR-Watch TEST_ALLOWANCE=60
 if [[ $NIGHTLY -eq 1 ]]; then LANE=Nightly IOS_PLAN=Nightly WATCH_PLAN=Nightly-Watch TEST_ALLOWANCE=600; fi
 
 # --shard <n>/<count> (PR CI's Check jobs, the nightly's legs): the tests of shard <n> in the tested plan's
-# shards file, scripts/<plan, lowercase>-shards.txt (pr-shards.txt, nightly-shards.txt, nightly-watch-shards.txt),
-# every other shard's targets skipped. An entry may be one suite of a target, "<target>/<suite>", when the target
-# is too long for one shard (the nightly's FeatureWorkoutTests): the shard holding the target whole skips those
-# suites, and a shard that holds suites runs exactly its entries (-only-testing). The build passes the unsharded build's arguments (its result bundle's
+# shards file, scripts/<plan, lowercase>-shards.txt (pr-shards.txt, nightly-shards.txt, nightly-watch-shards.txt).
+# An entry may be one suite of a target, "<target>/<suite>", when the target is too long for one shard (the
+# nightly's FeatureWorkoutTests). Every shard runs exactly its own entries (-only-testing), less the suites other
+# shards hold of a target it holds whole (-skip-testing:<target>/<suite>). It never skips another shard's whole
+# targets: xcodebuild reads -skip-testing:<target>/<suite> as selecting the rest of <target>, so a shard of whole
+# targets skipping every other shard's entries ran the targets split across legs as well (run 43204045964's legs
+# 3, 4, 6 and 7 ran other legs' LedgerPersistenceTests, FeatureWorkoutTests and LedgerUITests and hit their
+# deadline). -only-testing leaves no target out: pr-shards.adv.sh P01 and P12 hold every target each shards
+# file's plan enables in exactly one shard. The build passes the unsharded build's arguments (its result bundle's
 # name aside), so every shard and main-cache.yml share compilation cache keys (check-wiring W84). A shard
 # measures only part of the coverage, so step 5 is scripts/check-shards.sh's, over every shard's bundle. Only a
 # run that tests one platform can be sharded.
@@ -119,20 +124,21 @@ if [[ -n "$SHARD" ]]; then
         echo "error: --shard takes <n>/$shard_count, <n> from 1 to $shard_count ($SHARDS_FILE has $shard_count shards), not $SHARD" >&2
         exit 2
     fi
-    only=() other_suites=()
+    other_suites=()
     while read -r shard entry _; do
         if [[ -z "$shard" || "$shard" == \#* ]]; then continue; fi
         if [[ "$shard" != "${SHARD%/*}" ]]; then
-            TEST_SELECTION+=("-skip-testing:$entry")
-            if [[ "$entry" == */* ]]; then other_suites+=("-skip-testing:$entry"); fi
+            if [[ "$entry" == */* ]]; then other_suites+=("$entry"); fi
             continue
         fi
-        only+=("-only-testing:$entry")
+        TEST_SELECTION+=("-only-testing:$entry")
         if [[ " ${SHARD_TARGETS[*]-} " != *" ${entry%%/*} "* ]]; then SHARD_TARGETS+=("${entry%%/*}"); fi
     done <"$SHARDS_FILE"
-    # A shard that holds suites runs exactly its entries, less the suites other shards hold of a target it holds
-    # whole (xcodebuild applies -skip-testing after -only-testing).
-    if [[ "${only[*]-}" == */* ]]; then TEST_SELECTION=("${only[@]}" ${other_suites[@]+"${other_suites[@]}"}); fi
+    # Another shard's suite is skipped only where this shard holds its target whole (xcodebuild applies
+    # -skip-testing after -only-testing); a suite of a target this shard does not run needs no skip.
+    for entry in ${other_suites[@]+"${other_suites[@]}"}; do
+        if [[ " ${TEST_SELECTION[*]} " == *" -only-testing:${entry%%/*} "* ]]; then TEST_SELECTION+=("-skip-testing:$entry"); fi
+    done
 fi
 # --build-only is the iOS half of the gate without its static steps; the rest of the script reads these.
 if [[ $BUILD_ONLY -eq 1 ]]; then IOS_ONLY=1 SKIP_LINT=1; fi
