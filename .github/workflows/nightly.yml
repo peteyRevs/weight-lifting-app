@@ -19,7 +19,8 @@ jobs:
   test:
     # Legs (docs/ci-cd.md, "Nightly legs"): the first nightly's one iOS job reached its 120 min while testing,
     # and its one watch job lost its runner at 61 min (run 43144335050); neither left a result bundle. Each
-    # leg now tests the targets scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it.
+    # leg now tests the entries scripts/nightly-shards.txt (iOS) or nightly-watch-shards.txt gives it, balanced
+    # by run 43170933804's runner times to end within about 75 min.
     name: ${{ matrix.platform }} leg ${{ matrix.leg }}/${{ matrix.legs }}
     runs-on: xcode-27 # a preview image; rolling back to 26.6 means reverting F32 as a whole (pr.yml)
     timeout-minutes: 145 # the step's 132, plus checkout, Xcode, mise, and packing and uploading the bundles
@@ -29,12 +30,17 @@ jobs:
       fail-fast: false # every leg reports
       matrix: # each shards file's legs, 1 to its count (WF76)
         include:
-          - { platform: ios, leg: 1, legs: 4 }
-          - { platform: ios, leg: 2, legs: 4 }
-          - { platform: ios, leg: 3, legs: 4 }
-          - { platform: ios, leg: 4, legs: 4 }
-          - { platform: watch, leg: 1, legs: 2 }
-          - { platform: watch, leg: 2, legs: 2 }
+          - { platform: ios, leg: 1, legs: 8 }
+          - { platform: ios, leg: 2, legs: 8 }
+          - { platform: ios, leg: 3, legs: 8 }
+          - { platform: ios, leg: 4, legs: 8 }
+          - { platform: ios, leg: 5, legs: 8 }
+          - { platform: ios, leg: 6, legs: 8 }
+          - { platform: ios, leg: 7, legs: 8 }
+          - { platform: ios, leg: 8, legs: 8 }
+          - { platform: watch, leg: 1, legs: 3 }
+          - { platform: watch, leg: 2, legs: 3 }
+          - { platform: watch, leg: 3, legs: 3 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +48,20 @@ jobs:
       - name: Select Xcode from .xcode-version
         run: sudo xcode-select -s "/Applications/Xcode_$(tr -d '[:space:]' < .xcode-version).app" && xcodebuild -version
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+      # main's caches, restored as Check restores them and never saved here: main-cache.yml saves them on each
+      # code push to main, under these keys (docs/ci-cd.md, "Compilation cache"). A dispatch on main restores
+      # main's newest compilation cache; cold, run 43170933804's legs built for 1,132-1,455 s.
+      - name: Restore Swift package checkouts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/SourcePackages
+          key: spm-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      - name: Restore compiled output (Xcode compilation cache)
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .derivedData/CompilationCache.noindex
+          key: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ github.sha }}
+          restore-keys: compilation-${{ hashFiles('.xcode-version', 'LedgerKit/Package.resolved', 'Ledger.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
       # check.sh as the PR shards run it: step 0 checks the Xcode against .xcode-version, then this platform's
       # build, the simulator's boot and the leg's tests, by UDID and one at a time, and check-test-results.sh
       # over the leg's targets. No format, lint or coverage gate (the PR lane's).
@@ -49,10 +69,15 @@ jobs:
         timeout-minutes: 132 # fails the step before the job times out, so the bundles still upload
         env:
           # s: 2 min before the step's timeout, check.sh interrupts xcodebuild, which finalizes the bundle.
-          # The largest leg, FeatureWorkoutTests alone, tests about 3,150 s on a developer Mac: 4,100-4,700 s
-          # at the 1.3-1.5 times a runner takes, after the runner's slowest build seen, 1,864 s, and about
-          # 100 s of tools, catalogs and boot. 7,800 s leaves about 1,100-1,700 s past that.
+          # A leg's tests take at most ~2,900 s on the runner (nightly-shards.txt), after a build of up to
+          # 1,864 s (the slowest seen, #94) and ~100 s of tools, catalogs and boot: about 4,900 s. 7,800 s
+          # leaves room for check.sh's one retry of a runner that never connected, or a runner twice as slow.
           LEDGER_XCODEBUILD_DEADLINE: 7800
+          LEDGER_COMPILATION_CACHE: "YES" # quoted: YAML 1.1 reads a bare YES as true
+          # Each timing budget is the reference machine's, a simulator on a developer Mac; this shared VM is
+          # held to twice it (testing-strategy §2.2, "Budgets and the runner"). xcodebuild hands a TEST_RUNNER_
+          # variable to the test runner without its prefix. The local nightly and every other job leave it unset.
+          TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR: 2
           PLATFORM: ${{ matrix.platform }}
           SHARD: ${{ matrix.leg }}/${{ matrix.legs }}
         run: scripts/check.sh --nightly "--$PLATFORM-only" --skip-lint --shard "$SHARD"

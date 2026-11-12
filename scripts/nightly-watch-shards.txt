@@ -1,10 +1,9 @@
-# The nightly's watchOS legs (docs/ci-cd.md, "Nightly legs"): `check.sh --nightly --watch-only --shard <n>/2`
-# runs leg <n>'s test targets of TestPlans/Nightly-Watch.xctestplan, skipping the other leg's. One
-# "<leg> <test target>" per line; every target the plan enables in exactly one leg (pr-shards.adv.sh).
+# The nightly's watchOS legs (docs/ci-cd.md, "Nightly legs"): `check.sh --nightly --watch-only --shard <n>/3` runs
+# leg <n>'s entries of TestPlans/Nightly-Watch.xctestplan, as nightly-shards.txt describes them (pr-shards.adv.sh).
 #
-# The first nightly's one watch job lost its runner at 61 min, with no log (run 43144335050). Its plan's
-# largest target, LedgerPersistenceTests (1,481 s on iOS on a developer Mac), has a leg of its own: each leg
-# then tests about half as long, and a leg that loses its runner again names its half.
+# Run 43170933804: leg 2's seven targets tested in about 3,230 s after a 505 s build. Leg 1's runner never
+# connected (check.sh now tests again once), so LedgerPersistenceTests has no watch time yet; on iOS it took
+# 3,598 s on the runner, so its two longest suites (1,945 s on iOS) have a leg of their own.
 1 LedgerPersistenceTests
 2 LedgerDomainTests
 2 LedgerSyncTests
@@ -13,3 +12,5 @@
 2 LedgerWatchAppKitTests
 2 LedgerWatchTests
 2 LedgerWatchUITests
+3 LedgerPersistenceTests/HistoryModelAdversarialTests
+3 LedgerPersistenceTests/LinkedSaveDifferentialAdversarialTests

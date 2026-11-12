@@ -83,7 +83,7 @@ check "WF11 only package checkouts and Xcode's compilation cache are cached (nev
 check "WF52 [F32] the package cache restores on an exact key only (a stale Package.resolved then resolves cold, and fails)" \
     is "$(jq -r '[.jobs[].steps[] | select(.uses // "" | test("actions/cache")) | select(.with.path == ".derivedData/SourcePackages")
         | .with | has("restore-keys")] | tostring' "$T/pr.json" "$T/nightly.json" "$T/mc.json" | tr '\n' ' ')" \
-    "[false] [] [false] "
+    "[false] [false] [false] "
 # The compilation cache (ci-efficiency notes): restored before check.sh, which turns it on, and saved after it,
 # on a red run too, under the restore step's key. Its keys hash the Xcode and both lockfiles; restore-keys are
 # the key without the commit, so a run starts from its PR's (or main's) newest cache.
@@ -298,10 +298,12 @@ while IFS='|' read -r platform leg legs; do
     (cd "$NB" && PLATFORM="$platform" SHARD="$leg/$legs" bash -eo pipefail "$T/nightly-test.sh")
 done < <(q nightly '.jobs.test | .steps[] as $s | select($s.run // "" | test("check\\.sh"))
     | .strategy.matrix.include[] | [.platform, .leg, .legs] | map(tostring) | join("|")')
-check "WF48 the legs run check.sh on iOS, legs 1-4, and watchOS, legs 1-2, each --nightly without lint" \
-    is "$(tr '\n' ';' <"$NB_LOG")" "--nightly --ios-only --skip-lint --shard 1/4;--nightly --ios-only --skip-lint --shard 2/4;\
---nightly --ios-only --skip-lint --shard 3/4;--nightly --ios-only --skip-lint --shard 4/4;\
---nightly --watch-only --skip-lint --shard 1/2;--nightly --watch-only --skip-lint --shard 2/2;"
+every_leg() { # <platform> <shards file>: the check.sh arguments of each of the file's legs, in order
+    local n; n="$(awk '$1 !~ /^#/ && NF { print $1 }' "$ROOT/scripts/$2" | sort -u | wc -l | tr -d ' ')"
+    for ((i = 1; i <= n; i++)); do printf -- '--nightly --%s-only --skip-lint --shard %s/%s;' "$1" "$i" "$n"; done
+}
+check "WF48 the legs run check.sh on every iOS leg, then every watchOS leg, each --nightly without lint" \
+    is "$(tr '\n' ';' <"$NB_LOG")" "$(every_leg ios nightly-shards.txt)$(every_leg watch nightly-watch-shards.txt)"
 check "WF48 ... and the step's env carries the leg from the matrix" \
     is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check\\.sh")) | .env | "\(.PLATFORM) \(.SHARD)"')" \
     '${{ matrix.platform }} ${{ matrix.leg }}/${{ matrix.legs }}'
@@ -320,6 +322,17 @@ check "WF75 a leg's deadline is 2 min before its step's timeout, and its job out
         | "\($step.env.LEDGER_XCODEBUILD_DEADLINE) \($step."timeout-minutes") \(."timeout-minutes")
  \($step."timeout-minutes" * 60 - $step.env.LEDGER_XCODEBUILD_DEADLINE)"')" "7800 132 145
  120"
+# main's caches: restored under Check's keys (main-cache.yml saves them there), never saved by the nightly.
+check "WF78 each leg restores main's package checkouts and compiled output under Check's keys, saves neither, and check.sh caches" \
+    is "$(q nightly '[.jobs.test.steps[] | select(.uses // "" | test("actions/cache")) | .uses | split("@")[0]] | join(",")') \
+$([[ "$(q nightly '[.jobs.test.steps[] | select(.uses // "" | test("actions/cache")) | .with] | sort_by(.path) | tojson')" \
+== "$(q pr '[.jobs.check.steps[] | select(.uses // "" | test("actions/cache(@|/restore)")) | .with] | sort_by(.path) | tojson')" ]] && echo keys) \
+$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.LEDGER_COMPILATION_CACHE')" \
+    "actions/cache/restore,actions/cache/restore keys YES"
+# Performance budgets on the runner (testing-strategy §2.2): the nightly's legs alone hold timings to twice them.
+check "WF79 only the nightly's legs set the performance runner factor, 2, for the test runner; no plan sets it" \
+    is "$(q nightly '.jobs.test.steps[] | select(.run // "" | test("check.sh")) | .env.TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR') \
+$(cat "$WF"/*.yml | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR:') $(cat "$ROOT"/TestPlans/*.xctestplan | grep -c 'LEDGER_PERFORMANCE_RUNNER_FACTOR')" "2 1 0"
 # A leg that fails or reaches its deadline still uploads its bundles, as one tar (35,000 files did not extract).
 check "WF77 a red or interrupted leg packs its bundles into one tar and uploads it, per leg and attempt (not when cancelled)" \
     is "$(q nightly '.jobs.test.steps | map(select(.name // "" | test("^Pack|^Upload")) | .if) | join(",")')

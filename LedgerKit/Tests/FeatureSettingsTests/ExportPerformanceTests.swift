@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import LedgerDomain
 import LedgerFakes
+import LedgerTestSupport
 import Testing
 
 /// F14 S2, N17 (amended): 10,000 sets written to the export's file in under 200 ms, the median of 5 runs, and the
@@ -14,7 +15,7 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct ExportPerformanceTests {
-    static let budget: Duration = .milliseconds(200)
+    static let budget = PerformanceRunner.budget(.milliseconds(200))
     static let memoryBudget = 5 * 1024 * 1024
 
     /// 400 workouts of 5 exercises of 5 sets: 10,000 sets, a week apart from 2018.

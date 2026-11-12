@@ -115,6 +115,25 @@ Concrete test names (file = suite = source type; see §6):
   times; the 95th percentile (the 19th fastest) must be under 50 ms, as F05
   criterion 9 says (architecture §15). Budgets live in `PerformanceBudget.swift`
   next to the tests, never inline.
+- **Budgets and the runner (2026-11-12; Pete's ruling, recorded for review).** A
+  budget belongs to the reference machine, a simulator on a developer Mac. A
+  shared CI runner's virtual machine is not that machine: in the hosted nightly
+  (run 43170933804) the timings missed their budgets by 2-54 % (`historyFold`
+  7.7 ms of 5, `recordNewWorkout` 55 of 50, `historyWrite` 298 of 250, the
+  History list's model 40 of 30, an exercise's history model 22.7 of 16, the
+  replay 5.1 of 5), and `historyList`'s 95th percentile by 271 % (74 ms of 20;
+  its median 25). Every timed budget, in every target, asks through
+  `PerformanceRunner.budget(_:)` (`LedgerTestSupport`), which multiplies it by
+  `LEDGER_PERFORMANCE_RUNNER_FACTOR`. Only `nightly.yml` sets it, to 2, as
+  `TEST_RUNNER_LEDGER_PERFORMANCE_RUNNER_FACTOR` (`xcodebuild` hands the test
+  runner the variable without the prefix; `workflows.adv.sh` WF79). Unset, as
+  on a developer Mac, in the local nightly and in `swift test`, every budget
+  holds as written; a value that is not a number of at least 1 counts as 1,
+  so the factor can only loosen a budget, never tighten or disable one
+  (`PerformanceRunnerTests`). Twice the budget clears every miss above but
+  `historyList`'s, which needs about 3.7 times: that one is left red on the
+  runner for a decision (the factor, or the measure: its outliers are two runs
+  of 20).
 
 ### 2.3 Sync (`LedgerSyncTests`) — target ≥ 90 %
 

@@ -21,6 +21,6 @@ struct ReplayPerformanceTests {
         _ = WorkoutEngine.replay(log)
         let clock = ContinuousClock()
         let timings = (0 ..< 5).map { _ in clock.measure { _ = WorkoutEngine.replay(log) } }.sorted()
-        #expect(timings[2] < .milliseconds(5), "median \(timings[2])")
+        #expect(timings[2] < PerformanceRunner.budget(.milliseconds(5)), "median \(timings[2])")
     }
 }

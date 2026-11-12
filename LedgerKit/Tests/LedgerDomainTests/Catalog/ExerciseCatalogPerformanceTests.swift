@@ -1,5 +1,6 @@
 import Foundation
 @testable import LedgerDomain
+import LedgerTestSupport
 import Testing
 
 /// The brief's budget: decoding the catalog takes under 20 ms on iPhone. A timing test is only
@@ -17,6 +18,6 @@ struct ExerciseCatalogPerformanceTests {
         _ = try ExerciseCatalog.seed()
         let clock = ContinuousClock()
         let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try ExerciseCatalog.seed() } }.sorted()
-        #expect(timings[2] < .milliseconds(20), "median \(timings[2])")
+        #expect(timings[2] < PerformanceRunner.budget(.milliseconds(20)), "median \(timings[2])")
     }
 }

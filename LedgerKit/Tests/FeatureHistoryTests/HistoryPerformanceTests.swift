@@ -15,7 +15,7 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct HistoryPerformanceTests {
-    static let model: Duration = .milliseconds(30)
+    static let model = PerformanceRunner.budget(.milliseconds(30))
     static let runs = 5
 
     @Test("N4. The list's model over 1,000 workouts, four a week with records, takes under 30 ms")

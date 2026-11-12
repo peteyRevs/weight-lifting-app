@@ -74,7 +74,7 @@ case "$1 $2 $3" in
     "simctl shutdown "* | "simctl erase "*) ;;
     "xcresulttool get test-results")
         [ "$4" = summary ] || { echo "fake xcrun: unexpected: $*" >&2; exit 64; }
-        echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}" ;;
+        if [ -n "${XCRUN_SUMMARY:-}" ]; then cat "$XCRUN_SUMMARY"; else echo "{\"totalTestCount\": ${XCRUN_TEST_COUNT:-1}}"; fi ;;
     *) echo "fake xcrun: unexpected: $*" >&2; exit 64 ;;
 esac
 SH

@@ -17,9 +17,9 @@ import Testing
     .enabled(if: TestLane.runsSlowTests, "a .performance test: nightly lane only")
 )
 struct LibraryPerformanceTests {
-    static let firstModel: Duration = .milliseconds(100)
-    static let keystroke: Duration = .milliseconds(10)
-    static let historyModel: Duration = .milliseconds(16)
+    static let firstModel = PerformanceRunner.budget(.milliseconds(100))
+    static let keystroke = PerformanceRunner.budget(.milliseconds(10))
+    static let historyModel = PerformanceRunner.budget(.milliseconds(16))
     static let runs = 5
 
     /// The catalog and 26 exercises of the lifter's own: 250; five recent, and a best set for every one.

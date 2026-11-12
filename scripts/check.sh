@@ -97,11 +97,13 @@ if [[ $NIGHTLY -eq 1 ]]; then LANE=Nightly IOS_PLAN=Nightly WATCH_PLAN=Nightly-W
 
 # --shard <n>/<count> (PR CI's Check jobs, the nightly's legs): the tests of shard <n> in the tested plan's
 # shards file, scripts/<plan, lowercase>-shards.txt (pr-shards.txt, nightly-shards.txt, nightly-watch-shards.txt),
-# every other shard's targets skipped. The build passes the unsharded build's arguments (its result bundle's
+# every other shard's targets skipped. An entry may be one suite of a target, "<target>/<suite>", when the target
+# is too long for one shard (the nightly's FeatureWorkoutTests): the shard holding the target whole skips those
+# suites, and a shard that holds suites runs exactly its entries (-only-testing). The build passes the unsharded build's arguments (its result bundle's
 # name aside), so every shard and main-cache.yml share compilation cache keys (check-wiring W84). A shard
 # measures only part of the coverage, so step 5 is scripts/check-shards.sh's, over every shard's bundle. Only a
 # run that tests one platform can be sharded.
-SHARD_TARGETS=() SKIP_TESTING=()
+SHARD_TARGETS=() TEST_SELECTION=()
 if [[ -n "$SHARD" ]]; then
     if (( !(IOS_ONLY || WATCH_ONLY) || FAST || LINT_ONLY || STATIC_ONLY || RECORD_SNAPSHOTS )); then
         echo "error: --shard needs --ios-only or --watch-only, and takes no --fast, --lint-only, --static-only or --record-snapshots: $ALL_FLAGS" >&2
@@ -117,10 +119,14 @@ if [[ -n "$SHARD" ]]; then
         echo "error: --shard takes <n>/$shard_count, <n> from 1 to $shard_count ($SHARDS_FILE has $shard_count shards), not $SHARD" >&2
         exit 2
     fi
-    while read -r shard target _; do
+    only=()
+    while read -r shard entry _; do
         if [[ -z "$shard" || "$shard" == \#* ]]; then continue; fi
-        if [[ "$shard" == "${SHARD%/*}" ]]; then SHARD_TARGETS+=("$target"); else SKIP_TESTING+=("-skip-testing:$target"); fi
+        if [[ "$shard" != "${SHARD%/*}" ]]; then TEST_SELECTION+=("-skip-testing:$entry"); continue; fi
+        only+=("-only-testing:$entry")
+        if [[ " ${SHARD_TARGETS[*]-} " != *" ${entry%%/*} "* ]]; then SHARD_TARGETS+=("${entry%%/*}"); fi
     done <"$SHARDS_FILE"
+    if [[ "${only[*]}" == */* ]]; then TEST_SELECTION=("${only[@]}"); fi # this shard holds suites
 fi
 # --build-only is the iOS half of the gate without its static steps; the rest of the script reads these.
 if [[ $BUILD_ONLY -eq 1 ]]; then IOS_ONLY=1 SKIP_LINT=1; fi
@@ -233,9 +239,26 @@ run_plan() { # <result bundle> <plan file> <xcodebuild args…>
             exit 1
         fi
     else
-        xcodebuild "$@" | beautify
+        local status=0
+        xcodebuild "$@" | beautify || status=$?
+        if [[ $status -ne 0 ]]; then
+            # Once, and only for the simulator's own failure: the test runner never connected, so no test ran
+            # (the nightly's watch leg 1, run 43170933804). Inside the same deadline; the first bundle is kept.
+            if ! runner_never_connected "$result"; then return "$status"; fi
+            echo "warning: the test runner hung before it connected, and no test ran: testing again, once" >&2
+            rm -rf "${result%.xcresult}-runner-hung.xcresult"
+            mv "$result" "${result%.xcresult}-runner-hung.xcresult"
+            xcodebuild "$@" | beautify
+        fi
         scripts/check-test-results.sh "$result" "$plan" ${SHARD_TARGETS[@]+"${SHARD_TARGETS[@]}"}
     fi
+}
+# <result bundle>: whether its run failed only because the test runner never connected: no test passed or was
+# skipped, and every failure is xcodebuild's "The test runner hung before establishing connection."
+runner_never_connected() {
+    xcrun xcresulttool get test-results summary --path "$1" 2>/dev/null | jq -e '.passedTests == 0
+        and .skippedTests == 0 and (.testFailures | length) > 0
+        and all(.testFailures[]; .failureText == "The test runner hung before establishing connection.")' >/dev/null
 }
 
 # ---- fast tier: host-side package tests, no simulator -----------------------
@@ -296,7 +319,7 @@ test_platform() { # <step> <platform> <scheme> <plan> <destination> <result bund
     run_plan "$RESULTS/$6.xcresult" "TestPlans/$4.xctestplan" \
         test-without-building "${xcargs[@]}" -resultBundlePath "$RESULTS/$6.xcresult" -collect-test-diagnostics never \
         -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance "$TEST_ALLOWANCE" -quiet \
-        ${SKIP_TESTING[@]+"${SKIP_TESTING[@]}"}
+        ${TEST_SELECTION[@]+"${TEST_SELECTION[@]}"}
     done_step "$2 tests"
 }
 if [[ $WATCH_ONLY -eq 1 ]]; then

@@ -1,5 +1,6 @@
 import Foundation
 @testable import LedgerDomain
+import LedgerTestSupport
 import Testing
 
 /// The brief's budget: writing a block takes under 5 ms. The catalog is given to the generator, so decoding
@@ -20,6 +21,6 @@ struct ProgramTemplatesPerformanceTests {
         _ = try block.program(catalog: catalog)
         let clock = ContinuousClock()
         let timings = try (0 ..< 5).map { _ in try clock.measure { _ = try block.program(catalog: catalog) } }.sorted()
-        #expect(timings[2] < .milliseconds(5), "median \(timings[2])")
+        #expect(timings[2] < PerformanceRunner.budget(.milliseconds(5)), "median \(timings[2])")
     }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PR CI's iOS test shards (docs/ci-cd.md, "Shards"): scripts/pr-shards.txt must place every test target the
-# PR plan enables in exactly one shard (and each nightly leg list every target of its plan, P12), so a target added to the plan later cannot go untested in CI, and
+# PR plan enables in exactly one shard (and each nightly leg list every target of its plan, P12), so a target
+# added to the plan later cannot go untested in CI, and
 # scripts/check-shards.sh (the Coverage job) must check every shard's bundle before it gates their coverage.
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
@@ -13,7 +14,23 @@ T="$ADV_TMP"
 # one "<plan|shards> <target>" per line; nothing when each enabled target is in exactly one shard.
 mismatch() {
     diff <(jq -r '.testTargets[] | select(.enabled != false) | .target.name' "$1" | sort) \
-        <(awk '$1 !~ /^#/ && NF { print $2 }' "$2" | sort) | sed -n 's/^< /plan /p; s/^> /shards /p'
+        <(awk '$1 !~ /^#/ && NF && $2 !~ /\// { print $2 }' "$2" | sort) | sed -n 's/^< /plan /p; s/^> /shards /p'
+}
+# suite_faults <shards file>: each "<target>/<suite>" entry whose target is not whole in another shard of the
+# file, which is listed twice, or whose suite no type or class of that target's sources declares (check.sh
+# --shard runs it with -only-testing, and the shard holding the target skips it). Nothing when all hold.
+suite_faults() {
+    awk '$1 !~ /^#/ && NF { print $1, $2 }' "$1" | while read -r shard entry; do
+        [[ "$entry" == */* ]] || continue
+        target="${entry%%/*}" suite="${entry#*/}"
+        whole="$(awk -v t="$target" '$1 !~ /^#/ && $2 == t { print $1 }' "$1")"
+        if [[ -z "$whole" ]]; then echo "$entry: $target is in no shard whole"
+        elif [[ "$whole" == "$shard" ]]; then echo "$entry: in the shard that holds $target whole"; fi
+        if [[ "$(awk -v e="$entry" '$1 !~ /^#/ && $2 == e' "$1" | wc -l)" -ne 1 ]]; then echo "$entry: listed twice"; fi
+        if ! grep -rqsE "^ *(final )?(struct|class) $suite\b" "$ROOT/LedgerKit/Tests/$target" "$ROOT/Apps/$target"; then
+            echo "$entry: no suite $suite in $target"
+        fi
+    done
 }
 shard_numbers() { awk '$1 !~ /^#/ && NF { print $1 }' "$1" | sort -u | tr '\n' ' '; }
 
@@ -36,9 +53,26 @@ for file in "$ROOT"/scripts/*-shards.txt; do
         is "$(mismatch "$plan" "$file")" ""
     check "P12 ... its shards are numbered 1 to their count" \
         is "$(shard_numbers "$file")" "$(seq "$(awk '$1 !~ /^#/ && NF { print $1 }' "$file" | sort -u | wc -l)" | tr '\n' ' ')"
-    check "P12 ... each line is \"<shard> <test target>\", with an optional # comment" \
-        is "$(awk '$1 !~ /^#/ && NF && ($1 !~ /^[1-9][0-9]*$/ || $2 !~ /^[A-Za-z]+Tests$/ || (NF > 2 && $3 !~ /^#/))' "$file")" ""
+    check "P12 ... each line is \"<shard> <test target>[/<suite>]\", with an optional # comment" \
+        is "$(awk '$1 !~ /^#/ && NF && ($1 !~ /^[1-9][0-9]*$/ || $2 !~ /^[A-Za-z]+Tests(\/[A-Za-z0-9]+)?$/ || (NF > 2 && $3 !~ /^#/))' "$file")" ""
+    check "P12 ... each suite entry names a suite of a target whole in another shard, once" is "$(suite_faults "$file")" ""
 done
+check "P13 the PR shards hold whole targets only (check-shards.sh reads each entry as a target)" \
+    is "$(awk '$1 !~ /^#/ && $2 ~ /\//' "$SHARDS")" ""
+
+# The suite rule itself, against shards files that break it as a later edit could.
+leg() { printf '%s\n' "$@" >"$T/legs.txt"; suite_faults "$T/legs.txt"; }
+check "P14 a suite whose target is whole in no shard is named" \
+    is "$(leg "1 FeatureWorkoutTests/WorkoutSaveAdversarialTests")" "FeatureWorkoutTests/WorkoutSaveAdversarialTests: FeatureWorkoutTests is in no shard whole"
+check "P14 ... a suite in the shard that holds its target whole" \
+    is "$(leg "1 FeatureWorkoutTests" "1 FeatureWorkoutTests/WorkoutSaveAdversarialTests")" \
+    "FeatureWorkoutTests/WorkoutSaveAdversarialTests: in the shard that holds FeatureWorkoutTests whole"
+check "P14 ... a suite listed twice" \
+    is "$(leg "1 FeatureWorkoutTests" "2 FeatureWorkoutTests/WorkoutSaveAdversarialTests" "3 FeatureWorkoutTests/WorkoutSaveAdversarialTests" | sort -u)" \
+    "FeatureWorkoutTests/WorkoutSaveAdversarialTests: listed twice"
+check "P14 ... a suite the target does not declare (a typo, or a suite renamed since)" \
+    is "$(leg "1 FeatureWorkoutTests" "2 FeatureWorkoutTests/WorkoutSaveAdversarialTest" "3 LedgerUITests" "4 LedgerUITests/Tabs")" \
+    "FeatureWorkoutTests/WorkoutSaveAdversarialTest: no suite WorkoutSaveAdversarialTest in FeatureWorkoutTests"
 
 # The comparison itself, against a plan and a shards file that drift apart as a later PR could make them.
 jq '.testTargets += [{"target": {"containerPath": "container:LedgerKit", "identifier": "FeatureNewTests", "name": "FeatureNewTests"}}]' \
