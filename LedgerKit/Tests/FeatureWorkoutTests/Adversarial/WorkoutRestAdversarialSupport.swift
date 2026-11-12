@@ -163,9 +163,20 @@ final class RestCover {
 
     // MARK: Time
 
-    /// `seconds` go by with the phone awake.
+    /// `seconds` go by with the phone awake: the rest's task wakes at each of its waits on time. So time
+    /// moves to the end of the wait it is asleep in, the task is let read the date and sleep again, and
+    /// only then does time move on. A single `advance` over all of it would also wake the task at each
+    /// wait, but would move on as soon as its few yields ran out: on a loaded machine the task then reads a
+    /// date seconds after its wait ended (a buzz the app rightly holds back, the walk's seeds 102964 and
+    /// 158397), or starts its next wait from a date read before the jump (a panel seconds behind until it
+    /// next wakes, seed 142559). Neither is a phone that is awake.
     func run(_ seconds: Double) async {
-        await clock.base.advance(by: .seconds(seconds))
+        let end = clock.base.now.advanced(by: .seconds(seconds))
+        while !isKeeperDone, let due = clock.due.value, due > clock.base.now, due < end {
+            await clock.base.advance(to: due)
+            await asleepOrDone()
+        }
+        await clock.base.advance(to: end)
         await asleepOrDone()
     }
 

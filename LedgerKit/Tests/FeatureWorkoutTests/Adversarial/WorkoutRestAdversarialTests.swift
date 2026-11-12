@@ -72,6 +72,7 @@ struct WorkoutRestAdversarialTests {
             // How long after the rest's end the wait that could find it over ended; nil when no time went by.
             var lateness: Double?
             if move < 10 {
+                // `run` wakes the rest's task at the end of each of its waits, its last one included.
                 await cover.run([0.25, 0.5, 0.75, 1, 1.5, 3, 10, 20, 40, 40][move])
                 lateness = 0
             } else if move < 14 {
