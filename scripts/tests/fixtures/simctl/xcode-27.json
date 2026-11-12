@@ -173,5 +173,27 @@
       },
       "state": "(active, disconnected)"
     }
-  }
+  },
+  "runtimes": [
+    {
+      "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+      "name": "iOS 27.0",
+      "platform": "iOS",
+      "version": "27.0",
+      "isAvailable": true,
+      "supportedArchitectures": [
+        "arm64"
+      ]
+    },
+    {
+      "identifier": "com.apple.CoreSimulator.SimRuntime.watchOS-27-0",
+      "name": "watchOS 27.0",
+      "platform": "watchOS",
+      "version": "27.0",
+      "isAvailable": true,
+      "supportedArchitectures": [
+        "arm64"
+      ]
+    }
+  ]
 }

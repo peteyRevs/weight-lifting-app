@@ -119,4 +119,32 @@ check "SD32 ... and a destination by UDID is refused (exit 2): --fresh copies a 
 out="$(XCRUN_FAIL="create Ledger" "$RESOLVE" --fresh 'platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0' 2>"$T/err")"; code=$?
 check "SD33 ... and a failed create fails it, printing no destination" is "$([[ $code -ne 0 ]] && echo failed) [$out]" "failed []"
 
+# A runtime its simulators cannot run on (run 43250355937, watch leg 2): simctl still listed the 27.0 watches as
+# available, but xcodebuild found their runtime "(null)" with no architecture, saw only the 27.2 watches, and
+# exited 70 after a 4-minute build. --fresh now checks the runtime first: unusable, it fails at once, creating
+# nothing, with a GitHub error naming the runtime, and never falls back to another OS.
+W12='platform=watchOS Simulator,name=Apple Watch Series 12 (46mm),OS=27.0'
+W27='com.apple.CoreSimulator.SimRuntime.watchOS-27-0'
+fresh_on() { # <jq edit of the watch runtime, or "drop"> -> $out, $err, $code, against a copy of the fixture
+    if [[ "$1" == drop ]]; then jq --arg r "$W27" '.runtimes |= map(select(.identifier != $r))' "$SIMCTL_JSON" >"$T/rt.json"
+    else jq --arg r "$W27" "(.runtimes[] | select(.identifier == \$r)) |= ($1)" "$SIMCTL_JSON" >"$T/rt.json"; fi
+    : >"$XCRUN_LOG"
+    out="$(SIMCTL_JSON="$T/rt.json" "$RESOLVE" --fresh "$W12" 2>"$T/err")"; code=$?; err="$(cat "$T/err")"
+}
+for broken in '.supportedArchitectures = []' 'del(.supportedArchitectures)' \
+    '.isAvailable = false | .availabilityError = "runtime bundle not found"' drop; do
+    fresh_on "$broken"
+    check "SD34 --fresh on an unusable watchOS 27.0 runtime fails (exit 1), creating nothing, printing no destination: $broken" \
+        is "$code [$out] $(grep -c '^simctl create' "$XCRUN_LOG")" "1 [] 0"
+    check "SD35 ... with one GitHub ::error:: that names the runtime, and tries no other OS: $broken" \
+        is "$(grep -c "^::error::.*$W27" <<<"$err") $(grep -cE 'watchOS-27-[1-9]|OS=27\.[1-9]' "$XCRUN_LOG")" "1 0"
+done
+fresh_on '.'
+check "SD36 ... while an available runtime with an architecture still gets its new simulator (the fixture as is)" \
+    is "$code $out" "0 platform=watchOS Simulator,id=C4EA7ED0-0000-4000-8000-000000000001"
+: >"$XCRUN_LOG"
+out="$(XCRUN_FAIL="list runtimes" "$RESOLVE" --fresh "$W12" 2>"$T/err")"; code=$?
+check "SD37 ... and a failing 'simctl list runtimes' fails it too, creating nothing" \
+    is "$([[ $code -ne 0 ]] && echo failed) [$out] $(grep -c '^simctl create' "$XCRUN_LOG")" "failed [] 0"
+
 finish
