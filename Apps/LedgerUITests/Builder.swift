@@ -70,14 +70,19 @@ final class Builder: XCTestCase {
         name.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).withOffset(CGVector(dx: 0, dy: 40)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the focus came with the tap")
         BuilderApp.clear(name)
+        // The name is stored as typed, but the deletions of one `typeText` may reach the field as fewer changes
+        // (the runner's last stored name was "A l"), so the test stores a name of its own: "Q", typed and then
+        // deleted each in a `typeText` of its own.
+        name.typeText("Q")
+        XCTAssertEqual(name.value as? String, "Q")
+        name.typeText(XCUIKeyboardKey.delete.rawValue)
         name.typeText("   ")
         attachScreenshot(of: app, named: "Builder, a draft of only spaces")
         // The drawn placeholder is hidden from VoiceOver, as the drawn name is: the screenshot shows it.
         XCTAssertEqual(name.value as? String, "   ", "the field holds the spaces")
         name.typeText("\n")
-        // The name is stored as typed, so deleting it letter by letter stored "A" before the field was blank; a
-        // blank name stores nothing, and the field takes the stored name back.
-        XCTAssertEqual(name.value as? String, "A", "a blank name is not stored")
+        // A blank name stores nothing, and the field takes the stored name, "Q", back.
+        XCTAssertEqual(name.value as? String, "Q", "a blank name is not stored")
     }
 
     /// 24e (`Builder.addDayAddExerciseChangeProgression`, testing-strategy §2.7): "+ Add training day" opens the
