@@ -57,7 +57,7 @@ struct ExerciseCard: View {
 /// on to the next exercise, XCUITest's hit test at the name no longer found it: the nightly `WorkoutLogging`
 /// test's "the next exercise's name is on screen" failed with the name drawn at the top of the page. That
 /// test is the pin. No hosted test can be: in a package test process `accessibilityHitTest(_:event:)`
-/// answers nil at every point, the card's name before the move included, because UIKit's accessibility
+/// answers nil at every point, the card's name before the move included, likely because UIKit's accessibility
 /// runtime is not loaded there (`chore(test)` fix round 2, 2026-11-12). Whether VoiceOver's touch
 /// exploration missed the name too was not shown.
 struct ExerciseCardTitleRow: View {

@@ -63,6 +63,9 @@ final class WorkoutStore {
     /// draws the panel again and nothing else. (Set by the store alone; the pump is in its own file.)
     var moment: Date?
     @ObservationIgnored var isDiscardRunning = false
+    /// The session said this store's cancelled discard dropped the workout (`discard()`): it is not asked
+    /// again, and a stream that opens on no workout closes the cover as discarded (`exit(for:)`).
+    @ObservationIgnored var isDiscardConfirmed = false
     /// The taps waiting for the pump, oldest first, each with the moment it was made at. The one being
     /// applied stays at the front until it is done.
     @ObservationIgnored var queue: [WorkoutTap] = []
@@ -254,13 +257,17 @@ extension WorkoutStore {
     }
 
     /// Why the cover closes on an update whose workout is not live. No workout at all, which only a
-    /// stream's first update can say, has nothing to tell, but in one case: this store asked the session
-    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile). The
-    /// host completes that call in a task of its own, so the workout is the one being saved.
+    /// stream's first update can say, has nothing to tell, but in two cases: this store asked the session
+    /// to save the workout and never heard the answer (the cover's tasks started again meanwhile), and the
+    /// host completes that call in a task of its own, so the workout is the one being saved; or this store's
+    /// discard was cancelled and the session said the workout was gone (`discard()`), so it was discarded.
     private func exit(for ended: WorkoutState?) -> WorkoutExit {
         guard let ended else {
             if isSaving, let save = pendingSave, save.wasSent {
                 return .route(.saved(save.id))
+            }
+            if isDiscardConfirmed {
+                return .route(.discarded)
             }
             return .nothingToShow
         }

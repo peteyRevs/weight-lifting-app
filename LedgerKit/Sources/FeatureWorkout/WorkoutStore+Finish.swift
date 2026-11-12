@@ -140,10 +140,14 @@ extension WorkoutStore {
     ///   the call in a task of its own and answers it. A client that throws its cancelled caller
     ///   `CancellationError` instead may or may not have dropped the workout (S13: one cancelled before the
     ///   session answered did not), so the session is asked. Dropped, the store goes on discarding, as a
-    ///   cancelled save goes on saving: nothing answers a tap until the ending update closes the cover.
-    ///   Still live, or not known, the discard is let go and the workout stays as the session shows it.
+    ///   cancelled save goes on saving: nothing answers a tap until an update closes the cover (the ending
+    ///   one, or a new stream's "nothing live", `exit(for:)`), and it is not asked again. Still live, or not
+    ///   known, the discard is let go and the workout stays as the session shows it. So is it when the
+    ///   session's updates have ended: no update will come, and the failed screen's Close must close. This
+    ///   helps only a client whose `current()` answers a cancelled caller; one that throws there too is
+    ///   "not known", as before.
     func discard() async {
-        guard isDiscarding, exit == nil, !isDiscardRunning else {
+        guard isDiscarding, exit == nil, !isDiscardRunning, !isDiscardConfirmed else {
             return
         }
         isDiscardRunning = true
@@ -156,10 +160,17 @@ extension WorkoutStore {
         } catch {
             guard !(error is CancellationError && Task.isCancelled) else {
                 // An answer of "cancelled" from this task, which is, counts as not known.
+                let isGone: Bool
                 do {
-                    isDiscarding = try await session.current() == nil
+                    isGone = try await session.current() == nil
                 } catch {
+                    isGone = false
+                }
+                if case .failed = workout {
                     isDiscarding = false
+                } else {
+                    isDiscarding = isGone
+                    isDiscardConfirmed = isGone
                 }
                 return
             }

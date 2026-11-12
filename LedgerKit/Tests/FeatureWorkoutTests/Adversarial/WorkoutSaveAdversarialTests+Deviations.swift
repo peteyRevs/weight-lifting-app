@@ -150,4 +150,41 @@ extension WorkoutSaveAdversarialTests {
         #expect(cover.store.exit != nil, "the failed screen's Close closes the cover")
         await cover.close()
     }
+
+    @Test("A client that throws a cancelled discard, the updates ending while it runs: the failed screen closes")
+    func throwingClient_updatesEndDuringTheCancelledDiscard_closeCloses() async {
+        let cover = await Self.withASetLogged()
+        await cover.session.holdEveryEnd()
+        await cover.session.throwToACancelledDiscard()
+        cover.send(.finish, .discard)
+        await cover.until("the discard to be held") { cover.session.endsWaiting.value == 1 }
+        await cover.restartTasks(awaitingTheOld: false)
+        await cover.rest()
+        await cover.until("the new follow to hear the session") { cover.store.isHearingTheSession }
+        await cover.session.endStreams()
+        await cover.until("the failed screen") {
+            if case .failed = cover.store.workout {
+                return true
+            }
+            return false
+        }
+        await cover.session.releaseEnd()
+        await eventually("the workout to be dropped") { await cover.session.ended?.phase == .discarded }
+        await cover.rest()
+        #expect(!cover.store.isDiscarding, "no update will come: the discard is let go")
+        cover.send(.minimize)
+        #expect(cover.store.exit != nil, "the failed screen's Close closes the cover")
+        await cover.close()
+    }
+
+    @Test("A client that throws a cancelled discard, then a new stream opens on no workout: it closes as discarded")
+    func throwingClient_droppedThenNothingLive_closesAsDiscarded() async {
+        let cover = await Self.discardThrownAtItsCancelledCaller()
+        #expect(cover.store.isDiscarding, "the session said the workout was gone")
+        await cover.restartTasks(awaitingTheOld: false)
+        await cover.until("the cover to close") { cover.store.exit != nil }
+        #expect(cover.store.exit == .route(.discarded), "not nothing to show: this cover discarded it")
+        #expect(await cover.fault() == nil)
+        await cover.close()
+    }
 }
